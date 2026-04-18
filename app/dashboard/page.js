@@ -8,6 +8,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [onglet, setOnglet] = useState('aujourd_hui')
   const [notificationsActives, setNotificationsActives] = useState(false)
+  const [nouvelleCommande, setNouvelleCommande] = useState(false)
 
   const trierCommandes = (data) => {
     return (data || []).sort((a, b) => {
@@ -59,6 +60,8 @@ export default function Dashboard() {
 
       if (dernierNombre > 0 && triees.length > dernierNombre) {
         jouerSon()
+        setNouvelleCommande(true)
+        setTimeout(() => setNouvelleCommande(false), 5000)
       }
       dernierNombre = triees.length
       setCommandes(triees)
@@ -124,7 +127,13 @@ export default function Dashboard() {
 
   return (
     <main style={{ fontFamily: 'DM Sans, sans-serif', maxWidth: 700, margin: '0 auto', padding: '1.5rem 1rem' }}>
-      
+
+      {nouvelleCommande && (
+        <div style={{ background: '#6B35C4', color: '#fff', padding: '1rem', borderRadius: 12, marginBottom: '1rem', textAlign: 'center', fontWeight: 800, fontSize: '1rem' }}>
+          🔔 Nouvelle commande !
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-1px', color: '#6B35C4', margin: 0 }}>yoppaa</h1>
@@ -165,7 +174,7 @@ export default function Dashboard() {
       </div>
 
       {loading && <p style={{ color: '#9660E0', textAlign: 'center' }}>Chargement...</p>}
-      
+
       {!loading && commandesFiltrees.length === 0 && (
         <div style={{ textAlign: 'center', padding: '3rem 0', color: '#C4A0F4' }}>
           <p style={{ fontSize: '2rem' }}>🎉</p>

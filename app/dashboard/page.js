@@ -44,7 +44,6 @@ export default function Dashboard() {
     oscillator.start(ctx.currentTime)
     oscillator.stop(ctx.currentTime + 0.3)
   }
-  }
 
   async function chargerCommercant() {
     const { data } = await supabase.from('commercants').select('*').limit(1).single()

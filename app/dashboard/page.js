@@ -7,6 +7,7 @@ export default function Dashboard() {
   const [commercant, setCommercant] = useState(null)
   const [loading, setLoading] = useState(true)
   const [onglet, setOnglet] = useState('aujourd_hui')
+  const [notificationsActives, setNotificationsActives] = useState(false)
 
   useEffect(() => {
     chargerCommercant()
@@ -30,6 +31,7 @@ export default function Dashboard() {
   }, [commercant])
 
   function jouerSon() {
+    if (!notificationsActives) return
     const ctx = new AudioContext()
     const oscillator = ctx.createOscillator()
     const gain = ctx.createGain()
@@ -41,6 +43,7 @@ export default function Dashboard() {
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
     oscillator.start(ctx.currentTime)
     oscillator.stop(ctx.currentTime + 0.3)
+  }
   }
 
   async function chargerCommercant() {
@@ -103,9 +106,10 @@ setCommandes(triees)
           <h1 style={{ fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-1px', color: '#6B35C4', margin: 0 }}>yoppaa</h1>
           <p style={{ color: '#1A0840', fontWeight: 700, margin: 0 }}>{commercant?.nom}</p>
         </div>
-        <div style={{ background: '#EDE0FF', borderRadius: 100, padding: '0.4rem 1rem', fontSize: '0.8rem', fontWeight: 700, color: '#6B35C4' }}>
-          Dashboard
-        </div>
+        <div onClick={() => setNotificationsActives(true)}
+  style={{ background: notificationsActives ? '#D4EDDA' : '#EDE0FF', borderRadius: 100, padding: '0.4rem 1rem', fontSize: '0.8rem', fontWeight: 700, color: notificationsActives ? '#155724' : '#6B35C4', cursor: 'pointer' }}>
+  {notificationsActives ? '🔔 Actif' : '🔕 Activer alertes'}
+</div>
       </div>
 
       {/* STATS */}

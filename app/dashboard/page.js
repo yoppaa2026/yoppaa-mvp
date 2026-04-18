@@ -1,4 +1,5 @@
 'use client'
+export const dynamic = 'force-dynamic'
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 
@@ -42,6 +43,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!commercant) return
+
     const canal = supabase
       .channel(`commandes-${commercant.id}`)
       .on('postgres_changes',
@@ -52,7 +54,15 @@ export default function Dashboard() {
         }
       )
       .subscribe()
-    return () => supabase.removeChannel(canal)
+
+    const intervalle = setInterval(() => {
+      chargerCommandes(commercant.id)
+    }, 10000)
+
+    return () => {
+      supabase.removeChannel(canal)
+      clearInterval(intervalle)
+    }
   }, [commercant, chargerCommandes])
 
   function activerNotifications() {

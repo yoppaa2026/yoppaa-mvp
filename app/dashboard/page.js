@@ -1,5 +1,4 @@
 'use client'
-export const dynamic = 'force-dynamic'
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 
@@ -10,18 +9,21 @@ export default function Dashboard() {
   const [onglet, setOnglet] = useState('aujourd_hui')
   const [notificationsActives, setNotificationsActives] = useState(false)
 
+  const trierCommandes = (data) => {
+    return (data || []).sort((a, b) => {
+      const heureA = a.creneau?.heure_debut || ''
+      const heureB = b.creneau?.heure_debut || ''
+      return heureA.localeCompare(heureB)
+    })
+  }
+
   const chargerCommandes = useCallback(async (commercantId) => {
     const { data } = await supabase
       .from('commandes')
       .select(`*, creneau:creneaux(*), commande_articles(*, article:articles(*))`)
       .eq('commercant_id', commercantId)
       .order('creneau_id', { ascending: true })
-    const triees = (data || []).sort((a, b) => {
-      const heureA = a.creneau?.heure_debut || ''
-      const heureB = b.creneau?.heure_debut || ''
-      return heureA.localeCompare(heureB)
-    })
-    setCommandes(triees)
+    setCommandes(trierCommandes(data))
     setLoading(false)
   }, [])
 
@@ -44,26 +46,26 @@ export default function Dashboard() {
   useEffect(() => {
     if (!commercant) return
 
-    const canal = supabase
-      .channel(`commandes-${commercant.id}`)
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'commandes' },
-        () => {
-          chargerCommandes(commercant.id)
-          jouerSon()
-        }
-      )
-      .subscribe()
+    let dernierNombre = 0
 
-    const intervalle = setInterval(() => {
-      chargerCommandes(commercant.id)
-    }, 10000)
+    const intervalle = setInterval(async () => {
+      const { data } = await supabase
+        .from('commandes')
+        .select(`*, creneau:creneaux(*), commande_articles(*, article:articles(*))`)
+        .eq('commercant_id', commercant.id)
+        .order('creneau_id', { ascending: true })
 
-    return () => {
-      supabase.removeChannel(canal)
-      clearInterval(intervalle)
-    }
-  }, [commercant, chargerCommandes])
+      const triees = trierCommandes(data)
+
+      if (dernierNombre > 0 && triees.length > dernierNombre) {
+        jouerSon()
+      }
+      dernierNombre = triees.length
+      setCommandes(triees)
+    }, 5000)
+
+    return () => clearInterval(intervalle)
+  }, [commercant])
 
   function activerNotifications() {
     const nouvelEtat = !notificationsActives

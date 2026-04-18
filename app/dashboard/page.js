@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 
 export default function Dashboard() {
@@ -9,61 +9,75 @@ export default function Dashboard() {
   const [onglet, setOnglet] = useState('aujourd_hui')
   const [notificationsActives, setNotificationsActives] = useState(false)
 
-  useEffect(() => {
-    chargerCommercant()
-  }, [])
-
-  useEffect(() => {
-    if (!commercant) return
-
-    const canal = supabase
-      .channel('commandes-temps-reel')
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'commandes', filter: `commercant_id=eq.${commercant.id}` },
-        (payload) => {
-          chargerCommandes(commercant.id)
-          jouerSon()
-        }
-      )
-      .subscribe()
-
-    return () => supabase.removeChannel(canal)
-  }, [commercant])
-
-  function jouerSon() {
-    if (!notificationsActives) return
-    const ctx = new AudioContext()
-    const oscillator = ctx.createOscillator()
-    const gain = ctx.createGain()
-    oscillator.connect(gain)
-    gain.connect(ctx.destination)
-    oscillator.frequency.setValueAtTime(880, ctx.currentTime)
-    oscillator.frequency.setValueAtTime(660, ctx.currentTime + 0.1)
-    gain.gain.setValueAtTime(0.3, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
-    oscillator.start(ctx.currentTime)
-    oscillator.stop(ctx.currentTime + 0.3)
-  }
-
-  async function chargerCommercant() {
-    const { data } = await supabase.from('commercants').select('*').limit(1).single()
-    setCommercant(data)
-    if (data) chargerCommandes(data.id)
-  }
-
-  async function chargerCommandes(commercantId) {
+  const chargerCommandes = useCallback(async (commercantId) => {
     const { data } = await supabase
       .from('commandes')
       .select(`*, creneau:creneaux(*), commande_articles(*, article:articles(*))`)
       .eq('commercant_id', commercantId)
       .order('creneau_id', { ascending: true })
     const triees = (data || []).sort((a, b) => {
-  const heureA = a.creneau?.heure_debut || ''
-  const heureB = b.creneau?.heure_debut || ''
-  return heureA.localeCompare(heureB)
-})
-setCommandes(triees)
+      const heureA = a.creneau?.heure_debut || ''
+      const heureB = b.creneau?.heure_debut || ''
+      return heureA.localeCompare(heureB)
+    })
+    setCommandes(triees)
     setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    async function chargerCommercant() {
+      const { data } = await supabase.from('commercants').select('*').limit(1).single()
+      setCommercant(data)
+      if (data) chargerCommandes(data.id)
+    }
+    chargerCommercant()
+  }, [chargerCommandes])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('notifs')
+      if (saved === 'true') setNotificationsActives(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!commercant) return
+    const canal = supabase
+      .channel(`commandes-${commercant.id}`)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'commandes' },
+        () => {
+          chargerCommandes(commercant.id)
+          jouerSon()
+        }
+      )
+      .subscribe()
+    return () => supabase.removeChannel(canal)
+  }, [commercant, chargerCommandes])
+
+  function activerNotifications() {
+    const nouvelEtat = !notificationsActives
+    setNotificationsActives(nouvelEtat)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('notifs', String(nouvelEtat))
+    }
+    if (nouvelEtat) jouerSon()
+  }
+
+  function jouerSon() {
+    try {
+      const ctx = new AudioContext()
+      const oscillator = ctx.createOscillator()
+      const gain = ctx.createGain()
+      oscillator.connect(gain)
+      gain.connect(ctx.destination)
+      oscillator.frequency.setValueAtTime(880, ctx.currentTime)
+      oscillator.frequency.setValueAtTime(660, ctx.currentTime + 0.1)
+      gain.gain.setValueAtTime(0.3, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
+      oscillator.start(ctx.currentTime)
+      oscillator.stop(ctx.currentTime + 0.3)
+    } catch(e) {}
   }
 
   async function changerStatut(commandeId, statut) {
@@ -99,19 +113,17 @@ setCommandes(triees)
   return (
     <main style={{ fontFamily: 'DM Sans, sans-serif', maxWidth: 700, margin: '0 auto', padding: '1.5rem 1rem' }}>
       
-      {/* HEADER */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-1px', color: '#6B35C4', margin: 0 }}>yoppaa</h1>
           <p style={{ color: '#1A0840', fontWeight: 700, margin: 0 }}>{commercant?.nom}</p>
         </div>
-        <div onClick={() => setNotificationsActives(true)}
-  style={{ background: notificationsActives ? '#D4EDDA' : '#EDE0FF', borderRadius: 100, padding: '0.4rem 1rem', fontSize: '0.8rem', fontWeight: 700, color: notificationsActives ? '#155724' : '#6B35C4', cursor: 'pointer' }}>
-  {notificationsActives ? '🔔 Actif' : '🔕 Activer alertes'}
-</div>
+        <div onClick={activerNotifications}
+          style={{ background: notificationsActives ? '#D4EDDA' : '#EDE0FF', borderRadius: 100, padding: '0.4rem 1rem', fontSize: '0.8rem', fontWeight: 700, color: notificationsActives ? '#155724' : '#6B35C4', cursor: 'pointer' }}>
+          {notificationsActives ? '🔔 Actif' : '🔕 Activer alertes'}
+        </div>
       </div>
 
-      {/* STATS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: '1.5rem' }}>
         {[
           { label: "Aujourd'hui", value: stats.total, color: '#6B35C4' },
@@ -126,7 +138,6 @@ setCommandes(triees)
         ))}
       </div>
 
-      {/* ONGLETS */}
       <div style={{ display: 'flex', gap: 8, marginBottom: '1rem' }}>
         {[
           { key: 'aujourd_hui', label: "Aujourd'hui" },
@@ -141,7 +152,6 @@ setCommandes(triees)
         ))}
       </div>
 
-      {/* COMMANDES */}
       {loading && <p style={{ color: '#9660E0', textAlign: 'center' }}>Chargement...</p>}
       
       {!loading && commandesFiltrees.length === 0 && (
@@ -153,7 +163,6 @@ setCommandes(triees)
 
       {commandesFiltrees.map(commande => (
         <div key={commande.id} style={{ background: '#fff', border: '1.5px solid #EDE0FF', borderRadius: 16, padding: '1rem 1.25rem', marginBottom: '0.75rem' }}>
-          
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <div>
               <p style={{ fontWeight: 800, color: '#1A0840', margin: '0 0 2px' }}>{commande.client_nom}</p>
@@ -169,7 +178,6 @@ setCommandes(triees)
             </div>
           </div>
 
-          {/* Articles */}
           <div style={{ borderTop: '1px solid #EDE0FF', paddingTop: '0.75rem', marginBottom: '0.75rem' }}>
             {commande.commande_articles?.map(ligne => (
               <div key={ligne.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#1A0840', marginBottom: 4 }}>
@@ -179,7 +187,6 @@ setCommandes(triees)
             ))}
           </div>
 
-          {/* Actions */}
           <div style={{ display: 'flex', gap: 8 }}>
             {commande.statut === 'en_attente' && (
               <button onClick={() => changerStatut(commande.id, 'en_preparation')}

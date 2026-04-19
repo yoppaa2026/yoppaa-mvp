@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 
 export default function Dashboard() {
   const [commandes, setCommandes] = useState([])
@@ -9,6 +10,7 @@ export default function Dashboard() {
   const [onglet, setOnglet] = useState('aujourd_hui')
   const [notificationsActives, setNotificationsActives] = useState(false)
   const [nouvelleCommande, setNouvelleCommande] = useState(false)
+  const router = useRouter()
 
   const trierCommandes = (data) => {
     return (data || []).sort((a, b) => {
@@ -30,12 +32,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function chargerCommercant() {
-      const { data } = await supabase.from('commercants').select('*').limit(1).single()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return; }
+      const { data } = await supabase.from('commercants').select('*').eq('user_id', user.id).single()
       setCommercant(data)
       if (data) chargerCommandes(data.id)
     }
     chargerCommercant()
-  }, [chargerCommandes])
+  }, [chargerCommandes, router])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -95,6 +99,11 @@ export default function Dashboard() {
     } catch(e) {}
   }
 
+  async function seDeconnecter() {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
   async function changerStatut(commandeId, statut) {
     await supabase.from('commandes').update({ statut }).eq('id', commandeId)
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, statut } : c))
@@ -139,9 +148,15 @@ export default function Dashboard() {
           <h1 style={{ fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-1px', color: '#6B35C4', margin: 0 }}>yoppaa</h1>
           <p style={{ color: '#1A0840', fontWeight: 700, margin: 0 }}>{commercant?.nom}</p>
         </div>
-        <div onClick={activerNotifications}
-          style={{ background: notificationsActives ? '#D4EDDA' : '#EDE0FF', borderRadius: 100, padding: '0.4rem 1rem', fontSize: '0.8rem', fontWeight: 700, color: notificationsActives ? '#155724' : '#6B35C4', cursor: 'pointer' }}>
-          {notificationsActives ? '🔔 Actif' : '🔕 Activer alertes'}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div onClick={activerNotifications}
+            style={{ background: notificationsActives ? '#D4EDDA' : '#EDE0FF', borderRadius: 100, padding: '0.4rem 1rem', fontSize: '0.8rem', fontWeight: 700, color: notificationsActives ? '#155724' : '#6B35C4', cursor: 'pointer' }}>
+            {notificationsActives ? '🔔 Actif' : '🔕 Alertes'}
+          </div>
+          <div onClick={seDeconnecter}
+            style={{ background: '#F8D7DA', borderRadius: 100, padding: '0.4rem 1rem', fontSize: '0.8rem', fontWeight: 700, color: '#721c24', cursor: 'pointer' }}>
+            Déconnexion
+          </div>
         </div>
       </div>
 

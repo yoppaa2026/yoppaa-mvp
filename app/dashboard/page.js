@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import ConfigDashboard from './ConfigDashboard'
 
 export default function Dashboard() {
   const [commandes, setCommandes] = useState([])
@@ -245,6 +246,7 @@ export default function Dashboard() {
           </div>
         </div>
       ))}
+    <ConfigDashboard commercantId={commercant?.id} />
     </main>
   )
 }

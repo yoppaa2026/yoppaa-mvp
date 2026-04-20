@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const C = {
@@ -11,9 +11,27 @@ const C = {
   pale:  '#EDE0FF',
 }
 
+// ─── Temps économisé par type ─────────────────────────────────────────────────
+const TEMPS_PAR_TYPE = {
+  'Boulangerie': 5,
+  'Boulangerie & Pâtisserie': 6,
+  'Coffee shop': 5,
+  'Sandwicherie': 8,
+  'Snack': 8,
+  'Friterie': 10,
+  'Pizzeria': 10,
+  'Épicerie': 6,
+  'Traiteur': 8,
+  'Pharmacie': 7,
+  'default': 7,
+}
+
+function getTemps(type) { return TEMPS_PAR_TYPE[type] || TEMPS_PAR_TYPE['default'] }
+
+// ─── Icônes SVG ───────────────────────────────────────────────────────────────
 const ICONES = {
   'Boulangerie': (
-    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width={36} height={36}>
+    <svg viewBox="0 0 40 40" fill="none" width={36} height={36}>
       <ellipse cx="20" cy="22" rx="14" ry="9" fill="#F59E0B" opacity="0.15"/>
       <path d="M8 22 Q10 12 20 11 Q30 12 32 22 Q30 28 20 28 Q10 28 8 22Z" fill="#F59E0B"/>
       <path d="M12 18 Q16 14 20 14 Q24 14 28 18" stroke="#D97706" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
@@ -21,7 +39,7 @@ const ICONES = {
     </svg>
   ),
   'Boulangerie & Pâtisserie': (
-    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width={36} height={36}>
+    <svg viewBox="0 0 40 40" fill="none" width={36} height={36}>
       <ellipse cx="20" cy="22" rx="14" ry="9" fill="#F59E0B" opacity="0.15"/>
       <path d="M8 22 Q10 12 20 11 Q30 12 32 22 Q30 28 20 28 Q10 28 8 22Z" fill="#F59E0B"/>
       <circle cx="20" cy="13" r="4" fill="#FCD34D" stroke="#D97706" strokeWidth="1"/>
@@ -29,7 +47,7 @@ const ICONES = {
     </svg>
   ),
   'Sandwicherie': (
-    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width={36} height={36}>
+    <svg viewBox="0 0 40 40" fill="none" width={36} height={36}>
       <rect x="7" y="24" width="26" height="5" rx="2.5" fill="#D97706"/>
       <rect x="7" y="19" width="26" height="5" rx="1" fill="#86EFAC"/>
       <rect x="9" y="16" width="22" height="3" rx="1" fill="#FCA5A5"/>
@@ -37,15 +55,23 @@ const ICONES = {
     </svg>
   ),
   'Snack': (
-    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width={36} height={36}>
+    <svg viewBox="0 0 40 40" fill="none" width={36} height={36}>
       <path d="M15 28 L13 14 Q20 10 27 14 L25 28Z" fill="#FCD34D" stroke="#D97706" strokeWidth="1"/>
       <path d="M15 19 Q20 16 25 19" stroke="#D97706" strokeWidth="1" strokeLinecap="round" fill="none"/>
       <circle cx="18" cy="22" r="1.5" fill="#EF4444"/>
       <circle cx="22" cy="23" r="1.5" fill="#22C55E"/>
     </svg>
   ),
+  'Friterie': (
+    <svg viewBox="0 0 40 40" fill="none" width={36} height={36}>
+      <rect x="12" y="20" width="16" height="12" rx="2" fill="#FCD34D" stroke="#D97706" strokeWidth="1.2"/>
+      <rect x="15" y="12" width="3" height="10" rx="1.5" fill="#F59E0B"/>
+      <rect x="19" y="10" width="3" height="12" rx="1.5" fill="#F59E0B"/>
+      <rect x="23" y="13" width="3" height="9" rx="1.5" fill="#F59E0B"/>
+    </svg>
+  ),
   'Pizzeria': (
-    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width={36} height={36}>
+    <svg viewBox="0 0 40 40" fill="none" width={36} height={36}>
       <path d="M20 8 L32 30 L8 30Z" fill="#FCD34D" stroke="#D97706" strokeWidth="1.2"/>
       <circle cx="20" cy="22" r="2" fill="#EF4444"/>
       <circle cx="15" cy="26" r="1.5" fill="#EF4444"/>
@@ -53,7 +79,7 @@ const ICONES = {
     </svg>
   ),
   'Coffee shop': (
-    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width={36} height={36}>
+    <svg viewBox="0 0 40 40" fill="none" width={36} height={36}>
       <path d="M10 21 Q10 18 14 18 L26 18 Q30 18 30 21 L29 28 Q28 31 20 31 Q12 31 11 28Z" fill="#92400E"/>
       <path d="M28 20 Q34 20 34 24 Q34 28 28 27" stroke="#92400E" strokeWidth="2" strokeLinecap="round" fill="none"/>
       <path d="M16 14 Q16 11 18 11" stroke="#6B35C4" strokeWidth="1.5" strokeLinecap="round"/>
@@ -61,7 +87,7 @@ const ICONES = {
     </svg>
   ),
   'Épicerie': (
-    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width={36} height={36}>
+    <svg viewBox="0 0 40 40" fill="none" width={36} height={36}>
       <rect x="8" y="20" width="24" height="12" rx="2" fill="#6B35C4" opacity="0.15"/>
       <rect x="8" y="20" width="24" height="12" rx="2" stroke="#6B35C4" strokeWidth="1.5" fill="none"/>
       <path d="M14 20 L12 14 L28 14 L26 20" stroke="#6B35C4" strokeWidth="1.5" fill="none"/>
@@ -70,14 +96,14 @@ const ICONES = {
     </svg>
   ),
   'Traiteur': (
-    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width={36} height={36}>
+    <svg viewBox="0 0 40 40" fill="none" width={36} height={36}>
       <path d="M8 22 Q8 18 20 18 Q32 18 32 22 L32 24 Q32 28 20 28 Q8 28 8 24Z" fill="#C4A0F4"/>
       <rect x="19" y="10" width="2" height="8" rx="1" fill="#6B35C4"/>
       <ellipse cx="20" cy="10" rx="5" ry="2" fill="#6B35C4" opacity="0.4"/>
     </svg>
   ),
   'Pharmacie': (
-    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width={36} height={36}>
+    <svg viewBox="0 0 40 40" fill="none" width={36} height={36}>
       <rect x="10" y="10" width="20" height="20" rx="4" fill="#22C55E" opacity="0.15"/>
       <rect x="10" y="10" width="20" height="20" rx="4" stroke="#22C55E" strokeWidth="1.5" fill="none"/>
       <rect x="18" y="14" width="4" height="12" rx="2" fill="#22C55E"/>
@@ -85,14 +111,13 @@ const ICONES = {
     </svg>
   ),
   'default': (
-    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width={36} height={36}>
+    <svg viewBox="0 0 40 40" fill="none" width={36} height={36}>
       <rect x="8" y="18" width="24" height="14" rx="3" fill="#6B35C4" opacity="0.15"/>
       <rect x="8" y="18" width="24" height="14" rx="3" stroke="#6B35C4" strokeWidth="1.5" fill="none"/>
       <rect x="14" y="10" width="12" height="8" rx="2" fill="#EDE0FF" stroke="#6B35C4" strokeWidth="1.5"/>
     </svg>
   )
 }
-
 function getIcone(type) { return ICONES[type] || ICONES['default'] }
 
 const TYPE_BADGE = {
@@ -100,6 +125,7 @@ const TYPE_BADGE = {
   'Boulangerie & Pâtisserie': { bg: '#FEF3C7', color: '#92400E' },
   'Sandwicherie':             { bg: '#CCE5FF', color: '#004085' },
   'Snack':                    { bg: '#D4EDDA', color: '#155724' },
+  'Friterie':                 { bg: '#FEF9C3', color: '#854D0E' },
   'Pizzeria':                 { bg: '#FEE2E2', color: '#991B1B' },
   'Coffee shop':              { bg: '#EDE0FF', color: '#2D0F6B' },
   'Épicerie':                 { bg: '#E0E7FF', color: '#3730A3' },
@@ -107,6 +133,9 @@ const TYPE_BADGE = {
   'Pharmacie':                { bg: '#D1FAE5', color: '#065F46' },
 }
 function getBadge(type) { return TYPE_BADGE[type] || { bg: C.pale, color: C.deep } }
+
+// ─── Catégories pour le filtre ────────────────────────────────────────────────
+const CATEGORIES = ['Tous', 'Boulangerie', 'Coffee shop', 'Sandwicherie', 'Snack', 'Friterie', 'Pizzeria', 'Épicerie', 'Traiteur']
 
 function distanceVolOiseau(lat1, lon1, lat2, lon2) {
   const R = 6371000
@@ -121,7 +150,6 @@ function formatDistance(m) {
   return m < 1000 ? `${Math.round(m)} m` : `${(m/1000).toFixed(1)} km`
 }
 
-// ─── Étoiles — toujours affichées, grises si pas de note ────────────────────
 function Etoiles({ note, taille = 16 }) {
   const n = note ? Math.round(note) : 0
   return (
@@ -133,30 +161,157 @@ function Etoiles({ note, taille = 16 }) {
   )
 }
 
+// ─── Swipe retrait ────────────────────────────────────────────────────────────
+function SwipeRetrait({ onConfirm }) {
+  const [swipeX, setSwipeX] = useState(0)
+  const [swiping, setSwiping] = useState(false)
+  const [confirmed, setConfirmed] = useState(false)
+  const startXRef = useRef(0)
+  const TRACK_WIDTH = 280
+  const THUMB_SIZE = 52
+  const MAX_X = TRACK_WIDTH - THUMB_SIZE - 8
+
+  function getClientX(e) { return e.touches ? e.touches[0].clientX : e.clientX }
+
+  function onStart(e) {
+    if (confirmed) return
+    setSwiping(true)
+    startXRef.current = getClientX(e) - swipeX
+  }
+
+  function onMove(e) {
+    if (!swiping || confirmed) return
+    const x = Math.max(0, Math.min(MAX_X, getClientX(e) - startXRef.current))
+    setSwipeX(x)
+    if (x >= MAX_X) { setConfirmed(true); setSwiping(false); onConfirm() }
+  }
+
+  function onEnd() {
+    if (confirmed) return
+    setSwiping(false)
+    if (swipeX < MAX_X) setSwipeX(0)
+  }
+
+  const progress = swipeX / MAX_X
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      <p style={{ fontSize: '0.85rem', color: '#6B7280', fontWeight: 600, margin: 0 }}>
+        Glisse pour confirmer le retrait
+      </p>
+      <div style={{ width: TRACK_WIDTH, height: THUMB_SIZE + 8, borderRadius: 100, background: confirmed ? '#D4EDDA' : `linear-gradient(to right, ${C.pale} ${progress * 100}%, #F3F4F6 ${progress * 100}%)`, position: 'relative', overflow: 'hidden', border: `2px solid ${confirmed ? '#16A34A' : C.light}`, transition: confirmed ? 'background 0.3s, border-color 0.3s' : 'none', userSelect: 'none', cursor: confirmed ? 'default' : 'grab' }}
+        onMouseDown={onStart} onMouseMove={onMove} onMouseUp={onEnd} onMouseLeave={onEnd}
+        onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700, color: confirmed ? '#16A34A' : C.mid, pointerEvents: 'none', paddingLeft: THUMB_SIZE + 12 }}>
+          {confirmed ? '✓ Confirmé !' : 'Glisse →'}
+        </div>
+        <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB_SIZE, height: THUMB_SIZE, borderRadius: '50%', background: confirmed ? '#16A34A' : C.main, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', color: '#fff', boxShadow: '0 2px 12px rgba(0,0,0,0.2)', transition: swiping ? 'none' : 'left 0.3s ease, background 0.3s', cursor: confirmed ? 'default' : 'grab', userSelect: 'none' }}>
+          {confirmed ? '✓' : '→'}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Carte commerce ───────────────────────────────────────────────────────────
+function CarteCommerce({ c, favoris, notesParCommerce, onSelect, onToggleFavori }) {
+  const badge = getBadge(c.type)
+  const estFavori = favoris.includes(c.id)
+  const noteInfo = notesParCommerce[c.id]
+
+  return (
+    <div onClick={() => onSelect(c)}
+      style={{ background: '#fff', border: `1.5px solid ${C.pale}`, borderRadius: 16, padding: '1rem 1.25rem', marginBottom: '0.75rem', cursor: 'pointer', boxShadow: '0 1px 4px rgba(107,53,196,0.06)' }}
+      onMouseOver={e => { e.currentTarget.style.borderColor = C.main; e.currentTarget.style.boxShadow = '0 4px 16px rgba(107,53,196,0.12)' }}
+      onMouseOut={e => { e.currentTarget.style.borderColor = C.pale; e.currentTarget.style.boxShadow = '0 1px 4px rgba(107,53,196,0.06)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 12, background: C.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+          {c.logo_url ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : getIcone(c.type)}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <p style={{ fontWeight: 800, color: C.ink, margin: '0 0 4px', fontSize: '1rem' }}>{c.nom}</p>
+              <span style={{ background: badge.bg, color: badge.color, fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 100 }}>{c.type}</span>
+            </div>
+            <button onClick={e => onToggleFavori(c.id, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.3rem', padding: '0 0 0 8px', lineHeight: 1 }}>
+              {estFavori ? '❤️' : '🤍'}
+            </button>
+          </div>
+          {c.description && <p style={{ fontSize: '0.8rem', color: '#6b5c8a', margin: '6px 0 0', lineHeight: 1.4 }}>{c.description}</p>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+            <Etoiles note={noteInfo?.moyenne || 0} taille={13} />
+            {noteInfo?.count > 0
+              ? <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>({noteInfo.count} avis)</span>
+              : <span style={{ fontSize: '0.72rem', color: '#D1D5DB' }}>Pas encore d'avis</span>
+            }
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginTop: 4 }}>
+            {c.distance != null && <span style={{ fontSize: '0.75rem', color: C.main, fontWeight: 700 }}>📍 {formatDistance(c.distance)}</span>}
+            {c.horaires && <span style={{ fontSize: '0.75rem', color: C.mid }}>🕐 {c.horaires}</span>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Composant principal ──────────────────────────────────────────────────────
 export default function Commander() {
+  // Navigation
+  const [onglet, setOnglet] = useState('accueil') // accueil | favoris | profil
+  const [etape, setEtape] = useState(1) // 1=liste, 2=articles, 3=créneau, 4=confirmation
+
+  // Données
   const [commercants, setCommercants] = useState([])
   const [commercantSelectionne, setCommercantSelectionne] = useState(null)
   const [articles, setArticles] = useState([])
   const [creneaux, setCreneaux] = useState([])
   const [avisCommerce, setAvisCommerce] = useState([])
+  const [notesParCommerce, setNotesParCommerce] = useState({})
+
+  // Commande
   const [panier, setPanier] = useState({})
   const [creneauChoisi, setCreneauChoisi] = useState(null)
-  const [client, setClient] = useState({ nom: '', email: '', telephone: '' })
-  const [etape, setEtape] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [derniereCommande, setDerniereCommande] = useState(null)
+
+  // Client
+  const [client, setClient] = useState({ nom: '', email: '', telephone: '' })
+  const [clientId, setClientId] = useState(null)
+  const [clientCommandes, setClientCommandes] = useState([])
+
+  // Géoloc & filtres
   const [position, setPosition] = useState(null)
   const [geoLoading, setGeoLoading] = useState(false)
+  const [categorieActive, setCategorieActive] = useState('Tous')
+
+  // Favoris
   const [favoris, setFavoris] = useState([])
-  const [clientId, setClientId] = useState(null)
-  const [derniereCommande, setDerniereCommande] = useState(null)
+  const [commercantsFavoris, setCommercantsFavoris] = useState([])
+
+  // Avis
   const [avisForm, setAvisForm] = useState({ note: 0, commentaire: '' })
   const [avisSoumis, setAvisSoumis] = useState(false)
-  // notes moyennes par commerce id
-  const [notesParCommerce, setNotesParCommerce] = useState({})
+  const [commandeRecuperee, setCommandeRecuperee] = useState(false)
+  const [minutesRestantes, setMinutesRestantes] = useState(30)
+  const [avisDisponible, setAvisDisponible] = useState(false)
+  const avisTimerRef = useRef(null)
 
   useEffect(() => {
     chargerCommercants()
     demanderGeolocalisation()
+    // Restaurer session client si existante
+    const savedEmail = localStorage.getItem('yoppaa_email')
+    const savedNom = localStorage.getItem('yoppaa_nom')
+    const savedId = localStorage.getItem('yoppaa_client_id')
+    if (savedEmail && savedId) {
+      setClient(p => ({ ...p, email: savedEmail, nom: savedNom || '' }))
+      setClientId(savedId)
+      chargerFavoris(savedId)
+      chargerCommandesClient(savedId)
+    }
+    return () => { if (avisTimerRef.current) clearTimeout(avisTimerRef.current) }
   }, [])
 
   function demanderGeolocalisation() {
@@ -172,8 +327,7 @@ export default function Commander() {
   async function chargerCommercants() {
     const { data } = await supabase.from('commercants').select('*').order('nom')
     setCommercants(data || [])
-    // Charger les notes moyennes pour tous les commerces
-    if (data && data.length > 0) chargerNotes(data.map(c => c.id))
+    if (data?.length > 0) chargerNotes(data.map(c => c.id))
   }
 
   async function chargerNotes(ids) {
@@ -181,17 +335,31 @@ export default function Commander() {
     if (!data) return
     const notes = {}
     ids.forEach(id => {
-      const avisCommerce = data.filter(a => a.commercant_id === id)
-      if (avisCommerce.length > 0) {
-        notes[id] = {
-          moyenne: (avisCommerce.reduce((acc, a) => acc + a.note, 0) / avisCommerce.length),
-          count: avisCommerce.length
-        }
-      } else {
-        notes[id] = { moyenne: 0, count: 0 }
-      }
+      const av = data.filter(a => a.commercant_id === id)
+      notes[id] = av.length > 0
+        ? { moyenne: av.reduce((acc, a) => acc + a.note, 0) / av.length, count: av.length }
+        : { moyenne: 0, count: 0 }
     })
     setNotesParCommerce(notes)
+  }
+
+  async function chargerFavoris(cid) {
+    const { data } = await supabase.from('favoris').select('commercant_id').eq('client_id', cid)
+    const ids = (data || []).map(f => f.commercant_id)
+    setFavoris(ids)
+    if (ids.length > 0) {
+      const { data: comms } = await supabase.from('commercants').select('*').in('id', ids)
+      setCommercantsFavoris(comms || [])
+    }
+  }
+
+  async function chargerCommandesClient(cid) {
+    const { data } = await supabase
+      .from('commandes')
+      .select('*, commercant:commercants(nom, type), commande_articles(quantite)')
+      .eq('client_email', localStorage.getItem('yoppaa_email') || '')
+      .order('created_at', { ascending: false })
+    setClientCommandes(data || [])
   }
 
   useEffect(() => {
@@ -236,12 +404,18 @@ export default function Commander() {
     const { data: existing } = await supabase.from('clients').select('id').eq('email', email).single()
     if (existing) {
       setClientId(existing.id)
-      const { data: favs } = await supabase.from('favoris').select('commercant_id').eq('client_id', existing.id)
-      setFavoris((favs || []).map(f => f.commercant_id))
+      localStorage.setItem('yoppaa_client_id', existing.id)
+      localStorage.setItem('yoppaa_email', email)
+      localStorage.setItem('yoppaa_nom', nom)
+      chargerFavoris(existing.id)
+      chargerCommandesClient(existing.id)
       return existing.id
     }
     const { data: nouveau } = await supabase.from('clients').insert({ email, nom }).select('id').single()
     setClientId(nouveau.id)
+    localStorage.setItem('yoppaa_client_id', nouveau.id)
+    localStorage.setItem('yoppaa_email', email)
+    localStorage.setItem('yoppaa_nom', nom)
     return nouveau.id
   }
 
@@ -261,9 +435,12 @@ export default function Commander() {
     if (favoris.includes(commercantId)) {
       await supabase.from('favoris').delete().eq('client_id', cid).eq('commercant_id', commercantId)
       setFavoris(prev => prev.filter(id => id !== commercantId))
+      setCommercantsFavoris(prev => prev.filter(c => c.id !== commercantId))
     } else {
       await supabase.from('favoris').insert({ client_id: cid, commercant_id: commercantId })
       setFavoris(prev => [...prev, commercantId])
+      const c = commercants.find(x => x.id === commercantId)
+      if (c) setCommercantsFavoris(prev => [...prev, c])
     }
   }
 
@@ -316,8 +493,22 @@ export default function Commander() {
       )
       setDerniereCommande({ ...commande, client_id: cid })
       setEtape(4)
+      chargerCommandesClient(cid)
     }
     setLoading(false)
+  }
+
+  async function confirmerRetrait() {
+    if (!derniereCommande) return
+    await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', derniereCommande.id)
+    setCommandeRecuperee(true)
+    let restant = 30
+    const interval = setInterval(() => {
+      restant -= 1
+      setMinutesRestantes(restant)
+      if (restant <= 0) { clearInterval(interval); setAvisDisponible(true) }
+    }, 60 * 1000)
+    avisTimerRef.current = setTimeout(() => setAvisDisponible(true), 30 * 60 * 1000)
   }
 
   async function soumettreAvis() {
@@ -337,108 +528,115 @@ export default function Commander() {
     return avis.reduce((acc, a) => acc + a.note, 0) / avis.length
   }
 
-  function resetEtape1() {
-    setEtape(1); setPanier({}); setClient({ nom: '', email: '', telephone: '' })
-    setCreneauChoisi(null); setCommercantSelectionne(null)
+  function resetCommande() {
+    setEtape(1); setPanier({}); setCreneauChoisi(null); setCommercantSelectionne(null)
     setAvisForm({ note: 0, commentaire: '' }); setAvisSoumis(false)
+    setCommandeRecuperee(false); setAvisDisponible(false); setMinutesRestantes(30)
+    if (avisTimerRef.current) clearTimeout(avisTimerRef.current)
   }
 
+  // ─── Calcul temps économisé ─────────────────────────────────────────────────
+  const tempsEconomise = clientCommandes
+    .filter(c => c.statut === 'recupere')
+    .reduce((acc, c) => acc + getTemps(c.commercant?.type), 0)
+
+  // ─── Commercants filtrés ────────────────────────────────────────────────────
+  const commercantsFiltres = categorieActive === 'Tous'
+    ? commercants
+    : commercants.filter(c => c.type === categorieActive || c.type?.includes(categorieActive))
+
+  // ─── Affichage de la liste (utilisé pour accueil et favoris) ────────────────
+  const estDansUnCommerce = etape > 1
+
   return (
-    <main style={{ fontFamily: 'DM Sans, sans-serif', maxWidth: 600, margin: '0 auto', padding: '0 0 2rem', background: '#FAFAFA', minHeight: '100vh' }}>
+    <div style={{ fontFamily: 'DM Sans, sans-serif', maxWidth: 600, margin: '0 auto', background: '#FAFAFA', minHeight: '100vh', paddingBottom: 72, position: 'relative' }}>
 
-      {/* HEADER */}
-      <div style={{ background: C.main, padding: '1.5rem 1rem 1.2rem', marginBottom: '1rem' }}>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', opacity: 0.4 }}/>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: C.light }}/>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: C.mid }}/>
-        </div>
-        <h1 style={{ fontWeight: 800, fontSize: '1.8rem', letterSpacing: '-2px', color: '#fff', margin: 0 }}>yoppaa</h1>
-        <p style={{ color: C.light, fontSize: '0.8rem', margin: 0 }}>Skip the wait</p>
-      </div>
-
-      {/* ── ÉTAPE 1 ── */}
-      {etape === 1 && (
-        <div style={{ padding: '0 1rem' }}>
-          {geoLoading && (
-            <div style={{ background: C.pale, borderRadius: 10, padding: '0.6rem 1rem', marginBottom: '1rem', fontSize: '0.82rem', color: C.main, fontWeight: 600 }}>
-              📍 Localisation en cours...
-            </div>
-          )}
-          {position && !geoLoading && (
-            <div style={{ background: C.pale, borderRadius: 10, padding: '0.6rem 1rem', marginBottom: '1rem', fontSize: '0.82rem', color: C.main, fontWeight: 600 }}>
-              📍 Triés par distance depuis ta position
-            </div>
-          )}
-          <p style={{ fontWeight: 800, fontSize: '1.1rem', color: C.ink, marginBottom: '1rem' }}>Commande sans attendre 👇</p>
-
-          {commercants.map(c => {
-            const badge = getBadge(c.type)
-            const estFavori = favoris.includes(c.id)
-            const noteInfo = notesParCommerce[c.id]
-            return (
-              <div key={c.id} onClick={() => selectionnerCommercant(c)}
-                style={{ background: '#fff', border: `1.5px solid ${C.pale}`, borderRadius: 16, padding: '1rem 1.25rem', marginBottom: '0.75rem', cursor: 'pointer', boxShadow: '0 1px 4px rgba(107,53,196,0.06)' }}
-                onMouseOver={e => { e.currentTarget.style.borderColor = C.main; e.currentTarget.style.boxShadow = '0 4px 16px rgba(107,53,196,0.12)' }}
-                onMouseOut={e => { e.currentTarget.style.borderColor = C.pale; e.currentTarget.style.boxShadow = '0 1px 4px rgba(107,53,196,0.06)' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  {/* Logo ou icône */}
-                  <div style={{ width: 56, height: 56, borderRadius: 12, background: C.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-                    {c.logo_url ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : getIcone(c.type)}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div>
-                        <p style={{ fontWeight: 800, color: C.ink, margin: '0 0 4px', fontSize: '1rem' }}>{c.nom}</p>
-                        <span style={{ background: badge.bg, color: badge.color, fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 100 }}>{c.type}</span>
-                      </div>
-                      <button onClick={e => toggleFavori(c.id, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.3rem', padding: '0 0 0 8px', lineHeight: 1 }}>
-                        {estFavori ? '❤️' : '🤍'}
-                      </button>
-                    </div>
-                    {c.description && <p style={{ fontSize: '0.8rem', color: '#6b5c8a', margin: '6px 0 0', lineHeight: 1.4 }}>{c.description}</p>}
-
-                    {/* Étoiles — toujours visibles */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                      <Etoiles note={noteInfo?.moyenne || 0} taille={13} />
-                      {noteInfo?.count > 0
-                        ? <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>({noteInfo.count} avis)</span>
-                        : <span style={{ fontSize: '0.72rem', color: '#D1D5DB' }}>Pas encore d'avis</span>
-                      }
-                    </div>
-
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginTop: 4 }}>
-                      {c.distance != null && <span style={{ fontSize: '0.75rem', color: C.main, fontWeight: 700 }}>📍 {formatDistance(c.distance)}</span>}
-                      {c.horaires && <span style={{ fontSize: '0.75rem', color: C.mid }}>🕐 {c.horaires}</span>}
-                    </div>
-                  </div>
-                </div>
+      {/* ── HEADER PRINCIPAL ── */}
+      {!estDansUnCommerce && (
+        <div style={{ background: C.main, padding: '1.25rem 1rem 0', position: 'sticky', top: 0, zIndex: 50 }}>
+          {/* Logo + position */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem' }}>
+            <div>
+              <div style={{ display: 'flex', gap: 5, marginBottom: 4 }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', opacity: 0.4 }}/>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: C.light }}/>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: C.mid }}/>
               </div>
-            )
-          })}
+              <h1 style={{ fontWeight: 800, fontSize: '1.6rem', letterSpacing: '-2px', color: '#fff', margin: 0 }}>yoppaa</h1>
+              <p style={{ color: C.light, fontSize: '0.75rem', margin: 0 }}>Skip the wait</p>
+            </div>
+            {/* Position actuelle */}
+            <button
+              onClick={demanderGeolocalisation}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 10, padding: '0.4rem 0.75rem', color: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '0.78rem', backdropFilter: 'blur(4px)' }}
+            >
+              <span style={{ fontSize: '1rem' }}>{geoLoading ? '⏳' : position ? '📍' : '📍'}</span>
+              <span>{geoLoading ? 'Localisation...' : position ? 'Ma position' : 'Activer ma position'}</span>
+            </button>
+          </div>
+
+          {/* Filtres catégories — uniquement sur l'onglet accueil */}
+          {onglet === 'accueil' && (
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: '0.75rem', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              {CATEGORIES.map(cat => (
+                <button key={cat} onClick={() => setCategorieActive(cat)}
+                  style={{ flexShrink: 0, padding: '0.35rem 0.875rem', borderRadius: 100, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.78rem', transition: 'all 0.15s', background: categorieActive === cat ? '#fff' : 'rgba(255,255,255,0.15)', color: categorieActive === cat ? C.main : '#fff', whiteSpace: 'nowrap' }}>
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {onglet !== 'accueil' && <div style={{ height: 12 }} />}
         </div>
       )}
 
-      {/* ── ÉTAPE 2 ── */}
-      {etape === 2 && (
-        <div style={{ padding: '0 1rem' }}>
-          <button onClick={() => { setEtape(1); setPanier({}) }} style={{ background: 'none', border: 'none', color: C.main, cursor: 'pointer', marginBottom: '1rem', fontWeight: 600, padding: 0, fontSize: '0.9rem' }}>← Retour</button>
+      {/* ── HEADER dans le commerce (étape 2, 3, 4) ── */}
+      {estDansUnCommerce && (
+        <div style={{ background: C.main, padding: '1rem 1rem 0.875rem' }}>
+          <button onClick={resetCommande} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', cursor: 'pointer', borderRadius: 8, padding: '0.35rem 0.75rem', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '0.85rem' }}>
+            ← Retour
+          </button>
+        </div>
+      )}
 
+      {/* ══════════════════════════════════════════════════════
+          ONGLET ACCUEIL
+      ══════════════════════════════════════════════════════ */}
+      {onglet === 'accueil' && !estDansUnCommerce && (
+        <div style={{ padding: '1rem 1rem 0' }}>
+          {position && (
+            <p style={{ fontSize: '0.78rem', color: C.mid, fontWeight: 600, marginBottom: '0.75rem' }}>
+              📍 {commercantsFiltres.length} commerce{commercantsFiltres.length > 1 ? 's' : ''} près de toi
+            </p>
+          )}
+          {commercantsFiltres.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem 0' }}>
+              <p style={{ fontSize: '2rem', marginBottom: 8 }}>🔍</p>
+              <p style={{ fontWeight: 700, color: '#6B7280' }}>Aucun commerce dans cette catégorie</p>
+            </div>
+          ) : commercantsFiltres.map(c => (
+            <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} />
+          ))}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════
+          ÉTAPE 2 — Articles
+      ══════════════════════════════════════════════════════ */}
+      {etape === 2 && (
+        <div style={{ padding: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.25rem', background: '#fff', borderRadius: 16, padding: '1rem', border: `1.5px solid ${C.pale}` }}>
             <div style={{ width: 64, height: 64, borderRadius: 14, background: C.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
               {commercantSelectionne?.logo_url ? <img src={commercantSelectionne.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : getIcone(commercantSelectionne?.type)}
             </div>
             <div>
-              <h2 style={{ fontWeight: 800, fontSize: '1.15rem', color: C.ink, margin: '0 0 4px' }}>{commercantSelectionne?.nom}</h2>
-              {commercantSelectionne?.adresse && <p style={{ fontSize: '0.75rem', color: '#b0a0c8', margin: '0 0 6px' }}>📍 {commercantSelectionne.adresse}</p>}
-              {/* Étoiles toujours visibles sur la fiche */}
+              <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: C.ink, margin: '0 0 4px' }}>{commercantSelectionne?.nom}</h2>
+              {commercantSelectionne?.adresse && <p style={{ fontSize: '0.75rem', color: '#b0a0c8', margin: '0 0 4px' }}>📍 {commercantSelectionne.adresse}</p>}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Etoiles note={noteMoyenne(avisCommerce)} taille={14} />
+                <Etoiles note={noteMoyenne(avisCommerce)} taille={13} />
                 {avisCommerce.length > 0
-                  ? <>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#F59E0B' }}>{noteMoyenne(avisCommerce).toFixed(1)}</span>
-                      <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>({avisCommerce.length} avis)</span>
-                    </>
+                  ? <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>({avisCommerce.length} avis)</span>
                   : <span style={{ fontSize: '0.72rem', color: '#D1D5DB' }}>Pas encore d'avis</span>
                 }
               </div>
@@ -479,7 +677,7 @@ export default function Commander() {
                   {a.commentaire && <p style={{ fontSize: '0.82rem', color: C.ink, margin: '4px 0 0', lineHeight: 1.5 }}>{a.commentaire}</p>}
                   {a.reponse_commercant && (
                     <div style={{ background: C.pale, borderRadius: 8, padding: '0.5rem 0.75rem', marginTop: 8 }}>
-                      <p style={{ fontSize: '0.75rem', fontWeight: 700, color: C.main, margin: '0 0 2px' }}>Réponse du commerce :</p>
+                      <p style={{ fontSize: '0.75rem', fontWeight: 700, color: C.main, margin: '0 0 2px' }}>Réponse :</p>
                       <p style={{ fontSize: '0.8rem', color: C.ink, margin: 0 }}>{a.reponse_commercant}</p>
                     </div>
                   )}
@@ -489,7 +687,7 @@ export default function Commander() {
           )}
 
           {Object.keys(panier).length > 0 && (
-            <div style={{ position: 'sticky', bottom: 16, marginTop: 8 }}>
+            <div style={{ position: 'sticky', bottom: 80, marginTop: 8 }}>
               <button onClick={() => setEtape(3)} style={{ width: '100%', padding: '1rem', background: C.main, color: '#fff', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '1rem', cursor: 'pointer', boxShadow: '0 4px 20px rgba(107,53,196,0.3)' }}>
                 Choisir mon créneau — {totalPanier().toFixed(2)}€
               </button>
@@ -498,10 +696,11 @@ export default function Commander() {
         </div>
       )}
 
-      {/* ── ÉTAPE 3 ── */}
+      {/* ══════════════════════════════════════════════════════
+          ÉTAPE 3 — Créneau
+      ══════════════════════════════════════════════════════ */}
       {etape === 3 && (
-        <div style={{ padding: '0 1rem' }}>
-          <button onClick={() => setEtape(2)} style={{ background: 'none', border: 'none', color: C.main, cursor: 'pointer', marginBottom: '1rem', fontWeight: 600, padding: 0, fontSize: '0.9rem' }}>← Retour</button>
+        <div style={{ padding: '1rem' }}>
           <h2 style={{ fontWeight: 800, fontSize: '1.2rem', marginBottom: '1rem', color: C.ink }}>Choisis ton créneau</h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: '1.5rem' }}>
             {creneaux.map(c => (
@@ -523,50 +722,211 @@ export default function Commander() {
           ))}
           <button onClick={passerCommande} disabled={loading || !creneauChoisi || !client.nom || !client.email}
             style={{ width: '100%', padding: '1rem', background: C.main, color: '#fff', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '1rem', cursor: 'pointer', opacity: (!creneauChoisi || !client.nom || !client.email) ? 0.5 : 1, boxShadow: '0 4px 20px rgba(107,53,196,0.3)' }}>
-            {loading ? 'En cours...' : `Confirmer ma commande — ${totalPanier().toFixed(2)}€`}
+            {loading ? 'En cours...' : `Confirmer — ${totalPanier().toFixed(2)}€`}
           </button>
           <p style={{ fontSize: '0.78rem', color: '#9a8ab0', textAlign: 'center', marginTop: 8 }}>Le paiement sera activé prochainement</p>
         </div>
       )}
 
-      {/* ── ÉTAPE 4 ── */}
+      {/* ══════════════════════════════════════════════════════
+          ÉTAPE 4 — Confirmation
+      ══════════════════════════════════════════════════════ */}
       {etape === 4 && (
-        <div style={{ padding: '2rem 1rem' }}>
-          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎉</div>
-            <h2 style={{ fontWeight: 800, fontSize: '1.5rem', color: C.ink, marginBottom: '0.5rem' }}>Commande confirmée !</h2>
-            <p style={{ color: C.main, marginBottom: '0.5rem' }}>Ta commande est enregistrée.</p>
-            <p style={{ color: C.mid, fontSize: '0.9rem', marginBottom: 0 }}>Le commerce la prépare pour ton créneau — tu n'as plus qu'à arriver !</p>
+        <div style={{ padding: '1.5rem 1rem' }}>
+          <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🎉</div>
+            <h2 style={{ fontWeight: 800, fontSize: '1.4rem', color: C.ink, marginBottom: '0.5rem' }}>Commande confirmée !</h2>
+            <p style={{ color: C.main, marginBottom: '0.25rem' }}>Chez <strong>{commercantSelectionne?.nom}</strong></p>
+            <p style={{ color: C.mid, fontSize: '0.85rem' }}>Présente-toi au créneau — tout sera prêt !</p>
           </div>
 
-          {!avisSoumis ? (
-            <div style={{ background: '#fff', borderRadius: 16, padding: '1.25rem', border: `1.5px solid ${C.pale}`, marginBottom: '1.5rem' }}>
-              <h3 style={{ fontWeight: 800, fontSize: '1rem', color: C.ink, margin: '0 0 12px' }}>Laisse un avis sur {commercantSelectionne?.nom} 👇</h3>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                {[1,2,3,4,5].map(i => (
-                  <span key={i} onClick={() => setAvisForm(p => ({ ...p, note: i }))}
-                    style={{ fontSize: 28, cursor: 'pointer', color: i <= avisForm.note ? '#F59E0B' : '#E5E7EB', transition: 'color 0.1s' }}>★</span>
-                ))}
-              </div>
-              <textarea placeholder="Ton commentaire (optionnel)" value={avisForm.commentaire}
-                onChange={e => setAvisForm(p => ({ ...p, commentaire: e.target.value }))}
-                style={{ width: '100%', padding: '0.75rem', border: `1.5px solid ${C.pale}`, borderRadius: 10, fontSize: '0.9rem', fontFamily: 'DM Sans, sans-serif', resize: 'vertical', minHeight: 80, boxSizing: 'border-box', outline: 'none' }}/>
-              <button onClick={soumettreAvis} disabled={!avisForm.note}
-                style={{ marginTop: 10, width: '100%', padding: '0.75rem', background: avisForm.note ? C.main : '#E5E7EB', color: '#fff', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.9rem', cursor: avisForm.note ? 'pointer' : 'default' }}>
-                Envoyer mon avis
-              </button>
+          {!commandeRecuperee ? (
+            <div style={{ background: '#fff', borderRadius: 16, padding: '1.5rem', border: `1.5px solid ${C.pale}`, marginBottom: '1.25rem', textAlign: 'center' }}>
+              <p style={{ fontWeight: 800, fontSize: '0.95rem', color: C.ink, marginBottom: '0.5rem' }}>📦 Tu as récupéré ta commande ?</p>
+              <p style={{ fontSize: '0.82rem', color: '#6B7280', marginBottom: '1.25rem' }}>Glisse devant le commerçant pour confirmer.</p>
+              <SwipeRetrait onConfirm={confirmerRetrait} />
             </div>
           ) : (
-            <div style={{ background: '#D4EDDA', borderRadius: 16, padding: '1rem', textAlign: 'center', marginBottom: '1.5rem' }}>
+            <div style={{ background: '#F0FDF4', borderRadius: 16, padding: '1.25rem', border: '1.5px solid #16A34A33', marginBottom: '1.25rem', textAlign: 'center' }}>
+              <p style={{ fontSize: '1.5rem', marginBottom: 6 }}>✅</p>
+              <p style={{ fontWeight: 800, color: '#16A34A' }}>Retrait confirmé !</p>
+            </div>
+          )}
+
+          {commandeRecuperee && !avisSoumis && (
+            <div style={{ background: '#fff', borderRadius: 16, padding: '1.25rem', border: `1.5px solid ${C.pale}`, marginBottom: '1.25rem' }}>
+              {!avisDisponible ? (
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ fontWeight: 700, color: C.ink, marginBottom: 4 }}>⏳ Ton avis dans {minutesRestantes} min</p>
+                  <p style={{ fontSize: '0.82rem', color: '#6B7280' }}>On te demandera un avis après ton retrait — le temps de savourer !</p>
+                </div>
+              ) : (
+                <>
+                  <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: C.ink, margin: '0 0 12px' }}>Comment était {commercantSelectionne?.nom} ? ⭐</h3>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                    {[1,2,3,4,5].map(i => (
+                      <span key={i} onClick={() => setAvisForm(p => ({ ...p, note: i }))}
+                        style={{ fontSize: 28, cursor: 'pointer', color: i <= avisForm.note ? '#F59E0B' : '#E5E7EB', transition: 'color 0.1s' }}>★</span>
+                    ))}
+                  </div>
+                  <textarea placeholder="Ton commentaire (optionnel)" value={avisForm.commentaire}
+                    onChange={e => setAvisForm(p => ({ ...p, commentaire: e.target.value }))}
+                    style={{ width: '100%', padding: '0.75rem', border: `1.5px solid ${C.pale}`, borderRadius: 10, fontSize: '0.9rem', fontFamily: 'DM Sans, sans-serif', resize: 'vertical', minHeight: 80, boxSizing: 'border-box', outline: 'none' }}/>
+                  <button onClick={soumettreAvis} disabled={!avisForm.note}
+                    style={{ marginTop: 10, width: '100%', padding: '0.75rem', background: avisForm.note ? C.main : '#E5E7EB', color: '#fff', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.9rem', cursor: avisForm.note ? 'pointer' : 'default' }}>
+                    Envoyer mon avis
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {avisSoumis && (
+            <div style={{ background: '#D4EDDA', borderRadius: 16, padding: '1rem', textAlign: 'center', marginBottom: '1.25rem' }}>
               <p style={{ color: '#155724', fontWeight: 700, margin: 0 }}>✓ Merci pour ton avis !</p>
             </div>
           )}
 
-          <button onClick={resetEtape1} style={{ width: '100%', padding: '0.75rem 2rem', background: C.main, color: '#fff', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '0.95rem' }}>
+          <button onClick={resetCommande} style={{ width: '100%', padding: '0.75rem 2rem', background: C.main, color: '#fff', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '0.95rem' }}>
             Commander autre chose
           </button>
         </div>
       )}
-    </main>
+
+      {/* ══════════════════════════════════════════════════════
+          ONGLET FAVORIS
+      ══════════════════════════════════════════════════════ */}
+      {onglet === 'favoris' && !estDansUnCommerce && (
+        <div style={{ padding: '1rem' }}>
+          <h2 style={{ fontWeight: 800, fontSize: '1.2rem', color: C.ink, marginBottom: '1rem' }}>Mes favoris ❤️</h2>
+          {commercantsFavoris.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem 0' }}>
+              <p style={{ fontSize: '2rem', marginBottom: 12 }}>🤍</p>
+              <p style={{ fontWeight: 700, color: '#6B7280', marginBottom: 8 }}>Aucun favori pour l'instant</p>
+              <p style={{ fontSize: '0.85rem', color: '#9CA3AF' }}>Tape ❤️ sur un commerce pour le retrouver ici.</p>
+            </div>
+          ) : commercantsFavoris.map(c => (
+            <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} onSelect={c => { selectionnerCommercant(c); setOnglet('accueil') }} onToggleFavori={toggleFavori} />
+          ))}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════
+          ONGLET PROFIL
+      ══════════════════════════════════════════════════════ */}
+      {onglet === 'profil' && !estDansUnCommerce && (
+        <div style={{ padding: '1rem' }}>
+
+          {/* Carte profil */}
+          <div style={{ background: `linear-gradient(135deg, ${C.main}, ${C.mid})`, borderRadius: 20, padding: '1.5rem', marginBottom: '1rem', color: '#fff' }}>
+            <div style={{ fontSize: '2rem', marginBottom: 8 }}>👤</div>
+            {client.nom ? (
+              <>
+                <p style={{ fontWeight: 800, fontSize: '1.2rem', margin: '0 0 4px' }}>{client.nom}</p>
+                <p style={{ fontSize: '0.82rem', color: C.light, margin: 0 }}>{client.email}</p>
+              </>
+            ) : (
+              <p style={{ fontWeight: 700, color: C.light }}>Connecte-toi pour voir ton profil</p>
+            )}
+          </div>
+
+          {/* Temps économisé */}
+          <div style={{ background: '#fff', borderRadius: 16, padding: '1.25rem', marginBottom: '1rem', border: `1.5px solid ${C.pale}`, textAlign: 'center' }}>
+            <p style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>⏱ Temps économisé en file</p>
+            <p style={{ fontSize: '3rem', fontWeight: 900, color: C.main, letterSpacing: '-2px', margin: '0 0 4px' }}>
+              {tempsEconomise >= 60
+                ? `${Math.floor(tempsEconomise / 60)}h${tempsEconomise % 60 > 0 ? `${tempsEconomise % 60}` : ''}`
+                : `${tempsEconomise} min`}
+            </p>
+            <p style={{ fontSize: '0.82rem', color: '#6B7280', margin: 0 }}>
+              {clientCommandes.filter(c => c.statut === 'recupere').length} commande{clientCommandes.filter(c => c.statut === 'recupere').length > 1 ? 's' : ''} récupérée{clientCommandes.filter(c => c.statut === 'recupere').length > 1 ? 's' : ''} sans faire la file 🎉
+            </p>
+          </div>
+
+          {/* Stats */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '1rem' }}>
+            <div style={{ background: '#fff', borderRadius: 14, padding: '1rem', border: `1.5px solid ${C.pale}`, textAlign: 'center' }}>
+              <p style={{ fontSize: '0.65rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Commandes</p>
+              <p style={{ fontSize: '2rem', fontWeight: 900, color: C.main, margin: 0 }}>{clientCommandes.length}</p>
+            </div>
+            <div style={{ background: '#fff', borderRadius: 14, padding: '1rem', border: `1.5px solid ${C.pale}`, textAlign: 'center' }}>
+              <p style={{ fontSize: '0.65rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Dépensé</p>
+              <p style={{ fontSize: '2rem', fontWeight: 900, color: C.main, margin: 0 }}>
+                {clientCommandes.reduce((acc, c) => acc + Number(c.total), 0).toFixed(0)}€
+              </p>
+            </div>
+          </div>
+
+          {/* Historique */}
+          <h3 style={{ fontWeight: 800, fontSize: '1rem', color: C.ink, marginBottom: '0.75rem' }}>Historique des commandes</h3>
+          {clientCommandes.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+              <p style={{ fontSize: '1.5rem', marginBottom: 8 }}>🛍️</p>
+              <p style={{ color: '#6B7280', fontSize: '0.9rem' }}>Aucune commande pour l'instant</p>
+            </div>
+          ) : clientCommandes.map(c => (
+            <div key={c.id} style={{ background: '#fff', border: `1.5px solid ${C.pale}`, borderRadius: 12, padding: '0.875rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: 700, color: C.ink, margin: '0 0 2px', fontSize: '0.9rem' }}>{c.commercant?.nom}</p>
+                <p style={{ fontSize: '0.75rem', color: '#9CA3AF', margin: 0 }}>
+                  {new Date(c.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontWeight: 800, color: C.main, margin: '0 0 4px', fontSize: '0.95rem' }}>{Number(c.total).toFixed(2)}€</p>
+                <span style={{
+                  fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+                  background: c.statut === 'recupere' ? '#D4EDDA' : c.statut === 'pret' ? '#D4EDDA' : c.statut === 'en_preparation' ? '#CCE5FF' : '#FFF3CD',
+                  color: c.statut === 'recupere' ? '#155724' : c.statut === 'pret' ? '#155724' : c.statut === 'en_preparation' ? '#004085' : '#856404',
+                }}>
+                  {c.statut === 'recupere' ? '✓ Récupérée' : c.statut === 'pret' ? 'Prête' : c.statut === 'en_preparation' ? 'En prépa' : 'En attente'}
+                </span>
+              </div>
+            </div>
+          ))}
+
+          {/* Déconnexion */}
+          {client.email && (
+            <button onClick={() => {
+              localStorage.removeItem('yoppaa_email')
+              localStorage.removeItem('yoppaa_nom')
+              localStorage.removeItem('yoppaa_client_id')
+              setClient({ nom: '', email: '', telephone: '' })
+              setClientId(null)
+              setFavoris([])
+              setCommercantsFavoris([])
+              setClientCommandes([])
+            }} style={{ width: '100%', marginTop: '1rem', padding: '0.75rem', background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: 'DM Sans, sans-serif' }}>
+              Se déconnecter
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════
+          NAV BAR FIXE EN BAS — style TooGoodToGo
+      ══════════════════════════════════════════════════════ */}
+      {!estDansUnCommerce && (
+        <nav style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 600, background: '#fff', borderTop: `1px solid ${C.pale}`, display: 'flex', zIndex: 100, paddingBottom: 'env(safe-area-inset-bottom)', boxShadow: '0 -4px 20px rgba(107,53,196,0.08)' }}>
+          {[
+            { key: 'accueil', label: 'Accueil', icon: '🏠' },
+            { key: 'favoris', label: 'Favoris', icon: '❤️', badge: favoris.length },
+            { key: 'profil', label: 'Profil', icon: '👤', badge: clientCommandes.filter(c => c.statut !== 'recupere').length },
+          ].map(item => (
+            <button key={item.key} onClick={() => setOnglet(item.key)}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '0.75rem 0 0.5rem', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.68rem', color: onglet === item.key ? C.main : '#9CA3AF', position: 'relative', transition: 'color 0.15s' }}>
+              <span style={{ fontSize: '1.4rem', lineHeight: 1 }}>{item.icon}</span>
+              {item.label}
+              {item.badge > 0 && (
+                <span style={{ position: 'absolute', top: 6, left: 'calc(50% + 6px)', background: C.main, color: '#fff', fontSize: '0.55rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100, minWidth: 16, textAlign: 'center' }}>{item.badge}</span>
+              )}
+              {onglet === item.key && (
+                <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 24, height: 3, borderRadius: 3, background: C.main }} />
+              )}
+            </button>
+          ))}
+        </nav>
+      )}
+    </div>
   )
 }

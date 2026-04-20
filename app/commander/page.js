@@ -1,8 +1,7 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-// ─── Palette Yoppaa ───────────────────────────────────────────────────────────
 const C = {
   ink:   '#1A0840',
   deep:  '#2D0F6B',
@@ -12,7 +11,6 @@ const C = {
   pale:  '#EDE0FF',
 }
 
-// ─── Icônes SVG par segment ───────────────────────────────────────────────────
 const ICONES = {
   'Boulangerie': (
     <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width={36} height={36}>
@@ -52,8 +50,6 @@ const ICONES = {
       <circle cx="20" cy="22" r="2" fill="#EF4444"/>
       <circle cx="15" cy="26" r="1.5" fill="#EF4444"/>
       <circle cx="25" cy="25" r="1.5" fill="#EF4444"/>
-      <path d="M20 8 L20 30" stroke="#D97706" strokeWidth="0.8" strokeDasharray="2,2"/>
-      <path d="M20 8 L32 30" stroke="#D97706" strokeWidth="0.8" strokeDasharray="2,2"/>
     </svg>
   ),
   'Coffee shop': (
@@ -125,17 +121,18 @@ function formatDistance(m) {
   return m < 1000 ? `${Math.round(m)} m` : `${(m/1000).toFixed(1)} km`
 }
 
+// ─── Étoiles — toujours affichées, grises si pas de note ────────────────────
 function Etoiles({ note, taille = 16 }) {
+  const n = note ? Math.round(note) : 0
   return (
-    <span style={{ display: 'inline-flex', gap: 2 }}>
+    <span style={{ display: 'inline-flex', gap: 1 }}>
       {[1,2,3,4,5].map(i => (
-        <span key={i} style={{ fontSize: taille, color: i <= note ? '#F59E0B' : '#E5E7EB' }}>★</span>
+        <span key={i} style={{ fontSize: taille, color: i <= n ? '#F59E0B' : '#D1D5DB' }}>★</span>
       ))}
     </span>
   )
 }
 
-// ─── Composant principal ──────────────────────────────────────────────────────
 export default function Commander() {
   const [commercants, setCommercants] = useState([])
   const [commercantSelectionne, setCommercantSelectionne] = useState(null)
@@ -154,6 +151,8 @@ export default function Commander() {
   const [derniereCommande, setDerniereCommande] = useState(null)
   const [avisForm, setAvisForm] = useState({ note: 0, commentaire: '' })
   const [avisSoumis, setAvisSoumis] = useState(false)
+  // notes moyennes par commerce id
+  const [notesParCommerce, setNotesParCommerce] = useState({})
 
   useEffect(() => {
     chargerCommercants()
@@ -173,6 +172,26 @@ export default function Commander() {
   async function chargerCommercants() {
     const { data } = await supabase.from('commercants').select('*').order('nom')
     setCommercants(data || [])
+    // Charger les notes moyennes pour tous les commerces
+    if (data && data.length > 0) chargerNotes(data.map(c => c.id))
+  }
+
+  async function chargerNotes(ids) {
+    const { data } = await supabase.from('avis').select('commercant_id, note').in('commercant_id', ids)
+    if (!data) return
+    const notes = {}
+    ids.forEach(id => {
+      const avisCommerce = data.filter(a => a.commercant_id === id)
+      if (avisCommerce.length > 0) {
+        notes[id] = {
+          moyenne: (avisCommerce.reduce((acc, a) => acc + a.note, 0) / avisCommerce.length),
+          count: avisCommerce.length
+        }
+      } else {
+        notes[id] = { moyenne: 0, count: 0 }
+      }
+    })
+    setNotesParCommerce(notes)
   }
 
   useEffect(() => {
@@ -187,8 +206,7 @@ export default function Commander() {
     try {
       const body = {
         locations: [[pos.lng, pos.lat], ...avecCoords.map(c => [parseFloat(c.longitude), parseFloat(c.latitude)])],
-        metrics: ['distance'],
-        units: 'm'
+        metrics: ['distance'], units: 'm'
       }
       const res = await fetch('https://api.openrouteservice.org/v2/matrix/driving-car', {
         method: 'POST',
@@ -315,8 +333,8 @@ export default function Commander() {
   }
 
   function noteMoyenne(avis) {
-    if (!avis || avis.length === 0) return null
-    return (avis.reduce((acc, a) => acc + a.note, 0) / avis.length).toFixed(1)
+    if (!avis || avis.length === 0) return 0
+    return avis.reduce((acc, a) => acc + a.note, 0) / avis.length
   }
 
   function resetEtape1() {
@@ -331,15 +349,15 @@ export default function Commander() {
       {/* HEADER */}
       <div style={{ background: C.main, padding: '1.5rem 1rem 1.2rem', marginBottom: '1rem' }}>
         <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-          {[0.4, 1, 1].map((op, i) => (
-            <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: i === 0 ? '#fff' : i === 1 ? C.light : C.mid, opacity: i === 0 ? op : 1 }}/>
-          ))}
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', opacity: 0.4 }}/>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: C.light }}/>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: C.mid }}/>
         </div>
         <h1 style={{ fontWeight: 800, fontSize: '1.8rem', letterSpacing: '-2px', color: '#fff', margin: 0 }}>yoppaa</h1>
         <p style={{ color: C.light, fontSize: '0.8rem', margin: 0 }}>Skip the wait</p>
       </div>
 
-      {/* ── ÉTAPE 1 ──────────────────────────────────────────────────────── */}
+      {/* ── ÉTAPE 1 ── */}
       {etape === 1 && (
         <div style={{ padding: '0 1rem' }}>
           {geoLoading && (
@@ -357,12 +375,14 @@ export default function Commander() {
           {commercants.map(c => {
             const badge = getBadge(c.type)
             const estFavori = favoris.includes(c.id)
+            const noteInfo = notesParCommerce[c.id]
             return (
               <div key={c.id} onClick={() => selectionnerCommercant(c)}
                 style={{ background: '#fff', border: `1.5px solid ${C.pale}`, borderRadius: 16, padding: '1rem 1.25rem', marginBottom: '0.75rem', cursor: 'pointer', boxShadow: '0 1px 4px rgba(107,53,196,0.06)' }}
                 onMouseOver={e => { e.currentTarget.style.borderColor = C.main; e.currentTarget.style.boxShadow = '0 4px 16px rgba(107,53,196,0.12)' }}
                 onMouseOut={e => { e.currentTarget.style.borderColor = C.pale; e.currentTarget.style.boxShadow = '0 1px 4px rgba(107,53,196,0.06)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  {/* Logo ou icône */}
                   <div style={{ width: 56, height: 56, borderRadius: 12, background: C.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
                     {c.logo_url ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : getIcone(c.type)}
                   </div>
@@ -377,7 +397,17 @@ export default function Commander() {
                       </button>
                     </div>
                     {c.description && <p style={{ fontSize: '0.8rem', color: '#6b5c8a', margin: '6px 0 0', lineHeight: 1.4 }}>{c.description}</p>}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginTop: 6 }}>
+
+                    {/* Étoiles — toujours visibles */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                      <Etoiles note={noteInfo?.moyenne || 0} taille={13} />
+                      {noteInfo?.count > 0
+                        ? <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>({noteInfo.count} avis)</span>
+                        : <span style={{ fontSize: '0.72rem', color: '#D1D5DB' }}>Pas encore d'avis</span>
+                      }
+                    </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginTop: 4 }}>
                       {c.distance != null && <span style={{ fontSize: '0.75rem', color: C.main, fontWeight: 700 }}>📍 {formatDistance(c.distance)}</span>}
                       {c.horaires && <span style={{ fontSize: '0.75rem', color: C.mid }}>🕐 {c.horaires}</span>}
                     </div>
@@ -389,7 +419,7 @@ export default function Commander() {
         </div>
       )}
 
-      {/* ── ÉTAPE 2 ──────────────────────────────────────────────────────── */}
+      {/* ── ÉTAPE 2 ── */}
       {etape === 2 && (
         <div style={{ padding: '0 1rem' }}>
           <button onClick={() => { setEtape(1); setPanier({}) }} style={{ background: 'none', border: 'none', color: C.main, cursor: 'pointer', marginBottom: '1rem', fontWeight: 600, padding: 0, fontSize: '0.9rem' }}>← Retour</button>
@@ -400,14 +430,18 @@ export default function Commander() {
             </div>
             <div>
               <h2 style={{ fontWeight: 800, fontSize: '1.15rem', color: C.ink, margin: '0 0 4px' }}>{commercantSelectionne?.nom}</h2>
-              {commercantSelectionne?.adresse && <p style={{ fontSize: '0.75rem', color: '#b0a0c8', margin: '0 0 4px' }}>📍 {commercantSelectionne.adresse}</p>}
-              {avisCommerce.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Etoiles note={Math.round(noteMoyenne(avisCommerce))} taille={13}/>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#F59E0B' }}>{noteMoyenne(avisCommerce)}</span>
-                  <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>({avisCommerce.length} avis)</span>
-                </div>
-              )}
+              {commercantSelectionne?.adresse && <p style={{ fontSize: '0.75rem', color: '#b0a0c8', margin: '0 0 6px' }}>📍 {commercantSelectionne.adresse}</p>}
+              {/* Étoiles toujours visibles sur la fiche */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Etoiles note={noteMoyenne(avisCommerce)} taille={14} />
+                {avisCommerce.length > 0
+                  ? <>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#F59E0B' }}>{noteMoyenne(avisCommerce).toFixed(1)}</span>
+                      <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>({avisCommerce.length} avis)</span>
+                    </>
+                  : <span style={{ fontSize: '0.72rem', color: '#D1D5DB' }}>Pas encore d'avis</span>
+                }
+              </div>
             </div>
           </div>
 
@@ -464,7 +498,7 @@ export default function Commander() {
         </div>
       )}
 
-      {/* ── ÉTAPE 3 ──────────────────────────────────────────────────────── */}
+      {/* ── ÉTAPE 3 ── */}
       {etape === 3 && (
         <div style={{ padding: '0 1rem' }}>
           <button onClick={() => setEtape(2)} style={{ background: 'none', border: 'none', color: C.main, cursor: 'pointer', marginBottom: '1rem', fontWeight: 600, padding: 0, fontSize: '0.9rem' }}>← Retour</button>
@@ -477,7 +511,6 @@ export default function Commander() {
               </div>
             ))}
           </div>
-
           <h2 style={{ fontWeight: 800, fontSize: '1.2rem', marginBottom: '1rem', color: C.ink }}>Tes coordonnées</h2>
           {[
             { key: 'nom', placeholder: 'Ton prénom et nom', type: 'text' },
@@ -488,7 +521,6 @@ export default function Commander() {
               onChange={e => setClient(p => ({ ...p, [f.key]: e.target.value }))}
               style={{ width: '100%', padding: '0.85rem', border: `1.5px solid ${C.pale}`, borderRadius: 10, marginBottom: 10, fontSize: '0.95rem', fontFamily: 'DM Sans, sans-serif', boxSizing: 'border-box', outline: 'none' }}/>
           ))}
-
           <button onClick={passerCommande} disabled={loading || !creneauChoisi || !client.nom || !client.email}
             style={{ width: '100%', padding: '1rem', background: C.main, color: '#fff', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '1rem', cursor: 'pointer', opacity: (!creneauChoisi || !client.nom || !client.email) ? 0.5 : 1, boxShadow: '0 4px 20px rgba(107,53,196,0.3)' }}>
             {loading ? 'En cours...' : `Confirmer ma commande — ${totalPanier().toFixed(2)}€`}
@@ -497,7 +529,7 @@ export default function Commander() {
         </div>
       )}
 
-      {/* ── ÉTAPE 4 ──────────────────────────────────────────────────────── */}
+      {/* ── ÉTAPE 4 ── */}
       {etape === 4 && (
         <div style={{ padding: '2rem 1rem' }}>
           <div style={{ textAlign: 'center', marginBottom: '2rem' }}>

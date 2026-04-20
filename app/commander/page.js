@@ -240,24 +240,25 @@ export default function Commander() {
         const lat = pos.coords.latitude
         const lng = pos.coords.longitude
         setPosition({ lat, lng })
-        // Reverse geocoding via ORS
+        // Reverse geocoding via Nominatim (OpenStreetMap)
         try {
-          const apiKey = process.env.NEXT_PUBLIC_ORS_API_KEY
           const res = await fetch(
-            `https://api.openrouteservice.org/geocode/reverse?api_key=${apiKey}&point.lon=${lng}&point.lat=${lat}&size=1`,
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=fr`,
             { headers: { 'Accept': 'application/json' } }
           )
           if (res.ok) {
             const data = await res.json()
-            const props = data.features?.[0]?.properties
-            if (props) {
-              const label = props.street
-                ? `${props.street}${props.housenumber ? ' ' + props.housenumber : ''}`
-                : props.locality || props.county || props.label || 'Position trouvée'
-              setRue(label)
+            const addr = data.address || {}
+            // Priorité : road/pedestrian/footway + house_number, sinon quarter/suburb, sinon ville
+            const rue = addr.road || addr.pedestrian || addr.footway || addr.path || addr.street
+            const numero = addr.house_number
+            if (rue) {
+              setRue(numero ? `${rue} ${numero}` : rue)
+            } else {
+              setRue(addr.quarter || addr.suburb || addr.neighbourhood || addr.town || addr.city || addr.municipality || 'Position active')
             }
           }
-        } catch { setRue('Position trouvée') }
+        } catch { setRue('Position active') }
         setGeoLoading(false)
       },
       () => { setGeoLoading(false) },

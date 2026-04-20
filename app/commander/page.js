@@ -417,13 +417,13 @@ export default function Commander() {
     <>
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { height: 100%; overflow-x: hidden; }
+        html, body { height: 100%; width: 100%; overflow-x: hidden; position: relative; }
         body { background: ${T.bg}; font-family: "DM Sans", sans-serif; font-size: 16px; -webkit-text-size-adjust: 100%; }
-        .page-wrap { display: flex; flex-direction: column; min-height: 100dvh; max-width: 640px; margin: 0 auto; background: ${T.bg}; }
+        .page-wrap { display: flex; flex-direction: column; min-height: 100dvh; max-width: 640px; margin: 0 auto; background: ${T.bg}; overflow-x: hidden; width: 100%; }
         .topbar { flex-shrink: 0; background: ${T.bgPanel}; border-bottom: 1px solid ${T.main}33; }
         .scroll-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
         .navbar { flex-shrink: 0; background: ${T.bgPanel}; border-top: 1px solid ${T.main}33; display: flex; padding-bottom: env(safe-area-inset-bottom, 0px); }
-        .cats { display: flex; gap: 8px; overflow-x: auto; padding: 0 1rem 0.875rem; scrollbar-width: none; -ms-overflow-style: none; white-space: nowrap; }
+        .cats { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; padding: 0 1rem 0.875rem; scrollbar-width: none; -ms-overflow-style: none; -webkit-overflow-scrolling: touch; contain: layout style; }
         .cats::-webkit-scrollbar { display: none; }
         .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .grid3 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -457,7 +457,7 @@ export default function Commander() {
                 <div className="cats">
                   {CATEGORIES.map(cat => (
                     <button key={cat} onClick={() => setCategorieActive(cat)}
-                      style={{ flexShrink: 0, padding: '0.4rem 0.875rem', borderRadius: 100, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', background: categorieActive === cat ? '#fff' : `${T.main}44`, color: categorieActive === cat ? T.main : '#fff' }}>
+                      style={{ flexShrink: 0, padding: '0.4rem 0.875rem', borderRadius: 100, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', whiteSpace: 'nowrap', background: categorieActive === cat ? '#fff' : `${T.main}44`, color: categorieActive === cat ? T.main : '#fff' }}>
                       {cat}
                     </button>
                   ))}

@@ -205,6 +205,7 @@ export default function Commander() {
   const [clientCommandes, setClientCommandes] = useState([])
   const [position, setPosition] = useState(null)
   const [geoLoading, setGeoLoading] = useState(false)
+  const [rue, setRue] = useState(null)
   const [categorieActive, setCategorieActive] = useState('Tous')
   const [favoris, setFavoris] = useState([])
   const [commercantsFavoris, setCommercantsFavoris] = useState([])
@@ -233,9 +234,34 @@ export default function Commander() {
   function demanderGeolocalisation() {
     if (!navigator.geolocation) return
     setGeoLoading(true)
+    setRue(null)
     navigator.geolocation.getCurrentPosition(
-      pos => { setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setGeoLoading(false) },
-      () => setGeoLoading(false), { timeout: 8000 }
+      async pos => {
+        const lat = pos.coords.latitude
+        const lng = pos.coords.longitude
+        setPosition({ lat, lng })
+        // Reverse geocoding via ORS
+        try {
+          const apiKey = process.env.NEXT_PUBLIC_ORS_API_KEY
+          const res = await fetch(
+            `https://api.openrouteservice.org/geocode/reverse?api_key=${apiKey}&point.lon=${lng}&point.lat=${lat}&size=1`,
+            { headers: { 'Accept': 'application/json' } }
+          )
+          if (res.ok) {
+            const data = await res.json()
+            const props = data.features?.[0]?.properties
+            if (props) {
+              const label = props.street
+                ? `${props.street}${props.housenumber ? ' ' + props.housenumber : ''}`
+                : props.locality || props.county || props.label || 'Position trouvée'
+              setRue(label)
+            }
+          }
+        } catch { setRue('Position trouvée') }
+        setGeoLoading(false)
+      },
+      () => { setGeoLoading(false) },
+      { timeout: 10000, enableHighAccuracy: true }
     )
   }
 
@@ -450,7 +476,7 @@ export default function Commander() {
                 <button onClick={demanderGeolocalisation}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, background: `${T.main}55`, border: `1px solid ${T.main}88`, borderRadius: 12, padding: '0.5rem 0.875rem', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}>
                   <span>{geoLoading ? '⏳' : '📍'}</span>
-                  <span>{geoLoading ? 'Localisation...' : position ? 'Ma position' : 'Activer'}</span>
+                  <span>{geoLoading ? 'Localisation...' : rue ? rue : position ? 'Position active' : 'Activer'}</span>
                 </button>
               </div>
               {onglet === 'accueil' && (

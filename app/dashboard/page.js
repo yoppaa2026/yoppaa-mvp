@@ -337,12 +337,15 @@ export default function Dashboard() {
           .scroll-zone { padding: 1.25rem; padding-bottom: 80px; }
         }
 
-        /* ── PC ≥ 1100px — sidebar visible, nav bottom cachée ── */
+        /* Nav bottom cachée — navigation dans le header */
+        .nav-bottom { display: none !important; }
+        .scroll-zone { padding-bottom: 1rem !important; }
+
+        /* ── PC >= 1100px ── */
         @media (min-width: 1100px) {
           .sidebar { display: flex !important; }
           .topbar { display: none !important; }
-          .nav-bottom { display: none !important; }
-          .scroll-zone { padding: 1.5rem; padding-bottom: 1.5rem; }
+          .scroll-zone { padding: 1.5rem !important; }
           .sticky-header { padding: 1rem 1.5rem; }
           .commandes-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
           .stats-grid { grid-template-columns: repeat(4, 1fr); gap: 8px; }
@@ -412,15 +415,31 @@ export default function Dashboard() {
 
           {/* Topbar mobile/tablette */}
           <div className="topbar">
-            <div>
-              <p style={{ fontWeight: 900, fontSize: '1.15rem', letterSpacing: '-1px', color: '#fff' }}>yoppaa</p>
-              <p style={{ color: T.light, fontWeight: 600, fontSize: '0.75rem' }}>{commercant?.nom}</p>
+            {/* Logo */}
+            <div style={{ flexShrink: 0 }}>
+              <p style={{ fontWeight: 900, fontSize: '1.1rem', letterSpacing: '-1px', color: '#fff', margin: 0 }}>yoppaa</p>
+              <p style={{ color: T.light, fontWeight: 600, fontSize: '0.7rem', margin: 0 }}>{commercant?.nom}</p>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={activerNotifications} style={{ padding: '0.375rem 0.75rem', borderRadius: 8, border: `1px solid ${T.main}44`, background: notificationsActives ? `${T.main}22` : 'transparent', color: T.light, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '0.78rem' }}>
+
+            {/* Boutons nav — centre */}
+            <div style={{ display: 'flex', gap: 4, background: `${T.main}22`, borderRadius: 10, padding: 3 }}>
+              {navItems.map(item => (
+                <button key={item.key} onClick={() => setOngletPrincipal(item.key)}
+                  style={{ padding: '0.3rem 0.75rem', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.75rem', transition: 'all 0.15s', background: ongletPrincipal === item.key ? T.main : 'transparent', color: ongletPrincipal === item.key ? '#fff' : T.light, position: 'relative' }}>
+                  {item.icon} {item.label}
+                  {item.key === 'commandes' && stats.nouvelles > 0 && (
+                    <span style={{ position: 'absolute', top: -4, right: -4, background: '#DC2626', color: '#fff', fontSize: '0.55rem', fontWeight: 800, padding: '1px 4px', borderRadius: 100 }}>{stats.nouvelles}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Actions droite */}
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <button onClick={activerNotifications} style={{ padding: '0.35rem 0.6rem', borderRadius: 8, border: `1px solid ${T.main}44`, background: notificationsActives ? `${T.main}22` : 'transparent', color: T.light, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '0.78rem' }}>
                 {notificationsActives ? '🔔' : '🔕'}
               </button>
-              <button onClick={seDeconnecter} style={{ padding: '0.375rem 0.75rem', borderRadius: 8, border: '1px solid #DC262633', background: '#DC262611', color: '#FCA5A5', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '0.78rem' }}>
+              <button onClick={seDeconnecter} style={{ padding: '0.35rem 0.6rem', borderRadius: 8, border: '1px solid #DC262633', background: '#DC262611', color: '#FCA5A5', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '0.78rem' }}>
                 ⏻
               </button>
             </div>

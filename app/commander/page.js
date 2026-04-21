@@ -678,7 +678,7 @@ export default function Commander() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: T.deep, marginBottom: 4 }}>{commercantSelectionne?.nom}</h2>
-                  {commercantSelectionne?.adresse && <p style={{ fontSize: '0.78rem', color: '#b0a0c8', marginBottom: 5 }}>📍 {commercantSelectionne.adresse}</p>}
+                  {commercantSelectionne?.adresse && <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 600, marginBottom: 5 }}>📍 {commercantSelectionne.adresse}</p>}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     <Etoiles note={noteMoyenne(avisCommerce)} taille={13}/>
                     {avisCommerce.length > 0 ? <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>({avisCommerce.length} avis)</span> : <span style={{ fontSize: '0.72rem', color: '#D1D5DB' }}>Pas encore d'avis</span>}
@@ -740,13 +740,13 @@ export default function Commander() {
                     <div key={a.id} style={{ ...card, marginBottom: '0.5rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                         <Etoiles note={a.note} taille={14}/>
-                        <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>{a.client?.nom || 'Client'}</span>
+                        <span style={{ fontSize: '0.75rem', color: T.deep, fontWeight: 600 }}>{a.client?.nom || 'Client'}</span>
                       </div>
-                      {a.commentaire && <p style={{ fontSize: '0.85rem', color: T.ink, marginTop: 4, lineHeight: 1.5 }}>{a.commentaire}</p>}
+                      {a.commentaire && <p style={{ fontSize: '0.875rem', color: T.ink, fontWeight: 500, marginTop: 4, lineHeight: 1.5 }}>{a.commentaire}</p>}
                       {a.reponse_commercant && (
                         <div style={{ background: T.pale, borderRadius: 10, padding: '0.5rem 0.75rem', marginTop: 8 }}>
                           <p style={{ fontSize: '0.72rem', fontWeight: 700, color: T.main, marginBottom: 2 }}>Réponse :</p>
-                          <p style={{ fontSize: '0.82rem', color: T.ink }}>{a.reponse_commercant}</p>
+                          <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 500 }}>{a.reponse_commercant}</p>
                         </div>
                       )}
                     </div>

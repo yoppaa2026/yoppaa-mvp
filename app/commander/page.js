@@ -323,7 +323,7 @@ export default function Commander() {
   async function chargerNotes(ids) {
     const [{ data: avisData }, { data: creneauxData }, { data: commandesData }] = await Promise.all([
       supabase.from('avis').select('commercant_id, note').in('commercant_id', ids),
-      supabase.from('creneaux').select('commercant_id, heure_debut, heure_fin, max_commandes, actif').in('commercant_id', ids).eq('actif', true),
+      supabase.from('creneaux').select('id, commercant_id, heure_debut, heure_fin, max_commandes, actif').in('commercant_id', ids).eq('actif', true),
       supabase.from('commandes').select('commercant_id, creneau_id').in('commercant_id', ids).neq('statut', 'recupere')
     ])
     const notes = {}

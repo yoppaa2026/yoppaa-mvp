@@ -679,20 +679,42 @@ export default function Commander() {
                         {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
                       </div>
                       {mention && (
-                        <div style={{ fontSize: '0.58rem', fontWeight: 700, color: mention.color, marginTop: 3, lineHeight: 1.2 }}>
+                        <div style={{ fontSize: '0.62rem', fontWeight: 800, color: passe ? T.deep : mention.color, marginTop: 3, lineHeight: 1.2 }}>
                           {mention.text}
                         </div>
                       )}
                     </div>
                   )
                 })}
-                {creneaux.length > 0 && creneaux.every(c => heureEnMinutes(c.heure_debut) <= maintenant()) && (
-                  <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '1.25rem', color: T.muted }}>
-                    <p style={{ fontSize: '1.5rem', marginBottom: 8 }}>🕐</p>
-                    <p style={{ fontWeight: 700, marginBottom: 4, color: T.ink }}>Plus de créneaux aujourd'hui</p>
-                    <p style={{ fontSize: '0.82rem' }}>Reviens demain pour commander !</p>
-                  </div>
-                )}
+                {creneaux.length > 0 && creneaux.every(c => heureEnMinutes(c.heure_debut) <= maintenant()) && (() => {
+                  // Premier créneau disponible = le plus tôt dans la liste
+                  const premierCreneau = creneaux.reduce((min, c) => heureEnMinutes(c.heure_debut) < heureEnMinutes(min.heure_debut) ? c : min, creneaux[0])
+                  const demain = new Date(); demain.setDate(demain.getDate() + 1)
+                  const jourDemain = demain.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
+                  const heureOuverture = commercantSelectionne?.heure_ouverture_resa
+                    ? commercantSelectionne.heure_ouverture_resa.slice(0,5)
+                    : '21:00'
+                  // Est-ce qu'on est déjà après l'heure d'ouverture des résa ?
+                  const resaOuverteMaintenat = maintenant() >= heureEnMinutes(heureOuverture)
+                  return (
+                    <div style={{ gridColumn: '1 / -1', background: T.pale, borderRadius: 12, padding: '1.25rem', textAlign: 'center', border: `1.5px solid ${T.main}33` }}>
+                      <p style={{ fontSize: '1.5rem', marginBottom: 8 }}>🕐</p>
+                      <p style={{ fontWeight: 800, marginBottom: 6, color: T.deep, fontSize: '1rem' }}>Plus de créneaux disponibles aujourd'hui</p>
+                      {resaOuverteMaintenat ? (
+                        <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>
+                          Les réservations pour demain sont ouvertes ! 🎉<br/>
+                          Premier créneau chez <strong>{commercantSelectionne?.nom}</strong> à <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> le <strong>{jourDemain}</strong>.
+                        </p>
+                      ) : (
+                        <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>
+                          Pour ta prochaine commande chez <strong>{commercantSelectionne?.nom}</strong>,<br/>
+                          reviens à partir de <strong>{heureOuverture}</strong> ce soir pour réserver<br/>
+                          le <strong>{jourDemain}</strong> dès <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> !
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
 
               <h2 style={{ fontWeight: 800, fontSize: '1.15rem', marginBottom: '1rem', color: T.ink }}>Tes coordonnées</h2>
@@ -881,7 +903,11 @@ export default function Commander() {
             <div style={{ padding: '0.875rem 1rem 1rem' }}>
               {/* Header */}
               <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 16, padding: '1.25rem', marginBottom: '1rem', color: '#fff', textAlign: 'center' }}>
-                <p style={{ fontSize: '1.8rem', marginBottom: 6 }}>🫂</p>
+                <svg viewBox="0 0 56 40" width="56" height="40" fill="none" style={{ marginBottom: 6 }}>
+                  <circle cx="12"  cy="20" r="9" fill="rgba(255,255,255,0.5)"/>
+                  <circle cx="28"  cy="14" r="9" fill="rgba(255,255,255,0.7)"/>
+                  <circle cx="44"  cy="20" r="9" fill="rgba(255,255,255,0.4)"/>
+                </svg>
                 <p style={{ fontWeight: 900, fontSize: '1.1rem', letterSpacing: '-1px', marginBottom: 4 }}>La Tribu Yoppaa</p>
                 <p style={{ fontSize: '0.82rem', color: T.light, lineHeight: 1.5 }}>
                   Tu as fait la file chez un commerce et tu penses qu'ils mériteraient Yoppaa ?<br/>
@@ -950,12 +976,19 @@ export default function Commander() {
               { key: 'accueil',   label: 'Accueil',   icon: '🏠' },
               { key: 'commandes', label: 'Commandes', icon: '📦', badge: badgeCommandes },
               { key: 'favoris',   label: 'Favoris',   icon: '❤️', badge: favoris.length },
-              { key: 'tribu',     label: 'Tribu',     icon: '🫂' },
+              { key: 'tribu',     label: 'Tribu',     icon: 'tribu' },
               { key: 'profil',    label: 'Profil',    icon: '👤' },
             ].map(item => (
               <button key={item.key} onClick={() => setOnglet(item.key)}
                 style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '0.75rem 0 0.625rem', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 700, fontSize: '0.65rem', color: onglet===item.key ? T.light : '#6B7280', position: 'relative', transition: 'color 0.15s' }}>
-                <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>{item.icon}</span>
+                {item.icon === 'tribu'
+                  ? <svg viewBox="0 0 28 20" width="26" height="18" fill="none">
+                      <circle cx="6"  cy="10" r="4.5" fill={onglet==='tribu' ? T.light : '#6B7280'} opacity={onglet==='tribu' ? 1 : 0.7}/>
+                      <circle cx="14" cy="7"  r="4.5" fill={onglet==='tribu' ? T.light : '#6B7280'} opacity={onglet==='tribu' ? 1 : 0.5}/>
+                      <circle cx="22" cy="10" r="4.5" fill={onglet==='tribu' ? T.light : '#6B7280'} opacity={onglet==='tribu' ? 1 : 0.3}/>
+                    </svg>
+                  : <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>{item.icon}</span>
+                }
                 {item.label}
                 {item.badge > 0 && (
                   <span style={{ position: 'absolute', top: 8, left: 'calc(50% + 8px)', background: item.key==='commandes' ? '#16A34A' : T.main, color: '#fff', fontSize: '0.55rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100, minWidth: 16, textAlign: 'center' }}>{item.badge}</span>

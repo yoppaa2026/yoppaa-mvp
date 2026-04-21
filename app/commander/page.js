@@ -162,6 +162,70 @@ function CarteCommerce({ c, favoris, notesParCommerce, onSelect, onToggleFavori 
   )
 }
 
+// ─── Suggestion commerce ─────────────────────────────────────────────────────
+function SuggestionForm({ clientId }) {
+  const [form, setForm] = useState({ nom: '', adresse: '', type: '', commentaire: '' })
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  const inputSt = { width: '100%', padding: '0.875rem 1rem', border: `1.5px solid ${T.pale}`, borderRadius: 12, marginBottom: 10, fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', outline: 'none', color: T.ink, background: '#fff', display: 'block' }
+
+  async function envoyer() {
+    if (!form.nom.trim()) return
+    setSending(true)
+    await supabase.from('suggestions_commercants').insert({
+      client_id: clientId || null,
+      nom_commerce: form.nom.trim(),
+      adresse: form.adresse.trim() || null,
+      type_commerce: form.type.trim() || null,
+      commentaire: form.commentaire.trim() || null,
+    })
+    setSent(true)
+    setSending(false)
+  }
+
+  if (sent) return (
+    <div style={{ background: '#F0FDF4', borderRadius: 16, padding: '1.5rem', textAlign: 'center', border: '1.5px solid #16A34A33' }}>
+      <p style={{ fontSize: '2rem', marginBottom: 10 }}>🎉</p>
+      <p style={{ fontWeight: 800, color: '#16A34A', marginBottom: 6, fontSize: '1rem' }}>Merci pour ta suggestion !</p>
+      <p style={{ fontSize: '0.875rem', color: T.muted }}>On va contacter ce commerce. Tu contribues à faire grandir la Tribu Yoppaa 🫂</p>
+      <button onClick={() => { setSent(false); setForm({ nom: '', adresse: '', type: '', commentaire: '' }) }}
+        style={{ marginTop: '1rem', padding: '0.75rem 1.5rem', background: T.main, color: '#fff', border: 'none', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
+        Suggérer un autre commerce
+      </button>
+    </div>
+  )
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, padding: '1.25rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 6px rgba(107,53,196,0.05)' }}>
+      <p style={{ fontWeight: 800, color: T.deep, marginBottom: '1rem', fontSize: '1rem' }}>Quel commerce mérite Yoppaa ?</p>
+
+      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Nom du commerce *</label>
+      <input placeholder="Ex: Boulangerie Martin" value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} style={inputSt}/>
+
+      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Adresse</label>
+      <input placeholder="Ex: Rue de la Paix 12, Bruxelles" value={form.adresse} onChange={e => setForm(p => ({ ...p, adresse: e.target.value }))} style={inputSt}/>
+
+      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Type de commerce</label>
+      <input placeholder="Ex: Boulangerie, Coffee shop, Friterie..." value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} style={inputSt}/>
+
+      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Pourquoi ce commerce ? (optionnel)</label>
+      <textarea placeholder="Ex: Toujours plein le midi, la file est interminable mais les sandwichs valent le coup !" value={form.commentaire}
+        onChange={e => setForm(p => ({ ...p, commentaire: e.target.value }))}
+        style={{ ...inputSt, resize: 'vertical', minHeight: 80, marginBottom: 16 }}/>
+
+      <button onClick={envoyer} disabled={!form.nom.trim() || sending}
+        style={{ width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: form.nom.trim() ? 'pointer' : 'default', fontSize: '1rem', background: form.nom.trim() ? T.main : '#E5E7EB', color: '#fff', boxShadow: form.nom.trim() ? `0 4px 20px ${T.main}44` : 'none', fontFamily: '"DM Sans", sans-serif' }}>
+        {sending ? 'Envoi...' : '🫂 Suggérer ce commerce'}
+      </button>
+
+      <p style={{ fontSize: '0.75rem', color: '#9CA3AF', textAlign: 'center', marginTop: 10, lineHeight: 1.5 }}>
+        On contacte le commerce de ta part et on t'informe s'il rejoint la Tribu Yoppaa.
+      </p>
+    </div>
+  )
+}
+
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function Commander() {
   const [onglet, setOnglet] = useState('accueil')
@@ -190,6 +254,7 @@ export default function Commander() {
   const [avisForm, setAvisForm] = useState({ note: 0, commentaire: '' })
   const [avisSoumis, setAvisSoumis] = useState(false)
   const avisTimerRef = useRef(null)
+  const [messageRetrait, setMessageRetrait] = useState(null)
 
   useEffect(() => {
     chargerCommercants()
@@ -338,8 +403,20 @@ export default function Commander() {
       supabase.from('creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
       supabase.from('avis').select('*, client:clients(nom)').eq('commercant_id', c.id).order('created_at', { ascending: false }).limit(10)
     ])
+    // Charger le nombre de commandes par créneau pour aujourd'hui
+    const aujourd_hui = new Date().toDateString()
+    const { data: commandesDuJour } = await supabase
+      .from('commandes')
+      .select('creneau_id')
+      .eq('commercant_id', c.id)
+      .neq('statut', 'recupere')
+    const countParCreneau = {}
+    ;(commandesDuJour || []).forEach(cmd => {
+      countParCreneau[cmd.creneau_id] = (countParCreneau[cmd.creneau_id] || 0) + 1
+    })
+    const creneauxAvecCount = (cren || []).map(cr => ({ ...cr, count: countParCreneau[cr.id] || 0 }))
     setArticles(arts||[])
-    setCreneaux(cren||[])
+    setCreneaux(creneauxAvecCount)
     setAvisCommerce(avis||[])
     setEtape(2)
   }
@@ -370,6 +447,8 @@ export default function Commander() {
   async function confirmerRetrait(commande) {
     await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', commande.id)
     setClientCommandes(prev => prev.map(c => c.id===commande.id ? { ...c, statut: 'recupere' } : c))
+    setMessageRetrait(commande.id)
+    setTimeout(() => setMessageRetrait(null), 8000)
     // Déclencher avis après 45min
     const avisData = {
       commandeId: commande.id,
@@ -580,20 +659,38 @@ export default function Commander() {
               <div className="grid3" style={{ marginBottom: '1.25rem' }}>
                 {creneaux.map(c => {
                   const passe = heureEnMinutes(c.heure_debut) <= maintenant()
-                  if (passe) return null  // Masquer complètement les créneaux passés
+                  const complet = c.count >= c.max_commandes
+                  const placesRestantes = c.max_commandes - c.count
+                  const bientotComplet = !complet && placesRestantes <= 1
+                  const presqueComplet = !complet && placesRestantes === 2
+                  const desactive = passe || complet
+
+                  let mention = null
+                  if (passe) mention = { text: 'Reviens demain !', color: '#9CA3AF' }
+                  else if (complet) mention = { text: 'Complet', color: '#DC2626' }
+                  else if (bientotComplet) mention = { text: '🔥 Dernière place !', color: '#EA580C' }
+                  else if (presqueComplet) mention = { text: '⚡ Presque complet', color: '#D97706' }
+
                   return (
                     <div key={c.id}
-                      onClick={() => setCreneauChoisi(c.id)}
-                      style={{ padding: '0.875rem 0.5rem', borderRadius: 12, border: `2px solid ${creneauChoisi===c.id ? T.main : T.pale}`, background: creneauChoisi===c.id ? T.pale : '#fff', cursor: 'pointer', textAlign: 'center', fontWeight: 700, color: T.ink, fontSize: '0.875rem', transition: 'all 0.15s' }}>
-                      {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
+                      onClick={() => !desactive && setCreneauChoisi(c.id)}
+                      style={{ padding: '0.75rem 0.5rem', borderRadius: 12, border: `2px solid ${desactive ? '#E5E7EB' : creneauChoisi===c.id ? T.main : T.pale}`, background: desactive ? '#F9FAFB' : creneauChoisi===c.id ? T.pale : '#fff', cursor: desactive ? 'default' : 'pointer', textAlign: 'center', fontWeight: 700, color: desactive ? '#D1D5DB' : T.ink, fontSize: '0.875rem', transition: 'all 0.15s', position: 'relative' }}>
+                      <div style={{ textDecoration: complet ? 'line-through' : 'none', opacity: passe ? 0.5 : 1 }}>
+                        {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
+                      </div>
+                      {mention && (
+                        <div style={{ fontSize: '0.58rem', fontWeight: 700, color: mention.color, marginTop: 3, lineHeight: 1.2 }}>
+                          {mention.text}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
-                {creneaux.every(c => heureEnMinutes(c.heure_debut) <= maintenant()) && (
-                  <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '1.5rem', color: T.muted, fontSize: '0.875rem' }}>
+                {creneaux.length > 0 && creneaux.every(c => heureEnMinutes(c.heure_debut) <= maintenant()) && (
+                  <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '1.25rem', color: T.muted }}>
                     <p style={{ fontSize: '1.5rem', marginBottom: 8 }}>🕐</p>
-                    <p style={{ fontWeight: 700, marginBottom: 4 }}>Plus de créneaux disponibles aujourd'hui</p>
-                    <p style={{ fontSize: '0.8rem' }}>Reviens demain !</p>
+                    <p style={{ fontWeight: 700, marginBottom: 4, color: T.ink }}>Plus de créneaux aujourd'hui</p>
+                    <p style={{ fontSize: '0.82rem' }}>Reviens demain pour commander !</p>
                   </div>
                 )}
               </div>
@@ -616,9 +713,10 @@ export default function Commander() {
             <div style={{ padding: '1.5rem 1rem' }}>
               <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
                 <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>🎉</div>
-                <h2 style={{ fontWeight: 900, fontSize: '1.4rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.5px' }}>Commande confirmée !</h2>
-                <p style={{ color: T.main, fontWeight: 700, marginBottom: '0.25rem', fontSize: '1rem' }}>Chez {commercantSelectionne?.nom}</p>
-                <p style={{ color: T.muted, fontSize: '0.875rem' }}>Ta commande est en cours de préparation.</p>
+                <p style={{ fontWeight: 900, fontSize: '1rem', color: T.main, letterSpacing: '-0.5px', marginBottom: 4 }}>yoppaa</p>
+                <h2 style={{ fontWeight: 900, fontSize: '1.4rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.5px' }}>Ta commande est passée !</h2>
+                <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem', fontSize: '1rem' }}>Chez {commercantSelectionne?.nom}</p>
+                <p style={{ color: T.muted, fontSize: '0.875rem' }}>On s'occupe du reste — présente-toi à ton créneau !</p>
               </div>
 
               {/* Message informatif — onglet Commandes */}
@@ -647,6 +745,15 @@ export default function Commander() {
           {/* ── ONGLET COMMANDES ── */}
           {onglet === 'commandes' && !estDansCommerce && (
             <div style={{ padding: '0.875rem 1rem 1rem' }}>
+
+              {/* Message post-retrait yoppaa */}
+              {messageRetrait && (
+                <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 16, padding: '1.25rem', marginBottom: '1rem', textAlign: 'center', color: '#fff' }}>
+                  <p style={{ fontWeight: 900, fontSize: '1.1rem', letterSpacing: '-1px', marginBottom: 6 }}>yoppaa ✓</p>
+                  <p style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 4 }}>Retrait confirmé !</p>
+                  <p style={{ fontSize: '0.82rem', color: T.light, lineHeight: 1.5 }}>Merci et profitez bien de votre commande 🎉<br/>Un message pour votre avis arrivera dans 45 min.</p>
+                </div>
+              )}
 
               {/* Avis en attente (après 45min) */}
               {avisEnAttente && !avisSoumis && (
@@ -769,6 +876,23 @@ export default function Commander() {
             </div>
           )}
 
+          {/* TRIBU YOPPAA */}
+          {onglet === 'tribu' && !estDansCommerce && (
+            <div style={{ padding: '0.875rem 1rem 1rem' }}>
+              {/* Header */}
+              <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 16, padding: '1.25rem', marginBottom: '1rem', color: '#fff', textAlign: 'center' }}>
+                <p style={{ fontSize: '1.8rem', marginBottom: 6 }}>🫂</p>
+                <p style={{ fontWeight: 900, fontSize: '1.1rem', letterSpacing: '-1px', marginBottom: 4 }}>La Tribu Yoppaa</p>
+                <p style={{ fontSize: '0.82rem', color: T.light, lineHeight: 1.5 }}>
+                  Tu as fait la file chez un commerce et tu penses qu'ils mériteraient Yoppaa ?<br/>
+                  Dis-le nous — on les contacte !
+                </p>
+              </div>
+
+              <SuggestionForm clientId={clientId} />
+            </div>
+          )}
+
           {/* PROFIL */}
           {onglet === 'profil' && !estDansCommerce && (
             <div style={{ padding: '0.875rem 1rem 1rem' }}>
@@ -826,6 +950,7 @@ export default function Commander() {
               { key: 'accueil',   label: 'Accueil',   icon: '🏠' },
               { key: 'commandes', label: 'Commandes', icon: '📦', badge: badgeCommandes },
               { key: 'favoris',   label: 'Favoris',   icon: '❤️', badge: favoris.length },
+              { key: 'tribu',     label: 'Tribu',     icon: '🫂' },
               { key: 'profil',    label: 'Profil',    icon: '👤' },
             ].map(item => (
               <button key={item.key} onClick={() => setOnglet(item.key)}

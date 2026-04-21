@@ -947,7 +947,8 @@ export default function Commander() {
                   const groupes = optionsParArticle[article.id] || []
                   const hasOptions = groupes.length > 0
                   const [showOptions, setShowOptions] = useState(false)
-                  const qte = Object.entries(panier).filter(([k]) => k === article.id || k.startsWith(article.id + '_')).reduce((acc, [,v]) => acc + v.quantite, 0)
+                  // Sans options : clé simple = article.id
+                  const qte = panier[article.id]?.quantite || 0
 
                   return (
                     <div style={{ ...card }}>
@@ -962,11 +963,19 @@ export default function Commander() {
                           {article.stock_jour === 0 && <span style={{ fontSize: '0.7rem', background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>Épuisé</span>}
                         </div>
                         {article.stock_jour !== 0 && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
-                            {qte > 0 && <span style={{ fontWeight: 800, minWidth: 20, textAlign: 'center', fontSize: '1rem', color: T.main }}>{qte}</span>}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 12, flexShrink: 0 }}>
+                            {/* Bouton − visible uniquement si qte > 0 et pas d'options */}
+                            {!hasOptions && qte > 0 && (
+                              <>
+                                <button onClick={() => retirerDuPanier(article.id)}
+                                  style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 800, cursor: 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                                <span style={{ fontWeight: 800, minWidth: 24, textAlign: 'center', fontSize: '1.05rem', color: T.ink }}>{qte}</span>
+                              </>
+                            )}
+                            {/* Bouton + normal sans options / bouton ⚙ avec options */}
                             <button onClick={() => hasOptions ? setShowOptions(v => !v) : ajouterAuPanier(article)}
-                              style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              {hasOptions ? '⚙' : '+'}
+                              style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: showOptions ? T.mid : T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: hasOptions ? '0.9rem' : '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {hasOptions ? '⚙️' : '+'}
                             </button>
                           </div>
                         )}

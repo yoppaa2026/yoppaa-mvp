@@ -473,7 +473,7 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s }) {
           <button style={{ ...s.btn, ...s.btnDanger, padding: '5px 12px', fontSize: 12 }} onClick={() => onDelete(a.id)}>🗑</button>
         </div>
       </div>
-      {showOptions && <OptionsArticle articleId={a.id} toast={window.__yoppaaToast || (() => {})}/>}
+      {showOptions && <OptionsArticle articleId={a.id} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
     </div>
   )
 }
@@ -847,8 +847,12 @@ export default function ConfigDashboard({ commercantId }) {
     setToastMsg(msg); setToastType(type)
     setTimeout(() => setToastMsg(''), 3000)
   }
-  // Rendre toast accessible depuis ArticleCard
-  if (typeof window !== 'undefined') window.__yoppaaToast = showToast
+
+  useEffect(() => {
+    function handleToast(e) { showToast(e.detail.msg, e.detail.type) }
+    window.addEventListener('yoppaa-toast', handleToast)
+    return () => window.removeEventListener('yoppaa-toast', handleToast)
+  }, [])
 
   const tabs = [
     { id: 'menu',     label: '🍞 Menu' },

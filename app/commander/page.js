@@ -24,7 +24,6 @@ function getTemps(type) { return TEMPS_PAR_TYPE[type] || 7 }
 
 const CATEGORIES = ['Tous', 'Boulangerie', 'Coffee shop', 'Sandwicherie', 'Snack', 'Friterie', 'Pizzeria', 'Épicerie', 'Traiteur']
 
-// ─── Badges par catégorie ─────────────────────────────────────────────────────
 const TYPE_BADGE = {
   'Boulangerie':              { bg: '#FFF3CD', color: '#856404' },
   'Boulangerie & Pâtisserie': { bg: '#FEF3C7', color: '#92400E' },
@@ -39,10 +38,8 @@ const TYPE_BADGE = {
 }
 function getBadge(type) { return TYPE_BADGE[type] || { bg: T.pale, color: T.deep } }
 
-// Retourne un tableau de 1 ou 2 types depuis le champ type du commerçant
 function parseTypes(type) {
   if (!type) return ['Commerce']
-  // Séparateurs possibles : " & ", " / ", ", "
   const parts = type.split(/\s*[&\/,]\s*/).map(t => t.trim()).filter(Boolean)
   return parts.length >= 2 ? parts.slice(0, 2) : [type]
 }
@@ -53,11 +50,7 @@ function Badges({ type }) {
     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
       {types.map((t, i) => {
         const badge = getBadge(t)
-        return (
-          <span key={i} style={{ background: badge.bg, color: badge.color, fontSize: '0.72rem', fontWeight: 700, padding: '3px 10px', borderRadius: 100, whiteSpace: 'nowrap' }}>
-            {t}
-          </span>
-        )
+        return <span key={i} style={{ background: badge.bg, color: badge.color, fontSize: '0.72rem', fontWeight: 700, padding: '3px 10px', borderRadius: 100, whiteSpace: 'nowrap' }}>{t}</span>
       })}
     </div>
   )
@@ -65,10 +58,9 @@ function Badges({ type }) {
 
 function distanceVolOiseau(lat1, lon1, lat2, lon2) {
   const R = 6371000
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
+  const dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180
   const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+  return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
 }
 function formatDistance(m) {
   if (!m && m !== 0) return null
@@ -77,11 +69,17 @@ function formatDistance(m) {
 
 function Etoiles({ note, taille = 14 }) {
   const n = note ? Math.round(note) : 0
-  return (
-    <span style={{ display: 'inline-flex', gap: 1 }}>
-      {[1,2,3,4,5].map(i => <span key={i} style={{ fontSize: taille, color: i <= n ? '#F59E0B' : '#D1D5DB' }}>★</span>)}
-    </span>
-  )
+  return <span style={{ display: 'inline-flex', gap: 1 }}>{[1,2,3,4,5].map(i => <span key={i} style={{ fontSize: taille, color: i<=n ? '#F59E0B' : '#D1D5DB' }}>★</span>)}</span>
+}
+
+// ─── Heure courante en minutes ────────────────────────────────────────────────
+function heureEnMinutes(heure) {
+  const [h, m] = heure.slice(0, 5).split(':').map(Number)
+  return h * 60 + m
+}
+function maintenant() {
+  const d = new Date()
+  return d.getHours() * 60 + d.getMinutes()
 }
 
 // ─── Swipe retrait ────────────────────────────────────────────────────────────
@@ -93,29 +91,17 @@ function SwipeRetrait({ onConfirm }) {
   const containerRef = useRef(null)
   const THUMB = 52
 
-  function getMaxX() {
-    const w = containerRef.current?.offsetWidth || 300
-    return w - THUMB - 8
-  }
+  function getMaxX() { return (containerRef.current?.offsetWidth || 300) - THUMB - 8 }
   function getX(e) { return e.touches ? e.touches[0].clientX : e.clientX }
 
-  const onStart = e => {
-    if (confirmed) return
-    setSwiping(true)
-    startRef.current = getX(e) - swipeX
-  }
+  const onStart = e => { if (confirmed) return; setSwiping(true); startRef.current = getX(e) - swipeX }
   const onMove = e => {
     if (!swiping || confirmed) return
-    const MAX = getMaxX()
-    const x = Math.max(0, Math.min(MAX, getX(e) - startRef.current))
+    const x = Math.max(0, Math.min(getMaxX(), getX(e) - startRef.current))
     setSwipeX(x)
-    if (x >= MAX) { setConfirmed(true); setSwiping(false); onConfirm() }
+    if (x >= getMaxX()) { setConfirmed(true); setSwiping(false); onConfirm() }
   }
-  const onEnd = () => {
-    if (confirmed) return
-    setSwiping(false)
-    if (swipeX < getMaxX()) setSwipeX(0)
-  }
+  const onEnd = () => { if (confirmed) return; setSwiping(false); if (swipeX < getMaxX()) setSwipeX(0) }
   const p = swipeX / (getMaxX() || 1)
 
   return (
@@ -124,13 +110,13 @@ function SwipeRetrait({ onConfirm }) {
         Glisse pour confirmer le retrait
       </p>
       <div ref={containerRef}
-        style={{ width: '100%', maxWidth: 320, height: THUMB + 8, borderRadius: 100, background: confirmed ? '#D4EDDA' : `linear-gradient(to right, ${T.pale} ${p*100}%, #F3F4F6 ${p*100}%)`, position: 'relative', overflow: 'hidden', border: `2px solid ${confirmed ? '#16A34A' : T.light}`, transition: confirmed ? 'all 0.3s' : 'none', userSelect: 'none', cursor: confirmed ? 'default' : 'grab', touchAction: 'none' }}
+        style={{ width: '100%', maxWidth: 340, height: THUMB+8, borderRadius: 100, background: confirmed ? '#D4EDDA' : `linear-gradient(to right, ${T.pale} ${p*100}%, #F3F4F6 ${p*100}%)`, position: 'relative', overflow: 'hidden', border: `2px solid ${confirmed ? '#16A34A' : T.light}`, transition: confirmed ? 'all 0.3s' : 'none', userSelect: 'none', cursor: confirmed ? 'default' : 'grab', touchAction: 'none' }}
         onMouseDown={onStart} onMouseMove={onMove} onMouseUp={onEnd} onMouseLeave={onEnd}
         onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}>
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', fontWeight: 700, color: confirmed ? '#16A34A' : T.mid, pointerEvents: 'none', paddingLeft: THUMB + 12 }}>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', fontWeight: 700, color: confirmed ? '#16A34A' : T.mid, pointerEvents: 'none', paddingLeft: THUMB+12 }}>
           {confirmed ? '✓ Confirmé !' : 'Glisse →'}
         </div>
-        <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: confirmed ? '#16A34A' : T.main, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.15)', transition: swiping ? 'none' : 'left 0.3s, background 0.3s', userSelect: 'none' }}>
+        <div style={{ position: 'absolute', left: 4+swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: confirmed ? '#16A34A' : T.main, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.15)', transition: swiping ? 'none' : 'left 0.3s, background 0.3s', userSelect: 'none' }}>
           {confirmed ? '✓' : '→'}
         </div>
       </div>
@@ -142,40 +128,30 @@ function SwipeRetrait({ onConfirm }) {
 function CarteCommerce({ c, favoris, notesParCommerce, onSelect, onToggleFavori }) {
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
-
   return (
     <div onClick={() => onSelect(c)}
       style={{ background: T.bgCard, border: `1.5px solid ${T.pale}`, borderLeft: `4px solid ${T.main}`, borderRadius: 14, padding: '1rem', marginBottom: '0.75rem', cursor: 'pointer', boxShadow: '0 1px 6px rgba(107,53,196,0.06)', transition: 'all 0.15s' }}
-      onMouseOver={e => { e.currentTarget.style.boxShadow = '0 4px 20px rgba(107,53,196,0.14)' }}
-      onMouseOut={e => { e.currentTarget.style.boxShadow = '0 1px 6px rgba(107,53,196,0.06)' }}>
+      onMouseOver={e => e.currentTarget.style.boxShadow = '0 4px 20px rgba(107,53,196,0.14)'}
+      onMouseOut={e => e.currentTarget.style.boxShadow = '0 1px 6px rgba(107,53,196,0.06)'}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Nom */}
           <p style={{ fontWeight: 800, color: T.ink, margin: '0 0 6px', fontSize: '1rem', letterSpacing: '-0.3px' }}>{c.nom}</p>
-          {/* Badges double catégorie */}
-          <Badges type={c.type} />
-          {/* Description */}
+          <Badges type={c.type}/>
           {c.description && <p style={{ fontSize: '0.82rem', color: '#6b5c8a', margin: '6px 0 0', lineHeight: 1.45 }}>{c.description}</p>}
-          {/* Étoiles */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
             <Etoiles note={noteInfo?.moyenne || 0} taille={13}/>
             <span style={{ fontSize: '0.72rem', color: noteInfo?.count > 0 ? '#9CA3AF' : '#D1D5DB' }}>
               {noteInfo?.count > 0 ? `(${noteInfo.count} avis)` : "Pas encore d'avis"}
             </span>
           </div>
-          {/* Distance + horaires */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px 12px', marginTop: 5 }}>
             {c.distance != null && <span style={{ fontSize: '0.75rem', color: T.main, fontWeight: 700 }}>📍 {formatDistance(c.distance)}</span>}
             {c.horaires && <span style={{ fontSize: '0.75rem', color: T.deep, fontWeight: 600 }}>🕐 {c.horaires}</span>}
           </div>
         </div>
-        {/* Logo + favori */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <div style={{ width: 52, height: 52, borderRadius: 12, background: T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {c.logo_url
-              ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-              : <span style={{ fontSize: '1.4rem' }}>🏪</span>
-            }
+            {c.logo_url ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <span style={{ fontSize: '1.4rem' }}>🏪</span>}
           </div>
           <button onClick={e => onToggleFavori(c.id, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem', lineHeight: 1, padding: 0 }}>
             {estFavori ? '❤️' : '🤍'}
@@ -209,11 +185,10 @@ export default function Commander() {
   const [categorieActive, setCategorieActive] = useState('Tous')
   const [favoris, setFavoris] = useState([])
   const [commercantsFavoris, setCommercantsFavoris] = useState([])
+  // Avis — déclenché depuis l'onglet Commandes
+  const [avisEnAttente, setAvisEnAttente] = useState(null) // { commandeId, clientId, commercantId, nom }
   const [avisForm, setAvisForm] = useState({ note: 0, commentaire: '' })
   const [avisSoumis, setAvisSoumis] = useState(false)
-  const [commandeRecuperee, setCommandeRecuperee] = useState(false)
-  const [minutesRestantes, setMinutesRestantes] = useState(30)
-  const [avisDisponible, setAvisDisponible] = useState(false)
   const avisTimerRef = useRef(null)
 
   useEffect(() => {
@@ -233,35 +208,24 @@ export default function Commander() {
 
   function demanderGeolocalisation() {
     if (!navigator.geolocation) return
-    setGeoLoading(true)
-    setRue(null)
+    setGeoLoading(true); setRue(null)
     navigator.geolocation.getCurrentPosition(
       async pos => {
-        const lat = pos.coords.latitude
-        const lng = pos.coords.longitude
+        const { latitude: lat, longitude: lng } = pos.coords
         setPosition({ lat, lng })
-        // Reverse geocoding via Nominatim (OpenStreetMap)
         try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=fr`,
-            { headers: { 'Accept': 'application/json' } }
-          )
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=fr`, { headers: { 'Accept': 'application/json' } })
           if (res.ok) {
             const data = await res.json()
             const addr = data.address || {}
-            // Priorité : road/pedestrian/footway + house_number, sinon quarter/suburb, sinon ville
-            const rue = addr.road || addr.pedestrian || addr.footway || addr.path || addr.street
-            const numero = addr.house_number
-            if (rue) {
-              setRue(numero ? `${rue} ${numero}` : rue)
-            } else {
-              setRue(addr.quarter || addr.suburb || addr.neighbourhood || addr.town || addr.city || addr.municipality || 'Position active')
-            }
+            const r = addr.road || addr.pedestrian || addr.footway || addr.path || addr.street
+            const n = addr.house_number
+            setRue(r ? (n ? `${r} ${n}` : r) : (addr.quarter || addr.suburb || addr.town || addr.city || 'Position active'))
           }
         } catch { setRue('Position active') }
         setGeoLoading(false)
       },
-      () => { setGeoLoading(false) },
+      () => setGeoLoading(false),
       { timeout: 10000, enableHighAccuracy: true }
     )
   }
@@ -278,24 +242,28 @@ export default function Commander() {
     const notes = {}
     ids.forEach(id => {
       const av = data.filter(a => a.commercant_id === id)
-      notes[id] = av.length > 0 ? { moyenne: av.reduce((a, x) => a + x.note, 0) / av.length, count: av.length } : { moyenne: 0, count: 0 }
+      notes[id] = av.length > 0 ? { moyenne: av.reduce((a, x) => a+x.note, 0)/av.length, count: av.length } : { moyenne: 0, count: 0 }
     })
     setNotesParCommerce(notes)
   }
 
   async function chargerFavoris(cid) {
     const { data } = await supabase.from('favoris').select('commercant_id').eq('client_id', cid)
-    const ids = (data || []).map(f => f.commercant_id)
+    const ids = (data||[]).map(f => f.commercant_id)
     setFavoris(ids)
     if (ids.length > 0) {
       const { data: comms } = await supabase.from('commercants').select('*').in('id', ids)
-      setCommercantsFavoris(comms || [])
+      setCommercantsFavoris(comms||[])
     }
   }
 
   async function chargerCommandesClient(email) {
-    const { data } = await supabase.from('commandes').select('*, commercant:commercants(nom, type)').eq('client_email', email).order('created_at', { ascending: false })
-    setClientCommandes(data || [])
+    const { data } = await supabase
+      .from('commandes')
+      .select('*, commercant:commercants(nom, type), creneau:creneaux(heure_debut, heure_fin)')
+      .eq('client_email', email)
+      .order('created_at', { ascending: false })
+    setClientCommandes(data||[])
   }
 
   useEffect(() => {
@@ -316,12 +284,12 @@ export default function Commander() {
       if (!res.ok) throw new Error()
       const data = await res.json()
       const distances = data.distances[0].slice(1)
-      const avecDistance = liste.map(c => { const idx = avecCoords.findIndex(x => x.id === c.id); return { ...c, distance: idx === -1 ? null : distances[idx] } })
-      avecDistance.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
+      const avecDistance = liste.map(c => { const idx = avecCoords.findIndex(x => x.id===c.id); return { ...c, distance: idx===-1 ? null : distances[idx] } })
+      avecDistance.sort((a,b) => (a.distance??Infinity)-(b.distance??Infinity))
       setCommercants(avecDistance)
     } catch {
       const avecDistance = liste.map(c => ({ ...c, distance: c.latitude && c.longitude ? distanceVolOiseau(pos.lat, pos.lng, parseFloat(c.latitude), parseFloat(c.longitude)) : null }))
-      avecDistance.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
+      avecDistance.sort((a,b) => (a.distance??Infinity)-(b.distance??Infinity))
       setCommercants(avecDistance)
     }
   }
@@ -334,9 +302,7 @@ export default function Commander() {
     localStorage.setItem('yoppaa_client_id', id)
     localStorage.setItem('yoppaa_email', email)
     localStorage.setItem('yoppaa_nom', nom)
-    if (!ex) return id
-    chargerFavoris(id)
-    chargerCommandesClient(email)
+    if (ex) { chargerFavoris(id); chargerCommandesClient(email) }
     return id
   }
 
@@ -355,12 +321,12 @@ export default function Commander() {
     if (!cid) return
     if (favoris.includes(commercantId)) {
       await supabase.from('favoris').delete().eq('client_id', cid).eq('commercant_id', commercantId)
-      setFavoris(prev => prev.filter(id => id !== commercantId))
-      setCommercantsFavoris(prev => prev.filter(c => c.id !== commercantId))
+      setFavoris(prev => prev.filter(id => id!==commercantId))
+      setCommercantsFavoris(prev => prev.filter(c => c.id!==commercantId))
     } else {
       await supabase.from('favoris').insert({ client_id: cid, commercant_id: commercantId })
       setFavoris(prev => [...prev, commercantId])
-      const c = commercants.find(x => x.id === commercantId)
+      const c = commercants.find(x => x.id===commercantId)
       if (c) setCommercantsFavoris(prev => [...prev, c])
     }
   }
@@ -372,15 +338,15 @@ export default function Commander() {
       supabase.from('creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
       supabase.from('avis').select('*, client:clients(nom)').eq('commercant_id', c.id).order('created_at', { ascending: false }).limit(10)
     ])
-    setArticles(arts || [])
-    setCreneaux(cren || [])
-    setAvisCommerce(avis || [])
+    setArticles(arts||[])
+    setCreneaux(cren||[])
+    setAvisCommerce(avis||[])
     setEtape(2)
   }
 
-  function ajouterAuPanier(a) { setPanier(p => ({ ...p, [a.id]: { ...a, quantite: (p[a.id]?.quantite || 0) + 1 } })) }
-  function retirerDuPanier(id) { setPanier(p => { const n = { ...p }; if (n[id]?.quantite > 1) n[id].quantite -= 1; else delete n[id]; return n }) }
-  function totalPanier() { return Object.values(panier).reduce((acc, i) => acc + i.prix * i.quantite, 0) }
+  function ajouterAuPanier(a) { setPanier(p => ({ ...p, [a.id]: { ...a, quantite: (p[a.id]?.quantite||0)+1 } })) }
+  function retirerDuPanier(id) { setPanier(p => { const n={...p}; if(n[id]?.quantite>1) n[id].quantite-=1; else delete n[id]; return n }) }
+  function totalPanier() { return Object.values(panier).reduce((acc,i) => acc+i.prix*i.quantite, 0) }
 
   async function passerCommande() {
     if (!creneauChoisi || !client.nom || !client.email) return
@@ -400,45 +366,63 @@ export default function Commander() {
     setLoading(false)
   }
 
-  async function confirmerRetrait() {
-    if (!derniereCommande) return
-    await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', derniereCommande.id)
-    setCommandeRecuperee(true)
-    let restant = 30
-    const iv = setInterval(() => { restant -= 1; setMinutesRestantes(restant); if (restant <= 0) { clearInterval(iv); setAvisDisponible(true) } }, 60000)
-    avisTimerRef.current = setTimeout(() => setAvisDisponible(true), 30 * 60 * 1000)
+  // ─── Confirmer retrait depuis l'onglet Commandes ──────────────────────────
+  async function confirmerRetrait(commande) {
+    await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', commande.id)
+    setClientCommandes(prev => prev.map(c => c.id===commande.id ? { ...c, statut: 'recupere' } : c))
+    // Déclencher avis après 45min
+    const avisData = {
+      commandeId: commande.id,
+      clientId: commande.client_id || clientId,
+      commercantId: commande.commercant_id,
+      nom: commande.commercant?.nom || ''
+    }
+    if (avisTimerRef.current) clearTimeout(avisTimerRef.current)
+    avisTimerRef.current = setTimeout(() => {
+      setAvisEnAttente(avisData)
+    }, 45 * 60 * 1000)
   }
 
   async function soumettreAvis() {
-    if (!avisForm.note || !derniereCommande) return
-    await supabase.from('avis').insert({ commande_id: derniereCommande.id, client_id: derniereCommande.client_id, commercant_id: commercantSelectionne.id, note: avisForm.note, commentaire: avisForm.commentaire.trim() || null })
+    if (!avisForm.note || !avisEnAttente) return
+    await supabase.from('avis').insert({
+      commande_id: avisEnAttente.commandeId,
+      client_id: avisEnAttente.clientId,
+      commercant_id: avisEnAttente.commercantId,
+      note: avisForm.note,
+      commentaire: avisForm.commentaire.trim() || null
+    })
     setAvisSoumis(true)
+    setAvisEnAttente(null)
+    setAvisForm({ note: 0, commentaire: '' })
   }
 
-  function noteMoyenne(avis) { return !avis?.length ? 0 : avis.reduce((acc, a) => acc + a.note, 0) / avis.length }
+  function noteMoyenne(avis) { return !avis?.length ? 0 : avis.reduce((acc,a) => acc+a.note, 0)/avis.length }
 
   function resetCommande() {
     setEtape(1); setPanier({}); setCreneauChoisi(null); setCommercantSelectionne(null)
-    setAvisForm({ note: 0, commentaire: '' }); setAvisSoumis(false)
-    setCommandeRecuperee(false); setAvisDisponible(false); setMinutesRestantes(30)
-    if (avisTimerRef.current) clearTimeout(avisTimerRef.current)
   }
 
-  const tempsEconomise = clientCommandes.filter(c => c.statut === 'recupere').reduce((acc, c) => acc + getTemps(c.commercant?.type), 0)
-
-  // Filtre — un commerçant peut être dans 2 catégories
-  const commercantsFiltres = categorieActive === 'Tous'
-    ? commercants
-    : commercants.filter(c => {
-        const types = parseTypes(c.type)
-        return types.some(t => t === categorieActive || t.includes(categorieActive))
-      })
-
+  const tempsEconomise = clientCommandes.filter(c => c.statut==='recupere').reduce((acc,c) => acc+getTemps(c.commercant?.type), 0)
+  const commercantsFiltres = categorieActive === 'Tous' ? commercants : commercants.filter(c => parseTypes(c.type).some(t => t===categorieActive || t.includes(categorieActive)))
   const estDansCommerce = etape > 1
+
+  // Commandes à swiper = statut pret
+  const commandesASwiper = clientCommandes.filter(c => c.statut === 'pret')
+  const commandesEnCours = clientCommandes.filter(c => ['en_attente','en_preparation'].includes(c.statut))
+  const commandesTerminees = clientCommandes.filter(c => c.statut === 'recupere')
+  const badgeCommandes = commandesASwiper.length + commandesEnCours.length
 
   const card = { background: T.bgCard, borderRadius: 14, padding: '1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 6px rgba(107,53,196,0.05)' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: T.main, color: '#fff', boxShadow: `0 4px 20px ${T.main}44`, fontFamily: '"DM Sans", sans-serif' }
   const inputSt = { width: '100%', padding: '0.875rem 1rem', border: `1.5px solid ${T.pale}`, borderRadius: 12, marginBottom: 10, fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', outline: 'none', color: T.ink, background: '#fff', display: 'block' }
+
+  const statutStyle = {
+    recupere:       { bg: '#F0FDF4', color: '#16A34A', label: '✓ Récupérée' },
+    pret:           { bg: '#EDE0FF', color: T.main,    label: '📦 Prête' },
+    en_preparation: { bg: '#EFF6FF', color: '#2563EB', label: '🟠 En prépa' },
+    en_attente:     { bg: '#FFF7ED', color: '#EA580C', label: '🔴 En attente' },
+  }
 
   return (
     <>
@@ -456,7 +440,6 @@ export default function Commander() {
         .grid3 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         @media (min-width: 480px) { .grid3 { grid-template-columns: 1fr 1fr 1fr; } }
         input, textarea, button, select { font-family: "DM Sans", sans-serif; }
-        a { color: inherit; }
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 
@@ -469,7 +452,7 @@ export default function Commander() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1rem 0.75rem' }}>
                 <div>
                   <div style={{ display: 'flex', gap: 5, marginBottom: 5 }}>
-                    {[0.4, 1, 1].map((op, i) => <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: i === 0 ? '#fff' : i === 1 ? T.light : T.mid, opacity: op }}/>)}
+                    {[0.4,1,1].map((op,i) => <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: i===0?'#fff':i===1?T.light:T.mid, opacity: op }}/>)}
                   </div>
                   <p style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1 }}>yoppaa</p>
                   <p style={{ color: T.light, fontSize: '0.75rem', marginTop: 2 }}>Skip the wait</p>
@@ -477,14 +460,14 @@ export default function Commander() {
                 <button onClick={demanderGeolocalisation}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, background: `${T.main}55`, border: `1px solid ${T.main}88`, borderRadius: 12, padding: '0.5rem 0.875rem', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}>
                   <span>{geoLoading ? '⏳' : '📍'}</span>
-                  <span>{geoLoading ? 'Localisation...' : rue ? rue : position ? 'Position active' : 'Activer'}</span>
+                  <span>{geoLoading ? 'Localisation...' : rue || (position ? 'Position active' : 'Activer')}</span>
                 </button>
               </div>
               {onglet === 'accueil' && (
                 <div className="cats">
                   {CATEGORIES.map(cat => (
                     <button key={cat} onClick={() => setCategorieActive(cat)}
-                      style={{ flexShrink: 0, padding: '0.4rem 0.875rem', borderRadius: 100, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', whiteSpace: 'nowrap', background: categorieActive === cat ? '#fff' : `${T.main}44`, color: categorieActive === cat ? T.main : '#fff' }}>
+                      style={{ flexShrink: 0, padding: '0.4rem 0.875rem', borderRadius: 100, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', whiteSpace: 'nowrap', background: categorieActive===cat ? '#fff' : `${T.main}44`, color: categorieActive===cat ? T.main : '#fff' }}>
                       {cat}
                     </button>
                   ))}
@@ -494,23 +477,22 @@ export default function Commander() {
             </>
           ) : (
             <div style={{ padding: '0.875rem 1rem' }}>
-              <button onClick={resetCommande}
-                style={{ background: `${T.main}55`, border: 'none', color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.875rem' }}>
+              <button onClick={resetCommande} style={{ background: `${T.main}55`, border: 'none', color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.875rem' }}>
                 ← Retour
               </button>
             </div>
           )}
         </div>
 
-        {/* ── CONTENU SCROLLABLE ── */}
+        {/* ── CONTENU ── */}
         <div className="scroll-body">
 
           {/* ACCUEIL */}
           {onglet === 'accueil' && !estDansCommerce && (
             <div style={{ padding: '0.875rem 1rem 1rem' }}>
-              {position && <p style={{ fontSize: '0.8rem', color: T.mid, fontWeight: 600, marginBottom: '0.75rem' }}>📍 {commercantsFiltres.length} commerce{commercantsFiltres.length > 1 ? 's' : ''} près de toi</p>}
+              {position && <p style={{ fontSize: '0.8rem', color: T.mid, fontWeight: 600, marginBottom: '0.75rem' }}>📍 {commercantsFiltres.length} commerce{commercantsFiltres.length>1?'s':''} près de toi</p>}
               {commercantsFiltres.length === 0
-                ? <div style={{ textAlign: 'center', padding: '3rem 0' }}><p style={{ fontSize: '2rem', marginBottom: 8 }}>🔍</p><p style={{ color: T.muted, fontSize: '1rem' }}>Aucun commerce dans cette catégorie</p></div>
+                ? <div style={{ textAlign: 'center', padding: '3rem 0' }}><p style={{ fontSize: '2rem', marginBottom: 8 }}>🔍</p><p style={{ color: T.muted }}>Aucun commerce dans cette catégorie</p></div>
                 : commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)
               }
             </div>
@@ -521,20 +503,14 @@ export default function Commander() {
             <div style={{ padding: '1rem' }}>
               <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1rem' }}>
                 <div style={{ width: 60, height: 60, borderRadius: 12, background: T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {commercantSelectionne?.logo_url
-                    ? <img src={commercantSelectionne.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                    : <span style={{ fontSize: '1.5rem' }}>🏪</span>
-                  }
+                  {commercantSelectionne?.logo_url ? <img src={commercantSelectionne.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <span style={{ fontSize: '1.5rem' }}>🏪</span>}
                 </div>
                 <div style={{ flex: 1 }}>
                   <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: T.ink, marginBottom: 4 }}>{commercantSelectionne?.nom}</h2>
                   {commercantSelectionne?.adresse && <p style={{ fontSize: '0.78rem', color: '#b0a0c8', marginBottom: 5 }}>📍 {commercantSelectionne.adresse}</p>}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     <Etoiles note={noteMoyenne(avisCommerce)} taille={13}/>
-                    {avisCommerce.length > 0
-                      ? <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>({avisCommerce.length} avis)</span>
-                      : <span style={{ fontSize: '0.72rem', color: '#D1D5DB' }}>Pas encore d'avis</span>
-                    }
+                    {avisCommerce.length > 0 ? <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>({avisCommerce.length} avis)</span> : <span style={{ fontSize: '0.72rem', color: '#D1D5DB' }}>Pas encore d'avis</span>}
                   </div>
                 </div>
               </div>
@@ -597,12 +573,17 @@ export default function Commander() {
             <div style={{ padding: '1rem' }}>
               <h2 style={{ fontWeight: 800, fontSize: '1.15rem', marginBottom: '1rem', color: T.ink }}>Choisis ton créneau</h2>
               <div className="grid3" style={{ marginBottom: '1.25rem' }}>
-                {creneaux.map(c => (
-                  <div key={c.id} onClick={() => setCreneauChoisi(c.id)}
-                    style={{ padding: '0.875rem 0.5rem', borderRadius: 12, border: `2px solid ${creneauChoisi === c.id ? T.main : T.pale}`, background: creneauChoisi === c.id ? T.pale : '#fff', cursor: 'pointer', textAlign: 'center', fontWeight: 700, color: T.ink, fontSize: '0.9rem', transition: 'all 0.15s' }}>
-                    {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
-                  </div>
-                ))}
+                {creneaux.map(c => {
+                  const passe = heureEnMinutes(c.heure_fin) < maintenant()
+                  return (
+                    <div key={c.id}
+                      onClick={() => !passe && setCreneauChoisi(c.id)}
+                      style={{ padding: '0.875rem 0.5rem', borderRadius: 12, border: `2px solid ${passe ? '#E5E7EB' : creneauChoisi===c.id ? T.main : T.pale}`, background: passe ? '#F9FAFB' : creneauChoisi===c.id ? T.pale : '#fff', cursor: passe ? 'default' : 'pointer', textAlign: 'center', fontWeight: 700, color: passe ? '#D1D5DB' : T.ink, fontSize: '0.875rem', transition: 'all 0.15s', position: 'relative' }}>
+                      {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
+                      {passe && <div style={{ fontSize: '0.6rem', color: '#9CA3AF', fontWeight: 600, marginTop: 3 }}>Reviens demain !</div>}
+                    </div>
+                  )
+                })}
               </div>
 
               <h2 style={{ fontWeight: 800, fontSize: '1.15rem', marginBottom: '1rem', color: T.ink }}>Tes coordonnées</h2>
@@ -618,60 +599,150 @@ export default function Commander() {
             </div>
           )}
 
-          {/* ÉTAPE 4 — Confirmation */}
+          {/* ÉTAPE 4 — Confirmation (sans swipe) */}
           {etape === 4 && (
-            <div style={{ padding: '1.25rem 1rem' }}>
-              <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-                <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🎉</div>
+            <div style={{ padding: '1.5rem 1rem' }}>
+              <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>🎉</div>
                 <h2 style={{ fontWeight: 900, fontSize: '1.4rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.5px' }}>Commande confirmée !</h2>
                 <p style={{ color: T.main, fontWeight: 700, marginBottom: '0.25rem', fontSize: '1rem' }}>Chez {commercantSelectionne?.nom}</p>
-                <p style={{ color: T.muted, fontSize: '0.875rem' }}>Présente-toi au créneau — tout sera prêt !</p>
+                <p style={{ color: T.muted, fontSize: '0.875rem' }}>Ta commande est en cours de préparation.</p>
               </div>
 
-              {!commandeRecuperee ? (
-                <div style={{ ...card, textAlign: 'center', padding: '1.5rem' }}>
-                  <p style={{ fontWeight: 800, color: T.ink, marginBottom: '0.5rem', fontSize: '1rem' }}>📦 Tu as récupéré ta commande ?</p>
-                  <p style={{ fontSize: '0.875rem', color: T.muted, marginBottom: '1.25rem' }}>Glisse devant le commerçant pour confirmer.</p>
-                  <SwipeRetrait onConfirm={confirmerRetrait}/>
-                </div>
-              ) : (
-                <div style={{ background: '#F0FDF4', borderRadius: 14, padding: '1.25rem', border: '1.5px solid #16A34A33', marginBottom: '0.75rem', textAlign: 'center' }}>
-                  <p style={{ fontSize: '1.75rem', marginBottom: 6 }}>✅</p>
-                  <p style={{ fontWeight: 800, color: '#16A34A', fontSize: '1rem' }}>Retrait confirmé !</p>
-                </div>
-              )}
+              {/* Message informatif — onglet Commandes */}
+              <div style={{ background: T.pale, borderRadius: 16, padding: '1.25rem', marginBottom: '1rem', border: `1.5px solid ${T.main}33` }}>
+                <p style={{ fontWeight: 800, color: T.ink, marginBottom: 8, fontSize: '1rem' }}>📦 Pour récupérer ta commande</p>
+                <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>
+                  Présente-toi chez <strong>{commercantSelectionne?.nom}</strong> à ton créneau.<br/>
+                  Quand ta commande est prête, tu pourras la confirmer depuis l'onglet <strong>Commandes</strong> en bas de l'écran.
+                </p>
+              </div>
 
-              {commandeRecuperee && !avisSoumis && (
-                <div style={{ ...card, padding: '1.25rem' }}>
-                  {!avisDisponible ? (
-                    <div style={{ textAlign: 'center' }}>
-                      <p style={{ fontWeight: 700, color: T.ink, marginBottom: 4, fontSize: '1rem' }}>⏳ Ton avis dans {minutesRestantes} min</p>
-                      <p style={{ fontSize: '0.875rem', color: T.muted }}>On te demandera un avis après — le temps de savourer !</p>
-                    </div>
-                  ) : (
-                    <>
-                      <h3 style={{ fontWeight: 800, fontSize: '1rem', color: T.ink, marginBottom: 12 }}>Comment était {commercantSelectionne?.nom} ? ⭐</h3>
-                      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                        {[1,2,3,4,5].map(i => <span key={i} onClick={() => setAvisForm(p => ({ ...p, note: i }))} style={{ fontSize: 32, cursor: 'pointer', color: i <= avisForm.note ? '#F59E0B' : '#E5E7EB', transition: 'color 0.1s' }}>★</span>)}
-                      </div>
-                      <textarea placeholder="Ton commentaire (optionnel)" value={avisForm.commentaire} onChange={e => setAvisForm(p => ({ ...p, commentaire: e.target.value }))}
-                        style={{ ...inputSt, resize: 'vertical', minHeight: 80, marginBottom: 0 }}/>
-                      <button onClick={soumettreAvis} disabled={!avisForm.note}
-                        style={{ ...btnPrimary, background: avisForm.note ? T.main : '#E5E7EB', marginTop: 10, boxShadow: 'none', cursor: avisForm.note ? 'pointer' : 'default' }}>
-                        Envoyer mon avis
-                      </button>
-                    </>
-                  )}
+              <div style={{ ...card, textAlign: 'center', padding: '1rem' }}>
+                <p style={{ fontSize: '0.8rem', color: T.muted, marginBottom: 12 }}>Retrouve le statut de ta commande ici :</p>
+                <button onClick={() => { setOnglet('commandes'); resetCommande() }}
+                  style={{ ...btnPrimary, fontSize: '0.9rem' }}>
+                  Voir mes commandes →
+                </button>
+              </div>
+
+              <button onClick={resetCommande} style={{ width: '100%', marginTop: 10, padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
+                Commander autre chose
+              </button>
+            </div>
+          )}
+
+          {/* ── ONGLET COMMANDES ── */}
+          {onglet === 'commandes' && !estDansCommerce && (
+            <div style={{ padding: '0.875rem 1rem 1rem' }}>
+
+              {/* Avis en attente (après 45min) */}
+              {avisEnAttente && !avisSoumis && (
+                <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 16, padding: '1.25rem', marginBottom: '1rem', color: '#fff' }}>
+                  <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 12 }}>⭐ Comment était {avisEnAttente.nom} ?</h3>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                    {[1,2,3,4,5].map(i => (
+                      <span key={i} onClick={() => setAvisForm(p => ({ ...p, note: i }))}
+                        style={{ fontSize: 30, cursor: 'pointer', color: i<=avisForm.note ? '#FCD34D' : 'rgba(255,255,255,0.3)', transition: 'color 0.1s' }}>★</span>
+                    ))}
+                  </div>
+                  <textarea placeholder="Ton commentaire (optionnel)" value={avisForm.commentaire}
+                    onChange={e => setAvisForm(p => ({ ...p, commentaire: e.target.value }))}
+                    style={{ width: '100%', padding: '0.75rem', border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: 10, fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif', resize: 'vertical', minHeight: 70, boxSizing: 'border-box', outline: 'none', color: '#fff', background: 'rgba(255,255,255,0.1)', marginBottom: 10 }}/>
+                  <button onClick={soumettreAvis} disabled={!avisForm.note}
+                    style={{ width: '100%', padding: '0.75rem', background: avisForm.note ? '#fff' : 'rgba(255,255,255,0.2)', color: avisForm.note ? T.main : 'rgba(255,255,255,0.5)', border: 'none', borderRadius: 100, fontWeight: 800, cursor: avisForm.note ? 'pointer' : 'default', fontSize: '0.9rem' }}>
+                    Envoyer mon avis
+                  </button>
                 </div>
               )}
 
               {avisSoumis && (
-                <div style={{ background: '#D4EDDA', borderRadius: 14, padding: '1rem', textAlign: 'center', marginBottom: '0.75rem' }}>
-                  <p style={{ color: '#155724', fontWeight: 700, fontSize: '1rem' }}>✓ Merci pour ton avis !</p>
+                <div style={{ background: '#D4EDDA', borderRadius: 14, padding: '1rem', textAlign: 'center', marginBottom: '1rem' }}>
+                  <p style={{ color: '#155724', fontWeight: 700 }}>✓ Merci pour ton avis !</p>
                 </div>
               )}
 
-              <button onClick={resetCommande} style={{ ...btnPrimary, marginTop: 8 }}>Commander autre chose</button>
+              {/* À swiper */}
+              {commandesASwiper.length > 0 && (
+                <>
+                  <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: T.ink, marginBottom: '0.75rem' }}>
+                    📦 Prêtes à récupérer
+                  </h2>
+                  {commandesASwiper.map(c => (
+                    <div key={c.id} style={{ background: '#F0FDF4', borderRadius: 16, padding: '1.25rem', marginBottom: '0.75rem', border: '2px solid #16A34A44' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                        <div>
+                          <p style={{ fontWeight: 800, color: T.ink, marginBottom: 2, fontSize: '1rem' }}>{c.commercant?.nom}</p>
+                          <p style={{ fontSize: '0.78rem', color: '#16A34A', fontWeight: 600 }}>
+                            🟢 Prête · {c.creneau ? `${c.creneau.heure_debut.slice(0,5)} – ${c.creneau.heure_fin.slice(0,5)}` : ''}
+                          </p>
+                        </div>
+                        <p style={{ fontWeight: 800, color: T.main, fontSize: '1rem' }}>{Number(c.total).toFixed(2)}€</p>
+                      </div>
+                      <SwipeRetrait onConfirm={() => confirmerRetrait(c)}/>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* En cours */}
+              {commandesEnCours.length > 0 && (
+                <>
+                  <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: T.ink, marginBottom: '0.75rem', marginTop: commandesASwiper.length > 0 ? '1rem' : 0 }}>
+                    🕐 En cours
+                  </h2>
+                  {commandesEnCours.map(c => {
+                    const sc = statutStyle[c.statut]
+                    return (
+                      <div key={c.id} style={{ ...card }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <p style={{ fontWeight: 800, color: T.ink, marginBottom: 2, fontSize: '0.95rem' }}>{c.commercant?.nom}</p>
+                            <p style={{ fontSize: '0.75rem', color: T.muted }}>
+                              {c.creneau ? `🕐 ${c.creneau.heure_debut.slice(0,5)} – ${c.creneau.heure_fin.slice(0,5)}` : ''}
+                            </p>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <p style={{ fontWeight: 800, color: T.main, marginBottom: 4, fontSize: '0.95rem' }}>{Number(c.total).toFixed(2)}€</p>
+                            <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: 100, background: sc.bg, color: sc.color }}>{sc.label}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+
+              {/* Vide */}
+              {commandesASwiper.length === 0 && commandesEnCours.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '3rem 0' }}>
+                  <p style={{ fontSize: '2.5rem', marginBottom: 10 }}>🛍️</p>
+                  <p style={{ fontWeight: 700, color: T.muted, marginBottom: 6 }}>Aucune commande en cours</p>
+                  <p style={{ fontSize: '0.875rem', color: '#9CA3AF', marginBottom: '1.25rem' }}>Tes commandes actives apparaîtront ici.</p>
+                  <button onClick={() => setOnglet('accueil')} style={{ ...btnPrimary, width: 'auto', padding: '0.75rem 1.5rem' }}>
+                    Commander maintenant
+                  </button>
+                </div>
+              )}
+
+              {/* Historique */}
+              {commandesTerminees.length > 0 && (
+                <div style={{ marginTop: '1.5rem' }}>
+                  <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: T.muted, marginBottom: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.72rem' }}>Historique</h3>
+                  {commandesTerminees.slice(0, 5).map(c => (
+                    <div key={c.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', opacity: 0.7 }}>
+                      <div>
+                        <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.9rem' }}>{c.commercant?.nom}</p>
+                        <p style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>{new Date(c.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <p style={{ fontWeight: 700, color: T.main, marginBottom: 2, fontSize: '0.9rem' }}>{Number(c.total).toFixed(2)}€</p>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: '#F0FDF4', color: '#16A34A' }}>✓ Récupérée</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -680,7 +751,7 @@ export default function Commander() {
             <div style={{ padding: '0.875rem 1rem 1rem' }}>
               <h2 style={{ fontWeight: 800, fontSize: '1.15rem', color: T.ink, marginBottom: '0.875rem' }}>Mes favoris ❤️</h2>
               {commercantsFavoris.length === 0
-                ? <div style={{ textAlign: 'center', padding: '3rem 0' }}><p style={{ fontSize: '2.5rem', marginBottom: 10 }}>🤍</p><p style={{ fontWeight: 700, color: T.muted, marginBottom: 6, fontSize: '1rem' }}>Aucun favori pour l'instant</p><p style={{ fontSize: '0.875rem', color: '#9CA3AF' }}>Tape ❤️ sur un commerce pour le retrouver ici.</p></div>
+                ? <div style={{ textAlign: 'center', padding: '3rem 0' }}><p style={{ fontSize: '2.5rem', marginBottom: 10 }}>🤍</p><p style={{ fontWeight: 700, color: T.muted, marginBottom: 6 }}>Aucun favori pour l'instant</p><p style={{ fontSize: '0.875rem', color: '#9CA3AF' }}>Tape ❤️ sur un commerce pour le retrouver ici.</p></div>
                 : commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} onSelect={c => { selectionnerCommercant(c); setOnglet('accueil') }} onToggleFavori={toggleFavori}/>)
               }
             </div>
@@ -704,18 +775,18 @@ export default function Commander() {
               <div style={{ ...card, textAlign: 'center', padding: '1.25rem' }}>
                 <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>⏱ Temps économisé en file</p>
                 <p style={{ fontSize: '3rem', fontWeight: 900, color: T.main, letterSpacing: '-2px', marginBottom: 6, lineHeight: 1 }}>
-                  {tempsEconomise >= 60 ? `${Math.floor(tempsEconomise/60)}h${tempsEconomise%60 > 0 ? tempsEconomise%60+'min' : ''}` : `${tempsEconomise} min`}
+                  {tempsEconomise >= 60 ? `${Math.floor(tempsEconomise/60)}h${tempsEconomise%60>0?tempsEconomise%60+'min':''}` : `${tempsEconomise} min`}
                 </p>
                 <p style={{ fontSize: '0.875rem', color: T.muted }}>
-                  {clientCommandes.filter(c => c.statut === 'recupere').length} commande{clientCommandes.filter(c => c.statut === 'recupere').length > 1 ? 's' : ''} sans faire la file 🎉
+                  {clientCommandes.filter(c=>c.statut==='recupere').length} commande{clientCommandes.filter(c=>c.statut==='recupere').length>1?'s':''} sans faire la file 🎉
                 </p>
               </div>
 
               <div className="grid2" style={{ marginBottom: '0.875rem' }}>
                 {[
                   { label: 'Commandes', value: clientCommandes.length, color: T.main },
-                  { label: 'Total dépensé', value: `${clientCommandes.reduce((acc, c) => acc + Number(c.total), 0).toFixed(0)}€`, color: T.mid },
-                ].map((s, i) => (
+                  { label: 'Total dépensé', value: `${clientCommandes.reduce((acc,c)=>acc+Number(c.total),0).toFixed(0)}€`, color: T.mid },
+                ].map((s,i) => (
                   <div key={i} style={{ ...card, textAlign: 'center', padding: '0.875rem', marginBottom: 0 }}>
                     <p style={{ fontSize: '0.65rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>{s.label}</p>
                     <p style={{ fontSize: '1.8rem', fontWeight: 900, color: s.color, letterSpacing: '-1px' }}>{s.value}</p>
@@ -723,32 +794,12 @@ export default function Commander() {
                 ))}
               </div>
 
-              <h3 style={{ fontWeight: 800, fontSize: '1rem', color: T.ink, marginBottom: '0.625rem' }}>Historique</h3>
-              {clientCommandes.length === 0
-                ? <div style={{ textAlign: 'center', padding: '2rem 0' }}><p style={{ fontSize: '1.5rem', marginBottom: 8 }}>🛍️</p><p style={{ color: T.muted, fontSize: '0.9rem' }}>Aucune commande pour l'instant</p></div>
-                : clientCommandes.map(c => {
-                    const sc = { recupere: { bg: '#F0FDF4', color: '#16A34A', label: '✓ Récupérée' }, pret: { bg: '#F0FDF4', color: '#16A34A', label: 'Prête' }, en_preparation: { bg: '#EFF6FF', color: '#2563EB', label: 'En prépa' }, en_attente: { bg: '#FFF7ED', color: '#EA580C', label: 'En attente' } }[c.statut] || { bg: T.pale, color: T.main, label: c.statut }
-                    return (
-                      <div key={c.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                        <div>
-                          <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.95rem' }}>{c.commercant?.nom}</p>
-                          <p style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>{new Date(c.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <p style={{ fontWeight: 800, color: T.main, marginBottom: 4, fontSize: '1rem' }}>{Number(c.total).toFixed(2)}€</p>
-                          <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: 100, background: sc.bg, color: sc.color }}>{sc.label}</span>
-                        </div>
-                      </div>
-                    )
-                  })
-              }
-
               {client.email && (
                 <button onClick={() => {
                   localStorage.removeItem('yoppaa_email'); localStorage.removeItem('yoppaa_nom'); localStorage.removeItem('yoppaa_client_id')
-                  setClient({ nom: '', email: '', telephone: '' }); setClientId(null)
+                  setClient({ nom:'', email:'', telephone:'' }); setClientId(null)
                   setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
-                }} style={{ width: '100%', marginTop: '1rem', padding: '0.875rem', background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.95rem' }}>
+                }} style={{ width: '100%', marginTop: '0.5rem', padding: '0.875rem', background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.95rem' }}>
                   Se déconnecter
                 </button>
               )}
@@ -756,22 +807,23 @@ export default function Commander() {
           )}
         </div>
 
-        {/* ── NAV BAR ── */}
+        {/* ── NAV BAR — 4 onglets ── */}
         {!estDansCommerce && (
           <nav className="navbar">
             {[
-              { key: 'accueil', label: 'Accueil', icon: '🏠' },
-              { key: 'favoris', label: 'Favoris', icon: '❤️', badge: favoris.length },
-              { key: 'profil',  label: 'Profil',  icon: '👤' },
+              { key: 'accueil',   label: 'Accueil',   icon: '🏠' },
+              { key: 'commandes', label: 'Commandes', icon: '📦', badge: badgeCommandes },
+              { key: 'favoris',   label: 'Favoris',   icon: '❤️', badge: favoris.length },
+              { key: 'profil',    label: 'Profil',    icon: '👤' },
             ].map(item => (
               <button key={item.key} onClick={() => setOnglet(item.key)}
-                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '0.75rem 0 0.625rem', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 700, fontSize: '0.7rem', color: onglet === item.key ? T.light : '#6B7280', position: 'relative', transition: 'color 0.15s' }}>
-                <span style={{ fontSize: '1.4rem', lineHeight: 1 }}>{item.icon}</span>
+                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '0.75rem 0 0.625rem', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 700, fontSize: '0.65rem', color: onglet===item.key ? T.light : '#6B7280', position: 'relative', transition: 'color 0.15s' }}>
+                <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>{item.icon}</span>
                 {item.label}
                 {item.badge > 0 && (
-                  <span style={{ position: 'absolute', top: 8, left: 'calc(50% + 8px)', background: T.main, color: '#fff', fontSize: '0.55rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100, minWidth: 16, textAlign: 'center' }}>{item.badge}</span>
+                  <span style={{ position: 'absolute', top: 8, left: 'calc(50% + 8px)', background: item.key==='commandes' ? '#16A34A' : T.main, color: '#fff', fontSize: '0.55rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100, minWidth: 16, textAlign: 'center' }}>{item.badge}</span>
                 )}
-                {onglet === item.key && <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 24, height: 3, borderRadius: 3, background: T.light }}/>}
+                {onglet===item.key && <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 24, height: 3, borderRadius: 3, background: T.light }}/>}
               </button>
             ))}
           </nav>

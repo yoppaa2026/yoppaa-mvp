@@ -318,8 +318,89 @@ function CarteAvis({ a }) {
   )
 }
 
+// ─── Splash Screen ───────────────────────────────────────────────────────────
+function SplashScreen({ onDone }) {
+  const [phase, setPhase] = useState(0) // 0=dots, 1=wordmark, 2=tagline, 3=fadeout
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase(1), 900)   // après les 3 dots
+    const t2 = setTimeout(() => setPhase(2), 1500)  // wordmark visible
+    const t3 = setTimeout(() => setPhase(3), 2100)  // tagline visible
+    const t4 = setTimeout(() => onDone(), 2700)     // fin
+    return () => [t1,t2,t3,t4].forEach(clearTimeout)
+  }, [])
+
+  const dots = [
+    { color: '#FFFFFF', delay: '0s',    opacity: 0.45 },
+    { color: '#C4A0F4', delay: '0.25s', opacity: 1 },
+    { color: '#9660E0', delay: '0.5s',  opacity: 1 },
+  ]
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: `linear-gradient(160deg, #160636 0%, #2D0F6B 50%, #1A0840 100%)`,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      animation: phase === 3 ? 'splash-out 0.6s ease-in forwards' : 'none',
+    }}>
+      {/* 3 points yo·pp·aa */}
+      <div style={{ display: 'flex', gap: 14, marginBottom: 20 }}>
+        {dots.map((d, i) => (
+          <div key={i} style={{
+            width: 16, height: 16, borderRadius: '50%',
+            background: d.color, opacity: d.opacity,
+            boxShadow: `0 0 16px ${d.color}88`,
+            animation: `dot-pop 0.45s cubic-bezier(0.34,1.56,0.64,1) ${d.delay} both`,
+          }}/>
+        ))}
+      </div>
+
+      {/* Wordmark yoppaa */}
+      <p style={{
+        fontFamily: '"DM Sans", sans-serif',
+        fontWeight: 900,
+        fontSize: '3.5rem',
+        color: '#fff',
+        letterSpacing: '-2px',
+        lineHeight: 1,
+        marginBottom: 10,
+        animation: phase >= 1 ? 'wordmark-in 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards' : 'none',
+        opacity: phase >= 1 ? 1 : 0,
+      }}>
+        yoppaa
+      </p>
+
+      {/* Tagline */}
+      <p style={{
+        fontFamily: '"DM Sans", sans-serif',
+        fontWeight: 700,
+        fontSize: '0.8rem',
+        color: '#C4A0F4',
+        letterSpacing: '3px',
+        textTransform: 'uppercase',
+        animation: phase >= 2 ? 'tagline-in 0.5s ease forwards' : 'none',
+        opacity: phase >= 2 ? 1 : 0,
+      }}>
+        Skip the wait
+      </p>
+    </div>
+  )
+}
+
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function Commander() {
+  // Splash screen — une seule fois par session
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const seen = sessionStorage.getItem('yoppaa_splash_seen')
+    return !seen
+  })
+
+  function onSplashDone() {
+    sessionStorage.setItem('yoppaa_splash_seen', '1')
+    setShowSplash(false)
+  }
+
   // FIX 1 : Persist onglet au refresh via localStorage
   const [onglet, setOngletState] = useState('accueil')
   function setOnglet(val) {
@@ -637,6 +718,7 @@ export default function Commander() {
 
   return (
     <>
+      {showSplash && <SplashScreen onDone={onSplashDone}/>}
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; width: 100%; overflow-x: hidden; position: relative; }
@@ -654,6 +736,10 @@ export default function Commander() {
         @keyframes tribu-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.7; transform:scale(1.15); } }
         @keyframes tribu-pulse2 { 0%,100% { opacity:0.85; transform:scale(1); } 50% { opacity:0.5; transform:scale(1.1); } }
         @keyframes tribu-pulse3 { 0%,100% { opacity:0.6; transform:scale(1); } 50% { opacity:0.3; transform:scale(1.05); } }
+        @keyframes dot-pop { 0% { opacity:0; transform:scale(0) translateY(8px); } 70% { transform:scale(1.3) translateY(-4px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
+        @keyframes wordmark-in { 0% { opacity:0; letter-spacing: 8px; } 100% { opacity:1; letter-spacing: -2px; } }
+        @keyframes tagline-in { 0% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
+        @keyframes splash-out { 0% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(1.05); } }
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 

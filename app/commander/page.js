@@ -56,17 +56,16 @@ function Badges({ type }) {
   )
 }
 
-// ─── Helpers horaires ────────────────────────────────────────────────────────
+// ─── Helpers horaires ─────────────────────────────────────────────────────────
 const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_COURTS = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 const JOURS_LONGS  = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
 
 function jourActuel() {
-  const idx = new Date().getDay() // 0=dim
+  const idx = new Date().getDay()
   return idx === 0 ? 'dimanche' : JOURS[idx - 1]
 }
 
-// Résumé court pour la carte : "Lun–Ven 7h–14h · Sam 7h–13h · Dim Fermé"
 function resumeHoraires(h) {
   if (!h) return null
   const groupes = []
@@ -75,7 +74,6 @@ function resumeHoraires(h) {
     const jour = JOURS[i]
     const info = h[jour]
     if (!info) { i++; continue }
-    // Grouper les jours consécutifs avec mêmes horaires
     let j = i + 1
     while (j < JOURS.length) {
       const next = h[JOURS[j]]
@@ -106,7 +104,6 @@ function Etoiles({ note, taille = 14 }) {
   return <span style={{ display: 'inline-flex', gap: 1 }}>{[1,2,3,4,5].map(i => <span key={i} style={{ fontSize: taille, color: i<=n ? '#F59E0B' : '#D1D5DB' }}>★</span>)}</span>
 }
 
-// ─── Heure courante en minutes ────────────────────────────────────────────────
 function heureEnMinutes(heure) {
   const [h, m] = heure.slice(0, 5).split(':').map(Number)
   return h * 60 + m
@@ -116,14 +113,14 @@ function maintenant() {
   return d.getHours() * 60 + d.getMinutes()
 }
 
-// ─── Swipe retrait ────────────────────────────────────────────────────────────
+// ─── FIX 2 : Swipe retrait — boule parfaitement centrée ───────────────────────
 function SwipeRetrait({ onConfirm }) {
   const [swipeX, setSwipeX] = useState(0)
   const [swiping, setSwiping] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const startRef = useRef(0)
   const containerRef = useRef(null)
-  const THUMB = 52
+  const THUMB = 48
 
   function getMaxX() { return (containerRef.current?.offsetWidth || 300) - THUMB - 8 }
   function getX(e) { return e.touches ? e.touches[0].clientX : e.clientX }
@@ -137,6 +134,7 @@ function SwipeRetrait({ onConfirm }) {
   }
   const onEnd = () => { if (confirmed) return; setSwiping(false); if (swipeX < getMaxX()) setSwipeX(0) }
   const p = swipeX / (getMaxX() || 1)
+  const TRACK_H = THUMB + 8
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
@@ -144,13 +142,15 @@ function SwipeRetrait({ onConfirm }) {
         Glisse pour confirmer le retrait
       </p>
       <div ref={containerRef}
-        style={{ width: '100%', maxWidth: 340, height: THUMB+8, borderRadius: 100, background: confirmed ? '#D4EDDA' : `linear-gradient(to right, ${T.pale} ${p*100}%, #F3F4F6 ${p*100}%)`, position: 'relative', overflow: 'hidden', border: `2px solid ${confirmed ? '#16A34A' : T.light}`, transition: confirmed ? 'all 0.3s' : 'none', userSelect: 'none', cursor: confirmed ? 'default' : 'grab', touchAction: 'none' }}
+        style={{ width: '100%', maxWidth: 340, height: TRACK_H, borderRadius: 100, background: confirmed ? '#D4EDDA' : `linear-gradient(to right, ${T.pale} ${p*100}%, #F3F4F6 ${p*100}%)`, position: 'relative', border: `2px solid ${confirmed ? '#16A34A' : T.light}`, transition: confirmed ? 'all 0.3s' : 'none', userSelect: 'none', cursor: confirmed ? 'default' : 'grab', touchAction: 'none' }}
         onMouseDown={onStart} onMouseMove={onMove} onMouseUp={onEnd} onMouseLeave={onEnd}
         onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}>
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', fontWeight: 700, color: confirmed ? '#16A34A' : T.mid, pointerEvents: 'none', paddingLeft: THUMB+12 }}>
+        {/* Texte centré */}
+        <div style={{ position: 'absolute', top: 0, bottom: 0, left: THUMB + 12, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.82rem', fontWeight: 700, color: confirmed ? '#16A34A' : T.mid, pointerEvents: 'none' }}>
           {confirmed ? '✓ Confirmé !' : 'Glisse →'}
         </div>
-        <div style={{ position: 'absolute', left: 4+swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: confirmed ? '#16A34A' : T.main, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.15)', transition: swiping ? 'none' : 'left 0.3s, background 0.3s', userSelect: 'none' }}>
+        {/* Boule — top:4 pour centrer dans TRACK_H = THUMB+8, height THUMB */}
+        <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: confirmed ? '#16A34A' : T.main, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.15)', transition: swiping ? 'none' : 'left 0.3s, background 0.3s', userSelect: 'none' }}>
           {confirmed ? '✓' : '→'}
         </div>
       </div>
@@ -165,10 +165,10 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
   const statut = statutsCommerce[c.id]
 
   const statutConfig = {
-    ouvert:  { dot: '#16A34A', label: 'Créneaux disponibles',     labelColor: '#16A34A' },
-    urgent:  { dot: '#EA580C', label: 'Réserve vite !',           labelColor: '#EA580C' },
-    complet: { dot: '#DC2626', label: "Complet pour aujourd'hui", labelColor: '#DC2626' },
-    ferme:   { dot: '#9CA3AF', label: "Fermé aujourd'hui",        labelColor: '#9CA3AF' },
+    ouvert:  { dot: '#16A34A', label: 'Créneaux disponibles',      labelColor: '#16A34A' },
+    urgent:  { dot: '#EA580C', label: 'Réserve vite !',            labelColor: '#EA580C' },
+    complet: { dot: '#DC2626', label: "Complet pour aujourd'hui",  labelColor: '#DC2626' },
+    ferme:   { dot: '#9CA3AF', label: "Fermé aujourd'hui",         labelColor: '#9CA3AF' },
   }
   const sc = statutConfig[statut] || null
 
@@ -218,7 +218,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
   )
 }
 
-// ─── Suggestion commerce ─────────────────────────────────────────────────────
+// ─── Suggestion commerce ──────────────────────────────────────────────────────
 function SuggestionForm({ clientId }) {
   const [form, setForm] = useState({ nom: '', adresse: '', type: '', commentaire: '' })
   const [sending, setSending] = useState(false)
@@ -236,25 +236,24 @@ function SuggestionForm({ clientId }) {
       type_commerce: form.type.trim() || null,
       commentaire: form.commentaire.trim() || null,
     })
-    setSent(true)
-    setSending(false)
+    setSent(true); setSending(false)
   }
 
   if (sent) return (
     <div style={{ background: '#F0FDF4', borderRadius: 16, padding: '1.5rem', textAlign: 'center', border: '1.5px solid #16A34A33' }}>
       <p style={{ fontSize: '2rem', marginBottom: 10 }}>🎉</p>
       <p style={{ fontWeight: 800, color: '#16A34A', marginBottom: 6, fontSize: '1rem' }}>Merci pour ta suggestion !</p>
-      <p style={{ fontSize: '0.875rem', color: T.muted }}>On va contacter ce commerce. Tu contribues à faire grandir la Tribu Yoppaa 🫂</p>
+      <p style={{ fontSize: '0.875rem', color: T.muted }}>On va contacter ce commerçant. Tu contribues à faire grandir la Tribu Yoppaa 🫂</p>
       <button onClick={() => { setSent(false); setForm({ nom: '', adresse: '', type: '', commentaire: '' }) }}
         style={{ marginTop: '1rem', padding: '0.75rem 1.5rem', background: T.main, color: '#fff', border: 'none', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
-        Suggérer un autre commerce
+        Suggérer un autre commerçant
       </button>
     </div>
   )
 
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '1.25rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 6px rgba(107,53,196,0.05)' }}>
-      <p style={{ fontWeight: 800, color: T.deep, marginBottom: '1rem', fontSize: '1rem' }}>Quel commerce mérite Yoppaa ?</p>
+      <p style={{ fontWeight: 800, color: T.deep, marginBottom: '1rem', fontSize: '1rem' }}>Quel commerçant mérite Yoppaa ?</p>
 
       <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Nom du commerce *</label>
       <input placeholder="Ex: Boulangerie Martin" value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} style={inputSt}/>
@@ -265,26 +264,69 @@ function SuggestionForm({ clientId }) {
       <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Type de commerce</label>
       <input placeholder="Ex: Boulangerie, Coffee shop, Friterie..." value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} style={inputSt}/>
 
-      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Pourquoi ce commerce ? (optionnel)</label>
+      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Pourquoi ce commerçant ? (optionnel)</label>
       <textarea placeholder="Ex: Toujours plein le midi, la file est interminable mais les sandwichs valent le coup !" value={form.commentaire}
         onChange={e => setForm(p => ({ ...p, commentaire: e.target.value }))}
         style={{ ...inputSt, resize: 'vertical', minHeight: 80, marginBottom: 16 }}/>
 
       <button onClick={envoyer} disabled={!form.nom.trim() || sending}
         style={{ width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: form.nom.trim() ? 'pointer' : 'default', fontSize: '1rem', background: form.nom.trim() ? T.main : '#E5E7EB', color: '#fff', boxShadow: form.nom.trim() ? `0 4px 20px ${T.main}44` : 'none', fontFamily: '"DM Sans", sans-serif' }}>
-        {sending ? 'Envoi...' : '🫂 Suggérer ce commerce'}
+        {sending ? 'Envoi...' : '🫂 Suggérer ce commerçant'}
       </button>
 
       <p style={{ fontSize: '0.75rem', color: '#9CA3AF', textAlign: 'center', marginTop: 10, lineHeight: 1.5 }}>
-        On contacte le commerce de ta part et on t'informe s'il rejoint la Tribu Yoppaa.
+        On contacte le commerçant de ta part et on t'informe s'il rejoint la Tribu Yoppaa.
       </p>
+    </div>
+  )
+}
+
+// ─── FIX 3 : Avis expandable ──────────────────────────────────────────────────
+function CarteAvis({ a }) {
+  const [ouvert, setOuvert] = useState(false)
+  return (
+    <div onClick={() => setOuvert(o => !o)}
+      style={{ background: T.bgCard, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.5rem', border: `1.5px solid ${T.pale}`, cursor: 'pointer', transition: 'all 0.15s' }}
+      onMouseOver={e => e.currentTarget.style.borderColor = T.main}
+      onMouseOut={e => e.currentTarget.style.borderColor = T.pale}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Etoiles note={a.note} taille={14}/>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: '0.75rem', color: T.deep, fontWeight: 600 }}>{a.client?.nom || 'Client'}</span>
+          <span style={{ fontSize: '0.72rem', color: T.muted }}>{ouvert ? '▲' : '▼'}</span>
+        </div>
+      </div>
+      {/* Aperçu commentaire même fermé */}
+      {a.commentaire && !ouvert && (
+        <p style={{ fontSize: '0.8rem', color: T.muted, marginTop: 6, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>
+          {a.commentaire}
+        </p>
+      )}
+      {/* Détail complet si ouvert */}
+      {ouvert && (
+        <div style={{ marginTop: 8 }}>
+          {a.commentaire && <p style={{ fontSize: '0.875rem', color: T.ink, fontWeight: 500, lineHeight: 1.5, marginBottom: a.reponse_commercant ? 10 : 0 }}>{a.commentaire}</p>}
+          {a.reponse_commercant && (
+            <div style={{ background: T.pale, borderRadius: 10, padding: '0.5rem 0.75rem' }}>
+              <p style={{ fontSize: '0.72rem', fontWeight: 700, color: T.main, marginBottom: 2 }}>Réponse du commerçant :</p>
+              <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 500 }}>{a.reponse_commercant}</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function Commander() {
-  const [onglet, setOnglet] = useState('accueil')
+  // FIX 1 : Persist onglet au refresh via localStorage
+  const [onglet, setOngletState] = useState('accueil')
+  function setOnglet(val) {
+    setOngletState(val)
+    localStorage.setItem('yoppaa_onglet', val)
+  }
+
   const [etape, setEtape] = useState(1)
   const [commercants, setCommercants] = useState([])
   const [commercantSelectionne, setCommercantSelectionne] = useState(null)
@@ -306,14 +348,17 @@ export default function Commander() {
   const [categorieActive, setCategorieActive] = useState('Tous')
   const [favoris, setFavoris] = useState([])
   const [commercantsFavoris, setCommercantsFavoris] = useState([])
-  // Avis — déclenché depuis l'onglet Commandes
-  const [avisEnAttente, setAvisEnAttente] = useState(null) // { commandeId, clientId, commercantId, nom }
+  const [avisEnAttente, setAvisEnAttente] = useState(null)
   const [avisForm, setAvisForm] = useState({ note: 0, commentaire: '' })
   const [avisSoumis, setAvisSoumis] = useState(false)
   const avisTimerRef = useRef(null)
   const [messageRetrait, setMessageRetrait] = useState(null)
 
   useEffect(() => {
+    // FIX 1 : Restaurer l'onglet sauvegardé
+    const savedOnglet = localStorage.getItem('yoppaa_onglet')
+    if (savedOnglet) setOngletState(savedOnglet)
+
     chargerCommercants()
     demanderGeolocalisation()
     const email = localStorage.getItem('yoppaa_email')
@@ -371,35 +416,22 @@ export default function Commander() {
     })
     setNotesParCommerce(notes)
 
-    // Calculer le statut de chaque commerce
-    const now = new Date()
-    const nowMin = now.getHours() * 60 + now.getMinutes()
+    const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
     const statuts = {}
     ids.forEach(id => {
       const crensDuJour = (creneauxData||[]).filter(c => c.commercant_id === id)
       const cmds = (commandesData||[]).filter(c => c.commercant_id === id)
       const countParCren = {}
       cmds.forEach(c => { countParCren[c.creneau_id] = (countParCren[c.creneau_id]||0)+1 })
-
-      // Créneaux encore disponibles (pas passés, pas complets)
       const crensDispos = crensDuJour.filter(c => {
         const debut = parseInt(c.heure_debut.slice(0,2))*60 + parseInt(c.heure_debut.slice(3,5))
-        const complet = (countParCren[c.id]||0) >= c.max_commandes
-        return debut > nowMin && !complet
+        return debut > nowMin && (countParCren[c.id]||0) < c.max_commandes
       })
-
-      // Places restantes sur tous les créneaux dispos
       const placesTotales = crensDispos.reduce((acc, c) => acc + (c.max_commandes - (countParCren[c.id]||0)), 0)
-
-      if (crensDuJour.length === 0) {
-        statuts[id] = 'ferme'
-      } else if (crensDispos.length === 0) {
-        statuts[id] = 'complet'
-      } else if (placesTotales <= 2) {
-        statuts[id] = 'urgent'
-      } else {
-        statuts[id] = 'ouvert'
-      }
+      if (crensDuJour.length === 0) statuts[id] = 'ferme'
+      else if (crensDispos.length === 0) statuts[id] = 'complet'
+      else if (placesTotales <= 2) statuts[id] = 'urgent'
+      else statuts[id] = 'ouvert'
     })
     setStatutsCommerce(statuts)
   }
@@ -495,17 +527,9 @@ export default function Commander() {
       supabase.from('creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
       supabase.from('avis').select('*, client:clients(nom)').eq('commercant_id', c.id).order('created_at', { ascending: false }).limit(10)
     ])
-    // Charger le nombre de commandes par créneau pour aujourd'hui
-    const aujourd_hui = new Date().toDateString()
-    const { data: commandesDuJour } = await supabase
-      .from('commandes')
-      .select('creneau_id')
-      .eq('commercant_id', c.id)
-      .neq('statut', 'recupere')
+    const { data: commandesDuJour } = await supabase.from('commandes').select('creneau_id').eq('commercant_id', c.id).neq('statut', 'recupere')
     const countParCreneau = {}
-    ;(commandesDuJour || []).forEach(cmd => {
-      countParCreneau[cmd.creneau_id] = (countParCreneau[cmd.creneau_id] || 0) + 1
-    })
+    ;(commandesDuJour || []).forEach(cmd => { countParCreneau[cmd.creneau_id] = (countParCreneau[cmd.creneau_id] || 0) + 1 })
     const creneauxAvecCount = (cren || []).map(cr => ({ ...cr, count: countParCreneau[cr.id] || 0 }))
     setArticles(arts||[])
     setCreneaux(creneauxAvecCount)
@@ -535,37 +559,20 @@ export default function Commander() {
     setLoading(false)
   }
 
-  // ─── Confirmer retrait depuis l'onglet Commandes ──────────────────────────
   async function confirmerRetrait(commande) {
     await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', commande.id)
     setClientCommandes(prev => prev.map(c => c.id===commande.id ? { ...c, statut: 'recupere' } : c))
     setMessageRetrait(commande.id)
     setTimeout(() => setMessageRetrait(null), 8000)
-    // Déclencher avis après 45min
-    const avisData = {
-      commandeId: commande.id,
-      clientId: commande.client_id || clientId,
-      commercantId: commande.commercant_id,
-      nom: commande.commercant?.nom || ''
-    }
+    const avisData = { commandeId: commande.id, clientId: commande.client_id || clientId, commercantId: commande.commercant_id, nom: commande.commercant?.nom || '' }
     if (avisTimerRef.current) clearTimeout(avisTimerRef.current)
-    avisTimerRef.current = setTimeout(() => {
-      setAvisEnAttente(avisData)
-    }, 45 * 60 * 1000)
+    avisTimerRef.current = setTimeout(() => setAvisEnAttente(avisData), 45 * 60 * 1000)
   }
 
   async function soumettreAvis() {
     if (!avisForm.note || !avisEnAttente) return
-    await supabase.from('avis').insert({
-      commande_id: avisEnAttente.commandeId,
-      client_id: avisEnAttente.clientId,
-      commercant_id: avisEnAttente.commercantId,
-      note: avisForm.note,
-      commentaire: avisForm.commentaire.trim() || null
-    })
-    setAvisSoumis(true)
-    setAvisEnAttente(null)
-    setAvisForm({ note: 0, commentaire: '' })
+    await supabase.from('avis').insert({ commande_id: avisEnAttente.commandeId, client_id: avisEnAttente.clientId, commercant_id: avisEnAttente.commercantId, note: avisForm.note, commentaire: avisForm.commentaire.trim() || null })
+    setAvisSoumis(true); setAvisEnAttente(null); setAvisForm({ note: 0, commentaire: '' })
   }
 
   function noteMoyenne(avis) { return !avis?.length ? 0 : avis.reduce((acc,a) => acc+a.note, 0)/avis.length }
@@ -577,8 +584,6 @@ export default function Commander() {
   const tempsEconomise = clientCommandes.filter(c => c.statut==='recupere').reduce((acc,c) => acc+getTemps(c.commercant?.type), 0)
   const commercantsFiltres = categorieActive === 'Tous' ? commercants : commercants.filter(c => parseTypes(c.type).some(t => t===categorieActive || t.includes(categorieActive)))
   const estDansCommerce = etape > 1
-
-  // Commandes à swiper = statut pret
   const commandesASwiper = clientCommandes.filter(c => c.statut === 'pret')
   const commandesEnCours = clientCommandes.filter(c => ['en_attente','en_preparation'].includes(c.statut))
   const commandesTerminees = clientCommandes.filter(c => c.statut === 'recupere')
@@ -587,7 +592,6 @@ export default function Commander() {
   const card = { background: T.bgCard, borderRadius: 14, padding: '1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 6px rgba(107,53,196,0.05)' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: T.main, color: '#fff', boxShadow: `0 4px 20px ${T.main}44`, fontFamily: '"DM Sans", sans-serif' }
   const inputSt = { width: '100%', padding: '0.875rem 1rem', border: `1.5px solid ${T.pale}`, borderRadius: 12, marginBottom: 10, fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', outline: 'none', color: T.ink, background: '#fff', display: 'block' }
-
   const statutStyle = {
     recupere:       { bg: '#F0FDF4', color: '#16A34A', label: '✓ Récupérée' },
     pret:           { bg: '#EDE0FF', color: T.main,    label: '📦 Prête' },
@@ -611,6 +615,9 @@ export default function Commander() {
         .grid3 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         @media (min-width: 480px) { .grid3 { grid-template-columns: 1fr 1fr 1fr; } }
         input, textarea, button, select { font-family: "DM Sans", sans-serif; }
+        @keyframes tribu-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.7; transform:scale(1.15); } }
+        @keyframes tribu-pulse2 { 0%,100% { opacity:0.85; transform:scale(1); } 50% { opacity:0.5; transform:scale(1.1); } }
+        @keyframes tribu-pulse3 { 0%,100% { opacity:0.6; transform:scale(1); } 50% { opacity:0.3; transform:scale(1.05); } }
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 
@@ -686,7 +693,7 @@ export default function Commander() {
                 </div>
               </div>
 
-              {/* Horaires détaillés 7 jours */}
+              {/* Horaires 7 jours */}
               {commercantSelectionne?.horaires_detail && (
                 <div style={{ background: T.bgCard, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}` }}>
                   <p style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>🕐 Horaires</p>
@@ -733,24 +740,11 @@ export default function Commander() {
                 </div>
               ))}
 
+              {/* FIX 3 : Avis cliquables avec CarteAvis expandable */}
               {avisCommerce.length > 0 && (
                 <div style={{ marginTop: '1.25rem' }}>
                   <h3 style={{ fontWeight: 800, fontSize: '1rem', color: T.deep, marginBottom: '0.625rem' }}>Avis clients</h3>
-                  {avisCommerce.map(a => (
-                    <div key={a.id} style={{ ...card, marginBottom: '0.5rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                        <Etoiles note={a.note} taille={14}/>
-                        <span style={{ fontSize: '0.75rem', color: T.deep, fontWeight: 600 }}>{a.client?.nom || 'Client'}</span>
-                      </div>
-                      {a.commentaire && <p style={{ fontSize: '0.875rem', color: T.ink, fontWeight: 500, marginTop: 4, lineHeight: 1.5 }}>{a.commentaire}</p>}
-                      {a.reponse_commercant && (
-                        <div style={{ background: T.pale, borderRadius: 10, padding: '0.5rem 0.75rem', marginTop: 8 }}>
-                          <p style={{ fontSize: '0.72rem', fontWeight: 700, color: T.main, marginBottom: 2 }}>Réponse :</p>
-                          <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 500 }}>{a.reponse_commercant}</p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  {avisCommerce.map(a => <CarteAvis key={a.id} a={a}/>)}
                 </div>
               )}
 
@@ -781,79 +775,52 @@ export default function Commander() {
                   const bientotComplet = !complet && placesRestantes <= 1
                   const presqueComplet = !complet && placesRestantes === 2
                   const desactive = passe || complet
-
                   let mention = null
-                  if (passe) mention = { text: 'Reviens demain !', color: '#9CA3AF' }
+                  if (passe) mention = { text: 'Reviens demain !', color: T.deep }
                   else if (complet) mention = { text: 'Complet', color: '#DC2626' }
                   else if (bientotComplet) mention = { text: '🔥 Dernière place !', color: '#EA580C' }
                   else if (presqueComplet) mention = { text: '⚡ Presque complet', color: '#D97706' }
-
                   return (
-                    <div key={c.id}
-                      onClick={() => !desactive && setCreneauChoisi(c.id)}
-                      style={{ padding: '0.75rem 0.5rem', borderRadius: 12, border: `2px solid ${desactive ? '#E5E7EB' : creneauChoisi===c.id ? T.main : T.pale}`, background: desactive ? '#F9FAFB' : creneauChoisi===c.id ? T.pale : '#fff', cursor: desactive ? 'default' : 'pointer', textAlign: 'center', fontWeight: 700, color: desactive ? '#D1D5DB' : T.ink, fontSize: '0.875rem', transition: 'all 0.15s', position: 'relative' }}>
+                    <div key={c.id} onClick={() => !desactive && setCreneauChoisi(c.id)}
+                      style={{ padding: '0.75rem 0.5rem', borderRadius: 12, border: `2px solid ${desactive ? '#E5E7EB' : creneauChoisi===c.id ? T.main : T.pale}`, background: desactive ? '#F9FAFB' : creneauChoisi===c.id ? T.pale : '#fff', cursor: desactive ? 'default' : 'pointer', textAlign: 'center', fontWeight: 700, color: desactive ? '#D1D5DB' : T.ink, fontSize: '0.875rem', transition: 'all 0.15s' }}>
                       <div style={{ textDecoration: complet ? 'line-through' : 'none', opacity: passe ? 0.5 : 1 }}>
                         {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
                       </div>
-                      {mention && (
-                        <div style={{ fontSize: '0.62rem', fontWeight: 800, color: passe ? T.deep : mention.color, marginTop: 3, lineHeight: 1.2 }}>
-                          {mention.text}
-                        </div>
-                      )}
+                      {mention && <div style={{ fontSize: '0.62rem', fontWeight: 800, color: mention.color, marginTop: 3, lineHeight: 1.2 }}>{mention.text}</div>}
                     </div>
                   )
                 })}
                 {creneaux.length > 0 && creneaux.every(c => heureEnMinutes(c.heure_debut) <= maintenant()) && (() => {
-                  // Premier créneau disponible = le plus tôt dans la liste
                   const premierCreneau = creneaux.reduce((min, c) => heureEnMinutes(c.heure_debut) < heureEnMinutes(min.heure_debut) ? c : min, creneaux[0])
                   const demain = new Date(); demain.setDate(demain.getDate() + 1)
                   const jourDemain = demain.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
-                  const heureOuverture = commercantSelectionne?.heure_ouverture_resa
-                    ? commercantSelectionne.heure_ouverture_resa.slice(0,5)
-                    : '21:00'
-                  // Est-ce qu'on est déjà après l'heure d'ouverture des résa ?
+                  const heureOuverture = commercantSelectionne?.heure_ouverture_resa ? commercantSelectionne.heure_ouverture_resa.slice(0,5) : '21:00'
                   const resaOuverteMaintenat = maintenant() >= heureEnMinutes(heureOuverture)
                   return (
                     <div style={{ gridColumn: '1 / -1', background: T.pale, borderRadius: 12, padding: '1.25rem', textAlign: 'center', border: `1.5px solid ${T.main}33` }}>
                       <p style={{ fontSize: '1.5rem', marginBottom: 8 }}>🕐</p>
                       <p style={{ fontWeight: 800, marginBottom: 6, color: T.deep, fontSize: '1rem' }}>Plus de créneaux disponibles aujourd'hui</p>
-                      {resaOuverteMaintenat ? (
-                        <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>
-                          Les réservations pour demain sont ouvertes ! 🎉<br/>
-                          Premier créneau chez <strong>{commercantSelectionne?.nom}</strong> à <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> le <strong>{jourDemain}</strong>.
-                        </p>
-                      ) : (
-                        <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>
-                          Pour ta prochaine commande chez <strong>{commercantSelectionne?.nom}</strong>,<br/>
-                          reviens à partir de <strong>{heureOuverture}</strong> ce soir pour réserver<br/>
-                          le <strong>{jourDemain}</strong> dès <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> !
-                        </p>
-                      )}
+                      {resaOuverteMaintenat
+                        ? <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>Les réservations pour demain sont ouvertes ! 🎉<br/>Premier créneau chez <strong>{commercantSelectionne?.nom}</strong> à <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> le <strong>{jourDemain}</strong>.</p>
+                        : <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>Pour ta prochaine commande chez <strong>{commercantSelectionne?.nom}</strong>,<br/>reviens à partir de <strong>{heureOuverture}</strong> ce soir pour réserver<br/>le <strong>{jourDemain}</strong> dès <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> !</p>
+                      }
                     </div>
                   )
                 })()}
               </div>
 
-              {/* Message "réserver pour demain" — visible si des créneaux dispo aujourd'hui */}
               {creneaux.some(c => heureEnMinutes(c.heure_debut) > maintenant()) && (() => {
-                const heureOuverture = commercantSelectionne?.heure_ouverture_resa
-                  ? commercantSelectionne.heure_ouverture_resa.slice(0,5)
-                  : '21:00'
+                const heureOuverture = commercantSelectionne?.heure_ouverture_resa ? commercantSelectionne.heure_ouverture_resa.slice(0,5) : '21:00'
                 const resaOuverte = maintenant() >= heureEnMinutes(heureOuverture)
                 const demain = new Date(); demain.setDate(demain.getDate() + 1)
                 const jourDemain = demain.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
                 const premierCreneau = creneaux.reduce((min, c) => heureEnMinutes(c.heure_debut) < heureEnMinutes(min.heure_debut) ? c : min, creneaux[0])
                 return (
                   <div style={{ background: T.pale, borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1.25rem', border: `1px solid ${T.main}22` }}>
-                    {resaOuverte ? (
-                      <p style={{ fontSize: '0.78rem', color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
-                        🎉 Les réservations pour demain sont déjà ouvertes ! Premier créneau à <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> le <strong>{jourDemain}</strong>.
-                      </p>
-                    ) : (
-                      <p style={{ fontSize: '0.78rem', color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
-                        💡 Pour ta commande de demain chez <strong>{commercantSelectionne?.nom}</strong>, reviens à partir de <strong>{heureOuverture}</strong> ce soir !
-                      </p>
-                    )}
+                    {resaOuverte
+                      ? <p style={{ fontSize: '0.78rem', color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>🎉 Les réservations pour demain sont déjà ouvertes ! Premier créneau à <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> le <strong>{jourDemain}</strong>.</p>
+                      : <p style={{ fontSize: '0.78rem', color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>💡 Pour ta commande de demain chez <strong>{commercantSelectionne?.nom}</strong>, reviens à partir de <strong>{heureOuverture}</strong> ce soir !</p>
+                    }
                   </div>
                 )
               })()}
@@ -862,7 +829,6 @@ export default function Commander() {
               <input placeholder="Ton prénom et nom" type="text" value={client.nom} onChange={e => setClient(p => ({ ...p, nom: e.target.value }))} style={inputSt}/>
               <input placeholder="Email" type="email" value={client.email} onChange={e => setClient(p => ({ ...p, email: e.target.value }))} style={inputSt}/>
               <input placeholder="Téléphone (optionnel)" type="tel" value={client.telephone} onChange={e => setClient(p => ({ ...p, telephone: e.target.value }))} style={inputSt}/>
-
               <button onClick={passerCommande} disabled={loading || !creneauChoisi || !client.nom || !client.email}
                 style={{ ...btnPrimary, opacity: (!creneauChoisi || !client.nom || !client.email) ? 0.5 : 1, marginTop: 4 }}>
                 {loading ? 'En cours...' : `Confirmer — ${totalPanier().toFixed(2)}€`}
@@ -871,7 +837,7 @@ export default function Commander() {
             </div>
           )}
 
-          {/* ÉTAPE 4 — Confirmation (sans swipe) */}
+          {/* ÉTAPE 4 — Confirmation */}
           {etape === 4 && (
             <div style={{ padding: '1.5rem 1rem' }}>
               <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
@@ -881,35 +847,28 @@ export default function Commander() {
                 <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem', fontSize: '1rem' }}>Chez {commercantSelectionne?.nom}</p>
                 <p style={{ color: T.muted, fontSize: '0.875rem' }}>On s'occupe du reste — présente-toi à ton créneau !</p>
               </div>
-
-              {/* Message informatif — onglet Commandes */}
               <div style={{ background: T.pale, borderRadius: 16, padding: '1.25rem', marginBottom: '1rem', border: `1.5px solid ${T.main}33` }}>
                 <p style={{ fontWeight: 800, color: T.ink, marginBottom: 8, fontSize: '1rem' }}>📦 Pour récupérer ta commande</p>
                 <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>
                   Présente-toi chez <strong>{commercantSelectionne?.nom}</strong> à ton créneau.<br/>
-                  Quand ta commande est prête, tu pourras la confirmer depuis l'onglet <strong>Commandes</strong> en bas de l'écran.
+                  Quand ta commande est prête, confirme depuis l'onglet <strong>Commandes</strong> en bas.
                 </p>
               </div>
-
               <div style={{ ...card, textAlign: 'center', padding: '1rem' }}>
                 <p style={{ fontSize: '0.8rem', color: T.muted, marginBottom: 12 }}>Retrouve le statut de ta commande ici :</p>
-                <button onClick={() => { setOnglet('commandes'); resetCommande() }}
-                  style={{ ...btnPrimary, fontSize: '0.9rem' }}>
+                <button onClick={() => { setOnglet('commandes'); resetCommande() }} style={{ ...btnPrimary, fontSize: '0.9rem' }}>
                   Voir mes commandes →
                 </button>
               </div>
-
               <button onClick={resetCommande} style={{ width: '100%', marginTop: 10, padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
                 Commander autre chose
               </button>
             </div>
           )}
 
-          {/* ── ONGLET COMMANDES ── */}
+          {/* ONGLET COMMANDES */}
           {onglet === 'commandes' && !estDansCommerce && (
             <div style={{ padding: '0.875rem 1rem 1rem' }}>
-
-              {/* Message post-retrait yoppaa */}
               {messageRetrait && (
                 <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 16, padding: '1.25rem', marginBottom: '1rem', textAlign: 'center', color: '#fff' }}>
                   <p style={{ fontWeight: 900, fontSize: '1.1rem', letterSpacing: '-1px', marginBottom: 6 }}>yoppaa ✓</p>
@@ -917,19 +876,13 @@ export default function Commander() {
                   <p style={{ fontSize: '0.82rem', color: T.light, lineHeight: 1.5 }}>Merci et profitez bien de votre commande 🎉<br/>Un message pour votre avis arrivera dans 45 min.</p>
                 </div>
               )}
-
-              {/* Avis en attente (après 45min) */}
               {avisEnAttente && !avisSoumis && (
                 <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 16, padding: '1.25rem', marginBottom: '1rem', color: '#fff' }}>
                   <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 12 }}>⭐ Comment était {avisEnAttente.nom} ?</h3>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                    {[1,2,3,4,5].map(i => (
-                      <span key={i} onClick={() => setAvisForm(p => ({ ...p, note: i }))}
-                        style={{ fontSize: 30, cursor: 'pointer', color: i<=avisForm.note ? '#FCD34D' : 'rgba(255,255,255,0.3)', transition: 'color 0.1s' }}>★</span>
-                    ))}
+                    {[1,2,3,4,5].map(i => <span key={i} onClick={() => setAvisForm(p => ({ ...p, note: i }))} style={{ fontSize: 30, cursor: 'pointer', color: i<=avisForm.note ? '#FCD34D' : 'rgba(255,255,255,0.3)', transition: 'color 0.1s' }}>★</span>)}
                   </div>
-                  <textarea placeholder="Ton commentaire (optionnel)" value={avisForm.commentaire}
-                    onChange={e => setAvisForm(p => ({ ...p, commentaire: e.target.value }))}
+                  <textarea placeholder="Ton commentaire (optionnel)" value={avisForm.commentaire} onChange={e => setAvisForm(p => ({ ...p, commentaire: e.target.value }))}
                     style={{ width: '100%', padding: '0.75rem', border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: 10, fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif', resize: 'vertical', minHeight: 70, boxSizing: 'border-box', outline: 'none', color: '#fff', background: 'rgba(255,255,255,0.1)', marginBottom: 10 }}/>
                   <button onClick={soumettreAvis} disabled={!avisForm.note}
                     style={{ width: '100%', padding: '0.75rem', background: avisForm.note ? '#fff' : 'rgba(255,255,255,0.2)', color: avisForm.note ? T.main : 'rgba(255,255,255,0.5)', border: 'none', borderRadius: 100, fontWeight: 800, cursor: avisForm.note ? 'pointer' : 'default', fontSize: '0.9rem' }}>
@@ -937,19 +890,11 @@ export default function Commander() {
                   </button>
                 </div>
               )}
+              {avisSoumis && <div style={{ background: '#D4EDDA', borderRadius: 14, padding: '1rem', textAlign: 'center', marginBottom: '1rem' }}><p style={{ color: '#155724', fontWeight: 700 }}>✓ Merci pour ton avis !</p></div>}
 
-              {avisSoumis && (
-                <div style={{ background: '#D4EDDA', borderRadius: 14, padding: '1rem', textAlign: 'center', marginBottom: '1rem' }}>
-                  <p style={{ color: '#155724', fontWeight: 700 }}>✓ Merci pour ton avis !</p>
-                </div>
-              )}
-
-              {/* À swiper */}
               {commandesASwiper.length > 0 && (
                 <>
-                  <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: T.ink, marginBottom: '0.75rem' }}>
-                    📦 Prêtes à récupérer
-                  </h2>
+                  <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: T.ink, marginBottom: '0.75rem' }}>📦 Prêtes à récupérer</h2>
                   {commandesASwiper.map(c => (
                     <div key={c.id} style={{ background: '#F0FDF4', borderRadius: 16, padding: '1.25rem', marginBottom: '0.75rem', border: '2px solid #16A34A44' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
@@ -967,12 +912,9 @@ export default function Commander() {
                 </>
               )}
 
-              {/* En cours */}
               {commandesEnCours.length > 0 && (
                 <>
-                  <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: T.ink, marginBottom: '0.75rem', marginTop: commandesASwiper.length > 0 ? '1rem' : 0 }}>
-                    🕐 En cours
-                  </h2>
+                  <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: T.ink, marginBottom: '0.75rem', marginTop: commandesASwiper.length > 0 ? '1rem' : 0 }}>🕐 En cours</h2>
                   {commandesEnCours.map(c => {
                     const sc = statutStyle[c.statut]
                     return (
@@ -981,7 +923,8 @@ export default function Commander() {
                           <div>
                             <p style={{ fontWeight: 800, color: T.ink, marginBottom: 2, fontSize: '0.95rem' }}>{c.commercant?.nom}</p>
                             <p style={{ fontSize: '0.75rem', color: T.muted }}>
-                              {c.creneau ? `🕐 ${c.creneau.heure_debut.slice(0,5)} – ${c.creneau.heure_fin.slice(0,5)}` : ''}
+                              {new Date(c.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}
+                              {c.creneau ? ` · 🕐 ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}
                             </p>
                           </div>
                           <div style={{ textAlign: 'right' }}>
@@ -995,22 +938,18 @@ export default function Commander() {
                 </>
               )}
 
-              {/* Vide */}
               {commandesASwiper.length === 0 && commandesEnCours.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '3rem 0' }}>
                   <p style={{ fontSize: '2.5rem', marginBottom: 10 }}>🛍️</p>
                   <p style={{ fontWeight: 700, color: T.muted, marginBottom: 6 }}>Aucune commande en cours</p>
                   <p style={{ fontSize: '0.875rem', color: '#9CA3AF', marginBottom: '1.25rem' }}>Tes commandes actives apparaîtront ici.</p>
-                  <button onClick={() => setOnglet('accueil')} style={{ ...btnPrimary, width: 'auto', padding: '0.75rem 1.5rem' }}>
-                    Commander maintenant
-                  </button>
+                  <button onClick={() => setOnglet('accueil')} style={{ ...btnPrimary, width: 'auto', padding: '0.75rem 1.5rem' }}>Commander maintenant</button>
                 </div>
               )}
 
-              {/* Historique */}
               {commandesTerminees.length > 0 && (
                 <div style={{ marginTop: '1.5rem' }}>
-                  <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: T.muted, marginBottom: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.72rem' }}>Historique</h3>
+                  <h3 style={{ fontWeight: 800, fontSize: '0.72rem', color: T.muted, marginBottom: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historique</h3>
                   {commandesTerminees.slice(0, 5).map(c => (
                     <div key={c.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', opacity: 0.7 }}>
                       <div>
@@ -1042,21 +981,21 @@ export default function Commander() {
           {/* TRIBU YOPPAA */}
           {onglet === 'tribu' && !estDansCommerce && (
             <div style={{ padding: '0.875rem 1rem 1rem' }}>
-              {/* Header */}
               <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 16, padding: '1.25rem', marginBottom: '1rem', color: '#fff', textAlign: 'center' }}>
-                <svg viewBox="0 0 56 40" width="56" height="40" fill="none" style={{ marginBottom: 6 }}>
-                  <circle cx="12"  cy="20" r="9" fill="rgba(255,255,255,0.5)"/>
-                  <circle cx="28"  cy="14" r="9" fill="rgba(255,255,255,0.7)"/>
-                  <circle cx="44"  cy="20" r="9" fill="rgba(255,255,255,0.4)"/>
+                {/* FIX 4 : Icône Tribu flashy avec animation pulse */}
+                <svg viewBox="0 0 64 36" width="64" height="36" fill="none" style={{ marginBottom: 8 }}>
+                  <circle cx="10" cy="18" r="10" fill="#fff" style={{ animation: 'tribu-pulse 2s ease-in-out infinite' }}/>
+                  <circle cx="32" cy="12" r="10" fill={T.light} style={{ animation: 'tribu-pulse2 2s ease-in-out infinite 0.3s' }}/>
+                  <circle cx="54" cy="18" r="10" fill={T.mid} style={{ animation: 'tribu-pulse3 2s ease-in-out infinite 0.6s' }}/>
                 </svg>
                 <p style={{ fontWeight: 900, fontSize: '1.1rem', letterSpacing: '-1px', marginBottom: 4 }}>La Tribu Yoppaa</p>
+                {/* FIX 5 : "commerçant" au lieu de "commerce" */}
                 <p style={{ fontSize: '0.82rem', color: T.light, lineHeight: 1.5 }}>
-                  Tu as fait la file chez un commerce et tu penses qu'ils mériteraient Yoppaa ?<br/>
-                  Dis-le nous — on les contacte !
+                  Tu as fait la file chez un commerçant et tu penses qu'il mériterait Yoppaa ?<br/>
+                  Dis-le nous — on le contacte !
                 </p>
               </div>
-
-              <SuggestionForm clientId={clientId} />
+              <SuggestionForm clientId={clientId}/>
             </div>
           )}
 
@@ -1074,7 +1013,6 @@ export default function Commander() {
                   </div>
                 </div>
               </div>
-
               <div style={{ ...card, textAlign: 'center', padding: '1.25rem' }}>
                 <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>⏱ Temps économisé en file</p>
                 <p style={{ fontSize: '3rem', fontWeight: 900, color: T.main, letterSpacing: '-2px', marginBottom: 6, lineHeight: 1 }}>
@@ -1084,7 +1022,6 @@ export default function Commander() {
                   {clientCommandes.filter(c=>c.statut==='recupere').length} commande{clientCommandes.filter(c=>c.statut==='recupere').length>1?'s':''} sans faire la file 🎉
                 </p>
               </div>
-
               <div className="grid2" style={{ marginBottom: '0.875rem' }}>
                 {[
                   { label: 'Commandes', value: clientCommandes.length, color: T.main },
@@ -1096,12 +1033,12 @@ export default function Commander() {
                   </div>
                 ))}
               </div>
-
               {client.email && (
                 <button onClick={() => {
-                  localStorage.removeItem('yoppaa_email'); localStorage.removeItem('yoppaa_nom'); localStorage.removeItem('yoppaa_client_id')
+                  localStorage.removeItem('yoppaa_email'); localStorage.removeItem('yoppaa_nom'); localStorage.removeItem('yoppaa_client_id'); localStorage.removeItem('yoppaa_onglet')
                   setClient({ nom:'', email:'', telephone:'' }); setClientId(null)
                   setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
+                  setOngletState('accueil')
                 }} style={{ width: '100%', marginTop: '0.5rem', padding: '0.875rem', background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.95rem' }}>
                   Se déconnecter
                 </button>
@@ -1110,7 +1047,7 @@ export default function Commander() {
           )}
         </div>
 
-        {/* ── NAV BAR — 4 onglets ── */}
+        {/* ── NAV BAR ── */}
         {!estDansCommerce && (
           <nav className="navbar">
             {[
@@ -1123,10 +1060,14 @@ export default function Commander() {
               <button key={item.key} onClick={() => setOnglet(item.key)}
                 style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '0.75rem 0 0.625rem', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 700, fontSize: '0.65rem', color: onglet===item.key ? T.light : '#6B7280', position: 'relative', transition: 'color 0.15s' }}>
                 {item.icon === 'tribu'
-                  ? <svg viewBox="0 0 28 20" width="26" height="18" fill="none">
-                      <circle cx="6"  cy="10" r="4.5" fill={onglet==='tribu' ? T.light : '#6B7280'} opacity={onglet==='tribu' ? 1 : 0.7}/>
-                      <circle cx="14" cy="7"  r="4.5" fill={onglet==='tribu' ? T.light : '#6B7280'} opacity={onglet==='tribu' ? 1 : 0.5}/>
-                      <circle cx="22" cy="10" r="4.5" fill={onglet==='tribu' ? T.light : '#6B7280'} opacity={onglet==='tribu' ? 1 : 0.3}/>
+                  ? <svg viewBox="0 0 32 22" width="28" height="20" fill="none">
+                      {/* FIX 4 : Points plus flashy — couleurs vives + glow */}
+                      <circle cx="6"  cy="11" r="5.5" fill={onglet==='tribu' ? '#fff' : T.main} opacity={onglet==='tribu' ? 1 : 0.5}
+                        style={onglet==='tribu' ? { filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.8))' } : {}}/>
+                      <circle cx="16" cy="7"  r="5.5" fill={onglet==='tribu' ? T.light : T.mid} opacity={onglet==='tribu' ? 1 : 0.6}
+                        style={onglet==='tribu' ? { filter: 'drop-shadow(0 0 4px rgba(196,160,244,0.8))' } : {}}/>
+                      <circle cx="26" cy="11" r="5.5" fill={onglet==='tribu' ? T.mid : '#9CA3AF'} opacity={onglet==='tribu' ? 1 : 0.4}
+                        style={onglet==='tribu' ? { filter: 'drop-shadow(0 0 4px rgba(150,96,224,0.8))' } : {}}/>
                     </svg>
                   : <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>{item.icon}</span>
                 }

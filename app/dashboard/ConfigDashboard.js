@@ -370,7 +370,8 @@ function TabProfil({ commercantId, toast }) {
     setLoading(true)
     const { data } = await supabase.from('commercants').select('*').eq('id', commercantId).single()
     if (data) {
-      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00' })
+      const defaultHoraires = { lundi: { ouvert: true, debut: '07:00', fin: '14:00' }, mardi: { ouvert: true, debut: '07:00', fin: '14:00' }, mercredi: { ouvert: true, debut: '07:00', fin: '14:00' }, jeudi: { ouvert: true, debut: '07:00', fin: '14:00' }, vendredi: { ouvert: true, debut: '07:00', fin: '14:00' }, samedi: { ouvert: true, debut: '07:00', fin: '13:00' }, dimanche: { ouvert: false, debut: '07:00', fin: '12:00' } }
+      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires })
       setLogoPreview(data.logo_url || null)
     }
     setLoading(false)
@@ -399,7 +400,7 @@ function TabProfil({ commercantId, toast }) {
   async function saveProfil() {
     if (!form.nom.trim()) return toast('Le nom est obligatoire', 'error')
     setSaving(true)
-    await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00' }).eq('id', commercantId)
+    await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail }).eq('id', commercantId)
     setSaving(false); toast('Profil mis à jour ✓')
   }
 
@@ -448,8 +449,33 @@ function TabProfil({ commercantId, toast }) {
             <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Décrivez votre commerce..." />
           </div>
           <div>
-            <label style={s.label}>Horaires</label>
-            <Textarea value={form.horaires} onChange={e => setForm(p => ({ ...p, horaires: e.target.value }))} placeholder="Ex: Lun–Ven 7h–14h · Sam 7h–13h" />
+            <label style={s.label}>Horaires d'ouverture</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+              {['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'].map((jour, idx) => {
+                const labels = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
+                const h = form.horaires_detail?.[jour] || { ouvert: false, debut: '07:00', fin: '14:00' }
+                return (
+                  <div key={jour} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: h.ouvert ? T.pale : '#F9FAFB', border: `1.5px solid ${h.ouvert ? T.light : '#E5E7EB'}` }}>
+                    {/* Toggle ouvert/fermé */}
+                    <button onClick={() => setForm(p => ({ ...p, horaires_detail: { ...p.horaires_detail, [jour]: { ...h, ouvert: !h.ouvert } } }))}
+                      style={{ width: 36, height: 20, borderRadius: 100, background: h.ouvert ? T.main : '#D1D5DB', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
+                      <div style={{ position: 'absolute', top: 2, left: h.ouvert ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}/>
+                    </button>
+                    {/* Nom du jour */}
+                    <span style={{ fontSize: 13, fontWeight: 700, color: h.ouvert ? T.ink : T.muted, width: 76, flexShrink: 0 }}>{labels[idx]}</span>
+                    {h.ouvert ? (
+                      <>
+                        <Input type="time" value={h.debut} onChange={e => setForm(p => ({ ...p, horaires_detail: { ...p.horaires_detail, [jour]: { ...h, debut: e.target.value } } }))} style={{ width: 110, fontSize: 13, padding: '4px 8px' }} />
+                        <span style={{ fontSize: 13, color: T.muted, flexShrink: 0 }}>→</span>
+                        <Input type="time" value={h.fin} onChange={e => setForm(p => ({ ...p, horaires_detail: { ...p.horaires_detail, [jour]: { ...h, fin: e.target.value } } }))} style={{ width: 110, fontSize: 13, padding: '4px 8px' }} />
+                      </>
+                    ) : (
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF' }}>Fermé</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
           <div>
             <label style={s.label}>Ouverture des réservations</label>

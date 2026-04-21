@@ -56,6 +56,40 @@ function Badges({ type }) {
   )
 }
 
+// ─── Helpers horaires ────────────────────────────────────────────────────────
+const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
+const JOURS_COURTS = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
+const JOURS_LONGS  = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
+
+function jourActuel() {
+  const idx = new Date().getDay() // 0=dim
+  return idx === 0 ? 'dimanche' : JOURS[idx - 1]
+}
+
+// Résumé court pour la carte : "Lun–Ven 7h–14h · Sam 7h–13h · Dim Fermé"
+function resumeHoraires(h) {
+  if (!h) return null
+  const groupes = []
+  let i = 0
+  while (i < JOURS.length) {
+    const jour = JOURS[i]
+    const info = h[jour]
+    if (!info) { i++; continue }
+    // Grouper les jours consécutifs avec mêmes horaires
+    let j = i + 1
+    while (j < JOURS.length) {
+      const next = h[JOURS[j]]
+      if (!next || next.ouvert !== info.ouvert || next.debut !== info.debut || next.fin !== info.fin) break
+      j++
+    }
+    const label = j - i > 1 ? `${JOURS_COURTS[i]}–${JOURS_COURTS[j-1]}` : JOURS_COURTS[i]
+    const horaire = info.ouvert ? `${info.debut.slice(0,5)}–${info.fin.slice(0,5)}` : 'Fermé'
+    groupes.push(`${label} ${horaire}`)
+    i = j
+  }
+  return groupes.join(' · ')
+}
+
 function distanceVolOiseau(lat1, lon1, lat2, lon2) {
   const R = 6371000
   const dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180
@@ -164,7 +198,11 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px 12px', marginTop: 5 }}>
             {c.distance != null && <span style={{ fontSize: '0.75rem', color: T.main, fontWeight: 700 }}>📍 {formatDistance(c.distance)}</span>}
-            {c.horaires && <span style={{ fontSize: '0.75rem', color: T.deep, fontWeight: 600 }}>🕐 {c.horaires}</span>}
+            {(c.horaires_detail || c.horaires) && (
+              <span style={{ fontSize: '0.72rem', color: T.deep, fontWeight: 600 }}>
+                🕐 {c.horaires_detail ? (resumeHoraires(c.horaires_detail) || c.horaires) : c.horaires}
+              </span>
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -647,6 +685,31 @@ export default function Commander() {
                   </div>
                 </div>
               </div>
+
+              {/* Horaires détaillés 7 jours */}
+              {commercantSelectionne?.horaires_detail && (
+                <div style={{ background: T.bgCard, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}` }}>
+                  <p style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>🕐 Horaires</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {JOURS.map((jour, idx) => {
+                      const h = commercantSelectionne.horaires_detail[jour]
+                      const estAujourdhui = jourActuel() === jour
+                      if (!h) return null
+                      return (
+                        <div key={jour} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', borderRadius: 8, background: estAujourdhui ? T.pale : 'transparent' }}>
+                          <span style={{ fontSize: '0.82rem', fontWeight: estAujourdhui ? 800 : 500, color: estAujourdhui ? T.deep : T.muted, width: 90 }}>
+                            {estAujourdhui ? '▸ ' : ''}{JOURS_LONGS[idx]}
+                          </span>
+                          {h.ouvert
+                            ? <span style={{ fontSize: '0.82rem', fontWeight: estAujourdhui ? 700 : 500, color: estAujourdhui ? T.main : T.ink }}>{h.debut.slice(0,5)} – {h.fin.slice(0,5)}</span>
+                            : <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#DC2626' }}>Fermé</span>
+                          }
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {articles.map(article => (
                 <div key={article.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

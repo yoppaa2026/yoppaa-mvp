@@ -840,27 +840,66 @@ export default function Commander() {
                 </div>
               )}
 
-              {articles.map(article => (
-                <div key={article.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: 700, color: T.deep, marginBottom: 2, fontSize: '0.95rem' }}>{article.nom}</p>
-                    {article.description && <p style={{ fontSize: '0.78rem', color: T.muted, marginBottom: 4, lineHeight: 1.4 }}>{article.description}</p>}
-                    <p style={{ fontSize: '0.95rem', color: T.main, fontWeight: 800 }}>{Number(article.prix).toFixed(2)}€</p>
-                    {article.stock_jour === 0 && <span style={{ fontSize: '0.7rem', background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>Épuisé</span>}
-                  </div>
-                  {article.stock_jour !== 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 12, flexShrink: 0 }}>
-                      {panier[article.id] && (
-                        <>
-                          <button onClick={() => retirerDuPanier(article.id)} style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 800, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                          <span style={{ fontWeight: 800, minWidth: 24, textAlign: 'center', fontSize: '1.05rem', color: T.ink }}>{panier[article.id].quantite}</span>
-                        </>
-                      )}
-                      <button onClick={() => ajouterAuPanier(article)} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+              {(() => {
+                // Grouper les articles par catégorie
+                const categories = [...new Set(articles.map(a => a.categorie).filter(Boolean))]
+                const sansCat = articles.filter(a => !a.categorie)
+                const ArticleRow = ({ article }) => (
+                  <div key={article.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontWeight: 700, color: T.deep, marginBottom: 2, fontSize: '0.95rem' }}>{article.nom}</p>
+                      {article.description && <p style={{ fontSize: '0.78rem', color: T.muted, marginBottom: 4, lineHeight: 1.4 }}>{article.description}</p>}
+                      <p style={{ fontSize: '0.95rem', color: T.main, fontWeight: 800 }}>{Number(article.prix).toFixed(2)}€</p>
+                      {article.stock_jour === 0 && <span style={{ fontSize: '0.7rem', background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>Épuisé</span>}
                     </div>
-                  )}
-                </div>
-              ))}
+                    {article.stock_jour !== 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 12, flexShrink: 0 }}>
+                        {panier[article.id] && (
+                          <>
+                            <button onClick={() => retirerDuPanier(article.id)} style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 800, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                            <span style={{ fontWeight: 800, minWidth: 24, textAlign: 'center', fontSize: '1.05rem', color: T.ink }}>{panier[article.id].quantite}</span>
+                          </>
+                        )}
+                        <button onClick={() => ajouterAuPanier(article)} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                      </div>
+                    )}
+                  </div>
+                )
+
+                if (categories.length === 0) {
+                  // Pas de catégories — affichage simple
+                  return articles.map(a => <ArticleRow key={a.id} article={a}/>)
+                }
+
+                return (
+                  <>
+                    {categories.map(cat => {
+                      const artsDecat = articles.filter(a => a.categorie === cat)
+                      if (!artsDecat.length) return null
+                      return (
+                        <div key={cat} style={{ marginBottom: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, marginTop: 4 }}>
+                            <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', background: T.pale, padding: '3px 10px', borderRadius: 100, whiteSpace: 'nowrap' }}>{cat}</span>
+                            <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                          </div>
+                          {artsDecat.map(a => <ArticleRow key={a.id} article={a}/>)}
+                        </div>
+                      )
+                    })}
+                    {sansCat.length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, marginTop: 4 }}>
+                          <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', background: '#F9FAFB', padding: '3px 10px', borderRadius: 100 }}>Autres</span>
+                          <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                        </div>
+                        {sansCat.map(a => <ArticleRow key={a.id} article={a}/>)}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
 
               {/* FIX 3 : Avis cliquables avec CarteAvis expandable */}
               {avisCommerce.length > 0 && (

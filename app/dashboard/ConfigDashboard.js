@@ -121,31 +121,56 @@ function Toast({ message, type }) {
 // ─── Onglet MENU ──────────────────────────────────────────────────────────────
 function TabMenu({ commercantId, toast }) {
   const [articles, setArticles] = useState([])
+  const [categories, setCategories] = useState([]) // liste des catégories uniques
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [showCatForm, setShowCatForm] = useState(false)
   const [editId, setEditId] = useState(null)
-  const [form, setForm] = useState({ nom: '', description: '', prix: '', stock_jour: '', actif: true })
+  const [form, setForm] = useState({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: '' })
+  const [nouvelleCat, setNouvelleCat] = useState('')
   const [saving, setSaving] = useState(false)
+  const [catActive, setCatActive] = useState('Tous')
 
   useEffect(() => { fetchArticles() }, [commercantId])
 
   async function fetchArticles() {
     setLoading(true)
-    const { data } = await supabase.from('articles').select('*').eq('commercant_id', commercantId).order('created_at')
+    const { data } = await supabase.from('articles').select('*').eq('commercant_id', commercantId).order('categorie').order('nom')
     setArticles(data || [])
+    // Extraire les catégories uniques
+    const cats = [...new Set((data || []).map(a => a.categorie).filter(Boolean))]
+    setCategories(cats)
     setLoading(false)
   }
 
-  function openNew() { setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true }); setEditId(null); setShowForm(true) }
-  function openEdit(a) { setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif }); setEditId(a.id); setShowForm(true) }
+  function openNew() { setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' ? catActive : '' }); setEditId(null); setShowForm(true) }
+  function openEdit(a) { setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '' }); setEditId(a.id); setShowForm(true) }
 
   async function saveArticle() {
     if (!form.nom.trim() || !form.prix) return toast('Nom et prix obligatoires', 'error')
     setSaving(true)
-    const payload = { commercant_id: commercantId, nom: form.nom.trim(), description: form.description.trim() || null, prix: parseFloat(form.prix), stock_jour: parseInt(form.stock_jour) || 0, actif: form.actif }
+    const payload = { commercant_id: commercantId, nom: form.nom.trim(), description: form.description.trim() || null, prix: parseFloat(form.prix), stock_jour: parseInt(form.stock_jour) || 0, actif: form.actif, categorie: form.categorie.trim() || null }
     if (editId) { await supabase.from('articles').update(payload).eq('id', editId); toast('Article mis à jour ✓') }
     else { await supabase.from('articles').insert(payload); toast('Article ajouté ✓') }
     setSaving(false); setShowForm(false); fetchArticles()
+  }
+
+  async function ajouterCategorie() {
+    if (!nouvelleCat.trim()) return
+    // Vérifier si elle existe déjà
+    if (categories.includes(nouvelleCat.trim())) { toast('Catégorie déjà existante', 'error'); return }
+    setCategories(prev => [...prev, nouvelleCat.trim()])
+    setCatActive(nouvelleCat.trim())
+    setNouvelleCat('')
+    setShowCatForm(false)
+    toast('Catégorie créée ✓')
+  }
+
+  async function supprimerCategorie(cat) {
+    if (!confirm(`Supprimer la catégorie "${cat}" ? Les articles resteront mais sans catégorie.`)) return
+    await supabase.from('articles').update({ categorie: null }).eq('commercant_id', commercantId).eq('categorie', cat)
+    toast('Catégorie supprimée'); fetchArticles()
+    if (catActive === cat) setCatActive('Tous')
   }
 
   async function toggleActif(a) { await supabase.from('articles').update({ actif: !a.actif }).eq('id', a.id); fetchArticles() }
@@ -163,26 +188,73 @@ function TabMenu({ commercantId, toast }) {
     toast('Article supprimé'); fetchArticles()
   }
 
+  // Articles filtrés par catégorie active
+  const articlesFiltres = catActive === 'Tous' ? articles : articles.filter(a => a.categorie === catActive)
+  const articlesSansCat = articles.filter(a => !a.categorie)
+
   if (loading) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h2 style={s.h2}>Menu <span style={{ color: T.mid, fontWeight: 600, fontSize: 14 }}>({articles.length})</span></h2>
-        <button style={{ ...s.btn, ...s.btnPrimary }} onClick={openNew}>+ Ajouter</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => { setShowCatForm(v => !v); setShowForm(false) }}>+ Catégorie</button>
+          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={() => { openNew(); setShowCatForm(false) }}>+ Article</button>
+        </div>
       </div>
 
+      {/* Formulaire nouvelle catégorie */}
+      {showCatForm && (
+        <div style={{ ...s.cardActive, padding: 16, marginBottom: 12 }}>
+          <label style={s.label}>Nom de la catégorie</label>
+          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+            <Input value={nouvelleCat} onChange={e => setNouvelleCat(e.target.value)} placeholder="Ex: Viennoiseries, Sandwichs chauds..." onKeyDown={e => e.key === 'Enter' && ajouterCategorie()} style={{ flex: 1 }}/>
+            <button style={{ ...s.btn, ...s.btnPrimary }} onClick={ajouterCategorie}>✓</button>
+            <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowCatForm(false)}>✕</button>
+          </div>
+        </div>
+      )}
+
+      {/* Filtres catégories */}
+      {categories.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+          {['Tous', ...categories, ...(articlesSansCat.length > 0 ? ['Sans catégorie'] : [])].map(cat => (
+            <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button onClick={() => setCatActive(cat)}
+                style={{ ...s.btn, padding: '5px 12px', fontSize: 12, background: catActive === cat ? T.main : T.pale, color: catActive === cat ? '#fff' : T.main }}>
+                {cat}
+              </button>
+              {cat !== 'Tous' && cat !== 'Sans catégorie' && (
+                <button onClick={() => supprimerCategorie(cat)}
+                  style={{ ...s.btn, ...s.btnDanger, padding: '5px 8px', fontSize: 11 }}>🗑</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Formulaire article */}
       {showForm && (
         <div style={s.cardActive}>
           <h3 style={{ ...s.h3, marginBottom: 14 }}>{editId ? '✏️ Modifier' : '+ Nouvel article'}</h3>
           <div style={{ display: 'grid', gap: 12 }}>
-            <div><label style={s.label}>Nom *</label><Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} placeholder="Ex: Croissant beurre" /></div>
-            <div><label style={s.label}>Description</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Ex: Feuilleté, pur beurre AOP..." /></div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="1.20" /></div>
-              <div><label style={s.label}>Stock du jour</label><Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="30" /></div>
+            <div><label style={s.label}>Nom *</label><Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} placeholder="Ex: Croissant beurre"/></div>
+            <div>
+              <label style={s.label}>Catégorie</label>
+              <select value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))}
+                style={{ ...s.input, cursor: 'pointer' }}>
+                <option value="">— Sans catégorie —</option>
+                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
             </div>
-            <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Article disponible" />
+            <div><label style={s.label}>Description</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Ex: Feuilleté, pur beurre AOP..."/></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="1.20"/></div>
+              <div><label style={s.label}>Stock du jour</label><Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="30"/></div>
+            </div>
+            <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Article disponible"/>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveArticle} disabled={saving}>{saving ? 'Enregistrement...' : '✓ Enregistrer'}</button>
@@ -191,40 +263,83 @@ function TabMenu({ commercantId, toast }) {
         </div>
       )}
 
+      {/* Liste articles */}
       {articles.length === 0 && !showForm ? (
         <div style={{ ...s.card, textAlign: 'center', padding: 40 }}>
           <p style={{ color: T.muted, marginBottom: 16 }}>Aucun article dans le menu</p>
           <button style={{ ...s.btn, ...s.btnPrimary }} onClick={openNew}>Ajouter le premier article</button>
         </div>
-      ) : articles.map(a => (
-        <div key={a.id} style={{ ...s.card, opacity: a.actif ? 1 : 0.6, borderLeft: `4px solid ${a.actif ? T.main : '#E5E7EB'}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontWeight: 800, color: T.ink, fontSize: 15 }}>{a.nom}</span>
-                <span style={{ ...s.tag, background: a.actif ? T.pale : '#F3F4F6', color: a.actif ? T.main : T.muted }}>{a.actif ? 'Actif' : 'Inactif'}</span>
-              </div>
-              {a.description && <p style={{ fontSize: 12, color: T.muted, margin: '0 0 8px' }}>{a.description}</p>}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 800, fontSize: 17, color: T.main }}>{Number(a.prix).toFixed(2)} €</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>Stock :</span>
-                  <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => updateStock(a.id, (a.stock_jour || 0) - 1)}>−</button>
-                  <input type="number" value={a.stock_jour ?? 0} min={0} onChange={e => updateStock(a.id, e.target.value)}
-                    style={{ ...s.input, width: 56, textAlign: 'center', padding: '4px 8px', fontSize: 14, fontWeight: 700 }} />
-                  <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => updateStock(a.id, (a.stock_jour || 0) + 1)}>+</button>
-                  {a.stock_jour === 0 && <span style={{ ...s.tag, background: '#FEE2E2', color: '#DC2626' }}>Épuisé</span>}
+      ) : (
+        <>
+          {/* Affichage par catégorie si "Tous" */}
+          {catActive === 'Tous' && categories.length > 0 ? (
+            <>
+              {categories.map(cat => {
+                const artsDecat = articles.filter(a => a.categorie === cat)
+                if (!artsDecat.length) return null
+                return (
+                  <div key={cat} style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', background: T.pale, padding: '3px 10px', borderRadius: 100 }}>{cat}</span>
+                      <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                    </div>
+                    {artsDecat.map(a => <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s}/>)}
+                  </div>
+                )
+              })}
+              {articlesSansCat.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', background: '#F9FAFB', padding: '3px 10px', borderRadius: 100 }}>Sans catégorie</span>
+                    <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                  </div>
+                  {articlesSansCat.map(a => <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s}/>)}
                 </div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-              <Toggle value={a.actif} onChange={() => toggleActif(a)} />
-              <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 12px', fontSize: 12 }} onClick={() => openEdit(a)}>✏️</button>
-              <button style={{ ...s.btn, ...s.btnDanger, padding: '5px 12px', fontSize: 12 }} onClick={() => deleteArticle(a.id)}>🗑</button>
+              )}
+            </>
+          ) : (
+            // Vue filtrée par catégorie
+            (catActive === 'Sans catégorie' ? articlesSansCat : articlesFiltres).map(a =>
+              <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s}/>
+            )
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Carte article réutilisable ───────────────────────────────────────────────
+function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s }) {
+  return (
+    <div style={{ ...s.card, opacity: a.actif ? 1 : 0.6, borderLeft: `4px solid ${a.actif ? T.main : '#E5E7EB'}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontWeight: 800, color: T.ink, fontSize: 15 }}>{a.nom}</span>
+            <span style={{ ...s.tag, background: a.actif ? T.pale : '#F3F4F6', color: a.actif ? T.main : T.muted }}>{a.actif ? 'Actif' : 'Inactif'}</span>
+          </div>
+          {a.description && <p style={{ fontSize: 12, color: T.muted, margin: '0 0 8px' }}>{a.description}</p>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 800, fontSize: 17, color: T.main }}>{Number(a.prix).toFixed(2)} €</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>Stock :</span>
+              <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => onUpdateStock(a.id, (a.stock_jour || 0) - 1)}>−</button>
+              <input type="number" value={a.stock_jour ?? 0} min={0} onChange={e => onUpdateStock(a.id, e.target.value)}
+                style={{ ...s.input, width: 56, textAlign: 'center', padding: '4px 8px', fontSize: 14, fontWeight: 700 }}/>
+              <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => onUpdateStock(a.id, (a.stock_jour || 0) + 1)}>+</button>
+              {a.stock_jour === 0 && <span style={{ ...s.tag, background: '#FEE2E2', color: '#DC2626' }}>Épuisé</span>}
             </div>
           </div>
         </div>
-      ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+          <Toggle value={a.actif} onChange={() => onToggle(a)}/>
+          <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 12px', fontSize: 12 }} onClick={() => onEdit(a)}>✏️</button>
+          <button style={{ ...s.btn, ...s.btnDanger, padding: '5px 12px', fontSize: 12 }} onClick={() => onDelete(a.id)}>🗑</button>
+        </div>
+      </div>
     </div>
   )
 }

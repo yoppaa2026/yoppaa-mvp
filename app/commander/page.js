@@ -387,6 +387,75 @@ function SplashScreen({ onDone }) {
   )
 }
 
+// ─── Sélecteur d'options article ─────────────────────────────────────────────
+function OptionsSelector({ article, groupes, onAjouter }) {
+  const [selections, setSelections] = useState({}) // groupeId -> [{ id, nom, prix_supplement }]
+  const [erreurs, setErreurs] = useState({})
+
+  function toggleValeur(groupe, valeur) {
+    setSelections(prev => {
+      const current = prev[groupe.id] || []
+      if (groupe.type === 'unique') {
+        // Remplacer la sélection
+        return { ...prev, [groupe.id]: [valeur] }
+      } else {
+        // Toggle
+        const exists = current.find(v => v.id === valeur.id)
+        return { ...prev, [groupe.id]: exists ? current.filter(v => v.id !== valeur.id) : [...current, valeur] }
+      }
+    })
+    setErreurs(p => ({ ...p, [groupe.id]: false }))
+  }
+
+  function valider() {
+    const errs = {}
+    let ok = true
+    groupes.forEach(g => {
+      if (g.obligatoire && (!selections[g.id] || selections[g.id].length === 0)) {
+        errs[g.id] = true; ok = false
+      }
+    })
+    setErreurs(errs)
+    if (!ok) return
+    onAjouter(article, Object.keys(selections).length > 0 ? selections : null)
+  }
+
+  const supplement = Object.values(selections).flat().reduce((acc, v) => acc + (v.prix_supplement||0), 0)
+
+  return (
+    <div style={{ background: T.pale, borderRadius: 14, padding: '1rem', marginTop: 8, border: `1.5px solid ${T.main}33` }}>
+      <p style={{ fontWeight: 800, color: T.deep, marginBottom: 10, fontSize: '0.9rem' }}>⚙️ Personnalise ton {article.nom}</p>
+      {groupes.map(g => (
+        <div key={g.id} style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <p style={{ fontWeight: 700, color: T.ink, fontSize: '0.82rem' }}>{g.nom}</p>
+            {g.obligatoire && <span style={{ fontSize: '0.62rem', fontWeight: 700, background: '#FEE2E2', color: '#DC2626', padding: '1px 6px', borderRadius: 100 }}>Obligatoire</span>}
+            <span style={{ fontSize: '0.62rem', fontWeight: 700, background: g.type === 'unique' ? '#FEF3C7' : T.pale, color: g.type === 'unique' ? '#92400E' : T.main, padding: '1px 6px', borderRadius: 100 }}>
+              {g.type === 'unique' ? '1 choix' : 'Multi'}
+            </span>
+          </div>
+          {erreurs[g.id] && <p style={{ fontSize: '0.72rem', color: '#DC2626', marginBottom: 4 }}>⚠️ Choix obligatoire</p>}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {(g.valeurs||[]).map(v => {
+              const selected = (selections[g.id]||[]).find(s => s.id === v.id)
+              return (
+                <button key={v.id} onClick={() => toggleValeur(g, v)}
+                  style={{ padding: '0.35rem 0.75rem', borderRadius: 100, border: `1.5px solid ${selected ? T.main : T.pale}`, background: selected ? T.main : '#fff', color: selected ? '#fff' : T.ink, fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', transition: 'all 0.15s' }}>
+                  {v.nom}{v.prix_supplement > 0 ? ` +${Number(v.prix_supplement).toFixed(2)}€` : ''}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+      <button onClick={valider}
+        style={{ width: '100%', padding: '0.75rem', border: 'none', borderRadius: 100, background: T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>
+        Ajouter au panier{supplement > 0 ? ` (+${supplement.toFixed(2)}€)` : ''}
+      </button>
+    </div>
+  )
+}
+
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function Commander() {
   // Splash screen — une seule fois par session
@@ -435,6 +504,8 @@ export default function Commander() {
   const avisTimerRef = useRef(null)
   const [messageRetrait, setMessageRetrait] = useState(null)
   const [modeLendemain, setModeLendemain] = useState(false)
+  const [optionsParArticle, setOptionsParArticle] = useState({})
+  const [selectionsOptions, setSelectionsOptions] = useState({}) // articleId -> { groupeId -> Set(valeurIds) }
 
   useEffect(() => {
     // FIX 1 : Restaurer l'onglet sauvegardé
@@ -647,16 +718,44 @@ export default function Commander() {
     const modeLendemain = resaLendemainOuverte && tousPassees
 
     const creneauxAvecCount = (cren || []).map(cr => ({ ...cr, count: countParCreneau[cr.id] || 0 }))
+    // Charger les options pour chaque article
+    const artIds = (arts||[]).map(a => a.id)
+    let optionsParArticle = {}
+    if (artIds.length > 0) {
+      const { data: groupesData } = await supabase
+        .from('article_options_groupes')
+        .select('*, valeurs:article_options_valeurs(*)')
+        .in('article_id', artIds)
+        .order('created_at')
+      ;(groupesData||[]).forEach(g => {
+        if (!optionsParArticle[g.article_id]) optionsParArticle[g.article_id] = []
+        optionsParArticle[g.article_id].push(g)
+      })
+    }
     setArticles(arts||[])
+    setOptionsParArticle(optionsParArticle)
     setCreneaux(creneauxAvecCount)
     setAvisCommerce(avis||[])
     setModeLendemain(modeLendemain)
     setEtape(2)
   }
 
-  function ajouterAuPanier(a) { setPanier(p => ({ ...p, [a.id]: { ...a, quantite: (p[a.id]?.quantite||0)+1 } })) }
+  function ajouterAuPanier(a, options = null) {
+    const key = options ? `${a.id}_${JSON.stringify(options)}` : a.id
+    const item = options ? { ...a, options, quantite: (panier[key]?.quantite||0)+1 } : { ...a, quantite: (panier[a.id]?.quantite||0)+1 }
+    setPanier(p => ({ ...p, [key]: item }))
+  }
+  function totalOptions(options) {
+    if (!options) return 0
+    return Object.values(options).flat().reduce((acc, v) => acc + (v.prix_supplement||0), 0)
+  }
   function retirerDuPanier(id) { setPanier(p => { const n={...p}; if(n[id]?.quantite>1) n[id].quantite-=1; else delete n[id]; return n }) }
-  function totalPanier() { return Object.values(panier).reduce((acc,i) => acc+i.prix*i.quantite, 0) }
+  function totalPanier() {
+    return Object.values(panier).reduce((acc, i) => {
+      const supplement = i.options ? Object.values(i.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0
+      return acc + (i.prix + supplement) * i.quantite
+    }, 0)
+  }
 
   async function passerCommande() {
     if (!creneauChoisi || !client.nom || !client.email) return
@@ -844,27 +943,40 @@ export default function Commander() {
                 // Grouper les articles par catégorie
                 const categories = [...new Set(articles.map(a => a.categorie).filter(Boolean))]
                 const sansCat = articles.filter(a => !a.categorie)
-                const ArticleRow = ({ article }) => (
-                  <div key={article.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: 700, color: T.deep, marginBottom: 2, fontSize: '0.95rem' }}>{article.nom}</p>
-                      {article.description && <p style={{ fontSize: '0.78rem', color: T.muted, marginBottom: 4, lineHeight: 1.4 }}>{article.description}</p>}
-                      <p style={{ fontSize: '0.95rem', color: T.main, fontWeight: 800 }}>{Number(article.prix).toFixed(2)}€</p>
-                      {article.stock_jour === 0 && <span style={{ fontSize: '0.7rem', background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>Épuisé</span>}
-                    </div>
-                    {article.stock_jour !== 0 && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 12, flexShrink: 0 }}>
-                        {panier[article.id] && (
-                          <>
-                            <button onClick={() => retirerDuPanier(article.id)} style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 800, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                            <span style={{ fontWeight: 800, minWidth: 24, textAlign: 'center', fontSize: '1.05rem', color: T.ink }}>{panier[article.id].quantite}</span>
-                          </>
+                const ArticleRow = ({ article }) => {
+                  const groupes = optionsParArticle[article.id] || []
+                  const hasOptions = groupes.length > 0
+                  const [showOptions, setShowOptions] = useState(false)
+                  const qte = Object.entries(panier).filter(([k]) => k === article.id || k.startsWith(article.id + '_')).reduce((acc, [,v]) => acc + v.quantite, 0)
+
+                  return (
+                    <div style={{ ...card }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontWeight: 700, color: T.deep, marginBottom: 2, fontSize: '0.95rem' }}>{article.nom}</p>
+                          {article.description && <p style={{ fontSize: '0.78rem', color: T.muted, marginBottom: 4, lineHeight: 1.4 }}>{article.description}</p>}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <p style={{ fontSize: '0.95rem', color: T.main, fontWeight: 800 }}>{Number(article.prix).toFixed(2)}€</p>
+                            {hasOptions && <span style={{ fontSize: '0.68rem', fontWeight: 700, color: T.mid, background: T.pale, padding: '1px 6px', borderRadius: 100 }}>Options dispo</span>}
+                          </div>
+                          {article.stock_jour === 0 && <span style={{ fontSize: '0.7rem', background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>Épuisé</span>}
+                        </div>
+                        {article.stock_jour !== 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
+                            {qte > 0 && <span style={{ fontWeight: 800, minWidth: 20, textAlign: 'center', fontSize: '1rem', color: T.main }}>{qte}</span>}
+                            <button onClick={() => hasOptions ? setShowOptions(v => !v) : ajouterAuPanier(article)}
+                              style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {hasOptions ? '⚙' : '+'}
+                            </button>
+                          </div>
                         )}
-                        <button onClick={() => ajouterAuPanier(article)} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
                       </div>
-                    )}
-                  </div>
-                )
+                      {showOptions && hasOptions && (
+                        <OptionsSelector article={article} groupes={groupes} onAjouter={(a, opts) => { ajouterAuPanier(a, opts); setShowOptions(false) }}/>
+                      )}
+                    </div>
+                  )
+                }
 
                 if (categories.length === 0) {
                   // Pas de catégories — affichage simple

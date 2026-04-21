@@ -311,8 +311,140 @@ function TabMenu({ commercantId, toast }) {
   )
 }
 
+// ─── Gestionnaire d'options pour un article ──────────────────────────────────
+function OptionsArticle({ articleId, toast }) {
+  const [groupes, setGroupes] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [formGroupe, setFormGroupe] = useState({ nom: '', type: 'multiple', obligatoire: false })
+  const [valeursForms, setValeursForms] = useState({}) // groupeId -> { nom, prix_supplement }
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { fetchGroupes() }, [articleId])
+
+  async function fetchGroupes() {
+    setLoading(true)
+    const { data: gData } = await supabase.from('article_options_groupes').select('*, valeurs:article_options_valeurs(*)').eq('article_id', articleId).order('created_at')
+    setGroupes(gData || [])
+    setLoading(false)
+  }
+
+  async function saveGroupe() {
+    if (!formGroupe.nom.trim()) return toast('Nom obligatoire', 'error')
+    setSaving(true)
+    await supabase.from('article_options_groupes').insert({ article_id: articleId, nom: formGroupe.nom.trim(), type: formGroupe.type, obligatoire: formGroupe.obligatoire })
+    toast('Groupe ajouté ✓'); setSaving(false)
+    setFormGroupe({ nom: '', type: 'multiple', obligatoire: false }); setShowForm(false); fetchGroupes()
+  }
+
+  async function deleteGroupe(id) {
+    if (!confirm('Supprimer ce groupe et toutes ses options ?')) return
+    await supabase.from('article_options_groupes').delete().eq('id', id)
+    toast('Groupe supprimé'); fetchGroupes()
+  }
+
+  async function addValeur(groupeId) {
+    const f = valeursForms[groupeId] || { nom: '', prix_supplement: 0 }
+    if (!f.nom.trim()) return toast('Nom obligatoire', 'error')
+    await supabase.from('article_options_valeurs').insert({ groupe_id: groupeId, nom: f.nom.trim(), prix_supplement: parseFloat(f.prix_supplement) || 0 })
+    setValeursForms(p => ({ ...p, [groupeId]: { nom: '', prix_supplement: 0 } }))
+    toast('Option ajoutée ✓'); fetchGroupes()
+  }
+
+  async function deleteValeur(id) {
+    await supabase.from('article_options_valeurs').delete().eq('id', id)
+    fetchGroupes()
+  }
+
+  if (loading) return <p style={{ fontSize: 12, color: T.muted, padding: '8px 0' }}>Chargement des options...</p>
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.pale}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>⚙️ Options</span>
+        <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 11 }} onClick={() => setShowForm(v => !v)}>+ Groupe</button>
+      </div>
+
+      {/* Formulaire nouveau groupe */}
+      {showForm && (
+        <div style={{ background: T.pale, borderRadius: 10, padding: 12, marginBottom: 10, border: `1.5px solid ${T.main}33` }}>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div>
+              <label style={{ ...s.label, fontSize: 10 }}>Nom du groupe *</label>
+              <input value={formGroupe.nom} onChange={e => setFormGroupe(p => ({ ...p, nom: e.target.value }))}
+                placeholder="Ex: Choix de sauce, Crudités..."
+                style={{ ...s.input, fontSize: 13, padding: '7px 10px' }}/>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div>
+                <label style={{ ...s.label, fontSize: 10 }}>Type</label>
+                <select value={formGroupe.type} onChange={e => setFormGroupe(p => ({ ...p, type: e.target.value }))}
+                  style={{ ...s.input, fontSize: 12, padding: '6px 8px', width: 'auto', cursor: 'pointer' }}>
+                  <option value="unique">Choix unique (1 seul)</option>
+                  <option value="multiple">Choix multiple (plusieurs)</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 16 }}>
+                <input type="checkbox" id={`oblig-${articleId}`} checked={formGroupe.obligatoire}
+                  onChange={e => setFormGroupe(p => ({ ...p, obligatoire: e.target.checked }))} style={{ cursor: 'pointer' }}/>
+                <label htmlFor={`oblig-${articleId}`} style={{ fontSize: 12, color: T.ink, cursor: 'pointer' }}>Obligatoire</label>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+            <button style={{ ...s.btn, ...s.btnPrimary, padding: '6px 12px', fontSize: 12 }} onClick={saveGroupe} disabled={saving}>✓ Créer</button>
+            <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 12px', fontSize: 12 }} onClick={() => setShowForm(false)}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* Liste des groupes */}
+      {groupes.length === 0 && !showForm && (
+        <p style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Aucune option — clique sur "+ Groupe" pour en ajouter.</p>
+      )}
+
+      {groupes.map(g => (
+        <div key={g.id} style={{ background: '#FAFAFA', borderRadius: 10, padding: 10, marginBottom: 8, border: `1px solid ${T.pale}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontWeight: 700, fontSize: 13, color: T.ink }}>{g.nom}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: g.type === 'unique' ? '#FEF3C7' : '#EDE0FF', color: g.type === 'unique' ? '#92400E' : T.main }}>
+                {g.type === 'unique' ? '1 choix' : 'Multi'}
+              </span>
+              {g.obligatoire && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: '#FEE2E2', color: '#DC2626' }}>Obligatoire</span>}
+            </div>
+            <button style={{ ...s.btn, ...s.btnDanger, padding: '3px 8px', fontSize: 11 }} onClick={() => deleteGroupe(g.id)}>🗑</button>
+          </div>
+
+          {/* Valeurs existantes */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+            {(g.valeurs || []).map(v => (
+              <span key={v.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 100, padding: '3px 8px 3px 10px', fontSize: 12 }}>
+                <span style={{ color: T.ink, fontWeight: 600 }}>{v.nom}</span>
+                {v.prix_supplement > 0 && <span style={{ color: T.main, fontSize: 11, fontWeight: 700 }}>+{Number(v.prix_supplement).toFixed(2)}€</span>}
+                <button onClick={() => deleteValeur(v.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>
+              </span>
+            ))}
+          </div>
+
+          {/* Ajouter une valeur */}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input value={valeursForms[g.id]?.nom || ''} onChange={e => setValeursForms(p => ({ ...p, [g.id]: { ...p[g.id], nom: e.target.value } }))}
+              placeholder="Nouvelle option..." onKeyDown={e => e.key === 'Enter' && addValeur(g.id)}
+              style={{ ...s.input, flex: 1, fontSize: 12, padding: '5px 8px' }}/>
+            <input type="number" min="0" step="0.10" value={valeursForms[g.id]?.prix_supplement || ''} onChange={e => setValeursForms(p => ({ ...p, [g.id]: { ...p[g.id], prix_supplement: e.target.value } }))}
+              placeholder="+€" style={{ ...s.input, width: 56, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
+            <button style={{ ...s.btn, ...s.btnPrimary, padding: '5px 10px', fontSize: 12 }} onClick={() => addValeur(g.id)}>+</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Carte article réutilisable ───────────────────────────────────────────────
 function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s }) {
+  const [showOptions, setShowOptions] = useState(false)
   return (
     <div style={{ ...s.card, opacity: a.actif ? 1 : 0.6, borderLeft: `4px solid ${a.actif ? T.main : '#E5E7EB'}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -337,9 +469,11 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
           <Toggle value={a.actif} onChange={() => onToggle(a)}/>
           <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 12px', fontSize: 12 }} onClick={() => onEdit(a)}>✏️</button>
+          <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 12px', fontSize: 12, background: showOptions ? T.pale : undefined }} onClick={() => setShowOptions(v => !v)}>⚙️</button>
           <button style={{ ...s.btn, ...s.btnDanger, padding: '5px 12px', fontSize: 12 }} onClick={() => onDelete(a.id)}>🗑</button>
         </div>
       </div>
+      {showOptions && <OptionsArticle articleId={a.id} toast={window.__yoppaaToast || (() => {})}/>}
     </div>
   )
 }
@@ -713,6 +847,8 @@ export default function ConfigDashboard({ commercantId }) {
     setToastMsg(msg); setToastType(type)
     setTimeout(() => setToastMsg(''), 3000)
   }
+  // Rendre toast accessible depuis ArticleCard
+  if (typeof window !== 'undefined') window.__yoppaaToast = showToast
 
   const tabs = [
     { id: 'menu',     label: '🍞 Menu' },

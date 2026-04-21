@@ -125,17 +125,35 @@ function SwipeRetrait({ onConfirm }) {
 }
 
 // ─── Carte commerce ───────────────────────────────────────────────────────────
-function CarteCommerce({ c, favoris, notesParCommerce, onSelect, onToggleFavori }) {
+function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect, onToggleFavori }) {
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
+  const statut = statutsCommerce[c.id]
+
+  const statutConfig = {
+    ouvert:  { dot: '#16A34A', label: 'Créneaux disponibles',     labelColor: '#16A34A' },
+    urgent:  { dot: '#EA580C', label: 'Réserve vite !',           labelColor: '#EA580C' },
+    complet: { dot: '#DC2626', label: 'Complet pour aujourd'hui', labelColor: '#DC2626' },
+    ferme:   { dot: '#9CA3AF', label: 'Fermé aujourd'hui',        labelColor: '#9CA3AF' },
+  }
+  const sc = statutConfig[statut] || null
+
   return (
     <div onClick={() => onSelect(c)}
-      style={{ background: T.bgCard, border: `1.5px solid ${T.pale}`, borderLeft: `4px solid ${T.main}`, borderRadius: 14, padding: '1rem', marginBottom: '0.75rem', cursor: 'pointer', boxShadow: '0 1px 6px rgba(107,53,196,0.06)', transition: 'all 0.15s' }}
+      style={{ background: T.bgCard, border: `1.5px solid ${T.pale}`, borderLeft: `4px solid ${sc ? sc.dot : T.main}`, borderRadius: 14, padding: '1rem', marginBottom: '0.75rem', cursor: 'pointer', boxShadow: '0 1px 6px rgba(107,53,196,0.06)', transition: 'all 0.15s' }}
       onMouseOver={e => e.currentTarget.style.boxShadow = '0 4px 20px rgba(107,53,196,0.14)'}
       onMouseOut={e => e.currentTarget.style.boxShadow = '0 1px 6px rgba(107,53,196,0.06)'}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontWeight: 800, color: T.ink, margin: '0 0 6px', fontSize: '1rem', letterSpacing: '-0.3px' }}>{c.nom}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <p style={{ fontWeight: 800, color: T.ink, margin: 0, fontSize: '1rem', letterSpacing: '-0.3px' }}>{c.nom}</p>
+            {sc && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: sc.dot, flexShrink: 0, boxShadow: `0 0 6px ${sc.dot}88` }}/>
+                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: sc.labelColor, whiteSpace: 'nowrap' }}>{sc.label}</span>
+              </span>
+            )}
+          </div>
           <Badges type={c.type}/>
           {c.description && <p style={{ fontSize: '0.82rem', color: '#6b5c8a', margin: '6px 0 0', lineHeight: 1.45 }}>{c.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
@@ -236,6 +254,7 @@ export default function Commander() {
   const [creneaux, setCreneaux] = useState([])
   const [avisCommerce, setAvisCommerce] = useState([])
   const [notesParCommerce, setNotesParCommerce] = useState({})
+  const [statutsCommerce, setStatutsCommerce] = useState({})
   const [panier, setPanier] = useState({})
   const [creneauChoisi, setCreneauChoisi] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -302,14 +321,49 @@ export default function Commander() {
   }
 
   async function chargerNotes(ids) {
-    const { data } = await supabase.from('avis').select('commercant_id, note').in('commercant_id', ids)
-    if (!data) return
+    const [{ data: avisData }, { data: creneauxData }, { data: commandesData }] = await Promise.all([
+      supabase.from('avis').select('commercant_id, note').in('commercant_id', ids),
+      supabase.from('creneaux').select('commercant_id, heure_debut, heure_fin, max_commandes, actif').in('commercant_id', ids).eq('actif', true),
+      supabase.from('commandes').select('commercant_id, creneau_id').in('commercant_id', ids).neq('statut', 'recupere')
+    ])
     const notes = {}
     ids.forEach(id => {
-      const av = data.filter(a => a.commercant_id === id)
+      const av = (avisData||[]).filter(a => a.commercant_id === id)
       notes[id] = av.length > 0 ? { moyenne: av.reduce((a, x) => a+x.note, 0)/av.length, count: av.length } : { moyenne: 0, count: 0 }
     })
     setNotesParCommerce(notes)
+
+    // Calculer le statut de chaque commerce
+    const now = new Date()
+    const nowMin = now.getHours() * 60 + now.getMinutes()
+    const statuts = {}
+    ids.forEach(id => {
+      const crensDuJour = (creneauxData||[]).filter(c => c.commercant_id === id)
+      const cmds = (commandesData||[]).filter(c => c.commercant_id === id)
+      const countParCren = {}
+      cmds.forEach(c => { countParCren[c.creneau_id] = (countParCren[c.creneau_id]||0)+1 })
+
+      // Créneaux encore disponibles (pas passés, pas complets)
+      const crensDispos = crensDuJour.filter(c => {
+        const debut = parseInt(c.heure_debut.slice(0,2))*60 + parseInt(c.heure_debut.slice(3,5))
+        const complet = (countParCren[c.id]||0) >= c.max_commandes
+        return debut > nowMin && !complet
+      })
+
+      // Places restantes sur tous les créneaux dispos
+      const placesTotales = crensDispos.reduce((acc, c) => acc + (c.max_commandes - (countParCren[c.id]||0)), 0)
+
+      if (crensDuJour.length === 0) {
+        statuts[id] = 'ferme'
+      } else if (crensDispos.length === 0) {
+        statuts[id] = 'complet'
+      } else if (placesTotales <= 2) {
+        statuts[id] = 'urgent'
+      } else {
+        statuts[id] = 'ouvert'
+      }
+    })
+    setStatutsCommerce(statuts)
   }
 
   async function chargerFavoris(cid) {
@@ -572,7 +626,7 @@ export default function Commander() {
               {position && <p style={{ fontSize: '0.8rem', color: T.mid, fontWeight: 600, marginBottom: '0.75rem' }}>📍 {commercantsFiltres.length} commerce{commercantsFiltres.length>1?'s':''} près de toi</p>}
               {commercantsFiltres.length === 0
                 ? <div style={{ textAlign: 'center', padding: '3rem 0' }}><p style={{ fontSize: '2rem', marginBottom: 8 }}>🔍</p><p style={{ color: T.muted }}>Aucun commerce dans cette catégorie</p></div>
-                : commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)
+                : commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)
               }
             </div>
           )}
@@ -917,7 +971,7 @@ export default function Commander() {
               <h2 style={{ fontWeight: 800, fontSize: '1.15rem', color: T.ink, marginBottom: '0.875rem' }}>Mes favoris ❤️</h2>
               {commercantsFavoris.length === 0
                 ? <div style={{ textAlign: 'center', padding: '3rem 0' }}><p style={{ fontSize: '2.5rem', marginBottom: 10 }}>🤍</p><p style={{ fontWeight: 700, color: T.muted, marginBottom: 6 }}>Aucun favori pour l'instant</p><p style={{ fontSize: '0.875rem', color: '#9CA3AF' }}>Tape ❤️ sur un commerce pour le retrouver ici.</p></div>
-                : commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} onSelect={c => { selectionnerCommercant(c); setOnglet('accueil') }} onToggleFavori={toggleFavori}/>)
+                : commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} onSelect={c => { selectionnerCommercant(c); setOnglet('accueil') }} onToggleFavori={toggleFavori}/>)
               }
             </div>
           )}

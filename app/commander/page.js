@@ -717,6 +717,30 @@ export default function Commander() {
                 })()}
               </div>
 
+              {/* Message "réserver pour demain" — visible si des créneaux dispo aujourd'hui */}
+              {creneaux.some(c => heureEnMinutes(c.heure_debut) > maintenant()) && (() => {
+                const heureOuverture = commercantSelectionne?.heure_ouverture_resa
+                  ? commercantSelectionne.heure_ouverture_resa.slice(0,5)
+                  : '21:00'
+                const resaOuverte = maintenant() >= heureEnMinutes(heureOuverture)
+                const demain = new Date(); demain.setDate(demain.getDate() + 1)
+                const jourDemain = demain.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
+                const premierCreneau = creneaux.reduce((min, c) => heureEnMinutes(c.heure_debut) < heureEnMinutes(min.heure_debut) ? c : min, creneaux[0])
+                return (
+                  <div style={{ background: T.pale, borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1.25rem', border: `1px solid ${T.main}22` }}>
+                    {resaOuverte ? (
+                      <p style={{ fontSize: '0.78rem', color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
+                        🎉 Les réservations pour demain sont déjà ouvertes ! Premier créneau à <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> le <strong>{jourDemain}</strong>.
+                      </p>
+                    ) : (
+                      <p style={{ fontSize: '0.78rem', color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
+                        💡 Pour ta commande de demain chez <strong>{commercantSelectionne?.nom}</strong>, reviens à partir de <strong>{heureOuverture}</strong> ce soir !
+                      </p>
+                    )}
+                  </div>
+                )
+              })()}
+
               <h2 style={{ fontWeight: 800, fontSize: '1.15rem', marginBottom: '1rem', color: T.ink }}>Tes coordonnées</h2>
               <input placeholder="Ton prénom et nom" type="text" value={client.nom} onChange={e => setClient(p => ({ ...p, nom: e.target.value }))} style={inputSt}/>
               <input placeholder="Email" type="email" value={client.email} onChange={e => setClient(p => ({ ...p, email: e.target.value }))} style={inputSt}/>

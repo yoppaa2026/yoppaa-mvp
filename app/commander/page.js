@@ -506,7 +506,7 @@ export default function Commander() {
                   {commercantSelectionne?.logo_url ? <img src={commercantSelectionne.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <span style={{ fontSize: '1.5rem' }}>🏪</span>}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: T.ink, marginBottom: 4 }}>{commercantSelectionne?.nom}</h2>
+                  <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: T.deep, marginBottom: 4 }}>{commercantSelectionne?.nom}</h2>
                   {commercantSelectionne?.adresse && <p style={{ fontSize: '0.78rem', color: '#b0a0c8', marginBottom: 5 }}>📍 {commercantSelectionne.adresse}</p>}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     <Etoiles note={noteMoyenne(avisCommerce)} taille={13}/>
@@ -518,8 +518,8 @@ export default function Commander() {
               {articles.map(article => (
                 <div key={article.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.95rem' }}>{article.nom}</p>
-                    {article.description && <p style={{ fontSize: '0.78rem', color: '#888', marginBottom: 4, lineHeight: 1.4 }}>{article.description}</p>}
+                    <p style={{ fontWeight: 700, color: T.deep, marginBottom: 2, fontSize: '0.95rem' }}>{article.nom}</p>
+                    {article.description && <p style={{ fontSize: '0.78rem', color: T.muted, marginBottom: 4, lineHeight: 1.4 }}>{article.description}</p>}
                     <p style={{ fontSize: '0.95rem', color: T.main, fontWeight: 800 }}>{Number(article.prix).toFixed(2)}€</p>
                     {article.stock_jour === 0 && <span style={{ fontSize: '0.7rem', background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>Épuisé</span>}
                   </div>
@@ -539,7 +539,7 @@ export default function Commander() {
 
               {avisCommerce.length > 0 && (
                 <div style={{ marginTop: '1.25rem' }}>
-                  <h3 style={{ fontWeight: 800, fontSize: '1rem', color: T.ink, marginBottom: '0.625rem' }}>Avis clients</h3>
+                  <h3 style={{ fontWeight: 800, fontSize: '1rem', color: T.deep, marginBottom: '0.625rem' }}>Avis clients</h3>
                   {avisCommerce.map(a => (
                     <div key={a.id} style={{ ...card, marginBottom: '0.5rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
@@ -571,19 +571,31 @@ export default function Commander() {
           {/* ÉTAPE 3 — Créneau */}
           {etape === 3 && (
             <div style={{ padding: '1rem' }}>
-              <h2 style={{ fontWeight: 800, fontSize: '1.15rem', marginBottom: '1rem', color: T.ink }}>Choisis ton créneau</h2>
+              <div style={{ marginBottom: '1rem' }}>
+                <p style={{ fontSize: '0.75rem', fontWeight: 700, color: T.mid, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
+                  {new Date().toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })} · {commercantSelectionne?.nom}
+                </p>
+                <h2 style={{ fontWeight: 800, fontSize: '1.15rem', color: T.ink }}>Choisis ton créneau</h2>
+              </div>
               <div className="grid3" style={{ marginBottom: '1.25rem' }}>
                 {creneaux.map(c => {
-                  const passe = heureEnMinutes(c.heure_fin) < maintenant()
+                  const passe = heureEnMinutes(c.heure_debut) <= maintenant()
+                  if (passe) return null  // Masquer complètement les créneaux passés
                   return (
                     <div key={c.id}
-                      onClick={() => !passe && setCreneauChoisi(c.id)}
-                      style={{ padding: '0.875rem 0.5rem', borderRadius: 12, border: `2px solid ${passe ? '#E5E7EB' : creneauChoisi===c.id ? T.main : T.pale}`, background: passe ? '#F9FAFB' : creneauChoisi===c.id ? T.pale : '#fff', cursor: passe ? 'default' : 'pointer', textAlign: 'center', fontWeight: 700, color: passe ? '#D1D5DB' : T.ink, fontSize: '0.875rem', transition: 'all 0.15s', position: 'relative' }}>
+                      onClick={() => setCreneauChoisi(c.id)}
+                      style={{ padding: '0.875rem 0.5rem', borderRadius: 12, border: `2px solid ${creneauChoisi===c.id ? T.main : T.pale}`, background: creneauChoisi===c.id ? T.pale : '#fff', cursor: 'pointer', textAlign: 'center', fontWeight: 700, color: T.ink, fontSize: '0.875rem', transition: 'all 0.15s' }}>
                       {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
-                      {passe && <div style={{ fontSize: '0.6rem', color: '#9CA3AF', fontWeight: 600, marginTop: 3 }}>Reviens demain !</div>}
                     </div>
                   )
                 })}
+                {creneaux.every(c => heureEnMinutes(c.heure_debut) <= maintenant()) && (
+                  <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '1.5rem', color: T.muted, fontSize: '0.875rem' }}>
+                    <p style={{ fontSize: '1.5rem', marginBottom: 8 }}>🕐</p>
+                    <p style={{ fontWeight: 700, marginBottom: 4 }}>Plus de créneaux disponibles aujourd'hui</p>
+                    <p style={{ fontSize: '0.8rem' }}>Reviens demain !</p>
+                  </div>
+                )}
               </div>
 
               <h2 style={{ fontWeight: 800, fontSize: '1.15rem', marginBottom: '1rem', color: T.ink }}>Tes coordonnées</h2>
@@ -674,7 +686,7 @@ export default function Commander() {
                         <div>
                           <p style={{ fontWeight: 800, color: T.ink, marginBottom: 2, fontSize: '1rem' }}>{c.commercant?.nom}</p>
                           <p style={{ fontSize: '0.78rem', color: '#16A34A', fontWeight: 600 }}>
-                            🟢 Prête · {c.creneau ? `${c.creneau.heure_debut.slice(0,5)} – ${c.creneau.heure_fin.slice(0,5)}` : ''}
+                            🟢 Prête · {new Date(c.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}
                           </p>
                         </div>
                         <p style={{ fontWeight: 800, color: T.main, fontSize: '1rem' }}>{Number(c.total).toFixed(2)}€</p>

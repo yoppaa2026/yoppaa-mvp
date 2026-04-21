@@ -133,8 +133,8 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
   const statutConfig = {
     ouvert:  { dot: '#16A34A', label: 'Créneaux disponibles',     labelColor: '#16A34A' },
     urgent:  { dot: '#EA580C', label: 'Réserve vite !',           labelColor: '#EA580C' },
-    complet: { dot: '#DC2626', label: 'Complet pour aujourd'hui', labelColor: '#DC2626' },
-    ferme:   { dot: '#9CA3AF', label: 'Fermé aujourd'hui',        labelColor: '#9CA3AF' },
+    complet: { dot: '#DC2626', label: "Complet pour aujourd'hui", labelColor: '#DC2626' },
+    ferme:   { dot: '#9CA3AF', label: "Fermé aujourd'hui",        labelColor: '#9CA3AF' },
   }
   const sc = statutConfig[statut] || null
 

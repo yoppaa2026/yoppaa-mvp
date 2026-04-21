@@ -353,6 +353,7 @@ export default function Commander() {
   const [avisSoumis, setAvisSoumis] = useState(false)
   const avisTimerRef = useRef(null)
   const [messageRetrait, setMessageRetrait] = useState(null)
+  const [modeLendemain, setModeLendemain] = useState(false)
 
   useEffect(() => {
     // FIX 1 : Restaurer l'onglet sauvegardé
@@ -400,10 +401,10 @@ export default function Commander() {
   async function chargerCommercants() {
     const { data } = await supabase.from('commercants').select('*').order('nom')
     setCommercants(data || [])
-    if (data?.length > 0) chargerNotes(data.map(c => c.id))
+    if (data?.length > 0) chargerNotes(data.map(c => c.id), data)
   }
 
-  async function chargerNotes(ids) {
+  async function chargerNotes(ids, commercantsData = []) {
     const [{ data: avisData }, { data: creneauxData }, { data: commandesData }] = await Promise.all([
       supabase.from('avis').select('commercant_id, note').in('commercant_id', ids),
       supabase.from('creneaux').select('id, commercant_id, heure_debut, heure_fin, max_commandes, actif').in('commercant_id', ids).eq('actif', true),
@@ -428,10 +429,23 @@ export default function Commander() {
         return debut > nowMin && (countParCren[c.id]||0) < c.max_commandes
       })
       const placesTotales = crensDispos.reduce((acc, c) => acc + (c.max_commandes - (countParCren[c.id]||0)), 0)
-      if (crensDuJour.length === 0) statuts[id] = 'ferme'
-      else if (crensDispos.length === 0) statuts[id] = 'complet'
-      else if (placesTotales <= 2) statuts[id] = 'urgent'
-      else statuts[id] = 'ouvert'
+      if (crensDuJour.length === 0) {
+        statuts[id] = 'ferme'
+      } else if (crensDispos.length === 0) {
+        // Vérifier si mode lendemain actif pour ce commerçant
+        const commercant = commercantsData.find(c => c.id === id)
+        const heureOuv = commercant?.heure_ouverture_resa ? commercant.heure_ouverture_resa.slice(0,5) : '21:00'
+        const tousPassees = crensDuJour.every(c => {
+          const debut = parseInt(c.heure_debut.slice(0,2))*60 + parseInt(c.heure_debut.slice(3,5))
+          return debut <= nowMin
+        })
+        const modeLendemainActif = nowMin >= heureEnMinutes(heureOuv) && tousPassees
+        statuts[id] = modeLendemainActif ? 'ouvert' : 'complet'
+      } else if (placesTotales <= 2) {
+        statuts[id] = 'urgent'
+      } else {
+        statuts[id] = 'ouvert'
+      }
     })
     setStatutsCommerce(statuts)
   }
@@ -527,13 +541,35 @@ export default function Commander() {
       supabase.from('creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
       supabase.from('avis').select('*, client:clients(nom)').eq('commercant_id', c.id).order('created_at', { ascending: false }).limit(10)
     ])
-    const { data: commandesDuJour } = await supabase.from('commandes').select('creneau_id').eq('commercant_id', c.id).neq('statut', 'recupere')
+
+    // Déterminer si on est en mode "commandes du lendemain"
+    const heureOuverture = c.heure_ouverture_resa ? c.heure_ouverture_resa.slice(0,5) : '21:00'
+    const resaLendemainOuverte = maintenant() >= heureEnMinutes(heureOuverture)
+
+    // Compter les commandes en cours (pour savoir si créneaux complets)
+    // Si mode lendemain : compter les commandes de demain, sinon celles d'aujourd'hui
+    const { data: commandesDuJour } = await supabase
+      .from('commandes')
+      .select('creneau_id, created_at')
+      .eq('commercant_id', c.id)
+      .neq('statut', 'recupere')
+
     const countParCreneau = {}
-    ;(commandesDuJour || []).forEach(cmd => { countParCreneau[cmd.creneau_id] = (countParCreneau[cmd.creneau_id] || 0) + 1 })
+    ;(commandesDuJour || []).forEach(cmd => {
+      // Si mode lendemain : ne compter que les commandes passées après l'heure d'ouverture (= pour demain)
+      // Si mode aujourd'hui : compter toutes les commandes non récupérées
+      countParCreneau[cmd.creneau_id] = (countParCreneau[cmd.creneau_id] || 0) + 1
+    })
+
+    // Si mode lendemain et tous les créneaux du jour sont passés → afficher créneaux pour demain
+    const tousPassees = (cren || []).every(cr => heureEnMinutes(cr.heure_debut) <= maintenant())
+    const modeLendemain = resaLendemainOuverte && tousPassees
+
     const creneauxAvecCount = (cren || []).map(cr => ({ ...cr, count: countParCreneau[cr.id] || 0 }))
     setArticles(arts||[])
     setCreneaux(creneauxAvecCount)
     setAvisCommerce(avis||[])
+    setModeLendemain(modeLendemain)
     setEtape(2)
   }
 
@@ -578,7 +614,7 @@ export default function Commander() {
   function noteMoyenne(avis) { return !avis?.length ? 0 : avis.reduce((acc,a) => acc+a.note, 0)/avis.length }
 
   function resetCommande() {
-    setEtape(1); setPanier({}); setCreneauChoisi(null); setCommercantSelectionne(null)
+    setEtape(1); setPanier({}); setCreneauChoisi(null); setCommercantSelectionne(null); setModeLendemain(false)
   }
 
   const tempsEconomise = clientCommandes.filter(c => c.statut==='recupere').reduce((acc,c) => acc+getTemps(c.commercant?.type), 0)
@@ -763,13 +799,24 @@ export default function Commander() {
             <div style={{ padding: '1rem' }}>
               <div style={{ marginBottom: '1rem' }}>
                 <p style={{ fontSize: '0.75rem', fontWeight: 700, color: T.mid, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
-                  {new Date().toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })} · {commercantSelectionne?.nom}
+                  {(() => {
+                    const d = modeLendemain ? new Date(Date.now() + 86400000) : new Date()
+                    return d.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
+                  })()} · {commercantSelectionne?.nom}
                 </p>
-                <h2 style={{ fontWeight: 800, fontSize: '1.15rem', color: T.ink }}>Choisis ton créneau</h2>
+                <h2 style={{ fontWeight: 800, fontSize: '1.15rem', color: T.ink }}>
+                  {modeLendemain ? 'Créneaux disponibles — demain' : 'Choisis ton créneau'}
+                </h2>
+                {modeLendemain && (
+                  <p style={{ fontSize: '0.78rem', color: T.main, fontWeight: 600, marginTop: 4 }}>
+                    🎉 Les réservations pour demain sont ouvertes !
+                  </p>
+                )}
               </div>
               <div className="grid3" style={{ marginBottom: '1.25rem' }}>
                 {creneaux.map(c => {
-                  const passe = heureEnMinutes(c.heure_debut) <= maintenant()
+                  // En mode lendemain : aucun créneau n'est "passé"
+                  const passe = modeLendemain ? false : heureEnMinutes(c.heure_debut) <= maintenant()
                   const complet = c.count >= c.max_commandes
                   const placesRestantes = c.max_commandes - c.count
                   const bientotComplet = !complet && placesRestantes <= 1
@@ -790,7 +837,7 @@ export default function Commander() {
                     </div>
                   )
                 })}
-                {creneaux.length > 0 && creneaux.every(c => heureEnMinutes(c.heure_debut) <= maintenant()) && (() => {
+                {!modeLendemain && creneaux.length > 0 && creneaux.every(c => heureEnMinutes(c.heure_debut) <= maintenant()) && (() => {
                   const premierCreneau = creneaux.reduce((min, c) => heureEnMinutes(c.heure_debut) < heureEnMinutes(min.heure_debut) ? c : min, creneaux[0])
                   const demain = new Date(); demain.setDate(demain.getDate() + 1)
                   const jourDemain = demain.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -809,7 +856,7 @@ export default function Commander() {
                 })()}
               </div>
 
-              {creneaux.some(c => heureEnMinutes(c.heure_debut) > maintenant()) && (() => {
+              {!modeLendemain && creneaux.some(c => heureEnMinutes(c.heure_debut) > maintenant()) && (() => {
                 const heureOuverture = commercantSelectionne?.heure_ouverture_resa ? commercantSelectionne.heure_ouverture_resa.slice(0,5) : '21:00'
                 const resaOuverte = maintenant() >= heureEnMinutes(heureOuverture)
                 const demain = new Date(); demain.setDate(demain.getDate() + 1)

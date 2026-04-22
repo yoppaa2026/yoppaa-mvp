@@ -118,7 +118,7 @@ export default function Dashboard() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data } = await supabase.from('commercants').select('*').eq('user_id', user.id).single()
+      const { data } = await supabase.from('commercants').select('*').eq('auth_user_id', user.id).single()
       setCommercant(data)
       if (data) chargerCommandes(data.id)
     }

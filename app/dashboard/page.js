@@ -95,6 +95,7 @@ export default function Dashboard() {
   const [commandes, setCommandes] = useState([])
   const [commercant, setCommercant] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [listeCommercants, setListeCommercants] = useState([])
   const [ongletPrincipal, setOngletPrincipal] = useState('commandes')
   const [filtreStatut, setFiltreStatut] = useState('actives')
   const [notificationsActives, setNotificationsActives] = useState(false)
@@ -118,9 +119,16 @@ export default function Dashboard() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data } = await supabase.from('commercants').select('*').eq('auth_user_id', user.id).single()
-      setCommercant(data)
-      if (data) chargerCommandes(data.id)
+      const { data } = await supabase.from('commercants').select('*').eq('auth_user_id', user.id).order('nom')
+      if (!data || data.length === 0) { router.push('/login'); return }
+      // Si un seul commerce → sélection auto, sinon → afficher le sélecteur
+      if (data.length === 1) {
+        setCommercant(data[0])
+        chargerCommandes(data[0].id)
+      } else {
+        setListeCommercants(data)
+        setLoading(false)
+      }
     }
     init()
   }, [chargerCommandes, router])
@@ -205,6 +213,32 @@ export default function Dashboard() {
     { label: 'Prêtes',     value: stats.pretes,    color: '#16A34A', bg: '#F0FDF4', border: '#16A34A20' },
     { label: 'CA du jour', value: `${stats.ca.toFixed(2)}€`, color: T.main, bg: T.pale, border: `${T.main}20` },
   ]
+
+  // Sélecteur de commerce si plusieurs liés au compte
+  if (listeCommercants.length > 0 && !commercant) return (
+    <div style={{ minHeight: '100vh', background: `linear-gradient(160deg, #160636, #2D0F6B)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: '"DM Sans", sans-serif' }}>
+      <div style={{ width: '100%', maxWidth: 400 }}>
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <p style={{ fontWeight: 900, fontSize: '2rem', letterSpacing: '-2px', color: '#fff', marginBottom: 4 }}>yoppaa</p>
+          <p style={{ color: T.light, fontSize: '0.82rem', fontWeight: 600 }}>Choisir un commerce</p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {listeCommercants.map(c => (
+            <button key={c.id} onClick={() => { setCommercant(c); setListeCommercants([]); chargerCommandes(c.id) }}
+              style={{ padding: '1rem 1.25rem', borderRadius: 14, border: `1.5px solid ${T.main}44`, background: 'rgba(255,255,255,0.06)', color: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '1rem', textAlign: 'left', transition: 'all 0.15s' }}
+              onMouseOver={e => { e.currentTarget.style.background = `${T.main}44`; e.currentTarget.style.borderColor = T.main }}
+              onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = `${T.main}44` }}>
+              <p style={{ margin: '0 0 4px' }}>{c.nom}</p>
+              <p style={{ fontSize: '0.75rem', color: T.light, margin: 0, fontWeight: 500 }}>{c.type} · {c.adresse}</p>
+            </button>
+          ))}
+        </div>
+        <button onClick={seDeconnecter} style={{ width: '100%', marginTop: '1.5rem', padding: '0.75rem', borderRadius: 100, border: '1px solid #DC262633', background: '#DC262611', color: '#FCA5A5', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '0.82rem' }}>
+          Se déconnecter
+        </button>
+      </div>
+    </div>
+  )
 
   return (
     <div style={{ minHeight: '100vh', background: T.bg, fontFamily: '"DM Sans", sans-serif' }}>

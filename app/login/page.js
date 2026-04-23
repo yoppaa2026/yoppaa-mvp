@@ -41,11 +41,7 @@ export default function Login() {
       }
     })
     if (err) {
-      if (err.message?.includes('rate') || err.status === 429) {
-        setError('Attends 30 secondes avant de réessayer')
-      } else {
-        setError('Email introuvable — vérifie ton adresse')
-      }
+      setError(err.message || JSON.stringify(err))
       setLoading(false); return
     }
     setSent(true); setLoading(false)

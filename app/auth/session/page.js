@@ -1,33 +1,25 @@
 'use client'
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
-// Cette page est appelée après le clic sur le magic link.
-// Elle laisse Supabase récupérer la session depuis l'URL (hash ou params),
-// puis redirige vers le dashboard.
-
-export default function SessionPage() {
+function SessionHandler() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
   useEffect(() => {
     const next = searchParams.get('next') || '/dashboard'
 
-    // Supabase detectSessionInUrl récupère automatiquement la session
-    // depuis le hash fragment (#access_token=...) ou les query params
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         router.replace(next)
       } else {
-        // Écoute l'event auth si la session n'est pas encore dispo
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
           if (event === 'SIGNED_IN' && session) {
             subscription.unsubscribe()
             router.replace(next)
           }
         })
-        // Timeout de sécurité — si rien au bout de 5s, retour login
         setTimeout(() => {
           subscription.unsubscribe()
           router.replace('/login?error=session-expirée')
@@ -36,6 +28,10 @@ export default function SessionPage() {
     })
   }, [router, searchParams])
 
+  return null
+}
+
+export default function SessionPage() {
   return (
     <div style={{
       minHeight: '100vh',
@@ -67,6 +63,9 @@ export default function SessionPage() {
             to   { transform: scale(1.3); opacity: 1; }
           }
         `}</style>
+        <Suspense fallback={null}>
+          <SessionHandler />
+        </Suspense>
       </div>
     </div>
   )

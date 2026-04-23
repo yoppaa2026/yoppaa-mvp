@@ -243,6 +243,12 @@ export default function Dashboard() {
   return (
     <div style={{ minHeight: '100vh', background: T.bg, fontFamily: '"DM Sans", sans-serif' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+      <link rel="manifest" href="/manifest-dashboard.json" />
+      <link rel="apple-touch-icon" href="/icon-pro-192.png" />
+      <meta name="apple-mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-title" content="Yoppaa Pro" />
+      <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+      <meta name="theme-color" content="#160636" />
 
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }

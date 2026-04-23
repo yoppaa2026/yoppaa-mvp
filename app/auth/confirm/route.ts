@@ -12,11 +12,17 @@ export async function GET(request: Request) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
-    const { error } = await supabase.auth.verifyOtp({ token_hash, type: type as any })
+
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash,
+      type: type as any,
+    })
+
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`)
+      // Redirige vers la page client qui finalise la session dans le navigateur
+      return NextResponse.redirect(`${origin}/auth/session?next=${encodeURIComponent(next)}`)
     }
   }
 
-  return NextResponse.redirect(`${origin}/login`)
+  return NextResponse.redirect(`${origin}/login?error=lien-invalide`)
 }

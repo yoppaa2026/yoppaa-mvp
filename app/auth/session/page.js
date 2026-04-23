@@ -8,24 +8,29 @@ function SessionHandler() {
   const searchParams = useSearchParams()
 
   useEffect(() => {
+    const token_hash = searchParams.get('token_hash')
+    const type = searchParams.get('type')
     const next = searchParams.get('next') || '/dashboard'
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        router.replace(next)
-      } else {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-          if (event === 'SIGNED_IN' && session) {
-            subscription.unsubscribe()
-            router.replace(next)
-          }
-        })
-        setTimeout(() => {
-          subscription.unsubscribe()
-          router.replace('/login?error=session-expirée')
-        }, 5000)
-      }
-    })
+    if (token_hash && type) {
+      // Vérification du OTP côté client — la session est créée dans le navigateur
+      supabase.auth.verifyOtp({ token_hash, type }).then(({ data, error }) => {
+        if (!error && data.session) {
+          router.replace(next)
+        } else {
+          router.replace('/login?error=lien-invalide')
+        }
+      })
+    } else {
+      // Pas de token — vérifie si session déjà active
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          router.replace(next)
+        } else {
+          router.replace('/login?error=lien-invalide')
+        }
+      })
+    }
   }, [router, searchParams])
 
   return null

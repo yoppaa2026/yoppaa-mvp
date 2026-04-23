@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -8,20 +7,12 @@ export async function GET(request: Request) {
   const next = searchParams.get('next') ?? '/dashboard'
 
   if (token_hash && type) {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-
-    const { error } = await supabase.auth.verifyOtp({
-      token_hash,
-      type: type as any,
-    })
-
-    if (!error) {
-      // Redirige vers la page client qui finalise la session dans le navigateur
-      return NextResponse.redirect(`${origin}/auth/session?next=${encodeURIComponent(next)}`)
-    }
+    // On passe le token à la page client qui gère la session dans le navigateur
+    const redirectUrl = new URL(`${origin}/auth/session`)
+    redirectUrl.searchParams.set('token_hash', token_hash)
+    redirectUrl.searchParams.set('type', type)
+    redirectUrl.searchParams.set('next', next)
+    return NextResponse.redirect(redirectUrl.toString())
   }
 
   return NextResponse.redirect(`${origin}/login?error=lien-invalide`)

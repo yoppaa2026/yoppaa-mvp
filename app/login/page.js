@@ -40,7 +40,14 @@ export default function Login() {
         emailRedirectTo: `${window.location.origin}/dashboard`,
       }
     })
-    if (err) { setError('Erreur envoi — vérifie ton email'); setLoading(false); return }
+    if (err) {
+      if (err.message?.includes('rate') || err.status === 429) {
+        setError('Attends 30 secondes avant de réessayer')
+      } else {
+        setError('Email introuvable — vérifie ton adresse')
+      }
+      setLoading(false); return
+    }
     setSent(true); setLoading(false)
   }
 

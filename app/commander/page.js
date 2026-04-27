@@ -163,13 +163,35 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
   const noteInfo = notesParCommerce[c.id]
   const statut = statutsCommerce[c.id]
 
-  const statutConfig = {
-    ouvert:  { dot: '#16A34A', label: 'Ouvert',    bg: '#F0FDF4', color: '#16A34A' },
-    urgent:  { dot: '#EA580C', label: 'Réserve vite !', bg: '#FFF7ED', color: '#EA580C' },
-    complet: { dot: '#DC2626', label: 'Complet',   bg: '#FEF2F2', color: '#DC2626' },
-    ferme:   { dot: '#9CA3AF', label: 'Fermé',     bg: '#F9FAFB', color: '#9CA3AF' },
+  // ─── Badge unique fusionné : statut créneaux + horaires + J+1 ───
+  function getBadgeFusionne() {
+    const j = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'][new Date().getDay()]
+    const h = c.horaires_detail?.[j]
+    const ouvertPhysiquement = h?.ouvert ?? true
+    const heureOuv = c.heure_ouverture_resa ? c.heure_ouverture_resa.slice(0,5) : '21:00'
+    const [hh, mm] = heureOuv.split(':').map(Number)
+    const now = new Date(); const nowMin = now.getHours() * 60 + now.getMinutes()
+    const resaJSuivantOuverte = nowMin >= hh * 60 + mm
+
+    if (!ouvertPhysiquement && !resaJSuivantOuverte)
+      return { dot: '#9CA3AF', label: 'Actuellement fermé', bg: '#F9FAFB', color: '#9CA3AF', pulse: false }
+
+    if (statut === 'ouvert') {
+      const horaire = h ? `${h.debut.slice(0,5)}–${h.fin.slice(0,5)}` : null
+      return { dot: '#16A34A', label: horaire ? `Actuellement ouvert · ${horaire}` : 'Actuellement ouvert', bg: '#F0FDF4', color: '#16A34A', pulse: true }
+    }
+    if (statut === 'urgent') {
+      const horaire = h ? `${h.debut.slice(0,5)}–${h.fin.slice(0,5)}` : null
+      return { dot: '#EA580C', label: `Réserve vite${horaire ? ` · ${horaire}` : ''}`, bg: '#FFF7ED', color: '#EA580C', pulse: true }
+    }
+    if (statut === 'complet' || statut === 'ferme') {
+      if (resaJSuivantOuverte)
+        return { dot: T.main, label: `Réservation disponible jusqu'à J+${c.horizon_commande || 1}`, bg: T.pale, color: T.main, pulse: true }
+      return { dot: '#EA580C', label: `Complet · Résa dès ${heureOuv}`, bg: '#FFF7ED', color: '#EA580C', pulse: false }
+    }
+    return { dot: '#9CA3AF', label: 'Actuellement fermé', bg: '#F9FAFB', color: '#9CA3AF', pulse: false }
   }
-  const sc = statutConfig[statut] || statutConfig['ferme']
+  const badge = getBadgeFusionne()
 
   return (
     <div onClick={() => onSelect(c)}
@@ -178,19 +200,13 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
       onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(107,53,196,0.07)' }}>
 
       {/* Mini bannière colorée */}
-      <div style={{ height: 6, background: `linear-gradient(90deg, ${T.main}, ${T.mid})` }}/>
+      <div style={{ height: 5, background: `linear-gradient(90deg, ${T.main}, ${T.mid})` }}/>
 
       <div style={{ padding: '0.875rem 1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Nom + statut */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-              <p style={{ fontWeight: 900, color: T.ink, margin: 0, fontSize: '1rem', letterSpacing: '-0.3px' }}>{c.nom}</p>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: sc.bg, borderRadius: 100, padding: '2px 8px', flexShrink: 0 }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc.dot, boxShadow: `0 0 5px ${sc.dot}88` }}/>
-                <span style={{ fontSize: '0.65rem', fontWeight: 700, color: sc.color }}>{sc.label}</span>
-              </span>
-            </div>
+            {/* Nom */}
+            <p style={{ fontWeight: 900, color: T.ink, margin: '0 0 6px', fontSize: '1rem', letterSpacing: '-0.3px' }}>{c.nom}</p>
 
             <Badges type={c.type}/>
 
@@ -203,30 +219,14 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
               </span>
             </div>
 
+            {/* Badge fusionné + distance */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: badge.bg, borderRadius: 100, padding: '4px 10px', border: `1px solid ${badge.dot}22` }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: badge.dot, boxShadow: badge.pulse ? `0 0 6px ${badge.dot}88` : 'none', flexShrink: 0, animation: badge.pulse ? 'dot-pulse 2s ease-in-out infinite' : 'none' }}/>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: badge.color }}>{badge.label}</span>
+              </span>
               {c.distance != null && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: T.pale, borderRadius: 100, padding: '3px 10px', fontSize: '0.7rem', fontWeight: 700, color: T.main }}>
-                  📍 {formatDistance(c.distance)}
-                </span>
-              )}
-              {c.horaires_detail && (() => {
-                const j = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'][new Date().getDay()]
-                const h = c.horaires_detail[j]
-                if (!h) return null
-                return h.ouvert ? (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#F0FDF4', borderRadius: 100, padding: '3px 10px', border: '1px solid #16A34A22' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A', boxShadow: '0 0 5px #16A34A88' }}/>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#16A34A' }}>Ouvert · {h.debut.slice(0,5)}–{h.fin.slice(0,5)}</span>
-                  </span>
-                ) : (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#FEF2F2', borderRadius: 100, padding: '3px 10px', border: '1px solid #DC262622' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#DC2626' }}/>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#DC2626' }}>Fermé aujourd'hui</span>
-                  </span>
-                )
-              })()}
-              {!c.horaires_detail && c.horaires && (
-                <span style={{ fontSize: '0.7rem', color: T.muted, fontWeight: 500 }}>🕐 {c.horaires}</span>
+                <span style={{ fontSize: '0.7rem', color: T.muted, fontWeight: 500 }}>📍 {formatDistance(c.distance)}</span>
               )}
             </div>
           </div>
@@ -475,6 +475,7 @@ export default function Commander() {
         @keyframes tribu-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.7; transform:scale(1.15); } }
         @keyframes tribu-pulse2 { 0%,100% { opacity:0.85; transform:scale(1); } 50% { opacity:0.5; transform:scale(1.1); } }
         @keyframes tribu-pulse3 { 0%,100% { opacity:0.6; transform:scale(1); } 50% { opacity:0.3; transform:scale(1.05); } }
+        @keyframes dot-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.4); opacity:0.7; } }
         @keyframes dot-pop { 0% { opacity:0; transform:scale(0) translateY(8px); } 70% { transform:scale(1.3) translateY(-4px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
         @keyframes wordmark-in { 0% { opacity:0; letter-spacing: 8px; } 100% { opacity:1; letter-spacing: -2px; } }
         @keyframes tagline-in { 0% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
@@ -494,13 +495,18 @@ export default function Commander() {
           {/* Top row — logo + géoloc */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1rem 0' }}>
             <div>
-              <div style={{ display: 'flex', gap: 5, marginBottom: 5 }}>
-                {[{o:0.4,c:'#fff'},{o:1,c:T.light},{o:1,c:T.mid}].map((d,i) => (
-                  <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 6px ${d.c}66` }}/>
+              {/* 3 points yo·pp·aa — plus grands, animés */}
+              <div style={{ display: 'flex', gap: 7, marginBottom: 8 }}>
+                {[
+                  { c: '#fff',   o: 0.35, delay: '0s',    size: 9 },
+                  { c: T.light,  o: 1,    delay: '0.3s',  size: 11 },
+                  { c: T.mid,    o: 1,    delay: '0.6s',  size: 9 },
+                ].map((d, i) => (
+                  <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 10px ${d.c}88`, animation: `dot-pulse 2s ease-in-out ${d.delay} infinite` }}/>
                 ))}
               </div>
-              <p style={{ fontWeight: 900, fontSize: '1.6rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1 }}>yoppaa</p>
-              <p style={{ color: T.light, fontSize: '0.7rem', marginTop: 2, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase' }}>Skip the wait</p>
+              <p style={{ fontWeight: 900, fontSize: '2rem', letterSpacing: '-2.5px', color: '#fff', lineHeight: 1, textShadow: `0 0 40px ${T.mid}66` }}>yoppaa</p>
+              <p style={{ color: T.light, fontSize: '0.62rem', marginTop: 3, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', opacity: 0.8 }}>Skip the wait</p>
             </div>
             {/* Localisation — GPS ou manuelle */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
@@ -609,18 +615,37 @@ export default function Commander() {
 
           {/* COMMANDES */}
           {onglet === 'commandes' && (
-            <div style={{ padding: '0.875rem 1rem 1rem' }}>
+            <div>
+              {/* Hero header commandes */}
+              <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #1e0950 100%)`, padding: '1.25rem 1rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 30%, ${T.main}44 0%, transparent 60%)`, pointerEvents: 'none' }}/>
+                <p style={{ fontSize: '0.62rem', fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 6, opacity: 0.7 }}>Yoppers</p>
+                <h2 style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px' }}>Mes commandes</h2>
+                {badgeCommandes > 0 && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.12)', borderRadius: 100, padding: '4px 12px', marginTop: 8, border: '1px solid rgba(255,255,255,0.15)' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#16A34A', boxShadow: '0 0 6px #16A34A88', animation: 'dot-pulse 2s ease-in-out infinite' }}/>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff' }}>{badgeCommandes} commande{badgeCommandes > 1 ? 's' : ''} en cours</span>
+                  </div>
+                )}
+              </div>
+              <div style={{ padding: '1rem 1rem 1rem' }}>
               {commandesASwiper.length > 0 && (
                 <>
-                  <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: T.ink, marginBottom: '0.75rem' }}>📦 Prêtes à récupérer</h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>📦 Prêtes à récupérer</span>
+                    <span style={{ background: '#16A34A', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{commandesASwiper.length}</span>
+                  </div>
                   {commandesASwiper.map(c => (
-                    <div key={c.id} style={{ background: '#F0FDF4', borderRadius: 16, padding: '1.25rem', marginBottom: '0.75rem', border: '2px solid #16A34A44' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                    <div key={c.id} style={{ background: 'linear-gradient(135deg, #F0FDF4, #fff)', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '0.75rem', border: '2px solid #16A34A33', boxShadow: '0 4px 16px rgba(22,163,74,0.1)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
-                          <p style={{ fontWeight: 800, color: T.ink, marginBottom: 2 }}>{c.commercant?.nom}</p>
-                          <p style={{ fontSize: '0.78rem', color: '#16A34A', fontWeight: 600 }}>🟢 Prête{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
+                          <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>{c.commercant?.nom}</p>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#F0FDF4', borderRadius: 100, padding: '3px 10px', border: '1px solid #16A34A22' }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A', animation: 'dot-pulse 2s ease-in-out infinite' }}/>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#16A34A' }}>Prête{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</span>
+                          </span>
                         </div>
-                        <p style={{ fontWeight: 800, color: T.main }}>{Number(c.total).toFixed(2)}€</p>
+                        <p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
                       </div>
                     </div>
                   ))}
@@ -628,19 +653,21 @@ export default function Commander() {
               )}
               {commandesEnCours.length > 0 && (
                 <>
-                  <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: T.ink, marginBottom: '0.75rem', marginTop: commandesASwiper.length > 0 ? '1rem' : 0 }}>🕐 En cours</h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, marginTop: commandesASwiper.length > 0 ? '1rem' : 0 }}>
+                    <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>🕐 En cours</span>
+                  </div>
                   {commandesEnCours.map(c => {
                     const sc = statutStyle[c.statut]
                     return (
-                      <div key={c.id} style={{ ...card }}>
+                      <div key={c.id} style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
-                            <p style={{ fontWeight: 800, color: T.ink, marginBottom: 2, fontSize: '0.95rem' }}>{c.commercant?.nom}</p>
-                            <p style={{ fontSize: '0.75rem', color: T.muted }}>{new Date(c.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · 🕐 ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
+                            <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>{c.commercant?.nom}</p>
+                            <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date(c.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · 🕐 ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
                           </div>
                           <div style={{ textAlign: 'right' }}>
-                            <p style={{ fontWeight: 800, color: T.main, marginBottom: 4, fontSize: '0.95rem' }}>{Number(c.total).toFixed(2)}€</p>
-                            <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: 100, background: sc.bg, color: sc.color }}>{sc.label}</span>
+                            <p style={{ fontWeight: 900, color: T.main, marginBottom: 4, fontSize: '0.95rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
+                            <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '3px 8px', borderRadius: 100, background: sc.bg, color: sc.color }}>{sc.label}</span>
                           </div>
                         </div>
                       </div>
@@ -650,108 +677,141 @@ export default function Commander() {
               )}
               {commandesASwiper.length === 0 && commandesEnCours.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '3rem 0' }}>
-                  <p style={{ fontSize: '2.5rem', marginBottom: 10 }}>🛍️</p>
-                  <p style={{ fontWeight: 700, color: T.muted, marginBottom: 6 }}>Aucune commande en cours</p>
-                  <p style={{ fontSize: '0.875rem', color: '#9CA3AF', marginBottom: '1.25rem' }}>Tes commandes actives apparaîtront ici.</p>
+                  <div style={{ fontSize: '3rem', marginBottom: 12 }}>🛍️</div>
+                  <p style={{ fontWeight: 800, color: T.ink, marginBottom: 6, fontSize: '1rem' }}>Aucune commande en cours</p>
+                  <p style={{ fontSize: '0.875rem', color: T.muted, marginBottom: '1.5rem' }}>Tes commandes actives apparaîtront ici.</p>
                   <button onClick={() => setOnglet('accueil')} style={{ ...btnPrimary, width: 'auto', padding: '0.75rem 1.5rem' }}>Commander maintenant</button>
                 </div>
               )}
               {commandesTerminees.length > 0 && (
                 <div style={{ marginTop: '1.5rem' }}>
-                  <h3 style={{ fontWeight: 800, fontSize: '0.72rem', color: T.muted, marginBottom: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historique</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historique</span>
+                    <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                  </div>
                   {commandesTerminees.slice(0, 5).map(c => (
-                    <div key={c.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', opacity: 0.7 }}>
+                    <div key={c.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.9rem' }}>{c.commercant?.nom}</p>
-                        <p style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>{new Date(c.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
+                        <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.875rem' }}>{c.commercant?.nom}</p>
+                        <p style={{ fontSize: '0.7rem', color: T.muted }}>{new Date(c.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontWeight: 700, color: T.main, marginBottom: 2, fontSize: '0.9rem' }}>{Number(c.total).toFixed(2)}€</p>
-                        <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: '#F0FDF4', color: '#16A34A' }}>✓ Récupérée</span>
+                        <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(c.total).toFixed(2)}€</p>
+                        <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: '#F0FDF4', color: '#16A34A' }}>✓ Récupérée</span>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
+              </div>
             </div>
           )}
 
           {/* FAVORIS */}
           {onglet === 'favoris' && (
-            <div style={{ padding: '0.875rem 1rem 1rem' }}>
-              <h2 style={{ fontWeight: 800, fontSize: '1.15rem', color: T.ink, marginBottom: '0.875rem' }}>Mes favoris ❤️</h2>
-              {commercantsFavoris.length === 0
-                ? <div style={{ textAlign: 'center', padding: '3rem 0' }}><p style={{ fontSize: '2.5rem', marginBottom: 10 }}>🤍</p><p style={{ fontWeight: 700, color: T.muted, marginBottom: 6 }}>Aucun favori</p><p style={{ fontSize: '0.875rem', color: '#9CA3AF' }}>Tape ❤️ sur un commerce pour le retrouver ici.</p></div>
-                : commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)
-              }
+            <div>
+              <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #3d1070 100%)`, padding: '1.25rem 1rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 20% 50%, #DC2626 0%, transparent 40%)`, opacity: 0.15, pointerEvents: 'none' }}/>
+                <p style={{ fontSize: '0.62rem', fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 6, opacity: 0.7 }}>Yoppers</p>
+                <h2 style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px' }}>Mes favoris</h2>
+                {favoris.length > 0 && (
+                  <p style={{ fontSize: '0.78rem', color: T.light, marginTop: 6, fontWeight: 600, opacity: 0.8 }}>❤️ {favoris.length} commerce{favoris.length > 1 ? 's' : ''} sauvegardé{favoris.length > 1 ? 's' : ''}</p>
+                )}
+              </div>
+              <div style={{ padding: '1rem' }}>
+                {commercantsFavoris.length === 0
+                  ? <div style={{ textAlign: 'center', padding: '3rem 0' }}>
+                      <div style={{ fontSize: '3rem', marginBottom: 12 }}>🤍</div>
+                      <p style={{ fontWeight: 800, color: T.ink, marginBottom: 6 }}>Aucun favori</p>
+                      <p style={{ fontSize: '0.875rem', color: T.muted }}>Tape ❤️ sur un commerce pour le retrouver ici.</p>
+                    </div>
+                  : commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)
+                }
+              </div>
             </div>
           )}
 
           {/* TRIBU */}
           {onglet === 'tribu' && (
-            <div style={{ padding: '0.875rem 1rem 1rem' }}>
-              <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 20, padding: '1.5rem', marginBottom: '1rem', color: '#fff', textAlign: 'center' }}>
-                <svg viewBox="0 0 64 36" width="64" height="36" fill="none" style={{ marginBottom: 10 }}>
-                  <circle cx="10" cy="18" r="10" fill="#fff" style={{ animation: 'tribu-pulse 2s ease-in-out infinite' }}/>
-                  <circle cx="32" cy="12" r="10" fill={T.light} style={{ animation: 'tribu-pulse2 2s ease-in-out infinite 0.3s' }}/>
-                  <circle cx="54" cy="18" r="10" fill={T.mid} style={{ animation: 'tribu-pulse3 2s ease-in-out infinite 0.6s' }}/>
-                </svg>
-                <p style={{ fontWeight: 900, fontSize: '1.2rem', letterSpacing: '-0.5px', marginBottom: 6 }}>La Tribu Yoppaa</p>
-                <p style={{ fontSize: '0.85rem', color: T.light, lineHeight: 1.6 }}>
+            <div>
+              {/* Hero tribu full-width */}
+              <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.main} 100%)`, padding: '2rem 1rem 3rem', position: 'relative', overflow: 'hidden', textAlign: 'center' }}>
+                <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 50% 100%, ${T.light}33 0%, transparent 60%)`, pointerEvents: 'none' }}/>
+                {/* 3 cercles animés */}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 20 }}>
+                  {[
+                    { c: '#fff', delay: '0s', size: 44, opacity: 0.9, anim: 'tribu-pulse' },
+                    { c: T.light, delay: '0.3s', size: 52, opacity: 1, anim: 'tribu-pulse2' },
+                    { c: T.mid, delay: '0.6s', size: 44, opacity: 0.8, anim: 'tribu-pulse3' },
+                  ].map((d, i) => (
+                    <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.opacity, boxShadow: `0 4px 20px ${d.c}66`, animation: `${d.anim} 2s ease-in-out ${d.delay} infinite` }}/>
+                  ))}
+                </div>
+                <p style={{ fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-1px', marginBottom: 8 }}>La Tribu Yoppaa</p>
+                <p style={{ fontSize: '0.875rem', color: T.light, lineHeight: 1.6, opacity: 0.9 }}>
                   Tu as fait la file chez un commerçant et tu penses<br/>qu'il mériterait Yoppaa ? Dis-le nous !
                 </p>
               </div>
-              <SuggestionForm clientId={clientId}/>
+              <div style={{ padding: '1rem', marginTop: '-1.5rem' }}>
+                <SuggestionForm clientId={clientId}/>
+              </div>
             </div>
           )}
 
           {/* PROFIL */}
           {onglet === 'profil' && (
-            <div style={{ padding: '0.875rem 1rem 1rem' }}>
-              <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, borderRadius: 20, padding: '1.5rem', marginBottom: '1rem', border: `1px solid ${T.main}44` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{ width: 56, height: 56, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', flexShrink: 0, boxShadow: `0 4px 16px ${T.main}44` }}>👤</div>
+            <div>
+              {/* Hero profil */}
+              <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #1e0950 100%)`, padding: '1.5rem 1rem 2.5rem', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 50%, ${T.main}44 0%, transparent 50%)`, pointerEvents: 'none' }}/>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
+                  <div style={{ width: 60, height: 60, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', flexShrink: 0, boxShadow: `0 6px 20px ${T.main}66, 0 0 0 3px rgba(255,255,255,0.15)` }}>👤</div>
                   <div>
                     {client.nom
-                      ? <><p style={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff', marginBottom: 2 }}>{client.nom}</p><p style={{ fontSize: '0.8rem', color: T.light }}>{client.email}</p></>
-                      : <><p style={{ fontWeight: 800, color: '#fff', marginBottom: 4 }}>Les Yoppers</p><p style={{ fontWeight: 600, color: T.light, fontSize: '0.82rem' }}>Passe une commande pour créer ton profil</p></>
+                      ? <><p style={{ fontWeight: 900, fontSize: '1.15rem', color: '#fff', marginBottom: 2, letterSpacing: '-0.3px' }}>{client.nom}</p><p style={{ fontSize: '0.78rem', color: T.light, opacity: 0.8 }}>{client.email}</p></>
+                      : <><p style={{ fontWeight: 900, color: '#fff', marginBottom: 4, fontSize: '1.1rem' }}>Les Yoppers 🟣</p><p style={{ fontWeight: 600, color: T.light, fontSize: '0.8rem', opacity: 0.8 }}>Passe une commande pour créer ton profil</p></>
                     }
                   </div>
                 </div>
               </div>
 
-              <div style={{ ...card, textAlign: 'center', padding: '1.5rem', background: `linear-gradient(135deg, ${T.pale}, #fff)` }}>
-                <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>⏱ Temps économisé en file</p>
-                <p style={{ fontSize: '3.5rem', fontWeight: 900, color: T.main, letterSpacing: '-2px', marginBottom: 6, lineHeight: 1 }}>
-                  {tempsEconomise >= 60 ? `${Math.floor(tempsEconomise/60)}h${tempsEconomise%60>0?tempsEconomise%60+'min':''}` : `${tempsEconomise} min`}
-                </p>
-                <p style={{ fontSize: '0.875rem', color: T.muted }}>
-                  {clientCommandes.filter(c=>c.statut==='recupere').length} commande{clientCommandes.filter(c=>c.statut==='recupere').length>1?'s':''} sans faire la file 🎉
-                </p>
-              </div>
+              <div style={{ padding: '0 1rem 1rem', marginTop: '-1.25rem' }}>
+                {/* Stat principale */}
+                <div style={{ background: '#fff', borderRadius: 20, padding: '1.5rem', marginBottom: '0.875rem', textAlign: 'center', boxShadow: `0 4px 20px ${T.main}14`, border: `1px solid ${T.pale}` }}>
+                  <p style={{ fontSize: '0.65rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>⏱ Temps économisé en file</p>
+                  <p style={{ fontSize: '3.5rem', fontWeight: 900, color: T.main, letterSpacing: '-3px', marginBottom: 4, lineHeight: 1 }}>
+                    {tempsEconomise >= 60 ? `${Math.floor(tempsEconomise/60)}h${tempsEconomise%60>0?tempsEconomise%60+'min':''}` : `${tempsEconomise} min`}
+                  </p>
+                  <p style={{ fontSize: '0.82rem', color: T.muted }}>
+                    {clientCommandes.filter(c=>c.statut==='recupere').length} commande{clientCommandes.filter(c=>c.statut==='recupere').length>1?'s':''} sans faire la file 🎉
+                  </p>
+                </div>
 
-              <div className="grid2" style={{ marginBottom: '0.875rem' }}>
-                {[
-                  { label: 'Commandes', value: clientCommandes.length, color: T.main },
-                  { label: 'Total dépensé', value: `${clientCommandes.reduce((acc,c)=>acc+Number(c.total),0).toFixed(0)}€`, color: T.mid },
-                ].map((s,i) => (
-                  <div key={i} style={{ ...card, textAlign: 'center', padding: '0.875rem', marginBottom: 0 }}>
-                    <p style={{ fontSize: '0.65rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>{s.label}</p>
-                    <p style={{ fontSize: '1.8rem', fontWeight: 900, color: s.color, letterSpacing: '-1px' }}>{s.value}</p>
-                  </div>
-                ))}
-              </div>
+                {/* Stats grid */}
+                <div className="grid2" style={{ marginBottom: '0.875rem' }}>
+                  {[
+                    { label: 'Commandes', value: clientCommandes.length, color: T.main, bg: T.pale, icon: '📦' },
+                    { label: 'Total dépensé', value: `${clientCommandes.reduce((acc,c)=>acc+Number(c.total),0).toFixed(0)}€`, color: T.mid, bg: `${T.mid}18`, icon: '💰' },
+                  ].map((s,i) => (
+                    <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '1rem', textAlign: 'center', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>
+                      <p style={{ fontSize: '1.2rem', marginBottom: 4 }}>{s.icon}</p>
+                      <p style={{ fontSize: '0.62rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 5 }}>{s.label}</p>
+                      <p style={{ fontSize: '1.75rem', fontWeight: 900, color: s.color, letterSpacing: '-1px' }}>{s.value}</p>
+                    </div>
+                  ))}
+                </div>
 
-              {client.email && (
-                <button onClick={() => {
-                  localStorage.removeItem('yoppaa_email'); localStorage.removeItem('yoppaa_nom'); localStorage.removeItem('yoppaa_client_id'); localStorage.removeItem('yoppaa_onglet')
-                  setClient({ nom:'', email:'', telephone:'' }); setClientId(null)
-                  setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
-                  setOngletState('accueil')
-                }} style={{ width: '100%', marginTop: '0.5rem', padding: '0.875rem', background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.95rem' }}>
-                  Se déconnecter
-                </button>
-              )}
+                {client.email && (
+                  <button onClick={() => {
+                    localStorage.removeItem('yoppaa_email'); localStorage.removeItem('yoppaa_nom'); localStorage.removeItem('yoppaa_client_id'); localStorage.removeItem('yoppaa_onglet')
+                    setClient({ nom:'', email:'', telephone:'' }); setClientId(null)
+                    setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
+                    setOngletState('accueil')
+                  }} style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: '#DC2626', border: '1.5px solid #DC262633', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem' }}>
+                    Se déconnecter
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

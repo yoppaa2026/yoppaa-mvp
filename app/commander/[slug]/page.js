@@ -241,6 +241,8 @@ export default function CommanderSlug() {
   const [rgpdMarketing, setRgpdMarketing] = useState(false)
   const [clientId, setClientId] = useState(null)
   const [modeLendemain, setModeLendemain] = useState(false)
+  const [joursDispos, setJoursDispos] = useState([])
+  const [jourSelectionne, setJourSelectionne] = useState(0)
   const [optionsParArticle, setOptionsParArticle] = useState({})
   const [derniereCommande, setDerniereCommande] = useState(null)
 
@@ -282,18 +284,46 @@ export default function CommanderSlug() {
       setNotesInfo({ moyenne: avisNotes.reduce((a, x) => a + x.note, 0) / avisNotes.length, count: avisNotes.length })
     }
 
+    const horizon = c.horizon_commande || 1
     const heureOuverture = c.heure_ouverture_resa ? c.heure_ouverture_resa.slice(0,5) : '21:00'
-    const resaLendemainOuverte = maintenant() >= heureEnMinutes(heureOuverture)
-    const { data: commandesDuJour } = await supabase.from('commandes').select('creneau_id').eq('commercant_id', c.id).neq('statut', 'recupere')
+    const now = maintenant()
+    const resaOuverte = now >= heureEnMinutes(heureOuverture)
+
+    // Charger toutes les commandes actives (pour compter les places prises)
+    const { data: commandesActives } = await supabase
+      .from('commandes').select('creneau_id, date_commande').eq('commercant_id', c.id).neq('statut', 'recupere')
 
     const countParCreneau = {}
-    ;(commandesDuJour || []).forEach(cmd => {
+    ;(commandesActives || []).forEach(cmd => {
       countParCreneau[cmd.creneau_id] = (countParCreneau[cmd.creneau_id] || 0) + 1
     })
 
-    const tousPassees = (cren || []).every(cr => heureEnMinutes(cr.heure_debut) <= maintenant())
-    const modeLend = resaLendemainOuverte && tousPassees
+    // Générer les jours disponibles selon l'horizon
+    const joursDispos = []
+    const today = new Date(); today.setHours(0,0,0,0)
+
+    // Jour 0 = aujourd'hui — uniquement si des créneaux futurs existent
     const creneauxAvecCount = (cren || []).map(cr => ({ ...cr, count: countParCreneau[cr.id] || 0 }))
+    const crensDisposAujourdhui = creneauxAvecCount.filter(cr => heureEnMinutes(cr.heure_debut) > now)
+
+    if (crensDisposAujourdhui.length > 0) {
+      joursDispos.push({ date: new Date(today), label: "Aujourd'hui", creneaux: creneauxAvecCount })
+    }
+
+    // Jours suivants selon horizon (si résa ouverte OU horizon > 1)
+    const maxJours = resaOuverte ? horizon : Math.max(horizon - 1, 0)
+    for (let i = 1; i <= maxJours; i++) {
+      const d = new Date(today); d.setDate(d.getDate() + i)
+      const label = i === 1 ? 'Demain' : d.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
+      // Pour les jours futurs : tous les créneaux sont disponibles (pas de notion "passé")
+      const crensFuturs = creneauxAvecCount.map(cr => ({ ...cr, count: 0 })) // reset count pour jours futurs
+      joursDispos.push({ date: d, label, creneaux: crensFuturs })
+    }
+
+    // Si aucun jour dispo aujourd'hui mais horizon = 1 et résa pas encore ouverte
+    if (joursDispos.length === 0) {
+      joursDispos.push({ date: new Date(today), label: "Aujourd'hui", creneaux: creneauxAvecCount })
+    }
 
     const artIds = (arts||[]).map(a => a.id)
     let opts = {}
@@ -312,8 +342,10 @@ export default function CommanderSlug() {
     setArticles(arts||[])
     setOptionsParArticle(opts)
     setCreneaux(creneauxAvecCount)
+    setJoursDispos(joursDispos)
+    setJourSelectionne(0)
     setAvisCommerce(avis||[])
-    setModeLendemain(modeLend)
+    setModeLendemain(joursDispos[0]?.label !== "Aujourd'hui")
     setLoading(false)
   }
 
@@ -658,62 +690,84 @@ export default function CommanderSlug() {
 
           {/* ÉTAPE 3 — Créneau + coordonnées + RGPD */}
           {etape === 3 && commercant && (
-            <div style={{ padding: '1rem' }}>
-              {/* Titre */}
-              <div style={{ marginBottom: '1rem' }}>
-                <p style={{ fontSize: '0.75rem', fontWeight: 700, color: T.mid, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
-                  {(() => {
-                    const d = modeLendemain ? new Date(Date.now() + 86400000) : new Date()
-                    return d.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
-                  })()} · {commercant.nom}
-                </p>
-                <h2 style={{ fontWeight: 900, fontSize: '1.2rem', color: T.ink, letterSpacing: '-0.5px' }}>
-                  {modeLendemain ? 'Créneaux disponibles — demain' : 'Choisis ton créneau'}
+            <div>
+              {/* ── Header hype étape 3 ── */}
+              <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.main} 100%)`, padding: '1.25rem 1rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}44 0%, transparent 50%), radial-gradient(circle at 20% 80%, ${T.light}18 0%, transparent 50%)`, pointerEvents: 'none' }}/>
+                <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 6, opacity: 0.8 }}>{commercant.nom}</p>
+                <h2 style={{ fontWeight: 900, fontSize: '1.3rem', color: '#fff', letterSpacing: '-0.5px', marginBottom: 0, textShadow: `0 2px 12px ${T.deep}88` }}>
+                  Choisis ta date<br/>et ton créneau
                 </h2>
-                {modeLendemain && (
-                  <p style={{ fontSize: '0.78rem', color: T.main, fontWeight: 600, marginTop: 4 }}>
-                    🎉 Les réservations pour demain sont ouvertes !
-                  </p>
-                )}
               </div>
 
-              {/* Mini récap commande */}
-              <div style={{ background: `linear-gradient(135deg, ${T.pale}, #fff)`, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
-                <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>🛒 Ta commande</p>
-                {Object.values(panier).map((item, i) => {
-                  const supplement = item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0
-                  return (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: 3 }}>
-                      <span style={{ color: T.ink, fontWeight: 600 }}>{item.quantite}× {item.nom}</span>
-                      <span style={{ color: T.main, fontWeight: 800 }}>{((item.prix + supplement) * item.quantite).toFixed(2)}€</span>
-                    </div>
-                  )
-                })}
-                <div style={{ borderTop: `1px solid ${T.main}22`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontWeight: 800, color: T.deep, fontSize: '0.875rem' }}>Total</span>
-                  <span style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.5px' }}>{totalPanier().toFixed(2)}€</span>
+              <div style={{ padding: '0 1rem 1rem', marginTop: -1 }}>
+                {/* Mini récap commande — card flottante */}
+                <div style={{ background: '#fff', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '1.25rem', border: `1.5px solid ${T.pale}`, boxShadow: `0 4px 20px ${T.main}14`, marginTop: '-1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🛒 Ta commande</span>
+                    <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                  </div>
+                  {Object.values(panier).map((item, i) => {
+                    const supplement = item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0
+                    return (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: 3 }}>
+                        <span style={{ color: T.ink, fontWeight: 600 }}>{item.quantite}× {item.nom}</span>
+                        <span style={{ color: T.main, fontWeight: 800 }}>{((item.prix + supplement) * item.quantite).toFixed(2)}€</span>
+                      </div>
+                    )
+                  })}
+                  <div style={{ borderTop: `1px solid ${T.pale}`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.82rem' }}>Total</span>
+                    <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.1rem', letterSpacing: '-0.5px' }}>{totalPanier().toFixed(2)}€</span>
+                  </div>
                 </div>
-              </div>
 
-              {/* Créneaux */}
+              {/* ── Onglets jours ── */}
+              {joursDispos.length > 1 && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: '1rem', overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+                  {joursDispos.map((jour, idx) => (
+                    <button key={idx} onClick={() => { setJourSelectionne(idx); setCreneauChoisi(null) }}
+                      style={{ flexShrink: 0, padding: '0.5rem 1.125rem', borderRadius: 100, border: `2px solid ${jourSelectionne === idx ? T.main : T.pale}`, background: jourSelectionne === idx ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: jourSelectionne === idx ? '#fff' : T.muted, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.15s', boxShadow: jourSelectionne === idx ? `0 4px 16px ${T.main}44` : 'none', fontFamily: '"DM Sans", sans-serif' }}>
+                      {jour.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Label date sélectionnée */}
+              {joursDispos[jourSelectionne] && (
+                <p style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ background: T.pale, borderRadius: 100, padding: '2px 8px', color: T.main, fontSize: '0.68rem' }}>
+                    📅 {joursDispos[jourSelectionne].label === "Aujourd'hui" || joursDispos[jourSelectionne].label === 'Demain'
+                      ? joursDispos[jourSelectionne].label
+                      : joursDispos[jourSelectionne].date.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
+                    }
+                  </span>
+                </p>
+              )}
+
+              {/* Créneaux du jour sélectionné — passés masqués */}
               <div className="grid3" style={{ marginBottom: '1.5rem' }}>
-                {creneaux.map(c => {
-                  const passe = modeLendemain ? false : heureEnMinutes(c.heure_debut) <= maintenant()
+                {(joursDispos[jourSelectionne]?.creneaux || creneaux)
+                  .filter(c => {
+                    const estAujourdhui = jourSelectionne === 0 && joursDispos[0]?.label === "Aujourd'hui"
+                    if (estAujourdhui && heureEnMinutes(c.heure_debut) <= maintenant()) return false
+                    return true
+                  })
+                  .map(c => {
                   const complet = c.count >= c.max_commandes
                   const placesRestantes = c.max_commandes - c.count
                   const bientotComplet = !complet && placesRestantes <= 1
                   const presqueComplet = !complet && placesRestantes === 2
-                  const desactive = passe || complet
                   const choisi = creneauChoisi === c.id
                   let mention = null
-                  if (passe) mention = { text: 'Passé', color: T.muted }
-                  else if (complet) mention = { text: 'Complet', color: '#DC2626' }
+                  if (complet) mention = { text: 'Complet', color: '#DC2626' }
                   else if (bientotComplet) mention = { text: '🔥 Dernière place !', color: '#EA580C' }
                   else if (presqueComplet) mention = { text: '⚡ Presque complet', color: '#D97706' }
                   return (
-                    <div key={c.id} onClick={() => !desactive && setCreneauChoisi(c.id)}
-                      style={{ padding: '0.875rem 0.5rem', borderRadius: 14, border: `2px solid ${desactive ? '#E5E7EB' : choisi ? T.main : T.pale}`, background: desactive ? '#F9FAFB' : choisi ? T.pale : '#fff', cursor: desactive ? 'default' : 'pointer', textAlign: 'center', fontWeight: 700, color: desactive ? '#D1D5DB' : T.ink, fontSize: '0.875rem', transition: 'all 0.15s', boxShadow: choisi ? `0 4px 16px ${T.main}33` : 'none' }}>
-                      <div style={{ textDecoration: complet ? 'line-through' : 'none', opacity: passe ? 0.5 : 1, fontSize: '0.875rem', letterSpacing: '-0.3px' }}>
+                    <div key={c.id} onClick={() => !complet && setCreneauChoisi(c.id)}
+                      style={{ padding: '0.875rem 0.5rem', borderRadius: 14, border: `2px solid ${complet ? '#E5E7EB' : choisi ? T.main : T.pale}`, background: complet ? '#F9FAFB' : choisi ? T.pale : '#fff', cursor: complet ? 'default' : 'pointer', textAlign: 'center', fontWeight: 700, color: complet ? '#D1D5DB' : T.ink, fontSize: '0.875rem', transition: 'all 0.15s', boxShadow: choisi ? `0 4px 16px ${T.main}33` : 'none' }}>
+                      <div style={{ textDecoration: complet ? 'line-through' : 'none', fontSize: '0.875rem', letterSpacing: '-0.3px' }}>
                         {c.heure_debut.slice(0,5)}<br/><span style={{ fontSize: '0.72rem', fontWeight: 600, color: T.muted }}>–{c.heure_fin.slice(0,5)}</span>
                       </div>
                       {mention && <div style={{ fontSize: '0.6rem', fontWeight: 800, color: mention.color, marginTop: 4, lineHeight: 1.2 }}>{mention.text}</div>}
@@ -721,27 +775,23 @@ export default function CommanderSlug() {
                     </div>
                   )
                 })}
-                {!modeLendemain && creneaux.length > 0 && creneaux.every(c => heureEnMinutes(c.heure_debut) <= maintenant()) && (() => {
-                  const premierCreneau = creneaux.reduce((min, c) => heureEnMinutes(c.heure_debut) < heureEnMinutes(min.heure_debut) ? c : min, creneaux[0])
-                  const demain = new Date(); demain.setDate(demain.getDate() + 1)
-                  const jourDemain = demain.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
-                  const heureOuverture = commercant?.heure_ouverture_resa ? commercant.heure_ouverture_resa.slice(0,5) : '21:00'
-                  const resaOuverte = maintenant() >= heureEnMinutes(heureOuverture)
-                  return (
-                    <div style={{ gridColumn: '1 / -1', background: T.pale, borderRadius: 14, padding: '1.25rem', textAlign: 'center', border: `1.5px solid ${T.main}22` }}>
-                      <p style={{ fontSize: '1.5rem', marginBottom: 8 }}>🕐</p>
-                      <p style={{ fontWeight: 800, marginBottom: 6, color: T.deep, fontSize: '0.95rem' }}>Plus de créneaux aujourd'hui</p>
-                      {resaOuverte
-                        ? <p style={{ fontSize: '0.82rem', color: T.deep, lineHeight: 1.6 }}>Les réservations pour demain sont ouvertes ! 🎉<br/>Premier créneau à <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> le <strong>{jourDemain}</strong>.</p>
-                        : <p style={{ fontSize: '0.82rem', color: T.deep, lineHeight: 1.6 }}>Reviens à partir de <strong>{heureOuverture}</strong> ce soir<br/>pour réserver dès <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> le <strong>{jourDemain}</strong>.</p>
-                      }
-                    </div>
-                  )
-                })()}
+                {/* Aucun créneau dispo sur ce jour */}
+                {(joursDispos[jourSelectionne]?.creneaux || creneaux).filter(c => {
+                  const estAujourdhui = jourSelectionne === 0 && joursDispos[0]?.label === "Aujourd'hui"
+                  if (estAujourdhui && heureEnMinutes(c.heure_debut) <= maintenant()) return false
+                  return true
+                }).length === 0 && (
+                  <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '1.5rem', color: T.muted, fontSize: '0.875rem', fontWeight: 600 }}>
+                    Aucun créneau disponible ce jour — choisis une autre date.
+                  </div>
+                )}
               </div>
 
-              {/* Coordonnées */}
-              <h2 style={{ fontWeight: 900, fontSize: '1.1rem', marginBottom: '0.875rem', color: T.ink, letterSpacing: '-0.3px' }}>Tes coordonnées</h2>
+              {/* ── Coordonnées ── */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, marginTop: 4 }}>
+                <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, letterSpacing: '-0.3px' }}>Tes coordonnées</span>
+                <div style={{ flex: 1, height: 1, background: T.pale }}/>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
                 <input placeholder="Prénom *" type="text" value={client.prenom} onChange={e => setClient(p => ({ ...p, prenom: e.target.value }))} style={{ ...inputSt, marginBottom: 0 }}/>
                 <input placeholder="Nom *" type="text" value={client.nom} onChange={e => setClient(p => ({ ...p, nom: e.target.value }))} style={{ ...inputSt, marginBottom: 0 }}/>
@@ -750,7 +800,7 @@ export default function CommanderSlug() {
               <input placeholder="Téléphone *" type="tel" value={client.telephone} onChange={e => setClient(p => ({ ...p, telephone: e.target.value }))} style={inputSt}/>
 
               {/* RGPD */}
-              <div style={{ background: T.bgCard, borderRadius: 14, border: `1.5px solid ${T.pale}`, overflow: 'hidden', marginBottom: 16 }}>
+              <div style={{ background: '#fff', borderRadius: 14, border: `1.5px solid ${T.pale}`, overflow: 'hidden', marginBottom: 16, boxShadow: '0 2px 8px rgba(107,53,196,0.05)' }}>
                 <div style={{ padding: '0.625rem 1rem', background: T.pale, borderBottom: `1px solid ${T.main}11` }}>
                   <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🔒 Confidentialité</p>
                 </div>
@@ -794,6 +844,7 @@ export default function CommanderSlug() {
                 </p>
               )}
               <p style={{ fontSize: '0.78rem', color: '#9a8ab0', textAlign: 'center', marginTop: 8, marginBottom: 24 }}>Le paiement sera activé prochainement</p>
+              </div>{/* fin padding div */}
             </div>
           )}
 

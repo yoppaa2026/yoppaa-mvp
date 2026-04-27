@@ -121,7 +121,7 @@ function Toast({ message, type }) {
 // ─── Onglet MENU ──────────────────────────────────────────────────────────────
 function TabMenu({ commercantId, toast }) {
   const [articles, setArticles] = useState([])
-  const [categories, setCategories] = useState([]) // liste des catégories uniques
+  const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [showCatForm, setShowCatForm] = useState(false)
@@ -130,6 +130,10 @@ function TabMenu({ commercantId, toast }) {
   const [nouvelleCat, setNouvelleCat] = useState('')
   const [saving, setSaving] = useState(false)
   const [catActive, setCatActive] = useState('Tous')
+  // Renommage catégorie
+  const [renamingCat, setRenamingCat] = useState(null) // nom de la cat en cours de renommage
+  const [renameValue, setRenameValue] = useState('')
+  const [renameSaving, setRenameSaving] = useState(false)
 
   useEffect(() => { fetchArticles() }, [commercantId])
 
@@ -137,19 +141,32 @@ function TabMenu({ commercantId, toast }) {
     setLoading(true)
     const { data } = await supabase.from('articles').select('*').eq('commercant_id', commercantId).order('categorie').order('nom')
     setArticles(data || [])
-    // Extraire les catégories uniques
     const cats = [...new Set((data || []).map(a => a.categorie).filter(Boolean))]
     setCategories(cats)
     setLoading(false)
   }
 
-  function openNew() { setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' ? catActive : '' }); setEditId(null); setShowForm(true) }
-  function openEdit(a) { setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '' }); setEditId(a.id); setShowForm(true) }
+  function openNew() {
+    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '' })
+    setEditId(null); setShowForm(true)
+  }
+  function openEdit(a) {
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '' })
+    setEditId(a.id); setShowForm(true)
+  }
 
   async function saveArticle() {
     if (!form.nom.trim() || !form.prix) return toast('Nom et prix obligatoires', 'error')
     setSaving(true)
-    const payload = { commercant_id: commercantId, nom: form.nom.trim(), description: form.description.trim() || null, prix: parseFloat(form.prix), stock_jour: parseInt(form.stock_jour) || 0, actif: form.actif, categorie: form.categorie.trim() || null }
+    const payload = {
+      commercant_id: commercantId,
+      nom: form.nom.trim(),
+      description: form.description.trim() || null,
+      prix: parseFloat(form.prix),
+      stock_jour: parseInt(form.stock_jour) || 0,
+      actif: form.actif,
+      categorie: form.categorie.trim() || null,
+    }
     if (editId) { await supabase.from('articles').update(payload).eq('id', editId); toast('Article mis à jour ✓') }
     else { await supabase.from('articles').insert(payload); toast('Article ajouté ✓') }
     setSaving(false); setShowForm(false); fetchArticles()
@@ -157,13 +174,38 @@ function TabMenu({ commercantId, toast }) {
 
   async function ajouterCategorie() {
     if (!nouvelleCat.trim()) return
-    // Vérifier si elle existe déjà
     if (categories.includes(nouvelleCat.trim())) { toast('Catégorie déjà existante', 'error'); return }
     setCategories(prev => [...prev, nouvelleCat.trim()])
     setCatActive(nouvelleCat.trim())
     setNouvelleCat('')
     setShowCatForm(false)
     toast('Catégorie créée ✓')
+  }
+
+  // ─── Renommer une catégorie ────────────────────────────────────────────────
+  function startRename(cat) {
+    setRenamingCat(cat)
+    setRenameValue(cat)
+  }
+
+  async function saveRename(oldCat) {
+    const newCat = renameValue.trim()
+    if (!newCat) return toast('Nom obligatoire', 'error')
+    if (newCat === oldCat) { setRenamingCat(null); return }
+    if (categories.includes(newCat)) { toast('Ce nom existe déjà', 'error'); return }
+    setRenameSaving(true)
+    // Mettre à jour tous les articles de cette catégorie
+    await supabase
+      .from('articles')
+      .update({ categorie: newCat })
+      .eq('commercant_id', commercantId)
+      .eq('categorie', oldCat)
+    toast('Catégorie renommée ✓')
+    setRenameSaving(false)
+    setRenamingCat(null)
+    // Mettre à jour la catégorie active si c'était celle renommée
+    if (catActive === oldCat) setCatActive(newCat)
+    fetchArticles()
   }
 
   async function supprimerCategorie(cat) {
@@ -188,7 +230,6 @@ function TabMenu({ commercantId, toast }) {
     toast('Article supprimé'); fetchArticles()
   }
 
-  // Articles filtrés par catégorie active
   const articlesFiltres = catActive === 'Tous' ? articles : articles.filter(a => a.categorie === catActive)
   const articlesSansCat = articles.filter(a => !a.categorie)
 
@@ -221,14 +262,54 @@ function TabMenu({ commercantId, toast }) {
       {categories.length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
           {['Tous', ...categories, ...(articlesSansCat.length > 0 ? ['Sans catégorie'] : [])].map(cat => (
-            <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <button onClick={() => setCatActive(cat)}
-                style={{ ...s.btn, padding: '5px 12px', fontSize: 12, background: catActive === cat ? T.main : T.pale, color: catActive === cat ? '#fff' : T.main }}>
-                {cat}
-              </button>
-              {cat !== 'Tous' && cat !== 'Sans catégorie' && (
-                <button onClick={() => supprimerCategorie(cat)}
-                  style={{ ...s.btn, ...s.btnDanger, padding: '5px 8px', fontSize: 11 }}>🗑</button>
+            <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              {/* Filtre actif */}
+              {renamingCat === cat ? (
+                // ─── Mode renommage inline ──────────────────────────────────
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: T.pale, borderRadius: 10, padding: '3px 6px', border: `1.5px solid ${T.main}` }}>
+                  <input
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveRename(cat); if (e.key === 'Escape') setRenamingCat(null) }}
+                    autoFocus
+                    style={{ ...s.input, width: 120, fontSize: 12, padding: '3px 8px', border: 'none', background: 'transparent', boxShadow: 'none' }}
+                  />
+                  <button
+                    onClick={() => saveRename(cat)}
+                    disabled={renameSaving}
+                    style={{ ...s.btn, ...s.btnPrimary, padding: '3px 8px', fontSize: 11 }}>
+                    {renameSaving ? '...' : '✓'}
+                  </button>
+                  <button
+                    onClick={() => setRenamingCat(null)}
+                    style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 11 }}>
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button onClick={() => setCatActive(cat)}
+                    style={{ ...s.btn, padding: '5px 12px', fontSize: 12, background: catActive === cat ? T.main : T.pale, color: catActive === cat ? '#fff' : T.main }}>
+                    {cat}
+                  </button>
+                  {/* Boutons renommer + supprimer — uniquement sur les vraies catégories */}
+                  {cat !== 'Tous' && cat !== 'Sans catégorie' && (
+                    <>
+                      <button
+                        onClick={() => startRename(cat)}
+                        title="Renommer"
+                        style={{ ...s.btn, ...s.btnGhost, padding: '5px 7px', fontSize: 11 }}>
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => supprimerCategorie(cat)}
+                        title="Supprimer"
+                        style={{ ...s.btn, ...s.btnDanger, padding: '5px 7px', fontSize: 11 }}>
+                        🗑
+                      </button>
+                    </>
+                  )}
+                </>
               )}
             </div>
           ))}
@@ -271,7 +352,6 @@ function TabMenu({ commercantId, toast }) {
         </div>
       ) : (
         <>
-          {/* Affichage par catégorie si "Tous" */}
           {catActive === 'Tous' && categories.length > 0 ? (
             <>
               {categories.map(cat => {
@@ -300,7 +380,6 @@ function TabMenu({ commercantId, toast }) {
               )}
             </>
           ) : (
-            // Vue filtrée par catégorie
             (catActive === 'Sans catégorie' ? articlesSansCat : articlesFiltres).map(a =>
               <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s}/>
             )
@@ -317,7 +396,7 @@ function OptionsArticle({ articleId, toast }) {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [formGroupe, setFormGroupe] = useState({ nom: '', type: 'multiple', obligatoire: false })
-  const [valeursForms, setValeursForms] = useState({}) // groupeId -> { nom, prix_supplement }
+  const [valeursForms, setValeursForms] = useState({})
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { fetchGroupes() }, [articleId])
@@ -365,7 +444,6 @@ function OptionsArticle({ articleId, toast }) {
         <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 11 }} onClick={() => setShowForm(v => !v)}>+ Groupe</button>
       </div>
 
-      {/* Formulaire nouveau groupe */}
       {showForm && (
         <div style={{ background: T.pale, borderRadius: 10, padding: 12, marginBottom: 10, border: `1.5px solid ${T.main}33` }}>
           <div style={{ display: 'grid', gap: 8 }}>
@@ -398,7 +476,6 @@ function OptionsArticle({ articleId, toast }) {
         </div>
       )}
 
-      {/* Liste des groupes */}
       {groupes.length === 0 && !showForm && (
         <p style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Aucune option — clique sur "+ Groupe" pour en ajouter.</p>
       )}
@@ -415,8 +492,6 @@ function OptionsArticle({ articleId, toast }) {
             </div>
             <button style={{ ...s.btn, ...s.btnDanger, padding: '3px 8px', fontSize: 11 }} onClick={() => deleteGroupe(g.id)}>🗑</button>
           </div>
-
-          {/* Valeurs existantes */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
             {(g.valeurs || []).map(v => (
               <span key={v.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 100, padding: '3px 8px 3px 10px', fontSize: 12 }}>
@@ -426,8 +501,6 @@ function OptionsArticle({ articleId, toast }) {
               </span>
             ))}
           </div>
-
-          {/* Ajouter une valeur */}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input value={valeursForms[g.id]?.nom || ''} onChange={e => setValeursForms(p => ({ ...p, [g.id]: { ...p[g.id], nom: e.target.value } }))}
               placeholder="Nouvelle option..." onKeyDown={e => e.key === 'Enter' && addValeur(g.id)}
@@ -705,12 +778,10 @@ function TabProfil({ commercantId, toast }) {
                 const h = form.horaires_detail?.[jour] || { ouvert: false, debut: '07:00', fin: '14:00' }
                 return (
                   <div key={jour} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: h.ouvert ? T.pale : '#F9FAFB', border: `1.5px solid ${h.ouvert ? T.light : '#E5E7EB'}` }}>
-                    {/* Toggle ouvert/fermé */}
                     <button onClick={() => setForm(p => ({ ...p, horaires_detail: { ...p.horaires_detail, [jour]: { ...h, ouvert: !h.ouvert } } }))}
                       style={{ width: 36, height: 20, borderRadius: 100, background: h.ouvert ? T.main : '#D1D5DB', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
                       <div style={{ position: 'absolute', top: 2, left: h.ouvert ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}/>
                     </button>
-                    {/* Nom du jour */}
                     <span style={{ fontSize: 13, fontWeight: 700, color: h.ouvert ? T.ink : T.muted, width: 76, flexShrink: 0 }}>{labels[idx]}</span>
                     {h.ouvert ? (
                       <>
@@ -863,8 +934,6 @@ export default function ConfigDashboard({ commercantId }) {
 
   return (
     <div style={{ fontFamily: '"DM Sans", sans-serif', paddingBottom: 24 }}>
-
-      {/* Onglets */}
       <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 14, marginBottom: 20, boxShadow: '0 2px 8px rgba(107,53,196,0.08)', border: `1px solid ${T.pale}`, flexWrap: 'wrap' }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}

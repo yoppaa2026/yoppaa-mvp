@@ -245,10 +245,14 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
             <div style={{ width: 56, height: 56, borderRadius: 14, background: T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(107,53,196,0.12)' }}>
               {c.logo_url ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <span style={{ fontSize: '1.5rem' }}>🏪</span>}
             </div>
-            <button onClick={e => onToggleFavori(c.id, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1, padding: 0, transition: 'transform 0.15s' }}
+            <button onClick={e => onToggleFavori(c.id, e)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, transition: 'transform 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               onMouseOver={e => e.currentTarget.style.transform = 'scale(1.2)'}
               onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}>
-              {estFavori ? '❤️' : '🤍'}
+              <svg width="22" height="22" viewBox="0 0 24 24" fill={estFavori ? '#C4A0F4' : 'none'} xmlns="http://www.w3.org/2000/svg">
+                <path d="M12,3 L14.5,9 L21.5,9.5 L16.5,14 L18.2,21 L12,17.5 L5.8,21 L7.5,14 L2.5,9.5 L9.5,9 Z"
+                  stroke={estFavori ? '#9660E0' : '#D1D5DB'} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+              </svg>
             </button>
           </div>
         </div>
@@ -518,15 +522,34 @@ export default function Commander() {
               <p style={{ color: T.light, fontSize: '0.62rem', marginTop: 3, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', opacity: 0.8 }}>Skip the wait</p>
             </div>
             {/* Localisation — GPS ou manuelle */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
+              {/* Bouton GPS hype */}
               <button onClick={() => { if (!showLocManuelle) demanderGeolocalisation(); setShowLocManuelle(false) }}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 12, padding: '0.5rem 0.875rem', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', transition: 'all 0.15s' }}>
-                <span>{geoLoading ? '⏳' : '📍'}</span>
-                <span>{geoLoading ? 'Localisation...' : rue || locManuelle || (position ? 'Position active' : 'GPS')}</span>
+                style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 14, padding: '0.5rem 0.875rem', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', transition: 'all 0.2s', letterSpacing: '-0.2px' }}>
+                {/* Icône GPS SVG */}
+                {geoLoading
+                  ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="white" strokeWidth="2.5" strokeDasharray="30 10" strokeLinecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></circle></svg>
+                  : <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="4" fill="white"/>
+                      <circle cx="12" cy="12" r="8" stroke="white" strokeWidth="2"/>
+                      <line x1="12" y1="2" x2="12" y2="4" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                      <line x1="12" y1="20" x2="12" y2="22" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                      <line x1="2" y1="12" x2="4" y2="12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                      <line x1="20" y1="12" x2="22" y2="12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                }
+                <span style={{ maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {geoLoading ? 'Localisation...' : rue || locManuelle || (position ? 'Position active' : 'Activer GPS')}
+                </span>
               </button>
+              {/* Lien saisie manuelle avec icône crayon SVG */}
               <button onClick={() => setShowLocManuelle(v => !v)}
-                style={{ background: 'none', border: 'none', color: `${T.light}99`, fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', padding: 0, letterSpacing: '0.3px' }}>
-                {showLocManuelle ? '✕ Fermer' : '✏️ Saisir manuellement'}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'rgba(196,160,244,0.7)', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+                {showLocManuelle
+                  ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="rgba(196,160,244,0.8)" strokeWidth="2.5" strokeLinecap="round"/></svg>
+                  : <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="rgba(196,160,244,0.8)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="rgba(196,160,244,0.8)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                }
+                {showLocManuelle ? 'Fermer' : 'Saisir manuellement'}
               </button>
             </div>
           </div>
@@ -535,7 +558,10 @@ export default function Commander() {
           {showLocManuelle && onglet === 'accueil' && (
             <div style={{ padding: '0 1rem 0.625rem', animation: 'fadeUp 0.2s ease' }}>
               <div style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: '0.9rem', pointerEvents: 'none' }}>📍</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                  <circle cx="12" cy="10" r="5" stroke="rgba(255,255,255,0.6)" strokeWidth="2.2"/>
+                  <path d="M12 15 C12 15 6 20 6 22 Q6 24 12 24 Q18 24 18 22 C18 20 12 15 12 15Z" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinejoin="round" fill="none"/>
+                </svg>
                 <input
                   placeholder="Ville, rue, code postal..."
                   value={locManuelle}
@@ -546,12 +572,12 @@ export default function Commander() {
                 />
                 {locManuelle && (
                   <button onClick={() => { setRue(locManuelle.trim()); setShowLocManuelle(false) }}
-                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: T.main, border: 'none', borderRadius: 8, padding: '4px 10px', color: '#fff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
+                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: T.main, border: 'none', borderRadius: 8, padding: '4px 10px', color: '#fff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                     OK
                   </button>
                 )}
               </div>
-              <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.45)', marginTop: 4, paddingLeft: 4 }}>Appuie sur Entrée ou OK pour valider</p>
+              <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.45)', marginTop: 4, paddingLeft: 4 }}>Entrée ou OK pour valider</p>
             </div>
           )}
 
@@ -563,9 +589,15 @@ export default function Commander() {
                 <span style={{ color: T.light }}>récupère sans attendre.</span>
               </p>
               {position && (
-                <p style={{ fontSize: '0.78rem', color: T.light, fontWeight: 600, marginTop: 6, opacity: 0.8 }}>
-                  📍 {commercantsFiltres.length} commerce{commercantsFiltres.length > 1 ? 's' : ''} près de toi
-                </p>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 100, padding: '4px 12px' }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="10" r="4" fill="white" opacity="0.9"/>
+                    <path d="M12 2C7.58 2 4 5.58 4 10c0 5.25 8 14 8 14s8-8.75 8-14c0-4.42-3.58-8-8-8z" stroke="white" strokeWidth="2" fill="none" opacity="0.9"/>
+                  </svg>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff', opacity: 0.9 }}>
+                    {commercantsFiltres.length} commerce{commercantsFiltres.length > 1 ? 's' : ''} près de toi
+                  </span>
+                </div>
               )}
             </div>
           )}
@@ -828,29 +860,78 @@ export default function Commander() {
         {/* ── NAV BAR ── */}
         <nav className="navbar">
           {[
-            { key: 'accueil',   label: 'Accueil',   icon: '🏠' },
-            { key: 'commandes', label: 'Commandes', icon: '📦', badge: badgeCommandes },
-            { key: 'favoris',   label: 'Favoris',   icon: '❤️', badge: favoris.length },
-            { key: 'tribu',     label: 'Tribu',     icon: 'tribu' },
-            { key: 'profil',    label: 'Profil',    icon: '👤' },
-          ].map(item => (
-            <button key={item.key} onClick={() => setOnglet(item.key)}
-              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '0.75rem 0 0.625rem', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 700, fontSize: '0.65rem', color: onglet===item.key ? T.light : '#6B7280', position: 'relative', transition: 'color 0.15s' }}>
-              {item.icon === 'tribu'
-                ? <svg viewBox="0 0 32 22" width="28" height="20" fill="none">
-                    <circle cx="6" cy="11" r="5.5" fill={onglet==='tribu'?'#fff':T.main} opacity={onglet==='tribu'?1:0.5} style={onglet==='tribu'?{filter:'drop-shadow(0 0 4px rgba(255,255,255,0.8))'}:{}}/>
-                    <circle cx="16" cy="7" r="5.5" fill={onglet==='tribu'?T.light:T.mid} opacity={onglet==='tribu'?1:0.6} style={onglet==='tribu'?{filter:'drop-shadow(0 0 4px rgba(196,160,244,0.8))'}:{}}/>
-                    <circle cx="26" cy="11" r="5.5" fill={onglet==='tribu'?T.mid:'#9CA3AF'} opacity={onglet==='tribu'?1:0.4} style={onglet==='tribu'?{filter:'drop-shadow(0 0 4px rgba(150,96,224,0.8))'}:{}}/>
+            { key: 'accueil',   label: 'Accueil',   badge: 0 },
+            { key: 'commandes', label: 'Commandes', badge: badgeCommandes },
+            { key: 'favoris',   label: 'Favoris',   badge: 0 },
+            { key: 'tribu',     label: 'Tribu',     badge: 0 },
+            { key: 'profil',    label: 'Profil',    badge: 0 },
+          ].map(item => {
+            const actif = onglet === item.key
+            const op = actif ? 1 : 0.5
+            const stroke = '#ffffff'
+            return (
+              <button key={item.key} onClick={() => setOnglet(item.key)}
+                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '0.625rem 0 0.5rem', border: 'none', background: 'transparent', cursor: 'pointer', position: 'relative' }}>
+
+                {/* ── Icône SVG ── */}
+                {item.key === 'accueil' && (
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3,10 L12,3 L21,10" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
+                    <path d="M5,10 L5,20 Q5,21 6,21 L9,21 L9,15 Q9,14 10,14 L14,14 Q15,14 15,15 L15,21 L18,21 Q19,21 19,20 L19,10" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                   </svg>
-                : <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>{item.icon}</span>
-              }
-              {item.label}
-              {item.badge > 0 && (
-                <span style={{ position: 'absolute', top: 8, left: 'calc(50% + 8px)', background: item.key==='commandes'?'#16A34A':T.main, color: '#fff', fontSize: '0.55rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100, minWidth: 16, textAlign: 'center' }}>{item.badge}</span>
-              )}
-              {onglet===item.key && <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 24, height: 3, borderRadius: 3, background: T.light }}/>}
-            </button>
-          ))}
+                )}
+
+                {item.key === 'commandes' && (
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="9" width="20" height="13" rx="3" stroke={stroke} strokeWidth="2.5" strokeLinejoin="round" opacity={op}/>
+                    <path d="M2,13 L22,13" stroke={stroke} strokeWidth="2.5" opacity={op}/>
+                    <path d="M8,9 L8,5 Q8,2 12,2 Q16,2 16,5 L16,9" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
+                    {item.badge > 0 && (
+                      <>
+                        <circle cx="19" cy="5" r="5.5" fill={T.main} stroke="white" strokeWidth="1.8"/>
+                        <text x="19" y="8.8" textAnchor="middle" fontSize="7" fontWeight="900" fill="white" fontFamily="DM Sans,sans-serif">{item.badge}</text>
+                      </>
+                    )}
+                  </svg>
+                )}
+
+                {item.key === 'favoris' && (
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12,5 L13.6,9.2 L18.2,9.6 L14.9,12.4 L15.9,17 L12,14.6 L8.1,17 L9.1,12.4 L5.8,9.6 L10.4,9.2 Z" stroke={stroke} strokeWidth="2.3" strokeLinejoin="round" strokeLinecap="round" opacity={op}/>
+                    <circle cx="8.5" cy="21" r="1.8" fill={actif ? '#C4A0F4' : stroke} opacity={actif ? 1 : 0.35}/>
+                    <circle cx="12" cy="21" r="2.2" fill={actif ? '#C4A0F4' : stroke} opacity={actif ? 1 : 0.5}/>
+                    <circle cx="15.5" cy="21" r="1.8" fill={actif ? '#9660E0' : stroke} opacity={actif ? 0.85 : 0.35}/>
+                  </svg>
+                )}
+
+                {item.key === 'tribu' && (
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="4" cy="8" r="3" stroke={stroke} strokeWidth="2.2" opacity={op * 0.7}/>
+                    <path d="M0,18 Q0,14 4,14 Q8,14 8,18" stroke={stroke} strokeWidth="2.2" strokeLinecap="round" opacity={op * 0.7}/>
+                    <circle cx="20" cy="8" r="3" stroke={stroke} strokeWidth="2.2" opacity={op * 0.7}/>
+                    <path d="M16,18 Q16,14 20,14 Q24,14 24,18" stroke={stroke} strokeWidth="2.2" strokeLinecap="round" opacity={op * 0.7}/>
+                    <circle cx="12" cy="6" r="4" stroke={stroke} strokeWidth="2.5" opacity={op}/>
+                    <path d="M5,20 Q5,15 12,15 Q19,15 19,20" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" opacity={op}/>
+                  </svg>
+                )}
+
+                {item.key === 'profil' && (
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="8" r="5" stroke={stroke} strokeWidth="2.5" opacity={op}/>
+                    <path d="M2,21 Q2,16 12,16 Q22,16 22,21" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" opacity={op}/>
+                  </svg>
+                )}
+
+                {/* Label */}
+                <span style={{ fontSize: '0.62rem', fontWeight: 700, color: actif ? '#fff' : '#6B7280', letterSpacing: '0.2px', fontFamily: '"DM Sans", sans-serif' }}>
+                  {item.label}
+                </span>
+
+                {/* Indicateur actif */}
+                {actif && <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 20, height: 3, borderRadius: 3, background: T.light }}/>}
+              </button>
+            )
+          })}
         </nav>
       </div>
     </>

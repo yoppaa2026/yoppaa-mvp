@@ -953,7 +953,6 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
                 </button>
               </>
             ) : (
-              {/* Sans options → −  quantité  + inline */}
               qteTotale > 0 ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <button onClick={() => retirerDuPanier(keySimple)}

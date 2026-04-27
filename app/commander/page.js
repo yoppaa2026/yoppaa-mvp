@@ -203,16 +203,30 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
               </span>
             </div>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px 10px', marginTop: 6 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
               {c.distance != null && (
-                <span style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: T.pale, borderRadius: 100, padding: '3px 10px', fontSize: '0.7rem', fontWeight: 700, color: T.main }}>
                   📍 {formatDistance(c.distance)}
                 </span>
               )}
-              {(c.horaires_detail || c.horaires) && (
-                <span style={{ fontSize: '0.7rem', color: T.deep, fontWeight: 600 }}>
-                  🕐 {c.horaires_detail ? (resumeHoraires(c.horaires_detail) || c.horaires) : c.horaires}
-                </span>
+              {c.horaires_detail && (() => {
+                const j = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'][new Date().getDay()]
+                const h = c.horaires_detail[j]
+                if (!h) return null
+                return h.ouvert ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#F0FDF4', borderRadius: 100, padding: '3px 10px', border: '1px solid #16A34A22' }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A', boxShadow: '0 0 5px #16A34A88' }}/>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#16A34A' }}>Ouvert · {h.debut.slice(0,5)}–{h.fin.slice(0,5)}</span>
+                  </span>
+                ) : (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#FEF2F2', borderRadius: 100, padding: '3px 10px', border: '1px solid #DC262622' }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#DC2626' }}/>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#DC2626' }}>Fermé aujourd'hui</span>
+                  </span>
+                )
+              })()}
+              {!c.horaires_detail && c.horaires && (
+                <span style={{ fontSize: '0.7rem', color: T.muted, fontWeight: 500 }}>🕐 {c.horaires}</span>
               )}
             </div>
           </div>
@@ -253,6 +267,8 @@ export default function Commander() {
   const [position, setPosition] = useState(null)
   const [geoLoading, setGeoLoading] = useState(false)
   const [rue, setRue] = useState(null)
+  const [showLocManuelle, setShowLocManuelle] = useState(false)
+  const [locManuelle, setLocManuelle] = useState('')
   const [categorieActive, setCategorieActive] = useState('Tous')
   const [searchQuery, setSearchQuery] = useState('')
   const [favoris, setFavoris] = useState([])
@@ -486,12 +502,43 @@ export default function Commander() {
               <p style={{ fontWeight: 900, fontSize: '1.6rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1 }}>yoppaa</p>
               <p style={{ color: T.light, fontSize: '0.7rem', marginTop: 2, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase' }}>Skip the wait</p>
             </div>
-            <button onClick={demanderGeolocalisation}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 12, padding: '0.5rem 0.875rem', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', transition: 'all 0.15s' }}>
-              <span style={{ fontSize: '0.9rem' }}>{geoLoading ? '⏳' : '📍'}</span>
-              <span>{geoLoading ? 'Localisation...' : rue || (position ? 'Position active' : 'Activer GPS')}</span>
-            </button>
+            {/* Localisation — GPS ou manuelle */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+              <button onClick={() => { if (!showLocManuelle) demanderGeolocalisation(); setShowLocManuelle(false) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 12, padding: '0.5rem 0.875rem', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', transition: 'all 0.15s' }}>
+                <span>{geoLoading ? '⏳' : '📍'}</span>
+                <span>{geoLoading ? 'Localisation...' : rue || locManuelle || (position ? 'Position active' : 'GPS')}</span>
+              </button>
+              <button onClick={() => setShowLocManuelle(v => !v)}
+                style={{ background: 'none', border: 'none', color: `${T.light}99`, fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', padding: 0, letterSpacing: '0.3px' }}>
+                {showLocManuelle ? '✕ Fermer' : '✏️ Saisir manuellement'}
+              </button>
+            </div>
           </div>
+
+          {/* Champ localisation manuelle */}
+          {showLocManuelle && onglet === 'accueil' && (
+            <div style={{ padding: '0 1rem 0.625rem', animation: 'fadeUp 0.2s ease' }}>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: '0.9rem', pointerEvents: 'none' }}>📍</span>
+                <input
+                  placeholder="Ville, rue, code postal..."
+                  value={locManuelle}
+                  onChange={e => setLocManuelle(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && locManuelle.trim()) { setRue(locManuelle.trim()); setShowLocManuelle(false) } }}
+                  autoFocus
+                  style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.5rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', backdropFilter: 'blur(8px)', outline: 'none' }}
+                />
+                {locManuelle && (
+                  <button onClick={() => { setRue(locManuelle.trim()); setShowLocManuelle(false) }}
+                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: T.main, border: 'none', borderRadius: 8, padding: '4px 10px', color: '#fff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
+                    OK
+                  </button>
+                )}
+              </div>
+              <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.45)', marginTop: 4, paddingLeft: 4 }}>Appuie sur Entrée ou OK pour valider</p>
+            </div>
+          )}
 
           {/* Tagline hero */}
           {onglet === 'accueil' && (

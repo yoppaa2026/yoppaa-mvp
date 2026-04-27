@@ -551,15 +551,15 @@ export default function CommanderSlug() {
 
                 {/* Infos commerçant */}
                 <div style={{ padding: '0.75rem 1rem 0.875rem', background: '#fff', borderBottom: `1px solid ${T.pale}`, position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  {/* Logo flottant — à droite */}
-                  <div style={{ position: 'absolute', top: -24, right: '1rem', width: 52, height: 52, borderRadius: 12, background: '#fff', border: `3px solid #fff`, boxShadow: `0 4px 16px rgba(0,0,0,0.18)`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {/* Logo flottant — à droite, grand */}
+                  <div style={{ position: 'absolute', top: -36, right: '1rem', width: 72, height: 72, borderRadius: 18, background: '#fff', border: `4px solid #fff`, boxShadow: `0 6px 24px rgba(0,0,0,0.2), 0 0 0 1px ${T.pale}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {commercant.logo_url
                       ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                      : <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>🏪</div>
+                      : <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem' }}>🏪</div>
                     }
                   </div>
 
-                  <div style={{ flex: 1, paddingRight: 64 }}>
+                  <div style={{ flex: 1, paddingRight: 84 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
                       <Etoiles note={notesInfo.moyenne} taille={13}/>
                       {notesInfo.count > 0

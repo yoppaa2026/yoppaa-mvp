@@ -17,13 +17,12 @@ const T = {
 }
 
 const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
-const JOURS_LONGS  = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
+const JOURS_LONGS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
 
 function jourActuel() {
   const idx = new Date().getDay()
   return idx === 0 ? 'dimanche' : JOURS[idx - 1]
 }
-
 function heureEnMinutes(heure) {
   const [h, m] = heure.slice(0, 5).split(':').map(Number)
   return h * 60 + m
@@ -32,7 +31,6 @@ function maintenant() {
   const d = new Date()
   return d.getHours() * 60 + d.getMinutes()
 }
-
 function Etoiles({ note, taille = 14 }) {
   const n = note ? Math.round(note) : 0
   return <span style={{ display: 'inline-flex', gap: 1 }}>{[1,2,3,4,5].map(i => <span key={i} style={{ fontSize: taille, color: i<=n ? '#F59E0B' : '#D1D5DB' }}>★</span>)}</span>
@@ -46,10 +44,8 @@ function SwipeRetrait({ onConfirm }) {
   const startRef = useRef(0)
   const containerRef = useRef(null)
   const THUMB = 48
-
   function getMaxX() { return (containerRef.current?.offsetWidth || 300) - THUMB - 8 }
   function getX(e) { return e.touches ? e.touches[0].clientX : e.clientX }
-
   const onStart = e => { if (confirmed) return; setSwiping(true); startRef.current = getX(e) - swipeX }
   const onMove = e => {
     if (!swiping || confirmed) return
@@ -60,7 +56,6 @@ function SwipeRetrait({ onConfirm }) {
   const onEnd = () => { if (confirmed) return; setSwiping(false); if (swipeX < getMaxX()) setSwipeX(0) }
   const p = swipeX / (getMaxX() || 1)
   const TRACK_H = THUMB + 8
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
       <p style={{ fontSize: '0.875rem', color: T.muted, fontWeight: 600, margin: 0, textAlign: 'center' }}>Glisse pour confirmer le retrait</p>
@@ -181,6 +176,62 @@ function OptionsSelector({ article, groupes, onAjouter }) {
   )
 }
 
+// ─── Récap panier ─────────────────────────────────────────────────────────────
+function RecapPanier({ panier, onRetirer, onAjouter, total, onValider }) {
+  const items = Object.entries(panier)
+  if (items.length === 0) return null
+
+  function labelOptions(options) {
+    if (!options) return null
+    return Object.values(options).flat().map(v => v.nom).join(', ')
+  }
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 16, border: `2px solid ${T.main}33`, overflow: 'hidden', marginTop: 16, boxShadow: `0 4px 20px ${T.main}22` }}>
+      <div style={{ background: T.pale, padding: '0.75rem 1rem', borderBottom: `1px solid ${T.main}22` }}>
+        <p style={{ fontWeight: 800, color: T.deep, fontSize: '0.875rem' }}>🛒 Mon panier</p>
+      </div>
+      <div style={{ padding: '0.5rem 1rem' }}>
+        {items.map(([key, item]) => {
+          const opts = labelOptions(item.options)
+          const prixUnitaire = item.prix + (item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0)
+          return (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.5rem 0', borderBottom: `1px solid ${T.pale}` }}>
+              {/* − quantité + */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                <button onClick={() => onRetirer(key)}
+                  style={{ width: 26, height: 26, borderRadius: '50%', border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                <span style={{ fontWeight: 800, minWidth: 18, textAlign: 'center', fontSize: '0.95rem', color: T.ink }}>{item.quantite}</span>
+                <button onClick={() => onAjouter(key, item)}
+                  style={{ width: 26, height: 26, borderRadius: '50%', border: 'none', background: T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+              </div>
+              {/* Nom + options */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontWeight: 700, color: T.ink, fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.nom}</p>
+                {opts && <p style={{ fontSize: '0.7rem', color: T.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opts}</p>}
+              </div>
+              {/* Prix */}
+              <p style={{ fontWeight: 800, color: T.main, fontSize: '0.875rem', flexShrink: 0 }}>
+                {(prixUnitaire * item.quantite).toFixed(2)}€
+              </p>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ padding: '0.875rem 1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.875rem' }}>Total</span>
+          <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.1rem' }}>{total.toFixed(2)}€</span>
+        </div>
+        <button onClick={onValider}
+          style={{ width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: T.main, color: '#fff', boxShadow: `0 4px 20px ${T.main}44`, fontFamily: '"DM Sans", sans-serif' }}>
+          Choisir mon créneau →
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function CommanderSlug() {
   const { slug } = useParams()
@@ -202,7 +253,6 @@ export default function CommanderSlug() {
   const [optionsParArticle, setOptionsParArticle] = useState({})
   const [derniereCommande, setDerniereCommande] = useState(null)
 
-  // Charger les données du commerçant au montage (et au refresh)
   useEffect(() => {
     if (!slug) return
     const email = localStorage.getItem('yoppaa_email')
@@ -217,17 +267,10 @@ export default function CommanderSlug() {
 
   async function chargerCommercant(slug) {
     setLoading(true)
-    // Charger le commerçant par slug
-    const { data: c } = await supabase
-      .from('commercants')
-      .select('*')
-      .eq('slug', slug)
-      .single()
-
+    const { data: c } = await supabase.from('commercants').select('*').eq('slug', slug).single()
     if (!c) { router.push('/commander'); return }
     setCommercant(c)
 
-    // Charger articles, créneaux, avis en parallèle
     const [{ data: arts }, { data: cren }, { data: avis }, { data: avisNotes }] = await Promise.all([
       supabase.from('articles').select('*').eq('commercant_id', c.id).eq('actif', true).order('nom'),
       supabase.from('creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
@@ -235,19 +278,13 @@ export default function CommanderSlug() {
       supabase.from('avis').select('note').eq('commercant_id', c.id),
     ])
 
-    // Notes moyennes
     if (avisNotes?.length > 0) {
       setNotesInfo({ moyenne: avisNotes.reduce((a, x) => a + x.note, 0) / avisNotes.length, count: avisNotes.length })
     }
 
-    // Mode lendemain
     const heureOuverture = c.heure_ouverture_resa ? c.heure_ouverture_resa.slice(0,5) : '21:00'
     const resaLendemainOuverte = maintenant() >= heureEnMinutes(heureOuverture)
-    const { data: commandesDuJour } = await supabase
-      .from('commandes')
-      .select('creneau_id')
-      .eq('commercant_id', c.id)
-      .neq('statut', 'recupere')
+    const { data: commandesDuJour } = await supabase.from('commandes').select('creneau_id').eq('commercant_id', c.id).neq('statut', 'recupere')
 
     const countParCreneau = {}
     ;(commandesDuJour || []).forEach(cmd => {
@@ -256,10 +293,8 @@ export default function CommanderSlug() {
 
     const tousPassees = (cren || []).every(cr => heureEnMinutes(cr.heure_debut) <= maintenant())
     const modeLend = resaLendemainOuverte && tousPassees
-
     const creneauxAvecCount = (cren || []).map(cr => ({ ...cr, count: countParCreneau[cr.id] || 0 }))
 
-    // Options articles
     const artIds = (arts||[]).map(a => a.id)
     let opts = {}
     if (artIds.length > 0) {
@@ -282,12 +317,42 @@ export default function CommanderSlug() {
     setLoading(false)
   }
 
-  function ajouterAuPanier(a, options = null) {
-    const key = options ? `${a.id}_${JSON.stringify(options)}` : a.id
-    const item = options ? { ...a, options, quantite: (panier[key]?.quantite||0)+1 } : { ...a, quantite: (panier[a.id]?.quantite||0)+1 }
-    setPanier(p => ({ ...p, [key]: item }))
+  // ─── Panier : gestion complète ────────────────────────────────
+  function ajouterAuPanier(article, options = null) {
+    const key = options ? `${article.id}_${JSON.stringify(options)}` : String(article.id)
+    setPanier(prev => ({
+      ...prev,
+      [key]: { ...article, options, quantite: (prev[key]?.quantite || 0) + 1 }
+    }))
   }
-  function retirerDuPanier(id) { setPanier(p => { const n={...p}; if(n[id]?.quantite>1) n[id].quantite-=1; else delete n[id]; return n }) }
+
+  // Incrémenter depuis le récap (on a déjà la clé et l'item)
+  function incrementerPanier(key, item) {
+    setPanier(prev => ({
+      ...prev,
+      [key]: { ...item, quantite: (prev[key]?.quantite || 0) + 1 }
+    }))
+  }
+
+  function retirerDuPanier(key) {
+    setPanier(prev => {
+      const next = { ...prev }
+      if (next[key]?.quantite > 1) {
+        next[key] = { ...next[key], quantite: next[key].quantite - 1 }
+      } else {
+        delete next[key]
+      }
+      return next
+    })
+  }
+
+  // Quantité totale d'un article (toutes variantes options confondues)
+  function qteTotaleArticle(articleId) {
+    return Object.entries(panier)
+      .filter(([key]) => key === String(articleId) || key.startsWith(`${articleId}_`))
+      .reduce((acc, [, item]) => acc + item.quantite, 0)
+  }
+
   function totalPanier() {
     return Object.values(panier).reduce((acc, i) => {
       const supplement = i.options ? Object.values(i.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0
@@ -433,7 +498,8 @@ export default function CommanderSlug() {
                   const groupes = optionsParArticle[article.id] || []
                   const hasOptions = groupes.length > 0
                   const [showOptions, setShowOptions] = useState(false)
-                  const qte = panier[article.id]?.quantite || 0
+                  // Quantité totale de cet article dans le panier (toutes variantes)
+                  const qteTotale = qteTotaleArticle(article.id)
 
                   return (
                     <div style={{ ...card }}>
@@ -448,16 +514,16 @@ export default function CommanderSlug() {
                           {article.stock_jour === 0 && <span style={{ fontSize: '0.7rem', background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>Épuisé</span>}
                         </div>
                         {article.stock_jour !== 0 && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 12, flexShrink: 0 }}>
-                            {!hasOptions && qte > 0 && (
-                              <>
-                                <button onClick={() => retirerDuPanier(article.id)}
-                                  style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 800, cursor: 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                                <span style={{ fontWeight: 800, minWidth: 24, textAlign: 'center', fontSize: '1.05rem', color: T.ink }}>{qte}</span>
-                              </>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
+                            {/* Badge quantité — visible si au moins 1 dans le panier */}
+                            {qteTotale > 0 && (
+                              <span style={{ background: T.main, color: '#fff', fontWeight: 800, fontSize: '0.78rem', borderRadius: 100, minWidth: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>
+                                {qteTotale}
+                              </span>
                             )}
+                            {/* Bouton + ou ⚙️ */}
                             <button onClick={() => hasOptions ? setShowOptions(v => !v) : ajouterAuPanier(article)}
-                              style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: showOptions ? T.mid : T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: hasOptions ? '0.9rem' : '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: showOptions ? T.mid : (qteTotale > 0 ? T.deep : T.main), color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: hasOptions ? '1rem' : '1.3rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' }}>
                               {hasOptions ? '⚙️' : '+'}
                             </button>
                           </div>
@@ -512,14 +578,14 @@ export default function CommanderSlug() {
                 </div>
               )}
 
-              {/* Bouton panier sticky */}
-              {Object.keys(panier).length > 0 && (
-                <div style={{ position: 'sticky', bottom: 16, marginTop: 16 }}>
-                  <button onClick={() => setEtape(3)} style={btnPrimary}>
-                    Choisir mon créneau — {totalPanier().toFixed(2)}€
-                  </button>
-                </div>
-              )}
+              {/* Récap panier sticky */}
+              <RecapPanier
+                panier={panier}
+                onRetirer={retirerDuPanier}
+                onAjouter={incrementerPanier}
+                total={totalPanier()}
+                onValider={() => setEtape(3)}
+              />
             </div>
           )}
 
@@ -541,6 +607,24 @@ export default function CommanderSlug() {
                     🎉 Les réservations pour demain sont ouvertes !
                   </p>
                 )}
+              </div>
+
+              {/* Récap mini panier en haut de l'étape 3 */}
+              <div style={{ background: T.pale, borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '1rem', border: `1px solid ${T.main}22` }}>
+                <p style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Ta commande</p>
+                {Object.values(panier).map((item, i) => {
+                  const supplement = item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0
+                  return (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: 2 }}>
+                      <span style={{ color: T.ink, fontWeight: 600 }}>{item.quantite}× {item.nom}</span>
+                      <span style={{ color: T.main, fontWeight: 700 }}>{((item.prix + supplement) * item.quantite).toFixed(2)}€</span>
+                    </div>
+                  )
+                })}
+                <div style={{ borderTop: `1px solid ${T.main}22`, marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: 800, color: T.deep, fontSize: '0.875rem' }}>Total</span>
+                  <span style={{ fontWeight: 900, color: T.main, fontSize: '0.875rem' }}>{totalPanier().toFixed(2)}€</span>
+                </div>
               </div>
 
               <div className="grid3" style={{ marginBottom: '1.25rem' }}>

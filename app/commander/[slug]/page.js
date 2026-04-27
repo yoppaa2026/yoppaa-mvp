@@ -471,33 +471,38 @@ export default function CommanderSlug() {
       <div className="page-wrap">
 
         {/* ── TOPBAR fixe ── */}
-        <div style={{ background: T.bgPanel, padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, borderBottom: `1px solid ${T.main}33` }}>
+        <div style={{ background: T.bgPanel, padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, borderBottom: `1px solid ${T.main}33` }}>
+          {/* Bouton retour */}
           <button onClick={() => router.push('/commander')}
-            style={{ background: `rgba(255,255,255,0.1)`, border: `1px solid rgba(255,255,255,0.15)`, color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.45rem 0.875rem', fontWeight: 700, fontSize: '0.82rem', flexShrink: 0, backdropFilter: 'blur(8px)' }}>
+            style={{ background: `rgba(255,255,255,0.1)`, border: `1px solid rgba(255,255,255,0.15)`, color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.45rem 0.875rem', fontWeight: 700, fontSize: '0.82rem', flexShrink: 0, backdropFilter: 'blur(8px)', letterSpacing: '-0.2px' }}>
             ← Retour
           </button>
 
-          {/* Nom du commerce dans la topbar */}
-          {commercant && (
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontWeight: 800, color: '#fff', fontSize: '0.95rem', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{commercant.nom}</p>
-              {commercant.type && <p style={{ fontSize: '0.7rem', color: T.light, fontWeight: 600, marginTop: 1 }}>{commercant.type}</p>}
+          {/* Badge type — hype */}
+          {commercant?.type && (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+              <span style={{ background: `linear-gradient(135deg, ${T.main}88, ${T.mid}88)`, backdropFilter: 'blur(8px)', border: `1px solid ${T.light}44`, borderRadius: 100, padding: '5px 14px', fontSize: '0.78rem', fontWeight: 800, color: '#fff', letterSpacing: '0.5px', textTransform: 'uppercase', boxShadow: `0 2px 12px ${T.main}44` }}>
+                {commercant.type}
+              </span>
             </div>
           )}
+          {!commercant?.type && <div style={{ flex: 1 }}/>}
 
-          {/* Étapes — cercles numérotés */}
+          {/* Étapes — pills stylées */}
           {etape < 4 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
               {[{ n: 1, label: 'Menu' }, { n: 2, label: 'Créneau' }].map((s, i) => {
-                const step = s.n
-                const done = etape > step + 1
-                const active = etape === step + 1
+                const done = etape > s.n + 1
+                const active = etape === s.n + 1
                 return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: active ? T.main : done ? '#16A34A' : 'rgba(255,255,255,0.15)', border: `2px solid ${active ? T.light : done ? '#16A34A' : 'rgba(255,255,255,0.2)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 800, color: active || done ? '#fff' : T.light, transition: 'all 0.3s' }}>
-                      {done ? '✓' : s.n}
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: active ? T.main : done ? '#16A34A22' : 'rgba(255,255,255,0.08)', border: `1.5px solid ${active ? T.light : done ? '#16A34A' : 'rgba(255,255,255,0.15)'}`, borderRadius: 100, padding: '3px 10px', transition: 'all 0.3s' }}>
+                      <span style={{ width: 16, height: 16, borderRadius: '50%', background: active ? '#fff' : done ? '#16A34A' : 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 900, color: active ? T.main : '#fff', flexShrink: 0 }}>
+                        {done ? '✓' : s.n}
+                      </span>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: active ? '#fff' : done ? '#16A34A' : 'rgba(255,255,255,0.5)', letterSpacing: '0.2px' }}>{s.label}</span>
                     </div>
-                    {i === 0 && <div style={{ width: 16, height: 2, borderRadius: 1, background: etape >= 3 ? '#16A34A' : 'rgba(255,255,255,0.2)' }}/>}
+                    {i === 0 && <div style={{ width: 12, height: 1.5, borderRadius: 1, background: etape >= 3 ? '#16A34A' : 'rgba(255,255,255,0.15)' }}/>}
                   </div>
                 )
               })}
@@ -545,28 +550,26 @@ export default function CommanderSlug() {
                 </div>
 
                 {/* Infos commerçant */}
-                <div style={{ padding: '0 1rem 0.875rem', background: '#fff', borderBottom: `1px solid ${T.pale}`, position: 'relative' }}>
-                  {/* Logo flottant */}
-                  <div style={{ position: 'absolute', top: -28, left: '1rem', width: 56, height: 56, borderRadius: 14, background: '#fff', border: `3px solid #fff`, boxShadow: `0 4px 16px rgba(0,0,0,0.15)`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ padding: '0.75rem 1rem 0.875rem', background: '#fff', borderBottom: `1px solid ${T.pale}`, position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  {/* Logo flottant — à droite */}
+                  <div style={{ position: 'absolute', top: -24, right: '1rem', width: 52, height: 52, borderRadius: 12, background: '#fff', border: `3px solid #fff`, boxShadow: `0 4px 16px rgba(0,0,0,0.18)`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {commercant.logo_url
                       ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                      : <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>🏪</div>
+                      : <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>🏪</div>
                     }
                   </div>
 
-                  <div style={{ paddingTop: 36, paddingLeft: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <Etoiles note={notesInfo.moyenne} taille={13}/>
-                        {notesInfo.count > 0
-                          ? <span style={{ fontSize: '0.7rem', color: T.muted }}>{notesInfo.count} avis</span>
-                          : <span style={{ fontSize: '0.7rem', color: '#D1D5DB' }}>Pas encore d'avis</span>
-                        }
-                      </div>
+                  <div style={{ flex: 1, paddingRight: 64 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                      <Etoiles note={notesInfo.moyenne} taille={13}/>
+                      {notesInfo.count > 0
+                        ? <span style={{ fontSize: '0.7rem', color: T.muted }}>{notesInfo.count} avis</span>
+                        : <span style={{ fontSize: '0.7rem', color: '#D1D5DB' }}>Pas encore d'avis</span>
+                      }
                     </div>
 
                     {commercant.description && (
-                      <p style={{ fontSize: '0.82rem', color: T.muted, marginTop: 6, lineHeight: 1.5 }}>{commercant.description}</p>
+                      <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.5 }}>{commercant.description}</p>
                     )}
 
                     {/* Horaires inline */}

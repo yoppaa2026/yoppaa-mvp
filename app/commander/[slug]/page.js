@@ -287,40 +287,44 @@ export default function CommanderSlug() {
     const horizon = c.horizon_commande || 1
     const heureOuverture = c.heure_ouverture_resa ? c.heure_ouverture_resa.slice(0,5) : '21:00'
     const now = maintenant()
-    const resaOuverte = now >= heureEnMinutes(heureOuverture)
 
-    // Charger toutes les commandes actives (pour compter les places prises)
     const { data: commandesActives } = await supabase
-      .from('commandes').select('creneau_id, date_commande').eq('commercant_id', c.id).neq('statut', 'recupere')
+      .from('commandes').select('creneau_id').eq('commercant_id', c.id).neq('statut', 'recupere')
 
     const countParCreneau = {}
     ;(commandesActives || []).forEach(cmd => {
       countParCreneau[cmd.creneau_id] = (countParCreneau[cmd.creneau_id] || 0) + 1
     })
 
-    // Générer les jours disponibles selon l'horizon
     const joursDispos = []
     const today = new Date(); today.setHours(0,0,0,0)
-
-    // Jour 0 = aujourd'hui — uniquement si des créneaux futurs existent
     const creneauxAvecCount = (cren || []).map(cr => ({ ...cr, count: countParCreneau[cr.id] || 0 }))
-    const crensDisposAujourdhui = creneauxAvecCount.filter(cr => heureEnMinutes(cr.heure_debut) > now)
 
+    // Aujourd'hui — si au moins un créneau futur existe
+    const crensDisposAujourdhui = creneauxAvecCount.filter(cr => heureEnMinutes(cr.heure_debut) > now)
     if (crensDisposAujourdhui.length > 0) {
       joursDispos.push({ date: new Date(today), label: "Aujourd'hui", creneaux: creneauxAvecCount })
     }
 
-    // Jours suivants selon horizon (si résa ouverte OU horizon > 1)
-    const maxJours = resaOuverte ? horizon : Math.max(horizon - 1, 0)
-    for (let i = 1; i <= maxJours; i++) {
+    // Jours suivants selon horizon — TOUJOURS disponibles (les clients commandent à l'avance)
+    for (let i = 1; i < horizon; i++) {
       const d = new Date(today); d.setDate(d.getDate() + i)
       const label = i === 1 ? 'Demain' : d.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
-      // Pour les jours futurs : tous les créneaux sont disponibles (pas de notion "passé")
-      const crensFuturs = creneauxAvecCount.map(cr => ({ ...cr, count: 0 })) // reset count pour jours futurs
-      joursDispos.push({ date: d, label, creneaux: crensFuturs })
+      joursDispos.push({ date: d, label, creneaux: creneauxAvecCount.map(cr => ({ ...cr, count: 0 })) })
     }
 
-    // Si aucun jour dispo aujourd'hui mais horizon = 1 et résa pas encore ouverte
+    // Jour horizon (ex: J+3) — disponible uniquement si résa ouverte
+    const resaOuverte = now >= heureEnMinutes(heureOuverture)
+    if (horizon >= 1 && resaOuverte) {
+      const d = new Date(today); d.setDate(d.getDate() + horizon)
+      const label = horizon === 1 ? 'Demain' : d.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
+      // Vérifier qu'on ne l'a pas déjà ajouté
+      if (!joursDispos.find(j => j.date.getTime() === d.getTime())) {
+        joursDispos.push({ date: d, label, creneaux: creneauxAvecCount.map(cr => ({ ...cr, count: 0 })) })
+      }
+    }
+
+    // Fallback — toujours au moins aujourd'hui
     if (joursDispos.length === 0) {
       joursDispos.push({ date: new Date(today), label: "Aujourd'hui", creneaux: creneauxAvecCount })
     }
@@ -722,22 +726,26 @@ export default function CommanderSlug() {
                   </div>
                 </div>
 
-              {/* ── Onglets jours avec date ── */}
-              {joursDispos.length > 1 && (
-                <div style={{ display: 'flex', gap: 6, marginBottom: '1rem', overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-                  {joursDispos.map((jour, idx) => {
-                    const actif = jourSelectionne === idx
-                    const dateStr = jour.date.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })
-                    return (
-                      <button key={idx} onClick={() => { setJourSelectionne(idx); setCreneauChoisi(null) }}
-                        style={{ flexShrink: 0, padding: '0.5rem 1rem', borderRadius: 14, border: `2px solid ${actif ? T.main : T.pale}`, background: actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: actif ? '#fff' : T.muted, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.15s', boxShadow: actif ? `0 4px 16px ${T.main}44` : 'none', fontFamily: '"DM Sans", sans-serif', textAlign: 'center', lineHeight: 1.3 }}>
-                        <div>{jour.label}</div>
-                        <div style={{ fontSize: '0.68rem', fontWeight: 600, opacity: actif ? 0.85 : 0.6, marginTop: 1 }}>{dateStr}</div>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
+              {/* ── Onglets jours avec date — toujours visible ── */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: '1rem', overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+                {joursDispos.length > 0 ? joursDispos.map((jour, idx) => {
+                  const actif = jourSelectionne === idx
+                  const dateStr = jour.date.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })
+                  return (
+                    <button key={idx} onClick={() => { setJourSelectionne(idx); setCreneauChoisi(null) }}
+                      style={{ flexShrink: 0, padding: '0.5rem 1rem', borderRadius: 14, border: `2px solid ${actif ? T.main : T.pale}`, background: actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: actif ? '#fff' : T.muted, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.15s', boxShadow: actif ? `0 4px 16px ${T.main}44` : 'none', fontFamily: '"DM Sans", sans-serif', textAlign: 'center', lineHeight: 1.3 }}>
+                      <div>{jour.label}</div>
+                      <div style={{ fontSize: '0.68rem', fontWeight: 600, opacity: actif ? 0.85 : 0.6, marginTop: 1 }}>{dateStr}</div>
+                    </button>
+                  )
+                }) : (
+                  /* Fallback — aucun jour calculé, afficher aujourd'hui */
+                  <button style={{ flexShrink: 0, padding: '0.5rem 1rem', borderRadius: 14, border: `2px solid ${T.main}`, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 700, fontSize: '0.8rem', fontFamily: '"DM Sans", sans-serif', textAlign: 'center', lineHeight: 1.3 }}>
+                    <div>Aujourd'hui</div>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 600, opacity: 0.85, marginTop: 1 }}>{new Date().toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</div>
+                  </button>
+                )}
+              </div>
 
               {/* Créneaux du jour sélectionné — passés masqués, dédoublonnés */}
               <div className="grid3" style={{ marginBottom: '1.5rem' }}>

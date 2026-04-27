@@ -191,10 +191,10 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider }) {
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.625rem 0', borderBottom: `1px solid ${T.pale}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                 <button onClick={() => onRetirer(key)}
-                  style={{ width: 28, height: 28, borderRadius: '50%', border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                <span style={{ fontWeight: 800, minWidth: 20, textAlign: 'center', fontSize: '1rem', color: T.ink }}>{item.quantite}</span>
+                  style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 900, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(107,53,196,0.08)' }}>−</button>
+                <span style={{ fontWeight: 900, minWidth: 22, textAlign: 'center', fontSize: '0.95rem', color: T.ink }}>{item.quantite}</span>
                 <button onClick={() => onAjouter(key, item)}
-                  style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                  style={{ width: 30, height: 30, borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 3px 10px ${T.main}44` }}>+</button>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontWeight: 700, color: T.ink, fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.nom}</p>
@@ -654,7 +654,7 @@ export default function CommanderSlug() {
                         <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, letterSpacing: '-0.3px' }}>{cat}</span>
                         <span style={{ fontSize: '0.7rem', fontWeight: 600, color: T.muted }}>{artsDecat.length} article{artsDecat.length > 1 ? 's' : ''}</span>
                       </div>
-                      {artsDecat.map(a => <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle} ajouterAuPanier={ajouterAuPanier} qteTotaleArticle={qteTotaleArticle}/>)}
+                      {artsDecat.map(a => <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle} ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}/>)}
                     </div>
                   )
                 })}
@@ -664,7 +664,7 @@ export default function CommanderSlug() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 12, paddingBottom: 10 }}>
                       <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, letterSpacing: '-0.3px' }}>Autres</span>
                     </div>
-                    {sansCat.map(a => <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle} ajouterAuPanier={ajouterAuPanier} qteTotaleArticle={qteTotaleArticle}/>)}
+                    {sansCat.map(a => <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle} ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}/>)}
                   </div>
                 )}
 
@@ -722,39 +722,34 @@ export default function CommanderSlug() {
                   </div>
                 </div>
 
-              {/* ── Onglets jours ── */}
+              {/* ── Onglets jours avec date ── */}
               {joursDispos.length > 1 && (
                 <div style={{ display: 'flex', gap: 6, marginBottom: '1rem', overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-                  {joursDispos.map((jour, idx) => (
-                    <button key={idx} onClick={() => { setJourSelectionne(idx); setCreneauChoisi(null) }}
-                      style={{ flexShrink: 0, padding: '0.5rem 1.125rem', borderRadius: 100, border: `2px solid ${jourSelectionne === idx ? T.main : T.pale}`, background: jourSelectionne === idx ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: jourSelectionne === idx ? '#fff' : T.muted, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.15s', boxShadow: jourSelectionne === idx ? `0 4px 16px ${T.main}44` : 'none', fontFamily: '"DM Sans", sans-serif' }}>
-                      {jour.label}
-                    </button>
-                  ))}
+                  {joursDispos.map((jour, idx) => {
+                    const actif = jourSelectionne === idx
+                    const dateStr = jour.date.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })
+                    return (
+                      <button key={idx} onClick={() => { setJourSelectionne(idx); setCreneauChoisi(null) }}
+                        style={{ flexShrink: 0, padding: '0.5rem 1rem', borderRadius: 14, border: `2px solid ${actif ? T.main : T.pale}`, background: actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: actif ? '#fff' : T.muted, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.15s', boxShadow: actif ? `0 4px 16px ${T.main}44` : 'none', fontFamily: '"DM Sans", sans-serif', textAlign: 'center', lineHeight: 1.3 }}>
+                        <div>{jour.label}</div>
+                        <div style={{ fontSize: '0.68rem', fontWeight: 600, opacity: actif ? 0.85 : 0.6, marginTop: 1 }}>{dateStr}</div>
+                      </button>
+                    )
+                  })}
                 </div>
               )}
 
-              {/* Label date sélectionnée */}
-              {joursDispos[jourSelectionne] && (
-                <p style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ background: T.pale, borderRadius: 100, padding: '2px 8px', color: T.main, fontSize: '0.68rem' }}>
-                    📅 {joursDispos[jourSelectionne].label === "Aujourd'hui" || joursDispos[jourSelectionne].label === 'Demain'
-                      ? joursDispos[jourSelectionne].label
-                      : joursDispos[jourSelectionne].date.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
-                    }
-                  </span>
-                </p>
-              )}
-
-              {/* Créneaux du jour sélectionné — passés masqués */}
+              {/* Créneaux du jour sélectionné — passés masqués, dédoublonnés */}
               <div className="grid3" style={{ marginBottom: '1.5rem' }}>
-                {(joursDispos[jourSelectionne]?.creneaux || creneaux)
-                  .filter(c => {
-                    const estAujourdhui = jourSelectionne === 0 && joursDispos[0]?.label === "Aujourd'hui"
-                    if (estAujourdhui && heureEnMinutes(c.heure_debut) <= maintenant()) return false
-                    return true
-                  })
-                  .map(c => {
+                {[...new Map(
+                  (joursDispos[jourSelectionne]?.creneaux || creneaux)
+                    .filter(c => {
+                      const estAujourdhui = jourSelectionne === 0 && joursDispos[0]?.label === "Aujourd'hui"
+                      if (estAujourdhui && heureEnMinutes(c.heure_debut) <= maintenant()) return false
+                      return true
+                    })
+                    .map(c => [`${c.heure_debut}-${c.heure_fin}`, c])
+                ).values()].map(c => {
                   const complet = c.count >= c.max_commandes
                   const placesRestantes = c.max_commandes - c.count
                   const bientotComplet = !complet && placesRestantes <= 1
@@ -766,21 +761,25 @@ export default function CommanderSlug() {
                   else if (presqueComplet) mention = { text: '⚡ Presque complet', color: '#D97706' }
                   return (
                     <div key={c.id} onClick={() => !complet && setCreneauChoisi(c.id)}
-                      style={{ padding: '0.875rem 0.5rem', borderRadius: 14, border: `2px solid ${complet ? '#E5E7EB' : choisi ? T.main : T.pale}`, background: complet ? '#F9FAFB' : choisi ? T.pale : '#fff', cursor: complet ? 'default' : 'pointer', textAlign: 'center', fontWeight: 700, color: complet ? '#D1D5DB' : T.ink, fontSize: '0.875rem', transition: 'all 0.15s', boxShadow: choisi ? `0 4px 16px ${T.main}33` : 'none' }}>
-                      <div style={{ textDecoration: complet ? 'line-through' : 'none', fontSize: '0.875rem', letterSpacing: '-0.3px' }}>
-                        {c.heure_debut.slice(0,5)}<br/><span style={{ fontSize: '0.72rem', fontWeight: 600, color: T.muted }}>–{c.heure_fin.slice(0,5)}</span>
-                      </div>
-                      {mention && <div style={{ fontSize: '0.6rem', fontWeight: 800, color: mention.color, marginTop: 4, lineHeight: 1.2 }}>{mention.text}</div>}
-                      {choisi && <div style={{ fontSize: '0.6rem', fontWeight: 800, color: T.main, marginTop: 4 }}>✓ Choisi</div>}
+                      style={{ padding: '0.75rem 0.5rem', borderRadius: 14, border: `2px solid ${complet ? '#E5E7EB' : choisi ? T.main : T.pale}`, background: complet ? '#F9FAFB' : choisi ? T.pale : '#fff', cursor: complet ? 'default' : 'pointer', textAlign: 'center', transition: 'all 0.15s', boxShadow: choisi ? `0 4px 16px ${T.main}33` : 'none' }}>
+                      {/* Heure début + fin sur une seule ligne, même typo */}
+                      <p style={{ fontWeight: 800, fontSize: '0.9rem', color: complet ? '#D1D5DB' : T.ink, letterSpacing: '-0.3px', textDecoration: complet ? 'line-through' : 'none' }}>
+                        {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
+                      </p>
+                      {mention && <p style={{ fontSize: '0.6rem', fontWeight: 800, color: mention.color, marginTop: 4, lineHeight: 1.2 }}>{mention.text}</p>}
+                      {choisi && <p style={{ fontSize: '0.6rem', fontWeight: 800, color: T.main, marginTop: 4 }}>✓ Choisi</p>}
                     </div>
                   )
                 })}
-                {/* Aucun créneau dispo sur ce jour */}
-                {(joursDispos[jourSelectionne]?.creneaux || creneaux).filter(c => {
-                  const estAujourdhui = jourSelectionne === 0 && joursDispos[0]?.label === "Aujourd'hui"
-                  if (estAujourdhui && heureEnMinutes(c.heure_debut) <= maintenant()) return false
-                  return true
-                }).length === 0 && (
+                {[...new Map(
+                  (joursDispos[jourSelectionne]?.creneaux || creneaux)
+                    .filter(c => {
+                      const estAujourdhui = jourSelectionne === 0 && joursDispos[0]?.label === "Aujourd'hui"
+                      if (estAujourdhui && heureEnMinutes(c.heure_debut) <= maintenant()) return false
+                      return true
+                    })
+                    .map(c => [`${c.heure_debut}-${c.heure_fin}`, c])
+                ).values()].length === 0 && (
                   <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '1.5rem', color: T.muted, fontSize: '0.875rem', fontWeight: 600 }}>
                     Aucun créneau disponible ce jour — choisis une autre date.
                   </div>
@@ -917,14 +916,16 @@ function HorairesSection({ horaires }) {
 }
 
 // ─── ArticleRow extrait du composant principal ────────────────────────────────
-function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, qteTotaleArticle }) {
+function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle }) {
   const groupes = optionsParArticle[article.id] || []
   const hasOptions = groupes.length > 0
   const [showOptions, setShowOptions] = useState(false)
   const qteTotale = qteTotaleArticle(article.id)
+  // Clé simple (sans options) pour retirer
+  const keySimple = String(article.id)
 
   return (
-    <div className="art-card" style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 4px rgba(107,53,196,0.04)' }}>
+    <div className="art-card" style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${qteTotale > 0 ? T.main+'44' : T.pale}`, boxShadow: qteTotale > 0 ? `0 2px 12px ${T.main}18` : '0 1px 4px rgba(107,53,196,0.04)', transition: 'all 0.2s' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ flex: 1 }}>
           <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{article.nom}</p>
@@ -935,17 +936,43 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, qteTo
           </div>
           {article.stock_jour === 0 && <span style={{ fontSize: '0.68rem', background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 6, fontWeight: 700, display: 'inline-block', marginTop: 4 }}>Épuisé</span>}
         </div>
+
         {article.stock_jour !== 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
-            {qteTotale > 0 && (
-              <div style={{ background: T.main, color: '#fff', fontWeight: 900, fontSize: '0.78rem', borderRadius: 100, minWidth: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px', boxShadow: `0 2px 8px ${T.main}55` }}>
-                {qteTotale}
-              </div>
+            {/* Si options → bouton ⚙️ seul */}
+            {hasOptions ? (
+              <>
+                {qteTotale > 0 && (
+                  <div style={{ background: T.main, color: '#fff', fontWeight: 900, fontSize: '0.78rem', borderRadius: 100, minWidth: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px', boxShadow: `0 2px 8px ${T.main}55` }}>
+                    {qteTotale}
+                  </div>
+                )}
+                <button onClick={() => setShowOptions(v => !v)}
+                  style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: showOptions ? T.mid : T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 3px 12px ${T.main}44` }}>
+                  ⚙️
+                </button>
+              </>
+            ) : (
+              {/* Sans options → −  quantité  + inline */}
+              qteTotale > 0 ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button onClick={() => retirerDuPanier(keySimple)}
+                    style={{ width: 34, height: 34, borderRadius: 10, border: `2px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 900, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: '0 1px 4px rgba(107,53,196,0.1)' }}>
+                    −
+                  </button>
+                  <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, minWidth: 22, textAlign: 'center' }}>{qteTotale}</span>
+                  <button onClick={() => ajouterAuPanier(article)}
+                    style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 4px 14px ${T.main}55` }}>
+                    +
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => ajouterAuPanier(article)}
+                  style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 4px 14px ${T.main}55` }}>
+                  +
+                </button>
+              )
             )}
-            <button onClick={() => hasOptions ? setShowOptions(v => !v) : ajouterAuPanier(article)}
-              style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: showOptions ? T.mid : qteTotale > 0 ? T.deep : T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: hasOptions ? '1rem' : '1.3rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 3px 12px ${T.main}44` }}>
-              {hasOptions ? '⚙️' : '+'}
-            </button>
           </div>
         )}
       </div>

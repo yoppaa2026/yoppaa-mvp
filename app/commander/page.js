@@ -193,7 +193,6 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
 
   const physique = getStatutPhysique()
   const resa = getStatutResa()
-  const badge = getBadgeFusionne()
 
   return (
     <div onClick={() => onSelect(c)}

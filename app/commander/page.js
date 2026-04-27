@@ -166,16 +166,45 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
   // ─── Deux badges distincts : horaires physiques + disponibilité Yoppaa ───
   function getStatutPhysique() {
     const JOURS_MAP = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
-    const j = JOURS_MAP[new Date().getDay()]
+    const JOURS_LABELS = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
+    const nowDate = new Date()
+    const nowMin = nowDate.getHours() * 60 + nowDate.getMinutes()
+    const todayIdx = nowDate.getDay()
+    const j = JOURS_MAP[todayIdx]
     const h = c.horaires_detail?.[j]
-    const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
+
     const ouvert = h?.ouvert && h.debut && h.fin
       ? nowMin >= heureEnMinutes(h.debut) && nowMin < heureEnMinutes(h.fin)
       : false
-    const horaire = h?.ouvert && h.debut && h.fin ? `${h.debut.slice(0,5)}–${h.fin.slice(0,5)}` : null
-    if (ouvert) return { dot: '#16A34A', label: `Ouvert${horaire ? ` · ${horaire}` : ''}`, color: '#16A34A', bg: '#F0FDF4', pulse: true }
-    if (horaire) return { dot: '#9CA3AF', label: `Fermé · ouvre à ${h.debut.slice(0,5)}`, color: '#6B7280', bg: '#F9FAFB', pulse: false }
-    return { dot: '#9CA3AF', label: 'Fermé aujourd\'hui', color: '#6B7280', bg: '#F9FAFB', pulse: false }
+
+    if (ouvert) {
+      const horaire = `${h.debut.slice(0,5)}–${h.fin.slice(0,5)}`
+      return { dot: '#16A34A', label: `Ouvert · ${horaire}`, color: '#16A34A', bg: '#F0FDF4', pulse: true }
+    }
+
+    // Commerce fermé — trouver le prochain créneau d'ouverture
+    if (h?.ouvert && h.debut) {
+      const ouvreLater = heureEnMinutes(h.debut) > nowMin
+      if (ouvreLater) {
+        return { dot: '#9CA3AF', label: `Fermé · ouvre à ${h.debut.slice(0,5)}`, color: '#6B7280', bg: '#F9FAFB', pulse: false }
+      }
+    }
+
+    // Chercher le prochain jour d'ouverture dans les 7 jours
+    if (c.horaires_detail) {
+      for (let i = 1; i <= 7; i++) {
+        const nextIdx = (todayIdx + i) % 7
+        const nextJour = JOURS_MAP[nextIdx]
+        const nextH = c.horaires_detail[nextJour]
+        if (nextH?.ouvert && nextH.debut) {
+          const label = i === 1 ? `Fermé · ouvre demain à ${nextH.debut.slice(0,5)}`
+            : `Fermé · ouvre ${JOURS_LABELS[nextIdx]} à ${nextH.debut.slice(0,5)}`
+          return { dot: '#9CA3AF', label, color: '#6B7280', bg: '#F9FAFB', pulse: false }
+        }
+      }
+    }
+
+    return { dot: '#9CA3AF', label: 'Fermé', color: '#6B7280', bg: '#F9FAFB', pulse: false }
   }
 
   function getStatutResa() {
@@ -584,9 +613,15 @@ export default function Commander() {
             </div>
           )}
 
-          {/* Tagline hero — cachée au scroll */}
-          {onglet === 'accueil' && !headerScrolled && (
-            <div style={{ padding: '0.875rem 1rem 0.75rem', animation: 'fadeUp 0.4s ease' }}>
+          {/* Tagline hero — transition smooth au scroll */}
+          {onglet === 'accueil' && (
+            <div style={{
+              maxHeight: headerScrolled ? '0px' : '120px',
+              opacity: headerScrolled ? 0 : 1,
+              overflow: 'hidden',
+              transition: 'max-height 0.35s ease, opacity 0.25s ease',
+              padding: headerScrolled ? '0 1rem' : '0.875rem 1rem 0.75rem',
+            }}>
               <p style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.5px', lineHeight: 1.25, marginBottom: 4 }}>
                 Commander avant d'arriver,<br/>
                 <span style={{ color: T.light }}>récupère sans attendre.</span>
@@ -607,18 +642,21 @@ export default function Commander() {
 
           {/* Barre de recherche */}
           {onglet === 'accueil' && (
-            <div style={{ padding: '0 1rem 0.875rem' }}>
+            <div style={{ padding: '0 1rem 0.75rem' }}>
               <div style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: '1rem', pointerEvents: 'none' }}>🔍</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                  <circle cx="11" cy="11" r="7" stroke="rgba(255,255,255,0.6)" strokeWidth="2.2"/>
+                  <path d="M16.5 16.5L21 21" stroke="rgba(255,255,255,0.6)" strokeWidth="2.2" strokeLinecap="round"/>
+                </svg>
                 <input
                   className="search-input"
                   placeholder="Rechercher un commerce..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.75rem', borderRadius: 12, border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', backdropFilter: 'blur(8px)' }}
+                  style={{ width: '100%', padding: '0.55rem 1rem 0.55rem 2.25rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', backdropFilter: 'blur(8px)' }}
                 />
                 {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', color: '#fff', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                  <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', color: '#fff', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                 )}
               </div>
             </div>

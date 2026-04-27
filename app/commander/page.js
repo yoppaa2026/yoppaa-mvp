@@ -163,34 +163,36 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
   const noteInfo = notesParCommerce[c.id]
   const statut = statutsCommerce[c.id]
 
-  // ─── Badge unique fusionné : statut créneaux + horaires + J+1 ───
-  function getBadgeFusionne() {
-    const j = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'][new Date().getDay()]
+  // ─── Deux badges distincts : horaires physiques + disponibilité Yoppaa ───
+  function getStatutPhysique() {
+    const JOURS_MAP = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
+    const j = JOURS_MAP[new Date().getDay()]
     const h = c.horaires_detail?.[j]
-    const ouvertPhysiquement = h?.ouvert ?? true
-    const heureOuv = c.heure_ouverture_resa ? c.heure_ouverture_resa.slice(0,5) : '21:00'
-    const [hh, mm] = heureOuv.split(':').map(Number)
-    const now = new Date(); const nowMin = now.getHours() * 60 + now.getMinutes()
-    const resaJSuivantOuverte = nowMin >= hh * 60 + mm
-
-    if (!ouvertPhysiquement && !resaJSuivantOuverte)
-      return { dot: '#9CA3AF', label: 'Actuellement fermé', bg: '#F9FAFB', color: '#9CA3AF', pulse: false }
-
-    if (statut === 'ouvert') {
-      const horaire = h ? `${h.debut.slice(0,5)}–${h.fin.slice(0,5)}` : null
-      return { dot: '#16A34A', label: horaire ? `Actuellement ouvert · ${horaire}` : 'Actuellement ouvert', bg: '#F0FDF4', color: '#16A34A', pulse: true }
-    }
-    if (statut === 'urgent') {
-      const horaire = h ? `${h.debut.slice(0,5)}–${h.fin.slice(0,5)}` : null
-      return { dot: '#EA580C', label: `Réserve vite${horaire ? ` · ${horaire}` : ''}`, bg: '#FFF7ED', color: '#EA580C', pulse: true }
-    }
-    if (statut === 'complet' || statut === 'ferme') {
-      if (resaJSuivantOuverte)
-        return { dot: T.main, label: `Réservation disponible jusqu'à J+${c.horizon_commande || 1}`, bg: T.pale, color: T.main, pulse: true }
-      return { dot: '#EA580C', label: `Complet · Résa dès ${heureOuv}`, bg: '#FFF7ED', color: '#EA580C', pulse: false }
-    }
-    return { dot: '#9CA3AF', label: 'Actuellement fermé', bg: '#F9FAFB', color: '#9CA3AF', pulse: false }
+    const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
+    const ouvert = h?.ouvert && h.debut && h.fin
+      ? nowMin >= heureEnMinutes(h.debut) && nowMin < heureEnMinutes(h.fin)
+      : false
+    const horaire = h?.ouvert && h.debut && h.fin ? `${h.debut.slice(0,5)}–${h.fin.slice(0,5)}` : null
+    if (ouvert) return { dot: '#16A34A', label: `Ouvert${horaire ? ` · ${horaire}` : ''}`, color: '#16A34A', bg: '#F0FDF4', pulse: true }
+    if (horaire) return { dot: '#9CA3AF', label: `Fermé · ouvre à ${h.debut.slice(0,5)}`, color: '#6B7280', bg: '#F9FAFB', pulse: false }
+    return { dot: '#9CA3AF', label: 'Fermé aujourd\'hui', color: '#6B7280', bg: '#F9FAFB', pulse: false }
   }
+
+  function getStatutResa() {
+    const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
+    const heureOuv = c.heure_ouverture_resa ? c.heure_ouverture_resa.slice(0,5) : '21:00'
+    const resaDemainOuverte = nowMin >= heureEnMinutes(heureOuv)
+    if (statut === 'ouvert')  return { dot: '#16A34A', label: 'Créneaux disponibles', color: '#16A34A', bg: '#F0FDF4' }
+    if (statut === 'urgent')  return { dot: '#EA580C', label: 'Réserve vite !', color: '#EA580C', bg: '#FFF7ED' }
+    if (statut === 'complet' || statut === 'ferme') {
+      if (resaDemainOuverte) return { dot: T.main, label: 'Réserver pour demain', color: T.main, bg: T.pale }
+      return { dot: '#9CA3AF', label: `Résa dès ${heureOuv}`, color: '#6B7280', bg: '#F9FAFB' }
+    }
+    return null
+  }
+
+  const physique = getStatutPhysique()
+  const resa = getStatutResa()
   const badge = getBadgeFusionne()
 
   return (
@@ -219,12 +221,20 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
               </span>
             </div>
 
-            {/* Badge fusionné + distance */}
+            {/* Statut physique + disponibilité Yoppaa — deux lignes claires */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: badge.bg, borderRadius: 100, padding: '4px 10px', border: `1px solid ${badge.dot}22` }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: badge.dot, boxShadow: badge.pulse ? `0 0 6px ${badge.dot}88` : 'none', flexShrink: 0, animation: badge.pulse ? 'dot-pulse 2s ease-in-out infinite' : 'none' }}/>
-                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: badge.color }}>{badge.label}</span>
+              {/* Ligne 1 — horaires physiques */}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: physique.bg, borderRadius: 100, padding: '4px 10px', border: `1px solid ${physique.dot}22` }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: physique.dot, flexShrink: 0, animation: physique.pulse ? 'dot-pulse 2s ease-in-out infinite' : 'none', boxShadow: physique.pulse ? `0 0 6px ${physique.dot}88` : 'none' }}/>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: physique.color }}>{physique.label}</span>
               </span>
+              {/* Ligne 2 — disponibilité résa Yoppaa */}
+              {resa && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: resa.bg, borderRadius: 100, padding: '4px 10px', border: `1px solid ${resa.dot}22` }}>
+                  <span style={{ fontSize: '0.62rem' }}>🟣</span>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: resa.color }}>{resa.label}</span>
+                </span>
+              )}
               {c.distance != null && (
                 <span style={{ fontSize: '0.7rem', color: T.muted, fontWeight: 500 }}>📍 {formatDistance(c.distance)}</span>
               )}

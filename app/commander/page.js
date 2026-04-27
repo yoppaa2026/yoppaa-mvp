@@ -269,6 +269,7 @@ export default function Commander() {
     if (typeof window === 'undefined') return false
     return !sessionStorage.getItem('yoppaa_splash_seen')
   })
+  const [headerScrolled, setHeaderScrolled] = useState(false)
   function onSplashDone() { sessionStorage.setItem('yoppaa_splash_seen', '1'); setShowSplash(false) }
 
   const [onglet, setOngletState] = useState('accueil')
@@ -506,20 +507,22 @@ export default function Commander() {
           <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 10%, ${T.mid}33 0%, transparent 50%), radial-gradient(circle at 10% 90%, ${T.light}18 0%, transparent 50%), radial-gradient(circle at 50% 50%, ${T.main}22 0%, transparent 70%)`, pointerEvents: 'none' }}/>
 
           {/* Top row — logo + géoloc */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1rem 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: headerScrolled ? '0.625rem 1rem' : '1rem 1rem 0', transition: 'padding 0.3s ease' }}>
             <div>
-              {/* 3 points yo·pp·aa — plus grands, animés */}
-              <div style={{ display: 'flex', gap: 7, marginBottom: 8 }}>
-                {[
-                  { c: '#fff',   o: 0.35, delay: '0s',    size: 9 },
-                  { c: T.light,  o: 1,    delay: '0.3s',  size: 11 },
-                  { c: T.mid,    o: 1,    delay: '0.6s',  size: 9 },
-                ].map((d, i) => (
-                  <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 10px ${d.c}88`, animation: `dot-pulse 2s ease-in-out ${d.delay} infinite` }}/>
-                ))}
-              </div>
-              <p style={{ fontWeight: 900, fontSize: '2rem', letterSpacing: '-2.5px', color: '#fff', lineHeight: 1, textShadow: `0 0 40px ${T.mid}66` }}>yoppaa</p>
-              <p style={{ color: T.light, fontSize: '0.62rem', marginTop: 3, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', opacity: 0.8 }}>Skip the wait</p>
+              {/* 3 points — cachés au scroll */}
+              {!headerScrolled && (
+                <div style={{ display: 'flex', gap: 7, marginBottom: 8 }}>
+                  {[
+                    { c: '#fff',   o: 0.35, delay: '0s',    size: 9 },
+                    { c: T.light,  o: 1,    delay: '0.3s',  size: 11 },
+                    { c: T.mid,    o: 1,    delay: '0.6s',  size: 9 },
+                  ].map((d, i) => (
+                    <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 10px ${d.c}88`, animation: `dot-pulse 2s ease-in-out ${d.delay} infinite` }}/>
+                  ))}
+                </div>
+              )}
+              <p style={{ fontWeight: 900, fontSize: headerScrolled ? '1.3rem' : '2rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1, textShadow: `0 0 40px ${T.mid}66`, transition: 'font-size 0.3s ease' }}>yoppaa</p>
+              {!headerScrolled && <p style={{ color: T.light, fontSize: '0.62rem', marginTop: 3, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', opacity: 0.8 }}>Skip the wait</p>}
             </div>
             {/* Localisation — GPS ou manuelle */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
@@ -581,9 +584,9 @@ export default function Commander() {
             </div>
           )}
 
-          {/* Tagline hero */}
-          {onglet === 'accueil' && (
-            <div style={{ padding: '1rem 1rem 0.875rem', animation: 'fadeUp 0.4s ease' }}>
+          {/* Tagline hero — cachée au scroll */}
+          {onglet === 'accueil' && !headerScrolled && (
+            <div style={{ padding: '0.875rem 1rem 0.75rem', animation: 'fadeUp 0.4s ease' }}>
               <p style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.5px', lineHeight: 1.25, marginBottom: 4 }}>
                 Commander avant d'arriver,<br/>
                 <span style={{ color: T.light }}>récupère sans attendre.</span>
@@ -637,7 +640,7 @@ export default function Commander() {
         </div>
 
         {/* ── CONTENU ── */}
-        <div className="scroll-body">
+        <div className="scroll-body" onScroll={e => setHeaderScrolled(e.currentTarget.scrollTop > 40)}>
 
           {/* ACCUEIL */}
           {onglet === 'accueil' && (

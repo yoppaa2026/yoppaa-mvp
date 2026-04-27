@@ -36,7 +36,6 @@ function Etoiles({ note, taille = 14 }) {
   return <span style={{ display: 'inline-flex', gap: 1 }}>{[1,2,3,4,5].map(i => <span key={i} style={{ fontSize: taille, color: i<=n ? '#F59E0B' : '#D1D5DB' }}>★</span>)}</span>
 }
 
-// ─── Swipe retrait ────────────────────────────────────────────────────────────
 function SwipeRetrait({ onConfirm }) {
   const [swipeX, setSwipeX] = useState(0)
   const [swiping, setSwiping] = useState(false)
@@ -74,7 +73,6 @@ function SwipeRetrait({ onConfirm }) {
   )
 }
 
-// ─── Avis expandable ──────────────────────────────────────────────────────────
 function CarteAvis({ a }) {
   const [ouvert, setOuvert] = useState(false)
   return (
@@ -109,7 +107,6 @@ function CarteAvis({ a }) {
   )
 }
 
-// ─── Sélecteur d'options article ──────────────────────────────────────────────
 function OptionsSelector({ article, groupes, onAjouter }) {
   const [selections, setSelections] = useState({})
   const [erreurs, setErreurs] = useState({})
@@ -176,7 +173,6 @@ function OptionsSelector({ article, groupes, onAjouter }) {
   )
 }
 
-// ─── Récap panier ─────────────────────────────────────────────────────────────
 function RecapPanier({ panier, onRetirer, onAjouter, total, onValider }) {
   const items = Object.entries(panier)
   if (items.length === 0) return null
@@ -197,7 +193,6 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider }) {
           const prixUnitaire = item.prix + (item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0)
           return (
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.5rem 0', borderBottom: `1px solid ${T.pale}` }}>
-              {/* − quantité + */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                 <button onClick={() => onRetirer(key)}
                   style={{ width: 26, height: 26, borderRadius: '50%', border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
@@ -205,12 +200,10 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider }) {
                 <button onClick={() => onAjouter(key, item)}
                   style={{ width: 26, height: 26, borderRadius: '50%', border: 'none', background: T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
               </div>
-              {/* Nom + options */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontWeight: 700, color: T.ink, fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.nom}</p>
                 {opts && <p style={{ fontSize: '0.7rem', color: T.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opts}</p>}
               </div>
-              {/* Prix */}
               <p style={{ fontWeight: 800, color: T.main, fontSize: '0.875rem', flexShrink: 0 }}>
                 {(prixUnitaire * item.quantite).toFixed(2)}€
               </p>
@@ -232,7 +225,6 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider }) {
   )
 }
 
-// ─── Composant principal ──────────────────────────────────────────────────────
 export default function CommanderSlug() {
   const { slug } = useParams()
   const router = useRouter()
@@ -247,7 +239,10 @@ export default function CommanderSlug() {
   const [creneauChoisi, setCreneauChoisi] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadingCommande, setLoadingCommande] = useState(false)
-  const [client, setClient] = useState({ nom: '', email: '', telephone: '' })
+  // ─── Coordonnées client : 4 champs séparés ───────────────────
+  const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '' })
+  const [rgpdCommande, setRgpdCommande] = useState(false)   // obligatoire
+  const [rgpdMarketing, setRgpdMarketing] = useState(false) // optionnel
   const [clientId, setClientId] = useState(null)
   const [modeLendemain, setModeLendemain] = useState(false)
   const [optionsParArticle, setOptionsParArticle] = useState({})
@@ -256,10 +251,11 @@ export default function CommanderSlug() {
   useEffect(() => {
     if (!slug) return
     const email = localStorage.getItem('yoppaa_email')
+    const prenom = localStorage.getItem('yoppaa_prenom')
     const nom = localStorage.getItem('yoppaa_nom')
     const id = localStorage.getItem('yoppaa_client_id')
     if (email && id) {
-      setClient(p => ({ ...p, email, nom: nom || '' }))
+      setClient(p => ({ ...p, email, prenom: prenom || '', nom: nom || '' }))
       setClientId(id)
     }
     chargerCommercant(slug)
@@ -317,7 +313,6 @@ export default function CommanderSlug() {
     setLoading(false)
   }
 
-  // ─── Panier : gestion complète ────────────────────────────────
   function ajouterAuPanier(article, options = null) {
     const key = options ? `${article.id}_${JSON.stringify(options)}` : String(article.id)
     setPanier(prev => ({
@@ -326,7 +321,6 @@ export default function CommanderSlug() {
     }))
   }
 
-  // Incrémenter depuis le récap (on a déjà la clé et l'item)
   function incrementerPanier(key, item) {
     setPanier(prev => ({
       ...prev,
@@ -346,7 +340,6 @@ export default function CommanderSlug() {
     })
   }
 
-  // Quantité totale d'un article (toutes variantes options confondues)
   function qteTotaleArticle(articleId) {
     return Object.entries(panier)
       .filter(([key]) => key === String(articleId) || key.startsWith(`${articleId}_`))
@@ -360,25 +353,34 @@ export default function CommanderSlug() {
     }, 0)
   }
 
-  async function getOuCreerClient(email, nom) {
+  async function getOuCreerClient(email, prenom, nom) {
+    const nomComplet = `${prenom} ${nom}`.trim()
     const { data: ex } = await supabase.from('clients').select('id').eq('email', email).single()
-    const id = ex ? ex.id : (await supabase.from('clients').insert({ email, nom }).select('id').single()).data?.id
+    const id = ex ? ex.id : (await supabase.from('clients').insert({ email, nom: nomComplet }).select('id').single()).data?.id
     if (!id) return null
     setClientId(id)
     localStorage.setItem('yoppaa_client_id', id)
     localStorage.setItem('yoppaa_email', email)
+    localStorage.setItem('yoppaa_prenom', prenom)
     localStorage.setItem('yoppaa_nom', nom)
     return id
   }
 
   async function passerCommande() {
-    if (!creneauChoisi || !client.nom || !client.email || !commercant) return
+    if (!creneauChoisi || !client.prenom || !client.nom || !client.email || !client.telephone || !rgpdCommande || !commercant) return
     setLoadingCommande(true)
-    const cid = await getOuCreerClient(client.email, client.nom)
+    const nomComplet = `${client.prenom} ${client.nom}`.trim()
+    const cid = await getOuCreerClient(client.email, client.prenom, client.nom)
     const { data: commande } = await supabase.from('commandes').insert({
-      commercant_id: commercant.id, creneau_id: creneauChoisi,
-      client_nom: client.nom, client_email: client.email, client_telephone: client.telephone,
-      total: totalPanier(), statut: 'en_attente'
+      commercant_id: commercant.id,
+      creneau_id: creneauChoisi,
+      client_nom: nomComplet,
+      client_email: client.email,
+      client_telephone: client.telephone,
+      rgpd_commande: true,
+      rgpd_marketing: rgpdMarketing,
+      total: totalPanier(),
+      statut: 'en_attente',
     }).select().single()
     if (commande) {
       await supabase.from('commande_articles').insert(
@@ -389,6 +391,9 @@ export default function CommanderSlug() {
     }
     setLoadingCommande(false)
   }
+
+  // Validation formulaire étape 3
+  const formValide = creneauChoisi && client.prenom.trim() && client.nom.trim() && client.email.trim() && client.telephone.trim() && rgpdCommande
 
   const card = { background: T.bgCard, borderRadius: 14, padding: '1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 6px rgba(107,53,196,0.05)' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: T.main, color: '#fff', boxShadow: `0 4px 20px ${T.main}44`, fontFamily: '"DM Sans", sans-serif' }
@@ -419,11 +424,12 @@ export default function CommanderSlug() {
         @media (min-width: 480px) { .grid3 { grid-template-columns: 1fr 1fr 1fr; } }
         input, textarea, button, select { font-family: "DM Sans", sans-serif; }
         @keyframes pulse { from { opacity:0.4; transform:scale(0.8); } to { opacity:1; transform:scale(1.2); } }
+        .rgpd-check { display: flex; align-items: flex-start; gap: 10; padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: background 0.15s; }
+        .rgpd-check:hover { background: ${T.pale}; }
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 
       <div className="page-wrap">
-        {/* ── TOPBAR ── */}
         <div className="topbar" style={{ padding: '0.875rem 1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button onClick={() => router.push('/commander')}
@@ -440,13 +446,11 @@ export default function CommanderSlug() {
           </div>
         </div>
 
-        {/* ── CONTENU ── */}
         <div className="scroll-body">
 
           {/* ÉTAPE 2 — Articles */}
           {etape === 2 && commercant && (
             <div style={{ padding: '1rem' }}>
-              {/* En-tête commerçant */}
               <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1rem' }}>
                 <div style={{ width: 60, height: 60, borderRadius: 12, background: T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   {commercant.logo_url ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <span style={{ fontSize: '1.5rem' }}>🏪</span>}
@@ -464,7 +468,6 @@ export default function CommanderSlug() {
                 </div>
               </div>
 
-              {/* Horaires 7 jours */}
               {commercant.horaires_detail && (
                 <div style={{ background: T.bgCard, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}` }}>
                   <p style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>🕐 Horaires</p>
@@ -489,7 +492,6 @@ export default function CommanderSlug() {
                 </div>
               )}
 
-              {/* Articles groupés par catégorie */}
               {(() => {
                 const categories = [...new Set(articles.map(a => a.categorie).filter(Boolean))]
                 const sansCat = articles.filter(a => !a.categorie)
@@ -498,7 +500,6 @@ export default function CommanderSlug() {
                   const groupes = optionsParArticle[article.id] || []
                   const hasOptions = groupes.length > 0
                   const [showOptions, setShowOptions] = useState(false)
-                  // Quantité totale de cet article dans le panier (toutes variantes)
                   const qteTotale = qteTotaleArticle(article.id)
 
                   return (
@@ -515,13 +516,11 @@ export default function CommanderSlug() {
                         </div>
                         {article.stock_jour !== 0 && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
-                            {/* Badge quantité — visible si au moins 1 dans le panier */}
                             {qteTotale > 0 && (
                               <span style={{ background: T.main, color: '#fff', fontWeight: 800, fontSize: '0.78rem', borderRadius: 100, minWidth: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>
                                 {qteTotale}
                               </span>
                             )}
-                            {/* Bouton + ou ⚙️ */}
                             <button onClick={() => hasOptions ? setShowOptions(v => !v) : ajouterAuPanier(article)}
                               style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: showOptions ? T.mid : (qteTotale > 0 ? T.deep : T.main), color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: hasOptions ? '1rem' : '1.3rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' }}>
                               {hasOptions ? '⚙️' : '+'}
@@ -570,7 +569,6 @@ export default function CommanderSlug() {
                 )
               })()}
 
-              {/* Avis */}
               {avisCommerce.length > 0 && (
                 <div style={{ marginTop: '1.25rem' }}>
                   <h3 style={{ fontWeight: 800, fontSize: '1rem', color: T.deep, marginBottom: '0.625rem' }}>Avis clients</h3>
@@ -578,7 +576,6 @@ export default function CommanderSlug() {
                 </div>
               )}
 
-              {/* Récap panier sticky */}
               <RecapPanier
                 panier={panier}
                 onRetirer={retirerDuPanier}
@@ -589,7 +586,7 @@ export default function CommanderSlug() {
             </div>
           )}
 
-          {/* ÉTAPE 3 — Créneau + coordonnées */}
+          {/* ÉTAPE 3 — Créneau + coordonnées + RGPD */}
           {etape === 3 && commercant && (
             <div style={{ padding: '1rem' }}>
               <div style={{ marginBottom: '1rem' }}>
@@ -609,7 +606,7 @@ export default function CommanderSlug() {
                 )}
               </div>
 
-              {/* Récap mini panier en haut de l'étape 3 */}
+              {/* Mini récap commande */}
               <div style={{ background: T.pale, borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '1rem', border: `1px solid ${T.main}22` }}>
                 <p style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Ta commande</p>
                 {Object.values(panier).map((item, i) => {
@@ -627,6 +624,7 @@ export default function CommanderSlug() {
                 </div>
               </div>
 
+              {/* Créneaux */}
               <div className="grid3" style={{ marginBottom: '1.25rem' }}>
                 {creneaux.map(c => {
                   const passe = modeLendemain ? false : heureEnMinutes(c.heure_debut) <= maintenant()
@@ -669,14 +667,92 @@ export default function CommanderSlug() {
                 })()}
               </div>
 
+              {/* ─── Coordonnées ─── */}
               <h2 style={{ fontWeight: 800, fontSize: '1.15rem', marginBottom: '1rem', color: T.ink }}>Tes coordonnées</h2>
-              <input placeholder="Ton prénom et nom" type="text" value={client.nom} onChange={e => setClient(p => ({ ...p, nom: e.target.value }))} style={inputSt}/>
-              <input placeholder="Email" type="email" value={client.email} onChange={e => setClient(p => ({ ...p, email: e.target.value }))} style={inputSt}/>
-              <input placeholder="Téléphone (optionnel)" type="tel" value={client.telephone} onChange={e => setClient(p => ({ ...p, telephone: e.target.value }))} style={inputSt}/>
-              <button onClick={passerCommande} disabled={loadingCommande || !creneauChoisi || !client.nom || !client.email}
-                style={{ ...btnPrimary, opacity: (!creneauChoisi || !client.nom || !client.email) ? 0.5 : 1, marginTop: 4 }}>
-                {loadingCommande ? 'En cours...' : `Confirmer — ${totalPanier().toFixed(2)}€`}
+
+              {/* Prénom + Nom sur 2 colonnes */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 0 }}>
+                <input
+                  placeholder="Prénom *"
+                  type="text"
+                  value={client.prenom}
+                  onChange={e => setClient(p => ({ ...p, prenom: e.target.value }))}
+                  style={{ ...inputSt, marginBottom: 0 }}
+                />
+                <input
+                  placeholder="Nom *"
+                  type="text"
+                  value={client.nom}
+                  onChange={e => setClient(p => ({ ...p, nom: e.target.value }))}
+                  style={{ ...inputSt, marginBottom: 0 }}
+                />
+              </div>
+              <div style={{ height: 10 }}/>
+              <input
+                placeholder="Email *"
+                type="email"
+                value={client.email}
+                onChange={e => setClient(p => ({ ...p, email: e.target.value }))}
+                style={inputSt}
+              />
+              <input
+                placeholder="Téléphone *"
+                type="tel"
+                value={client.telephone}
+                onChange={e => setClient(p => ({ ...p, telephone: e.target.value }))}
+                style={inputSt}
+              />
+
+              {/* ─── Consentements RGPD ─── */}
+              <div style={{ background: T.bgCard, borderRadius: 14, border: `1.5px solid ${T.pale}`, overflow: 'hidden', marginBottom: 16, marginTop: 4 }}>
+                <div style={{ padding: '0.625rem 1rem', background: T.pale, borderBottom: `1px solid ${T.main}11` }}>
+                  <p style={{ fontSize: '0.7rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🔒 Confidentialité</p>
+                </div>
+
+                {/* Case 1 — Obligatoire */}
+                <label className="rgpd-check" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', cursor: 'pointer', borderBottom: `1px solid ${T.pale}`, background: rgpdCommande ? '#F0FDF4' : '#fff' }}>
+                  <div onClick={() => setRgpdCommande(v => !v)}
+                    style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${rgpdCommande ? '#16A34A' : '#D1D5DB'}`, background: rgpdCommande ? '#16A34A' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, transition: 'all 0.15s', cursor: 'pointer' }}>
+                    {rgpdCommande && <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 900 }}>✓</span>}
+                  </div>
+                  <div>
+                    <p style={{ fontSize: '0.82rem', fontWeight: 700, color: T.ink, marginBottom: 2 }}>
+                      Traitement de ma commande <span style={{ fontSize: '0.65rem', fontWeight: 700, background: '#FEE2E2', color: '#DC2626', padding: '1px 6px', borderRadius: 100, marginLeft: 4 }}>Obligatoire</span>
+                    </p>
+                    <p style={{ fontSize: '0.75rem', color: T.muted, lineHeight: 1.5 }}>
+                      J'accepte que mes coordonnées soient transmises à <strong>{commercant.nom}</strong> pour le traitement et la préparation de ma commande.
+                    </p>
+                  </div>
+                </label>
+
+                {/* Case 2 — Optionnelle */}
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', cursor: 'pointer', background: rgpdMarketing ? '#F0FDF4' : '#fff' }}>
+                  <div onClick={() => setRgpdMarketing(v => !v)}
+                    style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${rgpdMarketing ? '#16A34A' : '#D1D5DB'}`, background: rgpdMarketing ? '#16A34A' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, transition: 'all 0.15s', cursor: 'pointer' }}>
+                    {rgpdMarketing && <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 900 }}>✓</span>}
+                  </div>
+                  <div>
+                    <p style={{ fontSize: '0.82rem', fontWeight: 700, color: T.ink, marginBottom: 2 }}>
+                      Offres et actualités <span style={{ fontSize: '0.65rem', fontWeight: 600, background: T.pale, color: T.main, padding: '1px 6px', borderRadius: 100, marginLeft: 4 }}>Optionnel</span>
+                    </p>
+                    <p style={{ fontSize: '0.75rem', color: T.muted, lineHeight: 1.5 }}>
+                      J'accepte que <strong>{commercant.nom}</strong> utilise mes coordonnées pour m'envoyer des offres, promotions et actualités.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              <button
+                onClick={passerCommande}
+                disabled={loadingCommande || !formValide}
+                style={{ ...btnPrimary, opacity: !formValide ? 0.45 : 1, cursor: !formValide ? 'default' : 'pointer', marginTop: 4 }}>
+                {loadingCommande ? 'En cours...' : `Confirmer ma commande — ${totalPanier().toFixed(2)}€`}
               </button>
+              {!rgpdCommande && (
+                <p style={{ fontSize: '0.75rem', color: '#DC2626', textAlign: 'center', marginTop: 6, fontWeight: 600 }}>
+                  ⚠️ Accepte le traitement de ta commande pour continuer
+                </p>
+              )}
               <p style={{ fontSize: '0.8rem', color: '#9a8ab0', textAlign: 'center', marginTop: 8 }}>Le paiement sera activé prochainement</p>
             </div>
           )}
@@ -701,7 +777,7 @@ export default function CommanderSlug() {
               <button onClick={() => router.push('/commander')} style={{ ...btnPrimary, marginBottom: 10 }}>
                 ← Retour à l'accueil
               </button>
-              <button onClick={() => { setPanier({}); setCreneauChoisi(null); setEtape(2) }}
+              <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(false); setEtape(2) }}
                 style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
                 Commander autre chose chez {commercant.nom}
               </button>

@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -36,6 +36,7 @@ function Etoiles({ note, taille = 14 }) {
   return <span style={{ display: 'inline-flex', gap: 1 }}>{[1,2,3,4,5].map(i => <span key={i} style={{ fontSize: taille, color: i<=n ? '#F59E0B' : '#D1D5DB' }}>★</span>)}</span>
 }
 
+// ─── Swipe retrait ────────────────────────────────────────────────────────────
 function SwipeRetrait({ onConfirm }) {
   const [swipeX, setSwipeX] = useState(0)
   const [swiping, setSwiping] = useState(false)
@@ -73,6 +74,7 @@ function SwipeRetrait({ onConfirm }) {
   )
 }
 
+// ─── Avis expandable ──────────────────────────────────────────────────────────
 function CarteAvis({ a }) {
   const [ouvert, setOuvert] = useState(false)
   return (
@@ -88,9 +90,7 @@ function CarteAvis({ a }) {
         </div>
       </div>
       {a.commentaire && !ouvert && (
-        <p style={{ fontSize: '0.8rem', color: T.muted, marginTop: 6, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>
-          {a.commentaire}
-        </p>
+        <p style={{ fontSize: '0.8rem', color: T.muted, marginTop: 6, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>{a.commentaire}</p>
       )}
       {ouvert && (
         <div style={{ marginTop: 8 }}>
@@ -107,6 +107,7 @@ function CarteAvis({ a }) {
   )
 }
 
+// ─── Sélecteur d'options article ──────────────────────────────────────────────
 function OptionsSelector({ article, groupes, onAjouter }) {
   const [selections, setSelections] = useState({})
   const [erreurs, setErreurs] = useState({})
@@ -114,23 +115,17 @@ function OptionsSelector({ article, groupes, onAjouter }) {
   function toggleValeur(groupe, valeur) {
     setSelections(prev => {
       const current = prev[groupe.id] || []
-      if (groupe.type === 'unique') {
-        return { ...prev, [groupe.id]: [valeur] }
-      } else {
-        const exists = current.find(v => v.id === valeur.id)
-        return { ...prev, [groupe.id]: exists ? current.filter(v => v.id !== valeur.id) : [...current, valeur] }
-      }
+      if (groupe.type === 'unique') return { ...prev, [groupe.id]: [valeur] }
+      const exists = current.find(v => v.id === valeur.id)
+      return { ...prev, [groupe.id]: exists ? current.filter(v => v.id !== valeur.id) : [...current, valeur] }
     })
     setErreurs(p => ({ ...p, [groupe.id]: false }))
   }
 
   function valider() {
-    const errs = {}
-    let ok = true
+    const errs = {}; let ok = true
     groupes.forEach(g => {
-      if (g.obligatoire && (!selections[g.id] || selections[g.id].length === 0)) {
-        errs[g.id] = true; ok = false
-      }
+      if (g.obligatoire && (!selections[g.id] || selections[g.id].length === 0)) { errs[g.id] = true; ok = false }
     })
     setErreurs(errs)
     if (!ok) return
@@ -173,6 +168,7 @@ function OptionsSelector({ article, groupes, onAjouter }) {
   )
 }
 
+// ─── Récap panier ─────────────────────────────────────────────────────────────
 function RecapPanier({ panier, onRetirer, onAjouter, total, onValider }) {
   const items = Object.entries(panier)
   if (items.length === 0) return null
@@ -183,41 +179,41 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider }) {
   }
 
   return (
-    <div style={{ background: '#fff', borderRadius: 16, border: `2px solid ${T.main}33`, overflow: 'hidden', marginTop: 16, boxShadow: `0 4px 20px ${T.main}22` }}>
-      <div style={{ background: T.pale, padding: '0.75rem 1rem', borderBottom: `1px solid ${T.main}22` }}>
-        <p style={{ fontWeight: 800, color: T.deep, fontSize: '0.875rem' }}>🛒 Mon panier</p>
+    <div style={{ background: '#fff', borderRadius: 20, border: `2px solid ${T.main}22`, overflow: 'hidden', marginTop: 20, boxShadow: `0 8px 32px ${T.main}18` }}>
+      <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, padding: '0.875rem 1.25rem' }}>
+        <p style={{ fontWeight: 800, color: '#fff', fontSize: '0.875rem', margin: 0 }}>🛒 Mon panier</p>
       </div>
-      <div style={{ padding: '0.5rem 1rem' }}>
+      <div style={{ padding: '0.5rem 1.25rem' }}>
         {items.map(([key, item]) => {
           const opts = labelOptions(item.options)
           const prixUnitaire = item.prix + (item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0)
           return (
-            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.5rem 0', borderBottom: `1px solid ${T.pale}` }}>
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.625rem 0', borderBottom: `1px solid ${T.pale}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                 <button onClick={() => onRetirer(key)}
-                  style={{ width: 26, height: 26, borderRadius: '50%', border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                <span style={{ fontWeight: 800, minWidth: 18, textAlign: 'center', fontSize: '0.95rem', color: T.ink }}>{item.quantite}</span>
+                  style={{ width: 28, height: 28, borderRadius: '50%', border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                <span style={{ fontWeight: 800, minWidth: 20, textAlign: 'center', fontSize: '1rem', color: T.ink }}>{item.quantite}</span>
                 <button onClick={() => onAjouter(key, item)}
-                  style={{ width: 26, height: 26, borderRadius: '50%', border: 'none', background: T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                  style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontWeight: 700, color: T.ink, fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.nom}</p>
                 {opts && <p style={{ fontSize: '0.7rem', color: T.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opts}</p>}
               </div>
-              <p style={{ fontWeight: 800, color: T.main, fontSize: '0.875rem', flexShrink: 0 }}>
+              <p style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem', flexShrink: 0 }}>
                 {(prixUnitaire * item.quantite).toFixed(2)}€
               </p>
             </div>
           )
         })}
       </div>
-      <div style={{ padding: '0.875rem 1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.875rem' }}>Total</span>
-          <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.1rem' }}>{total.toFixed(2)}€</span>
+      <div style={{ padding: '1rem 1.25rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.875rem' }}>Total commande</span>
+          <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.25rem', letterSpacing: '-0.5px' }}>{total.toFixed(2)}€</span>
         </div>
         <button onClick={onValider}
-          style={{ width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: T.main, color: '#fff', boxShadow: `0 4px 20px ${T.main}44`, fontFamily: '"DM Sans", sans-serif' }}>
+          style={{ width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif', letterSpacing: '-0.3px' }}>
           Choisir mon créneau →
         </button>
       </div>
@@ -225,6 +221,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider }) {
   )
 }
 
+// ─── Composant principal ──────────────────────────────────────────────────────
 export default function CommanderSlug() {
   const { slug } = useParams()
   const router = useRouter()
@@ -239,14 +236,21 @@ export default function CommanderSlug() {
   const [creneauChoisi, setCreneauChoisi] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadingCommande, setLoadingCommande] = useState(false)
-  // ─── Coordonnées client : 4 champs séparés ───────────────────
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '' })
-  const [rgpdCommande, setRgpdCommande] = useState(false)   // obligatoire
-  const [rgpdMarketing, setRgpdMarketing] = useState(false) // optionnel
+  const [rgpdCommande, setRgpdCommande] = useState(false)
+  const [rgpdMarketing, setRgpdMarketing] = useState(false)
   const [clientId, setClientId] = useState(null)
   const [modeLendemain, setModeLendemain] = useState(false)
   const [optionsParArticle, setOptionsParArticle] = useState({})
   const [derniereCommande, setDerniereCommande] = useState(null)
+
+  // ─── Barre catégories sticky ──────────────────────────────────
+  const [categorieActive, setCategorieActive] = useState(null)
+  const [catBarVisible, setCatBarVisible] = useState(false)
+  const catRefs = useRef({})
+  const headerRef = useRef(null)
+  const scrollRef = useRef(null)
+  const catBarRef = useRef(null)
 
   useEffect(() => {
     if (!slug) return
@@ -268,7 +272,7 @@ export default function CommanderSlug() {
     setCommercant(c)
 
     const [{ data: arts }, { data: cren }, { data: avis }, { data: avisNotes }] = await Promise.all([
-      supabase.from('articles').select('*').eq('commercant_id', c.id).eq('actif', true).order('nom'),
+      supabase.from('articles').select('*').eq('commercant_id', c.id).eq('actif', true).order('categorie').order('nom'),
       supabase.from('creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
       supabase.from('avis').select('*, client:clients(nom)').eq('commercant_id', c.id).order('created_at', { ascending: false }).limit(10),
       supabase.from('avis').select('note').eq('commercant_id', c.id),
@@ -313,39 +317,65 @@ export default function CommanderSlug() {
     setLoading(false)
   }
 
+  // ─── Scroll spy pour la barre catégories ─────────────────────
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current || !headerRef.current) return
+    const scrollTop = scrollRef.current.scrollTop
+    const headerH = headerRef.current.offsetHeight
+
+    // Afficher la barre catégories après le header
+    setCatBarVisible(scrollTop > headerH - 60)
+
+    // Détecter la catégorie active
+    const cats = Object.keys(catRefs.current)
+    let active = cats[0]
+    for (const cat of cats) {
+      const el = catRefs.current[cat]
+      if (!el) continue
+      const top = el.offsetTop - headerH - 80
+      if (scrollTop >= top) active = cat
+    }
+    setCategorieActive(active)
+  }, [])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    return () => el.removeEventListener('scroll', handleScroll)
+  }, [handleScroll, etape])
+
+  function scrollToCategorie(cat) {
+    const el = catRefs.current[cat]
+    const scroll = scrollRef.current
+    const header = headerRef.current
+    if (!el || !scroll || !header) return
+    const top = el.offsetTop - header.offsetHeight - 56
+    scroll.scrollTo({ top, behavior: 'smooth' })
+    setCategorieActive(cat)
+  }
+
+  // ─── Panier ───────────────────────────────────────────────────
   function ajouterAuPanier(article, options = null) {
     const key = options ? `${article.id}_${JSON.stringify(options)}` : String(article.id)
-    setPanier(prev => ({
-      ...prev,
-      [key]: { ...article, options, quantite: (prev[key]?.quantite || 0) + 1 }
-    }))
+    setPanier(prev => ({ ...prev, [key]: { ...article, options, quantite: (prev[key]?.quantite || 0) + 1 } }))
   }
-
   function incrementerPanier(key, item) {
-    setPanier(prev => ({
-      ...prev,
-      [key]: { ...item, quantite: (prev[key]?.quantite || 0) + 1 }
-    }))
+    setPanier(prev => ({ ...prev, [key]: { ...item, quantite: (prev[key]?.quantite || 0) + 1 } }))
   }
-
   function retirerDuPanier(key) {
     setPanier(prev => {
       const next = { ...prev }
-      if (next[key]?.quantite > 1) {
-        next[key] = { ...next[key], quantite: next[key].quantite - 1 }
-      } else {
-        delete next[key]
-      }
+      if (next[key]?.quantite > 1) next[key] = { ...next[key], quantite: next[key].quantite - 1 }
+      else delete next[key]
       return next
     })
   }
-
   function qteTotaleArticle(articleId) {
     return Object.entries(panier)
       .filter(([key]) => key === String(articleId) || key.startsWith(`${articleId}_`))
       .reduce((acc, [, item]) => acc + item.quantite, 0)
   }
-
   function totalPanier() {
     return Object.values(panier).reduce((acc, i) => {
       const supplement = i.options ? Object.values(i.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0
@@ -372,15 +402,10 @@ export default function CommanderSlug() {
     const nomComplet = `${client.prenom} ${client.nom}`.trim()
     const cid = await getOuCreerClient(client.email, client.prenom, client.nom)
     const { data: commande } = await supabase.from('commandes').insert({
-      commercant_id: commercant.id,
-      creneau_id: creneauChoisi,
-      client_nom: nomComplet,
-      client_email: client.email,
-      client_telephone: client.telephone,
-      rgpd_commande: true,
-      rgpd_marketing: rgpdMarketing,
-      total: totalPanier(),
-      statut: 'en_attente',
+      commercant_id: commercant.id, creneau_id: creneauChoisi,
+      client_nom: nomComplet, client_email: client.email, client_telephone: client.telephone,
+      rgpd_commande: true, rgpd_marketing: rgpdMarketing,
+      total: totalPanier(), statut: 'en_attente',
     }).select().single()
     if (commande) {
       await supabase.from('commande_articles').insert(
@@ -392,203 +417,236 @@ export default function CommanderSlug() {
     setLoadingCommande(false)
   }
 
-  // Validation formulaire étape 3
   const formValide = creneauChoisi && client.prenom.trim() && client.nom.trim() && client.email.trim() && client.telephone.trim() && rgpdCommande
-
-  const card = { background: T.bgCard, borderRadius: 14, padding: '1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 6px rgba(107,53,196,0.05)' }
-  const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: T.main, color: '#fff', boxShadow: `0 4px 20px ${T.main}44`, fontFamily: '"DM Sans", sans-serif' }
   const inputSt = { width: '100%', padding: '0.875rem 1rem', border: `1.5px solid ${T.pale}`, borderRadius: 12, marginBottom: 10, fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', outline: 'none', color: T.ink, background: '#fff', display: 'block' }
+  const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }
 
   if (loading) return (
-    <div style={{ minHeight: '100dvh', background: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+    <div style={{ minHeight: '100dvh', background: `linear-gradient(160deg, ${T.bgPanel} 0%, #2D0F6B 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;800;900&display=swap" rel="stylesheet"/>
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 10 }}>
         {[0,1,2].map(i => (
           <div key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: [T.light, T.mid, T.main][i], animation: `pulse 0.8s ease-in-out ${i*0.2}s infinite alternate` }}/>
         ))}
       </div>
+      <p style={{ color: T.light, fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', fontWeight: 600 }}>Chargement...</p>
       <style>{`@keyframes pulse { from { opacity:0.4; transform:scale(0.8); } to { opacity:1; transform:scale(1.2); } }`}</style>
     </div>
   )
+
+  // ─── Catégories pour la barre ─────────────────────────────────
+  const categories = [...new Set(articles.map(a => a.categorie).filter(Boolean))]
+  const sansCat = articles.filter(a => !a.categorie)
+  const toutesLesCats = [...categories, ...(sansCat.length > 0 ? ['__autres__'] : [])]
 
   return (
     <>
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { height: 100%; width: 100%; overflow-x: hidden; }
+        html, body { height: 100%; width: 100%; overflow: hidden; }
         body { background: ${T.bg}; font-family: "DM Sans", sans-serif; font-size: 16px; -webkit-text-size-adjust: 100%; }
-        .page-wrap { display: flex; flex-direction: column; min-height: 100dvh; max-width: 640px; margin: 0 auto; background: ${T.bg}; overflow-x: hidden; width: 100%; }
-        .topbar { flex-shrink: 0; background: ${T.bgPanel}; border-bottom: 1px solid ${T.main}33; }
-        .scroll-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .page-wrap { display: flex; flex-direction: column; height: 100dvh; max-width: 640px; margin: 0 auto; background: ${T.bg}; overflow: hidden; width: 100%; position: relative; }
+        .scroll-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
         .grid3 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         @media (min-width: 480px) { .grid3 { grid-template-columns: 1fr 1fr 1fr; } }
         input, textarea, button, select { font-family: "DM Sans", sans-serif; }
+
+        /* Barre catégories */
+        .cat-bar { display: flex; gap: 0; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; background: #fff; border-bottom: 1px solid ${T.pale}; }
+        .cat-bar::-webkit-scrollbar { display: none; }
+        .cat-pill { flex-shrink: 0; padding: 0.75rem 1rem; border: none; background: transparent; font-family: "DM Sans", sans-serif; font-weight: 700; font-size: 0.82rem; cursor: pointer; color: ${T.muted}; border-bottom: 2px solid transparent; transition: all 0.15s; white-space: nowrap; }
+        .cat-pill.active { color: ${T.main}; border-bottom-color: ${T.main}; }
+
+        /* Article card hover */
+        .art-card { transition: box-shadow 0.15s, transform 0.15s; }
+        .art-card:hover { box-shadow: 0 6px 24px rgba(107,53,196,0.12) !important; transform: translateY(-1px); }
+
+        /* Animations */
         @keyframes pulse { from { opacity:0.4; transform:scale(0.8); } to { opacity:1; transform:scale(1.2); } }
-        .rgpd-check { display: flex; align-items: flex-start; gap: 10; padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: background 0.15s; }
-        .rgpd-check:hover { background: ${T.pale}; }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes slideIn { from { opacity:0; transform:translateX(-8px); } to { opacity:1; transform:translateX(0); } }
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 
       <div className="page-wrap">
-        <div className="topbar" style={{ padding: '0.875rem 1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button onClick={() => router.push('/commander')}
-              style={{ background: `${T.main}55`, border: 'none', color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.875rem', flexShrink: 0 }}>
-              ← Retour
-            </button>
-            {etape < 4 && (
-              <div style={{ display: 'flex', gap: 4 }}>
-                {[2,3].map(s => (
-                  <div key={s} style={{ height: 3, width: etape >= s ? 32 : 20, borderRadius: 3, background: etape >= s ? T.light : `${T.main}44`, transition: 'all 0.3s' }}/>
-                ))}
-              </div>
-            )}
-          </div>
+
+        {/* ── TOPBAR fixe ── */}
+        <div style={{ background: T.bgPanel, padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, borderBottom: `1px solid ${T.main}33` }}>
+          <button onClick={() => router.push('/commander')}
+            style={{ background: `rgba(255,255,255,0.1)`, border: `1px solid rgba(255,255,255,0.15)`, color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.45rem 0.875rem', fontWeight: 700, fontSize: '0.82rem', flexShrink: 0, backdropFilter: 'blur(8px)' }}>
+            ← Retour
+          </button>
+
+          {/* Nom du commerce dans la topbar */}
+          {commercant && (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontWeight: 800, color: '#fff', fontSize: '0.95rem', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{commercant.nom}</p>
+              {commercant.type && <p style={{ fontSize: '0.7rem', color: T.light, fontWeight: 600, marginTop: 1 }}>{commercant.type}</p>}
+            </div>
+          )}
+
+          {/* Étapes — cercles numérotés */}
+          {etape < 4 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              {[{ n: 1, label: 'Menu' }, { n: 2, label: 'Créneau' }].map((s, i) => {
+                const step = s.n
+                const done = etape > step + 1
+                const active = etape === step + 1
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: active ? T.main : done ? '#16A34A' : 'rgba(255,255,255,0.15)', border: `2px solid ${active ? T.light : done ? '#16A34A' : 'rgba(255,255,255,0.2)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 800, color: active || done ? '#fff' : T.light, transition: 'all 0.3s' }}>
+                      {done ? '✓' : s.n}
+                    </div>
+                    {i === 0 && <div style={{ width: 16, height: 2, borderRadius: 1, background: etape >= 3 ? '#16A34A' : 'rgba(255,255,255,0.2)' }}/>}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
-        <div className="scroll-body">
+        {/* ── SCROLL BODY ── */}
+        <div className="scroll-body" ref={scrollRef}>
 
           {/* ÉTAPE 2 — Articles */}
           {etape === 2 && commercant && (
-            <div style={{ padding: '1rem' }}>
-              <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1rem' }}>
-                <div style={{ width: 60, height: 60, borderRadius: 12, background: T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {commercant.logo_url ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <span style={{ fontSize: '1.5rem' }}>🏪</span>}
+            <>
+              {/* ── HEADER COMMERÇANT ── */}
+              <div ref={headerRef}>
+                {/* Bannière */}
+                <div style={{ position: 'relative', height: 160, overflow: 'hidden', background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)` }}>
+                  {commercant.logo_url && (
+                    <img src={commercant.logo_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.25 }}/>
+                  )}
+                  {/* Motif décoratif */}
+                  <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}44 0%, transparent 60%), radial-gradient(circle at 20% 80%, ${T.light}22 0%, transparent 50%)` }}/>
+                  {/* 3 points yo·pp·aa */}
+                  <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 5 }}>
+                    {[{c:'#fff',o:0.4},{c:T.light,o:1},{c:T.mid,o:1}].map((d,i) => (
+                      <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: d.c, opacity: d.o }}/>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <h2 style={{ fontWeight: 800, fontSize: '1.1rem', color: T.deep, marginBottom: 4 }}>{commercant.nom}</h2>
-                  {commercant.adresse && <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 600, marginBottom: 5 }}>📍 {commercant.adresse}</p>}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <Etoiles note={notesInfo.moyenne} taille={13}/>
-                    {notesInfo.count > 0
-                      ? <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>({notesInfo.count} avis)</span>
-                      : <span style={{ fontSize: '0.72rem', color: '#D1D5DB' }}>Pas encore d'avis</span>
+
+                {/* Infos commerçant */}
+                <div style={{ padding: '0 1rem 0.875rem', background: '#fff', borderBottom: `1px solid ${T.pale}`, position: 'relative' }}>
+                  {/* Logo flottant */}
+                  <div style={{ position: 'absolute', top: -28, left: '1rem', width: 56, height: 56, borderRadius: 14, background: '#fff', border: `3px solid #fff`, boxShadow: `0 4px 16px rgba(0,0,0,0.15)`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {commercant.logo_url
+                      ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                      : <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>🏪</div>
                     }
                   </div>
-                </div>
-              </div>
 
-              {commercant.horaires_detail && (
-                <div style={{ background: T.bgCard, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}` }}>
-                  <p style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>🕐 Horaires</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    {JOURS.map((jour, idx) => {
-                      const h = commercant.horaires_detail[jour]
-                      const estAujourdhui = jourActuel() === jour
+                  <div style={{ paddingTop: 36, paddingLeft: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                      <div>
+                        <h1 style={{ fontWeight: 900, fontSize: '1.25rem', color: T.ink, letterSpacing: '-0.5px', marginBottom: 3 }}>{commercant.nom}</h1>
+                        {commercant.adresse && <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 500 }}>📍 {commercant.adresse}</p>}
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                          <Etoiles note={notesInfo.moyenne} taille={13}/>
+                        </div>
+                        {notesInfo.count > 0
+                          ? <p style={{ fontSize: '0.7rem', color: T.muted, marginTop: 2 }}>{notesInfo.count} avis</p>
+                          : <p style={{ fontSize: '0.7rem', color: '#D1D5DB', marginTop: 2 }}>Pas encore d'avis</p>
+                        }
+                      </div>
+                    </div>
+
+                    {commercant.description && (
+                      <p style={{ fontSize: '0.82rem', color: T.muted, marginTop: 6, lineHeight: 1.5 }}>{commercant.description}</p>
+                    )}
+
+                    {/* Horaires inline */}
+                    {commercant.horaires_detail && (() => {
+                      const j = jourActuel()
+                      const h = commercant.horaires_detail[j]
                       if (!h) return null
                       return (
-                        <div key={jour} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', borderRadius: 8, background: estAujourdhui ? T.pale : 'transparent' }}>
-                          <span style={{ fontSize: '0.82rem', fontWeight: estAujourdhui ? 800 : 500, color: estAujourdhui ? T.deep : T.muted, width: 90 }}>
-                            {estAujourdhui ? '▸ ' : ''}{JOURS_LONGS[idx]}
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, background: h.ouvert ? '#F0FDF4' : '#FEF2F2', borderRadius: 100, padding: '4px 10px', border: `1px solid ${h.ouvert ? '#16A34A33' : '#DC262633'}` }}>
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: h.ouvert ? '#16A34A' : '#DC2626', boxShadow: `0 0 6px ${h.ouvert ? '#16A34A' : '#DC2626'}88`, flexShrink: 0 }}/>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: h.ouvert ? '#16A34A' : '#DC2626' }}>
+                            {h.ouvert ? `Ouvert · ${h.debut.slice(0,5)}–${h.fin.slice(0,5)}` : 'Fermé aujourd\'hui'}
                           </span>
-                          {h.ouvert
-                            ? <span style={{ fontSize: '0.82rem', fontWeight: estAujourdhui ? 700 : 500, color: estAujourdhui ? T.main : T.ink }}>{h.debut.slice(0,5)} – {h.fin.slice(0,5)}</span>
-                            : <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#DC2626' }}>Fermé</span>
-                          }
                         </div>
                       )
-                    })}
+                    })()}
+                  </div>
+                </div>
+
+                {/* Horaires 7 jours — collapsible */}
+                {commercant.horaires_detail && (
+                  <HorairesSection horaires={commercant.horaires_detail} />
+                )}
+              </div>
+
+              {/* ── BARRE CATÉGORIES STICKY ── */}
+              {toutesLesCats.length > 1 && (
+                <div ref={catBarRef}
+                  style={{ position: 'sticky', top: 0, zIndex: 20, transition: 'box-shadow 0.2s', boxShadow: catBarVisible ? '0 2px 12px rgba(0,0,0,0.08)' : 'none' }}>
+                  <div className="cat-bar">
+                    {toutesLesCats.map(cat => (
+                      <button key={cat} className={`cat-pill ${categorieActive === cat ? 'active' : ''}`}
+                        onClick={() => scrollToCategorie(cat)}>
+                        {cat === '__autres__' ? 'Autres' : cat}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
 
-              {(() => {
-                const categories = [...new Set(articles.map(a => a.categorie).filter(Boolean))]
-                const sansCat = articles.filter(a => !a.categorie)
-
-                const ArticleRow = ({ article }) => {
-                  const groupes = optionsParArticle[article.id] || []
-                  const hasOptions = groupes.length > 0
-                  const [showOptions, setShowOptions] = useState(false)
-                  const qteTotale = qteTotaleArticle(article.id)
-
+              {/* ── ARTICLES ── */}
+              <div style={{ padding: '0.875rem 1rem 0' }}>
+                {categories.map(cat => {
+                  const artsDecat = articles.filter(a => a.categorie === cat)
+                  if (!artsDecat.length) return null
                   return (
-                    <div style={{ ...card }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ flex: 1 }}>
-                          <p style={{ fontWeight: 700, color: T.deep, marginBottom: 2, fontSize: '0.95rem' }}>{article.nom}</p>
-                          {article.description && <p style={{ fontSize: '0.78rem', color: T.muted, marginBottom: 4, lineHeight: 1.4 }}>{article.description}</p>}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <p style={{ fontSize: '0.95rem', color: T.main, fontWeight: 800 }}>{Number(article.prix).toFixed(2)}€</p>
-                            {hasOptions && <span style={{ fontSize: '0.68rem', fontWeight: 700, color: T.mid, background: T.pale, padding: '1px 6px', borderRadius: 100 }}>Options dispo</span>}
-                          </div>
-                          {article.stock_jour === 0 && <span style={{ fontSize: '0.7rem', background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>Épuisé</span>}
-                        </div>
-                        {article.stock_jour !== 0 && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
-                            {qteTotale > 0 && (
-                              <span style={{ background: T.main, color: '#fff', fontWeight: 800, fontSize: '0.78rem', borderRadius: 100, minWidth: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>
-                                {qteTotale}
-                              </span>
-                            )}
-                            <button onClick={() => hasOptions ? setShowOptions(v => !v) : ajouterAuPanier(article)}
-                              style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: showOptions ? T.mid : (qteTotale > 0 ? T.deep : T.main), color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: hasOptions ? '1rem' : '1.3rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' }}>
-                              {hasOptions ? '⚙️' : '+'}
-                            </button>
-                          </div>
-                        )}
+                    <div key={cat} ref={el => catRefs.current[cat] = el} style={{ marginBottom: 4 }}>
+                      {/* Titre catégorie */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 12, paddingBottom: 10 }}>
+                        <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, letterSpacing: '-0.3px' }}>{cat}</span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: T.muted }}>{artsDecat.length} article{artsDecat.length > 1 ? 's' : ''}</span>
                       </div>
-                      {showOptions && hasOptions && (
-                        <OptionsSelector article={article} groupes={groupes} onAjouter={(a, opts) => { ajouterAuPanier(a, opts); setShowOptions(false) }}/>
-                      )}
+                      {artsDecat.map(a => <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle} ajouterAuPanier={ajouterAuPanier} qteTotaleArticle={qteTotaleArticle}/>)}
                     </div>
                   )
-                }
+                })}
 
-                if (categories.length === 0) {
-                  return articles.map(a => <ArticleRow key={a.id} article={a}/>)
-                }
+                {sansCat.length > 0 && (
+                  <div ref={el => catRefs.current['__autres__'] = el} style={{ marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 12, paddingBottom: 10 }}>
+                      <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, letterSpacing: '-0.3px' }}>Autres</span>
+                    </div>
+                    {sansCat.map(a => <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle} ajouterAuPanier={ajouterAuPanier} qteTotaleArticle={qteTotaleArticle}/>)}
+                  </div>
+                )}
 
-                return (
-                  <>
-                    {categories.map(cat => {
-                      const artsDecat = articles.filter(a => a.categorie === cat)
-                      if (!artsDecat.length) return null
-                      return (
-                        <div key={cat} style={{ marginBottom: 8 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, marginTop: 4 }}>
-                            <div style={{ flex: 1, height: 1, background: T.pale }}/>
-                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', background: T.pale, padding: '3px 10px', borderRadius: 100, whiteSpace: 'nowrap' }}>{cat}</span>
-                            <div style={{ flex: 1, height: 1, background: T.pale }}/>
-                          </div>
-                          {artsDecat.map(a => <ArticleRow key={a.id} article={a}/>)}
-                        </div>
-                      )
-                    })}
-                    {sansCat.length > 0 && (
-                      <div style={{ marginBottom: 8 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, marginTop: 4 }}>
-                          <div style={{ flex: 1, height: 1, background: T.pale }}/>
-                          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', background: '#F9FAFB', padding: '3px 10px', borderRadius: 100 }}>Autres</span>
-                          <div style={{ flex: 1, height: 1, background: T.pale }}/>
-                        </div>
-                        {sansCat.map(a => <ArticleRow key={a.id} article={a}/>)}
-                      </div>
-                    )}
-                  </>
-                )
-              })()}
+                {/* Avis */}
+                {avisCommerce.length > 0 && (
+                  <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: `1px solid ${T.pale}` }}>
+                    <h3 style={{ fontWeight: 800, fontSize: '1rem', color: T.deep, marginBottom: '0.75rem' }}>⭐ Avis clients</h3>
+                    {avisCommerce.map(a => <CarteAvis key={a.id} a={a}/>)}
+                  </div>
+                )}
 
-              {avisCommerce.length > 0 && (
-                <div style={{ marginTop: '1.25rem' }}>
-                  <h3 style={{ fontWeight: 800, fontSize: '1rem', color: T.deep, marginBottom: '0.625rem' }}>Avis clients</h3>
-                  {avisCommerce.map(a => <CarteAvis key={a.id} a={a}/>)}
-                </div>
-              )}
-
-              <RecapPanier
-                panier={panier}
-                onRetirer={retirerDuPanier}
-                onAjouter={incrementerPanier}
-                total={totalPanier()}
-                onValider={() => setEtape(3)}
-              />
-            </div>
+                <RecapPanier
+                  panier={panier}
+                  onRetirer={retirerDuPanier}
+                  onAjouter={incrementerPanier}
+                  total={totalPanier()}
+                  onValider={() => setEtape(3)}
+                />
+                <div style={{ height: 24 }}/>
+              </div>
+            </>
           )}
 
           {/* ÉTAPE 3 — Créneau + coordonnées + RGPD */}
           {etape === 3 && commercant && (
             <div style={{ padding: '1rem' }}>
+              {/* Titre */}
               <div style={{ marginBottom: '1rem' }}>
                 <p style={{ fontSize: '0.75rem', fontWeight: 700, color: T.mid, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
                   {(() => {
@@ -596,7 +654,7 @@ export default function CommanderSlug() {
                     return d.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
                   })()} · {commercant.nom}
                 </p>
-                <h2 style={{ fontWeight: 800, fontSize: '1.15rem', color: T.ink }}>
+                <h2 style={{ fontWeight: 900, fontSize: '1.2rem', color: T.ink, letterSpacing: '-0.5px' }}>
                   {modeLendemain ? 'Créneaux disponibles — demain' : 'Choisis ton créneau'}
                 </h2>
                 {modeLendemain && (
@@ -607,25 +665,25 @@ export default function CommanderSlug() {
               </div>
 
               {/* Mini récap commande */}
-              <div style={{ background: T.pale, borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '1rem', border: `1px solid ${T.main}22` }}>
-                <p style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Ta commande</p>
+              <div style={{ background: `linear-gradient(135deg, ${T.pale}, #fff)`, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
+                <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>🛒 Ta commande</p>
                 {Object.values(panier).map((item, i) => {
                   const supplement = item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0
                   return (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: 2 }}>
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: 3 }}>
                       <span style={{ color: T.ink, fontWeight: 600 }}>{item.quantite}× {item.nom}</span>
-                      <span style={{ color: T.main, fontWeight: 700 }}>{((item.prix + supplement) * item.quantite).toFixed(2)}€</span>
+                      <span style={{ color: T.main, fontWeight: 800 }}>{((item.prix + supplement) * item.quantite).toFixed(2)}€</span>
                     </div>
                   )
                 })}
-                <div style={{ borderTop: `1px solid ${T.main}22`, marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ borderTop: `1px solid ${T.main}22`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontWeight: 800, color: T.deep, fontSize: '0.875rem' }}>Total</span>
-                  <span style={{ fontWeight: 900, color: T.main, fontSize: '0.875rem' }}>{totalPanier().toFixed(2)}€</span>
+                  <span style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.5px' }}>{totalPanier().toFixed(2)}€</span>
                 </div>
               </div>
 
               {/* Créneaux */}
-              <div className="grid3" style={{ marginBottom: '1.25rem' }}>
+              <div className="grid3" style={{ marginBottom: '1.5rem' }}>
                 {creneaux.map(c => {
                   const passe = modeLendemain ? false : heureEnMinutes(c.heure_debut) <= maintenant()
                   const complet = c.count >= c.max_commandes
@@ -633,18 +691,20 @@ export default function CommanderSlug() {
                   const bientotComplet = !complet && placesRestantes <= 1
                   const presqueComplet = !complet && placesRestantes === 2
                   const desactive = passe || complet
+                  const choisi = creneauChoisi === c.id
                   let mention = null
-                  if (passe) mention = { text: 'Reviens demain !', color: T.deep }
+                  if (passe) mention = { text: 'Passé', color: T.muted }
                   else if (complet) mention = { text: 'Complet', color: '#DC2626' }
                   else if (bientotComplet) mention = { text: '🔥 Dernière place !', color: '#EA580C' }
                   else if (presqueComplet) mention = { text: '⚡ Presque complet', color: '#D97706' }
                   return (
                     <div key={c.id} onClick={() => !desactive && setCreneauChoisi(c.id)}
-                      style={{ padding: '0.75rem 0.5rem', borderRadius: 12, border: `2px solid ${desactive ? '#E5E7EB' : creneauChoisi===c.id ? T.main : T.pale}`, background: desactive ? '#F9FAFB' : creneauChoisi===c.id ? T.pale : '#fff', cursor: desactive ? 'default' : 'pointer', textAlign: 'center', fontWeight: 700, color: desactive ? '#D1D5DB' : T.ink, fontSize: '0.875rem', transition: 'all 0.15s' }}>
-                      <div style={{ textDecoration: complet ? 'line-through' : 'none', opacity: passe ? 0.5 : 1 }}>
-                        {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
+                      style={{ padding: '0.875rem 0.5rem', borderRadius: 14, border: `2px solid ${desactive ? '#E5E7EB' : choisi ? T.main : T.pale}`, background: desactive ? '#F9FAFB' : choisi ? T.pale : '#fff', cursor: desactive ? 'default' : 'pointer', textAlign: 'center', fontWeight: 700, color: desactive ? '#D1D5DB' : T.ink, fontSize: '0.875rem', transition: 'all 0.15s', boxShadow: choisi ? `0 4px 16px ${T.main}33` : 'none' }}>
+                      <div style={{ textDecoration: complet ? 'line-through' : 'none', opacity: passe ? 0.5 : 1, fontSize: '0.875rem', letterSpacing: '-0.3px' }}>
+                        {c.heure_debut.slice(0,5)}<br/><span style={{ fontSize: '0.72rem', fontWeight: 600, color: T.muted }}>–{c.heure_fin.slice(0,5)}</span>
                       </div>
-                      {mention && <div style={{ fontSize: '0.62rem', fontWeight: 800, color: mention.color, marginTop: 3, lineHeight: 1.2 }}>{mention.text}</div>}
+                      {mention && <div style={{ fontSize: '0.6rem', fontWeight: 800, color: mention.color, marginTop: 4, lineHeight: 1.2 }}>{mention.text}</div>}
+                      {choisi && <div style={{ fontSize: '0.6rem', fontWeight: 800, color: T.main, marginTop: 4 }}>✓ Choisi</div>}
                     </div>
                   )
                 })}
@@ -655,77 +715,46 @@ export default function CommanderSlug() {
                   const heureOuverture = commercant?.heure_ouverture_resa ? commercant.heure_ouverture_resa.slice(0,5) : '21:00'
                   const resaOuverte = maintenant() >= heureEnMinutes(heureOuverture)
                   return (
-                    <div style={{ gridColumn: '1 / -1', background: T.pale, borderRadius: 12, padding: '1.25rem', textAlign: 'center', border: `1.5px solid ${T.main}33` }}>
+                    <div style={{ gridColumn: '1 / -1', background: T.pale, borderRadius: 14, padding: '1.25rem', textAlign: 'center', border: `1.5px solid ${T.main}22` }}>
                       <p style={{ fontSize: '1.5rem', marginBottom: 8 }}>🕐</p>
-                      <p style={{ fontWeight: 800, marginBottom: 6, color: T.deep, fontSize: '1rem' }}>Plus de créneaux disponibles aujourd'hui</p>
+                      <p style={{ fontWeight: 800, marginBottom: 6, color: T.deep, fontSize: '0.95rem' }}>Plus de créneaux aujourd'hui</p>
                       {resaOuverte
-                        ? <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>Les réservations pour demain sont ouvertes ! 🎉<br/>Premier créneau à <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> le <strong>{jourDemain}</strong>.</p>
-                        : <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>Reviens à partir de <strong>{heureOuverture}</strong> ce soir pour réserver<br/>le <strong>{jourDemain}</strong> dès <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> !</p>
+                        ? <p style={{ fontSize: '0.82rem', color: T.deep, lineHeight: 1.6 }}>Les réservations pour demain sont ouvertes ! 🎉<br/>Premier créneau à <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> le <strong>{jourDemain}</strong>.</p>
+                        : <p style={{ fontSize: '0.82rem', color: T.deep, lineHeight: 1.6 }}>Reviens à partir de <strong>{heureOuverture}</strong> ce soir<br/>pour réserver dès <strong>{premierCreneau.heure_debut.slice(0,5)}</strong> le <strong>{jourDemain}</strong>.</p>
                       }
                     </div>
                   )
                 })()}
               </div>
 
-              {/* ─── Coordonnées ─── */}
-              <h2 style={{ fontWeight: 800, fontSize: '1.15rem', marginBottom: '1rem', color: T.ink }}>Tes coordonnées</h2>
-
-              {/* Prénom + Nom sur 2 colonnes */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 0 }}>
-                <input
-                  placeholder="Prénom *"
-                  type="text"
-                  value={client.prenom}
-                  onChange={e => setClient(p => ({ ...p, prenom: e.target.value }))}
-                  style={{ ...inputSt, marginBottom: 0 }}
-                />
-                <input
-                  placeholder="Nom *"
-                  type="text"
-                  value={client.nom}
-                  onChange={e => setClient(p => ({ ...p, nom: e.target.value }))}
-                  style={{ ...inputSt, marginBottom: 0 }}
-                />
+              {/* Coordonnées */}
+              <h2 style={{ fontWeight: 900, fontSize: '1.1rem', marginBottom: '0.875rem', color: T.ink, letterSpacing: '-0.3px' }}>Tes coordonnées</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                <input placeholder="Prénom *" type="text" value={client.prenom} onChange={e => setClient(p => ({ ...p, prenom: e.target.value }))} style={{ ...inputSt, marginBottom: 0 }}/>
+                <input placeholder="Nom *" type="text" value={client.nom} onChange={e => setClient(p => ({ ...p, nom: e.target.value }))} style={{ ...inputSt, marginBottom: 0 }}/>
               </div>
-              <div style={{ height: 10 }}/>
-              <input
-                placeholder="Email *"
-                type="email"
-                value={client.email}
-                onChange={e => setClient(p => ({ ...p, email: e.target.value }))}
-                style={inputSt}
-              />
-              <input
-                placeholder="Téléphone *"
-                type="tel"
-                value={client.telephone}
-                onChange={e => setClient(p => ({ ...p, telephone: e.target.value }))}
-                style={inputSt}
-              />
+              <input placeholder="Email *" type="email" value={client.email} onChange={e => setClient(p => ({ ...p, email: e.target.value }))} style={inputSt}/>
+              <input placeholder="Téléphone *" type="tel" value={client.telephone} onChange={e => setClient(p => ({ ...p, telephone: e.target.value }))} style={inputSt}/>
 
-              {/* ─── Consentements RGPD ─── */}
-              <div style={{ background: T.bgCard, borderRadius: 14, border: `1.5px solid ${T.pale}`, overflow: 'hidden', marginBottom: 16, marginTop: 4 }}>
+              {/* RGPD */}
+              <div style={{ background: T.bgCard, borderRadius: 14, border: `1.5px solid ${T.pale}`, overflow: 'hidden', marginBottom: 16 }}>
                 <div style={{ padding: '0.625rem 1rem', background: T.pale, borderBottom: `1px solid ${T.main}11` }}>
-                  <p style={{ fontSize: '0.7rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🔒 Confidentialité</p>
+                  <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🔒 Confidentialité</p>
                 </div>
-
-                {/* Case 1 — Obligatoire */}
-                <label className="rgpd-check" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', cursor: 'pointer', borderBottom: `1px solid ${T.pale}`, background: rgpdCommande ? '#F0FDF4' : '#fff' }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', cursor: 'pointer', borderBottom: `1px solid ${T.pale}`, background: rgpdCommande ? '#F0FDF4' : '#fff' }}>
                   <div onClick={() => setRgpdCommande(v => !v)}
                     style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${rgpdCommande ? '#16A34A' : '#D1D5DB'}`, background: rgpdCommande ? '#16A34A' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, transition: 'all 0.15s', cursor: 'pointer' }}>
                     {rgpdCommande && <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 900 }}>✓</span>}
                   </div>
                   <div>
                     <p style={{ fontSize: '0.82rem', fontWeight: 700, color: T.ink, marginBottom: 2 }}>
-                      Traitement de ma commande <span style={{ fontSize: '0.65rem', fontWeight: 700, background: '#FEE2E2', color: '#DC2626', padding: '1px 6px', borderRadius: 100, marginLeft: 4 }}>Obligatoire</span>
+                      Traitement de ma commande <span style={{ fontSize: '0.62rem', fontWeight: 700, background: '#FEE2E2', color: '#DC2626', padding: '1px 6px', borderRadius: 100, marginLeft: 4 }}>Obligatoire</span>
                     </p>
                     <p style={{ fontSize: '0.75rem', color: T.muted, lineHeight: 1.5 }}>
-                      J'accepte que mes coordonnées soient transmises à <strong>{commercant.nom}</strong> pour le traitement et la préparation de ma commande.
+                      J'accepte que mes coordonnées soient transmises à <strong>{commercant.nom}</strong> pour le traitement de ma commande.
                     </p>
                   </div>
                 </label>
-
-                {/* Case 2 — Optionnelle */}
                 <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', cursor: 'pointer', background: rgpdMarketing ? '#F0FDF4' : '#fff' }}>
                   <div onClick={() => setRgpdMarketing(v => !v)}
                     style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${rgpdMarketing ? '#16A34A' : '#D1D5DB'}`, background: rgpdMarketing ? '#16A34A' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, transition: 'all 0.15s', cursor: 'pointer' }}>
@@ -733,19 +762,17 @@ export default function CommanderSlug() {
                   </div>
                   <div>
                     <p style={{ fontSize: '0.82rem', fontWeight: 700, color: T.ink, marginBottom: 2 }}>
-                      Offres et actualités <span style={{ fontSize: '0.65rem', fontWeight: 600, background: T.pale, color: T.main, padding: '1px 6px', borderRadius: 100, marginLeft: 4 }}>Optionnel</span>
+                      Offres et actualités <span style={{ fontSize: '0.62rem', fontWeight: 600, background: T.pale, color: T.main, padding: '1px 6px', borderRadius: 100, marginLeft: 4 }}>Optionnel</span>
                     </p>
                     <p style={{ fontSize: '0.75rem', color: T.muted, lineHeight: 1.5 }}>
-                      J'accepte que <strong>{commercant.nom}</strong> utilise mes coordonnées pour m'envoyer des offres, promotions et actualités.
+                      J'accepte que <strong>{commercant.nom}</strong> utilise mes coordonnées pour m'envoyer des offres et actualités.
                     </p>
                   </div>
                 </label>
               </div>
 
-              <button
-                onClick={passerCommande}
-                disabled={loadingCommande || !formValide}
-                style={{ ...btnPrimary, opacity: !formValide ? 0.45 : 1, cursor: !formValide ? 'default' : 'pointer', marginTop: 4 }}>
+              <button onClick={passerCommande} disabled={loadingCommande || !formValide}
+                style={{ ...btnPrimary, opacity: !formValide ? 0.45 : 1, cursor: !formValide ? 'default' : 'pointer' }}>
                 {loadingCommande ? 'En cours...' : `Confirmer ma commande — ${totalPanier().toFixed(2)}€`}
               </button>
               {!rgpdCommande && (
@@ -753,22 +780,22 @@ export default function CommanderSlug() {
                   ⚠️ Accepte le traitement de ta commande pour continuer
                 </p>
               )}
-              <p style={{ fontSize: '0.8rem', color: '#9a8ab0', textAlign: 'center', marginTop: 8 }}>Le paiement sera activé prochainement</p>
+              <p style={{ fontSize: '0.78rem', color: '#9a8ab0', textAlign: 'center', marginTop: 8, marginBottom: 24 }}>Le paiement sera activé prochainement</p>
             </div>
           )}
 
           {/* ÉTAPE 4 — Confirmation */}
           {etape === 4 && commercant && (
-            <div style={{ padding: '1.5rem 1rem' }}>
+            <div style={{ padding: '1.5rem 1rem', animation: 'fadeUp 0.4s ease' }}>
               <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>🎉</div>
+                <div style={{ fontSize: '3.5rem', marginBottom: '0.75rem' }}>🎉</div>
                 <p style={{ fontWeight: 900, fontSize: '1rem', color: T.main, letterSpacing: '-0.5px', marginBottom: 4 }}>yoppaa</p>
-                <h2 style={{ fontWeight: 900, fontSize: '1.4rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.5px' }}>Ta commande est passée !</h2>
-                <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem', fontSize: '1rem' }}>Chez {commercant.nom}</p>
-                <p style={{ color: T.muted, fontSize: '0.875rem' }}>On s'occupe du reste — présente-toi à ton créneau !</p>
+                <h2 style={{ fontWeight: 900, fontSize: '1.5rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>Commande confirmée !</h2>
+                <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>Chez {commercant.nom}</p>
+                <p style={{ color: T.muted, fontSize: '0.875rem' }}>Présente-toi à ton créneau — c'est tout !</p>
               </div>
-              <div style={{ background: T.pale, borderRadius: 16, padding: '1.25rem', marginBottom: '1rem', border: `1.5px solid ${T.main}33` }}>
-                <p style={{ fontWeight: 800, color: T.ink, marginBottom: 8, fontSize: '1rem' }}>📦 Pour récupérer ta commande</p>
+              <div style={{ background: `linear-gradient(135deg, ${T.pale}, #fff)`, borderRadius: 20, padding: '1.25rem', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
+                <p style={{ fontWeight: 800, color: T.ink, marginBottom: 8 }}>📦 Comment récupérer ta commande</p>
                 <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>
                   Présente-toi chez <strong>{commercant.nom}</strong> à ton créneau.<br/>
                   Quand ta commande est prête, confirme depuis l'onglet <strong>Commandes</strong>.
@@ -786,5 +813,81 @@ export default function CommanderSlug() {
         </div>
       </div>
     </>
+  )
+}
+
+// ─── Horaires section collapsible ─────────────────────────────────────────────
+function HorairesSection({ horaires }) {
+  const [open, setOpen] = useState(false)
+  const j = jourActuel()
+
+  return (
+    <div style={{ background: '#fff', borderBottom: `1px solid ${T.pale}` }}>
+      <button onClick={() => setOpen(v => !v)}
+        style={{ width: '100%', padding: '0.625rem 1rem', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: '"DM Sans", sans-serif' }}>
+        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🕐 Horaires complets</span>
+        <span style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700 }}>{open ? '▲ Fermer' : '▼ Voir'}</span>
+      </button>
+      {open && (
+        <div style={{ padding: '0 1rem 0.875rem' }}>
+          {JOURS.map((jour, idx) => {
+            const h = horaires[jour]
+            const estAujourdhui = j === jour
+            if (!h) return null
+            return (
+              <div key={jour} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', borderRadius: 8, background: estAujourdhui ? T.pale : 'transparent' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: estAujourdhui ? 800 : 500, color: estAujourdhui ? T.deep : T.muted, width: 90 }}>
+                  {estAujourdhui ? '▸ ' : ''}{JOURS_LONGS[idx]}
+                </span>
+                {h.ouvert
+                  ? <span style={{ fontSize: '0.82rem', fontWeight: estAujourdhui ? 700 : 500, color: estAujourdhui ? T.main : T.ink }}>{h.debut.slice(0,5)} – {h.fin.slice(0,5)}</span>
+                  : <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#DC2626' }}>Fermé</span>
+                }
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── ArticleRow extrait du composant principal ────────────────────────────────
+function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, qteTotaleArticle }) {
+  const groupes = optionsParArticle[article.id] || []
+  const hasOptions = groupes.length > 0
+  const [showOptions, setShowOptions] = useState(false)
+  const qteTotale = qteTotaleArticle(article.id)
+
+  return (
+    <div className="art-card" style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 4px rgba(107,53,196,0.04)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{article.nom}</p>
+          {article.description && <p style={{ fontSize: '0.78rem', color: T.muted, marginBottom: 5, lineHeight: 1.4 }}>{article.description}</p>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(article.prix).toFixed(2)}€</p>
+            {hasOptions && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100 }}>Personnalisable</span>}
+          </div>
+          {article.stock_jour === 0 && <span style={{ fontSize: '0.68rem', background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 6, fontWeight: 700, display: 'inline-block', marginTop: 4 }}>Épuisé</span>}
+        </div>
+        {article.stock_jour !== 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
+            {qteTotale > 0 && (
+              <div style={{ background: T.main, color: '#fff', fontWeight: 900, fontSize: '0.78rem', borderRadius: 100, minWidth: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px', boxShadow: `0 2px 8px ${T.main}55` }}>
+                {qteTotale}
+              </div>
+            )}
+            <button onClick={() => hasOptions ? setShowOptions(v => !v) : ajouterAuPanier(article)}
+              style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: showOptions ? T.mid : qteTotale > 0 ? T.deep : T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: hasOptions ? '1rem' : '1.3rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 3px 12px ${T.main}44` }}>
+              {hasOptions ? '⚙️' : '+'}
+            </button>
+          </div>
+        )}
+      </div>
+      {showOptions && hasOptions && (
+        <OptionsSelector article={article} groupes={groupes} onAjouter={(a, opts) => { ajouterAuPanier(a, opts); setShowOptions(false) }}/>
+      )}
+    </div>
   )
 }

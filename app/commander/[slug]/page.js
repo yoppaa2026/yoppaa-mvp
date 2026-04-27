@@ -519,12 +519,28 @@ export default function CommanderSlug() {
                     <img src={commercant.logo_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.25 }}/>
                   )}
                   {/* Motif décoratif */}
-                  <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}44 0%, transparent 60%), radial-gradient(circle at 20% 80%, ${T.light}22 0%, transparent 50%)` }}/>
-                  {/* 3 points yo·pp·aa */}
-                  <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 5 }}>
-                    {[{c:'#fff',o:0.4},{c:T.light,o:1},{c:T.mid,o:1}].map((d,i) => (
-                      <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: d.c, opacity: d.o }}/>
-                    ))}
+                  <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}55 0%, transparent 60%), radial-gradient(circle at 20% 80%, ${T.light}22 0%, transparent 50%), radial-gradient(circle at 50% 110%, ${T.main}44 0%, transparent 50%)` }}/>
+                  {/* Contenu bannière */}
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '1rem 1.25rem' }}>
+                    {/* 3 points yo·pp·aa */}
+                    <div style={{ position: 'absolute', top: 14, right: 14, display: 'flex', gap: 5 }}>
+                      {[{c:'#fff',o:0.35},{c:T.light,o:0.8},{c:T.mid,o:0.9}].map((d,i) => (
+                        <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: d.c, opacity: d.o }}/>
+                      ))}
+                    </div>
+                    {/* Badge type */}
+                    {commercant?.type && (
+                      <span style={{ display: 'inline-block', background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 100, padding: '3px 10px', fontSize: '0.7rem', fontWeight: 700, color: '#fff', marginBottom: 6, alignSelf: 'flex-start', letterSpacing: '0.3px' }}>
+                        {commercant.type}
+                      </span>
+                    )}
+                    {/* Nom en grand */}
+                    <h1 style={{ fontWeight: 900, fontSize: '1.75rem', color: '#fff', letterSpacing: '-0.75px', lineHeight: 1.1, textShadow: '0 2px 12px rgba(0,0,0,0.3)', margin: 0 }}>
+                      {commercant?.nom}
+                    </h1>
+                    {commercant?.adresse && (
+                      <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.65)', marginTop: 4, fontWeight: 500 }}>📍 {commercant.adresse}</p>
+                    )}
                   </div>
                 </div>
 
@@ -539,18 +555,12 @@ export default function CommanderSlug() {
                   </div>
 
                   <div style={{ paddingTop: 36, paddingLeft: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                      <div>
-                        <h1 style={{ fontWeight: 900, fontSize: '1.25rem', color: T.ink, letterSpacing: '-0.5px', marginBottom: 3 }}>{commercant.nom}</h1>
-                        {commercant.adresse && <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 500 }}>📍 {commercant.adresse}</p>}
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
-                          <Etoiles note={notesInfo.moyenne} taille={13}/>
-                        </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <Etoiles note={notesInfo.moyenne} taille={13}/>
                         {notesInfo.count > 0
-                          ? <p style={{ fontSize: '0.7rem', color: T.muted, marginTop: 2 }}>{notesInfo.count} avis</p>
-                          : <p style={{ fontSize: '0.7rem', color: '#D1D5DB', marginTop: 2 }}>Pas encore d'avis</p>
+                          ? <span style={{ fontSize: '0.7rem', color: T.muted }}>{notesInfo.count} avis</span>
+                          : <span style={{ fontSize: '0.7rem', color: '#D1D5DB' }}>Pas encore d'avis</span>
                         }
                       </div>
                     </div>

@@ -62,32 +62,14 @@ function getNumeroJour(commandes, commandeId, jourKey) {
   return idx === -1 ? '?' : idx + 1
 }
 
-// AudioContext singleton — débloqué sur interaction utilisateur
-let _audioCtx = null
-function getAudioCtx() {
-  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)()
-  if (_audioCtx.state === 'suspended') _audioCtx.resume()
-  return _audioCtx
-}
-
+// ─── Son notification ─────────────────────────────────────────────────────────
 function jouerSon() {
   try {
-    const ctx = getAudioCtx()
-    const now = ctx.currentTime
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain); gain.connect(ctx.destination)
-    osc.type = 'sine'
-    osc.frequency.setValueAtTime(880, now)
-    osc.frequency.setValueAtTime(1100, now + 0.12)
-    osc.frequency.setValueAtTime(880, now + 0.24)
-    osc.frequency.setValueAtTime(1320, now + 0.36)
-    gain.gain.setValueAtTime(0, now)
-    gain.gain.linearRampToValueAtTime(0.35, now + 0.02)
-    gain.gain.setValueAtTime(0.35, now + 0.38)
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55)
-    osc.start(now); osc.stop(now + 0.6)
-  } catch(e) { console.warn('Audio error:', e) }
+    const audio = new Audio('/sounds/notification.mp3')
+    audio.currentTime = 0
+    audio.volume = 0.7
+    audio.play().catch(e => console.warn('Audio:', e))
+  } catch(e) {}
 }
 
 // ─── Icônes SVG ───────────────────────────────────────────────────────────────
@@ -301,8 +283,6 @@ export default function Dashboard() {
     const n = !notificationsActives
     setNotificationsActives(n)
     if (typeof window !== 'undefined') localStorage.setItem('notifs', String(n))
-    // Débloquer AudioContext sur interaction utilisateur
-    try { getAudioCtx() } catch(e) {}
     if (n) jouerSon()
   }
 

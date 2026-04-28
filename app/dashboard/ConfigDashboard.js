@@ -17,19 +17,19 @@ const T = {
 const s = {
   card: {
     background: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 20,
     marginBottom: 12,
     border: `1.5px solid ${T.pale}`,
-    boxShadow: '0 2px 8px rgba(107,53,196,0.06)',
+    boxShadow: '0 2px 12px rgba(107,53,196,0.07)',
   },
   cardActive: {
     background: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 20,
     marginBottom: 12,
     border: `2px solid ${T.main}`,
-    boxShadow: `0 0 20px ${T.main}22`,
+    boxShadow: `0 0 24px ${T.main}22`,
   },
   label: {
     display: 'block',
@@ -67,10 +67,10 @@ const s = {
     fontSize: 13,
     transition: 'all 0.15s',
   },
-  btnPrimary: { background: T.main, color: '#fff' },
+  btnPrimary: { background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 4px 14px ${T.main}44` },
   btnGhost:   { background: T.pale, color: T.main },
   btnDanger:  { background: '#FEE2E2', color: '#DC2626' },
-  h2: { fontSize: 17, fontWeight: 800, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 16px' },
+  h2: { fontSize: 17, fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 16px' },
   h3: { fontSize: 13, fontWeight: 700, color: T.muted, margin: '0 0 4px' },
   tag: { display: 'inline-block', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 },
 }
@@ -559,13 +559,28 @@ function TabCreneaux({ commercantId, toast }) {
   const [form, setForm] = useState({ heure_debut: '', heure_fin: '', max_commandes: 5, actif: true })
   const [saving, setSaving] = useState(false)
 
+  const [horizon, setHorizon] = useState(1)
+  const [savingHorizon, setSavingHorizon] = useState(false)
+
   useEffect(() => { fetchCreneaux() }, [commercantId])
 
   async function fetchCreneaux() {
     setLoading(true)
-    const { data } = await supabase.from('creneaux').select('*').eq('commercant_id', commercantId).order('heure_debut')
-    setCreneaux(data || [])
+    const [{ data: cren }, { data: comm }] = await Promise.all([
+      supabase.from('creneaux').select('*').eq('commercant_id', commercantId).order('heure_debut'),
+      supabase.from('commercants').select('horizon_commande').eq('id', commercantId).single()
+    ])
+    setCreneaux(cren || [])
+    setHorizon(comm?.horizon_commande || 1)
     setLoading(false)
+  }
+
+  async function saveHorizon(val) {
+    setSavingHorizon(true)
+    await supabase.from('commercants').update({ horizon_commande: val }).eq('id', commercantId)
+    setHorizon(val)
+    setSavingHorizon(false)
+    toast('Horizon mis à jour ✓')
   }
 
   async function saveCreneau() {
@@ -615,8 +630,32 @@ function TabCreneaux({ commercantId, toast }) {
 
   if (loading) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
 
+  const HORIZONS = [
+    { val: 1, label: '1 jour',  desc: "Aujourd'hui seulement" },
+    { val: 2, label: '2 jours', desc: "Aujourd'hui + demain" },
+    { val: 3, label: '3 jours', desc: "Les 3 prochains jours" },
+    { val: 7, label: '7 jours', desc: "Une semaine à l'avance" },
+  ]
+
   return (
     <div>
+      {/* ─── Horizon de réservation ─── */}
+      <div style={{ ...s.card, marginBottom: 20, background: T.pale, border: `1.5px solid ${T.main}22`, boxShadow: 'none' }}>
+        <h3 style={{ fontWeight: 800, fontSize: 14, color: T.deep, marginBottom: 4 }}>📅 Horizon de réservation</h3>
+        <p style={{ fontSize: 12, color: T.muted, marginBottom: 12, lineHeight: 1.5 }}>
+          Jusqu'à combien de jours à l'avance tes clients peuvent-ils réserver ?
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+          {HORIZONS.map(h => (
+            <button key={h.val} onClick={() => saveHorizon(h.val)} disabled={savingHorizon}
+              style={{ padding: '10px 12px', borderRadius: 10, border: `2px solid ${horizon === h.val ? T.main : T.pale}`, background: horizon === h.val ? T.main : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s', fontFamily: '"DM Sans", sans-serif' }}>
+              <p style={{ fontWeight: 800, fontSize: 13, color: horizon === h.val ? '#fff' : T.ink, marginBottom: 2 }}>{h.label}</p>
+              <p style={{ fontSize: 11, color: horizon === h.val ? 'rgba(255,255,255,0.8)' : T.muted }}>{h.desc}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <h2 style={s.h2}>Créneaux <span style={{ color: T.mid, fontWeight: 600, fontSize: 14 }}>({creneaux.length})</span></h2>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -737,7 +776,7 @@ function TabProfil({ commercantId, toast }) {
         <label style={s.label}>Logo</label>
         <p style={{ fontSize: 12, color: T.muted, marginBottom: 14 }}>Format carré · 512×512px · JPG ou PNG · Max 512KB</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ width: 88, height: 88, borderRadius: 14, background: T.pale, border: `2px dashed ${logoPreview ? T.main : T.light}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+          <div style={{ width: 88, height: 88, borderRadius: 16, background: T.pale, border: `2px dashed ${logoPreview ? T.main : T.light}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
             {logoPreview ? <img src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <span style={{ fontSize: 28 }}>🏪</span>}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -908,6 +947,21 @@ function TabAvis({ commercantId, toast }) {
   )
 }
 
+
+// ─── Icônes onglets ───────────────────────────────────────────────────────────
+function IcoMenu({ size=18, color='currentColor' }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke={color} strokeWidth="2.2" strokeLinecap="round"/><circle cx="7" cy="6" r="2" fill={color}/><circle cx="12" cy="12" r="2" fill={color}/><circle cx="17" cy="18" r="2" fill={color}/></svg>
+}
+function IcoCreneaux({ size=18, color='currentColor' }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={color} strokeWidth="2.2"/><path d="M12 7v5l3 3" stroke={color} strokeWidth="2.2" strokeLinecap="round"/></svg>
+}
+function IcoProfil({ size=18, color='currentColor' }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="18" rx="3" stroke={color} strokeWidth="2.2"/><path d="M8 10h8M8 14h5" stroke={color} strokeWidth="2" strokeLinecap="round"/><circle cx="5.5" cy="10" r="1.5" fill={color}/><circle cx="5.5" cy="14" r="1.5" fill={color}/></svg>
+}
+function IcoAvis({ size=18, color='currentColor' }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke={color} strokeWidth="2" strokeLinejoin="round"/></svg>
+}
+
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function ConfigDashboard({ commercantId }) {
   const [tab, setTab] = useState('menu')
@@ -926,27 +980,46 @@ export default function ConfigDashboard({ commercantId }) {
   }, [])
 
   const tabs = [
-    { id: 'menu',     label: '🍞 Menu' },
-    { id: 'creneaux', label: '🕐 Créneaux' },
-    { id: 'profil',   label: '🏪 Profil' },
-    { id: 'avis',     label: '⭐ Avis' },
+    { id: 'menu',     label: 'Menu',     Icon: IcoMenu },
+    { id: 'creneaux', label: 'Créneaux', Icon: IcoCreneaux },
+    { id: 'profil',   label: 'Profil',   Icon: IcoProfil },
+    { id: 'avis',     label: 'Avis',     Icon: IcoAvis },
   ]
 
   return (
     <div style={{ fontFamily: '"DM Sans", sans-serif', paddingBottom: 24 }}>
-      <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 14, marginBottom: 20, boxShadow: '0 2px 8px rgba(107,53,196,0.08)', border: `1px solid ${T.pale}`, flexWrap: 'wrap' }}>
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ flex: 1, minWidth: 80, padding: '9px 4px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, transition: 'all 0.2s', background: tab === t.id ? T.main : 'transparent', color: tab === t.id ? '#fff' : T.muted }}>
-            {t.label}
-          </button>
-        ))}
+
+      {/* Header dégradé violet hype */}
+      <div style={{ background: `linear-gradient(135deg, #160636 0%, #2D0F6B 50%, #3D1580 100%)`, borderRadius: 20, padding: '1.25rem 1.5rem 0', marginBottom: 0, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 30%, #9660E033 0%, transparent 60%), radial-gradient(circle at 10% 70%, #C4A0F418 0%, transparent 50%)`, pointerEvents: 'none' }}/>
+        <div style={{ display: 'flex', gap: 5, marginBottom: 8, position: 'relative' }}>
+          {[{c:'#fff',o:0.35},{c:'#C4A0F4',o:1},{c:'#9660E0',o:1}].map((d,i) => (
+            <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: d.c, opacity: d.o }}/>
+          ))}
+        </div>
+        <p style={{ fontWeight: 900, fontSize: '1.1rem', color: '#fff', letterSpacing: '-0.5px', marginBottom: 3, position: 'relative' }}>Paramètres</p>
+        <p style={{ fontSize: '0.7rem', color: '#C4A0F4', opacity: 0.7, fontWeight: 600, marginBottom: '1rem', position: 'relative' }}>Menu · Créneaux · Profil · Avis</p>
+        <div style={{ display: 'flex', gap: 2, position: 'relative' }}>
+          {tabs.map(({ id, label, Icon }) => {
+            const actif = tab === id
+            return (
+              <button key={id} onClick={() => setTab(id)}
+                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '0.625rem 0.25rem 0.75rem', border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.7rem', transition: 'all 0.2s', background: 'transparent', color: actif ? '#fff' : 'rgba(196,160,244,0.55)', borderBottom: `2.5px solid ${actif ? '#fff' : 'transparent'}` }}>
+                <Icon size={17} color={actif ? '#fff' : 'rgba(196,160,244,0.55)'}/>
+                {label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      {tab === 'menu'     && <TabMenu     commercantId={commercantId} toast={showToast} />}
-      {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
-      {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} />}
-      {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
+      {/* Contenu */}
+      <div style={{ paddingTop: 20 }}>
+        {tab === 'menu'     && <TabMenu     commercantId={commercantId} toast={showToast} />}
+        {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
+        {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} />}
+        {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
+      </div>
 
       <Toast message={toastMsg} type={toastType} />
     </div>

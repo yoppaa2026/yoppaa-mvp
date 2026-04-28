@@ -441,7 +441,7 @@ export default function Commander() {
   const [searchQuery, setSearchQuery] = useState('')
   const [favoris, setFavoris] = useState([])
   const [commercantsFavoris, setCommercantsFavoris] = useState([])
-  const [client, setClient] = useState({ nom: '', email: '', telephone: '' })
+  const [client, setClient] = useState({ nom: '', email: '', telephone: '', prenom: '' })
   const [clientId, setClientId] = useState(null)
   const [clientCommandes, setClientCommandes] = useState([])
 
@@ -452,9 +452,10 @@ export default function Commander() {
     demanderGeolocalisation()
     const email = localStorage.getItem('yoppaa_email')
     const nom = localStorage.getItem('yoppaa_nom')
+    const prenom = localStorage.getItem('yoppaa_prenom')
     const id = localStorage.getItem('yoppaa_client_id')
     if (email && id) {
-      setClient(p => ({ ...p, email, nom: nom || '' }))
+      setClient(p => ({ ...p, email, nom: nom || '', prenom: prenom || '' }))
       setClientId(id)
       chargerFavoris(id)
       chargerCommandesClient(email)
@@ -865,7 +866,7 @@ export default function Commander() {
                         <p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
                       </div>
                       <SwipeRetrait
-                        clientPrenom={localStorage.getItem('yoppaa_prenom') || client.nom?.split(' ')[0] || 'Yopper'}
+                        clientPrenom={client.prenom || client.nom?.split(' ')[0] || 'Yopper'}
                         onConfirm={async () => {
                           await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', c.id)
                           chargerCommandesClient(client.email)

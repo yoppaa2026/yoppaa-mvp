@@ -195,8 +195,6 @@ function CarteCommande({ commande, numero, onChangerStatut }) {
               )}
             </div>
           </div>
-            </div>
-          </div>
           <div style={{ textAlign: 'right' }}>
             <p style={{ fontWeight: 900, color: T.ink, margin: '0 0 4px', fontSize: '1.05rem', letterSpacing: '-0.3px' }}>{Number(commande.total).toFixed(2)}€</p>
             <span style={{ background: couleur.badge, color: '#fff', fontSize: '0.65rem', fontWeight: 800, padding: '3px 9px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.3px' }}>

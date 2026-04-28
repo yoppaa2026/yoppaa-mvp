@@ -514,15 +514,7 @@ export default function CommanderSlug() {
             ← Retour
           </button>
 
-          {/* Badge type — hype */}
-          {commercant?.type && (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-              <span style={{ background: `linear-gradient(135deg, ${T.main}88, ${T.mid}88)`, backdropFilter: 'blur(8px)', border: `1px solid ${T.light}44`, borderRadius: 100, padding: '5px 14px', fontSize: '0.78rem', fontWeight: 800, color: '#fff', letterSpacing: '0.5px', textTransform: 'uppercase', boxShadow: `0 2px 12px ${T.main}44` }}>
-                {commercant.type}
-              </span>
-            </div>
-          )}
-          {!commercant?.type && <div style={{ flex: 1 }}/>}
+          <div style={{ flex: 1 }}/>
 
           {/* Étapes — pills stylées */}
           {etape < 4 && (
@@ -947,18 +939,27 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
 
         {article.stock_jour !== 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
-            {/* Si options → bouton ⚙️ seul */}
+            {/* Si options → +/- + bouton sliders */}
             {hasOptions ? (
               <>
-                {qteTotale > 0 && (
-                  <div style={{ background: T.main, color: '#fff', fontWeight: 900, fontSize: '0.78rem', borderRadius: 100, minWidth: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px', boxShadow: `0 2px 8px ${T.main}55` }}>
-                    {qteTotale}
+                {qteTotale > 0 ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button onClick={() => retirerDuPanier(keySimple)}
+                      style={{ width: 34, height: 34, borderRadius: 10, border: `2px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 900, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: '0 1px 4px rgba(107,53,196,0.1)' }}>
+                      −
+                    </button>
+                    <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, minWidth: 22, textAlign: 'center' }}>{qteTotale}</span>
+                    <button onClick={() => setShowOptions(v => !v)}
+                      style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: showOptions ? `linear-gradient(135deg, ${T.mid}, ${T.main})` : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 4px 14px ${T.main}55` }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2.5" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="2.5" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2.5" fill="currentColor" stroke="none"/></svg>
+                    </button>
                   </div>
+                ) : (
+                  <button onClick={() => setShowOptions(v => !v)}
+                    style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: showOptions ? `linear-gradient(135deg, ${T.mid}, ${T.main})` : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 4px 14px ${T.main}55` }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2.5" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="2.5" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2.5" fill="currentColor" stroke="none"/></svg>
+                  </button>
                 )}
-                <button onClick={() => setShowOptions(v => !v)}
-                  style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: showOptions ? T.mid : T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 3px 12px ${T.main}44` }}>
-                  ⚙️
-                </button>
               </>
             ) : (
               qteTotale > 0 ? (

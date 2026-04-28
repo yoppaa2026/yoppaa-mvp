@@ -346,7 +346,7 @@ function TabMenu({ commercantId, toast }) {
       {/* Formulaire article */}
       {showForm && (
         <div style={s.cardActive}>
-          <h3 style={{ ...s.h3, marginBottom: 14 }}>{editId ? 'Modifier l'article' : 'Nouvel article'}</h3>
+          <h3 style={{ ...s.h3, marginBottom: 14 }}>{editId ? "Modifier l'article" : 'Nouvel article'}</h3>
           <div style={{ display: 'grid', gap: 12 }}>
             <div><label style={s.label}>Nom *</label><Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} placeholder="Ex: Croissant beurre"/></div>
             <div>

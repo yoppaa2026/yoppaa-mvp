@@ -69,13 +69,26 @@ function getNumeroJour(commandes, commandeId, jourKey) {
 }
 
 // ─── Son notification ─────────────────────────────────────────────────────────
+let _notifAudio = null
+function prechargerAudio() {
+  if (_notifAudio) return
+  try {
+    _notifAudio = new Audio('/sounds/notification.mp3')
+    _notifAudio.volume = 0.7
+    _notifAudio.load()
+  } catch(e) {}
+}
 function jouerSon() {
   try {
-    const audio = new Audio('/sounds/notification.mp3')
-    audio.currentTime = 0
-    audio.volume = 0.7
-    const p = audio.play()
-    if (p !== undefined) p.catch(e => console.warn('Audio:', e))
+    if (_notifAudio) {
+      _notifAudio.currentTime = 0
+      _notifAudio.play().catch(() => {
+        // Fallback — nouvelle instance
+        try { new Audio('/sounds/notification.mp3').play().catch(()=>{}) } catch(e) {}
+      })
+    } else {
+      new Audio('/sounds/notification.mp3').play().catch(()=>{})
+    }
   } catch(e) {}
 }
 
@@ -311,6 +324,8 @@ export default function Dashboard() {
     const n = !notificationsActives
     setNotificationsActives(n)
     if (typeof window !== 'undefined') localStorage.setItem('notifs', String(n))
+    // Précharger l'audio sur ce geste utilisateur — débloque le contexte audio
+    prechargerAudio()
     if (n) jouerSon()
   }
 

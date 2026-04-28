@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -101,16 +101,15 @@ function maintenant() {
 }
 
 // ─── Splash Screen ────────────────────────────────────────────────────────────
-
-// ─── YOP! Swipe ───────────────────────────────────────────────────────────────
-function SwipeRetrait({ onConfirm, clientPrenom, numeroCommande }) {
+// ─── YOP! Swipe hype ──────────────────────────────────────────────────────────
+function SwipeRetrait({ onConfirm, clientPrenom }) {
   const [swipeX, setSwipeX] = useState(0)
   const [swiping, setSwiping] = useState(false)
-  const [phase, setPhase] = useState('idle')
+  const [phase, setPhase] = useState('idle') // idle | swiping | yop | done
   const startRef = useRef(0)
   const containerRef = useRef(null)
-  const THUMB = 52
-  const C = { main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF', ink: '#1A0840' }
+  const THUMB = 56
+  const C = { main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF', ink: '#1A0840', deep: '#2D0F6B' }
 
   function getMaxX() { return (containerRef.current?.offsetWidth || 300) - THUMB - 8 }
   function getX(e) { return e.touches ? e.touches[0].clientX : e.clientX }
@@ -126,13 +125,16 @@ function SwipeRetrait({ onConfirm, clientPrenom, numeroCommande }) {
     setSwipeX(x)
     if (x >= getMaxX()) {
       setSwiping(false); setPhase('yop')
+      // Son — déclenché directement dans le geste utilisateur
       try {
         const a = new Audio('/sounds/yop.mp3')
         a.volume = 0.8
-        const p = a.play()
-        if (p !== undefined) p.catch(() => {})
+        a.play().catch(() => {
+          // Retry silencieux
+          setTimeout(() => { try { new Audio('/sounds/yop.mp3').play().catch(()=>{}) } catch(e){} }, 100)
+        })
       } catch(e) {}
-      setTimeout(() => { setPhase('done'); onConfirm() }, 2200)
+      setTimeout(() => { setPhase('done'); onConfirm() }, 3500)
     }
   }
   const onEnd = () => {
@@ -143,49 +145,86 @@ function SwipeRetrait({ onConfirm, clientPrenom, numeroCommande }) {
   const p = swipeX / (getMaxX() || 1)
   const TRACK_H = THUMB + 8
 
+  // ─── Phase YOP! — animation 3 points + wordmark ───────────────────────────
   if (phase === 'yop' || phase === 'done') {
     return (
-      <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
-        <style>{`@keyframes yopPulse { from { transform:scale(0.7) translateY(0); opacity:0.5; } to { transform:scale(1.4) translateY(-4px); opacity:1; } }`}</style>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
-          {[{c:C.main,d:'0s',s:10},{c:C.light,d:'0.15s',s:14},{c:C.mid,d:'0.3s',s:10}].map((d,i) => (
-            <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, animation: `yopPulse 0.6s ease-in-out ${d.d} infinite alternate`, boxShadow: `0 0 12px ${d.c}88` }}/>
-          ))}
+      <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+        <style>{`
+          @keyframes yopDot1 { 0%,100%{transform:scale(0.6) translateY(0);opacity:0.4} 33%{transform:scale(1.6) translateY(-8px);opacity:1} }
+          @keyframes yopDot2 { 0%,100%{transform:scale(0.6) translateY(0);opacity:0.4} 50%{transform:scale(1.8) translateY(-10px);opacity:1} }
+          @keyframes yopDot3 { 0%,100%{transform:scale(0.6) translateY(0);opacity:0.4} 66%{transform:scale(1.6) translateY(-8px);opacity:1} }
+          @keyframes yopWordmark { 0%{opacity:0;letter-spacing:8px;transform:translateY(8px)} 100%{opacity:1;letter-spacing:-2px;transform:translateY(0)} }
+          @keyframes yopSub { 0%{opacity:0;transform:translateY(6px)} 100%{opacity:1;transform:translateY(0)} }
+        `}</style>
+        {/* 3 points yo·pp·aa */}
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 16, height: 32, alignItems: 'flex-end' }}>
+          <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#fff', boxShadow: `0 0 16px ${C.main}88`, animation: 'yopDot1 1.2s ease-in-out infinite' }}/>
+          <div style={{ width: 16, height: 16, borderRadius: '50%', background: C.light, boxShadow: `0 0 20px ${C.light}88`, animation: 'yopDot2 1.2s ease-in-out infinite' }}/>
+          <div style={{ width: 12, height: 12, borderRadius: '50%', background: C.mid, boxShadow: `0 0 16px ${C.mid}88`, animation: 'yopDot3 1.2s ease-in-out infinite' }}/>
         </div>
-        <p style={{ fontWeight: 900, fontSize: '1.1rem', color: C.ink, letterSpacing: '-0.3px', marginBottom: 4 }}>
-          C'est <span style={{ color: C.main }}>YOP!</span> 🎉
+        {/* Wordmark yoppaa */}
+        <p style={{ fontWeight: 900, fontSize: '2.2rem', color: C.ink, letterSpacing: '-2px', lineHeight: 1, marginBottom: 8, animation: 'yopWordmark 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards' }}>
+          yoppaa
         </p>
-        <p style={{ fontSize: '0.82rem', color: '#6B7280', fontWeight: 600 }}>
-          Enjoy {clientPrenom || 'Yopper'} !
+        {/* Message */}
+        <p style={{ fontWeight: 700, fontSize: '0.9rem', color: C.deep, animation: 'yopSub 0.5s ease 0.3s both', letterSpacing: '-0.2px' }}>
+          C'est <span style={{ fontWeight: 900, color: C.main }}>YOP!</span> {clientPrenom || 'Yopper'} 🎉
+        </p>
+        <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: 6, animation: 'yopSub 0.5s ease 0.5s both' }}>
+          Skip the wait — bien joué !
         </p>
       </div>
     )
   }
 
+  // ─── Phase idle / swiping ─────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-      <style>{`@keyframes yopArrow { 0%,100% { opacity:0.4; transform:translateX(0); } 50% { opacity:1; transform:translateX(4px); } }`}</style>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontWeight: 900, fontSize: '0.95rem', color: C.main, letterSpacing: '-0.3px' }}>YOP!</span>
-        <span style={{ fontSize: '0.75rem', color: '#9CA3AF', fontWeight: 600, animation: 'yopArrow 1.2s ease-in-out infinite' }}>→→→</span>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+      <style>{`
+        @keyframes yopArrowPulse { 0%,100%{opacity:0.3;transform:translateX(0)} 50%{opacity:1;transform:translateX(5px)} }
+      `}</style>
+
+      {/* Label hype */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        <span style={{ fontWeight: 900, fontSize: '1rem', color: C.main, letterSpacing: '-0.5px' }}>YOP!</span>
+        <div style={{ display: 'flex', gap: 3 }}>
+          {[0,1,2].map(i => (
+            <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill="none"
+              style={{ animation: `yopArrowPulse 1s ease-in-out ${i*0.2}s infinite` }}>
+              <path d="M9 18l6-6-6-6" stroke={C.mid} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          ))}
+        </div>
+        <span style={{ fontWeight: 700, fontSize: '0.72rem', color: '#9CA3AF', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Glisse</span>
       </div>
+
+      {/* Track */}
       <div ref={containerRef}
-        style={{ width: '100%', height: TRACK_H, borderRadius: 100, background: `linear-gradient(to right, ${C.pale} ${p*100}%, #F3F4F6 ${p*100}%)`, position: 'relative', border: `2px solid ${p > 0.5 ? C.main : C.light}`, userSelect: 'none', cursor: 'grab', touchAction: 'none', transition: 'border-color 0.2s' }}
+        style={{ width: '100%', height: TRACK_H, borderRadius: 100, background: `linear-gradient(to right, ${C.pale} ${p*100}%, #F1F0F9 ${p*100}%)`, position: 'relative', border: `2px solid ${p > 0.5 ? C.main : C.light}`, userSelect: 'none', cursor: 'grab', touchAction: 'none', transition: 'border-color 0.2s', boxShadow: p > 0.3 ? `0 4px 20px ${C.main}22` : 'none' }}
         onMouseDown={onStart} onMouseMove={onMove} onMouseUp={onEnd} onMouseLeave={onEnd}
         onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}>
-        <div style={{ position: 'absolute', top: 0, bottom: 0, left: THUMB + 12, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-          <span style={{ fontSize: '0.78rem', fontWeight: 800, color: p > 0.3 ? C.main : '#9CA3AF', letterSpacing: '1px', textTransform: 'uppercase', transition: 'color 0.2s' }}>
-            {p > 0.7 ? 'Lâche !' : ''}
-          </span>
-        </div>
-        <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: `linear-gradient(135deg, ${C.main}, ${C.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 16px ${C.main}66`, transition: swiping ? 'none' : 'left 0.3s', userSelect: 'none' }}>
-          <span style={{ fontWeight: 900, fontSize: '0.85rem', color: '#fff', letterSpacing: '-0.5px' }}>YOP</span>
+
+        {/* Texte central — apparaît après 70% */}
+        {p > 0.7 && (
+          <div style={{ position: 'absolute', top: 0, bottom: 0, left: THUMB + 12, right: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 900, color: C.main, letterSpacing: '1px', textTransform: 'uppercase' }}>Lâche !</span>
+          </div>
+        )}
+
+        {/* Thumb hype */}
+        <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: `linear-gradient(135deg, ${C.main}, ${C.mid})`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 20px ${C.main}66, 0 0 0 ${p > 0.5 ? '3px' : '0px'} ${C.light}`, transition: swiping ? 'none' : 'left 0.3s, box-shadow 0.2s', userSelect: 'none', gap: 1 }}>
+          {/* 3 mini points yo·pp·aa sur le thumb */}
+          <div style={{ display: 'flex', gap: 3, marginBottom: 2 }}>
+            {[{c:'rgba(255,255,255,0.5)',s:4},{c:'rgba(196,160,244,0.9)',s:5},{c:'rgba(150,96,224,0.9)',s:4}].map((d,i) => (
+              <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c }}/>
+            ))}
+          </div>
+          <span style={{ fontWeight: 900, fontSize: '0.72rem', color: '#fff', letterSpacing: '-0.3px', lineHeight: 1 }}>YOP</span>
         </div>
       </div>
     </div>
   )
 }
-
 
 function SplashScreen({ onDone }) {
   const [phase, setPhase] = useState(0)
@@ -422,6 +461,16 @@ export default function Commander() {
     }
   }, [])
 
+  // ─── Polling client 5s — mise à jour statuts sans refresh ─────────────────
+  useEffect(() => {
+    const email = localStorage.getItem('yoppaa_email')
+    if (!email) return
+    const iv = setInterval(() => {
+      chargerCommandesClient(email)
+    }, 5000)
+    return () => clearInterval(iv)
+  }, [])
+
   function demanderGeolocalisation() {
     if (!navigator.geolocation) return
     setGeoLoading(true); setRue(null)
@@ -506,7 +555,7 @@ export default function Commander() {
   useEffect(() => {
     if (!position || !commercants.length) return
     calculerDistances(commercants, position)
-  }, [position?.lat, position?.lng, commercants.length])
+  }, [position, commercants.length])
 
   async function calculerDistances(liste, pos) {
     const apiKey = process.env.NEXT_PUBLIC_ORS_API_KEY
@@ -622,7 +671,7 @@ export default function Commander() {
           <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 10%, ${T.mid}33 0%, transparent 50%), radial-gradient(circle at 10% 90%, ${T.light}18 0%, transparent 50%), radial-gradient(circle at 50% 50%, ${T.main}22 0%, transparent 70%)`, pointerEvents: 'none' }}/>
 
           {/* Top row — logo + géoloc */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: headerScrolled ? '0.5rem 1rem' : '0.75rem 1rem 0', transition: 'padding 0.4s cubic-bezier(0.4,0,0.2,1)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: headerScrolled ? '0.625rem 1rem' : '1rem 1rem 0', transition: 'padding 0.3s ease' }}>
             <div>
               {/* 3 points — cachés au scroll */}
               {!headerScrolled && (
@@ -636,7 +685,7 @@ export default function Commander() {
                   ))}
                 </div>
               )}
-              <p style={{ fontWeight: 900, fontSize: headerScrolled ? '1.2rem' : '1.75rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1, textShadow: `0 0 40px ${T.mid}66`, transition: 'font-size 0.4s cubic-bezier(0.4,0,0.2,1)' }}>yoppaa</p>
+              <p style={{ fontWeight: 900, fontSize: headerScrolled ? '1.3rem' : '2rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1, textShadow: `0 0 40px ${T.mid}66`, transition: 'font-size 0.3s ease' }}>yoppaa</p>
               {!headerScrolled && <p style={{ color: T.light, fontSize: '0.62rem', marginTop: 3, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', opacity: 0.8 }}>Skip the wait</p>}
             </div>
             {/* Localisation — GPS ou manuelle */}
@@ -684,39 +733,12 @@ export default function Commander() {
                   placeholder="Ville, rue, code postal..."
                   value={locManuelle}
                   onChange={e => setLocManuelle(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && locManuelle.trim()) {
-                      setRue(locManuelle.trim())
-                      setShowLocManuelle(false)
-                      // Geocoder la ville saisie et recalculer les distances
-                      fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locManuelle.trim())}&format=json&limit=1&accept-language=fr`)
-                        .then(r => r.json())
-                        .then(data => {
-                          if (data?.[0]) {
-                            const pos = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
-                            setPosition(pos)
-                            calculerDistances(commercants, pos)
-                          }
-                        }).catch(() => {})
-                    }
-                  }}
+                  onKeyDown={e => { if (e.key === 'Enter' && locManuelle.trim()) { setRue(locManuelle.trim()); setShowLocManuelle(false) } }}
                   autoFocus
                   style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.5rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', backdropFilter: 'blur(8px)', outline: 'none' }}
                 />
                 {locManuelle && (
-                  <button onClick={() => {
-                    setRue(locManuelle.trim())
-                    setShowLocManuelle(false)
-                    fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locManuelle.trim())}&format=json&limit=1&accept-language=fr`)
-                      .then(r => r.json())
-                      .then(data => {
-                        if (data?.[0]) {
-                          const pos = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
-                          setPosition(pos)
-                          calculerDistances(commercants, pos)
-                        }
-                      }).catch(() => {})
-                  }}
+                  <button onClick={() => { setRue(locManuelle.trim()); setShowLocManuelle(false) }}
                     style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: T.main, border: 'none', borderRadius: 8, padding: '4px 10px', color: '#fff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                     OK
                   </button>
@@ -729,32 +751,27 @@ export default function Commander() {
           {/* Tagline hero — transition smooth au scroll */}
           {onglet === 'accueil' && (
             <div style={{
-              maxHeight: headerScrolled ? '0px' : '100px',
+              maxHeight: headerScrolled ? '0px' : '120px',
               opacity: headerScrolled ? 0 : 1,
               overflow: 'hidden',
-              transition: 'max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s cubic-bezier(0.4,0,0.2,1), padding 0.4s cubic-bezier(0.4,0,0.2,1)',
-              padding: headerScrolled ? '0 1rem' : '0.625rem 1rem 0.5rem',
+              transition: 'max-height 0.35s ease, opacity 0.25s ease',
+              padding: headerScrolled ? '0 1rem' : '0.875rem 1rem 0.75rem',
             }}>
-              <p style={{ fontWeight: 900, fontSize: '1.2rem', color: '#fff', letterSpacing: '-0.5px', lineHeight: 1.25, marginBottom: 4 }}>
+              <p style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.5px', lineHeight: 1.25, marginBottom: 4 }}>
                 Commander avant d'arriver,<br/>
                 <span style={{ color: T.light }}>récupère sans attendre.</span>
               </p>
-              {position && (() => {
-                const RAYON_KM = 15
-                const commercantsProches = commercantsFiltres.filter(c => c.distance == null || c.distance <= RAYON_KM * 1000)
-                const count = commercantsProches.length
-                return (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 100, padding: '4px 12px' }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="10" r="4" fill="white" opacity="0.9"/>
-                      <path d="M12 2C7.58 2 4 5.58 4 10c0 5.25 8 14 8 14s8-8.75 8-14c0-4.42-3.58-8-8-8z" stroke="white" strokeWidth="2" fill="none" opacity="0.9"/>
-                    </svg>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff', opacity: 0.9 }}>
-                      {count} commerce{count > 1 ? 's' : ''} près de toi · {RAYON_KM} km
-                    </span>
-                  </div>
-                )
-              })()}
+              {position && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 100, padding: '4px 12px' }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="10" r="4" fill="white" opacity="0.9"/>
+                    <path d="M12 2C7.58 2 4 5.58 4 10c0 5.25 8 14 8 14s8-8.75 8-14c0-4.42-3.58-8-8-8z" stroke="white" strokeWidth="2" fill="none" opacity="0.9"/>
+                  </svg>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff', opacity: 0.9 }}>
+                    {commercantsFiltres.length} commerce{commercantsFiltres.length > 1 ? 's' : ''} près de toi
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -837,7 +854,7 @@ export default function Commander() {
                   </div>
                   {commandesASwiper.map(c => (
                     <div key={c.id} style={{ background: 'linear-gradient(135deg, #F0FDF4, #fff)', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '0.75rem', border: '2px solid #16A34A33', boxShadow: '0 4px 16px rgba(22,163,74,0.1)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                         <div>
                           <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>{c.commercant?.nom}</p>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#F0FDF4', borderRadius: 100, padding: '3px 10px', border: '1px solid #16A34A22' }}>
@@ -849,7 +866,6 @@ export default function Commander() {
                       </div>
                       <SwipeRetrait
                         clientPrenom={localStorage.getItem('yoppaa_prenom') || client.nom?.split(' ')[0] || 'Yopper'}
-                        numeroCommande={clientCommandes.filter(x => new Date(x.created_at).toDateString() === new Date().toDateString()).findIndex(x => x.id === c.id) + 1}
                         onConfirm={async () => {
                           await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', c.id)
                           chargerCommandesClient(client.email)
@@ -1037,18 +1053,18 @@ export default function Commander() {
             const stroke = '#ffffff'
             return (
               <button key={item.key} onClick={() => setOnglet(item.key)}
-                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '0.45rem 0 0.4rem', border: 'none', background: 'transparent', cursor: 'pointer', position: 'relative' }}>
+                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '0.625rem 0 0.5rem', border: 'none', background: 'transparent', cursor: 'pointer', position: 'relative' }}>
 
                 {/* ── Icône SVG ── */}
                 {item.key === 'accueil' && (
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M3,10 L12,3 L21,10" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                     <path d="M5,10 L5,20 Q5,21 6,21 L9,21 L9,15 Q9,14 10,14 L14,14 Q15,14 15,15 L15,21 L18,21 Q19,21 19,20 L19,10" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                   </svg>
                 )}
 
                 {item.key === 'commandes' && (
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect x="2" y="9" width="20" height="13" rx="3" stroke={stroke} strokeWidth="2.5" strokeLinejoin="round" opacity={op}/>
                     <path d="M2,13 L22,13" stroke={stroke} strokeWidth="2.5" opacity={op}/>
                     <path d="M8,9 L8,5 Q8,2 12,2 Q16,2 16,5 L16,9" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
@@ -1062,7 +1078,7 @@ export default function Commander() {
                 )}
 
                 {item.key === 'favoris' && (
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12,5 L13.6,9.2 L18.2,9.6 L14.9,12.4 L15.9,17 L12,14.6 L8.1,17 L9.1,12.4 L5.8,9.6 L10.4,9.2 Z" stroke={stroke} strokeWidth="2.3" strokeLinejoin="round" strokeLinecap="round" opacity={op}/>
                     <circle cx="8.5" cy="21" r="1.8" fill={actif ? '#C4A0F4' : stroke} opacity={actif ? 1 : 0.35}/>
                     <circle cx="12" cy="21" r="2.2" fill={actif ? '#C4A0F4' : stroke} opacity={actif ? 1 : 0.5}/>
@@ -1071,7 +1087,7 @@ export default function Commander() {
                 )}
 
                 {item.key === 'tribu' && (
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="4" cy="8" r="3" stroke={stroke} strokeWidth="2.2" opacity={op * 0.7}/>
                     <path d="M0,18 Q0,14 4,14 Q8,14 8,18" stroke={stroke} strokeWidth="2.2" strokeLinecap="round" opacity={op * 0.7}/>
                     <circle cx="20" cy="8" r="3" stroke={stroke} strokeWidth="2.2" opacity={op * 0.7}/>
@@ -1082,7 +1098,7 @@ export default function Commander() {
                 )}
 
                 {item.key === 'profil' && (
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="12" cy="8" r="5" stroke={stroke} strokeWidth="2.5" opacity={op}/>
                     <path d="M2,21 Q2,16 12,16 Q22,16 22,21" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" opacity={op}/>
                   </svg>

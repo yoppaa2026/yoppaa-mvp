@@ -108,16 +108,24 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
   const [phase, setPhase] = useState('idle') // idle | swiping | yop | done
   const startRef = useRef(0)
   const containerRef = useRef(null)
-  const THUMB = 56
+  const THUMB = 48
   const C = { main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF', ink: '#1A0840', deep: '#2D0F6B' }
 
   function getMaxX() { return (containerRef.current?.offsetWidth || 300) - THUMB - 8 }
   function getX(e) { return e.touches ? e.touches[0].clientX : e.clientX }
 
+  const audioRef = useRef(null)
+
   const onStart = e => {
     if (phase !== 'idle') return
     setPhase('swiping'); setSwiping(true)
     startRef.current = getX(e) - swipeX
+    // Précharger le son dès le début du geste — contexte audio débloqué ici
+    try {
+      audioRef.current = new Audio('/sounds/yop.mp3')
+      audioRef.current.volume = 0.8
+      audioRef.current.load()
+    } catch(e) {}
   }
   const onMove = e => {
     if (phase !== 'swiping') return
@@ -125,14 +133,13 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
     setSwipeX(x)
     if (x >= getMaxX()) {
       setSwiping(false); setPhase('yop')
-      // Son — déclenché directement dans le geste utilisateur
+      // Jouer le son préchargé
       try {
-        const a = new Audio('/sounds/yop.mp3')
-        a.volume = 0.8
-        a.play().catch(() => {
-          // Retry silencieux
-          setTimeout(() => { try { new Audio('/sounds/yop.mp3').play().catch(()=>{}) } catch(e){} }, 100)
-        })
+        if (audioRef.current) {
+          audioRef.current.play().catch(() => {})
+        } else {
+          new Audio('/sounds/yop.mp3').play().catch(() => {})
+        }
       } catch(e) {}
       setTimeout(() => { setPhase('done'); onConfirm() }, 3500)
     }
@@ -143,7 +150,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
   }
 
   const p = swipeX / (getMaxX() || 1)
-  const TRACK_H = THUMB + 8
+  const TRACK_H = THUMB + 16
 
   // ─── Phase YOP! — animation 3 points + wordmark ───────────────────────────
   if (phase === 'yop' || phase === 'done') {

@@ -115,10 +115,16 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
   function getX(e) { return e.touches ? e.touches[0].clientX : e.clientX }
 
   const audioRef = useRef(null)
+  const phaseRef = useRef('idle') // ref synchrone pour éviter les conflits async
+
+  function setPhaseSync(val) {
+    phaseRef.current = val
+    setPhase(val)
+  }
 
   const onStart = e => {
-    if (phase !== 'idle') return
-    setPhase('swiping'); setSwiping(true)
+    if (phaseRef.current !== 'idle') return
+    setPhaseSync('swiping'); setSwiping(true)
     startRef.current = getX(e) - swipeX
     // Précharger le son dès le début du geste — contexte audio débloqué ici
     try {
@@ -128,11 +134,12 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
     } catch(e) {}
   }
   const onMove = e => {
-    if (phase !== 'swiping') return
+    if (phaseRef.current !== 'swiping') return
     const x = Math.max(0, Math.min(getMaxX(), getX(e) - startRef.current))
     setSwipeX(x)
     if (x >= getMaxX()) {
-      setSwiping(false); setPhase('yop')
+      setSwiping(false)
+      setPhaseSync('yop')
       // Jouer le son préchargé
       try {
         if (audioRef.current) {
@@ -141,12 +148,12 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
           new Audio('/sounds/yop.mp3').play().catch(() => {})
         }
       } catch(e) {}
-      setTimeout(() => { setPhase('done'); onConfirm() }, 3500)
+      setTimeout(() => { setPhaseSync('done'); onConfirm() }, 3500)
     }
   }
   const onEnd = () => {
-    if (phase !== 'swiping') return
-    setSwiping(false); setPhase('idle'); setSwipeX(0)
+    if (phaseRef.current !== 'swiping') return // Ne pas reset si yop/done
+    setSwiping(false); setPhaseSync('idle'); setSwipeX(0)
   }
 
   const p = swipeX / (getMaxX() || 1)

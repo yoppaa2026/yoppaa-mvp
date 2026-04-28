@@ -43,13 +43,15 @@ function dateKey(date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
-function getJoursDispos(commandes) {
-  const keys = [...new Set(commandes.map(c => {
-    // Utilise la date du créneau si dispo, sinon created_at
-    const ref = c.date_commande || c.created_at
-    return dateKey(ref)
-  }))].sort()
-  return keys
+function getJoursDispos(horizon = 1) {
+  const today = new Date(); today.setHours(0,0,0,0)
+  const jours = []
+  for (let i = 0; i <= horizon; i++) {
+    const d = new Date(today)
+    d.setDate(today.getDate() + i)
+    jours.push(dateKey(d))
+  }
+  return jours
 }
 
 function getNumeroJour(commandes, commandeId, jourKey) {
@@ -291,12 +293,10 @@ export default function Dashboard() {
 
   // ─── Stats & filtres ──────────────────────────────────────────────────────
   const todayKey = dateKey(new Date())
-  const joursDispos = getJoursDispos(commandes)
+  const joursDispos = getJoursDispos(commercant?.horizon_commande || 1)
 
   // Si aucun jour sélectionné ou jour inexistant → aujourd'hui
-  const jourActif = (jourSelectionne && joursDispos.includes(jourSelectionne))
-    ? jourSelectionne
-    : (joursDispos.includes(todayKey) ? todayKey : joursDispos[0])
+  const jourActif = (jourSelectionne && joursDispos.includes(jourSelectionne)) ? jourSelectionne : todayKey
 
   const commandesDuJour = commandes.filter(c => dateKey(c.date_commande || c.created_at) === jourActif)
 

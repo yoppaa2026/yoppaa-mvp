@@ -37,44 +37,67 @@ function Etoiles({ note, taille = 14 }) {
 }
 
 // ─── Swipe retrait ────────────────────────────────────────────────────────────
-function SwipeRetrait({ onConfirm }) {
+// ─── YOP! Swipe ───────────────────────────────────────────────────────────────
+function SwipeRetrait({ onConfirm, clientPrenom }) {
   const [swipeX, setSwipeX] = useState(0)
   const [swiping, setSwiping] = useState(false)
-  const [confirmed, setConfirmed] = useState(false)
+  const [phase, setPhase] = useState('idle')
   const startRef = useRef(0)
   const containerRef = useRef(null)
-  const THUMB = 48
+  const THUMB = 52
+  const C = { main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF', ink: '#1A0840' }
   function getMaxX() { return (containerRef.current?.offsetWidth || 300) - THUMB - 8 }
   function getX(e) { return e.touches ? e.touches[0].clientX : e.clientX }
-  const onStart = e => { if (confirmed) return; setSwiping(true); startRef.current = getX(e) - swipeX }
+  const onStart = e => { if (phase !== 'idle') return; setPhase('swiping'); setSwiping(true); startRef.current = getX(e) - swipeX }
   const onMove = e => {
-    if (!swiping || confirmed) return
+    if (phase !== 'swiping') return
     const x = Math.max(0, Math.min(getMaxX(), getX(e) - startRef.current))
     setSwipeX(x)
-    if (x >= getMaxX()) { setConfirmed(true); setSwiping(false); onConfirm() }
+    if (x >= getMaxX()) {
+      setSwiping(false); setPhase('yop')
+      try { const a = new Audio('/sounds/yop.mp3'); a.volume = 0.8; const p = a.play(); if (p) p.catch(()=>{}) } catch(e) {}
+      setTimeout(() => { setPhase('done'); onConfirm() }, 2200)
+    }
   }
-  const onEnd = () => { if (confirmed) return; setSwiping(false); if (swipeX < getMaxX()) setSwipeX(0) }
+  const onEnd = () => { if (phase !== 'swiping') return; setSwiping(false); setPhase('idle'); setSwipeX(0) }
   const p = swipeX / (getMaxX() || 1)
   const TRACK_H = THUMB + 8
+  if (phase === 'yop' || phase === 'done') {
+    return (
+      <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
+        <style>{`@keyframes yopPulse { from { transform:scale(0.7) translateY(0); opacity:0.5; } to { transform:scale(1.4) translateY(-4px); opacity:1; } }`}</style>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
+          {[{c:C.main,d:'0s',s:10},{c:C.light,d:'0.15s',s:14},{c:C.mid,d:'0.3s',s:10}].map((d,i) => (
+            <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, animation: `yopPulse 0.6s ease-in-out ${d.d} infinite alternate`, boxShadow: `0 0 12px ${d.c}88` }}/>
+          ))}
+        </div>
+        <p style={{ fontWeight: 900, fontSize: '1.1rem', color: C.ink, letterSpacing: '-0.3px', marginBottom: 4 }}>C'est <span style={{ color: C.main }}>YOP!</span> 🎉</p>
+        <p style={{ fontSize: '0.82rem', color: '#6B7280', fontWeight: 600 }}>Enjoy {clientPrenom || 'Yopper'} !</p>
+      </div>
+    )
+  }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-      <p style={{ fontSize: '0.875rem', color: T.muted, fontWeight: 600, margin: 0, textAlign: 'center' }}>Glisse pour confirmer le retrait</p>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+      <style>{`@keyframes yopArrow { 0%,100% { opacity:0.4; transform:translateX(0); } 50% { opacity:1; transform:translateX(4px); } }`}</style>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontWeight: 900, fontSize: '0.95rem', color: C.main, letterSpacing: '-0.3px' }}>YOP!</span>
+        <span style={{ fontSize: '0.75rem', color: '#9CA3AF', fontWeight: 600, animation: 'yopArrow 1.2s ease-in-out infinite' }}>→→→</span>
+      </div>
       <div ref={containerRef}
-        style={{ width: '100%', maxWidth: 340, height: TRACK_H, borderRadius: 100, background: confirmed ? '#D4EDDA' : `linear-gradient(to right, ${T.pale} ${p*100}%, #F3F4F6 ${p*100}%)`, position: 'relative', border: `2px solid ${confirmed ? '#16A34A' : T.light}`, transition: confirmed ? 'all 0.3s' : 'none', userSelect: 'none', cursor: confirmed ? 'default' : 'grab', touchAction: 'none' }}
+        style={{ width: '100%', height: TRACK_H, borderRadius: 100, background: `linear-gradient(to right, ${C.pale} ${p*100}%, #F3F4F6 ${p*100}%)`, position: 'relative', border: `2px solid ${p > 0.5 ? C.main : C.light}`, userSelect: 'none', cursor: 'grab', touchAction: 'none', transition: 'border-color 0.2s' }}
         onMouseDown={onStart} onMouseMove={onMove} onMouseUp={onEnd} onMouseLeave={onEnd}
         onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}>
-        <div style={{ position: 'absolute', top: 0, bottom: 0, left: THUMB + 12, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.82rem', fontWeight: 700, color: confirmed ? '#16A34A' : T.mid, pointerEvents: 'none' }}>
-          {confirmed ? '✓ Confirmé !' : 'Glisse →'}
+        <div style={{ position: 'absolute', top: 0, bottom: 0, left: THUMB + 12, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <span style={{ fontSize: '0.78rem', fontWeight: 800, color: p > 0.3 ? C.main : '#9CA3AF', letterSpacing: '1px', textTransform: 'uppercase', transition: 'color 0.2s' }}>{p > 0.7 ? 'Lâche !' : ''}</span>
         </div>
-        <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: confirmed ? '#16A34A' : T.main, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.15)', transition: swiping ? 'none' : 'left 0.3s, background 0.3s', userSelect: 'none' }}>
-          {confirmed ? '✓' : '→'}
+        <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: `linear-gradient(135deg, ${C.main}, ${C.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 16px ${C.main}66`, transition: swiping ? 'none' : 'left 0.3s', userSelect: 'none' }}>
+          <span style={{ fontWeight: 900, fontSize: '0.85rem', color: '#fff', letterSpacing: '-0.5px' }}>YOP</span>
         </div>
       </div>
     </div>
   )
 }
 
-// ─── Avis expandable ──────────────────────────────────────────────────────────
 function CarteAvis({ a }) {
   const [ouvert, setOuvert] = useState(false)
   return (
@@ -245,14 +268,6 @@ export default function CommanderSlug() {
   const [jourSelectionne, setJourSelectionne] = useState(0)
   const [optionsParArticle, setOptionsParArticle] = useState({})
   const [derniereCommande, setDerniereCommande] = useState(null)
-  const [stocksParJour, setStocksParJour] = useState([])
-
-  // Mise à jour des articles quand le jour change
-  useEffect(() => {
-    if (stocksParJour.length > 0 && stocksParJour[jourSelectionne]) {
-      setArticles(stocksParJour[jourSelectionne])
-    }
-  }, [jourSelectionne, stocksParJour])
 
   // ─── Barre catégories sticky ──────────────────────────────────
   const [categorieActive, setCategorieActive] = useState(null)
@@ -351,47 +366,13 @@ export default function CommanderSlug() {
       })
     }
 
-    // ─── Stock par jour ───────────────────────────────────────────
-    // Pour chaque jour dispo, charger le stock depuis stock_jours
-    // Les articles illimités → stock_jour = 999 (toujours dispo)
-    // Les articles journaliers → stock depuis stock_jours pour la date
-    // Les articles manuels → stock_jour tel quel
-    const artsAvecStock = await Promise.all(joursDispos.map(async (jour) => {
-      const dateStr = jour.date.toISOString().slice(0,10)
-      const journaliers = (arts||[]).filter(a => a.stock_mode === 'journalier')
-      if (journaliers.length > 0) {
-        const { data: stocksJour } = await supabase
-          .from('stock_jours')
-          .select('article_id, stock_disponible')
-          .in('article_id', journaliers.map(a => a.id))
-          .eq('date', dateStr)
-        const stockMap = {}
-        ;(stocksJour||[]).forEach(s => { stockMap[s.article_id] = s.stock_disponible })
-        return (arts||[]).map(a => {
-          if (a.stock_mode === 'illimite') return { ...a, stock_jour: 999 }
-          if (a.stock_mode === 'journalier') {
-            // Si pas de stock_jours pour ce jour → utiliser stock_base
-            const stock = stockMap[a.id] !== undefined ? stockMap[a.id] : (a.stock_base || 0)
-            return { ...a, stock_jour: stock }
-          }
-          return a // manuel → inchangé
-        })
-      }
-      return (arts||[]).map(a => a.stock_mode === 'illimite' ? { ...a, stock_jour: 999 } : a)
-    }))
-
-    // Stock pour le premier jour (aujourd'hui ou demain)
-    const articlesAvecStockJour0 = artsAvecStock[0] || arts || []
-
-    setArticles(articlesAvecStockJour0)
+    setArticles(arts||[])
     setOptionsParArticle(opts)
     setCreneaux(creneauxAvecCount)
     setJoursDispos(joursDispos)
     setJourSelectionne(0)
     setAvisCommerce(avis||[])
     setModeLendemain(joursDispos[0]?.label !== "Aujourd'hui")
-    // Stocker tous les stocks par jour pour mise à jour dynamique
-    setStocksParJour(artsAvecStock)
     setLoading(false)
   }
 
@@ -479,9 +460,10 @@ export default function CommanderSlug() {
     setLoadingCommande(true)
     const nomComplet = `${client.prenom} ${client.nom}`.trim()
     const cid = await getOuCreerClient(client.email, client.prenom, client.nom)
-    // Date du jour sélectionné pour la commande
-    const jourDate = joursDispos[jourSelectionne]?.date
-    const dateStr = jourDate ? jourDate.toISOString().slice(0,10) : new Date().toISOString().slice(0,10)
+    // Date locale (pas UTC) pour éviter décalage fuseau horaire
+    const jourDate = joursDispos[jourSelectionne]?.date || new Date()
+    const d = new Date(jourDate)
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
     const { data: commande } = await supabase.from('commandes').insert({
       commercant_id: commercant.id, creneau_id: creneauChoisi,
       client_nom: nomComplet, client_email: client.email, client_telephone: client.telephone,
@@ -493,20 +475,6 @@ export default function CommanderSlug() {
       await supabase.from('commande_articles').insert(
         Object.values(panier).map(i => ({ commande_id: commande.id, article_id: i.id, quantite: i.quantite, prix_unitaire: i.prix }))
       )
-      // Décrémenter stock_jours pour les articles journaliers
-      const articlesJournaliers = Object.values(panier).filter(i => {
-        const art = articles.find(a => a.id === i.id)
-        return art?.stock_mode === 'journalier'
-      })
-      for (const item of articlesJournaliers) {
-        const art = articles.find(a => a.id === item.id)
-        if (!art) continue
-        const newStock = Math.max(0, (art.stock_jour || 0) - item.quantite)
-        await supabase.from('stock_jours').upsert({
-          article_id: item.id, date: dateStr, stock_disponible: newStock
-        })
-        await supabase.from('articles').update({ stock_jour: newStock }).eq('id', item.id)
-      }
       setDerniereCommande({ ...commande, client_id: cid })
       setEtape(4)
     }
@@ -574,7 +542,15 @@ export default function CommanderSlug() {
             ← Retour
           </button>
 
-          <div style={{ flex: 1 }}/>
+          {/* Badge type — hype */}
+          {commercant?.type && (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+              <span style={{ background: `linear-gradient(135deg, ${T.main}88, ${T.mid}88)`, backdropFilter: 'blur(8px)', border: `1px solid ${T.light}44`, borderRadius: 100, padding: '5px 14px', fontSize: '0.78rem', fontWeight: 800, color: '#fff', letterSpacing: '0.5px', textTransform: 'uppercase', boxShadow: `0 2px 12px ${T.main}44` }}>
+                {commercant.type}
+              </span>
+            </div>
+          )}
+          {!commercant?.type && <div style={{ flex: 1 }}/>}
 
           {/* Étapes — pills stylées */}
           {etape < 4 && (
@@ -999,27 +975,18 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
 
         {article.stock_jour !== 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
-            {/* Si options → +/- + bouton sliders */}
+            {/* Si options → bouton ⚙️ seul */}
             {hasOptions ? (
               <>
-                {qteTotale > 0 ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <button onClick={() => retirerDuPanier(keySimple)}
-                      style={{ width: 34, height: 34, borderRadius: 10, border: `2px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 900, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: '0 1px 4px rgba(107,53,196,0.1)' }}>
-                      −
-                    </button>
-                    <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, minWidth: 22, textAlign: 'center' }}>{qteTotale}</span>
-                    <button onClick={() => setShowOptions(v => !v)}
-                      style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: showOptions ? `linear-gradient(135deg, ${T.mid}, ${T.main})` : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 4px 14px ${T.main}55` }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2.5" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="2.5" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2.5" fill="currentColor" stroke="none"/></svg>
-                    </button>
+                {qteTotale > 0 && (
+                  <div style={{ background: T.main, color: '#fff', fontWeight: 900, fontSize: '0.78rem', borderRadius: 100, minWidth: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px', boxShadow: `0 2px 8px ${T.main}55` }}>
+                    {qteTotale}
                   </div>
-                ) : (
-                  <button onClick={() => setShowOptions(v => !v)}
-                    style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: showOptions ? `linear-gradient(135deg, ${T.mid}, ${T.main})` : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 4px 14px ${T.main}55` }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2.5" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="2.5" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2.5" fill="currentColor" stroke="none"/></svg>
-                  </button>
                 )}
+                <button onClick={() => setShowOptions(v => !v)}
+                  style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: showOptions ? T.mid : T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 3px 12px ${T.main}44` }}>
+                  ⚙️
+                </button>
               </>
             ) : (
               qteTotale > 0 ? (

@@ -68,26 +68,41 @@ function getNumeroJour(commandes, commandeId, jourKey) {
   return idx === -1 ? '?' : idx + 1
 }
 
-// ─── Son notification ─────────────────────────────────────────────────────────
-let _audioUnlocked = false
-function unlockAudio() {
-  if (_audioUnlocked) return
+// ─── Notifications système ────────────────────────────────────────────────────
+let _notifPermission = 'default'
+
+async function demanderPermissionNotif() {
+  if (!('Notification' in window)) return false
+  if (Notification.permission === 'granted') { _notifPermission = 'granted'; return true }
+  if (Notification.permission === 'denied') return false
+  const result = await Notification.requestPermission()
+  _notifPermission = result
+  return result === 'granted'
+}
+
+function envoyerNotification(titre, body) {
+  // 1. Notification système (son natif du device)
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(titre, {
+        body,
+        icon: '/icon-pro-192.png',
+        badge: '/icon-pro-192.png',
+        tag: 'yoppaa-commande',
+        renotify: true,
+      })
+    } catch(e) {}
+  }
+  // 2. Son audio en fallback
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)()
-    ctx.resume().then(() => { _audioUnlocked = true })
-    // Précharger aussi via HTMLAudio
     const a = new Audio('/sounds/notification.mp3')
-    a.volume = 0; a.play().then(() => { a.pause(); a.currentTime = 0; _audioUnlocked = true }).catch(() => {})
+    a.volume = 0.7
+    a.play().catch(() => {})
   } catch(e) {}
 }
+
 function jouerSon() {
-  try {
-    const audio = new Audio('/sounds/notification.mp3')
-    audio.volume = 0.7
-    audio.play().catch(() => {
-      try { new Audio('/sounds/notification.mp3').play().catch(()=>{}) } catch(e) {}
-    })
-  } catch(e) {}
+  envoyerNotification('🔔 Nouvelle commande !', 'Une nouvelle commande vient d\'arriver sur Yoppaa.')
 }
 
 // ─── Icônes SVG ───────────────────────────────────────────────────────────────
@@ -260,10 +275,6 @@ export default function Dashboard() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       if (localStorage.getItem('notifs') === 'true') setNotificationsActives(true)
-      // Débloquer audio sur premier clic n'importe où dans la page
-      const handler = () => { unlockAudio(); document.removeEventListener('click', handler) }
-      document.addEventListener('click', handler)
-      return () => document.removeEventListener('click', handler)
     }
   }, [])
 
@@ -322,12 +333,20 @@ export default function Dashboard() {
     router.push('/login')
   }
 
-  function activerNotifications() {
+  async function activerNotifications() {
     const n = !notificationsActives
     setNotificationsActives(n)
     if (typeof window !== 'undefined') localStorage.setItem('notifs', String(n))
-    unlockAudio()
-    if (n) jouerSon()
+    if (n) {
+      const ok = await demanderPermissionNotif()
+      if (ok) {
+        // Test immédiat
+        envoyerNotification('🔔 Alertes Yoppaa activées !', 'Tu recevras une notification à chaque nouvelle commande.')
+      } else {
+        // Pas de permission — fallback audio seulement
+        try { new Audio('/sounds/notification.mp3').play().catch(()=>{}) } catch(e) {}
+      }
+    }
   }
 
   // ─── Stats & filtres ──────────────────────────────────────────────────────

@@ -69,26 +69,24 @@ function getNumeroJour(commandes, commandeId, jourKey) {
 }
 
 // ─── Son notification ─────────────────────────────────────────────────────────
-let _notifAudio = null
-function prechargerAudio() {
-  if (_notifAudio) return
+let _audioUnlocked = false
+function unlockAudio() {
+  if (_audioUnlocked) return
   try {
-    _notifAudio = new Audio('/sounds/notification.mp3')
-    _notifAudio.volume = 0.7
-    _notifAudio.load()
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    ctx.resume().then(() => { _audioUnlocked = true })
+    // Précharger aussi via HTMLAudio
+    const a = new Audio('/sounds/notification.mp3')
+    a.volume = 0; a.play().then(() => { a.pause(); a.currentTime = 0; _audioUnlocked = true }).catch(() => {})
   } catch(e) {}
 }
 function jouerSon() {
   try {
-    if (_notifAudio) {
-      _notifAudio.currentTime = 0
-      _notifAudio.play().catch(() => {
-        // Fallback — nouvelle instance
-        try { new Audio('/sounds/notification.mp3').play().catch(()=>{}) } catch(e) {}
-      })
-    } else {
-      new Audio('/sounds/notification.mp3').play().catch(()=>{})
-    }
+    const audio = new Audio('/sounds/notification.mp3')
+    audio.volume = 0.7
+    audio.play().catch(() => {
+      try { new Audio('/sounds/notification.mp3').play().catch(()=>{}) } catch(e) {}
+    })
   } catch(e) {}
 }
 
@@ -262,6 +260,10 @@ export default function Dashboard() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       if (localStorage.getItem('notifs') === 'true') setNotificationsActives(true)
+      // Débloquer audio sur premier clic n'importe où dans la page
+      const handler = () => { unlockAudio(); document.removeEventListener('click', handler) }
+      document.addEventListener('click', handler)
+      return () => document.removeEventListener('click', handler)
     }
   }, [])
 
@@ -324,8 +326,7 @@ export default function Dashboard() {
     const n = !notificationsActives
     setNotificationsActives(n)
     if (typeof window !== 'undefined') localStorage.setItem('notifs', String(n))
-    // Précharger l'audio sur ce geste utilisateur — débloque le contexte audio
-    prechargerAudio()
+    unlockAudio()
     if (n) jouerSon()
   }
 

@@ -245,6 +245,14 @@ export default function CommanderSlug() {
   const [jourSelectionne, setJourSelectionne] = useState(0)
   const [optionsParArticle, setOptionsParArticle] = useState({})
   const [derniereCommande, setDerniereCommande] = useState(null)
+  const [stocksParJour, setStocksParJour] = useState([])
+
+  // Mise à jour des articles quand le jour change
+  useEffect(() => {
+    if (stocksParJour.length > 0 && stocksParJour[jourSelectionne]) {
+      setArticles(stocksParJour[jourSelectionne])
+    }
+  }, [jourSelectionne, stocksParJour])
 
   // ─── Barre catégories sticky ──────────────────────────────────
   const [categorieActive, setCategorieActive] = useState(null)
@@ -343,13 +351,47 @@ export default function CommanderSlug() {
       })
     }
 
-    setArticles(arts||[])
+    // ─── Stock par jour ───────────────────────────────────────────
+    // Pour chaque jour dispo, charger le stock depuis stock_jours
+    // Les articles illimités → stock_jour = 999 (toujours dispo)
+    // Les articles journaliers → stock depuis stock_jours pour la date
+    // Les articles manuels → stock_jour tel quel
+    const artsAvecStock = await Promise.all(joursDispos.map(async (jour) => {
+      const dateStr = jour.date.toISOString().slice(0,10)
+      const journaliers = (arts||[]).filter(a => a.stock_mode === 'journalier')
+      if (journaliers.length > 0) {
+        const { data: stocksJour } = await supabase
+          .from('stock_jours')
+          .select('article_id, stock_disponible')
+          .in('article_id', journaliers.map(a => a.id))
+          .eq('date', dateStr)
+        const stockMap = {}
+        ;(stocksJour||[]).forEach(s => { stockMap[s.article_id] = s.stock_disponible })
+        return (arts||[]).map(a => {
+          if (a.stock_mode === 'illimite') return { ...a, stock_jour: 999 }
+          if (a.stock_mode === 'journalier') {
+            // Si pas de stock_jours pour ce jour → utiliser stock_base
+            const stock = stockMap[a.id] !== undefined ? stockMap[a.id] : (a.stock_base || 0)
+            return { ...a, stock_jour: stock }
+          }
+          return a // manuel → inchangé
+        })
+      }
+      return (arts||[]).map(a => a.stock_mode === 'illimite' ? { ...a, stock_jour: 999 } : a)
+    }))
+
+    // Stock pour le premier jour (aujourd'hui ou demain)
+    const articlesAvecStockJour0 = artsAvecStock[0] || arts || []
+
+    setArticles(articlesAvecStockJour0)
     setOptionsParArticle(opts)
     setCreneaux(creneauxAvecCount)
     setJoursDispos(joursDispos)
     setJourSelectionne(0)
     setAvisCommerce(avis||[])
     setModeLendemain(joursDispos[0]?.label !== "Aujourd'hui")
+    // Stocker tous les stocks par jour pour mise à jour dynamique
+    setStocksParJour(artsAvecStock)
     setLoading(false)
   }
 
@@ -437,16 +479,34 @@ export default function CommanderSlug() {
     setLoadingCommande(true)
     const nomComplet = `${client.prenom} ${client.nom}`.trim()
     const cid = await getOuCreerClient(client.email, client.prenom, client.nom)
+    // Date du jour sélectionné pour la commande
+    const jourDate = joursDispos[jourSelectionne]?.date
+    const dateStr = jourDate ? jourDate.toISOString().slice(0,10) : new Date().toISOString().slice(0,10)
     const { data: commande } = await supabase.from('commandes').insert({
       commercant_id: commercant.id, creneau_id: creneauChoisi,
       client_nom: nomComplet, client_email: client.email, client_telephone: client.telephone,
       rgpd_commande: true, rgpd_marketing: rgpdMarketing,
       total: totalPanier(), statut: 'en_attente',
+      date_commande: dateStr,
     }).select().single()
     if (commande) {
       await supabase.from('commande_articles').insert(
         Object.values(panier).map(i => ({ commande_id: commande.id, article_id: i.id, quantite: i.quantite, prix_unitaire: i.prix }))
       )
+      // Décrémenter stock_jours pour les articles journaliers
+      const articlesJournaliers = Object.values(panier).filter(i => {
+        const art = articles.find(a => a.id === i.id)
+        return art?.stock_mode === 'journalier'
+      })
+      for (const item of articlesJournaliers) {
+        const art = articles.find(a => a.id === item.id)
+        if (!art) continue
+        const newStock = Math.max(0, (art.stock_jour || 0) - item.quantite)
+        await supabase.from('stock_jours').upsert({
+          article_id: item.id, date: dateStr, stock_disponible: newStock
+        })
+        await supabase.from('articles').update({ stock_jour: newStock }).eq('id', item.id)
+      }
       setDerniereCommande({ ...commande, client_id: cid })
       setEtape(4)
     }

@@ -126,7 +126,12 @@ function SwipeRetrait({ onConfirm, clientPrenom, numeroCommande }) {
     setSwipeX(x)
     if (x >= getMaxX()) {
       setSwiping(false); setPhase('yop')
-      try { const a = new Audio('/sounds/yop.mp3'); a.volume = 0.8; a.play().catch(()=>{}) } catch(e) {}
+      try {
+        const a = new Audio('/sounds/yop.mp3')
+        a.volume = 0.8
+        const p = a.play()
+        if (p !== undefined) p.catch(() => {})
+      } catch(e) {}
       setTimeout(() => { setPhase('done'); onConfirm() }, 2200)
     }
   }
@@ -170,7 +175,7 @@ function SwipeRetrait({ onConfirm, clientPrenom, numeroCommande }) {
         onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}>
         <div style={{ position: 'absolute', top: 0, bottom: 0, left: THUMB + 12, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
           <span style={{ fontSize: '0.78rem', fontWeight: 800, color: p > 0.3 ? C.main : '#9CA3AF', letterSpacing: '1px', textTransform: 'uppercase', transition: 'color 0.2s' }}>
-            {p > 0.7 ? 'Lâche !' : 'Glisse'}
+            {p > 0.7 ? 'Lâche !' : ''}
           </span>
         </div>
         <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: `linear-gradient(135deg, ${C.main}, ${C.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 16px ${C.main}66`, transition: swiping ? 'none' : 'left 0.3s', userSelect: 'none' }}>
@@ -843,7 +848,7 @@ export default function Commander() {
                         <p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
                       </div>
                       <SwipeRetrait
-                        clientPrenom={client.nom?.split(' ')[0] || 'Yopper'}
+                        clientPrenom={localStorage.getItem('yoppaa_prenom') || client.nom?.split(' ')[0] || 'Yopper'}
                         numeroCommande={clientCommandes.filter(x => new Date(x.created_at).toDateString() === new Date().toDateString()).findIndex(x => x.id === c.id) + 1}
                         onConfirm={async () => {
                           await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', c.id)

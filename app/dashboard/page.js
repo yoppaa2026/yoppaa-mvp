@@ -40,10 +40,13 @@ function dateLabel(date) {
 
 function dateKey(date) {
   if (!date) return ''
-  // Si c'est déjà une string date SQL (YYYY-MM-DD), la retourner directement
+  // String date SQL pure YYYY-MM-DD → retourner directement
   if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date
+  // Timestamp avec timezone → convertir en heure locale Belgique
   const d = new Date(date)
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  const offset = d.getTimezoneOffset() * 60000
+  const local = new Date(d.getTime() - offset)
+  return local.toISOString().slice(0, 10)
 }
 
 function getJoursDispos(horizon = 1) {
@@ -71,7 +74,8 @@ function jouerSon() {
     const audio = new Audio('/sounds/notification.mp3')
     audio.currentTime = 0
     audio.volume = 0.7
-    audio.play().catch(e => console.warn('Audio:', e))
+    const p = audio.play()
+    if (p !== undefined) p.catch(e => console.warn('Audio:', e))
   } catch(e) {}
 }
 

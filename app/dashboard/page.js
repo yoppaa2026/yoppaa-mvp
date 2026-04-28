@@ -39,6 +39,9 @@ function dateLabel(date) {
 }
 
 function dateKey(date) {
+  if (!date) return ''
+  // Si c'est déjà une string date SQL (YYYY-MM-DD), la retourner directement
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date
   const d = new Date(date)
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
@@ -181,6 +184,7 @@ export default function Dashboard() {
   const [jourSelectionne, setJourSelectionne] = useState(null) // null = aujourd'hui par défaut
   const [notificationsActives, setNotificationsActives] = useState(false)
   const [nouvelleCommande, setNouvelleCommande] = useState(false)
+  const [commandeRecuperee, setCommandeRecuperee] = useState(null) // { nom, numero }
   const router = useRouter()
   const dernierNombreRef = useRef(0)
   const pollingRef = useRef(null)
@@ -256,11 +260,31 @@ export default function Dashboard() {
         .eq('commercant_id', commercant.id)
         .order('created_at', { ascending: true })
       const triees = trierCommandes(data)
+
+      // Nouvelle commande arrivée
       if (dernierNombreRef.current > 0 && triees.length > dernierNombreRef.current) {
         if (notificationsActives) jouerSon()
         setNouvelleCommande(true)
         setTimeout(() => setNouvelleCommande(false), 6000)
       }
+
+      // Commande passée en "recupere" depuis le dernier poll
+      setCommandes(prev => {
+        const anciennes = prev.filter(c => c.statut === 'pret')
+        anciennes.forEach(ancien => {
+          const nouvelle = triees.find(n => n.id === ancien.id)
+          if (nouvelle?.statut === 'recupere') {
+            const todayKey = dateKey(new Date())
+            const nbDuJour = triees.filter(c => dateKey(c.date_commande || c.created_at) === todayKey).sort((a,b) => new Date(a.created_at) - new Date(b.created_at))
+            const num = nbDuJour.findIndex(c => c.id === ancien.id) + 1
+            const prenom = nouvelle.client_nom?.split(' ')[0] || 'Le Yopper'
+            setCommandeRecuperee({ nom: prenom, numero: num })
+            setTimeout(() => setCommandeRecuperee(null), 8000)
+          }
+        })
+        return prev
+      })
+
       dernierNombreRef.current = triees.length
       setCommandes(triees)
     }, 5000)
@@ -548,6 +572,23 @@ export default function Dashboard() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', padding: '0.875rem', textAlign: 'center', fontWeight: 800, fontSize: '1rem', boxShadow: `0 4px 30px ${T.main}88`, animation: 'slideDown 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
           <span style={{ animation: 'pulse 1s ease infinite' }}>🔔</span>
           Nouvelle commande reçue !
+        </div>
+      )}
+
+      {/* Bannière YOP! — commande récupérée */}
+      {commandeRecuperee && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9998, background: 'linear-gradient(135deg, #16A34A, #22C55E)', color: '#fff', padding: '0.875rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '1rem', boxShadow: '0 4px 30px rgba(22,163,74,0.5)', animation: 'slideDown 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+            {[{c:'#fff',o:0.5,s:6},{c:'#fff',o:0.8,s:8},{c:'#fff',o:0.5,s:6}].map((d,i) => (
+              <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, opacity: d.o, animation: `pulse ${0.6 + i*0.15}s ease-in-out infinite alternate` }}/>
+            ))}
+          </div>
+          <span>🎉 {commandeRecuperee.nom} a récupéré la commande #{commandeRecuperee.numero} — YOP!</span>
+          <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+            {[{c:'#fff',o:0.5,s:6},{c:'#fff',o:0.8,s:8},{c:'#fff',o:0.5,s:6}].map((d,i) => (
+              <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, opacity: d.o, animation: `pulse ${0.6 + i*0.15}s ease-in-out infinite alternate` }}/>
+            ))}
+          </div>
         </div>
       )}
 

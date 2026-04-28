@@ -420,7 +420,7 @@ export default function Commander() {
   useEffect(() => {
     if (!position || !commercants.length) return
     calculerDistances(commercants, position)
-  }, [position, commercants.length])
+  }, [position?.lat, position?.lng, commercants.length])
 
   async function calculerDistances(liste, pos) {
     const apiKey = process.env.NEXT_PUBLIC_ORS_API_KEY
@@ -536,7 +536,7 @@ export default function Commander() {
           <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 10%, ${T.mid}33 0%, transparent 50%), radial-gradient(circle at 10% 90%, ${T.light}18 0%, transparent 50%), radial-gradient(circle at 50% 50%, ${T.main}22 0%, transparent 70%)`, pointerEvents: 'none' }}/>
 
           {/* Top row — logo + géoloc */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: headerScrolled ? '0.625rem 1rem' : '1rem 1rem 0', transition: 'padding 0.3s ease' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: headerScrolled ? '0.5rem 1rem' : '0.75rem 1rem 0', transition: 'padding 0.4s cubic-bezier(0.4,0,0.2,1)' }}>
             <div>
               {/* 3 points — cachés au scroll */}
               {!headerScrolled && (
@@ -550,7 +550,7 @@ export default function Commander() {
                   ))}
                 </div>
               )}
-              <p style={{ fontWeight: 900, fontSize: headerScrolled ? '1.3rem' : '2rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1, textShadow: `0 0 40px ${T.mid}66`, transition: 'font-size 0.3s ease' }}>yoppaa</p>
+              <p style={{ fontWeight: 900, fontSize: headerScrolled ? '1.2rem' : '1.75rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1, textShadow: `0 0 40px ${T.mid}66`, transition: 'font-size 0.4s cubic-bezier(0.4,0,0.2,1)' }}>yoppaa</p>
               {!headerScrolled && <p style={{ color: T.light, fontSize: '0.62rem', marginTop: 3, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', opacity: 0.8 }}>Skip the wait</p>}
             </div>
             {/* Localisation — GPS ou manuelle */}
@@ -598,12 +598,39 @@ export default function Commander() {
                   placeholder="Ville, rue, code postal..."
                   value={locManuelle}
                   onChange={e => setLocManuelle(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && locManuelle.trim()) { setRue(locManuelle.trim()); setShowLocManuelle(false) } }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && locManuelle.trim()) {
+                      setRue(locManuelle.trim())
+                      setShowLocManuelle(false)
+                      // Geocoder la ville saisie et recalculer les distances
+                      fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locManuelle.trim())}&format=json&limit=1&accept-language=fr`)
+                        .then(r => r.json())
+                        .then(data => {
+                          if (data?.[0]) {
+                            const pos = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
+                            setPosition(pos)
+                            calculerDistances(commercants, pos)
+                          }
+                        }).catch(() => {})
+                    }
+                  }}
                   autoFocus
                   style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.5rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', backdropFilter: 'blur(8px)', outline: 'none' }}
                 />
                 {locManuelle && (
-                  <button onClick={() => { setRue(locManuelle.trim()); setShowLocManuelle(false) }}
+                  <button onClick={() => {
+                    setRue(locManuelle.trim())
+                    setShowLocManuelle(false)
+                    fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locManuelle.trim())}&format=json&limit=1&accept-language=fr`)
+                      .then(r => r.json())
+                      .then(data => {
+                        if (data?.[0]) {
+                          const pos = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
+                          setPosition(pos)
+                          calculerDistances(commercants, pos)
+                        }
+                      }).catch(() => {})
+                  }}
                     style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: T.main, border: 'none', borderRadius: 8, padding: '4px 10px', color: '#fff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                     OK
                   </button>
@@ -616,27 +643,32 @@ export default function Commander() {
           {/* Tagline hero — transition smooth au scroll */}
           {onglet === 'accueil' && (
             <div style={{
-              maxHeight: headerScrolled ? '0px' : '120px',
+              maxHeight: headerScrolled ? '0px' : '100px',
               opacity: headerScrolled ? 0 : 1,
               overflow: 'hidden',
-              transition: 'max-height 0.35s ease, opacity 0.25s ease',
-              padding: headerScrolled ? '0 1rem' : '0.875rem 1rem 0.75rem',
+              transition: 'max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s cubic-bezier(0.4,0,0.2,1), padding 0.4s cubic-bezier(0.4,0,0.2,1)',
+              padding: headerScrolled ? '0 1rem' : '0.625rem 1rem 0.5rem',
             }}>
-              <p style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.5px', lineHeight: 1.25, marginBottom: 4 }}>
+              <p style={{ fontWeight: 900, fontSize: '1.2rem', color: '#fff', letterSpacing: '-0.5px', lineHeight: 1.25, marginBottom: 4 }}>
                 Commander avant d'arriver,<br/>
                 <span style={{ color: T.light }}>récupère sans attendre.</span>
               </p>
-              {position && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 100, padding: '4px 12px' }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="10" r="4" fill="white" opacity="0.9"/>
-                    <path d="M12 2C7.58 2 4 5.58 4 10c0 5.25 8 14 8 14s8-8.75 8-14c0-4.42-3.58-8-8-8z" stroke="white" strokeWidth="2" fill="none" opacity="0.9"/>
-                  </svg>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff', opacity: 0.9 }}>
-                    {commercantsFiltres.length} commerce{commercantsFiltres.length > 1 ? 's' : ''} près de toi
-                  </span>
-                </div>
-              )}
+              {position && (() => {
+                const RAYON_KM = 15
+                const commercantsProches = commercantsFiltres.filter(c => c.distance == null || c.distance <= RAYON_KM * 1000)
+                const count = commercantsProches.length
+                return (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 100, padding: '4px 12px' }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="10" r="4" fill="white" opacity="0.9"/>
+                      <path d="M12 2C7.58 2 4 5.58 4 10c0 5.25 8 14 8 14s8-8.75 8-14c0-4.42-3.58-8-8-8z" stroke="white" strokeWidth="2" fill="none" opacity="0.9"/>
+                    </svg>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff', opacity: 0.9 }}>
+                      {count} commerce{count > 1 ? 's' : ''} près de toi · {RAYON_KM} km
+                    </span>
+                  </div>
+                )
+              })()}
             </div>
           )}
 
@@ -912,18 +944,18 @@ export default function Commander() {
             const stroke = '#ffffff'
             return (
               <button key={item.key} onClick={() => setOnglet(item.key)}
-                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '0.625rem 0 0.5rem', border: 'none', background: 'transparent', cursor: 'pointer', position: 'relative' }}>
+                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '0.45rem 0 0.4rem', border: 'none', background: 'transparent', cursor: 'pointer', position: 'relative' }}>
 
                 {/* ── Icône SVG ── */}
                 {item.key === 'accueil' && (
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M3,10 L12,3 L21,10" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                     <path d="M5,10 L5,20 Q5,21 6,21 L9,21 L9,15 Q9,14 10,14 L14,14 Q15,14 15,15 L15,21 L18,21 Q19,21 19,20 L19,10" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                   </svg>
                 )}
 
                 {item.key === 'commandes' && (
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect x="2" y="9" width="20" height="13" rx="3" stroke={stroke} strokeWidth="2.5" strokeLinejoin="round" opacity={op}/>
                     <path d="M2,13 L22,13" stroke={stroke} strokeWidth="2.5" opacity={op}/>
                     <path d="M8,9 L8,5 Q8,2 12,2 Q16,2 16,5 L16,9" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
@@ -937,7 +969,7 @@ export default function Commander() {
                 )}
 
                 {item.key === 'favoris' && (
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12,5 L13.6,9.2 L18.2,9.6 L14.9,12.4 L15.9,17 L12,14.6 L8.1,17 L9.1,12.4 L5.8,9.6 L10.4,9.2 Z" stroke={stroke} strokeWidth="2.3" strokeLinejoin="round" strokeLinecap="round" opacity={op}/>
                     <circle cx="8.5" cy="21" r="1.8" fill={actif ? '#C4A0F4' : stroke} opacity={actif ? 1 : 0.35}/>
                     <circle cx="12" cy="21" r="2.2" fill={actif ? '#C4A0F4' : stroke} opacity={actif ? 1 : 0.5}/>
@@ -946,7 +978,7 @@ export default function Commander() {
                 )}
 
                 {item.key === 'tribu' && (
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="4" cy="8" r="3" stroke={stroke} strokeWidth="2.2" opacity={op * 0.7}/>
                     <path d="M0,18 Q0,14 4,14 Q8,14 8,18" stroke={stroke} strokeWidth="2.2" strokeLinecap="round" opacity={op * 0.7}/>
                     <circle cx="20" cy="8" r="3" stroke={stroke} strokeWidth="2.2" opacity={op * 0.7}/>
@@ -957,7 +989,7 @@ export default function Commander() {
                 )}
 
                 {item.key === 'profil' && (
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="12" cy="8" r="5" stroke={stroke} strokeWidth="2.5" opacity={op}/>
                     <path d="M2,21 Q2,16 12,16 Q22,16 22,21" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" opacity={op}/>
                   </svg>

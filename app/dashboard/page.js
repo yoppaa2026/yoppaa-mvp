@@ -62,19 +62,32 @@ function getNumeroJour(commandes, commandeId, jourKey) {
   return idx === -1 ? '?' : idx + 1
 }
 
+// AudioContext singleton — débloqué sur interaction utilisateur
+let _audioCtx = null
+function getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+  if (_audioCtx.state === 'suspended') _audioCtx.resume()
+  return _audioCtx
+}
+
 function jouerSon() {
   try {
-    const ctx = new AudioContext()
+    const ctx = getAudioCtx()
+    const now = ctx.currentTime
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
     osc.connect(gain); gain.connect(ctx.destination)
-    osc.frequency.setValueAtTime(880, ctx.currentTime)
-    osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.1)
-    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.2)
-    gain.gain.setValueAtTime(0.3, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4)
-    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.4)
-  } catch(e) {}
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(880, now)
+    osc.frequency.setValueAtTime(1100, now + 0.12)
+    osc.frequency.setValueAtTime(880, now + 0.24)
+    osc.frequency.setValueAtTime(1320, now + 0.36)
+    gain.gain.setValueAtTime(0, now)
+    gain.gain.linearRampToValueAtTime(0.35, now + 0.02)
+    gain.gain.setValueAtTime(0.35, now + 0.38)
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55)
+    osc.start(now); osc.stop(now + 0.6)
+  } catch(e) { console.warn('Audio error:', e) }
 }
 
 // ─── Icônes SVG ───────────────────────────────────────────────────────────────
@@ -288,6 +301,8 @@ export default function Dashboard() {
     const n = !notificationsActives
     setNotificationsActives(n)
     if (typeof window !== 'undefined') localStorage.setItem('notifs', String(n))
+    // Débloquer AudioContext sur interaction utilisateur
+    try { getAudioCtx() } catch(e) {}
     if (n) jouerSon()
   }
 

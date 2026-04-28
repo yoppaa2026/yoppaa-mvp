@@ -154,6 +154,18 @@ function CarteCommande({ commande, numero, onChangerStatut }) {
     ? `${commande.creneau.heure_debut.slice(0,5)} – ${commande.creneau.heure_fin.slice(0,5)}`
     : null
 
+  // Date formatée mer. 29/04
+  const dateRef = commande.date_commande || commande.created_at
+  const dateFormatee = dateRef ? (() => {
+    const d = typeof dateRef === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateRef)
+      ? new Date(dateRef + 'T12:00:00')
+      : new Date(dateRef)
+    return d.toLocaleDateString('fr-BE', { weekday: 'short', day: '2-digit', month: '2-digit' })
+  })() : null
+
+  // Prénom uniquement
+  const prenom = commande.client_nom?.split(' ')[0] || commande.client_nom
+
   return (
     <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: `0 2px 12px ${couleur.border}14`, border: `1.5px solid ${couleur.border}22`, transition: 'transform 0.15s, box-shadow 0.15s' }}
       onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 8px 28px ${couleur.border}28` }}
@@ -162,17 +174,27 @@ function CarteCommande({ commande, numero, onChangerStatut }) {
       <div style={{ padding: '0.875rem 1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.625rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${couleur.border}, ${couleur.border}bb)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.9rem', color: '#fff', flexShrink: 0, boxShadow: `0 3px 10px ${couleur.border}44` }}>
-              #{numero}
+            {/* Numéro + date dans le carré */}
+            <div style={{ minWidth: 44, borderRadius: 10, background: `linear-gradient(135deg, ${couleur.border}, ${couleur.border}bb)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0, boxShadow: `0 3px 10px ${couleur.border}44`, padding: '6px 6px', gap: 2 }}>
+              <span style={{ fontWeight: 900, fontSize: '0.9rem', lineHeight: 1 }}>#{numero}</span>
+              {dateFormatee && <span style={{ fontSize: '0.55rem', fontWeight: 700, opacity: 0.85, textAlign: 'center', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{dateFormatee}</span>}
             </div>
             <div>
-              <p style={{ fontWeight: 800, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{commande.client_nom}</p>
+              <p style={{ fontWeight: 800, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{prenom}</p>
               {heure && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
                   <IconClock size={11} color={couleur.border}/>
                   <span style={{ fontSize: '0.75rem', color: couleur.border, fontWeight: 700 }}>{heure}</span>
                 </div>
               )}
+              {commande.client_telephone && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8 19.79 19.79 0 01.22 2.18 2 2 0 012.2 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.11 6.11l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <span style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 600 }}>{commande.client_telephone}</span>
+                </div>
+              )}
+            </div>
+          </div>
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>

@@ -1,11 +1,11 @@
 {
-  "name": "Yoppaa \u2014 Skip the wait",
+  "name": "Yoppaa",
   "short_name": "Yoppaa",
-  "description": "Commande avant d'arriver, r\u00e9cup\u00e8re sans attendre.",
+  "description": "Commande avant d'arriver, récupère sans attendre.",
   "start_url": "/commander",
   "display": "standalone",
-  "background_color": "#160636",
-  "theme_color": "#6B35C4",
+  "background_color": "#8040D0",
+  "theme_color": "#8040D0",
   "orientation": "portrait",
   "icons": [
     {

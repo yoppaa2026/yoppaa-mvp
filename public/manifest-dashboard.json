@@ -4,8 +4,8 @@
   "description": "Dashboard commerçant Yoppaa — gérez vos commandes en temps réel.",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#160636",
-  "theme_color": "#160636",
+  "background_color": "#0D0420",
+  "theme_color": "#0D0420",
   "orientation": "portrait",
   "icons": [
     {
@@ -15,7 +15,7 @@
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-192.png",
+      "src": "/icon-pro-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

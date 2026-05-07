@@ -967,7 +967,19 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
           <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{article.nom}</p>
           {article.description && <p style={{ fontSize: '0.78rem', color: T.muted, marginBottom: 5, lineHeight: 1.4 }}>{article.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(article.prix).toFixed(2)}€</p>
+            {(() => {
+              const today = new Date().toISOString().slice(0,10)
+              const promoActive = article.prix_promo && (!article.promo_debut || article.promo_debut <= today) && (!article.promo_fin || article.promo_fin >= today)
+              return promoActive ? (
+                <>
+                  <p style={{ fontSize: '1rem', color: '#DC2626', fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(article.prix_promo).toFixed(2)}€</p>
+                  <p style={{ fontSize: '0.82rem', color: '#9CA3AF', fontWeight: 600, textDecoration: 'line-through' }}>{Number(article.prix).toFixed(2)}€</p>
+                  <span style={{ fontSize: '0.6rem', fontWeight: 800, background: '#DC2626', color: '#fff', padding: '2px 7px', borderRadius: 100 }}>PROMO</span>
+                </>
+              ) : (
+                <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(article.prix).toFixed(2)}€</p>
+              )
+            })()}
             {hasOptions && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100 }}>Personnalisable</span>}
           </div>
           {article.stock_jour === 0 && <span style={{ fontSize: '0.68rem', background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 6, fontWeight: 700, display: 'inline-block', marginTop: 4 }}>Épuisé</span>}
@@ -1002,7 +1014,7 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
                   </button>
                 </div>
               ) : (
-                <button onClick={() => ajouterAuPanier(article)}
+                <button onClick={() => ajouterAuPanier({ ...article, prix: (() => { const today = new Date().toISOString().slice(0,10); return article.prix_promo && (!article.promo_debut || article.promo_debut <= today) && (!article.promo_fin || article.promo_fin >= today) ? article.prix_promo : article.prix })() })}
                   style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 4px 14px ${T.main}55` }}>
                   +
                 </button>

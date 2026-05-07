@@ -265,7 +265,7 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
     else setSwipeX(0)
   }
 
-  const numero = commande.id ? String(commande.id).slice(-2).padStart(2, '0') : '##'
+  const numero = commande.numero_commande || commande.numero || '?'
   const creneau = commande.creneau ? `${commande.creneau.heure_debut.slice(0,5)} – ${commande.creneau.heure_fin.slice(0,5)}` : null
 
   return (
@@ -333,10 +333,20 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
           </div>
         </div>
       ) : (
-        <div style={{ textAlign: 'center', animation: 'pickup-fadein 0.4s ease' }}>
-          <div style={{ fontSize: '3rem', marginBottom: 8 }}>✓</div>
-          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#4ADE80', marginBottom: 4 }}>Commande récupérée !</div>
-          <div style={{ fontSize: '0.8rem', color: 'rgba(196,160,244,0.6)' }}>À bientôt Yopper 👋</div>
+        <div style={{ textAlign: 'center', animation: 'pickup-fadein 0.4s ease', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          {/* 3 points animés */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+            {[{c:'#4ADE80',s:12},{c:'#4ADE80',s:16},{c:'#4ADE80',s:12}].map((d,i) => (
+              <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, boxShadow: `0 0 14px ${d.c}88`, animation: `pickup-pulse 1s ease-in-out ${i*0.15}s infinite` }}/>
+            ))}
+          </div>
+          <div style={{ fontSize: '4rem', lineHeight: 1 }}>🎉</div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#4ADE80', letterSpacing: '-0.5px' }}>C'est récupéré !</div>
+          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff', opacity: 0.9 }}>Merci {clientPrenom || 'Yopper'} 🟣</div>
+          <div style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 16, padding: '12px 20px', marginTop: 8, textAlign: 'center' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#C4A0F4', marginBottom: 4 }}>Skip the wait</div>
+            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>Bien joué — tu as évité la file ! 🚀</div>
+          </div>
         </div>
       )}
 

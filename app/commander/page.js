@@ -1133,7 +1133,7 @@ export default function Commander() {
 
         {/* ── FOOTER LÉGAL ── */}
         <div style={{ background: T.bgPanel, borderTop: `1px solid ${T.main}22`, padding: '0.5rem 1rem', textAlign: 'center' }}>
-          <a href="/legal" style={{ fontSize: '0.62rem', color: 'rgba(196,160,244,0.5)', textDecoration: 'none', fontWeight: 500 }}>
+          <a href="/legal" target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.62rem', color: 'rgba(196,160,244,0.5)', textDecoration: 'none', fontWeight: 500 }}>
             Mentions légales · CGU · Confidentialité
           </a>
         </div>

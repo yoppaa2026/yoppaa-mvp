@@ -859,6 +859,14 @@ export default function Dashboard() {
             {ongletPrincipal === 'config' && commercant && (
               <ConfigDashboard commercantId={commercant.id}/>
             )}
+
+            {/* Footer légal */}
+            <div style={{ textAlign: 'center', padding: '1.5rem 0 0.5rem', borderTop: `1px solid ${T.pale}`, marginTop: '1.5rem' }}>
+              <a href="/legal" style={{ fontSize: '0.68rem', color: T.muted, textDecoration: 'none', fontWeight: 500 }}>
+                Mentions légales · CGU · Politique de confidentialité
+              </a>
+              <p style={{ fontSize: '0.6rem', color: '#9CA3AF', marginTop: 4 }}>Avcotech SRL · BCE 0731.637.418 · yoppaa.app</p>
+            </div>
           </div>
         </div>
       </div>

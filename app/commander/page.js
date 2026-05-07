@@ -276,11 +276,14 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
       `}</style>
 
       {/* 3 points */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 28 }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
         {[{c:'#fff',o:0.4,s:10},{c:'#C4A0F4',o:1,s:13},{c:'#9660E0',o:1,s:10}].map((d,i) => (
           <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 12px ${d.c}88` }}/>
         ))}
       </div>
+
+      {/* Wordmark yoppaa */}
+      <div style={{ fontWeight: 900, fontSize: '2.4rem', color: '#fff', letterSpacing: '-2px', lineHeight: 1, textShadow: '0 0 40px #9660E088', marginBottom: 20 }}>yoppaa</div>
 
       {/* Numéro */}
       <div style={{ fontSize: '7rem', fontWeight: 900, color: '#fff', letterSpacing: '-4px', lineHeight: 1, textShadow: '0 0 60px #9660E088', animation: 'pickup-pulse 2s ease-in-out infinite', marginBottom: 4 }}>#{numero}</div>

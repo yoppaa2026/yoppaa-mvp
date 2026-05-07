@@ -17,19 +17,19 @@ const T = {
 const s = {
   card: {
     background: '#fff',
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 20,
     marginBottom: 12,
     border: `1.5px solid ${T.pale}`,
-    boxShadow: '0 2px 12px rgba(107,53,196,0.07)',
+    boxShadow: '0 2px 8px rgba(107,53,196,0.06)',
   },
   cardActive: {
     background: '#fff',
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 20,
     marginBottom: 12,
     border: `2px solid ${T.main}`,
-    boxShadow: `0 0 24px ${T.main}22`,
+    boxShadow: `0 0 20px ${T.main}22`,
   },
   label: {
     display: 'block',
@@ -67,12 +67,10 @@ const s = {
     fontSize: 13,
     transition: 'all 0.15s',
   },
-  btnPrimary: { background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 4px 14px ${T.main}44` },
+  btnPrimary: { background: T.main, color: '#fff' },
   btnGhost:   { background: T.pale, color: T.main },
-  btnAction:  { background: '#F3F4F6', color: '#374151', border: '1.5px solid #E5E7EB' },
-  btnDelete:  { background: '#FEF2F2', color: '#B91C1C', border: '1.5px solid #FECACA' },
   btnDanger:  { background: '#FEE2E2', color: '#DC2626' },
-  h2: { fontSize: 17, fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 16px' },
+  h2: { fontSize: 17, fontWeight: 800, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 16px' },
   h3: { fontSize: 13, fontWeight: 700, color: T.muted, margin: '0 0 4px' },
   tag: { display: 'inline-block', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 },
 }
@@ -111,17 +109,6 @@ function Toggle({ value, onChange, label }) {
   )
 }
 
-
-// ─── Icônes SVG actions ───────────────────────────────────────────────────────
-const IcoEdit = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-const IcoTrash = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/><path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
-const IcoCheck = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-const IcoClose = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>
-const IcoSliders = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="4" y1="6" x2="20" y2="6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/><line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/><line x1="4" y1="18" x2="20" y2="18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/><circle cx="8" cy="6" r="2.5" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="2.5" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2.5" fill="currentColor" stroke="none"/></svg>
-const IcoPlus = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>
-const IcoZap = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/></svg>
-const IcoCat = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="4" rx="1" stroke="currentColor" strokeWidth="2"/><rect x="3" y="10" width="18" height="4" rx="1" stroke="currentColor" strokeWidth="2"/><rect x="3" y="17" width="18" height="4" rx="1" stroke="currentColor" strokeWidth="2"/></svg>
-
 function Toast({ message, type }) {
   if (!message) return null
   return (
@@ -139,7 +126,7 @@ function TabMenu({ commercantId, toast }) {
   const [showForm, setShowForm] = useState(false)
   const [showCatForm, setShowCatForm] = useState(false)
   const [editId, setEditId] = useState(null)
-  const [form, setForm] = useState({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: '' })
+  const [form, setForm] = useState({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: '', prix_promo: '', promo_debut: '', promo_fin: '' })
   const [nouvelleCat, setNouvelleCat] = useState('')
   const [saving, setSaving] = useState(false)
   const [catActive, setCatActive] = useState('Tous')
@@ -153,30 +140,18 @@ function TabMenu({ commercantId, toast }) {
   async function fetchArticles() {
     setLoading(true)
     const { data } = await supabase.from('articles').select('*').eq('commercant_id', commercantId).order('categorie').order('nom')
-    // Reset auto stock journalier si dernier reset pas aujourd'hui
-    const today = new Date().toISOString().slice(0,10)
-    const journaliers = (data || []).filter(a => a.stock_mode === 'journalier' && a.stock_base > 0)
-    for (const a of journaliers) {
-      const { data: stockJour } = await supabase.from('stock_jours').select('*').eq('article_id', a.id).eq('date', today).single()
-      if (!stockJour) {
-        // Pas encore de stock pour aujourd'hui → créer avec stock_base
-        await supabase.from('stock_jours').upsert({ article_id: a.id, date: today, stock_disponible: a.stock_base })
-        await supabase.from('articles').update({ stock_jour: a.stock_base }).eq('id', a.id)
-      }
-    }
-    const { data: fresh } = await supabase.from('articles').select('*').eq('commercant_id', commercantId).order('categorie').order('nom')
-    setArticles(fresh || [])
-    const cats = [...new Set((fresh || []).map(a => a.categorie).filter(Boolean))]
+    setArticles(data || [])
+    const cats = [...new Set((data || []).map(a => a.categorie).filter(Boolean))]
     setCategories(cats)
     setLoading(false)
   }
 
   function openNew() {
-    setForm({ nom: '', description: '', prix: '', stock_mode: 'illimite', stock_base: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '' })
+    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', prix_promo: '', promo_debut: '', promo_fin: '' })
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_mode: a.stock_mode || 'illimite', stock_base: String(a.stock_base ?? ''), actif: a.actif, categorie: a.categorie || '' })
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', prix_promo: a.prix_promo ? String(a.prix_promo) : '', promo_debut: a.promo_debut || '', promo_fin: a.promo_fin || '' })
     setEditId(a.id); setShowForm(true)
   }
 
@@ -188,9 +163,10 @@ function TabMenu({ commercantId, toast }) {
       nom: form.nom.trim(),
       description: form.description.trim() || null,
       prix: parseFloat(form.prix),
-      stock_mode: form.stock_mode || 'illimite',
-      stock_base: form.stock_mode !== 'illimite' ? (parseInt(form.stock_base) || 0) : null,
-      stock_jour: form.stock_mode !== 'illimite' ? (parseInt(form.stock_base) || 0) : 999,
+      prix_promo: form.prix_promo ? parseFloat(form.prix_promo) : null,
+      promo_debut: form.promo_debut || null,
+      promo_fin: form.promo_fin || null,
+      stock_jour: parseInt(form.stock_jour) || 0,
       actif: form.actif,
       categorie: form.categorie.trim() || null,
     }
@@ -247,8 +223,8 @@ function TabMenu({ commercantId, toast }) {
   async function updateStock(id, val) {
     const n = parseInt(val)
     if (isNaN(n) || n < 0) return
-    await supabase.from('articles').update({ stock_jour: n, stock_base: n }).eq('id', id)
-    setArticles(prev => prev.map(a => a.id === id ? { ...a, stock_jour: n, stock_base: n } : a))
+    await supabase.from('articles').update({ stock_jour: n }).eq('id', id)
+    setArticles(prev => prev.map(a => a.id === id ? { ...a, stock_jour: n } : a))
   }
 
   async function deleteArticle(id) {
@@ -268,8 +244,8 @@ function TabMenu({ commercantId, toast }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h2 style={s.h2}>Menu <span style={{ color: T.mid, fontWeight: 600, fontSize: 14 }}>({articles.length})</span></h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => { setShowCatForm(v => !v); setShowForm(false) }}><IcoCat/> Catégorie</button>
-          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={() => { openNew(); setShowCatForm(false) }}><IcoPlus/> Article</button>
+          <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => { setShowCatForm(v => !v); setShowForm(false) }}>+ Catégorie</button>
+          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={() => { openNew(); setShowCatForm(false) }}>+ Article</button>
         </div>
       </div>
 
@@ -279,8 +255,8 @@ function TabMenu({ commercantId, toast }) {
           <label style={s.label}>Nom de la catégorie</label>
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
             <Input value={nouvelleCat} onChange={e => setNouvelleCat(e.target.value)} placeholder="Ex: Viennoiseries, Sandwichs chauds..." onKeyDown={e => e.key === 'Enter' && ajouterCategorie()} style={{ flex: 1 }}/>
-            <button style={{ ...s.btn, ...s.btnPrimary }} onClick={ajouterCategorie}><IcoCheck/></button>
-            <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowCatForm(false)}><IcoClose/></button>
+            <button style={{ ...s.btn, ...s.btnPrimary }} onClick={ajouterCategorie}>✓</button>
+            <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowCatForm(false)}>✕</button>
           </div>
         </div>
       )}
@@ -305,7 +281,7 @@ function TabMenu({ commercantId, toast }) {
                     onClick={() => saveRename(cat)}
                     disabled={renameSaving}
                     style={{ ...s.btn, ...s.btnPrimary, padding: '3px 8px', fontSize: 11 }}>
-                    {renameSaving ? '...' : <IcoCheck/>}
+                    {renameSaving ? '...' : '✓'}
                   </button>
                   <button
                     onClick={() => setRenamingCat(null)}
@@ -346,7 +322,7 @@ function TabMenu({ commercantId, toast }) {
       {/* Formulaire article */}
       {showForm && (
         <div style={s.cardActive}>
-          <h3 style={{ ...s.h3, marginBottom: 14 }}>{editId ? "Modifier l'article" : 'Nouvel article'}</h3>
+          <h3 style={{ ...s.h3, marginBottom: 14 }}>{editId ? '✏️ Modifier' : '+ Nouvel article'}</h3>
           <div style={{ display: 'grid', gap: 12 }}>
             <div><label style={s.label}>Nom *</label><Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} placeholder="Ex: Croissant beurre"/></div>
             <div>
@@ -360,43 +336,33 @@ function TabMenu({ commercantId, toast }) {
             <div><label style={s.label}>Description</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Ex: Feuilleté, pur beurre AOP..."/></div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="1.20"/></div>
-            </div>
-            {/* Mode stock */}
-            <div>
-              <label style={s.label}>Gestion du stock</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 4 }}>
-                {[
-                  { val: 'illimite',   label: 'Illimité',   desc: 'Toujours dispo' },
-                  { val: 'journalier', label: 'Journalier', desc: 'Reset chaque jour' },
-                  { val: 'manuel',     label: 'Manuel',     desc: 'Géré à la main' },
-                ].map(m => (
-                  <button key={m.val} type="button" onClick={() => setForm(p => ({ ...p, stock_mode: m.val }))}
-                    style={{ padding: '8px 6px', borderRadius: 10, border: `2px solid ${form.stock_mode === m.val ? T.main : T.pale}`, background: form.stock_mode === m.val ? T.main : '#fff', cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s', fontFamily: '"DM Sans", sans-serif' }}>
-                    <p style={{ fontWeight: 800, fontSize: 12, color: form.stock_mode === m.val ? '#fff' : T.ink, marginBottom: 2 }}>{m.label}</p>
-                    <p style={{ fontSize: 10, color: form.stock_mode === m.val ? 'rgba(255,255,255,0.8)' : T.muted }}>{m.desc}</p>
-                  </button>
-                ))}
+            {/* Promo */}
+            <div style={{ background: '#FFFBEB', borderRadius: 12, padding: 12, border: '1.5px solid #FDE68A' }}>
+              <label style={{ ...s.label, color: '#B45309' }}>🏷️ Prix promo (optionnel)</label>
+              <p style={{ fontSize: 11, color: '#92400E', marginBottom: 8 }}>
+                Laisse vide si pas de promo active.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={{ ...s.label, fontSize: 10 }}>Prix promo (€)</label>
+                  <Input type="number" step="0.10" min="0" value={form.prix_promo} onChange={e => setForm(p => ({ ...p, prix_promo: e.target.value }))} placeholder="Ex: 0.90"/>
+                </div>
+                <div>
+                  <label style={{ ...s.label, fontSize: 10 }}>Date début</label>
+                  <Input type="date" value={form.promo_debut} onChange={e => setForm(p => ({ ...p, promo_debut: e.target.value }))}/>
+                </div>
+                <div>
+                  <label style={{ ...s.label, fontSize: 10 }}>Date fin</label>
+                  <Input type="date" value={form.promo_fin} onChange={e => setForm(p => ({ ...p, promo_fin: e.target.value }))}/>
+                </div>
               </div>
             </div>
-            {/* Stock de base — masqué si illimité */}
-            {form.stock_mode !== 'illimite' && (
-              <div>
-                <label style={s.label}>
-                  {form.stock_mode === 'journalier' ? 'Stock de base (remis chaque jour)' : 'Stock disponible'}
-                </label>
-                <Input type="number" min="0" value={form.stock_base} onChange={e => setForm(p => ({ ...p, stock_base: e.target.value }))}
-                  placeholder={form.stock_mode === 'journalier' ? 'Ex: 30' : 'Ex: 50'}/>
-                {form.stock_mode === 'journalier' && (
-                  <p style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
-                    Chaque jour à minuit, le stock repart de cette valeur. Tu peux l'ajuster manuellement le matin.
-                  </p>
-                )}
-              </div>
-            )}
+              <div><label style={s.label}>Stock du jour</label><Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="30"/></div>
+            </div>
             <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Article disponible"/>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-            <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveArticle} disabled={saving}>{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
+            <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveArticle} disabled={saving}>{saving ? 'Enregistrement...' : '✓ Enregistrer'}</button>
             <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowForm(false)}>Annuler</button>
           </div>
         </div>
@@ -498,8 +464,8 @@ function OptionsArticle({ articleId, toast }) {
   return (
     <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.pale}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Options</span>
-        <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 11 }} onClick={() => setShowForm(v => !v)}><IcoPlus/> Groupe</button>
+        <span style={{ fontSize: 12, fontWeight: 700, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>⚙️ Options</span>
+        <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 11 }} onClick={() => setShowForm(v => !v)}>+ Groupe</button>
       </div>
 
       {showForm && (
@@ -528,14 +494,14 @@ function OptionsArticle({ articleId, toast }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-            <button style={{ ...s.btn, ...s.btnPrimary, padding: '6px 12px', fontSize: 12 }} onClick={saveGroupe} disabled={saving}>Créer</button>
+            <button style={{ ...s.btn, ...s.btnPrimary, padding: '6px 12px', fontSize: 12 }} onClick={saveGroupe} disabled={saving}>✓ Créer</button>
             <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 12px', fontSize: 12 }} onClick={() => setShowForm(false)}>Annuler</button>
           </div>
         </div>
       )}
 
       {groupes.length === 0 && !showForm && (
-        <p style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Aucune option — clique sur "<IcoPlus/> Groupe" pour en ajouter.</p>
+        <p style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Aucune option — clique sur "+ Groupe" pour en ajouter.</p>
       )}
 
       {groupes.map(g => (
@@ -548,7 +514,7 @@ function OptionsArticle({ articleId, toast }) {
               </span>
               {g.obligatoire && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: '#FEE2E2', color: '#DC2626' }}>Obligatoire</span>}
             </div>
-            <button style={{ ...s.btn, ...s.btnDanger, padding: '3px 8px', fontSize: 11 }} onClick={() => deleteGroupe(g.id)}>< IcoTrash/></button>
+            <button style={{ ...s.btn, ...s.btnDanger, padding: '3px 8px', fontSize: 11 }} onClick={() => deleteGroupe(g.id)}>🗑</button>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
             {(g.valeurs || []).map(v => (
@@ -586,32 +552,35 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s }) {
           </div>
           {a.description && <p style={{ fontSize: 12, color: T.muted, margin: '0 0 8px' }}>{a.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 800, fontSize: 17, color: T.main }}>{Number(a.prix).toFixed(2)} €</span>
-            {/* Badge mode stock */}
-            {(!a.stock_mode || a.stock_mode === 'illimite') ? (
-              <span style={{ ...s.tag, background: '#F0FDF4', color: '#16A34A', border: '1px solid #16A34A22' }}>∞ Illimité</span>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, color: T.muted, fontWeight: 600 }}>
-                  {a.stock_mode === 'journalier' ? '↻ Stock/jour :' : 'Stock :'}
-                </span>
-                <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => onUpdateStock(a.id, (a.stock_jour || 0) - 1)}>−</button>
-                <input type="number" value={a.stock_jour ?? 0} min={0} onChange={e => onUpdateStock(a.id, e.target.value)}
-                  style={{ ...s.input, width: 56, textAlign: 'center', padding: '4px 8px', fontSize: 14, fontWeight: 700 }}/>
-                <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => onUpdateStock(a.id, (a.stock_jour || 0) + 1)}>+</button>
-                {a.stock_jour === 0 && <span style={{ ...s.tag, background: '#FEE2E2', color: '#DC2626' }}>Épuisé</span>}
-                {a.stock_mode === 'journalier' && a.stock_base > 0 && a.stock_jour > 0 && (
-                  <span style={{ fontSize: 10, color: T.muted }}>base: {a.stock_base}</span>
-                )}
-              </div>
-            )}
+            {/* Prix promo ou prix normal */}
+            {(() => {
+              const today = new Date().toISOString().slice(0,10)
+              const promoActive = a.prix_promo && (!a.promo_debut || a.promo_debut <= today) && (!a.promo_fin || a.promo_fin >= today)
+              return promoActive ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 800, fontSize: 17, color: '#DC2626' }}>{Number(a.prix_promo).toFixed(2)} €</span>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: '#9CA3AF', textDecoration: 'line-through' }}>{Number(a.prix).toFixed(2)} €</span>
+                  <span style={{ background: '#DC2626', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>PROMO</span>
+                </div>
+              ) : (
+                <span style={{ fontWeight: 800, fontSize: 17, color: T.main }}>{Number(a.prix).toFixed(2)} €</span>
+              )
+            })()}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>Stock :</span>
+              <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => onUpdateStock(a.id, (a.stock_jour || 0) - 1)}>−</button>
+              <input type="number" value={a.stock_jour ?? 0} min={0} onChange={e => onUpdateStock(a.id, e.target.value)}
+                style={{ ...s.input, width: 56, textAlign: 'center', padding: '4px 8px', fontSize: 14, fontWeight: 700 }}/>
+              <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => onUpdateStock(a.id, (a.stock_jour || 0) + 1)}>+</button>
+              {a.stock_jour === 0 && <span style={{ ...s.tag, background: '#FEE2E2', color: '#DC2626' }}>Épuisé</span>}
+            </div>
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
           <Toggle value={a.actif} onChange={() => onToggle(a)}/>
-          <button style={{ ...s.btn, ...s.btnAction, padding: '7px 10px' }} onClick={() => onEdit(a)}><IcoEdit/></button>
-          <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 12px', fontSize: 12, background: showOptions ? T.pale : undefined }} onClick={() => setShowOptions(v => !v)}><IcoSliders/></button>
-          <button style={{ ...s.btn, ...s.btnDelete, padding: '7px 10px' }} onClick={() => onDelete(a.id)}><IcoTrash/></button>
+          <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 12px', fontSize: 12 }} onClick={() => onEdit(a)}>✏️</button>
+          <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 12px', fontSize: 12, background: showOptions ? T.pale : undefined }} onClick={() => setShowOptions(v => !v)}>⚙️</button>
+          <button style={{ ...s.btn, ...s.btnDanger, padding: '5px 12px', fontSize: 12 }} onClick={() => onDelete(a.id)}>🗑</button>
         </div>
       </div>
       {showOptions && <OptionsArticle articleId={a.id} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
@@ -709,7 +678,7 @@ function TabCreneaux({ commercantId, toast }) {
     <div>
       {/* ─── Horizon de réservation ─── */}
       <div style={{ ...s.card, marginBottom: 20, background: T.pale, border: `1.5px solid ${T.main}22`, boxShadow: 'none' }}>
-        <h3 style={{ fontWeight: 800, fontSize: 14, color: T.deep, marginBottom: 4 }}>Horizon de réservation</h3>
+        <h3 style={{ fontWeight: 800, fontSize: 14, color: T.deep, marginBottom: 4 }}>📅 Horizon de réservation</h3>
         <p style={{ fontSize: 12, color: T.muted, marginBottom: 12, lineHeight: 1.5 }}>
           Jusqu'à combien de jours à l'avance tes clients peuvent-ils réserver ?
         </p>
@@ -727,8 +696,8 @@ function TabCreneaux({ commercantId, toast }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <h2 style={s.h2}>Créneaux <span style={{ color: T.mid, fontWeight: 600, fontSize: 14 }}>({creneaux.length})</span></h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ ...s.btn, ...s.btnGhost }} onClick={genererCreneaux}><IcoZap/> Générer auto</button>
-          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={() => setShowForm(true)}><IcoPlus/> Ajouter</button>
+          <button style={{ ...s.btn, ...s.btnGhost }} onClick={genererCreneaux}>⚡ Générer auto</button>
+          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={() => setShowForm(true)}>+ Ajouter</button>
         </div>
       </div>
 
@@ -745,7 +714,7 @@ function TabCreneaux({ commercantId, toast }) {
           </div>
           <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Créneau actif" />
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-            <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveCreneau} disabled={saving}>{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
+            <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveCreneau} disabled={saving}>{saving ? 'Enregistrement...' : '✓ Enregistrer'}</button>
             <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowForm(false)}>Annuler</button>
           </div>
         </div>
@@ -755,7 +724,7 @@ function TabCreneaux({ commercantId, toast }) {
         <div style={{ ...s.card, textAlign: 'center', padding: 40 }}>
           <p style={{ color: T.muted, marginBottom: 8 }}>Aucun créneau configuré</p>
           <p style={{ color: T.light, fontSize: 13, marginBottom: 16 }}>Utilise "Générer auto" pour tout créer en un clic.</p>
-          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={genererCreneaux}><IcoZap/> Générer automatiquement</button>
+          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={genererCreneaux}>⚡ Générer automatiquement</button>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
@@ -775,7 +744,7 @@ function TabCreneaux({ commercantId, toast }) {
                 <Toggle value={c.actif} onChange={() => toggleCreneau(c)} />
               </div>
               <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
-                <button style={{ ...s.btn, ...s.btnDelete, padding: '6px 10px' }} onClick={() => deleteCreneau(c.id)}>< IcoTrash/></button>
+                <button style={{ ...s.btn, ...s.btnDanger, padding: '4px 10px', fontSize: 12 }} onClick={() => deleteCreneau(c.id)}>🗑</button>
               </div>
             </div>
           ))}
@@ -844,7 +813,7 @@ function TabProfil({ commercantId, toast }) {
         <label style={s.label}>Logo</label>
         <p style={{ fontSize: 12, color: T.muted, marginBottom: 14 }}>Format carré · 512×512px · JPG ou PNG · Max 512KB</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ width: 88, height: 88, borderRadius: 16, background: T.pale, border: `2px dashed ${logoPreview ? T.main : T.light}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+          <div style={{ width: 88, height: 88, borderRadius: 14, background: T.pale, border: `2px dashed ${logoPreview ? T.main : T.light}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
             {logoPreview ? <img src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <span style={{ fontSize: 28 }}>🏪</span>}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -914,7 +883,7 @@ function TabProfil({ commercantId, toast }) {
         </div>
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
           <button style={{ ...s.btn, ...s.btnPrimary, padding: '11px 24px', fontSize: 14 }} onClick={saveProfil} disabled={saving}>
-            {saving ? 'Enregistrement...' : 'Enregistrer'}
+            {saving ? 'Enregistrement...' : '✓ Enregistrer'}
           </button>
         </div>
       </div>
@@ -1015,21 +984,6 @@ function TabAvis({ commercantId, toast }) {
   )
 }
 
-
-// ─── Icônes onglets ───────────────────────────────────────────────────────────
-function IcoMenu({ size=18, color='currentColor' }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke={color} strokeWidth="2.2" strokeLinecap="round"/><circle cx="7" cy="6" r="2" fill={color}/><circle cx="12" cy="12" r="2" fill={color}/><circle cx="17" cy="18" r="2" fill={color}/></svg>
-}
-function IcoCreneaux({ size=18, color='currentColor' }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={color} strokeWidth="2.2"/><path d="M12 7v5l3 3" stroke={color} strokeWidth="2.2" strokeLinecap="round"/></svg>
-}
-function IcoProfil({ size=18, color='currentColor' }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="18" rx="3" stroke={color} strokeWidth="2.2"/><path d="M8 10h8M8 14h5" stroke={color} strokeWidth="2" strokeLinecap="round"/><circle cx="5.5" cy="10" r="1.5" fill={color}/><circle cx="5.5" cy="14" r="1.5" fill={color}/></svg>
-}
-function IcoAvis({ size=18, color='currentColor' }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke={color} strokeWidth="2" strokeLinejoin="round"/></svg>
-}
-
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function ConfigDashboard({ commercantId }) {
   const [tab, setTab] = useState('menu')
@@ -1048,46 +1002,27 @@ export default function ConfigDashboard({ commercantId }) {
   }, [])
 
   const tabs = [
-    { id: 'menu',     label: 'Menu',     Icon: IcoMenu },
-    { id: 'creneaux', label: 'Créneaux', Icon: IcoCreneaux },
-    { id: 'profil',   label: 'Profil',   Icon: IcoProfil },
-    { id: 'avis',     label: 'Avis',     Icon: IcoAvis },
+    { id: 'menu',     label: '🍞 Menu' },
+    { id: 'creneaux', label: '🕐 Créneaux' },
+    { id: 'profil',   label: '🏪 Profil' },
+    { id: 'avis',     label: '⭐ Avis' },
   ]
 
   return (
     <div style={{ fontFamily: '"DM Sans", sans-serif', paddingBottom: 24 }}>
-
-      {/* Header dégradé violet hype */}
-      <div style={{ background: `linear-gradient(135deg, #160636 0%, #2D0F6B 50%, #3D1580 100%)`, borderRadius: 20, padding: '1.25rem 1.5rem 0', marginBottom: 0, position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 30%, #9660E033 0%, transparent 60%), radial-gradient(circle at 10% 70%, #C4A0F418 0%, transparent 50%)`, pointerEvents: 'none' }}/>
-        <div style={{ display: 'flex', gap: 5, marginBottom: 8, position: 'relative' }}>
-          {[{c:'#fff',o:0.35},{c:'#C4A0F4',o:1},{c:'#9660E0',o:1}].map((d,i) => (
-            <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: d.c, opacity: d.o }}/>
-          ))}
-        </div>
-        <p style={{ fontWeight: 900, fontSize: '1.1rem', color: '#fff', letterSpacing: '-0.5px', marginBottom: 3, position: 'relative' }}>Paramètres</p>
-        <p style={{ fontSize: '0.7rem', color: '#C4A0F4', opacity: 0.7, fontWeight: 600, marginBottom: '1rem', position: 'relative' }}>Menu · Créneaux · Profil · Avis</p>
-        <div style={{ display: 'flex', gap: 2, position: 'relative' }}>
-          {tabs.map(({ id, label, Icon }) => {
-            const actif = tab === id
-            return (
-              <button key={id} onClick={() => setTab(id)}
-                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '0.625rem 0.25rem 0.75rem', border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.7rem', transition: 'all 0.2s', background: 'transparent', color: actif ? '#fff' : 'rgba(196,160,244,0.55)', borderBottom: `2.5px solid ${actif ? '#fff' : 'transparent'}` }}>
-                <Icon size={17} color={actif ? '#fff' : 'rgba(196,160,244,0.55)'}/>
-                {label}
-              </button>
-            )
-          })}
-        </div>
+      <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 14, marginBottom: 20, boxShadow: '0 2px 8px rgba(107,53,196,0.08)', border: `1px solid ${T.pale}`, flexWrap: 'wrap' }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ flex: 1, minWidth: 80, padding: '9px 4px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, transition: 'all 0.2s', background: tab === t.id ? T.main : 'transparent', color: tab === t.id ? '#fff' : T.muted }}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* Contenu */}
-      <div style={{ paddingTop: 20 }}>
-        {tab === 'menu'     && <TabMenu     commercantId={commercantId} toast={showToast} />}
-        {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
-        {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} />}
-        {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
-      </div>
+      {tab === 'menu'     && <TabMenu     commercantId={commercantId} toast={showToast} />}
+      {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
+      {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} />}
+      {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
 
       <Toast message={toastMsg} type={toastType} />
     </div>

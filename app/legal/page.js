@@ -75,10 +75,18 @@ export default function LegalPage() {
         <p style={{ fontSize: '0.75rem', color: 'rgba(196,160,244,0.6)', marginTop: 6 }}>Avcotech SRL · BCE 0731.637.418 · Rue de Prée 9G, 5640 Mettet</p>
       </div>
 
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '2rem 1.5rem', display: 'grid', gridTemplateColumns: '220px 1fr', gap: '2rem', alignItems: 'start' }}>
+      <style>{`
+        @media (max-width: 700px) {
+          .legal-layout { grid-template-columns: 1fr !important; }
+          .legal-nav { position: static !important; display: flex !important; flex-wrap: wrap !important; gap: 6px !important; padding: 0.75rem !important; }
+          .legal-nav a { padding: 0.35rem 0.75rem !important; border-radius: 100px !important; border: 1.5px solid #EDE0FF; font-size: 0.72rem !important; }
+        }
+      `}</style>
+
+      <div className="legal-layout" style={{ maxWidth: 900, margin: '0 auto', padding: '1.5rem', display: 'grid', gridTemplateColumns: '220px 1fr', gap: '2rem', alignItems: 'start' }}>
 
         {/* Navigation sticky */}
-        <nav style={{ position: 'sticky', top: '1.5rem', background: '#fff', borderRadius: 16, border: `1.5px solid ${T.pale}`, padding: '1rem', boxShadow: '0 2px 12px rgba(107,53,196,0.07)' }}>
+        <nav className="legal-nav" style={{ position: 'sticky', top: '1.5rem', background: '#fff', borderRadius: 16, border: `1.5px solid ${T.pale}`, padding: '1rem', boxShadow: '0 2px 12px rgba(107,53,196,0.07)' }}>
           <p style={{ fontSize: '0.7rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.75rem' }}>Sommaire</p>
           {sections.map(s => (
             <a key={s.id} href={`#${s.id}`} onClick={() => setActiveSection(s.id)}

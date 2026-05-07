@@ -335,12 +335,14 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
       ) : (
         <div style={{ textAlign: 'center', animation: 'pickup-fadein 0.4s ease', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
           {/* 3 points animés */}
-          <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 4 }}>
             {[{c:'#4ADE80',s:12},{c:'#4ADE80',s:16},{c:'#4ADE80',s:12}].map((d,i) => (
               <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, boxShadow: `0 0 14px ${d.c}88`, animation: `pickup-pulse 1s ease-in-out ${i*0.15}s infinite` }}/>
             ))}
           </div>
-          <div style={{ fontSize: '4rem', lineHeight: 1 }}>🎉</div>
+          {/* Wordmark yoppaa */}
+          <div style={{ fontWeight: 900, fontSize: '2.4rem', color: '#fff', letterSpacing: '-2px', lineHeight: 1, textShadow: '0 0 40px #9660E088', marginBottom: 4 }}>yoppaa</div>
+          <div style={{ fontSize: '3rem', lineHeight: 1 }}>🎉</div>
           <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#4ADE80', letterSpacing: '-0.5px' }}>C'est récupéré !</div>
           <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff', opacity: 0.9 }}>Merci {clientPrenom || 'Yopper'} 🟣</div>
           <div style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 16, padding: '12px 20px', marginTop: 8, textAlign: 'center' }}>
@@ -795,8 +797,8 @@ export default function Commander() {
           clientPrenom={client.prenom || client.nom?.split(' ')[0] || 'Yopper'}
           onConfirm={async () => {
             await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', pickupCommande.id)
-            setPickupCommande(null)
             chargerCommandesClient(client.email)
+            setTimeout(() => setPickupCommande(null), 7000)
           }}
         />
       )}

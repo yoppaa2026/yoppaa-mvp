@@ -265,7 +265,7 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
     else setSwipeX(0)
   }
 
-  const numero = commande.numero_commande || commande.numero || '?'
+  const numero = commande.numero_jour || '?'
   const creneau = commande.creneau ? `${commande.creneau.heure_debut.slice(0,5)} – ${commande.creneau.heure_fin.slice(0,5)}` : null
 
   return (
@@ -680,7 +680,26 @@ export default function Commander() {
 
   async function chargerCommandesClient(email) {
     const { data } = await supabase.from('commandes').select('*, commercant:commercants(nom, type), creneau:creneaux(heure_debut, heure_fin)').eq('client_email', email).order('created_at', { ascending: false })
-    setClientCommandes(data||[])
+    if (!data) { setClientCommandes([]); return }
+    // Calculer le numéro du jour par commerçant
+    const today = new Date().toISOString().slice(0, 10)
+    const { data: cmdsDuJour } = await supabase
+      .from('commandes')
+      .select('id, commercant_id, created_at')
+      .gte('created_at', today + 'T00:00:00')
+      .lte('created_at', today + 'T23:59:59')
+      .order('created_at', { ascending: true })
+    const numeroMap = {}
+    if (cmdsDuJour) {
+      const compteurs = {}
+      cmdsDuJour.forEach(c => {
+        const key = c.commercant_id
+        compteurs[key] = (compteurs[key] || 0) + 1
+        numeroMap[c.id] = compteurs[key]
+      })
+    }
+    const dataAvecNumero = data.map(c => ({ ...c, numero_jour: numeroMap[c.id] || null }))
+    setClientCommandes(dataAvecNumero)
   }
 
   useEffect(() => {

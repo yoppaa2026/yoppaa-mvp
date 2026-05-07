@@ -1,35 +1,40 @@
-import type { Metadata } from "next";
+'use client'
 
-export const metadata: Metadata = {
-  title: "Yoppaa Pro — Dashboard",
-  description: "Gérez vos commandes en temps réel.",
-  manifest: "/manifest-dashboard.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "Yoppaa Pro",
-  },
-  icons: {
-    apple: "/icon-pro-192.png",
-  },
-};
+import { useEffect } from "react";
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <>
-      <head>
-        <meta name="theme-color" content="#0D0420" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Yoppaa Pro" />
-        <link rel="apple-touch-icon" href="/icon-pro-192.png" />
-        <link rel="manifest" href="/manifest-dashboard.json" />
-      </head>
-      {children}
-    </>
-  );
+  useEffect(() => {
+    // Surcharge le manifest et l'icône PWA pour le dashboard Pro
+    const manifest = document.querySelector('link[rel="manifest"]');
+    if (manifest) {
+      manifest.setAttribute('href', '/manifest-dashboard.json');
+    } else {
+      const link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = '/manifest-dashboard.json';
+      document.head.appendChild(link);
+    }
+
+    const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+    if (appleIcon) {
+      appleIcon.setAttribute('href', '/icon-pro-192.png');
+    } else {
+      const link = document.createElement('link');
+      link.rel = 'apple-touch-icon';
+      link.href = '/icon-pro-192.png';
+      document.head.appendChild(link);
+    }
+
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.setAttribute('content', '#0D0420');
+
+    const appTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (appTitle) appTitle.setAttribute('content', 'Yoppaa Pro');
+  }, []);
+
+  return <>{children}</>;
 }

@@ -140,18 +140,28 @@ function TabMenu({ commercantId, toast }) {
   async function fetchArticles() {
     setLoading(true)
     const { data } = await supabase.from('articles').select('*').eq('commercant_id', commercantId).order('categorie').order('nom')
-    setArticles(data || [])
-    const cats = [...new Set((data || []).map(a => a.categorie).filter(Boolean))]
+    const today = new Date().toISOString().slice(0,10)
+    const journaliers = (data || []).filter(a => a.stock_mode === 'journalier' && a.stock_base > 0)
+    for (const a of journaliers) {
+      const { data: stockJour } = await supabase.from('stock_jours').select('*').eq('article_id', a.id).eq('date', today).single()
+      if (!stockJour) {
+        await supabase.from('stock_jours').upsert({ article_id: a.id, date: today, stock_disponible: a.stock_base })
+        await supabase.from('articles').update({ stock_jour: a.stock_base }).eq('id', a.id)
+      }
+    }
+    const { data: fresh } = await supabase.from('articles').select('*').eq('commercant_id', commercantId).order('categorie').order('nom')
+    setArticles(fresh || [])
+    const cats = [...new Set((fresh || []).map(a => a.categorie).filter(Boolean))]
     setCategories(cats)
     setLoading(false)
   }
 
   function openNew() {
-    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', prix_promo: '', promo_debut: '', promo_fin: '' })
+    setForm({ nom: '', description: '', prix: '', stock_mode: 'illimite', stock_base: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', prix_promo: '', promo_debut: '', promo_fin: '' })
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', prix_promo: a.prix_promo ? String(a.prix_promo) : '', promo_debut: a.promo_debut || '', promo_fin: a.promo_fin || '' })
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_mode: a.stock_mode || 'illimite', stock_base: String(a.stock_base ?? ''), actif: a.actif, categorie: a.categorie || '', prix_promo: a.prix_promo ? String(a.prix_promo) : '', promo_debut: a.promo_debut || '', promo_fin: a.promo_fin || '' })
     setEditId(a.id); setShowForm(true)
   }
 
@@ -166,7 +176,9 @@ function TabMenu({ commercantId, toast }) {
       prix_promo: form.prix_promo ? parseFloat(form.prix_promo) : null,
       promo_debut: form.promo_debut || null,
       promo_fin: form.promo_fin || null,
-      stock_jour: parseInt(form.stock_jour) || 0,
+      stock_mode: form.stock_mode || 'illimite',
+      stock_base: form.stock_mode !== 'illimite' ? (parseInt(form.stock_base) || 0) : null,
+      stock_jour: form.stock_mode !== 'illimite' ? (parseInt(form.stock_base) || 0) : 999,
       actif: form.actif,
       categorie: form.categorie.trim() || null,
     }
@@ -336,6 +348,33 @@ function TabMenu({ commercantId, toast }) {
             <div><label style={s.label}>Description</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Ex: Feuilleté, pur beurre AOP..."/></div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="1.20"/></div>
+            {/* Mode stock */}
+            <div>
+              <label style={s.label}>Gestion du stock</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 4 }}>
+                {[
+                  { val: 'illimite',   label: 'Illimité',   desc: 'Toujours dispo' },
+                  { val: 'journalier', label: 'Journalier', desc: 'Reset chaque jour' },
+                  { val: 'manuel',     label: 'Manuel',     desc: 'Géré à la main' },
+                ].map(m => (
+                  <button key={m.val} type="button" onClick={() => setForm(p => ({ ...p, stock_mode: m.val }))}
+                    style={{ padding: '8px 6px', borderRadius: 10, border: `2px solid ${(form.stock_mode||'illimite') === m.val ? T.main : T.pale}`, background: (form.stock_mode||'illimite') === m.val ? T.main : '#fff', cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s', fontFamily: '"DM Sans", sans-serif' }}>
+                    <p style={{ fontWeight: 800, fontSize: 12, color: (form.stock_mode||'illimite') === m.val ? '#fff' : T.ink, marginBottom: 2 }}>{m.label}</p>
+                    <p style={{ fontSize: 10, color: (form.stock_mode||'illimite') === m.val ? 'rgba(255,255,255,0.8)' : T.muted }}>{m.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {(form.stock_mode || 'illimite') !== 'illimite' && (
+              <div>
+                <label style={s.label}>{form.stock_mode === 'journalier' ? 'Stock de base (remis chaque jour)' : 'Stock disponible'}</label>
+                <Input type="number" min="0" value={form.stock_base} onChange={e => setForm(p => ({ ...p, stock_base: e.target.value }))}
+                  placeholder={form.stock_mode === 'journalier' ? 'Ex: 30' : 'Ex: 50'}/>
+                {form.stock_mode === 'journalier' && (
+                  <p style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>Chaque jour à minuit, le stock repart de cette valeur.</p>
+                )}
+              </div>
+            )}
             {/* Promo */}
             <div style={{ background: '#FFFBEB', borderRadius: 12, padding: 12, border: '1.5px solid #FDE68A' }}>
               <label style={{ ...s.label, color: '#B45309' }}>🏷️ Prix promo (optionnel)</label>

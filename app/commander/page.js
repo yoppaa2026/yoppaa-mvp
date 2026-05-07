@@ -240,6 +240,102 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
   )
 }
 
+// ─── Écran Pick-up — plein écran violet quand commande prête ─────────────────
+function PickupScreen({ commande, clientPrenom, onConfirm }) {
+  const [swiped, setSwiped] = useState(false)
+  const [swipeX, setSwipeX] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  const [confirmed, setConfirmed] = useState(false)
+  const [pulse, setPulse] = useState(false)
+  const startX = useRef(null)
+  const trackW = 280
+  const thumbW = 64
+  const maxX = trackW - thumbW - 8
+  const C = { main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4' }
+
+  useEffect(() => {
+    const interval = setInterval(() => setPulse(p => !p), 1400)
+    return () => clearInterval(interval)
+  }, [])
+
+  const onStart = e => {
+    if (confirmed) return
+    setDragging(true)
+    startX.current = (e.touches ? e.touches[0].clientX : e.clientX) - swipeX
+  }
+  const onMove = e => {
+    if (!dragging) return
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - startX.current
+    setSwipeX(Math.max(0, Math.min(x, maxX)))
+  }
+  const onEnd = () => {
+    if (!dragging) return
+    setDragging(false)
+    if (swipeX >= maxX * 0.85) {
+      setSwipeX(maxX); setSwiped(true)
+      setTimeout(() => { setConfirmed(true); onConfirm() }, 400)
+    } else { setSwipeX(0) }
+  }
+
+  const numero = commande.id ? String(commande.id).slice(-2).padStart(2, '0') : '##'
+  const creneau = commande.creneau ? `${commande.creneau.heure_debut.slice(0,5)} – ${commande.creneau.heure_fin.slice(0,5)}` : null
+  const nomCommerce = commande.commercant?.nom || 'Yoppaa'
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9998, background: `linear-gradient(160deg, #2D0F6B 0%, #6B35C4 50%, #1A0840 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem 1.5rem' }}>
+      <style>{`
+        @keyframes pickup-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.7;transform:scale(1.08)} }
+        @keyframes pickup-fadein { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+      `}</style>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 28 }}>
+        {[{ c:'#fff', o:0.4, s:10 },{ c:'#C4A0F4', o:1, s:13 },{ c:'#9660E0', o:1, s:10 }].map((d,i) => (
+          <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 12px ${d.c}88` }}/>
+        ))}
+      </div>
+      <div style={{ fontSize: '7rem', fontWeight: 900, color: '#fff', letterSpacing: '-4px', lineHeight: 1, textShadow: '0 0 60px #9660E088', animation: 'pickup-pulse 2s ease-in-out infinite', marginBottom: 4 }}>#{numero}</div>
+      <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#C4A0F4', marginBottom: 12, letterSpacing: '-0.5px' }}>{clientPrenom || 'Yopper'}</div>
+      {creneau && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 20, padding: '6px 16px', marginBottom: 28 }}>
+          <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#4ADE80', boxShadow: pulse ? '0 0 8px #4ADE80' : 'none', transition: 'box-shadow 0.4s' }}/>
+          <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 700 }}>{creneau}</span>
+        </div>
+      )}
+      {!confirmed && (
+        <div style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 20, padding: '16px 24px', marginBottom: 28, textAlign: 'center' }}>
+          <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#fff', marginBottom: 4, letterSpacing: '-0.5px' }}>Skip the wait</div>
+          <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#C4A0F4', letterSpacing: '0.5px' }}>PRIORITÉ YOPPERS 🟣</div>
+          <div style={{ fontSize: '0.75rem', color: 'rgba(196,160,244,0.6)', marginTop: 6 }}>Montre cet écran au comptoir</div>
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '10px 16px', marginBottom: 28, width: '100%', maxWidth: 320 }}>
+        <span style={{ fontSize: '1.4rem' }}>🏪</span>
+        <div style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 700 }}>{nomCommerce}</div>
+      </div>
+      {!confirmed ? (
+        <div style={{ width: '100%', maxWidth: 320 }}>
+          <div style={{ textAlign: 'center', color: 'rgba(196,160,244,0.5)', fontSize: '0.75rem', marginBottom: 8 }}>{swiped ? 'Confirmation...' : 'Glisse pour confirmer la récupération'}</div>
+          <div style={{ width: trackW, height: 64, background: 'rgba(107,53,196,0.2)', border: '1px solid rgba(107,53,196,0.4)', borderRadius: 32, position: 'relative', margin: '0 auto', cursor: 'grab', userSelect: 'none', overflow: 'hidden', touchAction: 'none' }}
+            onMouseDown={onStart} onMouseMove={onMove} onMouseUp={onEnd} onMouseLeave={onEnd}
+            onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}>
+            <div style={{ position: 'absolute', left: 4, top: 4, bottom: 4, width: swipeX + thumbW, background: 'rgba(107,53,196,0.25)', borderRadius: 28, transition: dragging ? 'none' : 'width 0.3s' }}/>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(196,160,244,0.4)', fontSize: '0.8rem', fontWeight: 700, letterSpacing: 1, pointerEvents: 'none', opacity: 1 - swipeX / maxX }}>SWIPE →</div>
+            <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: thumbW, height: 56, background: `linear-gradient(135deg, ${C.main}, ${C.mid})`, borderRadius: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 20px rgba(107,53,196,0.6)', transition: dragging ? 'none' : 'left 0.3s', fontSize: 22 }}>
+              {swipeX >= maxX * 0.85 ? '✓' : '→'}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ textAlign: 'center', animation: 'pickup-fadein 0.4s ease' }}>
+          <div style={{ fontSize: '3rem', marginBottom: 8 }}>✓</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#4ADE80', marginBottom: 4 }}>Commande récupérée !</div>
+          <div style={{ fontSize: '0.8rem', color: 'rgba(196,160,244,0.6)' }}>À bientôt Yopper 👋</div>
+        </div>
+      )}
+      <div style={{ position: 'absolute', bottom: 24, width: 100, height: 4, background: 'rgba(255,255,255,0.2)', borderRadius: 2 }}/>
+    </div>
+  )
+}
+
 function SplashScreen({ onDone }) {
   const [phase, setPhase] = useState(0)
   useEffect(() => {
@@ -458,6 +554,7 @@ export default function Commander() {
   const [client, setClient] = useState({ nom: '', email: '', telephone: '', prenom: '' })
   const [clientId, setClientId] = useState(null)
   const [clientCommandes, setClientCommandes] = useState([])
+  const [pickupCommande, setPickupCommande] = useState(null)
 
   useEffect(() => {
     const savedOnglet = localStorage.getItem('yoppaa_onglet')
@@ -485,26 +582,6 @@ export default function Commander() {
     }, 5000)
     return () => clearInterval(iv)
   }, [])
-
-  async function geocoderAdresseManuelle(adresse) {
-    if (!adresse.trim()) return
-    setGeoLoading(true)
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(adresse)}&format=json&limit=1&accept-language=fr`,
-        { headers: { 'Accept': 'application/json' } }
-      )
-      if (res.ok) {
-        const data = await res.json()
-        if (data?.length > 0) {
-          const { lat, lon } = data[0]
-          setPosition({ lat: parseFloat(lat), lng: parseFloat(lon) })
-          setRue(adresse.trim())
-        }
-      }
-    } catch { }
-    setGeoLoading(false)
-  }
 
   function demanderGeolocalisation() {
     if (!navigator.geolocation) return
@@ -585,6 +662,11 @@ export default function Commander() {
   async function chargerCommandesClient(email) {
     const { data } = await supabase.from('commandes').select('*, commercant:commercants(nom, type), creneau:creneaux(heure_debut, heure_fin)').eq('client_email', email).order('created_at', { ascending: false })
     setClientCommandes(data||[])
+    // Afficher l'écran pick-up si une commande vient de passer en "pret"
+    const pretes = (data||[]).filter(c => c.statut === 'pret')
+    if (pretes.length > 0 && !pickupCommande) {
+      setPickupCommande(pretes[0])
+    }
   }
 
   useEffect(() => {
@@ -674,6 +756,17 @@ export default function Commander() {
   return (
     <>
       {showSplash && <SplashScreen onDone={onSplashDone}/>}
+      {pickupCommande && (
+        <PickupScreen
+          commande={pickupCommande}
+          clientPrenom={client.prenom || client.nom?.split(' ')[0] || 'Yopper'}
+          onConfirm={async () => {
+            await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', pickupCommande.id)
+            setPickupCommande(null)
+            chargerCommandesClient(client.email)
+          }}
+        />
+      )}
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; width: 100%; overflow-x: hidden; }
@@ -768,12 +861,12 @@ export default function Commander() {
                   placeholder="Ville, rue, code postal..."
                   value={locManuelle}
                   onChange={e => setLocManuelle(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && locManuelle.trim()) { geocoderAdresseManuelle(locManuelle.trim()); setShowLocManuelle(false) } }}
+                  onKeyDown={e => { if (e.key === 'Enter' && locManuelle.trim()) { setRue(locManuelle.trim()); setShowLocManuelle(false) } }}
                   autoFocus
                   style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.5rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', backdropFilter: 'blur(8px)', outline: 'none' }}
                 />
                 {locManuelle && (
-                  <button onClick={() => { geocoderAdresseManuelle(locManuelle.trim()); setShowLocManuelle(false) }}
+                  <button onClick={() => { setRue(locManuelle.trim()); setShowLocManuelle(false) }}
                     style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: T.main, border: 'none', borderRadius: 8, padding: '4px 10px', color: '#fff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                     OK
                   </button>
@@ -921,7 +1014,7 @@ export default function Commander() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
                             <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>{c.commercant?.nom}</p>
-                            <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date(c.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · 🕐 ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
+                            <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · 🕐 ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
                           </div>
                           <div style={{ textAlign: 'right' }}>
                             <p style={{ fontWeight: 900, color: T.main, marginBottom: 4, fontSize: '0.95rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
@@ -951,7 +1044,7 @@ export default function Commander() {
                     <div key={c.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.875rem' }}>{c.commercant?.nom}</p>
-                        <p style={{ fontSize: '0.7rem', color: T.muted }}>{new Date(c.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
+                        <p style={{ fontSize: '0.7rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(c.total).toFixed(2)}€</p>

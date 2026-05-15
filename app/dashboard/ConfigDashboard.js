@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const T = {
@@ -961,9 +961,320 @@ function TabProfil({ commercantId, toast }) {
       <div style={{ ...s.card, background: T.pale, boxShadow: 'none', border: 'none' }}>
         <p style={{ fontSize: 12, color: T.main, fontWeight: 600 }}>💡 URL client : yoppaa.app/commander</p>
       </div>
+
+      <QRCodeSection commercantId={commercantId} toast={toast} />
     </div>
   )
 }
+
+// ─── Composant QR Code imprimable ─────────────────────────────────────────────
+function QRCodeSection({ commercantId, toast }) {
+  const [slug, setSlug]           = useState(null)
+  const [nomCommerce, setNomCommerce] = useState('')
+  const [loading, setLoading]     = useState(true)
+  const [qrDataUrl, setQrDataUrl] = useState(null)
+
+  const url = slug ? `https://yoppaa.app/commander/${slug}` : null
+
+  useEffect(() => {
+    async function fetchSlug() {
+      setLoading(true)
+      const { data } = await supabase.from('commercants').select('slug, nom').eq('id', commercantId).single()
+      if (data) { setSlug(data.slug); setNomCommerce(data.nom || '') }
+      setLoading(false)
+    }
+    fetchSlug()
+  }, [commercantId])
+
+  useEffect(() => {
+    if (!url) return
+    async function gen() {
+      try {
+        const QRCode = (await import('qrcode')).default
+        const dataUrl = await QRCode.toDataURL(url, {
+          width: 900, margin: 1,
+          color: { dark: '#1A0840', light: '#FFFFFF' },
+          errorCorrectionLevel: 'H',
+        })
+        setQrDataUrl(dataUrl)
+      } catch (e) { toast('Erreur génération QR', 'error') }
+    }
+    gen()
+  }, [url])
+
+  // ─── Canvas composé — style tribu hype ───────────────────────────────────
+  async function buildCompositeCanvas() {
+    const QR   = 820   // taille QR rendu dans le canvas
+    const PAD  = 56
+    const W    = QR + PAD * 2
+
+    // Zones verticales
+    const TOP_H    = 200  // 3 points + yoppaa + nom commerce
+    const QR_H     = QR + 32
+    const MIDDLE_H = 80   // tagline sous QR
+    const BOT_H    = 120  // "Rejoins la tribu..."
+    const H = TOP_H + QR_H + MIDDLE_H + BOT_H + PAD * 2
+
+    const canvas = document.createElement('canvas')
+    canvas.width = W; canvas.height = H
+    const ctx = canvas.getContext('2d')
+
+    // ── Fond dégradé ink ──
+    const bg = ctx.createLinearGradient(0, 0, W * 0.3, H)
+    bg.addColorStop(0,   '#160636')
+    bg.addColorStop(0.45,'#2D0F6B')
+    bg.addColorStop(1,   '#1A0840')
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
+
+    // ── Halo décoratif derrière le QR ──
+    const haloY = PAD + TOP_H + QR_H / 2
+    const halo = ctx.createRadialGradient(W/2, haloY, 0, W/2, haloY, QR * 0.75)
+    halo.addColorStop(0,   'rgba(107,53,196,0.22)')
+    halo.addColorStop(0.6, 'rgba(107,53,196,0.06)')
+    halo.addColorStop(1,   'rgba(0,0,0,0)')
+    ctx.fillStyle = halo; ctx.fillRect(0, 0, W, H)
+
+    // ── Ligne déco top ──
+    const lineGrad = ctx.createLinearGradient(0, 0, W, 0)
+    lineGrad.addColorStop(0,   'rgba(196,160,244,0)')
+    lineGrad.addColorStop(0.5, 'rgba(196,160,244,0.5)')
+    lineGrad.addColorStop(1,   'rgba(196,160,244,0)')
+    ctx.strokeStyle = lineGrad; ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(PAD, PAD + 2); ctx.lineTo(W - PAD, PAD + 2); ctx.stroke()
+
+    // ── 3 points yo·pp·aa ──
+    const dots = [
+      { r: 7,  c: 'rgba(255,255,255,0.5)' },
+      { r: 10, c: '#C4A0F4' },
+      { r: 7,  c: '#9660E0' },
+    ]
+    const gapDots = 22
+    const totalDW = dots.reduce((a, d) => a + d.r * 2, 0) + gapDots * 2
+    let dx = W / 2 - totalDW / 2
+    const dotsY = PAD + 38
+    dots.forEach((d, i) => {
+      dx += d.r
+      ctx.beginPath(); ctx.arc(dx, dotsY, d.r, 0, Math.PI * 2)
+      ctx.fillStyle = d.c; ctx.fill()
+      // Glow sur le point du milieu
+      if (i === 1) {
+        ctx.beginPath(); ctx.arc(dx, dotsY, d.r + 6, 0, Math.PI * 2)
+        const glow = ctx.createRadialGradient(dx, dotsY, d.r, dx, dotsY, d.r + 10)
+        glow.addColorStop(0, 'rgba(196,160,244,0.35)')
+        glow.addColorStop(1, 'rgba(196,160,244,0)')
+        ctx.fillStyle = glow; ctx.fill()
+      }
+      dx += d.r + (i < 2 ? gapDots : 0)
+    })
+
+    // ── "yoppaa" wordmark ──
+    ctx.textAlign = 'center'
+    ctx.fillStyle = '#FFFFFF'
+    ctx.font = '900 80px "DM Sans", Arial, sans-serif'
+    ctx.fillText('yoppaa', W / 2, PAD + 108)
+
+    // ── Séparateur subtil ──
+    const sep = ctx.createLinearGradient(PAD * 2, 0, W - PAD * 2, 0)
+    sep.addColorStop(0,   'rgba(196,160,244,0)')
+    sep.addColorStop(0.5, 'rgba(196,160,244,0.3)')
+    sep.addColorStop(1,   'rgba(196,160,244,0)')
+    ctx.strokeStyle = sep; ctx.lineWidth = 0.8
+    ctx.beginPath(); ctx.moveTo(PAD * 2, PAD + 122); ctx.lineTo(W - PAD * 2, PAD + 122); ctx.stroke()
+
+    // ── Nom du commerce — bien visible ──
+    ctx.font = '700 38px "DM Sans", Arial, sans-serif'
+    ctx.fillStyle = '#C4A0F4'
+    ctx.fillText(nomCommerce, W / 2, PAD + 168)
+
+    // ── Fond blanc arrondi pour QR ──
+    const qrX = PAD; const qrY = PAD + TOP_H
+    const qrSz = QR + 32
+    const rr = 28
+    ctx.fillStyle = '#FFFFFF'
+    ctx.shadowColor = 'rgba(107,53,196,0.4)'
+    ctx.shadowBlur = 40
+    ctx.beginPath()
+    ctx.moveTo(qrX + rr, qrY)
+    ctx.lineTo(qrX + qrSz - rr, qrY)
+    ctx.quadraticCurveTo(qrX + qrSz, qrY, qrX + qrSz, qrY + rr)
+    ctx.lineTo(qrX + qrSz, qrY + qrSz - rr)
+    ctx.quadraticCurveTo(qrX + qrSz, qrY + qrSz, qrX + qrSz - rr, qrY + qrSz)
+    ctx.lineTo(qrX + rr, qrY + qrSz)
+    ctx.quadraticCurveTo(qrX, qrY + qrSz, qrX, qrY + qrSz - rr)
+    ctx.lineTo(qrX, qrY + rr)
+    ctx.quadraticCurveTo(qrX, qrY, qrX + rr, qrY)
+    ctx.closePath(); ctx.fill()
+    ctx.shadowBlur = 0
+
+    // ── QR image dans le fond blanc ──
+    const qrImg = new window.Image()
+    await new Promise(resolve => { qrImg.onload = resolve; qrImg.src = qrDataUrl })
+    ctx.drawImage(qrImg, qrX + 16, qrY + 16, QR, QR)
+
+    // ── "Commande en avance, passe en priorité" ──
+    const midY = PAD + TOP_H + QR_H
+    ctx.font = '600 30px "DM Sans", Arial, sans-serif'
+    ctx.fillStyle = 'rgba(196,160,244,0.85)'
+    ctx.fillText('Commande en avance, passe en priorité', W / 2, midY + 46)
+
+    // ── "ICI ON EST YOPPERS" — grande accroche ──
+    const botY = PAD + TOP_H + QR_H + MIDDLE_H
+    ctx.font = '900 52px "DM Sans", Arial, sans-serif'
+    // Dégradé blanc → light sur le texte
+    const txtGrad = ctx.createLinearGradient(PAD, 0, W - PAD, 0)
+    txtGrad.addColorStop(0, '#FFFFFF')
+    txtGrad.addColorStop(0.5, '#EDE0FF')
+    txtGrad.addColorStop(1, '#C4A0F4')
+    ctx.fillStyle = txtGrad
+    ctx.fillText('ICI ON EST YOPPERS', W / 2, botY + 50)
+
+    // ── Ligne déco bottom ──
+    ctx.strokeStyle = sep; ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(PAD, botY + 66); ctx.lineTo(W - PAD, botY + 66); ctx.stroke()
+
+    // ── "Rejoins la tribu — yoppaa.app" ──
+    ctx.font = '500 24px "DM Sans", Arial, sans-serif'
+    ctx.fillStyle = 'rgba(196,160,244,0.6)'
+    ctx.fillText('Rejoins la tribu sur yoppaa.app', W / 2, botY + 96)
+
+    return canvas
+  }
+
+  // ─── HTML impression 1 page stricte ──────────────────────────────────────
+  async function buildPrintHTML(format) {
+    const canvas  = await buildCompositeCanvas()
+    const imgUrl  = canvas.toDataURL('image/png')
+    const isA4    = format === 'A4'
+    const pw      = isA4 ? '210mm' : '148mm'
+    const ph      = isA4 ? '297mm' : '210mm'
+    const imgW    = isA4 ? '194mm' : '136mm'
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Yoppaa QR — ${nomCommerce}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  @page{size:${format} portrait;margin:0;}
+  html,body{width:${pw};height:${ph};overflow:hidden;background:#160636!important;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;
+    display:flex;align-items:center;justify-content:center;}
+  img{width:${imgW};height:auto;display:block;}
+</style></head>
+<body><img src="${imgUrl}"/></body>
+<script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></html>`
+  }
+
+  async function printQR(format) {
+    if (!qrDataUrl) return toast('QR pas encore prêt', 'error')
+    const html = await buildPrintHTML(format)
+    const win  = window.open('', '_blank')
+    win.document.open(); win.document.write(html); win.document.close()
+  }
+
+  async function downloadPNG() {
+    if (!qrDataUrl) return
+    const canvas = await buildCompositeCanvas()
+    const a = document.createElement('a')
+    a.download = `yoppaa-qr-${slug}.png`
+    a.href = canvas.toDataURL('image/png')
+    a.click(); toast('PNG téléchargé ✓')
+  }
+
+  async function downloadPDF(format) {
+    if (!qrDataUrl) return
+    try {
+      const { jsPDF } = await import('jspdf')
+      const canvas  = await buildCompositeCanvas()
+      const imgData = canvas.toDataURL('image/png')
+      const isA4    = format === 'A4'
+      const pdf     = new jsPDF({ orientation: 'portrait', unit: 'mm', format: format.toLowerCase() })
+      const W = pdf.internal.pageSize.getWidth()
+      const H = pdf.internal.pageSize.getHeight()
+      pdf.setFillColor(22, 6, 54); pdf.rect(0, 0, W, H, 'F')
+      const imgW = isA4 ? 184 : 130
+      const imgH = imgW * (canvas.height / canvas.width)
+      pdf.addImage(imgData, 'PNG', (W - imgW) / 2, (H - imgH) / 2, imgW, imgH)
+      pdf.save(`yoppaa-qr-${slug}-${format}.pdf`)
+      toast(`PDF ${format} téléchargé ✓`)
+    } catch (e) { console.error(e); toast('Erreur PDF', 'error') }
+  }
+
+  if (loading) return null
+  if (!slug) return (
+    <div style={{ ...s.card, background: '#FEF3C7', border: '1.5px solid #F59E0B33', marginTop: 12 }}>
+      <p style={{ fontSize: 13, color: '#92400E', fontWeight: 600 }}>⚠️ Aucun slug — contacte le support.</p>
+    </div>
+  )
+
+  return (
+    <div style={{ ...s.card, marginTop: 12 }}>
+      <h2 style={{ ...s.h2, marginBottom: 4 }}>QR Code</h2>
+      <p style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>Vitrine, sacs, flyers — partout !</p>
+
+      {/* ── Preview tribu hype ── */}
+      <div style={{ background: 'linear-gradient(160deg, #160636 0%, #2D0F6B 50%, #1A0840 100%)', borderRadius: 18, padding: '22px 20px 20px', textAlign: 'center', marginBottom: 16, position: 'relative', overflow: 'hidden' }}>
+        {/* Halo déco */}
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 260, height: 260, borderRadius: '50%', background: 'radial-gradient(circle, rgba(107,53,196,0.2) 0%, transparent 70%)', pointerEvents: 'none' }}/>
+
+        {/* 3 points */}
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 10, alignItems: 'center' }}>
+          <div style={{ width: 8,  height: 8,  borderRadius: '50%', background: 'rgba(255,255,255,0.5)' }}/>
+          <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#C4A0F4', boxShadow: '0 0 12px rgba(196,160,244,0.6)' }}/>
+          <div style={{ width: 8,  height: 8,  borderRadius: '50%', background: '#9660E0' }}/>
+        </div>
+
+        {/* yoppaa wordmark */}
+        <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '1.9rem', color: '#fff', letterSpacing: '-2px', lineHeight: 1, marginBottom: 2 }}>yoppaa</p>
+
+        {/* Séparateur */}
+        <div style={{ width: 40, height: 1, background: 'rgba(196,160,244,0.3)', margin: '8px auto' }}/>
+
+        {/* Nom commerce */}
+        <p style={{ fontSize: 15, fontWeight: 700, color: '#C4A0F4', marginBottom: 14, letterSpacing: '-0.3px' }}>{nomCommerce}</p>
+
+        {/* QR */}
+        {qrDataUrl
+          ? <img src={qrDataUrl} alt="QR Code" style={{ width: 196, height: 196, borderRadius: 12, display: 'block', margin: '0 auto', background: '#fff', padding: 8, boxShadow: '0 8px 32px rgba(107,53,196,0.5)' }}/>
+          : <div style={{ width: 196, height: 196, background: '#2D0F6B', borderRadius: 12, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C4A0F4', fontSize: 12 }}>Génération...</div>
+        }
+
+        {/* Tagline */}
+        <p style={{ fontSize: 11, color: 'rgba(196,160,244,0.7)', marginTop: 10, marginBottom: 6 }}>Commande en avance, passe en priorité</p>
+
+        {/* Accroche tribu */}
+        <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '1.05rem', color: '#fff', letterSpacing: '-0.3px', marginBottom: 4 }}>ICI ON EST YOPPERS 🟣</p>
+
+        {/* URL */}
+        <p style={{ fontSize: 9, color: 'rgba(196,160,244,0.5)', marginTop: 2 }}>Rejoins la tribu sur yoppaa.app</p>
+      </div>
+
+      {/* URL copiable */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.pale, borderRadius: 10, padding: '8px 12px', marginBottom: 16 }}>
+        <span style={{ fontSize: 11, color: T.main, flex: 1, wordBreak: 'break-all' }}>{url}</span>
+        <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 11, flexShrink: 0 }}
+          onClick={() => { navigator.clipboard.writeText(url); toast('URL copiée ✓') }}>📋</button>
+      </div>
+
+      {/* PNG */}
+      <button style={{ ...s.btn, ...s.btnGhost, width: '100%', justifyContent: 'center', marginBottom: 10 }} onClick={downloadPNG} disabled={!qrDataUrl}>
+        ⬇️ Télécharger PNG
+      </button>
+
+      {/* PDF */}
+      <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>PDF</p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        <button style={{ ...s.btn, ...s.btnGhost, flex: 1, justifyContent: 'center' }} onClick={() => downloadPDF('A5')} disabled={!qrDataUrl}>📄 A5</button>
+        <button style={{ ...s.btn, ...s.btnGhost, flex: 1, justifyContent: 'center' }} onClick={() => downloadPDF('A4')} disabled={!qrDataUrl}>📄 A4</button>
+      </div>
+
+      {/* Impression */}
+      <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Impression</p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center' }} onClick={() => printQR('A5')} disabled={!qrDataUrl}>🖨️ A5</button>
+        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center' }} onClick={() => printQR('A4')} disabled={!qrDataUrl}>🖨️ A4</button>
+      </div>
+    </div>
+  )
+}
+
 
 // ─── Onglet AVIS ──────────────────────────────────────────────────────────────
 function TabAvis({ commercantId, toast }) {

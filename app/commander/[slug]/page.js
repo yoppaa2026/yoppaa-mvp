@@ -321,7 +321,6 @@ export default function CommanderSlug() {
     const tempsParCreneau = {}
     ;(commandesActives || []).forEach(cmd => {
       countParCreneau[cmd.creneau_id] = (countParCreneau[cmd.creneau_id] || 0) + 1
-      // Cumul temps de préparation
       const tempsCmd = (cmd.commande_articles || []).reduce((acc, ligne) => {
         return acc + (ligne.quantite * (ligne.article?.temps_prepa || 1))
       }, 0)
@@ -795,16 +794,25 @@ export default function CommanderSlug() {
                     })
                     .map(c => [`${c.heure_debut}-${c.heure_fin}`, c])
                 ).values()].map(c => {
-                  // Calcul complet selon mode_capacite
-                  const modeTemps = c.mode_capacite === 'temps'
-                  const complet = modeTemps
-                    ? (c.temps_cumul || 0) >= (c.capacite_temps || 30)
-                    : c.count >= c.max_commandes
-                  const capaciteTotal = modeTemps ? (c.capacite_temps || 30) : c.max_commandes
-                  const utilisee = modeTemps ? (c.temps_cumul || 0) : c.count
-                  const placesRestantes = capaciteTotal - utilisee
-                  const bientotComplet = !complet && placesRestantes <= (modeTemps ? capaciteTotal * 0.15 : 1)
-                  const presqueComplet = !complet && placesRestantes <= (modeTemps ? capaciteTotal * 0.3 : 2) && !bientotComplet
+                  // Mode global du commerçant
+                  const modeTemps = (c.mode_capacite || commercant?.mode_capacite) === 'temps'
+                  const capacite = modeTemps ? (c.capacite_temps || 30) : c.max_commandes
+                  const utilise = modeTemps ? (c.temps_cumul || 0) : c.count
+                  // Débordement : si créneau précédent déborde, déduire de ce créneau
+                  const creneauxTries = (joursDispos[jourSelectionne]?.creneaux || creneaux)
+                  const idxCourant = creneauxTries.findIndex(x => x.id === c.id)
+                  let debordementPrecedent = 0
+                  if (modeTemps && idxCourant > 0) {
+                    const prec = creneauxTries[idxCourant - 1]
+                    const capacitePrec = prec.capacite_temps || 30
+                    const utiliséPrec = prec.temps_cumul || 0
+                    if (utiliséPrec > capacitePrec) debordementPrecedent = utiliséPrec - capacitePrec
+                  }
+                  const utiliseEffectif = utilise + debordementPrecedent
+                  const complet = utiliseEffectif >= capacite
+                  const placesRestantes = capacite - utiliseEffectif
+                  const bientotComplet = !complet && placesRestantes <= (modeTemps ? capacite * 0.15 : 1)
+                  const presqueComplet = !complet && placesRestantes <= (modeTemps ? capacite * 0.3 : 2) && !bientotComplet
                   const choisi = creneauChoisi === c.id
                   let mention = null
                   if (complet) mention = { text: 'Complet', color: '#DC2626' }

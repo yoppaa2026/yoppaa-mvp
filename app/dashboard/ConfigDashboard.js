@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const T = {
@@ -556,7 +556,7 @@ function TabCreneaux({ commercantId, toast }) {
   const [creneaux, setCreneaux] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true })
+  const [form, setForm] = useState({ heure_debut: '', heure_fin: '', max_commandes: 5, actif: true })
   const [saving, setSaving] = useState(false)
 
   const [horizon, setHorizon] = useState(1)
@@ -586,19 +586,10 @@ function TabCreneaux({ commercantId, toast }) {
   async function saveCreneau() {
     if (!form.heure_debut || !form.heure_fin) return toast('Heures obligatoires', 'error')
     if (form.heure_fin <= form.heure_debut) return toast('Heure de fin invalide', 'error')
-
-    // ─── Détection superposition — bloquant ─────────────────────
-    const nouveauSlot = [{ heure_debut: form.heure_debut, heure_fin: form.heure_fin }]
-    const superpositions = detecterSuperpositions(creneaux, nouveauSlot)
-    if (superpositions.length > 0) {
-      toast(`⚠️ Ce créneau chevauche un créneau existant — modifie les heures ou supprime le créneau conflictuel.`, 'error')
-      return
-    }
-
     setSaving(true)
-    await supabase.from('creneaux').insert({ commercant_id: commercantId, heure_debut: form.heure_debut, heure_fin: form.heure_fin, max_commandes: parseInt(form.max_commandes) || 5, delta_minutes: parseInt(form.delta_minutes) || 0, actif: form.actif })
+    await supabase.from('creneaux').insert({ commercant_id: commercantId, heure_debut: form.heure_debut, heure_fin: form.heure_fin, max_commandes: parseInt(form.max_commandes) || 5, actif: form.actif })
     toast('Créneau ajouté ✓'); setSaving(false); setShowForm(false)
-    setForm({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true }); fetchCreneaux()
+    setForm({ heure_debut: '', heure_fin: '', max_commandes: 5, actif: true }); fetchCreneaux()
   }
 
   async function toggleCreneau(c) { await supabase.from('creneaux').update({ actif: !c.actif }).eq('id', c.id); fetchCreneaux() }
@@ -610,78 +601,10 @@ function TabCreneaux({ commercantId, toast }) {
     setCreneaux(prev => prev.map(c => c.id === id ? { ...c, max_commandes: n } : c))
   }
 
-  async function updateDelta(id, val) {
-    const n = parseInt(val)
-    if (isNaN(n) || n < 0) return
-    await supabase.from('creneaux').update({ delta_minutes: n }).eq('id', id)
-    setCreneaux(prev => prev.map(c => c.id === id ? { ...c, delta_minutes: n } : c))
-  }
-
   async function deleteCreneau(id) {
     if (!confirm('Supprimer ce créneau ?')) return
-    // Vérifier commandes actives liées à ce créneau
-    const { data: cmdLiees } = await supabase
-      .from('commandes')
-      .select('id')
-      .eq('creneau_id', id)
-      .neq('statut', 'recupere')
-    if (cmdLiees?.length > 0) {
-      toast(`Impossible — ${cmdLiees.length} commande(s) active(s) sur ce créneau`, 'error')
-      return
-    }
     await supabase.from('creneaux').delete().eq('id', id)
-    toast('Créneau supprimé ✓'); fetchCreneaux()
-  }
-
-  async function toutSupprimer() {
-    if (!creneaux.length) return
-    if (!confirm(`Supprimer les ${creneaux.length} créneaux ? Cette action est irréversible.`)) return
-
-    const ids = creneaux.map(c => c.id)
-
-    // ─── Vérifier quels créneaux ont des commandes liées ─────────
-    const { data: commandesLiees } = await supabase
-      .from('commandes')
-      .select('creneau_id')
-      .in('creneau_id', ids)
-      .neq('statut', 'recupere')
-
-    const idsAvecCommandes = [...new Set((commandesLiees || []).map(c => c.creneau_id))]
-    const idsSansCommandes = ids.filter(id => !idsAvecCommandes.includes(id))
-
-    if (idsAvecCommandes.length > 0 && idsSansCommandes.length === 0) {
-      toast(`Impossible — tous les créneaux ont des commandes actives`, 'error')
-      return
-    }
-
-    if (idsAvecCommandes.length > 0) {
-      const ok = confirm(`⚠️ ${idsAvecCommandes.length} créneau(x) ont des commandes actives et ne peuvent pas être supprimés.
-
-OK = Supprimer uniquement les ${idsSansCommandes.length} créneaux sans commandes
-Annuler = Annuler`)
-      if (!ok) return
-    }
-
-    if (idsSansCommandes.length > 0) {
-      await supabase.from('creneaux').delete().in('id', idsSansCommandes)
-    }
-    toast(`${idsSansCommandes.length} créneau(x) supprimé(s) ✓`)
-    fetchCreneaux()
-  }
-
-  function detecterSuperpositions(existants, nouveaux) {
-    const superpositions = []
-    for (const n of nouveaux) {
-      for (const e of existants) {
-        const eDebut = e.heure_debut.slice(0,5)
-        const eFin = e.heure_fin.slice(0,5)
-        if (n.heure_debut < eFin && n.heure_fin > eDebut) {
-          superpositions.push(`${n.heure_debut}–${n.heure_fin}`)
-          break
-        }
-      }
-    }
-    return superpositions
+    toast('Créneau supprimé'); fetchCreneaux()
   }
 
   async function genererCreneaux() {
@@ -701,21 +624,8 @@ Annuler = Annuler`)
       current = next
     }
     if (!slots.length) return toast('Aucun créneau généré', 'error')
-
-    const superpositions = detecterSuperpositions(creneaux, slots)
-    if (superpositions.length > 0) {
-      const ok = confirm(`⚠️ ${superpositions.length} créneau(x) se superposent avec des créneaux existants :\n${superpositions.join(', ')}\n\nOK = Supprimer tous les créneaux existants et remplacer\nAnnuler = Annuler la génération`)
-      if (!ok) return
-      // Remplacer — supprimer par IDs d'abord
-      const ids = creneaux.map(c => c.id)
-      if (ids.length > 0) await supabase.from('creneaux').delete().in('id', ids)
-      await supabase.from('creneaux').insert(slots)
-      toast(`${slots.length} créneaux générés (anciens remplacés) ✓`)
-    } else {
-      await supabase.from('creneaux').insert(slots)
-      toast(`${slots.length} créneaux générés ✓`)
-    }
-    fetchCreneaux()
+    await supabase.from('creneaux').insert(slots)
+    toast(`${slots.length} créneaux générés ✓`); fetchCreneaux()
   }
 
   if (loading) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
@@ -749,7 +659,6 @@ Annuler = Annuler`)
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <h2 style={s.h2}>Créneaux <span style={{ color: T.mid, fontWeight: 600, fontSize: 14 }}>({creneaux.length})</span></h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ ...s.btn, ...s.btnDanger }} onClick={toutSupprimer} disabled={creneaux.length === 0}>🗑 Tout supprimer</button>
           <button style={{ ...s.btn, ...s.btnGhost }} onClick={genererCreneaux}>⚡ Générer auto</button>
           <button style={{ ...s.btn, ...s.btnPrimary }} onClick={() => setShowForm(true)}>+ Ajouter</button>
         </div>
@@ -762,16 +671,9 @@ Annuler = Annuler`)
             <div><label style={s.label}>Début *</label><Input type="time" value={form.heure_debut} onChange={e => setForm(p => ({ ...p, heure_debut: e.target.value }))} /></div>
             <div><label style={s.label}>Fin *</label><Input type="time" value={form.heure_fin} onChange={e => setForm(p => ({ ...p, heure_fin: e.target.value }))} /></div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-            <div>
-              <label style={s.label}>Commandes max</label>
-              <Input type="number" min="1" max="50" value={form.max_commandes} onChange={e => setForm(p => ({ ...p, max_commandes: e.target.value }))} style={{ width: '100%' }} />
-            </div>
-            <div>
-              <label style={s.label}>Délai min (minutes)</label>
-              <Input type="number" min="0" max="120" value={form.delta_minutes} onChange={e => setForm(p => ({ ...p, delta_minutes: e.target.value }))} style={{ width: '100%' }} />
-              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Délai entre commande et retrait</p>
-            </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={s.label}>Commandes max</label>
+            <Input type="number" min="1" max="50" value={form.max_commandes} onChange={e => setForm(p => ({ ...p, max_commandes: e.target.value }))} style={{ width: 100 }} />
           </div>
           <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Créneau actif" />
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
@@ -800,15 +702,6 @@ Annuler = Annuler`)
                     <input type="number" value={c.max_commandes} min={1} onChange={e => updateMax(c.id, e.target.value)}
                       style={{ ...s.input, width: 48, textAlign: 'center', padding: '3px 6px', fontSize: 13, fontWeight: 700 }} />
                     <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateMax(c.id, c.max_commandes + 1)}>+</button>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                    <span style={{ fontSize: 12, color: T.muted }}>Délai :</span>
-                    <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateDelta(c.id, Math.max(0, (c.delta_minutes || 0) - 5))}>−</button>
-                    <input type="number" value={c.delta_minutes || 0} min={0} onChange={e => updateDelta(c.id, e.target.value)}
-                      style={{ ...s.input, width: 48, textAlign: 'center', padding: '3px 6px', fontSize: 13, fontWeight: 700 }} />
-                    <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateDelta(c.id, (c.delta_minutes || 0) + 5)}>+</button>
-                    <span style={{ fontSize: 11, color: T.muted }}>min</span>
-                    {(c.delta_minutes || 0) > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: T.main, background: T.pale, padding: '2px 6px', borderRadius: 100 }}>⏱ {c.delta_minutes} min</span>}
                   </div>
                 </div>
                 <Toggle value={c.actif} onChange={() => toggleCreneau(c)} />
@@ -960,6 +853,293 @@ function TabProfil({ commercantId, toast }) {
 
       <div style={{ ...s.card, background: T.pale, boxShadow: 'none', border: 'none' }}>
         <p style={{ fontSize: 12, color: T.main, fontWeight: 600 }}>💡 URL client : yoppaa.app/commander</p>
+      </div>
+
+      {/* ─── QR Code ─── */}
+      <QRCodeSection commercantId={commercantId} toast={toast} />
+    </div>
+  )
+}
+
+// ─── Composant QR Code imprimable ─────────────────────────────────────────────
+function QRCodeSection({ commercantId, toast }) {
+  const canvasRef = useRef(null)
+  const printRef = useRef(null)
+  const [slug, setSlug] = useState(null)
+  const [nomCommerce, setNomCommerce] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [qrReady, setQrReady] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [size, setSize] = useState(400)
+
+  const url = slug ? `https://yoppaa.app/commander/${slug}` : null
+
+  useEffect(() => {
+    async function fetchSlug() {
+      setLoading(true)
+      const { data } = await supabase.from('commercants').select('slug, nom').eq('id', commercantId).single()
+      if (data) {
+        setSlug(data.slug)
+        setNomCommerce(data.nom || '')
+      }
+      setLoading(false)
+    }
+    fetchSlug()
+  }, [commercantId])
+
+  const generateQR = useCallback(async () => {
+    if (!url || !canvasRef.current) return
+    setGenerating(true)
+    try {
+      const QRCode = (await import('qrcode')).default
+      await QRCode.toCanvas(canvasRef.current, url, {
+        width: size,
+        margin: 2,
+        color: { dark: '#1A0840', light: '#FFFFFF' },
+        errorCorrectionLevel: 'H',
+      })
+      setQrReady(true)
+    } catch (e) {
+      toast('Erreur génération QR', 'error')
+    }
+    setGenerating(false)
+  }, [url, size])
+
+  useEffect(() => {
+    if (slug) generateQR()
+  }, [slug, size])
+
+  // ─── Télécharger PNG ───────────────────────────────────────────────────────
+  function downloadPNG() {
+    if (!canvasRef.current || !qrReady) return
+    const canvas = buildPrintCanvas()
+    const link = document.createElement('a')
+    link.download = `yoppaa-qr-${slug}.png`
+    link.href = canvas.toDataURL('image/png')
+    link.click()
+    toast('QR téléchargé en PNG ✓')
+  }
+
+  // ─── Télécharger PDF ───────────────────────────────────────────────────────
+  async function downloadPDF() {
+    if (!canvasRef.current || !qrReady) return
+    try {
+      const { jsPDF } = await import('jspdf')
+      const canvas = buildPrintCanvas()
+      const imgData = canvas.toDataURL('image/png')
+      // Format A5 paysage pour affichage vitrine
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' })
+      const pdfW = pdf.internal.pageSize.getWidth()
+      const pdfH = pdf.internal.pageSize.getHeight()
+      // Fond violet Yoppaa
+      pdf.setFillColor(107, 53, 196)
+      pdf.rect(0, 0, pdfW, pdfH, 'F')
+      // Fond blanc centré
+      const margin = 10
+      const boxW = pdfW - margin * 2
+      const boxH = pdfH - margin * 2
+      pdf.setFillColor(255, 255, 255)
+      pdf.roundedRect(margin, margin, boxW, boxH, 8, 8, 'F')
+      // Titre "Commandez ici"
+      pdf.setTextColor(26, 8, 64)
+      pdf.setFontSize(18)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Commandez ici', pdfW / 2, margin + 14, { align: 'center' })
+      // Sous-titre commerce
+      pdf.setFontSize(11)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setTextColor(107, 53, 196)
+      pdf.text(nomCommerce, pdfW / 2, margin + 22, { align: 'center' })
+      // QR code — centré
+      const qrSize = Math.min(boxW - 20, 100)
+      const qrX = (pdfW - qrSize) / 2
+      const qrY = margin + 30
+      pdf.addImage(imgData, 'PNG', qrX, qrY, qrSize, qrSize)
+      // URL sous le QR
+      pdf.setFontSize(8)
+      pdf.setTextColor(107, 53, 196)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(url, pdfW / 2, qrY + qrSize + 6, { align: 'center' })
+      // Tagline "Skip the wait 🟣"
+      pdf.setFontSize(13)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setTextColor(26, 8, 64)
+      pdf.text('Skip the wait', pdfW / 2, pdfH - margin - 12, { align: 'center' })
+      pdf.setFontSize(9)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setTextColor(150, 96, 224)
+      pdf.text('yoppaa.app', pdfW / 2, pdfH - margin - 6, { align: 'center' })
+      pdf.save(`yoppaa-qr-${slug}.pdf`)
+      toast('QR téléchargé en PDF ✓')
+    } catch (e) {
+      console.error(e)
+      toast('Erreur génération PDF', 'error')
+    }
+  }
+
+  // ─── Imprimer depuis le navigateur ────────────────────────────────────────
+  function printQR() {
+    if (!canvasRef.current || !qrReady) return
+    const canvas = buildPrintCanvas()
+    const imgUrl = canvas.toDataURL('image/png')
+    const win = window.open('', '_blank', 'width=600,height=800')
+    win.document.write(`
+      <html><head><title>QR Yoppaa — ${nomCommerce}</title>
+      <style>
+        body { margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #6B35C4; font-family: sans-serif; }
+        .card { background: #fff; border-radius: 16px; padding: 32px; text-align: center; max-width: 340px; }
+        h1 { color: #1A0840; font-size: 22px; margin: 0 0 4px; }
+        p { color: #6B35C4; font-size: 13px; margin: 0 0 20px; }
+        img { width: 100%; max-width: 280px; display: block; margin: 0 auto 16px; }
+        .url { font-size: 10px; color: #9660E0; word-break: break-all; margin-bottom: 20px; }
+        .tag { font-size: 16px; font-weight: 700; color: #1A0840; }
+        @media print { body { background: #6B35C4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+      </style></head>
+      <body>
+        <div class="card">
+          <h1>Commandez ici</h1>
+          <p>${nomCommerce}</p>
+          <img src="${imgUrl}" />
+          <div class="url">${url}</div>
+          <div class="tag">Skip the wait 🟣</div>
+        </div>
+        <script>window.onload = () => window.print()<\/script>
+      </body></html>
+    `)
+    win.document.close()
+  }
+
+  // ─── Canvas de rendu pour export ──────────────────────────────────────────
+  function buildPrintCanvas() {
+    const qrCanvas = canvasRef.current
+    const padding = 40
+    const titleH = 60
+    const footerH = 50
+    const totalW = qrCanvas.width + padding * 2
+    const totalH = qrCanvas.height + padding * 2 + titleH + footerH
+    const out = document.createElement('canvas')
+    out.width = totalW
+    out.height = totalH
+    const ctx = out.getContext('2d')
+    // Fond violet
+    ctx.fillStyle = '#6B35C4'
+    ctx.fillRect(0, 0, totalW, totalH)
+    // Fond blanc arrondi
+    ctx.fillStyle = '#ffffff'
+    roundRect(ctx, padding / 2, padding / 2, totalW - padding, totalH - padding, 20)
+    ctx.fill()
+    // Titre
+    ctx.fillStyle = '#1A0840'
+    ctx.font = 'bold 28px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('Commandez ici', totalW / 2, padding / 2 + 40)
+    // Sous-titre
+    ctx.fillStyle = '#6B35C4'
+    ctx.font = '16px sans-serif'
+    ctx.fillText(nomCommerce, totalW / 2, padding / 2 + 62)
+    // QR
+    ctx.drawImage(qrCanvas, padding, padding / 2 + titleH, qrCanvas.width, qrCanvas.height)
+    // URL
+    ctx.fillStyle = '#9660E0'
+    ctx.font = '13px sans-serif'
+    ctx.fillText(url, totalW / 2, padding / 2 + titleH + qrCanvas.height + 24)
+    // Tagline
+    ctx.fillStyle = '#1A0840'
+    ctx.font = 'bold 18px sans-serif'
+    ctx.fillText('Skip the wait', totalW / 2, totalH - padding / 2 - 14)
+    ctx.fillStyle = '#9660E0'
+    ctx.font = '13px sans-serif'
+    ctx.fillText('yoppaa.app', totalW / 2, totalH - padding / 2 + 4)
+    return out
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath()
+    ctx.moveTo(x + r, y)
+    ctx.lineTo(x + w - r, y)
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+    ctx.lineTo(x + w, y + h - r)
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+    ctx.lineTo(x + r, y + h)
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+    ctx.lineTo(x, y + r)
+    ctx.quadraticCurveTo(x, y, x + r, y)
+    ctx.closePath()
+  }
+
+  if (loading) return null
+
+  if (!slug) {
+    return (
+      <div style={{ ...s.card, background: '#FEF3C7', border: '1.5px solid #F59E0B33', marginTop: 12 }}>
+        <p style={{ fontSize: 13, color: '#92400E', fontWeight: 600 }}>
+          ⚠️ Aucun slug configuré — contacte le support pour activer ton QR code.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ ...s.card, marginTop: 12 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div>
+          <h2 style={{ ...s.h2, marginBottom: 4 }}>QR Code</h2>
+          <p style={{ fontSize: 12, color: T.muted }}>Affiches en vitrine, sur vos sacs, partout !</p>
+        </div>
+        {/* Taille */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          {[200, 400, 600].map(sz => (
+            <button key={sz} onClick={() => setSize(sz)}
+              style={{ ...s.btn, padding: '5px 10px', fontSize: 11, background: size === sz ? T.main : T.pale, color: size === sz ? '#fff' : T.main }}>
+              {sz === 200 ? 'S' : sz === 400 ? 'M' : 'L'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Preview QR */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+        <div style={{ background: 'linear-gradient(135deg, #6B35C4, #9660E0)', borderRadius: 20, padding: 20, display: 'inline-block' }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 16, textAlign: 'center' }}>
+            <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, marginBottom: 6, letterSpacing: '-0.5px' }}>Commandez ici</p>
+            <p style={{ fontSize: 11, color: T.main, marginBottom: 12 }}>{nomCommerce}</p>
+            {generating ? (
+              <div style={{ width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 13 }}>Génération...</div>
+            ) : (
+              <canvas ref={canvasRef} style={{ display: 'block', borderRadius: 8, width: 200, height: 200, imageRendering: 'pixelated' }} />
+            )}
+            <p style={{ fontSize: 9, color: T.muted, marginTop: 10, wordBreak: 'break-all', maxWidth: 200 }}>{url}</p>
+            <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, marginTop: 8 }}>Skip the wait 🟣</p>
+          </div>
+        </div>
+
+        {/* URL copiable */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.pale, borderRadius: 10, padding: '8px 14px', width: '100%' }}>
+          <span style={{ fontSize: 12, color: T.main, flex: 1, wordBreak: 'break-all' }}>{url}</span>
+          <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 12, flexShrink: 0 }}
+            onClick={() => { navigator.clipboard.writeText(url); toast('URL copiée ✓') }}>
+            📋 Copier
+          </button>
+        </div>
+
+        {/* Boutons export */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
+          <button style={{ ...s.btn, ...s.btnGhost, flex: 1, minWidth: 110, justifyContent: 'center' }} onClick={downloadPNG} disabled={!qrReady}>
+            ⬇️ PNG
+          </button>
+          <button style={{ ...s.btn, ...s.btnGhost, flex: 1, minWidth: 110, justifyContent: 'center' }} onClick={downloadPDF} disabled={!qrReady}>
+            📄 PDF A5
+          </button>
+          <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, minWidth: 110, justifyContent: 'center' }} onClick={printQR} disabled={!qrReady}>
+            🖨️ Imprimer
+          </button>
+        </div>
+
+        <p style={{ fontSize: 11, color: T.muted, textAlign: 'center' }}>
+          Le QR code pointe vers <strong>{url}</strong><br/>
+          Niveau de correction élevé — fonctionne même partiellement masqué
+        </p>
       </div>
     </div>
   )

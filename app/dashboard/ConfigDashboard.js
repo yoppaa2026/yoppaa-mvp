@@ -147,11 +147,11 @@ function TabMenu({ commercantId, toast }) {
   }
 
   function openNew() {
-    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '' })
+    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '' })
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '' })
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? '') })
     setEditId(a.id); setShowForm(true)
   }
 
@@ -166,6 +166,7 @@ function TabMenu({ commercantId, toast }) {
       stock_jour: parseInt(form.stock_jour) || 0,
       actif: form.actif,
       categorie: form.categorie.trim() || null,
+      temps_prepa: parseFloat(form.temps_prepa) || 0,
     }
     if (editId) { await supabase.from('articles').update(payload).eq('id', editId); toast('Article mis à jour ✓') }
     else { await supabase.from('articles').insert(payload); toast('Article ajouté ✓') }
@@ -334,6 +335,11 @@ function TabMenu({ commercantId, toast }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="1.20"/></div>
               <div><label style={s.label}>Stock du jour</label><Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="30"/></div>
+            </div>
+            <div>
+              <label style={s.label}>⏱ Temps de préparation (min)</label>
+              <Input type="number" min="0" step="0.5" value={form.temps_prepa} onChange={e => setForm(p => ({ ...p, temps_prepa: e.target.value }))} placeholder="0 = non défini · 0.5 = 30 sec · 1 = 1 min · 5 = 5 min"/>
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Utilisé si le créneau est configuré en mode Temps de préparation</p>
             </div>
             <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Article disponible"/>
           </div>
@@ -529,6 +535,7 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s }) {
           {a.description && <p style={{ fontSize: 12, color: T.muted, margin: '0 0 8px' }}>{a.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 800, fontSize: 17, color: T.main }}>{Number(a.prix).toFixed(2)} €</span>
+            {(a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100 }}>⏱ {a.temps_prepa} min</span>}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>Stock :</span>
               <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => onUpdateStock(a.id, (a.stock_jour || 0) - 1)}>−</button>
@@ -556,7 +563,7 @@ function TabCreneaux({ commercantId, toast }) {
   const [creneaux, setCreneaux] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true })
+  const [form, setForm] = useState({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true, mode_capacite: 'commandes', capacite_temps: 30 })
   const [saving, setSaving] = useState(false)
 
   const [horizon, setHorizon] = useState(1)
@@ -596,7 +603,7 @@ function TabCreneaux({ commercantId, toast }) {
     }
 
     setSaving(true)
-    await supabase.from('creneaux').insert({ commercant_id: commercantId, heure_debut: form.heure_debut, heure_fin: form.heure_fin, max_commandes: parseInt(form.max_commandes) || 5, delta_minutes: parseInt(form.delta_minutes) || 0, actif: form.actif })
+    await supabase.from('creneaux').insert({ commercant_id: commercantId, heure_debut: form.heure_debut, heure_fin: form.heure_fin, max_commandes: parseInt(form.max_commandes) || 5, delta_minutes: parseInt(form.delta_minutes) || 0, actif: form.actif, mode_capacite: form.mode_capacite || 'commandes', capacite_temps: parseFloat(form.capacite_temps) || 30 })
     toast('Créneau ajouté ✓'); setSaving(false); setShowForm(false)
     setForm({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true }); fetchCreneaux()
   }
@@ -615,6 +622,19 @@ function TabCreneaux({ commercantId, toast }) {
     if (isNaN(n) || n < 0) return
     await supabase.from('creneaux').update({ delta_minutes: n }).eq('id', id)
     setCreneaux(prev => prev.map(c => c.id === id ? { ...c, delta_minutes: n } : c))
+  }
+
+  
+  async function updateModeCapacite(id, val) {
+    await supabase.from('creneaux').update({ mode_capacite: val }).eq('id', id)
+    setCreneaux(prev => prev.map(c => c.id === id ? { ...c, mode_capacite: val } : c))
+  }
+
+  async function updateCapaciteTemps(id, val) {
+    const n = parseFloat(val)
+    if (isNaN(n) || n < 1) return
+    await supabase.from('creneaux').update({ capacite_temps: n }).eq('id', id)
+    setCreneaux(prev => prev.map(c => c.id === id ? { ...c, capacite_temps: n } : c))
   }
 
   async function deleteCreneau(id) {
@@ -697,7 +717,7 @@ Annuler = Annuler`)
       const totalMin = h * 60 + m + duree
       const next = `${String(Math.floor(totalMin/60)).padStart(2,'0')}:${String(totalMin%60).padStart(2,'0')}`
       if (next > fin) break
-      slots.push({ commercant_id: commercantId, heure_debut: current, heure_fin: next, max_commandes: max, actif: true })
+      slots.push({ commercant_id: commercantId, heure_debut: current, heure_fin: next, max_commandes: max, actif: true, mode_capacite: 'commandes', capacite_temps: 30 })
       current = next
     }
     if (!slots.length) return toast('Aucun créneau généré', 'error')
@@ -773,6 +793,31 @@ Annuler = Annuler`)
               <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Délai entre commande et retrait</p>
             </div>
           </div>
+
+          {/* ─── Mode capacité ─── */}
+          <div style={{ background: T.pale, borderRadius: 12, padding: 14, marginBottom: 12, border: '1px solid ' + T.main + '22' }}>
+            <label style={{ ...s.label, marginBottom: 10 }}>Mode de capacité</label>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+              {[
+                { val: 'commandes', label: '📦 Commandes max', desc: 'Nombre de commandes' },
+                { val: 'temps', label: '⏱ Temps de préparation', desc: 'Capacité en minutes' },
+              ].map(m => (
+                <button key={m.val} onClick={() => setForm(p => ({ ...p, mode_capacite: m.val }))}
+                  style={{ flex: 1, padding: '8px 10px', borderRadius: 10, border: '2px solid ' + (form.mode_capacite === m.val ? T.main : T.pale), background: form.mode_capacite === m.val ? T.main : '#fff', cursor: 'pointer', textAlign: 'left', fontFamily: '"DM Sans", sans-serif' }}>
+                  <p style={{ fontWeight: 800, fontSize: 12, color: form.mode_capacite === m.val ? '#fff' : T.ink, marginBottom: 2 }}>{m.label}</p>
+                  <p style={{ fontSize: 10, color: form.mode_capacite === m.val ? 'rgba(255,255,255,0.8)' : T.muted }}>{m.desc}</p>
+                </button>
+              ))}
+            </div>
+            {form.mode_capacite === 'temps' && (
+              <div style={{ marginTop: 10 }}>
+                <label style={s.label}>Capacité de préparation (min)</label>
+                <Input type="number" min="1" step="0.5" value={form.capacite_temps} onChange={e => setForm(p => ({ ...p, capacite_temps: e.target.value }))} style={{ width: '100%' }} />
+                <p style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>Durée créneau × nb de cuisiniers — Ex: créneau 15 min, 2 cuisiniers = 30 min</p>
+              </div>
+            )}
+          </div>
+
           <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Créneau actif" />
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveCreneau} disabled={saving}>{saving ? 'Enregistrement...' : '✓ Enregistrer'}</button>
@@ -809,6 +854,28 @@ Annuler = Annuler`)
                     <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateDelta(c.id, (c.delta_minutes || 0) + 5)}>+</button>
                     <span style={{ fontSize: 11, color: T.muted }}>min</span>
                     {(c.delta_minutes || 0) > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: T.main, background: T.pale, padding: '2px 6px', borderRadius: 100 }}>⏱ {c.delta_minutes} min</span>}
+                  </div>
+
+                  {/* ─── Mode capacité sur la card ─── */}
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid ' + T.pale }}>
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                      {[{ val: 'commandes', label: '📦' }, { val: 'temps', label: '⏱' }].map(m => (
+                        <button key={m.val} onClick={() => updateModeCapacite(c.id, m.val)}
+                          style={{ ...s.btn, padding: '2px 8px', fontSize: 11, background: (c.mode_capacite || 'commandes') === m.val ? T.main : T.pale, color: (c.mode_capacite || 'commandes') === m.val ? '#fff' : T.main }}>
+                          {m.label} {(c.mode_capacite || 'commandes') === m.val ? ((c.mode_capacite || 'commandes') === 'commandes' ? 'Commandes' : 'Temps') : ''}
+                        </button>
+                      ))}
+                    </div>
+                    {(c.mode_capacite || 'commandes') === 'temps' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 11, color: T.muted, flexShrink: 0 }}>Capacité :</span>
+                        <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateCapaciteTemps(c.id, Math.max(1, (c.capacite_temps || 30) - 5))}>−</button>
+                        <input type="number" value={c.capacite_temps || 30} min={1} step={0.5} onChange={e => updateCapaciteTemps(c.id, e.target.value)}
+                          style={{ ...s.input, width: 52, textAlign: 'center', padding: '3px 6px', fontSize: 13, fontWeight: 700 }} />
+                        <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateCapaciteTemps(c.id, (c.capacite_temps || 30) + 5)}>+</button>
+                        <span style={{ fontSize: 11, color: T.muted }}>min</span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <Toggle value={c.actif} onChange={() => toggleCreneau(c)} />

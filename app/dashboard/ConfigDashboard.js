@@ -586,6 +586,15 @@ function TabCreneaux({ commercantId, toast }) {
   async function saveCreneau() {
     if (!form.heure_debut || !form.heure_fin) return toast('Heures obligatoires', 'error')
     if (form.heure_fin <= form.heure_debut) return toast('Heure de fin invalide', 'error')
+
+    // ─── Détection superposition — bloquant ─────────────────────
+    const nouveauSlot = [{ heure_debut: form.heure_debut, heure_fin: form.heure_fin }]
+    const superpositions = detecterSuperpositions(creneaux, nouveauSlot)
+    if (superpositions.length > 0) {
+      toast(`⚠️ Ce créneau chevauche un créneau existant — modifie les heures ou supprime le créneau conflictuel.`, 'error')
+      return
+    }
+
     setSaving(true)
     await supabase.from('creneaux').insert({ commercant_id: commercantId, heure_debut: form.heure_debut, heure_fin: form.heure_fin, max_commandes: parseInt(form.max_commandes) || 5, actif: form.actif })
     toast('Créneau ajouté ✓'); setSaving(false); setShowForm(false)
@@ -608,9 +617,12 @@ function TabCreneaux({ commercantId, toast }) {
   }
 
   async function toutSupprimer() {
+    if (!creneaux.length) return
     if (!confirm(`Supprimer les ${creneaux.length} créneaux ? Cette action est irréversible.`)) return
-    await supabase.from('creneaux').delete().eq('commercant_id', commercantId)
-    toast('Tous les créneaux supprimés'); fetchCreneaux()
+    // ─── Supprimer par IDs pour contourner les restrictions RLS ──
+    const ids = creneaux.map(c => c.id)
+    await supabase.from('creneaux').delete().in('id', ids)
+    toast('Tous les créneaux supprimés ✓'); fetchCreneaux()
   }
 
   function detecterSuperpositions(existants, nouveaux) {
@@ -648,15 +660,13 @@ function TabCreneaux({ commercantId, toast }) {
 
     const superpositions = detecterSuperpositions(creneaux, slots)
     if (superpositions.length > 0) {
-      const choix = confirm(`⚠️ ${superpositions.length} créneau(x) se superposent : ${superpositions.join(', ')}\n\nOK = Remplacer tous les créneaux existants\nAnnuler = Ajouter quand même`)
-      if (choix) {
-        await supabase.from('creneaux').delete().eq('commercant_id', commercantId)
-        await supabase.from('creneaux').insert(slots)
-        toast(`${slots.length} créneaux générés (remplacés) ✓`)
-      } else {
-        await supabase.from('creneaux').insert(slots)
-        toast(`${slots.length} créneaux ajoutés ✓`)
-      }
+      const ok = confirm(`⚠️ ${superpositions.length} créneau(x) se superposent avec des créneaux existants :\n${superpositions.join(', ')}\n\nOK = Supprimer tous les créneaux existants et remplacer\nAnnuler = Annuler la génération`)
+      if (!ok) return
+      // Remplacer — supprimer par IDs d'abord
+      const ids = creneaux.map(c => c.id)
+      if (ids.length > 0) await supabase.from('creneaux').delete().in('id', ids)
+      await supabase.from('creneaux').insert(slots)
+      toast(`${slots.length} créneaux générés (anciens remplacés) ✓`)
     } else {
       await supabase.from('creneaux').insert(slots)
       toast(`${slots.length} créneaux générés ✓`)

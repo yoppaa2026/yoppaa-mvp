@@ -126,7 +126,7 @@ function TabMenu({ commercantId, toast }) {
   const [showForm, setShowForm] = useState(false)
   const [showCatForm, setShowCatForm] = useState(false)
   const [editId, setEditId] = useState(null)
-  const [form, setForm] = useState({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: '', prix_promo: '', promo_debut: '', promo_fin: '' })
+  const [form, setForm] = useState({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: '' })
   const [nouvelleCat, setNouvelleCat] = useState('')
   const [saving, setSaving] = useState(false)
   const [catActive, setCatActive] = useState('Tous')
@@ -140,28 +140,18 @@ function TabMenu({ commercantId, toast }) {
   async function fetchArticles() {
     setLoading(true)
     const { data } = await supabase.from('articles').select('*').eq('commercant_id', commercantId).order('categorie').order('nom')
-    const today = new Date().toISOString().slice(0,10)
-    const journaliers = (data || []).filter(a => a.stock_mode === 'journalier' && a.stock_base > 0)
-    for (const a of journaliers) {
-      const { data: stockJour } = await supabase.from('stock_jours').select('*').eq('article_id', a.id).eq('date', today).single()
-      if (!stockJour) {
-        await supabase.from('stock_jours').upsert({ article_id: a.id, date: today, stock_disponible: a.stock_base })
-        await supabase.from('articles').update({ stock_jour: a.stock_base }).eq('id', a.id)
-      }
-    }
-    const { data: fresh } = await supabase.from('articles').select('*').eq('commercant_id', commercantId).order('categorie').order('nom')
-    setArticles(fresh || [])
-    const cats = [...new Set((fresh || []).map(a => a.categorie).filter(Boolean))]
+    setArticles(data || [])
+    const cats = [...new Set((data || []).map(a => a.categorie).filter(Boolean))]
     setCategories(cats)
     setLoading(false)
   }
 
   function openNew() {
-    setForm({ nom: '', description: '', prix: '', stock_mode: 'illimite', stock_base: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', prix_promo: '', promo_debut: '', promo_fin: '' })
+    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '' })
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_mode: a.stock_mode || 'illimite', stock_base: String(a.stock_base ?? ''), actif: a.actif, categorie: a.categorie || '', prix_promo: a.prix_promo ? String(a.prix_promo) : '', promo_debut: a.promo_debut || '', promo_fin: a.promo_fin || '' })
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '' })
     setEditId(a.id); setShowForm(true)
   }
 
@@ -173,12 +163,7 @@ function TabMenu({ commercantId, toast }) {
       nom: form.nom.trim(),
       description: form.description.trim() || null,
       prix: parseFloat(form.prix),
-      prix_promo: form.prix_promo ? parseFloat(form.prix_promo) : null,
-      promo_debut: form.promo_debut || null,
-      promo_fin: form.promo_fin || null,
-      stock_mode: form.stock_mode || 'illimite',
-      stock_base: form.stock_mode !== 'illimite' ? (parseInt(form.stock_base) || 0) : null,
-      stock_jour: form.stock_mode !== 'illimite' ? (parseInt(form.stock_base) || 0) : 999,
+      stock_jour: parseInt(form.stock_jour) || 0,
       actif: form.actif,
       categorie: form.categorie.trim() || null,
     }
@@ -348,54 +333,6 @@ function TabMenu({ commercantId, toast }) {
             <div><label style={s.label}>Description</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Ex: Feuilleté, pur beurre AOP..."/></div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="1.20"/></div>
-            {/* Mode stock */}
-            <div>
-              <label style={s.label}>Gestion du stock</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 4 }}>
-                {[
-                  { val: 'illimite',   label: 'Illimité',   desc: 'Toujours dispo' },
-                  { val: 'journalier', label: 'Journalier', desc: 'Reset chaque jour' },
-                  { val: 'manuel',     label: 'Manuel',     desc: 'Géré à la main' },
-                ].map(m => (
-                  <button key={m.val} type="button" onClick={() => setForm(p => ({ ...p, stock_mode: m.val }))}
-                    style={{ padding: '8px 6px', borderRadius: 10, border: `2px solid ${(form.stock_mode||'illimite') === m.val ? T.main : T.pale}`, background: (form.stock_mode||'illimite') === m.val ? T.main : '#fff', cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s', fontFamily: '"DM Sans", sans-serif' }}>
-                    <p style={{ fontWeight: 800, fontSize: 12, color: (form.stock_mode||'illimite') === m.val ? '#fff' : T.ink, marginBottom: 2 }}>{m.label}</p>
-                    <p style={{ fontSize: 10, color: (form.stock_mode||'illimite') === m.val ? 'rgba(255,255,255,0.8)' : T.muted }}>{m.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-            {(form.stock_mode || 'illimite') !== 'illimite' && (
-              <div>
-                <label style={s.label}>{form.stock_mode === 'journalier' ? 'Stock de base (remis chaque jour)' : 'Stock disponible'}</label>
-                <Input type="number" min="0" value={form.stock_base} onChange={e => setForm(p => ({ ...p, stock_base: e.target.value }))}
-                  placeholder={form.stock_mode === 'journalier' ? 'Ex: 30' : 'Ex: 50'}/>
-                {form.stock_mode === 'journalier' && (
-                  <p style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>Chaque jour à minuit, le stock repart de cette valeur.</p>
-                )}
-              </div>
-            )}
-            {/* Promo */}
-            <div style={{ background: '#FFFBEB', borderRadius: 12, padding: 12, border: '1.5px solid #FDE68A' }}>
-              <label style={{ ...s.label, color: '#B45309' }}>🏷️ Prix promo (optionnel)</label>
-              <p style={{ fontSize: 11, color: '#92400E', marginBottom: 8 }}>
-                Laisse vide si pas de promo active.
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                <div>
-                  <label style={{ ...s.label, fontSize: 10 }}>Prix promo (€)</label>
-                  <Input type="number" step="0.10" min="0" value={form.prix_promo} onChange={e => setForm(p => ({ ...p, prix_promo: e.target.value }))} placeholder="Ex: 0.90"/>
-                </div>
-                <div>
-                  <label style={{ ...s.label, fontSize: 10 }}>Date début</label>
-                  <Input type="date" value={form.promo_debut} onChange={e => setForm(p => ({ ...p, promo_debut: e.target.value }))}/>
-                </div>
-                <div>
-                  <label style={{ ...s.label, fontSize: 10 }}>Date fin</label>
-                  <Input type="date" value={form.promo_fin} onChange={e => setForm(p => ({ ...p, promo_fin: e.target.value }))}/>
-                </div>
-              </div>
-            </div>
               <div><label style={s.label}>Stock du jour</label><Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="30"/></div>
             </div>
             <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Article disponible"/>
@@ -591,20 +528,7 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s }) {
           </div>
           {a.description && <p style={{ fontSize: 12, color: T.muted, margin: '0 0 8px' }}>{a.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-            {/* Prix promo ou prix normal */}
-            {(() => {
-              const today = new Date().toISOString().slice(0,10)
-              const promoActive = a.prix_promo && (!a.promo_debut || a.promo_debut <= today) && (!a.promo_fin || a.promo_fin >= today)
-              return promoActive ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontWeight: 800, fontSize: 17, color: '#DC2626' }}>{Number(a.prix_promo).toFixed(2)} €</span>
-                  <span style={{ fontWeight: 600, fontSize: 13, color: '#9CA3AF', textDecoration: 'line-through' }}>{Number(a.prix).toFixed(2)} €</span>
-                  <span style={{ background: '#DC2626', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>PROMO</span>
-                </div>
-              ) : (
-                <span style={{ fontWeight: 800, fontSize: 17, color: T.main }}>{Number(a.prix).toFixed(2)} €</span>
-              )
-            })()}
+            <span style={{ fontWeight: 800, fontSize: 17, color: T.main }}>{Number(a.prix).toFixed(2)} €</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>Stock :</span>
               <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => onUpdateStock(a.id, (a.stock_jour || 0) - 1)}>−</button>
@@ -683,6 +607,27 @@ function TabCreneaux({ commercantId, toast }) {
     toast('Créneau supprimé'); fetchCreneaux()
   }
 
+  async function toutSupprimer() {
+    if (!confirm(`Supprimer les ${creneaux.length} créneaux ? Cette action est irréversible.`)) return
+    await supabase.from('creneaux').delete().eq('commercant_id', commercantId)
+    toast('Tous les créneaux supprimés'); fetchCreneaux()
+  }
+
+  function detecterSuperpositions(existants, nouveaux) {
+    const superpositions = []
+    for (const n of nouveaux) {
+      for (const e of existants) {
+        const eDebut = e.heure_debut.slice(0,5)
+        const eFin = e.heure_fin.slice(0,5)
+        if (n.heure_debut < eFin && n.heure_fin > eDebut) {
+          superpositions.push(`${n.heure_debut}–${n.heure_fin}`)
+          break
+        }
+      }
+    }
+    return superpositions
+  }
+
   async function genererCreneaux() {
     const debut = prompt('Heure d\'ouverture (ex: 07:00) :')
     const fin = prompt('Heure de fermeture (ex: 14:00) :')
@@ -700,8 +645,23 @@ function TabCreneaux({ commercantId, toast }) {
       current = next
     }
     if (!slots.length) return toast('Aucun créneau généré', 'error')
-    await supabase.from('creneaux').insert(slots)
-    toast(`${slots.length} créneaux générés ✓`); fetchCreneaux()
+
+    const superpositions = detecterSuperpositions(creneaux, slots)
+    if (superpositions.length > 0) {
+      const choix = confirm(`⚠️ ${superpositions.length} créneau(x) se superposent : ${superpositions.join(', ')}\n\nOK = Remplacer tous les créneaux existants\nAnnuler = Ajouter quand même`)
+      if (choix) {
+        await supabase.from('creneaux').delete().eq('commercant_id', commercantId)
+        await supabase.from('creneaux').insert(slots)
+        toast(`${slots.length} créneaux générés (remplacés) ✓`)
+      } else {
+        await supabase.from('creneaux').insert(slots)
+        toast(`${slots.length} créneaux ajoutés ✓`)
+      }
+    } else {
+      await supabase.from('creneaux').insert(slots)
+      toast(`${slots.length} créneaux générés ✓`)
+    }
+    fetchCreneaux()
   }
 
   if (loading) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
@@ -735,6 +695,7 @@ function TabCreneaux({ commercantId, toast }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <h2 style={s.h2}>Créneaux <span style={{ color: T.mid, fontWeight: 600, fontSize: 14 }}>({creneaux.length})</span></h2>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button style={{ ...s.btn, ...s.btnDanger }} onClick={toutSupprimer} disabled={creneaux.length === 0}>🗑 Tout supprimer</button>
           <button style={{ ...s.btn, ...s.btnGhost }} onClick={genererCreneaux}>⚡ Générer auto</button>
           <button style={{ ...s.btn, ...s.btnPrimary }} onClick={() => setShowForm(true)}>+ Ajouter</button>
         </div>

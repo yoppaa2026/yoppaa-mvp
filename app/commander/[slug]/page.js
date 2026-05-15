@@ -827,7 +827,13 @@ export default function CommanderSlug() {
                   (joursDispos[jourSelectionne]?.creneaux || creneaux)
                     .filter(c => {
                       const estAujourdhui = jourSelectionne === 0 && joursDispos[0]?.label === "Aujourd'hui"
-                      if (estAujourdhui && heureEnMinutes(c.heure_debut) <= maintenant()) return false
+                      if (estAujourdhui) {
+                        // Créneau passé → masqué
+                        if (heureEnMinutes(c.heure_debut) <= maintenant()) return false
+                        // Delta minimum — créneau trop proche → masqué
+                        const deltaMin = c.delta_minutes || 0
+                        if (deltaMin > 0 && heureEnMinutes(c.heure_debut) - maintenant() < deltaMin) return false
+                      }
                       return true
                     })
                     .map(c => [`${c.heure_debut}-${c.heure_fin}`, c])
@@ -857,7 +863,13 @@ export default function CommanderSlug() {
                   (joursDispos[jourSelectionne]?.creneaux || creneaux)
                     .filter(c => {
                       const estAujourdhui = jourSelectionne === 0 && joursDispos[0]?.label === "Aujourd'hui"
-                      if (estAujourdhui && heureEnMinutes(c.heure_debut) <= maintenant()) return false
+                      if (estAujourdhui) {
+                        // Créneau passé → masqué
+                        if (heureEnMinutes(c.heure_debut) <= maintenant()) return false
+                        // Delta minimum — créneau trop proche → masqué
+                        const deltaMin = c.delta_minutes || 0
+                        if (deltaMin > 0 && heureEnMinutes(c.heure_debut) - maintenant() < deltaMin) return false
+                      }
                       return true
                     })
                     .map(c => [`${c.heure_debut}-${c.heure_fin}`, c])

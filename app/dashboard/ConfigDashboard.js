@@ -556,7 +556,7 @@ function TabCreneaux({ commercantId, toast }) {
   const [creneaux, setCreneaux] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ heure_debut: '', heure_fin: '', max_commandes: 5, actif: true })
+  const [form, setForm] = useState({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true })
   const [saving, setSaving] = useState(false)
 
   const [horizon, setHorizon] = useState(1)
@@ -596,9 +596,9 @@ function TabCreneaux({ commercantId, toast }) {
     }
 
     setSaving(true)
-    await supabase.from('creneaux').insert({ commercant_id: commercantId, heure_debut: form.heure_debut, heure_fin: form.heure_fin, max_commandes: parseInt(form.max_commandes) || 5, actif: form.actif })
+    await supabase.from('creneaux').insert({ commercant_id: commercantId, heure_debut: form.heure_debut, heure_fin: form.heure_fin, max_commandes: parseInt(form.max_commandes) || 5, delta_minutes: parseInt(form.delta_minutes) || 0, actif: form.actif })
     toast('Créneau ajouté ✓'); setSaving(false); setShowForm(false)
-    setForm({ heure_debut: '', heure_fin: '', max_commandes: 5, actif: true }); fetchCreneaux()
+    setForm({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true }); fetchCreneaux()
   }
 
   async function toggleCreneau(c) { await supabase.from('creneaux').update({ actif: !c.actif }).eq('id', c.id); fetchCreneaux() }
@@ -608,6 +608,13 @@ function TabCreneaux({ commercantId, toast }) {
     if (isNaN(n) || n < 1) return
     await supabase.from('creneaux').update({ max_commandes: n }).eq('id', id)
     setCreneaux(prev => prev.map(c => c.id === id ? { ...c, max_commandes: n } : c))
+  }
+
+  async function updateDelta(id, val) {
+    const n = parseInt(val)
+    if (isNaN(n) || n < 0) return
+    await supabase.from('creneaux').update({ delta_minutes: n }).eq('id', id)
+    setCreneaux(prev => prev.map(c => c.id === id ? { ...c, delta_minutes: n } : c))
   }
 
   async function deleteCreneau(id) {
@@ -755,9 +762,16 @@ Annuler = Annuler`)
             <div><label style={s.label}>Début *</label><Input type="time" value={form.heure_debut} onChange={e => setForm(p => ({ ...p, heure_debut: e.target.value }))} /></div>
             <div><label style={s.label}>Fin *</label><Input type="time" value={form.heure_fin} onChange={e => setForm(p => ({ ...p, heure_fin: e.target.value }))} /></div>
           </div>
-          <div style={{ marginBottom: 12 }}>
-            <label style={s.label}>Commandes max</label>
-            <Input type="number" min="1" max="50" value={form.max_commandes} onChange={e => setForm(p => ({ ...p, max_commandes: e.target.value }))} style={{ width: 100 }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+            <div>
+              <label style={s.label}>Commandes max</label>
+              <Input type="number" min="1" max="50" value={form.max_commandes} onChange={e => setForm(p => ({ ...p, max_commandes: e.target.value }))} style={{ width: '100%' }} />
+            </div>
+            <div>
+              <label style={s.label}>Délai min (minutes)</label>
+              <Input type="number" min="0" max="120" value={form.delta_minutes} onChange={e => setForm(p => ({ ...p, delta_minutes: e.target.value }))} style={{ width: '100%' }} />
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Délai entre commande et retrait</p>
+            </div>
           </div>
           <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Créneau actif" />
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
@@ -786,6 +800,15 @@ Annuler = Annuler`)
                     <input type="number" value={c.max_commandes} min={1} onChange={e => updateMax(c.id, e.target.value)}
                       style={{ ...s.input, width: 48, textAlign: 'center', padding: '3px 6px', fontSize: 13, fontWeight: 700 }} />
                     <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateMax(c.id, c.max_commandes + 1)}>+</button>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                    <span style={{ fontSize: 12, color: T.muted }}>Délai :</span>
+                    <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateDelta(c.id, Math.max(0, (c.delta_minutes || 0) - 5))}>−</button>
+                    <input type="number" value={c.delta_minutes || 0} min={0} onChange={e => updateDelta(c.id, e.target.value)}
+                      style={{ ...s.input, width: 48, textAlign: 'center', padding: '3px 6px', fontSize: 13, fontWeight: 700 }} />
+                    <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateDelta(c.id, (c.delta_minutes || 0) + 5)}>+</button>
+                    <span style={{ fontSize: 11, color: T.muted }}>min</span>
+                    {(c.delta_minutes || 0) > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: T.main, background: T.pale, padding: '2px 6px', borderRadius: 100 }}>⏱ {c.delta_minutes} min</span>}
                   </div>
                 </div>
                 <Toggle value={c.actif} onChange={() => toggleCreneau(c)} />

@@ -660,7 +660,7 @@ function TabCreneaux({ commercantId, toast }) {
   // ─── Fix suppression individuelle ─────────────────────────────────────────
   async function deleteCreneau(id) {
     if (!confirm('Supprimer ce créneau ?')) return
-    const { data: cmdLiees } = await supabase.from('commandes').select('id').eq('creneau_id', id).neq('statut', 'recupere')
+    const { data: cmdLiees } = await supabase.from('commandes').select('id').eq('creneau_id', id).not('statut', 'in', '(recupere,non_retire)')
     if (cmdLiees?.length > 0) { toast(`Impossible — ${cmdLiees.length} commande(s) active(s) sur ce créneau`, 'error'); return }
     const { error } = await supabase.from('creneaux').delete().eq('id', id)
     if (error) { toast('Erreur suppression : ' + error.message, 'error'); return }
@@ -677,7 +677,7 @@ function TabCreneaux({ commercantId, toast }) {
     const avecCmd = []
     const sansCmd = []
     for (const c of crenJour) {
-      const { data } = await supabase.from('commandes').select('id').eq('creneau_id', c.id).neq('statut', 'recupere')
+      const { data } = await supabase.from('commandes').select('id').eq('creneau_id', c.id).not('statut', 'in', '(recupere,non_retire)')
       if (data?.length > 0) avecCmd.push(c.id)
       else sansCmd.push(c.id)
     }

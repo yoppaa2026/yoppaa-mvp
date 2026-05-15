@@ -864,13 +864,13 @@ function TabProfil({ commercantId, toast }) {
 // ─── Composant QR Code imprimable ─────────────────────────────────────────────
 function QRCodeSection({ commercantId, toast }) {
   const canvasRef = useRef(null)
-  const printRef = useRef(null)
   const [slug, setSlug] = useState(null)
   const [nomCommerce, setNomCommerce] = useState('')
   const [loading, setLoading] = useState(true)
   const [qrReady, setQrReady] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [size, setSize] = useState(400)
+  const [printFormat, setPrintFormat] = useState('A5')
 
   const url = slug ? `https://yoppaa.app/commander/${slug}` : null
 
@@ -878,10 +878,7 @@ function QRCodeSection({ commercantId, toast }) {
     async function fetchSlug() {
       setLoading(true)
       const { data } = await supabase.from('commercants').select('slug, nom').eq('id', commercantId).single()
-      if (data) {
-        setSlug(data.slug)
-        setNomCommerce(data.nom || '')
-      }
+      if (data) { setSlug(data.slug); setNomCommerce(data.nom || '') }
       setLoading(false)
     }
     fetchSlug()
@@ -893,26 +890,89 @@ function QRCodeSection({ commercantId, toast }) {
     try {
       const QRCode = (await import('qrcode')).default
       await QRCode.toCanvas(canvasRef.current, url, {
-        width: size,
-        margin: 2,
+        width: size, margin: 2,
         color: { dark: '#1A0840', light: '#FFFFFF' },
         errorCorrectionLevel: 'H',
       })
       setQrReady(true)
-    } catch (e) {
-      toast('Erreur génération QR', 'error')
-    }
+    } catch (e) { toast('Erreur génération QR', 'error') }
     setGenerating(false)
   }, [url, size])
 
-  useEffect(() => {
-    if (slug) generateQR()
-  }, [slug, size])
+  useEffect(() => { if (slug) generateQR() }, [slug, size])
 
-  // ─── Télécharger PNG ───────────────────────────────────────────────────────
+  // ─── Génère le HTML d'impression selon le format ──────────────────────────
+  function buildPrintHTML(format) {
+    const qrCanvas = canvasRef.current
+    const imgUrl = qrCanvas.toDataURL('image/png')
+    const isA4 = format === 'A4'
+    const pageW = isA4 ? '210mm' : '148mm'
+    const pageH = isA4 ? '297mm' : '210mm'
+    const qrW   = isA4 ? '180mm' : '118mm'
+    const titleSize  = isA4 ? '32px' : '22px'
+    const subSize    = isA4 ? '18px' : '13px'
+    const urlSize    = isA4 ? '12px' : '9px'
+    const tagSize    = isA4 ? '22px' : '15px'
+    return `<!DOCTYPE html><html><head><title>QR Yoppaa — ${nomCommerce}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  @page { size: ${format} portrait; margin: 0; }
+  html, body {
+    width: ${pageW}; height: ${pageH};
+    background: #6B35C4 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-family: sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .card {
+    width: calc(${pageW} - 16mm);
+    height: calc(${pageH} - 16mm);
+    background: #fff;
+    border-radius: 12px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: space-evenly;
+    padding: 6mm 8mm;
+    text-align: center;
+  }
+  .top { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  h1 { font-size:${titleSize}; font-weight:800; color:#1A0840; letter-spacing:-1px; }
+  .sub { font-size:${subSize}; color:#6B35C4; font-weight:600; }
+  img { width:${qrW}; height:auto; display:block; border-radius:8px; }
+  .urltext { font-size:${urlSize}; color:#9660E0; word-break:break-all; }
+  .tag { font-size:${tagSize}; font-weight:800; color:#1A0840; letter-spacing:-0.5px; }
+  .brand { font-size:${urlSize}; color:#9660E0; font-weight:600; }
+</style></head><body>
+<div class="card">
+  <div class="top">
+    <h1>Commandez ici</h1>
+    <div class="sub">${nomCommerce}</div>
+  </div>
+  <img src="${imgUrl}" />
+  <div class="urltext">${url}</div>
+  <div class="tag">Skip the wait 🟣</div>
+  <div class="brand">yoppaa.app</div>
+</div>
+<script>window.onload = () => { setTimeout(() => window.print(), 300) }<\/script>
+</body></html>`
+  }
+
+  // ─── Imprimer ─────────────────────────────────────────────────────────────
+  function printQR(format) {
+    if (!canvasRef.current || !qrReady) return
+    const html = buildPrintHTML(format)
+    const win = window.open('', '_blank', 'width=700,height=900')
+    win.document.open()
+    win.document.write(html)
+    win.document.close()
+    toast(`Impression ${format} ouverte ✓`)
+  }
+
+  // ─── Télécharger PNG ──────────────────────────────────────────────────────
   function downloadPNG() {
     if (!canvasRef.current || !qrReady) return
-    const canvas = buildPrintCanvas()
+    const canvas = buildExportCanvas()
     const link = document.createElement('a')
     link.download = `yoppaa-qr-${slug}.png`
     link.href = canvas.toDataURL('image/png')
@@ -920,151 +980,86 @@ function QRCodeSection({ commercantId, toast }) {
     toast('QR téléchargé en PNG ✓')
   }
 
-  // ─── Télécharger PDF ───────────────────────────────────────────────────────
-  async function downloadPDF() {
+  // ─── Télécharger PDF ──────────────────────────────────────────────────────
+  async function downloadPDF(format) {
     if (!canvasRef.current || !qrReady) return
     try {
       const { jsPDF } = await import('jspdf')
-      const canvas = buildPrintCanvas()
-      const imgData = canvas.toDataURL('image/png')
-      // Format A5 paysage pour affichage vitrine
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' })
+      const isA4 = format === 'A4'
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: format.toLowerCase() })
       const pdfW = pdf.internal.pageSize.getWidth()
       const pdfH = pdf.internal.pageSize.getHeight()
-      // Fond violet Yoppaa
+      const m = 8 // margin
+      // Fond violet
       pdf.setFillColor(107, 53, 196)
       pdf.rect(0, 0, pdfW, pdfH, 'F')
-      // Fond blanc centré
-      const margin = 10
-      const boxW = pdfW - margin * 2
-      const boxH = pdfH - margin * 2
+      // Carte blanche
       pdf.setFillColor(255, 255, 255)
-      pdf.roundedRect(margin, margin, boxW, boxH, 8, 8, 'F')
-      // Titre "Commandez ici"
-      pdf.setTextColor(26, 8, 64)
-      pdf.setFontSize(18)
+      pdf.roundedRect(m, m, pdfW - m*2, pdfH - m*2, 8, 8, 'F')
+      // Titre
       pdf.setFont('helvetica', 'bold')
-      pdf.text('Commandez ici', pdfW / 2, margin + 14, { align: 'center' })
-      // Sous-titre commerce
-      pdf.setFontSize(11)
+      pdf.setFontSize(isA4 ? 26 : 18)
+      pdf.setTextColor(26, 8, 64)
+      pdf.text('Commandez ici', pdfW/2, m + (isA4 ? 18 : 14), { align: 'center' })
+      // Sous-titre
       pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(isA4 ? 13 : 10)
       pdf.setTextColor(107, 53, 196)
-      pdf.text(nomCommerce, pdfW / 2, margin + 22, { align: 'center' })
-      // QR code — centré
-      const qrSize = Math.min(boxW - 20, 100)
+      pdf.text(nomCommerce, pdfW/2, m + (isA4 ? 26 : 21), { align: 'center' })
+      // QR
+      const qrSize = isA4 ? 150 : 100
       const qrX = (pdfW - qrSize) / 2
-      const qrY = margin + 30
-      pdf.addImage(imgData, 'PNG', qrX, qrY, qrSize, qrSize)
-      // URL sous le QR
-      pdf.setFontSize(8)
-      pdf.setTextColor(107, 53, 196)
-      pdf.setFont('helvetica', 'normal')
-      pdf.text(url, pdfW / 2, qrY + qrSize + 6, { align: 'center' })
-      // Tagline "Skip the wait 🟣"
-      pdf.setFontSize(13)
-      pdf.setFont('helvetica', 'bold')
-      pdf.setTextColor(26, 8, 64)
-      pdf.text('Skip the wait', pdfW / 2, pdfH - margin - 12, { align: 'center' })
-      pdf.setFontSize(9)
-      pdf.setFont('helvetica', 'normal')
+      const qrY = m + (isA4 ? 34 : 28)
+      const canvas = buildExportCanvas()
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', qrX, qrY, qrSize, qrSize)
+      // URL
+      pdf.setFontSize(isA4 ? 9 : 7)
       pdf.setTextColor(150, 96, 224)
-      pdf.text('yoppaa.app', pdfW / 2, pdfH - margin - 6, { align: 'center' })
-      pdf.save(`yoppaa-qr-${slug}.pdf`)
-      toast('QR téléchargé en PDF ✓')
-    } catch (e) {
-      console.error(e)
-      toast('Erreur génération PDF', 'error')
-    }
+      pdf.text(url, pdfW/2, qrY + qrSize + (isA4 ? 8 : 6), { align: 'center' })
+      // Tagline
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(isA4 ? 18 : 13)
+      pdf.setTextColor(26, 8, 64)
+      pdf.text('Skip the wait', pdfW/2, pdfH - m - (isA4 ? 12 : 10), { align: 'center' })
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(isA4 ? 10 : 8)
+      pdf.setTextColor(150, 96, 224)
+      pdf.text('yoppaa.app', pdfW/2, pdfH - m - (isA4 ? 5 : 4), { align: 'center' })
+      pdf.save(`yoppaa-qr-${slug}-${format}.pdf`)
+      toast(`PDF ${format} téléchargé ✓`)
+    } catch (e) { console.error(e); toast('Erreur génération PDF', 'error') }
   }
 
-  // ─── Imprimer depuis le navigateur ────────────────────────────────────────
-  function printQR() {
-    if (!canvasRef.current || !qrReady) return
-    const canvas = buildPrintCanvas()
-    const imgUrl = canvas.toDataURL('image/png')
-    const win = window.open('', '_blank', 'width=600,height=800')
-    win.document.write(`
-      <html><head><title>QR Yoppaa — ${nomCommerce}</title>
-      <style>
-        body { margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #6B35C4; font-family: sans-serif; }
-        .card { background: #fff; border-radius: 16px; padding: 32px; text-align: center; max-width: 340px; }
-        h1 { color: #1A0840; font-size: 22px; margin: 0 0 4px; }
-        p { color: #6B35C4; font-size: 13px; margin: 0 0 20px; }
-        img { width: 100%; max-width: 280px; display: block; margin: 0 auto 16px; }
-        .url { font-size: 10px; color: #9660E0; word-break: break-all; margin-bottom: 20px; }
-        .tag { font-size: 16px; font-weight: 700; color: #1A0840; }
-        @media print { body { background: #6B35C4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-      </style></head>
-      <body>
-        <div class="card">
-          <h1>Commandez ici</h1>
-          <p>${nomCommerce}</p>
-          <img src="${imgUrl}" />
-          <div class="url">${url}</div>
-          <div class="tag">Skip the wait 🟣</div>
-        </div>
-        <script>window.onload = () => window.print()<\/script>
-      </body></html>
-    `)
-    win.document.close()
-  }
-
-  // ─── Canvas de rendu pour export ──────────────────────────────────────────
-  function buildPrintCanvas() {
+  // ─── Canvas export PNG ────────────────────────────────────────────────────
+  function buildExportCanvas() {
     const qrCanvas = canvasRef.current
-    const padding = 40
-    const titleH = 60
-    const footerH = 50
-    const totalW = qrCanvas.width + padding * 2
-    const totalH = qrCanvas.height + padding * 2 + titleH + footerH
+    const pad = 40; const titleH = 70; const footerH = 60
+    const W = qrCanvas.width + pad*2
+    const H = qrCanvas.height + pad*2 + titleH + footerH
     const out = document.createElement('canvas')
-    out.width = totalW
-    out.height = totalH
+    out.width = W; out.height = H
     const ctx = out.getContext('2d')
-    // Fond violet
-    ctx.fillStyle = '#6B35C4'
-    ctx.fillRect(0, 0, totalW, totalH)
-    // Fond blanc arrondi
-    ctx.fillStyle = '#ffffff'
-    roundRect(ctx, padding / 2, padding / 2, totalW - padding, totalH - padding, 20)
-    ctx.fill()
-    // Titre
-    ctx.fillStyle = '#1A0840'
-    ctx.font = 'bold 28px sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText('Commandez ici', totalW / 2, padding / 2 + 40)
-    // Sous-titre
-    ctx.fillStyle = '#6B35C4'
-    ctx.font = '16px sans-serif'
-    ctx.fillText(nomCommerce, totalW / 2, padding / 2 + 62)
-    // QR
-    ctx.drawImage(qrCanvas, padding, padding / 2 + titleH, qrCanvas.width, qrCanvas.height)
-    // URL
-    ctx.fillStyle = '#9660E0'
-    ctx.font = '13px sans-serif'
-    ctx.fillText(url, totalW / 2, padding / 2 + titleH + qrCanvas.height + 24)
-    // Tagline
-    ctx.fillStyle = '#1A0840'
-    ctx.font = 'bold 18px sans-serif'
-    ctx.fillText('Skip the wait', totalW / 2, totalH - padding / 2 - 14)
-    ctx.fillStyle = '#9660E0'
-    ctx.font = '13px sans-serif'
-    ctx.fillText('yoppaa.app', totalW / 2, totalH - padding / 2 + 4)
-    return out
-  }
-
-  function roundRect(ctx, x, y, w, h, r) {
+    ctx.fillStyle = '#6B35C4'; ctx.fillRect(0,0,W,H)
+    ctx.fillStyle = '#fff'
+    const r = 20, x = pad/2, y = pad/2, w = W-pad, h = H-pad
     ctx.beginPath()
-    ctx.moveTo(x + r, y)
-    ctx.lineTo(x + w - r, y)
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r)
-    ctx.lineTo(x + w, y + h - r)
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
-    ctx.lineTo(x + r, y + h)
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r)
-    ctx.lineTo(x, y + r)
-    ctx.quadraticCurveTo(x, y, x + r, y)
-    ctx.closePath()
+    ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r)
+    ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h)
+    ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r)
+    ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath(); ctx.fill()
+    ctx.textAlign = 'center'
+    ctx.fillStyle = '#1A0840'; ctx.font = 'bold 30px sans-serif'
+    ctx.fillText('Commandez ici', W/2, pad/2 + 44)
+    ctx.fillStyle = '#6B35C4'; ctx.font = '18px sans-serif'
+    ctx.fillText(nomCommerce, W/2, pad/2 + 66)
+    ctx.drawImage(qrCanvas, pad, pad/2 + titleH, qrCanvas.width, qrCanvas.height)
+    ctx.fillStyle = '#9660E0'; ctx.font = '14px sans-serif'
+    ctx.fillText(url, W/2, pad/2 + titleH + qrCanvas.height + 26)
+    ctx.fillStyle = '#1A0840'; ctx.font = 'bold 20px sans-serif'
+    ctx.fillText('Skip the wait', W/2, H - pad/2 - 16)
+    ctx.fillStyle = '#9660E0'; ctx.font = '14px sans-serif'
+    ctx.fillText('yoppaa.app', W/2, H - pad/2 + 4)
+    return out
   }
 
   if (loading) return null
@@ -1085,9 +1080,8 @@ function QRCodeSection({ commercantId, toast }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
           <h2 style={{ ...s.h2, marginBottom: 4 }}>QR Code</h2>
-          <p style={{ fontSize: 12, color: T.muted }}>Affiches en vitrine, sur vos sacs, partout !</p>
+          <p style={{ fontSize: 12, color: T.muted }}>Vitrine, sacs, flyers — partout !</p>
         </div>
-        {/* Taille */}
         <div style={{ display: 'flex', gap: 4 }}>
           {[200, 400, 600].map(sz => (
             <button key={sz} onClick={() => setSize(sz)}
@@ -1098,17 +1092,16 @@ function QRCodeSection({ commercantId, toast }) {
         </div>
       </div>
 
-      {/* Preview QR */}
+      {/* Preview */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-        <div style={{ background: 'linear-gradient(135deg, #6B35C4, #9660E0)', borderRadius: 20, padding: 20, display: 'inline-block' }}>
+        <div style={{ background: 'linear-gradient(135deg, #6B35C4, #9660E0)', borderRadius: 20, padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 12, padding: 16, textAlign: 'center' }}>
-            <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, marginBottom: 6, letterSpacing: '-0.5px' }}>Commandez ici</p>
+            <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, marginBottom: 4, letterSpacing: '-0.5px' }}>Commandez ici</p>
             <p style={{ fontSize: 11, color: T.main, marginBottom: 12 }}>{nomCommerce}</p>
-            {generating ? (
-              <div style={{ width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 13 }}>Génération...</div>
-            ) : (
-              <canvas ref={canvasRef} style={{ display: 'block', borderRadius: 8, width: 200, height: 200, imageRendering: 'pixelated' }} />
-            )}
+            {generating
+              ? <div style={{ width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 13 }}>Génération...</div>
+              : <canvas ref={canvasRef} style={{ display: 'block', borderRadius: 8, width: 200, height: 200 }} />
+            }
             <p style={{ fontSize: 9, color: T.muted, marginTop: 10, wordBreak: 'break-all', maxWidth: 200 }}>{url}</p>
             <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, marginTop: 8 }}>Skip the wait 🟣</p>
           </div>
@@ -1123,22 +1116,41 @@ function QRCodeSection({ commercantId, toast }) {
           </button>
         </div>
 
-        {/* Boutons export */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
-          <button style={{ ...s.btn, ...s.btnGhost, flex: 1, minWidth: 110, justifyContent: 'center' }} onClick={downloadPNG} disabled={!qrReady}>
-            ⬇️ PNG
-          </button>
-          <button style={{ ...s.btn, ...s.btnGhost, flex: 1, minWidth: 110, justifyContent: 'center' }} onClick={downloadPDF} disabled={!qrReady}>
-            📄 PDF A5
-          </button>
-          <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, minWidth: 110, justifyContent: 'center' }} onClick={printQR} disabled={!qrReady}>
-            🖨️ Imprimer
+        {/* PNG */}
+        <div style={{ width: '100%' }}>
+          <button style={{ ...s.btn, ...s.btnGhost, width: '100%', justifyContent: 'center' }} onClick={downloadPNG} disabled={!qrReady}>
+            ⬇️ Télécharger PNG
           </button>
         </div>
 
-        <p style={{ fontSize: 11, color: T.muted, textAlign: 'center' }}>
-          Le QR code pointe vers <strong>{url}</strong><br/>
-          Niveau de correction élevé — fonctionne même partiellement masqué
+        {/* PDF A4 / A5 */}
+        <div style={{ width: '100%' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Télécharger PDF</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button style={{ ...s.btn, ...s.btnGhost, flex: 1, justifyContent: 'center' }} onClick={() => downloadPDF('A5')} disabled={!qrReady}>
+              📄 PDF A5
+            </button>
+            <button style={{ ...s.btn, ...s.btnGhost, flex: 1, justifyContent: 'center' }} onClick={() => downloadPDF('A4')} disabled={!qrReady}>
+              📄 PDF A4
+            </button>
+          </div>
+        </div>
+
+        {/* Imprimer A4 / A5 */}
+        <div style={{ width: '100%' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Imprimer directement</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center' }} onClick={() => printQR('A5')} disabled={!qrReady}>
+              🖨️ Imprimer A5
+            </button>
+            <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center' }} onClick={() => printQR('A4')} disabled={!qrReady}>
+              🖨️ Imprimer A4
+            </button>
+          </div>
+        </div>
+
+        <p style={{ fontSize: 11, color: T.muted, textAlign: 'center', lineHeight: 1.5 }}>
+          Correction d'erreur H — fonctionne même partiellement masqué
         </p>
       </div>
     </div>

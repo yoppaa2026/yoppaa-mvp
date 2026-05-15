@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const T = {
@@ -147,11 +147,11 @@ function TabMenu({ commercantId, toast }) {
   }
 
   function openNew() {
-    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '' })
+    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '' })
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '' })
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? '') })
     setEditId(a.id); setShowForm(true)
   }
 
@@ -166,6 +166,7 @@ function TabMenu({ commercantId, toast }) {
       stock_jour: parseInt(form.stock_jour) || 0,
       actif: form.actif,
       categorie: form.categorie.trim() || null,
+      temps_prepa: parseFloat(form.temps_prepa) || 0,
     }
     if (editId) { await supabase.from('articles').update(payload).eq('id', editId); toast('Article mis à jour ✓') }
     else { await supabase.from('articles').insert(payload); toast('Article ajouté ✓') }
@@ -334,6 +335,11 @@ function TabMenu({ commercantId, toast }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="1.20"/></div>
               <div><label style={s.label}>Stock du jour</label><Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="30"/></div>
+            </div>
+            <div>
+              <label style={s.label}>⏱ Temps de préparation (min)</label>
+              <Input type="number" min="0" step="0.5" value={form.temps_prepa} onChange={e => setForm(p => ({ ...p, temps_prepa: e.target.value }))} placeholder="0 = non défini · 1 = 1 min · 5 = 5 min"/>
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Utilisé en mode Temps de préparation</p>
             </div>
             <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Article disponible"/>
           </div>
@@ -529,6 +535,7 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s }) {
           {a.description && <p style={{ fontSize: 12, color: T.muted, margin: '0 0 8px' }}>{a.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 800, fontSize: 17, color: T.main }}>{Number(a.prix).toFixed(2)} €</span>
+            {(a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100 }}>⏱ {a.temps_prepa} min</span>}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>Stock :</span>
               <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => onUpdateStock(a.id, (a.stock_jour || 0) - 1)}>−</button>
@@ -553,36 +560,67 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s }) {
 
 // ─── Onglet CRÉNEAUX ──────────────────────────────────────────────────────────
 function TabCreneaux({ commercantId, toast }) {
+  const JOURS_SEMAINE = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
+  const JOURS_LABELS  = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dim']
+
   const [creneaux, setCreneaux] = useState([])
+  const [horaires, setHoraires] = useState(null)
+  const [fermetures, setFermetures] = useState([])
   const [loading, setLoading] = useState(true)
+  const [jourActif, setJourActif] = useState('lundi')
   const [showForm, setShowForm] = useState(false)
+  const [showFermetureForm, setShowFermetureForm] = useState(false)
   const [form, setForm] = useState({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true, capacite_temps: 30 })
+  const [fermetureForm, setFermetureForm] = useState({ date_debut: '', date_fin: '', motif: '' })
   const [saving, setSaving] = useState(false)
+  const [savingFermeture, setSavingFermeture] = useState(false)
+  const [showCopier, setShowCopier] = useState(false)
+  const [joursCibles, setJoursCibles] = useState([])
 
   const [horizon, setHorizon] = useState(1)
   const [savingHorizon, setSavingHorizon] = useState(false)
   const [modeGlobal, setModeGlobal] = useState('commandes')
   const [savingMode, setSavingMode] = useState(false)
 
-  useEffect(() => { fetchCreneaux() }, [commercantId])
+  useEffect(() => { fetchAll() }, [commercantId])
 
-  async function fetchCreneaux() {
+  async function fetchAll() {
     setLoading(true)
-    const [{ data: cren }, { data: comm }] = await Promise.all([
+    const [{ data: cren }, { data: comm }, { data: ferm }] = await Promise.all([
       supabase.from('creneaux').select('*').eq('commercant_id', commercantId).order('heure_debut'),
-      supabase.from('commercants').select('horizon_commande, mode_capacite').eq('id', commercantId).single()
+      supabase.from('commercants').select('horizon_commande, mode_capacite, horaires_detail').eq('id', commercantId).single(),
+      supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', commercantId).order('date_debut')
     ])
     setCreneaux(cren || [])
     setHorizon(comm?.horizon_commande || 1)
     setModeGlobal(comm?.mode_capacite || 'commandes')
+    setHoraires(comm?.horaires_detail || null)
+    setFermetures(ferm || [])
     setLoading(false)
+  }
+
+  // ─── Helpers horaires ──────────────────────────────────────────────────────
+  function jourOuvert(jour) {
+    if (!horaires) return true
+    return horaires[jour]?.ouvert !== false
+  }
+  function horaireJour(jour) {
+    if (!horaires || !horaires[jour]) return { debut: '07:00', fin: '18:00' }
+    return { debut: horaires[jour].debut || '07:00', fin: horaires[jour].fin || '18:00' }
+  }
+  function creneauxDuJour(jour) {
+    return creneaux.filter(c => c.jour_semaine === jour || c.jour_semaine === null)
+  }
+  function creneauxHorsHoraires(jour, cren) {
+    if (!horaires || !horaires[jour]?.ouvert) return []
+    const h = horaireJour(jour)
+    return cren.filter(c => c.heure_debut.slice(0,5) < h.debut || c.heure_fin.slice(0,5) > h.fin)
   }
 
   async function saveHorizon(val) {
     setSavingHorizon(true)
     await supabase.from('commercants').update({ horizon_commande: val }).eq('id', commercantId)
-    setHorizon(val)
-    setSavingHorizon(false)
+    setHorizon(val); setSavingHorizon(false)
     toast('Horizon mis à jour ✓')
   }
 
@@ -600,26 +638,6 @@ function TabCreneaux({ commercantId, toast }) {
     setCreneaux(prev => prev.map(c => c.id === id ? { ...c, capacite_temps: n } : c))
   }
 
-  async function saveCreneau() {
-    if (!form.heure_debut || !form.heure_fin) return toast('Heures obligatoires', 'error')
-    if (form.heure_fin <= form.heure_debut) return toast('Heure de fin invalide', 'error')
-
-    // ─── Détection superposition — bloquant ─────────────────────
-    const nouveauSlot = [{ heure_debut: form.heure_debut, heure_fin: form.heure_fin }]
-    const superpositions = detecterSuperpositions(creneaux, nouveauSlot)
-    if (superpositions.length > 0) {
-      toast(`⚠️ Ce créneau chevauche un créneau existant — modifie les heures ou supprime le créneau conflictuel.`, 'error')
-      return
-    }
-
-    setSaving(true)
-    await supabase.from('creneaux').insert({ commercant_id: commercantId, heure_debut: form.heure_debut, heure_fin: form.heure_fin, max_commandes: parseInt(form.max_commandes) || 5, delta_minutes: parseInt(form.delta_minutes) || 0, actif: form.actif, capacite_temps: parseFloat(form.capacite_temps) || 30 })
-    toast('Créneau ajouté ✓'); setSaving(false); setShowForm(false)
-    setForm({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true, capacite_temps: 30 }); fetchCreneaux()
-  }
-
-  async function toggleCreneau(c) { await supabase.from('creneaux').update({ actif: !c.actif }).eq('id', c.id); fetchCreneaux() }
-
   async function updateMax(id, val) {
     const n = parseInt(val)
     if (isNaN(n) || n < 1) return
@@ -634,106 +652,177 @@ function TabCreneaux({ commercantId, toast }) {
     setCreneaux(prev => prev.map(c => c.id === id ? { ...c, delta_minutes: n } : c))
   }
 
+  async function toggleCreneau(c) {
+    await supabase.from('creneaux').update({ actif: !c.actif }).eq('id', c.id)
+    fetchAll()
+  }
+
+  // ─── Fix suppression individuelle ─────────────────────────────────────────
   async function deleteCreneau(id) {
     if (!confirm('Supprimer ce créneau ?')) return
-    // Vérifier commandes actives liées à ce créneau
-    const { data: cmdLiees } = await supabase
-      .from('commandes')
-      .select('id')
-      .eq('creneau_id', id)
-      .neq('statut', 'recupere')
-    if (cmdLiees?.length > 0) {
-      toast(`Impossible — ${cmdLiees.length} commande(s) active(s) sur ce créneau`, 'error')
-      return
-    }
-    await supabase.from('creneaux').delete().eq('id', id)
-    toast('Créneau supprimé ✓'); fetchCreneaux()
+    const { data: cmdLiees } = await supabase.from('commandes').select('id').eq('creneau_id', id).neq('statut', 'recupere')
+    if (cmdLiees?.length > 0) { toast(`Impossible — ${cmdLiees.length} commande(s) active(s) sur ce créneau`, 'error'); return }
+    const { error } = await supabase.from('creneaux').delete().eq('id', id)
+    if (error) { toast('Erreur suppression : ' + error.message, 'error'); return }
+    toast('Créneau supprimé ✓'); fetchAll()
   }
 
+  // ─── Fix toutSupprimer — delete un par un pour éviter bug .in() ───────────
   async function toutSupprimer() {
-    if (!creneaux.length) return
-    if (!confirm(`Supprimer les ${creneaux.length} créneaux ? Cette action est irréversible.`)) return
+    const crenJour = creneauxDuJour(jourActif)
+    if (!crenJour.length) return
+    if (!confirm(`Supprimer les ${crenJour.length} créneaux du ${jourActif} ?`)) return
 
-    const ids = creneaux.map(c => c.id)
-
-    // ─── Vérifier quels créneaux ont des commandes liées ─────────
-    const { data: commandesLiees } = await supabase
-      .from('commandes')
-      .select('creneau_id')
-      .in('creneau_id', ids)
-      .neq('statut', 'recupere')
-
-    const idsAvecCommandes = [...new Set((commandesLiees || []).map(c => c.creneau_id))]
-    const idsSansCommandes = ids.filter(id => !idsAvecCommandes.includes(id))
-
-    if (idsAvecCommandes.length > 0 && idsSansCommandes.length === 0) {
-      toast(`Impossible — tous les créneaux ont des commandes actives`, 'error')
-      return
+    // Vérifier commandes actives
+    const avecCmd = []
+    const sansCmd = []
+    for (const c of crenJour) {
+      const { data } = await supabase.from('commandes').select('id').eq('creneau_id', c.id).neq('statut', 'recupere')
+      if (data?.length > 0) avecCmd.push(c.id)
+      else sansCmd.push(c.id)
     }
 
-    if (idsAvecCommandes.length > 0) {
-      const ok = confirm(`⚠️ ${idsAvecCommandes.length} créneau(x) ont des commandes actives et ne peuvent pas être supprimés.
-
-OK = Supprimer uniquement les ${idsSansCommandes.length} créneaux sans commandes
-Annuler = Annuler`)
-      if (!ok) return
+    if (avecCmd.length > 0 && sansCmd.length === 0) {
+      toast('Impossible — tous ont des commandes actives', 'error'); return
+    }
+    if (avecCmd.length > 0) {
+      if (!confirm(`⚠️ ${avecCmd.length} créneau(x) ont des commandes actives.\nOK = supprimer uniquement les ${sansCmd.length} créneaux libres`)) return
     }
 
-    if (idsSansCommandes.length > 0) {
-      await supabase.from('creneaux').delete().in('id', idsSansCommandes)
+    // Supprimer un par un (évite le bug .in())
+    let ok = 0
+    for (const id of sansCmd) {
+      const { error } = await supabase.from('creneaux').delete().eq('id', id)
+      if (!error) ok++
     }
-    toast(`${idsSansCommandes.length} créneau(x) supprimé(s) ✓`)
-    fetchCreneaux()
+    toast(`${ok} créneau(x) supprimé(s) ✓`); fetchAll()
   }
 
-  function detecterSuperpositions(existants, nouveaux) {
-    const superpositions = []
-    for (const n of nouveaux) {
-      for (const e of existants) {
-        const eDebut = e.heure_debut.slice(0,5)
-        const eFin = e.heure_fin.slice(0,5)
-        if (n.heure_debut < eFin && n.heure_fin > eDebut) {
-          superpositions.push(`${n.heure_debut}–${n.heure_fin}`)
-          break
-        }
+  // ─── Ajouter créneau sur le jour actif ────────────────────────────────────
+  async function saveCreneau() {
+    if (!form.heure_debut || !form.heure_fin) return toast('Heures obligatoires', 'error')
+    if (form.heure_fin <= form.heure_debut) return toast('Heure de fin invalide', 'error')
+
+    // Vérif hors horaires
+    if (jourOuvert(jourActif) && horaires?.[jourActif]) {
+      const h = horaireJour(jourActif)
+      if (form.heure_debut < h.debut || form.heure_fin > h.fin) {
+        if (!confirm(`⚠️ Ce créneau est hors des horaires d'ouverture (${h.debut}–${h.fin}).\nContinuer quand même ?`)) return
       }
     }
-    return superpositions
+
+    // Superposition sur ce jour
+    const existants = creneauxDuJour(jourActif)
+    for (const e of existants) {
+      if (form.heure_debut < e.heure_fin.slice(0,5) && form.heure_fin > e.heure_debut.slice(0,5)) {
+        toast('⚠️ Ce créneau chevauche un créneau existant', 'error'); return
+      }
+    }
+
+    setSaving(true)
+    const { error } = await supabase.from('creneaux').insert({
+      commercant_id: commercantId,
+      jour_semaine: jourActif,
+      heure_debut: form.heure_debut,
+      heure_fin: form.heure_fin,
+      max_commandes: parseInt(form.max_commandes) || 5,
+      delta_minutes: parseInt(form.delta_minutes) || 0,
+      actif: form.actif,
+      capacite_temps: parseFloat(form.capacite_temps) || 30
+    })
+    if (error) { toast('Erreur : ' + error.message, 'error'); setSaving(false); return }
+    toast('Créneau ajouté ✓'); setSaving(false); setShowForm(false)
+    setForm({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true, capacite_temps: 30 })
+    fetchAll()
   }
 
-  async function genererCreneaux() {
-    const debut = prompt('Heure d\'ouverture (ex: 07:00) :')
-    const fin = prompt('Heure de fermeture (ex: 14:00) :')
+  // ─── Générer auto sur le jour actif ───────────────────────────────────────
+  async function genererJour() {
+    if (!jourOuvert(jourActif)) return toast(`${jourActif} est fermé — modifie les horaires dans Profil`, 'error')
+    const h = horaireJour(jourActif)
+    const debut = prompt(`Heure d'ouverture (défaut: ${h.debut}) :`) || h.debut
+    const fin   = prompt(`Heure de fermeture (défaut: ${h.fin}) :`) || h.fin
     const duree = parseInt(prompt('Durée en minutes (ex: 15) :') || '15')
-    const max = parseInt(prompt('Commandes max par créneau (ex: 5) :') || '5')
-    const capTemps = parseFloat(prompt('Capacité temps par créneau en min (ex: 30 pour 2 cuisiniers × 15 min) :') || String(duree))
+    const max   = parseInt(prompt('Commandes max par créneau (ex: 5) :') || '5')
+    const cap   = parseFloat(prompt(`Capacité temps (min) par créneau (ex: ${duree}) :`) || String(duree))
     if (!debut || !fin || !duree) return
+
+    // Vérif hors horaires
+    if (debut < h.debut || fin > h.fin) {
+      toast(`⚠️ Hors horaires d'ouverture (${h.debut}–${h.fin}) — génération annulée`, 'error'); return
+    }
+
     const slots = []
     let current = debut
     while (current < fin) {
-      const [h, m] = current.split(':').map(Number)
-      const totalMin = h * 60 + m + duree
+      const [hh, mm] = current.split(':').map(Number)
+      const totalMin = hh * 60 + mm + duree
       const next = `${String(Math.floor(totalMin/60)).padStart(2,'0')}:${String(totalMin%60).padStart(2,'0')}`
       if (next > fin) break
-      slots.push({ commercant_id: commercantId, heure_debut: current, heure_fin: next, max_commandes: max, actif: true, capacite_temps: capTemps })
+      slots.push({ commercant_id: commercantId, jour_semaine: jourActif, heure_debut: current, heure_fin: next, max_commandes: max, actif: true, capacite_temps: cap })
       current = next
     }
     if (!slots.length) return toast('Aucun créneau généré', 'error')
 
-    const superpositions = detecterSuperpositions(creneaux, slots)
-    if (superpositions.length > 0) {
-      const ok = confirm(`⚠️ ${superpositions.length} créneau(x) se superposent avec des créneaux existants :\n${superpositions.join(', ')}\n\nOK = Supprimer tous les créneaux existants et remplacer\nAnnuler = Annuler la génération`)
-      if (!ok) return
-      // Remplacer — supprimer par IDs d'abord
-      const ids = creneaux.map(c => c.id)
-      if (ids.length > 0) await supabase.from('creneaux').delete().in('id', ids)
-      await supabase.from('creneaux').insert(slots)
-      toast(`${slots.length} créneaux générés (anciens remplacés) ✓`)
-    } else {
-      await supabase.from('creneaux').insert(slots)
-      toast(`${slots.length} créneaux générés ✓`)
+    const existants = creneauxDuJour(jourActif)
+    if (existants.length > 0) {
+      if (!confirm(`⚠️ ${existants.length} créneau(x) existent déjà pour ${jourActif}.\nOK = remplacer · Annuler = abandonner`)) return
+      for (const c of existants) await supabase.from('creneaux').delete().eq('id', c.id)
     }
-    fetchCreneaux()
+
+    await supabase.from('creneaux').insert(slots)
+    toast(`${slots.length} créneaux générés pour ${jourActif} ✓`); fetchAll()
+  }
+
+  // ─── Copier vers d'autres jours ───────────────────────────────────────────
+  async function copierVers() {
+    const source = creneauxDuJour(jourActif)
+    if (!source.length) return toast('Aucun créneau à copier', 'error')
+    if (!joursCibles.length) return toast('Sélectionne au moins un jour cible', 'error')
+
+    let total = 0
+    for (const cible of joursCibles) {
+      if (!jourOuvert(cible)) { toast(`${cible} est fermé — ignoré`, 'error'); continue }
+      // Supprimer existants sur la cible
+      const existants = creneaux.filter(c => c.jour_semaine === cible)
+      for (const c of existants) await supabase.from('creneaux').delete().eq('id', c.id)
+      // Insérer copies
+      const copies = source.map(c => ({
+        commercant_id: commercantId,
+        jour_semaine: cible,
+        heure_debut: c.heure_debut,
+        heure_fin: c.heure_fin,
+        max_commandes: c.max_commandes,
+        delta_minutes: c.delta_minutes || 0,
+        actif: c.actif,
+        capacite_temps: c.capacite_temps || 30
+      }))
+      await supabase.from('creneaux').insert(copies)
+      total += copies.length
+    }
+    toast(`${total} créneau(x) copiés ✓`); setShowCopier(false); setJoursCibles([]); fetchAll()
+  }
+
+  // ─── Fermetures exceptionnelles ───────────────────────────────────────────
+  async function saveFermeture() {
+    if (!fermetureForm.date_debut || !fermetureForm.date_fin) return toast('Dates obligatoires', 'error')
+    if (fermetureForm.date_fin < fermetureForm.date_debut) return toast('Date de fin invalide', 'error')
+    setSavingFermeture(true)
+    const { error } = await supabase.from('fermetures_exceptionnelles').insert({
+      commercant_id: commercantId,
+      date_debut: fermetureForm.date_debut,
+      date_fin: fermetureForm.date_fin,
+      motif: fermetureForm.motif.trim() || null
+    })
+    if (error) { toast('Erreur : ' + error.message, 'error'); setSavingFermeture(false); return }
+    toast('Fermeture ajoutée ✓'); setSavingFermeture(false); setShowFermetureForm(false)
+    setFermetureForm({ date_debut: '', date_fin: '', motif: '' }); fetchAll()
+  }
+
+  async function deleteFermeture(id) {
+    if (!confirm('Supprimer cette fermeture ?')) return
+    await supabase.from('fermetures_exceptionnelles').delete().eq('id', id)
+    toast('Fermeture supprimée ✓'); fetchAll()
   }
 
   if (loading) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
@@ -745,14 +834,15 @@ Annuler = Annuler`)
     { val: 7, label: '7 jours', desc: "Une semaine à l'avance" },
   ]
 
+  const crensJourActif = creneauxDuJour(jourActif)
+  const horsHoraires = creneauxHorsHoraires(jourActif, crensJourActif)
+
   return (
     <div>
-      {/* ─── Horizon de réservation ─── */}
-      <div style={{ ...s.card, marginBottom: 20, background: T.pale, border: `1.5px solid ${T.main}22`, boxShadow: 'none' }}>
+      {/* ─── Horizon ─── */}
+      <div style={{ ...s.card, marginBottom: 16, background: T.pale, border: `1.5px solid ${T.main}22`, boxShadow: 'none' }}>
         <h3 style={{ fontWeight: 800, fontSize: 14, color: T.deep, marginBottom: 4 }}>📅 Horizon de réservation</h3>
-        <p style={{ fontSize: 12, color: T.muted, marginBottom: 12, lineHeight: 1.5 }}>
-          Jusqu'à combien de jours à l'avance tes clients peuvent-ils réserver ?
-        </p>
+        <p style={{ fontSize: 12, color: T.muted, marginBottom: 12, lineHeight: 1.5 }}>Jusqu'à combien de jours à l'avance tes clients peuvent réserver ?</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
           {HORIZONS.map(h => (
             <button key={h.val} onClick={() => saveHorizon(h.val)} disabled={savingHorizon}
@@ -764,8 +854,8 @@ Annuler = Annuler`)
         </div>
       </div>
 
-      {/* ─── Mode capacité global ─── */}
-      <div style={{ ...s.card, marginBottom: 20 }}>
+      {/* ─── Mode capacité ─── */}
+      <div style={{ ...s.card, marginBottom: 16 }}>
         <h3 style={{ fontWeight: 800, fontSize: 14, color: T.deep, marginBottom: 4 }}>⚙️ Mode de capacité</h3>
         <p style={{ fontSize: 12, color: T.muted, marginBottom: 12, lineHeight: 1.5 }}>Comment la capacité de tes créneaux est calculée.</p>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -781,108 +871,240 @@ Annuler = Annuler`)
           ))}
         </div>
         {modeGlobal === 'temps' && (
-          <p style={{ fontSize: 11, color: T.main, marginTop: 10, fontWeight: 600 }}>
-            💡 Capacité = durée créneau × nb de cuisiniers — Ex: 15 min × 2 = 30 min
-          </p>
+          <p style={{ fontSize: 11, color: T.main, marginTop: 10, fontWeight: 600 }}>💡 Capacité = durée créneau × nb de cuisiniers — Ex: 15 min × 2 = 30 min</p>
         )}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={s.h2}>Créneaux <span style={{ color: T.mid, fontWeight: 600, fontSize: 14 }}>({creneaux.length})</span></h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ ...s.btn, ...s.btnDanger }} onClick={toutSupprimer} disabled={creneaux.length === 0}>🗑 Tout supprimer</button>
-          <button style={{ ...s.btn, ...s.btnGhost }} onClick={genererCreneaux}>⚡ Générer auto</button>
-          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={() => setShowForm(true)}>+ Ajouter</button>
-        </div>
+      {/* ─── Onglets jours ─── */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, overflowX: 'auto', scrollbarWidth: 'none' }}>
+        {JOURS_SEMAINE.map((jour, idx) => {
+          const ouvert = jourOuvert(jour)
+          const nbCren = creneauxDuJour(jour).length
+          const actif = jourActif === jour
+          return (
+            <button key={jour} onClick={() => { if (!ouvert) { toast(`${jour} est fermé — modifie les horaires dans Profil`, 'error'); return }; setJourActif(jour); setShowForm(false); setShowCopier(false) }}
+              style={{ flexShrink: 0, padding: '8px 10px', borderRadius: 10, border: `2px solid ${actif ? T.main : ouvert ? T.pale : '#E5E7EB'}`, background: actif ? T.main : ouvert ? '#fff' : '#F9FAFB', cursor: ouvert ? 'pointer' : 'not-allowed', textAlign: 'center', fontFamily: '"DM Sans", sans-serif', opacity: ouvert ? 1 : 0.5, transition: 'all 0.15s', minWidth: 52 }}>
+              <p style={{ fontWeight: 800, fontSize: 12, color: actif ? '#fff' : ouvert ? T.ink : T.muted }}>{JOURS_LABELS[idx]}</p>
+              {ouvert
+                ? <p style={{ fontSize: 10, color: actif ? 'rgba(255,255,255,0.8)' : T.muted, marginTop: 2 }}>{nbCren > 0 ? `${nbCren} crén.` : '–'}</p>
+                : <p style={{ fontSize: 9, color: '#DC2626', marginTop: 2, fontWeight: 700 }}>Fermé</p>
+              }
+            </button>
+          )
+        })}
       </div>
 
-      {showForm && (
-        <div style={s.cardActive}>
-          <h3 style={{ ...s.h3, marginBottom: 14 }}>Nouveau créneau</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-            <div><label style={s.label}>Début *</label><Input type="time" value={form.heure_debut} onChange={e => setForm(p => ({ ...p, heure_debut: e.target.value }))} /></div>
-            <div><label style={s.label}>Fin *</label><Input type="time" value={form.heure_fin} onChange={e => setForm(p => ({ ...p, heure_fin: e.target.value }))} /></div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-            <div>
-              <label style={s.label}>Commandes max</label>
-              <Input type="number" min="1" max="50" value={form.max_commandes} onChange={e => setForm(p => ({ ...p, max_commandes: e.target.value }))} style={{ width: '100%' }} />
-            </div>
-            <div>
-              <label style={s.label}>Délai min (minutes)</label>
-              <Input type="number" min="0" max="120" value={form.delta_minutes} onChange={e => setForm(p => ({ ...p, delta_minutes: e.target.value }))} style={{ width: '100%' }} />
-              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Délai entre commande et retrait</p>
-            </div>
-          </div>
-          {modeGlobal === 'temps' && (
-            <div style={{ marginTop: 4 }}>
-              <label style={s.label}>Capacité de préparation (min)</label>
-              <Input type="number" min="1" step="0.5" value={form.capacite_temps} onChange={e => setForm(p => ({ ...p, capacite_temps: e.target.value }))} style={{ width: '100%' }} />
-              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Durée créneau × nb de cuisiniers — Ex: créneau 15 min, 2 cuisiniers = 30 min</p>
-            </div>
-          )}
-          <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Créneau actif" />
-          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-            <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveCreneau} disabled={saving}>{saving ? 'Enregistrement...' : '✓ Enregistrer'}</button>
-            <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowForm(false)}>Annuler</button>
-          </div>
-        </div>
-      )}
-
-      {creneaux.length === 0 && !showForm ? (
-        <div style={{ ...s.card, textAlign: 'center', padding: 40 }}>
-          <p style={{ color: T.muted, marginBottom: 8 }}>Aucun créneau configuré</p>
-          <p style={{ color: T.light, fontSize: 13, marginBottom: 16 }}>Utilise "Générer auto" pour tout créer en un clic.</p>
-          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={genererCreneaux}>⚡ Générer automatiquement</button>
+      {/* ─── Contenu du jour actif ─── */}
+      {!jourOuvert(jourActif) ? (
+        <div style={{ ...s.card, textAlign: 'center', padding: 32, background: '#FEF2F2', border: '1.5px solid #DC262622' }}>
+          <p style={{ fontSize: 20, marginBottom: 8 }}>🔒</p>
+          <p style={{ fontWeight: 700, color: '#DC2626' }}>{jourActif} — Commerce fermé</p>
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>Modifie les horaires dans l'onglet Profil pour ouvrir ce jour.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
-          {creneaux.map(c => (
-            <div key={c.id} style={{ ...s.card, marginBottom: 0, opacity: c.actif ? 1 : 0.55, borderLeft: `4px solid ${c.actif ? T.main : '#E5E7EB'}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: T.ink, letterSpacing: '-1px' }}>{c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}</div>
-                  {modeGlobal === 'commandes' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                      <span style={{ fontSize: 12, color: T.muted }}>Max :</span>
-                      <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateMax(c.id, c.max_commandes - 1)}>−</button>
-                      <input type="number" value={c.max_commandes} min={1} onChange={e => updateMax(c.id, e.target.value)}
-                        style={{ ...s.input, width: 48, textAlign: 'center', padding: '3px 6px', fontSize: 13, fontWeight: 700 }} />
-                      <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateMax(c.id, c.max_commandes + 1)}>+</button>
-                    </div>
-                  )}
-                  {modeGlobal === 'temps' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                      <span style={{ fontSize: 11, color: T.muted, flexShrink: 0 }}>Capacité :</span>
-                      <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateCapaciteTemps(c.id, Math.max(1, (c.capacite_temps || 30) - 5))}>−</button>
-                      <input type="number" value={c.capacite_temps || 30} min={1} step={0.5} onChange={e => updateCapaciteTemps(c.id, e.target.value)}
-                        style={{ ...s.input, width: 52, textAlign: 'center', padding: '3px 6px', fontSize: 13, fontWeight: 700 }} />
-                      <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateCapaciteTemps(c.id, (c.capacite_temps || 30) + 5)}>+</button>
-                      <span style={{ fontSize: 11, color: T.muted }}>min</span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                    <span style={{ fontSize: 12, color: T.muted }}>Délai :</span>
-                    <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateDelta(c.id, Math.max(0, (c.delta_minutes || 0) - 5))}>−</button>
-                    <input type="number" value={c.delta_minutes || 0} min={0} onChange={e => updateDelta(c.id, e.target.value)}
-                      style={{ ...s.input, width: 48, textAlign: 'center', padding: '3px 6px', fontSize: 13, fontWeight: 700 }} />
-                    <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 7px', fontSize: 13 }} onClick={() => updateDelta(c.id, (c.delta_minutes || 0) + 5)}>+</button>
-                    <span style={{ fontSize: 11, color: T.muted }}>min</span>
-                    {(c.delta_minutes || 0) > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: T.main, background: T.pale, padding: '2px 6px', borderRadius: 100 }}>⏱ {c.delta_minutes} min</span>}
-                  </div>
-                </div>
-                <Toggle value={c.actif} onChange={() => toggleCreneau(c)} />
+        <>
+          {/* Header jour */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <div>
+              <h2 style={{ ...s.h2, margin: 0, textTransform: 'capitalize' }}>{jourActif}</h2>
+              {horaires?.[jourActif] && (
+                <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+                  🕐 {horaireJour(jourActif).debut} – {horaireJour(jourActif).fin}
+                </p>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {crensJourActif.length > 0 && (
+                <>
+                  <button style={{ ...s.btn, ...s.btnGhost, fontSize: 12, padding: '6px 12px' }} onClick={() => { setShowCopier(v => !v); setShowForm(false) }}>📋 Copier vers...</button>
+                  <button style={{ ...s.btn, ...s.btnDanger, fontSize: 12, padding: '6px 12px' }} onClick={toutSupprimer}>🗑 Vider</button>
+                </>
+              )}
+              <button style={{ ...s.btn, ...s.btnGhost, fontSize: 12, padding: '6px 12px' }} onClick={genererJour}>⚡ Générer</button>
+              <button style={{ ...s.btn, ...s.btnPrimary, fontSize: 12, padding: '6px 12px' }} onClick={() => { setShowForm(v => !v); setShowCopier(false) }}>+ Ajouter</button>
+            </div>
+          </div>
+
+          {/* Alerte hors horaires */}
+          {horsHoraires.length > 0 && (
+            <div style={{ background: '#FEF3C7', border: '1.5px solid #F59E0B44', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>
+                ⚠️ {horsHoraires.length} créneau(x) hors des horaires d'ouverture ({horaireJour(jourActif).debut}–{horaireJour(jourActif).fin})
+              </p>
+            </div>
+          )}
+
+          {/* Panel copier vers */}
+          {showCopier && (
+            <div style={{ ...s.cardActive, marginBottom: 12 }}>
+              <p style={{ fontWeight: 700, fontSize: 13, color: T.ink, marginBottom: 10 }}>📋 Copier les créneaux de {jourActif} vers :</p>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                {JOURS_SEMAINE.filter(j => j !== jourActif).map(jour => {
+                  const ouvert = jourOuvert(jour)
+                  const selec = joursCibles.includes(jour)
+                  return (
+                    <button key={jour} onClick={() => ouvert && setJoursCibles(prev => selec ? prev.filter(j => j !== jour) : [...prev, jour])}
+                      style={{ ...s.btn, padding: '5px 12px', fontSize: 12, background: selec ? T.main : ouvert ? T.pale : '#F3F4F6', color: selec ? '#fff' : ouvert ? T.main : T.muted, opacity: ouvert ? 1 : 0.5, cursor: ouvert ? 'pointer' : 'not-allowed', textTransform: 'capitalize' }}>
+                      {jour}
+                    </button>
+                  )
+                })}
               </div>
-              <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
-                <button style={{ ...s.btn, ...s.btnDanger, padding: '4px 10px', fontSize: 12 }} onClick={() => deleteCreneau(c.id)}>🗑</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button style={{ ...s.btn, ...s.btnPrimary }} onClick={copierVers} disabled={!joursCibles.length}>✓ Copier</button>
+                <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => { setShowCopier(false); setJoursCibles([]) }}>Annuler</button>
               </div>
             </div>
-          ))}
-        </div>
+          )}
+
+          {/* Formulaire ajout créneau */}
+          {showForm && (
+            <div style={{ ...s.cardActive, marginBottom: 12 }}>
+              <h3 style={{ ...s.h3, marginBottom: 14 }}>+ Nouveau créneau — {jourActif}</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div><label style={s.label}>Début *</label><Input type="time" value={form.heure_debut} onChange={e => setForm(p => ({ ...p, heure_debut: e.target.value }))} /></div>
+                <div><label style={s.label}>Fin *</label><Input type="time" value={form.heure_fin} onChange={e => setForm(p => ({ ...p, heure_fin: e.target.value }))} /></div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={s.label}>Commandes max</label>
+                  <Input type="number" min="1" max="50" value={form.max_commandes} onChange={e => setForm(p => ({ ...p, max_commandes: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={s.label}>Délai min (minutes)</label>
+                  <Input type="number" min="0" max="120" value={form.delta_minutes} onChange={e => setForm(p => ({ ...p, delta_minutes: e.target.value }))} />
+                  <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Délai entre commande et retrait</p>
+                </div>
+              </div>
+              {modeGlobal === 'temps' && (
+                <div style={{ marginBottom: 12 }}>
+                  <label style={s.label}>Capacité de préparation (min)</label>
+                  <Input type="number" min="1" step="0.5" value={form.capacite_temps} onChange={e => setForm(p => ({ ...p, capacite_temps: e.target.value }))} />
+                  <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Durée × nb de cuisiniers — Ex: 15 min × 2 = 30 min</p>
+                </div>
+              )}
+              <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Créneau actif" />
+              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveCreneau} disabled={saving}>{saving ? 'Enregistrement...' : '✓ Enregistrer'}</button>
+                <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowForm(false)}>Annuler</button>
+              </div>
+            </div>
+          )}
+
+          {/* Liste créneaux du jour */}
+          {crensJourActif.length === 0 && !showForm ? (
+            <div style={{ ...s.card, textAlign: 'center', padding: 32 }}>
+              <p style={{ color: T.muted, marginBottom: 8 }}>Aucun créneau pour {jourActif}</p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                <button style={{ ...s.btn, ...s.btnGhost }} onClick={genererJour}>⚡ Générer auto</button>
+                <button style={{ ...s.btn, ...s.btnPrimary }} onClick={() => setShowForm(true)}>+ Ajouter manuellement</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10, marginBottom: 16 }}>
+              {crensJourActif.sort((a,b) => a.heure_debut.localeCompare(b.heure_debut)).map(c => {
+                const horsH = horaires?.[jourActif]?.ouvert && (c.heure_debut.slice(0,5) < horaireJour(jourActif).debut || c.heure_fin.slice(0,5) > horaireJour(jourActif).fin)
+                return (
+                  <div key={c.id} style={{ ...s.card, marginBottom: 0, opacity: c.actif ? 1 : 0.55, borderLeft: `4px solid ${horsH ? '#F59E0B' : c.actif ? T.main : '#E5E7EB'}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: T.ink, letterSpacing: '-0.5px' }}>{c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}</div>
+                        {horsH && <span style={{ fontSize: 10, fontWeight: 700, color: '#92400E', background: '#FEF3C7', padding: '1px 6px', borderRadius: 100 }}>⚠️ Hors horaires</span>}
+                        {modeGlobal === 'commandes' && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 8 }}>
+                            <span style={{ fontSize: 11, color: T.muted }}>Max :</span>
+                            <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateMax(c.id, c.max_commandes - 1)}>−</button>
+                            <input type="number" value={c.max_commandes} min={1} onChange={e => updateMax(c.id, e.target.value)}
+                              style={{ ...s.input, width: 44, textAlign: 'center', padding: '2px 4px', fontSize: 13, fontWeight: 700 }} />
+                            <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateMax(c.id, c.max_commandes + 1)}>+</button>
+                          </div>
+                        )}
+                        {modeGlobal === 'temps' && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 8 }}>
+                            <span style={{ fontSize: 11, color: T.muted, flexShrink: 0 }}>Cap :</span>
+                            <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateCapaciteTemps(c.id, Math.max(1, (c.capacite_temps || 30) - 5))}>−</button>
+                            <input type="number" value={c.capacite_temps || 30} min={1} onChange={e => updateCapaciteTemps(c.id, e.target.value)}
+                              style={{ ...s.input, width: 44, textAlign: 'center', padding: '2px 4px', fontSize: 13, fontWeight: 700 }} />
+                            <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateCapaciteTemps(c.id, (c.capacite_temps || 30) + 5)}>+</button>
+                            <span style={{ fontSize: 10, color: T.muted }}>min</span>
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                          <span style={{ fontSize: 11, color: T.muted }}>Délai :</span>
+                          <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateDelta(c.id, Math.max(0, (c.delta_minutes || 0) - 5))}>−</button>
+                          <input type="number" value={c.delta_minutes || 0} min={0} onChange={e => updateDelta(c.id, e.target.value)}
+                            style={{ ...s.input, width: 44, textAlign: 'center', padding: '2px 4px', fontSize: 13, fontWeight: 700 }} />
+                          <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateDelta(c.id, (c.delta_minutes || 0) + 5)}>+</button>
+                          <span style={{ fontSize: 10, color: T.muted }}>min</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                        <Toggle value={c.actif} onChange={() => toggleCreneau(c)} />
+                        <button style={{ ...s.btn, ...s.btnDanger, padding: '3px 8px', fontSize: 11, marginTop: 4 }} onClick={() => deleteCreneau(c.id)}>🗑</button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
+
+      {/* ─── Fermetures exceptionnelles ─── */}
+      <div style={{ marginTop: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h2 style={{ ...s.h2, margin: 0 }}>🔒 Fermetures exceptionnelles</h2>
+          <button style={{ ...s.btn, ...s.btnGhost, fontSize: 12, padding: '6px 12px' }} onClick={() => setShowFermetureForm(v => !v)}>+ Ajouter</button>
+        </div>
+
+        {showFermetureForm && (
+          <div style={{ ...s.cardActive, marginBottom: 12 }}>
+            <h3 style={{ ...s.h3, marginBottom: 14 }}>Nouvelle fermeture</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div><label style={s.label}>Date début *</label><Input type="date" value={fermetureForm.date_debut} onChange={e => setFermetureForm(p => ({ ...p, date_debut: e.target.value }))} /></div>
+              <div><label style={s.label}>Date fin *</label><Input type="date" value={fermetureForm.date_fin} onChange={e => setFermetureForm(p => ({ ...p, date_fin: e.target.value }))} /></div>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={s.label}>Motif (optionnel)</label>
+              <Input value={fermetureForm.motif} onChange={e => setFermetureForm(p => ({ ...p, motif: e.target.value }))} placeholder="Ex: Congés annuels, Jour férié, Formation..." />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveFermeture} disabled={savingFermeture}>{savingFermeture ? 'Enregistrement...' : '✓ Enregistrer'}</button>
+              <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowFermetureForm(false)}>Annuler</button>
+            </div>
+          </div>
+        )}
+
+        {fermetures.length === 0 ? (
+          <div style={{ ...s.card, textAlign: 'center', padding: 24 }}>
+            <p style={{ color: T.muted, fontSize: 13 }}>Aucune fermeture exceptionnelle planifiée</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {fermetures.map(f => {
+              const debut = new Date(f.date_debut).toLocaleDateString('fr-BE', { day: 'numeric', month: 'long', year: 'numeric' })
+              const fin   = new Date(f.date_fin).toLocaleDateString('fr-BE', { day: 'numeric', month: 'long', year: 'numeric' })
+              const memeJour = f.date_debut === f.date_fin
+              return (
+                <div key={f.id} style={{ ...s.card, marginBottom: 0, borderLeft: '4px solid #DC2626', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                  <div>
+                    <p style={{ fontWeight: 700, color: T.ink, fontSize: 14 }}>
+                      {memeJour ? debut : `${debut} → ${fin}`}
+                    </p>
+                    {f.motif && <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{f.motif}</p>}
+                  </div>
+                  <button style={{ ...s.btn, ...s.btnDanger, padding: '4px 10px', fontSize: 12, flexShrink: 0 }} onClick={() => deleteFermeture(f.id)}>🗑</button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
+
 
 // ─── Onglet PROFIL ────────────────────────────────────────────────────────────
 function TabProfil({ commercantId, toast }) {

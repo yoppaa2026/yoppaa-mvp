@@ -612,17 +612,54 @@ function TabCreneaux({ commercantId, toast }) {
 
   async function deleteCreneau(id) {
     if (!confirm('Supprimer ce créneau ?')) return
+    // Vérifier commandes actives liées à ce créneau
+    const { data: cmdLiees } = await supabase
+      .from('commandes')
+      .select('id')
+      .eq('creneau_id', id)
+      .neq('statut', 'recupere')
+    if (cmdLiees?.length > 0) {
+      toast(`Impossible — ${cmdLiees.length} commande(s) active(s) sur ce créneau`, 'error')
+      return
+    }
     await supabase.from('creneaux').delete().eq('id', id)
-    toast('Créneau supprimé'); fetchCreneaux()
+    toast('Créneau supprimé ✓'); fetchCreneaux()
   }
 
   async function toutSupprimer() {
     if (!creneaux.length) return
     if (!confirm(`Supprimer les ${creneaux.length} créneaux ? Cette action est irréversible.`)) return
-    // ─── Supprimer par IDs pour contourner les restrictions RLS ──
+
     const ids = creneaux.map(c => c.id)
-    await supabase.from('creneaux').delete().in('id', ids)
-    toast('Tous les créneaux supprimés ✓'); fetchCreneaux()
+
+    // ─── Vérifier quels créneaux ont des commandes liées ─────────
+    const { data: commandesLiees } = await supabase
+      .from('commandes')
+      .select('creneau_id')
+      .in('creneau_id', ids)
+      .neq('statut', 'recupere')
+
+    const idsAvecCommandes = [...new Set((commandesLiees || []).map(c => c.creneau_id))]
+    const idsSansCommandes = ids.filter(id => !idsAvecCommandes.includes(id))
+
+    if (idsAvecCommandes.length > 0 && idsSansCommandes.length === 0) {
+      toast(`Impossible — tous les créneaux ont des commandes actives`, 'error')
+      return
+    }
+
+    if (idsAvecCommandes.length > 0) {
+      const ok = confirm(`⚠️ ${idsAvecCommandes.length} créneau(x) ont des commandes actives et ne peuvent pas être supprimés.
+
+OK = Supprimer uniquement les ${idsSansCommandes.length} créneaux sans commandes
+Annuler = Annuler`)
+      if (!ok) return
+    }
+
+    if (idsSansCommandes.length > 0) {
+      await supabase.from('creneaux').delete().in('id', idsSansCommandes)
+    }
+    toast(`${idsSansCommandes.length} créneau(x) supprimé(s) ✓`)
+    fetchCreneaux()
   }
 
   function detecterSuperpositions(existants, nouveaux) {

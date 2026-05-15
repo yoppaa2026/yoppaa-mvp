@@ -458,6 +458,30 @@ export default function CommanderSlug() {
   async function passerCommande() {
     if (!creneauChoisi || !client.prenom || !client.nom || !client.email || !client.telephone || !rgpdCommande || !commercant) return
     setLoadingCommande(true)
+
+    // ─── Vérification stock en temps réel avant commande ────────
+    const articleIds = Object.values(panier).map(i => i.id)
+    const { data: stockActuel } = await supabase
+      .from('articles')
+      .select('id, nom, stock_jour')
+      .in('id', articleIds)
+    
+    const erreurStock = []
+    for (const item of Object.values(panier)) {
+      const art = stockActuel?.find(a => a.id === item.id)
+      if (art && art.stock_jour !== 999 && art.stock_jour < item.quantite) {
+        erreurStock.push(`${art.nom} : ${art.stock_jour} restant(s), tu en commandes ${item.quantite}`)
+      }
+    }
+    if (erreurStock.length > 0) {
+      alert(`⚠️ Stock insuffisant :\n${erreurStock.join('\n')}\n\nMets à jour ton panier.`)
+      // Rafraîchir les articles pour afficher le vrai stock
+      const { data: arts } = await supabase.from('articles').select('*').eq('commercant_id', commercant.id).eq('actif', true)
+      if (arts) setArticles(arts)
+      setLoadingCommande(false)
+      return
+    }
+
     const nomComplet = `${client.prenom} ${client.nom}`.trim()
     const cid = await getOuCreerClient(client.email, client.prenom, client.nom)
     // Date locale (pas UTC) pour éviter décalage fuseau horaire

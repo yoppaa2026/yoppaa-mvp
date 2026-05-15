@@ -609,7 +609,11 @@ function TabCreneaux({ commercantId, toast }) {
     return { debut: horaires[jour].debut || '07:00', fin: horaires[jour].fin || '18:00' }
   }
   function creneauxDuJour(jour) {
-    return creneaux.filter(c => c.jour_semaine === jour || c.jour_semaine === null)
+    // jour_semaine === null = anciens créneaux globaux — affichés uniquement sur lundi par convention
+    return creneaux.filter(c => c.jour_semaine === jour || (c.jour_semaine === null && jour === 'lundi'))
+  }
+  function creneauxNull() {
+    return creneaux.filter(c => c.jour_semaine === null)
   }
   function creneauxHorsHoraires(jour, cren) {
     if (!horaires || !horaires[jour]?.ouvert) return []
@@ -671,7 +675,11 @@ function TabCreneaux({ commercantId, toast }) {
   async function toutSupprimer() {
     const crenJour = creneauxDuJour(jourActif)
     if (!crenJour.length) return
-    if (!confirm(`Supprimer les ${crenJour.length} créneaux du ${jourActif} ?`)) return
+    const nbNull = jourActif === 'lundi' ? creneauxNull().length : 0
+    const msg = nbNull > 0
+      ? `Supprimer les ${crenJour.length} créneaux du ${jourActif} ? (dont ${nbNull} créneaux legacy sans jour assigné)`
+      : `Supprimer les ${crenJour.length} créneaux du ${jourActif} ?`
+    if (!confirm(msg)) return
 
     // Vérifier commandes actives
     const avecCmd = []

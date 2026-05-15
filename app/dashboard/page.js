@@ -15,6 +15,7 @@ const T = {
   ink:     '#1A0840',
   deep:    '#2D0F6B',
   muted:   '#6B7280',
+  gris:    { border: '#9CA3AF', badge: '#6B7280', cardBg: '#F9FAFB' },
   rouge:   { border: '#DC2626', badge: '#DC2626', cardBg: '#FFF0F0' },
   orange:  { border: '#EA580C', badge: '#EA580C', cardBg: '#FFF7ED' },
   vert:    { border: '#16A34A', badge: '#16A34A', cardBg: '#F0FDF4' },
@@ -22,10 +23,11 @@ const T = {
 }
 
 const STATUTS = {
-  'en_attente':     { label: 'Nouvelle',  couleur: T.rouge,  icon: '🔴', next: 'en_preparation', nextLabel: 'Démarrer la prépa' },
-  'en_preparation': { label: 'En prépa',  couleur: T.orange, icon: '🟠', next: 'pret',            nextLabel: 'Marquer prête' },
-  'pret':           { label: 'Prête',     couleur: T.vert,   icon: '🟢', next: null,              nextLabel: null },
-  'recupere':       { label: 'Récupérée', couleur: T.bleu,   icon: '🔵', next: null,              nextLabel: null },
+  'en_attente':     { label: 'Nouvelle',    couleur: T.rouge,  icon: '🔴', next: 'en_preparation', nextLabel: 'Démarrer la prépa' },
+  'en_preparation': { label: 'En prépa',    couleur: T.orange, icon: '🟠', next: 'pret',            nextLabel: 'Marquer prête' },
+  'pret':           { label: 'Prête',       couleur: T.vert,   icon: '🟢', next: null,              nextLabel: null },
+  'recupere':       { label: 'Récupérée',   couleur: T.bleu,   icon: '🔵', next: null,              nextLabel: null },
+  'non_retire':     { label: 'Non retiré',  couleur: { border: '#9CA3AF', badge: '#6B7280', cardBg: '#F9FAFB' }, icon: '⚫', next: null, nextLabel: null },
 }
 
 // ─── Helpers dates ────────────────────────────────────────────────────────────
@@ -218,6 +220,42 @@ function CarteCommande({ commande, numero, onChangerStatut }) {
             {statut.nextLabel} →
           </button>
         )}
+        {/* Bouton Non retiré — visible dès que le créneau est passé, confirmation obligatoire */}
+        {commande.statut === 'pret' && (() => {
+          const maintenant = new Date()
+          let creneauPasse = false
+          if (commande.creneau?.heure_fin) {
+            const dateRef = commande.date_commande || commande.created_at
+            const dateFin = typeof dateRef === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateRef)
+              ? new Date(dateRef + 'T' + commande.creneau.heure_fin.slice(0,5) + ':00')
+              : new Date(dateRef)
+            creneauPasse = maintenant > dateFin
+          }
+          if (!creneauPasse) return null
+          return (
+            <button onClick={() => {
+              if (window.confirm(`Marquer comme non retiré ?\n\nClient : ${commande.client_nom}\nCréneau : ${commande.creneau?.heure_debut?.slice(0,5)}–${commande.creneau?.heure_fin?.slice(0,5)}\n\nConfirme que le client ne s'est pas présenté.`)) {
+                onChangerStatut(commande.id, 'non_retire')
+              }
+            }}
+              style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: '#9CA3AF', border: '1.5px solid #E5E7EB', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem', fontFamily: '"DM Sans", sans-serif', marginTop: 6, transition: 'all 0.15s' }}
+              onMouseOver={e => { e.currentTarget.style.background = '#F9FAFB'; e.currentTarget.style.borderColor = '#9CA3AF' }}
+              onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#E5E7EB' }}>
+              ⚫ Client non venu
+            </button>
+          )
+        })()}
+        {/* Remettre en Prête si non retiré par erreur */}
+        {commande.statut === 'non_retire' && (
+          <button onClick={() => {
+            if (window.confirm('Annuler le statut "Non retiré" et remettre la commande en "Prête" ?')) {
+              onChangerStatut(commande.id, 'pret')
+            }
+          }}
+            style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: '#6B7280', border: '1.5px solid #E5E7EB', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem', fontFamily: '"DM Sans", sans-serif', marginTop: 6 }}>
+            ↩ Annuler — remettre en Prête
+          </button>
+        )}
       </div>
     </div>
   )
@@ -232,6 +270,7 @@ export default function Dashboard() {
   const [ongletPrincipal, setOngletPrincipal] = useState('commandes')
   const [filtreStatut, setFiltreStatut] = useState('actives')
   const [jourSelectionne, setJourSelectionne] = useState(null) // null = aujourd'hui par défaut
+  const [modeHistorique, setModeHistorique] = useState(false)
   const [notificationsActives, setNotificationsActives] = useState(false)
   const [nouvelleCommande, setNouvelleCommande] = useState(false)
   const [commandeRecuperee, setCommandeRecuperee] = useState(null) // { nom, numero }
@@ -376,7 +415,14 @@ export default function Dashboard() {
   // Si aucun jour sélectionné ou jour inexistant → aujourd'hui
   const jourActif = (jourSelectionne && joursDispos.includes(jourSelectionne)) ? jourSelectionne : todayKey
 
-  const commandesDuJour = commandes.filter(c => dateKey(c.date_commande || c.created_at) === jourActif)
+  // Commandes hors horizon = historique
+  const commandesHistorique = commandes
+    .filter(c => !joursDispos.includes(dateKey(c.date_commande || c.created_at)))
+    .sort((a, b) => new Date(b.date_commande || b.created_at) - new Date(a.date_commande || a.created_at))
+
+  const commandesDuJour = modeHistorique
+    ? commandesHistorique
+    : commandes.filter(c => dateKey(c.date_commande || c.created_at) === jourActif)
 
   const stats = {
     nouvelles:  commandesDuJour.filter(c => c.statut === 'en_attente').length,
@@ -392,16 +438,20 @@ export default function Dashboard() {
     if (filtreStatut === 'en_preparation') return c.statut === 'en_preparation'
     if (filtreStatut === 'pret')           return c.statut === 'pret'
     if (filtreStatut === 'recupere')       return c.statut === 'recupere'
+    if (filtreStatut === 'non_retire')     return c.statut === 'non_retire'
     return true
   })
 
+  const nonRetires = commandesDuJour.filter(c => c.statut === 'non_retire').length
+
   const filtresStatut = [
-    { key: 'actives',        label: 'Actives',    count: stats.nouvelles + stats.enPrepa + stats.pretes },
-    { key: 'en_attente',     label: 'Nouvelles',  count: stats.nouvelles,  color: '#DC2626' },
-    { key: 'en_preparation', label: 'En prépa',   count: stats.enPrepa,    color: '#EA580C' },
-    { key: 'pret',           label: 'Prêtes',     count: stats.pretes,     color: '#16A34A' },
-    { key: 'recupere',       label: 'Récupérées', count: stats.recuperees, color: '#2563EB' },
-    { key: 'tout',           label: 'Tout',       count: commandesDuJour.length },
+    { key: 'actives',        label: 'Actives',      count: stats.nouvelles + stats.enPrepa + stats.pretes },
+    { key: 'en_attente',     label: 'Nouvelles',    count: stats.nouvelles,  color: '#DC2626' },
+    { key: 'en_preparation', label: 'En prépa',     count: stats.enPrepa,    color: '#EA580C' },
+    { key: 'pret',           label: 'Prêtes',       count: stats.pretes,     color: '#16A34A' },
+    { key: 'recupere',       label: 'Récupérées',   count: stats.recuperees, color: '#2563EB' },
+    { key: 'non_retire',     label: 'Non retirés',  count: nonRetires,       color: '#6B7280' },
+    { key: 'tout',           label: 'Tout',         count: commandesDuJour.length },
   ]
 
   const statsCards = [
@@ -792,11 +842,11 @@ export default function Dashboard() {
               {joursDispos.length > 0 && (
                 <div className="jours-wrap">
                   {joursDispos.map(jour => {
-                    const actif = jour === jourActif
+                    const actif = !modeHistorique && jour === jourActif
                     const nbCmds = commandes.filter(c => dateKey(c.date_commande || c.created_at) === jour).length
                     const nbActives = commandes.filter(c => dateKey(c.date_commande || c.created_at) === jour && ['en_attente','en_preparation','pret'].includes(c.statut)).length
                     return (
-                      <button key={jour} className="pill" onClick={() => setJourSelectionne(jour)}
+                      <button key={jour} className="pill" onClick={() => { setJourSelectionne(jour); setModeHistorique(false); setFiltreStatut('actives') }}
                         style={{ borderColor: actif ? T.main : `${T.main}28`, background: actif ? T.main : '#fff', color: actif ? '#fff' : T.ink, display: 'flex', alignItems: 'center', gap: 5 }}>
                         {dateLabel(jour + 'T00:00:00')}
                         {nbActives > 0 && (
@@ -808,6 +858,14 @@ export default function Dashboard() {
                       </button>
                     )
                   })}
+                  {/* Onglet Historique */}
+                  <button className="pill" onClick={() => { setModeHistorique(true); setFiltreStatut('tout') }}
+                    style={{ borderColor: modeHistorique ? '#6B7280' : `${T.main}28`, background: modeHistorique ? '#6B7280' : '#fff', color: modeHistorique ? '#fff' : T.muted, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    📋 Historique
+                    {commandesHistorique.length > 0 && (
+                      <span style={{ background: modeHistorique ? 'rgba(255,255,255,0.3)' : '#E5E7EB', color: modeHistorique ? '#fff' : T.muted, fontSize: '0.6rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>{commandesHistorique.length}</span>
+                    )}
+                  </button>
                 </div>
               )}
 
@@ -859,14 +917,6 @@ export default function Dashboard() {
             {ongletPrincipal === 'config' && commercant && (
               <ConfigDashboard commercantId={commercant.id}/>
             )}
-
-            {/* Footer légal */}
-            <div style={{ textAlign: 'center', padding: '1.5rem 0 0.5rem', borderTop: `1px solid ${T.pale}`, marginTop: '1.5rem' }}>
-              <a href="/legal" onClick={(e) => { e.preventDefault(); window.open("/legal", "_blank", "noopener,noreferrer") }} style={{ fontSize: '0.68rem', color: T.muted, textDecoration: 'none', fontWeight: 500 }}>
-                Mentions légales · CGU · Politique de confidentialité
-              </a>
-              <p style={{ fontSize: '0.6rem', color: '#9CA3AF', marginTop: 4 }}>Avcotech SRL · BCE 0731.637.418 · yoppaa.app</p>
-            </div>
           </div>
         </div>
       </div>

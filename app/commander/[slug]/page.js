@@ -826,7 +826,10 @@ export default function CommanderSlug() {
                 {[...new Map(
                   (joursDispos[jourSelectionne]?.creneaux || creneaux)
                     .filter(c => {
-                      const estAujourdhui = jourSelectionne === 0 && joursDispos[0]?.label === "Aujourd'hui"
+                      // Vérifier si le jour sélectionné est bien aujourd'hui (comparaison de date)
+                      const dateJour = joursDispos[jourSelectionne]?.date
+                      const todayMidnight = new Date(); todayMidnight.setHours(0,0,0,0)
+                      const estAujourdhui = dateJour && new Date(dateJour).setHours(0,0,0,0) === todayMidnight.getTime()
                       if (estAujourdhui) {
                         // Créneau passé → masqué
                         if (heureEnMinutes(c.heure_debut) <= maintenant()) return false
@@ -862,11 +865,11 @@ export default function CommanderSlug() {
                 {[...new Map(
                   (joursDispos[jourSelectionne]?.creneaux || creneaux)
                     .filter(c => {
-                      const estAujourdhui = jourSelectionne === 0 && joursDispos[0]?.label === "Aujourd'hui"
-                      if (estAujourdhui) {
-                        // Créneau passé → masqué
+                      const dateJour2 = joursDispos[jourSelectionne]?.date
+                      const todayMidnight2 = new Date(); todayMidnight2.setHours(0,0,0,0)
+                      const estAujourdhui2 = dateJour2 && new Date(dateJour2).setHours(0,0,0,0) === todayMidnight2.getTime()
+                      if (estAujourdhui2) {
                         if (heureEnMinutes(c.heure_debut) <= maintenant()) return false
-                        // Delta minimum — créneau trop proche → masqué
                         const deltaMin = c.delta_minutes || 0
                         if (deltaMin > 0 && heureEnMinutes(c.heure_debut) - maintenant() < deltaMin) return false
                       }

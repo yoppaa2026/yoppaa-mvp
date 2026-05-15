@@ -417,9 +417,25 @@ export default function CommanderSlug() {
   // ─── Panier ───────────────────────────────────────────────────
   function ajouterAuPanier(article, options = null) {
     const key = options ? `${article.id}_${JSON.stringify(options)}` : String(article.id)
+    // ─── Vérif stock côté client avant d'ajouter ────────────────
+    const stockLimite = article.stock_jour !== undefined && article.stock_jour !== 999
+    if (stockLimite) {
+      const qteActuelle = Object.entries(panier)
+        .filter(([k]) => k === String(article.id) || k.startsWith(`${article.id}_`))
+        .reduce((acc, [, i]) => acc + i.quantite, 0)
+      if (qteActuelle >= article.stock_jour) return // stock insuffisant, on bloque
+    }
     setPanier(prev => ({ ...prev, [key]: { ...article, options, quantite: (prev[key]?.quantite || 0) + 1 } }))
   }
   function incrementerPanier(key, item) {
+    // ─── Vérif stock côté client ─────────────────────────────────
+    const stockLimite = item.stock_jour !== undefined && item.stock_jour !== 999
+    if (stockLimite) {
+      const qteActuelle = Object.entries(panier)
+        .filter(([k]) => k === String(item.id) || k.startsWith(`${item.id}_`))
+        .reduce((acc, [, i]) => acc + i.quantite, 0)
+      if (qteActuelle >= item.stock_jour) return
+    }
     setPanier(prev => ({ ...prev, [key]: { ...item, quantite: (prev[key]?.quantite || 0) + 1 } }))
   }
   function retirerDuPanier(key) {
@@ -459,27 +475,24 @@ export default function CommanderSlug() {
     if (!creneauChoisi || !client.prenom || !client.nom || !client.email || !client.telephone || !rgpdCommande || !commercant) return
     setLoadingCommande(true)
 
-    // ─── Vérification stock en temps réel avant commande ────────
-    const articleIds = Object.values(panier).map(i => i.id)
-    const { data: stockActuel } = await supabase
-      .from('articles')
-      .select('id, nom, stock_jour')
-      .in('id', articleIds)
-    
-    const erreurStock = []
-    for (const item of Object.values(panier)) {
-      const art = stockActuel?.find(a => a.id === item.id)
-      if (art && art.stock_jour !== 999 && art.stock_jour < item.quantite) {
-        erreurStock.push(`${art.nom} : ${art.stock_jour} restant(s), tu en commandes ${item.quantite}`)
+    // ─── Vérification + décrémentation atomique (gère la concurrence) ──
+    const articlesPayload = Object.values(panier)
+      .filter(i => i.stock_jour !== 999)
+      .map(i => ({ id: i.id, quantite: i.quantite }))
+
+    if (articlesPayload.length > 0) {
+      const { data: stockResult, error: stockError } = await supabase
+        .rpc('passer_commande_stock', { p_articles: articlesPayload })
+
+      if (stockError || !stockResult?.ok) {
+        const erreurs = stockResult?.erreurs || ['Stock insuffisant']
+        alert(`⚠️ Stock insuffisant :\n${erreurs.join('\n')}\n\nMets à jour ton panier.`)
+        // Rafraîchir les articles pour afficher le vrai stock
+        const { data: arts } = await supabase.from('articles').select('*').eq('commercant_id', commercant.id).eq('actif', true)
+        if (arts) setArticles(arts)
+        setLoadingCommande(false)
+        return
       }
-    }
-    if (erreurStock.length > 0) {
-      alert(`⚠️ Stock insuffisant :\n${erreurStock.join('\n')}\n\nMets à jour ton panier.`)
-      // Rafraîchir les articles pour afficher le vrai stock
-      const { data: arts } = await supabase.from('articles').select('*').eq('commercant_id', commercant.id).eq('actif', true)
-      if (arts) setArticles(arts)
-      setLoadingCommande(false)
-      return
     }
 
     const nomComplet = `${client.prenom} ${client.nom}`.trim()
@@ -499,15 +512,7 @@ export default function CommanderSlug() {
       await supabase.from('commande_articles').insert(
         Object.values(panier).map(i => ({ commande_id: commande.id, article_id: i.id, quantite: i.quantite, prix_unitaire: i.prix }))
       )
-      // ─── Décrémenter stock_jour pour chaque article commandé ───
-      for (const item of Object.values(panier)) {
-        if (item.stock_jour !== 999 && item.stock_jour > 0) {
-          await supabase.rpc('decrement_stock', {
-            article_id: item.id,
-            quantite: item.quantite
-          })
-        }
-      }
+      // ─── Stock déjà décrémenté atomiquement avant l'insert ────
       // Mettre à jour l'état local pour refléter le nouveau stock
       setArticles(prev => prev.map(a => {
         const panierItem = Object.values(panier).find(i => i.id === a.id)
@@ -1000,6 +1005,9 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
   const qteTotale = qteTotaleArticle(article.id)
   // Clé simple (sans options) pour retirer
   const keySimple = String(article.id)
+  // Stock max — 999 = illimité
+  const stockMax = article.stock_jour !== undefined && article.stock_jour !== 999 ? article.stock_jour : Infinity
+  const stockAtteint = qteTotale >= stockMax
 
   return (
     <div className="art-card" style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${qteTotale > 0 ? T.main+'44' : T.pale}`, boxShadow: qteTotale > 0 ? `0 2px 12px ${T.main}18` : '0 1px 4px rgba(107,53,196,0.04)', transition: 'all 0.2s' }}>
@@ -1037,8 +1045,9 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
                     −
                   </button>
                   <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, minWidth: 22, textAlign: 'center' }}>{qteTotale}</span>
-                  <button onClick={() => ajouterAuPanier(article)}
-                    style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 4px 14px ${T.main}55` }}>
+                  <button onClick={() => !stockAtteint && ajouterAuPanier(article)}
+                    disabled={stockAtteint}
+                    style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: stockAtteint ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: stockAtteint ? '#9CA3AF' : '#fff', fontWeight: 900, cursor: stockAtteint ? 'default' : 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: stockAtteint ? 'none' : `0 4px 14px ${T.main}55` }}>
                     +
                   </button>
                 </div>

@@ -880,14 +880,13 @@ function QRCodeSection({ commercantId, toast }) {
     fetchSlug()
   }, [commercantId])
 
-  // Génère le QR en dataURL dès que le slug est connu
   useEffect(() => {
     if (!url) return
     async function gen() {
       try {
         const QRCode = (await import('qrcode')).default
         const dataUrl = await QRCode.toDataURL(url, {
-          width: 600, margin: 2,
+          width: 800, margin: 2,
           color: { dark: '#1A0840', light: '#FFFFFF' },
           errorCorrectionLevel: 'H',
         })
@@ -897,75 +896,136 @@ function QRCodeSection({ commercantId, toast }) {
     gen()
   }, [url])
 
-  // ─── HTML d'impression — 1 seule page garantie ───────────────────────────
-  function buildPrintHTML(format) {
+  // ─── Canvas composé avec style tribu ─────────────────────────────────────
+  async function buildCompositeCanvas() {
+    const SIZE = 800
+    const PAD = 60
+    const HEADER = 160
+    const FOOTER = 130
+    const W = SIZE + PAD * 2
+    const H = SIZE + PAD * 2 + HEADER + FOOTER
+
+    const canvas = document.createElement('canvas')
+    canvas.width = W; canvas.height = H
+    const ctx = canvas.getContext('2d')
+
+    // Fond dégradé ink → deep → dark
+    const grad = ctx.createLinearGradient(0, 0, W * 0.4, H)
+    grad.addColorStop(0, '#160636')
+    grad.addColorStop(0.5, '#2D0F6B')
+    grad.addColorStop(1, '#1A0840')
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H)
+
+    // 3 points yo·pp·aa en haut
+    const dotColors = ['rgba(255,255,255,0.55)', '#C4A0F4', '#9660E0']
+    const dotSizes = [14, 18, 14]
+    const dotsY = PAD + 34
+    const totalDotW = dotSizes.reduce((a,b) => a+b, 0) + 16*2
+    let dotX = W/2 - totalDotW/2
+    dotColors.forEach((color, i) => {
+      const r = dotSizes[i] / 2
+      dotX += r
+      ctx.beginPath()
+      ctx.arc(dotX, dotsY, r, 0, Math.PI * 2)
+      ctx.fillStyle = color; ctx.fill()
+      dotX += r + 16
+    })
+
+    // Wordmark "yoppaa"
+    ctx.textAlign = 'center'
+    ctx.fillStyle = '#FFFFFF'
+    ctx.font = '900 72px "DM Sans", sans-serif'
+    ctx.letterSpacing = '-4px'
+    ctx.fillText('yoppaa', W/2, PAD + 100)
+
+    // Nom commerce
+    ctx.fillStyle = '#C4A0F4'
+    ctx.font = '600 28px "DM Sans", sans-serif'
+    ctx.fillText(nomCommerce, W/2, PAD + HEADER - 14)
+
+    // Fond blanc arrondi pour QR
+    const qrX = PAD; const qrY = PAD + HEADER
+    const r = 24
+    ctx.fillStyle = '#FFFFFF'
+    ctx.beginPath()
+    ctx.moveTo(qrX+r, qrY); ctx.lineTo(qrX+SIZE-r, qrY)
+    ctx.quadraticCurveTo(qrX+SIZE, qrY, qrX+SIZE, qrY+r)
+    ctx.lineTo(qrX+SIZE, qrY+SIZE-r)
+    ctx.quadraticCurveTo(qrX+SIZE, qrY+SIZE, qrX+SIZE-r, qrY+SIZE)
+    ctx.lineTo(qrX+r, qrY+SIZE)
+    ctx.quadraticCurveTo(qrX, qrY+SIZE, qrX, qrY+SIZE-r)
+    ctx.lineTo(qrX, qrY+r)
+    ctx.quadraticCurveTo(qrX, qrY, qrX+r, qrY); ctx.closePath(); ctx.fill()
+
+    // QR image
+    const qrImg = new window.Image()
+    await new Promise(resolve => {
+      qrImg.onload = resolve
+      qrImg.src = qrDataUrl
+    })
+    ctx.drawImage(qrImg, qrX + 16, qrY + 16, SIZE - 32, SIZE - 32)
+
+    // URL
+    ctx.fillStyle = 'rgba(196,160,244,0.7)'
+    ctx.font = '500 20px "DM Sans", sans-serif'
+    ctx.fillText(url, W/2, qrY + SIZE + 42)
+
+    // "Skip the wait"
+    ctx.fillStyle = '#FFFFFF'
+    ctx.font = '900 36px "DM Sans", sans-serif'
+    ctx.fillText('Skip the wait', W/2, H - PAD/2 - 20)
+
+    // Point violet décoratif
+    ctx.beginPath()
+    ctx.arc(W/2 + ctx.measureText('Skip the wait').width/2 + 20, H - PAD/2 - 28, 8, 0, Math.PI*2)
+    ctx.fillStyle = '#9660E0'; ctx.fill()
+
+    return canvas
+  }
+
+  // ─── HTML impression 1 page garantie ─────────────────────────────────────
+  async function buildPrintHTML(format) {
+    const canvas = await buildCompositeCanvas()
+    const imgUrl = canvas.toDataURL('image/png')
     const isA4 = format === 'A4'
     const pw = isA4 ? '210mm' : '148mm'
     const ph = isA4 ? '297mm' : '210mm'
-    const qrSz = isA4 ? '140mm' : '100mm'
-    const t1 = isA4 ? '28px' : '20px'
-    const t2 = isA4 ? '16px' : '12px'
-    const t3 = isA4 ? '24px' : '17px'
-    const t4 = isA4 ? '11px' : '8px'
+    const imgW = isA4 ? '190mm' : '134mm'
+
     return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>QR Yoppaa — ${nomCommerce}</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
   @page{size:${format} portrait;margin:0;}
-  html,body{
-    width:${pw};height:${ph};max-height:${ph};overflow:hidden;
-    background:#6B35C4!important;
-    -webkit-print-color-adjust:exact;print-color-adjust:exact;
+  html{width:${pw};height:${ph};overflow:hidden;}
+  body{
+    width:${pw};height:${ph};
+    background:#160636!important;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
     display:flex;align-items:center;justify-content:center;
-    font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+    overflow:hidden;
   }
-  .wrap{
-    width:calc(${pw} - 12mm);
-    height:calc(${ph} - 12mm);
-    background:#fff;
-    border-radius:10mm;
-    display:flex;flex-direction:column;
-    align-items:center;justify-content:space-between;
-    padding:7mm 8mm;
-    text-align:center;
-  }
-  .logo{font-size:${t4};font-weight:700;color:#9660E0;letter-spacing:2px;text-transform:uppercase;}
-  .title{font-size:${t1};font-weight:900;color:#1A0840;letter-spacing:-1px;line-height:1;}
-  .sub{font-size:${t2};font-weight:600;color:#6B35C4;margin-top:3px;}
-  .qr{width:${qrSz};height:${qrSz};border-radius:4mm;display:block;}
-  .urltext{font-size:${t4};color:#C4A0F4;word-break:break-all;max-width:${qrSz};}
-  .tag{font-size:${t3};font-weight:900;color:#1A0840;letter-spacing:-0.5px;}
-  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#6B35C4;margin-left:4px;vertical-align:middle;}
-</style></head><body>
-<div class="wrap">
-  <div class="logo">yoppaa</div>
-  <div>
-    <div class="title">Commandez ici</div>
-    <div class="sub">${nomCommerce}</div>
-  </div>
-  <img class="qr" src="${qrDataUrl}" />
-  <div class="urltext">${url}</div>
-  <div>
-    <div class="tag">Skip the wait<span class="dot"></span></div>
-  </div>
-</div>
-<script>window.onload=()=>setTimeout(()=>window.print(),200)<\/script>
-</body></html>`
+  img{width:${imgW};height:auto;display:block;border-radius:8px;}
+</style></head>
+<body><img src="${imgUrl}"/></body>
+<script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script>
+</html>`
   }
 
-  function printQR(format) {
+  async function printQR(format) {
     if (!qrDataUrl) return toast('QR pas encore prêt', 'error')
+    const html = await buildPrintHTML(format)
     const win = window.open('', '_blank')
-    win.document.open()
-    win.document.write(buildPrintHTML(format))
-    win.document.close()
+    win.document.open(); win.document.write(html); win.document.close()
   }
 
-  function downloadPNG() {
+  async function downloadPNG() {
     if (!qrDataUrl) return
+    const canvas = await buildCompositeCanvas()
     const a = document.createElement('a')
     a.download = `yoppaa-qr-${slug}.png`
-    a.href = qrDataUrl
+    a.href = canvas.toDataURL('image/png')
     a.click()
     toast('PNG téléchargé ✓')
   }
@@ -974,37 +1034,20 @@ function QRCodeSection({ commercantId, toast }) {
     if (!qrDataUrl) return
     try {
       const { jsPDF } = await import('jspdf')
+      const canvas = await buildCompositeCanvas()
+      const imgData = canvas.toDataURL('image/png')
       const isA4 = format === 'A4'
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: format.toLowerCase() })
       const W = pdf.internal.pageSize.getWidth()
       const H = pdf.internal.pageSize.getHeight()
-      const m = 6
-      pdf.setFillColor(107, 53, 196); pdf.rect(0, 0, W, H, 'F')
-      pdf.setFillColor(255, 255, 255); pdf.roundedRect(m, m, W-m*2, H-m*2, 8, 8, 'F')
-      const cx = W / 2
-      // Logo
-      pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(7); pdf.setTextColor(150, 96, 224)
-      pdf.text('YOPPAA', cx, m + 8, { align: 'center' })
-      // Titre
-      pdf.setFontSize(isA4 ? 24 : 16); pdf.setTextColor(26, 8, 64)
-      pdf.text('Commandez ici', cx, m + (isA4 ? 20 : 16), { align: 'center' })
-      // Sous-titre
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(isA4 ? 12 : 9); pdf.setTextColor(107, 53, 196)
-      pdf.text(nomCommerce, cx, m + (isA4 ? 28 : 22), { align: 'center' })
-      // QR — seul le vrai dataURL, pas un canvas composite
-      const qrSz = isA4 ? 140 : 98
-      const qrX = (W - qrSz) / 2
-      const qrY = m + (isA4 ? 34 : 28)
-      pdf.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSz, qrSz)
-      // URL
-      pdf.setFontSize(isA4 ? 8 : 6); pdf.setTextColor(196, 160, 244)
-      pdf.text(url, cx, qrY + qrSz + (isA4 ? 7 : 5), { align: 'center' })
-      // Tagline
-      pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(isA4 ? 18 : 13); pdf.setTextColor(26, 8, 64)
-      pdf.text('Skip the wait', cx, H - m - (isA4 ? 8 : 6), { align: 'center' })
+      // Fond ink
+      pdf.setFillColor(22, 6, 54); pdf.rect(0, 0, W, H, 'F')
+      // Image centrée
+      const imgW = isA4 ? 180 : 130
+      const imgH = imgW * (canvas.height / canvas.width)
+      const imgX = (W - imgW) / 2
+      const imgY = (H - imgH) / 2
+      pdf.addImage(imgData, 'PNG', imgX, imgY, imgW, imgH)
       pdf.save(`yoppaa-qr-${slug}-${format}.pdf`)
       toast(`PDF ${format} téléchargé ✓`)
     } catch (e) { console.error(e); toast('Erreur PDF', 'error') }
@@ -1017,31 +1060,41 @@ function QRCodeSection({ commercantId, toast }) {
     </div>
   )
 
+  // ─── Preview style tribu ──────────────────────────────────────────────────
+  const bgStyle = { background: 'linear-gradient(160deg, #160636 0%, #2D0F6B 50%, #1A0840 100%)' }
+
   return (
     <div style={{ ...s.card, marginTop: 12 }}>
       <h2 style={{ ...s.h2, marginBottom: 4 }}>QR Code</h2>
       <p style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>Vitrine, sacs, flyers — partout !</p>
 
-      {/* Preview hype */}
-      <div style={{ background: T.main, borderRadius: 16, padding: 20, textAlign: 'center', marginBottom: 16 }}>
-        <p style={{ fontSize: 10, fontWeight: 700, color: T.light, letterSpacing: '2px', marginBottom: 8, textTransform: 'uppercase' }}>yoppaa</p>
-        <p style={{ fontSize: 16, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', marginBottom: 2 }}>Commandez ici</p>
-        <p style={{ fontSize: 11, color: T.light, marginBottom: 12 }}>{nomCommerce}</p>
+      {/* Preview tribu */}
+      <div style={{ ...bgStyle, borderRadius: 16, padding: '24px 20px', textAlign: 'center', marginBottom: 16 }}>
+        {/* 3 points */}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 12, alignItems: 'center' }}>
+          <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgba(255,255,255,0.5)' }}/>
+          <div style={{ width: 14, height: 14, borderRadius: '50%', background: '#C4A0F4' }}/>
+          <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#9660E0' }}/>
+        </div>
+        {/* Wordmark */}
+        <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '2rem', color: '#fff', letterSpacing: '-2px', lineHeight: 1, marginBottom: 4 }}>yoppaa</p>
+        <p style={{ fontSize: 12, color: '#C4A0F4', fontWeight: 600, marginBottom: 14 }}>{nomCommerce}</p>
+        {/* QR */}
         {qrDataUrl
-          ? <img src={qrDataUrl} alt="QR Code" style={{ width: 180, height: 180, borderRadius: 8, display: 'block', margin: '0 auto', background: '#fff', padding: 6 }} />
-          : <div style={{ width: 180, height: 180, background: T.deep, borderRadius: 8, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.light, fontSize: 12 }}>Génération...</div>
+          ? <img src={qrDataUrl} alt="QR Code" style={{ width: 200, height: 200, borderRadius: 10, display: 'block', margin: '0 auto', background: '#fff', padding: 8 }} />
+          : <div style={{ width: 200, height: 200, background: '#2D0F6B', borderRadius: 10, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C4A0F4', fontSize: 12 }}>Génération...</div>
         }
-        <p style={{ fontSize: 9, color: T.light, marginTop: 10, wordBreak: 'break-all', opacity: 0.8 }}>{url}</p>
-        <p style={{ fontSize: 13, fontWeight: 900, color: '#fff', marginTop: 8, letterSpacing: '-0.3px' }}>Skip the wait 🟣</p>
+        <p style={{ fontSize: 10, color: 'rgba(196,160,244,0.7)', marginTop: 10, wordBreak: 'break-all' }}>{url}</p>
+        <p style={{ fontWeight: 900, fontSize: 14, color: '#fff', marginTop: 8, letterSpacing: '-0.3px' }}>
+          Skip the wait <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#9660E0', verticalAlign: 'middle', marginLeft: 3 }}/>
+        </p>
       </div>
 
       {/* URL copiable */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.pale, borderRadius: 10, padding: '8px 12px', marginBottom: 16 }}>
         <span style={{ fontSize: 11, color: T.main, flex: 1, wordBreak: 'break-all' }}>{url}</span>
         <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 11, flexShrink: 0 }}
-          onClick={() => { navigator.clipboard.writeText(url); toast('URL copiée ✓') }}>
-          📋
-        </button>
+          onClick={() => { navigator.clipboard.writeText(url); toast('URL copiée ✓') }}>📋</button>
       </div>
 
       {/* PNG */}

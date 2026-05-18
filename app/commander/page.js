@@ -297,7 +297,7 @@ function SuggestionForm({ clientId }) {
 }
 
 // ─── Carte commerce — redesignée ──────────────────────────────────────────────
-function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect, onToggleFavori, onPrefetch }) {
+function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect, onToggleFavori }) {
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
   const statut = statutsCommerce[c.id]
@@ -364,8 +364,6 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
 
   return (
     <div onClick={() => onSelect(c)}
-      onTouchStart={() => c.slug && onPrefetch && onPrefetch(c.slug)}
-      onMouseEnter={() => c.slug && onPrefetch && onPrefetch(c.slug)}
       style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', marginBottom: '0.875rem', cursor: 'pointer', boxShadow: '0 2px 12px rgba(107,53,196,0.07)', border: `1px solid ${T.pale}`, transition: 'all 0.2s' }}
       onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(107,53,196,0.14)' }}
       onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(107,53,196,0.07)' }}>
@@ -431,76 +429,9 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
   )
 }
 
-// ─── Cache prefetch par slug ──────────────────────────────────────────────────
-const prefetchCache = {}
-async function prefetchCommercant(slug) {
-  if (prefetchCache[slug]) return
-  prefetchCache[slug] = true
-  try {
-    const cacheKey = `yoppaa_commerce_${slug}`
-    if (localStorage.getItem(cacheKey)) return
-    await supabase.from('commercants').select('id,nom,slug').eq('slug', slug).single()
-  } catch(e) {}
-}
-
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function Commander() {
   const router = useRouter()
-
-  // ── Vérification onboarding + sync session Supabase ──────────────────────
-  const [onboardingChecked, setOnboardingChecked] = useState(false)
-
-  useEffect(() => {
-    async function checkAuth() {
-      const done = localStorage.getItem('yoppaa_onboarding_done')
-      // Vérifier aussi si session Supabase active (cas connexion récente)
-      const { data: { session } } = await supabase.auth.getSession()
-
-      if (session) {
-        // Session active — marquer onboarding comme fait
-        localStorage.setItem('yoppaa_onboarding_done', '1')
-        // Sync profil client si localStorage vide
-        const emailLocal = localStorage.getItem('yoppaa_email')
-        if (!emailLocal && session.user?.email) {
-          const email = session.user.email
-          const { data: client } = await supabase
-            .from('clients')
-            .select('id, nom, email')
-            .eq('email', email)
-            .single()
-          if (client) {
-            localStorage.setItem('yoppaa_client_id', client.id)
-            localStorage.setItem('yoppaa_email', client.email)
-            const parts = (client.nom || '').split(' ')
-            localStorage.setItem('yoppaa_prenom', parts[0] || '')
-            localStorage.setItem('yoppaa_nom', parts.slice(1).join(' ') || '')
-          } else {
-            // Créer le profil client si inexistant
-            const { data: newClient } = await supabase
-              .from('clients')
-              .upsert({ email }, { onConflict: 'email' })
-              .select('id')
-              .single()
-            if (newClient) {
-              localStorage.setItem('yoppaa_client_id', newClient.id)
-              localStorage.setItem('yoppaa_email', email)
-            }
-          }
-        }
-        setOnboardingChecked(true)
-        return
-      }
-
-      // Pas de session Supabase
-      if (!done) {
-        router.push('/onboarding')
-        return
-      }
-      setOnboardingChecked(true)
-    }
-    checkAuth()
-  }, [])
-  // ─────────────────────────────────────────────────────────────────────────
 
   const [showSplash, setShowSplash] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -529,26 +460,72 @@ export default function Commander() {
   const [clientCommandes, setClientCommandes] = useState([])
 
   useEffect(() => {
-    if (!onboardingChecked) return
-    const savedOnglet = localStorage.getItem('yoppaa_onglet')
-    if (savedOnglet) setOngletState(savedOnglet)
-    chargerCommercants()
-    demanderGeolocalisation()
-    const email = localStorage.getItem('yoppaa_email')
-    const nom = localStorage.getItem('yoppaa_nom')
-    const prenom = localStorage.getItem('yoppaa_prenom')
-    const id = localStorage.getItem('yoppaa_client_id')
-    if (email && id) {
-      setClient(p => ({ ...p, email, nom: nom || '', prenom: prenom || '' }))
-      setClientId(id)
-      chargerFavoris(id)
-      chargerCommandesClient(email)
+    async function init() {
+      // 1. Vérification onboarding + sync session Supabase
+      const done = localStorage.getItem('yoppaa_onboarding_done')
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!done && !session) {
+        router.push('/onboarding')
+        return
+      }
+
+      // Marquer onboarding fait si session active
+      if (session) localStorage.setItem('yoppaa_onboarding_done', '1')
+
+      // 2. Sync profil client depuis Supabase si localStorage vide
+      let email = localStorage.getItem('yoppaa_email')
+      let nom = localStorage.getItem('yoppaa_nom')
+      let prenom = localStorage.getItem('yoppaa_prenom')
+      let id = localStorage.getItem('yoppaa_client_id')
+
+      if (session?.user?.email && !email) {
+        email = session.user.email
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('id, nom, email')
+          .eq('email', email)
+          .single()
+        if (clientData) {
+          id = clientData.id
+          nom = clientData.nom || ''
+          prenom = (clientData.nom || '').split(' ')[0] || ''
+          localStorage.setItem('yoppaa_client_id', clientData.id)
+          localStorage.setItem('yoppaa_email', email)
+          localStorage.setItem('yoppaa_prenom', prenom)
+          localStorage.setItem('yoppaa_nom', nom)
+        } else {
+          // Créer profil client
+          const { data: newClient } = await supabase
+            .from('clients')
+            .upsert({ email }, { onConflict: 'email' })
+            .select('id').single()
+          if (newClient) {
+            id = newClient.id
+            localStorage.setItem('yoppaa_client_id', newClient.id)
+            localStorage.setItem('yoppaa_email', email)
+          }
+        }
+      }
+
+      // 3. Charger tout
+      const savedOnglet = localStorage.getItem('yoppaa_onglet')
+      if (savedOnglet) setOngletState(savedOnglet)
+      chargerCommercants()
+      demanderGeolocalisation()
+
+      if (email && id) {
+        setClient(p => ({ ...p, email, nom: nom || '', prenom: prenom || '' }))
+        setClientId(id)
+        chargerFavoris(id)
+        chargerCommandesClient(email)
+      }
     }
+    init()
   }, [])
 
-  // ─── Polling client 5s ─────────────────────────────────────────────────────
+  // ─── Polling client 5s — mise à jour statuts sans refresh ─────────────────
   useEffect(() => {
-    if (!onboardingChecked) return
     const email = localStorage.getItem('yoppaa_email')
     if (!email) return
     const iv = setInterval(() => {
@@ -744,9 +721,6 @@ export default function Commander() {
     en_attente:     { bg: '#FFF7ED', color: '#EA580C', label: '🔴 En attente' },
   }
 
-  // Ne rien afficher tant que auth non vérifiée
-  if (!onboardingChecked) return null
-
   return (
     <>
       {showSplash && <SplashScreen onDone={onSplashDone}/>}
@@ -936,7 +910,7 @@ export default function Commander() {
                   <p style={{ fontSize: '0.875rem', color: '#9CA3AF' }}>Essaie une autre catégorie ou recherche.</p>
                 </div>
               ) : (
-                commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} onPrefetch={prefetchCommercant}/>)
+                commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)
               )}
             </div>
           )}
@@ -1059,7 +1033,7 @@ export default function Commander() {
                       <p style={{ fontWeight: 800, color: T.ink, marginBottom: 6 }}>Aucun favori</p>
                       <p style={{ fontSize: '0.875rem', color: T.muted }}>Tape ❤️ sur un commerce pour le retrouver ici.</p>
                     </div>
-                  : commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} onPrefetch={prefetchCommercant}/>)
+                  : commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)
                 }
               </div>
             </div>

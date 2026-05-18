@@ -296,6 +296,65 @@ function SuggestionForm({ clientId }) {
   )
 }
 
+
+// ─── Édition prénom inline ────────────────────────────────────────────────────
+function EditablePrenom({ client, setClient, clientId }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(client.prenom || '')
+  const [saving, setSaving] = useState(false)
+
+  async function sauvegarder() {
+    if (!val.trim()) return
+    setSaving(true)
+    const prenom = val.trim()
+    localStorage.setItem('yoppaa_prenom', prenom)
+    setClient(p => ({ ...p, prenom }))
+    if (clientId) {
+      await supabase.from('clients').update({ nom: prenom }).eq('id', clientId)
+    }
+    setSaving(false)
+    setEditing(false)
+  }
+
+  if (editing) return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <input
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && sauvegarder()}
+        autoFocus
+        placeholder="Ton prénom"
+        style={{ background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.4)', borderRadius: 10, padding: '0.5rem 0.875rem', color: '#fff', fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', outline: 'none', width: '100%', boxSizing: 'border-box' }}
+      />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={sauvegarder} disabled={!val.trim() || saving}
+          style={{ flex: 1, padding: '0.5rem', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', color: '#6B35C4', fontFamily: '"DM Sans", sans-serif' }}>
+          {saving ? '...' : '✓ Sauvegarder'}
+        </button>
+        <button onClick={() => setEditing(false)}
+          style={{ padding: '0.5rem 0.875rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 100, color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+          Annuler
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+        <p style={{ fontWeight: 900, fontSize: '1.15rem', color: '#fff', letterSpacing: '-0.3px' }}>
+          {client.prenom || 'Yopper 🟣'}
+        </p>
+        <button onClick={() => { setVal(client.prenom || ''); setEditing(true) }}
+          style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 100, padding: '2px 10px', color: 'rgba(255,255,255,0.7)', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+          ✏️ Modifier
+        </button>
+      </div>
+      <p style={{ fontSize: '0.78rem', color: '#C4A0F4', opacity: 0.8 }}>{client.email}</p>
+    </div>
+  )
+}
+
 // ─── Carte commerce — redesignée ──────────────────────────────────────────────
 function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect, onToggleFavori }) {
   const estFavori = favoris.includes(c.id)
@@ -1006,7 +1065,7 @@ export default function Commander() {
                   <div style={{ width: 60, height: 60, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', flexShrink: 0, boxShadow: `0 6px 20px ${T.main}66, 0 0 0 3px rgba(255,255,255,0.15)` }}>👤</div>
                   <div>
                     {client.email
-                      ? <><p style={{ fontWeight: 900, fontSize: '1.15rem', color: '#fff', marginBottom: 2, letterSpacing: '-0.3px' }}>{client.prenom || client.email.split('@')[0]}</p><p style={{ fontSize: '0.78rem', color: T.light, opacity: 0.8 }}>{client.email}</p></>
+                      ? <EditablePrenom client={client} setClient={setClient} clientId={clientId}/>
                       : <div>
                           <p style={{ fontWeight: 900, color: '#fff', marginBottom: 10, fontSize: '1.1rem' }}>Les Yoppers 🟣</p>
                           <button onClick={() => router.push('/commander/auth?redirect=/commander')}

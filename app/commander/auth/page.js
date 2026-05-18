@@ -30,9 +30,31 @@ function AuthForm() {
   // Vérifier si déjà connecté
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.replace(redirect)
+      if (session) {
+        localStorage.setItem('yoppaa_onboarding_done', '1')
+        router.replace(redirect)
+      }
     })
   }, [])
+
+  // ── Sauvegarder profil client en localStorage ─────────────────────────────
+  async function sauvegarderClient(user) {
+    if (!user) return
+    const { data: client } = await supabase
+      .from('clients')
+      .select('id, nom, email')
+      .eq('email', user.email)
+      .single()
+    if (client) {
+      localStorage.setItem('yoppaa_client_id', client.id)
+      localStorage.setItem('yoppaa_email', client.email)
+      const parts = (client.nom || '').split(' ')
+      localStorage.setItem('yoppaa_prenom', parts[0] || '')
+      localStorage.setItem('yoppaa_nom', parts.slice(1).join(' ') || '')
+    }
+    // Marquer onboarding comme fait
+    localStorage.setItem('yoppaa_onboarding_done', '1')
+  }
 
   // ── Magic link ────────────────────────────────────────────────────────────
   async function envoyerMagicLink() {
@@ -65,21 +87,7 @@ function AuthForm() {
       setLoading(false)
       return
     }
-    // Sauvegarder infos client
-    if (data.user) {
-      const { data: client } = await supabase
-        .from('clients')
-        .select('id, nom, email')
-        .eq('email', data.user.email)
-        .single()
-      if (client) {
-        localStorage.setItem('yoppaa_client_id', client.id)
-        localStorage.setItem('yoppaa_email', client.email)
-        const parts = (client.nom || '').split(' ')
-        localStorage.setItem('yoppaa_prenom', parts[0] || '')
-        localStorage.setItem('yoppaa_nom', parts.slice(1).join(' ') || '')
-      }
-    }
+    await sauvegarderClient(data.user)
     router.replace(redirect)
   }
 
@@ -101,7 +109,7 @@ function AuthForm() {
       setLoading(false)
       return
     }
-    // Créer le profil client
+    // Créer le profil client en DB
     if (data.user) {
       await supabase.from('clients').upsert({
         email: email.trim().toLowerCase(),
@@ -114,8 +122,8 @@ function AuthForm() {
         localStorage.setItem('yoppaa_prenom', prenom.trim())
         localStorage.setItem('yoppaa_nom', nom.trim())
       }
+      localStorage.setItem('yoppaa_onboarding_done', '1')
     }
-    // Si email de confirmation requis
     if (!data.session) {
       setMessage({ type: 'success', text: 'Compte créé ! Vérifie ta boîte mail pour confirmer.' })
     } else {
@@ -247,7 +255,10 @@ function AuthForm() {
       )}
 
       {/* Skip */}
-      <button onClick={() => router.push(redirect)}
+      <button onClick={() => {
+        localStorage.setItem('yoppaa_onboarding_done', '1')
+        router.push(redirect)
+      }}
         style={{ width: '100%', marginTop: 20, padding: '0.75rem', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.3)', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
         Continuer sans compte →
       </button>

@@ -44,7 +44,7 @@ function ConfirmHandler() {
               localStorage.setItem('yoppaa_email', email)
             }
           }
-          router.replace(next)
+          localStorage.setItem('yoppaa_onboarding_done', '1'); router.replace(next)
         } else {
           router.replace('/commander/auth?error=lien-invalide')
         }
@@ -52,7 +52,7 @@ function ConfirmHandler() {
         // Pas de token — vérifier session existante
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
-          router.replace(next)
+          localStorage.setItem('yoppaa_onboarding_done', '1'); router.replace(next)
         } else {
           router.replace('/commander/auth?error=lien-invalide')
         }

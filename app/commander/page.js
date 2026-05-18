@@ -185,7 +185,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
           C'est <span style={{ fontWeight: 900, color: C.main }}>YOP!</span> {clientPrenom || 'Yopper'} 🎉
         </p>
         <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: 6, animation: 'yopSub 0.5s ease 0.5s both' }}>
-          Ton quartier, dans ta poche. — bien joué !
+          Skip the wait — bien joué !
         </p>
       </div>
     )
@@ -257,7 +257,7 @@ function SplashScreen({ onDone }) {
         ))}
       </div>
       <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '3.5rem', color: '#fff', letterSpacing: '-2px', lineHeight: 1, marginBottom: 10, animation: phase >= 1 ? 'wordmark-in 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards' : 'none', opacity: phase >= 1 ? 1 : 0 }}>yoppaa</p>
-      <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#C4A0F4', letterSpacing: '3px', textTransform: 'uppercase', animation: phase >= 2 ? 'tagline-in 0.5s ease forwards' : 'none', opacity: phase >= 2 ? 1 : 0 }}>Ton quartier, dans ta poche.</p>
+      <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#C4A0F4', letterSpacing: '3px', textTransform: 'uppercase', animation: phase >= 2 ? 'tagline-in 0.5s ease forwards' : 'none', opacity: phase >= 2 ? 1 : 0 }}>Skip the wait</p>
     </div>
   )
 }
@@ -460,68 +460,20 @@ export default function Commander() {
   const [clientCommandes, setClientCommandes] = useState([])
 
   useEffect(() => {
-    async function init() {
-      // 1. Vérification onboarding + sync session Supabase
-      const done = localStorage.getItem('yoppaa_onboarding_done')
-      const { data: { session } } = await supabase.auth.getSession()
-
-      if (!done && !session) {
-        router.push('/onboarding')
-        return
-      }
-
-      // Marquer onboarding fait si session active
-      if (session) localStorage.setItem('yoppaa_onboarding_done', '1')
-
-      // 2. Sync profil client depuis Supabase si localStorage vide
-      let email = localStorage.getItem('yoppaa_email')
-      let nom = localStorage.getItem('yoppaa_nom')
-      let prenom = localStorage.getItem('yoppaa_prenom')
-      let id = localStorage.getItem('yoppaa_client_id')
-
-      if (session?.user?.email && !email) {
-        email = session.user.email
-        const { data: clientData } = await supabase
-          .from('clients')
-          .select('id, nom, email')
-          .eq('email', email)
-          .single()
-        if (clientData) {
-          id = clientData.id
-          nom = clientData.nom || ''
-          prenom = (clientData.nom || '').split(' ')[0] || ''
-          localStorage.setItem('yoppaa_client_id', clientData.id)
-          localStorage.setItem('yoppaa_email', email)
-          localStorage.setItem('yoppaa_prenom', prenom)
-          localStorage.setItem('yoppaa_nom', nom)
-        } else {
-          // Créer profil client
-          const { data: newClient } = await supabase
-            .from('clients')
-            .upsert({ email }, { onConflict: 'email' })
-            .select('id').single()
-          if (newClient) {
-            id = newClient.id
-            localStorage.setItem('yoppaa_client_id', newClient.id)
-            localStorage.setItem('yoppaa_email', email)
-          }
-        }
-      }
-
-      // 3. Charger tout
-      const savedOnglet = localStorage.getItem('yoppaa_onglet')
-      if (savedOnglet) setOngletState(savedOnglet)
-      chargerCommercants()
-      demanderGeolocalisation()
-
-      if (email && id) {
-        setClient(p => ({ ...p, email, nom: nom || '', prenom: prenom || '' }))
-        setClientId(id)
-        chargerFavoris(id)
-        chargerCommandesClient(email)
-      }
+    const savedOnglet = localStorage.getItem('yoppaa_onglet')
+    if (savedOnglet) setOngletState(savedOnglet)
+    chargerCommercants()
+    demanderGeolocalisation()
+    const email = localStorage.getItem('yoppaa_email')
+    const nom = localStorage.getItem('yoppaa_nom')
+    const prenom = localStorage.getItem('yoppaa_prenom')
+    const id = localStorage.getItem('yoppaa_client_id')
+    if (email && id) {
+      setClient(p => ({ ...p, email, nom: nom || '', prenom: prenom || '' }))
+      setClientId(id)
+      chargerFavoris(id)
+      chargerCommandesClient(email)
     }
-    init()
   }, [])
 
   // ─── Polling client 5s — mise à jour statuts sans refresh ─────────────────
@@ -533,28 +485,6 @@ export default function Commander() {
     }, 5000)
     return () => clearInterval(iv)
   }, [])
-
-  async function geocoderAdresseManuelle(adresse) {
-    if (!adresse.trim()) return
-    setGeoLoading(true)
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(adresse)}&format=json&limit=1&accept-language=fr`,
-        { headers: { 'Accept': 'application/json' } }
-      )
-      if (res.ok) {
-        const data = await res.json()
-        if (data?.length > 0) {
-          const { lat, lon } = data[0]
-          const newPos = { lat: parseFloat(lat), lng: parseFloat(lon) }
-          setPosition(newPos)
-          setRue(adresse.trim())
-          if (commercants.length > 0) calculerDistances(commercants, newPos)
-        }
-      }
-    } catch {}
-    setGeoLoading(false)
-  }
 
   function demanderGeolocalisation() {
     if (!navigator.geolocation) return
@@ -590,7 +520,7 @@ export default function Commander() {
     const [{ data: avisData }, { data: creneauxData }, { data: commandesData }] = await Promise.all([
       supabase.from('avis').select('commercant_id, note').in('commercant_id', ids),
       supabase.from('creneaux').select('id, commercant_id, heure_debut, heure_fin, max_commandes, actif').in('commercant_id', ids).eq('actif', true),
-      supabase.from('commandes').select('commercant_id, creneau_id').in('commercant_id', ids).not('statut', 'in', '(recupere,non_retire)')
+      supabase.from('commandes').select('commercant_id, creneau_id').in('commercant_id', ids).neq('statut', 'recupere')
     ])
     const notes = {}
     ids.forEach(id => {
@@ -771,7 +701,7 @@ export default function Commander() {
                 </div>
               )}
               <p style={{ fontWeight: 900, fontSize: headerScrolled ? '1.3rem' : '2rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1, textShadow: `0 0 40px ${T.mid}66`, transition: 'font-size 0.3s ease' }}>yoppaa</p>
-              {!headerScrolled && <p style={{ color: T.light, fontSize: '0.62rem', marginTop: 3, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', opacity: 0.8 }}>Ton quartier, dans ta poche.</p>}
+              {!headerScrolled && <p style={{ color: T.light, fontSize: '0.62rem', marginTop: 3, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', opacity: 0.8 }}>Skip the wait</p>}
             </div>
             {/* Localisation — GPS ou manuelle */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
@@ -818,12 +748,12 @@ export default function Commander() {
                   placeholder="Ville, rue, code postal..."
                   value={locManuelle}
                   onChange={e => setLocManuelle(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && locManuelle.trim()) { geocoderAdresseManuelle(locManuelle.trim()); setShowLocManuelle(false) } }}
+                  onKeyDown={e => { if (e.key === 'Enter' && locManuelle.trim()) { setRue(locManuelle.trim()); setShowLocManuelle(false) } }}
                   autoFocus
                   style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.5rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', backdropFilter: 'blur(8px)', outline: 'none' }}
                 />
                 {locManuelle && (
-                  <button onClick={() => { geocoderAdresseManuelle(locManuelle.trim()); setShowLocManuelle(false) }}
+                  <button onClick={() => { setRue(locManuelle.trim()); setShowLocManuelle(false) }}
                     style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: T.main, border: 'none', borderRadius: 8, padding: '4px 10px', color: '#fff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                     OK
                   </button>
@@ -1075,9 +1005,9 @@ export default function Commander() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
                   <div style={{ width: 60, height: 60, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', flexShrink: 0, boxShadow: `0 6px 20px ${T.main}66, 0 0 0 3px rgba(255,255,255,0.15)` }}>👤</div>
                   <div>
-                    {client.nom
-                      ? <><p style={{ fontWeight: 900, fontSize: '1.15rem', color: '#fff', marginBottom: 2, letterSpacing: '-0.3px' }}>{client.nom}</p><p style={{ fontSize: '0.78rem', color: T.light, opacity: 0.8 }}>{client.email}</p></>
-                      : <><p style={{ fontWeight: 900, color: '#fff', marginBottom: 4, fontSize: '1.1rem' }}>Les Yoppers 🟣</p><p style={{ fontWeight: 600, color: T.light, fontSize: '0.8rem', opacity: 0.8 }}>Passe une commande pour créer ton profil</p></>
+                    {client.email
+                      ? <><p style={{ fontWeight: 900, fontSize: '1.15rem', color: '#fff', marginBottom: 2, letterSpacing: '-0.3px' }}>{client.nom || client.prenom || client.email.split('@')[0]}</p><p style={{ fontSize: '0.78rem', color: T.light, opacity: 0.8 }}>{client.email}</p></>
+                      : <><p style={{ fontWeight: 900, color: '#fff', marginBottom: 4, fontSize: '1.1rem' }}>Les Yoppers 🟣</p><p style={{ fontWeight: 600, color: T.light, fontSize: '0.8rem', opacity: 0.8 }}>Connecte-toi pour voir ton profil</p></>
                     }
                   </div>
                 </div>
@@ -1110,8 +1040,14 @@ export default function Commander() {
                 </div>
 
                 {client.email && (
-                  <button onClick={() => {
-                    localStorage.removeItem('yoppaa_email'); localStorage.removeItem('yoppaa_nom'); localStorage.removeItem('yoppaa_client_id'); localStorage.removeItem('yoppaa_onglet')
+                  <button onClick={async () => {
+                    await supabase.auth.signOut()
+                    localStorage.removeItem('yoppaa_email')
+                    localStorage.removeItem('yoppaa_nom')
+                    localStorage.removeItem('yoppaa_prenom')
+                    localStorage.removeItem('yoppaa_client_id')
+                    localStorage.removeItem('yoppaa_onglet')
+                    // On garde yoppaa_onboarding_done pour ne pas relancer l'onboarding
                     setClient({ nom:'', email:'', telephone:'' }); setClientId(null)
                     setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
                     setOngletState('accueil')

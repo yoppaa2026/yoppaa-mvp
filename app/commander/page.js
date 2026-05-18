@@ -185,7 +185,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
           C'est <span style={{ fontWeight: 900, color: C.main }}>YOP!</span> {clientPrenom || 'Yopper'} 🎉
         </p>
         <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: 6, animation: 'yopSub 0.5s ease 0.5s both' }}>
-          Skip the wait — bien joué !
+          Ton quartier, dans ta poche. — bien joué !
         </p>
       </div>
     )
@@ -257,7 +257,7 @@ function SplashScreen({ onDone }) {
         ))}
       </div>
       <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '3.5rem', color: '#fff', letterSpacing: '-2px', lineHeight: 1, marginBottom: 10, animation: phase >= 1 ? 'wordmark-in 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards' : 'none', opacity: phase >= 1 ? 1 : 0 }}>yoppaa</p>
-      <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#C4A0F4', letterSpacing: '3px', textTransform: 'uppercase', animation: phase >= 2 ? 'tagline-in 0.5s ease forwards' : 'none', opacity: phase >= 2 ? 1 : 0 }}>Skip the wait</p>
+      <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#C4A0F4', letterSpacing: '3px', textTransform: 'uppercase', animation: phase >= 2 ? 'tagline-in 0.5s ease forwards' : 'none', opacity: phase >= 2 ? 1 : 0 }}>Ton quartier, dans ta poche.</p>
     </div>
   )
 }
@@ -447,13 +447,60 @@ async function prefetchCommercant(slug) {
 export default function Commander() {
   const router = useRouter()
 
-  // ── Vérification onboarding ──────────────────────────────────────────────
+  // ── Vérification onboarding + sync session Supabase ──────────────────────
   const [onboardingChecked, setOnboardingChecked] = useState(false)
+
   useEffect(() => {
-    const done = localStorage.getItem('yoppaa_onboarding_done')
-    if (!done) { router.push('/onboarding'); return }
-    setOnboardingChecked(true)
+    async function checkAuth() {
+      const done = localStorage.getItem('yoppaa_onboarding_done')
+      // Vérifier aussi si session Supabase active (cas connexion récente)
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (session) {
+        // Session active — marquer onboarding comme fait
+        localStorage.setItem('yoppaa_onboarding_done', '1')
+        // Sync profil client si localStorage vide
+        const emailLocal = localStorage.getItem('yoppaa_email')
+        if (!emailLocal && session.user?.email) {
+          const email = session.user.email
+          const { data: client } = await supabase
+            .from('clients')
+            .select('id, nom, email')
+            .eq('email', email)
+            .single()
+          if (client) {
+            localStorage.setItem('yoppaa_client_id', client.id)
+            localStorage.setItem('yoppaa_email', client.email)
+            const parts = (client.nom || '').split(' ')
+            localStorage.setItem('yoppaa_prenom', parts[0] || '')
+            localStorage.setItem('yoppaa_nom', parts.slice(1).join(' ') || '')
+          } else {
+            // Créer le profil client si inexistant
+            const { data: newClient } = await supabase
+              .from('clients')
+              .upsert({ email }, { onConflict: 'email' })
+              .select('id')
+              .single()
+            if (newClient) {
+              localStorage.setItem('yoppaa_client_id', newClient.id)
+              localStorage.setItem('yoppaa_email', email)
+            }
+          }
+        }
+        setOnboardingChecked(true)
+        return
+      }
+
+      // Pas de session Supabase
+      if (!done) {
+        router.push('/onboarding')
+        return
+      }
+      setOnboardingChecked(true)
+    }
+    checkAuth()
   }, [])
+  // ─────────────────────────────────────────────────────────────────────────
 
   const [showSplash, setShowSplash] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -697,7 +744,7 @@ export default function Commander() {
     en_attente:     { bg: '#FFF7ED', color: '#EA580C', label: '🔴 En attente' },
   }
 
-  // Ne rien afficher tant que l'onboarding n'est pas vérifié
+  // Ne rien afficher tant que auth non vérifiée
   if (!onboardingChecked) return null
 
   return (
@@ -750,7 +797,7 @@ export default function Commander() {
                 </div>
               )}
               <p style={{ fontWeight: 900, fontSize: headerScrolled ? '1.3rem' : '2rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1, textShadow: `0 0 40px ${T.mid}66`, transition: 'font-size 0.3s ease' }}>yoppaa</p>
-              {!headerScrolled && <p style={{ color: T.light, fontSize: '0.62rem', marginTop: 3, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', opacity: 0.8 }}>Skip the wait</p>}
+              {!headerScrolled && <p style={{ color: T.light, fontSize: '0.62rem', marginTop: 3, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', opacity: 0.8 }}>Ton quartier, dans ta poche.</p>}
             </div>
             {/* Localisation — GPS ou manuelle */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>

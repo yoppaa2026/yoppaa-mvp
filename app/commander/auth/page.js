@@ -19,15 +19,14 @@ function AuthForm() {
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/commander'
 
-  const [mode, setMode] = useState('magic') // magic | login | signup
+  const [mode, setMode] = useState('magic')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [prenom, setPrenom] = useState('')
   const [nom, setNom] = useState('')
   const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState(null) // { type: 'success'|'error', text }
+  const [message, setMessage] = useState(null)
 
-  // Vérifier si déjà connecté
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
@@ -37,7 +36,6 @@ function AuthForm() {
     })
   }, [])
 
-  // ── Sauvegarder profil client en localStorage ─────────────────────────────
   async function sauvegarderClient(user) {
     if (!user) return
     const { data: client } = await supabase
@@ -48,15 +46,15 @@ function AuthForm() {
     if (client) {
       localStorage.setItem('yoppaa_client_id', client.id)
       localStorage.setItem('yoppaa_email', client.email)
-      const parts = (client.nom || '').split(' ')
-      localStorage.setItem('yoppaa_prenom', parts[0] || '')
-      localStorage.setItem('yoppaa_nom', parts.slice(1).join(' ') || '')
+      // nom en DB = prénom saisi (via EditablePrenom ou inscription)
+      // Si DB vide, garder le prénom déjà stocké en localStorage
+      const prenomDB = (client.nom || '').trim()
+      const prenomLocal = localStorage.getItem('yoppaa_prenom') || ''
+      localStorage.setItem('yoppaa_prenom', prenomDB || prenomLocal)
     }
-    // Marquer onboarding comme fait
     localStorage.setItem('yoppaa_onboarding_done', '1')
   }
 
-  // ── Magic link ────────────────────────────────────────────────────────────
   async function envoyerMagicLink() {
     if (!email.trim()) return
     setLoading(true); setMessage(null)
@@ -67,14 +65,13 @@ function AuthForm() {
       }
     })
     if (error) {
-      setMessage({ type: 'error', text: 'Erreur lors de l\'envoi. Vérifie ton adresse email.' })
+      setMessage({ type: 'error', text: "Erreur lors de l'envoi. Vérifie ton adresse email." })
     } else {
       setMessage({ type: 'success', text: `Lien envoyé à ${email} — vérifie ta boîte mail !` })
     }
     setLoading(false)
   }
 
-  // ── Connexion mot de passe ────────────────────────────────────────────────
   async function seConnecter() {
     if (!email.trim() || !password.trim()) return
     setLoading(true); setMessage(null)
@@ -91,7 +88,6 @@ function AuthForm() {
     router.replace(redirect)
   }
 
-  // ── Inscription ───────────────────────────────────────────────────────────
   async function sInscrire() {
     if (!email.trim() || !password.trim() || !prenom.trim()) return
     setLoading(true); setMessage(null)
@@ -105,22 +101,20 @@ function AuthForm() {
       }
     })
     if (error) {
-      setMessage({ type: 'error', text: error.message.includes('already') ? 'Cet email est déjà utilisé. Connecte-toi !' : 'Erreur lors de l\'inscription.' })
+      setMessage({ type: 'error', text: error.message.includes('already') ? 'Cet email est déjà utilisé. Connecte-toi !' : "Erreur lors de l'inscription." })
       setLoading(false)
       return
     }
-    // Créer le profil client en DB
     if (data.user) {
       await supabase.from('clients').upsert({
         email: email.trim().toLowerCase(),
-        nom: nomComplet,
+        nom: prenom.trim(), // On stocke juste le prénom dans nom
       }, { onConflict: 'email' })
       const { data: client } = await supabase.from('clients').select('id').eq('email', email.trim().toLowerCase()).single()
       if (client) {
         localStorage.setItem('yoppaa_client_id', client.id)
         localStorage.setItem('yoppaa_email', email.trim().toLowerCase())
         localStorage.setItem('yoppaa_prenom', prenom.trim())
-        localStorage.setItem('yoppaa_nom', nom.trim())
       }
       localStorage.setItem('yoppaa_onboarding_done', '1')
     }
@@ -155,7 +149,6 @@ function AuthForm() {
   return (
     <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', padding: '0 1.25rem' }}>
 
-      {/* Logo */}
       <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 14 }}>
           {[{c:'rgba(255,255,255,0.4)',s:8},{c:T.light,s:11},{c:T.mid,s:8}].map((d,i) => (
@@ -168,7 +161,6 @@ function AuthForm() {
         </p>
       </div>
 
-      {/* Onglets mode */}
       <div style={{ display: 'flex', background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: 4, marginBottom: '1.5rem', gap: 4 }}>
         {[
           { key: 'magic', label: '✉️ Magic link' },
@@ -186,7 +178,6 @@ function AuthForm() {
         ))}
       </div>
 
-      {/* Message */}
       {message && (
         <div style={{ borderRadius: 12, padding: '0.875rem 1rem', marginBottom: '1rem', background: message.type === 'success' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)', border: `1px solid ${message.type === 'success' ? '#16A34A44' : '#DC262644'}` }}>
           <p style={{ fontSize: '0.82rem', fontWeight: 600, color: message.type === 'success' ? '#4ADE80' : '#FCA5A5', lineHeight: 1.5 }}>
@@ -195,28 +186,18 @@ function AuthForm() {
         </div>
       )}
 
-      {/* ── MAGIC LINK ── */}
       {mode === 'magic' && (
         <div>
           <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.82rem', fontWeight: 500, lineHeight: 1.6, marginBottom: '1.25rem', textAlign: 'center' }}>
             Reçois un lien magique par email.<br/>Un clic et tu es connecté — sans mot de passe.
           </p>
-          <input
-            placeholder="ton@email.com"
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && envoyerMagicLink()}
-            style={inputSt}
-            autoFocus
-          />
+          <input placeholder="ton@email.com" type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && envoyerMagicLink()} style={inputSt} autoFocus/>
           <button onClick={envoyerMagicLink} disabled={!email.trim() || loading} style={{ ...btnPrimary, opacity: !email.trim() || loading ? 0.5 : 1 }}>
             {loading ? 'Envoi...' : 'Envoyer le lien magique ✨'}
           </button>
         </div>
       )}
 
-      {/* ── CONNEXION MOT DE PASSE ── */}
       {mode === 'login' && (
         <div>
           <input placeholder="ton@email.com" type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputSt} autoFocus/>
@@ -232,7 +213,6 @@ function AuthForm() {
         </div>
       )}
 
-      {/* ── INSCRIPTION ── */}
       {mode === 'signup' && (
         <div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 0 }}>
@@ -254,16 +234,11 @@ function AuthForm() {
         </div>
       )}
 
-      {/* Skip */}
-      <button onClick={() => {
-        localStorage.setItem('yoppaa_onboarding_done', '1')
-        router.push(redirect)
-      }}
+      <button onClick={() => { localStorage.setItem('yoppaa_onboarding_done', '1'); router.push(redirect) }}
         style={{ width: '100%', marginTop: 20, padding: '0.75rem', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.3)', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
         Continuer sans compte →
       </button>
 
-      {/* Avantages compte */}
       <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)' }}>
         <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, opacity: 0.8 }}>Avec un compte Yopper</p>
         {['Suis tes commandes en temps réel', 'Accède à tes favoris partout', 'Retrouve ton historique', 'Offres exclusives Yoppers'].map((a, i) => (

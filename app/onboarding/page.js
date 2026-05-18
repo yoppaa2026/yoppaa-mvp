@@ -283,7 +283,7 @@ export default function OnboardingPage() {
         allerEcranSuivant()
       }
     } else if (ecran.id === 'connexion') {
-      router.push('/login?redirect=/commander')
+      router.push('/commander/auth?redirect=/commander')
     } else {
       allerEcranSuivant()
     }

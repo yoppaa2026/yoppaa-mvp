@@ -1006,8 +1006,14 @@ export default function Commander() {
                   <div style={{ width: 60, height: 60, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', flexShrink: 0, boxShadow: `0 6px 20px ${T.main}66, 0 0 0 3px rgba(255,255,255,0.15)` }}>👤</div>
                   <div>
                     {client.email
-                      ? <><p style={{ fontWeight: 900, fontSize: '1.15rem', color: '#fff', marginBottom: 2, letterSpacing: '-0.3px' }}>{client.nom || client.prenom || client.email.split('@')[0]}</p><p style={{ fontSize: '0.78rem', color: T.light, opacity: 0.8 }}>{client.email}</p></>
-                      : <><p style={{ fontWeight: 900, color: '#fff', marginBottom: 4, fontSize: '1.1rem' }}>Les Yoppers 🟣</p><p style={{ fontWeight: 600, color: T.light, fontSize: '0.8rem', opacity: 0.8 }}>Connecte-toi pour voir ton profil</p></>
+                      ? <><p style={{ fontWeight: 900, fontSize: '1.15rem', color: '#fff', marginBottom: 2, letterSpacing: '-0.3px' }}>{client.prenom || client.email.split('@')[0]}</p><p style={{ fontSize: '0.78rem', color: T.light, opacity: 0.8 }}>{client.email}</p></>
+                      : <div>
+                          <p style={{ fontWeight: 900, color: '#fff', marginBottom: 10, fontSize: '1.1rem' }}>Les Yoppers 🟣</p>
+                          <button onClick={() => router.push('/commander/auth?redirect=/commander')}
+                            style={{ padding: '0.625rem 1.25rem', background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: 100, color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                            Se connecter →
+                          </button>
+                        </div>
                     }
                   </div>
                 </div>
@@ -1042,13 +1048,8 @@ export default function Commander() {
                 {client.email && (
                   <button onClick={async () => {
                     await supabase.auth.signOut()
-                    localStorage.removeItem('yoppaa_email')
-                    localStorage.removeItem('yoppaa_nom')
-                    localStorage.removeItem('yoppaa_prenom')
-                    localStorage.removeItem('yoppaa_client_id')
-                    localStorage.removeItem('yoppaa_onglet')
-                    // On garde yoppaa_onboarding_done pour ne pas relancer l'onboarding
-                    setClient({ nom:'', email:'', telephone:'' }); setClientId(null)
+                    localStorage.removeItem('yoppaa_email'); localStorage.removeItem('yoppaa_nom'); localStorage.removeItem('yoppaa_prenom'); localStorage.removeItem('yoppaa_client_id'); localStorage.removeItem('yoppaa_onglet')
+                    setClient({ nom:'', email:'', telephone:'', prenom:'' }); setClientId(null)
                     setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
                     setOngletState('accueil')
                   }} style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: '#DC2626', border: '1.5px solid #DC262633', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem' }}>

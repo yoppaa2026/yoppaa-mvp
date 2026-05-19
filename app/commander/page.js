@@ -296,65 +296,6 @@ function SuggestionForm({ clientId }) {
   )
 }
 
-
-// ─── Édition prénom inline ────────────────────────────────────────────────────
-function EditablePrenom({ client, setClient, clientId }) {
-  const [editing, setEditing] = useState(false)
-  const [val, setVal] = useState(client.prenom || '')
-  const [saving, setSaving] = useState(false)
-
-  async function sauvegarder() {
-    if (!val.trim()) return
-    setSaving(true)
-    const prenom = val.trim()
-    localStorage.setItem('yoppaa_prenom', prenom)
-    setClient(p => ({ ...p, prenom }))
-    if (clientId) {
-      await supabase.from('clients').update({ nom: prenom }).eq('id', clientId)
-    }
-    setSaving(false)
-    setEditing(false)
-  }
-
-  if (editing) return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <input
-        value={val}
-        onChange={e => setVal(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' && sauvegarder()}
-        autoFocus
-        placeholder="Ton prénom"
-        style={{ background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.4)', borderRadius: 10, padding: '0.5rem 0.875rem', color: '#fff', fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', outline: 'none', width: '100%', boxSizing: 'border-box' }}
-      />
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={sauvegarder} disabled={!val.trim() || saving}
-          style={{ flex: 1, padding: '0.5rem', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', color: '#6B35C4', fontFamily: '"DM Sans", sans-serif' }}>
-          {saving ? '...' : '✓ Sauvegarder'}
-        </button>
-        <button onClick={() => setEditing(false)}
-          style={{ padding: '0.5rem 0.875rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 100, color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-          Annuler
-        </button>
-      </div>
-    </div>
-  )
-
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-        <p style={{ fontWeight: 900, fontSize: '1.15rem', color: '#fff', letterSpacing: '-0.3px' }}>
-          {client.prenom || 'Yopper 🟣'}
-        </p>
-        <button onClick={() => { setVal(client.prenom || ''); setEditing(true) }}
-          style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 100, padding: '2px 10px', color: 'rgba(255,255,255,0.7)', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-          ✏️ Modifier
-        </button>
-      </div>
-      <p style={{ fontSize: '0.78rem', color: '#C4A0F4', opacity: 0.8 }}>{client.email}</p>
-    </div>
-  )
-}
-
 // ─── Carte commerce — redesignée ──────────────────────────────────────────────
 function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect, onToggleFavori }) {
   const estFavori = favoris.includes(c.id)
@@ -650,6 +591,29 @@ export default function Commander() {
     }
   }
 
+  async function geocoderAdresseManuelle(adresse) {
+    if (!adresse.trim()) return
+    setGeoLoading(true)
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(adresse)}&format=json&limit=1&accept-language=fr`, { headers: { 'Accept': 'application/json' } })
+      if (res.ok) {
+        const data = await res.json()
+        if (data && data.length > 0) {
+          const { lat, lon, display_name } = data[0]
+          const newPos = { lat: parseFloat(lat), lng: parseFloat(lon) }
+          setPosition(newPos)
+          const parts = display_name.split(',')
+          setRue(parts.slice(0, 2).join(',').trim())
+          calculerDistances(commercants, newPos)
+        } else {
+          setRue(adresse)
+        }
+      }
+    } catch { setRue(adresse) }
+    setGeoLoading(false)
+    setShowLocManuelle(false)
+  }
+
   async function getOuCreerClient(email, nom) {
     const { data: ex } = await supabase.from('clients').select('id').eq('email', email).single()
     const id = ex ? ex.id : (await supabase.from('clients').insert({ email, nom }).select('id').single()).data?.id
@@ -662,12 +626,8 @@ export default function Commander() {
   async function toggleFavori(commercantId, e) {
     e.stopPropagation()
     if (!client.email) {
-      const email = prompt('Entre ton email pour sauvegarder tes favoris :')
-      if (!email) return
-      setClient(p => ({ ...p, email }))
-      const id = await getOuCreerClient(email, '')
-      await supabase.from('favoris').insert({ client_id: id, commercant_id: commercantId })
-      setFavoris(prev => [...prev, commercantId]); return
+      router.push('/commander/auth?redirect=/commander')
+      return
     }
     let cid = clientId || await getOuCreerClient(client.email, client.nom)
     if (!cid) return
@@ -807,12 +767,12 @@ export default function Commander() {
                   placeholder="Ville, rue, code postal..."
                   value={locManuelle}
                   onChange={e => setLocManuelle(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && locManuelle.trim()) { setRue(locManuelle.trim()); setShowLocManuelle(false) } }}
+                  onKeyDown={e => { if (e.key === 'Enter' && locManuelle.trim()) { geocoderAdresseManuelle(locManuelle.trim()) } }}
                   autoFocus
                   style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.5rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', backdropFilter: 'blur(8px)', outline: 'none' }}
                 />
                 {locManuelle && (
-                  <button onClick={() => { setRue(locManuelle.trim()); setShowLocManuelle(false) }}
+                  <button onClick={() => { if (locManuelle.trim()) geocoderAdresseManuelle(locManuelle.trim()) }}
                     style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: T.main, border: 'none', borderRadius: 8, padding: '4px 10px', color: '#fff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                     OK
                   </button>
@@ -960,7 +920,7 @@ export default function Commander() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
                             <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>{c.commercant?.nom}</p>
-                            <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date(c.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · 🕐 ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
+                            <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · 🕐 ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
                           </div>
                           <div style={{ textAlign: 'right' }}>
                             <p style={{ fontWeight: 900, color: T.main, marginBottom: 4, fontSize: '0.95rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
@@ -990,7 +950,7 @@ export default function Commander() {
                     <div key={c.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.875rem' }}>{c.commercant?.nom}</p>
-                        <p style={{ fontSize: '0.7rem', color: T.muted }}>{new Date(c.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
+                        <p style={{ fontSize: '0.7rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(c.total).toFixed(2)}€</p>
@@ -1064,15 +1024,9 @@ export default function Commander() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
                   <div style={{ width: 60, height: 60, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', flexShrink: 0, boxShadow: `0 6px 20px ${T.main}66, 0 0 0 3px rgba(255,255,255,0.15)` }}>👤</div>
                   <div>
-                    {client.email
-                      ? <EditablePrenom client={client} setClient={setClient} clientId={clientId}/>
-                      : <div>
-                          <p style={{ fontWeight: 900, color: '#fff', marginBottom: 10, fontSize: '1.1rem' }}>Les Yoppers 🟣</p>
-                          <button onClick={() => router.push('/commander/auth?redirect=/commander')}
-                            style={{ padding: '0.625rem 1.25rem', background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: 100, color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                            Se connecter →
-                          </button>
-                        </div>
+                    {client.nom
+                      ? <><p style={{ fontWeight: 900, fontSize: '1.15rem', color: '#fff', marginBottom: 2, letterSpacing: '-0.3px' }}>{client.nom}</p><p style={{ fontSize: '0.78rem', color: T.light, opacity: 0.8 }}>{client.email}</p></>
+                      : <><p style={{ fontWeight: 900, color: '#fff', marginBottom: 4, fontSize: '1.1rem' }}>Les Yoppers 🟣</p><p style={{ fontWeight: 600, color: T.light, fontSize: '0.8rem', opacity: 0.8 }}>Passe une commande pour créer ton profil</p></>
                     }
                   </div>
                 </div>
@@ -1105,10 +1059,9 @@ export default function Commander() {
                 </div>
 
                 {client.email && (
-                  <button onClick={async () => {
-                    await supabase.auth.signOut()
-                    localStorage.removeItem('yoppaa_email'); localStorage.removeItem('yoppaa_nom'); localStorage.removeItem('yoppaa_prenom'); localStorage.removeItem('yoppaa_client_id'); localStorage.removeItem('yoppaa_onglet')
-                    setClient({ nom:'', email:'', telephone:'', prenom:'' }); setClientId(null)
+                  <button onClick={() => {
+                    localStorage.removeItem('yoppaa_email'); localStorage.removeItem('yoppaa_nom'); localStorage.removeItem('yoppaa_client_id'); localStorage.removeItem('yoppaa_onglet')
+                    setClient({ nom:'', email:'', telephone:'' }); setClientId(null)
                     setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
                     setOngletState('accueil')
                   }} style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: '#DC2626', border: '1.5px solid #DC262633', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem' }}>

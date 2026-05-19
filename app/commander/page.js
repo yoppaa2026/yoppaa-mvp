@@ -354,6 +354,48 @@ function EditablePrenom({ client, setClient, clientId }) {
   )
 }
 
+// ─── Écran pick-up hype ───────────────────────────────────────────────────────
+function PickupScreen({ commande, clientPrenom, onConfirm }) {
+  const numero = commande.numero_commande || commande.numero || String(commande.id).slice(-4)
+  const creneau = commande.creneau
+    ? `${commande.creneau.heure_debut.slice(0,5)} – ${commande.creneau.heure_fin.slice(0,5)}`
+    : null
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'linear-gradient(160deg, #1A0840 0%, #2D0F6B 40%, #6B35C4 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '3rem 2rem 2.5rem', overflow: 'hidden' }}>
+      <style>{`
+        @keyframes pu-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.7} }
+        @keyframes pu-fadein { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes pu-glow { 0%,100%{text-shadow:0 0 40px #9660E088} 50%{text-shadow:0 0 80px #C4A0F4cc} }
+      `}</style>
+      {/* Déco fond */}
+      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle at 80% 20%, #9660E033 0%, transparent 50%), radial-gradient(circle at 20% 80%, #6B35C422 0%, transparent 50%)', pointerEvents: 'none' }}/>
+      {/* Logo */}
+      <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', animation: 'pu-fadein 0.5s ease' }}>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 10 }}>
+          {[{c:'rgba(255,255,255,0.35)',s:10},{c:'#C4A0F4',s:14},{c:'#9660E0',s:10}].map((d,i) => (
+            <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, animation: `pu-pulse 2s ease-in-out ${i*0.3}s infinite` }}/>
+          ))}
+        </div>
+        <p style={{ fontWeight: 900, fontSize: '2.2rem', color: '#fff', letterSpacing: '-2px', lineHeight: 1, animation: 'pu-glow 2s ease-in-out infinite' }}>yoppaa</p>
+      </div>
+      {/* Numéro + infos */}
+      <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', animation: 'pu-fadein 0.6s ease 0.1s both' }}>
+        <p style={{ fontSize: '0.75rem', fontWeight: 800, color: '#C4A0F4', textTransform: 'uppercase', letterSpacing: 3, marginBottom: 12, opacity: 0.8 }}>Ta commande est prête</p>
+        <p style={{ fontSize: '7rem', fontWeight: 900, color: '#fff', letterSpacing: '-4px', lineHeight: 1, textShadow: '0 0 60px #9660E088', marginBottom: 8 }}>#{numero}</p>
+        <p style={{ fontSize: '1.6rem', fontWeight: 900, color: '#C4A0F4', letterSpacing: '-0.5px', marginBottom: 8 }}>{clientPrenom || 'Yopper'} 🟣</p>
+        {creneau && <p style={{ fontSize: '1rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>🕐 {creneau}</p>}
+        <div style={{ marginTop: 20, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 16, padding: '12px 24px', display: 'inline-block' }}>
+          <p style={{ fontWeight: 900, fontSize: '1rem', color: '#fff', letterSpacing: '-0.3px' }}>Skip the wait — PRIORITÉ YOPPERS 🟣</p>
+        </div>
+      </div>
+      {/* Swipe */}
+      <div style={{ position: 'relative', zIndex: 2, width: '100%', animation: 'pu-fadein 0.6s ease 0.3s both' }}>
+        <SwipeRetrait clientPrenom={clientPrenom} onConfirm={onConfirm}/>
+      </div>
+    </div>
+  )
+}
+
 // ─── Carte commerce — redesignée ──────────────────────────────────────────────
 function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect, onToggleFavori }) {
   const estFavori = favoris.includes(c.id)
@@ -925,6 +967,17 @@ export default function Commander() {
           {/* COMMANDES */}
           {onglet === 'commandes' && (
             <div>
+              {/* Pickup screen plein écran — overlay fixe si commande prête */}
+              {commandesASwiper.length > 0 && (
+                <PickupScreen
+                  commande={commandesASwiper[0]}
+                  clientPrenom={client.prenom || client.nom?.split(' ')[0] || 'Yopper'}
+                  onConfirm={async () => {
+                    await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', commandesASwiper[0].id)
+                    chargerCommandesClient(client.email)
+                  }}
+                />
+              )}
               {/* Hero header commandes */}
               <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #1e0950 100%)`, padding: '1.25rem 1rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 30%, ${T.main}44 0%, transparent 60%)`, pointerEvents: 'none' }}/>

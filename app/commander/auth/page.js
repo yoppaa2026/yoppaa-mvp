@@ -29,7 +29,9 @@ function AuthForm() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+      // Rediriger seulement si session Supabase active ET email en localStorage
+      // Si l'utilisateur s'est déconnecté, yoppaa_email est supprimé → on reste sur la page auth
+      if (session && localStorage.getItem('yoppaa_email')) {
         localStorage.setItem('yoppaa_onboarding_done', '1')
         router.replace(redirect)
       }
@@ -46,8 +48,6 @@ function AuthForm() {
     if (client) {
       localStorage.setItem('yoppaa_client_id', client.id)
       localStorage.setItem('yoppaa_email', client.email)
-      // nom en DB = prénom saisi (via EditablePrenom ou inscription)
-      // Si DB vide, garder le prénom déjà stocké en localStorage
       const prenomDB = (client.nom || '').trim()
       const prenomLocal = localStorage.getItem('yoppaa_prenom') || ''
       localStorage.setItem('yoppaa_prenom', prenomDB || prenomLocal)
@@ -108,7 +108,7 @@ function AuthForm() {
     if (data.user) {
       await supabase.from('clients').upsert({
         email: email.trim().toLowerCase(),
-        nom: prenom.trim(), // On stocke juste le prénom dans nom
+        nom: prenom.trim(),
       }, { onConflict: 'email' })
       const { data: client } = await supabase.from('clients').select('id').eq('email', email.trim().toLowerCase()).single()
       if (client) {

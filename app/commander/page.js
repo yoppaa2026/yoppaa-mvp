@@ -558,6 +558,7 @@ export default function Commander() {
   const [client, setClient] = useState({ nom: '', email: '', telephone: '', prenom: '' })
   const [clientId, setClientId] = useState(null)
   const [clientCommandes, setClientCommandes] = useState([])
+  const [pickupCommande, setPickupCommande] = useState(null)
 
   useEffect(() => {
     const savedOnglet = localStorage.getItem('yoppaa_onglet')
@@ -967,13 +968,14 @@ export default function Commander() {
           {/* COMMANDES */}
           {onglet === 'commandes' && (
             <div>
-              {/* Pickup screen plein écran — overlay fixe si commande prête */}
-              {commandesASwiper.length > 0 && (
+              {/* Pickup screen — overlay fixe déclenché par le client */}
+              {pickupCommande && (
                 <PickupScreen
-                  commande={commandesASwiper[0]}
+                  commande={pickupCommande}
                   clientPrenom={client.prenom || client.nom?.split(' ')[0] || 'Yopper'}
                   onConfirm={async () => {
-                    await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', commandesASwiper[0].id)
+                    await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', pickupCommande.id)
+                    setPickupCommande(null)
                     chargerCommandesClient(client.email)
                   }}
                 />
@@ -999,7 +1001,7 @@ export default function Commander() {
                   </div>
                   {commandesASwiper.map(c => (
                     <div key={c.id} style={{ background: 'linear-gradient(135deg, #F0FDF4, #fff)', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '0.75rem', border: '2px solid #16A34A33', boxShadow: '0 4px 16px rgba(22,163,74,0.1)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem' }}>
                         <div>
                           <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>{c.commercant?.nom}</p>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#F0FDF4', borderRadius: 100, padding: '3px 10px', border: '1px solid #16A34A22' }}>
@@ -1009,12 +1011,10 @@ export default function Commander() {
                         </div>
                         <p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
                       </div>
-                      <SwipeRetrait
-                        clientPrenom={client.prenom || client.nom?.split(' ')[0] || 'Yopper'}
-                        onConfirm={async () => {
-                          await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', c.id)
-                          chargerCommandesClient(client.email)
-                        }}/>
+                      <button onClick={() => setPickupCommande(c)}
+                        style={{ width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.95rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 16px ${T.main}44`, letterSpacing: '-0.3px' }}>
+                        🟣 Retirer ma commande YOP! →
+                      </button>
                     </div>
                   ))}
                 </>

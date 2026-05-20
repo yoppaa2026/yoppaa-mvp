@@ -782,18 +782,58 @@ export default function CommanderSlug() {
   async function passerCommande() {
     if (!creneauChoisi || !client.prenom || !client.nom || !client.email || !client.telephone || !rgpdCommande || !commercant) return
     setLoadingCommande(true)
-    const cid = await getOuCreerClient(client.email, client.prenom, client.nom)
+
     const nomComplet = `${client.prenom} ${client.nom}`.trim()
     const jourDate = joursDispos[jourSelectionne]?.date || new Date()
     const d = new Date(jourDate)
     const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+
+    // ── Validation stock avant commande ───────────────────────────────────────
+    const articlesAValider = Object.values(panier).filter(i => i.stock_jour > 0)
+    if (articlesAValider.length > 0) {
+      const artIds = articlesAValider.map(i => i.id)
+      const { data: dejaCommandes } = await supabase
+        .from('commande_articles')
+        .select('article_id, quantite, commande:commandes!inner(date_commande, statut, commercant_id)')
+        .in('article_id', artIds)
+        .eq('commande.date_commande', dateStr)
+        .eq('commande.commercant_id', commercant.id)
+        .neq('commande.statut', 'non_retire')
+      const qteDeja = {}
+      ;(dejaCommandes || []).forEach(r => {
+        qteDeja[r.article_id] = (qteDeja[r.article_id] || 0) + r.quantite
+      })
+      for (const item of articlesAValider) {
+        const deja = qteDeja[item.id] || 0
+        const stockDisponible = item.stock_jour - deja
+        if (item.quantite > stockDisponible) {
+          alert(`⚠️ Stock insuffisant pour "${item.nom}" : ${stockDisponible} disponible${stockDisponible > 1 ? 's' : ''}, tu en demandes ${item.quantite}.`)
+          setLoadingCommande(false)
+          return
+        }
+      }
+    }
+
+    // ── Numéro de commande séquentiel du jour ─────────────────────────────────
+    const { count: countToday } = await supabase
+      .from('commandes')
+      .select('*', { count: 'exact', head: true })
+      .eq('commercant_id', commercant.id)
+      .eq('date_commande', dateStr)
+    const numero_commande = (countToday || 0) + 1
+
+    const cid = await getOuCreerClient(client.email, client.prenom, client.nom)
+
+    // ── Insérer la commande ───────────────────────────────────────────────────
     const { data: commande } = await supabase.from('commandes').insert({
       commercant_id: commercant.id, creneau_id: creneauChoisi,
       client_nom: nomComplet, client_email: client.email, client_telephone: client.telephone,
       rgpd_commande: true, rgpd_marketing: rgpdMarketing,
       total: totalPanier(), statut: 'en_attente',
       date_commande: dateStr,
+      numero_commande,
     }).select().single()
+
     if (commande) {
       await supabase.from('commande_articles').insert(
         Object.values(panier).map(i => ({ commande_id: commande.id, article_id: i.id, quantite: i.quantite, prix_unitaire: i.prix }))

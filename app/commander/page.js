@@ -698,7 +698,37 @@ export default function Commander() {
 
   async function chargerCommandesClient(email) {
     const { data } = await supabase.from('commandes').select('*, commercant:commercants(nom, type), creneau:creneaux(heure_debut, heure_fin)').eq('client_email', email).order('created_at', { ascending: false })
-    setClientCommandes(data||[])
+    if (!data || data.length === 0) { setClientCommandes([]); return }
+
+    // FIX NUMÉRO : enrichir chaque commande avec son numéro affiché
+    // (numero_commande DB en priorité, sinon position du jour — même logique
+    // que le dashboard et le PickupScreen).
+    function dateKeyOf(c) {
+      const ref = c.date_commande || c.created_at
+      if (typeof ref === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ref)) return ref
+      return new Date(ref).toISOString().slice(0, 10)
+    }
+    const cles = [...new Set(data.map(c => `${c.commercant_id}|${dateKeyOf(c)}`))]
+    const positionsMap = {}
+    await Promise.all(cles.map(async cle => {
+      const [cid, dateStr] = cle.split('|')
+      const { data: duJour } = await supabase
+        .from('commandes')
+        .select('id, created_at, creneau:creneaux(heure_debut)')
+        .eq('commercant_id', cid)
+        .eq('date_commande', dateStr)
+        .order('created_at', { ascending: true })
+      const tri = (duJour || []).sort((a, b) =>
+        (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '') ||
+        new Date(a.created_at) - new Date(b.created_at)
+      )
+      tri.forEach((c, idx) => { positionsMap[c.id] = idx + 1 })
+    }))
+    const enriched = data.map(c => ({
+      ...c,
+      numeroAffiche: c.numero_commande || positionsMap[c.id] || null,
+    }))
+    setClientCommandes(enriched)
   }
 
   useEffect(() => {
@@ -1027,7 +1057,10 @@ export default function Commander() {
                     <div key={c.id} style={{ background: 'linear-gradient(135deg, #F0FDF4, #fff)', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '0.75rem', border: '2px solid #16A34A33', boxShadow: '0 4px 16px rgba(22,163,74,0.1)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem' }}>
                         <div>
-                          <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>{c.commercant?.nom}</p>
+                          <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>
+                            {c.commercant?.nom}
+                            {c.numeroAffiche && <span style={{ color: T.main, marginLeft: 6 }}>#{c.numeroAffiche}</span>}
+                          </p>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#F0FDF4', borderRadius: 100, padding: '3px 10px', border: '1px solid #16A34A22' }}>
                             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A', animation: 'dot-pulse 2s ease-in-out infinite' }}/>
                             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#16A34A' }}>Prête{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</span>
@@ -1055,7 +1088,10 @@ export default function Commander() {
                       <div key={c.id} style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
-                            <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>{c.commercant?.nom}</p>
+                            <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>
+                              {c.commercant?.nom}
+                              {c.numeroAffiche && <span style={{ color: T.main, marginLeft: 6 }}>#{c.numeroAffiche}</span>}
+                            </p>
                             <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · 🕐 ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
                           </div>
                           <div style={{ textAlign: 'right' }}>
@@ -1085,7 +1121,10 @@ export default function Commander() {
                   {commandesTerminees.slice(0, 5).map(c => (
                     <div key={c.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.875rem' }}>{c.commercant?.nom}</p>
+                        <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.875rem' }}>
+                          {c.commercant?.nom}
+                          {c.numeroAffiche && <span style={{ color: T.muted, marginLeft: 6 }}>#{c.numeroAffiche}</span>}
+                        </p>
                         <p style={{ fontSize: '0.7rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
                       </div>
                       <div style={{ textAlign: 'right' }}>

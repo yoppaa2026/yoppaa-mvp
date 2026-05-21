@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const T = {
@@ -135,6 +135,9 @@ function TabMenu({ commercantId, toast }) {
   const [renameValue, setRenameValue] = useState('')
   const [renameSaving, setRenameSaving] = useState(false)
 
+  // FIX STOCK : afficher le stock restant côté commerçant
+  const [commandesParArticleJour, setCommandesParArticleJour] = useState({})
+
   useEffect(() => { fetchArticles() }, [commercantId])
 
   async function fetchArticles() {
@@ -145,6 +148,37 @@ function TabMenu({ commercantId, toast }) {
     setCategories(cats)
     setLoading(false)
   }
+
+  // Charge les quantités commandées aujourd'hui par article (exclut "non_retire")
+  const chargerCommandesAujourdhui = useCallback(async () => {
+    if (!commercantId) return
+    const d = new Date()
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    const { data: cmds } = await supabase
+      .from('commandes')
+      .select('id')
+      .eq('commercant_id', commercantId)
+      .eq('date_commande', dateStr)
+      .neq('statut', 'non_retire')
+    if (!cmds || cmds.length === 0) { setCommandesParArticleJour({}); return }
+    const cmdIds = cmds.map(c => c.id)
+    const { data: lignes } = await supabase
+      .from('commande_articles')
+      .select('article_id, quantite')
+      .in('commande_id', cmdIds)
+    const map = {}
+    ;(lignes || []).forEach(r => {
+      map[r.article_id] = (map[r.article_id] || 0) + r.quantite
+    })
+    setCommandesParArticleJour(map)
+  }, [commercantId])
+
+  useEffect(() => {
+    if (!commercantId) return
+    chargerCommandesAujourdhui()
+    const id = setInterval(chargerCommandesAujourdhui, 5000)
+    return () => clearInterval(id)
+  }, [commercantId, chargerCommandesAujourdhui])
 
   function openNew() {
     setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '' })
@@ -370,7 +404,7 @@ function TabMenu({ commercantId, toast }) {
                       <span style={{ fontSize: 12, fontWeight: 700, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', background: T.pale, padding: '3px 10px', borderRadius: 100 }}>{cat}</span>
                       <div style={{ flex: 1, height: 1, background: T.pale }}/>
                     </div>
-                    {artsDecat.map(a => <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s}/>)}
+                    {artsDecat.map(a => <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0}/>)}
                   </div>
                 )
               })}
@@ -381,13 +415,13 @@ function TabMenu({ commercantId, toast }) {
                     <span style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', background: '#F9FAFB', padding: '3px 10px', borderRadius: 100 }}>Sans catégorie</span>
                     <div style={{ flex: 1, height: 1, background: T.pale }}/>
                   </div>
-                  {articlesSansCat.map(a => <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s}/>)}
+                  {articlesSansCat.map(a => <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0}/>)}
                 </div>
               )}
             </>
           ) : (
             (catActive === 'Sans catégorie' ? articlesSansCat : articlesFiltres).map(a =>
-              <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s}/>
+              <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0}/>
             )
           )}
         </>
@@ -522,8 +556,12 @@ function OptionsArticle({ articleId, toast }) {
 }
 
 // ─── Carte article réutilisable ───────────────────────────────────────────────
-function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s }) {
+function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaCommande = 0 }) {
   const [showOptions, setShowOptions] = useState(false)
+  // Stock restant aujourd'hui = stock_jour configuré − quantités déjà commandées
+  const stockBrut = a.stock_jour || 0
+  const stockRestant = Math.max(0, stockBrut - dejaCommande)
+  const stockGere = stockBrut > 0
   return (
     <div style={{ ...s.card, opacity: a.actif ? 1 : 0.6, borderLeft: `4px solid ${a.actif ? T.main : '#E5E7EB'}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -542,7 +580,13 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s }) {
               <input type="number" value={a.stock_jour ?? 0} min={0} onChange={e => onUpdateStock(a.id, e.target.value)}
                 style={{ ...s.input, width: 56, textAlign: 'center', padding: '4px 8px', fontSize: 14, fontWeight: 700 }}/>
               <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => onUpdateStock(a.id, (a.stock_jour || 0) + 1)}>+</button>
-              {a.stock_jour === 0 && <span style={{ ...s.tag, background: '#FEE2E2', color: '#DC2626' }}>Épuisé</span>}
+              {stockGere ? (
+                <span style={{ fontSize: 11, fontWeight: 700, color: stockRestant === 0 ? '#DC2626' : stockRestant <= 2 ? '#EA580C' : '#16A34A', background: stockRestant === 0 ? '#FEE2E2' : stockRestant <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100, marginLeft: 4 }}>
+                  {stockRestant} / {stockBrut} dispo
+                </span>
+              ) : (
+                <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100, marginLeft: 4 }}>Non géré</span>
+              )}
             </div>
           </div>
         </div>

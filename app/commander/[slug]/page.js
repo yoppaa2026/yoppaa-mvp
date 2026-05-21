@@ -710,14 +710,23 @@ export default function CommanderSlug() {
     const jourDate = joursDispos[jourSelectionne]?.date || new Date()
     const d = new Date(jourDate)
     const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-    const { data } = await supabase
+
+    // Approche en 2 étapes (plus robuste qu'une jointure avec filtres) :
+    // 1) commandes du jour pour ce commerçant 2) leurs commande_articles
+    const { data: cmds } = await supabase
+      .from('commandes')
+      .select('id')
+      .eq('commercant_id', commercant.id)
+      .eq('date_commande', dateStr)
+      .neq('statut', 'non_retire')
+    if (!cmds || cmds.length === 0) { setCommandesParArticleJour({}); return }
+    const cmdIds = cmds.map(c => c.id)
+    const { data: lignes } = await supabase
       .from('commande_articles')
-      .select('article_id, quantite, commande:commandes!inner(date_commande, statut, commercant_id)')
-      .eq('commande.commercant_id', commercant.id)
-      .eq('commande.date_commande', dateStr)
-      .neq('commande.statut', 'non_retire')
+      .select('article_id, quantite')
+      .in('commande_id', cmdIds)
     const map = {}
-    ;(data || []).forEach(r => {
+    ;(lignes || []).forEach(r => {
       map[r.article_id] = (map[r.article_id] || 0) + r.quantite
     })
     setCommandesParArticleJour(map)
@@ -728,12 +737,47 @@ export default function CommanderSlug() {
     chargerCommandesJour()
   }, [chargerCommandesJour])
 
+  // Rafraîchit articles + stocks de fond — garantit que le client voit toujours
+  // les vrais stocks configurés par le commerçant, même si le cache localStorage
+  // est encore "frais" ou si Supabase Realtime n'est pas activé sur ces tables.
+  const rafraichirArticlesEtStocks = useCallback(async () => {
+    if (!commercant) return
+    const { data: arts } = await supabase
+      .from('articles')
+      .select('*')
+      .eq('commercant_id', commercant.id)
+      .eq('actif', true)
+      .order('categorie').order('nom')
+    if (arts) setArticles(arts)
+    const artIds = (arts || []).map(a => a.id)
+    if (artIds.length > 0) {
+      const { data: stocksData } = await supabase
+        .from('article_stock_jour')
+        .select('*')
+        .eq('commercant_id', commercant.id)
+        .in('article_id', artIds)
+      const map = {}
+      ;(stocksData || []).forEach(s => {
+        if (!map[s.article_id]) map[s.article_id] = {}
+        map[s.article_id][s.jour_semaine] = { stock: s.stock, actif: s.actif }
+      })
+      setStocksJour(map)
+    }
+  }, [commercant])
+
+  useEffect(() => {
+    if (commercant) rafraichirArticlesEtStocks()
+  }, [commercant, rafraichirArticlesEtStocks])
+
   // Polling toutes les 5s + Realtime Supabase pour sync temps réel avec le dashboard
   const articlesRef = useRef(articles)
   useEffect(() => { articlesRef.current = articles }, [articles])
   useEffect(() => {
     if (!commercant) return
-    const intervalId = setInterval(chargerCommandesJour, 5000)
+    const intervalId = setInterval(() => {
+      chargerCommandesJour()
+      rafraichirArticlesEtStocks()
+    }, 5000)
     const channel = supabase
       .channel(`stock-sync-${commercant.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'commandes', filter: `commercant_id=eq.${commercant.id}` }, () => chargerCommandesJour())
@@ -761,7 +805,7 @@ export default function CommanderSlug() {
       clearInterval(intervalId)
       supabase.removeChannel(channel)
     }
-  }, [commercant, chargerCommandesJour])
+  }, [commercant, chargerCommandesJour, rafraichirArticlesEtStocks])
 
   const handleScroll = useCallback(() => {
     if (!scrollRef.current || !headerRef.current) return
@@ -954,10 +998,25 @@ export default function CommanderSlug() {
     )
     try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
 
-    // FIX NUMÉRO : utiliser directement numero_commande de la DB — source unique de vérité
-    // Le dashboard utilise aussi numero_commande → parfaite synchronisation
-    const numeroAffiche = commande.numero_commande || numero_commande || 1
-    setDerniereCommande({ ...commande, client_id: cid, numeroSequentiel: numeroAffiche })
+    // FIX NUMÉRO : calculer la position réelle dans le jour pour ce commerce —
+    // même logique que le dashboard (getNumeroJour) et que le PickupScreen,
+    // pour que les 3 affichages soient parfaitement alignés.
+    let numeroFinal = commande.numero_commande
+    if (!numeroFinal) {
+      const { data: duJour } = await supabase
+        .from('commandes')
+        .select('id, created_at, creneau:creneaux(heure_debut)')
+        .eq('commercant_id', commercant.id)
+        .eq('date_commande', dateStr)
+        .order('created_at', { ascending: true })
+      const tri = (duJour || []).sort((a, b) =>
+        (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '') ||
+        new Date(a.created_at) - new Date(b.created_at)
+      )
+      const idx = tri.findIndex(c => c.id === commande.id)
+      numeroFinal = idx >= 0 ? idx + 1 : (numero_commande || 1)
+    }
+    setDerniereCommande({ ...commande, client_id: cid, numeroSequentiel: numeroFinal })
     setEtape(4)
     setLoadingCommande(false)
   }

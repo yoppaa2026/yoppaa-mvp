@@ -651,7 +651,7 @@ function OptionsArticle({ articleId, toast }) {
   const [groupes, setGroupes] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [formGroupe, setFormGroupe] = useState({ nom: '', type: 'multiple', obligatoire: false })
+  const [formGroupe, setFormGroupe] = useState({ nom: '', type: 'unique', obligatoire: false })
   const [valeursForms, setValeursForms] = useState({})
   const [saving, setSaving] = useState(false)
 
@@ -671,7 +671,13 @@ function OptionsArticle({ articleId, toast }) {
     setSaving(false)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('Groupe ajouté')
-    setFormGroupe({ nom: '', type: 'multiple', obligatoire: false }); setShowForm(false); fetchGroupes()
+    setFormGroupe({ nom: '', type: 'unique', obligatoire: false }); setShowForm(false); fetchGroupes()
+  }
+
+  async function updateGroupe(id, patch) {
+    const { error } = await supabase.from('article_options_groupes').update(patch).eq('id', id)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    fetchGroupes()
   }
 
   async function deleteGroupe(id) {
@@ -720,21 +726,29 @@ function OptionsArticle({ articleId, toast }) {
                 placeholder="Ex: Choix de sauce, Crudités..."
                 style={{ ...s.input, fontSize: 13, padding: '7px 10px' }}/>
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div>
-                <label style={{ ...s.label, fontSize: 10 }}>Type</label>
-                <select value={formGroupe.type} onChange={e => setFormGroupe(p => ({ ...p, type: e.target.value }))}
-                  style={{ ...s.input, fontSize: 12, padding: '6px 8px', width: 'auto', cursor: 'pointer' }}>
-                  <option value="unique">Choix unique (1 seul)</option>
-                  <option value="multiple">Choix multiple (plusieurs)</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 16 }}>
-                <input type="checkbox" id={`oblig-${articleId}`} checked={formGroupe.obligatoire}
-                  onChange={e => setFormGroupe(p => ({ ...p, obligatoire: e.target.checked }))} style={{ cursor: 'pointer' }}/>
-                <label htmlFor={`oblig-${articleId}`} style={{ fontSize: 12, color: T.ink, cursor: 'pointer' }}>Obligatoire</label>
+            <div>
+              <label style={{ ...s.label, fontSize: 10 }}>Type de choix</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[
+                  { val: 'unique',   label: 'Un seul choix', desc: 'Ex : taille, sauce' },
+                  { val: 'multiple', label: 'Plusieurs',     desc: 'Ex : suppléments' },
+                ].map(opt => {
+                  const sel = formGroupe.type === opt.val
+                  return (
+                    <button key={opt.val} type="button" onClick={() => setFormGroupe(p => ({ ...p, type: opt.val }))}
+                      style={{ flex: 1, padding: '8px 10px', borderRadius: 10, border: `1.5px solid ${sel ? T.bgPanel : T.hairline}`, background: sel ? T.bgPanel : '#fff', color: sel ? '#fff' : T.ink, cursor: 'pointer', textAlign: 'left', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s' }}>
+                      <div style={{ fontWeight: 800, fontSize: 12, marginBottom: 1 }}>{opt.label}</div>
+                      <div style={{ fontSize: 10, opacity: sel ? 0.85 : 0.6 }}>{opt.desc}</div>
+                    </button>
+                  )
+                })}
               </div>
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '6px 0' }}>
+              <input type="checkbox" checked={formGroupe.obligatoire}
+                onChange={e => setFormGroupe(p => ({ ...p, obligatoire: e.target.checked }))} style={{ cursor: 'pointer', width: 16, height: 16 }}/>
+              <span style={{ fontSize: 12, color: T.ink, fontWeight: 600 }}>Le client doit obligatoirement choisir</span>
+            </label>
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
             <button style={{ ...s.btn, ...s.btnPrimary, padding: '6px 12px', fontSize: 12 }} onClick={saveGroupe} disabled={saving}>
@@ -751,13 +765,21 @@ function OptionsArticle({ articleId, toast }) {
 
       {groupes.map(g => (
         <div key={g.id} style={{ background: '#fff', borderRadius: 10, padding: 10, marginBottom: 8, border: `1px solid ${T.hairline}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontWeight: 700, fontSize: 13, color: T.ink }}>{g.nom}</span>
-              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: g.type === 'unique' ? '#FEF3C7' : '#EDE0FF', color: g.type === 'unique' ? '#92400E' : T.main }}>
-                {g.type === 'unique' ? '1 choix' : 'Multi'}
-              </span>
-              {g.obligatoire && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: '#FEE2E2', color: '#DC2626' }}>Obligatoire</span>}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 800, fontSize: 13, color: T.ink }}>{g.nom}</span>
+              {/* Badge type cliquable pour basculer unique <-> multiple */}
+              <button onClick={() => updateGroupe(g.id, { type: g.type === 'unique' ? 'multiple' : 'unique' })}
+                title="Cliquer pour basculer"
+                style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 100, background: T.bgPanel, color: '#fff', border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                {g.type === 'unique' ? '1 choix' : 'Plusieurs choix'}
+              </button>
+              {/* Badge obligatoire cliquable */}
+              <button onClick={() => updateGroupe(g.id, { obligatoire: !g.obligatoire })}
+                title="Cliquer pour basculer"
+                style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 100, background: g.obligatoire ? '#FEE2E2' : '#F3F4F6', color: g.obligatoire ? '#DC2626' : T.muted, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                {g.obligatoire ? 'Obligatoire' : 'Optionnel'}
+              </button>
             </div>
             <button style={{ ...s.btn, ...s.btnDanger, padding: '5px 8px', fontSize: 11 }} onClick={() => deleteGroupe(g.id)} title="Supprimer le groupe">
               <Icon name="trash" size={13} color="#DC2626"/>

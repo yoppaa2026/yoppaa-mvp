@@ -66,6 +66,10 @@ function getNumeroJour(commandes, commandeId, jourKey) {
   const duJour = [...commandes]
     .filter(c => dateKey(c.date_commande || c.created_at) === jourKey)
     .sort((a, b) => (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '') || new Date(a.created_at) - new Date(b.created_at))
+  const commande = duJour.find(c => c.id === commandeId)
+  if (commande?.numero_commande && commande.numero_commande <= 999) {
+    return commande.numero_commande
+  }
   const idx = duJour.findIndex(c => c.id === commandeId)
   return idx === -1 ? '?' : idx + 1
 }
@@ -692,7 +696,7 @@ export default function Dashboard() {
               <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, opacity: d.o, animation: `pulse ${0.6 + i*0.15}s ease-in-out infinite alternate` }}/>
             ))}
           </div>
-          <span>🎉 {commandeRecuperee.nom} a récupéré la commande #{commandeRecuperee.numero} — YOP!</span>
+          <span>🎉 {commandeRecuperee.nom} a récupéré la commande #{commandeRecuperee.numero} !</span>
           <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
             {[{c:'#fff',o:0.5,s:6},{c:'#fff',o:0.8,s:8},{c:'#fff',o:0.5,s:6}].map((d,i) => (
               <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, opacity: d.o, animation: `pulse ${0.6 + i*0.15}s ease-in-out infinite alternate` }}/>

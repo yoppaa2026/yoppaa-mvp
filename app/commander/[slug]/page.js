@@ -109,16 +109,15 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
             <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, animation: `yopPulse 0.6s ease-in-out ${d.d} infinite alternate`, boxShadow: `0 0 12px ${d.c}88` }}/>
           ))}
         </div>
-        <p style={{ fontWeight: 900, fontSize: '1.1rem', color: C.ink, letterSpacing: '-0.3px', marginBottom: 4 }}>C'est <span style={{ color: C.main }}>YOP!</span> 🎉</p>
-        <p style={{ fontSize: '0.82rem', color: '#6B7280', fontWeight: 600 }}>Enjoy {clientPrenom || 'Yopper'} !</p>
+        <p style={{ fontWeight: 900, fontSize: '1.1rem', color: C.ink, letterSpacing: '-0.3px', marginBottom: 4 }}>Récupéré ! 🎉</p>
+        <p style={{ fontSize: '0.82rem', color: '#6B7280', fontWeight: 600 }}>Profite bien {clientPrenom} !</p>
       </div>
     )
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontWeight: 900, fontSize: '0.95rem', color: C.main, letterSpacing: '-0.3px' }}>YOP!</span>
-        <span style={{ fontSize: '0.75rem', color: '#9CA3AF', fontWeight: 600, animation: 'yopArrow 1.2s ease-in-out infinite' }}>→→→</span>
+        <span style={{ fontSize: '0.72rem', color: '#9CA3AF', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', animation: 'yopArrow 1.2s ease-in-out infinite' }}>Glisse pour récupérer →→→</span>
       </div>
       <div ref={containerRef}
         style={{ width: '100%', height: TRACK_H, borderRadius: 100, background: `linear-gradient(to right, ${C.pale} ${p*100}%, #F3F4F6 ${p*100}%)`, position: 'relative', border: `2px solid ${p > 0.5 ? C.main : C.light}`, userSelect: 'none', cursor: 'grab', touchAction: 'none', transition: 'border-color 0.2s' }}
@@ -128,7 +127,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
           <span style={{ fontSize: '0.78rem', fontWeight: 800, color: p > 0.3 ? C.main : '#9CA3AF', letterSpacing: '1px', textTransform: 'uppercase', transition: 'color 0.2s' }}>{p > 0.7 ? 'Lâche !' : ''}</span>
         </div>
         <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: `linear-gradient(135deg, ${C.main}, ${C.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 16px ${C.main}66`, transition: swiping ? 'none' : 'left 0.3s', userSelect: 'none' }}>
-          <span style={{ fontWeight: 900, fontSize: '0.85rem', color: '#fff', letterSpacing: '-0.5px' }}>YOP</span>
+          <span style={{ fontWeight: 800, fontSize: '0.62rem', color: '#fff', letterSpacing: '1px', textTransform: 'uppercase' }}>SWIPE</span>
         </div>
       </div>
     </div>
@@ -363,6 +362,9 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
   const dispos = hasStockJour ? labelsDispos() : []
   const epuiseComplet = epuiseAujourdhui && !prochain
   const inactifCeJour = !actifCeJour
+  // Stock limit : bloquer le + quand panier atteint le stock dispo
+  const stockGere = article.stock_jour > 0
+  const stockAtteint = stockGere && stockAujourdhui > 0 && qteTotale >= stockAujourdhui
 
   return (
     <div className="art-card" style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${(epuiseComplet || inactifCeJour) ? '#E5E7EB' : qteTotale > 0 ? T.main+'44' : T.pale}`, boxShadow: qteTotale > 0 ? `0 2px 12px ${T.main}18` : '0 1px 4px rgba(107,53,196,0.04)', opacity: (epuiseComplet || inactifCeJour) ? 0.6 : 1, transition: 'all 0.2s' }}>
@@ -422,9 +424,12 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <button onClick={() => retirerDuPanier(keySimple)}
                     style={{ width: 34, height: 34, borderRadius: 10, border: `2px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 900, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                  <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, minWidth: 22, textAlign: 'center' }}>{qteTotale}</span>
-                  <button onClick={() => ajouterAuPanier(article)}
-                    style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 14px ${T.main}55` }}>+</button>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, minWidth: 22, textAlign: 'center' }}>{qteTotale}</span>
+                    {stockAtteint && <span style={{ fontSize: '0.5rem', fontWeight: 700, color: T.main, letterSpacing: '0.3px', whiteSpace: 'nowrap' }}>MAX ✓</span>}
+                  </div>
+                  <button onClick={() => !stockAtteint && ajouterAuPanier(article)} disabled={stockAtteint}
+                    style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: stockAtteint ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: stockAtteint ? '#9CA3AF' : '#fff', fontWeight: 900, cursor: stockAtteint ? 'default' : 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: stockAtteint ? 'none' : `0 4px 14px ${T.main}55`, transition: 'all 0.15s' }}>+</button>
                 </div>
               ) : (
                 <button onClick={() => ajouterAuPanier(article)}
@@ -835,7 +840,24 @@ export default function CommanderSlug() {
       Object.values(panier).map(i => ({ commande_id: commande.id, article_id: i.id, quantite: i.quantite, prix_unitaire: i.prix }))
     )
     try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
-    setDerniereCommande({ ...commande, client_id: cid })
+
+    // FIX 3 — Calculer le numéro séquentiel du jour (même logique que dashboard)
+    let numeroSequentiel = 1
+    try {
+      const { data: ordresDuJour } = await supabase
+        .from('commandes')
+        .select('id, created_at, creneau:creneaux(heure_debut)')
+        .eq('commercant_id', commercant.id)
+        .eq('date_commande', dateStr)
+      const sorted = (ordresDuJour || []).sort((a, b) =>
+        (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '') ||
+        new Date(a.created_at) - new Date(b.created_at)
+      )
+      const pos = sorted.findIndex(c => c.id === commande.id)
+      if (pos !== -1) numeroSequentiel = pos + 1
+    } catch(e) {}
+
+    setDerniereCommande({ ...commande, client_id: cid, numeroSequentiel })
     setEtape(4)
     setLoadingCommande(false)
   }
@@ -1305,6 +1327,11 @@ export default function CommanderSlug() {
               <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
                 <div style={{ fontSize: '3.5rem', marginBottom: '0.75rem' }}>🎉</div>
                 <p style={{ fontWeight: 900, fontSize: '1rem', color: T.main, marginBottom: 4 }}>yoppaa</p>
+                {derniereCommande?.numeroSequentiel && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '6px 20px', marginBottom: 12, boxShadow: `0 4px 16px ${T.main}44` }}>
+                    <span style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px' }}>#{derniereCommande.numeroSequentiel}</span>
+                  </div>
+                )}
                 <h2 style={{ fontWeight: 900, fontSize: '1.5rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>Commande confirmée !</h2>
                 <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>Chez {commercant.nom}</p>
                 <p style={{ color: T.muted, fontSize: '0.875rem' }}>Présente-toi à ton créneau — c'est tout !</p>

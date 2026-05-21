@@ -458,6 +458,7 @@ export default function CommanderSlug() {
   const [loadingCommande, setLoadingCommande] = useState(false)
   // FIX 1 — erreur stock non-bloquante (remplace alert)
   const [erreurCommande, setErreurCommande] = useState(null)
+  const [ajustementStock, setAjustementStock] = useState(null) // { articleId, nom, stockDisponible }
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '' })
   const [rgpdCommande, setRgpdCommande] = useState(false)
   const [rgpdMarketing, setRgpdMarketing] = useState(false)
@@ -779,15 +780,16 @@ export default function CommanderSlug() {
         const deja = qteDeja[item.id] || 0
         const stockDisponible = item.stock_jour - deja
         if (item.quantite > stockDisponible) {
+          // FIX 2 — Mémoriser l'ajustement suggéré + garder le panier intact
           setErreurCommande(`Stock insuffisant pour "${item.nom}" : ${stockDisponible} disponible${stockDisponible > 1 ? 's' : ''}, tu en demandes ${item.quantite}.`)
+          setAjustementStock({ articleId: item.id, nom: item.nom, stockDisponible })
           setLoadingCommande(false)
           return
         }
       }
     }
 
-    // ── FIX : Numéro de commande séquentiel fiable ────────────────────────────
-    // Récupère le max existant plutôt qu'un count (évite les doublons en cas d'erreur)
+    // ── Numéro de commande séquentiel fiable (max réel en DB) ─────────────────
     const { data: derniereCmd } = await supabase
       .from('commandes')
       .select('numero_commande')
@@ -800,18 +802,31 @@ export default function CommanderSlug() {
 
     const cid = await getOuCreerClient(client.email, client.prenom, client.nom)
 
-    // ── Insert commande avec gestion d'erreur explicite ───────────────────────
-    const { data: commande, error: errInsert } = await supabase.from('commandes').insert({
+    // ── FIX 3 : Insert avec gestion d'erreur + fallback sans numero_commande ──
+    const insertPayload = {
       commercant_id: commercant.id, creneau_id: creneauChoisi,
       client_nom: nomComplet, client_email: client.email, client_telephone: client.telephone,
       rgpd_commande: true, rgpd_marketing: rgpdMarketing,
       total: totalPanier(), statut: 'en_attente',
       date_commande: dateStr,
       numero_commande,
-    }).select().single()
+    }
+    let { data: commande, error: errInsert } = await supabase.from('commandes').insert(insertPayload).select().single()
 
-    if (errInsert || !commande) {
-      setErreurCommande('Une erreur est survenue. Réessaie dans quelques secondes.')
+    // Fallback sans numero_commande si la colonne pose problème
+    if (errInsert) {
+      const { numero_commande: _, ...payloadSansNumero } = insertPayload
+      const { data: c2, error: e2 } = await supabase.from('commandes').insert(payloadSansNumero).select().single()
+      if (!e2 && c2) { commande = c2; errInsert = null }
+      else {
+        const msg = errInsert?.message || errInsert?.code || e2?.message || 'inconnue'
+        setErreurCommande(`Erreur : ${msg}`)
+        setLoadingCommande(false)
+        return
+      }
+    }
+    if (!commande) {
+      setErreurCommande('Commande non créée. Réessaie.')
       setLoadingCommande(false)
       return
     }
@@ -886,10 +901,10 @@ export default function CommanderSlug() {
             ← Retour
           </button>
 
-          {/* FIX 2 — Logo supprimé, nom seul dans le topbar */}
+          {/* FIX 4 — Nom commerçant topbar : police réduite pour éviter la coupure */}
           <div style={{ flex: 1, overflow: 'hidden' }}>
             {commercant && (
-              <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#fff', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+              <span style={{ fontWeight: 700, fontSize: '0.75rem', color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', opacity: 0.9 }}>
                 {commercant.nom}
               </span>
             )}
@@ -1133,7 +1148,7 @@ export default function CommanderSlug() {
                     const actif = jourSelectionne === idx
                     const dateStr = jour.date.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })
                     return (
-                      <button key={idx} onClick={() => { setJourSelectionne(idx); setCreneauChoisi(null); setErreurCommande(null) }}
+                      <button key={idx} onClick={() => { setJourSelectionne(idx); setCreneauChoisi(null); setErreurCommande(null); setAjustementStock(null) }}
                         style={{ flexShrink: 0, padding: '0.5rem 1rem', borderRadius: 14, border: `2px solid ${actif ? T.main : T.pale}`, background: actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: actif ? '#fff' : T.muted, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.15s', boxShadow: actif ? `0 4px 16px ${T.main}44` : 'none', fontFamily: '"DM Sans", sans-serif', textAlign: 'center', lineHeight: 1.3 }}>
                         <div>{jour.label}</div>
                         <div style={{ fontSize: '0.68rem', opacity: actif ? 0.85 : 0.6, marginTop: 1 }}>{dateStr}</div>
@@ -1175,7 +1190,7 @@ export default function CommanderSlug() {
                     else if (bientot) mention = { text: '🔥 Dernière place !', color: '#EA580C' }
                     else if (presque) mention = { text: '⚡ Presque complet', color: '#D97706' }
                     return (
-                      <div key={c.id} onClick={() => { if (!complet) { setCreneauChoisi(c.id); setErreurCommande(null) } }}
+                      <div key={c.id} onClick={() => { if (!complet) { setCreneauChoisi(c.id); setErreurCommande(null); setAjustementStock(null) } }}
                         style={{ padding: '0.75rem 0.5rem', borderRadius: 14, border: `2px solid ${complet ? '#E5E7EB' : choisi ? T.main : T.pale}`, background: complet ? '#F9FAFB' : choisi ? T.pale : '#fff', cursor: complet ? 'default' : 'pointer', textAlign: 'center', transition: 'all 0.15s', boxShadow: choisi ? `0 4px 16px ${T.main}33` : 'none' }}>
                         <p style={{ fontWeight: 800, fontSize: '0.9rem', color: complet ? '#D1D5DB' : T.ink, textDecoration: complet ? 'line-through' : 'none' }}>
                           {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
@@ -1226,15 +1241,51 @@ export default function CommanderSlug() {
                   ))}
                 </div>
 
-                {/* FIX 1 — Message d'erreur stock non-bloquant */}
+                {/* FIX 1&2 — Message d'erreur avec actions intelligentes */}
                 {erreurCommande && (
-                  <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.875rem 1rem', marginBottom: 12, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                    <span style={{ fontSize: '1rem', flexShrink: 0 }}>⚠️</span>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.5 }}>{erreurCommande}</p>
+                  <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.875rem 1rem', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                      <span style={{ fontSize: '1rem', flexShrink: 0 }}>⚠️</span>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.5 }}>{erreurCommande}</p>
+                      </div>
+                      <button onClick={() => { setErreurCommande(null); setAjustementStock(null) }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '1rem', fontWeight: 700, flexShrink: 0, padding: 0 }}>✕</button>
                     </div>
-                    <button onClick={() => setErreurCommande(null)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '1rem', fontWeight: 700, flexShrink: 0, padding: 0 }}>✕</button>
+                    {ajustementStock && (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                        {ajustementStock.stockDisponible > 0 && (
+                          <button onClick={() => {
+                            // Réduire automatiquement la quantité au stock disponible
+                            setPanier(prev => {
+                              const next = { ...prev }
+                              let restant = ajustementStock.stockDisponible
+                              Object.keys(next).forEach(key => {
+                                if (key === String(ajustementStock.articleId) || key.startsWith(`${ajustementStock.articleId}_`)) {
+                                  if (restant > 0) {
+                                    const qte = Math.min(next[key].quantite, restant)
+                                    next[key] = { ...next[key], quantite: qte }
+                                    restant -= qte
+                                  } else {
+                                    delete next[key]
+                                  }
+                                }
+                              })
+                              return next
+                            })
+                            setErreurCommande(null)
+                            setAjustementStock(null)
+                          }}
+                            style={{ padding: '0.5rem 1rem', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                            ✓ Réduire à {ajustementStock.stockDisponible}
+                          </button>
+                        )}
+                        <button onClick={() => { setEtape(2); setErreurCommande(null); setAjustementStock(null) }}
+                          style={{ padding: '0.5rem 1rem', borderRadius: 100, border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                          ← Modifier mon panier
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1288,7 +1339,7 @@ export default function CommanderSlug() {
               )}
 
               <button onClick={() => router.push('/commander')} style={{ ...btnPrimary, marginBottom: 10 }}>← Retour à l'accueil</button>
-              <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(false); setErreurCommande(null); setEtape(2) }}
+              <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(false); setErreurCommande(null); setAjustementStock(null); setEtape(2) }}
                 style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
                 Commander autre chose chez {commercant.nom}
               </button>

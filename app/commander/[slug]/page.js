@@ -1047,8 +1047,29 @@ export default function CommanderSlug() {
       return
     }
 
+    // Persistance options + prix_unitaire INCLUANT les suppléments
+    // (le commerçant voit ainsi sauce/extras + le bon total par ligne)
     await supabase.from('commande_articles').insert(
-      Object.values(panier).map(i => ({ commande_id: commande.id, article_id: i.id, quantite: i.quantite, prix_unitaire: i.prix }))
+      Object.values(panier).map(i => {
+        const optionsFlat = i.options
+          ? Object.entries(i.options).flatMap(([groupeId, valeurs]) => {
+              const groupe = (optionsParArticle[i.id] || []).find(g => String(g.id) === String(groupeId))
+              return valeurs.map(v => ({
+                groupe_nom: groupe?.nom || '',
+                valeur_nom: v.nom,
+                prix_supplement: Number(v.prix_supplement || 0),
+              }))
+            })
+          : []
+        const supplement = optionsFlat.reduce((s, o) => s + o.prix_supplement, 0)
+        return {
+          commande_id: commande.id,
+          article_id: i.id,
+          quantite: i.quantite,
+          prix_unitaire: Number(i.prix) + supplement,
+          options: optionsFlat.length > 0 ? optionsFlat : null,
+        }
+      })
     )
     try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
 

@@ -210,12 +210,33 @@ function CarteCommande({ commande, numero, onChangerStatut }) {
           </div>
         </div>
         <div style={{ background: T.bg, borderRadius: 10, padding: '0.5rem 0.75rem', marginBottom: '0.625rem' }}>
-          {commande.commande_articles?.map(ligne => (
-            <div key={ligne.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: T.muted, marginBottom: 2, lineHeight: 1.4 }}>
-              <span style={{ fontWeight: 600 }}>{ligne.quantite}× {ligne.article?.nom}</span>
-              <span style={{ fontWeight: 700, color: T.ink }}>{(ligne.quantite * ligne.prix_unitaire).toFixed(2)}€</span>
-            </div>
-          ))}
+          {commande.commande_articles?.map(ligne => {
+            // Regroupe les options par groupe pour un affichage hiérarchisé
+            const optionsParGroupe = {}
+            ;(ligne.options || []).forEach(o => {
+              const g = o.groupe_nom || 'Options'
+              if (!optionsParGroupe[g]) optionsParGroupe[g] = []
+              optionsParGroupe[g].push(o)
+            })
+            return (
+              <div key={ligne.id} style={{ marginBottom: 6, lineHeight: 1.4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: T.muted }}>
+                  <span style={{ fontWeight: 700, color: T.ink }}>{ligne.quantite}× {ligne.article?.nom}</span>
+                  <span style={{ fontWeight: 700, color: T.ink }}>{(ligne.quantite * ligne.prix_unitaire).toFixed(2)}€</span>
+                </div>
+                {Object.entries(optionsParGroupe).map(([groupe, vals]) => (
+                  <div key={groupe} style={{ fontSize: '0.72rem', color: T.deep, marginLeft: 10, marginTop: 1, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    <span style={{ color: T.muted, fontWeight: 600 }}>{groupe} :</span>
+                    {vals.map((v, i) => (
+                      <span key={i} style={{ fontWeight: 700, color: T.deep }}>
+                        {v.valeur_nom}{Number(v.prix_supplement) > 0 ? ` +${Number(v.prix_supplement).toFixed(2)}€` : ''}{i < vals.length - 1 ? ',' : ''}
+                      </span>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )
+          })}
         </div>
         {statut.next && (
           <button onClick={() => onChangerStatut(commande.id, statut.next)}

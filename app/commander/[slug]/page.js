@@ -314,28 +314,22 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
   const qteTotale = qteTotaleArticle(article.id)
   const keySimple = String(article.id)
 
-  // ── Stock par jour ──
   const stocksArticle = stocksJour[article.id] || {}
   const hasStockJour = Object.keys(stocksArticle).length > 0
 
-  // Jour sélectionné dans le tunnel
   const jourDateSelectionne = joursDispos[jourSelectionne]?.date || new Date()
   const jourNomSelectionne = JOURS[jourIdx(jourDateSelectionne)]
 
-  // Stock aujourd'hui
   const stockAujourdhui = hasStockJour
     ? (stocksArticle[jourActuel()]?.actif !== false ? (stocksArticle[jourActuel()]?.stock ?? article.stock_jour) : 0)
     : article.stock_jour
 
-  // Article actif ce jour ?
   const actifCeJour = hasStockJour
     ? (stocksArticle[jourNomSelectionne]?.actif !== false)
     : true
 
-  // Épuisé aujourd'hui ?
   const epuiseAujourdhui = stockAujourdhui === 0
 
-  // Prochain jour dispo
   function prochainJourDispo() {
     for (let i = 1; i < 7; i++) {
       const d = new Date(); d.setDate(d.getDate() + i)
@@ -348,7 +342,6 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
     return null
   }
 
-  // Labels dispo multi-jours
   function labelsDispos() {
     const labels = []
     const today = new Date()
@@ -382,7 +375,6 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
             {hasOptions && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100 }}>Personnalisable</span>}
           </div>
 
-          {/* Labels stock par jour */}
           {hasStockJour && dispos.length > 0 && (
             <div style={{ display: 'flex', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
               {dispos.map((d, i) => (
@@ -393,7 +385,6 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
             </div>
           )}
 
-          {/* Épuisé aujourd'hui avec dispo demain */}
           {epuiseAujourdhui && prochain && (
             <button onClick={() => onCommanderDemain(prochain.idx)}
               style={{ marginTop: 6, fontSize: '0.72rem', fontWeight: 800, color: T.main, background: T.pale, border: `1px solid ${T.main}44`, borderRadius: 100, padding: '3px 10px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
@@ -401,12 +392,10 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
             </button>
           )}
 
-          {/* Épuisé sans alternative */}
           {epuiseComplet && (
             <span style={{ fontSize: '0.68rem', background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 6, fontWeight: 700, display: 'inline-block', marginTop: 6 }}>Épuisé</span>
           )}
 
-          {/* Inactif ce jour */}
           {inactifCeJour && !epuiseComplet && prochain && (
             <span style={{ fontSize: '0.68rem', background: '#FEF3C7', color: '#92400E', padding: '2px 8px', borderRadius: 6, fontWeight: 700, display: 'inline-block', marginTop: 6 }}>
               Disponible {prochain.nom}
@@ -467,6 +456,8 @@ export default function CommanderSlug() {
   const [creneauChoisi, setCreneauChoisi] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadingCommande, setLoadingCommande] = useState(false)
+  // FIX 1 — erreur stock non-bloquante (remplace alert)
+  const [erreurCommande, setErreurCommande] = useState(null)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '' })
   const [rgpdCommande, setRgpdCommande] = useState(false)
   const [rgpdMarketing, setRgpdMarketing] = useState(false)
@@ -487,7 +478,6 @@ export default function CommanderSlug() {
   const headerRef = useRef(null)
   const scrollRef = useRef(null)
 
-  // Détection desktop
   useEffect(() => {
     setIsDesktop(window.innerWidth > 768)
     const h = () => setIsDesktop(window.innerWidth > 768)
@@ -506,7 +496,6 @@ export default function CommanderSlug() {
       setClientId(id)
     }
 
-    // Cache localStorage TTL 5 min
     const cacheKey = `yoppaa_commerce_${slug}`
     const cached = localStorage.getItem(cacheKey)
     if (cached) {
@@ -539,10 +528,7 @@ export default function CommanderSlug() {
   async function chargerCommercant(slug) {
     setLoading(true)
 
-    // Toutes les requêtes en parallèle
-    const [
-      { data: c },
-    ] = await Promise.all([
+    const [{ data: c }] = await Promise.all([
       supabase.from('commercants').select('*').eq('slug', slug).single(),
     ])
     if (!c) { router.push('/commander'); return }
@@ -567,12 +553,10 @@ export default function CommanderSlug() {
       supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', c.id).gte('date_fin', new Date().toISOString()),
     ])
 
-    // Notes
     const notesInfo = avisNotes?.length > 0
       ? { moyenne: avisNotes.reduce((a, x) => a + x.note, 0) / avisNotes.length, count: avisNotes.length }
       : { moyenne: 0, count: 0 }
 
-    // Capacité créneaux
     const countParCreneau = {}
     const tempsParCreneau = {}
     ;(commandesActives || []).forEach(cmd => {
@@ -582,7 +566,6 @@ export default function CommanderSlug() {
     })
     const creneauxAvecCount = (cren || []).map(cr => ({ ...cr, count: countParCreneau[cr.id] || 0, temps_cumul: tempsParCreneau[cr.id] || 0 }))
 
-    // Options articles
     const artIds = (arts||[]).map(a => a.id)
     let opts = {}
     if (artIds.length > 0) {
@@ -597,7 +580,6 @@ export default function CommanderSlug() {
       })
     }
 
-    // Stocks par jour
     let stocksJourMap = {}
     if (artIds.length > 0) {
       const { data: stocksData } = await supabase
@@ -611,10 +593,7 @@ export default function CommanderSlug() {
       })
     }
 
-    // Photo couverture
     const couverture = (photosData||[]).find(p => p.type === 'couverture') || null
-
-    // Deal actif
     const deal = dealsData?.[0] || null
 
     const cacheData = {
@@ -630,7 +609,6 @@ export default function CommanderSlug() {
       fermetures: fermeturesData || [],
     }
 
-    // Sauvegarder en cache
     try {
       localStorage.setItem(`yoppaa_commerce_${slug}`, JSON.stringify({ data: cacheData, ts: Date.now() }))
     } catch(e) {}
@@ -653,14 +631,12 @@ export default function CommanderSlug() {
       })
     }
 
-    // Filtrer créneaux par jour_semaine
     function creneauxPourDate(date, avecCount = true) {
       const nomJour = JOURS[jourIdx(date)]
       return creneauxAvecCount.filter(cr => cr.jour_semaine === nomJour || cr.jour_semaine === null)
         .map(cr => avecCount ? cr : { ...cr, count: 0, temps_cumul: 0 })
     }
 
-    // Aujourd'hui
     if (!estEnFermeture(today)) {
       const crensAujourdhui = creneauxPourDate(today, true).filter(cr => heureEnMinutes(cr.heure_debut) > now)
       if (crensAujourdhui.length > 0) {
@@ -668,7 +644,6 @@ export default function CommanderSlug() {
       }
     }
 
-    // Jours suivants
     for (let i = 1; i < horizon; i++) {
       const d = new Date(today); d.setDate(d.getDate() + i)
       if (estEnFermeture(d)) continue
@@ -676,7 +651,6 @@ export default function CommanderSlug() {
       joursDispos.push({ date: d, label, creneaux: creneauxPourDate(d, false) })
     }
 
-    // Jour horizon si résa ouverte
     const resaOuverte = now >= heureEnMinutes(heureOuverture)
     if (horizon >= 1 && resaOuverte) {
       const d = new Date(today); d.setDate(d.getDate() + horizon)
@@ -700,7 +674,6 @@ export default function CommanderSlug() {
     }
   }, [commercant, creneaux, fermetures])
 
-  // Scroll spy
   const handleScroll = useCallback(() => {
     if (!scrollRef.current || !headerRef.current) return
     const scrollTop = scrollRef.current.scrollTop
@@ -733,7 +706,6 @@ export default function CommanderSlug() {
     setCategorieActive(cat)
   }
 
-  // Panier
   function ajouterAuPanier(article, options = null) {
     const key = options ? `${article.id}_${JSON.stringify(options)}` : String(article.id)
     setPanier(prev => ({ ...prev, [key]: { ...article, options, quantite: (prev[key]?.quantite || 0) + 1 } }))
@@ -759,7 +731,6 @@ export default function CommanderSlug() {
     }, 0)
   }
 
-  // Commander pour un autre jour
   function commanderPourJour(idxJour) {
     setJourSelectionne(idxJour)
     setEtape(3)
@@ -782,13 +753,14 @@ export default function CommanderSlug() {
   async function passerCommande() {
     if (!creneauChoisi || !client.prenom || !client.nom || !client.email || !client.telephone || !rgpdCommande || !commercant) return
     setLoadingCommande(true)
+    setErreurCommande(null)
 
     const nomComplet = `${client.prenom} ${client.nom}`.trim()
     const jourDate = joursDispos[jourSelectionne]?.date || new Date()
     const d = new Date(jourDate)
     const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 
-    // ── Validation stock avant commande ───────────────────────────────────────
+    // ── FIX 1 : Validation stock — message dans la page au lieu d'alert() ─────
     const articlesAValider = Object.values(panier).filter(i => i.stock_jour > 0)
     if (articlesAValider.length > 0) {
       const artIds = articlesAValider.map(i => i.id)
@@ -807,7 +779,7 @@ export default function CommanderSlug() {
         const deja = qteDeja[item.id] || 0
         const stockDisponible = item.stock_jour - deja
         if (item.quantite > stockDisponible) {
-          alert(`⚠️ Stock insuffisant pour "${item.nom}" : ${stockDisponible} disponible${stockDisponible > 1 ? 's' : ''}, tu en demandes ${item.quantite}.`)
+          setErreurCommande(`Stock insuffisant pour "${item.nom}" : ${stockDisponible} disponible${stockDisponible > 1 ? 's' : ''}, tu en demandes ${item.quantite}.`)
           setLoadingCommande(false)
           return
         }
@@ -824,7 +796,6 @@ export default function CommanderSlug() {
 
     const cid = await getOuCreerClient(client.email, client.prenom, client.nom)
 
-    // ── Insérer la commande ───────────────────────────────────────────────────
     const { data: commande } = await supabase.from('commandes').insert({
       commercant_id: commercant.id, creneau_id: creneauChoisi,
       client_nom: nomComplet, client_email: client.email, client_telephone: client.telephone,
@@ -838,7 +809,6 @@ export default function CommanderSlug() {
       await supabase.from('commande_articles').insert(
         Object.values(panier).map(i => ({ commande_id: commande.id, article_id: i.id, quantite: i.quantite, prix_unitaire: i.prix }))
       )
-      // Invalider le cache
       try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
       setDerniereCommande({ ...commande, client_id: cid })
       setEtape(4)
@@ -850,20 +820,16 @@ export default function CommanderSlug() {
   const inputSt = { width: '100%', padding: '0.875rem 1rem', border: `1.5px solid ${T.pale}`, borderRadius: 12, marginBottom: 10, fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', outline: 'none', color: T.ink, background: '#fff', display: 'block' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }
 
-  // Catégories
   const categories = [...new Set(articles.map(a => a.categorie).filter(Boolean))]
   const sansCat = articles.filter(a => !a.categorie)
   const toutesLesCats = [...categories, ...(sansCat.length > 0 ? ['__autres__'] : [])]
 
-  // Adresse Maps
   function ouvrirMaps() {
     if (!commercant?.adresse) return
     const q = encodeURIComponent(commercant.adresse)
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
     window.open(isIOS ? `maps://maps.apple.com/?q=${q}` : `https://maps.google.com/?q=${q}`, '_blank')
   }
-
-  // Téléphone
   function appeler() {
     if (!commercant?.telephone) return
     window.open(`tel:${commercant.telephone}`)
@@ -911,18 +877,12 @@ export default function CommanderSlug() {
             ← Retour
           </button>
 
-          {/* Logo + nom dans topbar si scrollé */}
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
+          {/* FIX 2 — Logo supprimé, nom seul dans le topbar */}
+          <div style={{ flex: 1, overflow: 'hidden' }}>
             {commercant && (
-              <>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: commercant.logo_url ? 'transparent' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>
-                  {commercant.logo_url
-                    ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                    : '🏪'
-                  }
-                </div>
-                <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#fff', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{commercant.nom}</span>
-              </>
+              <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#fff', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+                {commercant.nom}
+              </span>
             )}
           </div>
 
@@ -950,7 +910,6 @@ export default function CommanderSlug() {
         {/* ── SCROLL BODY ── */}
         <div className="scroll-body" ref={scrollRef}>
 
-          {/* Loading skeleton */}
           {loading && (
             <>
               <SkeletonHeader/>
@@ -963,17 +922,14 @@ export default function CommanderSlug() {
           {/* ÉTAPE 2 — Articles */}
           {!loading && etape === 2 && commercant && (
             <>
-              {/* ── HEADER OPTION C ── */}
               <div ref={headerRef}>
 
-                {/* Bannière photo ou dégradé */}
                 <div style={{ position: 'relative', height: 220, overflow: 'hidden' }}>
                   {photoCouverture?.url
                     ? <img src={photoCouverture.url} alt={commercant.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                     : (
                       <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)` }}>
                         <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}55 0%, transparent 60%), radial-gradient(circle at 20% 80%, ${T.light}22 0%, transparent 50%)` }}/>
-                        {/* 3 points déco */}
                         <div style={{ position: 'absolute', top: 14, right: 14, display: 'flex', gap: 5 }}>
                           {[{c:'#fff',o:0.35},{c:T.light,o:0.8},{c:T.mid,o:0.9}].map((d,i) => (
                             <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: d.c, opacity: d.o }}/>
@@ -982,11 +938,9 @@ export default function CommanderSlug() {
                       </div>
                     )
                   }
-                  {/* Overlay gradient bas */}
                   <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: 'linear-gradient(to top, rgba(22,6,54,0.7), transparent)' }}/>
                 </div>
 
-                {/* Deal actif — entre photo et card */}
                 {dealActif && (
                   <div style={{ background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, animation: 'dealPulse 3s ease infinite' }}>
                     <span style={{ fontSize: 14 }}>🔥</span>
@@ -1003,10 +957,10 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {/* Card flottante — Option C */}
+                {/* Card flottante */}
                 <div style={{ background: '#fff', margin: '0 12px', marginTop: -20, borderRadius: 20, padding: '1rem 1.125rem', boxShadow: `0 8px 32px rgba(22,6,54,0.2), 0 2px 8px ${T.main}22`, border: `1px solid ${T.pale}`, position: 'relative' }}>
 
-                  {/* Logo flottant en haut à droite de la card */}
+                  {/* Logo flottant en haut à droite de la card (reste ici) */}
                   <div style={{ position: 'absolute', top: -24, right: 16, width: 48, height: 48, borderRadius: 14, background: commercant.logo_url ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, border: '3px solid #fff', boxShadow: `0 4px 16px rgba(0,0,0,0.15)`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>
                     {commercant.logo_url
                       ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
@@ -1014,7 +968,6 @@ export default function CommanderSlug() {
                     }
                   </div>
 
-                  {/* Nom + type */}
                   <div style={{ paddingRight: 60 }}>
                     {commercant.type && (
                       <span style={{ fontSize: '0.65rem', fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100, display: 'inline-block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
@@ -1026,7 +979,6 @@ export default function CommanderSlug() {
                     </h1>
                   </div>
 
-                  {/* Note + statut ouvert */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Etoiles note={notesInfo.moyenne} taille={12}/>
@@ -1051,7 +1003,6 @@ export default function CommanderSlug() {
                     <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.5, marginBottom: 10 }}>{commercant.description}</p>
                   )}
 
-                  {/* Actions rapides */}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {commercant.adresse && (
                       <button className="action-btn" onClick={ouvrirMaps}>
@@ -1074,14 +1025,11 @@ export default function CommanderSlug() {
                   </div>
                 </div>
 
-                {/* Espacement après card */}
                 <div style={{ height: 12, background: T.bg }}/>
 
-                {/* Horaires 7 jours */}
                 {commercant.horaires_detail && <HorairesSection horaires={commercant.horaires_detail}/>}
               </div>
 
-              {/* ── BARRE CATÉGORIES STICKY ── */}
               {toutesLesCats.length > 1 && (
                 <div style={{ position: 'sticky', top: 0, zIndex: 20, boxShadow: catBarVisible ? '0 2px 12px rgba(0,0,0,0.08)' : 'none' }}>
                   <div className="cat-bar">
@@ -1094,7 +1042,6 @@ export default function CommanderSlug() {
                 </div>
               )}
 
-              {/* ── ARTICLES ── */}
               <div style={{ padding: '0.875rem 1rem 0' }}>
                 {categories.map(cat => {
                   const artsDecat = articles.filter(a => a.categorie === cat)
@@ -1129,7 +1076,6 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {/* Avis */}
                 {avisCommerce.length > 0 && (
                   <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: `1px solid ${T.pale}` }}>
                     <h3 style={{ fontWeight: 800, fontSize: '1rem', color: T.deep, marginBottom: '0.75rem' }}>⭐ Avis clients</h3>
@@ -1153,7 +1099,6 @@ export default function CommanderSlug() {
               </div>
 
               <div style={{ padding: '0 1rem 1rem', marginTop: -1 }}>
-                {/* Mini récap */}
                 <div style={{ background: '#fff', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '1.25rem', border: `1.5px solid ${T.pale}`, boxShadow: `0 4px 20px ${T.main}14`, marginTop: '-1rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <span style={{ fontSize: '0.68rem', fontWeight: 700, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🛒 Ta commande</span>
@@ -1174,13 +1119,12 @@ export default function CommanderSlug() {
                   </div>
                 </div>
 
-                {/* Onglets jours */}
                 <div style={{ display: 'flex', gap: 6, marginBottom: '1rem', overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
                   {joursDispos.map((jour, idx) => {
                     const actif = jourSelectionne === idx
                     const dateStr = jour.date.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })
                     return (
-                      <button key={idx} onClick={() => { setJourSelectionne(idx); setCreneauChoisi(null) }}
+                      <button key={idx} onClick={() => { setJourSelectionne(idx); setCreneauChoisi(null); setErreurCommande(null) }}
                         style={{ flexShrink: 0, padding: '0.5rem 1rem', borderRadius: 14, border: `2px solid ${actif ? T.main : T.pale}`, background: actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: actif ? '#fff' : T.muted, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.15s', boxShadow: actif ? `0 4px 16px ${T.main}44` : 'none', fontFamily: '"DM Sans", sans-serif', textAlign: 'center', lineHeight: 1.3 }}>
                         <div>{jour.label}</div>
                         <div style={{ fontSize: '0.68rem', opacity: actif ? 0.85 : 0.6, marginTop: 1 }}>{dateStr}</div>
@@ -1189,7 +1133,6 @@ export default function CommanderSlug() {
                   })}
                 </div>
 
-                {/* Créneaux — filtrés par jour_semaine */}
                 <div className="grid3" style={{ marginBottom: '1.5rem' }}>
                   {[...new Map(
                     (joursDispos[jourSelectionne]?.creneaux || creneaux)
@@ -1223,7 +1166,7 @@ export default function CommanderSlug() {
                     else if (bientot) mention = { text: '🔥 Dernière place !', color: '#EA580C' }
                     else if (presque) mention = { text: '⚡ Presque complet', color: '#D97706' }
                     return (
-                      <div key={c.id} onClick={() => !complet && setCreneauChoisi(c.id)}
+                      <div key={c.id} onClick={() => { if (!complet) { setCreneauChoisi(c.id); setErreurCommande(null) } }}
                         style={{ padding: '0.75rem 0.5rem', borderRadius: 14, border: `2px solid ${complet ? '#E5E7EB' : choisi ? T.main : T.pale}`, background: complet ? '#F9FAFB' : choisi ? T.pale : '#fff', cursor: complet ? 'default' : 'pointer', textAlign: 'center', transition: 'all 0.15s', boxShadow: choisi ? `0 4px 16px ${T.main}33` : 'none' }}>
                         <p style={{ fontWeight: 800, fontSize: '0.9rem', color: complet ? '#D1D5DB' : T.ink, textDecoration: complet ? 'line-through' : 'none' }}>
                           {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
@@ -1240,7 +1183,6 @@ export default function CommanderSlug() {
                   )}
                 </div>
 
-                {/* Coordonnées */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                   <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink }}>Tes coordonnées</span>
                   <div style={{ flex: 1, height: 1, background: T.pale }}/>
@@ -1252,7 +1194,6 @@ export default function CommanderSlug() {
                 <input placeholder="Email *" type="email" value={client.email} onChange={e => setClient(p => ({ ...p, email: e.target.value }))} style={inputSt}/>
                 <input placeholder="Téléphone *" type="tel" value={client.telephone} onChange={e => setClient(p => ({ ...p, telephone: e.target.value }))} style={inputSt}/>
 
-                {/* RGPD */}
                 <div style={{ background: '#fff', borderRadius: 14, border: `1.5px solid ${T.pale}`, overflow: 'hidden', marginBottom: 16 }}>
                   <div style={{ padding: '0.625rem 1rem', background: T.pale }}>
                     <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🔒 Confidentialité</p>
@@ -1275,6 +1216,18 @@ export default function CommanderSlug() {
                     </label>
                   ))}
                 </div>
+
+                {/* FIX 1 — Message d'erreur stock non-bloquant */}
+                {erreurCommande && (
+                  <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.875rem 1rem', marginBottom: 12, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <span style={{ fontSize: '1rem', flexShrink: 0 }}>⚠️</span>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.5 }}>{erreurCommande}</p>
+                    </div>
+                    <button onClick={() => setErreurCommande(null)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '1rem', fontWeight: 700, flexShrink: 0, padding: 0 }}>✕</button>
+                  </div>
+                )}
 
                 <button onClick={passerCommande} disabled={loadingCommande || !formValide}
                   style={{ ...btnPrimary, opacity: !formValide ? 0.45 : 1, cursor: !formValide ? 'default' : 'pointer' }}>
@@ -1305,7 +1258,6 @@ export default function CommanderSlug() {
                 </p>
               </div>
 
-              {/* Bloc téléchargement app si desktop */}
               {isDesktop && (
                 <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, borderRadius: 20, padding: '1.25rem', marginBottom: '1rem', border: `1px solid ${T.main}44`, textAlign: 'center' }}>
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 10 }}>
@@ -1327,7 +1279,7 @@ export default function CommanderSlug() {
               )}
 
               <button onClick={() => router.push('/commander')} style={{ ...btnPrimary, marginBottom: 10 }}>← Retour à l'accueil</button>
-              <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(false); setEtape(2) }}
+              <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(false); setErreurCommande(null); setEtape(2) }}
                 style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
                 Commander autre chose chez {commercant.nom}
               </button>

@@ -137,6 +137,8 @@ function TabMenu({ commercantId, toast }) {
 
   // FIX STOCK : afficher le stock restant côté commerçant
   const [commandesParArticleJour, setCommandesParArticleJour] = useState({})
+  // STOCK PAR JOUR : { articleId: { lundi: { stock, actif }, mardi: ... } }
+  const [stockParJourMap, setStockParJourMap] = useState({})
 
   useEffect(() => { fetchArticles() }, [commercantId])
 
@@ -147,6 +149,47 @@ function TabMenu({ commercantId, toast }) {
     const cats = [...new Set((data || []).map(a => a.categorie).filter(Boolean))]
     setCategories(cats)
     setLoading(false)
+    // Charger les stocks par jour
+    const artIds = (data || []).map(a => a.id)
+    if (artIds.length > 0) {
+      const { data: sjData } = await supabase
+        .from('article_stock_jour')
+        .select('*')
+        .eq('commercant_id', commercantId)
+        .in('article_id', artIds)
+      const map = {}
+      ;(sjData || []).forEach(r => {
+        if (!map[r.article_id]) map[r.article_id] = {}
+        map[r.article_id][r.jour_semaine] = { stock: r.stock, actif: r.actif }
+      })
+      setStockParJourMap(map)
+    } else {
+      setStockParJourMap({})
+    }
+  }
+
+  // Upsert le stock pour un (article, jour). Si la contrainte unique n'existe
+  // pas, on fait delete puis insert.
+  async function setStockJour(articleId, jourSemaine, stock, actif) {
+    const payload = { commercant_id: commercantId, article_id: articleId, jour_semaine: jourSemaine, stock: Math.max(0, parseInt(stock) || 0), actif: !!actif }
+    const { error } = await supabase
+      .from('article_stock_jour')
+      .upsert(payload, { onConflict: 'article_id,jour_semaine' })
+    if (error) {
+      await supabase.from('article_stock_jour').delete().eq('article_id', articleId).eq('jour_semaine', jourSemaine)
+      await supabase.from('article_stock_jour').insert(payload)
+    }
+    setStockParJourMap(prev => ({
+      ...prev,
+      [articleId]: { ...(prev[articleId] || {}), [jourSemaine]: { stock: payload.stock, actif: payload.actif } },
+    }))
+  }
+
+  // Applique un stock à tous les jours ouvrés (raccourci "appliquer à tous")
+  async function setStockTousJours(articleId, stock) {
+    const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
+    await Promise.all(JOURS.map(j => setStockJour(articleId, j, stock, true)))
+    toast('Stock appliqué aux 7 jours ✓')
   }
 
   // Charge les quantités commandées aujourd'hui par article (exclut "non_retire")
@@ -404,7 +447,7 @@ function TabMenu({ commercantId, toast }) {
                       <span style={{ fontSize: 12, fontWeight: 700, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', background: T.pale, padding: '3px 10px', borderRadius: 100 }}>{cat}</span>
                       <div style={{ flex: 1, height: 1, background: T.pale }}/>
                     </div>
-                    {artsDecat.map(a => <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0}/>)}
+                    {artsDecat.map(a => <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>)}
                   </div>
                 )
               })}
@@ -415,13 +458,13 @@ function TabMenu({ commercantId, toast }) {
                     <span style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', background: '#F9FAFB', padding: '3px 10px', borderRadius: 100 }}>Sans catégorie</span>
                     <div style={{ flex: 1, height: 1, background: T.pale }}/>
                   </div>
-                  {articlesSansCat.map(a => <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0}/>)}
+                  {articlesSansCat.map(a => <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>)}
                 </div>
               )}
             </>
           ) : (
             (catActive === 'Sans catégorie' ? articlesSansCat : articlesFiltres).map(a =>
-              <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0}/>
+              <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
             )
           )}
         </>
@@ -556,38 +599,123 @@ function OptionsArticle({ articleId, toast }) {
 }
 
 // ─── Carte article réutilisable ───────────────────────────────────────────────
-function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaCommande = 0 }) {
+const JOURS_KEYS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
+const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
+
+function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaCommande = 0, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
   const [showOptions, setShowOptions] = useState(false)
-  // Stock restant aujourd'hui = stock_jour configuré − quantités déjà commandées
-  const stockBrut = a.stock_jour || 0
-  const stockRestant = Math.max(0, stockBrut - dejaCommande)
-  const stockGere = stockBrut > 0
+  const [jourEdite, setJourEdite] = useState(null) // 'lundi', 'mardi', ...
+  const [editVal, setEditVal] = useState('')
+
+  // Stock effectif pour un jour donné : entrée article_stock_jour si présente,
+  // sinon fallback sur stock_jour global de l'article
+  const stockEffectif = (jour) => {
+    const entry = stockParJour[jour]
+    if (entry) return { stock: entry.stock, actif: entry.actif, override: true }
+    return { stock: a.stock_jour || 0, actif: true, override: false }
+  }
+
+  // Stock restant aujourd'hui
+  const jourActuelIdx = (() => { const i = new Date().getDay(); return i === 0 ? 6 : i - 1 })()
+  const jourActuelKey = JOURS_KEYS[jourActuelIdx]
+  const effAuj = stockEffectif(jourActuelKey)
+  const stockBrutAuj = effAuj.actif ? effAuj.stock : 0
+  const stockRestant = Math.max(0, stockBrutAuj - dejaCommande)
+
+  function ouvrirEdition(jour) {
+    const eff = stockEffectif(jour)
+    setEditVal(String(eff.stock))
+    setJourEdite(jour)
+  }
+
+  function fermerEdition() { setJourEdite(null); setEditVal('') }
+
+  function sauvegarder(jour, actif) {
+    onSetStockJour(a.id, jour, parseInt(editVal) || 0, actif)
+    fermerEdition()
+  }
+
   return (
     <div style={{ ...s.card, opacity: a.actif ? 1 : 0.6, borderLeft: `4px solid ${a.actif ? T.main : '#E5E7EB'}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <span style={{ fontWeight: 800, color: T.ink, fontSize: 15 }}>{a.nom}</span>
             <span style={{ ...s.tag, background: a.actif ? T.pale : '#F3F4F6', color: a.actif ? T.main : T.muted }}>{a.actif ? 'Actif' : 'Inactif'}</span>
           </div>
           {a.description && <p style={{ fontSize: 12, color: T.muted, margin: '0 0 8px' }}>{a.description}</p>}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 8 }}>
             <span style={{ fontWeight: 800, fontSize: 17, color: T.main }}>{Number(a.prix).toFixed(2)} €</span>
             {(a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100 }}>⏱ {a.temps_prepa} min</span>}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>Stock :</span>
-              <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => onUpdateStock(a.id, (a.stock_jour || 0) - 1)}>−</button>
-              <input type="number" value={a.stock_jour ?? 0} min={0} onChange={e => onUpdateStock(a.id, e.target.value)}
-                style={{ ...s.input, width: 56, textAlign: 'center', padding: '4px 8px', fontSize: 14, fontWeight: 700 }}/>
-              <button style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 14 }} onClick={() => onUpdateStock(a.id, (a.stock_jour || 0) + 1)}>+</button>
-              {stockGere ? (
-                <span style={{ fontSize: 11, fontWeight: 700, color: stockRestant === 0 ? '#DC2626' : stockRestant <= 2 ? '#EA580C' : '#16A34A', background: stockRestant === 0 ? '#FEE2E2' : stockRestant <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100, marginLeft: 4 }}>
-                  {stockRestant} / {stockBrut} dispo
-                </span>
-              ) : (
-                <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100, marginLeft: 4 }}>Non géré</span>
-              )}
+            {stockBrutAuj > 0 ? (
+              <span style={{ fontSize: 11, fontWeight: 700, color: stockRestant === 0 ? '#DC2626' : stockRestant <= 2 ? '#EA580C' : '#16A34A', background: stockRestant === 0 ? '#FEE2E2' : stockRestant <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>
+                Aujourd'hui : {stockRestant} / {stockBrutAuj} dispo
+              </span>
+            ) : (
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>
+                {effAuj.actif ? 'Non géré' : 'Fermé aujourd’hui'}
+              </span>
+            )}
+          </div>
+
+          {/* 7 chips stock par jour */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stock par jour</span>
+              <button onClick={() => {
+                const v = window.prompt('Stock à appliquer aux 7 jours :', String(a.stock_jour || 0))
+                if (v !== null) onSetStockTousJours(a.id, v)
+              }} style={{ ...s.btn, ...s.btnGhost, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>
+                Appliquer à tous
+              </button>
             </div>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {JOURS_KEYS.map((jour, idx) => {
+                const eff = stockEffectif(jour)
+                const ferme = !eff.actif
+                const epuise = eff.actif && eff.stock === 0
+                const aujourdhui = jour === jourActuelKey
+                const couleurs = ferme
+                  ? { bg: '#F3F4F6', color: '#9CA3AF', border: '#E5E7EB' }
+                  : epuise
+                  ? { bg: '#FEE2E2', color: '#DC2626', border: '#FCA5A5' }
+                  : eff.override
+                  ? { bg: '#F0FDF4', color: '#16A34A', border: '#86EFAC' }
+                  : { bg: '#F8F6FF', color: T.main, border: T.pale }
+                return (
+                  <button key={jour} onClick={() => ouvrirEdition(jour)}
+                    style={{ padding: '4px 8px', borderRadius: 8, border: `1.5px solid ${aujourdhui ? T.main : couleurs.border}`, background: couleurs.bg, color: couleurs.color, fontSize: 11, fontWeight: 700, cursor: 'pointer', minWidth: 52, fontFamily: 'inherit', transition: 'all 0.15s', position: 'relative' }}>
+                    <span style={{ display: 'block', fontSize: 9, opacity: 0.7 }}>{JOURS_LABELS_COURT[idx]}</span>
+                    <span style={{ display: 'block', fontWeight: 900 }}>{ferme ? '✕' : eff.stock}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Éditeur inline */}
+            {jourEdite && (
+              <div style={{ marginTop: 8, padding: 10, background: T.pale, borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: T.deep }}>
+                  {JOURS_LABELS_COURT[JOURS_KEYS.indexOf(jourEdite)]} :
+                </span>
+                <input type="number" min={0} value={editVal} autoFocus
+                  onChange={e => setEditVal(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') sauvegarder(jourEdite, true); if (e.key === 'Escape') fermerEdition() }}
+                  style={{ ...s.input, width: 70, textAlign: 'center', padding: '4px 8px', fontSize: 14, fontWeight: 700 }}/>
+                <button onClick={() => sauvegarder(jourEdite, true)}
+                  style={{ ...s.btn, ...s.btnPrimary, padding: '4px 12px', fontSize: 12 }}>
+                  ✓ Enregistrer
+                </button>
+                <button onClick={() => sauvegarder(jourEdite, false)}
+                  style={{ ...s.btn, ...s.btnGhost, padding: '4px 12px', fontSize: 12, background: '#FEE2E2', color: '#DC2626', borderColor: '#FCA5A5' }}>
+                  Fermé ce jour
+                </button>
+                <button onClick={fermerEdition}
+                  style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 12 }}>
+                  Annuler
+                </button>
+              </div>
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>

@@ -241,7 +241,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
           const prixUnitaire = item.prix + (item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0)
           // FIX STOCK : vérifier la limite par article dans le panier
           const stockMax = getStockMax ? getStockMax(item.id) : Infinity
-          const stockAtteintPanier = item.stock_jour > 0 && item.quantite >= stockMax
+          const stockAtteintPanier = stockMax !== Infinity && item.quantite >= stockMax
           return (
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.625rem 0', borderBottom: `1px solid ${T.pale}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -333,18 +333,23 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
   const jourDateSelectionne = joursDispos[jourSelectionne]?.date || new Date()
   const jourNomSelectionne = JOURS[jourIdx(jourDateSelectionne)]
 
-  // FIX STOCK SYNC : stock disponible RÉEL = stock brut configuré − commandes déjà passées
-  const stockBrutSelectionne = hasStockJour
-    ? (stocksArticle[jourNomSelectionne]?.actif !== false ? (stocksArticle[jourNomSelectionne]?.stock ?? article.stock_jour) : 0)
-    : article.stock_jour
+  // Logique unifiée avec getStockMax :
+  // - entrée article_stock_jour pour ce jour → source de vérité
+  // - sinon → fallback sur article.stock_jour global
+  // - stock géré ssi (entrée existe pour ce jour) OU (stock_jour global > 0)
+  const entryDay = stocksArticle[jourNomSelectionne]
+  let stockBrutSelectionne, actifCeJour
+  if (entryDay) {
+    actifCeJour = entryDay.actif !== false
+    stockBrutSelectionne = entryDay.actif === false ? 0 : (entryDay.stock || 0)
+  } else {
+    actifCeJour = true
+    stockBrutSelectionne = article.stock_jour || 0
+  }
+  const stockGere = !!entryDay || (article.stock_jour || 0) > 0
   const dejaCommande = (commandesParArticleJour && commandesParArticleJour[article.id]) || 0
   const stockAujourdhui = Math.max(0, stockBrutSelectionne - dejaCommande)
-
-  const actifCeJour = hasStockJour
-    ? (stocksArticle[jourNomSelectionne]?.actif !== false)
-    : true
-
-  const epuiseAujourdhui = article.stock_jour > 0 && stockAujourdhui === 0
+  const epuiseAujourdhui = stockGere && stockAujourdhui === 0
 
   function prochainJourDispo() {
     for (let i = 1; i < 7; i++) {
@@ -380,7 +385,6 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
   const epuiseComplet = epuiseAujourdhui && !prochain
   const inactifCeJour = !actifCeJour
   // Stock limit : bloquer le + quand panier atteint le stock dispo
-  const stockGere = article.stock_jour > 0
   const stockAtteint = stockGere && stockAujourdhui > 0 && qteTotale >= stockAujourdhui
 
   return (
@@ -489,6 +493,8 @@ export default function CommanderSlug() {
   const [clientId, setClientId] = useState(null)
   const [joursDispos, setJoursDispos] = useState([])
   const [jourSelectionne, setJourSelectionne] = useState(0)
+  // Confirmation de changement de jour quand le panier n'est pas vide
+  const [confirmationJour, setConfirmationJour] = useState(null) // { nouveauIdx }
   const [optionsParArticle, setOptionsParArticle] = useState({})
   const [stocksJour, setStocksJour] = useState({})
   // FIX STOCK SYNC : quantités déjà commandées par d'autres clients pour le jour sélectionné
@@ -843,7 +849,7 @@ export default function CommanderSlug() {
     // FIX STOCK : vérifier la limite avant d'ajouter
     const stockMax = getStockMax(article.id)
     const qteTotale = qteTotaleArticle(article.id)
-    if (article.stock_jour > 0 && qteTotale >= stockMax) return
+    if (stockMax !== Infinity && qteTotale >= stockMax) return
     const key = options ? `${article.id}_${JSON.stringify(options)}` : String(article.id)
     setPanier(prev => ({ ...prev, [key]: { ...article, options, quantite: (prev[key]?.quantite || 0) + 1 } }))
   }
@@ -852,7 +858,7 @@ export default function CommanderSlug() {
   function incrementerPanier(key, item) {
     const stockMax = getStockMax(item.id)
     const qteTotale = qteTotaleArticle(item.id)
-    if (item.stock_jour > 0 && qteTotale >= stockMax) return
+    if (stockMax !== Infinity && qteTotale >= stockMax) return
     setPanier(prev => ({ ...prev, [key]: { ...item, quantite: (prev[key]?.quantite || 0) + 1 } }))
   }
 
@@ -869,23 +875,28 @@ export default function CommanderSlug() {
     return Object.entries(panier).filter(([key]) => key === String(articleId) || key.startsWith(`${articleId}_`)).reduce((acc, [, item]) => acc + item.quantite, 0)
   }
 
-  // FIX STOCK : helper pour obtenir le stock max disponible d'un article
-  // - prend en compte le stock par jour de la semaine (article_stock_jour)
-  // - soustrait les commandes déjà passées par d'autres clients (sync temps réel)
+  // Stock disponible d'un article pour le jour sélectionné. Priorité :
+  // 1) entrée article_stock_jour pour ce jour-de-semaine (override fiable)
+  // 2) sinon, fallback sur articles.stock_jour global
+  // 3) si rien de défini (les deux à 0/null) → Infinity = stock non géré.
+  // Toujours soustrait les commandes déjà passées (sync temps réel).
   function getStockMax(articleId) {
     const article = articles.find(a => a.id === articleId)
-    if (!article || !article.stock_jour || article.stock_jour <= 0) return Infinity
+    if (!article) return Infinity
     const stocksArticle = stocksJour[articleId] || {}
-    const hasStockJour = Object.keys(stocksArticle).length > 0
     const jourDateSelectionne = joursDispos[jourSelectionne]?.date || new Date()
     const jourNomSelectionne = JOURS[jourIdx(jourDateSelectionne)]
-    const stockBrut = hasStockJour
-      ? (stocksArticle[jourNomSelectionne]?.actif !== false ? (stocksArticle[jourNomSelectionne]?.stock ?? article.stock_jour) : 0)
-      : article.stock_jour
-    if (stockBrut <= 0) return 0
+    const entryDay = stocksArticle[jourNomSelectionne]
     const dejaCommande = commandesParArticleJour[articleId] || 0
-    const dispo = stockBrut - dejaCommande
-    return dispo > 0 ? dispo : 0
+
+    if (entryDay) {
+      if (entryDay.actif === false) return 0
+      const stockBrut = entryDay.stock || 0
+      if (stockBrut <= 0) return 0
+      return Math.max(0, stockBrut - dejaCommande)
+    }
+    if (!article.stock_jour || article.stock_jour <= 0) return Infinity
+    return Math.max(0, article.stock_jour - dejaCommande)
   }
 
   function totalPanier() {
@@ -896,9 +907,32 @@ export default function CommanderSlug() {
   }
 
   function commanderPourJour(idxJour) {
-    setJourSelectionne(idxJour)
-    setEtape(3)
-    setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 100)
+    // Vient du bouton "Commander [jour] →" sur un article épuisé aujourd'hui.
+    // Change le jour (avec confirmation si panier non vide) sans passer
+    // immédiatement à l'étape 3 — l'utilisateur doit pouvoir compléter son panier
+    // avec d'autres articles du jour ciblé avant de choisir son créneau.
+    changerJour(idxJour)
+  }
+
+  function changerJour(idx) {
+    if (idx === jourSelectionne) return
+    const panierNonVide = Object.keys(panier).length > 0
+    if (panierNonVide) {
+      setConfirmationJour({ nouveauIdx: idx })
+    } else {
+      setJourSelectionne(idx)
+      setCreneauChoisi(null)
+    }
+  }
+
+  function confirmerChangementJour() {
+    if (!confirmationJour) return
+    setPanier({})
+    setJourSelectionne(confirmationJour.nouveauIdx)
+    setCreneauChoisi(null)
+    setErreurCommande(null)
+    setAjustementStock(null)
+    setConfirmationJour(null)
   }
 
   async function getOuCreerClient(email, prenom, nom) {
@@ -924,9 +958,16 @@ export default function CommanderSlug() {
     const d = new Date(jourDate)
     const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 
-    // ── Validation stock (uniquement si changé depuis l'ajout au panier) ──────
-    // Avec le blocage à l'ajout, ce check ne se déclenche QUE si qq'un a commandé entre-temps
-    const articlesAValider = Object.values(panier).filter(i => i.stock_jour > 0)
+    // ── Validation stock — race condition (qq'un a commandé entre-temps) ──────
+    // Stock brut = entrée article_stock_jour pour ce jour si présente, sinon
+    // articles.stock_jour global. On valide tout article dont un stock est géré.
+    const jourNomDateChoisie = JOURS[jourIdx(jourDate)]
+    function stockBrutPourJour(item) {
+      const entry = (stocksJour[item.id] || {})[jourNomDateChoisie]
+      if (entry) return entry.actif === false ? 0 : (entry.stock || 0)
+      return item.stock_jour || 0
+    }
+    const articlesAValider = Object.values(panier).filter(i => stockBrutPourJour(i) > 0 || ((stocksJour[i.id] || {})[jourNomDateChoisie]))
     if (articlesAValider.length > 0) {
       const artIds = articlesAValider.map(i => i.id)
       const { data: dejaCommandes } = await supabase
@@ -942,7 +983,8 @@ export default function CommanderSlug() {
       })
       for (const item of articlesAValider) {
         const deja = qteDeja[item.id] || 0
-        const stockDisponible = item.stock_jour - deja
+        const stockBrut = stockBrutPourJour(item)
+        const stockDisponible = stockBrut - deja
         if (item.quantite > stockDisponible) {
           setErreurCommande(`Stock insuffisant pour "${item.nom}" : il ne reste que ${stockDisponible} disponible${stockDisponible > 1 ? 's' : ''} (quelqu'un a commandé entre-temps).`)
           setAjustementStock({ articleId: item.id, nom: item.nom, stockDisponible })
@@ -1072,6 +1114,29 @@ export default function CommanderSlug() {
         @keyframes dealPulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+
+      {/* Modale : confirmation de changement de jour avec panier non vide */}
+      {confirmationJour && joursDispos[confirmationJour.nouveauIdx] && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.65)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeUp 0.2s ease' }}>
+          <div style={{ background: '#fff', borderRadius: 20, padding: '1.5rem 1.25rem', maxWidth: 380, width: '100%', boxShadow: '0 24px 48px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontSize: '2rem', textAlign: 'center', marginBottom: 12 }}>🗓️</div>
+            <p style={{ fontWeight: 900, fontSize: '1.1rem', color: T.ink, textAlign: 'center', marginBottom: 8, letterSpacing: '-0.3px' }}>Changer de jour ?</p>
+            <p style={{ fontSize: '0.875rem', color: T.muted, textAlign: 'center', lineHeight: 1.5, marginBottom: 18 }}>
+              Tu vas passer à <strong style={{ color: T.deep }}>{joursDispos[confirmationJour.nouveauIdx].label}</strong>. Le stock dépend du jour : ton panier actuel sera vidé.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setConfirmationJour(null)}
+                style={{ flex: 1, padding: '0.875rem', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.muted, fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                Annuler
+              </button>
+              <button onClick={confirmerChangementJour}
+                style={{ flex: 1, padding: '0.875rem', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.875rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 16px ${T.main}55` }}>
+                Vider et changer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="page-wrap">
 
@@ -1233,6 +1298,28 @@ export default function CommanderSlug() {
                 {commercant.horaires_detail && <HorairesSection horaires={commercant.horaires_detail}/>}
               </div>
 
+              {/* Sélecteur de jour de retrait — pilote les stocks affichés et les créneaux dispo */}
+              {joursDispos.length > 0 && (
+                <div style={{ background: '#fff', borderBottom: `1px solid ${T.pale}`, padding: '0.625rem 1rem 0.5rem' }}>
+                  <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                    🗓️ Je récupère le
+                  </p>
+                  <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+                    {joursDispos.map((jour, idx) => {
+                      const actif = jourSelectionne === idx
+                      const dateStr = jour.date.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })
+                      return (
+                        <button key={idx} onClick={() => changerJour(idx)}
+                          style={{ flexShrink: 0, padding: '0.4rem 0.875rem', borderRadius: 12, border: `1.5px solid ${actif ? T.main : T.pale}`, background: actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: actif ? '#fff' : T.muted, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'center', lineHeight: 1.3, boxShadow: actif ? `0 4px 14px ${T.main}33` : 'none', transition: 'all 0.15s' }}>
+                          <div style={{ fontWeight: 800 }}>{jour.label}</div>
+                          <div style={{ fontSize: '0.65rem', opacity: actif ? 0.85 : 0.6, marginTop: 1 }}>{dateStr}</div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {toutesLesCats.length > 1 && (
                 <div style={{ position: 'sticky', top: 0, zIndex: 20, boxShadow: catBarVisible ? '0 2px 12px rgba(0,0,0,0.08)' : 'none' }}>
                   <div className="cat-bar">
@@ -1308,7 +1395,7 @@ export default function CommanderSlug() {
               <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.main} 100%)`, padding: '1.25rem 1rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}44 0%, transparent 50%)`, pointerEvents: 'none' }}/>
                 <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 6, opacity: 0.8 }}>{commercant.nom}</p>
-                <h2 style={{ fontWeight: 900, fontSize: '1.3rem', color: '#fff', letterSpacing: '-0.5px' }}>Choisis ta date<br/>et ton créneau</h2>
+                <h2 style={{ fontWeight: 900, fontSize: '1.3rem', color: '#fff', letterSpacing: '-0.5px' }}>Choisis ton créneau</h2>
               </div>
 
               <div style={{ padding: '0 1rem 1rem', marginTop: -1 }}>
@@ -1332,19 +1419,21 @@ export default function CommanderSlug() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 6, marginBottom: '1rem', overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-                  {joursDispos.map((jour, idx) => {
-                    const actif = jourSelectionne === idx
-                    const dateStr = jour.date.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })
-                    return (
-                      <button key={idx} onClick={() => { setJourSelectionne(idx); setCreneauChoisi(null); setErreurCommande(null); setAjustementStock(null) }}
-                        style={{ flexShrink: 0, padding: '0.5rem 1rem', borderRadius: 14, border: `2px solid ${actif ? T.main : T.pale}`, background: actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: actif ? '#fff' : T.muted, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.15s', boxShadow: actif ? `0 4px 16px ${T.main}44` : 'none', fontFamily: '"DM Sans", sans-serif', textAlign: 'center', lineHeight: 1.3 }}>
-                        <div>{jour.label}</div>
-                        <div style={{ fontSize: '0.68rem', opacity: actif ? 0.85 : 0.6, marginTop: 1 }}>{dateStr}</div>
-                      </button>
-                    )
-                  })}
-                </div>
+                {/* Jour verrouillé — il a été choisi à l'étape 2 (menu) */}
+                {joursDispos[jourSelectionne] && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: '1rem', background: T.pale, border: `1.5px solid ${T.main}33`, borderRadius: 14, padding: '0.625rem 0.875rem' }}>
+                    <div>
+                      <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>🗓️ Retrait</p>
+                      <p style={{ fontWeight: 800, fontSize: '0.95rem', color: T.deep, letterSpacing: '-0.3px' }}>
+                        {joursDispos[jourSelectionne].label} <span style={{ color: T.muted, fontWeight: 600, fontSize: '0.82rem' }}>· {joursDispos[jourSelectionne].date.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</span>
+                      </p>
+                    </div>
+                    <button onClick={() => { setEtape(2); setCreneauChoisi(null); setErreurCommande(null); setAjustementStock(null); setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 100) }}
+                      style={{ background: '#fff', border: `1.5px solid ${T.main}`, color: T.main, fontWeight: 700, fontSize: '0.72rem', padding: '0.4rem 0.875rem', borderRadius: 100, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
+                      Changer
+                    </button>
+                  </div>
+                )}
 
                 <div className="grid3" style={{ marginBottom: '1.5rem' }}>
                   {[...new Map(

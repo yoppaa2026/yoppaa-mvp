@@ -345,8 +345,9 @@ function TabMenu({ commercantId, toast }) {
 
   async function deleteArticle(id) {
     if (!confirm('Supprimer cet article ?')) return
-    const { error } = await supabase.from('articles').delete().eq('id', id)
+    const { data, error } = await supabase.from('articles').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    if (!data || data.length === 0) { toast('Suppression refusée par les permissions Supabase (RLS)', 'error'); return }
     toast('Article supprimé'); fetchArticles()
   }
 
@@ -675,8 +676,9 @@ function OptionsArticle({ articleId, toast }) {
 
   async function deleteGroupe(id) {
     if (!confirm('Supprimer ce groupe et toutes ses options ?')) return
-    const { error } = await supabase.from('article_options_groupes').delete().eq('id', id)
+    const { data, error } = await supabase.from('article_options_groupes').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    if (!data || data.length === 0) { toast('Suppression refusée par les permissions Supabase (RLS)', 'error'); return }
     toast('Groupe supprimé'); fetchGroupes()
   }
 
@@ -690,8 +692,9 @@ function OptionsArticle({ articleId, toast }) {
   }
 
   async function deleteValeur(id) {
-    const { error } = await supabase.from('article_options_valeurs').delete().eq('id', id)
+    const { data, error } = await supabase.from('article_options_valeurs').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    if (!data || data.length === 0) { toast('Suppression refusée par les permissions Supabase (RLS)', 'error'); return }
     fetchGroupes()
   }
 

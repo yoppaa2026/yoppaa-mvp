@@ -189,33 +189,46 @@ function OptionsSelector({ article, groupes, onAjouter }) {
   }
   const supplement = Object.values(selections).flat().reduce((acc, v) => acc + (v.prix_supplement||0), 0)
   return (
-    <div style={{ background: T.pale, borderRadius: 14, padding: '1rem', marginTop: 8, border: `1.5px solid ${T.main}33` }}>
-      <p style={{ fontWeight: 800, color: T.deep, marginBottom: 10, fontSize: '0.9rem' }}>⚙️ Personnalise ton {article.nom}</p>
-      {groupes.map(g => (
-        <div key={g.id} style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-            <p style={{ fontWeight: 700, color: T.ink, fontSize: '0.82rem' }}>{g.nom}</p>
-            {g.obligatoire && <span style={{ fontSize: '0.62rem', fontWeight: 700, background: '#FEE2E2', color: '#DC2626', padding: '1px 6px', borderRadius: 100 }}>Obligatoire</span>}
-            <span style={{ fontSize: '0.62rem', fontWeight: 700, background: g.type === 'unique' ? '#FEF3C7' : T.pale, color: g.type === 'unique' ? '#92400E' : T.main, padding: '1px 6px', borderRadius: 100 }}>
-              {g.type === 'unique' ? '1 choix' : 'Multi'}
-            </span>
+    <div style={{ background: '#fff', borderRadius: 14, padding: '1rem', marginTop: 8, border: `1.5px solid ${T.pale}` }}>
+      <p style={{ fontWeight: 800, color: T.deep, marginBottom: 12, fontSize: '0.9rem' }}>Personnalise ton {article.nom}</p>
+      {groupes.map(g => {
+        const isUnique = g.type === 'unique'
+        return (
+          <div key={g.id} style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+              <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.85rem' }}>{g.nom}</p>
+              <span style={{ fontSize: '0.6rem', fontWeight: 800, background: isUnique ? T.deep : T.pale, color: isUnique ? '#fff' : T.deep, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                {isUnique ? 'Choisis-en un' : 'Cumulables'}
+              </span>
+              {g.obligatoire && <span style={{ fontSize: '0.6rem', fontWeight: 800, background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Obligatoire</span>}
+            </div>
+            {erreurs[g.id] && <p style={{ fontSize: '0.72rem', color: '#DC2626', marginBottom: 4, fontWeight: 700 }}>Choix obligatoire</p>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {(g.valeurs||[]).map(v => {
+                const selected = !!(selections[g.id]||[]).find(s => s.id === v.id)
+                return (
+                  <button key={v.id} onClick={() => toggleValeur(g, v)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.55rem 0.75rem', borderRadius: 10, border: `1.5px solid ${selected ? T.main : T.pale}`, background: selected ? `${T.main}0c` : '#fff', cursor: 'pointer', transition: 'all 0.15s', fontFamily: '"DM Sans", sans-serif', textAlign: 'left', width: '100%' }}>
+                    {/* Indicateur visuel : rond plein si unique (radio), carré coché si multi (checkbox) */}
+                    <span style={{ width: 18, height: 18, borderRadius: isUnique ? '50%' : 5, border: `2px solid ${selected ? T.main : '#D1D5DB'}`, background: selected ? T.main : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}>
+                      {selected && (isUnique
+                        ? <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }}/>
+                        : <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      )}
+                    </span>
+                    <span style={{ flex: 1, fontWeight: selected ? 700 : 600, color: T.ink, fontSize: '0.85rem' }}>{v.nom}</span>
+                    {v.prix_supplement > 0 && (
+                      <span style={{ fontWeight: 800, color: T.main, fontSize: '0.78rem' }}>+{Number(v.prix_supplement).toFixed(2)}€</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
           </div>
-          {erreurs[g.id] && <p style={{ fontSize: '0.72rem', color: '#DC2626', marginBottom: 4 }}>⚠️ Choix obligatoire</p>}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {(g.valeurs||[]).map(v => {
-              const selected = (selections[g.id]||[]).find(s => s.id === v.id)
-              return (
-                <button key={v.id} onClick={() => toggleValeur(g, v)}
-                  style={{ padding: '0.35rem 0.75rem', borderRadius: 100, border: `1.5px solid ${selected ? T.main : T.pale}`, background: selected ? T.main : '#fff', color: selected ? '#fff' : T.ink, fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', transition: 'all 0.15s' }}>
-                  {v.nom}{v.prix_supplement > 0 ? ` +${Number(v.prix_supplement).toFixed(2)}€` : ''}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ))}
+        )
+      })}
       <button onClick={valider}
-        style={{ width: '100%', padding: '0.75rem', border: 'none', borderRadius: 100, background: T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>
+        style={{ width: '100%', padding: '0.75rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.main}44`, marginTop: 4 }}>
         Ajouter au panier{supplement > 0 ? ` (+${supplement.toFixed(2)}€)` : ''}
       </button>
     </div>
@@ -769,17 +782,30 @@ export default function CommanderSlug() {
     if (arts) setArticles(arts)
     const artIds = (arts || []).map(a => a.id)
     if (artIds.length > 0) {
-      const { data: stocksData } = await supabase
-        .from('article_stock_jour')
-        .select('*')
-        .eq('commercant_id', commercant.id)
-        .in('article_id', artIds)
-      const map = {}
+      const [{ data: stocksData }, { data: groupesData }] = await Promise.all([
+        supabase
+          .from('article_stock_jour')
+          .select('*')
+          .eq('commercant_id', commercant.id)
+          .in('article_id', artIds),
+        supabase
+          .from('article_options_groupes')
+          .select('*, valeurs:article_options_valeurs(*)')
+          .in('article_id', artIds)
+          .order('created_at'),
+      ])
+      const stocksMap = {}
       ;(stocksData || []).forEach(s => {
-        if (!map[s.article_id]) map[s.article_id] = {}
-        map[s.article_id][s.jour_semaine] = { stock: s.stock, actif: s.actif }
+        if (!stocksMap[s.article_id]) stocksMap[s.article_id] = {}
+        stocksMap[s.article_id][s.jour_semaine] = { stock: s.stock, actif: s.actif }
       })
-      setStocksJour(map)
+      setStocksJour(stocksMap)
+      const optsMap = {}
+      ;(groupesData || []).forEach(g => {
+        if (!optsMap[g.article_id]) optsMap[g.article_id] = []
+        optsMap[g.article_id].push(g)
+      })
+      setOptionsParArticle(optsMap)
     }
   }, [commercant])
 
@@ -818,6 +844,8 @@ export default function CommanderSlug() {
         })
         setStocksJour(map)
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'article_options_groupes' }, () => rafraichirArticlesEtStocks())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'article_options_valeurs' }, () => rafraichirArticlesEtStocks())
       .subscribe()
     return () => {
       clearInterval(intervalId)

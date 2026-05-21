@@ -348,8 +348,60 @@ function EditablePrenom({ client, setClient, clientId }) {
 }
 
 // ─── Écran pick-up hype ───────────────────────────────────────────────────────
+// FIX NUMÉRO : numero_commande de la DB en priorité ; si manquant (anciennes
+// commandes), on calcule la position du jour côté commerçant — même logique que
+// le dashboard (getNumeroJour) pour que client et commerçant voient le même #.
 function PickupScreen({ commande, clientPrenom, onConfirm }) {
-  const numero = commande.numero_commande || commande.numero || String(commande.id).slice(-4)
+  const [numeroCalcule, setNumeroCalcule] = useState(null)
+
+  useEffect(() => {
+    let annule = false
+    async function rechercherNumero() {
+      // 1) numero_commande déjà présent → on l'utilise
+      if (commande.numero_commande) {
+        if (!annule) setNumeroCalcule(commande.numero_commande)
+        return
+      }
+      // 2) re-fetch la commande pour obtenir un numero_commande à jour
+      if (commande.id) {
+        const { data: fresh } = await supabase
+          .from('commandes')
+          .select('numero_commande, commercant_id, date_commande, created_at')
+          .eq('id', commande.id)
+          .maybeSingle()
+        if (fresh?.numero_commande) {
+          if (!annule) setNumeroCalcule(fresh.numero_commande)
+          return
+        }
+        // 3) fallback : position dans la liste triée du jour pour ce commerce
+        const cid = fresh?.commercant_id || commande.commercant_id
+        const dateRef = fresh?.date_commande || commande.date_commande
+        if (cid && dateRef) {
+          const dateStr = typeof dateRef === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateRef)
+            ? dateRef
+            : new Date(dateRef).toISOString().slice(0, 10)
+          const { data: duJour } = await supabase
+            .from('commandes')
+            .select('id, created_at, creneau:creneaux(heure_debut)')
+            .eq('commercant_id', cid)
+            .eq('date_commande', dateStr)
+            .order('created_at', { ascending: true })
+          const tri = (duJour || []).sort((a, b) =>
+            (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '') ||
+            new Date(a.created_at) - new Date(b.created_at)
+          )
+          const idx = tri.findIndex(c => c.id === commande.id)
+          if (!annule) setNumeroCalcule(idx >= 0 ? idx + 1 : '?')
+          return
+        }
+      }
+      if (!annule) setNumeroCalcule('?')
+    }
+    rechercherNumero()
+    return () => { annule = true }
+  }, [commande.id, commande.numero_commande, commande.commercant_id, commande.date_commande])
+
+  const numero = numeroCalcule ?? '…'
   const creneau = commande.creneau
     ? `${commande.creneau.heure_debut.slice(0,5)} – ${commande.creneau.heure_fin.slice(0,5)}`
     : null

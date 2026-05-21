@@ -320,7 +320,7 @@ function HorairesSection({ horaires }) {
 }
 
 // ─── ArticleRow ───────────────────────────────────────────────────────────────
-function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain }) {
+function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour }) {
   const groupes = optionsParArticle[article.id] || []
   const hasOptions = groupes.length > 0
   const [showOptions, setShowOptions] = useState(false)
@@ -333,15 +333,18 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
   const jourDateSelectionne = joursDispos[jourSelectionne]?.date || new Date()
   const jourNomSelectionne = JOURS[jourIdx(jourDateSelectionne)]
 
-  const stockAujourdhui = hasStockJour
-    ? (stocksArticle[jourActuel()]?.actif !== false ? (stocksArticle[jourActuel()]?.stock ?? article.stock_jour) : 0)
+  // FIX STOCK SYNC : stock disponible RÉEL = stock brut configuré − commandes déjà passées
+  const stockBrutSelectionne = hasStockJour
+    ? (stocksArticle[jourNomSelectionne]?.actif !== false ? (stocksArticle[jourNomSelectionne]?.stock ?? article.stock_jour) : 0)
     : article.stock_jour
+  const dejaCommande = (commandesParArticleJour && commandesParArticleJour[article.id]) || 0
+  const stockAujourdhui = Math.max(0, stockBrutSelectionne - dejaCommande)
 
   const actifCeJour = hasStockJour
     ? (stocksArticle[jourNomSelectionne]?.actif !== false)
     : true
 
-  const epuiseAujourdhui = stockAujourdhui === 0
+  const epuiseAujourdhui = article.stock_jour > 0 && stockAujourdhui === 0
 
   function prochainJourDispo() {
     for (let i = 1; i < 7; i++) {
@@ -488,6 +491,8 @@ export default function CommanderSlug() {
   const [jourSelectionne, setJourSelectionne] = useState(0)
   const [optionsParArticle, setOptionsParArticle] = useState({})
   const [stocksJour, setStocksJour] = useState({})
+  // FIX STOCK SYNC : quantités déjà commandées par d'autres clients pour le jour sélectionné
+  const [commandesParArticleJour, setCommandesParArticleJour] = useState({})
   const [photoCouverture, setPhotoCouverture] = useState(null)
   const [dealActif, setDealActif] = useState(null)
   const [fermetures, setFermetures] = useState([])
@@ -696,6 +701,68 @@ export default function CommanderSlug() {
     }
   }, [commercant, creneaux, fermetures])
 
+  // ─── FIX STOCK SYNC : charger les commandes du jour sélectionné ─────────────
+  // Récupère les quantités déjà commandées par article pour le jour sélectionné
+  // (exclut les commandes "non_retire") afin que le stock disponible affiché côté
+  // client soit cohérent avec ce que voit le commerçant sur son dashboard.
+  const chargerCommandesJour = useCallback(async () => {
+    if (!commercant) return
+    const jourDate = joursDispos[jourSelectionne]?.date || new Date()
+    const d = new Date(jourDate)
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    const { data } = await supabase
+      .from('commande_articles')
+      .select('article_id, quantite, commande:commandes!inner(date_commande, statut, commercant_id)')
+      .eq('commande.commercant_id', commercant.id)
+      .eq('commande.date_commande', dateStr)
+      .neq('commande.statut', 'non_retire')
+    const map = {}
+    ;(data || []).forEach(r => {
+      map[r.article_id] = (map[r.article_id] || 0) + r.quantite
+    })
+    setCommandesParArticleJour(map)
+  }, [commercant, joursDispos, jourSelectionne])
+
+  // Recharge à chaque changement de jour ou de commerçant
+  useEffect(() => {
+    chargerCommandesJour()
+  }, [chargerCommandesJour])
+
+  // Polling toutes les 5s + Realtime Supabase pour sync temps réel avec le dashboard
+  const articlesRef = useRef(articles)
+  useEffect(() => { articlesRef.current = articles }, [articles])
+  useEffect(() => {
+    if (!commercant) return
+    const intervalId = setInterval(chargerCommandesJour, 5000)
+    const channel = supabase
+      .channel(`stock-sync-${commercant.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'commandes', filter: `commercant_id=eq.${commercant.id}` }, () => chargerCommandesJour())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'commande_articles' }, () => chargerCommandesJour())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'articles', filter: `commercant_id=eq.${commercant.id}` }, payload => {
+        setArticles(prev => prev.map(a => a.id === payload.new.id ? { ...a, ...payload.new } : a))
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'article_stock_jour', filter: `commercant_id=eq.${commercant.id}` }, async () => {
+        const artIds = articlesRef.current.map(a => a.id)
+        if (artIds.length === 0) return
+        const { data: stocksData } = await supabase
+          .from('article_stock_jour')
+          .select('*')
+          .eq('commercant_id', commercant.id)
+          .in('article_id', artIds)
+        const map = {}
+        ;(stocksData || []).forEach(s => {
+          if (!map[s.article_id]) map[s.article_id] = {}
+          map[s.article_id][s.jour_semaine] = { stock: s.stock, actif: s.actif }
+        })
+        setStocksJour(map)
+      })
+      .subscribe()
+    return () => {
+      clearInterval(intervalId)
+      supabase.removeChannel(channel)
+    }
+  }, [commercant, chargerCommandesJour])
+
   const handleScroll = useCallback(() => {
     if (!scrollRef.current || !headerRef.current) return
     const scrollTop = scrollRef.current.scrollTop
@@ -759,15 +826,22 @@ export default function CommanderSlug() {
   }
 
   // FIX STOCK : helper pour obtenir le stock max disponible d'un article
+  // - prend en compte le stock par jour de la semaine (article_stock_jour)
+  // - soustrait les commandes déjà passées par d'autres clients (sync temps réel)
   function getStockMax(articleId) {
     const article = articles.find(a => a.id === articleId)
     if (!article || !article.stock_jour || article.stock_jour <= 0) return Infinity
     const stocksArticle = stocksJour[articleId] || {}
     const hasStockJour = Object.keys(stocksArticle).length > 0
-    const stockAujourdhui = hasStockJour
-      ? (stocksArticle[jourActuel()]?.actif !== false ? (stocksArticle[jourActuel()]?.stock ?? article.stock_jour) : 0)
+    const jourDateSelectionne = joursDispos[jourSelectionne]?.date || new Date()
+    const jourNomSelectionne = JOURS[jourIdx(jourDateSelectionne)]
+    const stockBrut = hasStockJour
+      ? (stocksArticle[jourNomSelectionne]?.actif !== false ? (stocksArticle[jourNomSelectionne]?.stock ?? article.stock_jour) : 0)
       : article.stock_jour
-    return stockAujourdhui > 0 ? stockAujourdhui : Infinity
+    if (stockBrut <= 0) return 0
+    const dejaCommande = commandesParArticleJour[articleId] || 0
+    const dispo = stockBrut - dejaCommande
+    return dispo > 0 ? dispo : 0
   }
 
   function totalPanier() {
@@ -1126,7 +1200,8 @@ export default function CommanderSlug() {
                         <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle}
                           ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                           stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
-                          onCommanderDemain={commanderPourJour}/>
+                          onCommanderDemain={commanderPourJour}
+                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour}/>
                       ))}
                     </div>
                   )
@@ -1141,7 +1216,8 @@ export default function CommanderSlug() {
                       <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle}
                         ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                         stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
-                        onCommanderDemain={commanderPourJour}/>
+                        onCommanderDemain={commanderPourJour}
+                        getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour}/>
                     ))}
                   </div>
                 )}

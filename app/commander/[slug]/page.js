@@ -760,7 +760,7 @@ export default function CommanderSlug() {
     const d = new Date(jourDate)
     const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 
-    // ── FIX 1 : Validation stock — message dans la page au lieu d'alert() ─────
+    // ── Validation stock ──────────────────────────────────────────────────────
     const articlesAValider = Object.values(panier).filter(i => i.stock_jour > 0)
     if (articlesAValider.length > 0) {
       const artIds = articlesAValider.map(i => i.id)
@@ -786,17 +786,22 @@ export default function CommanderSlug() {
       }
     }
 
-    // ── Numéro de commande séquentiel du jour ─────────────────────────────────
-    const { count: countToday } = await supabase
+    // ── FIX : Numéro de commande séquentiel fiable ────────────────────────────
+    // Récupère le max existant plutôt qu'un count (évite les doublons en cas d'erreur)
+    const { data: derniereCmd } = await supabase
       .from('commandes')
-      .select('*', { count: 'exact', head: true })
+      .select('numero_commande')
       .eq('commercant_id', commercant.id)
       .eq('date_commande', dateStr)
-    const numero_commande = (countToday || 0) + 1
+      .order('numero_commande', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const numero_commande = ((derniereCmd?.numero_commande) ?? 0) + 1
 
     const cid = await getOuCreerClient(client.email, client.prenom, client.nom)
 
-    const { data: commande } = await supabase.from('commandes').insert({
+    // ── Insert commande avec gestion d'erreur explicite ───────────────────────
+    const { data: commande, error: errInsert } = await supabase.from('commandes').insert({
       commercant_id: commercant.id, creneau_id: creneauChoisi,
       client_nom: nomComplet, client_email: client.email, client_telephone: client.telephone,
       rgpd_commande: true, rgpd_marketing: rgpdMarketing,
@@ -805,14 +810,18 @@ export default function CommanderSlug() {
       numero_commande,
     }).select().single()
 
-    if (commande) {
-      await supabase.from('commande_articles').insert(
-        Object.values(panier).map(i => ({ commande_id: commande.id, article_id: i.id, quantite: i.quantite, prix_unitaire: i.prix }))
-      )
-      try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
-      setDerniereCommande({ ...commande, client_id: cid })
-      setEtape(4)
+    if (errInsert || !commande) {
+      setErreurCommande('Une erreur est survenue. Réessaie dans quelques secondes.')
+      setLoadingCommande(false)
+      return
     }
+
+    await supabase.from('commande_articles').insert(
+      Object.values(panier).map(i => ({ commande_id: commande.id, article_id: i.id, quantite: i.quantite, prix_unitaire: i.prix }))
+    )
+    try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
+    setDerniereCommande({ ...commande, client_id: cid })
+    setEtape(4)
     setLoadingCommande(false)
   }
 

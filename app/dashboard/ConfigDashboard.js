@@ -22,16 +22,16 @@ const s = {
     borderRadius: 14,
     padding: 20,
     marginBottom: 12,
-    border: `1.5px solid ${T.pale}`,
-    boxShadow: '0 2px 8px rgba(107,53,196,0.06)',
+    border: `1px solid ${T.hairline}`,
+    boxShadow: '0 1px 3px rgba(22,6,54,0.04)',
   },
   cardActive: {
     background: '#fff',
     borderRadius: 14,
     padding: 20,
     marginBottom: 12,
-    border: `2px solid ${T.main}`,
-    boxShadow: `0 0 20px ${T.main}22`,
+    border: `1.5px solid ${T.bgPanel}`,
+    boxShadow: `0 8px 24px rgba(22,6,54,0.12)`,
   },
   label: {
     display: 'block',
@@ -46,16 +46,16 @@ const s = {
     width: '100%',
     padding: '10px 14px',
     borderRadius: 10,
-    border: `1.5px solid ${T.pale}`,
+    border: `1px solid ${T.hairline}`,
     fontSize: 14,
     color: T.ink,
     background: '#fff',
     outline: 'none',
     boxSizing: 'border-box',
     fontFamily: '"DM Sans", sans-serif',
-    transition: 'border-color 0.15s',
+    transition: 'border-color 0.15s, box-shadow 0.15s',
   },
-  inputFocus: { borderColor: T.main, boxShadow: `0 0 0 3px ${T.main}11` },
+  inputFocus: { borderColor: T.bgPanel, boxShadow: `0 0 0 3px rgba(22,6,54,0.08)` },
   btn: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -69,9 +69,9 @@ const s = {
     fontSize: 13,
     transition: 'all 0.15s',
   },
-  btnPrimary: { background: T.main, color: '#fff' },
-  btnGhost:   { background: T.pale, color: T.main },
-  btnDanger:  { background: '#FEE2E2', color: '#DC2626' },
+  btnPrimary: { background: T.bgPanel, color: '#fff', boxShadow: '0 4px 12px rgba(22,6,54,0.18)' },
+  btnGhost:   { background: '#fff', color: T.bgPanel, border: `1px solid ${T.hairline}` },
+  btnDanger:  { background: '#fff', color: '#DC2626', border: '1px solid #FCA5A5' },
   h2: { fontSize: 17, fontWeight: 800, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 16px' },
   h3: { fontSize: 13, fontWeight: 700, color: T.muted, margin: '0 0 4px' },
   tag: { display: 'inline-block', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 },
@@ -103,7 +103,7 @@ function Toggle({ value, onChange, label }) {
   return (
     <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
       <div onClick={() => onChange(!value)}
-        style={{ width: 44, height: 24, borderRadius: 12, background: value ? T.main : '#E5E7EB', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+        style={{ width: 44, height: 24, borderRadius: 12, background: value ? T.bgPanel : '#E5E7EB', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
         <div style={{ position: 'absolute', top: 2, left: value ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.2)', transition: 'left 0.2s' }} />
       </div>
       {label && <span style={{ fontSize: 13, color: T.ink, fontWeight: 600 }}>{label}</span>}
@@ -282,9 +282,13 @@ function TabMenu({ commercantId, toast }) {
       categorie: form.categorie.trim() || null,
       temps_prepa: parseFloat(form.temps_prepa) || 0,
     }
-    if (editId) { await supabase.from('articles').update(payload).eq('id', editId); toast('Article mis à jour ✓') }
-    else { await supabase.from('articles').insert(payload); toast('Article ajouté ✓') }
-    setSaving(false); setShowForm(false); fetchArticles()
+    const { error } = editId
+      ? await supabase.from('articles').update(payload).eq('id', editId)
+      : await supabase.from('articles').insert(payload)
+    setSaving(false)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast(editId ? 'Article mis à jour' : 'Article ajouté')
+    setShowForm(false); fetchArticles()
   }
 
   async function ajouterCategorie() {
@@ -309,23 +313,23 @@ function TabMenu({ commercantId, toast }) {
     if (newCat === oldCat) { setRenamingCat(null); return }
     if (categories.includes(newCat)) { toast('Ce nom existe déjà', 'error'); return }
     setRenameSaving(true)
-    // Mettre à jour tous les articles de cette catégorie
-    await supabase
+    const { error } = await supabase
       .from('articles')
       .update({ categorie: newCat })
       .eq('commercant_id', commercantId)
       .eq('categorie', oldCat)
-    toast('Catégorie renommée ✓')
     setRenameSaving(false)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast('Catégorie renommée')
     setRenamingCat(null)
-    // Mettre à jour la catégorie active si c'était celle renommée
     if (catActive === oldCat) setCatActive(newCat)
     fetchArticles()
   }
 
   async function supprimerCategorie(cat) {
     if (!confirm(`Supprimer la catégorie "${cat}" ? Les articles resteront mais sans catégorie.`)) return
-    await supabase.from('articles').update({ categorie: null }).eq('commercant_id', commercantId).eq('categorie', cat)
+    const { error } = await supabase.from('articles').update({ categorie: null }).eq('commercant_id', commercantId).eq('categorie', cat)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('Catégorie supprimée'); fetchArticles()
     if (catActive === cat) setCatActive('Tous')
   }
@@ -341,7 +345,8 @@ function TabMenu({ commercantId, toast }) {
 
   async function deleteArticle(id) {
     if (!confirm('Supprimer cet article ?')) return
-    await supabase.from('articles').delete().eq('id', id)
+    const { error } = await supabase.from('articles').delete().eq('id', id)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('Article supprimé'); fetchArticles()
   }
 
@@ -393,8 +398,8 @@ function TabMenu({ commercantId, toast }) {
       <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 16, border: `1px solid ${T.hairline}`, boxShadow: '0 1px 4px rgba(22,6,54,0.04)' }}>
         {SUB_TABS.map(t => (
           <button key={t.id} onClick={() => setSubTab(t.id)}
-            style={{ flex: 1, minWidth: 80, padding: '9px 6px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 12.5, transition: 'all 0.2s', background: subTab === t.id ? T.pale : 'transparent', color: subTab === t.id ? T.bgPanel : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <Icon name={t.icon} size={14} color={subTab === t.id ? T.bgPanel : T.muted}/>
+            style={{ flex: 1, minWidth: 80, padding: '10px 6px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 12.5, transition: 'all 0.2s', background: subTab === t.id ? T.bgPanel : 'transparent', color: subTab === t.id ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Icon name={t.icon} size={14} color={subTab === t.id ? '#fff' : T.muted}/>
             {t.label}
           </button>
         ))}
@@ -541,8 +546,8 @@ function TabMenu({ commercantId, toast }) {
                 const isRenaming = renamingCat === cat
                 return (
                   <div key={cat} style={{ ...s.card, display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', marginBottom: 8 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 10, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Icon name="tag" size={18} color={T.main}/>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: T.bgPanel, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Icon name="tag" size={18} color="#fff"/>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {isRenaming ? (
@@ -605,10 +610,10 @@ function TabMenu({ commercantId, toast }) {
       {/* ───────────── SUB-TAB : PERSONNALISATION ───────────── */}
       {subTab === 'personnalisation' && (
         <>
-          <div style={{ ...s.card, background: T.pale, border: `1.5px solid ${T.main}22`, padding: 14, marginBottom: 14 }}>
-            <p style={{ fontSize: 13, fontWeight: 800, color: T.bgPanel, marginBottom: 4 }}>Personnalisation par article</p>
-            <p style={{ fontSize: 12, color: T.deep, lineHeight: 1.5, margin: 0 }}>
-              Configure les groupes d&rsquo;options de chaque article (sauces obligatoires, suppléments payants…). Clique sur un article pour gérer ses options.
+          <div style={{ background: T.bgPanel, borderRadius: 14, padding: '14px 16px', marginBottom: 14, color: '#fff' }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 4 }}>Personnalisation par article</p>
+            <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, margin: 0 }}>
+              Configure les groupes d&rsquo;options de chaque article (sauces obligatoires, suppléments payants…). Clique pour gérer.
             </p>
           </div>
           {articles.length === 0 ? (
@@ -619,8 +624,8 @@ function TabMenu({ commercantId, toast }) {
             articles.map(a => (
               <details key={a.id} style={{ ...s.card, padding: 0, overflow: 'hidden' }}>
                 <summary style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, listStyle: 'none' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Icon name="sliders" size={16} color={T.main}/>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: T.bgPanel, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon name="sliders" size={16} color="#fff"/>
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontWeight: 700, color: T.ink, fontSize: 14, margin: 0 }}>{a.nom}</p>
@@ -661,45 +666,50 @@ function OptionsArticle({ articleId, toast }) {
   async function saveGroupe() {
     if (!formGroupe.nom.trim()) return toast('Nom obligatoire', 'error')
     setSaving(true)
-    await supabase.from('article_options_groupes').insert({ article_id: articleId, nom: formGroupe.nom.trim(), type: formGroupe.type, obligatoire: formGroupe.obligatoire })
-    toast('Groupe ajouté ✓'); setSaving(false)
+    const { error } = await supabase.from('article_options_groupes').insert({ article_id: articleId, nom: formGroupe.nom.trim(), type: formGroupe.type, obligatoire: formGroupe.obligatoire })
+    setSaving(false)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast('Groupe ajouté')
     setFormGroupe({ nom: '', type: 'multiple', obligatoire: false }); setShowForm(false); fetchGroupes()
   }
 
   async function deleteGroupe(id) {
     if (!confirm('Supprimer ce groupe et toutes ses options ?')) return
-    await supabase.from('article_options_groupes').delete().eq('id', id)
+    const { error } = await supabase.from('article_options_groupes').delete().eq('id', id)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('Groupe supprimé'); fetchGroupes()
   }
 
   async function addValeur(groupeId) {
     const f = valeursForms[groupeId] || { nom: '', prix_supplement: 0 }
     if (!f.nom.trim()) return toast('Nom obligatoire', 'error')
-    await supabase.from('article_options_valeurs').insert({ groupe_id: groupeId, nom: f.nom.trim(), prix_supplement: parseFloat(f.prix_supplement) || 0 })
+    const { error } = await supabase.from('article_options_valeurs').insert({ groupe_id: groupeId, nom: f.nom.trim(), prix_supplement: parseFloat(f.prix_supplement) || 0 })
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     setValeursForms(p => ({ ...p, [groupeId]: { nom: '', prix_supplement: 0 } }))
-    toast('Option ajoutée ✓'); fetchGroupes()
+    toast('Option ajoutée'); fetchGroupes()
   }
 
   async function deleteValeur(id) {
-    await supabase.from('article_options_valeurs').delete().eq('id', id)
+    const { error } = await supabase.from('article_options_valeurs').delete().eq('id', id)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     fetchGroupes()
   }
 
   if (loading) return <p style={{ fontSize: 12, color: T.muted, padding: '8px 0' }}>Chargement des options...</p>
 
   return (
-    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.pale}` }}>
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.hairline}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <span style={{ fontSize: 12, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '1px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Icon name="sliders" size={14} color={T.bgPanel}/> Groupes d&rsquo;options
         </span>
         <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }} onClick={() => setShowForm(v => !v)}>
-          <Icon name="plus" size={12} color={T.main}/> Groupe
+          <Icon name="plus" size={12} color={T.bgPanel}/> Groupe
         </button>
       </div>
 
       {showForm && (
-        <div style={{ background: T.pale, borderRadius: 10, padding: 12, marginBottom: 10, border: `1.5px solid ${T.main}33` }}>
+        <div style={{ background: '#FAFAFA', borderRadius: 10, padding: 12, marginBottom: 10, border: `1.5px solid ${T.bgPanel}` }}>
           <div style={{ display: 'grid', gap: 8 }}>
             <div>
               <label style={{ ...s.label, fontSize: 10 }}>Nom du groupe *</label>
@@ -737,7 +747,7 @@ function OptionsArticle({ articleId, toast }) {
       )}
 
       {groupes.map(g => (
-        <div key={g.id} style={{ background: '#FAFAFA', borderRadius: 10, padding: 10, marginBottom: 8, border: `1px solid ${T.pale}` }}>
+        <div key={g.id} style={{ background: '#fff', borderRadius: 10, padding: 10, marginBottom: 8, border: `1px solid ${T.hairline}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontWeight: 700, fontSize: 13, color: T.ink }}>{g.nom}</span>
@@ -752,7 +762,7 @@ function OptionsArticle({ articleId, toast }) {
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
             {(g.valeurs || []).map(v => (
-              <span key={v.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 100, padding: '3px 8px 3px 10px', fontSize: 12 }}>
+              <span key={v.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 100, padding: '3px 8px 3px 10px', fontSize: 12 }}>
                 <span style={{ color: T.ink, fontWeight: 600 }}>{v.nom}</span>
                 {v.prix_supplement > 0 && <span style={{ color: T.main, fontSize: 11, fontWeight: 700 }}>+{Number(v.prix_supplement).toFixed(2)}€</span>}
                 <button onClick={() => deleteValeur(v.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>
@@ -831,12 +841,12 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaComm
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <span style={{ fontWeight: 800, color: T.ink, fontSize: 15 }}>{a.nom}</span>
-            <span style={{ ...s.tag, background: a.actif ? T.pale : '#F3F4F6', color: a.actif ? T.main : T.muted }}>{a.actif ? 'Actif' : 'Inactif'}</span>
+            <span style={{ ...s.tag, background: a.actif ? T.bgPanel : '#F3F4F6', color: a.actif ? '#fff' : T.muted }}>{a.actif ? 'Actif' : 'Inactif'}</span>
           </div>
           {a.description && <p style={{ fontSize: 12, color: T.muted, margin: '0 0 8px' }}>{a.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 8 }}>
-            <span style={{ fontWeight: 800, fontSize: 17, color: T.main }}>{Number(a.prix).toFixed(2)} €</span>
-            {(a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100 }}>⏱ {a.temps_prepa} min</span>}
+            <span style={{ fontWeight: 900, fontSize: 18, color: T.bgPanel, letterSpacing: '-0.3px' }}>{Number(a.prix).toFixed(2)} €</span>
+            {(a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.bgPanel, background: '#F8F6FF', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="clock" size={11} color={T.bgPanel}/>{a.temps_prepa} min</span>}
             {effAuj.ferme ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Fermé aujourd&rsquo;hui</span>
             ) : stockBrutAuj > 0 ? (
@@ -874,7 +884,7 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaComm
                   ? { bg: '#FEE2E2', color: '#DC2626', border: '#FCA5A5' }
                   : eff.override
                   ? { bg: '#F0FDF4', color: '#16A34A', border: '#86EFAC' }
-                  : { bg: '#F8F6FF', color: T.main, border: T.pale }
+                  : { bg: '#fff', color: T.bgPanel, border: T.hairline }
                 return (
                   <button key={jour} onClick={() => ouvrirEdition(jour)}
                     style={{ padding: '4px 8px', borderRadius: 8, border: `1.5px solid ${aujourdhui ? T.main : couleurs.border}`, background: couleurs.bg, color: couleurs.color, fontSize: 11, fontWeight: 700, cursor: 'pointer', minWidth: 52, fontFamily: 'inherit', transition: 'all 0.15s', position: 'relative' }}>
@@ -890,7 +900,7 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaComm
               const isAuj = jourEdite === jourActuelKey
               const consoEdit = isAuj ? dejaCommande : 0
               return (
-                <div style={{ marginTop: 8, padding: 10, background: T.pale, borderRadius: 10 }}>
+                <div style={{ marginTop: 8, padding: 12, background: '#FAFAFA', borderRadius: 10, border: `1px solid ${T.hairline}` }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: consoEdit > 0 ? 6 : 0 }}>
                     <span style={{ fontSize: 12, fontWeight: 800, color: T.deep }}>
                       {JOURS_LABELS_COURT[JOURS_KEYS.indexOf(jourEdite)]} &mdash; Stock disponible
@@ -925,10 +935,10 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaComm
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
           <Toggle value={a.actif} onChange={() => onToggle(a)}/>
           <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 10px', fontSize: 12 }} onClick={() => onEdit(a)} title="Modifier l'article">
-            <Icon name="edit" size={14} color={T.main}/>
+            <Icon name="edit" size={14} color={T.bgPanel}/>
           </button>
-          <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 10px', fontSize: 12, background: showOptions ? T.pale : undefined }} onClick={() => setShowOptions(v => !v)} title="Options & personnalisation">
-            <Icon name="sliders" size={14} color={T.main}/>
+          <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 10px', fontSize: 12, background: showOptions ? T.bgPanel : '#fff', color: showOptions ? '#fff' : T.bgPanel, borderColor: showOptions ? T.bgPanel : T.hairline }} onClick={() => setShowOptions(v => !v)} title="Options & personnalisation">
+            <Icon name="sliders" size={14} color={showOptions ? '#fff' : T.bgPanel}/>
           </button>
           <button style={{ ...s.btn, ...s.btnDanger, padding: '6px 10px', fontSize: 12 }} onClick={() => onDelete(a.id)} title="Supprimer">
             <Icon name="trash" size={14} color="#DC2626"/>

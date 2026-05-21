@@ -185,11 +185,14 @@ function TabMenu({ commercantId, toast }) {
     }))
   }
 
-  // Applique un stock à tous les jours ouvrés (raccourci "appliquer à tous")
-  async function setStockTousJours(articleId, stock) {
+  // Applique un dispo aux 7 jours. Pour le jour actuel on rajoute déjà_commandé.
+  async function setStockTousJours(articleId, dispo, dejaCommandeAuj, jourActuelKey) {
     const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
-    await Promise.all(JOURS.map(j => setStockJour(articleId, j, stock, true)))
-    toast('Stock appliqué aux 7 jours ✓')
+    await Promise.all(JOURS.map(j => {
+      const brut = j === jourActuelKey ? (dispo + (dejaCommandeAuj || 0)) : dispo
+      return setStockJour(articleId, j, brut, true)
+    }))
+    toast('Stock appliqué aux 7 jours')
   }
 
   // Charge les quantités commandées aujourd'hui par article (exclut "non_retire")
@@ -604,34 +607,49 @@ const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
 function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaCommande = 0, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
   const [showOptions, setShowOptions] = useState(false)
-  const [jourEdite, setJourEdite] = useState(null) // 'lundi', 'mardi', ...
+  const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
 
-  // Stock effectif pour un jour donné : entrée article_stock_jour si présente,
-  // sinon fallback sur stock_jour global de l'article
-  const stockEffectif = (jour) => {
-    const entry = stockParJour[jour]
-    if (entry) return { stock: entry.stock, actif: entry.actif, override: true }
-    return { stock: a.stock_jour || 0, actif: true, override: false }
-  }
-
-  // Stock restant aujourd'hui
+  // Sémantique commerçant : "stock dispo" = ce qu'il reste à vendre maintenant.
+  // En interne on stocke le brut total préparé pour la journée ; le dispo se
+  // recalcule = brut − déjà commandé. Quand le commerçant édite, il pense en
+  // "dispo courant" → on sauve dispoSaisi + dejaCommande comme nouveau brut.
+  // dejaCommande n'est appliqué qu'au jour ACTUEL (les commandes ne touchent
+  // que le stock du jour où elles sont passées).
   const jourActuelIdx = (() => { const i = new Date().getDay(); return i === 0 ? 6 : i - 1 })()
   const jourActuelKey = JOURS_KEYS[jourActuelIdx]
-  const effAuj = stockEffectif(jourActuelKey)
-  const stockBrutAuj = effAuj.actif ? effAuj.stock : 0
-  const stockRestant = Math.max(0, stockBrutAuj - dejaCommande)
+
+  const dispoEffectif = (jour) => {
+    const entry = stockParJour[jour]
+    const conso = jour === jourActuelKey ? dejaCommande : 0
+    if (entry) {
+      if (entry.actif === false) return { dispo: 0, ferme: true, override: true, brut: entry.stock }
+      const dispo = Math.max(0, (entry.stock || 0) - conso)
+      return { dispo, ferme: false, override: true, brut: entry.stock || 0 }
+    }
+    const brut = a.stock_jour || 0
+    return { dispo: Math.max(0, brut - conso), ferme: false, override: false, brut }
+  }
+
+  const effAuj = dispoEffectif(jourActuelKey)
+  const stockBrutAuj = effAuj.brut
+  const stockRestant = effAuj.dispo
 
   function ouvrirEdition(jour) {
-    const eff = stockEffectif(jour)
-    setEditVal(String(eff.stock))
+    const eff = dispoEffectif(jour)
+    setEditVal(String(eff.dispo))
     setJourEdite(jour)
   }
 
   function fermerEdition() { setJourEdite(null); setEditVal('') }
 
   function sauvegarder(jour, actif) {
-    onSetStockJour(a.id, jour, parseInt(editVal) || 0, actif)
+    // L'utilisateur saisit le DISPO. On stocke le brut = dispo + déjà commandé
+    // (uniquement pour le jour actuel — pour les autres jours, dispo = brut).
+    const dispoSaisi = Math.max(0, parseInt(editVal) || 0)
+    const conso = jour === jourActuelKey ? dejaCommande : 0
+    const brut = actif ? dispoSaisi + conso : 0
+    onSetStockJour(a.id, jour, brut, actif)
     fermerEdition()
   }
 
@@ -647,14 +665,14 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaComm
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 8 }}>
             <span style={{ fontWeight: 800, fontSize: 17, color: T.main }}>{Number(a.prix).toFixed(2)} €</span>
             {(a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100 }}>⏱ {a.temps_prepa} min</span>}
-            {stockBrutAuj > 0 ? (
+            {effAuj.ferme ? (
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Fermé aujourd&rsquo;hui</span>
+            ) : stockBrutAuj > 0 ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: stockRestant === 0 ? '#DC2626' : stockRestant <= 2 ? '#EA580C' : '#16A34A', background: stockRestant === 0 ? '#FEE2E2' : stockRestant <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>
-                Aujourd'hui : {stockRestant} / {stockBrutAuj} dispo
+                Aujourd&rsquo;hui&nbsp;: {stockRestant} dispo {dejaCommande > 0 && <span style={{ opacity: 0.65 }}>({dejaCommande} commandé{dejaCommande > 1 ? 's' : ''})</span>}
               </span>
             ) : (
-              <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>
-                {effAuj.actif ? 'Non géré' : 'Fermé aujourd’hui'}
-              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Non géré</span>
             )}
           </div>
 
@@ -663,17 +681,20 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaComm
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stock par jour</span>
               <button onClick={() => {
-                const v = window.prompt('Stock à appliquer aux 7 jours :', String(a.stock_jour || 0))
-                if (v !== null) onSetStockTousJours(a.id, v)
+                const v = window.prompt('Stock disponible à appliquer aux 7 jours :', String(stockRestant))
+                if (v !== null) {
+                  const dispo = Math.max(0, parseInt(v) || 0)
+                  onSetStockTousJours(a.id, dispo, dejaCommande, jourActuelKey)
+                }
               }} style={{ ...s.btn, ...s.btnGhost, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>
                 Appliquer à tous
               </button>
             </div>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {JOURS_KEYS.map((jour, idx) => {
-                const eff = stockEffectif(jour)
-                const ferme = !eff.actif
-                const epuise = eff.actif && eff.stock === 0
+                const eff = dispoEffectif(jour)
+                const ferme = eff.ferme
+                const epuise = !ferme && eff.dispo === 0
                 const aujourdhui = jour === jourActuelKey
                 const couleurs = ferme
                   ? { bg: '#F3F4F6', color: '#9CA3AF', border: '#E5E7EB' }
@@ -686,36 +707,47 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaComm
                   <button key={jour} onClick={() => ouvrirEdition(jour)}
                     style={{ padding: '4px 8px', borderRadius: 8, border: `1.5px solid ${aujourdhui ? T.main : couleurs.border}`, background: couleurs.bg, color: couleurs.color, fontSize: 11, fontWeight: 700, cursor: 'pointer', minWidth: 52, fontFamily: 'inherit', transition: 'all 0.15s', position: 'relative' }}>
                     <span style={{ display: 'block', fontSize: 9, opacity: 0.7 }}>{JOURS_LABELS_COURT[idx]}</span>
-                    <span style={{ display: 'block', fontWeight: 900 }}>{ferme ? '✕' : eff.stock}</span>
+                    <span style={{ display: 'block', fontWeight: 900 }}>{ferme ? '✕' : eff.dispo}</span>
                   </button>
                 )
               })}
             </div>
 
-            {/* Éditeur inline */}
-            {jourEdite && (
-              <div style={{ marginTop: 8, padding: 10, background: T.pale, borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: T.deep }}>
-                  {JOURS_LABELS_COURT[JOURS_KEYS.indexOf(jourEdite)]} :
-                </span>
-                <input type="number" min={0} value={editVal} autoFocus
-                  onChange={e => setEditVal(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') sauvegarder(jourEdite, true); if (e.key === 'Escape') fermerEdition() }}
-                  style={{ ...s.input, width: 70, textAlign: 'center', padding: '4px 8px', fontSize: 14, fontWeight: 700 }}/>
-                <button onClick={() => sauvegarder(jourEdite, true)}
-                  style={{ ...s.btn, ...s.btnPrimary, padding: '4px 12px', fontSize: 12 }}>
-                  ✓ Enregistrer
-                </button>
-                <button onClick={() => sauvegarder(jourEdite, false)}
-                  style={{ ...s.btn, ...s.btnGhost, padding: '4px 12px', fontSize: 12, background: '#FEE2E2', color: '#DC2626', borderColor: '#FCA5A5' }}>
-                  Fermé ce jour
-                </button>
-                <button onClick={fermerEdition}
-                  style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 12 }}>
-                  Annuler
-                </button>
-              </div>
-            )}
+            {/* Éditeur inline — saisie en "stock dispo" (intuitif) */}
+            {jourEdite && (() => {
+              const isAuj = jourEdite === jourActuelKey
+              const consoEdit = isAuj ? dejaCommande : 0
+              return (
+                <div style={{ marginTop: 8, padding: 10, background: T.pale, borderRadius: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: consoEdit > 0 ? 6 : 0 }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: T.deep }}>
+                      {JOURS_LABELS_COURT[JOURS_KEYS.indexOf(jourEdite)]} &mdash; Stock disponible
+                    </span>
+                    <input type="number" min={0} value={editVal} autoFocus
+                      onChange={e => setEditVal(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') sauvegarder(jourEdite, true); if (e.key === 'Escape') fermerEdition() }}
+                      style={{ ...s.input, width: 80, textAlign: 'center', padding: '4px 8px', fontSize: 14, fontWeight: 700 }}/>
+                    <button onClick={() => sauvegarder(jourEdite, true)}
+                      style={{ ...s.btn, ...s.btnPrimary, padding: '4px 12px', fontSize: 12 }}>
+                      Enregistrer
+                    </button>
+                    <button onClick={() => sauvegarder(jourEdite, false)}
+                      style={{ ...s.btn, ...s.btnGhost, padding: '4px 12px', fontSize: 12, background: '#FEE2E2', color: '#DC2626', borderColor: '#FCA5A5' }}>
+                      Fermer ce jour
+                    </button>
+                    <button onClick={fermerEdition}
+                      style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 12 }}>
+                      Annuler
+                    </button>
+                  </div>
+                  {consoEdit > 0 && (
+                    <p style={{ fontSize: 11, color: T.muted, fontWeight: 600, margin: 0 }}>
+                      {consoEdit} déjà commandé{consoEdit > 1 ? 's' : ''} aujourd&rsquo;hui — sera ajouté automatiquement au total brut interne.
+                    </p>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
@@ -1011,6 +1043,9 @@ function TabCreneaux({ commercantId, toast }) {
     { val: 1, label: '1 jour',  desc: "Aujourd'hui seulement" },
     { val: 2, label: '2 jours', desc: "Aujourd'hui + demain" },
     { val: 3, label: '3 jours', desc: "Les 3 prochains jours" },
+    { val: 4, label: '4 jours', desc: "Les 4 prochains jours" },
+    { val: 5, label: '5 jours', desc: "Les 5 prochains jours" },
+    { val: 6, label: '6 jours', desc: "Les 6 prochains jours" },
     { val: 7, label: '7 jours', desc: "Une semaine à l'avance" },
   ]
 

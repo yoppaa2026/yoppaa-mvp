@@ -398,32 +398,44 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
             {hasOptions && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100 }}>Personnalisable</span>}
           </div>
 
-          {hasStockJour && dispos.length > 0 && (
-            <div style={{ display: 'flex', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
-              {dispos.map((d, i) => (
-                <span key={i} style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 7px', borderRadius: 100, background: d.epuise ? '#FEF2F2' : '#F0FDF4', color: d.epuise ? '#DC2626' : '#16A34A', border: `1px solid ${d.epuise ? '#FCA5A5' : '#86EFAC'}` }}>
-                  {d.label} {d.epuise ? '✗' : d.stock > 0 ? `${d.stock}` : '✓'}
+          {/* Indicateur stock 3 niveaux — clair et pro */}
+          {stockGere && (() => {
+            if (inactifCeJour) {
+              return prochain ? (
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F9FAFB', color: T.muted, padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#9CA3AF' }}/>
+                  Fermé — dispo {prochain.nom}
                 </span>
-              ))}
-            </div>
-          )}
-
-          {epuiseAujourdhui && prochain && (
-            <button onClick={() => onCommanderDemain(prochain.idx)}
-              style={{ marginTop: 6, fontSize: '0.72rem', fontWeight: 800, color: T.main, background: T.pale, border: `1px solid ${T.main}44`, borderRadius: 100, padding: '3px 10px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-              Commander {prochain.nom} →
-            </button>
-          )}
-
-          {epuiseComplet && (
-            <span style={{ fontSize: '0.68rem', background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 6, fontWeight: 700, display: 'inline-block', marginTop: 6 }}>Épuisé</span>
-          )}
-
-          {inactifCeJour && !epuiseComplet && prochain && (
-            <span style={{ fontSize: '0.68rem', background: '#FEF3C7', color: '#92400E', padding: '2px 8px', borderRadius: 6, fontWeight: 700, display: 'inline-block', marginTop: 6 }}>
-              Disponible {prochain.nom}
-            </span>
-          )}
+              ) : (
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F9FAFB', color: T.muted, padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#9CA3AF' }}/>
+                  Indisponible
+                </span>
+              )
+            }
+            if (stockAujourdhui === 0) {
+              return (
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#FEE2E2', color: '#DC2626', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#DC2626' }}/>
+                  Épuisé
+                </span>
+              )
+            }
+            if (stockAujourdhui <= 5) {
+              return (
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#FFF7ED', color: '#EA580C', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#EA580C' }}/>
+                  Plus que {stockAujourdhui}
+                </span>
+              )
+            }
+            return (
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F0FDF4', color: '#16A34A', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A' }}/>
+                Disponible
+              </span>
+            )
+          })()}
         </div>
 
         {!epuiseComplet && !inactifCeJour && !epuiseAujourdhui && (

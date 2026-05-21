@@ -101,11 +101,11 @@ function maintenant() {
 }
 
 // ─── Splash Screen ────────────────────────────────────────────────────────────
-// ─── YOP! Swipe hype ──────────────────────────────────────────────────────────
+// ─── FIX SWIPE : SwipeRetrait — YOP → SWIPE, instructions claires ────────────
 function SwipeRetrait({ onConfirm, clientPrenom }) {
   const [swipeX, setSwipeX] = useState(0)
   const [swiping, setSwiping] = useState(false)
-  const [phase, setPhase] = useState('idle') // idle | swiping | yop | done
+  const [phase, setPhase] = useState('idle') // idle | swiping | success | done
   const startRef = useRef(0)
   const containerRef = useRef(null)
   const THUMB = 48
@@ -115,7 +115,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
   function getX(e) { return e.touches ? e.touches[0].clientX : e.clientX }
 
   const audioRef = useRef(null)
-  const phaseRef = useRef('idle') // ref synchrone pour éviter les conflits async
+  const phaseRef = useRef('idle')
 
   function setPhaseSync(val) {
     phaseRef.current = val
@@ -126,7 +126,6 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
     if (phaseRef.current !== 'idle') return
     setPhaseSync('swiping'); setSwiping(true)
     startRef.current = getX(e) - swipeX
-    // Précharger le son dès le début du geste — contexte audio débloqué ici
     try {
       audioRef.current = new Audio('/sounds/yop.mp3')
       audioRef.current.volume = 0.8
@@ -139,8 +138,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
     setSwipeX(x)
     if (x >= getMaxX()) {
       setSwiping(false)
-      setPhaseSync('yop')
-      // Jouer le son préchargé
+      setPhaseSync('success')
       try {
         if (audioRef.current) {
           audioRef.current.play().catch(() => {})
@@ -152,15 +150,15 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
     }
   }
   const onEnd = () => {
-    if (phaseRef.current !== 'swiping') return // Ne pas reset si yop/done
+    if (phaseRef.current !== 'swiping') return
     setSwiping(false); setPhaseSync('idle'); setSwipeX(0)
   }
 
   const p = swipeX / (getMaxX() || 1)
   const TRACK_H = THUMB + 16
 
-  // ─── Phase YOP! — animation 3 points + wordmark ───────────────────────────
-  if (phase === 'yop' || phase === 'done') {
+  // ─── Phase succès — animation 3 points + wordmark ─────────────────────────
+  if (phase === 'success' || phase === 'done') {
     return (
       <div style={{ textAlign: 'center', padding: '1rem 0' }}>
         <style>{`
@@ -170,19 +168,16 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
           @keyframes yopWordmark { 0%{opacity:0;letter-spacing:8px;transform:translateY(8px)} 100%{opacity:1;letter-spacing:-2px;transform:translateY(0)} }
           @keyframes yopSub { 0%{opacity:0;transform:translateY(6px)} 100%{opacity:1;transform:translateY(0)} }
         `}</style>
-        {/* 3 points yo·pp·aa */}
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 16, height: 32, alignItems: 'flex-end' }}>
           <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#fff', boxShadow: `0 0 16px ${C.main}88`, animation: 'yopDot1 1.2s ease-in-out infinite' }}/>
           <div style={{ width: 16, height: 16, borderRadius: '50%', background: C.light, boxShadow: `0 0 20px ${C.light}88`, animation: 'yopDot2 1.2s ease-in-out infinite' }}/>
           <div style={{ width: 12, height: 12, borderRadius: '50%', background: C.mid, boxShadow: `0 0 16px ${C.mid}88`, animation: 'yopDot3 1.2s ease-in-out infinite' }}/>
         </div>
-        {/* Wordmark yoppaa */}
         <p style={{ fontWeight: 900, fontSize: '2.2rem', color: C.ink, letterSpacing: '-2px', lineHeight: 1, marginBottom: 8, animation: 'yopWordmark 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards' }}>
           yoppaa
         </p>
-        {/* Message */}
         <p style={{ fontWeight: 700, fontSize: '0.9rem', color: C.deep, animation: 'yopSub 0.5s ease 0.3s both', letterSpacing: '-0.2px' }}>
-          C'est <span style={{ fontWeight: 900, color: C.main }}>YOP!</span> {clientPrenom || 'Yopper'} 🎉
+          Récupéré ! <span style={{ fontWeight: 900, color: C.main }}>🎉</span> {clientPrenom || 'Yopper'}
         </p>
         <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: 6, animation: 'yopSub 0.5s ease 0.5s both' }}>
           Skip the wait — bien joué !
@@ -195,21 +190,20 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
       <style>{`
-        @keyframes yopArrowPulse { 0%,100%{opacity:0.3;transform:translateX(0)} 50%{opacity:1;transform:translateX(5px)} }
+        @keyframes swipeArrowPulse { 0%,100%{opacity:0.3;transform:translateX(0)} 50%{opacity:1;transform:translateX(5px)} }
       `}</style>
 
-      {/* Label hype */}
+      {/* FIX : label "Glisse pour récupérer" — sans "YOP!" */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-        <span style={{ fontWeight: 900, fontSize: '1rem', color: C.main, letterSpacing: '-0.5px' }}>YOP!</span>
         <div style={{ display: 'flex', gap: 3 }}>
           {[0,1,2].map(i => (
             <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill="none"
-              style={{ animation: `yopArrowPulse 1s ease-in-out ${i*0.2}s infinite` }}>
+              style={{ animation: `swipeArrowPulse 1s ease-in-out ${i*0.2}s infinite` }}>
               <path d="M9 18l6-6-6-6" stroke={C.mid} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           ))}
         </div>
-        <span style={{ fontWeight: 700, fontSize: '0.72rem', color: '#9CA3AF', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Glisse</span>
+        <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#9CA3AF', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Glisse pour récupérer</span>
       </div>
 
       {/* Track */}
@@ -225,15 +219,14 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
           </div>
         )}
 
-        {/* Thumb hype */}
-        <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: `linear-gradient(135deg, ${C.main}, ${C.mid})`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 20px ${C.main}66, 0 0 0 ${p > 0.5 ? '3px' : '0px'} ${C.light}`, transition: swiping ? 'none' : 'left 0.3s, box-shadow 0.2s', userSelect: 'none', gap: 1 }}>
-          {/* 3 mini points yo·pp·aa sur le thumb */}
-          <div style={{ display: 'flex', gap: 3, marginBottom: 2 }}>
+        {/* FIX : thumb — "YOP" → "SWIPE" */}
+        <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: `linear-gradient(135deg, ${C.main}, ${C.mid})`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 20px ${C.main}66, 0 0 0 ${p > 0.5 ? '3px' : '0px'} ${C.light}`, transition: swiping ? 'none' : 'left 0.3s, box-shadow 0.2s', userSelect: 'none', gap: 2 }}>
+          <div style={{ display: 'flex', gap: 3 }}>
             {[{c:'rgba(255,255,255,0.5)',s:4},{c:'rgba(196,160,244,0.9)',s:5},{c:'rgba(150,96,224,0.9)',s:4}].map((d,i) => (
               <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c }}/>
             ))}
           </div>
-          <span style={{ fontWeight: 900, fontSize: '0.72rem', color: '#fff', letterSpacing: '-0.3px', lineHeight: 1 }}>YOP</span>
+          <span style={{ fontWeight: 900, fontSize: '0.52rem', color: '#fff', letterSpacing: '0.8px', textTransform: 'uppercase', lineHeight: 1 }}>SWIPE</span>
         </div>
       </div>
     </div>
@@ -361,7 +354,8 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
     ? `${commande.creneau.heure_debut.slice(0,5)} – ${commande.creneau.heure_fin.slice(0,5)}`
     : null
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'linear-gradient(160deg, #1A0840 0%, #2D0F6B 40%, #6B35C4 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '3rem 2rem 2.5rem', overflow: 'hidden' }}>
+    // FIX FOOTER : position: fixed + zIndex: 9999 — rendu HORS de page-wrap (voir return principal)
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'linear-gradient(160deg, #1A0840 0%, #2D0F6B 40%, #6B35C4 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '3rem 2rem calc(2.5rem + env(safe-area-inset-bottom, 0px))', overflow: 'hidden' }}>
       <style>{`
         @keyframes pu-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.7} }
         @keyframes pu-fadein { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
@@ -388,7 +382,7 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
           <p style={{ fontWeight: 900, fontSize: '1rem', color: '#fff', letterSpacing: '-0.3px' }}>Skip the wait — PRIORITÉ YOPPERS 🟣</p>
         </div>
       </div>
-      {/* Swipe */}
+      {/* FIX : SwipeRetrait en bas — pas de conflit avec la navbar (rendu hors page-wrap) */}
       <div style={{ position: 'relative', zIndex: 2, width: '100%', animation: 'pu-fadein 0.6s ease 0.3s both' }}>
         <SwipeRetrait clientPrenom={clientPrenom} onConfirm={onConfirm}/>
       </div>
@@ -402,7 +396,6 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
   const noteInfo = notesParCommerce[c.id]
   const statut = statutsCommerce[c.id]
 
-  // ─── Deux badges distincts : horaires physiques + disponibilité Yoppaa ───
   function getStatutPhysique() {
     const JOURS_MAP = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
     const JOURS_LABELS = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
@@ -421,7 +414,6 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
       return { dot: '#16A34A', label: `Ouvert · ${horaire}`, color: '#16A34A', bg: '#F0FDF4', pulse: true }
     }
 
-    // Commerce fermé — trouver le prochain créneau d'ouverture
     if (h?.ouvert && h.debut) {
       const ouvreLater = heureEnMinutes(h.debut) > nowMin
       if (ouvreLater) {
@@ -429,7 +421,6 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
       }
     }
 
-    // Chercher le prochain jour d'ouverture dans les 7 jours
     if (c.horaires_detail) {
       for (let i = 1; i <= 7; i++) {
         const nextIdx = (todayIdx + i) % 7
@@ -468,34 +459,25 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
       onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(107,53,196,0.14)' }}
       onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(107,53,196,0.07)' }}>
 
-      {/* Mini bannière colorée */}
       <div style={{ height: 5, background: `linear-gradient(90deg, ${T.main}, ${T.mid})` }}/>
 
       <div style={{ padding: '0.875rem 1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Nom */}
             <p style={{ fontWeight: 900, color: T.ink, margin: '0 0 6px', fontSize: '1rem', letterSpacing: '-0.3px' }}>{c.nom}</p>
-
             <Badges type={c.type}/>
-
             {c.description && <p style={{ fontSize: '0.78rem', color: T.muted, margin: '6px 0 0', lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.description}</p>}
-
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
               <Etoiles note={noteInfo?.moyenne || 0}/>
               <span style={{ fontSize: '0.7rem', color: noteInfo?.count > 0 ? T.muted : '#D1D5DB' }}>
                 {noteInfo?.count > 0 ? `${noteInfo.count} avis` : 'Pas encore d\'avis'}
               </span>
             </div>
-
-            {/* Statut physique + disponibilité Yoppaa — deux lignes claires */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
-              {/* Ligne 1 — horaires physiques */}
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: physique.bg, borderRadius: 100, padding: '4px 10px', border: `1px solid ${physique.dot}22` }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: physique.dot, flexShrink: 0, animation: physique.pulse ? 'dot-pulse 2s ease-in-out infinite' : 'none', boxShadow: physique.pulse ? `0 0 6px ${physique.dot}88` : 'none' }}/>
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, color: physique.color }}>{physique.label}</span>
               </span>
-              {/* Ligne 2 — disponibilité résa Yoppaa */}
               {resa && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: resa.bg, borderRadius: 100, padding: '4px 10px', border: `1px solid ${resa.dot}22` }}>
                   <span style={{ fontSize: '0.62rem' }}>🟣</span>
@@ -508,7 +490,6 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
             </div>
           </div>
 
-          {/* Logo + favori */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <div style={{ width: 56, height: 56, borderRadius: 14, background: T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(107,53,196,0.12)' }}>
               {c.logo_url ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <span style={{ fontSize: '1.5rem' }}>🏪</span>}
@@ -577,7 +558,7 @@ export default function Commander() {
     }
   }, [])
 
-  // ─── Polling client 5s — mise à jour statuts sans refresh ─────────────────
+  // ─── Polling client 5s ─────────────────────────────────────────────────────
   useEffect(() => {
     const email = localStorage.getItem('yoppaa_email')
     if (!email) return
@@ -752,7 +733,6 @@ export default function Commander() {
 
   const tempsEconomise = clientCommandes.filter(c => c.statut==='recupere').reduce((acc,c) => acc+getTemps(c.commercant?.type), 0)
 
-  // Filtres combinés : catégorie + recherche
   const commercantsFiltres = commercants
     .filter(c => categorieActive === 'Tous' || parseTypes(c.type).some(t => t===categorieActive || t.includes(categorieActive)))
     .filter(c => !searchQuery.trim() || c.nom.toLowerCase().includes(searchQuery.toLowerCase()) || (c.type||'').toLowerCase().includes(searchQuery.toLowerCase()) || (c.adresse||'').toLowerCase().includes(searchQuery.toLowerCase()))
@@ -774,6 +754,21 @@ export default function Commander() {
   return (
     <>
       {showSplash && <SplashScreen onDone={onSplashDone}/>}
+
+      {/* FIX FOOTER : PickupScreen rendu HORS de .page-wrap pour éviter le stacking context
+          (overflow-x: hidden sur .page-wrap bloque position:fixed des enfants) */}
+      {pickupCommande && (
+        <PickupScreen
+          commande={pickupCommande}
+          clientPrenom={client.prenom || client.nom?.split(' ')[0] || 'Yopper'}
+          onConfirm={async () => {
+            await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', pickupCommande.id)
+            setPickupCommande(null)
+            chargerCommandesClient(client.email)
+          }}
+        />
+      )}
+
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; width: 100%; overflow-x: hidden; }
@@ -802,13 +797,10 @@ export default function Commander() {
 
         {/* ── HERO HEADER ── */}
         <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #3D1580 100%)`, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
-          {/* Motif décoratif */}
           <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 10%, ${T.mid}33 0%, transparent 50%), radial-gradient(circle at 10% 90%, ${T.light}18 0%, transparent 50%), radial-gradient(circle at 50% 50%, ${T.main}22 0%, transparent 70%)`, pointerEvents: 'none' }}/>
 
-          {/* Top row — logo + géoloc */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: headerScrolled ? '0.625rem 1rem' : '1rem 1rem 0', transition: 'padding 0.3s ease' }}>
             <div>
-              {/* 3 points — cachés au scroll */}
               {!headerScrolled && (
                 <div style={{ display: 'flex', gap: 7, marginBottom: 8 }}>
                   {[
@@ -823,12 +815,9 @@ export default function Commander() {
               <p style={{ fontWeight: 900, fontSize: headerScrolled ? '1.3rem' : '2rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1, textShadow: `0 0 40px ${T.mid}66`, transition: 'font-size 0.3s ease' }}>yoppaa</p>
               {!headerScrolled && <p style={{ color: T.light, fontSize: '0.62rem', marginTop: 3, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', opacity: 0.8 }}>Skip the wait</p>}
             </div>
-            {/* Localisation — GPS ou manuelle */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
-              {/* Bouton GPS hype */}
               <button onClick={() => { if (!showLocManuelle) demanderGeolocalisation(); setShowLocManuelle(false) }}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 14, padding: '0.5rem 0.875rem', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', transition: 'all 0.2s', letterSpacing: '-0.2px' }}>
-                {/* Icône GPS SVG */}
                 {geoLoading
                   ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="white" strokeWidth="2.5" strokeDasharray="30 10" strokeLinecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></circle></svg>
                   : <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -844,7 +833,6 @@ export default function Commander() {
                   {geoLoading ? 'Localisation...' : rue || locManuelle || (position ? 'Position active' : 'Activer GPS')}
                 </span>
               </button>
-              {/* Lien saisie manuelle avec icône crayon SVG */}
               <button onClick={() => setShowLocManuelle(v => !v)}
                 style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'rgba(196,160,244,0.7)', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}>
                 {showLocManuelle
@@ -856,7 +844,6 @@ export default function Commander() {
             </div>
           </div>
 
-          {/* Champ localisation manuelle */}
           {showLocManuelle && onglet === 'accueil' && (
             <div style={{ padding: '0 1rem 0.625rem', animation: 'fadeUp 0.2s ease' }}>
               <div style={{ position: 'relative' }}>
@@ -883,7 +870,6 @@ export default function Commander() {
             </div>
           )}
 
-          {/* Tagline hero — transition smooth au scroll */}
           {onglet === 'accueil' && (
             <div style={{
               maxHeight: headerScrolled ? '0px' : '120px',
@@ -910,7 +896,6 @@ export default function Commander() {
             </div>
           )}
 
-          {/* Barre de recherche */}
           {onglet === 'accueil' && (
             <div style={{ padding: '0 1rem 0.75rem' }}>
               <div style={{ position: 'relative' }}>
@@ -932,7 +917,6 @@ export default function Commander() {
             </div>
           )}
 
-          {/* Filtres catégories */}
           {onglet === 'accueil' && (
             <div className="cats">
               {CATEGORIES.map(cat => (
@@ -968,18 +952,6 @@ export default function Commander() {
           {/* COMMANDES */}
           {onglet === 'commandes' && (
             <div>
-              {/* Pickup screen — overlay fixe déclenché par le client */}
-              {pickupCommande && (
-                <PickupScreen
-                  commande={pickupCommande}
-                  clientPrenom={client.prenom || client.nom?.split(' ')[0] || 'Yopper'}
-                  onConfirm={async () => {
-                    await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', pickupCommande.id)
-                    setPickupCommande(null)
-                    chargerCommandesClient(client.email)
-                  }}
-                />
-              )}
               {/* Hero header commandes */}
               <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #1e0950 100%)`, padding: '1.25rem 1rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 30%, ${T.main}44 0%, transparent 60%)`, pointerEvents: 'none' }}/>
@@ -1011,9 +983,10 @@ export default function Commander() {
                         </div>
                         <p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
                       </div>
+                      {/* FIX BOUTON : suppression de "YOP!" dans le label */}
                       <button onClick={() => setPickupCommande(c)}
                         style={{ width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.95rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 16px ${T.main}44`, letterSpacing: '-0.3px' }}>
-                        🟣 Retirer ma commande YOP! →
+                        🟣 Retirer ma commande →
                       </button>
                     </div>
                   ))}
@@ -1102,10 +1075,8 @@ export default function Commander() {
           {/* TRIBU */}
           {onglet === 'tribu' && (
             <div>
-              {/* Hero tribu full-width */}
               <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.main} 100%)`, padding: '2rem 1rem 3rem', position: 'relative', overflow: 'hidden', textAlign: 'center' }}>
                 <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 50% 100%, ${T.light}33 0%, transparent 60%)`, pointerEvents: 'none' }}/>
-                {/* 3 cercles animés */}
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 20 }}>
                   {[
                     { c: '#fff', delay: '0s', size: 44, opacity: 0.9, anim: 'tribu-pulse' },
@@ -1129,7 +1100,6 @@ export default function Commander() {
           {/* PROFIL */}
           {onglet === 'profil' && (
             <div>
-              {/* Hero profil */}
               <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #1e0950 100%)`, padding: '1.5rem 1rem 2.5rem', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 50%, ${T.main}44 0%, transparent 50%)`, pointerEvents: 'none' }}/>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
@@ -1150,7 +1120,6 @@ export default function Commander() {
               </div>
 
               <div style={{ padding: '0 1rem 1rem', marginTop: '-1.25rem' }}>
-                {/* Stat principale */}
                 <div style={{ background: '#fff', borderRadius: 20, padding: '1.5rem', marginBottom: '0.875rem', textAlign: 'center', boxShadow: `0 4px 20px ${T.main}14`, border: `1px solid ${T.pale}` }}>
                   <p style={{ fontSize: '0.65rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>⏱ Temps économisé en file</p>
                   <p style={{ fontSize: '3.5rem', fontWeight: 900, color: T.main, letterSpacing: '-3px', marginBottom: 4, lineHeight: 1 }}>
@@ -1161,7 +1130,6 @@ export default function Commander() {
                   </p>
                 </div>
 
-                {/* Stats grid */}
                 <div className="grid2" style={{ marginBottom: '0.875rem' }}>
                   {[
                     { label: 'Commandes', value: clientCommandes.length, color: T.main, bg: T.pale, icon: '📦' },
@@ -1207,14 +1175,12 @@ export default function Commander() {
               <button key={item.key} onClick={() => setOnglet(item.key)}
                 style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '0.625rem 0 0.5rem', border: 'none', background: 'transparent', cursor: 'pointer', position: 'relative' }}>
 
-                {/* ── Icône SVG ── */}
                 {item.key === 'accueil' && (
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M3,10 L12,3 L21,10" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                     <path d="M5,10 L5,20 Q5,21 6,21 L9,21 L9,15 Q9,14 10,14 L14,14 Q15,14 15,15 L15,21 L18,21 Q19,21 19,20 L19,10" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                   </svg>
                 )}
-
                 {item.key === 'commandes' && (
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect x="2" y="9" width="20" height="13" rx="3" stroke={stroke} strokeWidth="2.5" strokeLinejoin="round" opacity={op}/>
@@ -1228,7 +1194,6 @@ export default function Commander() {
                     )}
                   </svg>
                 )}
-
                 {item.key === 'favoris' && (
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12,5 L13.6,9.2 L18.2,9.6 L14.9,12.4 L15.9,17 L12,14.6 L8.1,17 L9.1,12.4 L5.8,9.6 L10.4,9.2 Z" stroke={stroke} strokeWidth="2.3" strokeLinejoin="round" strokeLinecap="round" opacity={op}/>
@@ -1237,7 +1202,6 @@ export default function Commander() {
                     <circle cx="15.5" cy="21" r="1.8" fill={actif ? '#9660E0' : stroke} opacity={actif ? 0.85 : 0.35}/>
                   </svg>
                 )}
-
                 {item.key === 'tribu' && (
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="4" cy="8" r="3" stroke={stroke} strokeWidth="2.2" opacity={op * 0.7}/>
@@ -1248,7 +1212,6 @@ export default function Commander() {
                     <path d="M5,20 Q5,15 12,15 Q19,15 19,20" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" opacity={op}/>
                   </svg>
                 )}
-
                 {item.key === 'profil' && (
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="12" cy="8" r="5" stroke={stroke} strokeWidth="2.5" opacity={op}/>
@@ -1256,12 +1219,9 @@ export default function Commander() {
                   </svg>
                 )}
 
-                {/* Label */}
                 <span style={{ fontSize: '0.62rem', fontWeight: 700, color: actif ? '#fff' : '#6B7280', letterSpacing: '0.2px', fontFamily: '"DM Sans", sans-serif' }}>
                   {item.label}
                 </span>
-
-                {/* Indicateur actif */}
                 {actif && <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: 20, height: 3, borderRadius: 3, background: T.light }}/>}
               </button>
             )

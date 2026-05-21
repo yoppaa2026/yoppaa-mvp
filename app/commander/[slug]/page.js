@@ -93,7 +93,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
     const x = Math.max(0, Math.min(getMaxX(), getX(e) - startRef.current))
     setSwipeX(x)
     if (x >= getMaxX()) {
-      setSwiping(false); setPhase('yop')
+      setSwiping(false); setPhase('success')
       try { const a = new Audio('/sounds/yop.mp3'); a.volume = 0.8; const p = a.play(); if (p) p.catch(()=>{}) } catch(e) {}
       setTimeout(() => { setPhase('done'); onConfirm() }, 2200)
     }
@@ -101,12 +101,12 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
   const onEnd = () => { if (phase !== 'swiping') return; setSwiping(false); setPhase('idle'); setSwipeX(0) }
   const p = swipeX / (getMaxX() || 1)
   const TRACK_H = THUMB + 8
-  if (phase === 'yop' || phase === 'done') {
+  if (phase === 'success' || phase === 'done') {
     return (
       <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
           {[{c:C.main,d:'0s',s:10},{c:C.light,d:'0.15s',s:14},{c:C.mid,d:'0.3s',s:10}].map((d,i) => (
-            <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, animation: `yopPulse 0.6s ease-in-out ${d.d} infinite alternate`, boxShadow: `0 0 12px ${d.c}88` }}/>
+            <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, animation: `swipePulse 0.6s ease-in-out ${d.d} infinite alternate`, boxShadow: `0 0 12px ${d.c}88` }}/>
           ))}
         </div>
         <p style={{ fontWeight: 900, fontSize: '1.1rem', color: C.ink, letterSpacing: '-0.3px', marginBottom: 4 }}>Récupéré ! 🎉</p>
@@ -117,7 +117,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: '0.72rem', color: '#9CA3AF', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', animation: 'yopArrow 1.2s ease-in-out infinite' }}>Glisse pour récupérer →→→</span>
+        <span style={{ fontSize: '0.72rem', color: '#9CA3AF', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', animation: 'swipeArrow 1.2s ease-in-out infinite' }}>Glisse pour récupérer →→→</span>
       </div>
       <div ref={containerRef}
         style={{ width: '100%', height: TRACK_H, borderRadius: 100, background: `linear-gradient(to right, ${C.pale} ${p*100}%, #F3F4F6 ${p*100}%)`, position: 'relative', border: `2px solid ${p > 0.5 ? C.main : C.light}`, userSelect: 'none', cursor: 'grab', touchAction: 'none', transition: 'border-color 0.2s' }}
@@ -222,7 +222,8 @@ function OptionsSelector({ article, groupes, onAjouter }) {
   )
 }
 
-function RecapPanier({ panier, onRetirer, onAjouter, total, onValider }) {
+// ─── RecapPanier — FIX STOCK : prop getStockMax, bouton + bloqué ──────────────
+function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockMax }) {
   const items = Object.entries(panier)
   if (items.length === 0) return null
   function labelOptions(options) {
@@ -238,18 +239,31 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider }) {
         {items.map(([key, item]) => {
           const opts = labelOptions(item.options)
           const prixUnitaire = item.prix + (item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0)
+          // FIX STOCK : vérifier la limite par article dans le panier
+          const stockMax = getStockMax ? getStockMax(item.id) : Infinity
+          const stockAtteintPanier = item.stock_jour > 0 && item.quantite >= stockMax
           return (
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.625rem 0', borderBottom: `1px solid ${T.pale}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                 <button onClick={() => onRetirer(key)}
                   style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 900, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                <span style={{ fontWeight: 900, minWidth: 22, textAlign: 'center', fontSize: '0.95rem', color: T.ink }}>{item.quantite}</span>
-                <button onClick={() => onAjouter(key, item)}
-                  style={{ width: 30, height: 30, borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 22 }}>
+                  <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink, textAlign: 'center' }}>{item.quantite}</span>
+                  {stockAtteintPanier && (
+                    <span style={{ fontSize: '0.48rem', fontWeight: 800, color: T.main, letterSpacing: '0.3px', whiteSpace: 'nowrap', lineHeight: 1 }}>MAX ✓</span>
+                  )}
+                </div>
+                <button
+                  onClick={() => !stockAtteintPanier && onAjouter(key, item)}
+                  disabled={stockAtteintPanier}
+                  style={{ width: 30, height: 30, borderRadius: 9, border: 'none', background: stockAtteintPanier ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: stockAtteintPanier ? '#9CA3AF' : '#fff', fontWeight: 900, cursor: stockAtteintPanier ? 'default' : 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>+</button>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontWeight: 700, color: T.ink, fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.nom}</p>
                 {opts && <p style={{ fontSize: '0.7rem', color: T.muted, marginTop: 1 }}>{opts}</p>}
+                {stockAtteintPanier && (
+                  <p style={{ fontSize: '0.68rem', color: T.main, fontWeight: 700, marginTop: 2 }}>Stock disponible atteint</p>
+                )}
               </div>
               <p style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem', flexShrink: 0 }}>{(prixUnitaire * item.quantite).toFixed(2)}€</p>
             </div>
@@ -432,8 +446,11 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
                     style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: stockAtteint ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: stockAtteint ? '#9CA3AF' : '#fff', fontWeight: 900, cursor: stockAtteint ? 'default' : 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: stockAtteint ? 'none' : `0 4px 14px ${T.main}55`, transition: 'all 0.15s' }}>+</button>
                 </div>
               ) : (
-                <button onClick={() => ajouterAuPanier(article)}
-                  style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 14px ${T.main}55` }}>+</button>
+                // FIX : bouton initial aussi bloqué si stock déjà atteint (cas où quelqu'un a commandé entre-temps)
+                <button
+                  onClick={() => !stockAtteint && ajouterAuPanier(article)}
+                  disabled={stockAtteint}
+                  style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: stockAtteint ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: stockAtteint ? '#9CA3AF' : '#fff', fontWeight: 900, cursor: stockAtteint ? 'default' : 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: stockAtteint ? 'none' : `0 4px 14px ${T.main}55` }}>+</button>
               )
             )}
           </div>
@@ -461,9 +478,8 @@ export default function CommanderSlug() {
   const [creneauChoisi, setCreneauChoisi] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadingCommande, setLoadingCommande] = useState(false)
-  // FIX 1 — erreur stock non-bloquante (remplace alert)
   const [erreurCommande, setErreurCommande] = useState(null)
-  const [ajustementStock, setAjustementStock] = useState(null) // { articleId, nom, stockDisponible }
+  const [ajustementStock, setAjustementStock] = useState(null)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '' })
   const [rgpdCommande, setRgpdCommande] = useState(false)
   const [rgpdMarketing, setRgpdMarketing] = useState(false)
@@ -713,12 +729,22 @@ export default function CommanderSlug() {
   }
 
   function ajouterAuPanier(article, options = null) {
+    // FIX STOCK : vérifier la limite avant d'ajouter
+    const stockMax = getStockMax(article.id)
+    const qteTotale = qteTotaleArticle(article.id)
+    if (article.stock_jour > 0 && qteTotale >= stockMax) return
     const key = options ? `${article.id}_${JSON.stringify(options)}` : String(article.id)
     setPanier(prev => ({ ...prev, [key]: { ...article, options, quantite: (prev[key]?.quantite || 0) + 1 } }))
   }
+
+  // FIX STOCK : incrementerPanier vérifie aussi le stock
   function incrementerPanier(key, item) {
+    const stockMax = getStockMax(item.id)
+    const qteTotale = qteTotaleArticle(item.id)
+    if (item.stock_jour > 0 && qteTotale >= stockMax) return
     setPanier(prev => ({ ...prev, [key]: { ...item, quantite: (prev[key]?.quantite || 0) + 1 } }))
   }
+
   function retirerDuPanier(key) {
     setPanier(prev => {
       const next = { ...prev }
@@ -727,9 +753,23 @@ export default function CommanderSlug() {
       return next
     })
   }
+
   function qteTotaleArticle(articleId) {
     return Object.entries(panier).filter(([key]) => key === String(articleId) || key.startsWith(`${articleId}_`)).reduce((acc, [, item]) => acc + item.quantite, 0)
   }
+
+  // FIX STOCK : helper pour obtenir le stock max disponible d'un article
+  function getStockMax(articleId) {
+    const article = articles.find(a => a.id === articleId)
+    if (!article || !article.stock_jour || article.stock_jour <= 0) return Infinity
+    const stocksArticle = stocksJour[articleId] || {}
+    const hasStockJour = Object.keys(stocksArticle).length > 0
+    const stockAujourdhui = hasStockJour
+      ? (stocksArticle[jourActuel()]?.actif !== false ? (stocksArticle[jourActuel()]?.stock ?? article.stock_jour) : 0)
+      : article.stock_jour
+    return stockAujourdhui > 0 ? stockAujourdhui : Infinity
+  }
+
   function totalPanier() {
     return Object.values(panier).reduce((acc, i) => {
       const supplement = i.options ? Object.values(i.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0
@@ -766,7 +806,8 @@ export default function CommanderSlug() {
     const d = new Date(jourDate)
     const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 
-    // ── Validation stock ──────────────────────────────────────────────────────
+    // ── Validation stock (uniquement si changé depuis l'ajout au panier) ──────
+    // Avec le blocage à l'ajout, ce check ne se déclenche QUE si qq'un a commandé entre-temps
     const articlesAValider = Object.values(panier).filter(i => i.stock_jour > 0)
     if (articlesAValider.length > 0) {
       const artIds = articlesAValider.map(i => i.id)
@@ -785,8 +826,7 @@ export default function CommanderSlug() {
         const deja = qteDeja[item.id] || 0
         const stockDisponible = item.stock_jour - deja
         if (item.quantite > stockDisponible) {
-          // FIX 2 — Mémoriser l'ajustement suggéré + garder le panier intact
-          setErreurCommande(`Stock insuffisant pour "${item.nom}" : ${stockDisponible} disponible${stockDisponible > 1 ? 's' : ''}, tu en demandes ${item.quantite}.`)
+          setErreurCommande(`Stock insuffisant pour "${item.nom}" : il ne reste que ${stockDisponible} disponible${stockDisponible > 1 ? 's' : ''} (quelqu'un a commandé entre-temps).`)
           setAjustementStock({ articleId: item.id, nom: item.nom, stockDisponible })
           setLoadingCommande(false)
           return
@@ -807,7 +847,6 @@ export default function CommanderSlug() {
 
     const cid = await getOuCreerClient(client.email, client.prenom, client.nom)
 
-    // ── FIX 3 : Insert avec gestion d'erreur + fallback sans numero_commande ──
     const insertPayload = {
       commercant_id: commercant.id, creneau_id: creneauChoisi,
       client_nom: nomComplet, client_email: client.email, client_telephone: client.telephone,
@@ -841,23 +880,10 @@ export default function CommanderSlug() {
     )
     try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
 
-    // FIX 3 — Calculer le numéro séquentiel du jour (même logique que dashboard)
-    let numeroSequentiel = 1
-    try {
-      const { data: ordresDuJour } = await supabase
-        .from('commandes')
-        .select('id, created_at, creneau:creneaux(heure_debut)')
-        .eq('commercant_id', commercant.id)
-        .eq('date_commande', dateStr)
-      const sorted = (ordresDuJour || []).sort((a, b) =>
-        (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '') ||
-        new Date(a.created_at) - new Date(b.created_at)
-      )
-      const pos = sorted.findIndex(c => c.id === commande.id)
-      if (pos !== -1) numeroSequentiel = pos + 1
-    } catch(e) {}
-
-    setDerniereCommande({ ...commande, client_id: cid, numeroSequentiel })
+    // FIX NUMÉRO : utiliser directement numero_commande de la DB — source unique de vérité
+    // Le dashboard utilise aussi numero_commande → parfaite synchronisation
+    const numeroAffiche = commande.numero_commande || numero_commande || 1
+    setDerniereCommande({ ...commande, client_id: cid, numeroSequentiel: numeroAffiche })
     setEtape(4)
     setLoadingCommande(false)
   }
@@ -908,8 +934,8 @@ export default function CommanderSlug() {
         @keyframes pulse { from { opacity:0.4; transform:scale(0.8); } to { opacity:1; transform:scale(1.2); } }
         @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
         @keyframes shimmer { from { background-position: -200% center; } to { background-position: 200% center; } }
-        @keyframes yopPulse { from { transform:scale(0.7) translateY(0); opacity:0.5; } to { transform:scale(1.4) translateY(-4px); opacity:1; } }
-        @keyframes yopArrow { 0%,100% { opacity:0.4; transform:translateX(0); } 50% { opacity:1; transform:translateX(4px); } }
+        @keyframes swipePulse { from { transform:scale(0.7) translateY(0); opacity:0.5; } to { transform:scale(1.4) translateY(-4px); opacity:1; } }
+        @keyframes swipeArrow { 0%,100% { opacity:0.4; transform:translateX(0); } 50% { opacity:1; transform:translateX(4px); } }
         @keyframes dealPulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
@@ -923,7 +949,6 @@ export default function CommanderSlug() {
             ← Retour
           </button>
 
-          {/* FIX 4 — Nom commerçant topbar : police réduite pour éviter la coupure */}
           <div style={{ flex: 1, overflow: 'hidden' }}>
             {commercant && (
               <span style={{ fontWeight: 700, fontSize: '0.75rem', color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', opacity: 0.9 }}>
@@ -1006,7 +1031,6 @@ export default function CommanderSlug() {
                 {/* Card flottante */}
                 <div style={{ background: '#fff', margin: '0 12px', marginTop: -20, borderRadius: 20, padding: '1rem 1.125rem', boxShadow: `0 8px 32px rgba(22,6,54,0.2), 0 2px 8px ${T.main}22`, border: `1px solid ${T.pale}`, position: 'relative' }}>
 
-                  {/* Logo flottant en haut à droite de la card (reste ici) */}
                   <div style={{ position: 'absolute', top: -24, right: 16, width: 48, height: 48, borderRadius: 14, background: commercant.logo_url ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, border: '3px solid #fff', boxShadow: `0 4px 16px rgba(0,0,0,0.15)`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>
                     {commercant.logo_url
                       ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
@@ -1129,7 +1153,15 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                <RecapPanier panier={panier} onRetirer={retirerDuPanier} onAjouter={incrementerPanier} total={totalPanier()} onValider={() => setEtape(3)}/>
+                {/* FIX : passer getStockMax à RecapPanier */}
+                <RecapPanier
+                  panier={panier}
+                  onRetirer={retirerDuPanier}
+                  onAjouter={incrementerPanier}
+                  total={totalPanier()}
+                  onValider={() => setEtape(3)}
+                  getStockMax={getStockMax}
+                />
                 <div style={{ height: 24 }}/>
               </div>
             </>
@@ -1263,7 +1295,7 @@ export default function CommanderSlug() {
                   ))}
                 </div>
 
-                {/* FIX 1&2 — Message d'erreur avec actions intelligentes */}
+                {/* Message erreur stock — uniquement si stock changé entre-temps */}
                 {erreurCommande && (
                   <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.875rem 1rem', marginBottom: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -1278,7 +1310,6 @@ export default function CommanderSlug() {
                       <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                         {ajustementStock.stockDisponible > 0 && (
                           <button onClick={() => {
-                            // Réduire automatiquement la quantité au stock disponible
                             setPanier(prev => {
                               const next = { ...prev }
                               let restant = ajustementStock.stockDisponible

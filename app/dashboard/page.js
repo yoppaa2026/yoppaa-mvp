@@ -62,14 +62,15 @@ function getJoursDispos(horizon = 1) {
   return jours
 }
 
+// FIX NUMÉRO : source unique = numero_commande DB, sans restriction <= 999
 function getNumeroJour(commandes, commandeId, jourKey) {
   const duJour = [...commandes]
     .filter(c => dateKey(c.date_commande || c.created_at) === jourKey)
     .sort((a, b) => (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '') || new Date(a.created_at) - new Date(b.created_at))
   const commande = duJour.find(c => c.id === commandeId)
-  if (commande?.numero_commande && commande.numero_commande <= 999) {
-    return commande.numero_commande
-  }
+  // Priorité absolue : numero_commande de la DB (même source que le client)
+  if (commande?.numero_commande) return commande.numero_commande
+  // Fallback : position dans la liste triée du jour
   const idx = duJour.findIndex(c => c.id === commandeId)
   return idx === -1 ? '?' : idx + 1
 }
@@ -688,7 +689,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Bannière YOP! — commande récupérée */}
+      {/* Bannière commande récupérée */}
       {commandeRecuperee && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9998, background: 'linear-gradient(135deg, #16A34A, #22C55E)', color: '#fff', padding: '0.875rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '1rem', boxShadow: '0 4px 30px rgba(22,163,74,0.5)', animation: 'slideDown 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
           <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>

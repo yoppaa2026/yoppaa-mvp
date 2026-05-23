@@ -366,7 +366,50 @@ function TabMenu({ commercantId, toast }) {
     { id: 'personnalisation', label: 'Personnalisation', icon: 'sliders' },
   ]
 
+  function renderArticleForm() {
+    return (
+      <div style={s.cardActive}>
+        <h3 style={{ ...s.h3, marginBottom: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Icon name={editId ? 'edit' : 'plus'} size={14} color={T.main}/>
+          {editId ? 'Modifier l’article' : 'Nouvel article'}
+        </h3>
+        <div style={{ display: 'grid', gap: 12 }}>
+          <div><label style={s.label}>Nom *</label><Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} placeholder="Ex: Croissant beurre"/></div>
+          <div>
+            <label style={s.label}>Catégorie</label>
+            <select value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))}
+              style={{ ...s.input, cursor: 'pointer' }}>
+              <option value="">— Sans catégorie —</option>
+              {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
+          </div>
+          <div><label style={s.label}>Description</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Ex: Feuilleté, pur beurre AOP..."/></div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="1.20"/></div>
+            <div><label style={s.label}>Stock du jour (défaut)</label><Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="30"/></div>
+          </div>
+          <div>
+            <label style={s.label}>Temps de préparation (min)</label>
+            <Input type="number" min="0" step="0.5" value={form.temps_prepa} onChange={e => setForm(p => ({ ...p, temps_prepa: e.target.value }))} placeholder="0 = non défini · 1 = 1 min · 5 = 5 min"/>
+            <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Utilisé en mode Temps de préparation</p>
+          </div>
+          <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Article disponible"/>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveArticle} disabled={saving}>
+            <Icon name="check" size={14}/> {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+          <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowForm(false)}>Annuler</button>
+        </div>
+      </div>
+    )
+  }
+
   function renderArticleCard(a) {
+    // Édition en place : le formulaire prend la place de la card pour cet article
+    if (showForm && editId === a.id) {
+      return <div key={a.id}>{renderArticleForm()}</div>
+    }
     return <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
   }
 
@@ -420,43 +463,10 @@ function TabMenu({ commercantId, toast }) {
         ))}
       </div>
 
-      {/* Formulaire article — partagé entre subTab articles et personnalisation */}
-      {showForm && (
-        <div style={s.cardActive}>
-          <h3 style={{ ...s.h3, marginBottom: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Icon name={editId ? 'edit' : 'plus'} size={14} color={T.main}/>
-            {editId ? 'Modifier l’article' : 'Nouvel article'}
-          </h3>
-          <div style={{ display: 'grid', gap: 12 }}>
-            <div><label style={s.label}>Nom *</label><Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} placeholder="Ex: Croissant beurre"/></div>
-            <div>
-              <label style={s.label}>Catégorie</label>
-              <select value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))}
-                style={{ ...s.input, cursor: 'pointer' }}>
-                <option value="">— Sans catégorie —</option>
-                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-              </select>
-            </div>
-            <div><label style={s.label}>Description</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Ex: Feuilleté, pur beurre AOP..."/></div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="1.20"/></div>
-              <div><label style={s.label}>Stock du jour (défaut)</label><Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="30"/></div>
-            </div>
-            <div>
-              <label style={s.label}>Temps de préparation (min)</label>
-              <Input type="number" min="0" step="0.5" value={form.temps_prepa} onChange={e => setForm(p => ({ ...p, temps_prepa: e.target.value }))} placeholder="0 = non défini · 1 = 1 min · 5 = 5 min"/>
-              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Utilisé en mode Temps de préparation</p>
-            </div>
-            <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Article disponible"/>
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-            <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveArticle} disabled={saving}>
-              <Icon name="check" size={14}/> {saving ? 'Enregistrement…' : 'Enregistrer'}
-            </button>
-            <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowForm(false)}>Annuler</button>
-          </div>
-        </div>
-      )}
+      {/* Nouvel article : formulaire affiché en haut.
+          Édition d'un article existant : formulaire inline à l'emplacement
+          de l'article (voir renderArticleCard plus bas). */}
+      {showForm && editId === null && renderArticleForm()}
 
       {/* ───────────── SUB-TAB : ARTICLES ───────────── */}
       {subTab === 'articles' && (

@@ -750,7 +750,7 @@ export default function Dashboard() {
       {/* Notif NOUVELLE COMMANDE — card flottante en haut à droite */}
       {nouvelleCommande && (
         <div onClick={() => setNouvelleCommande(false)}
-          style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, maxWidth: 360, animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1)', cursor: 'pointer' }}>
+          style={{ position: 'fixed', top: 20, right: 20, left: 20, zIndex: 9999, maxWidth: 360, marginLeft: 'auto', animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1)', cursor: 'pointer' }}>
           <div style={{ background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 60%, ${T.main} 100%)`, borderRadius: 18, padding: '16px 18px', color: '#fff', boxShadow: `0 24px 48px rgba(22,6,54,0.4), 0 0 0 1px ${T.main}55`, display: 'flex', gap: 14, alignItems: 'center' }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'wiggle 0.7s ease-in-out infinite alternate' }}>
@@ -774,7 +774,7 @@ export default function Dashboard() {
       {/* Notif COMMANDE RÉCUPÉRÉE — card flottante en haut à droite (sans cacher la liste) */}
       {commandeRecuperee && (
         <div onClick={() => setCommandeRecuperee(null)}
-          style={{ position: 'fixed', top: nouvelleCommande ? 110 : 20, right: 20, zIndex: 9998, maxWidth: 360, animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1)', cursor: 'pointer' }}>
+          style={{ position: 'fixed', top: nouvelleCommande ? 110 : 20, right: 20, left: 20, zIndex: 9998, maxWidth: 360, marginLeft: 'auto', animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1)', cursor: 'pointer' }}>
           <div style={{ background: '#fff', borderRadius: 18, padding: '14px 18px', boxShadow: `0 24px 48px rgba(22,6,54,0.18), 0 0 0 1px ${T.hairline || T.pale}`, display: 'flex', gap: 14, alignItems: 'center' }}>
             <div style={{ width: 52, height: 52, borderRadius: 12, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 900, fontSize: 20, letterSpacing: '-0.5px', boxShadow: `0 6px 16px ${T.main}55` }}>
               #{commandeRecuperee.numero}
@@ -876,7 +876,7 @@ export default function Dashboard() {
                   <p style={{ fontWeight: 900, fontSize: '1.1rem', letterSpacing: '-1.5px', color: '#fff', lineHeight: 1 }}>yoppaa</p>
                   <span style={{ fontSize: '0.55rem', fontWeight: 700, color: T.light, background: `${T.main}44`, padding: '2px 6px', borderRadius: 100, border: `1px solid ${T.light}33` }}>PRO</span>
                 </div>
-                <p style={{ color: T.light, fontWeight: 600, fontSize: '0.68rem', opacity: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{commercant?.nom}</p>
+                <p style={{ color: T.light, fontWeight: 600, fontSize: '0.68rem', opacity: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 'clamp(100px, 25vw, 240px)' }}>{commercant?.nom}</p>
               </div>
 
               <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 3, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}>

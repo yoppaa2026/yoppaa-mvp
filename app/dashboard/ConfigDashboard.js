@@ -372,8 +372,22 @@ function TabMenu({ commercantId, toast }) {
 
   return (
     <div>
+      <style>{`
+        .tabmenu-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+        .tabmenu-header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+        @media (max-width: 600px) {
+          .tabmenu-header { flex-direction: column; align-items: stretch; }
+          .tabmenu-header-actions { justify-content: flex-start; }
+        }
+        .stock-editor-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        @media (max-width: 480px) {
+          .stock-editor-row { display: grid; grid-template-columns: 1fr auto; row-gap: 8px; column-gap: 8px; }
+          .stock-editor-row .stock-editor-label { grid-column: 1 / -1; }
+          .stock-editor-row .stock-editor-input { width: 100% !important; }
+        }
+      `}</style>
       {/* ─── En-tête (panel violet foncé YOPPAA) ─────────────────────────── */}
-      <div style={{ background: T.bgPanel, borderRadius: 14, padding: '18px 20px', marginBottom: 14, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <div className="tabmenu-header" style={{ background: T.bgPanel, borderRadius: 14, padding: '18px 20px', marginBottom: 14, color: '#fff' }}>
         <div>
           <p style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>Menu</p>
           <h2 style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', margin: 0 }}>
@@ -381,7 +395,7 @@ function TabMenu({ commercantId, toast }) {
             <span style={{ color: T.light, fontWeight: 600, fontSize: 14, marginLeft: 8 }}>· {categories.length} catégorie{categories.length > 1 ? 's' : ''}</span>
           </h2>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="tabmenu-header-actions">
           {subTab === 'categories' && (
             <button style={{ ...s.btn, background: '#fff', color: T.bgPanel }} onClick={() => { setShowCatForm(v => !v); setShowForm(false) }}>
               <Icon name="plus" size={14}/> Catégorie
@@ -926,29 +940,33 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaComm
               const consoEdit = isAuj ? dejaCommande : 0
               return (
                 <div style={{ marginTop: 8, padding: 12, background: '#FAFAFA', borderRadius: 10, border: `1px solid ${T.hairline}` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: consoEdit > 0 ? 6 : 0 }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: T.deep }}>
+                  {/* Ligne 1 : label + input + bouton primaire (sur petit écran : label en haut, input + bouton sur la ligne) */}
+                  <div className="stock-editor-row" style={{ marginBottom: 8 }}>
+                    <span className="stock-editor-label" style={{ fontSize: 12, fontWeight: 800, color: T.deep }}>
                       {JOURS_LABELS_COURT[JOURS_KEYS.indexOf(jourEdite)]} &mdash; Stock disponible
                     </span>
-                    <input type="number" min={0} value={editVal} autoFocus
+                    <input className="stock-editor-input" type="number" min={0} value={editVal} autoFocus
                       onChange={e => setEditVal(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') sauvegarder(jourEdite, true); if (e.key === 'Escape') fermerEdition() }}
-                      style={{ ...s.input, width: 80, textAlign: 'center', padding: '4px 8px', fontSize: 14, fontWeight: 700 }}/>
+                      style={{ ...s.input, width: 90, textAlign: 'center', padding: '6px 8px', fontSize: 14, fontWeight: 700 }}/>
                     <button onClick={() => sauvegarder(jourEdite, true)}
-                      style={{ ...s.btn, ...s.btnPrimary, padding: '4px 12px', fontSize: 12 }}>
+                      style={{ ...s.btn, ...s.btnPrimary, padding: '6px 14px', fontSize: 12 }}>
                       Enregistrer
                     </button>
+                  </div>
+                  {/* Ligne 2 : actions secondaires */}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <button onClick={() => sauvegarder(jourEdite, false)}
-                      style={{ ...s.btn, ...s.btnGhost, padding: '4px 12px', fontSize: 12, background: '#FEE2E2', color: '#DC2626', borderColor: '#FCA5A5' }}>
+                      style={{ ...s.btn, padding: '5px 12px', fontSize: 12, background: '#FEE2E2', color: '#DC2626', border: '1px solid #FCA5A5' }}>
                       Fermer ce jour
                     </button>
                     <button onClick={fermerEdition}
-                      style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 12 }}>
+                      style={{ ...s.btn, ...s.btnGhost, padding: '5px 12px', fontSize: 12 }}>
                       Annuler
                     </button>
                   </div>
                   {consoEdit > 0 && (
-                    <p style={{ fontSize: 11, color: T.muted, fontWeight: 600, margin: 0 }}>
+                    <p style={{ fontSize: 11, color: T.muted, fontWeight: 600, margin: '8px 0 0' }}>
                       {consoEdit} déjà commandé{consoEdit > 1 ? 's' : ''} aujourd&rsquo;hui — sera ajouté automatiquement au total brut interne.
                     </p>
                   )}

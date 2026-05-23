@@ -835,8 +835,14 @@ export default function Commander() {
   const statutStyle = {
     recupere:       { bg: '#F0FDF4', color: '#16A34A', label: 'Récupérée' },
     pret:           { bg: '#F0FDF4', color: '#16A34A', label: 'Prête à retirer' },
-    en_preparation: { bg: '#EFF6FF', color: '#2563EB', label: 'En cours de préparation' },
-    en_attente:     { bg: '#FFF7ED', color: '#EA580C', label: 'En attente de validation' },
+    en_preparation: { bg: '#EFF6FF', color: '#2563EB', label: 'En préparation' },
+    en_attente:     { bg: '#F0FDF4', color: '#16A34A', label: 'Validée' },
+  }
+  // Sous-texte chaleureux par statut (affiche sous la pastille pour donner du contexte)
+  const statutSousTexte = {
+    en_attente:     'Ton commerçant préféré va bientôt s’y mettre 🟣',
+    en_preparation: 'C’est en train de chauffer pour toi',
+    pret:           'Présente-toi à l’heure de ton créneau',
   }
 
   // Vérifie si le créneau de retrait a commencé (peut SWIPER)
@@ -1131,20 +1137,26 @@ export default function Commander() {
                   </div>
                   {commandesEnCours.map(c => {
                     const sc = statutStyle[c.statut]
+                    const sousTexte = statutSousTexte[c.statut]
                     return (
                       <div key={c.id} style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
                             <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>
                               {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.main, fontWeight: 700 }}> — commande #{c.numeroAffiche}</span>}
                             </p>
-                            <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · 🕐 ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
+                            <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
                           </div>
-                          <div style={{ textAlign: 'right' }}>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
                             <p style={{ fontWeight: 900, color: T.main, marginBottom: 4, fontSize: '0.95rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
                             <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '3px 8px', borderRadius: 100, background: sc.bg, color: sc.color }}>{sc.label}</span>
                           </div>
                         </div>
+                        {sousTexte && (
+                          <p style={{ fontSize: '0.72rem', color: T.deep, marginTop: 8, fontWeight: 600, lineHeight: 1.4 }}>
+                            {sousTexte}
+                          </p>
+                        )}
                       </div>
                     )
                   })}

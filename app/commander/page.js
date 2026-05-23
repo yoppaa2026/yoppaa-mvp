@@ -841,7 +841,7 @@ export default function Commander() {
   // Sous-texte chaleureux par statut (affiche sous la pastille pour donner du contexte)
   const statutSousTexte = {
     en_attente:     'Ton commerçant préféré va bientôt s’y mettre 🟣',
-    en_preparation: 'C’est en train de chauffer pour toi',
+    en_preparation: 'Préparation lancée, c’est entre de bonnes mains',
     pret:           'Présente-toi à l’heure de ton créneau',
   }
 

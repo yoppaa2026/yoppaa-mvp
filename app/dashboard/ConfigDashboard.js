@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const T = {
@@ -174,15 +174,22 @@ function TabMenu({ commercantId, toast }) {
   // STOCK PAR JOUR : { articleId: { lundi: { stock, actif }, mardi: ... } }
   const [stockParJourMap, setStockParJourMap] = useState({})
 
+  // 1er fetch = affiche "Chargement…". Les re-fetch (apres save/delete)
+  // ne toggle pas loading pour ne pas demonter la liste et perdre le scroll.
+  const firstLoadRef = useRef(true)
+
   useEffect(() => { fetchArticles() }, [commercantId])
 
   async function fetchArticles() {
-    setLoading(true)
+    if (firstLoadRef.current) setLoading(true)
     const { data } = await supabase.from('articles').select('*').eq('commercant_id', commercantId).order('categorie').order('nom')
     setArticles(data || [])
     const cats = [...new Set((data || []).map(a => a.categorie).filter(Boolean))]
     setCategories(cats)
-    setLoading(false)
+    if (firstLoadRef.current) {
+      setLoading(false)
+      firstLoadRef.current = false
+    }
     // Charger les stocks par jour
     const artIds = (data || []).map(a => a.id)
     if (artIds.length > 0) {

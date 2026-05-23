@@ -957,7 +957,6 @@ export default function Commander() {
                 </div>
               )}
               <p style={{ fontWeight: 900, fontSize: headerScrolled ? '1.3rem' : '2rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1, textShadow: `0 0 40px ${T.mid}66`, transition: 'font-size 0.3s ease' }}>yoppaa</p>
-              {!headerScrolled && <p style={{ color: T.light, fontSize: '0.62rem', marginTop: 3, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', opacity: 0.8 }}>Skip the wait</p>}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
               <button onClick={() => { if (!showLocManuelle) demanderGeolocalisation(); setShowLocManuelle(false) }}
@@ -1023,8 +1022,8 @@ export default function Commander() {
               padding: headerScrolled ? '0 1rem' : '0.875rem 1rem 0.75rem',
             }}>
               <p style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.5px', lineHeight: 1.25, marginBottom: 4 }}>
-                Commander avant d'arriver,<br/>
-                <span style={{ color: T.light }}>récupère sans attendre.</span>
+                Ton quartier,<br/>
+                <span style={{ color: T.light }}>dans ta poche.</span>
               </p>
               {position && (
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 100, padding: '4px 12px' }}>

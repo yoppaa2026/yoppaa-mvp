@@ -250,7 +250,7 @@ function SplashScreen({ onDone }) {
         ))}
       </div>
       <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '3.5rem', color: '#fff', letterSpacing: '-2px', lineHeight: 1, marginBottom: 10, animation: phase >= 1 ? 'wordmark-in 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards' : 'none', opacity: phase >= 1 ? 1 : 0 }}>yoppaa</p>
-      <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#C4A0F4', letterSpacing: '3px', textTransform: 'uppercase', animation: phase >= 2 ? 'tagline-in 0.5s ease forwards' : 'none', opacity: phase >= 2 ? 1 : 0 }}>Skip the wait</p>
+      <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#C4A0F4', letterSpacing: '1.5px', textTransform: 'uppercase', animation: phase >= 2 ? 'tagline-in 0.5s ease forwards' : 'none', opacity: phase >= 2 ? 1 : 0 }}>Ton quartier, dans ta poche</p>
     </div>
   )
 }
@@ -1013,31 +1013,6 @@ export default function Commander() {
             </div>
           )}
 
-          {onglet === 'accueil' && (
-            <div style={{
-              maxHeight: headerScrolled ? '0px' : '120px',
-              opacity: headerScrolled ? 0 : 1,
-              overflow: 'hidden',
-              transition: 'max-height 0.35s ease, opacity 0.25s ease',
-              padding: headerScrolled ? '0 1rem' : '0.875rem 1rem 0.75rem',
-            }}>
-              <p style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.5px', lineHeight: 1.25, marginBottom: 4 }}>
-                Ton quartier,<br/>
-                <span style={{ color: T.light }}>dans ta poche.</span>
-              </p>
-              {position && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 100, padding: '4px 12px' }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="10" r="4" fill="white" opacity="0.9"/>
-                    <path d="M12 2C7.58 2 4 5.58 4 10c0 5.25 8 14 8 14s8-8.75 8-14c0-4.42-3.58-8-8-8z" stroke="white" strokeWidth="2" fill="none" opacity="0.9"/>
-                  </svg>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff', opacity: 0.9 }}>
-                    {commercantsFiltres.length} commerce{commercantsFiltres.length > 1 ? 's' : ''} près de toi
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
 
           {onglet === 'accueil' && (
             <div style={{ padding: '0 1rem 0.75rem' }}>
@@ -1079,7 +1054,12 @@ export default function Commander() {
 
           {/* ACCUEIL */}
           {onglet === 'accueil' && (
-            <div style={{ padding: '1rem 1rem 1rem' }}>
+            <div style={{ padding: '0.875rem 1rem 1rem' }}>
+              {position && commercantsFiltres.length > 0 && (
+                <p style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 600, marginBottom: 10 }}>
+                  {commercantsFiltres.length} commerce{commercantsFiltres.length > 1 ? 's' : ''} près de toi
+                </p>
+              )}
               {commercantsFiltres.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem 0' }}>
                   <p style={{ fontSize: '2.5rem', marginBottom: 10 }}>🔍</p>

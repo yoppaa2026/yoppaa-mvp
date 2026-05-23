@@ -1154,7 +1154,7 @@ export default function CommanderSlug() {
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; width: 100%; overflow: hidden; }
         body { background: ${T.bg}; font-family: "DM Sans", sans-serif; font-size: 16px; -webkit-text-size-adjust: 100%; }
-        .page-wrap { display: flex; flex-direction: column; height: 100dvh; max-width: 640px; margin: 0 auto; background: ${T.bg}; overflow: hidden; width: 100%; position: relative; }
+        .page-wrap { display: flex; flex-direction: column; height: 100dvh; max-width: 760px; margin: 0 auto; background: ${T.bg}; overflow: hidden; width: 100%; position: relative; }
         .scroll-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
         .grid3 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         @media (min-width: 480px) { .grid3 { grid-template-columns: 1fr 1fr 1fr; } }
@@ -1165,6 +1165,10 @@ export default function CommanderSlug() {
         .cat-pill.active { color: ${T.main}; border-bottom-color: ${T.main}; }
         .art-card { transition: box-shadow 0.15s, transform 0.15s; }
         .art-card:hover { box-shadow: 0 6px 24px rgba(107,53,196,0.12) !important; transform: translateY(-1px); }
+        @media (min-width: 800px) {
+          .articles-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.625rem; align-items: start; }
+          .articles-grid > .art-card { margin-bottom: 0 !important; }
+        }
         .action-btn { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 0.5rem 1rem; border-radius: 100px; border: 1.5px solid ${T.pale}; background: #fff; color: ${T.ink}; font-weight: 700; font-size: 0.78rem; cursor: pointer; transition: all 0.15s; }
         .action-btn:hover { border-color: ${T.main}; color: ${T.main}; background: ${T.pale}; }
         @keyframes pulse { from { opacity:0.4; transform:scale(0.8); } to { opacity:1; transform:scale(1.2); } }
@@ -1403,13 +1407,15 @@ export default function CommanderSlug() {
                         <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, letterSpacing: '-0.3px' }}>{cat}</span>
                         <span style={{ fontSize: '0.7rem', fontWeight: 600, color: T.muted }}>{artsDecat.length} article{artsDecat.length > 1 ? 's' : ''}</span>
                       </div>
-                      {artsDecat.map(a => (
-                        <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle}
-                          ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
-                          stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
-                          onCommanderDemain={commanderPourJour}
-                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour}/>
-                      ))}
+                      <div className="articles-grid">
+                        {artsDecat.map(a => (
+                          <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle}
+                            ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
+                            stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
+                            onCommanderDemain={commanderPourJour}
+                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour}/>
+                        ))}
+                      </div>
                     </div>
                   )
                 })}
@@ -1419,13 +1425,15 @@ export default function CommanderSlug() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 12, paddingBottom: 10 }}>
                       <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink }}>Autres</span>
                     </div>
-                    {sansCat.map(a => (
-                      <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle}
-                        ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
-                        stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
-                        onCommanderDemain={commanderPourJour}
-                        getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour}/>
-                    ))}
+                    <div className="articles-grid">
+                      {sansCat.map(a => (
+                        <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle}
+                          ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
+                          stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
+                          onCommanderDemain={commanderPourJour}
+                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour}/>
+                      ))}
+                    </div>
                   </div>
                 )}
 

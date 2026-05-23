@@ -1015,21 +1015,21 @@ export default function Commander() {
 
 
           {onglet === 'accueil' && (
-            <div style={{ padding: '0 1rem 0.75rem' }}>
-              <div style={{ position: 'relative' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                  <circle cx="11" cy="11" r="7" stroke="rgba(255,255,255,0.6)" strokeWidth="2.2"/>
-                  <path d="M16.5 16.5L21 21" stroke="rgba(255,255,255,0.6)" strokeWidth="2.2" strokeLinecap="round"/>
+            <div style={{ padding: '1rem 1rem 0.625rem' }}>
+              <div style={{ position: 'relative', maxWidth: 520, margin: '0 auto' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                  <circle cx="11" cy="11" r="7" stroke="rgba(255,255,255,0.55)" strokeWidth="2.2"/>
+                  <path d="M16.5 16.5L21 21" stroke="rgba(255,255,255,0.55)" strokeWidth="2.2" strokeLinecap="round"/>
                 </svg>
                 <input
                   className="search-input"
-                  placeholder="Rechercher un commerce..."
+                  placeholder="Rechercher un commerce…"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  style={{ width: '100%', padding: '0.55rem 1rem 0.55rem 2.25rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', backdropFilter: 'blur(8px)' }}
+                  style={{ width: '100%', padding: '0.4rem 1rem 0.4rem 2.1rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: '0.82rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', backdropFilter: 'blur(8px)' }}
                 />
                 {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', color: '#fff', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                  <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.18)', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', color: '#fff', fontSize: '0.65rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                 )}
               </div>
             </div>

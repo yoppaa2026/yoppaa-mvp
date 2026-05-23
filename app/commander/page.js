@@ -872,6 +872,19 @@ export default function Commander() {
     return Math.max(0, Math.ceil(diffMs / 60000))
   }
 
+  // Formate les minutes en "X min" / "Xh Y min" / "Xj Yh"
+  function formatTempsRestant(min) {
+    if (min < 60) return `${min} min`
+    if (min < 1440) {
+      const h = Math.floor(min / 60)
+      const m = min % 60
+      return m === 0 ? `${h}h` : `${h}h ${m} min`
+    }
+    const j = Math.floor(min / 1440)
+    const h = Math.floor((min % 1440) / 60)
+    return h === 0 ? `${j}j` : `${j}j ${h}h`
+  }
+
   return (
     <>
       {showSplash && <SplashScreen onDone={onSplashDone}/>}
@@ -1119,7 +1132,7 @@ export default function Commander() {
                       ) : (
                         <div style={{ background: T.bgPanel, borderRadius: 14, padding: '0.875rem 1rem', color: '#fff', display: 'flex', flexDirection: 'column', gap: 6 }}>
                           <p style={{ fontSize: '0.78rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>
-                            ⏱  Plus que {min} min avant ton créneau
+                            ⏱  Plus que {formatTempsRestant(min)} avant ton créneau
                           </p>
                           <p style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.4 }}>
                             Présente-toi à partir de {heureCreneau}. Merci {prenom} 🟣

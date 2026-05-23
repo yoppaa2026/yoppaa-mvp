@@ -592,6 +592,12 @@ export default function Commander() {
   const [clientId, setClientId] = useState(null)
   const [clientCommandes, setClientCommandes] = useState([])
   const [pickupCommande, setPickupCommande] = useState(null)
+  // Tick minute pour rafraichir le compteur "Plus que X min avant ton créneau"
+  const [, setNowTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(t => t + 1), 30000)
+    return () => clearInterval(id)
+  }, [])
 
   useEffect(() => {
     const savedOnglet = localStorage.getItem('yoppaa_onglet')
@@ -827,10 +833,37 @@ export default function Commander() {
   const card = { background: '#fff', borderRadius: 14, padding: '1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 6px rgba(107,53,196,0.05)' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }
   const statutStyle = {
-    recupere:       { bg: '#F0FDF4', color: '#16A34A', label: '✓ Récupérée' },
-    pret:           { bg: T.pale,    color: T.main,    label: '📦 Prête' },
-    en_preparation: { bg: '#EFF6FF', color: '#2563EB', label: '🟠 En prépa' },
-    en_attente:     { bg: '#FFF7ED', color: '#EA580C', label: '🔴 En attente' },
+    recupere:       { bg: '#F0FDF4', color: '#16A34A', label: 'Récupérée' },
+    pret:           { bg: '#F0FDF4', color: '#16A34A', label: 'Prête à retirer' },
+    en_preparation: { bg: '#EFF6FF', color: '#2563EB', label: 'En cours de préparation' },
+    en_attente:     { bg: '#FFF7ED', color: '#EA580C', label: 'En attente de validation' },
+  }
+
+  // Vérifie si le créneau de retrait a commencé (peut SWIPER)
+  function peutRetirer(commande) {
+    if (!commande?.creneau?.heure_debut) return true
+    const dateRef = commande.date_commande || commande.created_at
+    const dateStr = typeof dateRef === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateRef)
+      ? dateRef
+      : new Date(dateRef).toISOString().slice(0, 10)
+    const [h, m] = commande.creneau.heure_debut.slice(0,5).split(':').map(Number)
+    const target = new Date(dateStr + 'T00:00:00')
+    target.setHours(h, m, 0, 0)
+    return new Date() >= target
+  }
+
+  // Minutes restantes avant le début du créneau (positif = pas encore l'heure)
+  function minutesAvantCreneau(commande) {
+    if (!commande?.creneau?.heure_debut) return 0
+    const dateRef = commande.date_commande || commande.created_at
+    const dateStr = typeof dateRef === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateRef)
+      ? dateRef
+      : new Date(dateRef).toISOString().slice(0, 10)
+    const [h, m] = commande.creneau.heure_debut.slice(0,5).split(':').map(Number)
+    const target = new Date(dateStr + 'T00:00:00')
+    target.setHours(h, m, 0, 0)
+    const diffMs = target - new Date()
+    return Math.max(0, Math.ceil(diffMs / 60000))
   }
 
   return (
@@ -1050,37 +1083,51 @@ export default function Commander() {
               {commandesASwiper.length > 0 && (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>📦 Prêtes à récupérer</span>
+                    <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>Prêtes à retirer</span>
                     <span style={{ background: '#16A34A', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{commandesASwiper.length}</span>
                   </div>
-                  {commandesASwiper.map(c => (
+                  {commandesASwiper.map(c => {
+                    const ok = peutRetirer(c)
+                    const min = ok ? 0 : minutesAvantCreneau(c)
+                    const heureCreneau = c.creneau?.heure_debut?.slice(0,5)
+                    const prenom = client.prenom || client.nom?.split(' ')[0] || 'Yopper'
+                    return (
                     <div key={c.id} style={{ background: 'linear-gradient(135deg, #F0FDF4, #fff)', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '0.75rem', border: '2px solid #16A34A33', boxShadow: '0 4px 16px rgba(22,163,74,0.1)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem' }}>
                         <div>
                           <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>
-                            {c.commercant?.nom}
-                            {c.numeroAffiche && <span style={{ color: T.main, marginLeft: 6 }}>#{c.numeroAffiche}</span>}
+                            {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.main, fontWeight: 700 }}> — commande #{c.numeroAffiche}</span>}
                           </p>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#F0FDF4', borderRadius: 100, padding: '3px 10px', border: '1px solid #16A34A22' }}>
                             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A', animation: 'dot-pulse 2s ease-in-out infinite' }}/>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#16A34A' }}>Prête{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</span>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#16A34A' }}>Prête à retirer{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</span>
                           </span>
                         </div>
                         <p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
                       </div>
-                      {/* FIX BOUTON : suppression de "YOP!" dans le label */}
-                      <button onClick={() => setPickupCommande(c)}
-                        style={{ width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.95rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 16px ${T.main}44`, letterSpacing: '-0.3px' }}>
-                        🟣 Retirer ma commande →
-                      </button>
+                      {ok ? (
+                        <button onClick={() => setPickupCommande(c)}
+                          style={{ width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.95rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 16px ${T.main}44`, letterSpacing: '-0.3px' }}>
+                          Retirer ma commande →
+                        </button>
+                      ) : (
+                        <div style={{ background: T.bgPanel, borderRadius: 14, padding: '0.875rem 1rem', color: '#fff', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <p style={{ fontSize: '0.78rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>
+                            ⏱  Plus que {min} min avant ton créneau
+                          </p>
+                          <p style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.4 }}>
+                            Présente-toi à partir de {heureCreneau}. Merci {prenom} 🟣
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  ))}
+                  )})}
                 </>
               )}
               {commandesEnCours.length > 0 && (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, marginTop: commandesASwiper.length > 0 ? '1rem' : 0 }}>
-                    <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>🕐 En cours</span>
+                    <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>En cours</span>
                   </div>
                   {commandesEnCours.map(c => {
                     const sc = statutStyle[c.statut]
@@ -1089,8 +1136,7 @@ export default function Commander() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
                             <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>
-                              {c.commercant?.nom}
-                              {c.numeroAffiche && <span style={{ color: T.main, marginLeft: 6 }}>#{c.numeroAffiche}</span>}
+                              {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.main, fontWeight: 700 }}> — commande #{c.numeroAffiche}</span>}
                             </p>
                             <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · 🕐 ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
                           </div>
@@ -1122,8 +1168,7 @@ export default function Commander() {
                     <div key={c.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.875rem' }}>
-                          {c.commercant?.nom}
-                          {c.numeroAffiche && <span style={{ color: T.muted, marginLeft: 6 }}>#{c.numeroAffiche}</span>}
+                          {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.muted, fontWeight: 600 }}> — commande #{c.numeroAffiche}</span>}
                         </p>
                         <p style={{ fontSize: '0.7rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
                       </div>

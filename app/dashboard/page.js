@@ -112,6 +112,25 @@ function jouerSon() {
   envoyerNotification('🔔 Nouvelle commande !', 'Une nouvelle commande vient d\'arriver sur Yoppaa.')
 }
 
+// Son distinct pour le retrait client (yop.mp3 — plus court, plus festif)
+function jouerSonRetrait() {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification('Commande récupérée !', {
+        body: 'Le client vient de retirer sa commande.',
+        icon: '/icon-pro-192.png',
+        tag: 'yoppaa-retrait',
+        renotify: true,
+      })
+    } catch(e) {}
+  }
+  try {
+    const a = new Audio('/sounds/yop.mp3')
+    a.volume = 0.8
+    a.play().catch(() => {})
+  } catch(e) {}
+}
+
 // ─── Icônes SVG ───────────────────────────────────────────────────────────────
 function IconCommandes({ size = 20, color = '#fff', opacity = 1 }) {
   return (
@@ -154,7 +173,7 @@ function IconClock({ size = 12, color = 'currentColor' }) {
 }
 
 // ─── Carte commande ───────────────────────────────────────────────────────────
-function CarteCommande({ commande, numero, onChangerStatut }) {
+function CarteCommande({ commande, numero, onChangerStatut, modeHistorique = false }) {
   const statut = STATUTS[commande.statut] || STATUTS['en_attente']
   const { couleur } = statut
   const heure = commande.creneau
@@ -170,8 +189,14 @@ function CarteCommande({ commande, numero, onChangerStatut }) {
     return d.toLocaleDateString('fr-BE', { weekday: 'short', day: '2-digit', month: '2-digit' })
   })() : null
 
-  // Prénom uniquement
+  // En historique : nom complet ; sinon prénom seul (gain de place sur la grille du jour)
   const prenom = commande.client_nom?.split(' ')[0] || commande.client_nom
+  const nomAffiche = modeHistorique ? (commande.client_nom || prenom) : prenom
+
+  // Heure de retrait (swipe client) = updated_at quand statut = recupere
+  const heureRetrait = (modeHistorique && commande.statut === 'recupere' && commande.updated_at)
+    ? new Date(commande.updated_at).toLocaleString('fr-BE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : null
 
   return (
     <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: `0 2px 12px ${couleur.border}14`, border: `1.5px solid ${couleur.border}22`, transition: 'transform 0.15s, box-shadow 0.15s' }}
@@ -187,11 +212,17 @@ function CarteCommande({ commande, numero, onChangerStatut }) {
               {dateFormatee && <span style={{ fontSize: '0.55rem', fontWeight: 700, opacity: 0.85, textAlign: 'center', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{dateFormatee}</span>}
             </div>
             <div>
-              <p style={{ fontWeight: 800, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{prenom}</p>
+              <p style={{ fontWeight: 800, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{nomAffiche}</p>
               {heure && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
                   <IconClock size={11} color={couleur.border}/>
                   <span style={{ fontSize: '0.75rem', color: couleur.border, fontWeight: 700 }}>{heure}</span>
+                </div>
+              )}
+              {heureRetrait && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Retiré</span>
+                  <span style={{ fontSize: '0.72rem', color: '#2563EB', fontWeight: 700 }}>{heureRetrait}</span>
                 </div>
               )}
               {commande.client_telephone && (
@@ -389,10 +420,14 @@ export default function Dashboard() {
         anciennes.forEach(ancien => {
           const nouvelle = triees.find(n => n.id === ancien.id)
           if (nouvelle?.statut === 'recupere') {
-            const todayKey = dateKey(new Date())
-            const nbDuJour = triees.filter(c => dateKey(c.date_commande || c.created_at) === todayKey).sort((a,b) => new Date(a.created_at) - new Date(b.created_at))
-            const num = nbDuJour.findIndex(c => c.id === ancien.id) + 1
+            // numero_commande DB prioritaire, sinon position du jour
+            const jourC = dateKey(nouvelle.date_commande || nouvelle.created_at)
+            const nbDuJour = triees
+              .filter(c => dateKey(c.date_commande || c.created_at) === jourC)
+              .sort((a,b) => (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '') || new Date(a.created_at) - new Date(b.created_at))
+            const num = nouvelle.numero_commande || (nbDuJour.findIndex(c => c.id === ancien.id) + 1)
             const prenom = nouvelle.client_nom?.split(' ')[0] || 'Le Yopper'
+            if (notificationsActives) jouerSonRetrait()
             setCommandeRecuperee({ nom: prenom, numero: num })
             setTimeout(() => setCommandeRecuperee(null), 8000)
           }
@@ -442,9 +477,17 @@ export default function Dashboard() {
   const jourActif = (jourSelectionne && joursDispos.includes(jourSelectionne)) ? jourSelectionne : todayKey
 
   // Commandes hors horizon = historique
+  // Tri : 1) date décroissante (récente d'abord) 2) numero_commande ascendant
+  // (chronologie de prise de commande à l'intérieur d'un même jour)
   const commandesHistorique = commandes
     .filter(c => !joursDispos.includes(dateKey(c.date_commande || c.created_at)))
-    .sort((a, b) => new Date(b.date_commande || b.created_at) - new Date(a.date_commande || a.created_at))
+    .sort((a, b) => {
+      const dateA = a.date_commande || a.created_at
+      const dateB = b.date_commande || b.created_at
+      const cmpDate = new Date(dateB) - new Date(dateA)
+      if (cmpDate !== 0) return cmpDate
+      return (a.numero_commande || 0) - (b.numero_commande || 0)
+    })
 
   const commandesDuJour = modeHistorique
     ? commandesHistorique
@@ -698,31 +741,51 @@ export default function Dashboard() {
         }
 
         @keyframes slideDown { from { transform: translateY(-100%) } to { transform: translateY(0) } }
+        @keyframes slideInRight { from { transform: translateX(120%); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+        @keyframes wiggle { 0%,100% { transform: rotate(-8deg) } 50% { transform: rotate(8deg) } }
         @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.5 } }
         @keyframes dotPulse { from { opacity:0.4; transform:scale(0.8); } to { opacity:1; transform:scale(1.2); } }
       `}</style>
 
-      {/* Bannière nouvelle commande */}
+      {/* Notif NOUVELLE COMMANDE — card flottante en haut à droite */}
       {nouvelleCommande && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', padding: '0.875rem', textAlign: 'center', fontWeight: 800, fontSize: '1rem', boxShadow: `0 4px 30px ${T.main}88`, animation: 'slideDown 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-          <span style={{ animation: 'pulse 1s ease infinite' }}>🔔</span>
-          Nouvelle commande reçue !
+        <div onClick={() => setNouvelleCommande(false)}
+          style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, maxWidth: 360, animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1)', cursor: 'pointer' }}>
+          <div style={{ background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 60%, ${T.main} 100%)`, borderRadius: 18, padding: '16px 18px', color: '#fff', boxShadow: `0 24px 48px rgba(22,6,54,0.4), 0 0 0 1px ${T.main}55`, display: 'flex', gap: 14, alignItems: 'center' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'wiggle 0.7s ease-in-out infinite alternate' }}>
+                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 01-3.46 0"/>
+              </svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 10, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>Nouvelle commande</p>
+              <p style={{ fontSize: 16, fontWeight: 900, color: '#fff', letterSpacing: '-0.3px', margin: 0 }}>À traiter maintenant</p>
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[T.light, T.mid, '#fff'].map((c, i) => (
+                <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: c, animation: `dotPulse 0.8s ease-in-out ${i*0.15}s infinite alternate` }}/>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Bannière commande récupérée */}
+      {/* Notif COMMANDE RÉCUPÉRÉE — card flottante en haut à droite (sans cacher la liste) */}
       {commandeRecuperee && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9998, background: 'linear-gradient(135deg, #16A34A, #22C55E)', color: '#fff', padding: '0.875rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '1rem', boxShadow: '0 4px 30px rgba(22,163,74,0.5)', animation: 'slideDown 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-          <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-            {[{c:'#fff',o:0.5,s:6},{c:'#fff',o:0.8,s:8},{c:'#fff',o:0.5,s:6}].map((d,i) => (
-              <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, opacity: d.o, animation: `pulse ${0.6 + i*0.15}s ease-in-out infinite alternate` }}/>
-            ))}
-          </div>
-          <span>🎉 {commandeRecuperee.nom} a récupéré la commande #{commandeRecuperee.numero} !</span>
-          <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-            {[{c:'#fff',o:0.5,s:6},{c:'#fff',o:0.8,s:8},{c:'#fff',o:0.5,s:6}].map((d,i) => (
-              <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, opacity: d.o, animation: `pulse ${0.6 + i*0.15}s ease-in-out infinite alternate` }}/>
-            ))}
+        <div onClick={() => setCommandeRecuperee(null)}
+          style={{ position: 'fixed', top: nouvelleCommande ? 110 : 20, right: 20, zIndex: 9998, maxWidth: 360, animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1)', cursor: 'pointer' }}>
+          <div style={{ background: '#fff', borderRadius: 18, padding: '14px 18px', boxShadow: `0 24px 48px rgba(22,6,54,0.18), 0 0 0 1px ${T.hairline || T.pale}`, display: 'flex', gap: 14, alignItems: 'center' }}>
+            <div style={{ width: 52, height: 52, borderRadius: 12, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 900, fontSize: 20, letterSpacing: '-0.5px', boxShadow: `0 6px 16px ${T.main}55` }}>
+              #{commandeRecuperee.numero}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 10, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>Récupérée</p>
+              <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{commandeRecuperee.nom}</p>
+            </div>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+            </div>
           </div>
         </div>
       )}
@@ -928,14 +991,20 @@ export default function Dashboard() {
                   </div>
                 )}
                 <div className="commandes-grid">
-                  {commandesFiltrees.map(commande => (
-                    <CarteCommande
-                      key={commande.id}
-                      commande={commande}
-                      numero={getNumeroJour(commandes, commande.id, jourActif)}
-                      onChangerStatut={changerStatut}
-                    />
-                  ))}
+                  {commandesFiltrees.map(commande => {
+                    // En historique, calculer le numéro avec le jour de la commande,
+                    // pas le jour actif (sinon le filtre retourne "?")
+                    const jourCommande = dateKey(commande.date_commande || commande.created_at)
+                    return (
+                      <CarteCommande
+                        key={commande.id}
+                        commande={commande}
+                        numero={getNumeroJour(commandes, commande.id, modeHistorique ? jourCommande : jourActif)}
+                        onChangerStatut={changerStatut}
+                        modeHistorique={modeHistorique}
+                      />
+                    )
+                  })}
                 </div>
               </>
             )}

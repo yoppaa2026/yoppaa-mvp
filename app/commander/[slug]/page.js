@@ -528,6 +528,7 @@ export default function CommanderSlug() {
   // FIX STOCK SYNC : quantités déjà commandées par d'autres clients pour le jour sélectionné
   const [commandesParArticleJour, setCommandesParArticleJour] = useState({})
   const [photoCouverture, setPhotoCouverture] = useState(null)
+  const [galerie, setGalerie] = useState([])
   const [dealActif, setDealActif] = useState(null)
   const [fermetures, setFermetures] = useState([])
   const [derniereCommande, setDerniereCommande] = useState(null)
@@ -580,6 +581,7 @@ export default function CommanderSlug() {
     setOptionsParArticle(data.options)
     setStocksJour(data.stocksJour)
     setPhotoCouverture(data.photoCouverture)
+    setGalerie(data.galerie || [])
     setDealActif(data.dealActif)
     setFermetures(data.fermetures)
     buildJoursDispos(data.commercant, data.creneaux, data.fermetures)
@@ -655,6 +657,7 @@ export default function CommanderSlug() {
     }
 
     const couverture = (photosData||[]).find(p => p.type === 'couverture') || null
+    const galerieAutres = (photosData||[]).filter(p => p.type !== 'couverture' && p.url)
     const deal = dealsData?.[0] || null
 
     const cacheData = {
@@ -666,6 +669,7 @@ export default function CommanderSlug() {
       options: opts,
       stocksJour: stocksJourMap,
       photoCouverture: couverture,
+      galerie: galerieAutres,
       dealActif: deal,
       fermetures: fermeturesData || [],
     }
@@ -1172,6 +1176,10 @@ export default function CommanderSlug() {
         .cat-pill.active { color: ${T.main}; border-bottom-color: ${T.main}; }
         .art-card { transition: box-shadow 0.15s, transform 0.15s; }
         .art-card:hover { box-shadow: 0 6px 24px rgba(107,53,196,0.12) !important; transform: translateY(-1px); }
+        /* Hero plus généreux : 240px mobile, 300px tablette+ */
+        .fiche-hero { height: 240px; }
+        @media (min-width: 600px) { .fiche-hero { height: 300px; } }
+        @media (min-width: 900px) { .fiche-hero { height: 340px; } }
         @media (min-width: 800px) {
           .articles-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.625rem; align-items: start; }
           .articles-grid > .art-card { margin-bottom: 0 !important; }
@@ -1272,21 +1280,47 @@ export default function CommanderSlug() {
             <>
               <div ref={headerRef}>
 
-                <div style={{ position: 'relative', height: 220, overflow: 'hidden' }}>
+                <div className="fiche-hero" style={{ position: 'relative', overflow: 'hidden' }}>
                   {photoCouverture?.url
                     ? <img src={photoCouverture.url} alt={commercant.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                     : (
                       <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)` }}>
                         <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}55 0%, transparent 60%), radial-gradient(circle at 20% 80%, ${T.light}22 0%, transparent 50%)` }}/>
-                        <div style={{ position: 'absolute', top: 14, right: 14, display: 'flex', gap: 5 }}>
-                          {[{c:'#fff',o:0.35},{c:T.light,o:0.8},{c:T.mid,o:0.9}].map((d,i) => (
-                            <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: d.c, opacity: d.o }}/>
-                          ))}
-                        </div>
                       </div>
                     )
                   }
-                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: 'linear-gradient(to top, rgba(22,6,54,0.7), transparent)' }}/>
+                  {/* Pastille type + badge Vitrine en haut */}
+                  <div style={{ position: 'absolute', top: 16, left: 16, right: 16, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    {commercant.type && (
+                      <span style={{ fontSize: '0.62rem', fontWeight: 800, color: '#fff', background: 'rgba(22,6,54,0.55)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.25)', padding: '4px 10px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                        {commercant.type}
+                      </span>
+                    )}
+                    {isVitrine && (
+                      <span style={{ fontSize: '0.62rem', fontWeight: 800, color: '#fff', background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.3)', padding: '4px 10px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                        Vitrine
+                      </span>
+                    )}
+                  </div>
+                  {/* Voile dégradé bas + nom du commerce overlayé */}
+                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '60px 18px 16px', background: 'linear-gradient(to top, rgba(22,6,54,0.85), rgba(22,6,54,0.4) 60%, transparent)' }}>
+                    <h1 style={{ fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.6px', lineHeight: 1.1, textShadow: '0 2px 16px rgba(0,0,0,0.4)', margin: 0 }}>
+                      {commercant.nom}
+                    </h1>
+                    {commercant.horaires_detail && (() => {
+                      const j = jourActuel()
+                      const h = commercant.horaires_detail[j]
+                      if (!h) return null
+                      return (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: h.ouvert ? 'rgba(22,163,74,0.95)' : 'rgba(220,38,38,0.95)', backdropFilter: 'blur(8px)', borderRadius: 100, padding: '4px 11px', marginTop: 8 }}>
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', animation: h.ouvert ? 'dot-pulse 2s ease infinite' : 'none' }}/>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#fff' }}>
+                            {h.ouvert ? `Ouvert · ${h.debut.slice(0,5)}–${h.fin.slice(0,5)}` : 'Fermé'}
+                          </span>
+                        </div>
+                      )
+                    })()}
+                  </div>
                 </div>
 
                 {dealActif && (
@@ -1305,56 +1339,42 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {/* Card flottante */}
-                <div style={{ background: '#fff', margin: '0 12px', marginTop: -20, borderRadius: 20, padding: '1rem 1.125rem', boxShadow: `0 8px 32px rgba(22,6,54,0.2), 0 2px 8px ${T.main}22`, border: `1px solid ${T.pale}`, position: 'relative' }}>
-
-                  <div style={{ position: 'absolute', top: -24, right: 16, width: 48, height: 48, borderRadius: 14, background: commercant.logo_url ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, border: '3px solid #fff', boxShadow: `0 4px 16px rgba(0,0,0,0.15)`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>
-                    {commercant.logo_url
-                      ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                      : '🏪'
-                    }
-                  </div>
-
-                  <div style={{ paddingRight: 60 }}>
-                    {commercant.type && (
-                      <span style={{ fontSize: '0.65rem', fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100, display: 'inline-block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                        {commercant.type}
-                      </span>
-                    )}
-                    <h1 style={{ fontWeight: 900, fontSize: '1.3rem', color: T.ink, letterSpacing: '-0.5px', lineHeight: 1.1, marginBottom: 6 }}>
-                      {commercant.nom}
-                    </h1>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Etoiles note={notesInfo.moyenne} taille={12}/>
-                      <span style={{ fontSize: '0.7rem', color: T.muted }}>{notesInfo.count > 0 ? `${notesInfo.count} avis` : 'Pas d\'avis'}</span>
+                {/* Card flottante : logo gros + avis + actions */}
+                <div style={{ background: '#fff', margin: '-32px 12px 0', borderRadius: 22, padding: '1.125rem 1.25rem 1rem', boxShadow: `0 12px 36px rgba(22,6,54,0.18), 0 2px 8px ${T.main}22`, border: `1px solid ${T.pale}`, position: 'relative' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{ width: 64, height: 64, borderRadius: 16, background: commercant.logo_url ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, border: '3px solid #fff', boxShadow: `0 6px 20px rgba(22,6,54,0.22)`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {commercant.logo_url
+                        ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                        : <span style={{ fontSize: '1.8rem' }}>🍫</span>
+                      }
                     </div>
-                    {commercant.horaires_detail && (() => {
-                      const j = jourActuel()
-                      const h = commercant.horaires_detail[j]
-                      if (!h) return null
-                      return (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: h.ouvert ? '#F0FDF4' : '#FEF2F2', borderRadius: 100, padding: '3px 8px', border: `1px solid ${h.ouvert ? '#16A34A33' : '#DC262633'}` }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: h.ouvert ? '#16A34A' : '#DC2626', flexShrink: 0 }}/>
-                          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: h.ouvert ? '#16A34A' : '#DC2626' }}>
-                            {h.ouvert ? `Ouvert · ${h.debut.slice(0,5)}–${h.fin.slice(0,5)}` : 'Fermé'}
-                          </span>
-                        </div>
-                      )
-                    })()}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <Etoiles note={notesInfo.moyenne} taille={14}/>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: T.ink }}>
+                          {notesInfo.moyenne > 0 ? notesInfo.moyenne.toFixed(1) : '—'}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', color: T.muted }}>
+                          {notesInfo.count > 0 ? `· ${notesInfo.count} avis` : '· Pas encore d\'avis'}
+                        </span>
+                      </div>
+                      {commercant.adresse && (
+                        <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.35, margin: 0, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          📍 {commercant.adresse}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   {commercant.description && (
-                    <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.5, marginBottom: 10 }}>{commercant.description}</p>
+                    <p style={{ fontSize: '0.85rem', color: T.deep, lineHeight: 1.55, margin: '12px 0 0' }}>{commercant.description}</p>
                   )}
 
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
                     {commercant.adresse && (
                       <button className="action-btn" onClick={ouvrirMaps}>
                         <span>📍</span>
-                        <span>{commercant.adresse}</span>
+                        <span>Itinéraire</span>
                       </button>
                     )}
                     {commercant.telephone && (
@@ -1365,6 +1385,22 @@ export default function CommanderSlug() {
                     )}
                   </div>
                 </div>
+
+                {/* Galerie photos (si présentes) — carrousel horizontal */}
+                {galerie.length > 0 && (
+                  <div style={{ marginTop: 18, paddingLeft: 12 }}>
+                    <p style={{ fontSize: '0.7rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8, paddingRight: 12 }}>
+                      📸 La maison en images
+                    </p>
+                    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, paddingRight: 12, scrollbarWidth: 'none' }}>
+                      {galerie.map(p => (
+                        <div key={p.id} style={{ flexShrink: 0, width: 200, height: 140, borderRadius: 14, overflow: 'hidden', boxShadow: '0 4px 16px rgba(22,6,54,0.12)', border: `1px solid ${T.pale}` }}>
+                          <img src={p.url} alt={p.legende || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ height: 12, background: T.bg }}/>
 

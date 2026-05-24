@@ -23,11 +23,13 @@ const TEMPS_PAR_TYPE = {
 }
 function getTemps(type) { return TEMPS_PAR_TYPE[type] || 7 }
 
-const CATEGORIES = ['Tous', 'Boulangerie', 'Coffee shop', 'Sandwicherie', 'Snack', 'Friterie', 'Pizzeria', 'Épicerie', 'Traiteur']
+const CATEGORIES = ['Tous', 'Boulangerie', 'Pâtisserie', 'Chocolatier', 'Coffee shop', 'Sandwicherie', 'Snack', 'Friterie', 'Pizzeria', 'Épicerie', 'Traiteur', 'Boucherie', 'Fleuriste', 'Pharmacie', 'Food truck']
 
 const TYPE_BADGE = {
   'Boulangerie':              { bg: '#FFF3CD', color: '#856404' },
+  'Pâtisserie':               { bg: '#FEF3C7', color: '#92400E' },
   'Boulangerie & Pâtisserie': { bg: '#FEF3C7', color: '#92400E' },
+  'Chocolatier':              { bg: '#F3E8DC', color: '#5C2E0E' },
   'Sandwicherie':             { bg: '#CCE5FF', color: '#004085' },
   'Snack':                    { bg: '#D4EDDA', color: '#155724' },
   'Friterie':                 { bg: '#FEF9C3', color: '#854D0E' },
@@ -35,7 +37,10 @@ const TYPE_BADGE = {
   'Coffee shop':              { bg: '#EDE0FF', color: '#2D0F6B' },
   'Épicerie':                 { bg: '#E0E7FF', color: '#3730A3' },
   'Traiteur':                 { bg: '#FCE7F3', color: '#9D174D' },
+  'Boucherie':                { bg: '#FEE4E2', color: '#7F1D1D' },
+  'Fleuriste':                { bg: '#FCE7F3', color: '#831843' },
   'Pharmacie':                { bg: '#D1FAE5', color: '#065F46' },
+  'Food truck':               { bg: '#FFEDD5', color: '#7C2D12' },
 }
 function getBadge(type) { return TYPE_BADGE[type] || { bg: T.pale, color: T.deep } }
 function parseTypes(type) {

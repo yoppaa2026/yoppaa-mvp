@@ -508,7 +508,9 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
   }
 
   const physique = getStatutPhysique()
-  const resa = getStatutResa()
+  // Pas de réservation pour les commerçants en plan Vitrine (lecture seule)
+  const isVitrine = c.plan === 'vitrine'
+  const resa = isVitrine ? null : getStatutResa()
 
   return (
     <div onClick={() => onSelect(c)}
@@ -516,12 +518,18 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
       onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(107,53,196,0.14)' }}
       onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(107,53,196,0.07)' }}>
 
-      <div style={{ height: 5, background: `linear-gradient(90deg, ${T.main}, ${T.mid})` }}/>
+      {/* Bande haute : violet vif si Click & Collect actif, gris-violet doux si Vitrine */}
+      <div style={{ height: 5, background: isVitrine ? `linear-gradient(90deg, ${T.light}, ${T.pale})` : `linear-gradient(90deg, ${T.main}, ${T.mid})` }}/>
 
       <div style={{ padding: '0.875rem 1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontWeight: 900, color: T.ink, margin: '0 0 6px', fontSize: '1rem', letterSpacing: '-0.3px' }}>{c.nom}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+              <p style={{ fontWeight: 900, color: T.ink, margin: 0, fontSize: '1rem', letterSpacing: '-0.3px' }}>{c.nom}</p>
+              {isVitrine && (
+                <span style={{ fontSize: '0.58rem', fontWeight: 800, color: T.muted, background: '#F3F4F6', padding: '2px 7px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px', border: '1px solid #E5E7EB' }}>Vitrine</span>
+              )}
+            </div>
             <Badges type={c.type}/>
             {c.description && <p style={{ fontSize: '0.78rem', color: T.muted, margin: '6px 0 0', lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.description}</p>}
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>

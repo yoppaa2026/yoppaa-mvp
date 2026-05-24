@@ -1481,7 +1481,7 @@ export default function CommanderSlug() {
                       Ce commerce n&rsquo;est pas encore commandable en ligne
                     </p>
                     <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.5, marginBottom: 16 }}>
-                      Envie de gagner du temps&nbsp;? Dis à {commercant.nom} que tu veux pouvoir commander à l&rsquo;avance via Yoppaa.
+                      Envie de gagner du temps chez <strong style={{ color: '#fff', fontWeight: 800 }}>{commercant.nom}</strong>&nbsp;? Fais-leur savoir que tu veux pouvoir commander à l&rsquo;avance via Yoppaa.
                     </p>
                     <button onClick={suggererClickCollect}
                       style={{ background: '#fff', border: 'none', borderRadius: 100, padding: '12px 22px', color: T.bgPanel, fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 16px rgba(0,0,0,0.18)' }}>

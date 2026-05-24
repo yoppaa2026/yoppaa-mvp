@@ -333,7 +333,7 @@ function HorairesSection({ horaires }) {
 }
 
 // ─── ArticleRow ───────────────────────────────────────────────────────────────
-function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour }) {
+function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false }) {
   const groupes = optionsParArticle[article.id] || []
   const hasOptions = groupes.length > 0
   const [showOptions, setShowOptions] = useState(false)
@@ -451,7 +451,7 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
           })()}
         </div>
 
-        {!epuiseComplet && !inactifCeJour && !epuiseAujourdhui && (
+        {!modeVitrine && !epuiseComplet && !inactifCeJour && !epuiseAujourdhui && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
             {hasOptions ? (
               <>
@@ -502,6 +502,9 @@ export default function CommanderSlug() {
 
   const [etape, setEtape] = useState(2)
   const [commercant, setCommercant] = useState(null)
+  // Mode Vitrine : commerce non commandable en ligne (plan = 'vitrine')
+  // → lecture seule, pas de panier, CTA "Suggérer Click & Collect" en bas
+  const [suggererToast, setSuggererToast] = useState(false)
   const [articles, setArticles] = useState([])
   const [creneaux, setCreneaux] = useState([])
   const [avisCommerce, setAvisCommerce] = useState([])
@@ -1142,10 +1145,14 @@ export default function CommanderSlug() {
     if (!commercant?.telephone) return
     window.open(`tel:${commercant.telephone}`)
   }
-  function whatsapp() {
-    if (!commercant?.telephone) return
-    const num = commercant.telephone.replace(/\D/g, '').replace(/^0/, '32')
-    window.open(`https://wa.me/${num}`)
+
+  // Mode Vitrine : commerce non commandable en ligne (plan = 'vitrine')
+  const isVitrine = commercant?.plan === 'vitrine'
+
+  function suggererClickCollect() {
+    // TODO : connecter à une table suggestions_click_collect + email Yoppaa
+    setSuggererToast(true)
+    setTimeout(() => setSuggererToast(false), 4000)
   }
 
   return (
@@ -1203,6 +1210,13 @@ export default function CommanderSlug() {
         </div>
       )}
 
+      {/* Toast confirmation suggestion Click & Collect (mode Vitrine) */}
+      {suggererToast && (
+        <div style={{ position: 'fixed', bottom: 30, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, background: T.bgPanel, color: '#fff', padding: '14px 22px', borderRadius: 14, fontWeight: 700, fontSize: 14, boxShadow: '0 12px 32px rgba(22,6,54,0.4)', animation: 'fadeUp 0.3s ease', maxWidth: 340, textAlign: 'center', lineHeight: 1.4 }}>
+          Merci&nbsp;! On en parle à {commercant?.nom} et à l&rsquo;équipe Yoppaa 🟣
+        </div>
+      )}
+
       <div className="page-wrap">
 
         {/* ── TOPBAR ── */}
@@ -1220,7 +1234,7 @@ export default function CommanderSlug() {
             )}
           </div>
 
-          {etape < 4 && (
+          {etape < 4 && !isVitrine && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
               {[{ n: 1, label: 'Menu' }, { n: 2, label: 'Créneau' }].map((s, i) => {
                 const done = etape > s.n + 1
@@ -1344,16 +1358,10 @@ export default function CommanderSlug() {
                       </button>
                     )}
                     {commercant.telephone && (
-                      <>
-                        <button className="action-btn" onClick={appeler}>
-                          <span>📞</span>
-                          <span>Appeler</span>
-                        </button>
-                        <button className="action-btn" onClick={whatsapp}>
-                          <span>💬</span>
-                          <span>WhatsApp</span>
-                        </button>
-                      </>
+                      <button className="action-btn" onClick={appeler}>
+                        <span>📞</span>
+                        <span>Appeler</span>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -1361,10 +1369,17 @@ export default function CommanderSlug() {
                 <div style={{ height: 12, background: T.bg }}/>
 
                 {commercant.horaires_detail && <HorairesSection horaires={commercant.horaires_detail}/>}
+
+                {/* Mention discrète en mode Vitrine */}
+                {isVitrine && (
+                  <div style={{ background: T.pale, borderTop: `1px solid ${T.main}22`, borderBottom: `1px solid ${T.main}22`, padding: '10px 16px', fontSize: 12, color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
+                    Envie de commander à l&rsquo;avance&nbsp;? Demandez à <strong style={{ color: T.bgPanel, fontWeight: 800 }}>{commercant.nom}</strong> d&rsquo;activer Yoppaa Click &amp; Collect.
+                  </div>
+                )}
               </div>
 
               {/* Sélecteur de jour de retrait — pilote les stocks affichés et les créneaux dispo */}
-              {joursDispos.length > 0 && (
+              {!isVitrine && joursDispos.length > 0 && (
                 <div style={{ background: '#fff', borderBottom: `1px solid ${T.pale}`, padding: '0.625rem 1rem 0.5rem' }}>
                   <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
                     🗓️ Je récupère le
@@ -1413,7 +1428,7 @@ export default function CommanderSlug() {
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                             onCommanderDemain={commanderPourJour}
-                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour}/>
+                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={isVitrine}/>
                         ))}
                       </div>
                     </div>
@@ -1431,7 +1446,7 @@ export default function CommanderSlug() {
                           ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                           stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                           onCommanderDemain={commanderPourJour}
-                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour}/>
+                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={isVitrine}/>
                       ))}
                     </div>
                   </div>
@@ -1444,15 +1459,37 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {/* FIX : passer getStockMax à RecapPanier */}
-                <RecapPanier
-                  panier={panier}
-                  onRetirer={retirerDuPanier}
-                  onAjouter={incrementerPanier}
-                  total={totalPanier()}
-                  onValider={() => setEtape(3)}
-                  getStockMax={getStockMax}
-                />
+                {/* RecapPanier : uniquement si plan Découverte/Pro */}
+                {!isVitrine && (
+                  <RecapPanier
+                    panier={panier}
+                    onRetirer={retirerDuPanier}
+                    onAjouter={incrementerPanier}
+                    total={totalPanier()}
+                    onValider={() => setEtape(3)}
+                    getStockMax={getStockMax}
+                  />
+                )}
+
+                {/* CTA Vitrine : suggérer l'activation du Click & Collect */}
+                {isVitrine && (
+                  <div style={{ marginTop: 24, background: T.bgPanel, borderRadius: 18, padding: '20px 18px', color: '#fff', textAlign: 'center' }}>
+                    <p style={{ fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 8 }}>
+                      Click &amp; Collect non activé
+                    </p>
+                    <p style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.3px', marginBottom: 6 }}>
+                      Ce commerce n&rsquo;est pas encore commandable en ligne
+                    </p>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.5, marginBottom: 16 }}>
+                      Envie de gagner du temps&nbsp;? Dis à {commercant.nom} que tu veux pouvoir commander à l&rsquo;avance via Yoppaa.
+                    </p>
+                    <button onClick={suggererClickCollect}
+                      style={{ background: '#fff', border: 'none', borderRadius: 100, padding: '12px 22px', color: T.bgPanel, fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 16px rgba(0,0,0,0.18)' }}>
+                      Suggérer à {commercant.nom} d&rsquo;activer le Click &amp; Collect →
+                    </button>
+                  </div>
+                )}
+
                 <div style={{ height: 24 }}/>
               </div>
             </>

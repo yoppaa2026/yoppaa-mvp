@@ -450,7 +450,7 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
 }
 
 // ─── Carte commerce — redesignée ──────────────────────────────────────────────
-function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect, onToggleFavori }) {
+function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsActifs, actusActives, onSelect, onToggleFavori }) {
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
   const statut = statutsCommerce[c.id]
@@ -534,9 +534,9 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, onSelect
               )}
             </div>
             <Badges type={c.type}/>
-            {/* Pills statut : 5 pills toujours visibles, pression sociale */}
+            {/* Pills statut : 5 pills toujours visibles, dot LIVE orange si actif */}
             <div style={{ marginTop: 8 }}>
-              <PillsStatut commercant={c} dealActif={false} actuActive={false} size="sm"/>
+              <PillsStatut commercant={c} dealActif={dealsActifs?.has(c.id) || false} actuActive={actusActives?.has(c.id) || false} size="sm"/>
             </div>
             {c.description && <p style={{ fontSize: '0.78rem', color: T.muted, margin: '6px 0 0', lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.description}</p>}
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
@@ -598,6 +598,9 @@ export default function Commander() {
   const [commercants, setCommercants] = useState([])
   const [notesParCommerce, setNotesParCommerce] = useState({})
   const [statutsCommerce, setStatutsCommerce] = useState({})
+  // Set des commerçants qui ont un deal/actu actif aujourd'hui (pour dot LIVE sur pills)
+  const [dealsActifs, setDealsActifs] = useState(new Set())
+  const [actusActives, setActusActives] = useState(new Set())
   const [position, setPosition] = useState(null)
   const [geoLoading, setGeoLoading] = useState(false)
   const [rue, setRue] = useState(null)
@@ -672,7 +675,48 @@ export default function Commander() {
   async function chargerCommercants() {
     const { data } = await supabase.from('commercants').select('*').order('nom')
     setCommercants(data || [])
-    if (data?.length > 0) chargerNotes(data.map(c => c.id), data)
+    if (data?.length > 0) {
+      chargerNotes(data.map(c => c.id), data)
+      chargerActiviteAujourdhui(data.map(c => c.id))
+    }
+  }
+
+  // Charge les deals et actus actifs aujourd'hui pour piloter le dot LIVE des pills
+  async function chargerActiviteAujourdhui(ids) {
+    if (!ids?.length) return
+    const aujourdhui = new Date().toISOString().slice(0, 10)
+    const [{ data: deals }, { data: actus }] = await Promise.all([
+      // Deals actifs : date_deal = aujourd'hui, OU intervalle date_debut/date_fin qui englobe
+      supabase.from('yoppaa_deals')
+        .select('commercant_id, date_deal, date_debut, date_fin, actif')
+        .in('commercant_id', ids)
+        .eq('actif', true),
+      supabase.from('actualites')
+        .select('commercant_id, date_debut, date_fin, actif')
+        .in('commercant_id', ids)
+        .eq('actif', true),
+    ])
+    const dealSet = new Set()
+    ;(deals || []).forEach(d => {
+      const dateDeal = d.date_deal || null
+      const dStart = d.date_debut ? d.date_debut.slice(0,10) : null
+      const dEnd   = d.date_fin   ? d.date_fin.slice(0,10)   : null
+      const dans = dateDeal === aujourdhui
+        || (dStart && dEnd && dStart <= aujourdhui && aujourdhui <= dEnd)
+      if (dans) dealSet.add(d.commercant_id)
+    })
+    const actuSet = new Set()
+    ;(actus || []).forEach(a => {
+      const dStart = a.date_debut ? a.date_debut.slice(0,10) : null
+      const dEnd   = a.date_fin   ? a.date_fin.slice(0,10)   : null
+      const dans = !dStart && !dEnd
+        || (dStart && !dEnd && dStart <= aujourdhui)
+        || (!dStart && dEnd && aujourdhui <= dEnd)
+        || (dStart && dEnd && dStart <= aujourdhui && aujourdhui <= dEnd)
+      if (dans) actuSet.add(a.commercant_id)
+    })
+    setDealsActifs(dealSet)
+    setActusActives(actuSet)
   }
 
   async function chargerNotes(ids, commercantsData = []) {
@@ -1085,7 +1129,7 @@ export default function Commander() {
                 </div>
               ) : (
                 <div className="commerces-grid">
-                  {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
+                  {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} dealsActifs={dealsActifs} actusActives={actusActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
                 </div>
               )}
             </div>
@@ -1235,7 +1279,7 @@ export default function Commander() {
                       <p style={{ fontWeight: 800, color: T.ink, marginBottom: 6 }}>Aucun favori</p>
                       <p style={{ fontSize: '0.875rem', color: T.muted }}>Tape ❤️ sur un commerce pour le retrouver ici.</p>
                     </div>
-                  : <div className="commerces-grid">{commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}</div>
+                  : <div className="commerces-grid">{commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} dealsActifs={dealsActifs} actusActives={actusActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}</div>
                 }
               </div>
             </div>

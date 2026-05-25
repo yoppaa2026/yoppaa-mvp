@@ -22,7 +22,7 @@ export default function PillsStatut({ commercant, dealActif = false, actuActive 
         const style = p.indisponible ? C.unavail : (p.actif ? C.on : C.off)
         return (
           <span key={p.key}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize, fontWeight: 800, padding, borderRadius: 100, background: style.bg, color: style.color, border: `1px solid ${style.border}`, textTransform: 'uppercase', letterSpacing: '0.4px', lineHeight: 1, whiteSpace: 'nowrap' }}>
+            style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize, fontWeight: 800, padding, borderRadius: 100, background: style.bg, color: style.color, border: `1px solid ${style.border}`, textTransform: 'uppercase', letterSpacing: '0.4px', lineHeight: 1, whiteSpace: 'nowrap' }}>
             {/* Icône check ou tiret selon état */}
             {p.actif ? (
               <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
@@ -34,9 +34,19 @@ export default function PillsStatut({ commercant, dealActif = false, actuActive 
               </svg>
             )}
             {p.label}
+            {/* Dot LIVE orange : signal qu'un deal/actu est ACTIF maintenant */}
+            {p.live && (
+              <span style={{ position: 'absolute', top: -3, right: -3, width: size === 'lg' ? 9 : 7, height: size === 'lg' ? 9 : 7, borderRadius: '50%', background: '#FB7C1C', border: '2px solid #fff', boxShadow: '0 0 0 1px rgba(251,124,28,0.4), 0 0 8px rgba(251,124,28,0.7)', animation: 'yoppa-live-pulse 1.6s ease-in-out infinite' }}/>
+            )}
           </span>
         )
       })}
+      <style>{`
+        @keyframes yoppa-live-pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50%      { transform: scale(1.25); opacity: 0.75; }
+        }
+      `}</style>
     </div>
   )
 }

@@ -531,6 +531,7 @@ export default function CommanderSlug() {
   const [commandesParArticleJour, setCommandesParArticleJour] = useState({})
   const [photoCouverture, setPhotoCouverture] = useState(null)
   const [galerie, setGalerie] = useState([])
+  const [actualites, setActualites] = useState([])
   const [dealActif, setDealActif] = useState(null)
   const [fermetures, setFermetures] = useState([])
   const [derniereCommande, setDerniereCommande] = useState(null)
@@ -584,6 +585,7 @@ export default function CommanderSlug() {
     setStocksJour(data.stocksJour)
     setPhotoCouverture(data.photoCouverture)
     setGalerie(data.galerie || [])
+    setActualites(data.actualites || [])
     setDealActif(data.dealActif)
     setFermetures(data.fermetures)
     buildJoursDispos(data.commercant, data.creneaux, data.fermetures)
@@ -607,6 +609,7 @@ export default function CommanderSlug() {
       { data: photosData },
       { data: dealsData },
       { data: fermeturesData },
+      { data: actualitesData },
     ] = await Promise.all([
       supabase.from('articles').select('*').eq('commercant_id', c.id).eq('actif', true).order('categorie').order('nom'),
       supabase.from('creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
@@ -616,6 +619,7 @@ export default function CommanderSlug() {
       supabase.from('commercant_photos').select('*').eq('commercant_id', c.id).order('ordre'),
       supabase.from('yoppaa_deals').select('*').eq('commercant_id', c.id).eq('actif', true).lte('date_debut', new Date().toISOString()).gte('date_fin', new Date().toISOString()).limit(1),
       supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', c.id).gte('date_fin', new Date().toISOString()),
+      supabase.from('actualites').select('*').eq('commercant_id', c.id).eq('actif', true).order('created_at', { ascending: false }),
     ])
 
     const notesInfo = avisNotes?.length > 0
@@ -662,6 +666,17 @@ export default function CommanderSlug() {
     const galerieAutres = (photosData||[]).filter(p => p.type !== 'couverture' && p.url)
     const deal = dealsData?.[0] || null
 
+    // Filtrer les actus actives aujourd'hui (sur la fenêtre date_debut/date_fin)
+    const aujourdhui = new Date().toISOString().slice(0, 10)
+    const actusActives = (actualitesData || []).filter(a => {
+      const dStart = a.date_debut ? a.date_debut.slice(0,10) : null
+      const dEnd   = a.date_fin   ? a.date_fin.slice(0,10)   : null
+      if (!dStart && !dEnd) return true
+      if (dStart && !dEnd) return dStart <= aujourdhui
+      if (!dStart && dEnd) return aujourdhui <= dEnd
+      return dStart <= aujourdhui && aujourdhui <= dEnd
+    })
+
     const cacheData = {
       commercant: c,
       articles: arts || [],
@@ -674,6 +689,7 @@ export default function CommanderSlug() {
       galerie: galerieAutres,
       dealActif: deal,
       fermetures: fermeturesData || [],
+      actualites: actusActives,
     }
 
     try {
@@ -1343,7 +1359,7 @@ export default function CommanderSlug() {
 
                   {/* Pills statut : visualisation des features dispo selon plan */}
                   <div style={{ marginTop: 12 }}>
-                    <PillsStatut commercant={commercant} dealActif={!!dealActif} actuActive={false} size="lg"/>
+                    <PillsStatut commercant={commercant} dealActif={!!dealActif} actuActive={actualites.length > 0} size="lg"/>
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>

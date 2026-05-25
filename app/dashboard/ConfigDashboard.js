@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { canDo } from '@/lib/plans'
 
 const T = {
   bg:      '#F8F6FF',
@@ -1006,6 +1007,441 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaComm
         </div>
       </div>
       {showOptions && <OptionsArticle articleId={a.id} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
+    </div>
+  )
+}
+
+// ─── Onglet DEALS ─────────────────────────────────────────────────────────────
+// Création/édition des deals d'un commerçant + intégration Morning Yoppaa.
+// Règles :
+//   - 1 seul deal par jour peut être inclus dans Le Morning
+//   - Deadline : 23h00 (commercant.heure_limite_morning) la veille
+//   - Si on coche inclus_morning sur deal A, on décoche les autres deals
+//     du même commerçant pour la même date_deal
+function TabDeals({ commercantId, commercant, toast }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  const [deals, setDeals] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId] = useState(null)
+  const [form, setForm] = useState({
+    titre: '', description: '', prix_deal: '', prix_original: '',
+    date_deal: tomorrow, heure_debut: '00:00', heure_fin: '23:59',
+    inclus_morning: false, actif: true,
+  })
+  const [saving, setSaving] = useState(false)
+  const firstLoadRef = useRef(true)
+
+  // Heure limite Morning (par défaut 23:00, configurable par commerçant)
+  const heureLimite = commercant?.heure_limite_morning?.slice(0, 5) || '23:00'
+
+  useEffect(() => { fetchDeals() }, [commercantId])
+
+  async function fetchDeals() {
+    if (firstLoadRef.current) setLoading(true)
+    const { data } = await supabase.from('yoppaa_deals')
+      .select('*')
+      .eq('commercant_id', commercantId)
+      .order('date_deal', { ascending: false, nullsLast: true })
+      .order('created_at', { ascending: false })
+    setDeals(data || [])
+    if (firstLoadRef.current) { setLoading(false); firstLoadRef.current = false }
+  }
+
+  function openNew() {
+    setForm({ titre: '', description: '', prix_deal: '', prix_original: '',
+      date_deal: tomorrow, heure_debut: '00:00', heure_fin: '23:59',
+      inclus_morning: false, actif: true })
+    setEditId(null); setShowForm(true)
+  }
+  function openEdit(d) {
+    setForm({
+      titre: d.titre || '',
+      description: d.description || '',
+      prix_deal: String(d.prix_deal ?? ''),
+      prix_original: String(d.prix_original ?? ''),
+      date_deal: d.date_deal || today,
+      heure_debut: '00:00',
+      heure_fin: '23:59',
+      inclus_morning: !!d.inclus_morning,
+      actif: d.actif !== false,
+    })
+    setEditId(d.id); setShowForm(true)
+  }
+
+  // Calcule si la deadline Morning est dépassée pour la date du deal
+  function deadlinePassee(dateDeal, inclusMorning) {
+    if (!inclusMorning) return false
+    if (!dateDeal) return false
+    // Pour figurer dans Le Morning du jour J, il faut soumettre avant 23h J-1
+    // Donc deadline = "veille du deal à 23h"
+    const veille = new Date(dateDeal + 'T00:00:00')
+    veille.setDate(veille.getDate() - 1)
+    const [h, m] = heureLimite.split(':').map(Number)
+    veille.setHours(h, m, 0, 0)
+    return new Date() > veille
+  }
+
+  async function saveDeal() {
+    if (!form.titre.trim()) return toast('Titre obligatoire', 'error')
+    if (!form.date_deal) return toast('Date obligatoire', 'error')
+    setSaving(true)
+    const dateDeal = form.date_deal
+    const dateDebut = `${dateDeal}T${form.heure_debut || '00:00'}:00`
+    const dateFin = `${dateDeal}T${form.heure_fin || '23:59'}:59`
+    const payload = {
+      commercant_id: commercantId,
+      titre: form.titre.trim(),
+      description: form.description.trim() || null,
+      prix_deal: form.prix_deal ? parseFloat(form.prix_deal) : null,
+      prix_original: form.prix_original ? parseFloat(form.prix_original) : null,
+      date_deal: dateDeal,
+      date_debut: dateDebut,
+      date_fin: dateFin,
+      inclus_morning: !!form.inclus_morning,
+      actif: !!form.actif,
+    }
+
+    // Règle : 1 seul deal coché pour le Morning par jour → décocher les autres
+    if (payload.inclus_morning) {
+      const q = supabase.from('yoppaa_deals')
+        .update({ inclus_morning: false })
+        .eq('commercant_id', commercantId)
+        .eq('date_deal', dateDeal)
+      if (editId) q.neq('id', editId)
+      await q
+    }
+
+    const { error } = editId
+      ? await supabase.from('yoppaa_deals').update(payload).eq('id', editId)
+      : await supabase.from('yoppaa_deals').insert(payload)
+    setSaving(false)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast(editId ? 'Deal mis à jour' : 'Deal créé')
+    setShowForm(false); fetchDeals()
+  }
+
+  async function deleteDeal(id) {
+    if (!confirm('Supprimer ce deal ?')) return
+    const { data, error } = await supabase.from('yoppaa_deals').delete().eq('id', id).select()
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    if (!data || data.length === 0) { toast('Suppression refusée (RLS)', 'error'); return }
+    toast('Deal supprimé'); fetchDeals()
+  }
+
+  async function toggleActif(d) {
+    await supabase.from('yoppaa_deals').update({ actif: !d.actif }).eq('id', d.id)
+    fetchDeals()
+  }
+
+  // Filtre : actuels/futurs vs passés
+  const dealsActuels = deals.filter(d => !d.date_deal || d.date_deal >= today)
+  const dealsPasses  = deals.filter(d => d.date_deal && d.date_deal < today)
+
+  if (loading) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
+
+  const warningSoumission = form.inclus_morning && deadlinePassee(form.date_deal, true)
+
+  return (
+    <div>
+      {/* En-tête violet foncé */}
+      <div style={{ background: T.bgPanel, borderRadius: 14, padding: '18px 20px', marginBottom: 14, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <p style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>Deals</p>
+          <h2 style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', margin: 0 }}>
+            {deals.length} deal{deals.length > 1 ? 's' : ''}
+            <span style={{ color: T.light, fontWeight: 600, fontSize: 14, marginLeft: 8 }}>· {dealsActuels.length} à venir / actif{dealsActuels.length > 1 ? 's' : ''}</span>
+          </h2>
+        </div>
+        <button style={{ ...s.btn, background: '#fff', color: T.bgPanel }} onClick={openNew}>
+          <Icon name="plus" size={14}/> Nouveau deal
+        </button>
+      </div>
+
+      {/* Info Morning Yoppaa */}
+      <div style={{ background: '#FFF7ED', borderLeft: `4px solid #EA580C`, borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 12.5, color: '#7C2D12', lineHeight: 1.5 }}>
+        <strong>☀️ Le Morning Yoppaa</strong> · push quotidien à 7h30 aux clients de ta zone.
+        <br/>Cochez «&nbsp;Inclure dans Le Morning Yoppaa&nbsp;» avant <strong>{heureLimite}</strong> la veille pour y apparaître. Un seul deal par jour par commerçant peut être inclus.
+      </div>
+
+      {/* Formulaire création / édition */}
+      {showForm && (
+        <div style={s.cardActive}>
+          <h3 style={{ ...s.h3, marginBottom: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Icon name={editId ? 'edit' : 'plus'} size={14} color={T.main}/>
+            {editId ? 'Modifier le deal' : 'Nouveau deal'}
+          </h3>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div><label style={s.label}>Titre *</label><Input value={form.titre} onChange={e => setForm(p => ({ ...p, titre: e.target.value }))} placeholder="Ex: 2 croissants achetés, 1 offert"/></div>
+            <div><label style={s.label}>Description</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Détails du deal, conditions…"/></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div><label style={s.label}>Prix deal (€)</label><Input type="number" step="0.10" min="0" value={form.prix_deal} onChange={e => setForm(p => ({ ...p, prix_deal: e.target.value }))} placeholder="2.50"/></div>
+              <div><label style={s.label}>Prix d&rsquo;origine (€)</label><Input type="number" step="0.10" min="0" value={form.prix_original} onChange={e => setForm(p => ({ ...p, prix_original: e.target.value }))} placeholder="3.50"/></div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              <div><label style={s.label}>Date</label><Input type="date" value={form.date_deal} min={today} onChange={e => setForm(p => ({ ...p, date_deal: e.target.value }))}/></div>
+              <div><label style={s.label}>Heure début</label><Input type="time" value={form.heure_debut} onChange={e => setForm(p => ({ ...p, heure_debut: e.target.value }))}/></div>
+              <div><label style={s.label}>Heure fin</label><Input type="time" value={form.heure_fin} onChange={e => setForm(p => ({ ...p, heure_fin: e.target.value }))}/></div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: form.inclus_morning ? '#FFF7ED' : '#FAFAFA', border: `1.5px solid ${form.inclus_morning ? '#EA580C' : T.hairline}`, borderRadius: 10, cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.inclus_morning} onChange={e => setForm(p => ({ ...p, inclus_morning: e.target.checked }))} style={{ width: 18, height: 18, cursor: 'pointer' }}/>
+              <span style={{ fontSize: 13, color: T.ink, fontWeight: 700 }}>☀️ Inclure dans Le Morning Yoppaa</span>
+            </label>
+            {warningSoumission && (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#7F1D1D', fontWeight: 600 }}>
+                ⚠️ Deadline dépassée — ce deal ne sera pas dans Le Morning Yoppaa de demain.
+              </div>
+            )}
+            <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Deal actif (visible côté client)"/>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+            <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveDeal} disabled={saving}>
+              <Icon name="check" size={14}/> {saving ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+            <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowForm(false)}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* Liste deals actuels */}
+      {dealsActuels.length === 0 && !showForm && (
+        <div style={{ ...s.card, textAlign: 'center', padding: 40 }}>
+          <p style={{ color: T.muted, marginBottom: 16 }}>Aucun deal actif</p>
+          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={openNew}>
+            <Icon name="plus" size={14}/> Créer le premier deal
+          </button>
+        </div>
+      )}
+      {dealsActuels.map(d => <DealRow key={d.id} d={d} today={today} onEdit={openEdit} onToggle={toggleActif} onDelete={deleteDeal}/>)}
+
+      {/* Historique */}
+      {dealsPasses.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>Historique · {dealsPasses.length} deal{dealsPasses.length > 1 ? 's' : ''} passé{dealsPasses.length > 1 ? 's' : ''}</p>
+          {dealsPasses.slice(0, 10).map(d => <DealRow key={d.id} d={d} today={today} onEdit={openEdit} onToggle={toggleActif} onDelete={deleteDeal} passe/>)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DealRow({ d, today, onEdit, onToggle, onDelete, passe = false }) {
+  const dateAffichee = d.date_deal
+    ? new Date(d.date_deal + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'short', day: '2-digit', month: 'short' })
+    : '—'
+  const isToday = d.date_deal === today
+  return (
+    <div style={{ ...s.card, opacity: passe || !d.actif ? 0.55 : 1, borderLeft: `4px solid ${d.inclus_morning ? '#EA580C' : (d.actif ? T.main : '#E5E7EB')}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+            <span style={{ fontWeight: 800, color: T.ink, fontSize: 15 }}>{d.titre}</span>
+            {isToday && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#F0FDF4', color: '#16A34A' }}>Aujourd&rsquo;hui</span>}
+            {d.inclus_morning && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#FFF7ED', color: '#EA580C' }}>☀️ Morning</span>}
+            <span style={{ ...s.tag, background: d.actif ? T.bgPanel : '#F3F4F6', color: d.actif ? '#fff' : T.muted }}>{d.actif ? 'Actif' : 'Inactif'}</span>
+          </div>
+          {d.description && <p style={{ fontSize: 12.5, color: T.muted, margin: '0 0 6px', lineHeight: 1.4 }}>{d.description}</p>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 12 }}>
+            <span style={{ color: T.muted, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="calendar" size={11}/>{dateAffichee}</span>
+            {d.prix_deal && (
+              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontWeight: 900, color: T.bgPanel, fontSize: 16 }}>{Number(d.prix_deal).toFixed(2)}€</span>
+                {d.prix_original && <span style={{ textDecoration: 'line-through', color: T.muted, fontSize: 12 }}>{Number(d.prix_original).toFixed(2)}€</span>}
+              </span>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+          <Toggle value={d.actif} onChange={() => onToggle(d)}/>
+          <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 10px', fontSize: 12 }} onClick={() => onEdit(d)} title="Modifier">
+            <Icon name="edit" size={14} color={T.bgPanel}/>
+          </button>
+          <button style={{ ...s.btn, ...s.btnDanger, padding: '6px 10px', fontSize: 12 }} onClick={() => onDelete(d.id)} title="Supprimer">
+            <Icon name="trash" size={14} color="#DC2626"/>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Onglet ACTUS / ALERTES ───────────────────────────────────────────────────
+function TabActus({ commercantId, toast }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const [actus, setActus] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId] = useState(null)
+  const [form, setForm] = useState({
+    titre: '', contenu: '', type: 'actu', date_debut: today, date_fin: '', actif: true,
+  })
+  const [saving, setSaving] = useState(false)
+  const firstLoadRef = useRef(true)
+
+  useEffect(() => { fetchActus() }, [commercantId])
+
+  async function fetchActus() {
+    if (firstLoadRef.current) setLoading(true)
+    const { data } = await supabase.from('actualites')
+      .select('*')
+      .eq('commercant_id', commercantId)
+      .order('created_at', { ascending: false })
+    setActus(data || [])
+    if (firstLoadRef.current) { setLoading(false); firstLoadRef.current = false }
+  }
+
+  function openNew() {
+    setForm({ titre: '', contenu: '', type: 'actu', date_debut: today, date_fin: '', actif: true })
+    setEditId(null); setShowForm(true)
+  }
+  function openEdit(a) {
+    setForm({
+      titre: a.titre || '',
+      contenu: a.contenu || '',
+      type: a.type || 'actu',
+      date_debut: a.date_debut || today,
+      date_fin: a.date_fin || '',
+      actif: a.actif !== false,
+    })
+    setEditId(a.id); setShowForm(true)
+  }
+
+  async function saveActu() {
+    if (!form.titre.trim()) return toast('Titre obligatoire', 'error')
+    setSaving(true)
+    const payload = {
+      commercant_id: commercantId,
+      titre: form.titre.trim(),
+      contenu: form.contenu.trim() || null,
+      type: form.type,
+      date_debut: form.date_debut || null,
+      date_fin: form.date_fin || null,
+      actif: !!form.actif,
+    }
+    const { error } = editId
+      ? await supabase.from('actualites').update(payload).eq('id', editId)
+      : await supabase.from('actualites').insert(payload)
+    setSaving(false)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast(editId ? 'Actualité mise à jour' : 'Actualité publiée')
+    setShowForm(false); fetchActus()
+  }
+
+  async function deleteActu(id) {
+    if (!confirm('Supprimer cette actualité ?')) return
+    const { data, error } = await supabase.from('actualites').delete().eq('id', id).select()
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    if (!data || data.length === 0) { toast('Suppression refusée (RLS)', 'error'); return }
+    toast('Actualité supprimée'); fetchActus()
+  }
+
+  async function toggleActif(a) {
+    await supabase.from('actualites').update({ actif: !a.actif }).eq('id', a.id)
+    fetchActus()
+  }
+
+  if (loading) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
+
+  return (
+    <div>
+      <div style={{ background: T.bgPanel, borderRadius: 14, padding: '18px 20px', marginBottom: 14, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <p style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>Actualités & Alertes</p>
+          <h2 style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', margin: 0 }}>
+            {actus.length} publication{actus.length > 1 ? 's' : ''}
+          </h2>
+        </div>
+        <button style={{ ...s.btn, background: '#fff', color: T.bgPanel }} onClick={openNew}>
+          <Icon name="plus" size={14}/> Nouvelle publication
+        </button>
+      </div>
+
+      <div style={{ background: '#F0F9FF', borderLeft: `4px solid #0284C7`, borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 12.5, color: '#0C4A6E', lineHeight: 1.5 }}>
+        Une <strong>actualité</strong> informe (nouveau produit, événement…). Une <strong>alerte</strong> signale un changement important (fermeture exceptionnelle, rupture). Les alertes s&rsquo;affichent en rouge sur la fiche client, prioritaires sur le menu.
+      </div>
+
+      {showForm && (
+        <div style={s.cardActive}>
+          <h3 style={{ ...s.h3, marginBottom: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Icon name={editId ? 'edit' : 'plus'} size={14} color={T.main}/>
+            {editId ? 'Modifier la publication' : 'Nouvelle publication'}
+          </h3>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div>
+              <label style={s.label}>Type</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[
+                  { val: 'actu',   label: 'Actualité', desc: 'Info positive' },
+                  { val: 'alerte', label: 'Alerte',    desc: 'Important / urgent' },
+                ].map(opt => {
+                  const sel = form.type === opt.val
+                  const colorActif = opt.val === 'alerte' ? '#DC2626' : T.bgPanel
+                  return (
+                    <button key={opt.val} type="button" onClick={() => setForm(p => ({ ...p, type: opt.val }))}
+                      style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${sel ? colorActif : T.hairline}`, background: sel ? colorActif : '#fff', color: sel ? '#fff' : T.ink, cursor: 'pointer', textAlign: 'left', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s' }}>
+                      <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 2 }}>{opt.label}</div>
+                      <div style={{ fontSize: 11, opacity: sel ? 0.85 : 0.6 }}>{opt.desc}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div><label style={s.label}>Titre *</label><Input value={form.titre} onChange={e => setForm(p => ({ ...p, titre: e.target.value }))} placeholder={form.type === 'alerte' ? 'Ex: Fermé exceptionnellement vendredi' : 'Ex: Nouveau menu d&rsquo;hiver dès lundi'}/></div>
+            <div><label style={s.label}>Contenu</label><Textarea value={form.contenu} onChange={e => setForm(p => ({ ...p, contenu: e.target.value }))} placeholder="Détails (optionnel)"/></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div><label style={s.label}>Date début</label><Input type="date" value={form.date_debut} onChange={e => setForm(p => ({ ...p, date_debut: e.target.value }))}/></div>
+              <div><label style={s.label}>Date fin (vide = pas d&rsquo;échéance)</label><Input type="date" value={form.date_fin} min={form.date_debut} onChange={e => setForm(p => ({ ...p, date_fin: e.target.value }))}/></div>
+            </div>
+            <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Publication active"/>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+            <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveActu} disabled={saving}>
+              <Icon name="check" size={14}/> {saving ? 'Enregistrement…' : 'Publier'}
+            </button>
+            <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowForm(false)}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {actus.length === 0 && !showForm && (
+        <div style={{ ...s.card, textAlign: 'center', padding: 40 }}>
+          <p style={{ color: T.muted, marginBottom: 16 }}>Aucune publication</p>
+          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={openNew}>
+            <Icon name="plus" size={14}/> Créer la première publication
+          </button>
+        </div>
+      )}
+
+      {actus.map(a => (
+        <div key={a.id} style={{ ...s.card, opacity: a.actif ? 1 : 0.6, borderLeft: `4px solid ${a.type === 'alerte' ? '#DC2626' : T.main}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 100, background: a.type === 'alerte' ? '#FEE2E2' : T.pale, color: a.type === 'alerte' ? '#DC2626' : T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {a.type === 'alerte' ? 'Alerte' : 'Actualité'}
+                </span>
+                <span style={{ fontWeight: 800, color: T.ink, fontSize: 14 }}>{a.titre}</span>
+                <span style={{ ...s.tag, background: a.actif ? T.bgPanel : '#F3F4F6', color: a.actif ? '#fff' : T.muted }}>{a.actif ? 'Actif' : 'Inactif'}</span>
+              </div>
+              {a.contenu && <p style={{ fontSize: 12.5, color: T.muted, margin: '0 0 6px', lineHeight: 1.4 }}>{a.contenu}</p>}
+              <p style={{ fontSize: 11, color: T.muted, fontWeight: 600 }}>
+                {a.date_debut ? `Du ${new Date(a.date_debut + 'T12:00:00').toLocaleDateString('fr-BE', { day: '2-digit', month: 'short' })}` : 'Sans date début'}
+                {a.date_fin ? ` au ${new Date(a.date_fin + 'T12:00:00').toLocaleDateString('fr-BE', { day: '2-digit', month: 'short' })}` : ' · permanente'}
+              </p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+              <Toggle value={a.actif} onChange={() => toggleActif(a)}/>
+              <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 10px', fontSize: 12 }} onClick={() => openEdit(a)} title="Modifier">
+                <Icon name="edit" size={14} color={T.bgPanel}/>
+              </button>
+              <button style={{ ...s.btn, ...s.btnDanger, padding: '6px 10px', fontSize: 12 }} onClick={() => deleteActu(a.id)} title="Supprimer">
+                <Icon name="trash" size={14} color="#DC2626"/>
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -2116,6 +2552,7 @@ export default function ConfigDashboard({ commercantId }) {
   const [tab, setTab] = useState('menu')
   const [toastMsg, setToastMsg] = useState('')
   const [toastType, setToastType] = useState('success')
+  const [commercant, setCommercant] = useState(null)
 
   function showToast(msg, type = 'success') {
     setToastMsg(msg); setToastType(type)
@@ -2128,12 +2565,27 @@ export default function ConfigDashboard({ commercantId }) {
     return () => window.removeEventListener('yoppaa-toast', handleToast)
   }, [])
 
+  // Charge le commerçant pour connaître le plan (conditionne les onglets)
+  useEffect(() => {
+    if (!commercantId) return
+    let annule = false
+    supabase.from('commercants').select('*').eq('id', commercantId).maybeSingle()
+      .then(({ data }) => { if (!annule) setCommercant(data) })
+    return () => { annule = true }
+  }, [commercantId])
+
+  // Onglets dynamiques selon le plan
+  const peutDeals = canDo(commercant?.plan, 'deals')
+  const peutActus = canDo(commercant?.plan, 'actus')
+
   const tabs = [
     { id: 'menu',     label: 'Menu',     icon: 'menu' },
+    peutDeals && { id: 'deals', label: 'Deals', icon: 'tag' },
+    peutActus && { id: 'actus', label: 'Actus', icon: 'sliders' },
     { id: 'creneaux', label: 'Créneaux', icon: 'clock' },
     { id: 'profil',   label: 'Profil',   icon: 'shop' },
     { id: 'avis',     label: 'Avis',     icon: 'star' },
-  ]
+  ].filter(Boolean)
 
   return (
     <div style={{ fontFamily: '"DM Sans", sans-serif', paddingBottom: 24 }}>
@@ -2148,6 +2600,8 @@ export default function ConfigDashboard({ commercantId }) {
       </div>
 
       {tab === 'menu'     && <TabMenu     commercantId={commercantId} toast={showToast} />}
+      {tab === 'deals'    && peutDeals && <TabDeals commercantId={commercantId} commercant={commercant} toast={showToast} />}
+      {tab === 'actus'    && peutActus && <TabActus commercantId={commercantId} toast={showToast} />}
       {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}

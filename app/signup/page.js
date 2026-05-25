@@ -163,11 +163,24 @@ export default function Signup() {
             retour={() => avancerVers(2)}
           />
         )}
-        {etape === 4 && (
-          <EtapePlaceholder titre="Horaires d'ouverture" n={4} avancer={() => avancerVers(5)} retour={() => avancerVers(3)}/>
+        {etape === 4 && commercant && (
+          <Etape4Horaires
+            commercant={commercant}
+            onboarding={onboarding}
+            onUpdate={c => setCommercant(c)}
+            onUpdateOb={ob => setOnboarding(ob)}
+            avancer={() => avancerVers(5)}
+            retour={() => avancerVers(3)}
+          />
         )}
-        {etape === 5 && (
-          <EtapePlaceholder titre="Success Pack & soumission" n={5} avancer={() => alert('Soumission à venir')} retour={() => avancerVers(4)}/>
+        {etape === 5 && commercant && onboarding && (
+          <Etape5Validation
+            commercant={commercant}
+            onboarding={onboarding}
+            onUpdate={c => setCommercant(c)}
+            onUpdateOb={ob => setOnboarding(ob)}
+            retour={() => avancerVers(4)}
+          />
         )}
       </main>
     </div>
@@ -706,6 +719,368 @@ function NavEtape({ retour, continuer, valide, saving, hint }) {
           {saving ? 'Enregistrement…' : 'Continuer →'}
         </button>
       </div>
+    </div>
+  )
+}
+
+// ─── ÉTAPE 4 : HORAIRES ───────────────────────────────────────────────────────
+// Grille 7 jours avec heures début/fin + toggle ouvert/fermé.
+// Bouton "Copier lundi → tous les jours" pour gagner du temps.
+const JOURS = [
+  { key: 'lundi',    label: 'Lundi' },
+  { key: 'mardi',    label: 'Mardi' },
+  { key: 'mercredi', label: 'Mercredi' },
+  { key: 'jeudi',    label: 'Jeudi' },
+  { key: 'vendredi', label: 'Vendredi' },
+  { key: 'samedi',   label: 'Samedi' },
+  { key: 'dimanche', label: 'Dimanche' },
+]
+
+function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, avancer, retour }) {
+  const initial = commercant.horaires_detail || {}
+  const [horaires, setHoraires] = useState(() => {
+    const out = {}
+    JOURS.forEach(j => {
+      const h = initial[j.key]
+      out[j.key] = h
+        ? { ouvert: h.ouvert !== false, debut: h.debut || '09:00', fin: h.fin || '18:00' }
+        : { ouvert: true, debut: '09:00', fin: '18:00' }
+    })
+    return out
+  })
+  const [saving, setSaving] = useState(false)
+  const debounceRef = useRef(null)
+
+  function updateJour(jour, patch) {
+    setHoraires(prev => {
+      const next = { ...prev, [jour]: { ...prev[jour], ...patch } }
+      clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(() => sauvegarder(next), 500)
+      return next
+    })
+  }
+
+  function copierLundi() {
+    const lun = horaires.lundi
+    const next = {}
+    JOURS.forEach(j => { next[j.key] = { ...lun } })
+    setHoraires(next)
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => sauvegarder(next), 200)
+  }
+
+  async function sauvegarder(values) {
+    setSaving(true)
+    const { data } = await supabase.from('commercants')
+      .update({ horaires_detail: values })
+      .eq('id', commercant.id)
+      .select()
+      .single()
+    if (data) onUpdate(data)
+    setSaving(false)
+  }
+
+  // Valide si au moins 1 jour est ouvert
+  const valide = Object.values(horaires).some(h => h.ouvert)
+
+  async function continuer() {
+    if (!valide) return
+    clearTimeout(debounceRef.current)
+    await sauvegarder(horaires)
+    if (onboarding) {
+      const { data } = await supabase.from('onboarding_commercants')
+        .update({ horaires_ok: true }).eq('id', onboarding.id).select().single()
+      if (data) onUpdateOb(data)
+    }
+    avancer()
+  }
+
+  return (
+    <div>
+      <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 6px' }}>
+        Tes horaires d&rsquo;ouverture
+      </h1>
+      <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 24px' }}>
+        Configure ton planning hebdomadaire. Tu pourras gérer les fermetures exceptionnelles depuis ton dashboard.
+      </p>
+
+      <Card titre="Planning hebdomadaire" sous="Astuce : configure lundi puis copie sur tous les jours.">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <button type="button" onClick={copierLundi}
+            style={{ padding: '6px 12px', background: T.pale, color: T.bgPanel, border: `1px solid ${T.main}33`, borderRadius: 100, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+            ⤵ Copier Lundi sur tous les jours
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {JOURS.map(j => {
+            const h = horaires[j.key]
+            return (
+              <div key={j.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: h.ouvert ? '#FAFAFA' : '#F3F4F6', border: `1px solid ${T.hairline}` }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: '0 0 110px' }}>
+                  <input type="checkbox" checked={h.ouvert} onChange={e => updateJour(j.key, { ouvert: e.target.checked })} style={{ width: 16, height: 16, cursor: 'pointer' }}/>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: h.ouvert ? T.ink : T.muted }}>{j.label}</span>
+                </label>
+                {h.ouvert ? (
+                  <>
+                    <input type="time" value={h.debut} onChange={e => updateJour(j.key, { debut: e.target.value })}
+                      style={{ ...inputStyle(), width: 110, padding: '6px 10px', fontSize: 13 }}/>
+                    <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>→</span>
+                    <input type="time" value={h.fin} onChange={e => updateJour(j.key, { fin: e.target.value })}
+                      style={{ ...inputStyle(), width: 110, padding: '6px 10px', fontSize: 13 }}/>
+                  </>
+                ) : (
+                  <span style={{ fontSize: 12, color: T.muted, fontStyle: 'italic' }}>Fermé</span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+
+      <NavEtape retour={retour} continuer={continuer} valide={valide} saving={saving} hint={valide ? null : 'Coche au moins un jour d\'ouverture.'}/>
+    </div>
+  )
+}
+
+// ─── ÉTAPE 5 : SUCCESS PACK + SOUMISSION ──────────────────────────────────────
+// - Choix optionnel d'un Success Pack (STARTER 49€, ESSENTIEL 149€, PREMIUM 299€)
+// - Calcul du score automatique 0-100 (visible en live)
+// - Soumission (statut = en_attente_validation + email Yoppaa via Resend)
+// - Bouton verrouille si score < 60
+const SUCCESS_PACKS = [
+  {
+    type: 'starter', label: 'Starter', prix: 49,
+    desc: 'Aide rédaction + guide photo personnalisé + vérif profil + 1 session WhatsApp 30 min',
+    bullets: ['Disponible tous plans', 'Livré sous 48 h'],
+  },
+  {
+    type: 'essentiel', label: 'Essentiel', prix: 149,
+    desc: 'Tout Starter + création menu (≤30 articles) + horaires + créneaux + 1er deal créé ensemble + session vidéo 1 h',
+    bullets: ['LIVE / BOOST / MAX', 'Livré sous 5 jours ouvrés'],
+  },
+  {
+    type: 'premium', label: 'Premium', prix: 299,
+    desc: 'Tout Essentiel + séance photo demi-journée + descriptions articles + fidélité + formation équipe 2 h + suivi J+30',
+    bullets: ['BOOST / MAX uniquement', 'Rayon 50 km Mettet'],
+  },
+]
+
+function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour }) {
+  const [packChoisi, setPackChoisi] = useState(onboarding.success_pack_choisi || null)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(onboarding.statut === 'en_attente_validation' || onboarding.statut === 'valide')
+  const [error, setError] = useState('')
+  const [stockMenu, setStockMenu] = useState(0)
+
+  // Compte les articles du commerçant (pour le score)
+  useEffect(() => {
+    let annule = false
+    supabase.from('articles')
+      .select('id', { count: 'exact', head: true })
+      .eq('commercant_id', commercant.id)
+      .then(({ count }) => { if (!annule) setStockMenu(count || 0) })
+    return () => { annule = true }
+  }, [commercant.id])
+
+  // Calcul du score 0-100 selon le brief
+  const score = (() => {
+    let s = 0
+    if (commercant.latitude && commercant.longitude) s += 20      // adresse géocodable
+    if (onboarding.photo_ok) s += 20                              // photo couverture uploadée
+    if (commercant.horaires_detail && Object.values(commercant.horaires_detail).some(h => h?.ouvert)) s += 20  // horaires
+    if (commercant.description && commercant.description.length >= 20) s += 10
+    if (commercant.logo_url) s += 10
+    if (commercant.telephone && /^\+?[\d\s.-]{8,}$/.test(commercant.telephone)) s += 10
+    if (stockMenu >= 1) s += 10
+    return s
+  })()
+  const peutSoumettre = score >= 60
+
+  async function selectPack(type) {
+    setPackChoisi(type)
+    await supabase.from('onboarding_commercants')
+      .update({ success_pack_choisi: type })
+      .eq('id', onboarding.id)
+  }
+
+  async function soumettre() {
+    if (!peutSoumettre || submitting) return
+    setSubmitting(true)
+    setError('')
+
+    // 1) Update onboarding : statut + score
+    const { data: ob, error: obErr } = await supabase.from('onboarding_commercants')
+      .update({
+        statut: 'en_attente_validation',
+        validation_auto_score: score,
+        success_pack_choisi: packChoisi,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', onboarding.id)
+      .select()
+      .single()
+    if (obErr) { setError(`Erreur : ${obErr.message}`); setSubmitting(false); return }
+    onUpdateOb(ob)
+
+    // 2) Si pack choisi : créer la ligne success_packs (statut en_attente)
+    if (packChoisi) {
+      const pack = SUCCESS_PACKS.find(p => p.type === packChoisi)
+      await supabase.from('success_packs').insert({
+        commercant_id: commercant.id,
+        type: packChoisi,
+        statut: 'en_attente',
+        montant_ht: pack?.prix || 0,
+      })
+    }
+
+    // 3) Update commerçant : statut publication = brouillon → en_attente
+    const { data: c } = await supabase.from('commercants')
+      .update({ statut_publication: 'en_attente' })
+      .eq('id', commercant.id)
+      .select()
+      .single()
+    if (c) onUpdate(c)
+
+    // 4) Email à Yoppaa via API route Resend (à implémenter — pour le MVP
+    //    on log juste un avertissement console + on continue. Quand l'API
+    //    /api/notify-yoppaa sera prête, on l'appelle ici.)
+    try {
+      await fetch('/api/notify-yoppaa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commercant_id: commercant.id,
+          nom: commercant.nom,
+          plan: commercant.plan,
+          score,
+          success_pack: packChoisi,
+        }),
+      })
+    } catch { /* email non bloquant pour la soumission */ }
+
+    setSubmitted(true)
+    setSubmitting(false)
+  }
+
+  if (submitted) {
+    return (
+      <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+        <div style={{ fontSize: '3.5rem', marginBottom: 16 }}>✅</div>
+        <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 12px' }}>
+          Demande envoyée&nbsp;!
+        </h1>
+        <p style={{ fontSize: '1rem', color: T.muted, margin: '0 0 24px', lineHeight: 1.6, maxWidth: 480, marginInline: 'auto' }}>
+          On valide ton profil <strong style={{ color: T.bgPanel }}>sous 24 h ouvrées</strong>. Tu recevras un email dès que ta page sera en ligne.
+        </p>
+        <Card titre="Récapitulatif">
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 13, color: T.deep, lineHeight: 1.9 }}>
+            <li><strong>Commerce :</strong> {commercant.nom}</li>
+            <li><strong>Plan choisi :</strong> {PLAN_LABEL[commercant.plan]}</li>
+            <li><strong>Score profil :</strong> {score} / 100</li>
+            {packChoisi && <li><strong>Success Pack :</strong> {SUCCESS_PACKS.find(p => p.type === packChoisi)?.label} ({SUCCESS_PACKS.find(p => p.type === packChoisi)?.prix}€ HT)</li>}
+          </ul>
+        </Card>
+        <p style={{ fontSize: 12, color: T.muted, marginTop: 16 }}>
+          Tu peux fermer cette page. On te recontacte par email à <strong>{commercant.email}</strong>.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 6px' }}>
+        Dernière étape&nbsp;: validation
+      </h1>
+      <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 24px' }}>
+        Choisis si tu veux être accompagné, puis envoie ta demande d&rsquo;activation.
+      </p>
+
+      {/* Score */}
+      <Card titre="Ton score de complétude" sous="Minimum 60 / 100 pour soumettre.">
+        <ScoreBar score={score}/>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 14, fontSize: 12 }}>
+          <ScoreItem label="Adresse géocodable" ok={commercant.latitude && commercant.longitude} pts={20}/>
+          <ScoreItem label="Photo couverture" ok={onboarding.photo_ok} pts={20}/>
+          <ScoreItem label="Horaires" ok={commercant.horaires_detail && Object.values(commercant.horaires_detail).some(h => h?.ouvert)} pts={20}/>
+          <ScoreItem label="Description ≥ 20" ok={commercant.description?.length >= 20} pts={10}/>
+          <ScoreItem label="Logo" ok={!!commercant.logo_url} pts={10}/>
+          <ScoreItem label="Téléphone valide" ok={commercant.telephone && /^\+?[\d\s.-]{8,}$/.test(commercant.telephone)} pts={10}/>
+          <ScoreItem label="Menu (≥ 1 article)" ok={stockMenu >= 1} pts={10}/>
+        </div>
+      </Card>
+
+      {/* Success Packs */}
+      <Card titre="Voulez-vous être accompagné pour votre démarrage ?" sous="Optionnel — tu peux te débrouiller seul si tu préfères.">
+        <div style={{ display: 'grid', gap: 10 }}>
+          {SUCCESS_PACKS.map(p => (
+            <button key={p.type} type="button" onClick={() => selectPack(p.type === packChoisi ? null : p.type)}
+              style={{ width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 14, border: `2px solid ${packChoisi === p.type ? T.bgPanel : T.hairline}`, background: packChoisi === p.type ? T.bgPanel : '#fff', color: packChoisi === p.type ? '#fff' : T.ink, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s', boxShadow: packChoisi === p.type ? `0 8px 24px rgba(22,6,54,0.2)` : 'none' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 900, fontSize: 17, letterSpacing: '-0.3px' }}>{p.label}</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: packChoisi === p.type ? T.light : T.main }}>{p.prix}€ HT</span>
+              </div>
+              <p style={{ fontSize: 12, color: packChoisi === p.type ? 'rgba(255,255,255,0.85)' : T.deep, margin: '0 0 4px', lineHeight: 1.4 }}>{p.desc}</p>
+              <p style={{ fontSize: 11, color: packChoisi === p.type ? 'rgba(255,255,255,0.55)' : T.muted, margin: 0, fontWeight: 600 }}>
+                {p.bullets.join(' · ')}
+              </p>
+            </button>
+          ))}
+          <button type="button" onClick={() => selectPack(null)}
+            style={{ width: '100%', padding: '12px 16px', borderRadius: 14, border: `1.5px dashed ${T.hairline}`, background: '#fff', color: T.muted, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13 }}>
+            Je me débrouille seul → Continuer
+          </button>
+        </div>
+      </Card>
+
+      {error && (
+        <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, color: '#7F1D1D', fontSize: 13, fontWeight: 600 }}>
+          {error}
+        </div>
+      )}
+
+      <div style={{ marginTop: 8 }}>
+        {!peutSoumettre && (
+          <p style={{ fontSize: 12, color: '#EA580C', fontWeight: 700, textAlign: 'center', marginBottom: 12 }}>
+            Score trop bas ({score}/100). Reviens sur les étapes précédentes pour compléter ton profil.
+          </p>
+        )}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={retour}
+            style={{ padding: '0.875rem 1.5rem', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.muted, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+            ← Retour
+          </button>
+          <button onClick={soumettre} disabled={!peutSoumettre || submitting}
+            style={{ flex: 1, padding: '0.875rem 1.5rem', borderRadius: 100, border: 'none', background: (!peutSoumettre || submitting) ? `${T.muted}66` : `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 15, cursor: (!peutSoumettre || submitting) ? 'not-allowed' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: peutSoumettre ? `0 6px 20px ${T.main}55` : 'none' }}>
+            {submitting ? 'Envoi…' : 'Envoyer ma demande d’activation →'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ScoreBar({ score }) {
+  const couleur = score >= 80 ? '#16A34A' : score >= 60 ? '#EA580C' : '#DC2626'
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Score actuel</span>
+        <span style={{ fontWeight: 900, fontSize: 22, color: couleur, letterSpacing: '-0.5px' }}>{score} <span style={{ fontSize: 12, color: T.muted, fontWeight: 700 }}>/ 100</span></span>
+      </div>
+      <div style={{ width: '100%', height: 10, background: T.hairline, borderRadius: 100, overflow: 'hidden' }}>
+        <div style={{ width: `${score}%`, height: '100%', background: `linear-gradient(90deg, ${couleur}, ${couleur}cc)`, transition: 'width 0.3s ease' }}/>
+      </div>
+    </div>
+  )
+}
+
+function ScoreItem({ label, ok, pts }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0' }}>
+      <span style={{ width: 16, height: 16, borderRadius: '50%', background: ok ? '#16A34A' : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 10, color: '#fff', fontWeight: 900 }}>{ok ? '✓' : '·'}</span>
+      <span style={{ fontWeight: 600, color: ok ? T.ink : T.muted, flex: 1 }}>{label}</span>
+      <span style={{ fontSize: 10, fontWeight: 700, color: ok ? '#16A34A' : T.muted }}>+{pts}</span>
     </div>
   )
 }

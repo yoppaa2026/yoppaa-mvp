@@ -303,9 +303,22 @@ function Etape1Compte({ session, commercant, onCompte }) {
       <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 6px' }}>
         Bienvenue sur Yoppaa
       </h1>
-      <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 24px' }}>
+      <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 16px' }}>
         Crée ton compte et choisis ton plan. Tu pourras tout configurer en quelques minutes.
       </p>
+
+      {/* Bandeau d'accroche : rassure sur la gratuité du plan ON */}
+      <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, color: '#fff', borderRadius: 14, padding: '14px 18px', marginBottom: 22, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 22, flexShrink: 0 }}>🟣</span>
+        <div>
+          <p style={{ fontWeight: 900, fontSize: 14, margin: 0, letterSpacing: '-0.3px' }}>
+            Vous ne rêvez pas — le forfait ON est <span style={{ color: T.light }}>gratuit à vie</span>.
+          </p>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', margin: '3px 0 0', lineHeight: 1.4 }}>
+            Aucune carte demandée. Aucun engagement. Upgrade quand tu veux.
+          </p>
+        </div>
+      </div>
 
       {!dejaConnecte ? (
         <Card titre="Ton compte">
@@ -332,6 +345,9 @@ function Etape1Compte({ session, commercant, onCompte }) {
         </p>
       </Card>
 
+      {/* Mini-glossaire des fonctionnalités — repliable pour ne pas alourdir */}
+      <GlossaireFeatures/>
+
       {error && (
         <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, color: '#7F1D1D', fontSize: 13, fontWeight: 600 }}>
           {error}
@@ -346,6 +362,51 @@ function Etape1Compte({ session, commercant, onCompte }) {
       <p style={{ fontSize: 11, color: T.muted, textAlign: 'center', marginTop: 12 }}>
         Déjà inscrit ? <a href="/login" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>Se connecter</a>
       </p>
+    </div>
+  )
+}
+
+// ─── GLOSSAIRE FEATURES — explique chaque fonction utilisee dans les plans ───
+// Repliable pour ne pas alourdir l'etape 1.
+function GlossaireFeatures() {
+  const [ouvert, setOuvert] = useState(false)
+  const features = [
+    { icone: '🔥', titre: 'Deal',           desc: 'Une promo limitée dans le temps. Bandeau visible sur ta page client, push aux favoris si tu actives la notif, possibilité d\'apparaître dans Le Morning Yoppaa.' },
+    { icone: '📢', titre: 'Actualité',      desc: 'Tu communiques une nouveauté (nouveau produit, événement). Affichée en bandeau violet sur ta page, push aux favoris à la publication.' },
+    { icone: '🚨', titre: 'Alerte',         desc: 'Information urgente (fermeture exceptionnelle, rupture). Bandeau rouge prioritaire sur ta page client.' },
+    { icone: '☀️', titre: 'Morning Yoppaa', desc: 'Push quotidien envoyé à 7h30 aux clients de ta zone. Les commerçants LIVE/BOOST/MAX peuvent y inscrire 1 deal/jour, à soumettre avant 23h la veille.' },
+    { icone: '🛒', titre: 'Click & Collect', desc: 'Le client commande à l\'avance, choisit un créneau de retrait. Tu reçois la commande dans ton dashboard, valides, marques prête. Indispensable pour passer au modèle Yoppaa complet.' },
+    { icone: '🚴', titre: 'Livraison',       desc: 'Module complet : zone configurable, frais configurables, créneaux livraison séparés, suivi commande client. Réservé au plan MAX.' },
+    { icone: '⭐', titre: 'Fidélité',        desc: 'BOOST : programme tampon simple (le 10e offert). MAX : points configurables, récompenses custom, analytics fidélité.' },
+    { icone: '🛍️', titre: 'Kit Yoppaa',      desc: 'Tablette + imprimante thermique pour gérer les commandes en boutique. 399€ HTVA comptant ou 3×133€ (Stripe ou Alma). Réservé aux plans BOOST et MAX.' },
+  ]
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${T.hairline}`, marginBottom: 14, overflow: 'hidden' }}>
+      <button type="button" onClick={() => setOuvert(o => !o)}
+        style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 800, color: T.bgPanel, margin: 0, letterSpacing: '-0.2px' }}>
+            Comprendre les fonctionnalités
+          </p>
+          <p style={{ fontSize: 11, color: T.muted, margin: '2px 0 0', fontWeight: 600 }}>
+            Deal, Actu, Morning Yoppaa, Click &amp; Collect…
+          </p>
+        </div>
+        <span style={{ fontSize: 14, color: T.main, fontWeight: 800, transform: ouvert ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>⌄</span>
+      </button>
+      {ouvert && (
+        <div style={{ padding: '0 18px 16px', borderTop: `1px solid ${T.hairline}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {features.map(f => (
+            <div key={f.titre} style={{ display: 'flex', gap: 10, paddingTop: 12 }}>
+              <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1.3 }}>{f.icone}</span>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: 0 }}>{f.titre}</p>
+                <p style={{ fontSize: 12, color: T.deep, margin: '2px 0 0', lineHeight: 1.5 }}>{f.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

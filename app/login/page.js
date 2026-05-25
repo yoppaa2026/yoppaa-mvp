@@ -197,6 +197,14 @@ export default function Login() {
               <p style={{ fontSize: '0.72rem', color: `${T.light}66`, textAlign: 'center', marginTop: '1rem', lineHeight: 1.5 }}>
                 Accès réservé aux commerçants partenaires Yoppaa.
               </p>
+
+              {/* Lien acquisition : nouveau commerçant → /signup */}
+              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
+                <a href="/signup"
+                  style={{ display: 'inline-block', color: T.light, fontSize: '0.85rem', fontWeight: 700, textDecoration: 'none', padding: '8px 4px', letterSpacing: '-0.2px' }}>
+                  Pas encore inscrit&nbsp;? <span style={{ color: '#fff', textDecoration: 'underline' }}>Découvrir Yoppaa Pro →</span>
+                </a>
+              </div>
             </>
           ) : (
             /* Écran confirmation magic link */

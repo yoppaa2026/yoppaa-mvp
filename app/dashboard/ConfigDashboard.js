@@ -1031,6 +1031,7 @@ function TabDeals({ commercantId, commercant, toast }) {
     date_debut: tomorrow, date_fin: tomorrow,
     heure_debut: '00:00', heure_fin: '23:59',
     inclus_morning: false, actif: true, article_id: '',
+    cta_appeler_reserver: false,
   })
   const [saving, setSaving] = useState(false)
   const firstLoadRef = useRef(true)
@@ -1064,7 +1065,8 @@ function TabDeals({ commercantId, commercant, toast }) {
     setForm({ titre: '', description: '', prix_deal: '', prix_original: '',
       date_debut: tomorrow, date_fin: tomorrow,
       heure_debut: '00:00', heure_fin: '23:59',
-      inclus_morning: false, actif: true, article_id: '' })
+      inclus_morning: false, actif: true, article_id: '',
+      cta_appeler_reserver: false })
     setEditId(null); setShowForm(true)
   }
   function openEdit(d) {
@@ -1085,6 +1087,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       inclus_morning: !!d.inclus_morning,
       actif: d.actif !== false,
       article_id: d.article_id || '',
+      cta_appeler_reserver: !!d.cta_appeler_reserver,
     })
     setEditId(d.id); setShowForm(true)
   }
@@ -1134,6 +1137,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       inclus_morning: !!form.inclus_morning,
       actif: !!form.actif,
       article_id: form.article_id || null,
+      cta_appeler_reserver: !!form.cta_appeler_reserver,
     }
 
     // Règle : 1 seul deal coché pour le Morning par jour → décocher les autres
@@ -1273,6 +1277,15 @@ function TabDeals({ commercantId, commercant, toast }) {
                 ⚠️ Deadline dépassée — ce deal ne sera pas dans Le Morning Yoppaa de demain.
               </div>
             )}
+            {/* CTA Appeler pour réserver : à activer pour les deals qui nécessitent
+                contact (réservation, dispo limitée, conditions particulières) */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: form.cta_appeler_reserver ? T.pale : '#FAFAFA', border: `1.5px solid ${form.cta_appeler_reserver ? T.bgPanel : T.hairline}`, borderRadius: 10, cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.cta_appeler_reserver} onChange={e => setForm(p => ({ ...p, cta_appeler_reserver: e.target.checked }))} style={{ width: 18, height: 18, cursor: 'pointer' }}/>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: 13, color: T.ink, fontWeight: 700, display: 'block' }}>📞 Bouton « Appeler pour réserver »</span>
+                <span style={{ fontSize: 11, color: T.muted, fontWeight: 500 }}>Active un bouton d&rsquo;appel direct dans la modale du deal côté client</span>
+              </div>
+            </label>
             <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Deal actif (visible côté client)"/>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>

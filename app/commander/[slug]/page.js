@@ -1286,8 +1286,9 @@ export default function CommanderSlug() {
                   ✓ Appliqué automatiquement à l&rsquo;article concerné dans le menu
                 </p>
               )}
-              {/* Bloc actions : Appeler (primary) + Fermer (secondary) */}
-              {commercant.telephone ? (
+              {/* Bouton "Appeler pour réserver" : uniquement si le commerçant
+                  l'a active sur ce deal (cta_appeler_reserver) ET telephone OK */}
+              {dealDetailOuvert.cta_appeler_reserver && commercant.telephone ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
                   <a href={`tel:${commercant.telephone}`}
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0.95rem', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 6px 20px ${T.main}55`, textDecoration: 'none' }}>

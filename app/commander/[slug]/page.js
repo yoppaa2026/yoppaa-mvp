@@ -1209,8 +1209,8 @@ export default function CommanderSlug() {
         @keyframes swipePulse { from { transform:scale(0.7) translateY(0); opacity:0.5; } to { transform:scale(1.4) translateY(-4px); opacity:1; } }
         @keyframes swipeArrow { 0%,100% { opacity:0.4; transform:translateX(0); } 50% { opacity:1; transform:translateX(4px); } }
         @keyframes dealGlow {
-          0%, 100% { box-shadow: 0 4px 16px rgba(22,6,54,0.18), 0 0 0 0 rgba(150,96,224,0); }
-          50%      { box-shadow: 0 4px 20px rgba(22,6,54,0.28), 0 0 0 4px rgba(150,96,224,0.18); }
+          0%, 100% { box-shadow: 0 4px 16px rgba(22,6,54,0.2),  0 0 0 0  rgba(196,160,244,0); }
+          50%      { box-shadow: 0 6px 28px rgba(22,6,54,0.35), 0 0 0 10px rgba(196,160,244,0.45); }
         }
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
@@ -1420,7 +1420,7 @@ export default function CommanderSlug() {
                 {/* Bandeau deal du jour */}
                 {canDo(commercant.plan, 'deals') && dealActif && (
                   <div style={{ margin: '0 12px 12px' }}>
-                    <div style={{ background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, animation: 'dealGlow 2.4s ease-in-out infinite' }}>
+                    <div style={{ background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, animation: 'dealGlow 1.8s ease-in-out infinite' }}>
                       <span style={{ fontSize: 18 }}>🔥</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>Deal du jour</p>

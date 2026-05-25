@@ -1022,13 +1022,14 @@ function TabDeals({ commercantId, commercant, toast }) {
   const today = new Date().toISOString().slice(0, 10)
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
   const [deals, setDeals] = useState([])
+  const [articles, setArticles] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({
     titre: '', description: '', prix_deal: '', prix_original: '',
     date_deal: tomorrow, heure_debut: '00:00', heure_fin: '23:59',
-    inclus_morning: false, actif: true,
+    inclus_morning: false, actif: true, article_id: '',
   })
   const [saving, setSaving] = useState(false)
   const firstLoadRef = useRef(true)
@@ -1036,12 +1037,12 @@ function TabDeals({ commercantId, commercant, toast }) {
   // Heure limite Morning (par défaut 23:00, configurable par commerçant)
   const heureLimite = commercant?.heure_limite_morning?.slice(0, 5) || '23:00'
 
-  useEffect(() => { fetchDeals() }, [commercantId])
+  useEffect(() => { fetchDeals(); fetchArticles() }, [commercantId])
 
   async function fetchDeals() {
     if (firstLoadRef.current) setLoading(true)
     const { data } = await supabase.from('yoppaa_deals')
-      .select('*')
+      .select('*, article:articles(id, nom, prix, categorie)')
       .eq('commercant_id', commercantId)
       .order('date_deal', { ascending: false, nullsLast: true })
       .order('created_at', { ascending: false })
@@ -1049,10 +1050,19 @@ function TabDeals({ commercantId, commercant, toast }) {
     if (firstLoadRef.current) { setLoading(false); firstLoadRef.current = false }
   }
 
+  async function fetchArticles() {
+    const { data } = await supabase.from('articles')
+      .select('id, nom, prix, categorie, actif')
+      .eq('commercant_id', commercantId)
+      .eq('actif', true)
+      .order('categorie').order('nom')
+    setArticles(data || [])
+  }
+
   function openNew() {
     setForm({ titre: '', description: '', prix_deal: '', prix_original: '',
       date_deal: tomorrow, heure_debut: '00:00', heure_fin: '23:59',
-      inclus_morning: false, actif: true })
+      inclus_morning: false, actif: true, article_id: '' })
     setEditId(null); setShowForm(true)
   }
   function openEdit(d) {
@@ -1066,8 +1076,19 @@ function TabDeals({ commercantId, commercant, toast }) {
       heure_fin: '23:59',
       inclus_morning: !!d.inclus_morning,
       actif: d.actif !== false,
+      article_id: d.article_id || '',
     })
     setEditId(d.id); setShowForm(true)
+  }
+
+  // Quand on choisit un article, on pré-remplit prix_original
+  function onArticleChange(articleId) {
+    const art = articles.find(a => a.id === articleId)
+    setForm(p => ({
+      ...p,
+      article_id: articleId,
+      prix_original: art && !p.prix_original ? String(art.prix) : p.prix_original,
+    }))
   }
 
   // Calcule si la deadline Morning est dépassée pour la date du deal
@@ -1101,6 +1122,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       date_fin: dateFin,
       inclus_morning: !!form.inclus_morning,
       actif: !!form.actif,
+      article_id: form.article_id || null,
     }
 
     // Règle : 1 seul deal coché pour le Morning par jour → décocher les autres
@@ -1175,6 +1197,21 @@ function TabDeals({ commercantId, commercant, toast }) {
           <div style={{ display: 'grid', gap: 12 }}>
             <div><label style={s.label}>Titre *</label><Input value={form.titre} onChange={e => setForm(p => ({ ...p, titre: e.target.value }))} placeholder="Ex: 2 croissants achetés, 1 offert"/></div>
             <div><label style={s.label}>Description</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Détails du deal, conditions…"/></div>
+            <div>
+              <label style={s.label}>Article concerné (optionnel)</label>
+              <select value={form.article_id} onChange={e => onArticleChange(e.target.value)}
+                style={{ ...s.input, cursor: 'pointer' }}>
+                <option value="">— Deal général (pas lié à un produit) —</option>
+                {articles.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.nom}{a.categorie ? ` · ${a.categorie}` : ''} — {Number(a.prix).toFixed(2)}€
+                  </option>
+                ))}
+              </select>
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
+                Si tu lies un produit, le badge DEAL s&rsquo;affiche dessus dans le menu et la réduction est appliquée automatiquement au panier (plans BOOST &amp; MAX).
+              </p>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div><label style={s.label}>Prix deal (€)</label><Input type="number" step="0.10" min="0" value={form.prix_deal} onChange={e => setForm(p => ({ ...p, prix_deal: e.target.value }))} placeholder="2.50"/></div>
               <div><label style={s.label}>Prix d&rsquo;origine (€)</label><Input type="number" step="0.10" min="0" value={form.prix_original} onChange={e => setForm(p => ({ ...p, prix_original: e.target.value }))} placeholder="3.50"/></div>

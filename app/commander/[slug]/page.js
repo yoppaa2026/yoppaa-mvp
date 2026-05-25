@@ -336,7 +336,7 @@ function HorairesSection({ horaires }) {
 }
 
 // ─── ArticleRow ───────────────────────────────────────────────────────────────
-function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false, masquerPrix = false }) {
+function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false, masquerPrix = false, dealArticle = null, onClickDeal = null }) {
   const groupes = optionsParArticle[article.id] || []
   const hasOptions = groupes.length > 0
   const [showOptions, setShowOptions] = useState(false)
@@ -414,10 +414,23 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
               <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, background: '#F3F4F6', padding: '4px 10px', borderRadius: 100, border: '1px dashed #D1D5DB' }}>
                 Prix non affichés
               </span>
+            ) : dealArticle && dealArticle.prix_deal != null ? (
+              // Prix barré + prix deal en accent
+              <>
+                <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(dealArticle.prix_deal).toFixed(2)}€</p>
+                <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{Number(article.prix).toFixed(2)}€</p>
+              </>
             ) : (
               <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(article.prix).toFixed(2)}€</p>
             )}
             {hasOptions && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100 }}>Personnalisable</span>}
+            {/* Badge DEAL cliquable si article lié à un deal actif */}
+            {dealArticle && (
+              <button onClick={e => { e.stopPropagation(); if (onClickDeal) onClickDeal(dealArticle) }}
+                style={{ fontSize: '0.62rem', fontWeight: 800, color: '#fff', background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, padding: '3px 10px', borderRadius: 100, border: 'none', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: `0 2px 8px rgba(22,6,54,0.3)`, animation: 'dealGlow 1.8s ease-in-out infinite', fontFamily: '"DM Sans", sans-serif' }}>
+                🔥 Deal
+              </button>
+            )}
           </div>
 
           {/* Indicateur stock 3 niveaux — clair et pro */}
@@ -537,6 +550,10 @@ export default function CommanderSlug() {
   const [galerie, setGalerie] = useState([])
   const [actualites, setActualites] = useState([])
   const [dealActif, setDealActif] = useState(null)
+  // Map article_id → deal pour appliquer la reduction sur articles concernes
+  const [dealsParArticle, setDealsParArticle] = useState({})
+  // Modale detail deal (titre + description + dates + prix)
+  const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   const [fermetures, setFermetures] = useState([])
   const [derniereCommande, setDerniereCommande] = useState(null)
   const [isDesktop, setIsDesktop] = useState(false)
@@ -591,6 +608,7 @@ export default function CommanderSlug() {
     setGalerie(data.galerie || [])
     setActualites(data.actualites || [])
     setDealActif(data.dealActif)
+    setDealsParArticle(data.dealsParArticle || {})
     setFermetures(data.fermetures)
     buildJoursDispos(data.commercant, data.creneaux, data.fermetures)
     setLoading(false)
@@ -621,7 +639,7 @@ export default function CommanderSlug() {
       supabase.from('avis').select('note').eq('commercant_id', c.id),
       supabase.from('commandes').select('creneau_id, commande_articles(quantite, article:articles(temps_prepa))').eq('commercant_id', c.id).not('statut', 'in', '(recupere,non_retire)'),
       supabase.from('commercant_photos').select('*').eq('commercant_id', c.id).order('ordre'),
-      supabase.from('yoppaa_deals').select('*').eq('commercant_id', c.id).eq('actif', true).lte('date_debut', new Date().toISOString()).gte('date_fin', new Date().toISOString()).limit(1),
+      supabase.from('yoppaa_deals').select('*').eq('commercant_id', c.id).eq('actif', true).lte('date_debut', new Date().toISOString()).gte('date_fin', new Date().toISOString()),
       supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', c.id).gte('date_fin', new Date().toISOString()),
       supabase.from('actualites').select('*').eq('commercant_id', c.id).eq('actif', true).order('created_at', { ascending: false }),
     ])
@@ -668,7 +686,13 @@ export default function CommanderSlug() {
 
     const couverture = (photosData||[]).find(p => p.type === 'couverture') || null
     const galerieAutres = (photosData||[]).filter(p => p.type !== 'couverture' && p.url)
-    const deal = dealsData?.[0] || null
+    const dealsActifs = dealsData || []
+    // Deal "vedette" affiche en bandeau : 1er deal SANS article_id (générique),
+    // sinon le 1er deal (avec article_id) pour ne pas avoir un bandeau vide
+    const deal = dealsActifs.find(d => !d.article_id) || dealsActifs[0] || null
+    // Map article_id → deal (pour appliquer la réduction sur les articles concernés)
+    const dealsParArticle = {}
+    dealsActifs.forEach(d => { if (d.article_id) dealsParArticle[d.article_id] = d })
 
     // Filtrer les actus actives aujourd'hui (sur la fenêtre date_debut/date_fin)
     const aujourdhui = new Date().toISOString().slice(0, 10)
@@ -692,6 +716,7 @@ export default function CommanderSlug() {
       photoCouverture: couverture,
       galerie: galerieAutres,
       dealActif: deal,
+      dealsParArticle,
       fermetures: fermeturesData || [],
       actualites: actusActives,
     }
@@ -920,7 +945,13 @@ export default function CommanderSlug() {
     const qteTotale = qteTotaleArticle(article.id)
     if (stockMax !== Infinity && qteTotale >= stockMax) return
     const key = options ? `${article.id}_${JSON.stringify(options)}` : String(article.id)
-    setPanier(prev => ({ ...prev, [key]: { ...article, options, quantite: (prev[key]?.quantite || 0) + 1 } }))
+    // Si un deal est lié à cet article ET fournit un prix_deal, applique-le.
+    // On stocke prix_original séparément pour pouvoir afficher la barré.
+    const deal = dealsParArticle[article.id]
+    const articleAvecPrix = (deal && deal.prix_deal != null)
+      ? { ...article, prix: Number(deal.prix_deal), prix_avant_deal: Number(article.prix), deal_id: deal.id }
+      : article
+    setPanier(prev => ({ ...prev, [key]: { ...articleAvecPrix, options, quantite: (prev[key]?.quantite || 0) + 1 } }))
   }
 
   // FIX STOCK : incrementerPanier vérifie aussi le stock
@@ -1215,6 +1246,55 @@ export default function CommanderSlug() {
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 
+      {/* Modale détail deal — titre + description complète + dates + prix */}
+      {dealDetailOuvert && (
+        <div onClick={() => setDealDetailOuvert(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeUp 0.2s ease' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 22, maxWidth: 440, width: '100%', boxShadow: '0 24px 48px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
+            {/* En-tête violet foncé */}
+            <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, padding: '20px 22px 24px', color: '#fff' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+                <span style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px', background: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: 100, border: '1px solid rgba(255,255,255,0.2)' }}>🔥 Deal du jour</span>
+                <button onClick={() => setDealDetailOuvert(null)} aria-label="Fermer"
+                  style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 30, height: 30, color: '#fff', cursor: 'pointer', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+              </div>
+              <h2 style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.2, margin: 0 }}>
+                {dealDetailOuvert.titre}
+              </h2>
+              {dealDetailOuvert.prix_deal && (
+                <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, marginTop: 12, background: 'rgba(255,255,255,0.1)', padding: '8px 14px', borderRadius: 12 }}>
+                  <span style={{ fontWeight: 900, fontSize: '1.6rem', color: T.light, letterSpacing: '-0.5px' }}>{Number(dealDetailOuvert.prix_deal).toFixed(2)}€</span>
+                  {dealDetailOuvert.prix_original && (
+                    <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.5)', textDecoration: 'line-through' }}>{Number(dealDetailOuvert.prix_original).toFixed(2)}€</span>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* Corps blanc */}
+            <div style={{ padding: '18px 22px 22px' }}>
+              {dealDetailOuvert.description && (
+                <p style={{ fontSize: '0.9rem', color: T.ink, lineHeight: 1.55, margin: '0 0 14px' }}>{dealDetailOuvert.description}</p>
+              )}
+              {dealDetailOuvert.date_deal && (
+                <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 600, margin: '0 0 6px' }}>
+                  📅 Valable le {new Date(dealDetailOuvert.date_deal + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </p>
+              )}
+              {dealDetailOuvert.article_id && (
+                <p style={{ fontSize: '0.78rem', color: T.main, fontWeight: 700, margin: '0 0 6px' }}>
+                  ✓ Appliqué automatiquement à l&rsquo;article concerné dans le menu
+                </p>
+              )}
+              <button onClick={() => setDealDetailOuvert(null)}
+                style={{ width: '100%', marginTop: 14, padding: '0.875rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 16px ${T.main}55` }}>
+                Compris
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modale : confirmation de changement de jour avec panier non vide */}
       {confirmationJour && joursDispos[confirmationJour.nouveauIdx] && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.65)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeUp 0.2s ease' }}>
@@ -1417,10 +1497,11 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {/* Bandeau deal du jour */}
+                {/* Bandeau deal du jour — cliquable pour ouvrir le détail */}
                 {canDo(commercant.plan, 'deals') && dealActif && (
                   <div style={{ margin: '0 12px 12px' }}>
-                    <div style={{ background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, animation: 'dealGlow 1.8s ease-in-out infinite' }}>
+                    <button onClick={() => setDealDetailOuvert(dealActif)}
+                      style={{ width: '100%', background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, animation: 'dealGlow 1.8s ease-in-out infinite', border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
                       <span style={{ fontSize: 18 }}>🔥</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>Deal du jour</p>
@@ -1432,7 +1513,8 @@ export default function CommanderSlug() {
                           <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{Number(dealActif.prix_deal).toFixed(2)}€</p>
                         </div>
                       )}
-                    </div>
+                      <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', flexShrink: 0, marginLeft: 4 }}>›</span>
+                    </button>
                   </div>
                 )}
 
@@ -1496,7 +1578,7 @@ export default function CommanderSlug() {
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                             onCommanderDemain={commanderPourJour}
-                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix')}/>
+                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}/>
                         ))}
                       </div>
                     </div>
@@ -1514,7 +1596,7 @@ export default function CommanderSlug() {
                           ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                           stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                           onCommanderDemain={commanderPourJour}
-                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix')}/>
+                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}/>
                       ))}
                     </div>
                   </div>

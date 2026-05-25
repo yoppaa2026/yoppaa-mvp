@@ -1169,9 +1169,7 @@ export default function CommanderSlug() {
   }
 
   // Plans YOPPAA : single source of truth via lib/plans.js
-  // isPlanOn   : plan ON (lecture seule, badge "VITRINE" affiche)
-  // peutCommander : BOOST/MAX uniquement (active panier + creneaux)
-  const isPlanOn = commercant?.plan === 'on'
+  // peutCommander = BOOST/MAX uniquement (active panier + creneaux)
   const peutCommander = canDo(commercant?.plan, 'commande')
 
   function suggererClickCollect() {
@@ -1310,12 +1308,6 @@ export default function CommanderSlug() {
                       </div>
                     )
                   }
-                  {/* Badge plan en haut à droite (sauf BOOST/MAX qui sont la norme) */}
-                  {!peutCommander && (
-                    <span style={{ position: 'absolute', top: 16, right: 16, fontSize: '0.62rem', fontWeight: 800, color: '#fff', background: 'rgba(22,6,54,0.55)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.3)', padding: '5px 12px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.7px' }}>
-                      {isPlanOn ? 'Vitrine' : 'Sans commande'}
-                    </span>
-                  )}
                   {/* Voile dégradé bas pour finition visuelle */}
                   <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, background: 'linear-gradient(to top, rgba(22,6,54,0.5), transparent)' }}/>
                 </div>

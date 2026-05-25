@@ -527,12 +527,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
       <div style={{ padding: '0.875rem 1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-              <p style={{ fontWeight: 900, color: T.ink, margin: 0, fontSize: '1rem', letterSpacing: '-0.3px' }}>{c.nom}</p>
-              {isPlanOn && (
-                <span style={{ fontSize: '0.58rem', fontWeight: 800, color: T.muted, background: '#F3F4F6', padding: '2px 7px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px', border: '1px solid #E5E7EB' }}>Vitrine</span>
-              )}
-            </div>
+            <p style={{ fontWeight: 900, color: T.ink, margin: '0 0 6px', fontSize: '1rem', letterSpacing: '-0.3px' }}>{c.nom}</p>
             <Badges type={c.type}/>
             {/* Pills statut : 5 pills toujours visibles, dot LIVE orange si actif */}
             <div style={{ marginTop: 8 }}>

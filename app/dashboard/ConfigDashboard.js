@@ -1028,7 +1028,8 @@ function TabDeals({ commercantId, commercant, toast }) {
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({
     titre: '', description: '', prix_deal: '', prix_original: '',
-    date_deal: tomorrow, heure_debut: '00:00', heure_fin: '23:59',
+    date_debut: tomorrow, date_fin: tomorrow,
+    heure_debut: '00:00', heure_fin: '23:59',
     inclus_morning: false, actif: true, article_id: '',
   })
   const [saving, setSaving] = useState(false)
@@ -1061,19 +1062,26 @@ function TabDeals({ commercantId, commercant, toast }) {
 
   function openNew() {
     setForm({ titre: '', description: '', prix_deal: '', prix_original: '',
-      date_deal: tomorrow, heure_debut: '00:00', heure_fin: '23:59',
+      date_debut: tomorrow, date_fin: tomorrow,
+      heure_debut: '00:00', heure_fin: '23:59',
       inclus_morning: false, actif: true, article_id: '' })
     setEditId(null); setShowForm(true)
   }
   function openEdit(d) {
+    // Récupère date_debut/date_fin depuis les timestamps ou retombe sur date_deal
+    const dDebut = d.date_debut ? d.date_debut.slice(0, 10) : (d.date_deal || today)
+    const dFin   = d.date_fin   ? d.date_fin.slice(0, 10)   : (d.date_deal || today)
+    const hDebut = d.date_debut ? d.date_debut.slice(11, 16) : '00:00'
+    const hFin   = d.date_fin   ? d.date_fin.slice(11, 16)   : '23:59'
     setForm({
       titre: d.titre || '',
       description: d.description || '',
       prix_deal: String(d.prix_deal ?? ''),
       prix_original: String(d.prix_original ?? ''),
-      date_deal: d.date_deal || today,
-      heure_debut: '00:00',
-      heure_fin: '23:59',
+      date_debut: dDebut,
+      date_fin: dFin,
+      heure_debut: hDebut,
+      heure_fin: hFin,
       inclus_morning: !!d.inclus_morning,
       actif: d.actif !== false,
       article_id: d.article_id || '',
@@ -1106,18 +1114,21 @@ function TabDeals({ commercantId, commercant, toast }) {
 
   async function saveDeal() {
     if (!form.titre.trim()) return toast('Titre obligatoire', 'error')
-    if (!form.date_deal) return toast('Date obligatoire', 'error')
+    if (!form.date_debut) return toast('Date de début obligatoire', 'error')
+    const dDebut = form.date_debut
+    const dFin = form.date_fin || dDebut
+    if (dFin < dDebut) return toast('La date de fin doit être après la date de début', 'error')
     setSaving(true)
-    const dateDeal = form.date_deal
-    const dateDebut = `${dateDeal}T${form.heure_debut || '00:00'}:00`
-    const dateFin = `${dateDeal}T${form.heure_fin || '23:59'}:59`
+    const dateDebut = `${dDebut}T${form.heure_debut || '00:00'}:00`
+    const dateFin   = `${dFin}T${form.heure_fin || '23:59'}:59`
     const payload = {
       commercant_id: commercantId,
       titre: form.titre.trim(),
       description: form.description.trim() || null,
       prix_deal: form.prix_deal ? parseFloat(form.prix_deal) : null,
       prix_original: form.prix_original ? parseFloat(form.prix_original) : null,
-      date_deal: dateDeal,
+      // date_deal = 1er jour de la période (utilisé pour la sélection Morning Yoppaa)
+      date_deal: dDebut,
       date_debut: dateDebut,
       date_fin: dateFin,
       inclus_morning: !!form.inclus_morning,
@@ -1126,20 +1137,26 @@ function TabDeals({ commercantId, commercant, toast }) {
     }
 
     // Règle : 1 seul deal coché pour le Morning par jour → décocher les autres
+    // pour le même date_deal (jour de featuring Morning)
     if (payload.inclus_morning) {
       const q = supabase.from('yoppaa_deals')
         .update({ inclus_morning: false })
         .eq('commercant_id', commercantId)
-        .eq('date_deal', dateDeal)
+        .eq('date_deal', dDebut)
       if (editId) q.neq('id', editId)
       await q
     }
 
-    const { error } = editId
-      ? await supabase.from('yoppaa_deals').update(payload).eq('id', editId)
-      : await supabase.from('yoppaa_deals').insert(payload)
+    // .select() pour détecter les RLS silencieux (0 rows affected)
+    const { data, error } = editId
+      ? await supabase.from('yoppaa_deals').update(payload).eq('id', editId).select()
+      : await supabase.from('yoppaa_deals').insert(payload).select()
     setSaving(false)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    if (!data || data.length === 0) {
+      toast('Modification refusée par les permissions Supabase (RLS)', 'error')
+      return
+    }
     toast(editId ? 'Deal mis à jour' : 'Deal créé')
     setShowForm(false); fetchDeals()
   }
@@ -1153,7 +1170,9 @@ function TabDeals({ commercantId, commercant, toast }) {
   }
 
   async function toggleActif(d) {
-    await supabase.from('yoppaa_deals').update({ actif: !d.actif }).eq('id', d.id)
+    const { data, error } = await supabase.from('yoppaa_deals').update({ actif: !d.actif }).eq('id', d.id).select()
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    if (!data || data.length === 0) { toast('Modification refusée (RLS)', 'error'); return }
     fetchDeals()
   }
 
@@ -1163,7 +1182,7 @@ function TabDeals({ commercantId, commercant, toast }) {
 
   if (loading) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
 
-  const warningSoumission = form.inclus_morning && deadlinePassee(form.date_deal, true)
+  const warningSoumission = form.inclus_morning && deadlinePassee(form.date_debut, true)
 
   return (
     <div>
@@ -1216,11 +1235,35 @@ function TabDeals({ commercantId, commercant, toast }) {
               <div><label style={s.label}>Prix deal (€)</label><Input type="number" step="0.10" min="0" value={form.prix_deal} onChange={e => setForm(p => ({ ...p, prix_deal: e.target.value }))} placeholder="2.50"/></div>
               <div><label style={s.label}>Prix d&rsquo;origine (€)</label><Input type="number" step="0.10" min="0" value={form.prix_original} onChange={e => setForm(p => ({ ...p, prix_original: e.target.value }))} placeholder="3.50"/></div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-              <div><label style={s.label}>Date</label><Input type="date" value={form.date_deal} min={today} onChange={e => setForm(p => ({ ...p, date_deal: e.target.value }))}/></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <label style={s.label}>Date début *</label>
+                <Input type="date" value={form.date_debut} min={today}
+                  onChange={e => {
+                    const v = e.target.value
+                    setForm(p => ({
+                      ...p,
+                      date_debut: v,
+                      // Si la date de fin est avant la nouvelle date début → on l'aligne
+                      date_fin: (!p.date_fin || p.date_fin < v) ? v : p.date_fin,
+                    }))
+                  }}/>
+              </div>
+              <div>
+                <label style={s.label}>Date fin *</label>
+                <Input type="date" value={form.date_fin} min={form.date_debut || today}
+                  onChange={e => setForm(p => ({ ...p, date_fin: e.target.value }))}/>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div><label style={s.label}>Heure début</label><Input type="time" value={form.heure_debut} onChange={e => setForm(p => ({ ...p, heure_debut: e.target.value }))}/></div>
               <div><label style={s.label}>Heure fin</label><Input type="time" value={form.heure_fin} onChange={e => setForm(p => ({ ...p, heure_fin: e.target.value }))}/></div>
             </div>
+            {form.date_debut && form.date_fin && form.date_debut !== form.date_fin && (
+              <p style={{ fontSize: 11, color: T.muted, fontStyle: 'italic', margin: 0 }}>
+                Période multi-jours : le deal sera affiché tous les jours entre {form.date_debut} et {form.date_fin}. Pour le Morning Yoppaa, le push partira le matin du {form.date_debut}.
+              </p>
+            )}
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: form.inclus_morning ? '#FFF7ED' : '#FAFAFA', border: `1.5px solid ${form.inclus_morning ? '#EA580C' : T.hairline}`, borderRadius: 10, cursor: 'pointer' }}>
               <input type="checkbox" checked={form.inclus_morning} onChange={e => setForm(p => ({ ...p, inclus_morning: e.target.checked }))} style={{ width: 18, height: 18, cursor: 'pointer' }}/>
               <span style={{ fontSize: 13, color: T.ink, fontWeight: 700 }}>☀️ Inclure dans Le Morning Yoppaa</span>

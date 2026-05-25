@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { canDo } from '@/lib/plans'
 import PillsStatut from '../PillsStatut'
+import CTAUpgrade from '../CTAUpgrade'
 
 const T = {
   bg:      '#F8F6FF',
@@ -335,7 +336,7 @@ function HorairesSection({ horaires }) {
 }
 
 // ─── ArticleRow ───────────────────────────────────────────────────────────────
-function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false }) {
+function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false, masquerPrix = false }) {
   const groupes = optionsParArticle[article.id] || []
   const hasOptions = groupes.length > 0
   const [showOptions, setShowOptions] = useState(false)
@@ -409,7 +410,13 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
           <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{article.nom}</p>
           {article.description && <p style={{ fontSize: '0.78rem', color: T.muted, marginBottom: 5, lineHeight: 1.4 }}>{article.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(article.prix).toFixed(2)}€</p>
+            {masquerPrix ? (
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, background: '#F3F4F6', padding: '4px 10px', borderRadius: 100, border: '1px dashed #D1D5DB' }}>
+                Prix non affichés
+              </span>
+            ) : (
+              <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(article.prix).toFixed(2)}€</p>
+            )}
             {hasOptions && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100 }}>Personnalisable</span>}
           </div>
 
@@ -504,9 +511,6 @@ export default function CommanderSlug() {
 
   const [etape, setEtape] = useState(2)
   const [commercant, setCommercant] = useState(null)
-  // Mode Vitrine : commerce non commandable en ligne (plan = 'vitrine')
-  // → lecture seule, pas de panier, CTA "Suggérer Click & Collect" en bas
-  const [suggererToast, setSuggererToast] = useState(false)
   const [articles, setArticles] = useState([])
   const [creneaux, setCreneaux] = useState([])
   const [avisCommerce, setAvisCommerce] = useState([])
@@ -1172,12 +1176,6 @@ export default function CommanderSlug() {
   // peutCommander = BOOST/MAX uniquement (active panier + creneaux)
   const peutCommander = canDo(commercant?.plan, 'commande')
 
-  function suggererClickCollect() {
-    // TODO : connecter à une table suggestions_click_collect + email Yoppaa
-    setSuggererToast(true)
-    setTimeout(() => setSuggererToast(false), 4000)
-  }
-
   return (
     <>
       <style>{`
@@ -1234,13 +1232,6 @@ export default function CommanderSlug() {
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Toast confirmation suggestion Click & Collect (mode Vitrine) */}
-      {suggererToast && (
-        <div style={{ position: 'fixed', bottom: 30, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, background: T.bgPanel, color: '#fff', padding: '14px 22px', borderRadius: 14, fontWeight: 700, fontSize: 14, boxShadow: '0 12px 32px rgba(22,6,54,0.4)', animation: 'fadeUp 0.3s ease', maxWidth: 340, textAlign: 'center', lineHeight: 1.4 }}>
-          Merci&nbsp;! On en parle à {commercant?.nom} et à l&rsquo;équipe Yoppaa 🟣
         </div>
       )}
 
@@ -1312,7 +1303,27 @@ export default function CommanderSlug() {
                   <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, background: 'linear-gradient(to top, rgba(22,6,54,0.5), transparent)' }}/>
                 </div>
 
-                {dealActif && (
+                {/* Bandeau alertes/actualités (priorité aux ALERTES en rouge) */}
+                {canDo(commercant.plan, 'actus') && actualites.length > 0 && (
+                  <div>
+                    {actualites.map(a => {
+                      const isAlerte = a.type === 'alerte'
+                      return (
+                        <div key={a.id} style={{ background: isAlerte ? 'linear-gradient(135deg, #7F1D1D, #B91C1C)' : `linear-gradient(135deg, ${T.deep}, ${T.main})`, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: isAlerte ? '#FCA5A5' : T.light, textTransform: 'uppercase', letterSpacing: '0.7px', flexShrink: 0 }}>
+                            {isAlerte ? 'Alerte' : 'Actualité'}
+                          </span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fff', margin: 0, lineHeight: 1.3 }}>{a.titre}</p>
+                            {a.contenu && <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.85)', margin: '2px 0 0', lineHeight: 1.4 }}>{a.contenu}</p>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {canDo(commercant.plan, 'deals') && dealActif && (
                   <div style={{ background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, animation: 'dealPulse 3s ease infinite' }}>
                     <span style={{ fontSize: 14 }}>🔥</span>
                     <div style={{ flex: 1 }}>
@@ -1477,7 +1488,7 @@ export default function CommanderSlug() {
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                             onCommanderDemain={commanderPourJour}
-                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander}/>
+                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix')}/>
                         ))}
                       </div>
                     </div>
@@ -1495,7 +1506,7 @@ export default function CommanderSlug() {
                           ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                           stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                           onCommanderDemain={commanderPourJour}
-                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander}/>
+                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix')}/>
                       ))}
                     </div>
                   </div>
@@ -1520,22 +1531,19 @@ export default function CommanderSlug() {
                   />
                 )}
 
-                {/* CTA si le plan ne permet pas la commande : suggerer activation Click & Collect */}
+                {/* CTAs contextuels selon le plan — sections grisées du commerce */}
                 {!peutCommander && (
-                  <div style={{ marginTop: 24, background: T.bgPanel, borderRadius: 18, padding: '20px 18px', color: '#fff', textAlign: 'center' }}>
-                    <p style={{ fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 8 }}>
-                      Click &amp; Collect non activé
-                    </p>
-                    <p style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.3px', marginBottom: 6 }}>
-                      Ce commerce n&rsquo;est pas encore commandable en ligne
-                    </p>
-                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.5, marginBottom: 16 }}>
-                      Envie de gagner du temps chez <strong style={{ color: '#fff', fontWeight: 800 }}>{commercant.nom}</strong>&nbsp;? Fais-leur savoir que tu veux pouvoir commander à l&rsquo;avance via Yoppaa.
-                    </p>
-                    <button onClick={suggererClickCollect}
-                      style={{ background: '#fff', border: 'none', borderRadius: 100, padding: '12px 22px', color: T.bgPanel, fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 16px rgba(0,0,0,0.18)' }}>
-                      Suggérer à {commercant.nom} d&rsquo;activer le Click &amp; Collect →
-                    </button>
+                  <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {!canDo(commercant.plan, 'prix') && (
+                      <CTAUpgrade type="prix" commercant={commercant} variant="banner"/>
+                    )}
+                    <CTAUpgrade type="commande" commercant={commercant} variant="banner"/>
+                  </div>
+                )}
+                {/* CTA livraison pour BOOST (n'a pas la livraison) — affichage discret en banner */}
+                {peutCommander && !canDo(commercant.plan, 'livraison') && (
+                  <div style={{ marginTop: 24 }}>
+                    <CTAUpgrade type="livraison" commercant={commercant} variant="banner"/>
                   </div>
                 )}
 

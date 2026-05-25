@@ -34,17 +34,23 @@ export default function PillsStatut({ commercant, dealActif = false, actuActive 
               </svg>
             )}
             {p.label}
-            {/* Dot LIVE orange : signal qu'un deal/actu est ACTIF maintenant */}
-            {p.live && (
-              <span style={{ position: 'absolute', top: -3, right: -3, width: size === 'lg' ? 9 : 7, height: size === 'lg' ? 9 : 7, borderRadius: '50%', background: '#FB7C1C', border: '2px solid #fff', boxShadow: '0 0 0 1px rgba(251,124,28,0.4), 0 0 8px rgba(251,124,28,0.7)', animation: 'yoppa-live-pulse 1.6s ease-in-out infinite' }}/>
-            )}
+            {/* Dot LIVE pulsant : violet pour DEAL, rouge pour ACTU.
+                Plus gros + animation marquee pour attirer l'oeil */}
+            {p.live && (() => {
+              const isDeal = p.key === 'deal'
+              const liveColor = isDeal ? '#6B35C4' : '#DC2626' // violet ou rouge
+              const liveSize = size === 'lg' ? 13 : 10
+              return (
+                <span style={{ position: 'absolute', top: -5, right: -5, width: liveSize, height: liveSize, borderRadius: '50%', background: liveColor, border: '2.5px solid #fff', boxShadow: `0 0 0 2px ${liveColor}33, 0 0 12px ${liveColor}cc`, animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
+              )
+            })()}
           </span>
         )
       })}
       <style>{`
         @keyframes yoppa-live-pulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50%      { transform: scale(1.25); opacity: 0.75; }
+          0%, 100% { transform: scale(1);   opacity: 1; }
+          50%      { transform: scale(1.45); opacity: 0.7; }
         }
       `}</style>
     </div>

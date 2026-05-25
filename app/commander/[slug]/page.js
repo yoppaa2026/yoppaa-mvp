@@ -1303,43 +1303,9 @@ export default function CommanderSlug() {
                   <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, background: 'linear-gradient(to top, rgba(22,6,54,0.5), transparent)' }}/>
                 </div>
 
-                {/* Bandeau alertes/actualités (priorité aux ALERTES en rouge) */}
-                {canDo(commercant.plan, 'actus') && actualites.length > 0 && (
-                  <div>
-                    {actualites.map(a => {
-                      const isAlerte = a.type === 'alerte'
-                      return (
-                        <div key={a.id} style={{ background: isAlerte ? 'linear-gradient(135deg, #7F1D1D, #B91C1C)' : `linear-gradient(135deg, ${T.deep}, ${T.main})`, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: isAlerte ? '#FCA5A5' : T.light, textTransform: 'uppercase', letterSpacing: '0.7px', flexShrink: 0 }}>
-                            {isAlerte ? 'Alerte' : 'Actualité'}
-                          </span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fff', margin: 0, lineHeight: 1.3 }}>{a.titre}</p>
-                            {a.contenu && <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.85)', margin: '2px 0 0', lineHeight: 1.4 }}>{a.contenu}</p>}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {canDo(commercant.plan, 'deals') && dealActif && (
-                  <div style={{ background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, animation: 'dealPulse 3s ease infinite' }}>
-                    <span style={{ fontSize: 14 }}>🔥</span>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: '0.68rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Deal Yoppers</p>
-                      <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>{dealActif.titre}</p>
-                    </div>
-                    {dealActif.prix_deal && (
-                      <div style={{ textAlign: 'right' }}>
-                        {dealActif.prix_original && <p style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.5)', textDecoration: 'line-through' }}>{dealActif.prix_original.toFixed(2)}€</p>}
-                        <p style={{ fontSize: '0.88rem', fontWeight: 900, color: T.light }}>{dealActif.prix_deal.toFixed(2)}€</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Card flottante : logo + type + nom + statut + actions */}
+                {/* Card flottante : logo + type + nom + statut + actions
+                    Chevauche le hero photo (marginTop -36) — donc placée JUSTE
+                    après le hero pour ne pas recouvrir les bandeaux actus/deal */}
                 <div style={{ background: '#fff', margin: '-36px 12px 0', borderRadius: 22, padding: '1.125rem 1.25rem 1rem', boxShadow: `0 12px 36px rgba(22,6,54,0.18), 0 2px 8px ${T.main}22`, border: `1px solid ${T.pale}`, position: 'relative' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
                     <div style={{ width: 64, height: 64, borderRadius: 16, background: commercant.logo_url ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, border: '3px solid #fff', boxShadow: `0 6px 20px rgba(22,6,54,0.22)`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: -28 }}>
@@ -1427,6 +1393,45 @@ export default function CommanderSlug() {
                 )}
 
                 <div style={{ height: 12, background: T.bg }}/>
+
+                {/* Bandeau alertes/actualités (alertes en rouge, prioritaires) */}
+                {canDo(commercant.plan, 'actus') && actualites.length > 0 && (
+                  <div style={{ margin: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {actualites.map(a => {
+                      const isAlerte = a.type === 'alerte'
+                      return (
+                        <div key={a.id} style={{ background: isAlerte ? 'linear-gradient(135deg, #7F1D1D, #B91C1C)' : `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, boxShadow: isAlerte ? '0 4px 16px rgba(220,38,38,0.25)' : '0 4px 16px rgba(22,6,54,0.15)' }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: isAlerte ? '#FCA5A5' : T.light, textTransform: 'uppercase', letterSpacing: '0.7px', flexShrink: 0, background: 'rgba(255,255,255,0.1)', padding: '3px 9px', borderRadius: 100, border: `1px solid ${isAlerte ? 'rgba(252,165,165,0.4)' : 'rgba(196,160,244,0.4)'}` }}>
+                            {isAlerte ? 'Alerte' : 'Actualité'}
+                          </span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: '0.88rem', fontWeight: 800, color: '#fff', margin: 0, lineHeight: 1.3 }}>{a.titre}</p>
+                            {a.contenu && <p style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.85)', margin: '2px 0 0', lineHeight: 1.4 }}>{a.contenu}</p>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Bandeau deal du jour */}
+                {canDo(commercant.plan, 'deals') && dealActif && (
+                  <div style={{ margin: '0 12px 12px' }}>
+                    <div style={{ background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, boxShadow: '0 4px 16px rgba(22,6,54,0.18)', animation: 'dealPulse 3s ease infinite' }}>
+                      <span style={{ fontSize: 18 }}>🔥</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>Deal du jour</p>
+                        <p style={{ fontSize: '0.9rem', fontWeight: 800, color: '#fff', marginTop: 2, lineHeight: 1.3 }}>{dealActif.titre}</p>
+                      </div>
+                      {dealActif.prix_deal && (
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          {dealActif.prix_original && <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', textDecoration: 'line-through' }}>{Number(dealActif.prix_original).toFixed(2)}€</p>}
+                          <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{Number(dealActif.prix_deal).toFixed(2)}€</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {commercant.horaires_detail && <HorairesSection horaires={commercant.horaires_detail}/>}
 

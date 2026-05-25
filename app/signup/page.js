@@ -1,8 +1,15 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { PLAN_LABEL, PLAN_PRIX, PLANS } from '@/lib/plans'
+
+const TYPES_COMMERCE = [
+  'Boulangerie', 'Pâtisserie', 'Chocolatier', 'Sandwicherie', 'Snack',
+  'Friterie', 'Pizzeria', 'Coffee shop', 'Épicerie', 'Traiteur',
+  'Pharmacie', 'Fleuriste', 'Boucherie', 'Pressing', 'Coiffeur',
+  'Food truck', 'Distributeur automatique', 'Autre',
+]
 
 // ─── PALETTE ──────────────────────────────────────────────────────────────────
 const T = {
@@ -136,11 +143,25 @@ export default function Signup() {
             }}
           />
         )}
-        {etape === 2 && (
-          <EtapePlaceholder titre="Infos de base" n={2} avancer={() => avancerVers(3)} retour={() => avancerVers(1)}/>
+        {etape === 2 && commercant && (
+          <Etape2Infos
+            commercant={commercant}
+            onboarding={onboarding}
+            onUpdate={c => setCommercant(c)}
+            onUpdateOb={ob => setOnboarding(ob)}
+            avancer={() => avancerVers(3)}
+            retour={() => avancerVers(1)}
+          />
         )}
-        {etape === 3 && (
-          <EtapePlaceholder titre="Visuels (photo couverture + logo)" n={3} avancer={() => avancerVers(4)} retour={() => avancerVers(2)}/>
+        {etape === 3 && commercant && (
+          <Etape3Visuels
+            commercant={commercant}
+            onboarding={onboarding}
+            onUpdate={c => setCommercant(c)}
+            onUpdateOb={ob => setOnboarding(ob)}
+            avancer={() => avancerVers(4)}
+            retour={() => avancerVers(2)}
+          />
         )}
         {etape === 4 && (
           <EtapePlaceholder titre="Horaires d'ouverture" n={4} avancer={() => avancerVers(5)} retour={() => avancerVers(3)}/>
@@ -316,7 +337,380 @@ function Etape1Compte({ session, commercant, onCompte }) {
   )
 }
 
-// ─── PLACEHOLDER pour les étapes 2-5 (commits suivants) ───────────────────────
+// ─── ÉTAPE 2 : INFOS DE BASE ──────────────────────────────────────────────────
+// - Nom, type, adresse (autocomplete Nominatim), téléphone, description ≥20
+// - Sauvegarde auto champ par champ (debounce 600ms)
+// - Update onboarding_commercants.infos_ok = true quand tous les champs requis
+function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, avancer, retour }) {
+  const [form, setForm] = useState({
+    nom: commercant.nom === 'Mon commerce' ? '' : (commercant.nom || ''),
+    type: commercant.type === 'À définir' ? '' : (commercant.type || ''),
+    adresse: commercant.adresse || '',
+    telephone: commercant.telephone || '',
+    description: commercant.description || '',
+    latitude: commercant.latitude,
+    longitude: commercant.longitude,
+  })
+  const [suggestions, setSuggestions] = useState([])
+  const [searchingAdresse, setSearchingAdresse] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const debounceRef = useRef(null)
+  const nominatimRef = useRef(null)
+
+  // Validation des champs requis (basée sur les seuils du brief)
+  const valide =
+    form.nom.trim().length >= 2 &&
+    form.type.trim().length > 0 &&
+    form.adresse.trim().length > 0 &&
+    form.telephone.trim().length >= 8 &&
+    form.description.trim().length >= 20 &&
+    form.latitude && form.longitude
+
+  // Sauvegarde auto (debounced)
+  function updateField(k, v) {
+    setForm(p => ({ ...p, [k]: v }))
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => sauvegarder({ ...form, [k]: v }), 600)
+  }
+
+  async function sauvegarder(values) {
+    setSaving(true)
+    const payload = {
+      nom: values.nom.trim() || 'Mon commerce',
+      type: values.type.trim() || 'À définir',
+      adresse: values.adresse.trim() || null,
+      telephone: values.telephone.trim() || null,
+      description: values.description.trim() || null,
+      latitude: values.latitude || null,
+      longitude: values.longitude || null,
+    }
+    const { data } = await supabase.from('commercants').update(payload).eq('id', commercant.id).select().single()
+    if (data) onUpdate(data)
+    setSaving(false)
+  }
+
+  // Autocomplete Nominatim (Belgique en priorité)
+  async function chercherAdresse(query) {
+    if (!query || query.length < 3) { setSuggestions([]); return }
+    setSearchingAdresse(true)
+    clearTimeout(nominatimRef.current)
+    nominatimRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&accept-language=fr&countrycodes=be`, {
+          headers: { Accept: 'application/json' },
+        })
+        const data = await res.json()
+        setSuggestions(data || [])
+      } catch { setSuggestions([]) }
+      setSearchingAdresse(false)
+    }, 400)
+  }
+
+  function choisirSuggestion(s) {
+    const adresse = s.display_name.split(',').slice(0, 3).join(', ')
+    setForm(p => ({
+      ...p,
+      adresse,
+      latitude: parseFloat(s.lat),
+      longitude: parseFloat(s.lon),
+    }))
+    setSuggestions([])
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => sauvegarder({
+      ...form, adresse, latitude: parseFloat(s.lat), longitude: parseFloat(s.lon),
+    }), 100)
+  }
+
+  async function continuer() {
+    if (!valide) return
+    // Sync immédiate avant d'avancer
+    clearTimeout(debounceRef.current)
+    await sauvegarder(form)
+    if (onboarding) {
+      const { data } = await supabase.from('onboarding_commercants')
+        .update({ infos_ok: true }).eq('id', onboarding.id).select().single()
+      if (data) onUpdateOb(data)
+    }
+    avancer()
+  }
+
+  return (
+    <div>
+      <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 6px' }}>
+        Présente ton commerce
+      </h1>
+      <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 24px' }}>
+        Ces infos apparaîtront sur ta page Yoppaa. Tu peux les modifier à tout moment.
+      </p>
+
+      <Card titre="Identité">
+        <Field label="Nom du commerce *">
+          <input type="text" value={form.nom} onChange={e => updateField('nom', e.target.value)} placeholder="Ex: Au Pain Doré" style={inputStyle()}/>
+        </Field>
+        <Field label="Type *">
+          <select value={form.type} onChange={e => updateField('type', e.target.value)} style={{ ...inputStyle(), cursor: 'pointer' }}>
+            <option value="">— Choisir un type —</option>
+            {TYPES_COMMERCE.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </Field>
+      </Card>
+
+      <Card titre="Localisation" sous="L'adresse permet aux clients de te trouver sur la carte.">
+        <Field label="Adresse complète *">
+          <div style={{ position: 'relative' }}>
+            <input type="text" value={form.adresse}
+              onChange={e => { updateField('adresse', e.target.value); chercherAdresse(e.target.value) }}
+              placeholder="Ex: Place Meunier 1, 5640 Mettet"
+              style={inputStyle()}/>
+            {searchingAdresse && (
+              <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: T.muted }}>…</span>
+            )}
+            {suggestions.length > 0 && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 12, marginTop: 4, boxShadow: '0 8px 24px rgba(22,6,54,0.12)', zIndex: 10, maxHeight: 240, overflowY: 'auto' }}>
+                {suggestions.map(s => (
+                  <button key={s.place_id} type="button" onClick={() => choisirSuggestion(s)}
+                    style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', borderBottom: `1px solid ${T.hairline}`, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 13, color: T.deep }}>
+                    {s.display_name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {form.latitude && form.longitude && (
+            <p style={{ fontSize: 11, color: '#16A34A', fontWeight: 700, margin: '6px 0 0' }}>
+              ✓ Position GPS confirmée ({form.latitude.toFixed(4)}, {form.longitude.toFixed(4)})
+            </p>
+          )}
+        </Field>
+        <Field label="Téléphone *">
+          <input type="tel" value={form.telephone} onChange={e => updateField('telephone', e.target.value)} placeholder="+32 71 00 00 00" style={inputStyle()}/>
+        </Field>
+      </Card>
+
+      <Card titre="Description" sous={`Minimum 20 caractères. ${form.description.length} / 20.`}>
+        <textarea value={form.description} onChange={e => updateField('description', e.target.value)}
+          placeholder="Quelques mots qui décrivent ton commerce, ce qui te rend unique…"
+          rows={4}
+          style={{ ...inputStyle(), minHeight: 90, resize: 'vertical' }}/>
+      </Card>
+
+      <NavEtape retour={retour} continuer={continuer} valide={valide} saving={saving} hint={valide ? null : 'Complète tous les champs pour continuer.'}/>
+    </div>
+  )
+}
+
+// ─── ÉTAPE 3 : VISUELS ────────────────────────────────────────────────────────
+// - Upload photo de couverture (16:9 conseillé) + logo (carré conseillé)
+// - Validation : JPG / PNG / WEBP, 800px min, 8MB max
+// - Stockage Supabase Storage bucket 'logos' (existant) avec préfixes différents
+// - URL couverture insérée dans commercant_photos (type='couverture')
+function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, avancer, retour }) {
+  const [logoUrl, setLogoUrl] = useState(commercant.logo_url || null)
+  const [couvertureUrl, setCouvertureUrl] = useState(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  // Charge la photo de couverture existante au mount
+  useEffect(() => {
+    let annule = false
+    supabase.from('commercant_photos')
+      .select('url')
+      .eq('commercant_id', commercant.id)
+      .eq('type', 'couverture')
+      .maybeSingle()
+      .then(({ data }) => { if (!annule && data?.url) setCouvertureUrl(data.url) })
+    return () => { annule = true }
+  }, [commercant.id])
+
+  async function validerFichier(file) {
+    if (!file) return 'Aucun fichier'
+    const okType = /image\/(jpeg|jpg|png|webp)/.test(file.type)
+    if (!okType) return 'Format invalide. Utilise JPG, PNG ou WEBP.'
+    if (file.size > 8 * 1024 * 1024) return 'Fichier trop lourd. Max 8 MB.'
+    // Check dimensions (min 800px sur le plus grand côté)
+    const dims = await new Promise(resolve => {
+      const img = new Image()
+      img.onload = () => resolve({ w: img.width, h: img.height })
+      img.onerror = () => resolve(null)
+      img.src = URL.createObjectURL(file)
+    })
+    if (!dims) return 'Fichier corrompu ou illisible.'
+    if (Math.max(dims.w, dims.h) < 800) return 'Image trop petite. Min 800 px sur le plus grand côté.'
+    return null
+  }
+
+  async function uploadLogo(file) {
+    setError('')
+    const err = await validerFichier(file)
+    if (err) { setError(err); return }
+    setUploadingLogo(true)
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+    const fileName = `logo-${commercant.id}-${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, file, { upsert: true })
+    if (upErr) { setError(`Upload échoué : ${upErr.message}`); setUploadingLogo(false); return }
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    const url = urlData.publicUrl
+    const { data: c } = await supabase.from('commercants').update({ logo_url: url }).eq('id', commercant.id).select().single()
+    if (c) onUpdate(c)
+    setLogoUrl(url)
+    setUploadingLogo(false)
+  }
+
+  async function uploadCouverture(file) {
+    setError('')
+    const err = await validerFichier(file)
+    if (err) { setError(err); return }
+    setUploadingCover(true)
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+    const fileName = `cover-${commercant.id}-${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, file, { upsert: true })
+    if (upErr) { setError(`Upload échoué : ${upErr.message}`); setUploadingCover(false); return }
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    const url = urlData.publicUrl
+    // Une seule photo de couverture : on supprime l'ancienne entrée si elle existe
+    await supabase.from('commercant_photos')
+      .delete()
+      .eq('commercant_id', commercant.id)
+      .eq('type', 'couverture')
+    await supabase.from('commercant_photos').insert({
+      commercant_id: commercant.id,
+      type: 'couverture',
+      url,
+      ordre: 0,
+    })
+    setCouvertureUrl(url)
+    setUploadingCover(false)
+  }
+
+  async function continuer() {
+    setSaving(true)
+    if (onboarding) {
+      const { data } = await supabase.from('onboarding_commercants')
+        .update({ photo_ok: !!couvertureUrl }).eq('id', onboarding.id).select().single()
+      if (data) onUpdateOb(data)
+    }
+    setSaving(false)
+    avancer()
+  }
+
+  return (
+    <div>
+      <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 6px' }}>
+        Tes visuels
+      </h1>
+      <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 12px' }}>
+        Une belle photo, c&rsquo;est <strong style={{ color: T.bgPanel }}>+40 % de clics</strong> sur ta page. Tu pourras en ajouter d&rsquo;autres plus tard.
+      </p>
+
+      <div style={{ background: '#F0F9FF', borderLeft: `4px solid #0284C7`, borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 12.5, color: '#0C4A6E', lineHeight: 1.5 }}>
+        Conseils&nbsp;: lumière naturelle, format paysage pour la couverture, façade ou produit phare bien visible. Format JPG/PNG/WEBP, 800 px min, 8 MB max.
+      </div>
+
+      <Card titre="Photo de couverture" sous="Format paysage (16:9 conseillé). C'est la grande image en haut de ta page.">
+        <UploadZone
+          url={couvertureUrl}
+          uploading={uploadingCover}
+          aspect="16/9"
+          minHeight={180}
+          label="Ajouter la photo de couverture"
+          onFile={uploadCouverture}
+        />
+      </Card>
+
+      <Card titre="Logo" sous="Format carré conseillé. Affiché dans la card flottante de ta page.">
+        <UploadZone
+          url={logoUrl}
+          uploading={uploadingLogo}
+          aspect="1/1"
+          minHeight={120}
+          label="Ajouter le logo"
+          onFile={uploadLogo}
+          maxWidth={140}
+        />
+      </Card>
+
+      {error && (
+        <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, color: '#7F1D1D', fontSize: 13, fontWeight: 600 }}>
+          {error}
+        </div>
+      )}
+
+      <NavEtape retour={retour} continuer={continuer} valide={true} saving={saving} hint={couvertureUrl ? null : 'Tu peux passer cette étape et ajouter les photos plus tard depuis ton dashboard.'}/>
+    </div>
+  )
+}
+
+function UploadZone({ url, uploading, aspect, minHeight, label, onFile, maxWidth }) {
+  const inputRef = useRef(null)
+  return (
+    <div style={{ maxWidth }}>
+      <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
+        style={{ width: '100%', minHeight, aspectRatio: aspect, borderRadius: 14, border: `2px dashed ${url ? T.bgPanel : T.hairline}`, background: url ? '#fff' : '#FAFAFA', cursor: uploading ? 'wait' : 'pointer', overflow: 'hidden', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: '"DM Sans", sans-serif', padding: 0 }}>
+        {url ? (
+          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+        ) : (
+          <div style={{ textAlign: 'center', padding: 16 }}>
+            <p style={{ fontSize: '1.4rem', marginBottom: 6 }}>📷</p>
+            <p style={{ fontSize: 13, color: T.muted, fontWeight: 700 }}>{label}</p>
+            <p style={{ fontSize: 11, color: T.muted, fontWeight: 500, marginTop: 4 }}>JPG, PNG ou WEBP · 8 MB max</p>
+          </div>
+        )}
+        {uploading && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: T.bgPanel }}>
+            Upload en cours…
+          </div>
+        )}
+      </button>
+      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp"
+        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = '' }}
+        style={{ display: 'none' }}/>
+      {url && (
+        <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
+          style={{ marginTop: 8, padding: '6px 12px', background: 'none', border: `1px solid ${T.hairline}`, borderRadius: 100, color: T.muted, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+          Remplacer
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── HELPERS UI partagés ──────────────────────────────────────────────────────
+function Field({ label, children }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 5, letterSpacing: '0.5px', textTransform: 'uppercase' }}>{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function inputStyle() {
+  return { width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 14, color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: '"DM Sans", sans-serif' }
+}
+
+function NavEtape({ retour, continuer, valide, saving, hint }) {
+  return (
+    <div style={{ marginTop: 8 }}>
+      {hint && (
+        <p style={{ fontSize: 12, color: T.muted, fontStyle: 'italic', textAlign: 'center', marginBottom: 12 }}>{hint}</p>
+      )}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={retour}
+          style={{ padding: '0.875rem 1.5rem', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.muted, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+          ← Retour
+        </button>
+        <button onClick={continuer} disabled={!valide || saving}
+          style={{ flex: 1, padding: '0.875rem 1.5rem', borderRadius: 100, border: 'none', background: (!valide || saving) ? `${T.muted}66` : `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 15, cursor: (!valide || saving) ? 'not-allowed' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: valide ? `0 6px 20px ${T.main}55` : 'none' }}>
+          {saving ? 'Enregistrement…' : 'Continuer →'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── PLACEHOLDER pour les étapes restantes (commit suivant) ───────────────────
 function EtapePlaceholder({ titre, n, avancer, retour }) {
   return (
     <div style={{ textAlign: 'center', padding: '2rem 0' }}>

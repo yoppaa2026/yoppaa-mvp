@@ -2,6 +2,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { canDo } from '@/lib/plans'
+import PillsStatut from '../PillsStatut'
 
 const T = {
   bg:      '#F8F6FF',
@@ -1150,8 +1152,11 @@ export default function CommanderSlug() {
     window.open(`tel:${commercant.telephone}`)
   }
 
-  // Mode Vitrine : commerce non commandable en ligne (plan = 'vitrine')
-  const isVitrine = commercant?.plan === 'vitrine'
+  // Plans YOPPAA : single source of truth via lib/plans.js
+  // isPlanOn   : plan ON (lecture seule, badge "VITRINE" affiche)
+  // peutCommander : BOOST/MAX uniquement (active panier + creneaux)
+  const isPlanOn = commercant?.plan === 'on'
+  const peutCommander = canDo(commercant?.plan, 'commande')
 
   function suggererClickCollect() {
     // TODO : connecter à une table suggestions_click_collect + email Yoppaa
@@ -1242,7 +1247,7 @@ export default function CommanderSlug() {
             )}
           </div>
 
-          {etape < 4 && !isVitrine && (
+          {etape < 4 && peutCommander && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
               {[{ n: 1, label: 'Menu' }, { n: 2, label: 'Créneau' }].map((s, i) => {
                 const done = etape > s.n + 1
@@ -1289,10 +1294,10 @@ export default function CommanderSlug() {
                       </div>
                     )
                   }
-                  {/* Badge Vitrine en haut à droite (uniquement pour les Vitrine) */}
-                  {isVitrine && (
+                  {/* Badge plan en haut à droite (sauf BOOST/MAX qui sont la norme) */}
+                  {!peutCommander && (
                     <span style={{ position: 'absolute', top: 16, right: 16, fontSize: '0.62rem', fontWeight: 800, color: '#fff', background: 'rgba(22,6,54,0.55)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.3)', padding: '5px 12px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.7px' }}>
-                      Vitrine
+                      {isPlanOn ? 'Vitrine' : 'Sans commande'}
                     </span>
                   )}
                   {/* Voile dégradé bas pour finition visuelle */}
@@ -1334,6 +1339,11 @@ export default function CommanderSlug() {
                         {commercant.nom}
                       </h1>
                     </div>
+                  </div>
+
+                  {/* Pills statut : visualisation des features dispo selon plan */}
+                  <div style={{ marginTop: 12 }}>
+                    <PillsStatut commercant={commercant} dealActif={!!dealActif} actuActive={false} size="lg"/>
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
@@ -1401,8 +1411,8 @@ export default function CommanderSlug() {
 
                 {commercant.horaires_detail && <HorairesSection horaires={commercant.horaires_detail}/>}
 
-                {/* Mention discrète en mode Vitrine */}
-                {isVitrine && (
+                {/* Mention discrete si le plan ne permet pas la commande (ON ou LIVE) */}
+                {!peutCommander && (
                   <div style={{ background: T.pale, borderTop: `1px solid ${T.main}22`, borderBottom: `1px solid ${T.main}22`, padding: '10px 16px', fontSize: 12, color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
                     Envie de commander à l&rsquo;avance&nbsp;? Demandez à <strong style={{ color: T.bgPanel, fontWeight: 800 }}>{commercant.nom}</strong> d&rsquo;activer Yoppaa Click &amp; Collect.
                   </div>
@@ -1410,7 +1420,7 @@ export default function CommanderSlug() {
               </div>
 
               {/* Sélecteur de jour de retrait — pilote les stocks affichés et les créneaux dispo */}
-              {!isVitrine && joursDispos.length > 0 && (
+              {peutCommander && joursDispos.length > 0 && (
                 <div style={{ background: '#fff', borderBottom: `1px solid ${T.pale}`, padding: '0.625rem 1rem 0.5rem' }}>
                   <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
                     🗓️ Je récupère le
@@ -1459,7 +1469,7 @@ export default function CommanderSlug() {
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                             onCommanderDemain={commanderPourJour}
-                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={isVitrine}/>
+                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander}/>
                         ))}
                       </div>
                     </div>
@@ -1477,7 +1487,7 @@ export default function CommanderSlug() {
                           ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                           stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                           onCommanderDemain={commanderPourJour}
-                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={isVitrine}/>
+                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander}/>
                       ))}
                     </div>
                   </div>
@@ -1490,8 +1500,8 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {/* RecapPanier : uniquement si plan Découverte/Pro */}
-                {!isVitrine && (
+                {/* RecapPanier : uniquement si plan permet la commande (BOOST/MAX) */}
+                {peutCommander && (
                   <RecapPanier
                     panier={panier}
                     onRetirer={retirerDuPanier}
@@ -1502,8 +1512,8 @@ export default function CommanderSlug() {
                   />
                 )}
 
-                {/* CTA Vitrine : suggérer l'activation du Click & Collect */}
-                {isVitrine && (
+                {/* CTA si le plan ne permet pas la commande : suggerer activation Click & Collect */}
+                {!peutCommander && (
                   <div style={{ marginTop: 24, background: T.bgPanel, borderRadius: 18, padding: '20px 18px', color: '#fff', textAlign: 'center' }}>
                     <p style={{ fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 8 }}>
                       Click &amp; Collect non activé

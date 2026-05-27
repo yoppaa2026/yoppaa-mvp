@@ -434,6 +434,7 @@ function GlossaireFeatures() {
     { icone: '🚴', titre: 'Livraison',       desc: 'Module complet : zone configurable, frais configurables, créneaux livraison séparés, suivi commande client. Réservé au plan MAX.' },
     { icone: '⭐', titre: 'Fidélité',        desc: 'BOOST : programme tampon simple (le 10e offert). MAX : points configurables, récompenses custom, analytics fidélité.' },
     { icone: '🛍️', titre: 'Kit Yoppaa',      desc: 'Tablette + imprimante thermique pour gérer les commandes en boutique. 399€ HTVA comptant ou 3×133€ (Stripe ou Alma). Réservé aux plans BOOST et MAX.' },
+    { icone: '📅', titre: 'Réservation RDV',  desc: 'Pour les vitrines (coiffeur, opticien, médecin…) : connecte ton système existant (Optios, Doctolib, Planity, TheFork, Booksy…). Un bouton « Réserver » s\'affiche sur ta page Yoppaa. Disponible dès le plan ON. Un module de réservation natif Yoppaa est en préparation pour une expérience 100% intégrée.' },
   ]
   return (
     <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${T.hairline}`, marginBottom: 14, overflow: 'hidden' }}>

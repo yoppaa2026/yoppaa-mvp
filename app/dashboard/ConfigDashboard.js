@@ -2251,6 +2251,9 @@ function TabProfil({ commercantId, toast }) {
             <p style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
               Si vide, le label est détecté automatiquement depuis l'URL.
             </p>
+            <p style={{ fontSize: 11, color: T.main, marginTop: 8, padding: '6px 10px', background: T.pale, borderRadius: 8, fontWeight: 600, border: `1px dashed ${T.main}33` }}>
+              💡 Bientôt — Yoppaa intégrera son propre module de réservation natif. En attendant, ton outil existant reste la solution la plus rapide.
+            </p>
           </div>
           <div>
             <label style={s.label}>Horaires d'ouverture</label>

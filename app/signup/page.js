@@ -2,14 +2,25 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { PLAN_LABEL, PLAN_PRIX, PLANS } from '@/lib/plans'
+import { PLAN_LABEL, PLAN_PRIX, PLANS, plansDispoPourCategorie } from '@/lib/plans'
 
-const TYPES_COMMERCE = [
+// Types de commerce séparés par catégorie : la liste affichée à l'étape 2
+// dépend du choix fait à l'étape 1 (alimentaire vs vitrine).
+const TYPES_ALIMENTAIRE = [
   'Boulangerie', 'Pâtisserie', 'Chocolatier', 'Sandwicherie', 'Snack',
   'Friterie', 'Pizzeria', 'Coffee shop', 'Épicerie', 'Traiteur',
-  'Pharmacie', 'Fleuriste', 'Boucherie', 'Pressing', 'Coiffeur',
-  'Food truck', 'Distributeur automatique', 'Autre',
+  'Boucherie', 'Food truck', 'Distributeur automatique', 'Autre alimentaire',
 ]
+const TYPES_VITRINE = [
+  'Coiffeur', 'Barbier', 'Esthéticienne', 'Opticien', 'Pharmacie',
+  'Fleuriste', 'Pressing', 'Vêtements', 'Chaussures', 'Bijouterie',
+  'Librairie', 'Garagiste', 'Toiletteur', 'Tatoueur', 'Studio photo',
+  'Salle de sport', 'Autre service',
+]
+
+function typesPourCategorie(categorie) {
+  return categorie === 'vitrine' ? TYPES_VITRINE : TYPES_ALIMENTAIRE
+}
 
 // ─── PALETTE ──────────────────────────────────────────────────────────────────
 const T = {
@@ -216,11 +227,22 @@ function BarreProgression({ etape }) {
 function Etape1Compte({ session, commercant, onCompte }) {
   const [email, setEmail] = useState(session?.user?.email || '')
   const [password, setPassword] = useState('')
+  const [categorie, setCategorie] = useState(commercant?.categorie || 'alimentaire')
   const [plan, setPlan] = useState(commercant?.plan || 'on')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const dejaConnecte = !!session
+  const plansDispos = plansDispoPourCategorie(categorie)
+
+  // Si la catégorie change et que le plan choisi n'est plus dispo (ex: BOOST avec vitrine),
+  // on redescend automatiquement sur le plan le plus haut dispo (LIVE pour vitrine).
+  useEffect(() => {
+    if (!plansDispos.includes(plan)) {
+      setPlan(plansDispos[plansDispos.length - 1])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categorie])
 
   async function creerCompte() {
     setError('')
@@ -263,6 +285,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
       email: email.trim(),
       nom: 'Mon commerce',
       type: 'À définir',
+      categorie,
       plan,
       plan_actif_depuis: new Date().toISOString(),
       statut: 'en_cours_onboarding',
@@ -290,12 +313,14 @@ function Etape1Compte({ session, commercant, onCompte }) {
     onCompte(s, c, ob)
   }
 
-  // Si déjà connecté, juste mettre à jour le plan choisi
+  // Si déjà connecté, juste mettre à jour catégorie + plan choisi
   async function mettreAJourPlan() {
     setLoading(true)
-    await supabase.from('commercants').update({ plan, plan_actif_depuis: new Date().toISOString() }).eq('id', commercant.id)
+    await supabase.from('commercants')
+      .update({ categorie, plan, plan_actif_depuis: new Date().toISOString() })
+      .eq('id', commercant.id)
     setLoading(false)
-    onCompte(session, { ...commercant, plan }, null)
+    onCompte(session, { ...commercant, categorie, plan }, null)
   }
 
   return (
@@ -333,16 +358,46 @@ function Etape1Compte({ session, commercant, onCompte }) {
         </Card>
       )}
 
+      <Card titre="Ton activité" sous="Yoppaa s'adapte : Click & Collect pour l'alimentaire, vitrine + RDV externe pour les autres.">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <CategorieCard
+            value="alimentaire"
+            actif={categorie === 'alimentaire'}
+            onClick={() => setCategorie('alimentaire')}
+            titre="Alimentaire"
+            sous="Click & Collect"
+            exemples="Boulangerie, friterie, traiteur, snack…"
+            icone="🥐"
+          />
+          <CategorieCard
+            value="vitrine"
+            actif={categorie === 'vitrine'}
+            onClick={() => setCategorie('vitrine')}
+            titre="Vitrine"
+            sous="Présence + RDV"
+            exemples="Coiffeur, opticien, fleuriste, pressing…"
+            icone="💇"
+          />
+        </div>
+      </Card>
+
       <Card titre="Choisis ton plan" sous="Tu pourras changer plus tard depuis ton dashboard.">
         <div style={{ display: 'grid', gap: 10 }}>
-          {PLANS.map(p => (
+          {plansDispos.map(p => (
             <CardPlan key={p} plan={p} actif={plan === p} onClick={() => setPlan(p)}/>
           ))}
         </div>
-        <p style={{ fontSize: 11, color: T.muted, marginTop: 12, lineHeight: 1.5 }}>
-          Plans payants : 30 jours gratuits si tu souscris dès maintenant.
-          Tu peux aussi démarrer en plan ON gratuit et upgrader à tout moment.
-        </p>
+        {categorie === 'vitrine' && (
+          <p style={{ fontSize: 11, color: T.muted, marginTop: 12, lineHeight: 1.5, background: T.pale, padding: '8px 10px', borderRadius: 8, border: `1px solid ${T.main}22` }}>
+            <strong style={{ color: T.bgPanel }}>BOOST et MAX</strong> sont réservés aux commerces alimentaires (Click &amp; Collect / livraison). Pour ton activité, <strong>ON</strong> ou <strong>LIVE</strong> couvrent tout : vitrine, deals, actus, et lien réservation externe (Optios, Doctolib, Planity…).
+          </p>
+        )}
+        {categorie === 'alimentaire' && (
+          <p style={{ fontSize: 11, color: T.muted, marginTop: 12, lineHeight: 1.5 }}>
+            Plans payants : 30 jours gratuits si tu souscris dès maintenant.
+            Tu peux aussi démarrer en plan ON gratuit et upgrader à tout moment.
+          </p>
+        )}
       </Card>
 
       {/* Mini-glossaire des fonctionnalités — repliable pour ne pas alourdir */}
@@ -524,7 +579,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, avancer, re
         <Field label="Type *">
           <select value={form.type} onChange={e => updateField('type', e.target.value)} style={{ ...inputStyle(), cursor: 'pointer' }}>
             <option value="">— Choisir un type —</option>
-            {TYPES_COMMERCE.map(t => <option key={t} value={t}>{t}</option>)}
+            {typesPourCategorie(commercant.categorie).map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </Field>
       </Card>
@@ -1198,6 +1253,27 @@ function FieldPassword({ value, onChange }) {
       <input type="password" value={value} onChange={e => onChange(e.target.value)} placeholder="••••••••" autoComplete="new-password"
         style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 14, color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: '"DM Sans", sans-serif' }}/>
     </div>
+  )
+}
+
+function CategorieCard({ actif, onClick, titre, sous, exemples, icone }) {
+  return (
+    <button type="button" onClick={onClick}
+      style={{
+        textAlign: 'left', padding: '14px 14px 12px', borderRadius: 14,
+        border: `2px solid ${actif ? T.bgPanel : T.hairline}`,
+        background: actif ? T.bgPanel : '#fff',
+        color: actif ? '#fff' : T.ink,
+        cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+        transition: 'all 0.15s',
+        boxShadow: actif ? `0 8px 24px rgba(22,6,54,0.2)` : 'none',
+        display: 'flex', flexDirection: 'column', gap: 4,
+      }}>
+      <span style={{ fontSize: 26, lineHeight: 1, marginBottom: 2 }}>{icone}</span>
+      <span style={{ fontWeight: 900, fontSize: 15, letterSpacing: '-0.3px' }}>{titre}</span>
+      <span style={{ fontSize: 12, fontWeight: 700, color: actif ? T.light : T.main }}>{sous}</span>
+      <span style={{ fontSize: 11, color: actif ? 'rgba(255,255,255,0.7)' : T.muted, lineHeight: 1.4, marginTop: 4 }}>{exemples}</span>
+    </button>
   )
 }
 

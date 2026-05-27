@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { canDo } from '@/lib/plans'
+import { canDo, isVitrine, detecterProviderReservation } from '@/lib/plans'
 import PillsStatut from '../PillsStatut'
 import CTAUpgrade from '../CTAUpgrade'
 
@@ -420,6 +420,18 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
                 <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(dealArticle.prix_deal).toFixed(2)}€</p>
                 <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{Number(article.prix).toFixed(2)}€</p>
               </>
+            ) : article.est_vitrine ? (
+              // Article en mode vitrine : "à partir de X €" ou "Prix sur demande"
+              Number(article.prix) > 0 ? (
+                <p style={{ fontSize: '0.95rem', color: T.main, fontWeight: 800, letterSpacing: '-0.2px' }}>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 700, color: T.muted, marginRight: 4 }}>dès</span>
+                  {Number(article.prix).toFixed(2)}€
+                </p>
+              ) : (
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '4px 10px', borderRadius: 100 }}>
+                  Prix sur demande
+                </span>
+              )
             ) : (
               <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(article.prix).toFixed(2)}€</p>
             )}
@@ -1205,7 +1217,13 @@ export default function CommanderSlug() {
 
   // Plans YOPPAA : single source of truth via lib/plans.js
   // peutCommander = BOOST/MAX uniquement (active panier + creneaux)
-  const peutCommander = canDo(commercant?.plan, 'commande')
+  // Bloque aussi catégorie vitrine (coiffeur/opticien : pas de C&C, RDV externe à la place)
+  const vitrine = isVitrine(commercant)
+  const peutCommander = !vitrine && canDo(commercant?.plan, 'commande')
+  // Bouton réservation externe : si url_reservation fournie, on construit le label
+  // depuis l'override ou via auto-détection du provider (Optios/Doctolib/Planity/…).
+  const urlResa = commercant?.url_reservation?.trim() || null
+  const labelResa = (commercant?.label_reservation?.trim()) || (urlResa ? detecterProviderReservation(urlResa).label : null)
 
   return (
     <>
@@ -1536,12 +1554,32 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
+                {/* Bouton réservation externe — Optios, Doctolib, Planity, TheFork…
+                    Le tracking des clics sera ajouté plus tard (table reservation_clicks). */}
+                {urlResa && (
+                  <div style={{ margin: '0 12px 12px' }}>
+                    <a href={urlResa} target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 18px', borderRadius: 14, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', textDecoration: 'none', boxShadow: `0 6px 22px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 20, flexShrink: 0 }}>📅</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelResa || 'Réserver en ligne'}</span>
+                      </span>
+                      <span style={{ fontSize: '1rem', flexShrink: 0 }}>→</span>
+                    </a>
+                  </div>
+                )}
+
                 {commercant.horaires_detail && <HorairesSection horaires={commercant.horaires_detail}/>}
 
-                {/* Mention discrete si le plan ne permet pas la commande (ON ou LIVE) */}
-                {!peutCommander && (
+                {/* Mention discrete si le plan ne permet pas la commande (ON ou LIVE) ou vitrine */}
+                {!peutCommander && !vitrine && (
                   <div style={{ background: T.pale, borderTop: `1px solid ${T.main}22`, borderBottom: `1px solid ${T.main}22`, padding: '10px 16px', fontSize: 12, color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
                     Envie de commander à l&rsquo;avance&nbsp;? Demandez à <strong style={{ color: T.bgPanel, fontWeight: 800 }}>{commercant.nom}</strong> d&rsquo;activer Yoppaa Click &amp; Collect.
+                  </div>
+                )}
+                {vitrine && !urlResa && (
+                  <div style={{ background: T.pale, borderTop: `1px solid ${T.main}22`, borderBottom: `1px solid ${T.main}22`, padding: '10px 16px', fontSize: 12, color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
+                    Passe directement à la boutique ou appelle <strong style={{ color: T.bgPanel, fontWeight: 800 }}>{commercant.nom}</strong> pour plus d&rsquo;infos.
                   </div>
                 )}
               </div>
@@ -1639,13 +1677,17 @@ export default function CommanderSlug() {
                   />
                 )}
 
-                {/* CTAs contextuels selon le plan — sections grisées du commerce */}
+                {/* CTAs contextuels selon le plan — sections grisées du commerce.
+                    Pour la catégorie vitrine, on masque le CTA "commande" (pas pertinent
+                    pour coiffeur/opticien) et on garde uniquement le CTA "prix" si plan ON. */}
                 {!peutCommander && (
                   <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {!canDo(commercant.plan, 'prix') && (
                       <CTAUpgrade type="prix" commercant={commercant} variant="banner"/>
                     )}
-                    <CTAUpgrade type="commande" commercant={commercant} variant="banner"/>
+                    {!vitrine && (
+                      <CTAUpgrade type="commande" commercant={commercant} variant="banner"/>
+                    )}
                   </div>
                 )}
                 {/* CTA livraison pour BOOST (n'a pas la livraison) — affichage discret en banner */}

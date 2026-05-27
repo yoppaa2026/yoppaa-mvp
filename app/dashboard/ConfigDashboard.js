@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { canDo } from '@/lib/plans'
+import { canDo, detecterProviderReservation } from '@/lib/plans'
 
 const T = {
   bg:      '#F8F6FF',
@@ -150,7 +150,11 @@ function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 2 }) {
 }
 
 // ─── Onglet MENU ──────────────────────────────────────────────────────────────
-function TabMenu({ commercantId, toast }) {
+function TabMenu({ commercantId, commercant, toast }) {
+  // ─── Mode vitrine ou menu commandable ────────────────────────────────────
+  // Pour catégorie='vitrine' (coiffeur, opticien…), on retire stock/jour, temps prépa,
+  // et on force est_vitrine=true sur les articles créés.
+  const estVitrine = commercant?.categorie === 'vitrine'
   // ─── Sous-onglet actif : Articles | Catégories | Personnalisation ────────
   const [subTab, setSubTab] = useState('articles')
   const [searchQuery, setSearchQuery] = useState('')
@@ -285,10 +289,11 @@ function TabMenu({ commercantId, toast }) {
       nom: form.nom.trim(),
       description: form.description.trim() || null,
       prix: parseFloat(form.prix),
-      stock_jour: parseInt(form.stock_jour) || 0,
+      stock_jour: estVitrine ? 0 : (parseInt(form.stock_jour) || 0),
       actif: form.actif,
       categorie: form.categorie.trim() || null,
-      temps_prepa: parseFloat(form.temps_prepa) || 0,
+      temps_prepa: estVitrine ? 0 : (parseFloat(form.temps_prepa) || 0),
+      est_vitrine: estVitrine,
     }
     const { error } = editId
       ? await supabase.from('articles').update(payload).eq('id', editId)
@@ -379,10 +384,12 @@ function TabMenu({ commercantId, toast }) {
       <div style={s.cardActive}>
         <h3 style={{ ...s.h3, marginBottom: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Icon name={editId ? 'edit' : 'plus'} size={14} color={T.main}/>
-          {editId ? 'Modifier l’article' : 'Nouvel article'}
+          {editId
+            ? (estVitrine ? 'Modifier le produit' : 'Modifier l’article')
+            : (estVitrine ? 'Nouveau produit phare' : 'Nouvel article')}
         </h3>
         <div style={{ display: 'grid', gap: 12 }}>
-          <div><label style={s.label}>Nom *</label><Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} placeholder="Ex: Croissant beurre"/></div>
+          <div><label style={s.label}>Nom *</label><Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} placeholder={estVitrine ? 'Ex: Monture Lindberg Air Titanium' : 'Ex: Croissant beurre'}/></div>
           <div>
             <label style={s.label}>Catégorie</label>
             <select value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))}
@@ -391,17 +398,27 @@ function TabMenu({ commercantId, toast }) {
               {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
             </select>
           </div>
-          <div><label style={s.label}>Description</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Ex: Feuilleté, pur beurre AOP..."/></div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="1.20"/></div>
-            <div><label style={s.label}>Stock du jour (défaut)</label><Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="30"/></div>
-          </div>
-          <div>
-            <label style={s.label}>Temps de préparation (min)</label>
-            <Input type="number" min="0" step="0.5" value={form.temps_prepa} onChange={e => setForm(p => ({ ...p, temps_prepa: e.target.value }))} placeholder="0 = non défini · 1 = 1 min · 5 = 5 min"/>
-            <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Utilisé en mode Temps de préparation</p>
-          </div>
-          <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Article disponible"/>
+          <div><label style={s.label}>Description</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder={estVitrine ? 'Ex: Titane japonais, charnières flex, 12 coloris…' : 'Ex: Feuilleté, pur beurre AOP...'}/></div>
+          {estVitrine ? (
+            <div>
+              <label style={s.label}>Prix indicatif (€)</label>
+              <Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="À partir de 290"/>
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Affiché en mode "à partir de" sur ta fiche client.</p>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="1.20"/></div>
+                <div><label style={s.label}>Stock du jour (défaut)</label><Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="30"/></div>
+              </div>
+              <div>
+                <label style={s.label}>Temps de préparation (min)</label>
+                <Input type="number" min="0" step="0.5" value={form.temps_prepa} onChange={e => setForm(p => ({ ...p, temps_prepa: e.target.value }))} placeholder="0 = non défini · 1 = 1 min · 5 = 5 min"/>
+                <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Utilisé en mode Temps de préparation</p>
+              </div>
+            </>
+          )}
+          <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label={estVitrine ? 'Produit visible' : 'Article disponible'}/>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
           <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveArticle} disabled={saving}>
@@ -418,7 +435,7 @@ function TabMenu({ commercantId, toast }) {
     if (showForm && editId === a.id) {
       return <div key={a.id}>{renderArticleForm()}</div>
     }
-    return <ArticleCard key={a.id} a={a} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
+    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
   }
 
   return (
@@ -440,9 +457,9 @@ function TabMenu({ commercantId, toast }) {
       {/* ─── En-tête (panel violet foncé YOPPAA) ─────────────────────────── */}
       <div className="tabmenu-header" style={{ background: T.bgPanel, borderRadius: 14, padding: '18px 20px', marginBottom: 14, color: '#fff' }}>
         <div>
-          <p style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>Menu</p>
+          <p style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>{estVitrine ? 'Vitrine' : 'Menu'}</p>
           <h2 style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', margin: 0 }}>
-            {articles.length} article{articles.length > 1 ? 's' : ''}
+            {articles.length} {estVitrine ? 'produit' : 'article'}{articles.length > 1 ? 's' : ''}
             <span style={{ color: T.light, fontWeight: 600, fontSize: 14, marginLeft: 8 }}>· {categories.length} catégorie{categories.length > 1 ? 's' : ''}</span>
           </h2>
         </div>
@@ -454,7 +471,7 @@ function TabMenu({ commercantId, toast }) {
           )}
           {(subTab === 'articles' || subTab === 'personnalisation') && (
             <button style={{ ...s.btn, background: '#fff', color: T.bgPanel }} onClick={() => { openNew(); setShowCatForm(false) }}>
-              <Icon name="plus" size={14}/> Article
+              <Icon name="plus" size={14}/> {estVitrine ? 'Produit' : 'Article'}
             </button>
           )}
         </div>
@@ -844,7 +861,7 @@ function OptionsArticle({ articleId, toast }) {
 const JOURS_KEYS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
-function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaCommande = 0, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
+function ArticleCard({ a, estVitrine = false, onEdit, onToggle, onUpdateStock, onDelete, s, dejaCommande = 0, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -902,9 +919,16 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaComm
           </div>
           {a.description && <p style={{ fontSize: 12, color: T.muted, margin: '0 0 8px' }}>{a.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 8 }}>
-            <span style={{ fontWeight: 900, fontSize: 18, color: T.bgPanel, letterSpacing: '-0.3px' }}>{Number(a.prix).toFixed(2)} €</span>
-            {(a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.bgPanel, background: '#F8F6FF', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="clock" size={11} color={T.bgPanel}/>{a.temps_prepa} min</span>}
-            {effAuj.ferme ? (
+            {Number(a.prix) > 0 ? (
+              <span style={{ fontWeight: 900, fontSize: 18, color: T.bgPanel, letterSpacing: '-0.3px' }}>
+                {estVitrine && <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginRight: 4 }}>à partir de</span>}
+                {Number(a.prix).toFixed(2)} €
+              </span>
+            ) : estVitrine ? (
+              <span style={{ fontSize: 12, fontWeight: 700, color: T.muted }}>Prix sur demande</span>
+            ) : null}
+            {!estVitrine && (a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.bgPanel, background: '#F8F6FF', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="clock" size={11} color={T.bgPanel}/>{a.temps_prepa} min</span>}
+            {!estVitrine && (effAuj.ferme ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Fermé aujourd&rsquo;hui</span>
             ) : stockBrutAuj > 0 ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: stockRestant === 0 ? '#DC2626' : stockRestant <= 2 ? '#EA580C' : '#16A34A', background: stockRestant === 0 ? '#FEE2E2' : stockRestant <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>
@@ -912,11 +936,16 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaComm
               </span>
             ) : (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Non géré</span>
+            ))}
+            {estVitrine && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.main, background: T.pale, padding: '3px 8px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                Vitrine · non commandable
+              </span>
             )}
           </div>
 
-          {/* 7 chips stock par jour */}
-          <div>
+          {/* 7 chips stock par jour — masqué en mode vitrine (pas de stock pertinent) */}
+          {!estVitrine && <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stock par jour</span>
               <button onClick={() => {
@@ -991,7 +1020,7 @@ function ArticleCard({ a, onEdit, onToggle, onUpdateStock, onDelete, s, dejaComm
                 </div>
               )
             })()}
-          </div>
+          </div>}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
           <Toggle value={a.actif} onChange={() => onToggle(a)}/>
@@ -2113,7 +2142,7 @@ function TabProfil({ commercantId, toast }) {
     const { data } = await supabase.from('commercants').select('*').eq('id', commercantId).single()
     if (data) {
       const defaultHoraires = { lundi: { ouvert: true, debut: '07:00', fin: '14:00' }, mardi: { ouvert: true, debut: '07:00', fin: '14:00' }, mercredi: { ouvert: true, debut: '07:00', fin: '14:00' }, jeudi: { ouvert: true, debut: '07:00', fin: '14:00' }, vendredi: { ouvert: true, debut: '07:00', fin: '14:00' }, samedi: { ouvert: true, debut: '07:00', fin: '13:00' }, dimanche: { ouvert: false, debut: '07:00', fin: '12:00' } }
-      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires })
+      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', url_reservation: data.url_reservation || '', label_reservation: data.label_reservation || '' })
       setLogoPreview(data.logo_url || null)
     }
     setLoading(false)
@@ -2142,7 +2171,7 @@ function TabProfil({ commercantId, toast }) {
   async function saveProfil() {
     if (!form.nom.trim()) return toast('Le nom est obligatoire', 'error')
     setSaving(true)
-    await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail }).eq('id', commercantId)
+    await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, url_reservation: form.url_reservation.trim() || null, label_reservation: form.label_reservation.trim() || null }).eq('id', commercantId)
     setSaving(false); toast('Profil mis à jour ✓')
   }
 
@@ -2151,6 +2180,14 @@ function TabProfil({ commercantId, toast }) {
   return (
     <div>
       <h2 style={s.h2}>Profil du commerce</h2>
+
+      {/* Badge catégorie — lecture seule. Pour changer, contacter support. */}
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px 6px 8px', borderRadius: 100, background: T.pale, border: `1px solid ${T.main}33`, marginBottom: 14 }}>
+        <span style={{ fontSize: 14 }}>{form.categorie === 'vitrine' ? '💇' : '🥐'}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          {form.categorie === 'vitrine' ? 'Vitrine · Présence + RDV' : 'Alimentaire · Click & Collect'}
+        </span>
+      </div>
 
       {/* Logo */}
       <div style={s.card}>
@@ -2189,6 +2226,31 @@ function TabProfil({ commercantId, toast }) {
           <div>
             <label style={s.label}>Description (visible clients)</label>
             <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Décrivez votre commerce..." />
+          </div>
+
+          {/* ─── Réservation externe ─── */}
+          {/* Lien Optios/Doctolib/Planity/TheFork/Calendly… Affiche un bouton CTA sur la fiche client. */}
+          <div>
+            <label style={s.label}>Lien réservation externe (optionnel)</label>
+            <p style={{ fontSize: 11, color: T.muted, marginBottom: 6, lineHeight: 1.5 }}>
+              Colle le lien de ton système de réservation. Un bouton « Réserver » s'affichera sur ta page Yoppaa. Compatible Optios, Doctolib, Planity, TheFork, Calendly, Booksy, Treatwell…
+            </p>
+            <Input
+              value={form.url_reservation}
+              onChange={e => setForm(p => ({ ...p, url_reservation: e.target.value }))}
+              placeholder="https://salonchezmarie.optios.com"
+              type="url"
+            />
+            <ApercuReservation url={form.url_reservation} labelOverride={form.label_reservation}/>
+            <label style={{ ...s.label, marginTop: 12 }}>Label personnalisé du bouton (optionnel)</label>
+            <Input
+              value={form.label_reservation}
+              onChange={e => setForm(p => ({ ...p, label_reservation: e.target.value }))}
+              placeholder={detecterProviderReservation(form.url_reservation).label || 'Réserver en ligne'}
+            />
+            <p style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
+              Si vide, le label est détecté automatiquement depuis l'URL.
+            </p>
           </div>
           <div>
             <label style={s.label}>Horaires d'ouverture</label>
@@ -2237,6 +2299,41 @@ function TabProfil({ commercantId, toast }) {
       </div>
 
       <QRCodeSection commercantId={commercantId} toast={toast} />
+    </div>
+  )
+}
+
+// ─── Aperçu bouton réservation externe ────────────────────────────────────────
+// Affiche en preview le bouton qui apparaîtra sur la fiche client, avec auto-détection
+// du provider depuis l'URL collée. Si label custom, prend le custom.
+function ApercuReservation({ url, labelOverride }) {
+  if (!url || url.trim().length < 5) return null
+  const detection = detecterProviderReservation(url)
+  if (!detection.provider) {
+    return (
+      <p style={{ fontSize: 11, color: '#DC2626', fontWeight: 700, marginTop: 6 }}>
+        ⚠️ URL invalide. Vérifie que le lien commence par https://
+      </p>
+    )
+  }
+  const label = labelOverride?.trim() || detection.label
+  const isAutreProvider = detection.provider === 'autre'
+  return (
+    <div style={{ marginTop: 10, padding: 10, background: T.pale, border: `1px solid ${T.main}22`, borderRadius: 10 }}>
+      <p style={{ fontSize: 10, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px' }}>
+        Aperçu sur ta page Yoppaa
+      </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', borderRadius: 100, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 14, boxShadow: `0 4px 16px ${T.main}44` }}>
+        <span style={{ fontSize: 16 }}>📅</span>
+        <span style={{ flex: 1 }}>{label}</span>
+        <span style={{ fontSize: 16 }}>→</span>
+      </div>
+      <p style={{ fontSize: 11, color: T.muted, margin: '8px 0 0', fontWeight: 600 }}>
+        {isAutreProvider
+          ? 'Provider non reconnu — le lien fonctionnera quand même.'
+          : <>Provider détecté : <strong style={{ color: T.main, textTransform: 'capitalize' }}>{detection.provider}</strong></>
+        }
+      </p>
     </div>
   )
 }
@@ -2667,15 +2764,16 @@ export default function ConfigDashboard({ commercantId }) {
     return () => { annule = true }
   }, [commercantId])
 
-  // Onglets dynamiques selon le plan
+  // Onglets dynamiques selon le plan + la catégorie
   const peutDeals = canDo(commercant?.plan, 'deals')
   const peutActus = canDo(commercant?.plan, 'actus')
-
+  const estVitrine = commercant?.categorie === 'vitrine'
+  // Vitrine : on parle de "Vitrine" plutôt que "Menu", et on masque "Créneaux" (pas de C&C)
   const tabs = [
-    { id: 'menu',     label: 'Menu',     icon: 'menu' },
+    { id: 'menu',     label: estVitrine ? 'Vitrine' : 'Menu', icon: 'menu' },
     peutDeals && { id: 'deals', label: 'Deals', icon: 'tag' },
     peutActus && { id: 'actus', label: 'Actus', icon: 'sliders' },
-    { id: 'creneaux', label: 'Créneaux', icon: 'clock' },
+    !estVitrine && { id: 'creneaux', label: 'Créneaux', icon: 'clock' },
     { id: 'profil',   label: 'Profil',   icon: 'shop' },
     { id: 'avis',     label: 'Avis',     icon: 'star' },
   ].filter(Boolean)
@@ -2692,7 +2790,7 @@ export default function ConfigDashboard({ commercantId }) {
         ))}
       </div>
 
-      {tab === 'menu'     && <TabMenu     commercantId={commercantId} toast={showToast} />}
+      {tab === 'menu'     && <TabMenu     commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'deals'    && peutDeals && <TabDeals commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'actus'    && peutActus && <TabActus commercantId={commercantId} toast={showToast} />}
       {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}

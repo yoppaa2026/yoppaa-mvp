@@ -1100,8 +1100,10 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
     }
 
     // 3) Update commerçant : statut publication = brouillon → en_attente
+    //    Et on efface le motif_rejet précédent : la re-soumission corrige
+    //    forcément le problème, plus de raison d'afficher l'ancien motif.
     const { data: c } = await supabase.from('commercants')
-      .update({ statut_publication: 'en_attente' })
+      .update({ statut_publication: 'en_attente', motif_rejet: null })
       .eq('id', commercant.id)
       .select()
       .single()
@@ -1162,6 +1164,27 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
       <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 24px' }}>
         Choisis si tu veux être accompagné, puis envoie ta demande d&rsquo;activation.
       </p>
+
+      {/* Bandeau de rejet : motif de l'admin si la demande précédente a été refusée.
+          Affiché tant que le commerçant n'a pas re-soumis (motif_rejet est mis à null
+          à la re-soumission). Doit être très visible pour qu'il sache quoi corriger. */}
+      {commercant.motif_rejet && (
+        <div style={{ background: '#FFF7ED', border: '1px solid #FB923C', borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 18 }}>📝</span>
+            <p style={{ fontSize: 11, fontWeight: 800, color: '#9A3412', margin: 0, textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+              Ta précédente demande a été refusée
+            </p>
+          </div>
+          <p style={{ fontSize: 13, color: '#7C2D12', fontWeight: 600, lineHeight: 1.5, margin: '0 0 10px' }}>
+            <strong>Motif de l&rsquo;équipe Yoppaa :</strong><br/>
+            {commercant.motif_rejet}
+          </p>
+          <p style={{ fontSize: 11.5, color: '#9A3412', lineHeight: 1.5, margin: 0 }}>
+            Reviens sur les étapes précédentes pour corriger ce point, puis re-soumets ci-dessous. On valide en moins de 24h une fois corrigé.
+          </p>
+        </div>
+      )}
 
       {/* Score */}
       <Card titre="Ton score de complétude" sous="Minimum 60 / 100 pour soumettre.">

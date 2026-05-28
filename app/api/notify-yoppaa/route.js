@@ -1,31 +1,39 @@
-// Notifie l'équipe Yoppaa qu'un nouveau commerçant attend validation.
-// Pour l'instant : log console + retour 200. Quand Resend sera branché
-// (npm install resend + variable RESEND_API_KEY dans .env), remplacer le
-// contenu par un vrai envoi d'email à alexandre@avcotech.be.
+// Notifie l'équipe Yoppaa (alexandre@avcotech.be) qu'un nouveau commerçant
+// vient de soumettre son onboarding et attend validation depuis /admin.
+// Branché sur Resend via lib/resend.js. Non bloquant pour la soumission :
+// si l'email échoue, on retourne 500 mais le commerçant a quand même son
+// statut 'en_attente_validation' enregistré côté DB.
 
 import { NextResponse } from 'next/server'
+import { envoyerAuAdmin, emailNouveauCommercantAValider } from '@/lib/resend'
 
 export async function POST(request) {
   try {
     const body = await request.json()
-    const { commercant_id, nom, plan, score, success_pack } = body || {}
+    const { commercant_id, nom, type, plan, score, success_pack } = body || {}
 
-    // TODO Resend : remplacer ce log par un envoi d'email réel.
-    // import { Resend } from 'resend'
-    // const resend = new Resend(process.env.RESEND_API_KEY)
-    // await resend.emails.send({
-    //   from: 'Yoppaa <noreply@yoppaa.app>',
-    //   to: 'alexandre@avcotech.be',
-    //   subject: `Nouveau commerçant à valider — ${nom}`,
-    //   html: `...`,
-    // })
-    console.log('[notify-yoppaa] Nouveau commerçant à valider :', {
-      commercant_id, nom, plan, score, success_pack,
+    const html = emailNouveauCommercantAValider({
+      commercant_id,
+      nom: nom || 'Commerçant sans nom',
+      type: type || '—',
+      plan: plan || 'on',
+      score: typeof score === 'number' ? score : 0,
+      success_pack: success_pack || null,
     })
 
-    return NextResponse.json({ ok: true })
+    const result = await envoyerAuAdmin({
+      subject: `Nouveau commerçant à valider — ${nom || 'Sans nom'}`,
+      html,
+    })
+
+    if (!result.ok) {
+      console.error('[notify-yoppaa] envoi Resend échoué', result.error)
+      return NextResponse.json({ ok: false, error: 'email_failed', detail: result.error }, { status: 502 })
+    }
+
+    return NextResponse.json({ ok: true, id: result.id })
   } catch (e) {
     console.error('[notify-yoppaa] erreur', e)
-    return NextResponse.json({ ok: false, error: e?.message }, { status: 500 })
+    return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })
   }
 }

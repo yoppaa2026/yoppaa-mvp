@@ -191,6 +191,7 @@ export default function Signup() {
             onUpdate={c => setCommercant(c)}
             onUpdateOb={ob => setOnboarding(ob)}
             retour={() => avancerVers(4)}
+            aller={n => avancerVers(n)}
           />
         )}
       </main>
@@ -1031,7 +1032,7 @@ const SUCCESS_PACKS = [
   },
 ]
 
-function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour }) {
+function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour, aller }) {
   const [packChoisi, setPackChoisi] = useState(onboarding.success_pack_choisi || null)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(onboarding.statut === 'en_attente_validation' || onboarding.statut === 'valide')
@@ -1167,7 +1168,8 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
 
       {/* Bandeau de rejet : motif de l'admin si la demande précédente a été refusée.
           Affiché tant que le commerçant n'a pas re-soumis (motif_rejet est mis à null
-          à la re-soumission). Doit être très visible pour qu'il sache quoi corriger. */}
+          à la re-soumission). Inclut 3 raccourcis vers les étapes modifiables : zéro
+          friction pour corriger ce qui doit l'être. */}
       {commercant.motif_rejet && (
         <div style={{ background: '#FFF7ED', border: '1px solid #FB923C', borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -1176,12 +1178,27 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
               Ta précédente demande a été refusée
             </p>
           </div>
-          <p style={{ fontSize: 13, color: '#7C2D12', fontWeight: 600, lineHeight: 1.5, margin: '0 0 10px' }}>
+          <p style={{ fontSize: 13, color: '#7C2D12', fontWeight: 600, lineHeight: 1.5, margin: '0 0 12px' }}>
             <strong>Motif de l&rsquo;équipe Yoppaa :</strong><br/>
             {commercant.motif_rejet}
           </p>
+          <p style={{ fontSize: 11, fontWeight: 800, color: '#9A3412', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px' }}>
+            Corrige directement →
+          </p>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+            {[
+              { n: 2, icon: '✏️', label: 'Infos commerce' },
+              { n: 3, icon: '📷', label: 'Visuels' },
+              { n: 4, icon: '🕐', label: 'Horaires' },
+            ].map(s => (
+              <button key={s.n} type="button" onClick={() => aller && aller(s.n)}
+                style={{ padding: '7px 12px', borderRadius: 100, border: '1.5px solid #FB923C', background: '#fff', color: '#9A3412', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span>{s.icon}</span> {s.label}
+              </button>
+            ))}
+          </div>
           <p style={{ fontSize: 11.5, color: '#9A3412', lineHeight: 1.5, margin: 0 }}>
-            Reviens sur les étapes précédentes pour corriger ce point, puis re-soumets ci-dessous. On valide en moins de 24h une fois corrigé.
+            Une fois corrigé, re-soumets ci-dessous. On valide en moins de 24h après ta correction.
           </p>
         </div>
       )}

@@ -36,6 +36,7 @@ function Login() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const nextPath = searchParams?.get('next') || '/dashboard'
+  const modeAdmin = nextPath === '/admin'
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -103,7 +104,9 @@ function Login() {
             ))}
           </div>
           <p style={{ fontWeight: 900, fontSize: '2.5rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1, marginBottom: 6 }}>yoppaa</p>
-          <p style={{ color: T.light, fontSize: '0.8rem', fontWeight: 600, letterSpacing: '2px', textTransform: 'uppercase' }}>Espace commerçant</p>
+          <p style={{ color: T.light, fontSize: '0.8rem', fontWeight: 600, letterSpacing: '2px', textTransform: 'uppercase' }}>
+            {modeAdmin ? '🔒 Espace admin' : 'Espace commerçant'}
+          </p>
         </div>
 
         {/* Card */}
@@ -111,7 +114,9 @@ function Login() {
 
           {!sent ? (
             <>
-              <h1 style={{ fontWeight: 800, fontSize: '1.25rem', color: '#fff', marginBottom: '1.25rem', letterSpacing: '-0.5px' }}>Connexion</h1>
+              <h1 style={{ fontWeight: 800, fontSize: '1.25rem', color: '#fff', marginBottom: '1.25rem', letterSpacing: '-0.5px' }}>
+                {modeAdmin ? 'Console admin' : 'Connexion'}
+              </h1>
 
               {/* Tabs */}
               <div style={{ display: 'flex', gap: 0, marginBottom: '1.5rem', background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 4 }}>
@@ -206,16 +211,20 @@ function Login() {
               </button>
 
               <p style={{ fontSize: '0.72rem', color: `${T.light}66`, textAlign: 'center', marginTop: '1rem', lineHeight: 1.5 }}>
-                Accès réservé aux commerçants partenaires Yoppaa.
+                {modeAdmin
+                  ? 'Accès réservé à l\'équipe Yoppaa.'
+                  : 'Accès réservé aux commerçants partenaires Yoppaa.'}
               </p>
 
-              {/* Lien acquisition : nouveau commerçant → /signup */}
-              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
-                <a href="/signup"
-                  style={{ display: 'inline-block', color: T.light, fontSize: '0.85rem', fontWeight: 700, textDecoration: 'none', padding: '8px 4px', letterSpacing: '-0.2px' }}>
-                  Pas encore inscrit&nbsp;? <span style={{ color: '#fff', textDecoration: 'underline' }}>Découvrir Yoppaa Pro →</span>
-                </a>
-              </div>
+              {/* Lien acquisition : masqué en mode admin */}
+              {!modeAdmin && (
+                <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
+                  <a href="/signup"
+                    style={{ display: 'inline-block', color: T.light, fontSize: '0.85rem', fontWeight: 700, textDecoration: 'none', padding: '8px 4px', letterSpacing: '-0.2px' }}>
+                    Pas encore inscrit&nbsp;? <span style={{ color: '#fff', textDecoration: 'underline' }}>Découvrir Yoppaa Pro →</span>
+                  </a>
+                </div>
+              )}
             </>
           ) : (
             /* Écran confirmation magic link */

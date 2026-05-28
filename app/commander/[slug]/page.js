@@ -633,6 +633,13 @@ export default function CommanderSlug() {
       supabase.from('commercants').select('*').eq('slug', slug).single(),
     ])
     if (!c) { router.push('/commander'); return }
+    // Bloque l'accès aux fiches non publiées (brouillon, en_attente, refusée).
+    // L'admin a une route d'aperçu dédiée — à coder plus tard.
+    if (c.statut_publication !== 'publie') {
+      setLoading(false)
+      setCommercant({ ...c, _nonPublie: true })
+      return
+    }
 
     const [
       { data: arts },
@@ -1405,7 +1412,26 @@ export default function CommanderSlug() {
           )}
 
           {/* ÉTAPE 2 — Articles */}
-          {!loading && etape === 2 && commercant && (
+          {/* Fiche non publiée (brouillon, en_attente_validation, refusée) → bloc d'info */}
+          {!loading && commercant?._nonPublie && (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+              <div style={{ maxWidth: 420, textAlign: 'center', background: '#fff', borderRadius: 18, padding: '32px 28px', border: `1px solid ${T.pale}`, boxShadow: '0 4px 20px rgba(22,6,54,0.08)' }}>
+                <div style={{ fontSize: '3rem', marginBottom: 12 }}>🛠️</div>
+                <h2 style={{ fontWeight: 900, fontSize: '1.3rem', color: T.ink, letterSpacing: '-0.5px', margin: '0 0 8px' }}>
+                  Bientôt en ligne
+                </h2>
+                <p style={{ fontSize: '0.95rem', color: T.muted, lineHeight: 1.55, margin: '0 0 18px' }}>
+                  <strong style={{ color: T.bgPanel }}>{commercant.nom}</strong> finalise son inscription Yoppaa. Cette page sera disponible dès validation par notre équipe.
+                </p>
+                <button onClick={() => router.push('/commander')}
+                  style={{ padding: '10px 22px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                  Voir les autres commerces →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!loading && !commercant?._nonPublie && etape === 2 && commercant && (
             <>
               <div ref={headerRef}>
 

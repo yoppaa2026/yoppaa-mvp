@@ -639,6 +639,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, avancer, 
   const [couvertureUrl, setCouvertureUrl] = useState(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingCover, setUploadingCover] = useState(false)
+  const [warningCover, setWarningCover] = useState(null) // avertissement non bloquant (orientation, qualité…)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -654,26 +655,26 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, avancer, 
     return () => { annule = true }
   }, [commercant.id])
 
+  // Retourne { error, dims }. Erreur bloque l'upload. Dims permet de générer un warning a posteriori.
   async function validerFichier(file) {
-    if (!file) return 'Aucun fichier'
+    if (!file) return { error: 'Aucun fichier', dims: null }
     const okType = /image\/(jpeg|jpg|png|webp)/.test(file.type)
-    if (!okType) return 'Format invalide. Utilise JPG, PNG ou WEBP.'
-    if (file.size > 8 * 1024 * 1024) return 'Fichier trop lourd. Max 8 MB.'
-    // Check dimensions (min 800px sur le plus grand côté)
+    if (!okType) return { error: 'Format invalide. Utilise JPG, PNG ou WEBP.', dims: null }
+    if (file.size > 8 * 1024 * 1024) return { error: 'Fichier trop lourd. Max 8 MB.', dims: null }
     const dims = await new Promise(resolve => {
       const img = new Image()
       img.onload = () => resolve({ w: img.width, h: img.height })
       img.onerror = () => resolve(null)
       img.src = URL.createObjectURL(file)
     })
-    if (!dims) return 'Fichier corrompu ou illisible.'
-    if (Math.max(dims.w, dims.h) < 800) return 'Image trop petite. Min 800 px sur le plus grand côté.'
-    return null
+    if (!dims) return { error: 'Fichier corrompu ou illisible.', dims: null }
+    if (Math.max(dims.w, dims.h) < 800) return { error: 'Image trop petite. Min 800 px sur le plus grand côté.', dims }
+    return { error: null, dims }
   }
 
   async function uploadLogo(file) {
     setError('')
-    const err = await validerFichier(file)
+    const { error: err } = await validerFichier(file)
     if (err) { setError(err); return }
     setUploadingLogo(true)
     const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
@@ -690,8 +691,16 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, avancer, 
 
   async function uploadCouverture(file) {
     setError('')
-    const err = await validerFichier(file)
+    setWarningCover(null)
+    const { error: err, dims } = await validerFichier(file)
     if (err) { setError(err); return }
+    // Warning non bloquant : orientation portrait sur la couverture = mauvais rendu
+    // sur la fiche client. On accepte mais on prévient.
+    if (dims && dims.h > dims.w * 1.1) {
+      setWarningCover('Cette photo est en mode portrait — elle s\'affichera mal sur la couverture (paysage). On la garde quand même, mais on conseille de la remplacer par une photo prise à l\'horizontale.')
+    } else if (dims && Math.min(dims.w, dims.h) < 500) {
+      setWarningCover('La photo est un peu petite pour la couverture. Une image plus large (≥ 1200 px) rendra mieux sur grand écran.')
+    }
     setUploadingCover(true)
     const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
     const fileName = `cover-${commercant.id}-${Date.now()}.${ext}`
@@ -734,22 +743,58 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, avancer, 
         Une belle photo, c&rsquo;est <strong style={{ color: T.bgPanel }}>+40 % de clics</strong> sur ta page. Tu pourras en ajouter d&rsquo;autres plus tard.
       </p>
 
-      <div style={{ background: '#F0F9FF', borderLeft: `4px solid #0284C7`, borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 12.5, color: '#0C4A6E', lineHeight: 1.5 }}>
-        Conseils&nbsp;: lumière naturelle, format paysage pour la couverture, façade ou produit phare bien visible. Format JPG/PNG/WEBP, 800 px min, 8 MB max.
+      {/* Bloc d'aide : ce qui fonctionne, ce qui ne fonctionne pas */}
+      <div style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: '14px 16px 12px', marginBottom: 14 }}>
+        <p style={{ fontSize: 11, fontWeight: 800, color: T.bgPanel, margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+          Pour des photos qui convertissent
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ background: '#F0FDF4', borderRadius: 10, padding: '10px 12px', border: '1px solid #BBF7D0' }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: '#15803D', margin: '0 0 6px' }}>✓ À faire</p>
+            <ul style={{ fontSize: 11.5, color: '#166534', margin: 0, paddingLeft: 14, lineHeight: 1.55 }}>
+              <li>Façade avec enseigne lisible</li>
+              <li>Format paysage 16:9 (1200×675 px ou +)</li>
+              <li>Lumière naturelle de jour</li>
+              <li>Image nette, droite, sans filtre</li>
+              <li>Cadrage à mi-distance (pas trop loin)</li>
+            </ul>
+          </div>
+          <div style={{ background: '#FEF2F2', borderRadius: 10, padding: '10px 12px', border: '1px solid #FECACA' }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: '#B91C1C', margin: '0 0 6px' }}>✕ À éviter</p>
+            <ul style={{ fontSize: 11.5, color: '#991B1B', margin: 0, paddingLeft: 14, lineHeight: 1.55 }}>
+              <li>Photo verticale (portrait) sur la couverture</li>
+              <li>Floue, sombre ou contre-jour</li>
+              <li>Filtres lourds, cadres déco</li>
+              <li>Photo de logo en couverture</li>
+              <li>Capture d'écran depuis un autre site</li>
+            </ul>
+          </div>
+        </div>
+        <p style={{ fontSize: 10.5, color: T.muted, margin: '10px 0 0', fontWeight: 600, lineHeight: 1.4 }}>
+          Format accepté : JPG, PNG, WEBP · 800 px minimum sur le grand côté · 8 MB max
+        </p>
       </div>
 
-      <Card titre="Photo de couverture" sous="Format paysage (16:9 conseillé). C'est la grande image en haut de ta page.">
+      <Card titre="Photo de couverture" sous="Grande image en haut de ta page client. Format paysage 16:9 conseillé.">
         <UploadZone
           url={couvertureUrl}
           uploading={uploadingCover}
           aspect="16/9"
           minHeight={180}
           label="Ajouter la photo de couverture"
-          onFile={uploadCouverture}
+          onFile={f => uploadCouverture(f)}
         />
+        {warningCover && (
+          <div style={{ marginTop: 10, padding: '8px 12px', background: '#FFF7ED', borderLeft: '3px solid #EA580C', borderRadius: 6, fontSize: 12, color: '#7C2D12', fontWeight: 600, lineHeight: 1.45 }}>
+            ⚠️ {warningCover}
+          </div>
+        )}
+        <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
+          <strong style={{ color: T.bgPanel }}>Idéal :</strong> ta façade en mode paysage à hauteur d'œil, par beau temps, sans voiture devant. Bouche-trou possible : un produit phare bien éclairé.
+        </div>
       </Card>
 
-      <Card titre="Logo" sous="Format carré conseillé. Affiché dans la card flottante de ta page.">
+      <Card titre="Logo" sous="Affiché dans la card flottante de ta page client. Format carré conseillé.">
         <UploadZone
           url={logoUrl}
           uploading={uploadingLogo}
@@ -759,6 +804,9 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, avancer, 
           onFile={uploadLogo}
           maxWidth={140}
         />
+        <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
+          <strong style={{ color: T.bgPanel }}>Idéal :</strong> ton logo seul sur fond uni (blanc ou couleur). Si tu n'en as pas, une photo carrée recadrée sur ton enseigne fait l'affaire.
+        </div>
       </Card>
 
       {error && (

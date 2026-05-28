@@ -668,7 +668,13 @@ export default function Commander() {
   }
 
   async function chargerCommercants() {
-    const { data } = await supabase.from('commercants').select('*').order('nom')
+    // Ne lister QUE les fiches publiées (validation admin OK).
+    // Les brouillons / en_attente / refusées restent invisibles côté client.
+    const { data } = await supabase
+      .from('commercants')
+      .select('*')
+      .eq('statut_publication', 'publie')
+      .order('nom')
     setCommercants(data || [])
     if (data?.length > 0) {
       chargerNotes(data.map(c => c.id), data)
@@ -755,7 +761,11 @@ export default function Commander() {
     const ids = (data||[]).map(f => f.commercant_id)
     setFavoris(ids)
     if (ids.length > 0) {
-      const { data: comms } = await supabase.from('commercants').select('*').in('id', ids)
+      const { data: comms } = await supabase
+        .from('commercants')
+        .select('*')
+        .in('id', ids)
+        .eq('statut_publication', 'publie')
       setCommercantsFavoris(comms||[])
     }
   }

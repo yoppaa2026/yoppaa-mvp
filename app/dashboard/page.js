@@ -364,7 +364,13 @@ export default function Dashboard() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
       const { data } = await supabase.from('commercants').select('*').eq('auth_user_id', user.id).order('nom')
-      if (!data || data.length === 0) { router.push('/login'); return }
+      if (!data || data.length === 0) {
+        // Pas de commerçant lié : si c'est l'admin Yoppaa, on l'envoie vers /admin.
+        // Sinon /login (cas où une session traîne sans onboarding finalisé).
+        if (user.email === 'verstappenalexandre@gmail.com') router.push('/admin')
+        else router.push('/login')
+        return
+      }
 
       if (data.length === 1) {
         setCommercant(data[0])

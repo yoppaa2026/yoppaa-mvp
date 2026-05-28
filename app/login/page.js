@@ -1,7 +1,7 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 const T = {
   bg:      '#F8F6FF',
@@ -15,7 +15,16 @@ const T = {
   muted:   '#6B7280',
 }
 
-export default function Login() {
+export default function LoginPage() {
+  // Suspense wrapper requis par Next.js 16 pour useSearchParams (build statique).
+  return (
+    <Suspense fallback={null}>
+      <Login/>
+    </Suspense>
+  )
+}
+
+function Login() {
   const [mode, setMode] = useState('magic') // 'magic' | 'password'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -25,13 +34,15 @@ export default function Login() {
   const [error, setError] = useState('')
   const [checkingSession, setCheckingSession] = useState(true)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const nextPath = searchParams?.get('next') || '/dashboard'
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.push('/dashboard')
+      if (session) router.push(nextPath)
       else setCheckingSession(false)
     })
-  }, [router])
+  }, [router, nextPath])
 
   function resetForm() {
     setError('')
@@ -44,7 +55,7 @@ export default function Login() {
     const { error: err } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/confirm?next=/dashboard`,
+        emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(nextPath)}`,
       }
     })
     if (err) {
@@ -66,7 +77,7 @@ export default function Login() {
       setError('Email ou mot de passe incorrect')
       setLoading(false); return
     }
-    router.push('/dashboard')
+    router.push(nextPath)
   }
 
   if (checkingSession) return (

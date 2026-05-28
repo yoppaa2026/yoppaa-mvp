@@ -1068,6 +1068,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
         body: JSON.stringify({
           commercant_id: commercant.id,
           nom: commercant.nom,
+          type: commercant.type,
           plan: commercant.plan,
           score,
           success_pack: packChoisi,

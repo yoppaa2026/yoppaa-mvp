@@ -750,23 +750,24 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, avancer, 
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <div style={{ background: '#F0FDF4', borderRadius: 10, padding: '10px 12px', border: '1px solid #BBF7D0' }}>
-            <p style={{ fontSize: 11, fontWeight: 800, color: '#15803D', margin: '0 0 6px' }}>✓ À faire</p>
+            <p style={{ fontSize: 11, fontWeight: 800, color: '#15803D', margin: '0 0 6px' }}>✓ Bon</p>
             <ul style={{ fontSize: 11.5, color: '#166534', margin: 0, paddingLeft: 14, lineHeight: 1.55 }}>
-              <li>Façade avec enseigne lisible</li>
+              <li>Façade reconnaissable (premier repère client)</li>
               <li>Format paysage 16:9 (1200×675 px ou +)</li>
-              <li>Lumière naturelle de jour</li>
-              <li>Image nette, droite, sans filtre</li>
-              <li>Cadrage à mi-distance (pas trop loin)</li>
+              <li>Lumière naturelle de jour, image nette</li>
+              <li>Enseigne lisible et bien cadrée</li>
+              <li>Qualité maximale (pas de compression douteuse)</li>
             </ul>
           </div>
           <div style={{ background: '#FEF2F2', borderRadius: 10, padding: '10px 12px', border: '1px solid #FECACA' }}>
-            <p style={{ fontSize: 11, fontWeight: 800, color: '#B91C1C', margin: '0 0 6px' }}>✕ À éviter</p>
+            <p style={{ fontSize: 11, fontWeight: 800, color: '#B91C1C', margin: '0 0 6px' }}>✗ Pas bon</p>
             <ul style={{ fontSize: 11.5, color: '#991B1B', margin: 0, paddingLeft: 14, lineHeight: 1.55 }}>
               <li>Photo verticale (portrait) sur la couverture</li>
               <li>Floue, sombre ou contre-jour</li>
-              <li>Filtres lourds, cadres déco</li>
-              <li>Photo de logo en couverture</li>
-              <li>Capture d'écran depuis un autre site</li>
+              <li>Filtres lourds, cadres déco, watermark</li>
+              <li>Photo de logo en couverture (utilise le champ Logo dédié)</li>
+              <li>Capture d'écran d'un autre site</li>
+              <li>Image basse qualité ou recadrée à l'arrache</li>
             </ul>
           </div>
         </div>
@@ -775,7 +776,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, avancer, 
         </p>
       </div>
 
-      <Card titre="Photo de couverture" sous="Grande image en haut de ta page client. Format paysage 16:9 conseillé.">
+      <Card titre="Photo de couverture" sous="C'est ta vignette sur Yoppaa — la première chose qu'un client voit en parcourant les commerces. Doit être ultra reconnaissable et qualitative.">
         <UploadZone
           url={couvertureUrl}
           uploading={uploadingCover}
@@ -790,7 +791,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, avancer, 
           </div>
         )}
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
-          <strong style={{ color: T.bgPanel }}>Idéal :</strong> ta façade en mode paysage à hauteur d'œil, par beau temps, sans voiture devant. Bouche-trou possible : un produit phare bien éclairé.
+          <strong style={{ color: T.bgPanel }}>Idéal :</strong> ta façade telle qu'on la voit depuis la rue — c'est le <strong style={{ color: T.bgPanel }}>premier repère</strong> pour le client qui arrive à pied. Enseigne nette et lisible, couleurs vives, lumière du jour. Format paysage 16:9, qualité maximale. Si pas de façade exploitable (boutique en galerie, food truck mobile), prends un produit phare très photogénique.
         </div>
       </Card>
 

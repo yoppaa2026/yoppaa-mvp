@@ -519,7 +519,7 @@ function EditablePrenom({ client, setClient, clientId }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
         <p style={{ fontWeight: 900, fontSize: '1.15rem', color: '#fff', letterSpacing: '-0.3px' }}>
-          {client.prenom || (<>Yopper<PointsYoppaa size={4}/></>)}
+          {client.prenom || 'Yopper 🟣'}
         </p>
         <button onClick={() => { setVal(client.prenom || ''); setEditing(true) }}
           style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 100, padding: '2px 10px', color: 'rgba(255,255,255,0.7)', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
@@ -612,10 +612,10 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
       <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', animation: 'pu-fadein 0.6s ease 0.1s both' }}>
         <p style={{ fontSize: '0.75rem', fontWeight: 800, color: '#C4A0F4', textTransform: 'uppercase', letterSpacing: 3, marginBottom: 12, opacity: 0.8 }}>Ta commande est prête</p>
         <p style={{ fontSize: '7rem', fontWeight: 900, color: '#fff', letterSpacing: '-4px', lineHeight: 1, textShadow: '0 0 60px #9660E088', marginBottom: 8 }}>#{numero}</p>
-        <p style={{ fontSize: '1.6rem', fontWeight: 900, color: '#C4A0F4', letterSpacing: '-0.5px', marginBottom: 8 }}>{clientPrenom || 'Yopper'}<PointsYoppaa size={6}/></p>
+        <p style={{ fontSize: '1.6rem', fontWeight: 900, color: '#C4A0F4', letterSpacing: '-0.5px', marginBottom: 8 }}>{clientPrenom || 'Yopper'} 🟣</p>
         {creneau && <p style={{ fontSize: '1rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>🕐 {creneau}</p>}
         <div style={{ marginTop: 20, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 16, padding: '12px 24px', display: 'inline-block' }}>
-          <p style={{ fontWeight: 900, fontSize: '1rem', color: '#fff', letterSpacing: '-0.3px' }}>Skip the wait — PRIORITÉ YOPPERS<PointsYoppaa size={5}/></p>
+          <p style={{ fontWeight: 900, fontSize: '1rem', color: '#fff', letterSpacing: '-0.3px' }}>Skip the wait — PRIORITÉ YOPPERS 🟣</p>
         </div>
       </div>
       {/* FIX : SwipeRetrait en bas — pas de conflit avec la navbar (rendu hors page-wrap) */}
@@ -855,7 +855,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
               </span>
               {resa && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: resa.bg, borderRadius: 100, padding: '4px 10px', border: `1px solid ${resa.dot}22` }}>
-                  <PointsYoppaa size={4}/>
+                  <span style={{ fontSize: '0.62rem' }}>🟣</span>
                   <span style={{ fontSize: '0.7rem', fontWeight: 700, color: resa.color }}>{resa.label}</span>
                 </span>
               )}
@@ -1314,7 +1314,7 @@ export default function Commander() {
   }
   // Sous-texte chaleureux par statut (affiche sous la pastille pour donner du contexte)
   const statutSousTexte = {
-    en_attente:     'Ton commerçant préféré va bientôt s’y mettre.',
+    en_attente:     'Ton commerçant préféré va bientôt s’y mettre 🟣',
     en_preparation: 'Préparation lancée, c’est entre de bonnes mains',
     pret:           'Présente-toi à l’heure de ton créneau',
   }
@@ -1702,7 +1702,7 @@ export default function Commander() {
                             ⏱  Plus que {formatTempsRestant(min)} avant ton créneau
                           </p>
                           <p style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.4 }}>
-                            Présente-toi à partir de {heureCreneau}. Merci {prenom}.
+                            Présente-toi à partir de {heureCreneau}. Merci {prenom} 🟣
                           </p>
                         </div>
                       )}
@@ -1936,7 +1936,7 @@ export default function Commander() {
                     {client.email
                       ? <EditablePrenom client={client} setClient={setClient} clientId={clientId}/>
                       : <div>
-                          <p style={{ fontWeight: 900, color: '#fff', marginBottom: 10, fontSize: '1.1rem' }}>Les Yoppers<PointsYoppaa size={5}/></p>
+                          <p style={{ fontWeight: 900, color: '#fff', marginBottom: 10, fontSize: '1.1rem' }}>Les Yoppers 🟣</p>
                           <button onClick={() => router.push('/commander/auth?redirect=/commander')}
                             style={{ padding: '0.625rem 1.25rem', background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: 100, color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                             Se connecter →

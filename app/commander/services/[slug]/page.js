@@ -215,8 +215,14 @@ export default function FicheServicePublic({ params }) {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
-              <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', background: couleurAccent, padding: '3px 8px', borderRadius: 100, letterSpacing: '0.7px', textTransform: 'uppercase' }}>
-                {isUrgence ? '⚠ Urgence' : 'Officiel'}
+              <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', background: couleurAccent, padding: '3px 8px', borderRadius: 100, letterSpacing: '0.7px', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                {isUrgence && (
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
+                    <path d="M12 9v4M12 17h.01"/>
+                  </svg>
+                )}
+                {isUrgence ? 'Urgence' : 'Officiel'}
               </span>
               <span style={{ fontSize: 10, fontWeight: 600, color: T.muted, letterSpacing: '0.3px' }}>
                 {typeLabel}
@@ -344,7 +350,11 @@ export default function FicheServicePublic({ params }) {
       {service.national && (
         <div style={{ padding: '12px 18px 8px' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 100, background: '#FEE2E2', color: '#991B1B', fontWeight: 700, fontSize: 11, letterSpacing: '0.3px' }}>
-            🌍 Service national — disponible dans toute la Belgique
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#991B1B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            Service national — disponible dans toute la Belgique
           </div>
         </div>
       )}

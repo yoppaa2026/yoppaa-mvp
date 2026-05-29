@@ -152,6 +152,40 @@ function IconSearch({ size = 36, color = T.muted }) {
     </svg>
   )
 }
+function IconCheck({ size = 14, color = '#fff' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M5 12l5 5L20 7"/>
+    </svg>
+  )
+}
+function IconGlobe({ size = 14, color = '#fff' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+    </svg>
+  )
+}
+function IconWarning({ size = 12, color = '#fff' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
+      <path d="M12 9v4M12 17h.01"/>
+    </svg>
+  )
+}
+function IconHandshake({ size = 18, color = '#fff' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="m11 17 2 2a1 1 0 1 0 3-3"/>
+      <path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/>
+      <path d="m21 3 1 11h-2"/>
+      <path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/>
+      <path d="M3 4h8"/>
+    </svg>
+  )
+}
 function IconSparkle({ size = 18, color = T.main }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -430,8 +464,8 @@ function SuggestionForm({ clientId }) {
       <input placeholder="Type (boulangerie, snack...)" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))} style={inputSt}/>
       <textarea placeholder="Pourquoi ce commerçant ?" value={form.commentaire} onChange={e => setForm(p => ({ ...p, commentaire: e.target.value }))} style={{ ...inputSt, resize: 'vertical', minHeight: 70, marginBottom: 14 }}/>
       <button onClick={envoyer} disabled={!form.nom.trim() || sending}
-        style={{ width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '1rem', background: form.nom.trim() ? T.main : '#E5E7EB', color: '#fff', cursor: form.nom.trim() ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif' }}>
-        {sending ? 'Envoi...' : '🫂 Suggérer ce commerçant'}
+        style={{ width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '1rem', background: form.nom.trim() ? T.main : '#E5E7EB', color: '#fff', cursor: form.nom.trim() ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        {sending ? 'Envoi...' : (<><IconHandshake size={18} color="#fff"/> Suggérer ce commerçant</>)}
       </button>
     </div>
   )
@@ -468,8 +502,8 @@ function EditablePrenom({ client, setClient, clientId }) {
       />
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={sauvegarder} disabled={!val.trim() || saving}
-          style={{ flex: 1, padding: '0.5rem', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', color: '#6B35C4', fontFamily: '"DM Sans", sans-serif' }}>
-          {saving ? '...' : '✓ Sauvegarder'}
+          style={{ flex: 1, padding: '0.5rem', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', color: '#6B35C4', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          {saving ? '...' : (<><IconCheck size={13} color="#6B35C4"/> Sauvegarder</>)}
         </button>
         <button onClick={() => setEditing(false)}
           style={{ padding: '0.5rem 0.875rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 100, color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
@@ -697,8 +731,9 @@ function CarteServicePublic({ s, onSelect }) {
       </div>
       <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', background: isUrgence ? '#DC2626' : T.deep, padding: '2px 7px', borderRadius: 100, letterSpacing: '0.6px', textTransform: 'uppercase', flexShrink: 0 }}>
-            {isUrgence ? '⚠ Urgence' : 'Officiel'}
+          <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', background: isUrgence ? '#DC2626' : T.deep, padding: '2px 7px', borderRadius: 100, letterSpacing: '0.6px', textTransform: 'uppercase', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            {isUrgence && <IconWarning size={9} color="#fff"/>}
+            {isUrgence ? 'Urgence' : 'Officiel'}
           </span>
           <span style={{ fontSize: 10, fontWeight: 600, color: T.muted, letterSpacing: '0.3px' }}>
             {typeLabel}

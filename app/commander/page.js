@@ -451,6 +451,70 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
 }
 
 // ─── Carte commerce — redesignée ──────────────────────────────────────────────
+// ─── Carte d'un service public (Plan PUBLIC) ────────────────────────────────
+// Affichée dans la section "Services & administrations" sur /commander.
+// Différencie urgences nationales (badge rouge ⚠) vs services locaux (badge violet OFFICIEL).
+const SERVICE_TYPE_EMOJI = {
+  commune: '🏛️', cpas: '🤝', police: '🚓', pompiers: '🚒',
+  ecole: '🏫', urgence: '🚨', medecin_garde: '🩺',
+  pharmacie_garde: '💊', autre: '🏢',
+}
+const SERVICE_TYPE_LABEL = {
+  commune: 'Administration communale', cpas: 'CPAS', police: 'Police',
+  pompiers: 'Pompiers', ecole: 'École', urgence: 'Urgence',
+  medecin_garde: 'Médecin de garde', pharmacie_garde: 'Pharmacie de garde',
+  autre: 'Service public',
+}
+
+function CarteServicePublic({ s, onSelect }) {
+  const isUrgence = s.national || s.type === 'urgence'
+  const emoji = SERVICE_TYPE_EMOJI[s.type] || '🏢'
+  const typeLabel = SERVICE_TYPE_LABEL[s.type] || 'Service'
+  return (
+    <div onClick={onSelect}
+      style={{
+        background: '#fff',
+        border: `1px solid ${isUrgence ? '#FECACA' : T.pale}`,
+        borderLeft: `4px solid ${isUrgence ? '#DC2626' : T.deep}`,
+        borderRadius: 14,
+        padding: '12px 14px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        transition: 'all 0.15s',
+      }}
+      onMouseOver={e => { e.currentTarget.style.boxShadow = `0 4px 16px ${isUrgence ? '#DC262622' : T.main + '14'}` }}
+      onMouseOut={e => { e.currentTarget.style.boxShadow = 'none' }}>
+      <div style={{ width: 42, height: 42, borderRadius: 12, background: isUrgence ? '#FEE2E2' : '#EDE0FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
+        {emoji}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', background: isUrgence ? '#DC2626' : T.deep, padding: '2px 7px', borderRadius: 100, letterSpacing: '0.6px', textTransform: 'uppercase', flexShrink: 0 }}>
+            {isUrgence ? '⚠ Urgence' : 'Officiel'}
+          </span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: T.muted, letterSpacing: '0.3px' }}>
+            {typeLabel}
+          </span>
+        </div>
+        <p style={{ fontSize: 14, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px', margin: 0, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {s.nom}
+        </p>
+      </div>
+      {s.telephone && (
+        <a href={`tel:${s.telephone}`} onClick={e => e.stopPropagation()}
+          aria-label={`Appeler ${s.nom}`}
+          style={{ width: 38, height: 38, borderRadius: '50%', background: isUrgence ? '#DC2626' : T.main, color: '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 3px 10px ${isUrgence ? '#DC262644' : T.main + '55'}` }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8 19.79 19.79 0 01.22 2.18 2 2 0 012.2 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.11 6.11l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+          </svg>
+        </a>
+      )}
+    </div>
+  )
+}
+
 function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsActifs, actusActives, onSelect, onToggleFavori }) {
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
@@ -614,6 +678,8 @@ export default function Commander() {
   // commune = false : client connecté mais aucune commune setée → modale ConfirmCommune
   const [commune, setCommune] = useState(null)
   const [showConfirmCommune, setShowConfirmCommune] = useState(false)
+  // Services publics (commune, CPAS, police, urgences) visibles dans la zone
+  const [servicesPublics, setServicesPublics] = useState([])
   const [pickupCommande, setPickupCommande] = useState(null)
   // Tick minute pour rafraichir le compteur "Plus que X min avant ton créneau"
   const [, setNowTick] = useState(0)
@@ -662,6 +728,28 @@ export default function Commander() {
     }, 5000)
     return () => clearInterval(iv)
   }, [])
+
+  // ─── Services publics : on charge les nationaux + ceux de la commune ─────
+  useEffect(() => {
+    let annule = false
+    const codesPostaux = commune?.codes_postaux || []
+    let q = supabase
+      .from('services_publics')
+      .select('id, slug, type, nom, description, codes_postaux, national, telephone, adresse, latitude, longitude, logo_url, photo_couverture_url')
+      .eq('statut', 'valide')
+      .order('national', { ascending: false })
+      .order('type')
+      .order('nom')
+    if (codesPostaux.length > 0) {
+      // overlap : national=true OR au moins un CP commun avec la commune
+      q = q.or(`national.eq.true,codes_postaux.ov.{${codesPostaux.join(',')}}`)
+    } else {
+      // Sans commune : on affiche au moins les urgences nationales
+      q = q.eq('national', true)
+    }
+    q.then(({ data }) => { if (!annule) setServicesPublics(data || []) })
+    return () => { annule = true }
+  }, [commune?.id])
 
   function demanderGeolocalisation() {
     if (!navigator.geolocation) return
@@ -1178,6 +1266,28 @@ export default function Commander() {
               ) : (
                 <div className="commerces-grid">
                   {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} dealsActifs={dealsActifs} actusActives={actusActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
+                </div>
+              )}
+
+              {/* ─── Services & Administrations (Plan PUBLIC) ─────────────── */}
+              {/* Section single, urgences nationales en tête, services locaux après.
+                  Tri DB : national DESC, type, nom. */}
+              {servicesPublics.length > 0 && (
+                <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: `1px solid ${T.pale}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+                      Services & administrations
+                    </span>
+                    <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>
+                      {servicesPublics.length}
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
+                    {servicesPublics.map(s => (
+                      <CarteServicePublic key={s.id} s={s} onSelect={() => router.push(`/commander/services/${s.slug}`)}/>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

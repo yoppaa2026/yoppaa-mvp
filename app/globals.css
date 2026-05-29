@@ -26,6 +26,19 @@ html, body {
   /* Empêche le scroll horizontal involontaire qui décale l'affichage sur mobile */
   overflow-x: hidden;
   max-width: 100vw;
+  /* Bloque le pan horizontal sur le body (les cards ne "glissent" plus de gauche/droite
+     au swipe). Le pan vertical reste OK et le pinch-zoom reste possible. Les conteneurs
+     qui DOIVENT scroller horizontalement (barres de filtres, jours dispos…) doivent
+     surcharger ça avec touch-action: pan-x. */
+  touch-action: pan-y pinch-zoom;
+  /* Empêche le rebond horizontal iOS qui donne l'impression que l'écran "saute" */
+  overscroll-behavior-x: none;
+}
+
+/* Conteneurs avec scroll horizontal interne (filtres catégories, jours…) :
+   on leur rend explicitement la capacité de pan horizontal. */
+.cat-bar, .jours-wrap, .filtres-wrap, [data-scroll-x] {
+  touch-action: pan-x;
 }
 
 /* Box-sizing global cohérent (évite les débordements liés aux paddings) */

@@ -28,14 +28,13 @@ export const metadata: Metadata = {
 
 // Viewport mobile : empêche le zoom auto Safari iOS sur les inputs (cause des
 // décentrages au clic) + cadre l'app à la largeur de l'écran (évite le scroll
-// horizontal involontaire). Garde le zoom utilisateur manuel possible (a11y).
+// horizontal involontaire). PAS de viewportFit=cover pour ne pas passer sous la
+// barre de statut (notch) ni laisser un bandeau blanc sous la home bar.
 export const viewport: Viewport = {
   themeColor: "#6B35C4",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  userScalable: false,
-  viewportFit: "cover",
 };
 
 export default function RootLayout({

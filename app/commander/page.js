@@ -1669,41 +1669,78 @@ export default function Commander() {
           {/* TRIBU */}
           {onglet === 'tribu' && (
             <div>
-              <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.main} 100%)`, padding: '2rem 1rem 3rem', position: 'relative', overflow: 'hidden', textAlign: 'center' }}>
+              {/* Hero — wordmark "Yoppers" tricolore (cohérence design system) + 3 cercles animés */}
+              <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.main} 100%)`, padding: '2rem 1rem 2.25rem', position: 'relative', overflow: 'hidden', textAlign: 'center' }}>
                 <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 50% 100%, ${T.light}33 0%, transparent 60%)`, pointerEvents: 'none' }}/>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 20 }}>
+                {/* Barre dégradée fine en haut — signature visuelle Yoppaa */}
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
+
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 16 }}>
                   {[
-                    { c: '#fff', delay: '0s', size: 44, opacity: 0.9, anim: 'tribu-pulse' },
-                    { c: T.light, delay: '0.3s', size: 52, opacity: 1, anim: 'tribu-pulse2' },
-                    { c: T.mid, delay: '0.6s', size: 44, opacity: 0.8, anim: 'tribu-pulse3' },
+                    { c: '#fff', delay: '0s', size: 38, opacity: 0.9, anim: 'tribu-pulse' },
+                    { c: T.light, delay: '0.3s', size: 46, opacity: 1, anim: 'tribu-pulse2' },
+                    { c: T.mid, delay: '0.6s', size: 38, opacity: 0.85, anim: 'tribu-pulse3' },
                   ].map((d, i) => (
                     <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.opacity, boxShadow: `0 4px 20px ${d.c}66`, animation: `${d.anim} 2s ease-in-out ${d.delay} infinite` }}/>
                   ))}
                 </div>
-                <p style={{ fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-1px', marginBottom: 8 }}>La Tribu Yoppaa</p>
-                <p style={{ fontSize: '0.875rem', color: T.light, lineHeight: 1.6, opacity: 0.9 }}>
-                  Tu as fait la file chez un commerçant et tu penses<br/>qu'il mériterait Yoppaa ? Dis-le nous !
+
+                <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2.5px', marginBottom: 4, opacity: 0.85 }}>
+                  La tribu
+                </p>
+                <p style={{ fontWeight: 900, fontSize: '2.4rem', letterSpacing: '-2px', lineHeight: 1, marginBottom: 14 }}>
+                  <span style={{ color: '#fff' }}>Yo</span>
+                  <span style={{ color: T.light }}>pp</span>
+                  <span style={{ color: T.mid }}>ers</span>
+                </p>
+                <p style={{ fontSize: '0.85rem', color: T.light, lineHeight: 1.55, opacity: 0.92, maxWidth: 320, margin: '0 auto' }}>
+                  Tu fais vivre Yoppaa. Suggère un commerce qu&rsquo;on devrait ajouter, ou signale un souci sur une fiche.
                 </p>
               </div>
-              <div style={{ padding: '1rem', marginTop: '-1.5rem' }}>
+
+              <div style={{ padding: '1.25rem 1rem 1rem' }}>
+
+                {/* Section 1 : Suggérer un commerce */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+                    Suggérer un commerce
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                </div>
                 <SuggestionForm clientId={clientId}/>
 
-                {/* ─── Signalement — info bloc, redirige vers la fiche concernée ─ */}
-                <div style={{ background: '#fff', borderRadius: 16, padding: '16px 18px', marginTop: 16, border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
-                    🚨
+                {/* Section 2 : Signaler un problème */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, marginTop: 24 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+                    Signaler un problème
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                </div>
+
+                <div style={{ background: '#fff', borderRadius: 16, padding: '16px 18px 14px', border: `1px solid ${T.pale}` }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 12, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
+                        <path d="M12 9v4M12 17h.01"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 14, fontWeight: 800, color: T.ink, margin: '0 0 4px', letterSpacing: '-0.2px', lineHeight: 1.3 }}>
+                        Tu vois un problème sur une fiche&nbsp;?
+                      </p>
+                      <p style={{ fontSize: 12, color: T.muted, margin: 0, lineHeight: 1.5 }}>
+                        Commerce fermé, horaires faux, numéro qui ne répond plus… Ouvre la fiche concernée et clique sur <strong style={{ color: T.deep, fontWeight: 700 }}>« Signaler un problème »</strong> en bas.
+                      </p>
+                    </div>
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 4px' }}>
-                      Signaler un problème
-                    </p>
-                    <p style={{ fontSize: 13, color: T.ink, fontWeight: 600, margin: '0 0 6px', lineHeight: 1.35 }}>
-                      Un commerce fermé, des horaires faux, un numéro qui ne répond plus&nbsp;?
-                    </p>
-                    <p style={{ fontSize: 12, color: T.muted, margin: 0, lineHeight: 1.5 }}>
-                      Ouvre la fiche concernée (commerce ou service) et clique sur <strong style={{ color: T.deep }}>« Signaler un problème »</strong> en bas. Ta contribution garde Yoppaa à jour pour toute la tribu.
-                    </p>
-                  </div>
+                  <button onClick={() => setOnglet('accueil')}
+                    style={{ width: '100%', padding: '10px 18px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    Voir les commerces
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12h14M13 5l7 7-7 7"/>
+                    </svg>
+                  </button>
                 </div>
               </div>
             </div>

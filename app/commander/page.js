@@ -1495,33 +1495,41 @@ export default function Commander() {
 
         {/* ── HERO HEADER ── */}
         <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #3D1580 100%)`, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
+          {/* Barre dégradée fine 3px en haut — signature visuelle Yoppaa (design system canonique) */}
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
           <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 10%, ${T.mid}33 0%, transparent 50%), radial-gradient(circle at 10% 90%, ${T.light}18 0%, transparent 50%), radial-gradient(circle at 50% 50%, ${T.main}22 0%, transparent 70%)`, pointerEvents: 'none' }}/>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0.875rem 1rem 0.625rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ display: 'flex', gap: 5 }}>
                 {[
-                  { c: '#fff',  o: 0.35, delay: '0s',    size: 6 },
-                  { c: T.light, o: 1,    delay: '0.3s',  size: 8 },
-                  { c: T.mid,   o: 1,    delay: '0.6s',  size: 6 },
+                  { c: '#fff',  o: 0.45, delay: '0s',    size: 7 },
+                  { c: T.light, o: 1,    delay: '0.3s',  size: 9 },
+                  { c: T.mid,   o: 1,    delay: '0.6s',  size: 7 },
                 ].map((d, i) => (
-                  <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 8px ${d.c}88`, animation: `dot-pulse 2s ease-in-out ${d.delay} infinite` }}/>
+                  <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 10px ${d.c}aa`, animation: `dot-pulse 2s ease-in-out ${d.delay} infinite` }}/>
                 ))}
               </div>
-              <p style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-1.5px', color: '#fff', lineHeight: 1, textShadow: `0 0 30px ${T.mid}55` }}>yoppaa</p>
+              {/* Wordmark tricolore : yo (blanc), pp (Light), aa (Mid) — canonique Good Morning Yoppers */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1 }}>
+                <p style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-1.5px', lineHeight: 1, margin: 0 }}>
+                  <span style={{ color: '#fff' }}>yo</span>
+                  <span style={{ color: T.light }}>pp</span>
+                  <span style={{ color: T.mid }}>aa</span>
+                </p>
+                <p style={{ fontSize: 9, fontWeight: 800, color: T.light, letterSpacing: '2.2px', textTransform: 'uppercase', opacity: 0.7, marginTop: 2 }}>
+                  Skip the wait
+                </p>
+              </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
               <button onClick={() => { if (!showLocManuelle) demanderGeolocalisation(); setShowLocManuelle(false) }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 14, padding: '0.5rem 0.875rem', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', transition: 'all 0.2s', letterSpacing: '-0.2px' }}>
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(12px)', border: `1px solid ${T.light}33`, borderRadius: 100, padding: '0.45rem 0.875rem 0.45rem 0.75rem', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', transition: 'all 0.2s', letterSpacing: '-0.2px' }}>
                 {geoLoading
-                  ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="white" strokeWidth="2.5" strokeDasharray="30 10" strokeLinecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></circle></svg>
-                  : <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="4" fill="white"/>
-                      <circle cx="12" cy="12" r="8" stroke="white" strokeWidth="2"/>
-                      <line x1="12" y1="2" x2="12" y2="4" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                      <line x1="12" y1="20" x2="12" y2="22" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                      <line x1="2" y1="12" x2="4" y2="12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                      <line x1="20" y1="12" x2="22" y2="12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                  ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="9" stroke="white" strokeWidth="2.5" strokeDasharray="30 10" strokeLinecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></circle></svg>
+                  : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.light} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+                      <circle cx="12" cy="10" r="3"/>
                     </svg>
                 }
                 <span style={{ maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1591,7 +1599,7 @@ export default function Commander() {
             <div className="cats">
               {CATEGORIES.map(cat => (
                 <button key={cat} onClick={() => setCategorieActive(cat)}
-                  style={{ flexShrink: 0, padding: '0.4rem 0.875rem', borderRadius: 100, border: categorieActive===cat ? 'none' : '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', whiteSpace: 'nowrap', background: categorieActive===cat ? '#fff' : 'rgba(255,255,255,0.08)', color: categorieActive===cat ? T.main : '#fff', backdropFilter: 'blur(4px)', transition: 'all 0.15s' }}>
+                  style={{ flexShrink: 0, padding: '0.45rem 1rem', borderRadius: 100, border: categorieActive===cat ? 'none' : `1px solid ${T.light}33`, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', whiteSpace: 'nowrap', background: categorieActive===cat ? '#fff' : 'rgba(255,255,255,0.08)', color: categorieActive===cat ? T.main : '#fff', backdropFilter: 'blur(4px)', transition: 'all 0.15s', boxShadow: categorieActive===cat ? `0 4px 14px rgba(255,255,255,0.25)` : 'none', letterSpacing: '-0.2px' }}>
                   {cat}
                 </button>
               ))}
@@ -1608,9 +1616,15 @@ export default function Commander() {
           {onglet === 'accueil' && (
             <div style={{ padding: '0.875rem 1rem 1rem' }}>
               {position && commercantsFiltres.length > 0 && (
-                <p style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 600, marginBottom: 10 }}>
-                  {commercantsFiltres.length} commerce{commercantsFiltres.length > 1 ? 's' : ''} près de toi
-                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+                    Près de toi
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>
+                    {commercantsFiltres.length} commerce{commercantsFiltres.length > 1 ? 's' : ''}
+                  </span>
+                </div>
               )}
               {commercantsFiltres.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem 0' }}>

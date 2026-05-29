@@ -1306,7 +1306,7 @@ export default function CommanderSlug() {
           .articles-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.625rem; align-items: start; }
           .articles-grid > .art-card { margin-bottom: 0 !important; }
         }
-        .action-btn { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 0.5rem 1rem; border-radius: 100px; border: 1.5px solid ${T.pale}; background: #fff; color: ${T.ink}; font-weight: 700; font-size: 0.78rem; cursor: pointer; transition: all 0.15s; }
+        .action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 0.4rem 0.75rem; border-radius: 100px; border: 1px solid ${T.pale}; background: #fff; color: ${T.ink}; font-weight: 700; font-size: 0.74rem; cursor: pointer; transition: all 0.15s; line-height: 1.1; }
         .action-btn:hover { border-color: ${T.main}; color: ${T.main}; background: ${T.pale}; }
         @keyframes pulse { from { opacity:0.4; transform:scale(0.8); } to { opacity:1; transform:scale(1.2); } }
         @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
@@ -1562,19 +1562,22 @@ export default function CommanderSlug() {
                     <p style={{ fontSize: '0.85rem', color: T.deep, lineHeight: 1.55, margin: '12px 0 0' }}>{commercant.description}</p>
                   )}
 
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', flexWrap: 'nowrap' }}>
                     {commercant.adresse && (
-                      <button className="action-btn" onClick={ouvrirMaps}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <button className="action-btn" onClick={ouvrirMaps}
+                        style={{ flex: 1, minWidth: 0, justifyContent: 'flex-start' }}
+                        aria-label={`Ouvrir ${commercant.adresse} dans Maps`}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                           <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
                           <circle cx="12" cy="10" r="3"/>
                         </svg>
-                        <span>{commercant.adresse}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{commercant.adresse}</span>
                       </button>
                     )}
                     {commercant.telephone && (
-                      <button className="action-btn" onClick={appeler}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <button className="action-btn" onClick={appeler} aria-label="Appeler"
+                        style={{ flexShrink: 0, background: '#F0FDF4', borderColor: '#10B98133', color: '#10B981' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                           <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
                         </svg>
                         <span>Appeler</span>

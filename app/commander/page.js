@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { canDo } from '@/lib/plans'
 import PillsStatut from './PillsStatut'
+import ConfirmCommune from './ConfirmCommune'
 
 const T = {
   bg:      '#F8F6FF',
@@ -608,6 +609,11 @@ export default function Commander() {
   const [client, setClient] = useState({ nom: '', email: '', telephone: '', prenom: '' })
   const [clientId, setClientId] = useState(null)
   const [clientCommandes, setClientCommandes] = useState([])
+  // Commune du Yopper (référentiel `communes` joint via clients.commune_id)
+  // commune = null  : pas encore chargé ou client pas connecté
+  // commune = false : client connecté mais aucune commune setée → modale ConfirmCommune
+  const [commune, setCommune] = useState(null)
+  const [showConfirmCommune, setShowConfirmCommune] = useState(false)
   const [pickupCommande, setPickupCommande] = useState(null)
   // Tick minute pour rafraichir le compteur "Plus que X min avant ton créneau"
   const [, setNowTick] = useState(0)
@@ -630,6 +636,20 @@ export default function Commander() {
       setClientId(id)
       chargerFavoris(id)
       chargerCommandesClient(email)
+      // Charge la commune du Yopper. Si null → modale ConfirmCommune au prochain rendu.
+      supabase
+        .from('clients')
+        .select('commune_id, commune:communes(id, nom, codes_postaux, province)')
+        .eq('id', id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.commune) {
+            setCommune(data.commune)
+          } else {
+            setCommune(false)
+            setShowConfirmCommune(true)
+          }
+        })
     }
   }, [])
 
@@ -956,6 +976,22 @@ export default function Commander() {
   return (
     <>
       {showSplash && <SplashScreen onDone={onSplashDone}/>}
+
+      {/* Confirmation/changement commune Yopper.
+          mode='first' : pas fermable, déclenchée auto si commune_id null
+          mode='change' : fermable, déclenchée depuis bouton "Changer ma commune" */}
+      {showConfirmCommune && clientId && (
+        <ConfirmCommune
+          clientId={clientId}
+          currentCommuneId={commune?.id || null}
+          mode={commune ? 'change' : 'first'}
+          onClose={() => setShowConfirmCommune(false)}
+          onSet={(id, c) => {
+            setCommune(c)
+            setShowConfirmCommune(false)
+          }}
+        />
+      )}
 
       {/* FIX FOOTER : PickupScreen rendu HORS de .page-wrap pour éviter le stacking context
           (overflow-x: hidden sur .page-wrap bloque position:fixed des enfants) */}

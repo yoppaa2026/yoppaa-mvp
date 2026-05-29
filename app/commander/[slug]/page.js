@@ -1879,19 +1879,42 @@ export default function CommanderSlug() {
             </>
           )}
 
-          {/* ÉTAPE 3 — Créneau + coordonnées */}
+          {/* ÉTAPE 3 — Créneau + coordonnées : pattern hero canonique */}
           {!loading && etape === 3 && commercant && (
             <div>
-              <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.main} 100%)`, padding: '1.25rem 1rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}44 0%, transparent 50%)`, pointerEvents: 'none' }}/>
-                <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 6, opacity: 0.8 }}>{commercant.nom}</p>
-                <h2 style={{ fontWeight: 900, fontSize: '1.3rem', color: '#fff', letterSpacing: '-0.5px' }}>Choisis ton créneau</h2>
+              <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.main} 100%)`, padding: '0.875rem 1rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
+                {/* Bande 3px canonique YOPPAA */}
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
+                <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 20%, ${T.mid}44 0%, transparent 55%), radial-gradient(circle at 10% 90%, ${T.light}14 0%, transparent 50%)`, pointerEvents: 'none' }}/>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, position: 'relative' }}>
+                  <div style={{ display: 'flex', gap: 3 }}>
+                    {[
+                      { c: '#fff',  o: 0.5, delay: '0s',   size: 5 },
+                      { c: T.light, o: 1,   delay: '0.3s', size: 6 },
+                      { c: T.mid,   o: 1,   delay: '0.6s', size: 5 },
+                    ].map((d, i) => (
+                      <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 8px ${d.c}aa`, animation: `dot-pulse 2s ease-in-out ${d.delay} infinite` }}/>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>Étape 2 · {commercant.nom}</p>
+                </div>
+                <h2 style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-0.6px', margin: 0, lineHeight: 1.1, position: 'relative' }}>
+                  <span style={{ color: '#fff' }}>Choisis ton </span>
+                  <span style={{ color: T.light }}>créneau</span>
+                </h2>
               </div>
 
               <div style={{ padding: '0 1rem 1rem', marginTop: -1 }}>
                 <div style={{ background: '#fff', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '1.25rem', border: `1.5px solid ${T.pale}`, boxShadow: `0 4px 20px ${T.main}14`, marginTop: '-1rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🛒 Ta commande</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 700, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 3h2l2.4 11.4a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.6L22 7H6"/>
+                        <circle cx="9" cy="20" r="1.5"/>
+                        <circle cx="18" cy="20" r="1.5"/>
+                      </svg>
+                      Ta commande
+                    </span>
                     <div style={{ flex: 1, height: 1, background: T.pale }}/>
                   </div>
                   {Object.values(panier).map((item, i) => {
@@ -1909,14 +1932,22 @@ export default function CommanderSlug() {
                   </div>
                 </div>
 
-                {/* Jour verrouillé — il a été choisi à l'étape 2 (menu) */}
+                {/* Jour verrouille — choisi a l'etape 2 (menu) */}
                 {joursDispos[jourSelectionne] && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: '1rem', background: T.pale, border: `1.5px solid ${T.main}33`, borderRadius: 14, padding: '0.625rem 0.875rem' }}>
-                    <div>
-                      <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>🗓️ Retrait</p>
-                      <p style={{ fontWeight: 800, fontSize: '0.95rem', color: T.deep, letterSpacing: '-0.3px' }}>
-                        {joursDispos[jourSelectionne].label} <span style={{ color: T.muted, fontWeight: 600, fontSize: '0.82rem' }}>· {joursDispos[jourSelectionne].date.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</span>
-                      </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: '#fff', border: `1.5px solid ${T.main}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="5" width="18" height="16" rx="2"/>
+                          <path d="M3 9h18M8 3v4M16 3v4"/>
+                        </svg>
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Retrait</p>
+                        <p style={{ fontWeight: 800, fontSize: '0.95rem', color: T.deep, letterSpacing: '-0.3px', margin: 0 }}>
+                          {joursDispos[jourSelectionne].label} <span style={{ color: T.muted, fontWeight: 600, fontSize: '0.82rem' }}>· {joursDispos[jourSelectionne].date.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</span>
+                        </p>
+                      </div>
                     </div>
                     <button onClick={() => { setEtape(2); setCreneauChoisi(null); setErreurCommande(null); setAjustementStock(null); setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 100) }}
                       style={{ background: '#fff', border: `1.5px solid ${T.main}`, color: T.main, fontWeight: 700, fontSize: '0.72rem', padding: '0.4rem 0.875rem', borderRadius: 100, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
@@ -1924,6 +1955,18 @@ export default function CommanderSlug() {
                     </button>
                   </div>
                 )}
+
+                {/* Section header creneaux */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 6v6l4 2"/>
+                    </svg>
+                    Horaires de retrait
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                </div>
 
                 <div className="grid3" style={{ marginBottom: '1.5rem' }}>
                   {[...new Map(
@@ -1953,18 +1996,54 @@ export default function CommanderSlug() {
                     const bientot = !complet && places <= (modeTemps ? capacite * 0.15 : 1)
                     const presque = !complet && places <= (modeTemps ? capacite * 0.3 : 2) && !bientot
                     const choisi = creneauChoisi === c.id
-                    let mention = null
-                    if (complet) mention = { text: 'Complet', color: '#DC2626' }
-                    else if (bientot) mention = { text: '🔥 Dernière place !', color: '#EA580C' }
-                    else if (presque) mention = { text: '⚡ Presque complet', color: '#D97706' }
                     return (
                       <div key={c.id} onClick={() => { if (!complet) { setCreneauChoisi(c.id); setErreurCommande(null); setAjustementStock(null) } }}
-                        style={{ padding: '0.75rem 0.5rem', borderRadius: 14, border: `2px solid ${complet ? '#E5E7EB' : choisi ? T.main : T.pale}`, background: complet ? '#F9FAFB' : choisi ? T.pale : '#fff', cursor: complet ? 'default' : 'pointer', textAlign: 'center', transition: 'all 0.15s', boxShadow: choisi ? `0 4px 16px ${T.main}33` : 'none' }}>
-                        <p style={{ fontWeight: 800, fontSize: '0.9rem', color: complet ? '#D1D5DB' : T.ink, textDecoration: complet ? 'line-through' : 'none' }}>
-                          {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
+                        style={{
+                          position: 'relative',
+                          padding: '0.75rem 0.5rem',
+                          borderRadius: 14,
+                          border: `2px solid ${complet ? '#E5E7EB' : choisi ? T.main : T.pale}`,
+                          background: complet ? '#F9FAFB' : choisi ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
+                          cursor: complet ? 'default' : 'pointer',
+                          textAlign: 'center',
+                          transition: 'all 0.15s',
+                          boxShadow: choisi ? `0 8px 22px ${T.main}55` : 'none',
+                          overflow: 'hidden',
+                        }}
+                        onMouseOver={e => { if (!complet && !choisi) { e.currentTarget.style.borderColor = T.main + '88'; e.currentTarget.style.transform = 'translateY(-1px)' } }}
+                        onMouseOut={e => { if (!complet && !choisi) { e.currentTarget.style.borderColor = T.pale; e.currentTarget.style.transform = 'translateY(0)' } }}>
+                        {/* Check overlay coin haut droit quand choisi */}
+                        {choisi && (
+                          <span style={{ position: 'absolute', top: 4, right: 4, width: 16, height: 16, borderRadius: '50%', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                          </span>
+                        )}
+                        <p style={{ fontWeight: 800, fontSize: '0.95rem', color: complet ? '#D1D5DB' : choisi ? '#fff' : T.ink, textDecoration: complet ? 'line-through' : 'none', letterSpacing: '-0.3px', margin: 0, lineHeight: 1.1 }}>
+                          {c.heure_debut.slice(0,5)}
+                          <span style={{ opacity: 0.55 }}> – {c.heure_fin.slice(0,5)}</span>
                         </p>
-                        {mention && <p style={{ fontSize: '0.6rem', fontWeight: 800, color: mention.color, marginTop: 4 }}>{mention.text}</p>}
-                        {choisi && <p style={{ fontSize: '0.6rem', fontWeight: 800, color: T.main, marginTop: 4 }}>✓ Choisi</p>}
+                        {/* Mention etat : SVG + texte, harmonise */}
+                        {complet && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.62rem', fontWeight: 800, color: '#DC2626', marginTop: 5 }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="10"/>
+                              <path d="M15 9l-6 6M9 9l6 6"/>
+                            </svg>
+                            Complet
+                          </span>
+                        )}
+                        {bientot && !complet && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.62rem', fontWeight: 800, color: choisi ? '#fff' : '#EA580C', marginTop: 5 }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill={choisi ? '#FB923C' : '#FB923C'} stroke={choisi ? '#FB923C' : '#FB923C'} strokeWidth="0.5"><path d="M12 2c1 3 3 4 3 7 0 1.5-1 3-3 3s-3-1.5-3-3c0-2 2-3 3-7zm-5 9c-1 0-3 2-3 6 0 4 3 5 8 5s8-1 8-5c0-4-2-6-3-6 0 3-2 5-5 5s-5-2-5-5z"/></svg>
+                            Dernière place
+                          </span>
+                        )}
+                        {presque && !complet && !bientot && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.62rem', fontWeight: 800, color: choisi ? '#fff' : '#D97706', marginTop: 5 }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill={choisi ? '#FBBF24' : '#FBBF24'} stroke={choisi ? '#FBBF24' : '#FBBF24'} strokeWidth="0.5"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+                            Presque complet
+                          </span>
+                        )}
                       </div>
                     )
                   })}
@@ -1976,7 +2055,13 @@ export default function CommanderSlug() {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink }}>Tes coordonnées</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                      <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    Tes coordonnées
+                  </span>
                   <div style={{ flex: 1, height: 1, background: T.pale }}/>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
@@ -1988,7 +2073,13 @@ export default function CommanderSlug() {
 
                 <div style={{ background: '#fff', borderRadius: 14, border: `1.5px solid ${T.pale}`, overflow: 'hidden', marginBottom: 16 }}>
                   <div style={{ padding: '0.625rem 1rem', background: T.pale }}>
-                    <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🔒 Confidentialité</p>
+                    <p style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                      </svg>
+                      Confidentialité
+                    </p>
                   </div>
                   {[
                     { key: 'rgpdCommande', val: rgpdCommande, set: setRgpdCommande, label: 'Traitement de ma commande', badge: 'Obligatoire', badgeColor: '#DC2626', badgeBg: '#FEE2E2', desc: `J'accepte que mes coordonnées soient transmises à ${commercant.nom} pour le traitement de ma commande.` },
@@ -1997,7 +2088,9 @@ export default function CommanderSlug() {
                     <label key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', cursor: 'pointer', borderBottom: i === 0 ? `1px solid ${T.pale}` : 'none', background: item.val ? '#F0FDF4' : '#fff' }}>
                       <div onClick={() => item.set(v => !v)}
                         style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${item.val ? '#10B981' : '#D1D5DB'}`, background: item.val ? '#10B981' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, transition: 'all 0.15s' }}>
-                        {item.val && <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 900 }}>✓</span>}
+                        {item.val && (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                        )}
                       </div>
                       <div>
                         <p style={{ fontSize: '0.82rem', fontWeight: 700, color: T.ink, marginBottom: 2 }}>
@@ -2009,16 +2102,22 @@ export default function CommanderSlug() {
                   ))}
                 </div>
 
-                {/* Message erreur stock — uniquement si stock changé entre-temps */}
+                {/* Message erreur stock — uniquement si stock change entre-temps */}
                 {erreurCommande && (
                   <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.875rem 1rem', marginBottom: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                      <span style={{ fontSize: '1rem', flexShrink: 0 }}>⚠️</span>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <path d="M12 9v4M12 17h.01"/>
+                      </svg>
                       <div style={{ flex: 1 }}>
                         <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.5 }}>{erreurCommande}</p>
                       </div>
                       <button onClick={() => { setErreurCommande(null); setAjustementStock(null) }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '1rem', fontWeight: 700, flexShrink: 0, padding: 0 }}>✕</button>
+                        aria-label="Fermer"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', flexShrink: 0, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      </button>
                     </div>
                     {ajustementStock && (
                       <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
@@ -2043,13 +2142,15 @@ export default function CommanderSlug() {
                             setErreurCommande(null)
                             setAjustementStock(null)
                           }}
-                            style={{ padding: '0.5rem 1rem', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                            ✓ Réduire à {ajustementStock.stockDisponible}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '0.5rem 1rem', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                            Réduire à {ajustementStock.stockDisponible}
                           </button>
                         )}
                         <button onClick={() => { setEtape(2); setErreurCommande(null); setAjustementStock(null) }}
-                          style={{ padding: '0.5rem 1rem', borderRadius: 100, border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                          ← Modifier mon panier
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '0.5rem 1rem', borderRadius: 100, border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+                          Modifier mon panier
                         </button>
                       </div>
                     )}
@@ -2057,10 +2158,23 @@ export default function CommanderSlug() {
                 )}
 
                 <button onClick={passerCommande} disabled={loadingCommande || !formValide}
-                  style={{ ...btnPrimary, opacity: !formValide ? 0.45 : 1, cursor: !formValide ? 'default' : 'pointer' }}>
-                  {loadingCommande ? 'En cours...' : `Confirmer ma commande — ${totalPanier().toFixed(2)}€`}
+                  style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: !formValide ? 0.45 : 1, cursor: !formValide ? 'default' : 'pointer' }}>
+                  {loadingCommande ? 'En cours…' : (
+                    <>
+                      Confirmer ma commande — {totalPanier().toFixed(2)}€
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+                    </>
+                  )}
                 </button>
-                {!rgpdCommande && <p style={{ fontSize: '0.75rem', color: '#DC2626', textAlign: 'center', marginTop: 6, fontWeight: 600 }}>⚠️ Accepte le traitement de ta commande pour continuer</p>}
+                {!rgpdCommande && (
+                  <p style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: '#DC2626', textAlign: 'center', marginTop: 6, fontWeight: 600, justifyContent: 'center', width: '100%' }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                      <path d="M12 9v4M12 17h.01"/>
+                    </svg>
+                    Accepte le traitement de ta commande pour continuer
+                  </p>
+                )}
                 <p style={{ fontSize: '0.78rem', color: '#9a8ab0', textAlign: 'center', marginTop: 8, marginBottom: 24 }}>Le paiement sera activé prochainement</p>
               </div>
             </div>

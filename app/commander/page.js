@@ -160,6 +160,75 @@ function IconSparkle({ size = 18, color = T.main }) {
     </svg>
   )
 }
+// Icône par type de service public (remplace les emojis SERVICE_TYPE_EMOJI).
+function IconService({ type, size = 22, color = '#2D0F6B' }) {
+  const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', style: { flexShrink: 0 } }
+  switch (type) {
+    case 'commune':
+      return (
+        <svg {...common}>
+          <path d="M3 11 12 4 21 11"/>
+          <path d="M5 11v9h14v-9"/>
+          <path d="M8 20v-7M12 20v-7M16 20v-7M3 20h18"/>
+        </svg>
+      )
+    case 'cpas':
+      return (
+        <svg {...common}>
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+        </svg>
+      )
+    case 'police':
+      return (
+        <svg {...common}>
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>
+          <path d="m9 12 2 2 4-4"/>
+        </svg>
+      )
+    case 'pompiers':
+      return (
+        <svg {...common}>
+          <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+        </svg>
+      )
+    case 'ecole':
+      return (
+        <svg {...common}>
+          <path d="M22 10 12 5 2 10l10 5 10-5Z"/>
+          <path d="M6 12v5c0 1 3 2.5 6 2.5s6-1.5 6-2.5v-5"/>
+        </svg>
+      )
+    case 'urgence':
+      return (
+        <svg {...common}>
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
+          <path d="M12 9v4M12 17h.01"/>
+        </svg>
+      )
+    case 'medecin_garde':
+      return (
+        <svg {...common}>
+          <rect x="3" y="3" width="18" height="18" rx="3"/>
+          <path d="M12 8v8M8 12h8"/>
+        </svg>
+      )
+    case 'pharmacie_garde':
+      return (
+        <svg {...common}>
+          <path d="M10.5 4.5 4.5 10.5a3.5 3.5 0 0 0 5 5L15.5 9.5a3.5 3.5 0 1 0-5-5Z"/>
+          <path d="m8 8 7 7"/>
+        </svg>
+      )
+    default:
+      return (
+        <svg {...common}>
+          <rect x="4" y="3" width="16" height="18" rx="2"/>
+          <path d="M9 7h.01M15 7h.01M9 11h.01M15 11h.01M9 15h.01M15 15h.01M12 21v-3"/>
+        </svg>
+      )
+  }
+}
+
 // Mini signature Yoppaa : 3 points tricolores inline (remplace les 🟣 décoratifs)
 function PointsYoppaa({ size = 5, gap = 3 }) {
   const couleurs = ['#ffffff', T.light, T.mid]
@@ -605,7 +674,6 @@ function SectionMesAvis({ clientId }) {
 
 function CarteServicePublic({ s, onSelect }) {
   const isUrgence = s.national || s.type === 'urgence'
-  const emoji = SERVICE_TYPE_EMOJI[s.type] || '🏢'
   const typeLabel = SERVICE_TYPE_LABEL[s.type] || 'Service'
   return (
     <div onClick={onSelect}
@@ -624,8 +692,8 @@ function CarteServicePublic({ s, onSelect }) {
         overflow: 'hidden',
         boxSizing: 'border-box',
       }}>
-      <div style={{ width: 38, height: 38, borderRadius: 10, background: isUrgence ? '#FEE2E2' : '#EDE0FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
-        {emoji}
+      <div style={{ width: 38, height: 38, borderRadius: 10, background: isUrgence ? '#FEE2E2' : '#EDE0FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <IconService type={s.type} size={20} color={isUrgence ? '#DC2626' : T.deep}/>
       </div>
       <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>

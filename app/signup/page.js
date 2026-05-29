@@ -209,13 +209,13 @@ function BarreProgression({ etape }) {
         return (
           <div key={e.n} style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: done ? '#16A34A' : (active ? '#fff' : 'rgba(255,255,255,0.15)'), color: active ? T.bgPanel : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 12, border: active ? `2px solid ${T.light}` : 'none', transition: 'all 0.2s', boxShadow: active ? `0 4px 12px rgba(196,160,244,0.5)` : 'none' }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: done ? '#10B981' : (active ? '#fff' : 'rgba(255,255,255,0.15)'), color: active ? T.bgPanel : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 12, border: active ? `2px solid ${T.light}` : 'none', transition: 'all 0.2s', boxShadow: active ? `0 4px 12px rgba(196,160,244,0.5)` : 'none' }}>
                 {done ? '✓' : e.n}
               </div>
               <p style={{ fontSize: 10, fontWeight: 700, color: done || active ? '#fff' : 'rgba(255,255,255,0.4)', marginTop: 4, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{e.label}</p>
             </div>
             {i < ETAPES.length - 1 && (
-              <div style={{ flex: 1, height: 2, background: done ? '#16A34A' : 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 13, transition: 'background 0.2s' }}/>
+              <div style={{ flex: 1, height: 2, background: done ? '#10B981' : 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 13, transition: 'background 0.2s' }}/>
             )}
           </div>
         )
@@ -608,7 +608,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, avancer, re
             )}
           </div>
           {form.latitude && form.longitude && (
-            <p style={{ fontSize: 11, color: '#16A34A', fontWeight: 700, margin: '6px 0 0' }}>
+            <p style={{ fontSize: 11, color: '#10B981', fontWeight: 700, margin: '6px 0 0' }}>
               ✓ Position GPS confirmée ({form.latitude.toFixed(4)}, {form.longitude.toFixed(4)})
             </p>
           )}
@@ -1268,7 +1268,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
 }
 
 function ScoreBar({ score }) {
-  const couleur = score >= 80 ? '#16A34A' : score >= 60 ? '#EA580C' : '#DC2626'
+  const couleur = score >= 80 ? '#10B981' : score >= 60 ? '#EA580C' : '#DC2626'
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
@@ -1285,9 +1285,9 @@ function ScoreBar({ score }) {
 function ScoreItem({ label, ok, pts }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0' }}>
-      <span style={{ width: 16, height: 16, borderRadius: '50%', background: ok ? '#16A34A' : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 10, color: '#fff', fontWeight: 900 }}>{ok ? '✓' : '·'}</span>
+      <span style={{ width: 16, height: 16, borderRadius: '50%', background: ok ? '#10B981' : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 10, color: '#fff', fontWeight: 900 }}>{ok ? '✓' : '·'}</span>
       <span style={{ fontWeight: 600, color: ok ? T.ink : T.muted, flex: 1 }}>{label}</span>
-      <span style={{ fontSize: 10, fontWeight: 700, color: ok ? '#16A34A' : T.muted }}>+{pts}</span>
+      <span style={{ fontSize: 10, fontWeight: 700, color: ok ? '#10B981' : T.muted }}>+{pts}</span>
     </div>
   )
 }

@@ -81,7 +81,7 @@ export default function ModalAvis({ commercant, clientId, commandeId = null, onC
           {done && (
             <div style={{ textAlign: 'center', padding: '18px 0 10px' }}>
               <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 60, height: 60, borderRadius: '50%', background: '#F0FDF4', marginBottom: 14 }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 12l5 5L20 7"/>
                 </svg>
               </div>

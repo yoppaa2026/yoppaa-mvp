@@ -931,7 +931,7 @@ function ArticleCard({ a, estVitrine = false, onEdit, onToggle, onUpdateStock, o
             {!estVitrine && (effAuj.ferme ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Fermé aujourd&rsquo;hui</span>
             ) : stockBrutAuj > 0 ? (
-              <span style={{ fontSize: 11, fontWeight: 700, color: stockRestant === 0 ? '#DC2626' : stockRestant <= 2 ? '#EA580C' : '#16A34A', background: stockRestant === 0 ? '#FEE2E2' : stockRestant <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: stockRestant === 0 ? '#DC2626' : stockRestant <= 2 ? '#EA580C' : '#10B981', background: stockRestant === 0 ? '#FEE2E2' : stockRestant <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>
                 Aujourd&rsquo;hui&nbsp;: {stockRestant} dispo {dejaCommande > 0 && <span style={{ opacity: 0.65 }}>({dejaCommande} commandé{dejaCommande > 1 ? 's' : ''})</span>}
               </span>
             ) : (
@@ -969,7 +969,7 @@ function ArticleCard({ a, estVitrine = false, onEdit, onToggle, onUpdateStock, o
                   : epuise
                   ? { bg: '#FEE2E2', color: '#DC2626', border: '#FCA5A5' }
                   : eff.override
-                  ? { bg: '#F0FDF4', color: '#16A34A', border: '#86EFAC' }
+                  ? { bg: '#F0FDF4', color: '#10B981', border: '#86EFAC' }
                   : { bg: '#fff', color: T.bgPanel, border: T.hairline }
                 return (
                   <button key={jour} onClick={() => ouvrirEdition(jour)}
@@ -1359,7 +1359,7 @@ function DealRow({ d, today, onEdit, onToggle, onDelete, passe = false }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
             <span style={{ fontWeight: 800, color: T.ink, fontSize: 15 }}>{d.titre}</span>
-            {isToday && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#F0FDF4', color: '#16A34A' }}>Aujourd&rsquo;hui</span>}
+            {isToday && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#F0FDF4', color: '#10B981' }}>Aujourd&rsquo;hui</span>}
             {d.inclus_morning && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#FFF7ED', color: '#EA580C' }}>☀️ Morning</span>}
             <span style={{ ...s.tag, background: d.actif ? T.bgPanel : '#F3F4F6', color: d.actif ? '#fff' : T.muted }}>{d.actif ? 'Actif' : 'Inactif'}</span>
           </div>
@@ -2702,7 +2702,7 @@ function TabSignalements({ commercantId, toast }) {
   const filtres = [
     { key: 'en_attente', label: 'En attente', color: '#DC2626' },
     { key: 'vu',         label: 'Vus',        color: '#EA580C' },
-    { key: 'traite',     label: 'Traités',    color: '#16A34A' },
+    { key: 'traite',     label: 'Traités',    color: '#10B981' },
     { key: 'ignore',     label: 'Ignorés',    color: T.muted },
     { key: 'tous',       label: 'Tous',       color: T.deep },
   ]
@@ -2755,7 +2755,7 @@ function TabSignalements({ commercantId, toast }) {
           const typeIcon  = SIGN_TYPE_ICON[sig.type] || '💬'
           const couleurStatut = sig.statut === 'en_attente' ? '#DC2626'
                               : sig.statut === 'vu'         ? '#EA580C'
-                              : sig.statut === 'traite'     ? '#16A34A'
+                              : sig.statut === 'traite'     ? '#10B981'
                               : T.muted
           return (
             <div key={sig.id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: `1px solid ${T.hairline}`, borderLeft: `4px solid ${couleurStatut}` }}>

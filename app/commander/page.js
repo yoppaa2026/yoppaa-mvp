@@ -449,11 +449,11 @@ function SuggestionForm({ clientId }) {
     setSent(true); setSending(false)
   }
   if (sent) return (
-    <div style={{ background: '#F0FDF4', borderRadius: 16, padding: '1.5rem', textAlign: 'center', border: '1.5px solid #16A34A33' }}>
+    <div style={{ background: '#F0FDF4', borderRadius: 16, padding: '1.5rem', textAlign: 'center', border: '1.5px solid #10B98133' }}>
       <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 56, height: 56, borderRadius: 14, background: T.pale, marginBottom: 12 }}>
         <IconSparkle size={28} color={T.main}/>
       </div>
-      <p style={{ fontWeight: 800, color: '#16A34A', marginBottom: 6 }}>Merci pour ta suggestion !</p>
+      <p style={{ fontWeight: 800, color: '#10B981', marginBottom: 6 }}>Merci pour ta suggestion !</p>
       <p style={{ fontSize: '0.875rem', color: T.muted }}>On va contacter ce commerçant. Tu contribues à faire grandir la Tribu Yoppaa 🫂</p>
       <button onClick={() => { setSent(false); setForm({ nom: '', adresse: '', type: '', commentaire: '' }) }} style={{ marginTop: '1rem', padding: '0.75rem 1.5rem', background: T.main, color: '#fff', border: 'none', borderRadius: 100, fontWeight: 700, cursor: 'pointer' }}>Suggérer un autre commerçant</button>
     </div>
@@ -762,6 +762,9 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
   const statut = statutsCommerce[c.id]
+  // Badge favori : violet quand simple favori (j'ai souscrit aux notifs), rouge quand un deal/actu est actif maintenant
+  const aDuNouveau = estFavori && ((dealsActifs?.has(c.id)) || (actusActives?.has(c.id)))
+  const badgeColor = aDuNouveau ? '#DC2626' : T.main
 
   function getStatutPhysique() {
     const JOURS_MAP = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
@@ -778,7 +781,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
 
     if (ouvert) {
       const horaire = `${h.debut.slice(0,5)}–${h.fin.slice(0,5)}`
-      return { dot: '#16A34A', label: `Ouvert · ${horaire}`, color: '#16A34A', bg: '#F0FDF4', pulse: true }
+      return { dot: '#10B981', label: `Ouvert · ${horaire}`, color: '#10B981', bg: '#F0FDF4', pulse: true }
     }
 
     if (h?.ouvert && h.debut) {
@@ -808,7 +811,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
     const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
     const heureOuv = c.heure_ouverture_resa ? c.heure_ouverture_resa.slice(0,5) : '21:00'
     const resaDemainOuverte = nowMin >= heureEnMinutes(heureOuv)
-    if (statut === 'ouvert')  return { dot: '#16A34A', label: 'Créneaux disponibles', color: '#16A34A', bg: '#F0FDF4' }
+    if (statut === 'ouvert')  return { dot: '#10B981', label: 'Créneaux disponibles', color: '#10B981', bg: '#F0FDF4' }
     if (statut === 'urgent')  return { dot: '#EA580C', label: 'Réserve vite !', color: '#EA580C', bg: '#FFF7ED' }
     if (statut === 'complet' || statut === 'ferme') {
       if (resaDemainOuverte) return { dot: T.main, label: 'Réserver pour demain', color: T.main, bg: T.pale }
@@ -841,13 +844,16 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
               <p style={{ fontWeight: 900, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.3px', lineHeight: 1.2, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nom}</p>
               <button onClick={e => onToggleFavori(c.id, e)}
                 aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s' }}
+                style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s' }}
                 onMouseOver={e => e.currentTarget.style.transform = 'scale(1.2)'}
                 onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill={estFavori ? '#C4A0F4' : 'none'} xmlns="http://www.w3.org/2000/svg">
                   <path d="M12,3 L14.5,9 L21.5,9.5 L16.5,14 L18.2,21 L12,17.5 L5.8,21 L7.5,14 L2.5,9.5 L9.5,9 Z"
                     stroke={estFavori ? '#9660E0' : '#D1D5DB'} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
                 </svg>
+                {estFavori && (
+                  <span aria-hidden style={{ position: 'absolute', bottom: -1, right: -1, width: 8, height: 8, borderRadius: '50%', background: badgeColor, border: '2px solid #fff', boxShadow: `0 0 0 1px ${badgeColor}33, 0 0 8px ${badgeColor}99`, animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
+                )}
               </button>
             </div>
             <Badges type={c.type}/>
@@ -859,7 +865,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6, alignItems: 'center' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: physique.bg, borderRadius: 100, padding: '3px 8px', border: `1px solid ${physique.dot}22` }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: physique.dot, flexShrink: 0, animation: physique.pulse ? 'dot-pulse 2s ease-in-out infinite' : 'none', boxShadow: physique.pulse ? `0 0 6px ${physique.dot}88` : 'none' }}/>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: physique.dot, flexShrink: 0, border: physique.pulse ? '1.5px solid #fff' : 'none', animation: physique.pulse ? 'yoppa-live-pulse 1s ease-in-out infinite' : 'none', boxShadow: physique.pulse ? `0 0 0 1.5px ${physique.dot}33, 0 0 8px ${physique.dot}99` : 'none' }}/>
                 <span style={{ fontSize: '0.66rem', fontWeight: 700, color: physique.color }}>{physique.label}</span>
               </span>
               {resa && (
@@ -896,6 +902,55 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
           <PillsStatut commercant={c} dealActif={dealsActifs?.has(c.id) || false} actuActive={actusActives?.has(c.id) || false} size="xs"/>
         </div>
       </div>
+    </div>
+  )
+}
+
+// Barre de categories scrollable horizontalement avec indicateur de fin (fade + chevron pulsant).
+// Le fade disparait quand on a tout vu (scrollLeft + clientWidth >= scrollWidth).
+function CategoriesScroll({ categorieActive, setCategorieActive }) {
+  const scrollRef = useRef(null)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    function check() {
+      setCanScrollRight(el.scrollLeft + el.clientWidth + 2 < el.scrollWidth)
+    }
+    check()
+    el.addEventListener('scroll', check, { passive: true })
+    window.addEventListener('resize', check)
+    return () => {
+      el.removeEventListener('scroll', check)
+      window.removeEventListener('resize', check)
+    }
+  }, [])
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div ref={scrollRef} className="cats">
+        {CATEGORIES.map(cat => (
+          <button key={cat} onClick={() => setCategorieActive(cat)}
+            style={{ flexShrink: 0, padding: '0.45rem 1rem', borderRadius: 100, border: categorieActive===cat ? 'none' : `1px solid ${T.light}33`, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', whiteSpace: 'nowrap', background: categorieActive===cat ? '#fff' : 'rgba(255,255,255,0.08)', color: categorieActive===cat ? T.main : '#fff', backdropFilter: 'blur(4px)', transition: 'all 0.15s', boxShadow: categorieActive===cat ? `0 4px 14px rgba(255,255,255,0.25)` : 'none', letterSpacing: '-0.2px' }}>
+            {cat}
+          </button>
+        ))}
+      </div>
+      {/* Fade + chevron pulsant : disparait quand l'utilisateur a tout vu */}
+      <div style={{ position: 'absolute', top: 0, right: 0, bottom: '0.875rem', width: 42, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 6, background: `linear-gradient(to right, transparent, ${T.bgPanel} 70%)`, opacity: canScrollRight ? 1 : 0, transition: 'opacity 0.2s' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(4px)', animation: 'cats-chev-pulse 1.4s ease-in-out infinite' }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 6l6 6-6 6"/>
+          </svg>
+        </span>
+      </div>
+      <style>{`
+        @keyframes cats-chev-pulse {
+          0%, 100% { transform: translateX(0);   opacity: 1; }
+          50%      { transform: translateX(3px); opacity: 0.6; }
+        }
+      `}</style>
     </div>
   )
 }
@@ -1354,10 +1409,10 @@ export default function Commander() {
   const card = { background: '#fff', borderRadius: 14, padding: '1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 6px rgba(107,53,196,0.05)' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }
   const statutStyle = {
-    recupere:       { bg: '#F0FDF4', color: '#16A34A', label: 'Récupérée' },
-    pret:           { bg: '#F0FDF4', color: '#16A34A', label: 'Prête à retirer' },
+    recupere:       { bg: '#F0FDF4', color: '#10B981', label: 'Récupérée' },
+    pret:           { bg: '#F0FDF4', color: '#10B981', label: 'Prête à retirer' },
     en_preparation: { bg: '#EFF6FF', color: '#2563EB', label: 'En préparation' },
-    en_attente:     { bg: '#F0FDF4', color: '#16A34A', label: 'Validée' },
+    en_attente:     { bg: '#F0FDF4', color: '#10B981', label: 'Validée' },
   }
   // Sous-texte chaleureux par statut (affiche sous la pastille pour donner du contexte)
   const statutSousTexte = {
@@ -1529,6 +1584,7 @@ export default function Commander() {
         @keyframes tribu-pulse2 { 0%,100% { opacity:0.85; transform:scale(1); } 50% { opacity:0.5; transform:scale(1.1); } }
         @keyframes tribu-pulse3 { 0%,100% { opacity:0.6; transform:scale(1); } 50% { opacity:0.3; transform:scale(1.05); } }
         @keyframes dot-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.4); opacity:0.7; } }
+        @keyframes yoppa-live-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.45); opacity:0.7; } }
         @keyframes dot-pop { 0% { opacity:0; transform:scale(0) translateY(8px); } 70% { transform:scale(1.3) translateY(-4px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
         @keyframes wordmark-in { 0% { opacity:0; letter-spacing: 8px; } 100% { opacity:1; letter-spacing: -2px; } }
         @keyframes tagline-in { 0% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
@@ -1640,14 +1696,7 @@ export default function Commander() {
           )}
 
           {onglet === 'accueil' && (
-            <div className="cats">
-              {CATEGORIES.map(cat => (
-                <button key={cat} onClick={() => setCategorieActive(cat)}
-                  style={{ flexShrink: 0, padding: '0.45rem 1rem', borderRadius: 100, border: categorieActive===cat ? 'none' : `1px solid ${T.light}33`, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', whiteSpace: 'nowrap', background: categorieActive===cat ? '#fff' : 'rgba(255,255,255,0.08)', color: categorieActive===cat ? T.main : '#fff', backdropFilter: 'blur(4px)', transition: 'all 0.15s', boxShadow: categorieActive===cat ? `0 4px 14px rgba(255,255,255,0.25)` : 'none', letterSpacing: '-0.2px' }}>
-                  {cat}
-                </button>
-              ))}
-            </div>
+            <CategoriesScroll categorieActive={categorieActive} setCategorieActive={setCategorieActive}/>
           )}
 
           {onglet !== 'accueil' && <div style={{ height: 10 }}/>}
@@ -1718,7 +1767,7 @@ export default function Commander() {
                 <h2 style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px' }}>Mes commandes</h2>
                 {badgeCommandes > 0 && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.12)', borderRadius: 100, padding: '4px 12px', marginTop: 8, border: '1px solid rgba(255,255,255,0.15)' }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#16A34A', boxShadow: '0 0 6px #16A34A88', animation: 'dot-pulse 2s ease-in-out infinite' }}/>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', border: '1.5px solid #fff', boxShadow: '0 0 0 1.5px #10B98133, 0 0 8px #10B98199', animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff' }}>{badgeCommandes} commande{badgeCommandes > 1 ? 's' : ''} en cours</span>
                   </div>
                 )}
@@ -1728,7 +1777,7 @@ export default function Commander() {
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                     <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>Prêtes à retirer</span>
-                    <span style={{ background: '#16A34A', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{commandesASwiper.length}</span>
+                    <span style={{ background: '#10B981', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{commandesASwiper.length}</span>
                   </div>
                   {commandesASwiper.map(c => {
                     const ok = peutRetirer(c)
@@ -1736,15 +1785,15 @@ export default function Commander() {
                     const heureCreneau = c.creneau?.heure_debut?.slice(0,5)
                     const prenom = client.prenom || client.nom?.split(' ')[0] || 'Yopper'
                     return (
-                    <div key={c.id} style={{ background: 'linear-gradient(135deg, #F0FDF4, #fff)', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '0.75rem', border: '2px solid #16A34A33', boxShadow: '0 4px 16px rgba(22,163,74,0.1)' }}>
+                    <div key={c.id} style={{ background: 'linear-gradient(135deg, #F0FDF4, #fff)', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '0.75rem', border: '2px solid #10B98133', boxShadow: '0 4px 16px rgba(22,163,74,0.1)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem' }}>
                         <div>
                           <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>
                             {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.main, fontWeight: 700 }}> — commande #{c.numeroAffiche}</span>}
                           </p>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#F0FDF4', borderRadius: 100, padding: '3px 10px', border: '1px solid #16A34A22' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A', animation: 'dot-pulse 2s ease-in-out infinite' }}/>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#16A34A' }}>Prête à retirer{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#F0FDF4', borderRadius: 100, padding: '3px 10px', border: '1px solid #10B98122' }}>
+                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', border: '1.5px solid #fff', boxShadow: '0 0 0 1.5px #10B98133, 0 0 8px #10B98199', animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#10B981' }}>Prête à retirer{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</span>
                           </span>
                         </div>
                         <p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
@@ -1826,7 +1875,7 @@ export default function Commander() {
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(c.total).toFixed(2)}€</p>
-                        <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: '#F0FDF4', color: '#16A34A' }}>✓ Récupérée</span>
+                        <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: '#F0FDF4', color: '#10B981' }}>✓ Récupérée</span>
                       </div>
                     </div>
                   ))}

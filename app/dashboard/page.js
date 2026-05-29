@@ -18,7 +18,7 @@ const T = {
   gris:    { border: '#9CA3AF', badge: '#6B7280', cardBg: '#F9FAFB' },
   rouge:   { border: '#DC2626', badge: '#DC2626', cardBg: '#FFF0F0' },
   orange:  { border: '#EA580C', badge: '#EA580C', cardBg: '#FFF7ED' },
-  vert:    { border: '#16A34A', badge: '#16A34A', cardBg: '#F0FDF4' },
+  vert:    { border: '#10B981', badge: '#10B981', cardBg: '#F0FDF4' },
   bleu:    { border: '#2563EB', badge: '#2563EB', cardBg: '#EFF6FF' },
 }
 
@@ -523,7 +523,7 @@ export default function Dashboard() {
     { key: 'actives',        label: 'Actives',      count: stats.nouvelles + stats.enPrepa + stats.pretes },
     { key: 'en_attente',     label: 'Nouvelles',    count: stats.nouvelles,  color: '#DC2626' },
     { key: 'en_preparation', label: 'En prépa',     count: stats.enPrepa,    color: '#EA580C' },
-    { key: 'pret',           label: 'Prêtes',       count: stats.pretes,     color: '#16A34A' },
+    { key: 'pret',           label: 'Prêtes',       count: stats.pretes,     color: '#10B981' },
     { key: 'recupere',       label: 'Récupérées',   count: stats.recuperees, color: '#2563EB' },
     { key: 'non_retire',     label: 'Non retirés',  count: nonRetires,       color: '#6B7280' },
     { key: 'tout',           label: 'Tout',         count: commandesDuJour.length },
@@ -532,7 +532,7 @@ export default function Dashboard() {
   const statsCards = [
     { label: 'Nouvelles',  value: stats.nouvelles,           color: '#DC2626', bg: '#FFF0F0', border: '#DC262618', pulse: stats.nouvelles > 0 },
     { label: 'En prépa',   value: stats.enPrepa,             color: '#EA580C', bg: '#FFF7ED', border: '#EA580C18', pulse: false },
-    { label: 'Prêtes',     value: stats.pretes,              color: '#16A34A', bg: '#F0FDF4', border: '#16A34A18', pulse: false },
+    { label: 'Prêtes',     value: stats.pretes,              color: '#10B981', bg: '#F0FDF4', border: '#10B98118', pulse: false },
     { label: 'CA du jour', value: `${stats.ca.toFixed(2)}€`, color: T.main,   bg: T.pale,   border: `${T.main}18`, pulse: false },
   ]
 
@@ -786,11 +786,11 @@ export default function Dashboard() {
               #{commandeRecuperee.numero}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 10, fontWeight: 800, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>Récupérée</p>
+              <p style={{ fontSize: 10, fontWeight: 800, color: '#10B981', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>Récupérée</p>
               <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{commandeRecuperee.nom}</p>
             </div>
             <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
             </div>
           </div>
         </div>

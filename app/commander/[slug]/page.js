@@ -150,7 +150,7 @@ function CarteAvis({ a }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Etoiles note={a.note} taille={14}/>
           {verifie && (
-            <span style={{ fontSize: 9, fontWeight: 800, color: '#16A34A', background: '#F0FDF4', padding: '2px 7px', borderRadius: 100, letterSpacing: '0.5px', textTransform: 'uppercase', border: '1px solid #BBF7D0' }}>
+            <span style={{ fontSize: 9, fontWeight: 800, color: '#10B981', background: '#F0FDF4', padding: '2px 7px', borderRadius: 100, letterSpacing: '0.5px', textTransform: 'uppercase', border: '1px solid #BBF7D0' }}>
               ✓ Vérifié
             </span>
           )}
@@ -486,8 +486,8 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
               )
             }
             return (
-              <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F0FDF4', color: '#16A34A', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A' }}/>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F0FDF4', color: '#10B981', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }}/>
                 Disponible
               </span>
             )
@@ -1403,13 +1403,13 @@ export default function CommanderSlug() {
                 const active = etape === s.n + 1
                 return (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: active ? T.main : done ? '#16A34A22' : 'rgba(255,255,255,0.08)', border: `1.5px solid ${active ? T.light : done ? '#16A34A' : 'rgba(255,255,255,0.15)'}`, borderRadius: 100, padding: '3px 10px', transition: 'all 0.3s' }}>
-                      <span style={{ width: 16, height: 16, borderRadius: '50%', background: active ? '#fff' : done ? '#16A34A' : 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 900, color: active ? T.main : '#fff', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: active ? T.main : done ? '#10B98122' : 'rgba(255,255,255,0.08)', border: `1.5px solid ${active ? T.light : done ? '#10B981' : 'rgba(255,255,255,0.15)'}`, borderRadius: 100, padding: '3px 10px', transition: 'all 0.3s' }}>
+                      <span style={{ width: 16, height: 16, borderRadius: '50%', background: active ? '#fff' : done ? '#10B981' : 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 900, color: active ? T.main : '#fff', flexShrink: 0 }}>
                         {done ? '✓' : s.n}
                       </span>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: active ? '#fff' : done ? '#16A34A' : 'rgba(255,255,255,0.5)' }}>{s.label}</span>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: active ? '#fff' : done ? '#10B981' : 'rgba(255,255,255,0.5)' }}>{s.label}</span>
                     </div>
-                    {i === 0 && <div style={{ width: 12, height: 1.5, background: etape >= 3 ? '#16A34A' : 'rgba(255,255,255,0.15)' }}/>}
+                    {i === 0 && <div style={{ width: 12, height: 1.5, background: etape >= 3 ? '#10B981' : 'rgba(255,255,255,0.15)' }}/>}
                   </div>
                 )
               })}
@@ -1509,9 +1509,9 @@ export default function CommanderSlug() {
                       const h = commercant.horaires_detail[j]
                       if (!h) return null
                       return (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: h.ouvert ? '#F0FDF4' : '#FEF2F2', borderRadius: 100, padding: '3px 9px', border: `1px solid ${h.ouvert ? '#16A34A33' : '#DC262633'}` }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: h.ouvert ? '#16A34A' : '#DC2626', flexShrink: 0, animation: h.ouvert ? 'dot-pulse 2s ease infinite' : 'none' }}/>
-                          <span style={{ fontSize: '0.7rem', fontWeight: 800, color: h.ouvert ? '#16A34A' : '#DC2626' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: h.ouvert ? '#F0FDF4' : '#FEF2F2', borderRadius: 100, padding: '3px 9px', border: `1px solid ${h.ouvert ? '#10B98133' : '#DC262633'}` }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: h.ouvert ? '#10B981' : '#DC2626', flexShrink: 0, animation: h.ouvert ? 'dot-pulse 2s ease infinite' : 'none' }}/>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 800, color: h.ouvert ? '#10B981' : '#DC2626' }}>
                             {h.ouvert ? `Ouvert · ${h.debut.slice(0,5)}–${h.fin.slice(0,5)}` : 'Fermé'}
                           </span>
                         </div>
@@ -1749,7 +1749,7 @@ export default function CommanderSlug() {
                 {/* Lien discret de signalement en bas de fiche */}
                 <div style={{ marginTop: 28, padding: '0 0 12px', textAlign: 'center' }}>
                   {signalementSent ? (
-                    <p style={{ fontSize: 12, color: '#16A34A', fontWeight: 700, margin: 0 }}>
+                    <p style={{ fontSize: 12, color: '#10B981', fontWeight: 700, margin: 0 }}>
                       ✓ Merci, signalement enregistré
                     </p>
                   ) : (
@@ -1882,7 +1882,7 @@ export default function CommanderSlug() {
                   ].map((item, i) => (
                     <label key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', cursor: 'pointer', borderBottom: i === 0 ? `1px solid ${T.pale}` : 'none', background: item.val ? '#F0FDF4' : '#fff' }}>
                       <div onClick={() => item.set(v => !v)}
-                        style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${item.val ? '#16A34A' : '#D1D5DB'}`, background: item.val ? '#16A34A' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, transition: 'all 0.15s' }}>
+                        style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${item.val ? '#10B981' : '#D1D5DB'}`, background: item.val ? '#10B981' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, transition: 'all 0.15s' }}>
                         {item.val && <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 900 }}>✓</span>}
                       </div>
                       <div>

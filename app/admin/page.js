@@ -224,7 +224,7 @@ export default function AdminPage() {
             <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${T.hairline}`, overflow: 'hidden' }}>
               {historique.map((h, i) => (
                 <div key={h.id} style={{ padding: '10px 16px', borderTop: i === 0 ? 'none' : `1px solid ${T.hairline}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: h.action === 'valide' ? '#16A34A' : '#DC2626', padding: '3px 9px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: h.action === 'valide' ? '#10B981' : '#DC2626', padding: '3px 9px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 }}>
                     {h.action === 'valide' ? '✓ Validé' : '✕ Rejeté'}
                   </span>
                   <span style={{ fontSize: 13, fontWeight: 700, color: T.ink, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -283,7 +283,7 @@ export default function AdminPage() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: toast.type === 'error' ? '#DC2626' : '#16A34A', color: '#fff', padding: '12px 22px', borderRadius: 100, fontWeight: 700, fontSize: 14, boxShadow: '0 8px 28px rgba(0,0,0,0.25)', zIndex: 2000, fontFamily: '"DM Sans", sans-serif', maxWidth: '90%' }}>
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: toast.type === 'error' ? '#DC2626' : '#10B981', color: '#fff', padding: '12px 22px', borderRadius: 100, fontWeight: 700, fontSize: 14, boxShadow: '0 8px 28px rgba(0,0,0,0.25)', zIndex: 2000, fontFamily: '"DM Sans", sans-serif', maxWidth: '90%' }}>
           {toast.msg}
         </div>
       )}
@@ -297,7 +297,7 @@ function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
   const score = ob?.validation_auto_score ?? null
   const successPack = ob?.success_pack_choisi
   const dateSoumission = ob?.completed_at || c.created_at
-  const couleurScore = score == null ? T.muted : score >= 80 ? '#16A34A' : score >= 60 ? '#EA580C' : '#DC2626'
+  const couleurScore = score == null ? T.muted : score >= 80 ? '#10B981' : score >= 60 ? '#EA580C' : '#DC2626'
 
   return (
     <div style={{ background: '#fff', borderRadius: 16, border: `1px solid ${T.hairline}`, overflow: 'hidden', boxShadow: '0 2px 12px rgba(22,6,54,0.05)', opacity: disabled ? 0.5 : 1 }}>
@@ -339,7 +339,7 @@ function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
             </p>
           )}
           <div style={{ display: 'grid', gap: 4, fontSize: 12, color: T.muted }}>
-            {c.adresse && <div>📍 {c.adresse}{c.latitude && c.longitude ? <span style={{ color: '#16A34A', marginLeft: 6 }}>✓ géocodée</span> : <span style={{ color: '#EA580C', marginLeft: 6 }}>⚠ pas géocodée</span>}</div>}
+            {c.adresse && <div>📍 {c.adresse}{c.latitude && c.longitude ? <span style={{ color: '#10B981', marginLeft: 6 }}>✓ géocodée</span> : <span style={{ color: '#EA580C', marginLeft: 6 }}>⚠ pas géocodée</span>}</div>}
             {c.telephone && <div>📞 {c.telephone}</div>}
             {c.email && <div>✉ {c.email}</div>}
           </div>
@@ -364,7 +364,7 @@ function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
           ✕ Rejeter
         </button>
         <button onClick={onValider} disabled={disabled}
-          style={{ padding: '9px 18px', borderRadius: 100, border: 'none', background: '#16A34A', color: '#fff', fontWeight: 800, fontSize: 13, cursor: disabled ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 14px rgba(22,163,74,0.3)' }}>
+          style={{ padding: '9px 18px', borderRadius: 100, border: 'none', background: '#10B981', color: '#fff', fontWeight: 800, fontSize: 13, cursor: disabled ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 14px rgba(22,163,74,0.3)' }}>
           {disabled ? 'En cours…' : '✓ Valider'}
         </button>
       </div>

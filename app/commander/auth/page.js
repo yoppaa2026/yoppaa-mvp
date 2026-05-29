@@ -181,7 +181,7 @@ function AuthForm() {
       </div>
 
       {message && (
-        <div style={{ borderRadius: 12, padding: '0.875rem 1rem', marginBottom: '1rem', background: message.type === 'success' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)', border: `1px solid ${message.type === 'success' ? '#16A34A44' : '#DC262644'}` }}>
+        <div style={{ borderRadius: 12, padding: '0.875rem 1rem', marginBottom: '1rem', background: message.type === 'success' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)', border: `1px solid ${message.type === 'success' ? '#10B98144' : '#DC262644'}` }}>
           <p style={{ fontSize: '0.82rem', fontWeight: 600, color: message.type === 'success' ? '#4ADE80' : '#FCA5A5', lineHeight: 1.5 }}>
             {message.type === 'success' ? '✅ ' : '⚠️ '}{message.text}
           </p>

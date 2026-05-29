@@ -362,7 +362,7 @@ export default function FicheServicePublic({ params }) {
       {/* Bouton signalement discret en bas */}
       <div style={{ padding: '14px 18px 28px', textAlign: 'center' }}>
         {signalementSent ? (
-          <p style={{ fontSize: 12, color: '#16A34A', fontWeight: 700, margin: 0 }}>
+          <p style={{ fontSize: 12, color: '#10B981', fontWeight: 700, margin: 0 }}>
             ✓ Merci, signalement enregistré
           </p>
         ) : (

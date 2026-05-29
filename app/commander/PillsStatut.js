@@ -5,7 +5,7 @@
 import { getPillsStatut } from '@/lib/plans'
 
 const C = {
-  on:        { bg: '#16A34A', color: '#fff',     border: '#16A34A' }, // vert plein
+  on:        { bg: '#10B981', color: '#fff',     border: '#10B981' }, // vert plein
   off:       { bg: '#F3F4F6', color: '#9CA3AF',  border: '#E5E7EB' }, // gris discret
   unavail:   { bg: '#FAFAFA', color: '#D1D5DB',  border: '#F3F4F6' }, // services-only
 }
@@ -42,11 +42,11 @@ export default function PillsStatut({ commercant, dealActif = false, actuActive 
             {p.live && (() => {
               const isDeal = p.key === 'deal'
               const liveColor = isDeal ? '#6B35C4' : '#DC2626' // violet ou rouge
-              const liveSize = size === 'lg' ? 13 : size === 'xs' ? 8 : 10
-              const offset = size === 'xs' ? -3 : -5
-              const borderW = size === 'xs' ? '2px' : '2.5px'
+              // Taille harmonisee : 7 sur card (xs), 10 sur fiche (sm/lg). Border 1.5px uniforme.
+              const liveSize = size === 'lg' ? 10 : size === 'xs' ? 7 : 9
+              const offset = size === 'xs' ? -3 : -4
               return (
-                <span style={{ position: 'absolute', top: offset, right: offset, width: liveSize, height: liveSize, borderRadius: '50%', background: liveColor, border: `${borderW} solid #fff`, boxShadow: `0 0 0 2px ${liveColor}33, 0 0 12px ${liveColor}cc`, animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
+                <span style={{ position: 'absolute', top: offset, right: offset, width: liveSize, height: liveSize, borderRadius: '50%', background: liveColor, border: '1.5px solid #fff', boxShadow: `0 0 0 1.5px ${liveColor}33, 0 0 8px ${liveColor}99`, animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
               )
             })()}
           </span>

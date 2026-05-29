@@ -2039,8 +2039,7 @@ export default function CommanderSlug() {
                           </span>
                         )}
                         <p style={{ fontWeight: 800, fontSize: '0.95rem', color: complet ? '#D1D5DB' : choisi ? '#fff' : T.ink, textDecoration: complet ? 'line-through' : 'none', letterSpacing: '-0.3px', margin: 0, lineHeight: 1.1 }}>
-                          {c.heure_debut.slice(0,5)}
-                          <span style={{ opacity: 0.55 }}> – {c.heure_fin.slice(0,5)}</span>
+                          {c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}
                         </p>
                         {/* Mention etat : SVG + texte, harmonise */}
                         {complet && (

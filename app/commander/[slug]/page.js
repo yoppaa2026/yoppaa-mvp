@@ -260,8 +260,17 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
   }
   return (
     <div style={{ background: '#fff', borderRadius: 20, border: `2px solid ${T.main}22`, overflow: 'hidden', marginTop: 20, boxShadow: `0 8px 32px ${T.main}18` }}>
+      {/* Bande 3px canonique YOPPAA */}
+      <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
       <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, padding: '0.875rem 1.25rem' }}>
-        <p style={{ fontWeight: 800, color: '#fff', fontSize: '0.875rem', margin: 0 }}>🛒 Mon panier</p>
+        <p style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#fff', fontSize: '0.875rem', margin: 0 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 3h2l2.4 11.4a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.6L22 7H6"/>
+            <circle cx="9" cy="20" r="1.5"/>
+            <circle cx="18" cy="20" r="1.5"/>
+          </svg>
+          Mon panier
+        </p>
       </div>
       <div style={{ padding: '0.5rem 1.25rem' }}>
         {items.map(([key, item]) => {
@@ -278,7 +287,10 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 22 }}>
                   <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink, textAlign: 'center' }}>{item.quantite}</span>
                   {stockAtteintPanier && (
-                    <span style={{ fontSize: '0.48rem', fontWeight: 800, color: T.main, letterSpacing: '0.3px', whiteSpace: 'nowrap', lineHeight: 1 }}>MAX ✓</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 1, fontSize: '0.48rem', fontWeight: 800, color: T.main, letterSpacing: '0.3px', whiteSpace: 'nowrap', lineHeight: 1 }}>
+                      MAX
+                      <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                    </span>
                   )}
                 </div>
                 <button
@@ -304,8 +316,12 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
           <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.25rem', letterSpacing: '-0.5px' }}>{total.toFixed(2)}€</span>
         </div>
         <button onClick={onValider}
-          style={{ width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }}>
-          Choisir mon créneau →
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }}>
+          Choisir mon créneau
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14"/>
+            <path d="M12 5l7 7-7 7"/>
+          </svg>
         </button>
       </div>
     </div>
@@ -1549,13 +1565,18 @@ export default function CommanderSlug() {
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
                     {commercant.adresse && (
                       <button className="action-btn" onClick={ouvrirMaps}>
-                        <span>📍</span>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+                          <circle cx="12" cy="10" r="3"/>
+                        </svg>
                         <span>{commercant.adresse}</span>
                       </button>
                     )}
                     {commercant.telephone && (
                       <button className="action-btn" onClick={appeler}>
-                        <span>📞</span>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+                        </svg>
                         <span>Appeler</span>
                       </button>
                     )}
@@ -1565,8 +1586,13 @@ export default function CommanderSlug() {
                 {/* Galerie photos (si présentes) — carrousel horizontal */}
                 {galerie.length > 0 && (
                   <div style={{ marginTop: 18, paddingLeft: 12 }}>
-                    <p style={{ fontSize: '0.7rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8, paddingRight: 12 }}>
-                      📸 La maison en images
+                    <p style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.7rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8, paddingRight: 12 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="5" width="18" height="14" rx="2"/>
+                        <circle cx="12" cy="12" r="3.5"/>
+                        <path d="M8 5l1.5-2h5L16 5"/>
+                      </svg>
+                      La maison en images
                     </p>
                     <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, paddingRight: 12, scrollbarWidth: 'none' }}>
                       {galerie.map(p => (

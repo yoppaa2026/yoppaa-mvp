@@ -1154,22 +1154,28 @@ export default function CommanderSlug() {
   async function getOuCreerClient(email, prenom, nom) {
     const nomComplet = `${prenom} ${nom}`.trim()
     const telephone = client.telephone || ''
-    const { data: ex } = await supabase.from('clients').select('id').eq('email', email).single()
+    // Fetch tout d'un coup pour comparer et eviter un UPDATE inutile sur chaque commande
+    const { data: ex } = await supabase.from('clients').select('id, prenom, nom, telephone').eq('email', email).maybeSingle()
     let id = ex?.id
     if (!ex) {
-      // Si une session Supabase Auth est active : on lie le client par auth_user_id (RLS)
-      // Save prenom/nom/telephone separes (colonnes ajoutees par migration)
+      // Nouveau client : INSERT avec tous les champs
       const { data: { user } } = await supabase.auth.getUser()
       const base = { email, prenom, nom: nomComplet, telephone }
       const payload = user ? { ...base, auth_user_id: user.id } : base
       const { data: inserted } = await supabase.from('clients').insert(payload).select('id').single()
       id = inserted?.id
+    } else {
+      // Client existant : UPDATE seulement si donnees ont change (evite RTT inutile sur chaque commande)
+      const needsUpdate = (
+        (telephone && ex.telephone !== telephone) ||
+        (prenom    && ex.prenom    !== prenom) ||
+        (nomComplet && ex.nom      !== nomComplet)
+      )
+      if (needsUpdate) {
+        await supabase.from('clients').update({ prenom, nom: nomComplet, telephone }).eq('id', id)
+      }
     }
     if (!id) return null
-    // Si le client existait deja mais sans telephone (compte cree avant migration), update
-    if (ex && telephone) {
-      await supabase.from('clients').update({ prenom, nom: nomComplet, telephone }).eq('id', id)
-    }
     setClientId(id)
     localStorage.setItem('yoppaa_client_id', id)
     localStorage.setItem('yoppaa_email', email)

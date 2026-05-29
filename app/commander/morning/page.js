@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 // ─── Tokens design system (canoniques) ─────────────────────────────
 const T = {
@@ -129,12 +130,23 @@ function IconNews({ size = 14, color = 'currentColor' }) {
     </svg>
   )
 }
+function IconChevronDown({ size = 10, color = T.main }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M6 9l6 6 6-6"/>
+    </svg>
+  )
+}
 
 // ─── Composants ─────────────────────────────────────────────────────
 
-function MorningHeader({ ctx }) {
+function MorningHeader({ ctx, communeAffichee, communePrincipale, communes, onSwitch }) {
   const yoppersRef = useRef(null)
   const gmFontSize = useMatchWidth(yoppersRef, 'Good Morning')
+  const [openSwitch, setOpenSwitch] = useState(false)
+
+  const enModeSwitch = communeAffichee && communePrincipale && communeAffichee.id !== communePrincipale.id
+  const nomAffiche = communeAffichee?.nom || 'Mettet'
 
   return (
     <div style={{ padding: '24px 24px 20px', borderBottom: `1px solid ${T.hairline}`, position: 'relative' }}>
@@ -166,15 +178,80 @@ function MorningHeader({ ctx }) {
         </div>
       </div>
 
-      {/* Zone GPS */}
-      <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <IconLocation size={13} color={T.main}/>
-        <span style={{ fontSize: 11, fontWeight: 700, color: T.ink, letterSpacing: '0.5px' }}>Mettet</span>
+      {/* Zone : sélecteur de commune (cliquable pour switch session) + 3 dots tricolores */}
+      <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
+        <button
+          onClick={() => communes?.length > 0 && setOpenSwitch(o => !o)}
+          disabled={!communes?.length}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px 4px 6px', background: openSwitch ? T.bgPage : 'transparent', border: `1.5px solid ${openSwitch ? T.main : 'transparent'}`, borderRadius: 100, cursor: communes?.length ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s' }}>
+          <IconLocation size={13} color={T.main}/>
+          <span style={{ fontSize: 11, fontWeight: 700, color: T.ink, letterSpacing: '0.5px' }}>
+            {nomAffiche}
+          </span>
+          {communes?.length > 0 && <IconChevronDown size={9} color={T.main}/>}
+        </button>
+
+        {/* Indicateur switch session */}
+        {enModeSwitch && (
+          <span style={{ fontSize: 9, fontWeight: 700, color: T.mid, fontStyle: 'italic' }}>
+            (cette session)
+          </span>
+        )}
+
         <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
           <div style={{ width: 5, height: 5, borderRadius: '50%', background: T.ink }}/>
           <div style={{ width: 5, height: 5, borderRadius: '50%', background: T.main }}/>
           <div style={{ width: 5, height: 5, borderRadius: '50%', background: T.mid }}/>
         </div>
+
+        {/* Dropdown communes — popup ancré sous le bouton */}
+        {openSwitch && (
+          <>
+            {/* overlay clic-pour-fermer */}
+            <div onClick={() => setOpenSwitch(false)}
+              style={{ position: 'fixed', inset: 0, zIndex: 50 }}/>
+            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, boxShadow: '0 12px 32px rgba(26,8,64,0.18)', zIndex: 60, minWidth: 220, maxHeight: 320, overflowY: 'auto' }}>
+              {enModeSwitch && (
+                <div style={{ padding: '10px 14px 8px', borderBottom: `1px solid ${T.hairline}`, background: T.bgPage }}>
+                  <p style={{ fontSize: 9, fontWeight: 800, color: T.mid, textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 2px' }}>
+                    Ta commune principale
+                  </p>
+                  <button onClick={() => { onSwitch(null); setOpenSwitch(false) }}
+                    style={{ background: 'none', border: 'none', padding: 0, fontSize: 13, fontWeight: 700, color: T.main, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                    ← Revenir à {communePrincipale?.nom}
+                  </button>
+                </div>
+              )}
+              <div style={{ padding: '8px 14px 6px', borderBottom: `1px solid ${T.hairline}` }}>
+                <p style={{ fontSize: 9, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.7px', margin: 0 }}>
+                  Voir le Morning de
+                </p>
+              </div>
+              {communes.map(c => {
+                const isCurrent = c.id === communeAffichee?.id
+                const isPrincipale = c.id === communePrincipale?.id
+                return (
+                  <button key={c.id}
+                    onClick={() => { if (!isCurrent) onSwitch(c); setOpenSwitch(false) }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', borderBottom: `1px solid ${T.hairline}`, background: isCurrent ? T.bgPage : '#fff', cursor: isCurrent ? 'default' : 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
+                    <IconLocation size={12} color={isCurrent ? T.main : T.deep}/>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: T.ink }}>{c.nom}</span>
+                    {isPrincipale && (
+                      <span style={{ fontSize: 9, fontWeight: 800, color: T.main, background: T.pale, padding: '2px 7px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Principale
+                      </span>
+                    )}
+                    {isCurrent && !isPrincipale && (
+                      <span style={{ fontSize: 9, fontWeight: 800, color: T.mid, fontStyle: 'italic' }}>
+                        en cours
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -313,6 +390,56 @@ export default function GoodMorningYoppersPage() {
   const [visible, setVisible] = useState(false)
   const ctx = getMorningContext()
 
+  // Communes : principale (du Yopper) + switch temporaire (session) + liste pour le sélecteur
+  const [communePrincipale, setCommunePrincipale] = useState(null)
+  const [communeSwitch, setCommuneSwitch] = useState(null)
+  const [communes, setCommunes] = useState([])
+  const communeAffichee = communeSwitch || communePrincipale
+
+  // Charge la liste des communes + la commune principale du Yopper
+  useEffect(() => {
+    let annule = false
+
+    // 1) Toutes les communes actives
+    supabase.from('communes').select('id, nom, codes_postaux, province').eq('active', true).order('nom')
+      .then(({ data }) => { if (!annule) setCommunes(data || []) })
+
+    // 2) Commune principale du Yopper (si connecté)
+    const clientId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_client_id') : null
+    if (clientId) {
+      supabase
+        .from('clients')
+        .select('commune:communes(id, nom, codes_postaux, province)')
+        .eq('id', clientId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (annule) return
+          if (data?.commune) setCommunePrincipale(data.commune)
+        })
+    }
+
+    // 3) Restaure un switch session éventuel
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = sessionStorage.getItem('morning_commune_switch')
+        if (raw) setCommuneSwitch(JSON.parse(raw))
+      } catch {}
+    }
+
+    return () => { annule = true }
+  }, [])
+
+  function onSwitchCommune(c) {
+    // c = null → revient à la commune principale ; sinon switch temporaire stocké en session
+    if (!c) {
+      setCommuneSwitch(null)
+      sessionStorage.removeItem('morning_commune_switch')
+    } else {
+      setCommuneSwitch(c)
+      sessionStorage.setItem('morning_commune_switch', JSON.stringify(c))
+    }
+  }
+
   // Animation entrée de la card
   useEffect(() => {
     const t1 = setTimeout(() => setVisible(true), 80)
@@ -364,7 +491,13 @@ export default function GoodMorningYoppersPage() {
         transform: visible ? 'translateY(0)' : 'translateY(20px)',
         transition: 'all 0.6s cubic-bezier(0.16,1,0.3,1)',
       }}>
-        <MorningHeader ctx={ctx}/>
+        <MorningHeader
+          ctx={ctx}
+          communeAffichee={communeAffichee}
+          communePrincipale={communePrincipale}
+          communes={communes}
+          onSwitch={onSwitchCommune}
+        />
         <Tabs tab={tab} setTab={setTab} dealsCount={dealsMock.length} actusCount={dealsMock.length}/>
 
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>

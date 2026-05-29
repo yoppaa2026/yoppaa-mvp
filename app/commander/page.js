@@ -418,21 +418,32 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
 function SplashScreen({ onDone }) {
   const [phase, setPhase] = useState(0)
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase(1), 900)
-    const t2 = setTimeout(() => setPhase(2), 1500)
-    const t3 = setTimeout(() => setPhase(3), 2100)
-    const t4 = setTimeout(() => onDone(), 2700)
+    // Phasage allonge : ~4.5s total pour laisser respirer chaque element.
+    const t1 = setTimeout(() => setPhase(1), 1100) // wordmark
+    const t2 = setTimeout(() => setPhase(2), 2100) // tagline
+    const t3 = setTimeout(() => setPhase(3), 3700) // debut fadeOut
+    const t4 = setTimeout(() => onDone(),    4500) // fin
     return () => [t1,t2,t3,t4].forEach(clearTimeout)
   }, [])
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: `linear-gradient(160deg, #160636 0%, #2D0F6B 50%, #1A0840 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', animation: phase === 3 ? 'splash-out 0.6s ease-in forwards' : 'none' }}>
-      <div style={{ display: 'flex', gap: 14, marginBottom: 20 }}>
-        {[{c:'#FFFFFF',d:'0s',o:0.45},{c:'#C4A0F4',d:'0.25s',o:1},{c:'#9660E0',d:'0.5s',o:1}].map((d, i) => (
-          <div key={i} style={{ width: 16, height: 16, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 16px ${d.c}88`, animation: `dot-pop 0.45s cubic-bezier(0.34,1.56,0.64,1) ${d.d} both` }}/>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: `linear-gradient(160deg, #160636 0%, #2D0F6B 50%, #1A0840 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', animation: phase === 3 ? 'splash-out 0.8s ease-in forwards' : 'none', overflow: 'hidden' }}>
+      {/* Signature canonique YOPPAA : bande degradee 3px Ink → Main → Light en haut */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, #1A0840 0%, #6B35C4 60%, #C4A0F4 100%)` }}/>
+
+      <div style={{ display: 'flex', gap: 14, marginBottom: 22 }}>
+        {[{c:'#FFFFFF',d:'0s',o:0.5},{c:'#C4A0F4',d:'0.3s',o:1},{c:'#9660E0',d:'0.6s',o:1}].map((d, i) => (
+          <div key={i} style={{ width: 16, height: 16, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 18px ${d.c}88`, animation: `dot-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) ${d.d} both` }}/>
         ))}
       </div>
-      <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '3.5rem', color: '#fff', letterSpacing: '-2px', lineHeight: 1, marginBottom: 10, animation: phase >= 1 ? 'wordmark-in 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards' : 'none', opacity: phase >= 1 ? 1 : 0 }}>yoppaa</p>
-      <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#C4A0F4', letterSpacing: '1.5px', textTransform: 'uppercase', animation: phase >= 2 ? 'tagline-in 0.5s ease forwards' : 'none', opacity: phase >= 2 ? 1 : 0 }}>Ton quartier, dans ta poche</p>
+
+      {/* Wordmark tricolore canonique : yo blanc, pp Light, aa Mid */}
+      <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '3.5rem', letterSpacing: '-2px', lineHeight: 1, marginBottom: 14, animation: phase >= 1 ? 'wordmark-in 0.7s cubic-bezier(0.25,0.46,0.45,0.94) forwards' : 'none', opacity: phase >= 1 ? 1 : 0 }}>
+        <span style={{ color: '#fff' }}>yo</span>
+        <span style={{ color: '#C4A0F4' }}>pp</span>
+        <span style={{ color: '#9660E0' }}>aa</span>
+      </p>
+
+      <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#C4A0F4', letterSpacing: '1.5px', textTransform: 'uppercase', animation: phase >= 2 ? 'tagline-in 0.6s ease forwards' : 'none', opacity: phase >= 2 ? 1 : 0 }}>Ton quartier, dans ta poche</p>
     </div>
   )
 }

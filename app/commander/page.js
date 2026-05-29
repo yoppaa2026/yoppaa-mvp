@@ -1849,7 +1849,10 @@ export default function Commander() {
                     const heureCreneau = c.creneau?.heure_debut?.slice(0,5)
                     const prenom = client.prenom || client.nom?.split(' ')[0] || 'Yopper'
                     return (
-                    <div key={c.id} style={{ background: 'linear-gradient(135deg, #F0FDF4, #fff)', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '0.75rem', border: '2px solid #10B98133', boxShadow: '0 4px 16px rgba(22,163,74,0.1)' }}>
+                    <div key={c.id} style={{ background: 'linear-gradient(135deg, #F0FDF4, #fff)', borderRadius: 16, overflow: 'hidden', marginBottom: '0.75rem', border: '2px solid #10B98133', boxShadow: '0 4px 16px rgba(16,185,129,0.1)' }}>
+                      {/* Bande 3px verte : signature pour les commandes pretes a retirer */}
+                      <div style={{ height: 3, background: 'linear-gradient(90deg, #047857 0%, #10B981 60%, #6EE7B7 100%)' }}/>
+                      <div style={{ padding: '1rem 1.125rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem' }}>
                         <div>
                           <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>
@@ -1877,6 +1880,7 @@ export default function Commander() {
                           </p>
                         </div>
                       )}
+                      </div>
                     </div>
                   )})}
                 </>
@@ -1890,7 +1894,10 @@ export default function Commander() {
                     const sc = statutStyle[c.statut]
                     const sousTexte = statutSousTexte[c.statut]
                     return (
-                      <div key={c.id} style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>
+                      <div key={c.id} style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', marginBottom: '0.625rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>
+                        {/* Bande 3px canonique YOPPAA (Ink → Main → Light) — signature pour les commandes en cours */}
+                        <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
+                        <div style={{ padding: '0.875rem 1rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>
@@ -1908,6 +1915,7 @@ export default function Commander() {
                             {sousTexte}
                           </p>
                         )}
+                        </div>
                       </div>
                     )
                   })}

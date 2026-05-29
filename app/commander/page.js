@@ -762,9 +762,6 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
   const statut = statutsCommerce[c.id]
-  // Badge favori : violet quand simple favori (j'ai souscrit aux notifs), rouge quand un deal/actu est actif maintenant
-  const aDuNouveau = estFavori && ((dealsActifs?.has(c.id)) || (actusActives?.has(c.id)))
-  const badgeColor = aDuNouveau ? '#DC2626' : T.main
 
   function getStatutPhysique() {
     const JOURS_MAP = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
@@ -844,16 +841,13 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
               <p style={{ fontWeight: 900, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.3px', lineHeight: 1.2, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nom}</p>
               <button onClick={e => onToggleFavori(c.id, e)}
                 aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s' }}
                 onMouseOver={e => e.currentTarget.style.transform = 'scale(1.2)'}
                 onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill={estFavori ? '#C4A0F4' : 'none'} xmlns="http://www.w3.org/2000/svg">
                   <path d="M12,3 L14.5,9 L21.5,9.5 L16.5,14 L18.2,21 L12,17.5 L5.8,21 L7.5,14 L2.5,9.5 L9.5,9 Z"
                     stroke={estFavori ? '#9660E0' : '#D1D5DB'} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
                 </svg>
-                {estFavori && (
-                  <span aria-hidden style={{ position: 'absolute', bottom: -1, right: -1, width: 8, height: 8, borderRadius: '50%', background: badgeColor, border: '2px solid #fff', boxShadow: `0 0 0 1px ${badgeColor}33, 0 0 8px ${badgeColor}99`, animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
-                )}
               </button>
             </div>
             <Badges type={c.type}/>
@@ -967,6 +961,15 @@ export default function Commander() {
 
   const [onglet, setOngletState] = useState('accueil')
   function setOnglet(val) { setOngletState(val); localStorage.setItem('yoppaa_onglet', val) }
+
+  // Toast : message ephemere en bas d'ecran (3.5s). Tout ce qui a besoin d'un feedback rapide passe par ici.
+  const [toast, setToast] = useState(null)
+  const toastTimerRef = useRef(null)
+  function showToast(msg) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast(msg)
+    toastTimerRef.current = setTimeout(() => setToast(null), 3500)
+  }
 
   const [commercants, setCommercants] = useState([])
   const [notesParCommerce, setNotesParCommerce] = useState({})
@@ -1381,11 +1384,14 @@ export default function Commander() {
       await supabase.from('favoris').delete().eq('client_id', cid).eq('commercant_id', commercantId)
       setFavoris(prev => prev.filter(id => id!==commercantId))
       setCommercantsFavoris(prev => prev.filter(c => c.id!==commercantId))
+      showToast({ type: 'info', msg: 'Retiré de tes favoris' })
     } else {
       await supabase.from('favoris').insert({ client_id: cid, commercant_id: commercantId })
       setFavoris(prev => [...prev, commercantId])
       const c = commercants.find(x => x.id===commercantId)
       if (c) setCommercantsFavoris(prev => [...prev, c])
+      const nom = commercants.find(x => x.id===commercantId)?.nom
+      showToast({ type: 'success', msg: `${nom ? nom + ' ajouté' : 'Ajouté'} aux favoris · tu recevras ses deals et actus` })
     }
   }
 
@@ -1585,6 +1591,7 @@ export default function Commander() {
         @keyframes tribu-pulse3 { 0%,100% { opacity:0.6; transform:scale(1); } 50% { opacity:0.3; transform:scale(1.05); } }
         @keyframes dot-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.4); opacity:0.7; } }
         @keyframes yoppa-live-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.45); opacity:0.7; } }
+        @keyframes toast-in { 0% { opacity:0; transform:translate(-50%, 12px) scale(0.95); } 100% { opacity:1; transform:translate(-50%, 0) scale(1); } }
         @keyframes dot-pop { 0% { opacity:0; transform:scale(0) translateY(8px); } 70% { transform:scale(1.3) translateY(-4px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
         @keyframes wordmark-in { 0% { opacity:0; letter-spacing: 8px; } 100% { opacity:1; letter-spacing: -2px; } }
         @keyframes tagline-in { 0% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
@@ -2153,6 +2160,19 @@ export default function Commander() {
           )}
         </div>
 
+        {/* Toast global : feedback ephemere 3.5s (favori, info), flotte au-dessus de la nav */}
+        {toast && (
+          <div role="status" aria-live="polite"
+            style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 78px)', zIndex: 1200, background: toast.type === 'success' ? `linear-gradient(135deg, ${T.deep}, ${T.bgPanel})` : T.bgPanel, color: '#fff', padding: '11px 16px', borderRadius: 100, fontSize: '0.82rem', fontWeight: 700, boxShadow: '0 8px 28px rgba(26,8,64,0.35), 0 0 0 1.5px rgba(255,255,255,0.08) inset', maxWidth: '92vw', display: 'inline-flex', alignItems: 'center', gap: 10, animation: 'toast-in 0.25s cubic-bezier(0.34,1.56,0.64,1)' }}>
+            {toast.type === 'success' && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: '50%', background: '#10B981', flexShrink: 0 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+              </span>
+            )}
+            <span style={{ lineHeight: 1.3 }}>{toast.msg}</span>
+          </div>
+        )}
+
         {/* ── NAV BAR ── */}
         <nav className="navbar hero-fullwidth">
           {[
@@ -2182,27 +2202,15 @@ export default function Commander() {
                     <rect x="2" y="9" width="20" height="13" rx="3" stroke={stroke} strokeWidth="2" strokeLinejoin="round" opacity={op}/>
                     <path d="M2,13 L22,13" stroke={stroke} strokeWidth="2" opacity={op}/>
                     <path d="M8,9 L8,5 Q8,2 12,2 Q16,2 16,5 L16,9" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
-                    {item.badge > 0 && (
-                      <>
-                        <circle cx="19" cy="5" r="5.5" fill={T.main} stroke="white" strokeWidth="1.8"/>
-                        <text x="19" y="8.8" textAnchor="middle" fontSize="7" fontWeight="900" fill="white" fontFamily="DM Sans,sans-serif">{item.badge}</text>
-                      </>
-                    )}
                   </svg>
                 )}
                 {item.key === 'services' && (
-                  /* Bâtiment officiel : mairie/administration. Badge rouge si alerte urgente. */
+                  /* Bâtiment officiel : mairie/administration. */
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
                     <path d="M3,11 L12,4 L21,11" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                     <path d="M5,11 L5,20 L19,20 L19,11" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                     <path d="M8,20 L8,13 M12,20 L12,13 M16,20 L16,13" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
                     <path d="M3,20 L21,20" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
-                    {item.badge > 0 && (
-                      <>
-                        <circle cx="19" cy="5" r="5.5" fill="#DC2626" stroke="white" strokeWidth="1.8"/>
-                        <text x="19" y="8.8" textAnchor="middle" fontSize="8" fontWeight="900" fill="white" fontFamily="DM Sans,sans-serif">!</text>
-                      </>
-                    )}
                   </svg>
                 )}
                 {item.key === 'tribu' && (
@@ -2220,6 +2228,13 @@ export default function Commander() {
                     <circle cx="12" cy="8" r="4.5" stroke={stroke} strokeWidth="2" opacity={op}/>
                     <path d="M3,21 Q3,16 12,16 Q21,16 21,21" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
                   </svg>
+                )}
+
+                {/* Badge nombre visible : grandi + lisible. Violet pour commandes, rouge pour services en alerte. */}
+                {item.badge > 0 && (
+                  <span style={{ position: 'absolute', top: 4, left: 'calc(50% + 6px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: item.key === 'services' ? '#DC2626' : T.main, color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: `0 2px 8px ${item.key === 'services' ? '#DC2626' : T.main}99, 0 0 0 1.5px ${item.key === 'services' ? '#DC2626' : T.main}44`, lineHeight: 1, letterSpacing: '-0.2px', animation: item.key === 'services' ? 'yoppa-live-pulse 1s ease-in-out infinite' : 'none' }}>
+                    {item.key === 'services' ? '!' : (item.badge > 9 ? '9+' : item.badge)}
+                  </span>
                 )}
 
                 <span style={{ fontSize: '0.62rem', fontWeight: 700, color: actif ? '#fff' : '#6B7280', letterSpacing: '0.2px', fontFamily: '"DM Sans", sans-serif' }}>

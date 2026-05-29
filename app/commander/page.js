@@ -1127,7 +1127,8 @@ export default function Commander() {
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; width: 100%; overflow-x: hidden; }
         body { background: ${T.bg}; font-family: "DM Sans", sans-serif; font-size: 16px; -webkit-text-size-adjust: 100%; }
-        .page-wrap { display: flex; flex-direction: column; min-height: 100dvh; max-width: 760px; margin: 0 auto; background: ${T.bg}; width: 100%; }
+        /* page-wrap : overflow-x hidden pour stopper tout débordement involontaire (cards qui glissent, scrollbar horizontal natif…) */
+        .page-wrap { display: flex; flex-direction: column; min-height: 100dvh; max-width: 760px; margin: 0 auto; background: ${T.bg}; width: 100%; overflow-x: hidden; }
         /* Header HYPE : background pleine largeur du viewport sur PC/tablette */
         .hero-fullwidth { margin-left: calc(-50vw + 50%); margin-right: calc(-50vw + 50%); padding-left: calc(50vw - 50%); padding-right: calc(50vw - 50%); }
         @media (max-width: 760px) {
@@ -1139,7 +1140,16 @@ export default function Commander() {
           .commerces-grid > * { margin-bottom: 0 !important; }
         }
         .scroll-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-        .navbar { flex-shrink: 0; background: ${T.bgPanel}; border-top: 1px solid ${T.main}33; display: flex; padding-bottom: env(safe-area-inset-bottom, 0px); }
+        /* Footer nav : padding horizontal pour ne pas toucher les bords sur mobile + safe area iOS. */
+        .navbar {
+          flex-shrink: 0;
+          background: ${T.bgPanel};
+          border-top: 1px solid ${T.main}33;
+          display: flex;
+          padding-left: max(env(safe-area-inset-left, 0px), 6px);
+          padding-right: max(env(safe-area-inset-right, 0px), 6px);
+          padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
         .cats { display: flex; gap: 6px; overflow-x: auto; padding: 0 1rem 0.875rem; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
         .cats::-webkit-scrollbar { display: none; }
         .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -1647,7 +1657,7 @@ export default function Commander() {
         <nav className="navbar hero-fullwidth">
           {[
             { key: 'accueil',   label: 'Accueil',   badge: 0 },
-            { key: 'services',  label: 'Services',  badge: alerteUrgenteActive ? 1 : 0 },
+            { key: 'services',  label: 'Officiel',  badge: alerteUrgenteActive ? 1 : 0 },
             { key: 'commandes', label: 'Commandes', badge: badgeCommandes },
             { key: 'tribu',     label: 'Tribu',     badge: 0 },
             { key: 'profil',    label: 'Profil',    badge: 0 },
@@ -1660,9 +1670,12 @@ export default function Commander() {
                 style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '0.625rem 0 0.5rem', border: 'none', background: 'transparent', cursor: 'pointer', position: 'relative' }}>
 
                 {item.key === 'accueil' && (
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M3,10 L12,3 L21,10" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
-                    <path d="M5,10 L5,20 Q5,21 6,21 L9,21 L9,15 Q9,14 10,14 L14,14 Q15,14 15,15 L15,21 L18,21 Q19,21 19,20 L19,10" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
+                  /* Signature Yoppaa : 3 points tricolores horizontaux (style wordmark).
+                     Différencie clairement de l'icône bâtiment "Officiel" et renforce la marque. */
+                  <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="6"  cy="13" r="3.2" fill="#ffffff" opacity={actif ? 0.55 : 0.3}/>
+                    <circle cx="13" cy="13" r="3.5" fill={T.light}  opacity={actif ? 1 : 0.5}/>
+                    <circle cx="20" cy="13" r="3.2" fill={T.mid}    opacity={actif ? 1 : 0.55}/>
                   </svg>
                 )}
                 {item.key === 'commandes' && (

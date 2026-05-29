@@ -1584,14 +1584,17 @@ export default function Commander() {
         /* Footer nav : padding horizontal généreux pour ne pas toucher les courbes
            des angles iPhone + safe area iOS. Les onglets utilisent flex:1 mais
            restent à l'intérieur de cette zone safe. */
-        /* Navbar : conteneur background pleine largeur viewport sur PC + inner flex centre a 760px.
-           IMPORTANT : on ne met PAS display:flex directement sur .navbar (les conteneurs flex
-           ne s'auto-expandent pas avec les marges negatives → navbar decalee a gauche sur PC). */
+        /* Navbar : full-viewport background via width:100vw + margins negatives pour centrer.
+           Plus robuste que la combinaison hero-fullwidth + flex parent sur viewports tres larges (PC). */
         .navbar {
           flex-shrink: 0;
           background: ${T.bgPanel};
           border-top: 1px solid ${T.main}33;
           padding-bottom: env(safe-area-inset-bottom, 0px);
+          width: 100vw;
+          margin-left: calc(-50vw + 50%);
+          margin-right: calc(-50vw + 50%);
+          box-sizing: border-box;
         }
         .navbar-tabs {
           display: flex;

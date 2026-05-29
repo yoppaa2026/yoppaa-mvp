@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { canDo } from '@/lib/plans'
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
+import ModalAvis from './ModalAvis'
 
 const T = {
   bg:      '#F8F6FF',
@@ -683,6 +684,9 @@ export default function Commander() {
   const [servicesPublics, setServicesPublics] = useState([])
   // Badge rouge sur l'onglet Services s'il y a au moins une alerte urgente active
   const [alerteUrgenteActive, setAlerteUrgenteActive] = useState(false)
+  // Modal d'avis post-commande : commande pour laquelle on propose un avis
+  // (déclenché auto quand statut='recupere' et pas encore d'avis pour cette commande)
+  const [avisCommande, setAvisCommande] = useState(null)
   const [pickupCommande, setPickupCommande] = useState(null)
   // Tick minute pour rafraichir le compteur "Plus que X min avant ton créneau"
   const [, setNowTick] = useState(0)
@@ -753,6 +757,30 @@ export default function Commander() {
     q.then(({ data }) => { if (!annule) setServicesPublics(data || []) })
     return () => { annule = true }
   }, [commune?.id])
+
+  // ─── Détection commandes récupérées → propose modale d'avis ─────────────
+  // Avis vérifié = uniquement lié à une vraie commande (pas d'avis spontané = anti-troll).
+  // Trigger : commande passée à statut='recupere' + pas encore d'avis + pas déjà dismissed.
+  useEffect(() => {
+    if (!clientId || avisCommande) return
+    if (!clientCommandes.length) return
+    const candidates = clientCommandes.filter(c => c.statut === 'recupere' && c.commercant_id)
+    if (candidates.length === 0) return
+
+    let annule = false
+    const dismissed = JSON.parse(typeof window !== 'undefined' ? (localStorage.getItem('yoppaa_avis_proposes') || '[]') : '[]')
+
+    // Filtre côté DB : les avis déjà existants pour ce client
+    supabase.from('avis').select('commande_id').eq('client_id', clientId)
+      .then(({ data: avisExistants }) => {
+        if (annule) return
+        const dejaAvis = new Set((avisExistants || []).map(a => a.commande_id).filter(Boolean))
+        // Prend la commande la plus récente (clientCommandes est ordonné par created_at desc côté chargerCommandesClient)
+        const prochaine = candidates.find(c => !dejaAvis.has(c.id) && !dismissed.includes(c.id))
+        if (prochaine) setAvisCommande(prochaine)
+      })
+    return () => { annule = true }
+  }, [clientCommandes, clientId, avisCommande])
 
   // Vérifie s'il y a une alerte urgente active sur un service de la zone
   // → déclenche le badge rouge sur l'onglet Services
@@ -1106,6 +1134,33 @@ export default function Commander() {
           onSet={(id, c) => {
             setCommune(c)
             setShowConfirmCommune(false)
+          }}
+        />
+      )}
+
+      {/* Modal d'avis post-commande : déclenchée auto si une commande passe à
+          'recupere' et qu'aucun avis n'existe encore. Au close (Plus tard ou Envoyer),
+          la commande est ajoutée à localStorage 'yoppaa_avis_proposes' pour ne plus
+          réafficher (mais l'avis peut être posté plus tard depuis l'historique). */}
+      {avisCommande && clientId && avisCommande.commercant && (
+        <ModalAvis
+          commercant={{ id: avisCommande.commercant_id, nom: avisCommande.commercant.nom, type: avisCommande.commercant.type }}
+          clientId={clientId}
+          commandeId={avisCommande.id}
+          onClose={() => {
+            try {
+              const dismissed = JSON.parse(localStorage.getItem('yoppaa_avis_proposes') || '[]')
+              if (!dismissed.includes(avisCommande.id)) dismissed.push(avisCommande.id)
+              localStorage.setItem('yoppaa_avis_proposes', JSON.stringify(dismissed))
+            } catch {}
+            setAvisCommande(null)
+          }}
+          onSent={() => {
+            try {
+              const dismissed = JSON.parse(localStorage.getItem('yoppaa_avis_proposes') || '[]')
+              if (!dismissed.includes(avisCommande.id)) dismissed.push(avisCommande.id)
+              localStorage.setItem('yoppaa_avis_proposes', JSON.stringify(dismissed))
+            } catch {}
           }}
         />
       )}

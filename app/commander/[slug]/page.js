@@ -140,13 +140,21 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
 
 function CarteAvis({ a }) {
   const [ouvert, setOuvert] = useState(false)
+  const verifie = !!a.commande_id
   return (
     <div onClick={() => setOuvert(o => !o)}
       style={{ background: T.bgCard, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.5rem', border: `1.5px solid ${T.pale}`, cursor: 'pointer', transition: 'all 0.15s' }}
       onMouseOver={e => e.currentTarget.style.borderColor = T.main}
       onMouseOut={e => e.currentTarget.style.borderColor = T.pale}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Etoiles note={a.note} taille={14}/>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Etoiles note={a.note} taille={14}/>
+          {verifie && (
+            <span style={{ fontSize: 9, fontWeight: 800, color: '#16A34A', background: '#F0FDF4', padding: '2px 7px', borderRadius: 100, letterSpacing: '0.5px', textTransform: 'uppercase', border: '1px solid #BBF7D0' }}>
+              ✓ Vérifié
+            </span>
+          )}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: '0.75rem', color: T.deep, fontWeight: 600 }}>{a.client?.nom || 'Client'}</span>
           <span style={{ fontSize: '0.72rem', color: T.muted }}>{ouvert ? '▲' : '▼'}</span>

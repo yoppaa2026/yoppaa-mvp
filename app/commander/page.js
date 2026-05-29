@@ -1125,10 +1125,36 @@ export default function Commander() {
 
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { height: 100%; width: 100%; overflow-x: hidden; }
-        body { background: ${T.bg}; font-family: "DM Sans", sans-serif; font-size: 16px; -webkit-text-size-adjust: 100%; }
-        /* page-wrap : overflow-x hidden pour stopper tout débordement involontaire (cards qui glissent, scrollbar horizontal natif…) */
-        .page-wrap { display: flex; flex-direction: column; min-height: 100dvh; max-width: 760px; margin: 0 auto; background: ${T.bg}; width: 100%; overflow-x: hidden; }
+        /* Anti-débord horizontal MAXIMAL : aucun scroll horizontal autorisé sur la page entière.
+           Le scroll vertical naturel reste OK. Les barres internes (.cats) gardent leur scroll-x interne. */
+        html, body {
+          height: 100%;
+          width: 100%;
+          max-width: 100vw;
+          overflow-x: hidden !important;
+          /* Bloque tout pan horizontal — seul le pan vertical et le pinch-zoom restent */
+          touch-action: pan-y pinch-zoom !important;
+          overscroll-behavior-x: none;
+        }
+        body { background: ${T.bg}; font-family: "DM Sans", sans-serif; font-size: 16px; -webkit-text-size-adjust: 100%; position: relative; }
+        .page-wrap {
+          display: flex; flex-direction: column;
+          min-height: 100dvh; max-width: 760px; margin: 0 auto;
+          background: ${T.bg}; width: 100%;
+          overflow-x: hidden;
+        }
+        /* Force chaque enfant direct du page-wrap à rester dans la largeur. */
+        .page-wrap > * { max-width: 100%; }
+        .scroll-body {
+          flex: 1;
+          overflow-y: auto;
+          overflow-x: hidden;
+          -webkit-overflow-scrolling: touch;
+          /* Bloque la propagation du scroll vers la page (rubber-banding) + pan-x interdit */
+          overscroll-behavior: contain;
+          touch-action: pan-y;
+        }
+        .scroll-body > * { max-width: 100%; }
         /* Header HYPE : background pleine largeur du viewport sur PC/tablette */
         .hero-fullwidth { margin-left: calc(-50vw + 50%); margin-right: calc(-50vw + 50%); padding-left: calc(50vw - 50%); padding-right: calc(50vw - 50%); }
         @media (max-width: 760px) {
@@ -1139,15 +1165,16 @@ export default function Commander() {
           .commerces-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; align-items: start; }
           .commerces-grid > * { margin-bottom: 0 !important; }
         }
-        .scroll-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-        /* Footer nav : padding horizontal pour ne pas toucher les bords sur mobile + safe area iOS. */
+        /* Footer nav : padding horizontal généreux pour ne pas toucher les courbes
+           des angles iPhone + safe area iOS. Les onglets utilisent flex:1 mais
+           restent à l'intérieur de cette zone safe. */
         .navbar {
           flex-shrink: 0;
           background: ${T.bgPanel};
           border-top: 1px solid ${T.main}33;
           display: flex;
-          padding-left: max(env(safe-area-inset-left, 0px), 6px);
-          padding-right: max(env(safe-area-inset-right, 0px), 6px);
+          padding-left: max(env(safe-area-inset-left, 0px), 16px);
+          padding-right: max(env(safe-area-inset-right, 0px), 16px);
           padding-bottom: env(safe-area-inset-bottom, 0px);
         }
         .cats { display: flex; gap: 6px; overflow-x: auto; padding: 0 1rem 0.875rem; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
@@ -1670,19 +1697,18 @@ export default function Commander() {
                 style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '0.625rem 0 0.5rem', border: 'none', background: 'transparent', cursor: 'pointer', position: 'relative' }}>
 
                 {item.key === 'accueil' && (
-                  /* Signature Yoppaa : 3 points tricolores horizontaux (style wordmark).
-                     Différencie clairement de l'icône bâtiment "Officiel" et renforce la marque. */
-                  <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="6"  cy="13" r="3.2" fill="#ffffff" opacity={actif ? 0.55 : 0.3}/>
-                    <circle cx="13" cy="13" r="3.5" fill={T.light}  opacity={actif ? 1 : 0.5}/>
-                    <circle cx="20" cy="13" r="3.2" fill={T.mid}    opacity={actif ? 1 : 0.55}/>
+                  /* Signature Yoppaa : 3 points tricolores horizontaux (wordmark). */
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
+                    <circle cx="5"  cy="12" r="2.8" fill="#ffffff" opacity={actif ? 0.55 : 0.3}/>
+                    <circle cx="12" cy="12" r="3.2" fill={T.light}  opacity={actif ? 1 : 0.5}/>
+                    <circle cx="19" cy="12" r="2.8" fill={T.mid}    opacity={actif ? 1 : 0.55}/>
                   </svg>
                 )}
                 {item.key === 'commandes' && (
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="2" y="9" width="20" height="13" rx="3" stroke={stroke} strokeWidth="2.5" strokeLinejoin="round" opacity={op}/>
-                    <path d="M2,13 L22,13" stroke={stroke} strokeWidth="2.5" opacity={op}/>
-                    <path d="M8,9 L8,5 Q8,2 12,2 Q16,2 16,5 L16,9" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
+                    <rect x="2" y="9" width="20" height="13" rx="3" stroke={stroke} strokeWidth="2" strokeLinejoin="round" opacity={op}/>
+                    <path d="M2,13 L22,13" stroke={stroke} strokeWidth="2" opacity={op}/>
+                    <path d="M8,9 L8,5 Q8,2 12,2 Q16,2 16,5 L16,9" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                     {item.badge > 0 && (
                       <>
                         <circle cx="19" cy="5" r="5.5" fill={T.main} stroke="white" strokeWidth="1.8"/>
@@ -1692,13 +1718,12 @@ export default function Commander() {
                   </svg>
                 )}
                 {item.key === 'services' && (
-                  /* Icône bâtiment officiel : colonnes type mairie/administration.
-                     Si alerte urgente active → badge rouge rond avec ! en haut à droite. */
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M3,11 L12,4 L21,11" stroke={stroke} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
-                    <path d="M5,11 L5,20 L19,20 L19,11" stroke={stroke} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
+                  /* Bâtiment officiel : mairie/administration. Badge rouge si alerte urgente. */
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
+                    <path d="M3,11 L12,4 L21,11" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
+                    <path d="M5,11 L5,20 L19,20 L19,11" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                     <path d="M8,20 L8,13 M12,20 L12,13 M16,20 L16,13" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
-                    <path d="M3,20 L21,20" stroke={stroke} strokeWidth="2.4" strokeLinecap="round" opacity={op}/>
+                    <path d="M3,20 L21,20" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
                     {item.badge > 0 && (
                       <>
                         <circle cx="19" cy="5" r="5.5" fill="#DC2626" stroke="white" strokeWidth="1.8"/>
@@ -1708,19 +1733,19 @@ export default function Commander() {
                   </svg>
                 )}
                 {item.key === 'tribu' && (
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="4" cy="8" r="3" stroke={stroke} strokeWidth="2.2" opacity={op * 0.7}/>
-                    <path d="M0,18 Q0,14 4,14 Q8,14 8,18" stroke={stroke} strokeWidth="2.2" strokeLinecap="round" opacity={op * 0.7}/>
-                    <circle cx="20" cy="8" r="3" stroke={stroke} strokeWidth="2.2" opacity={op * 0.7}/>
-                    <path d="M16,18 Q16,14 20,14 Q24,14 24,18" stroke={stroke} strokeWidth="2.2" strokeLinecap="round" opacity={op * 0.7}/>
-                    <circle cx="12" cy="6" r="4" stroke={stroke} strokeWidth="2.5" opacity={op}/>
-                    <path d="M5,20 Q5,15 12,15 Q19,15 19,20" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" opacity={op}/>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
+                    <circle cx="5" cy="8" r="2.5" stroke={stroke} strokeWidth="2" opacity={op * 0.75}/>
+                    <path d="M1.5,17.5 Q1.5,14 5,14 Q8.5,14 8.5,17.5" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op * 0.75}/>
+                    <circle cx="19" cy="8" r="2.5" stroke={stroke} strokeWidth="2" opacity={op * 0.75}/>
+                    <path d="M15.5,17.5 Q15.5,14 19,14 Q22.5,14 22.5,17.5" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op * 0.75}/>
+                    <circle cx="12" cy="6" r="3.5" stroke={stroke} strokeWidth="2" opacity={op}/>
+                    <path d="M5.5,20 Q5.5,15 12,15 Q18.5,15 18.5,20" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
                   </svg>
                 )}
                 {item.key === 'profil' && (
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="8" r="5" stroke={stroke} strokeWidth="2.5" opacity={op}/>
-                    <path d="M2,21 Q2,16 12,16 Q22,16 22,21" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" opacity={op}/>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
+                    <circle cx="12" cy="8" r="4.5" stroke={stroke} strokeWidth="2" opacity={op}/>
+                    <path d="M3,21 Q3,16 12,16 Q21,16 21,21" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
                   </svg>
                 )}
 

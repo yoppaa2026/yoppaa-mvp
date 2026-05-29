@@ -859,7 +859,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6, alignItems: 'center' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: physique.bg, borderRadius: 100, padding: '3px 8px', border: `1px solid ${physique.dot}22` }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: physique.dot, flexShrink: 0, border: physique.pulse ? '1.5px solid #fff' : 'none', animation: physique.pulse ? 'yoppa-live-pulse 1s ease-in-out infinite' : 'none', boxShadow: physique.pulse ? `0 0 0 1.5px ${physique.dot}33, 0 0 8px ${physique.dot}99` : 'none' }}/>
+                <span style={{ width: physique.pulse ? 9 : 7, height: physique.pulse ? 9 : 7, borderRadius: '50%', background: physique.dot, flexShrink: 0 }}/>
                 <span style={{ fontSize: '0.66rem', fontWeight: 700, color: physique.color }}>{physique.label}</span>
               </span>
               {resa && (

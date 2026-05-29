@@ -843,8 +843,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
             <div style={{ marginTop: 6 }}>
               <PillsStatut commercant={c} dealActif={dealsActifs?.has(c.id) || false} actuActive={actusActives?.has(c.id) || false} size="sm"/>
             </div>
-            {c.description && <p style={{ fontSize: '0.74rem', color: T.muted, margin: '5px 0 0', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.description}</p>}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
               <Etoiles note={noteInfo?.moyenne || 0} taille={11}/>
               <span style={{ fontSize: '0.68rem', color: noteInfo?.count > 0 ? T.muted : '#D1D5DB' }}>
                 {noteInfo?.count > 0 ? `${noteInfo.count} avis` : 'Pas encore d\'avis'}

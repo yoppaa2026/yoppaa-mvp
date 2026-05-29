@@ -1542,10 +1542,7 @@ export default function Commander() {
             </div>
           </div>
 
-          {/* Slogan centré pleine largeur — pas dans le row top pour ne pas déborder */}
-          <p style={{ fontSize: 10, fontWeight: 800, color: T.light, letterSpacing: '2.5px', textTransform: 'uppercase', opacity: 0.75, textAlign: 'center', margin: '2px 0 0', padding: '0 1rem' }}>
-            Ton quartier, dans ta poche
-          </p>
+
 
           {showLocManuelle && onglet === 'accueil' && (
             <div style={{ padding: '0 1rem 0.625rem', animation: 'fadeUp 0.2s ease' }}>

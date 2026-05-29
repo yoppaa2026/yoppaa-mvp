@@ -160,6 +160,31 @@ function AuthForm() {
     opacity: loading ? 0.7 : 1,
   }
 
+  // Mini SVG helpers reutilises
+  const IconMail = ({ size = 13, color = 'currentColor' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="18" height="14" rx="2"/>
+      <path d="M3 7l9 6 9-6"/>
+    </svg>
+  )
+  const IconLock = ({ size = 13, color = 'currentColor' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2"/>
+      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    </svg>
+  )
+  const IconUser = ({ size = 13, color = 'currentColor' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="4"/>
+      <path d="M3 21Q3 16 12 16 Q21 16 21 21"/>
+    </svg>
+  )
+  const IconArrowRight = ({ size = 14, color = 'currentColor' }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+    </svg>
+  )
+
   return (
     <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', padding: '0 1.25rem' }}>
 
@@ -169,7 +194,12 @@ function AuthForm() {
             <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, boxShadow: `0 0 12px ${d.c}88` }}/>
           ))}
         </div>
-        <p style={{ fontWeight: 900, fontSize: '2.5rem', color: '#fff', letterSpacing: '-2px', lineHeight: 1 }}>yoppaa</p>
+        {/* Wordmark canonique fond fonce : yo blanc, pp Light, aa Mid */}
+        <p style={{ fontWeight: 900, fontSize: '2.5rem', letterSpacing: '-2px', lineHeight: 1 }}>
+          <span style={{ color: '#fff' }}>yo</span>
+          <span style={{ color: T.light }}>pp</span>
+          <span style={{ color: T.mid }}>aa</span>
+        </p>
         <p style={{ fontSize: '0.72rem', color: T.light, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', marginTop: 4, opacity: 0.8 }}>
           Ton quartier, dans ta poche.
         </p>
@@ -177,25 +207,38 @@ function AuthForm() {
 
       <div style={{ display: 'flex', background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: 4, marginBottom: '1.5rem', gap: 4 }}>
         {[
-          { key: 'magic', label: '✉️ Magic link' },
-          { key: 'login', label: '🔑 Mot de passe' },
-          { key: 'signup', label: '👤 Inscription' },
-        ].map(tab => (
-          <button key={tab.key} onClick={() => { setMode(tab.key); setMessage(null) }}
-            style={{ flex: 1, padding: '0.5rem 0.25rem', border: 'none', borderRadius: 10, fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer', transition: 'all 0.2s',
-              background: mode === tab.key ? '#fff' : 'transparent',
-              color: mode === tab.key ? T.main : 'rgba(255,255,255,0.5)',
-              boxShadow: mode === tab.key ? `0 2px 8px rgba(0,0,0,0.15)` : 'none',
-            }}>
-            {tab.label}
-          </button>
-        ))}
+          { key: 'magic',  label: 'Magic link',  Icon: IconMail },
+          { key: 'login',  label: 'Mot de passe',Icon: IconLock },
+          { key: 'signup', label: 'Inscription', Icon: IconUser },
+        ].map(tab => {
+          const actif = mode === tab.key
+          return (
+            <button key={tab.key} onClick={() => { setMode(tab.key); setMessage(null) }}
+              style={{ flex: 1, padding: '0.5rem 0.25rem', border: 'none', borderRadius: 10, fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer', transition: 'all 0.2s',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                background: actif ? '#fff' : 'transparent',
+                color: actif ? T.main : 'rgba(255,255,255,0.5)',
+                boxShadow: actif ? `0 2px 8px rgba(0,0,0,0.15)` : 'none',
+              }}>
+              <tab.Icon size={12} color={actif ? T.main : 'rgba(255,255,255,0.5)'}/>
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
 
       {message && (
-        <div style={{ borderRadius: 12, padding: '0.875rem 1rem', marginBottom: '1rem', background: message.type === 'success' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)', border: `1px solid ${message.type === 'success' ? '#10B98144' : '#DC262644'}` }}>
-          <p style={{ fontSize: '0.82rem', fontWeight: 600, color: message.type === 'success' ? '#4ADE80' : '#FCA5A5', lineHeight: 1.5 }}>
-            {message.type === 'success' ? '✅ ' : '⚠️ '}{message.text}
+        <div style={{ borderRadius: 12, padding: '0.875rem 1rem', marginBottom: '1rem', background: message.type === 'success' ? 'rgba(16,185,129,0.15)' : 'rgba(220,38,38,0.15)', border: `1px solid ${message.type === 'success' ? '#10B98144' : '#DC262644'}` }}>
+          <p style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 600, color: message.type === 'success' ? '#4ADE80' : '#FCA5A5', lineHeight: 1.5 }}>
+            {message.type === 'success' ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ADE80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M5 12l5 5L20 7"/></svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <path d="M12 9v4M12 17h.01"/>
+              </svg>
+            )}
+            {message.text}
           </p>
         </div>
       )}
@@ -206,8 +249,12 @@ function AuthForm() {
             Reçois un lien magique par email.<br/>Un clic et tu es connecté — sans mot de passe.
           </p>
           <input placeholder="ton@email.com" type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && envoyerMagicLink()} style={inputSt} autoFocus/>
-          <button onClick={envoyerMagicLink} disabled={!email.trim() || loading} style={{ ...btnPrimary, opacity: !email.trim() || loading ? 0.5 : 1 }}>
-            {loading ? 'Envoi...' : 'Envoyer le lien magique ✨'}
+          <button onClick={envoyerMagicLink} disabled={!email.trim() || loading}
+            style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: !email.trim() || loading ? 0.5 : 1 }}>
+            {loading ? 'Envoi…' : (<>Envoyer le lien magique
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3l1.9 5.8H20l-5 3.6L17 18l-5-3.6L7 18l2-5.6-5-3.6h6.1L12 3z"/>
+              </svg></>)}
           </button>
         </div>
       )}
@@ -217,12 +264,12 @@ function AuthForm() {
           <input placeholder="ton@email.com" type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputSt} autoFocus/>
           <input placeholder="Mot de passe" type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && seConnecter()} style={inputSt}/>
           <button onClick={seConnecter} disabled={!email.trim() || !password.trim() || loading}
-            style={{ ...btnPrimary, opacity: !email.trim() || !password.trim() || loading ? 0.5 : 1 }}>
-            {loading ? 'Connexion...' : 'Se connecter →'}
+            style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: !email.trim() || !password.trim() || loading ? 0.5 : 1 }}>
+            {loading ? 'Connexion…' : (<>Se connecter <IconArrowRight size={16} color="#fff"/></>)}
           </button>
           <button onClick={() => setMode('signup')}
             style={{ width: '100%', marginTop: 10, padding: '0.75rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 100, color: 'rgba(255,255,255,0.6)', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-            Pas encore de compte ? S'inscrire
+            Pas encore de compte ? S&apos;inscrire
           </button>
         </div>
       )}
@@ -251,8 +298,8 @@ function AuthForm() {
       )}
 
       <button onClick={() => { localStorage.setItem('yoppaa_onboarding_done', '1'); router.push(redirect) }}
-        style={{ width: '100%', marginTop: 20, padding: '0.75rem', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.3)', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-        Continuer sans compte →
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', marginTop: 20, padding: '0.75rem', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.3)', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+        Continuer sans compte <IconArrowRight size={13} color="rgba(255,255,255,0.3)"/>
       </button>
 
       <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -282,7 +329,9 @@ export default function CommanderAuthPage() {
         input:focus { border-color: rgba(196,160,244,0.6) !important; outline: none; }
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
-      <div style={{ minHeight: '100dvh', background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, #3D1580 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem 0' }}>
+      <div style={{ minHeight: '100dvh', background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, #3D1580 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem 0', position: 'relative', overflow: 'hidden' }}>
+        {/* Bande 3px canonique YOPPAA (Ink -> Main -> Light) */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
         <Suspense fallback={null}>
           <AuthForm/>
         </Suspense>

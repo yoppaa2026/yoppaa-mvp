@@ -1382,10 +1382,16 @@ export default function CommanderSlug() {
       <div className="page-wrap">
 
         {/* ── TOPBAR ── */}
-        <div style={{ background: T.bgPanel, padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, borderBottom: `1px solid ${T.main}33` }}>
+        <div style={{ background: T.bgPanel, padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, borderBottom: `1px solid ${T.main}33`, position: 'relative' }}>
+          {/* Bande 3px canonique YOPPAA (Ink → Main → Light) */}
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
           <button onClick={() => router.push('/commander')}
-            style={{ background: `rgba(255,255,255,0.1)`, border: `1px solid rgba(255,255,255,0.15)`, color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.45rem 0.875rem', fontWeight: 700, fontSize: '0.82rem', flexShrink: 0, backdropFilter: 'blur(8px)' }}>
-            ← Retour
+            aria-label="Retour"
+            style={{ background: `rgba(255,255,255,0.1)`, border: `1px solid rgba(255,255,255,0.15)`, color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.45rem 0.7rem 0.45rem 0.6rem', fontWeight: 700, fontSize: '0.82rem', flexShrink: 0, backdropFilter: 'blur(8px)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 18l-6-6 6-6"/>
+            </svg>
+            Retour
           </button>
 
           <div style={{ flex: 1, overflow: 'hidden' }}>
@@ -1454,6 +1460,8 @@ export default function CommanderSlug() {
               <div ref={headerRef}>
 
                 <div className="fiche-hero" style={{ position: 'relative', overflow: 'hidden' }}>
+                  {/* Bande 3px canonique YOPPAA en haut du hero (Ink → Main → Light) */}
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 3 }}/>
                   {photoCouverture?.url
                     ? <img src={photoCouverture.url} alt={commercant.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                     : (
@@ -1510,7 +1518,7 @@ export default function CommanderSlug() {
                       if (!h) return null
                       return (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: h.ouvert ? '#F0FDF4' : '#FEF2F2', borderRadius: 100, padding: '3px 9px', border: `1px solid ${h.ouvert ? '#10B98133' : '#DC262633'}` }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: h.ouvert ? '#10B981' : '#DC2626', flexShrink: 0, animation: h.ouvert ? 'dot-pulse 2s ease infinite' : 'none' }}/>
+                          <span style={{ width: h.ouvert ? 9 : 7, height: h.ouvert ? 9 : 7, borderRadius: '50%', background: h.ouvert ? '#10B981' : '#DC2626', flexShrink: 0 }}/>
                           <span style={{ fontSize: '0.7rem', fontWeight: 800, color: h.ouvert ? '#10B981' : '#DC2626' }}>
                             {h.ouvert ? `Ouvert · ${h.debut.slice(0,5)}–${h.fin.slice(0,5)}` : 'Fermé'}
                           </span>

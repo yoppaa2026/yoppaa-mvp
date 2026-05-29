@@ -1511,16 +1511,11 @@ export default function Commander() {
                 ))}
               </div>
               {/* Wordmark tricolore : yo (blanc), pp (Light), aa (Mid) — canonique Good Morning Yoppers */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1 }}>
-                <p style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-1.5px', lineHeight: 1, margin: 0 }}>
-                  <span style={{ color: '#fff' }}>yo</span>
-                  <span style={{ color: T.light }}>pp</span>
-                  <span style={{ color: T.mid }}>aa</span>
-                </p>
-                <p style={{ fontSize: 9, fontWeight: 800, color: T.light, letterSpacing: '1.8px', textTransform: 'uppercase', opacity: 0.75, marginTop: 2 }}>
-                  Ton quartier, dans ta poche
-                </p>
-              </div>
+              <p style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-1.5px', lineHeight: 1, margin: 0 }}>
+                <span style={{ color: '#fff' }}>yo</span>
+                <span style={{ color: T.light }}>pp</span>
+                <span style={{ color: T.mid }}>aa</span>
+              </p>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
               <button onClick={() => { if (!showLocManuelle) demanderGeolocalisation(); setShowLocManuelle(false) }}
@@ -1546,6 +1541,11 @@ export default function Commander() {
               </button>
             </div>
           </div>
+
+          {/* Slogan centré pleine largeur — pas dans le row top pour ne pas déborder */}
+          <p style={{ fontSize: 10, fontWeight: 800, color: T.light, letterSpacing: '2.5px', textTransform: 'uppercase', opacity: 0.75, textAlign: 'center', margin: '2px 0 0', padding: '0 1rem' }}>
+            Ton quartier, dans ta poche
+          </p>
 
           {showLocManuelle && onglet === 'accueil' && (
             <div style={{ padding: '0 1rem 0.625rem', animation: 'fadeUp 0.2s ease' }}>
@@ -1575,7 +1575,7 @@ export default function Commander() {
 
 
           {onglet === 'accueil' && (
-            <div style={{ padding: '1rem 1rem 0.625rem' }}>
+            <div style={{ padding: '0.625rem 1rem 0.625rem' }}>
               <div style={{ position: 'relative', maxWidth: 520, margin: '0 auto' }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
                   <circle cx="11" cy="11" r="7" stroke="rgba(255,255,255,0.55)" strokeWidth="2.2"/>

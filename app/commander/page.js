@@ -1517,8 +1517,8 @@ export default function Commander() {
                   <span style={{ color: T.light }}>pp</span>
                   <span style={{ color: T.mid }}>aa</span>
                 </p>
-                <p style={{ fontSize: 9, fontWeight: 800, color: T.light, letterSpacing: '2.2px', textTransform: 'uppercase', opacity: 0.7, marginTop: 2 }}>
-                  Skip the wait
+                <p style={{ fontSize: 9, fontWeight: 800, color: T.light, letterSpacing: '1.8px', textTransform: 'uppercase', opacity: 0.75, marginTop: 2 }}>
+                  Ton quartier, dans ta poche
                 </p>
               </div>
             </div>

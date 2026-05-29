@@ -490,36 +490,42 @@ function SuggestionForm({ clientId }) {
 // ─── Édition prénom inline ────────────────────────────────────────────────────
 function EditablePrenom({ client, setClient, clientId }) {
   const [editing, setEditing] = useState(false)
-  const [val, setVal] = useState(client.prenom || '')
+  const [vPrenom, setVPrenom] = useState(client.prenom || '')
+  const [vNom, setVNom]       = useState(client.nom || '')
+  const [vTel, setVTel]       = useState(client.telephone || '')
   const [saving, setSaving] = useState(false)
 
   async function sauvegarder() {
-    if (!val.trim()) return
+    if (!vPrenom.trim()) return
     setSaving(true)
-    const prenom = val.trim()
+    const prenom = vPrenom.trim()
+    const nom    = vNom.trim()
+    const telephone = vTel.trim()
     localStorage.setItem('yoppaa_prenom', prenom)
-    setClient(p => ({ ...p, prenom }))
+    if (nom) localStorage.setItem('yoppaa_nom', nom)
+    if (telephone) localStorage.setItem('yoppaa_telephone', telephone)
+    setClient(p => ({ ...p, prenom, nom, telephone }))
     if (clientId) {
-      await supabase.from('clients').update({ nom: prenom }).eq('id', clientId)
+      // Save dans les vraies colonnes (migration SQL passee : prenom, nom, telephone separes)
+      await supabase.from('clients').update({ prenom, nom, telephone }).eq('id', clientId)
     }
     setSaving(false)
     setEditing(false)
   }
 
+  const inputDark = { background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.4)', borderRadius: 10, padding: '0.5rem 0.875rem', color: '#fff', fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif', outline: 'none', width: '100%', boxSizing: 'border-box' }
+
   if (editing) return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <input
-        value={val}
-        onChange={e => setVal(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' && sauvegarder()}
-        autoFocus
-        placeholder="Ton prénom"
-        style={{ background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.4)', borderRadius: 10, padding: '0.5rem 0.875rem', color: '#fff', fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', outline: 'none', width: '100%', boxSizing: 'border-box' }}
-      />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <input value={vPrenom} onChange={e => setVPrenom(e.target.value)} autoFocus placeholder="Prénom" style={inputDark}/>
+        <input value={vNom} onChange={e => setVNom(e.target.value)} placeholder="Nom" style={inputDark}/>
+      </div>
+      <input value={vTel} onChange={e => setVTel(e.target.value)} type="tel" placeholder="Téléphone" onKeyDown={e => e.key === 'Enter' && sauvegarder()} style={inputDark}/>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={sauvegarder} disabled={!val.trim() || saving}
+        <button onClick={sauvegarder} disabled={!vPrenom.trim() || saving}
           style={{ flex: 1, padding: '0.5rem', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', color: '#6B35C4', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          {saving ? '...' : (<><IconCheck size={13} color="#6B35C4"/> Sauvegarder</>)}
+          {saving ? '…' : (<><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6B35C4" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Sauvegarder</>)}
         </button>
         <button onClick={() => setEditing(false)}
           style={{ padding: '0.5rem 0.875rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 100, color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
@@ -532,15 +538,28 @@ function EditablePrenom({ client, setClient, clientId }) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-        <p style={{ fontWeight: 900, fontSize: '1.15rem', color: '#fff', letterSpacing: '-0.3px' }}>
-          {client.prenom || 'Yopper 🟣'}
+        <p style={{ fontWeight: 900, fontSize: '1.15rem', color: '#fff', letterSpacing: '-0.3px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {[client.prenom, client.nom].filter(Boolean).join(' ') || 'Yopper 🟣'}
         </p>
-        <button onClick={() => { setVal(client.prenom || ''); setEditing(true) }}
-          style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 100, padding: '2px 10px', color: 'rgba(255,255,255,0.7)', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-          ✏️ Modifier
+        <button onClick={() => { setVPrenom(client.prenom || ''); setVNom(client.nom || ''); setVTel(client.telephone || ''); setEditing(true) }}
+          aria-label="Modifier mes infos"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 100, padding: '3px 9px', color: 'rgba(255,255,255,0.85)', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20h9"/>
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+          Modifier
         </button>
       </div>
-      <p style={{ fontSize: '0.78rem', color: '#C4A0F4', opacity: 0.8 }}>{client.email}</p>
+      <p style={{ fontSize: '0.78rem', color: '#C4A0F4', opacity: 0.9, marginBottom: client.telephone ? 2 : 0 }}>{client.email}</p>
+      {client.telephone && (
+        <p style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.72rem', color: '#C4A0F4', opacity: 0.7 }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+          </svg>
+          {client.telephone}
+        </p>
+      )}
     </div>
   )
 }
@@ -2153,7 +2172,12 @@ export default function Commander() {
                   <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>{client.email ? 'Mon profil' : 'Bienvenue'}</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
-                  <div style={{ width: 60, height: 60, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', flexShrink: 0, boxShadow: `0 6px 20px ${T.main}66, 0 0 0 3px rgba(255,255,255,0.15)` }}>👤</div>
+                  <div style={{ width: 60, height: 60, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 6px 20px ${T.main}66, 0 0 0 3px rgba(255,255,255,0.15)` }}>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="8" r="4"/>
+                      <path d="M3 21Q3 16 12 16 Q21 16 21 21"/>
+                    </svg>
+                  </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     {client.email
                       ? <EditablePrenom client={client} setClient={setClient} clientId={clientId}/>
@@ -2174,17 +2198,21 @@ export default function Commander() {
               </div>
 
               <div style={{ padding: '0 1rem 1rem', marginTop: '-1.25rem' }}>
-                <div style={{ background: '#fff', borderRadius: 20, padding: '1.5rem', marginBottom: '0.875rem', textAlign: 'center', boxShadow: `0 4px 20px ${T.main}14`, border: `1px solid ${T.pale}` }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
-                    <IconClock size={12} color={T.muted}/>
-                    <p style={{ fontSize: '0.65rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Temps économisé en file</p>
+                {/* Card stat principale : temps economise — bande 3px canonique + visuel signature */}
+                <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', marginBottom: '0.875rem', boxShadow: `0 4px 20px ${T.main}14`, border: `1px solid ${T.pale}` }}>
+                  <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
+                  <div style={{ padding: '1.5rem', textAlign: 'center' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                      <IconClock size={12} color={T.muted}/>
+                      <p style={{ fontSize: '0.65rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Temps économisé en file</p>
+                    </div>
+                    <p style={{ fontSize: '3.5rem', fontWeight: 900, color: T.main, letterSpacing: '-3px', marginBottom: 4, lineHeight: 1 }}>
+                      {tempsEconomise >= 60 ? `${Math.floor(tempsEconomise/60)}h${tempsEconomise%60>0?tempsEconomise%60+'min':''}` : `${tempsEconomise} min`}
+                    </p>
+                    <p style={{ fontSize: '0.82rem', color: T.muted }}>
+                      {clientCommandes.filter(c=>c.statut==='recupere').length} commande{clientCommandes.filter(c=>c.statut==='recupere').length>1?'s':''} sans faire la file
+                    </p>
                   </div>
-                  <p style={{ fontSize: '3.5rem', fontWeight: 900, color: T.main, letterSpacing: '-3px', marginBottom: 4, lineHeight: 1 }}>
-                    {tempsEconomise >= 60 ? `${Math.floor(tempsEconomise/60)}h${tempsEconomise%60>0?tempsEconomise%60+'min':''}` : `${tempsEconomise} min`}
-                  </p>
-                  <p style={{ fontSize: '0.82rem', color: T.muted }}>
-                    {clientCommandes.filter(c=>c.statut==='recupere').length} commande{clientCommandes.filter(c=>c.statut==='recupere').length>1?'s':''} sans faire la file
-                  </p>
                 </div>
 
                 <div className="grid2" style={{ marginBottom: '0.875rem' }}>
@@ -2192,12 +2220,15 @@ export default function Commander() {
                     { label: 'Commandes', value: clientCommandes.length, color: T.main, bg: T.pale, Icon: IconBox },
                     { label: 'Total dépensé', value: `${clientCommandes.reduce((acc,c)=>acc+Number(c.total),0).toFixed(0)}€`, color: T.mid, bg: `${T.mid}18`, Icon: IconEuro },
                   ].map((s,i) => (
-                    <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '1rem', textAlign: 'center', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 10, background: s.bg, marginBottom: 6 }}>
-                        <s.Icon size={20} color={s.color}/>
+                    <div key={i} style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>
+                      <div style={{ height: 2, background: `linear-gradient(90deg, ${s.color}, ${s.color}55)` }}/>
+                      <div style={{ padding: '1rem', textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 10, background: s.bg, marginBottom: 6 }}>
+                          <s.Icon size={20} color={s.color}/>
+                        </div>
+                        <p style={{ fontSize: '0.62rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 5 }}>{s.label}</p>
+                        <p style={{ fontSize: '1.75rem', fontWeight: 900, color: s.color, letterSpacing: '-1px' }}>{s.value}</p>
                       </div>
-                      <p style={{ fontSize: '0.62rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 5 }}>{s.label}</p>
-                      <p style={{ fontSize: '1.75rem', fontWeight: 900, color: s.color, letterSpacing: '-1px' }}>{s.value}</p>
                     </div>
                   ))}
                 </div>
@@ -2259,11 +2290,16 @@ export default function Commander() {
                 {client.email && (
                   <button onClick={async () => {
                     await supabase.auth.signOut()
-                    localStorage.removeItem('yoppaa_email'); localStorage.removeItem('yoppaa_nom'); localStorage.removeItem('yoppaa_prenom'); localStorage.removeItem('yoppaa_client_id'); localStorage.removeItem('yoppaa_onglet')
+                    ;['yoppaa_email','yoppaa_nom','yoppaa_prenom','yoppaa_telephone','yoppaa_client_id','yoppaa_onglet'].forEach(k => localStorage.removeItem(k))
                     setClient({ nom:'', email:'', telephone:'', prenom:'' }); setClientId(null)
                     setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
                     setOngletState('accueil')
-                  }} style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: '#DC2626', border: '1.5px solid #DC262633', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem' }}>
+                  }} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', padding: '0.875rem', background: 'transparent', color: '#DC2626', border: '1.5px solid #DC262633', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                      <path d="M16 17l5-5-5-5"/>
+                      <path d="M21 12H9"/>
+                    </svg>
                     Se déconnecter
                   </button>
                 )}

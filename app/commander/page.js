@@ -467,6 +467,72 @@ const SERVICE_TYPE_LABEL = {
   autre: 'Service',
 }
 
+// ─── Section "Mes avis" — affichée dans l'onglet Profil ────────────────────
+// Liste compacte des avis vérifiés (liés à une commande) postés par le Yopper.
+function SectionMesAvis({ clientId }) {
+  const [avis, setAvis] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!clientId) { setLoading(false); return }
+    let annule = false
+    supabase
+      .from('avis')
+      .select('id, note, commentaire, created_at, commande_id, commercant:commercants(nom, slug)')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false })
+      .limit(20)
+      .then(({ data }) => {
+        if (annule) return
+        setAvis(data || [])
+        setLoading(false)
+      })
+    return () => { annule = true }
+  }, [clientId])
+
+  if (loading) return null
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px 12px', marginBottom: '0.875rem', border: `1px solid ${T.pale}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+          Mes avis
+        </span>
+        <div style={{ flex: 1, height: 1, background: T.pale }}/>
+        {avis.length > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>{avis.length}</span>}
+      </div>
+      {avis.length === 0 ? (
+        <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5, margin: 0 }}>
+          Après ta prochaine commande récupérée, on te proposera de laisser un avis pour aider la tribu.
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {avis.slice(0, 5).map(a => (
+            <div key={a.id} style={{ padding: '10px 12px', background: T.bg, borderRadius: 10, border: `1px solid ${T.pale}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                  {a.commercant?.nom || 'Commerçant'}
+                </p>
+                <span style={{ fontSize: 12, color: '#F59E0B', fontWeight: 700, flexShrink: 0 }}>{'★'.repeat(a.note)}</span>
+              </div>
+              {a.commentaire && (
+                <p style={{ fontSize: 12, color: T.muted, margin: 0, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                  &laquo;&nbsp;{a.commentaire}&nbsp;&raquo;
+                </p>
+              )}
+            </div>
+          ))}
+          {avis.length > 5 && (
+            <p style={{ fontSize: 11, color: T.muted, fontStyle: 'italic', textAlign: 'center', margin: '4px 0 0' }}>
+              + {avis.length - 5} autres avis
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CarteServicePublic({ s, onSelect }) {
   const isUrgence = s.national || s.type === 'urgence'
   const emoji = SERVICE_TYPE_EMOJI[s.type] || '🏢'
@@ -1688,6 +1754,11 @@ export default function Commander() {
                     </div>
                   ))}
                 </div>
+
+                {/* Mes avis — derniers avis vérifiés laissés par le Yopper */}
+                {client.email && (
+                  <SectionMesAvis clientId={clientId}/>
+                )}
 
                 {/* Mes favoris — accessible si Yopper connecté.
                     Déplacé ici depuis l'ancien onglet "Favoris" du footer (remplacé par Services). */}

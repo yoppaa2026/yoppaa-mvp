@@ -1404,6 +1404,32 @@ export default function Commander() {
                   ))}
                 </div>
 
+                {/* Card "Ma commune" — accessible si Yopper connecté.
+                    Clic sur "Changer" ouvre la modale ConfirmCommune en mode 'change'
+                    (fermable + liste manuelle directe). */}
+                {client.email && (
+                  <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: '0.875rem', border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 12, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 10, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.7px', margin: 0 }}>
+                        Ma commune principale
+                      </p>
+                      <p style={{ fontSize: 15, fontWeight: 800, color: T.ink, margin: '2px 0 0', letterSpacing: '-0.3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {commune?.nom || 'Non définie'}
+                      </p>
+                    </div>
+                    <button onClick={() => setShowConfirmCommune(true)}
+                      style={{ padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
+                      Changer
+                    </button>
+                  </div>
+                )}
+
                 {client.email && (
                   <button onClick={async () => {
                     await supabase.auth.signOut()

@@ -825,41 +825,40 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
 
   return (
     <div onClick={() => onSelect(c)}
-      style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', marginBottom: '0.875rem', cursor: 'pointer', boxShadow: '0 1px 4px rgba(26,8,64,0.04)', border: `1px solid ${T.pale}`, transition: 'all 0.2s' }}
+      style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', marginBottom: '0.5rem', cursor: 'pointer', boxShadow: '0 1px 4px rgba(26,8,64,0.04)', border: `1px solid ${T.pale}`, transition: 'all 0.2s' }}
       onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 12px 32px rgba(26,8,64,0.12)`; e.currentTarget.style.borderColor = T.light }}
       onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(26,8,64,0.04)'; e.currentTarget.style.borderColor = T.pale }}>
 
-      {/* Bande haute fine 3px — signature visuelle canonique Yoppaa (Ink → Main → Light).
-          Si C&C actif : vibrante. Sinon : plus douce pour signaler le mode lecture seule. */}
+      {/* Bande haute fine 3px — signature visuelle canonique Yoppaa (Ink → Main → Light). */}
       <div style={{ height: 3, background: peutCommander
         ? `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`
         : `linear-gradient(90deg, ${T.pale}, ${T.light})` }}/>
 
-      <div style={{ padding: '0.875rem 1rem' }}>
+      <div style={{ padding: '0.625rem 0.875rem 0.75rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontWeight: 900, color: T.ink, margin: '0 0 6px', fontSize: '1rem', letterSpacing: '-0.3px' }}>{c.nom}</p>
+            <p style={{ fontWeight: 900, color: T.ink, margin: '0 0 4px', fontSize: '0.95rem', letterSpacing: '-0.3px', lineHeight: 1.2 }}>{c.nom}</p>
             <Badges type={c.type}/>
             {/* Pills statut : 5 pills toujours visibles, dot LIVE orange si actif */}
-            <div style={{ marginTop: 8 }}>
+            <div style={{ marginTop: 6 }}>
               <PillsStatut commercant={c} dealActif={dealsActifs?.has(c.id) || false} actuActive={actusActives?.has(c.id) || false} size="sm"/>
             </div>
-            {c.description && <p style={{ fontSize: '0.78rem', color: T.muted, margin: '6px 0 0', lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.description}</p>}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
-              <Etoiles note={noteInfo?.moyenne || 0}/>
-              <span style={{ fontSize: '0.7rem', color: noteInfo?.count > 0 ? T.muted : '#D1D5DB' }}>
+            {c.description && <p style={{ fontSize: '0.74rem', color: T.muted, margin: '5px 0 0', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.description}</p>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 5 }}>
+              <Etoiles note={noteInfo?.moyenne || 0} taille={11}/>
+              <span style={{ fontSize: '0.68rem', color: noteInfo?.count > 0 ? T.muted : '#D1D5DB' }}>
                 {noteInfo?.count > 0 ? `${noteInfo.count} avis` : 'Pas encore d\'avis'}
               </span>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: physique.bg, borderRadius: 100, padding: '4px 10px', border: `1px solid ${physique.dot}22` }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: physique.dot, flexShrink: 0, animation: physique.pulse ? 'dot-pulse 2s ease-in-out infinite' : 'none', boxShadow: physique.pulse ? `0 0 6px ${physique.dot}88` : 'none' }}/>
-                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: physique.color }}>{physique.label}</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6, alignItems: 'center' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: physique.bg, borderRadius: 100, padding: '3px 8px', border: `1px solid ${physique.dot}22` }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: physique.dot, flexShrink: 0, animation: physique.pulse ? 'dot-pulse 2s ease-in-out infinite' : 'none', boxShadow: physique.pulse ? `0 0 6px ${physique.dot}88` : 'none' }}/>
+                <span style={{ fontSize: '0.66rem', fontWeight: 700, color: physique.color }}>{physique.label}</span>
               </span>
               {resa && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: resa.bg, borderRadius: 100, padding: '4px 10px', border: `1px solid ${resa.dot}22` }}>
-                  <span style={{ fontSize: '0.62rem' }}>🟣</span>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: resa.color }}>{resa.label}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: resa.bg, borderRadius: 100, padding: '3px 8px', border: `1px solid ${resa.dot}22` }}>
+                  <span style={{ fontSize: '0.58rem' }}>🟣</span>
+                  <span style={{ fontSize: '0.66rem', fontWeight: 700, color: resa.color }}>{resa.label}</span>
                 </span>
               )}
               {c.distance != null && (
@@ -874,11 +873,11 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <div style={{ width: 56, height: 56, borderRadius: 14, background: c.logo_url ? '#fff' : T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(26,8,64,0.08)', border: c.logo_url ? `1px solid ${T.pale}` : 'none' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 12, background: c.logo_url ? '#fff' : T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(26,8,64,0.08)', border: c.logo_url ? `1px solid ${T.pale}` : 'none' }}>
               {c.logo_url
                 ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                : <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 9 4 5h16l1 4v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0Z"/>
                     <path d="M5 11v10h14V11"/>
                     <path d="M9 21v-6h6v6"/>
@@ -886,10 +885,10 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
               }
             </div>
             <button onClick={e => onToggleFavori(c.id, e)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, transition: 'transform 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, transition: 'transform 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               onMouseOver={e => e.currentTarget.style.transform = 'scale(1.2)'}
               onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill={estFavori ? '#C4A0F4' : 'none'} xmlns="http://www.w3.org/2000/svg">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill={estFavori ? '#C4A0F4' : 'none'} xmlns="http://www.w3.org/2000/svg">
                 <path d="M12,3 L14.5,9 L21.5,9.5 L16.5,14 L18.2,21 L12,17.5 L5.8,21 L7.5,14 L2.5,9.5 L9.5,9 Z"
                   stroke={estFavori ? '#9660E0' : '#D1D5DB'} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
               </svg>

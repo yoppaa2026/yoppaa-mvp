@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { canDo, isVitrine, detecterProviderReservation } from '@/lib/plans'
 import PillsStatut from '../PillsStatut'
 import CTAUpgrade from '../CTAUpgrade'
+import ModalSignalement from '../ModalSignalement'
 
 const T = {
   bg:      '#F8F6FF',
@@ -535,6 +536,8 @@ export default function CommanderSlug() {
   const router = useRouter()
 
   const [etape, setEtape] = useState(2)
+  const [showSignalement, setShowSignalement] = useState(false)
+  const [signalementSent, setSignalementSent] = useState(false)
   const [commercant, setCommercant] = useState(null)
   const [articles, setArticles] = useState([])
   const [creneaux, setCreneaux] = useState([])
@@ -1730,6 +1733,20 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
+                {/* Lien discret de signalement en bas de fiche */}
+                <div style={{ marginTop: 28, padding: '0 0 12px', textAlign: 'center' }}>
+                  {signalementSent ? (
+                    <p style={{ fontSize: 12, color: '#16A34A', fontWeight: 700, margin: 0 }}>
+                      ✓ Merci, signalement enregistré
+                    </p>
+                  ) : (
+                    <button onClick={() => setShowSignalement(true)}
+                      style={{ background: 'none', border: 'none', color: T.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textDecoration: 'underline', textDecorationColor: T.pale, textUnderlineOffset: 3 }}>
+                      Signaler un problème sur cette fiche
+                    </button>
+                  )}
+                </div>
+
                 <div style={{ height: 24 }}/>
               </div>
             </>
@@ -1975,6 +1992,16 @@ export default function CommanderSlug() {
           )}
         </div>
       </div>
+
+      {/* Modale signalement (déclenchée depuis le lien en bas de fiche) */}
+      {showSignalement && commercant && (
+        <ModalSignalement
+          target={{ kind: 'commerce', id: commercant.id, nom: commercant.nom }}
+          yopperId={typeof window !== 'undefined' ? localStorage.getItem('yoppaa_client_id') : null}
+          onClose={() => setShowSignalement(false)}
+          onSent={() => setSignalementSent(true)}
+        />
+      )}
     </>
   )
 }

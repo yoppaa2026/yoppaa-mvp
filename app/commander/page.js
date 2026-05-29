@@ -1566,6 +1566,24 @@ export default function Commander() {
               </div>
               <div style={{ padding: '1rem', marginTop: '-1.5rem' }}>
                 <SuggestionForm clientId={clientId}/>
+
+                {/* ─── Signalement — info bloc, redirige vers la fiche concernée ─ */}
+                <div style={{ background: '#fff', borderRadius: 16, padding: '16px 18px', marginTop: 16, border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+                    🚨
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 4px' }}>
+                      Signaler un problème
+                    </p>
+                    <p style={{ fontSize: 13, color: T.ink, fontWeight: 600, margin: '0 0 6px', lineHeight: 1.35 }}>
+                      Un commerce fermé, des horaires faux, un numéro qui ne répond plus&nbsp;?
+                    </p>
+                    <p style={{ fontSize: 12, color: T.muted, margin: 0, lineHeight: 1.5 }}>
+                      Ouvre la fiche concernée (commerce ou service) et clique sur <strong style={{ color: T.deep }}>« Signaler un problème »</strong> en bas. Ta contribution garde Yoppaa à jour pour toute la tribu.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}

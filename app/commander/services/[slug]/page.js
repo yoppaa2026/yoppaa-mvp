@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import ModalSignalement from '../../ModalSignalement'
 
 // Design system canonique
 const T = {
@@ -95,6 +96,8 @@ export default function FicheServicePublic({ params }) {
   const [notFound, setNotFound] = useState(false)
   // Next.js 15+ : params est un Promise — on l'attend
   const [slug, setSlug] = useState(null)
+  const [showSignalement, setShowSignalement] = useState(false)
+  const [signalementSent, setSignalementSent] = useState(false)
 
   useEffect(() => {
     Promise.resolve(params).then(p => setSlug(p?.slug))
@@ -330,11 +333,34 @@ export default function FicheServicePublic({ params }) {
       )}
 
       {service.national && (
-        <div style={{ padding: '12px 18px 20px' }}>
+        <div style={{ padding: '12px 18px 8px' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 100, background: '#FEE2E2', color: '#991B1B', fontWeight: 700, fontSize: 11, letterSpacing: '0.3px' }}>
             🌍 Service national — disponible dans toute la Belgique
           </div>
         </div>
+      )}
+
+      {/* Bouton signalement discret en bas */}
+      <div style={{ padding: '14px 18px 28px', textAlign: 'center' }}>
+        {signalementSent ? (
+          <p style={{ fontSize: 12, color: '#16A34A', fontWeight: 700, margin: 0 }}>
+            ✓ Merci, signalement enregistré
+          </p>
+        ) : (
+          <button onClick={() => setShowSignalement(true)}
+            style={{ background: 'none', border: 'none', color: T.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline', textDecorationColor: T.hairline, textUnderlineOffset: 3 }}>
+            Signaler un problème sur cette fiche
+          </button>
+        )}
+      </div>
+
+      {showSignalement && (
+        <ModalSignalement
+          target={{ kind: 'service', id: service.id, nom: service.nom }}
+          yopperId={typeof window !== 'undefined' ? localStorage.getItem('yoppaa_client_id') : null}
+          onClose={() => setShowSignalement(false)}
+          onSent={() => setSignalementSent(true)}
+        />
       )}
     </div>
   )

@@ -2205,12 +2205,18 @@ export default function Commander() {
                   </svg>
                 )}
                 {item.key === 'services' && (
-                  /* Bâtiment officiel : mairie/administration. */
+                  /* Bâtiment officiel : mairie/administration. Badge rouge si alerte urgente. */
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
                     <path d="M3,11 L12,4 L21,11" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                     <path d="M5,11 L5,20 L19,20 L19,11" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                     <path d="M8,20 L8,13 M12,20 L12,13 M16,20 L16,13" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
                     <path d="M3,20 L21,20" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
+                    {item.badge > 0 && (
+                      <>
+                        <circle cx="19" cy="5" r="5.5" fill="#DC2626" stroke="white" strokeWidth="1.8"/>
+                        <text x="19" y="8.8" textAnchor="middle" fontSize="8" fontWeight="900" fill="white" fontFamily="DM Sans,sans-serif">!</text>
+                      </>
+                    )}
                   </svg>
                 )}
                 {item.key === 'tribu' && (
@@ -2230,10 +2236,10 @@ export default function Commander() {
                   </svg>
                 )}
 
-                {/* Badge nombre visible : grandi + lisible. Violet pour commandes, rouge pour services en alerte. */}
-                {item.badge > 0 && (
-                  <span style={{ position: 'absolute', top: 4, left: 'calc(50% + 6px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: item.key === 'services' ? '#DC2626' : T.main, color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: `0 2px 8px ${item.key === 'services' ? '#DC2626' : T.main}99, 0 0 0 1.5px ${item.key === 'services' ? '#DC2626' : T.main}44`, lineHeight: 1, letterSpacing: '-0.2px', animation: item.key === 'services' ? 'yoppa-live-pulse 1s ease-in-out infinite' : 'none' }}>
-                    {item.key === 'services' ? '!' : (item.badge > 9 ? '9+' : item.badge)}
+                {/* Badge nombre commandes : grandi + lisible (uniquement pour l'onglet commandes). */}
+                {item.key === 'commandes' && item.badge > 0 && (
+                  <span style={{ position: 'absolute', top: 4, left: 'calc(50% + 6px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: T.main, color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: `0 2px 8px ${T.main}99, 0 0 0 1.5px ${T.main}44`, lineHeight: 1, letterSpacing: '-0.2px' }}>
+                    {item.badge > 9 ? '9+' : item.badge}
                   </span>
                 )}
 

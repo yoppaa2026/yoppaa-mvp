@@ -12,12 +12,12 @@ const C = {
 
 export default function PillsStatut({ commercant, dealActif = false, actuActive = false, size = 'sm' }) {
   const pills = getPillsStatut(commercant, { dealActif, actuActive })
-  const fontSize = size === 'lg' ? '0.7rem' : size === 'xs' ? '0.5rem' : '0.58rem'
-  const padding  = size === 'lg' ? '5px 11px' : size === 'xs' ? '2.5px 5px' : '3px 8px'
+  const fontSize = size === 'lg' ? '0.7rem' : size === 'xs' ? '0.58rem' : '0.58rem'
+  const padding  = size === 'lg' ? '5px 11px' : size === 'xs' ? '3.5px 7px' : '3px 8px'
   const iconSize = size === 'lg' ? 10 : size === 'xs' ? 6 : 8
-  const gap      = size === 'xs' ? 2 : 4
+  const gap      = size === 'xs' ? 3 : 4
   const xs       = size === 'xs'
-  const letter   = size === 'xs' ? '0.2px' : '0.4px'
+  const letter   = size === 'xs' ? '0.3px' : '0.4px'
 
   return (
     <div style={{ display: 'flex', flexWrap: xs ? 'nowrap' : 'wrap', gap, overflow: xs ? 'hidden' : 'visible', minWidth: 0 }}>
@@ -25,9 +25,9 @@ export default function PillsStatut({ commercant, dealActif = false, actuActive 
         const style = p.indisponible ? C.unavail : (p.actif ? C.on : C.off)
         return (
           <span key={p.key}
-            style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: xs ? 2.5 : 4, fontSize, fontWeight: 800, padding, borderRadius: 100, background: style.bg, color: style.color, border: `1px solid ${style.border}`, textTransform: 'uppercase', letterSpacing: letter, lineHeight: 1, whiteSpace: 'nowrap', flexShrink: 0 }}>
-            {/* Icône check ou tiret selon état */}
-            {p.actif ? (
+            style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: xs ? 0 : 4, fontSize, fontWeight: 800, padding, borderRadius: 100, background: style.bg, color: style.color, border: `1px solid ${style.border}`, textTransform: 'uppercase', letterSpacing: letter, lineHeight: 1, whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {/* Icône check ou tiret (cachée en size xs : couleur seule suffit) */}
+            {!xs && (p.actif ? (
               <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M5 12l5 5L20 7"/>
               </svg>
@@ -35,7 +35,7 @@ export default function PillsStatut({ commercant, dealActif = false, actuActive 
               <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
                 <path d="M5 12h14"/>
               </svg>
-            )}
+            ))}
             {p.label}
             {/* Dot LIVE pulsant : violet pour DEAL, rouge pour ACTU.
                 Plus gros + animation marquee pour attirer l'oeil */}

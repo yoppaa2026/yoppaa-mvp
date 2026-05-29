@@ -1041,7 +1041,7 @@ function ArticleCard({ a, estVitrine = false, onEdit, onToggle, onUpdateStock, o
 }
 
 // ─── Onglet DEALS ─────────────────────────────────────────────────────────────
-// Création/édition des deals d'un commerçant + intégration Morning Yoppaa.
+// Création/édition des deals d'un commerçant + intégration Good Morning Yoppers.
 // Règles :
 //   - 1 seul deal par jour peut être inclus dans Le Morning
 //   - Deadline : 23h00 (commercant.heure_limite_morning) la veille
@@ -1159,7 +1159,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       description: form.description.trim() || null,
       prix_deal: form.prix_deal ? parseFloat(form.prix_deal) : null,
       prix_original: form.prix_original ? parseFloat(form.prix_original) : null,
-      // date_deal = 1er jour de la période (utilisé pour la sélection Morning Yoppaa)
+      // date_deal = 1er jour de la période (utilisé pour la sélection Good Morning Yoppers)
       date_deal: dDebut,
       date_debut: dateDebut,
       date_fin: dateFin,
@@ -1233,10 +1233,10 @@ function TabDeals({ commercantId, commercant, toast }) {
         </button>
       </div>
 
-      {/* Info Morning Yoppaa */}
+      {/* Info Good Morning Yoppers */}
       <div style={{ background: '#FFF7ED', borderLeft: `4px solid #EA580C`, borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 12.5, color: '#7C2D12', lineHeight: 1.5 }}>
-        <strong>☀️ Le Morning Yoppaa</strong> · push quotidien à 7h30 aux clients de ta zone.
-        <br/>Cochez «&nbsp;Inclure dans Le Morning Yoppaa&nbsp;» avant <strong>{heureLimite}</strong> la veille pour y apparaître. Un seul deal par jour par commerçant peut être inclus.
+        <strong>Good Morning Yoppers</strong> · push quotidien à 7h30 aux clients de ta zone.
+        <br/>Cochez «&nbsp;Inclure dans le Good Morning Yoppers&nbsp;» avant <strong>{heureLimite}</strong> la veille pour y apparaître. Un seul deal par jour par commerçant peut être inclus.
       </div>
 
       {/* Formulaire création / édition */}
@@ -1294,16 +1294,16 @@ function TabDeals({ commercantId, commercant, toast }) {
             </div>
             {form.date_debut && form.date_fin && form.date_debut !== form.date_fin && (
               <p style={{ fontSize: 11, color: T.muted, fontStyle: 'italic', margin: 0 }}>
-                Période multi-jours : le deal sera affiché tous les jours entre {form.date_debut} et {form.date_fin}. Pour le Morning Yoppaa, le push partira le matin du {form.date_debut}.
+                Période multi-jours : le deal sera affiché tous les jours entre {form.date_debut} et {form.date_fin}. Pour le Good Morning Yoppers, le push partira le matin du {form.date_debut}.
               </p>
             )}
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: form.inclus_morning ? '#FFF7ED' : '#FAFAFA', border: `1.5px solid ${form.inclus_morning ? '#EA580C' : T.hairline}`, borderRadius: 10, cursor: 'pointer' }}>
               <input type="checkbox" checked={form.inclus_morning} onChange={e => setForm(p => ({ ...p, inclus_morning: e.target.checked }))} style={{ width: 18, height: 18, cursor: 'pointer' }}/>
-              <span style={{ fontSize: 13, color: T.ink, fontWeight: 700 }}>☀️ Inclure dans Le Morning Yoppaa</span>
+              <span style={{ fontSize: 13, color: T.ink, fontWeight: 700 }}>☀️ Inclure dans le Good Morning Yoppers</span>
             </label>
             {warningSoumission && (
               <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#7F1D1D', fontWeight: 600 }}>
-                ⚠️ Deadline dépassée — ce deal ne sera pas dans Le Morning Yoppaa de demain.
+                ⚠️ Deadline dépassée — ce deal ne sera pas dans le Good Morning Yoppers de demain.
               </div>
             )}
             {/* CTA Appeler pour réserver : à activer pour les deals qui nécessitent

@@ -427,10 +427,10 @@ function Etape1Compte({ session, commercant, onCompte }) {
 function GlossaireFeatures() {
   const [ouvert, setOuvert] = useState(false)
   const features = [
-    { icone: '🔥', titre: 'Deal',           desc: 'Une promo limitée dans le temps. Bandeau visible sur ta page client, push aux favoris si tu actives la notif, possibilité d\'apparaître dans Le Morning Yoppaa.' },
+    { icone: '🔥', titre: 'Deal',           desc: 'Une promo limitée dans le temps. Bandeau visible sur ta page client, push aux favoris si tu actives la notif, possibilité d\'apparaître dans le Good Morning Yoppers.' },
     { icone: '📢', titre: 'Actualité',      desc: 'Tu communiques une nouveauté (nouveau produit, événement). Affichée en bandeau violet sur ta page, push aux favoris à la publication.' },
     { icone: '🚨', titre: 'Alerte',         desc: 'Information urgente (fermeture exceptionnelle, rupture). Bandeau rouge prioritaire sur ta page client.' },
-    { icone: '☀️', titre: 'Morning Yoppaa', desc: 'Push quotidien envoyé à 7h30 aux clients de ta zone. Les commerçants LIVE/BOOST/MAX peuvent y inscrire 1 deal/jour, à soumettre avant 23h la veille.' },
+    { icone: '☀️', titre: 'Good Morning Yoppers', desc: 'Push quotidien envoyé à 7h30 aux clients de ta zone. Les commerçants LIVE/BOOST/MAX peuvent y inscrire 1 deal/jour, à soumettre avant 23h la veille.' },
     { icone: '🛒', titre: 'Click & Collect', desc: 'Le client commande à l\'avance, choisit un créneau de retrait. Tu reçois la commande dans ton dashboard, valides, marques prête. Indispensable pour passer au modèle Yoppaa complet.' },
     { icone: '🚴', titre: 'Livraison',       desc: 'Module complet : zone configurable, frais configurables, créneaux livraison séparés, suivi commande client. Réservé au plan MAX.' },
     { icone: '⭐', titre: 'Fidélité',        desc: 'BOOST : programme tampon simple (le 10e offert). MAX : points configurables, récompenses custom, analytics fidélité.' },
@@ -446,7 +446,7 @@ function GlossaireFeatures() {
             Comprendre les fonctionnalités
           </p>
           <p style={{ fontSize: 11, color: T.muted, margin: '2px 0 0', fontWeight: 600 }}>
-            Deal, Actu, Morning Yoppaa, Click &amp; Collect…
+            Deal, Actu, Good Morning Yoppers, Click &amp; Collect…
           </p>
         </div>
         <span style={{ fontSize: 14, color: T.main, fontWeight: 800, transform: ouvert ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>⌄</span>
@@ -1373,7 +1373,7 @@ function CardPlan({ plan, actif, onClick }) {
   const label = PLAN_LABEL[plan]
   const features = {
     on:    'Page live + menu sans prix + horaires + avis. Idéal pour démarrer.',
-    live:  'Tout ON + prix visibles + photos articles + deals + actualités + Morning Yoppaa.',
+    live:  'Tout ON + prix visibles + photos articles + deals + actualités + Good Morning Yoppers.',
     boost: 'Tout LIVE + Click & Collect + fidélité + dashboard commandes + kit hardware.',
     max:   'Tout BOOST + module livraison complet + fidélité avancée + support prioritaire.',
   }

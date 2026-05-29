@@ -29,32 +29,121 @@ const T = {
   urgentFg: '#CC3333',
 }
 
-// ─── Données mockées (à remplacer par fetchMorning) ────────────────
-const dealsMock = [
-  {
-    commerce: "P'tit Toqué", type: '🥐', categorie: 'Boulangerie',
-    deal: 'Croissants butter édition limitée',
-    prix: '1,20€', prixNormal: '1,80€', stock: 18,
-    actu: 'On ouvre dès 6h30 ce mois-ci pour les lève-tôt 🌅',
-  },
-  {
-    commerce: 'Kebabistro', type: '🌯', categorie: 'Snack',
-    deal: 'Midi express — sandwich + boisson',
-    prix: '7,50€', prixNormal: '10,50€', stock: 3,
-    actu: "Nouvelle sauce maison à l'ail confit sur toutes les formules 🧄",
-  },
-  {
-    commerce: "Mozz'Art", type: '🍕', categorie: 'Pizzeria',
-    deal: 'Pizza du jour — 4 fromages',
-    prix: '9€', prixNormal: '13€', stock: 8,
-    actu: 'Soirée pizza vendredi — commande dès maintenant pour 19h–21h 🎉',
-  },
-]
+// ─── Mapping type de commerce → emoji (pour illustrer la card) ────
+// Les emojis restent autorisés sur les cards commerçant comme illustration
+// du type de commerce (cf. design system : exception emoji autorisée).
+const EMOJI_TYPE = {
+  'Boulangerie': '🥐', 'Pâtisserie': '🧁', 'Chocolatier': '🍫',
+  'Sandwicherie': '🥪', 'Snack': '🌯', 'Friterie': '🍟',
+  'Pizzeria': '🍕', 'Coffee shop': '☕', 'Épicerie': '🛒',
+  'Traiteur': '🍽️', 'Boucherie': '🥩', 'Fleuriste': '💐',
+  'Pharmacie': '💊', 'Food truck': '🚚',
+  'Coiffeur': '💇', 'Opticien': '👓', 'Pressing': '👔',
+}
+function emojiDuType(type) {
+  if (!type) return '🏪'
+  // Cas "Boulangerie & Pâtisserie" → prend le premier
+  const first = type.split(/\s*[&\/,]\s*/)[0].trim()
+  return EMOJI_TYPE[first] || EMOJI_TYPE[type] || '🏪'
+}
+
+// Codes postaux belges = 4 chiffres. Extrait depuis l'adresse libre.
+function extraireCodePostal(adresse) {
+  if (!adresse) return null
+  const m = adresse.match(/\b(\d{4})\b/)
+  return m ? m[1] : null
+}
+
+// Formate un prix en string "1,20€" (français)
+function fmtPrix(n) {
+  if (n == null) return null
+  return Number(n).toFixed(2).replace('.', ',') + '€'
+}
 
 // ─── Helpers dates (locale FR-BE) ──────────────────────────────────
 const DAYS = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi']
 const MONTHS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre']
 const LAUNCH_DATE = new Date(2026, 0, 1) // 1er janvier 2026
+
+// ─── Fetch des deals + actus de la commune affichée ──────────────
+// Filtre côté DB : actifs + date du jour. Filtre côté JS : commerçant
+// publié + plan LIVE/BOOST/MAX + code postal dans la commune.
+async function fetchMorningData(commune) {
+  if (!commune?.codes_postaux?.length) return { deals: [], actus: [] }
+  const today = new Date().toISOString().slice(0, 10)
+
+  const [{ data: dealsRaw }, { data: actusRaw }] = await Promise.all([
+    supabase
+      .from('yoppaa_deals')
+      .select(`
+        id, titre, description, prix_deal, prix_original, date_deal, article_id, cta_appeler_reserver,
+        commercant:commercants ( id, nom, type, adresse, plan, statut_publication )
+      `)
+      .eq('actif', true)
+      .eq('inclus_morning', true)
+      .eq('date_deal', today),
+
+    supabase
+      .from('actualites')
+      .select(`
+        id, titre, contenu, type, date_debut, date_fin,
+        commercant:commercants ( id, nom, type, adresse, plan, statut_publication )
+      `)
+      .eq('actif', true)
+      .lte('date_debut', today)
+      .gte('date_fin', today),
+  ])
+
+  const cpDeLaCommune = new Set(commune.codes_postaux)
+  const PLANS_OK = new Set(['live', 'boost', 'max'])
+
+  function commercantEligible(c) {
+    if (!c) return false
+    if (c.statut_publication !== 'publie') return false
+    if (!PLANS_OK.has((c.plan || '').toLowerCase())) return false
+    const cp = extraireCodePostal(c.adresse)
+    return cp && cpDeLaCommune.has(cp)
+  }
+
+  // Récupère les stocks des articles liés aux deals (pour le badge "X restants")
+  const articleIds = (dealsRaw || [])
+    .filter(d => commercantEligible(d.commercant) && d.article_id)
+    .map(d => d.article_id)
+  let stockParArticle = {}
+  if (articleIds.length > 0) {
+    const { data: articles } = await supabase
+      .from('articles')
+      .select('id, stock_jour')
+      .in('id', articleIds)
+    stockParArticle = Object.fromEntries((articles || []).map(a => [a.id, a.stock_jour ?? 0]))
+  }
+
+  const deals = (dealsRaw || [])
+    .filter(d => commercantEligible(d.commercant))
+    .map(d => ({
+      id: d.id,
+      commerce: d.commercant.nom,
+      type: emojiDuType(d.commercant.type),
+      categorie: d.commercant.type || 'Commerce',
+      deal: d.titre,
+      prix: fmtPrix(d.prix_deal),
+      prixNormal: fmtPrix(d.prix_original),
+      stock: d.article_id ? (stockParArticle[d.article_id] ?? null) : null,
+    }))
+
+  const actus = (actusRaw || [])
+    .filter(a => commercantEligible(a.commercant))
+    .map(a => ({
+      id: a.id,
+      commerce: a.commercant.nom,
+      type: emojiDuType(a.commercant.type),
+      categorie: a.commercant.type || 'Commerce',
+      actu: a.contenu || a.titre,
+      alerte: a.type === 'alerte',
+    }))
+
+  return { deals, actus }
+}
 
 function getMorningContext() {
   const now = new Date()
@@ -291,7 +380,8 @@ function Tabs({ tab, setTab, dealsCount, actusCount }) {
 }
 
 function DealCard({ d, shown, delay }) {
-  const isUrgent = d.stock <= 5
+  const hasStock = typeof d.stock === 'number' && d.stock > 0
+  const isUrgent = hasStock && d.stock <= 5
   return (
     <div className="gmy-anim" style={{ opacity: shown ? 1 : 0, transform: shown ? 'translateY(0)' : 'translateY(8px)', transition: 'all 0.4s cubic-bezier(0.16,1,0.3,1)', transitionDelay: `${delay}ms` }}>
       <div className="gmy-card-hover" style={{ border: `1px solid ${T.hairline}`, borderRadius: 16, padding: '14px 16px', cursor: 'pointer', background: '#fff', transition: 'all 0.2s ease' }}>
@@ -309,11 +399,13 @@ function DealCard({ d, shown, delay }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 800, color: T.ink }}>{d.prix}</div>
-          <div style={{ fontSize: 12, color: T.mid, textDecoration: 'line-through' }}>{d.prixNormal}</div>
-          <div style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: isUrgent ? T.urgentBg : T.pale, color: isUrgent ? T.urgentFg : T.deep }}>
-            {isUrgent ? '⚡ ' : ''}{d.stock} restants
-          </div>
+          {d.prix && <div style={{ fontSize: 20, fontWeight: 800, color: T.ink }}>{d.prix}</div>}
+          {d.prixNormal && <div style={{ fontSize: 12, color: T.mid, textDecoration: 'line-through' }}>{d.prixNormal}</div>}
+          {hasStock && (
+            <div style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: isUrgent ? T.urgentBg : T.pale, color: isUrgent ? T.urgentFg : T.deep }}>
+              {isUrgent ? '⚡ ' : ''}{d.stock} restants
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -396,36 +488,51 @@ export default function GoodMorningYoppersPage() {
   const [communes, setCommunes] = useState([])
   const communeAffichee = communeSwitch || communePrincipale
 
+  // Données réelles (deals + actus) chargées depuis Supabase selon la commune affichée
+  const [realDeals, setRealDeals] = useState([])
+  const [realActus, setRealActus] = useState([])
+  const [loadingData, setLoadingData] = useState(true)
+
   // Charge la liste des communes + la commune principale du Yopper
   useEffect(() => {
     let annule = false
 
-    // 1) Toutes les communes actives
-    supabase.from('communes').select('id, nom, codes_postaux, province').eq('active', true).order('nom')
-      .then(({ data }) => { if (!annule) setCommunes(data || []) })
+    async function init() {
+      // 1) Toutes les communes actives
+      const { data: allCommunes } = await supabase
+        .from('communes')
+        .select('id, nom, codes_postaux, province')
+        .eq('active', true)
+        .order('nom')
+      if (annule) return
+      setCommunes(allCommunes || [])
 
-    // 2) Commune principale du Yopper (si connecté)
-    const clientId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_client_id') : null
-    if (clientId) {
-      supabase
-        .from('clients')
-        .select('commune:communes(id, nom, codes_postaux, province)')
-        .eq('id', clientId)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (annule) return
-          if (data?.commune) setCommunePrincipale(data.commune)
-        })
+      // 2) Commune principale du Yopper si connecté ; sinon fallback Mettet
+      const clientId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_client_id') : null
+      let principale = null
+      if (clientId) {
+        const { data } = await supabase
+          .from('clients')
+          .select('commune:communes(id, nom, codes_postaux, province)')
+          .eq('id', clientId)
+          .maybeSingle()
+        if (data?.commune) principale = data.commune
+      }
+      if (!principale && allCommunes?.length > 0) {
+        principale = allCommunes.find(c => c.nom === 'Mettet') || allCommunes[0]
+      }
+      if (!annule && principale) setCommunePrincipale(principale)
+
+      // 3) Restaure un switch session éventuel
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = sessionStorage.getItem('morning_commune_switch')
+          if (raw && !annule) setCommuneSwitch(JSON.parse(raw))
+        } catch {}
+      }
     }
 
-    // 3) Restaure un switch session éventuel
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = sessionStorage.getItem('morning_commune_switch')
-        if (raw) setCommuneSwitch(JSON.parse(raw))
-      } catch {}
-    }
-
+    init()
     return () => { annule = true }
   }, [])
 
@@ -440,23 +547,40 @@ export default function GoodMorningYoppersPage() {
     }
   }
 
-  // Animation entrée de la card
+  // Refetch deals/actus à chaque changement de commune affichée
+  useEffect(() => {
+    let annule = false
+    if (!communeAffichee) {
+      // Commune pas encore chargée — on attend
+      return
+    }
+    setLoadingData(true)
+    fetchMorningData(communeAffichee).then(({ deals, actus }) => {
+      if (annule) return
+      setRealDeals(deals)
+      setRealActus(actus)
+      setLoadingData(false)
+    })
+    return () => { annule = true }
+  }, [communeAffichee?.id])
+
+  // Items affichés selon l'onglet (deals ou actus) — source de la cascade animation
+  const itemsAffiches = tab === 'deals' ? realDeals : realActus
+
+  // Animation entrée de la card (1 fois)
   useEffect(() => {
     const t1 = setTimeout(() => setVisible(true), 80)
-    const timers = dealsMock.map((_, i) =>
-      setTimeout(() => setShown(p => { const n = [...p]; n[i] = true; return n }), 400 + i * 150)
-    )
-    return () => { clearTimeout(t1); timers.forEach(clearTimeout) }
+    return () => clearTimeout(t1)
   }, [])
 
-  // Animation re-cascade au changement d'onglet
+  // Animation cascade : se redéclenche quand on switch d'onglet OU quand les data changent
   useEffect(() => {
-    setShown([false, false, false])
-    const timers = dealsMock.map((_, i) =>
+    setShown(Array(itemsAffiches.length).fill(false))
+    const timers = itemsAffiches.map((_, i) =>
       setTimeout(() => setShown(p => { const n = [...p]; n[i] = true; return n }), 60 + i * 120)
     )
     return () => timers.forEach(clearTimeout)
-  }, [tab])
+  }, [tab, itemsAffiches.length])
 
   // Marque le morning comme vu aujourd'hui (logique "1 fois/jour")
   useEffect(() => {
@@ -498,14 +622,32 @@ export default function GoodMorningYoppersPage() {
           communes={communes}
           onSwitch={onSwitchCommune}
         />
-        <Tabs tab={tab} setTab={setTab} dealsCount={dealsMock.length} actusCount={dealsMock.length}/>
+        <Tabs tab={tab} setTab={setTab} dealsCount={realDeals.length} actusCount={realActus.length}/>
 
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {tab === 'deals' && dealsMock.map((d, i) => (
-            <DealCard key={i} d={d} shown={shown[i]} delay={i * 55}/>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 120 }}>
+          {loadingData && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 0', color: T.muted, fontSize: 13, fontWeight: 600 }}>
+              Chargement…
+            </div>
+          )}
+
+          {!loadingData && itemsAffiches.length === 0 && (
+            <div style={{ padding: '24px 8px', textAlign: 'center' }}>
+              <p style={{ fontSize: 32, margin: 0, lineHeight: 1 }}>☕</p>
+              <p style={{ fontSize: 14, fontWeight: 800, color: T.ink, margin: '12px 0 4px', letterSpacing: '-0.2px' }}>
+                Pas de {tab === 'deals' ? 'deals' : 'actus'} à {communeAffichee?.nom || 'cet endroit'} ce matin
+              </p>
+              <p style={{ fontSize: 12, color: T.muted, margin: 0, lineHeight: 1.5 }}>
+                Rendez-vous demain à 07h30 — ou switche de commune pour voir ailleurs.
+              </p>
+            </div>
+          )}
+
+          {!loadingData && tab === 'deals' && realDeals.map((d, i) => (
+            <DealCard key={d.id} d={d} shown={shown[i]} delay={i * 55}/>
           ))}
-          {tab === 'actus' && dealsMock.map((d, i) => (
-            <ActuCard key={i} d={d} shown={shown[i]} delay={i * 55}/>
+          {!loadingData && tab === 'actus' && realActus.map((d, i) => (
+            <ActuCard key={d.id} d={d} shown={shown[i]} delay={i * 55}/>
           ))}
         </div>
 

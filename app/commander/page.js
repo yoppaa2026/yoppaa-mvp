@@ -1571,11 +1571,10 @@ export default function Commander() {
           touch-action: pan-y;
         }
         .scroll-body > * { max-width: 100%; }
-        /* Header HYPE : background pleine largeur du viewport sur PC/tablette */
-        .hero-fullwidth { margin-left: calc(-50vw + 50%); margin-right: calc(-50vw + 50%); padding-left: calc(50vw - 50%); padding-right: calc(50vw - 50%); }
-        @media (max-width: 760px) {
-          .hero-fullwidth { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
-        }
+        /* Hero + footer alignes sur la largeur des cards (760px max via page-wrap).
+           La classe .hero-fullwidth est conservee mais ne fait plus rien — gardee pour ne pas
+           casser les references existantes. Le rendu suit naturellement la largeur du parent. */
+        .hero-fullwidth { /* no-op */ }
         /* Grille 2 cols pour les commerces sur PC/tablette large */
         @media (min-width: 800px) {
           .commerces-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; align-items: start; }
@@ -1584,23 +1583,16 @@ export default function Commander() {
         /* Footer nav : padding horizontal généreux pour ne pas toucher les courbes
            des angles iPhone + safe area iOS. Les onglets utilisent flex:1 mais
            restent à l'intérieur de cette zone safe. */
-        /* Navbar : full-viewport background via width:100vw + margins negatives pour centrer.
-           Plus robuste que la combinaison hero-fullwidth + flex parent sur viewports tres larges (PC). */
+        /* Navbar : alignee sur la largeur des cards (760px page-wrap). Pas de full-width viewport. */
         .navbar {
           flex-shrink: 0;
           background: ${T.bgPanel};
           border-top: 1px solid ${T.main}33;
           padding-bottom: env(safe-area-inset-bottom, 0px);
-          width: 100vw;
-          margin-left: calc(-50vw + 50%);
-          margin-right: calc(-50vw + 50%);
-          box-sizing: border-box;
         }
         .navbar-tabs {
           display: flex;
-          max-width: 760px;
           width: 100%;
-          margin: 0 auto;
           padding-left: max(env(safe-area-inset-left, 0px), 16px);
           padding-right: max(env(safe-area-inset-right, 0px), 16px);
           box-sizing: border-box;

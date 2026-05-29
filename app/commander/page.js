@@ -864,7 +864,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
               </span>
               {resa && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: resa.bg, borderRadius: 100, padding: '3px 8px', border: `1px solid ${resa.dot}22` }}>
-                  <span style={{ fontSize: '0.58rem' }}>🟣</span>
+                  <span style={{ fontSize: '0.5rem', lineHeight: 1 }}>🟣</span>
                   <span style={{ fontSize: '0.66rem', fontWeight: 700, color: resa.color }}>{resa.label}</span>
                 </span>
               )}

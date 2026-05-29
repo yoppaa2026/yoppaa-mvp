@@ -624,7 +624,8 @@ export default function CommanderSlug() {
   const [ajustementStock, setAjustementStock] = useState(null)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '' })
   const [rgpdCommande, setRgpdCommande] = useState(false)
-  const [rgpdMarketing, setRgpdMarketing] = useState(false)
+  // Marketing pre-coche par defaut : maximise le taux d'opt-in (l'utilisateur peut decocher s'il refuse)
+  const [rgpdMarketing, setRgpdMarketing] = useState(true)
   const [clientId, setClientId] = useState(null)
   const [joursDispos, setJoursDispos] = useState([])
   const [jourSelectionne, setJourSelectionne] = useState(0)
@@ -2152,7 +2153,7 @@ export default function CommanderSlug() {
                 </svg>
                 Retour à l&apos;accueil
               </button>
-              <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(false); setErreurCommande(null); setAjustementStock(null); setEtape(2) }}
+              <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(true); setErreurCommande(null); setAjustementStock(null); setEtape(2) }}
                 style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
                 Continuer chez {commercant.nom}
               </button>

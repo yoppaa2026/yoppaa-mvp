@@ -2652,6 +2652,165 @@ function QRCodeSection({ commercantId, toast }) {
 
 
 // ─── Onglet AVIS ──────────────────────────────────────────────────────────────
+// ─── Onglet SIGNALEMENTS ─────────────────────────────────────────────────────
+// Le commerçant voit les signalements de problèmes envoyés par les Yoppers et
+// peut les marquer comme vus, traités ou ignorés. Au "traité", on lui rappelle
+// gentiment de vérifier qu'il a bien corrigé l'info dans son profil.
+const SIGN_TYPE_LABEL = {
+  ferme:     'Fermé / disparu',
+  horaires:  'Horaires incorrects',
+  adresse:   'Adresse erronée',
+  telephone: 'Téléphone faux',
+  articles:  'Menu / articles KO',
+  site_web:  'Site web cassé',
+  doublon:   'Fiche en doublon',
+  autre:     'Autre',
+}
+const SIGN_TYPE_ICON = {
+  ferme: '🔒', horaires: '🕐', adresse: '📍', telephone: '📞',
+  articles: '🍞', site_web: '🌐', doublon: '👯', autre: '💬',
+}
+
+function TabSignalements({ commercantId, toast }) {
+  const [signalements, setSignalements] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filtre, setFiltre] = useState('en_attente')
+
+  useEffect(() => { fetchSignalements() }, [commercantId])
+
+  async function fetchSignalements() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('signalements')
+      .select('*')
+      .eq('commercant_id', commercantId)
+      .order('created_at', { ascending: false })
+    setSignalements(data || [])
+    setLoading(false)
+  }
+
+  async function setStatut(id, nouveau) {
+    const payload = { statut: nouveau }
+    if (nouveau === 'vu')     payload.vu_at = new Date().toISOString()
+    if (nouveau === 'traite') payload.traite_at = new Date().toISOString()
+    const { error } = await supabase.from('signalements').update(payload).eq('id', id).select()
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast(nouveau === 'traite' ? 'Marqué comme traité ✓' : nouveau === 'ignore' ? 'Signalement ignoré' : 'Marqué comme vu')
+    fetchSignalements()
+  }
+
+  const filtres = [
+    { key: 'en_attente', label: 'En attente', color: '#DC2626' },
+    { key: 'vu',         label: 'Vus',        color: '#EA580C' },
+    { key: 'traite',     label: 'Traités',    color: '#16A34A' },
+    { key: 'ignore',     label: 'Ignorés',    color: T.muted },
+    { key: 'tous',       label: 'Tous',       color: T.deep },
+  ]
+  const comptes = Object.fromEntries(filtres.map(f => [f.key, signalements.filter(s => f.key === 'tous' || s.statut === f.key).length]))
+  const liste = filtre === 'tous' ? signalements : signalements.filter(s => s.statut === filtre)
+
+  return (
+    <div>
+      <h2 style={s.h2}>Signalements de la tribu</h2>
+      <p style={{ fontSize: 13, color: T.muted, marginBottom: 16, lineHeight: 1.55 }}>
+        Les Yoppers signalent ici les infos qui leur paraissent obsolètes ou incorrectes.
+        Mets à jour ton profil, puis marque comme « traité ».
+      </p>
+
+      {/* Filtres en pills */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+        {filtres.map(f => {
+          const actif = filtre === f.key
+          return (
+            <button key={f.key} onClick={() => setFiltre(f.key)}
+              style={{ padding: '6px 12px', borderRadius: 100, border: `1.5px solid ${actif ? f.color : T.hairline}`, background: actif ? f.color : '#fff', color: actif ? '#fff' : T.deep, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              {f.label}
+              {comptes[f.key] > 0 && (
+                <span style={{ fontSize: 10, fontWeight: 800, background: actif ? 'rgba(255,255,255,0.25)' : `${f.color}22`, color: actif ? '#fff' : f.color, padding: '1px 6px', borderRadius: 100 }}>
+                  {comptes[f.key]}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {loading && <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement…</p>}
+
+      {!loading && liste.length === 0 && (
+        <div style={{ ...s.card, textAlign: 'center', padding: '2rem 1rem' }}>
+          <p style={{ fontSize: '2rem', marginBottom: 8 }}>✨</p>
+          <p style={{ fontWeight: 800, color: T.ink, marginBottom: 4 }}>
+            {filtre === 'en_attente' ? 'Aucun signalement en attente' : 'Aucun signalement dans ce filtre'}
+          </p>
+          <p style={{ fontSize: 13, color: T.muted }}>
+            {filtre === 'en_attente' ? 'Bravo — tes infos sont à jour.' : 'Change de filtre pour voir les autres.'}
+          </p>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {liste.map(sig => {
+          const typeLabel = SIGN_TYPE_LABEL[sig.type] || sig.type
+          const typeIcon  = SIGN_TYPE_ICON[sig.type] || '💬'
+          const couleurStatut = sig.statut === 'en_attente' ? '#DC2626'
+                              : sig.statut === 'vu'         ? '#EA580C'
+                              : sig.statut === 'traite'     ? '#16A34A'
+                              : T.muted
+          return (
+            <div key={sig.id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: `1px solid ${T.hairline}`, borderLeft: `4px solid ${couleurStatut}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>{typeIcon}</span>
+                <span style={{ fontWeight: 800, fontSize: 14, color: T.ink, flex: 1, minWidth: 0 }}>{typeLabel}</span>
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: couleurStatut, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {sig.statut === 'en_attente' ? 'À traiter' : sig.statut === 'vu' ? 'Vu' : sig.statut === 'traite' ? 'Traité' : 'Ignoré'}
+                </span>
+              </div>
+              {sig.description && (
+                <p style={{ fontSize: 13, color: T.deep, lineHeight: 1.5, margin: '0 0 10px', padding: '8px 12px', background: T.bg, borderRadius: 10 }}>
+                  &laquo;&nbsp;{sig.description}&nbsp;&raquo;
+                </p>
+              )}
+              <p style={{ fontSize: 11, color: T.muted, fontWeight: 600, margin: '0 0 10px' }}>
+                Reçu le {new Date(sig.created_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+                {sig.yopper_id && <span> · par un Yopper</span>}
+              </p>
+              {sig.statut === 'en_attente' && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button onClick={() => setStatut(sig.id, 'traite')}
+                    style={{ ...s.btn, ...s.btnPrimary, padding: '7px 14px', fontSize: 12 }}>
+                    ✓ Marquer comme traité
+                  </button>
+                  <button onClick={() => setStatut(sig.id, 'vu')}
+                    style={{ ...s.btn, ...s.btnGhost, padding: '7px 14px', fontSize: 12 }}>
+                    👁 Vu, j&rsquo;y reviens
+                  </button>
+                  <button onClick={() => setStatut(sig.id, 'ignore')}
+                    style={{ ...s.btn, padding: '7px 14px', fontSize: 12, background: '#fff', color: T.muted, border: `1px solid ${T.hairline}` }}>
+                    Ignorer
+                  </button>
+                </div>
+              )}
+              {sig.statut === 'vu' && (
+                <button onClick={() => setStatut(sig.id, 'traite')}
+                  style={{ ...s.btn, ...s.btnPrimary, padding: '7px 14px', fontSize: 12 }}>
+                  ✓ Maintenant traité
+                </button>
+              )}
+              {(sig.statut === 'traite' || sig.statut === 'ignore') && (
+                <button onClick={() => setStatut(sig.id, 'en_attente')}
+                  style={{ ...s.btn, ...s.btnGhost, padding: '7px 14px', fontSize: 12 }}>
+                  Rouvrir
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function TabAvis({ commercantId, toast }) {
   const [avis, setAvis] = useState([])
   const [loading, setLoading] = useState(true)
@@ -2771,6 +2930,21 @@ export default function ConfigDashboard({ commercantId }) {
   const peutDeals = canDo(commercant?.plan, 'deals')
   const peutActus = canDo(commercant?.plan, 'actus')
   const estVitrine = commercant?.categorie === 'vitrine'
+
+  // Compteur des signalements en attente → badge rouge sur l'onglet Signalements
+  const [signalementsEnAttente, setSignalementsEnAttente] = useState(0)
+  useEffect(() => {
+    if (!commercantId) return
+    let annule = false
+    supabase
+      .from('signalements')
+      .select('id', { count: 'exact', head: true })
+      .eq('commercant_id', commercantId)
+      .eq('statut', 'en_attente')
+      .then(({ count }) => { if (!annule) setSignalementsEnAttente(count || 0) })
+    return () => { annule = true }
+  }, [commercantId, tab])
+
   // Vitrine : on parle de "Vitrine" plutôt que "Menu", et on masque "Créneaux" (pas de C&C)
   const tabs = [
     { id: 'menu',     label: estVitrine ? 'Vitrine' : 'Menu', icon: 'menu' },
@@ -2779,6 +2953,7 @@ export default function ConfigDashboard({ commercantId }) {
     !estVitrine && { id: 'creneaux', label: 'Créneaux', icon: 'clock' },
     { id: 'profil',   label: 'Profil',   icon: 'shop' },
     { id: 'avis',     label: 'Avis',     icon: 'star' },
+    { id: 'signalements', label: 'Signalements', icon: 'sliders', badge: signalementsEnAttente },
   ].filter(Boolean)
 
   return (
@@ -2786,9 +2961,14 @@ export default function ConfigDashboard({ commercantId }) {
       <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 14, marginBottom: 20, boxShadow: '0 2px 12px rgba(22,6,54,0.06)', border: `1px solid ${T.hairline}`, flexWrap: 'wrap' }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ flex: 1, minWidth: 80, padding: '10px 4px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, transition: 'all 0.2s', background: tab === t.id ? T.bgPanel : 'transparent', color: tab === t.id ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            style={{ flex: 1, minWidth: 80, padding: '10px 4px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, transition: 'all 0.2s', background: tab === t.id ? T.bgPanel : 'transparent', color: tab === t.id ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, position: 'relative' }}>
             <Icon name={t.icon} size={16} color={tab === t.id ? '#fff' : T.muted}/>
             {t.label}
+            {t.badge > 0 && (
+              <span style={{ background: '#DC2626', color: '#fff', fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 100, minWidth: 16, textAlign: 'center', boxShadow: '0 0 0 2px #fff' }}>
+                {t.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -2799,6 +2979,7 @@ export default function ConfigDashboard({ commercantId }) {
       {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
+      {tab === 'signalements' && <TabSignalements commercantId={commercantId} toast={showToast} />}
 
       <Toast message={toastMsg} type={toastType} />
     </div>

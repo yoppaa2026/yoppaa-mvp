@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -26,6 +26,18 @@ export const metadata: Metadata = {
   },
 };
 
+// Viewport mobile : empêche le zoom auto Safari iOS sur les inputs (cause des
+// décentrages au clic) + cadre l'app à la largeur de l'écran (évite le scroll
+// horizontal involontaire). Garde le zoom utilisateur manuel possible (a11y).
+export const viewport: Viewport = {
+  themeColor: "#6B35C4",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -37,10 +49,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
-        <meta name="theme-color" content="#6B35C4" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Yoppaa" />
+        {/* theme-color, viewport, apple-web-app sont gérés par les exports metadata + viewport de Next.js */}
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className="min-h-full flex flex-col">{children}</body>

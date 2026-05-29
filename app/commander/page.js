@@ -680,6 +680,8 @@ export default function Commander() {
   const [showConfirmCommune, setShowConfirmCommune] = useState(false)
   // Services publics (commune, CPAS, police, urgences) visibles dans la zone
   const [servicesPublics, setServicesPublics] = useState([])
+  // Badge rouge sur l'onglet Services s'il y a au moins une alerte urgente active
+  const [alerteUrgenteActive, setAlerteUrgenteActive] = useState(false)
   const [pickupCommande, setPickupCommande] = useState(null)
   // Tick minute pour rafraichir le compteur "Plus que X min avant ton créneau"
   const [, setNowTick] = useState(0)
@@ -750,6 +752,25 @@ export default function Commander() {
     q.then(({ data }) => { if (!annule) setServicesPublics(data || []) })
     return () => { annule = true }
   }, [commune?.id])
+
+  // Vérifie s'il y a une alerte urgente active sur un service de la zone
+  // → déclenche le badge rouge sur l'onglet Services
+  useEffect(() => {
+    if (servicesPublics.length === 0) { setAlerteUrgenteActive(false); return }
+    let annule = false
+    const today = new Date().toISOString().slice(0, 10)
+    const ids = servicesPublics.map(s => s.id)
+    supabase
+      .from('actualites')
+      .select('id', { count: 'exact', head: true })
+      .in('service_id', ids)
+      .eq('actif', true)
+      .eq('urgence', true)
+      .lte('date_debut', today)
+      .gte('date_fin', today)
+      .then(({ count }) => { if (!annule) setAlerteUrgenteActive((count || 0) > 0) })
+    return () => { annule = true }
+  }, [servicesPublics])
 
   function demanderGeolocalisation() {
     if (!navigator.geolocation) return
@@ -1420,28 +1441,71 @@ export default function Commander() {
           )}
 
           {/* FAVORIS */}
-          {onglet === 'favoris' && (
-            <div>
-              <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #3d1070 100%)`, padding: '1.25rem 1rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 20% 50%, #DC2626 0%, transparent 40%)`, opacity: 0.15, pointerEvents: 'none' }}/>
-                <p style={{ fontSize: '0.62rem', fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 6, opacity: 0.7 }}>Yoppers</p>
-                <h2 style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px' }}>Mes favoris</h2>
-                {favoris.length > 0 && (
-                  <p style={{ fontSize: '0.78rem', color: T.light, marginTop: 6, fontWeight: 600, opacity: 0.8 }}>❤️ {favoris.length} commerce{favoris.length > 1 ? 's' : ''} sauvegardé{favoris.length > 1 ? 's' : ''}</p>
+          {/* SERVICES — onglet dédié, hero + 2 sections (Urgences nationales / Locaux) */}
+          {onglet === 'services' && (() => {
+            const urgences = servicesPublics.filter(s => s.national || s.type === 'urgence')
+            const locaux   = servicesPublics.filter(s => !s.national && s.type !== 'urgence')
+            return (
+              <div>
+                <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, ${T.main} 100%)`, padding: '1.5rem 1rem 1.75rem', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.light}33 0%, transparent 50%)`, pointerEvents: 'none' }}/>
+                  <p style={{ fontSize: '0.62rem', fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 6, opacity: 0.8 }}>Officiel</p>
+                  <h2 style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px', margin: 0 }}>
+                    Services &amp; administrations
+                  </h2>
+                  {commune?.nom && (
+                    <p style={{ fontSize: '0.78rem', color: T.light, marginTop: 6, fontWeight: 600, opacity: 0.85 }}>
+                      de {commune.nom} et services nationaux
+                    </p>
+                  )}
+                </div>
+
+                {servicesPublics.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+                    <p style={{ fontSize: '3rem', marginBottom: 12 }}>🏛️</p>
+                    <p style={{ fontWeight: 800, color: T.ink, marginBottom: 6 }}>Pas de services pour ta zone</p>
+                    <p style={{ fontSize: '0.875rem', color: T.muted, lineHeight: 1.5 }}>
+                      On ajoute les communes au fil de l&rsquo;eau. Reviens bientôt.
+                    </p>
+                  </div>
+                )}
+
+                {urgences.length > 0 && (
+                  <div style={{ padding: '1rem 1rem 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+                        Urgences
+                      </span>
+                      <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>{urgences.length}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
+                      {urgences.map(s => (
+                        <CarteServicePublic key={s.id} s={s} onSelect={() => router.push(`/commander/services/${s.slug}`)}/>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {locaux.length > 0 && (
+                  <div style={{ padding: '1.25rem 1rem 1.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+                        Services locaux{commune?.nom ? ` · ${commune.nom}` : ''}
+                      </span>
+                      <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>{locaux.length}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
+                      {locaux.map(s => (
+                        <CarteServicePublic key={s.id} s={s} onSelect={() => router.push(`/commander/services/${s.slug}`)}/>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
-              <div style={{ padding: '1rem' }}>
-                {commercantsFavoris.length === 0
-                  ? <div style={{ textAlign: 'center', padding: '3rem 0' }}>
-                      <div style={{ fontSize: '3rem', marginBottom: 12 }}>🤍</div>
-                      <p style={{ fontWeight: 800, color: T.ink, marginBottom: 6 }}>Aucun favori</p>
-                      <p style={{ fontSize: '0.875rem', color: T.muted }}>Tape ❤️ sur un commerce pour le retrouver ici.</p>
-                    </div>
-                  : <div className="commerces-grid">{commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} dealsActifs={dealsActifs} actusActives={actusActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}</div>
-                }
-              </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* TRIBU */}
           {onglet === 'tribu' && (
@@ -1514,6 +1578,29 @@ export default function Commander() {
                   ))}
                 </div>
 
+                {/* Mes favoris — accessible si Yopper connecté.
+                    Déplacé ici depuis l'ancien onglet "Favoris" du footer (remplacé par Services). */}
+                {client.email && (
+                  <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px 12px', marginBottom: '0.875rem', border: `1px solid ${T.pale}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                        Mes favoris
+                      </span>
+                      <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>{commercantsFavoris.length}</span>
+                    </div>
+                    {commercantsFavoris.length === 0 ? (
+                      <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5, margin: 0 }}>
+                        Tape l&rsquo;étoile sur un commerce pour le retrouver ici en un clic.
+                      </p>
+                    ) : (
+                      <div className="commerces-grid" style={{ marginTop: 4 }}>
+                        {commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} dealsActifs={dealsActifs} actusActives={actusActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Card "Ma commune" — accessible si Yopper connecté.
                     Clic sur "Changer" ouvre la modale ConfirmCommune en mode 'change'
                     (fermable + liste manuelle directe). */}
@@ -1560,8 +1647,8 @@ export default function Commander() {
         <nav className="navbar hero-fullwidth">
           {[
             { key: 'accueil',   label: 'Accueil',   badge: 0 },
+            { key: 'services',  label: 'Services',  badge: alerteUrgenteActive ? 1 : 0 },
             { key: 'commandes', label: 'Commandes', badge: badgeCommandes },
-            { key: 'favoris',   label: 'Favoris',   badge: 0 },
             { key: 'tribu',     label: 'Tribu',     badge: 0 },
             { key: 'profil',    label: 'Profil',    badge: 0 },
           ].map(item => {
@@ -1591,12 +1678,20 @@ export default function Commander() {
                     )}
                   </svg>
                 )}
-                {item.key === 'favoris' && (
+                {item.key === 'services' && (
+                  /* Icône bâtiment officiel : colonnes type mairie/administration.
+                     Si alerte urgente active → badge rouge rond avec ! en haut à droite. */
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12,5 L13.6,9.2 L18.2,9.6 L14.9,12.4 L15.9,17 L12,14.6 L8.1,17 L9.1,12.4 L5.8,9.6 L10.4,9.2 Z" stroke={stroke} strokeWidth="2.3" strokeLinejoin="round" strokeLinecap="round" opacity={op}/>
-                    <circle cx="8.5" cy="21" r="1.8" fill={actif ? '#C4A0F4' : stroke} opacity={actif ? 1 : 0.35}/>
-                    <circle cx="12" cy="21" r="2.2" fill={actif ? '#C4A0F4' : stroke} opacity={actif ? 1 : 0.5}/>
-                    <circle cx="15.5" cy="21" r="1.8" fill={actif ? '#9660E0' : stroke} opacity={actif ? 0.85 : 0.35}/>
+                    <path d="M3,11 L12,4 L21,11" stroke={stroke} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
+                    <path d="M5,11 L5,20 L19,20 L19,11" stroke={stroke} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
+                    <path d="M8,20 L8,13 M12,20 L12,13 M16,20 L16,13" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
+                    <path d="M3,20 L21,20" stroke={stroke} strokeWidth="2.4" strokeLinecap="round" opacity={op}/>
+                    {item.badge > 0 && (
+                      <>
+                        <circle cx="19" cy="5" r="5.5" fill="#DC2626" stroke="white" strokeWidth="1.8"/>
+                        <text x="19" y="8.8" textAnchor="middle" fontSize="8" fontWeight="900" fill="white" fontFamily="DM Sans,sans-serif">!</text>
+                      </>
+                    )}
                   </svg>
                 )}
                 {item.key === 'tribu' && (

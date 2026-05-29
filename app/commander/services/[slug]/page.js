@@ -150,7 +150,7 @@ export default function FicheServicePublic({ params }) {
           <p style={{ fontSize: 13, color: T.muted, margin: '0 0 18px', lineHeight: 1.5 }}>
             Ce service public n&rsquo;existe pas ou n&rsquo;est pas encore activé.
           </p>
-          <button onClick={() => router.push('/commander')}
+          <button onClick={() => { if (window.history.length > 1) router.back(); else router.push('/commander') }}
             style={{ padding: '10px 22px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.ink}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
             Retour
           </button>
@@ -174,18 +174,32 @@ export default function FicheServicePublic({ params }) {
 
       {/* Topbar : retour */}
       <div style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', borderBottom: `1px solid ${T.hairline}`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button onClick={() => router.push('/commander')}
+        <button onClick={() => { if (window.history.length > 1) router.back(); else router.push('/commander') }}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: T.bgPage, border: 'none', borderRadius: 100, color: T.muted, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
           <IconBack/> Retour
         </button>
       </div>
 
+      {/* Photo de couverture pleine largeur si présente */}
+      {service.photo_couverture_url && (
+        <div style={{ width: '100%', height: 200, position: 'relative', overflow: 'hidden', borderBottom: `1px solid ${T.hairline}` }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: isUrgence ? `linear-gradient(90deg, #DC2626, #B91C1C, #7F1D1D)` : `linear-gradient(90deg, ${T.ink}, ${T.main}, ${T.light})`, zIndex: 2 }}/>
+          <img src={service.photo_couverture_url} alt={service.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+        </div>
+      )}
+
       {/* Hero header */}
       <div style={{ background: '#fff', padding: '20px 18px 18px', borderBottom: `1px solid ${T.hairline}`, position: 'relative' }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: isUrgence ? `linear-gradient(90deg, #DC2626, #B91C1C, #7F1D1D)` : `linear-gradient(90deg, ${T.ink}, ${T.main}, ${T.light})` }}/>
+        {!service.photo_couverture_url && (
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: isUrgence ? `linear-gradient(90deg, #DC2626, #B91C1C, #7F1D1D)` : `linear-gradient(90deg, ${T.ink}, ${T.main}, ${T.light})` }}/>
+        )}
         <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-          <div style={{ width: 64, height: 64, borderRadius: 16, background: isUrgence ? '#FEE2E2' : T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, flexShrink: 0 }}>
-            {emoji}
+          <div style={{ width: 64, height: 64, borderRadius: 16, background: service.logo_url ? '#fff' : (isUrgence ? '#FEE2E2' : T.pale), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: service.logo_url ? `1px solid ${T.pale}` : 'none', marginTop: service.photo_couverture_url ? -48 : 0, boxShadow: service.photo_couverture_url ? '0 4px 16px rgba(26,8,64,0.18)' : 'none' }}>
+            {service.logo_url ? (
+              <img src={service.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            ) : (
+              <span style={{ fontSize: 32 }}>{emoji}</span>
+            )}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>

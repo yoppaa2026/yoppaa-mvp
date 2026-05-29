@@ -475,27 +475,42 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
             ) : (
               <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(article.prix).toFixed(2)}€</p>
             )}
-            {hasOptions && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: T.mid, background: T.pale, padding: '2px 8px', borderRadius: 100 }}>Personnalisable</span>}
+            {hasOptions && (
+              <button onClick={e => { e.stopPropagation(); setShowOptions(v => !v) }}
+                aria-label="Composer cet article"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.65rem', fontWeight: 800, color: T.main, background: T.pale, padding: '3px 9px 3px 7px', borderRadius: 100, border: `1px solid ${T.main}22`, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', letterSpacing: '-0.1px', transition: 'all 0.15s' }}
+                onMouseOver={e => { e.currentTarget.style.background = `${T.main}1f`; e.currentTarget.style.borderColor = `${T.main}55` }}
+                onMouseOut={e => { e.currentTarget.style.background = T.pale; e.currentTarget.style.borderColor = `${T.main}22` }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3l1.9 5.8H20l-5 3.6L17 18l-5-3.6L7 18l2-5.6-5-3.6h6.1L12 3z"/>
+                </svg>
+                Compose +{groupes.length}
+              </button>
+            )}
             {/* Badge DEAL cliquable si article lié à un deal actif */}
             {dealArticle && (
               <button onClick={e => { e.stopPropagation(); if (onClickDeal) onClickDeal(dealArticle) }}
-                style={{ fontSize: '0.62rem', fontWeight: 800, color: '#fff', background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, padding: '3px 10px', borderRadius: 100, border: 'none', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: `0 2px 8px rgba(22,6,54,0.3)`, animation: 'dealGlow 1.8s ease-in-out infinite', fontFamily: '"DM Sans", sans-serif' }}>
-                🔥 Deal
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.62rem', fontWeight: 800, color: '#fff', background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, padding: '3px 10px 3px 8px', borderRadius: 100, border: 'none', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: `0 2px 8px rgba(22,6,54,0.3)`, animation: 'dealGlow 1.8s ease-in-out infinite', fontFamily: '"DM Sans", sans-serif' }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="#FB923C" stroke="#FB923C" strokeWidth="0.5" strokeLinejoin="round">
+                  <path d="M12 2c1 3 3 4 3 7 0 1.5-1 3-3 3s-3-1.5-3-3c0-2 2-3 3-7zm-5 9c-1 0-3 2-3 6 0 4 3 5 8 5s8-1 8-5c0-4-2-6-3-6 0 3-2 5-5 5s-5-2-5-5z"/>
+                </svg>
+                Deal
               </button>
             )}
           </div>
 
           {/* Indicateur stock 3 niveaux — clair et pro */}
           {stockGere && (() => {
+            // Pastilles status : dot taille 9 statique pour harmonisation YOPPAA (status indicator, pas live event)
             if (inactifCeJour) {
               return prochain ? (
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F9FAFB', color: T.muted, padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#9CA3AF' }}/>
+                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#9CA3AF', flexShrink: 0 }}/>
                   Fermé — dispo {prochain.nom}
                 </span>
               ) : (
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F9FAFB', color: T.muted, padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#9CA3AF' }}/>
+                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#9CA3AF', flexShrink: 0 }}/>
                   Indisponible
                 </span>
               )
@@ -503,7 +518,7 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
             if (stockAujourdhui === 0) {
               return (
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#FEE2E2', color: '#DC2626', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#DC2626' }}/>
+                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#DC2626', flexShrink: 0 }}/>
                   Épuisé
                 </span>
               )
@@ -511,14 +526,14 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
             if (stockAujourdhui <= 5) {
               return (
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#FFF7ED', color: '#EA580C', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#EA580C' }}/>
+                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#EA580C', flexShrink: 0 }}/>
                   Plus que {stockAujourdhui}
                 </span>
               )
             }
             return (
               <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F0FDF4', color: '#10B981', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }}/>
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#10B981', flexShrink: 0 }}/>
                 Disponible
               </span>
             )
@@ -528,35 +543,54 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
         {!modeVitrine && !epuiseComplet && !inactifCeJour && !epuiseAujourdhui && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
             {hasOptions ? (
+              // hasOptions : "+ " ouvre les options (au lieu d'ajouter direct). Compteur visible si qte > 0.
+              // Visuel uniforme avec les articles simples : meme bouton "+ " gradient, plus de gros gear violet.
               <>
                 {qteTotale > 0 && (
-                  <div style={{ background: T.main, color: '#fff', fontWeight: 900, fontSize: '0.78rem', borderRadius: 100, minWidth: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>
+                  <div style={{ background: T.main, color: '#fff', fontWeight: 900, fontSize: '0.78rem', borderRadius: 100, minWidth: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px', boxShadow: `0 2px 8px ${T.main}33` }}>
                     {qteTotale}
                   </div>
                 )}
-                <button onClick={() => setShowOptions(v => !v)}
-                  style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: showOptions ? T.mid : T.main, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', boxShadow: `0 3px 12px ${T.main}44` }}>
-                  ⚙️
+                <button onClick={() => setShowOptions(v => !v)} disabled={stockAtteint}
+                  aria-label="Composer cet article"
+                  style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: stockAtteint ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: stockAtteint ? '#9CA3AF' : '#fff', fontWeight: 900, cursor: stockAtteint ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: stockAtteint ? 'none' : `0 4px 14px ${T.main}55`, transition: 'all 0.15s' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 5v14"/>
+                    <path d="M5 12h14"/>
+                  </svg>
                 </button>
               </>
             ) : (
               qteTotale > 0 ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <button onClick={() => retirerDuPanier(keySimple)}
-                    style={{ width: 34, height: 34, borderRadius: 10, border: `2px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 900, cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                    aria-label="Retirer"
+                    style={{ width: 34, height: 34, borderRadius: 10, border: `2px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/></svg>
+                  </button>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, minWidth: 22, textAlign: 'center' }}>{qteTotale}</span>
-                    {stockAtteint && <span style={{ fontSize: '0.5rem', fontWeight: 700, color: T.main, letterSpacing: '0.3px', whiteSpace: 'nowrap' }}>MAX ✓</span>}
+                    {stockAtteint && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 1, fontSize: '0.5rem', fontWeight: 800, color: T.main, letterSpacing: '0.3px', whiteSpace: 'nowrap', lineHeight: 1 }}>
+                        MAX
+                        <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                      </span>
+                    )}
                   </div>
                   <button onClick={() => !stockAtteint && ajouterAuPanier(article)} disabled={stockAtteint}
-                    style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: stockAtteint ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: stockAtteint ? '#9CA3AF' : '#fff', fontWeight: 900, cursor: stockAtteint ? 'default' : 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: stockAtteint ? 'none' : `0 4px 14px ${T.main}55`, transition: 'all 0.15s' }}>+</button>
+                    aria-label="Ajouter"
+                    style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: stockAtteint ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: stockAtteint ? '#9CA3AF' : '#fff', fontWeight: 900, cursor: stockAtteint ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: stockAtteint ? 'none' : `0 4px 14px ${T.main}55`, transition: 'all 0.15s' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                  </button>
                 </div>
               ) : (
-                // FIX : bouton initial aussi bloqué si stock déjà atteint (cas où quelqu'un a commandé entre-temps)
                 <button
                   onClick={() => !stockAtteint && ajouterAuPanier(article)}
                   disabled={stockAtteint}
-                  style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: stockAtteint ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: stockAtteint ? '#9CA3AF' : '#fff', fontWeight: 900, cursor: stockAtteint ? 'default' : 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: stockAtteint ? 'none' : `0 4px 14px ${T.main}55` }}>+</button>
+                  aria-label="Ajouter"
+                  style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: stockAtteint ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: stockAtteint ? '#9CA3AF' : '#fff', fontWeight: 900, cursor: stockAtteint ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: stockAtteint ? 'none' : `0 4px 14px ${T.main}55` }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                </button>
               )
             )}
           </div>
@@ -1657,10 +1691,15 @@ export default function CommanderSlug() {
                     <a href={urlResa} target="_blank" rel="noopener noreferrer"
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 18px', borderRadius: 14, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', textDecoration: 'none', boxShadow: `0 6px 22px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 20, flexShrink: 0 }}>📅</span>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                          <rect x="3" y="5" width="18" height="16" rx="2"/>
+                          <path d="M3 9h18M8 3v4M16 3v4"/>
+                        </svg>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelResa || 'Réserver en ligne'}</span>
                       </span>
-                      <span style={{ fontSize: '1rem', flexShrink: 0 }}>→</span>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                      </svg>
                     </a>
                   </div>
                 )}
@@ -1683,8 +1722,12 @@ export default function CommanderSlug() {
               {/* Sélecteur de jour de retrait — pilote les stocks affichés et les créneaux dispo */}
               {peutCommander && joursDispos.length > 0 && (
                 <div style={{ background: '#fff', borderBottom: `1px solid ${T.pale}`, padding: '0.625rem 1rem 0.5rem' }}>
-                  <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
-                    🗓️ Je récupère le
+                  <p style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.65rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="5" width="18" height="16" rx="2"/>
+                      <path d="M3 9h18M8 3v4M16 3v4"/>
+                    </svg>
+                    Je récupère le
                   </p>
                   <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
                     {joursDispos.map((jour, idx) => {

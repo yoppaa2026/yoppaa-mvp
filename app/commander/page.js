@@ -825,12 +825,15 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
 
   return (
     <div onClick={() => onSelect(c)}
-      style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', marginBottom: '0.875rem', cursor: 'pointer', boxShadow: '0 2px 12px rgba(107,53,196,0.07)', border: `1px solid ${T.pale}`, transition: 'all 0.2s' }}
-      onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(107,53,196,0.14)' }}
-      onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(107,53,196,0.07)' }}>
+      style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', marginBottom: '0.875rem', cursor: 'pointer', boxShadow: '0 1px 4px rgba(26,8,64,0.04)', border: `1px solid ${T.pale}`, transition: 'all 0.2s' }}
+      onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 12px 32px rgba(26,8,64,0.12)`; e.currentTarget.style.borderColor = T.light }}
+      onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(26,8,64,0.04)'; e.currentTarget.style.borderColor = T.pale }}>
 
-      {/* Bande haute : violet vif si Click & Collect actif, gris-violet doux sinon */}
-      <div style={{ height: 5, background: peutCommander ? `linear-gradient(90deg, ${T.main}, ${T.mid})` : `linear-gradient(90deg, ${T.light}, ${T.pale})` }}/>
+      {/* Bande haute fine 3px — signature visuelle canonique Yoppaa (Ink → Main → Light).
+          Si C&C actif : vibrante. Sinon : plus douce pour signaler le mode lecture seule. */}
+      <div style={{ height: 3, background: peutCommander
+        ? `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`
+        : `linear-gradient(90deg, ${T.pale}, ${T.light})` }}/>
 
       <div style={{ padding: '0.875rem 1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
@@ -860,14 +863,27 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
                 </span>
               )}
               {c.distance != null && (
-                <span style={{ fontSize: '0.7rem', color: T.muted, fontWeight: 500 }}>📍 {formatDistance(c.distance)}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.7rem', color: T.muted, fontWeight: 600 }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  {formatDistance(c.distance)}
+                </span>
               )}
             </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <div style={{ width: 56, height: 56, borderRadius: 14, background: T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(107,53,196,0.12)' }}>
-              {c.logo_url ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <span style={{ fontSize: '1.5rem' }}>🏪</span>}
+            <div style={{ width: 56, height: 56, borderRadius: 14, background: c.logo_url ? '#fff' : T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(26,8,64,0.08)', border: c.logo_url ? `1px solid ${T.pale}` : 'none' }}>
+              {c.logo_url
+                ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                : <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 9 4 5h16l1 4v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0Z"/>
+                    <path d="M5 11v10h14V11"/>
+                    <path d="M9 21v-6h6v6"/>
+                  </svg>
+              }
             </div>
             <button onClick={e => onToggleFavori(c.id, e)}
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, transition: 'transform 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}

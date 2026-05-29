@@ -24,6 +24,8 @@ function AuthForm() {
   const [password, setPassword] = useState('')
   const [prenom, setPrenom] = useState('')
   const [nom, setNom] = useState('')
+  // Telephone obligatoire a l'inscription : indispensable pour suivi commande + resolution probleme retrait
+  const [telephone, setTelephone] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
 
@@ -40,17 +42,21 @@ function AuthForm() {
 
   async function sauvegarderClient(user) {
     if (!user) return
+    // Fetch les vrais champs prenom/nom/telephone (SQL migration appliquee)
     const { data: client } = await supabase
       .from('clients')
-      .select('id, nom, email')
+      .select('id, nom, prenom, email, telephone')
       .eq('email', user.email)
       .single()
     if (client) {
       localStorage.setItem('yoppaa_client_id', client.id)
       localStorage.setItem('yoppaa_email', client.email)
-      const prenomDB = (client.nom || '').trim()
+      // Priorite : champ prenom dedie en DB, sinon ce qui est en localStorage
+      const prenomDB = (client.prenom || '').trim()
       const prenomLocal = localStorage.getItem('yoppaa_prenom') || ''
       localStorage.setItem('yoppaa_prenom', prenomDB || prenomLocal)
+      if (client.nom) localStorage.setItem('yoppaa_nom', client.nom)
+      if (client.telephone) localStorage.setItem('yoppaa_telephone', client.telephone)
     }
     localStorage.setItem('yoppaa_onboarding_done', '1')
   }
@@ -89,7 +95,8 @@ function AuthForm() {
   }
 
   async function sInscrire() {
-    if (!email.trim() || !password.trim() || !prenom.trim()) return
+    // Champs obligatoires : prenom, nom, email, password, telephone (suivi commande + retrait)
+    if (!email.trim() || !password.trim() || !prenom.trim() || !nom.trim() || !telephone.trim()) return
     setLoading(true); setMessage(null)
     const nomComplet = `${prenom.trim()} ${nom.trim()}`.trim()
     const { data, error } = await supabase.auth.signUp({
@@ -106,10 +113,13 @@ function AuthForm() {
       return
     }
     if (data.user) {
-      // auth_user_id : lien Supabase Auth ↔ table clients (requis par les RLS)
+      // auth_user_id : lien Supabase Auth <-> table clients (requis par les RLS)
+      // Save les 3 champs separes : prenom, nom, telephone (colonnes ajoutees par migration)
       await supabase.from('clients').upsert({
         email: email.trim().toLowerCase(),
-        nom: prenom.trim(),
+        prenom: prenom.trim(),
+        nom: nom.trim(),
+        telephone: telephone.trim(),
         auth_user_id: data.user.id,
       }, { onConflict: 'email' })
       const { data: client } = await supabase.from('clients').select('id').eq('email', email.trim().toLowerCase()).single()
@@ -117,6 +127,8 @@ function AuthForm() {
         localStorage.setItem('yoppaa_client_id', client.id)
         localStorage.setItem('yoppaa_email', email.trim().toLowerCase())
         localStorage.setItem('yoppaa_prenom', prenom.trim())
+        localStorage.setItem('yoppaa_nom', nom.trim())
+        localStorage.setItem('yoppaa_telephone', telephone.trim())
       }
       localStorage.setItem('yoppaa_onboarding_done', '1')
     }
@@ -219,14 +231,16 @@ function AuthForm() {
         <div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 0 }}>
             <input placeholder="Prénom *" type="text" value={prenom} onChange={e => setPrenom(e.target.value)} style={{ ...inputSt, marginBottom: 0 }} autoFocus/>
-            <input placeholder="Nom" type="text" value={nom} onChange={e => setNom(e.target.value)} style={{ ...inputSt, marginBottom: 0 }}/>
+            <input placeholder="Nom *" type="text" value={nom} onChange={e => setNom(e.target.value)} style={{ ...inputSt, marginBottom: 0 }}/>
           </div>
           <div style={{ height: 10 }}/>
           <input placeholder="ton@email.com *" type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputSt}/>
+          <input placeholder="Téléphone *" type="tel" value={telephone} onChange={e => setTelephone(e.target.value)} style={inputSt}/>
+          <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.45)', marginBottom: 10, paddingLeft: 4, lineHeight: 1.4 }}>Pour le suivi de tes commandes et en cas de souci au retrait.</p>
           <input placeholder="Mot de passe *" type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && sInscrire()} style={inputSt}/>
           <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.35)', marginBottom: 12, paddingLeft: 4 }}>Minimum 6 caractères</p>
-          <button onClick={sInscrire} disabled={!email.trim() || !password.trim() || !prenom.trim() || loading}
-            style={{ ...btnPrimary, opacity: !email.trim() || !password.trim() || !prenom.trim() || loading ? 0.5 : 1 }}>
+          <button onClick={sInscrire} disabled={!email.trim() || !password.trim() || !prenom.trim() || !nom.trim() || !telephone.trim() || loading}
+            style={{ ...btnPrimary, opacity: !email.trim() || !password.trim() || !prenom.trim() || !nom.trim() || !telephone.trim() || loading ? 0.5 : 1 }}>
             {loading ? 'Création...' : 'Créer mon compte Yopper 🟣'}
           </button>
           <button onClick={() => setMode('login')}

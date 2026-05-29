@@ -673,10 +673,22 @@ export default function CommanderSlug() {
     const email = localStorage.getItem('yoppaa_email')
     const prenom = localStorage.getItem('yoppaa_prenom')
     const nom = localStorage.getItem('yoppaa_nom')
+    const telephone = localStorage.getItem('yoppaa_telephone')
     const id = localStorage.getItem('yoppaa_client_id')
     if (email && id) {
-      setClient(p => ({ ...p, email, prenom: prenom || '', nom: nom || '' }))
+      // Pre-remplir TOUS les champs (telephone inclus depuis la migration SQL clients)
+      setClient(p => ({ ...p, email, prenom: prenom || '', nom: nom || '', telephone: telephone || '' }))
       setClientId(id)
+      // Si telephone manquant en local (compte cree avant migration), tenter de le recharger depuis la DB
+      if (!telephone) {
+        supabase.from('clients').select('prenom, nom, telephone').eq('id', id).single().then(({ data }) => {
+          if (data) {
+            if (data.prenom) { localStorage.setItem('yoppaa_prenom', data.prenom); setClient(p => ({ ...p, prenom: data.prenom })) }
+            if (data.nom) { localStorage.setItem('yoppaa_nom', data.nom); setClient(p => ({ ...p, nom: data.nom })) }
+            if (data.telephone) { localStorage.setItem('yoppaa_telephone', data.telephone); setClient(p => ({ ...p, telephone: data.telephone })) }
+          }
+        })
+      }
     }
 
     const cacheKey = `yoppaa_commerce_${slug}`
@@ -1141,21 +1153,29 @@ export default function CommanderSlug() {
 
   async function getOuCreerClient(email, prenom, nom) {
     const nomComplet = `${prenom} ${nom}`.trim()
+    const telephone = client.telephone || ''
     const { data: ex } = await supabase.from('clients').select('id').eq('email', email).single()
     let id = ex?.id
     if (!ex) {
       // Si une session Supabase Auth est active : on lie le client par auth_user_id (RLS)
+      // Save prenom/nom/telephone separes (colonnes ajoutees par migration)
       const { data: { user } } = await supabase.auth.getUser()
-      const payload = user ? { email, nom: nomComplet, auth_user_id: user.id } : { email, nom: nomComplet }
+      const base = { email, prenom, nom: nomComplet, telephone }
+      const payload = user ? { ...base, auth_user_id: user.id } : base
       const { data: inserted } = await supabase.from('clients').insert(payload).select('id').single()
       id = inserted?.id
     }
     if (!id) return null
+    // Si le client existait deja mais sans telephone (compte cree avant migration), update
+    if (ex && telephone) {
+      await supabase.from('clients').update({ prenom, nom: nomComplet, telephone }).eq('id', id)
+    }
     setClientId(id)
     localStorage.setItem('yoppaa_client_id', id)
     localStorage.setItem('yoppaa_email', email)
     localStorage.setItem('yoppaa_prenom', prenom)
     localStorage.setItem('yoppaa_nom', nom)
+    if (telephone) localStorage.setItem('yoppaa_telephone', telephone)
     return id
   }
 

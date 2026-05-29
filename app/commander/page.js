@@ -851,10 +851,6 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
               </button>
             </div>
             <Badges type={c.type}/>
-            {/* Pills statut : 5 pills sur une ligne unique (size xs, labels abreges) */}
-            <div style={{ marginTop: 6 }}>
-              <PillsStatut commercant={c} dealActif={dealsActifs?.has(c.id) || false} actuActive={actusActives?.has(c.id) || false} size="xs"/>
-            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
               <Etoiles note={noteInfo?.moyenne || 0} taille={11}/>
               <span style={{ fontSize: '0.68rem', color: noteInfo?.count > 0 ? T.muted : '#D1D5DB' }}>
@@ -894,6 +890,10 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
                 </svg>
             }
           </div>
+        </div>
+        {/* Pills statut sur toute la largeur de la card : 5 pills une seule ligne, labels complets */}
+        <div style={{ marginTop: 8 }}>
+          <PillsStatut commercant={c} dealActif={dealsActifs?.has(c.id) || false} actuActive={actusActives?.has(c.id) || false} size="xs"/>
         </div>
       </div>
     </div>

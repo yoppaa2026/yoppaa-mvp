@@ -101,6 +101,76 @@ function Etoiles({ note, taille = 13 }) {
   const n = note ? Math.round(note) : 0
   return <span style={{ display: 'inline-flex', gap: 1 }}>{[1,2,3,4,5].map(i => <span key={i} style={{ fontSize: taille, color: i<=n ? '#F59E0B' : '#D1D5DB' }}>★</span>)}</span>
 }
+
+// ─── Icônes SVG réutilisables (design system canonique) ─────────────────────
+// Remplace les emojis UI : strokeWidth 2, round caps, palette stricte.
+// Les emojis types de commerce (🥐 🌯 🍕…) restent (illustration légitime).
+function IconBag({ size = 28, color = T.muted }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/>
+      <path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>
+    </svg>
+  )
+}
+function IconBox({ size = 20, color = T.main }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+      <path d="m3.27 6.96 8.73 5.05 8.73-5.05M12 22.08V12"/>
+    </svg>
+  )
+}
+function IconEuro({ size = 20, color = T.mid }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M4 10h12M4 14h9"/>
+      <path d="M19 5.6A8 8 0 0 0 13 3a9 9 0 0 0 0 18 8 8 0 0 0 6-2.6"/>
+    </svg>
+  )
+}
+function IconClock({ size = 16, color = T.muted }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M12 6v6l4 2"/>
+    </svg>
+  )
+}
+function IconHeart({ size = 36, color = T.muted, filled = false }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? color : 'none'} stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/>
+    </svg>
+  )
+}
+function IconSearch({ size = 36, color = T.muted }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <circle cx="11" cy="11" r="8"/>
+      <path d="m21 21-4.35-4.35"/>
+    </svg>
+  )
+}
+function IconSparkle({ size = 18, color = T.main }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+      <path d="M5 3v4M19 17v4M3 5h4M17 19h4"/>
+    </svg>
+  )
+}
+// Mini signature Yoppaa : 3 points tricolores inline (remplace les 🟣 décoratifs)
+function PointsYoppaa({ size = 5, gap = 3 }) {
+  const couleurs = ['#ffffff', T.light, T.mid]
+  return (
+    <span style={{ display: 'inline-flex', gap, alignItems: 'center', verticalAlign: 'middle', marginLeft: 4 }}>
+      {couleurs.map((c, i) => (
+        <span key={i} style={{ width: size, height: size, borderRadius: '50%', background: c, opacity: i === 0 ? 0.55 : 1, boxShadow: `0 0 4px ${c}55` }}/>
+      ))}
+    </span>
+  )
+}
 function heureEnMinutes(heure) {
   const [h, m] = heure.slice(0, 5).split(':').map(Number)
   return h * 60 + m
@@ -1439,9 +1509,11 @@ export default function Commander() {
               )}
               {commercantsFiltres.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem 0' }}>
-                  <p style={{ fontSize: '2.5rem', marginBottom: 10 }}>🔍</p>
-                  <p style={{ fontWeight: 700, color: T.muted, marginBottom: 4 }}>Aucun résultat</p>
-                  <p style={{ fontSize: '0.875rem', color: '#9CA3AF' }}>Essaie une autre catégorie ou recherche.</p>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 72, height: 72, borderRadius: 18, background: T.pale, marginBottom: 14 }}>
+                    <IconSearch size={36} color={T.main}/>
+                  </div>
+                  <p style={{ fontWeight: 800, color: T.ink, marginBottom: 4, letterSpacing: '-0.2px' }}>Aucun résultat</p>
+                  <p style={{ fontSize: '0.875rem', color: T.muted }}>Essaie une autre catégorie ou recherche.</p>
                 </div>
               ) : (
                 <div className="commerces-grid">
@@ -1567,8 +1639,10 @@ export default function Commander() {
               )}
               {commandesASwiper.length === 0 && commandesEnCours.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '3rem 0' }}>
-                  <div style={{ fontSize: '3rem', marginBottom: 12 }}>🛍️</div>
-                  <p style={{ fontWeight: 800, color: T.ink, marginBottom: 6, fontSize: '1rem' }}>Aucune commande en cours</p>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 80, height: 80, borderRadius: 20, background: T.pale, marginBottom: 16 }}>
+                    <IconBag size={40} color={T.main}/>
+                  </div>
+                  <p style={{ fontWeight: 800, color: T.ink, marginBottom: 6, fontSize: '1rem', letterSpacing: '-0.2px' }}>Aucune commande en cours</p>
                   <p style={{ fontSize: '0.875rem', color: T.muted, marginBottom: '1.5rem' }}>Tes commandes actives apparaîtront ici.</p>
                   <button onClick={() => setOnglet('accueil')} style={{ ...btnPrimary, width: 'auto', padding: '0.75rem 1.5rem' }}>Commander maintenant</button>
                 </div>
@@ -1770,22 +1844,27 @@ export default function Commander() {
 
               <div style={{ padding: '0 1rem 1rem', marginTop: '-1.25rem' }}>
                 <div style={{ background: '#fff', borderRadius: 20, padding: '1.5rem', marginBottom: '0.875rem', textAlign: 'center', boxShadow: `0 4px 20px ${T.main}14`, border: `1px solid ${T.pale}` }}>
-                  <p style={{ fontSize: '0.65rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>⏱ Temps économisé en file</p>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                    <IconClock size={12} color={T.muted}/>
+                    <p style={{ fontSize: '0.65rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Temps économisé en file</p>
+                  </div>
                   <p style={{ fontSize: '3.5rem', fontWeight: 900, color: T.main, letterSpacing: '-3px', marginBottom: 4, lineHeight: 1 }}>
                     {tempsEconomise >= 60 ? `${Math.floor(tempsEconomise/60)}h${tempsEconomise%60>0?tempsEconomise%60+'min':''}` : `${tempsEconomise} min`}
                   </p>
                   <p style={{ fontSize: '0.82rem', color: T.muted }}>
-                    {clientCommandes.filter(c=>c.statut==='recupere').length} commande{clientCommandes.filter(c=>c.statut==='recupere').length>1?'s':''} sans faire la file 🎉
+                    {clientCommandes.filter(c=>c.statut==='recupere').length} commande{clientCommandes.filter(c=>c.statut==='recupere').length>1?'s':''} sans faire la file
                   </p>
                 </div>
 
                 <div className="grid2" style={{ marginBottom: '0.875rem' }}>
                   {[
-                    { label: 'Commandes', value: clientCommandes.length, color: T.main, bg: T.pale, icon: '📦' },
-                    { label: 'Total dépensé', value: `${clientCommandes.reduce((acc,c)=>acc+Number(c.total),0).toFixed(0)}€`, color: T.mid, bg: `${T.mid}18`, icon: '💰' },
+                    { label: 'Commandes', value: clientCommandes.length, color: T.main, bg: T.pale, Icon: IconBox },
+                    { label: 'Total dépensé', value: `${clientCommandes.reduce((acc,c)=>acc+Number(c.total),0).toFixed(0)}€`, color: T.mid, bg: `${T.mid}18`, Icon: IconEuro },
                   ].map((s,i) => (
                     <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '1rem', textAlign: 'center', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>
-                      <p style={{ fontSize: '1.2rem', marginBottom: 4 }}>{s.icon}</p>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 10, background: s.bg, marginBottom: 6 }}>
+                        <s.Icon size={20} color={s.color}/>
+                      </div>
                       <p style={{ fontSize: '0.62rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 5 }}>{s.label}</p>
                       <p style={{ fontSize: '1.75rem', fontWeight: 900, color: s.color, letterSpacing: '-1px' }}>{s.value}</p>
                     </div>

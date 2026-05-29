@@ -1778,13 +1778,28 @@ export default function Commander() {
           {/* COMMANDES */}
           {onglet === 'commandes' && (
             <div>
-              {/* Hero header commandes */}
-              <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #1e0950 100%)`, padding: '1.25rem 1rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 30%, ${T.main}44 0%, transparent 60%)`, pointerEvents: 'none' }}/>
-                <p style={{ fontSize: '0.62rem', fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 6, opacity: 0.7 }}>Yoppers</p>
-                <h2 style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px' }}>Mes commandes</h2>
+              {/* Hero header commandes — pattern canonique : 3px bar + radial multi + 3 points tricolores + eyebrow */}
+              <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #1e0950 100%)`, padding: '0.875rem 1rem 1.25rem', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
+                <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 20%, ${T.main}44 0%, transparent 55%), radial-gradient(circle at 10% 90%, ${T.light}14 0%, transparent 50%)`, pointerEvents: 'none' }}/>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, position: 'relative' }}>
+                  <div style={{ display: 'flex', gap: 3 }}>
+                    {[
+                      { c: '#fff',  o: 0.5, delay: '0s',   size: 5 },
+                      { c: T.light, o: 1,   delay: '0.3s', size: 6 },
+                      { c: T.mid,   o: 1,   delay: '0.6s', size: 5 },
+                    ].map((d, i) => (
+                      <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 8px ${d.c}aa`, animation: `dot-pulse 2s ease-in-out ${d.delay} infinite` }}/>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>Yoppers</p>
+                </div>
+                <h2 style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-0.6px', margin: 0, position: 'relative', lineHeight: 1.1 }}>
+                  <span style={{ color: '#fff' }}>Mes </span>
+                  <span style={{ color: T.light }}>commandes</span>
+                </h2>
                 {badgeCommandes > 0 && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.12)', borderRadius: 100, padding: '4px 12px', marginTop: 8, border: '1px solid rgba(255,255,255,0.15)' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(4px)', borderRadius: 100, padding: '4px 12px', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', position: 'relative' }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', border: '1.5px solid #fff', boxShadow: '0 0 0 1.5px #10B98133, 0 0 8px #10B98199', animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff' }}>{badgeCommandes} commande{badgeCommandes > 1 ? 's' : ''} en cours</span>
                   </div>
@@ -1910,14 +1925,27 @@ export default function Commander() {
             const locaux   = servicesPublics.filter(s => !s.national && s.type !== 'urgence')
             return (
               <div>
-                <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, ${T.main} 100%)`, padding: '1.5rem 1rem 1.75rem', position: 'relative', overflow: 'hidden' }}>
-                  <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.light}33 0%, transparent 50%)`, pointerEvents: 'none' }}/>
-                  <p style={{ fontSize: '0.62rem', fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 6, opacity: 0.8 }}>Officiel</p>
-                  <h2 style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px', margin: 0 }}>
-                    Services &amp; administrations
+                <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, ${T.main} 100%)`, padding: '0.875rem 1rem 1.25rem', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
+                  <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 20%, ${T.light}33 0%, transparent 55%), radial-gradient(circle at 10% 90%, ${T.mid}22 0%, transparent 50%)`, pointerEvents: 'none' }}/>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, position: 'relative' }}>
+                    <div style={{ display: 'flex', gap: 3 }}>
+                      {[
+                        { c: '#fff',  o: 0.5, delay: '0s',   size: 5 },
+                        { c: T.light, o: 1,   delay: '0.3s', size: 6 },
+                        { c: T.mid,   o: 1,   delay: '0.6s', size: 5 },
+                      ].map((d, i) => (
+                        <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 8px ${d.c}aa`, animation: `dot-pulse 2s ease-in-out ${d.delay} infinite` }}/>
+                      ))}
+                    </div>
+                    <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>Officiel</p>
+                  </div>
+                  <h2 style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-0.6px', margin: 0, lineHeight: 1.1, position: 'relative' }}>
+                    <span style={{ color: '#fff' }}>Services </span>
+                    <span style={{ color: T.light }}>&amp; administrations</span>
                   </h2>
                   {commune?.nom && (
-                    <p style={{ fontSize: '0.78rem', color: T.light, marginTop: 6, fontWeight: 600, opacity: 0.85 }}>
+                    <p style={{ fontSize: '0.78rem', color: T.light, marginTop: 6, fontWeight: 600, opacity: 0.85, position: 'relative' }}>
                       de {commune.nom} et services nationaux
                     </p>
                   )}
@@ -2053,17 +2081,34 @@ export default function Commander() {
           {/* PROFIL */}
           {onglet === 'profil' && (
             <div>
-              <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #1e0950 100%)`, padding: '1.5rem 1rem 2.5rem', position: 'relative', overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 50%, ${T.main}44 0%, transparent 50%)`, pointerEvents: 'none' }}/>
+              <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #1e0950 100%)`, padding: '0.875rem 1rem 2.25rem', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
+                <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 50%, ${T.main}44 0%, transparent 55%), radial-gradient(circle at 10% 90%, ${T.light}18 0%, transparent 50%)`, pointerEvents: 'none' }}/>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, position: 'relative' }}>
+                  <div style={{ display: 'flex', gap: 3 }}>
+                    {[
+                      { c: '#fff',  o: 0.5, delay: '0s',   size: 5 },
+                      { c: T.light, o: 1,   delay: '0.3s', size: 6 },
+                      { c: T.mid,   o: 1,   delay: '0.6s', size: 5 },
+                    ].map((d, i) => (
+                      <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 8px ${d.c}aa`, animation: `dot-pulse 2s ease-in-out ${d.delay} infinite` }}/>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>{client.email ? 'Mon profil' : 'Bienvenue'}</p>
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
                   <div style={{ width: 60, height: 60, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', flexShrink: 0, boxShadow: `0 6px 20px ${T.main}66, 0 0 0 3px rgba(255,255,255,0.15)` }}>👤</div>
-                  <div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     {client.email
                       ? <EditablePrenom client={client} setClient={setClient} clientId={clientId}/>
                       : <div>
-                          <p style={{ fontWeight: 900, color: '#fff', marginBottom: 10, fontSize: '1.1rem' }}>Les Yoppers 🟣</p>
+                          <p style={{ fontWeight: 900, marginBottom: 10, fontSize: '1.2rem', letterSpacing: '-0.4px' }}>
+                            <span style={{ color: '#fff' }}>Les </span>
+                            <span style={{ color: T.light }}>Yoppers</span>
+                            <span style={{ color: T.mid }}> 🟣</span>
+                          </p>
                           <button onClick={() => router.push('/commander/auth?redirect=/commander')}
-                            style={{ padding: '0.625rem 1.25rem', background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: 100, color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                            style={{ padding: '0.625rem 1.25rem', background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(4px)', border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: 100, color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                             Se connecter →
                           </button>
                         </div>

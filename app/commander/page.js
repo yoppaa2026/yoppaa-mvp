@@ -837,11 +837,23 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
       <div style={{ padding: '0.625rem 0.875rem 0.75rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontWeight: 900, color: T.ink, margin: '0 0 4px', fontSize: '0.95rem', letterSpacing: '-0.3px', lineHeight: 1.2 }}>{c.nom}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <p style={{ fontWeight: 900, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.3px', lineHeight: 1.2, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nom}</p>
+              <button onClick={e => onToggleFavori(c.id, e)}
+                aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s' }}
+                onMouseOver={e => e.currentTarget.style.transform = 'scale(1.2)'}
+                onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill={estFavori ? '#C4A0F4' : 'none'} xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12,3 L14.5,9 L21.5,9.5 L16.5,14 L18.2,21 L12,17.5 L5.8,21 L7.5,14 L2.5,9.5 L9.5,9 Z"
+                    stroke={estFavori ? '#9660E0' : '#D1D5DB'} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
             <Badges type={c.type}/>
-            {/* Pills statut : 5 pills toujours visibles, dot LIVE orange si actif */}
+            {/* Pills statut : 5 pills sur une ligne unique (size xs, labels abreges) */}
             <div style={{ marginTop: 6 }}>
-              <PillsStatut commercant={c} dealActif={dealsActifs?.has(c.id) || false} actuActive={actusActives?.has(c.id) || false} size="sm"/>
+              <PillsStatut commercant={c} dealActif={dealsActifs?.has(c.id) || false} actuActive={actusActives?.has(c.id) || false} size="xs"/>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
               <Etoiles note={noteInfo?.moyenne || 0} taille={11}/>
@@ -872,26 +884,15 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <div style={{ width: 48, height: 48, borderRadius: 12, background: c.logo_url ? '#fff' : T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(26,8,64,0.08)', border: c.logo_url ? `1px solid ${T.pale}` : 'none' }}>
-              {c.logo_url
-                ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 9 4 5h16l1 4v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0Z"/>
-                    <path d="M5 11v10h14V11"/>
-                    <path d="M9 21v-6h6v6"/>
-                  </svg>
-              }
-            </div>
-            <button onClick={e => onToggleFavori(c.id, e)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, transition: 'transform 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              onMouseOver={e => e.currentTarget.style.transform = 'scale(1.2)'}
-              onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill={estFavori ? '#C4A0F4' : 'none'} xmlns="http://www.w3.org/2000/svg">
-                <path d="M12,3 L14.5,9 L21.5,9.5 L16.5,14 L18.2,21 L12,17.5 L5.8,21 L7.5,14 L2.5,9.5 L9.5,9 Z"
-                  stroke={estFavori ? '#9660E0' : '#D1D5DB'} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
-              </svg>
-            </button>
+          <div style={{ width: 48, height: 48, borderRadius: 12, background: c.logo_url ? '#fff' : T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(26,8,64,0.08)', border: c.logo_url ? `1px solid ${T.pale}` : 'none', flexShrink: 0 }}>
+            {c.logo_url
+              ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+              : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9 4 5h16l1 4v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0Z"/>
+                  <path d="M5 11v10h14V11"/>
+                  <path d="M9 21v-6h6v6"/>
+                </svg>
+            }
           </div>
         </div>
       </div>

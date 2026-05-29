@@ -10,14 +10,19 @@ const C = {
   unavail:   { bg: '#FAFAFA', color: '#D1D5DB',  border: '#F3F4F6' }, // services-only
 }
 
+// Labels abreges pour size="xs" : tient sur une ligne meme sur iPhone SE
+const LABELS_XS = { enligne: 'EN', deal: 'DEAL', actu: 'ACTU', commande: 'CMD', livraison: 'LIV' }
+
 export default function PillsStatut({ commercant, dealActif = false, actuActive = false, size = 'sm' }) {
   const pills = getPillsStatut(commercant, { dealActif, actuActive })
-  const fontSize = size === 'lg' ? '0.7rem' : '0.58rem'
-  const padding  = size === 'lg' ? '5px 11px' : '3px 8px'
-  const iconSize = size === 'lg' ? 10 : 8
+  const fontSize = size === 'lg' ? '0.7rem' : size === 'xs' ? '0.55rem' : '0.58rem'
+  const padding  = size === 'lg' ? '5px 11px' : size === 'xs' ? '3px 6px' : '3px 8px'
+  const iconSize = size === 'lg' ? 10 : size === 'xs' ? 7 : 8
+  const gap      = size === 'xs' ? 3 : 4
+  const xs       = size === 'xs'
 
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+    <div style={{ display: 'flex', flexWrap: xs ? 'nowrap' : 'wrap', gap, overflow: xs ? 'hidden' : 'visible' }}>
       {pills.map(p => {
         const style = p.indisponible ? C.unavail : (p.actif ? C.on : C.off)
         return (
@@ -33,15 +38,17 @@ export default function PillsStatut({ commercant, dealActif = false, actuActive 
                 <path d="M5 12h14"/>
               </svg>
             )}
-            {p.label}
+            {xs ? (LABELS_XS[p.key] || p.label) : p.label}
             {/* Dot LIVE pulsant : violet pour DEAL, rouge pour ACTU.
                 Plus gros + animation marquee pour attirer l'oeil */}
             {p.live && (() => {
               const isDeal = p.key === 'deal'
               const liveColor = isDeal ? '#6B35C4' : '#DC2626' // violet ou rouge
-              const liveSize = size === 'lg' ? 13 : 10
+              const liveSize = size === 'lg' ? 13 : size === 'xs' ? 8 : 10
+              const offset = size === 'xs' ? -3 : -5
+              const borderW = size === 'xs' ? '2px' : '2.5px'
               return (
-                <span style={{ position: 'absolute', top: -5, right: -5, width: liveSize, height: liveSize, borderRadius: '50%', background: liveColor, border: '2.5px solid #fff', boxShadow: `0 0 0 2px ${liveColor}33, 0 0 12px ${liveColor}cc`, animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
+                <span style={{ position: 'absolute', top: offset, right: offset, width: liveSize, height: liveSize, borderRadius: '50%', background: liveColor, border: `${borderW} solid #fff`, boxShadow: `0 0 0 2px ${liveColor}33, 0 0 12px ${liveColor}cc`, animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
               )
             })()}
           </span>

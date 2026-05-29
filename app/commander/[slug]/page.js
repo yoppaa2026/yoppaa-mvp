@@ -2051,8 +2051,18 @@ export default function CommanderSlug() {
           {!loading && etape === 4 && commercant && (
             <div style={{ padding: '1.5rem 1rem', animation: 'fadeUp 0.4s ease' }}>
               <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                <div style={{ fontSize: '3.5rem', marginBottom: '0.75rem' }}>🎉</div>
-                <p style={{ fontWeight: 900, fontSize: '1rem', color: T.main, marginBottom: 4 }}>yoppaa</p>
+                {/* Cercle vert pulsant + check SVG : signal succes plus pro qu'un emoji */}
+                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg, #10B981, #6EE7B7)', marginBottom: '0.875rem', boxShadow: '0 8px 28px rgba(16,185,129,0.45), 0 0 0 6px #10B98122' }}>
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12l5 5L20 7"/>
+                  </svg>
+                </div>
+                {/* Wordmark tricolore canonique */}
+                <p style={{ fontWeight: 900, fontSize: '1rem', marginBottom: 4, letterSpacing: '-0.3px' }}>
+                  <span style={{ color: T.ink }}>yo</span>
+                  <span style={{ color: T.light }}>pp</span>
+                  <span style={{ color: T.mid }}>aa</span>
+                </p>
                 {derniereCommande?.numeroSequentiel && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '6px 20px', marginBottom: 12, boxShadow: `0 4px 16px ${T.main}44` }}>
                     <span style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px' }}>#{derniereCommande.numeroSequentiel}</span>
@@ -2060,15 +2070,25 @@ export default function CommanderSlug() {
                 )}
                 <h2 style={{ fontWeight: 900, fontSize: '1.5rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>Commande confirmée !</h2>
                 <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>Chez {commercant.nom}</p>
-                <p style={{ color: T.muted, fontSize: '0.875rem' }}>Présente-toi à ton créneau — c'est tout !</p>
+                <p style={{ color: T.muted, fontSize: '0.875rem' }}>Présente-toi à ton créneau — c&apos;est tout !</p>
               </div>
 
-              <div style={{ background: `linear-gradient(135deg, ${T.pale}, #fff)`, borderRadius: 20, padding: '1.25rem', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
-                <p style={{ fontWeight: 800, color: T.ink, marginBottom: 8 }}>📦 Comment récupérer ta commande</p>
-                <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>
-                  Présente-toi chez <strong>{commercant.nom}</strong> à ton créneau.<br/>
-                  Quand ta commande est prête, confirme depuis l'onglet <strong>Commandes</strong>.
-                </p>
+              <div style={{ background: `linear-gradient(135deg, ${T.pale}, #fff)`, borderRadius: 20, overflow: 'hidden', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
+                <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
+                <div style={{ padding: '1.25rem' }}>
+                  <p style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, color: T.ink, marginBottom: 8 }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                      <path d="M3.27 6.96L12 12.01l8.73-5.05"/>
+                      <path d="M12 22.08V12"/>
+                    </svg>
+                    Comment récupérer ta commande
+                  </p>
+                  <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>
+                    Présente-toi chez <strong>{commercant.nom}</strong> à ton créneau.<br/>
+                    Quand ta commande est prête, confirme depuis l&apos;onglet <strong>Commandes</strong>.
+                  </p>
+                </div>
               </div>
 
               {isDesktop && (
@@ -2078,20 +2098,34 @@ export default function CommanderSlug() {
                       <div key={i} style={{width:d.s,height:d.s,borderRadius:'50%',background:d.c}}/>
                     ))}
                   </div>
-                  <p style={{ fontWeight: 800, color: '#fff', fontSize: '0.95rem', marginBottom: 6 }}>📱 Pour ton retrait sans attendre</p>
+                  <p style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#fff', fontSize: '0.95rem', marginBottom: 6 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="6" y="2" width="12" height="20" rx="2.5"/>
+                      <path d="M11 18h2"/>
+                    </svg>
+                    Pour ton retrait sans attendre
+                  </p>
                   <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5, marginBottom: 12 }}>
-                    Tu as commandé depuis ton PC. Pour utiliser l'écran de retrait prioritaire Yoppaa chez le commerçant, télécharge l'app sur ton téléphone.<br/>
+                    Tu as commandé depuis ton PC. Pour utiliser l&apos;écran de retrait prioritaire Yoppaa chez le commerçant, télécharge l&apos;app sur ton téléphone.<br/>
                     <strong style={{ color: T.light }}>Tes identifiants restent les mêmes.</strong>
                   </p>
                   <a href="https://yoppaa.app/download"
-                    style={{ display: 'inline-block', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', borderRadius: 100, padding: '10px 24px', fontSize: '0.875rem', fontWeight: 800, textDecoration: 'none', boxShadow: `0 4px 16px ${T.main}55` }}>
-                    Télécharger Yoppaa →
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', borderRadius: 100, padding: '10px 24px', fontSize: '0.875rem', fontWeight: 800, textDecoration: 'none', boxShadow: `0 4px 16px ${T.main}55` }}>
+                    Télécharger Yoppaa
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                    </svg>
                   </a>
                   <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', marginTop: 8 }}>ICI ON EST YOPPERS 🟣</p>
                 </div>
               )}
 
-              <button onClick={() => router.push('/commander')} style={{ ...btnPrimary, marginBottom: 10 }}>← Retour à l'accueil</button>
+              <button onClick={() => router.push('/commander')} style={{ ...btnPrimary, marginBottom: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
+                </svg>
+                Retour à l&apos;accueil
+              </button>
               <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(false); setErreurCommande(null); setAjustementStock(null); setEtape(2) }}
                 style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
                 Commander autre chose chez {commercant.nom}

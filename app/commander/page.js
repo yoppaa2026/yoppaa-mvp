@@ -603,6 +603,8 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
   return (
     // FIX FOOTER : position: fixed + zIndex: 9999 — rendu HORS de page-wrap (voir return principal)
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'linear-gradient(160deg, #1A0840 0%, #2D0F6B 40%, #6B35C4 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '3rem 2rem calc(2.5rem + env(safe-area-inset-bottom, 0px))', overflow: 'hidden' }}>
+      {/* Bande 3px canonique YOPPAA */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #1A0840 0%, #6B35C4 60%, #C4A0F4 100%)', zIndex: 3 }}/>
       <style>{`
         @keyframes pu-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.7} }
         @keyframes pu-fadein { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
@@ -610,21 +612,33 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
       `}</style>
       {/* Déco fond */}
       <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle at 80% 20%, #9660E033 0%, transparent 50%), radial-gradient(circle at 20% 80%, #6B35C422 0%, transparent 50%)', pointerEvents: 'none' }}/>
-      {/* Logo */}
+      {/* Logo : 3 points tricolores + wordmark canonique (yo blanc, pp Light, aa Mid) */}
       <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', animation: 'pu-fadein 0.5s ease' }}>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 10 }}>
           {[{c:'rgba(255,255,255,0.35)',s:10},{c:'#C4A0F4',s:14},{c:'#9660E0',s:10}].map((d,i) => (
             <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, animation: `pu-pulse 2s ease-in-out ${i*0.3}s infinite` }}/>
           ))}
         </div>
-        <p style={{ fontWeight: 900, fontSize: '2.2rem', color: '#fff', letterSpacing: '-2px', lineHeight: 1, animation: 'pu-glow 2s ease-in-out infinite' }}>yoppaa</p>
+        <p style={{ fontWeight: 900, fontSize: '2.2rem', letterSpacing: '-2px', lineHeight: 1, animation: 'pu-glow 2s ease-in-out infinite' }}>
+          <span style={{ color: '#fff' }}>yo</span>
+          <span style={{ color: '#C4A0F4' }}>pp</span>
+          <span style={{ color: '#9660E0' }}>aa</span>
+        </p>
       </div>
       {/* Numéro + infos */}
       <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', animation: 'pu-fadein 0.6s ease 0.1s both' }}>
         <p style={{ fontSize: '0.75rem', fontWeight: 800, color: '#C4A0F4', textTransform: 'uppercase', letterSpacing: 3, marginBottom: 12, opacity: 0.8 }}>Ta commande est prête</p>
         <p style={{ fontSize: '7rem', fontWeight: 900, color: '#fff', letterSpacing: '-4px', lineHeight: 1, textShadow: '0 0 60px #9660E088', marginBottom: 8 }}>#{numero}</p>
         <p style={{ fontSize: '1.6rem', fontWeight: 900, color: '#C4A0F4', letterSpacing: '-0.5px', marginBottom: 8 }}>{clientPrenom || 'Yopper'} 🟣</p>
-        {creneau && <p style={{ fontSize: '1rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>🕐 {creneau}</p>}
+        {creneau && (
+          <p style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '1rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+            {creneau}
+          </p>
+        )}
         <div style={{ marginTop: 20, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 16, padding: '12px 24px', display: 'inline-block' }}>
           <p style={{ fontWeight: 900, fontSize: '1rem', color: '#fff', letterSpacing: '-0.3px' }}>Skip the wait — PRIORITÉ YOPPERS 🟣</p>
         </div>

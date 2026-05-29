@@ -874,7 +874,14 @@ export default function Commander() {
 
   async function getOuCreerClient(email, nom) {
     const { data: ex } = await supabase.from('clients').select('id').eq('email', email).single()
-    const id = ex ? ex.id : (await supabase.from('clients').insert({ email, nom }).select('id').single()).data?.id
+    let id = ex?.id
+    if (!ex) {
+      // Si une session Supabase Auth est active : on lie le client par auth_user_id (RLS)
+      const { data: { user } } = await supabase.auth.getUser()
+      const payload = user ? { email, nom, auth_user_id: user.id } : { email, nom }
+      const { data: inserted } = await supabase.from('clients').insert(payload).select('id').single()
+      id = inserted?.id
+    }
     if (!id) return null
     setClientId(id); localStorage.setItem('yoppaa_client_id', id); localStorage.setItem('yoppaa_email', email); localStorage.setItem('yoppaa_nom', nom)
     if (ex) { chargerFavoris(id); chargerCommandesClient(email) }

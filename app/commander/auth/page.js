@@ -106,9 +106,11 @@ function AuthForm() {
       return
     }
     if (data.user) {
+      // auth_user_id : lien Supabase Auth ↔ table clients (requis par les RLS)
       await supabase.from('clients').upsert({
         email: email.trim().toLowerCase(),
         nom: prenom.trim(),
+        auth_user_id: data.user.id,
       }, { onConflict: 'email' })
       const { data: client } = await supabase.from('clients').select('id').eq('email', email.trim().toLowerCase()).single()
       if (client) {

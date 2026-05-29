@@ -1042,6 +1042,25 @@ export default function Commander() {
     return () => { annule = true }
   }, [servicesPublics])
 
+  // Cache reverse geocoding : si on a deja resolu une position proche (~100m), on
+  // reutilise la valeur en localStorage et on evite de pinger Nominatim a chaque refresh
+  // (leur API publique gratuite a une politique 1 req/s max — sinon ils repondent vide).
+  function libelleAdresse(addr) {
+    if (!addr) return null
+    const rue = addr.road || addr.pedestrian || addr.footway || addr.street || addr.path
+    const n = addr.house_number
+    if (rue) return n ? `${rue} ${n}` : rue
+    return addr.quarter
+        || addr.neighbourhood
+        || addr.suburb
+        || addr.hamlet
+        || addr.village
+        || addr.town
+        || addr.city
+        || addr.municipality
+        || null
+  }
+
   function demanderGeolocalisation() {
     if (!navigator.geolocation) return
     setGeoLoading(true); setRue(null)
@@ -1049,16 +1068,29 @@ export default function Commander() {
       async pos => {
         const { latitude: lat, longitude: lng } = pos.coords
         setPosition({ lat, lng })
+        // Clé cache : position arrondie à 3 décimales (~100m de précision)
+        const cacheKey = `yoppaa_geo_${lat.toFixed(3)}_${lng.toFixed(3)}`
         try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=fr`, { headers: { 'Accept': 'application/json' } })
+          const cached = typeof window !== 'undefined' ? localStorage.getItem(cacheKey) : null
+          if (cached) {
+            setRue(cached)
+            setGeoLoading(false)
+            return
+          }
+        } catch {}
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=fr&zoom=18&addressdetails=1`, { headers: { 'Accept': 'application/json' } })
           if (res.ok) {
             const data = await res.json()
-            const addr = data.address || {}
-            const r = addr.road || addr.pedestrian || addr.footway || addr.street
-            const n = addr.house_number
-            setRue(r ? (n ? `${r} ${n}` : r) : (addr.quarter || addr.suburb || addr.town || addr.city || 'Position active'))
+            const lib = libelleAdresse(data.address) || 'Près de toi'
+            setRue(lib)
+            try { localStorage.setItem(cacheKey, lib) } catch {}
+          } else {
+            setRue('Près de toi')
           }
-        } catch { setRue('Position active') }
+        } catch {
+          setRue('Près de toi')
+        }
         setGeoLoading(false)
       },
       () => setGeoLoading(false),
@@ -1528,7 +1560,7 @@ export default function Commander() {
                     </svg>
                 }
                 <span style={{ maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {geoLoading ? 'Localisation...' : rue || locManuelle || (position ? 'Position active' : 'Activer GPS')}
+                  {geoLoading ? 'Localisation...' : rue || locManuelle || (position ? 'Près de toi' : 'Activer GPS')}
                 </span>
               </button>
               <button onClick={() => setShowLocManuelle(v => !v)}

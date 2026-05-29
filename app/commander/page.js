@@ -911,26 +911,43 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
   )
 }
 
-// Barre de categories scrollable horizontalement avec indicateur de fin (fade + chevron pulsant).
-// Le fade disparait quand on a tout vu (scrollLeft + clientWidth >= scrollWidth).
+// Barre de categories scrollable horizontalement avec indicateurs gauche/droite cliquables.
+// Sur PC : molette verticale = scroll horizontal (la scrollbar est masquee pour le design).
 function CategoriesScroll({ categorieActive, setCategorieActive }) {
   const scrollRef = useRef(null)
+  const [canScrollLeft, setCanScrollLeft]   = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
 
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     function check() {
+      setCanScrollLeft(el.scrollLeft > 2)
       setCanScrollRight(el.scrollLeft + el.clientWidth + 2 < el.scrollWidth)
     }
     check()
     el.addEventListener('scroll', check, { passive: true })
     window.addEventListener('resize', check)
+    // Molette verticale -> scroll horizontal sur PC (non-touchpad). On garde le scroll natif touchpad horizontal.
+    function onWheel(e) {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        el.scrollLeft += e.deltaY
+        e.preventDefault()
+      }
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
     return () => {
       el.removeEventListener('scroll', check)
+      el.removeEventListener('wheel', onWheel)
       window.removeEventListener('resize', check)
     }
   }, [])
+
+  function scrollBy(dir) {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollBy({ left: dir * Math.max(180, el.clientWidth * 0.7), behavior: 'smooth' })
+  }
 
   return (
     <div style={{ position: 'relative' }}>
@@ -942,14 +959,24 @@ function CategoriesScroll({ categorieActive, setCategorieActive }) {
           </button>
         ))}
       </div>
-      {/* Fade + chevron pulsant : disparait quand l'utilisateur a tout vu */}
-      <div style={{ position: 'absolute', top: 0, right: 0, bottom: '0.875rem', width: 42, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 6, background: `linear-gradient(to right, transparent, ${T.bgPanel} 70%)`, opacity: canScrollRight ? 1 : 0, transition: 'opacity 0.2s' }}>
+      {/* Fade + chevron CLIQUABLE a gauche (quand scrolle) */}
+      <button aria-label="Categories precedentes" onClick={() => scrollBy(-1)}
+        style={{ position: 'absolute', top: 0, left: 0, bottom: '0.875rem', width: 42, padding: 0, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: 6, background: `linear-gradient(to left, transparent, ${T.bgPanel} 70%)`, cursor: 'pointer', opacity: canScrollLeft ? 1 : 0, pointerEvents: canScrollLeft ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(4px)' }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 6l-6 6 6 6"/>
+          </svg>
+        </span>
+      </button>
+      {/* Fade + chevron CLIQUABLE a droite (quand il en reste) */}
+      <button aria-label="Categories suivantes" onClick={() => scrollBy(1)}
+        style={{ position: 'absolute', top: 0, right: 0, bottom: '0.875rem', width: 42, padding: 0, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 6, background: `linear-gradient(to right, transparent, ${T.bgPanel} 70%)`, cursor: 'pointer', opacity: canScrollRight ? 1 : 0, pointerEvents: canScrollRight ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(4px)', animation: 'cats-chev-pulse 1.4s ease-in-out infinite' }}>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 6l6 6-6 6"/>
           </svg>
         </span>
-      </div>
+      </button>
       <style>{`
         @keyframes cats-chev-pulse {
           0%, 100% { transform: translateX(0);   opacity: 1; }

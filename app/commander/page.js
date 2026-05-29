@@ -355,14 +355,17 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
           <div style={{ width: 16, height: 16, borderRadius: '50%', background: C.light, boxShadow: `0 0 20px ${C.light}88`, animation: 'yopDot2 1.2s ease-in-out infinite' }}/>
           <div style={{ width: 12, height: 12, borderRadius: '50%', background: C.mid, boxShadow: `0 0 16px ${C.mid}88`, animation: 'yopDot3 1.2s ease-in-out infinite' }}/>
         </div>
-        <p style={{ fontWeight: 900, fontSize: '2.2rem', color: C.ink, letterSpacing: '-2px', lineHeight: 1, marginBottom: 8, animation: 'yopWordmark 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards' }}>
-          yoppaa
+        {/* Wordmark tricolore canonique fond clair : Yo Ink, pp Main, aa Mid */}
+        <p style={{ fontWeight: 900, fontSize: '2.2rem', letterSpacing: '-2px', lineHeight: 1, marginBottom: 8, animation: 'yopWordmark 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards' }}>
+          <span style={{ color: C.ink }}>yo</span>
+          <span style={{ color: C.main }}>pp</span>
+          <span style={{ color: C.mid }}>aa</span>
         </p>
         <p style={{ fontWeight: 700, fontSize: '0.9rem', color: C.deep, animation: 'yopSub 0.5s ease 0.3s both', letterSpacing: '-0.2px' }}>
-          Récupéré ! {clientPrenom || 'Yopper'}
+          Bien joué {clientPrenom || 'Yopper'} 🟣
         </p>
         <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: 6, animation: 'yopSub 0.5s ease 0.5s both' }}>
-          Skip the wait — bien joué !
+          Tu skip la file
         </p>
       </div>
     )
@@ -640,7 +643,7 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
           </p>
         )}
         <div style={{ marginTop: 20, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 16, padding: '12px 24px', display: 'inline-block' }}>
-          <p style={{ fontWeight: 900, fontSize: '1rem', color: '#fff', letterSpacing: '-0.3px' }}>Skip the wait — PRIORITÉ YOPPERS 🟣</p>
+          <p style={{ fontWeight: 900, fontSize: '1rem', color: '#fff', letterSpacing: '-0.3px' }}>PRIORITÉ YOPPERS 🟣</p>
         </div>
       </div>
       {/* FIX : SwipeRetrait en bas — pas de conflit avec la navbar (rendu hors page-wrap) */}

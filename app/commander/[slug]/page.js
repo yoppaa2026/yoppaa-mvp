@@ -653,10 +653,18 @@ export default function CommanderSlug() {
   const scrollRef = useRef(null)
 
   useEffect(() => {
-    setIsDesktop(window.innerWidth > 768)
-    const h = () => setIsDesktop(window.innerWidth > 768)
-    window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
+    // Vrai "desktop" = mouse-only (hover + pointer fine). Exclut iPad/Android tablette qui peuvent
+    // installer la PWA pour le retrait. Un iPad detecte 1024px de large mais doit etre traite comme tablette.
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia('(hover: hover) and (pointer: fine)')
+    const check = () => setIsDesktop(mq.matches)
+    check()
+    if (mq.addEventListener) {
+      mq.addEventListener('change', check)
+      return () => mq.removeEventListener('change', check)
+    }
+    mq.addListener(check)
+    return () => mq.removeListener(check)
   }, [])
 
   useEffect(() => {
@@ -1170,15 +1178,36 @@ export default function CommanderSlug() {
       return item.stock_jour || 0
     }
     const articlesAValider = Object.values(panier).filter(i => stockBrutPourJour(i) > 0 || ((stocksJour[i.id] || {})[jourNomDateChoisie]))
+
+    // PERF : parallelisation des 3 queries independantes (stock check, numero max, client)
+    // au lieu de 3 round-trips sequentiels. Sur reseau lent ca passe de ~6-10s a ~2-3s.
+    const artIds = articlesAValider.map(i => i.id)
+    const stockCheckPromise = articlesAValider.length > 0
+      ? supabase
+          .from('commande_articles')
+          .select('article_id, quantite, commande:commandes!inner(date_commande, statut, commercant_id)')
+          .in('article_id', artIds)
+          .eq('commande.date_commande', dateStr)
+          .eq('commande.commercant_id', commercant.id)
+          .neq('commande.statut', 'non_retire')
+      : Promise.resolve({ data: [] })
+    const numeroPromise = supabase
+      .from('commandes')
+      .select('numero_commande')
+      .eq('commercant_id', commercant.id)
+      .eq('date_commande', dateStr)
+      .order('numero_commande', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const cidPromise = getOuCreerClient(client.email, client.prenom, client.nom)
+
+    const [{ data: dejaCommandes }, { data: derniereCmd }, cid] = await Promise.all([
+      stockCheckPromise,
+      numeroPromise,
+      cidPromise,
+    ])
+
     if (articlesAValider.length > 0) {
-      const artIds = articlesAValider.map(i => i.id)
-      const { data: dejaCommandes } = await supabase
-        .from('commande_articles')
-        .select('article_id, quantite, commande:commandes!inner(date_commande, statut, commercant_id)')
-        .in('article_id', artIds)
-        .eq('commande.date_commande', dateStr)
-        .eq('commande.commercant_id', commercant.id)
-        .neq('commande.statut', 'non_retire')
       const qteDeja = {}
       ;(dejaCommandes || []).forEach(r => {
         qteDeja[r.article_id] = (qteDeja[r.article_id] || 0) + r.quantite
@@ -1196,18 +1225,7 @@ export default function CommanderSlug() {
       }
     }
 
-    // ── Numéro de commande séquentiel fiable (max réel en DB) ─────────────────
-    const { data: derniereCmd } = await supabase
-      .from('commandes')
-      .select('numero_commande')
-      .eq('commercant_id', commercant.id)
-      .eq('date_commande', dateStr)
-      .order('numero_commande', { ascending: false })
-      .limit(1)
-      .maybeSingle()
     const numero_commande = ((derniereCmd?.numero_commande) ?? 0) + 1
-
-    const cid = await getOuCreerClient(client.email, client.prenom, client.nom)
 
     const insertPayload = {
       commercant_id: commercant.id, creneau_id: creneauChoisi,
@@ -2057,10 +2075,10 @@ export default function CommanderSlug() {
                     <path d="M5 12l5 5L20 7"/>
                   </svg>
                 </div>
-                {/* Wordmark tricolore canonique */}
+                {/* Wordmark tricolore canonique fond clair : Yo Ink, pp Main, aa Mid */}
                 <p style={{ fontWeight: 900, fontSize: '1rem', marginBottom: 4, letterSpacing: '-0.3px' }}>
                   <span style={{ color: T.ink }}>yo</span>
-                  <span style={{ color: T.light }}>pp</span>
+                  <span style={{ color: T.main }}>pp</span>
                   <span style={{ color: T.mid }}>aa</span>
                 </p>
                 {derniereCommande?.numeroSequentiel && (
@@ -2068,26 +2086,34 @@ export default function CommanderSlug() {
                     <span style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px' }}>#{derniereCommande.numeroSequentiel}</span>
                   </div>
                 )}
-                <h2 style={{ fontWeight: 900, fontSize: '1.5rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>Commande confirmée !</h2>
+                <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>Yoppé ! 🟣</h2>
                 <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>Chez {commercant.nom}</p>
-                <p style={{ color: T.muted, fontSize: '0.875rem' }}>Présente-toi à ton créneau — c&apos;est tout !</p>
+                <p style={{ color: T.muted, fontSize: '0.875rem' }}>On te prévient quand c&apos;est prêt à retirer.</p>
               </div>
 
               <div style={{ background: `linear-gradient(135deg, ${T.pale}, #fff)`, borderRadius: 20, overflow: 'hidden', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
                 <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
                 <div style={{ padding: '1.25rem' }}>
-                  <p style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, color: T.ink, marginBottom: 8 }}>
+                  <p style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, color: T.ink, marginBottom: 12, fontSize: '1rem' }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                      <path d="M3.27 6.96L12 12.01l8.73-5.05"/>
-                      <path d="M12 22.08V12"/>
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 8v4l3 3"/>
                     </svg>
-                    Comment récupérer ta commande
+                    Et après ?
                   </p>
-                  <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6 }}>
-                    Présente-toi chez <strong>{commercant.nom}</strong> à ton créneau.<br/>
-                    Quand ta commande est prête, confirme depuis l&apos;onglet <strong>Commandes</strong>.
-                  </p>
+                  {/* 3 etapes concretes — plus parlant pour un newcomer que "confirme depuis l'onglet Commandes" */}
+                  <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {[
+                      { n: 1, t: <>On te notifie quand ta commande est <strong>prête à retirer</strong>.</> },
+                      { n: 2, t: <>Tu te rends chez <strong>{commercant.nom}</strong> à ton créneau.</> },
+                      { n: 3, t: <>Tu <strong>glisses pour confirmer</strong> ta récupération sur l&apos;onglet Commandes.</> },
+                    ].map(s => (
+                      <li key={s.n} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '0.85rem', color: T.deep, lineHeight: 1.5 }}>
+                        <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 1, boxShadow: `0 2px 6px ${T.main}33` }}>{s.n}</span>
+                        <span style={{ paddingTop: 2 }}>{s.t}</span>
+                      </li>
+                    ))}
+                  </ol>
                 </div>
               </div>
 
@@ -2128,7 +2154,7 @@ export default function CommanderSlug() {
               </button>
               <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(false); setErreurCommande(null); setAjustementStock(null); setEtape(2) }}
                 style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
-                Commander autre chose chez {commercant.nom}
+                Continuer chez {commercant.nom}
               </button>
             </div>
           )}

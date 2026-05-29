@@ -1584,14 +1584,23 @@ export default function Commander() {
         /* Footer nav : padding horizontal généreux pour ne pas toucher les courbes
            des angles iPhone + safe area iOS. Les onglets utilisent flex:1 mais
            restent à l'intérieur de cette zone safe. */
+        /* Navbar : conteneur background pleine largeur viewport sur PC + inner flex centre a 760px.
+           IMPORTANT : on ne met PAS display:flex directement sur .navbar (les conteneurs flex
+           ne s'auto-expandent pas avec les marges negatives → navbar decalee a gauche sur PC). */
         .navbar {
           flex-shrink: 0;
           background: ${T.bgPanel};
           border-top: 1px solid ${T.main}33;
+          padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        .navbar-tabs {
           display: flex;
+          max-width: 760px;
+          width: 100%;
+          margin: 0 auto;
           padding-left: max(env(safe-area-inset-left, 0px), 16px);
           padding-right: max(env(safe-area-inset-right, 0px), 16px);
-          padding-bottom: env(safe-area-inset-bottom, 0px);
+          box-sizing: border-box;
         }
         .cats { display: flex; gap: 6px; overflow-x: auto; padding: 0 1rem 0.875rem; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
         .cats::-webkit-scrollbar { display: none; }
@@ -2231,6 +2240,7 @@ export default function Commander() {
 
         {/* ── NAV BAR ── */}
         <nav className="navbar hero-fullwidth">
+        <div className="navbar-tabs">
           {[
             { key: 'accueil',   label: 'Accueil',   badge: 0 },
             { key: 'services',  label: 'Officiel',  badge: alerteUrgenteActive ? 1 : 0 },
@@ -2306,6 +2316,7 @@ export default function Commander() {
               </button>
             )
           })}
+        </div>
         </nav>
       </div>
     </>

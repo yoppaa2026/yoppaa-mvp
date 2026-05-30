@@ -1,6 +1,10 @@
 // Composant 5 pills statut YOPPAA — réutilisé partout (card listing, fiche commerçant)
-// Visualise EN LIGNE / DEAL / ACTU / COMMANDE / LIVRAISON
-// Pills grisées = levier visuel de pression sociale (upgrade)
+// Pills par catégorie commerçant (5 toujours, layout stable) :
+//   • alimentaire : EN LIGNE / DEAL / ACTU / COMMANDE / LIVRAISON
+//   • vitrine     : EN LIGNE / DEAL / ACTU / RDV / FIDÉLITÉ
+//   • service public : EN LIGNE / ACTU / DEAL(indispo) / COMMANDE(indispo) / LIVRAISON(indispo)
+// Pills grisées = levier visuel de pression sociale (upgrade plan).
+// Le label affiché est dynamique (vient de getPillsStatut côté lib/plans.js).
 
 import { getPillsStatut } from '@/lib/plans'
 

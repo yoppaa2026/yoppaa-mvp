@@ -237,7 +237,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
   const plansDispos = plansDispoPourCategorie(categorie)
 
   // Si la catégorie change et que le plan choisi n'est plus dispo (ex: BOOST avec vitrine),
-  // on redescend automatiquement sur le plan le plus haut dispo (LIVE pour vitrine).
+  // on redescend automatiquement sur le plan le plus haut dispo (PRO+ pour vitrine, MAX pour alimentaire).
   useEffect(() => {
     if (!plansDispos.includes(plan)) {
       setPlan(plansDispos[plansDispos.length - 1])
@@ -390,7 +390,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
         </div>
         {categorie === 'vitrine' && (
           <p style={{ fontSize: 11, color: T.muted, marginTop: 12, lineHeight: 1.5, background: T.pale, padding: '8px 10px', borderRadius: 8, border: `1px solid ${T.main}22` }}>
-            <strong style={{ color: T.bgPanel }}>BOOST et MAX</strong> sont réservés aux commerces alimentaires (Click &amp; Collect / livraison). Pour ton activité, <strong>ON</strong> ou <strong>LIVE</strong> couvrent tout : vitrine, deals, actus, et lien réservation externe (Optios, Doctolib, Planity…).
+            <strong style={{ color: T.bgPanel }}>PRO et PRO+</strong> incluent le module de réservation RDV natif Yoppaa : prestations, créneaux, agenda, fidélité automatique. <strong>Zéro commission</strong>, jamais. Tu peux aussi rester en <strong>ON gratuit</strong> avec un simple lien vers ton agenda externe (Optios, Doctolib, Planity…).
           </p>
         )}
         {categorie === 'alimentaire' && (
@@ -435,7 +435,7 @@ function GlossaireFeatures() {
     { icone: '🚴', titre: 'Livraison',       desc: 'Module complet : zone configurable, frais configurables, créneaux livraison séparés, suivi commande client. Réservé au plan MAX.' },
     { icone: '⭐', titre: 'Fidélité',        desc: 'BOOST : programme tampon simple (le 10e offert). MAX : points configurables, récompenses custom, analytics fidélité.' },
     { icone: '🛍️', titre: 'Kit Yoppaa',      desc: 'Tablette + imprimante thermique pour gérer les commandes en boutique. 399€ HTVA comptant ou 3×133€ (Stripe ou Alma). Réservé aux plans BOOST et MAX.' },
-    { icone: '📅', titre: 'Réservation RDV',  desc: 'Pour les vitrines (coiffeur, opticien, médecin…) : connecte ton système existant (Optios, Doctolib, Planity, TheFork, Booksy…). Un bouton « Réserver » s\'affiche sur ta page Yoppaa. Disponible dès le plan ON. Un module de réservation natif Yoppaa est en préparation pour une expérience 100% intégrée.' },
+    { icone: '📅', titre: 'Réservation RDV',  desc: 'Pour les vitrines (coiffeur, esthéticienne, barbier, etc.) : module RDV natif Yoppaa inclus dès PRO (34,90€/m). Prestations, créneaux, agenda intégré, fidélité auto, export comptable. Zéro commission. Plan ON gratuit : tu peux mettre un simple lien vers ton agenda externe (Optios, Doctolib, Planity, TheFork, Booksy…).' },
   ]
   return (
     <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${T.hairline}`, marginBottom: 14, overflow: 'hidden' }}>
@@ -1372,10 +1372,14 @@ function CardPlan({ plan, actif, onClick }) {
   const p = PLAN_PRIX[plan]
   const label = PLAN_LABEL[plan]
   const features = {
-    on:    'Page live + menu sans prix + horaires + avis. Idéal pour démarrer.',
-    live:  'Tout ON + prix visibles + photos articles + deals + actualités + Good Morning Yoppers.',
-    boost: 'Tout LIVE + Click & Collect + fidélité + dashboard commandes + kit hardware.',
-    max:   'Tout BOOST + module livraison complet + fidélité avancée + support prioritaire.',
+    // Alimentaire
+    on:      'Page live + menu sans prix + horaires + avis. Idéal pour démarrer.',
+    live:    'Tout ON + prix visibles + photos articles + deals + actualités + Good Morning Yoppers.',
+    boost:   'Tout LIVE + Click & Collect + fidélité + dashboard commandes + kit hardware.',
+    max:     'Tout BOOST + module livraison complet + fidélité avancée + support prioritaire.',
+    // Vitrine (RDV : coiffeur / esthe / barbier / etc.)
+    pro:     'Module RDV complet (prestations, créneaux, agenda) + deals + actualités + fidélité automatique + export comptable + Good Morning Yoppers. Zéro commission, jamais.',
+    proplus: 'Tout PRO + multi-praticiens illimité (planning par praticien, stats segmentées). Pour les salons avec équipe.',
   }
   return (
     <button onClick={onClick}

@@ -49,6 +49,105 @@ function formatPrix(prestation) {
   return 'Sur demande'
 }
 
+// ─── Helpers calcul slots ────────────────────────────────────────────────────
+const JOURS_LONGS = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi']
+const JOURS_COURTS = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam']
+const MOIS_COURTS = ['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc']
+
+function timeToMinutes(t) {
+  // "09:30" ou "09:30:00" → 570
+  if (!t) return 0
+  const [h, m] = t.slice(0, 5).split(':').map(Number)
+  return h * 60 + m
+}
+function minutesToTime(min) {
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+function jourSemaineDate(d) {
+  return JOURS[d.getDay()]
+}
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function isToday(d) {
+  const now = new Date()
+  return d.getFullYear() === now.getFullYear()
+    && d.getMonth() === now.getMonth()
+    && d.getDate() === now.getDate()
+}
+
+// Calcule les slots libres pour une date donnée, durée prestation, créneaux du commerçant
+// et réservations existantes (statuts confirme + honore).
+// Retourne un array de strings "HH:MM" triés.
+function genererSlotsLibres({ dateChoisie, dureeMinutes, creneaux, reservations }) {
+  if (!dateChoisie || !dureeMinutes || !creneaux?.length) return []
+  const dateStr = isoDate(dateChoisie)
+  const jour    = jourSemaineDate(dateChoisie)
+  const nowMin  = isToday(dateChoisie) ? new Date().getHours() * 60 + new Date().getMinutes() : -1
+
+  // Filtre creneaux : ceux qui matchent ce jour-là (par jour_semaine récurrent ou par date_specifique ponctuelle)
+  const creneauxJour = creneaux.filter(c =>
+    c.actif !== false
+    && (c.date_specifique === dateStr || (!c.date_specifique && c.jour_semaine === jour))
+  )
+  if (creneauxJour.length === 0) return []
+
+  // Map des plages réservées (en minutes depuis minuit) pour overlap check
+  const plagesReservees = (reservations || []).map(r => ({
+    start: timeToMinutes(r.heure_debut),
+    end:   timeToMinutes(r.heure_fin),
+  }))
+
+  const slotsLibres = new Set()
+  for (const cr of creneauxJour) {
+    const debut      = timeToMinutes(cr.heure_debut)
+    const fin        = timeToMinutes(cr.heure_fin)
+    const pauseDebut = cr.pause_debut ? timeToMinutes(cr.pause_debut) : null
+    const pauseFin   = cr.pause_fin   ? timeToMinutes(cr.pause_fin)   : null
+    const pas        = cr.pas_minutes || 15
+
+    for (let t = debut; t + dureeMinutes <= fin; t += pas) {
+      const slotEnd = t + dureeMinutes
+      // Si aujourd'hui, exclure les créneaux passés
+      if (nowMin >= 0 && t <= nowMin) continue
+      // Exclure si chevauche la pause
+      if (pauseDebut != null && pauseFin != null && t < pauseFin && slotEnd > pauseDebut) continue
+      // Exclure si overlap avec une réservation existante
+      const collision = plagesReservees.some(p => t < p.end && slotEnd > p.start)
+      if (collision) continue
+      slotsLibres.add(minutesToTime(t))
+    }
+  }
+  return [...slotsLibres].sort()
+}
+
+// Génère N jours à partir d'aujourd'hui, en marquant lesquels sont ouverts (au moins 1 créneau).
+function genererJoursDispos({ nbJours, horairesDetail, creneaux }) {
+  const out = []
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  for (let i = 0; i < nbJours; i++) {
+    const d = new Date(now)
+    d.setDate(now.getDate() + i)
+    const jour = jourSemaineDate(d)
+    const horaireJour = horairesDetail?.[jour]
+    const aCreneau = (creneaux || []).some(c =>
+      c.actif !== false
+      && (c.date_specifique === isoDate(d) || (!c.date_specifique && c.jour_semaine === jour))
+    )
+    out.push({
+      date: d,
+      iso: isoDate(d),
+      jour,
+      ouvert: !!(horaireJour?.ouvert && aCreneau),
+      isToday: i === 0,
+    })
+  }
+  return out
+}
+
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function CommanderRdvSlug() {
   const { slug } = useParams()
@@ -56,13 +155,17 @@ export default function CommanderRdvSlug() {
 
   const [commercant, setCommercant] = useState(null)
   const [prestations, setPrestations] = useState([])
+  const [creneauxConfig, setCreneauxConfig] = useState([])  // les rdv_creneaux du commerçant
   const [loading, setLoading] = useState(true)
   const [erreur, setErreur] = useState(null)
 
   // État du flow (4 étapes)
   const [etape, setEtape] = useState(1)
   const [prestationChoisie, setPrestationChoisie] = useState(null)
-  // RDV-4b : date + heure choisies (à venir)
+  const [dateChoisie, setDateChoisie] = useState(null)        // Date object
+  const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
+  const [slotsLibres, setSlotsLibres] = useState([])
+  const [slotsLoading, setSlotsLoading] = useState(false)
   // RDV-4c : coordonnées client (à venir)
   // RDV-4d : derniereRdv pour écran confirmation (à venir)
 
@@ -108,28 +211,81 @@ export default function CommanderRdvSlug() {
       }
       setCommercant(c)
 
-      // 2. Fetch les prestations actives de ce commerçant
-      const { data: prest } = await supabase
-        .from('rdv_prestations')
-        .select('*')
-        .eq('commercant_id', c.id)
-        .eq('actif', true)
-        .is('deleted_at', null)
-        .order('ordre', { ascending: true })
-        .order('created_at', { ascending: true })
+      // 2. Fetch prestations + créneaux config en parallèle
+      const [{ data: prest }, { data: cren }] = await Promise.all([
+        supabase
+          .from('rdv_prestations')
+          .select('*')
+          .eq('commercant_id', c.id)
+          .eq('actif', true)
+          .is('deleted_at', null)
+          .order('ordre', { ascending: true })
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('rdv_creneaux')
+          .select('*')
+          .eq('commercant_id', c.id)
+          .eq('actif', true)
+          .is('deleted_at', null),
+      ])
 
       if (annule) return
       setPrestations(prest || [])
+      setCreneauxConfig(cren || [])
       setLoading(false)
     })()
     return () => { annule = true }
   }, [slug, router])
 
+  // Fetch slots libres quand la date change (ou la prestation change)
+  useEffect(() => {
+    if (etape !== 2 || !dateChoisie || !prestationChoisie || !commercant) return
+    let annule = false
+    ;(async () => {
+      setSlotsLoading(true)
+      // Fetch réservations existantes du jour (statuts confirme + honore uniquement)
+      const dateStr = isoDate(dateChoisie)
+      const { data: reservations } = await supabase
+        .from('rdv_reservations')
+        .select('heure_debut, heure_fin, statut')
+        .eq('commercant_id', commercant.id)
+        .eq('date_rdv', dateStr)
+        .in('statut', ['confirme', 'honore'])
+        .is('deleted_at', null)
+      if (annule) return
+      const slots = genererSlotsLibres({
+        dateChoisie,
+        dureeMinutes: prestationChoisie.duree_minutes,
+        creneaux: creneauxConfig,
+        reservations: reservations || [],
+      })
+      setSlotsLibres(slots)
+      setSlotsLoading(false)
+    })()
+    return () => { annule = true }
+  }, [etape, dateChoisie, prestationChoisie, commercant, creneauxConfig])
+
   function choisirPrestation(p) {
     setPrestationChoisie(p)
     setEtape(2)
+    setDateChoisie(null)
+    setHeureChoisie(null)
+    setSlotsLibres([])
     setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
   }
+
+  // Liste des jours disponibles (14 prochains)
+  const joursDispos = commercant && creneauxConfig.length > 0
+    ? genererJoursDispos({ nbJours: 14, horairesDetail: commercant.horaires_detail, creneaux: creneauxConfig })
+    : []
+
+  // Auto-sélectionne le premier jour ouvert quand on entre à l'étape 2
+  useEffect(() => {
+    if (etape === 2 && !dateChoisie && joursDispos.length > 0) {
+      const premierOuvert = joursDispos.find(j => j.ouvert)
+      if (premierOuvert) setDateChoisie(premierOuvert.date)
+    }
+  }, [etape, joursDispos, dateChoisie])
 
   // ─── Rendu ────────────────────────────────────────────────────────────────
   return (
@@ -147,6 +303,7 @@ export default function CommanderRdvSlug() {
         @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
         .fiche-hero { height: 220px; }
         @media (min-width: 600px) { .fiche-hero { height: 280px; } }
+        .day-scroll::-webkit-scrollbar { display: none; }
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 
@@ -397,14 +554,166 @@ export default function CommanderRdvSlug() {
                 </div>
               )}
 
-              {/* ─── ÉTAPE 2 — placeholder, sera implémenté en RDV-4b ─── */}
+              {/* ─── ÉTAPE 2 — CALENDRIER + SLOTS CRÉNEAUX ─── */}
               {etape === 2 && prestationChoisie && (
+                <div style={{ padding: '1.25rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
+                  {/* Recap prestation choisie + bouton Changer */}
+                  <div style={{ background: '#fff', borderRadius: 14, border: `1.5px solid ${T.pale}`, overflow: 'hidden', marginBottom: 18, boxShadow: '0 1px 4px rgba(107,53,196,0.04)' }}>
+                    <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.75rem 1rem' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Prestation choisie</p>
+                        <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.92rem', letterSpacing: '-0.2px', lineHeight: 1.2, marginBottom: 4 }}>{prestationChoisie.nom}</p>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', color: T.muted, fontWeight: 700 }}>
+                          <span>{formatDuree(prestationChoisie.duree_minutes)}</span>
+                          <span style={{ opacity: 0.5 }}>·</span>
+                          <span style={{ color: T.main, fontWeight: 800 }}>{formatPrix(prestationChoisie)}</span>
+                        </div>
+                      </div>
+                      <button onClick={() => { setPrestationChoisie(null); setEtape(1); setDateChoisie(null); setHeureChoisie(null) }}
+                        style={{ background: '#fff', border: `1.5px solid ${T.main}`, color: T.main, fontWeight: 700, fontSize: '0.72rem', padding: '0.4rem 0.875rem', borderRadius: 100, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
+                        Changer
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Section : choix du jour */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="5" width="18" height="16" rx="2"/>
+                        <path d="M3 9h18M8 3v4M16 3v4"/>
+                      </svg>
+                      Je viens le
+                    </span>
+                    <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                  </div>
+
+                  {/* Day picker horizontal scrollable */}
+                  <div className="day-scroll" style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 18, scrollbarWidth: 'none' }}>
+                    {joursDispos.map(j => {
+                      const choisi = dateChoisie && isoDate(dateChoisie) === j.iso
+                      return (
+                        <button key={j.iso} onClick={() => { if (j.ouvert) { setDateChoisie(j.date); setHeureChoisie(null) } }} disabled={!j.ouvert}
+                          style={{
+                            flexShrink: 0, minWidth: 64,
+                            padding: '0.5rem 0.75rem', borderRadius: 12,
+                            border: `1.5px solid ${j.ouvert ? (choisi ? T.main : T.pale) : '#E5E7EB'}`,
+                            background: !j.ouvert ? '#F9FAFB' : (choisi ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff'),
+                            color: !j.ouvert ? '#D1D5DB' : (choisi ? '#fff' : T.ink),
+                            cursor: j.ouvert ? 'pointer' : 'not-allowed',
+                            textAlign: 'center', fontFamily: '"DM Sans", sans-serif',
+                            transition: 'all 0.15s',
+                            boxShadow: choisi ? `0 8px 22px ${T.main}55` : 'none',
+                            position: 'relative',
+                          }}>
+                          {j.isToday && (
+                            <span style={{ position: 'absolute', top: 4, right: 4, fontSize: '0.45rem', fontWeight: 900, color: choisi ? T.main : T.muted, background: choisi ? '#fff' : T.pale, padding: '1px 4px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Auj</span>
+                          )}
+                          <div style={{ fontSize: '0.62rem', fontWeight: 700, opacity: 0.8, marginBottom: 2 }}>
+                            {JOURS_COURTS[j.date.getDay()]}
+                          </div>
+                          <div style={{ fontSize: '1.05rem', fontWeight: 900, letterSpacing: '-0.5px', lineHeight: 1 }}>
+                            {j.date.getDate()}
+                          </div>
+                          <div style={{ fontSize: '0.58rem', fontWeight: 700, opacity: 0.7, marginTop: 2 }}>
+                            {MOIS_COURTS[j.date.getMonth()]}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Section : choix du créneau */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 6v6l4 2"/>
+                      </svg>
+                      À quelle heure
+                    </span>
+                    <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                    {dateChoisie && !slotsLoading && (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>
+                        {slotsLibres.length} {slotsLibres.length > 1 ? 'créneaux libres' : slotsLibres.length === 1 ? 'créneau libre' : 'plus de créneau'}
+                      </span>
+                    )}
+                  </div>
+
+                  {!dateChoisie && (
+                    <div style={{ textAlign: 'center', padding: '1.5rem 1rem', color: T.muted, fontSize: '0.85rem' }}>
+                      Choisis d'abord un jour ci-dessus ↑
+                    </div>
+                  )}
+
+                  {dateChoisie && slotsLoading && (
+                    <div style={{ textAlign: 'center', padding: '1.5rem 1rem', color: T.muted, fontSize: '0.85rem' }}>
+                      Chargement des créneaux…
+                    </div>
+                  )}
+
+                  {dateChoisie && !slotsLoading && slotsLibres.length === 0 && (
+                    <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.875rem 1rem', textAlign: 'center' }}>
+                      <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.5 }}>
+                        Aucun créneau libre ce jour-là. Essaie un autre jour ↑
+                      </p>
+                    </div>
+                  )}
+
+                  {dateChoisie && !slotsLoading && slotsLibres.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 6, marginBottom: 18 }}>
+                      {slotsLibres.map(slot => {
+                        const choisi = heureChoisie === slot
+                        return (
+                          <button key={slot} onClick={() => setHeureChoisie(slot)}
+                            style={{
+                              padding: '0.55rem 0.5rem', borderRadius: 10,
+                              border: `1.5px solid ${choisi ? T.main : T.pale}`,
+                              background: choisi ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
+                              color: choisi ? '#fff' : T.ink,
+                              fontWeight: 800, fontSize: '0.85rem',
+                              cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                              transition: 'all 0.15s', letterSpacing: '-0.2px',
+                              boxShadow: choisi ? `0 6px 18px ${T.main}55` : 'none',
+                              position: 'relative',
+                            }}
+                            onMouseOver={e => { if (!choisi) { e.currentTarget.style.borderColor = T.main + '88'; e.currentTarget.style.transform = 'translateY(-1px)' } }}
+                            onMouseOut={e => { if (!choisi) { e.currentTarget.style.borderColor = T.pale; e.currentTarget.style.transform = 'translateY(0)' } }}>
+                            {choisi && (
+                              <span style={{ position: 'absolute', top: 3, right: 3, width: 14, height: 14, borderRadius: '50%', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
+                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                              </span>
+                            )}
+                            {slot}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Bouton Continuer */}
+                  {heureChoisie && (
+                    <button onClick={() => setEtape(3)}
+                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '1rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 6px 24px ${T.main}55`, animation: 'fadeUp 0.3s ease' }}>
+                      Continuer — {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} à {heureChoisie}
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* ─── ÉTAPE 3 — placeholder, sera implémenté en RDV-4c ─── */}
+              {etape === 3 && prestationChoisie && dateChoisie && heureChoisie && (
                 <div style={{ padding: '1.5rem 1rem 2rem', textAlign: 'center', color: T.muted }}>
-                  <p style={{ fontWeight: 800, color: T.ink, marginBottom: 8 }}>Étape 2 — Créneau (à venir en RDV-4b)</p>
-                  <p style={{ fontSize: '0.85rem', marginBottom: 16 }}>Prestation choisie : <strong style={{ color: T.main }}>{prestationChoisie.nom}</strong></p>
-                  <button onClick={() => { setPrestationChoisie(null); setEtape(1) }}
+                  <p style={{ fontWeight: 800, color: T.ink, marginBottom: 8 }}>Étape 3 — Coordonnées (à venir en RDV-4c)</p>
+                  <p style={{ fontSize: '0.85rem', marginBottom: 6 }}>Prestation : <strong style={{ color: T.main }}>{prestationChoisie.nom}</strong></p>
+                  <p style={{ fontSize: '0.85rem', marginBottom: 16 }}>RDV : <strong style={{ color: T.main }}>{JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} à {heureChoisie}</strong></p>
+                  <button onClick={() => setEtape(2)}
                     style={{ padding: '10px 22px', borderRadius: 100, border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                    ← Changer de prestation
+                    ← Modifier le créneau
                   </button>
                 </div>
               )}

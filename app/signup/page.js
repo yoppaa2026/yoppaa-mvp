@@ -401,8 +401,8 @@ function Etape1Compte({ session, commercant, onCompte }) {
         )}
       </Card>
 
-      {/* Mini-glossaire des fonctionnalités — repliable pour ne pas alourdir */}
-      <GlossaireFeatures/>
+      {/* Mini-glossaire des fonctionnalités — contextuel selon la catégorie choisie */}
+      <GlossaireFeatures categorie={categorie}/>
 
       {error && (
         <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, color: '#7F1D1D', fontSize: 13, fontWeight: 600 }}>
@@ -423,20 +423,48 @@ function Etape1Compte({ session, commercant, onCompte }) {
 }
 
 // ─── GLOSSAIRE FEATURES — explique chaque fonction utilisee dans les plans ───
-// Repliable pour ne pas alourdir l'etape 1.
-function GlossaireFeatures() {
+// Contextuel selon categorie (alimentaire vs vitrine).
+// Features communes en haut, features specifiques ensuite.
+function GlossaireFeatures({ categorie = 'alimentaire' }) {
   const [ouvert, setOuvert] = useState(false)
-  const features = [
+
+  // Features communes aux 2 categories (visibilite, communication)
+  const featuresCommunes = [
     { icone: '🔥', titre: 'Deal',           desc: 'Une promo limitée dans le temps. Bandeau visible sur ta page client, push aux favoris si tu actives la notif, possibilité d\'apparaître dans le Good Morning Yoppers.' },
-    { icone: '📢', titre: 'Actualité',      desc: 'Tu communiques une nouveauté (nouveau produit, événement). Affichée en bandeau violet sur ta page, push aux favoris à la publication.' },
-    { icone: '🚨', titre: 'Alerte',         desc: 'Information urgente (fermeture exceptionnelle, rupture). Bandeau rouge prioritaire sur ta page client.' },
-    { icone: '☀️', titre: 'Good Morning Yoppers', desc: 'Push quotidien envoyé à 7h30 aux clients de ta zone. Les commerçants LIVE/BOOST/MAX peuvent y inscrire 1 deal/jour, à soumettre avant 23h la veille.' },
-    { icone: '🛒', titre: 'Click & Collect', desc: 'Le client commande à l\'avance, choisit un créneau de retrait. Tu reçois la commande dans ton dashboard, valides, marques prête. Indispensable pour passer au modèle Yoppaa complet.' },
+    { icone: '📢', titre: 'Actualité',      desc: 'Tu communiques une nouveauté (nouveau produit, événement, créneau libre). Affichée en bandeau violet sur ta page, push aux favoris à la publication.' },
+    { icone: '🚨', titre: 'Alerte',         desc: 'Information urgente (fermeture exceptionnelle, indisponibilité). Bandeau rouge prioritaire sur ta page client.' },
+    { icone: '☀️', titre: 'Good Morning Yoppers', desc: categorie === 'vitrine'
+        ? 'Push quotidien envoyé à 7h30 aux clients de ta zone. Plans PRO/PRO+ peuvent y inscrire deals + actus + créneaux dispos, à soumettre avant 23h la veille.'
+        : 'Push quotidien envoyé à 7h30 aux clients de ta zone. Les commerçants LIVE/BOOST/MAX peuvent y inscrire 1 deal/jour, à soumettre avant 23h la veille.' },
+  ]
+
+  // Features alimentaire uniquement
+  const featuresAlimentaire = [
+    { icone: '🛒', titre: 'Click & Collect', desc: 'Le client commande à l\'avance, choisit un créneau de retrait. Tu reçois la commande dans ton dashboard, valides, marques prête. Cœur de l\'expérience Yoppaa alimentaire.' },
     { icone: '🚴', titre: 'Livraison',       desc: 'Module complet : zone configurable, frais configurables, créneaux livraison séparés, suivi commande client. Réservé au plan MAX.' },
     { icone: '⭐', titre: 'Fidélité',        desc: 'BOOST : programme tampon simple (le 10e offert). MAX : points configurables, récompenses custom, analytics fidélité.' },
     { icone: '🛍️', titre: 'Kit Yoppaa',      desc: 'Tablette + imprimante thermique pour gérer les commandes en boutique. 399€ HTVA comptant ou 3×133€ (Stripe ou Alma). Réservé aux plans BOOST et MAX.' },
-    { icone: '📅', titre: 'Réservation RDV',  desc: 'Pour les vitrines (coiffeur, esthéticienne, barbier, etc.) : module RDV natif Yoppaa inclus dès PRO (34,90€/m). Prestations, créneaux, agenda intégré, fidélité auto, export comptable. Zéro commission. Plan ON gratuit : tu peux mettre un simple lien vers ton agenda externe (Optios, Doctolib, Planity, TheFork, Booksy…).' },
   ]
+
+  // Features vitrine uniquement
+  const featuresVitrine = [
+    { icone: '📅', titre: 'Module RDV natif', desc: 'Inclus dès PRO (34,90€/m). Le client choisit une prestation, une date et un créneau, valide en 3 clics. Tu reçois la notification dans ton dashboard. Zéro commission. iCal joint pour son calendrier.' },
+    { icone: '🧰', titre: 'Prestations',     desc: 'Catalogue de tes services : nom, durée (15min à 3h), prix fixe ou fourchette, acompte optionnel. Modifiable à tout moment depuis ton dashboard.' },
+    { icone: '⏰', titre: 'Créneaux RDV',    desc: 'Tu définis tes plages horaires par jour de la semaine (avec pause déjeuner si tu veux). Pas configurable (15min/30min/1h). Exceptions ponctuelles (date spécifique) supportées.' },
+    { icone: '⭐', titre: 'Fidélité auto',    desc: 'Active le programme : tes RDV honorés incrémentent automatiquement le compteur du client. Récompense (% de remise) déclenchée au seuil que tu choisis (ex. 10 RDV → -10%).' },
+    { icone: '👥', titre: 'Multi-praticiens', desc: 'Réservé PRO+ (49,90€/m). Tu ajoutes tes praticien·nes avec photo + spécialités. Chaque RDV est associé à une personne. Planning et stats par praticien. Le client peut choisir ou laisser "Premier disponible".' },
+    { icone: '📊', titre: 'Export comptable', desc: 'Exporte tes RDV honorés en CSV ou PDF mensuel pour ta comptabilité. Conservation 7 ans (loi belge).' },
+    { icone: '🔗', titre: 'Lien externe (ON gratuit)', desc: 'Plan ON : tu n\'as pas le module natif mais tu peux mettre un lien vers ton agenda externe (Optios, Doctolib, Planity, Booksy, TheFork). Un bouton "Réserver" apparaît sur ta page Yoppaa.' },
+  ]
+
+  const features = categorie === 'vitrine'
+    ? [...featuresCommunes, ...featuresVitrine]
+    : [...featuresCommunes, ...featuresAlimentaire]
+
+  const sousTitre = categorie === 'vitrine'
+    ? 'Deal, Actu, Module RDV, Prestations, Fidélité auto…'
+    : 'Deal, Actu, Good Morning Yoppers, Click & Collect…'
+
   return (
     <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${T.hairline}`, marginBottom: 14, overflow: 'hidden' }}>
       <button type="button" onClick={() => setOuvert(o => !o)}
@@ -446,7 +474,7 @@ function GlossaireFeatures() {
             Comprendre les fonctionnalités
           </p>
           <p style={{ fontSize: 11, color: T.muted, margin: '2px 0 0', fontWeight: 600 }}>
-            Deal, Actu, Good Morning Yoppers, Click &amp; Collect…
+            {sousTitre}
           </p>
         </div>
         <span style={{ fontSize: 14, color: T.main, fontWeight: 800, transform: ouvert ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>⌄</span>

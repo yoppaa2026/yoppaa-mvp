@@ -454,6 +454,7 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
     { icone: '⭐', titre: 'Fidélité auto',    desc: 'Active le programme : tes RDV honorés incrémentent automatiquement le compteur du client. Récompense (% de remise) déclenchée au seuil que tu choisis (ex. 10 RDV → -10%).' },
     { icone: '👥', titre: 'Multi-praticiens', desc: 'Réservé PRO+ (49,90€/m). Tu ajoutes tes praticien·nes avec photo + spécialités. Chaque RDV est associé à une personne. Planning et stats par praticien. Le client peut choisir ou laisser "Premier disponible".' },
     { icone: '📊', titre: 'Export comptable', desc: 'Exporte tes RDV honorés en CSV ou PDF mensuel pour ta comptabilité. Conservation 7 ans (loi belge).' },
+    { icone: '📱', titre: 'Tablette Yoppaa',  desc: 'Optionnel — 199€ comptant, sans obligation. Une tablette dédiée pour consulter ton agenda et gérer tes RDV en temps réel à ton comptoir. Tu peux aussi utiliser ton téléphone ou ton ordinateur, le dashboard est responsive.' },
     { icone: '🔗', titre: 'Lien externe (ON gratuit)', desc: 'Plan ON : tu n\'as pas le module natif mais tu peux mettre un lien vers ton agenda externe (Optios, Doctolib, Planity, Booksy, TheFork). Un bouton "Réserver" apparaît sur ta page Yoppaa.' },
   ]
 

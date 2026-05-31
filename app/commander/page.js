@@ -1470,7 +1470,13 @@ export default function Commander() {
   }
 
   function selectionnerCommercant(c) {
-    if (!c.slug) return
+    if (!c.slug) {
+      // Defensive : ne devrait jamais arriver depuis l'API admin/valider (auto-genere le slug),
+      // mais on log pour debug + toast pour ne pas laisser l'user dans le silence si bug DB.
+      console.warn('[selectionnerCommercant] commercant sans slug, click ignoré', { id: c.id, nom: c.nom })
+      showToast({ type: 'info', msg: `Fiche temporairement indisponible pour ${c.nom}` })
+      return
+    }
     localStorage.setItem('yoppaa_onglet', 'accueil')
     // Routing par catégorie :
     //   • vitrine (coiffeur, esthe, etc.) → /commander/rdv/[slug] (module RDV natif)

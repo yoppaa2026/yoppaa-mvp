@@ -14,6 +14,30 @@ import { envoyerAuCommercant, emailValidationCommercant } from '@/lib/resend'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
+// Slugify : normalise un nom en slug URL-safe (sans accents, lowercase, tirets).
+function slugify(str) {
+  return String(str || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')  // strip combining diacritics
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+}
+
+// Génère un slug unique en DB (suffixe -2, -3, etc. si déjà pris).
+async function genererSlugUnique(supabase, nom, excludeId) {
+  const base = slugify(nom) || 'commerce'
+  let slug = base
+  let i = 1
+  while (i < 50) {
+    const { data } = await supabase.from('commercants').select('id').eq('slug', slug).maybeSingle()
+    if (!data || data.id === excludeId) return slug
+    i++
+    slug = `${base}-${i}`
+  }
+  return `${base}-${Date.now()}`  // fallback ultime
+}
+
 export async function POST(request) {
   try {
     const { commercant_id } = await request.json()
@@ -39,14 +63,30 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
 
-    // 1) Update commerçant
+    // Fetch préalable : on a besoin du nom pour générer un slug si manquant
+    const { data: existant } = await supabase
+      .from('commercants')
+      .select('id, nom, slug')
+      .eq('id', commercant_id)
+      .single()
+    if (!existant) {
+      return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
+    }
+
+    // Si pas de slug, on en génère un automatique unique (basé sur le nom)
+    const updates = {
+      statut: 'valide',
+      statut_publication: 'publie',
+      motif_rejet: null,
+    }
+    if (!existant.slug) {
+      updates.slug = await genererSlugUnique(supabase, existant.nom, existant.id)
+    }
+
+    // 1) Update commerçant (slug inclus si nouvellement généré)
     const { data: commercant, error: errC } = await supabase
       .from('commercants')
-      .update({
-        statut: 'valide',
-        statut_publication: 'publie',
-        motif_rejet: null,
-      })
+      .update(updates)
       .eq('id', commercant_id)
       .select('id, nom, email, slug')
       .single()

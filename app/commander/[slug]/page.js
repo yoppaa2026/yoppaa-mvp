@@ -6,6 +6,7 @@ import { canDo, isVitrine, detecterProviderReservation } from '@/lib/plans'
 import PillsStatut from '../PillsStatut'
 import CTAUpgrade from '../CTAUpgrade'
 import ModalSignalement from '../ModalSignalement'
+import HorairesSection from '../HorairesSection'
 
 const T = {
   bg:      '#F8F6FF',
@@ -324,53 +325,6 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
           </svg>
         </button>
       </div>
-    </div>
-  )
-}
-
-// ─── Horaires section collapsible ─────────────────────────────────────────────
-function HorairesSection({ horaires }) {
-  const [open, setOpen] = useState(false)
-  const j = jourActuel()
-  return (
-    <div style={{ background: '#fff', borderBottom: `1px solid ${T.pale}` }}>
-      <button onClick={() => setOpen(v => !v)}
-        style={{ width: '100%', padding: '0.625rem 1rem', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: '"DM Sans", sans-serif' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 6v6l4 2"/>
-          </svg>
-          Horaires complets
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', color: T.main, fontWeight: 700 }}>
-          {open ? 'Fermer' : 'Voir'}
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-            <path d="M6 9l6 6 6-6"/>
-          </svg>
-        </span>
-      </button>
-      {open && (
-        <div style={{ padding: '0 1rem 0.875rem' }}>
-          {JOURS.map((jour, idx) => {
-            const h = horaires[jour]
-            const estAujourdhui = j === jour
-            if (!h) return null
-            return (
-              <div key={jour} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', borderRadius: 8, background: estAujourdhui ? T.pale : 'transparent' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.82rem', fontWeight: estAujourdhui ? 800 : 500, color: estAujourdhui ? T.deep : T.muted, width: 90 }}>
-                  {estAujourdhui && <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.main }}/>}
-                  {JOURS_LONGS[idx]}
-                </span>
-                {h.ouvert
-                  ? <span style={{ fontSize: '0.82rem', fontWeight: estAujourdhui ? 700 : 500, color: estAujourdhui ? T.main : T.ink }}>{h.debut.slice(0,5)} – {h.fin.slice(0,5)}</span>
-                  : <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#DC2626' }}>Fermé</span>
-                }
-              </div>
-            )
-          })}
-        </div>
-      )}
     </div>
   )
 }

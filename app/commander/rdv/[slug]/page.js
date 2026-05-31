@@ -17,6 +17,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { isVitrine } from '@/lib/plans'
+import HorairesSection from '../../HorairesSection'
 
 const T = {
   bg:       '#F8F6FF',
@@ -746,6 +747,11 @@ export default function CommanderRdvSlug() {
                       <span>Appeler</span>
                     </a>
                   )}
+                </div>
+
+                {/* Horaires complets (collapsible) — meme widget que la fiche alimentaire */}
+                <div style={{ marginTop: 12, marginLeft: -4, marginRight: -4 }}>
+                  <HorairesSection horaires={commercant.horaires_detail} variant="card"/>
                 </div>
               </div>
 

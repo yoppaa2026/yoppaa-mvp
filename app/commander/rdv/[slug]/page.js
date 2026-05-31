@@ -166,7 +166,11 @@ export default function CommanderRdvSlug() {
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
   const [slotsLibres, setSlotsLibres] = useState([])
   const [slotsLoading, setSlotsLoading] = useState(false)
-  // RDV-4c : coordonnées client (à venir)
+  // RDV-4c : coordonnées client + RGPD (pré-fill depuis localStorage)
+  const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '', notes: '' })
+  const [clientId, setClientId] = useState(null)
+  const [rgpdCommande, setRgpdCommande] = useState(false)
+  const [rgpdMarketing, setRgpdMarketing] = useState(true)  // pré-coché (cf signup data flow)
   // RDV-4d : derniereRdv pour écran confirmation (à venir)
 
   const scrollRef = useRef(null)
@@ -286,6 +290,24 @@ export default function CommanderRdvSlug() {
       if (premierOuvert) setDateChoisie(premierOuvert.date)
     }
   }, [etape, joursDispos, dateChoisie])
+
+  // Pré-fill coordonnées depuis localStorage (Yopper connecté)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const email     = localStorage.getItem('yoppaa_email') || ''
+    const prenom    = localStorage.getItem('yoppaa_prenom') || ''
+    const nom       = localStorage.getItem('yoppaa_nom') || ''
+    const telephone = localStorage.getItem('yoppaa_telephone') || ''
+    const id        = localStorage.getItem('yoppaa_client_id')
+    if (email) setClient(p => ({ ...p, email, prenom, nom, telephone }))
+    if (id) setClientId(id)
+  }, [])
+
+  const yopperConnecte = !!(client.email && clientId)
+  const formValide = !!(prestationChoisie && dateChoisie && heureChoisie
+    && client.prenom.trim() && client.nom.trim()
+    && client.email.trim() && client.telephone.trim()
+    && rgpdCommande)
 
   // ─── Rendu ────────────────────────────────────────────────────────────────
   return (
@@ -705,15 +727,153 @@ export default function CommanderRdvSlug() {
                 </div>
               )}
 
-              {/* ─── ÉTAPE 3 — placeholder, sera implémenté en RDV-4c ─── */}
+              {/* ─── ÉTAPE 3 — COORDONNÉES + RGPD ─── */}
               {etape === 3 && prestationChoisie && dateChoisie && heureChoisie && (
-                <div style={{ padding: '1.5rem 1rem 2rem', textAlign: 'center', color: T.muted }}>
-                  <p style={{ fontWeight: 800, color: T.ink, marginBottom: 8 }}>Étape 3 — Coordonnées (à venir en RDV-4c)</p>
-                  <p style={{ fontSize: '0.85rem', marginBottom: 6 }}>Prestation : <strong style={{ color: T.main }}>{prestationChoisie.nom}</strong></p>
-                  <p style={{ fontSize: '0.85rem', marginBottom: 16 }}>RDV : <strong style={{ color: T.main }}>{JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} à {heureChoisie}</strong></p>
-                  <button onClick={() => setEtape(2)}
-                    style={{ padding: '10px 22px', borderRadius: 100, border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                    ← Modifier le créneau
+                <div style={{ padding: '1.25rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
+                  {/* Recap RDV verrouillé */}
+                  <div style={{ background: '#fff', borderRadius: 14, border: `1.5px solid ${T.pale}`, overflow: 'hidden', marginBottom: 18, boxShadow: '0 1px 4px rgba(107,53,196,0.04)' }}>
+                    <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
+                    <div style={{ padding: '0.875rem 1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Ton RDV</p>
+                          <p style={{ fontWeight: 800, color: T.ink, fontSize: '1rem', letterSpacing: '-0.2px', lineHeight: 1.25, marginBottom: 4 }}>
+                            {prestationChoisie.nom}
+                          </p>
+                          <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 600, lineHeight: 1.45 }}>
+                            {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} · {heureChoisie}<br/>
+                            <span style={{ color: T.muted, fontWeight: 500 }}>
+                              {formatDuree(prestationChoisie.duree_minutes)} · <span style={{ color: T.main, fontWeight: 800 }}>{formatPrix(prestationChoisie)}</span>
+                            </span>
+                          </p>
+                        </div>
+                        <button onClick={() => setEtape(2)}
+                          style={{ background: '#fff', border: `1.5px solid ${T.main}`, color: T.main, fontWeight: 700, fontSize: '0.72rem', padding: '0.4rem 0.875rem', borderRadius: 100, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
+                          Modifier
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Encart Yopper connecté vs invité */}
+                  {!yopperConnecte && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.pale, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: 14, border: `1px solid ${T.main}22` }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4M12 8h.01"/>
+                      </svg>
+                      <p style={{ fontSize: '0.78rem', color: T.deep, lineHeight: 1.45, flex: 1 }}>
+                        Crée ton compte Yopper pour pré-remplir tes coordonnées et retrouver tous tes RDV.{' '}
+                        <a href={`/commander/auth?redirect=/commander/rdv/${slug}`} style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>
+                          Se connecter →
+                        </a>
+                      </p>
+                    </div>
+                  )}
+
+                  {yopperConnecte && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#F0FDF4', border: '1px solid #10B98133', borderRadius: 100, padding: '4px 10px', marginBottom: 14 }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#10B981', letterSpacing: '-0.2px' }}>Coordonnées Yopper pré-remplies</span>
+                    </div>
+                  )}
+
+                  {/* Section coordonnées */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                      </svg>
+                      Tes coordonnées
+                    </span>
+                    <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                    <input placeholder="Prénom *" type="text" value={client.prenom} onChange={e => setClient(p => ({ ...p, prenom: e.target.value }))}
+                      style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: 12, border: `1.5px solid ${T.pale}`, fontSize: '0.95rem', fontFamily: '"DM Sans", sans-serif', color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box' }}/>
+                    <input placeholder="Nom *" type="text" value={client.nom} onChange={e => setClient(p => ({ ...p, nom: e.target.value }))}
+                      style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: 12, border: `1.5px solid ${T.pale}`, fontSize: '0.95rem', fontFamily: '"DM Sans", sans-serif', color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box' }}/>
+                  </div>
+                  <input placeholder="Email *" type="email" value={client.email} onChange={e => setClient(p => ({ ...p, email: e.target.value }))}
+                    style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: 12, border: `1.5px solid ${T.pale}`, fontSize: '0.95rem', fontFamily: '"DM Sans", sans-serif', color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box', marginBottom: 10 }}/>
+                  <input placeholder="Téléphone *" type="tel" value={client.telephone} onChange={e => setClient(p => ({ ...p, telephone: e.target.value }))}
+                    style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: 12, border: `1.5px solid ${T.pale}`, fontSize: '0.95rem', fontFamily: '"DM Sans", sans-serif', color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}/>
+
+                  {/* Notes optionnelles */}
+                  <textarea placeholder="Une précision pour le commerçant ? (optionnel — allergie, demande spécifique…)"
+                    value={client.notes} onChange={e => setClient(p => ({ ...p, notes: e.target.value }))}
+                    rows={3}
+                    style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: 12, border: `1.5px solid ${T.pale}`, fontSize: '0.85rem', fontFamily: '"DM Sans", sans-serif', color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box', marginBottom: 16, resize: 'vertical' }}/>
+
+                  {/* RGPD */}
+                  <div style={{ background: '#fff', borderRadius: 14, border: `1.5px solid ${T.pale}`, overflow: 'hidden', marginBottom: 16 }}>
+                    <div style={{ padding: '0.625rem 1rem', background: T.pale }}>
+                      <p style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="11" width="18" height="11" rx="2"/>
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                        Confidentialité
+                      </p>
+                    </div>
+                    {[
+                      { key: 'rgpdCommande', val: rgpdCommande, set: setRgpdCommande, label: 'Traitement de mon RDV', badge: 'Obligatoire', badgeColor: '#DC2626', badgeBg: '#FEE2E2', desc: `J'accepte que mes coordonnées soient transmises à ${commercant.nom} pour le traitement de mon rendez-vous.` },
+                      { key: 'rgpdMarketing', val: rgpdMarketing, set: setRgpdMarketing, label: 'Offres et actualités', badge: 'Optionnel', badgeColor: T.main, badgeBg: T.pale, desc: `J'accepte que ${commercant.nom} utilise mes coordonnées pour m'envoyer des offres et actualités.` },
+                    ].map((item, i) => (
+                      <label key={item.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', cursor: 'pointer', borderBottom: i === 0 ? `1px solid ${T.pale}` : 'none', background: item.val ? '#F0FDF4' : '#fff' }}>
+                        <div onClick={() => item.set(v => !v)}
+                          style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${item.val ? '#10B981' : '#D1D5DB'}`, background: item.val ? '#10B981' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, transition: 'all 0.15s' }}>
+                          {item.val && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                          )}
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '0.82rem', fontWeight: 700, color: T.ink, marginBottom: 2 }}>
+                            {item.label}{' '}
+                            <span style={{ fontSize: '0.62rem', fontWeight: 700, background: item.badgeBg, color: item.badgeColor, padding: '1px 6px', borderRadius: 100, marginLeft: 4 }}>{item.badge}</span>
+                          </p>
+                          <p style={{ fontSize: '0.75rem', color: T.muted, lineHeight: 1.5 }}>{item.desc}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* Bouton Confirmer (placeholder pour RDV-4d) */}
+                  <button disabled={!formValide}
+                    onClick={() => setEtape(4)}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: !formValide ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: !formValide ? '#9CA3AF' : '#fff', fontWeight: 800, fontSize: '1rem', cursor: !formValide ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: !formValide ? 'none' : `0 6px 24px ${T.main}55`, opacity: !formValide ? 0.6 : 1, transition: 'all 0.2s' }}>
+                    Confirmer mon RDV
+                    {formValide && (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                      </svg>
+                    )}
+                  </button>
+                  {!rgpdCommande && (
+                    <p style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: '#DC2626', textAlign: 'center', marginTop: 6, fontWeight: 600, justifyContent: 'center', width: '100%' }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <path d="M12 9v4M12 17h.01"/>
+                      </svg>
+                      Accepte le traitement de ton RDV pour continuer
+                    </p>
+                  )}
+                  <p style={{ fontSize: '0.7rem', color: T.muted, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
+                    Tu pourras annuler ou reporter jusqu'à {commercant.rdv_delai_annulation_heures || 24}h avant le RDV.
+                  </p>
+                </div>
+              )}
+
+              {/* ─── ÉTAPE 4 — placeholder confirmation (sera RDV-4d) ─── */}
+              {etape === 4 && (
+                <div style={{ padding: '1.5rem 1rem 2rem', textAlign: 'center' }}>
+                  <p style={{ fontWeight: 800, color: T.ink, fontSize: '1.1rem', marginBottom: 8 }}>Étape 4 — Confirmation (à venir en RDV-4d)</p>
+                  <p style={{ fontSize: '0.85rem', color: T.muted, marginBottom: 6 }}>Insert DB + email confirmation + iCal + écran "Yoppé ! 🟣"</p>
+                  <button onClick={() => setEtape(3)}
+                    style={{ marginTop: 16, padding: '10px 22px', borderRadius: 100, border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                    ← Retour
                   </button>
                 </div>
               )}

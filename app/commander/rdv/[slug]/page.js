@@ -101,8 +101,16 @@ function genererSlots({ dateChoisie, dureeMinutes, creneaux, reservations }) {
     start: timeToMinutes(r.heure_debut),
     end:   timeToMinutes(r.heure_fin),
   }))
+  // Ensemble des heures de DEBUT exactes des reservations existantes.
+  // Permet de distinguer 2 cas d'indisponibilite :
+  //  - heure = debut exact d'une reservation -> 'reserve' (un RDV commence ici)
+  //  - heure overlap mais pas debut exact   -> 'incompatible' (la duree de la
+  //    prestation choisie deborderait sur un RDV qui suit, exemple : 2h a 14h
+  //    si un RDV existe deja a 15h30. Ce slot n'est pas REserve, il est juste
+  //    incompatible pour cette duree).
+  const startTimes = new Set(plagesReservees.map(p => minutesToTime(p.start)))
 
-  const slotsMap = new Map()  // heure "HH:MM" → { heure, pris }
+  const slotsMap = new Map()  // heure "HH:MM" → { heure, pris, motif }
   for (const cr of creneauxJour) {
     const debut      = timeToMinutes(cr.heure_debut)
     const fin        = timeToMinutes(cr.heure_fin)
@@ -119,8 +127,9 @@ function genererSlots({ dateChoisie, dureeMinutes, creneaux, reservations }) {
       const heure = minutesToTime(t)
       // Si déjà présent en mode "libre" via un autre créneau, ne pas écraser
       if (slotsMap.has(heure) && !slotsMap.get(heure).pris) continue
-      const pris = plagesReservees.some(p => t < p.end && slotEnd > p.start)
-      slotsMap.set(heure, { heure, pris })
+      const overlap = plagesReservees.some(p => t < p.end && slotEnd > p.start)
+      const motif = !overlap ? null : (startTimes.has(heure) ? 'reserve' : 'incompatible')
+      slotsMap.set(heure, { heure, pris: overlap, motif })
     }
   }
   return [...slotsMap.values()].sort((a, b) => a.heure.localeCompare(b.heure))
@@ -859,17 +868,30 @@ export default function CommanderRdvSlug() {
 
                   {dateChoisie && !slotsLoading && slots.length > 0 && (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 6, marginBottom: 18 }}>
-                      {slots.map(({ heure, pris }) => {
+                      {slots.map(({ heure, pris, motif }) => {
                         const choisi = heureChoisie === heure
                         if (pris) {
-                          // Slot déjà réservé : grisé + barré + label "Pris". Non cliquable.
-                          // Affichage maintenu pour preuve sociale (commerçant a de l'activité).
+                          // 2 motifs visuels distincts :
+                          //  - 'reserve'      : un RDV commence pile a cette heure -> "Déjà réservé"
+                          //  - 'incompatible' : la duree de la prestation choisie deborderait sur
+                          //                     un RDV qui suit -> "Pas assez de temps". Le slot
+                          //                     lui-meme n'est pas pris, juste incompatible avec
+                          //                     la duree (clarification UX importante : sinon le
+                          //                     Yopper se demande pourquoi 14h est 'reserve' quand
+                          //                     seul 15h30 est pris en realite).
+                          const labelMap = { reserve: 'Déjà réservé', incompatible: 'Pas assez de temps' }
+                          const titleMap = { reserve: 'Créneau déjà réservé', incompatible: 'Cette prestation est trop longue pour rentrer avant le prochain RDV' }
+                          const styleMap = {
+                            reserve:      { bg: '#F3F4F6', border: '#D1D5DB' },
+                            incompatible: { bg: '#FAFAFA', border: '#E5E7EB' },
+                          }
+                          const variant = styleMap[motif] || styleMap.reserve
                           return (
-                            <div key={heure} aria-disabled="true" title="Créneau déjà réservé"
+                            <div key={heure} aria-disabled="true" title={titleMap[motif] || 'Indisponible'}
                               style={{
                                 padding: '0.55rem 0.4rem', borderRadius: 10,
-                                border: `1.5px dashed #D1D5DB`,
-                                background: '#F3F4F6',
+                                border: `1.5px dashed ${variant.border}`,
+                                background: variant.bg,
                                 color: '#9CA3AF',
                                 fontWeight: 700, fontSize: '0.85rem',
                                 fontFamily: '"DM Sans", sans-serif',
@@ -883,7 +905,7 @@ export default function CommanderRdvSlug() {
                               }}>
                               {heure}
                               <span style={{ display: 'block', fontSize: '0.5rem', fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.4px', textDecoration: 'none', marginTop: 1 }}>
-                                Déjà réservé
+                                {labelMap[motif] || 'Indispo'}
                               </span>
                             </div>
                           )

@@ -329,12 +329,21 @@ export default function CommanderAuthPage() {
         input:focus { border-color: rgba(196,160,244,0.6) !important; outline: none; }
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
-      <div style={{ minHeight: '100dvh', background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, #3D1580 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem 0', position: 'relative', overflow: 'hidden' }}>
+      {/* Layout iOS-safe :
+          • minHeight 100dvh suit la viewport dynamique (clavier ouvert/fermé)
+          • overflowX hidden uniquement (Y libre → scroll naturel si form > viewport)
+          • Centrage via margin auto sur le wrapper interne au lieu de justifyContent
+            (justifyContent: center coupe le HAUT en flex column quand content > viewport,
+            margin auto degrade gracieusement en push-down naturel quand le clavier reduit)
+          • Safe-area top/bottom pour iPhone notch + home indicator */}
+      <div style={{ minHeight: '100dvh', background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, #3D1580 100%)`, display: 'flex', flexDirection: 'column', padding: 'max(1.5rem, env(safe-area-inset-top)) 0 max(2rem, env(safe-area-inset-bottom))', position: 'relative', overflowX: 'hidden' }}>
         {/* Bande 3px canonique YOPPAA (Ink -> Main -> Light) */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
-        <Suspense fallback={null}>
-          <AuthForm/>
-        </Suspense>
+        <div style={{ margin: 'auto 0', width: '100%', display: 'flex', justifyContent: 'center' }}>
+          <Suspense fallback={null}>
+            <AuthForm/>
+          </Suspense>
+        </div>
       </div>
     </>
   )

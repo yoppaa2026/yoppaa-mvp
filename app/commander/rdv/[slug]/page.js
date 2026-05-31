@@ -171,7 +171,10 @@ export default function CommanderRdvSlug() {
   const [clientId, setClientId] = useState(null)
   const [rgpdCommande, setRgpdCommande] = useState(false)
   const [rgpdMarketing, setRgpdMarketing] = useState(true)  // pré-coché (cf signup data flow)
-  // RDV-4d : derniereRdv pour écran confirmation (à venir)
+  // RDV-4d : insert + confirmation
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
+  const [rdvCree, setRdvCree] = useState(null)  // contient la ligne rdv_reservations créée + meta affichage
 
   const scrollRef = useRef(null)
 
@@ -308,6 +311,148 @@ export default function CommanderRdvSlug() {
     && client.prenom.trim() && client.nom.trim()
     && client.email.trim() && client.telephone.trim()
     && rgpdCommande)
+
+  // ─── Get-or-create client (invité ou Yopper connecté) ─────────────────────
+  // Similaire à la logique panier C&C : on lie l'email à un row clients existant
+  // ou on crée. Update seulement si données changées (perf, cf memory PERF FIX).
+  async function getOuCreerClient(email, prenom, nom, telephone) {
+    const nomComplet = `${prenom} ${nom}`.trim()
+    const { data: ex } = await supabase
+      .from('clients')
+      .select('id, prenom, nom, telephone')
+      .eq('email', email)
+      .maybeSingle()
+    let id = ex?.id
+    if (!ex) {
+      const { data: { user } } = await supabase.auth.getUser()
+      const base = { email, prenom, nom: nomComplet, telephone }
+      const payload = user ? { ...base, auth_user_id: user.id } : base
+      const { data: inserted } = await supabase.from('clients').insert(payload).select('id').single()
+      id = inserted?.id
+    } else {
+      const needsUpdate = (
+        (telephone && ex.telephone !== telephone) ||
+        (prenom    && ex.prenom    !== prenom) ||
+        (nomComplet && ex.nom      !== nomComplet)
+      )
+      if (needsUpdate) {
+        await supabase.from('clients').update({ prenom, nom: nomComplet, telephone }).eq('id', id)
+      }
+    }
+    if (!id) return null
+    setClientId(id)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('yoppaa_client_id', id)
+      localStorage.setItem('yoppaa_email', email)
+      localStorage.setItem('yoppaa_prenom', prenom)
+      localStorage.setItem('yoppaa_nom', nom)
+      if (telephone) localStorage.setItem('yoppaa_telephone', telephone)
+    }
+    return id
+  }
+
+  // ─── Insert RDV (étape 4 onClick "Confirmer mon RDV") ──────────────────────
+  // Anti double-booking via UNIQUE INDEX DB (code 23505) — catché pour UX explicite.
+  async function passerRdv() {
+    if (!formValide || !commercant) return
+    setSubmitting(true)
+    setSubmitError(null)
+
+    const email = client.email.trim().toLowerCase()
+    const prenom = client.prenom.trim()
+    const nom = client.nom.trim()
+    const telephone = client.telephone.trim()
+
+    // 1. Get/create client + calcul heure_fin en parallèle inutile, on séquence simple
+    const cid = await getOuCreerClient(email, prenom, nom, telephone)
+
+    // 2. Calcul heure_fin (heure_debut + durée prestation)
+    const debutMin = timeToMinutes(heureChoisie)
+    const finMin   = debutMin + prestationChoisie.duree_minutes
+    const heureFin = minutesToTime(finMin)
+    const dateStr  = isoDate(dateChoisie)
+
+    // 3. Prix estimé (figé dans la résa — si prix variable, on prend prix_min)
+    const prixEstime = prestationChoisie.prix != null
+      ? Number(prestationChoisie.prix)
+      : (prestationChoisie.prix_min != null ? Number(prestationChoisie.prix_min) : null)
+
+    // 4. Acompte (figé)
+    const acomptePct = prestationChoisie.acompte_pourcent || commercant.rdv_acompte_global || 0
+    const acompteMontant = (prixEstime != null && acomptePct > 0)
+      ? Math.round(prixEstime * acomptePct) / 100
+      : null
+
+    // 5. Insert RDV
+    const payload = {
+      commercant_id: commercant.id,
+      client_id: cid,
+      prestation_id: prestationChoisie.id,
+      client_email: email,
+      client_prenom: prenom,
+      client_nom: nom,
+      client_telephone: telephone,
+      date_rdv: dateStr,
+      heure_debut: heureChoisie,
+      heure_fin: heureFin,
+      duree_minutes: prestationChoisie.duree_minutes,
+      prix_estime: prixEstime,
+      acompte_montant: acompteMontant,
+      acompte_paye: false,
+      statut: 'confirme',
+      notes_client: client.notes.trim() || null,
+      rgpd_marketing: rgpdMarketing,
+    }
+
+    const { data: nouveauRdv, error } = await supabase
+      .from('rdv_reservations')
+      .insert(payload)
+      .select('*')
+      .single()
+
+    if (error) {
+      // 23505 = unique_violation : un autre client a réservé ce slot pendant qu'on était sur le formulaire
+      if (error.code === '23505') {
+        setSubmitError('Ce créneau vient d\'être pris par un autre client. Choisis-en un autre.')
+        // Reset au step 2 pour reload les slots dispos
+        setHeureChoisie(null)
+        setSubmitting(false)
+        setTimeout(() => setEtape(2), 1200)
+        return
+      }
+      // Toute autre erreur DB (RLS, contrainte, etc.)
+      console.error('[rdv] insert error', error)
+      setSubmitError(`Erreur : ${error.message || error.code}`)
+      setSubmitting(false)
+      return
+    }
+
+    // 6. Calcul numéro du jour (séquentiel pour UX commerçant côté dashboard)
+    let numeroFinal = null
+    try {
+      const { data: duJour } = await supabase
+        .from('rdv_reservations')
+        .select('id, heure_debut')
+        .eq('commercant_id', commercant.id)
+        .eq('date_rdv', dateStr)
+        .in('statut', ['confirme', 'honore'])
+        .is('deleted_at', null)
+        .order('heure_debut', { ascending: true })
+      const idx = (duJour || []).findIndex(r => r.id === nouveauRdv.id)
+      numeroFinal = idx >= 0 ? idx + 1 : null
+      if (numeroFinal) {
+        await supabase.from('rdv_reservations').update({ numero_rdv: numeroFinal }).eq('id', nouveauRdv.id)
+      }
+    } catch (e) {
+      console.warn('[rdv] numero calc skip', e)
+    }
+
+    // 7. État final pour écran confirmation (étape 4)
+    setRdvCree({ ...nouveauRdv, numero_rdv: numeroFinal })
+    setSubmitting(false)
+    setEtape(4)
+    setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
+  }
 
   // ─── Rendu ────────────────────────────────────────────────────────────────
   return (
@@ -840,15 +985,28 @@ export default function CommanderRdvSlug() {
                     ))}
                   </div>
 
-                  {/* Bouton Confirmer (placeholder pour RDV-4d) */}
-                  <button disabled={!formValide}
-                    onClick={() => setEtape(4)}
-                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: !formValide ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: !formValide ? '#9CA3AF' : '#fff', fontWeight: 800, fontSize: '1rem', cursor: !formValide ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: !formValide ? 'none' : `0 6px 24px ${T.main}55`, opacity: !formValide ? 0.6 : 1, transition: 'all 0.2s' }}>
-                    Confirmer mon RDV
-                    {formValide && (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                  {/* Erreur insert (double-booking ou autre) */}
+                  {submitError && (
+                    <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.875rem 1rem', marginBottom: 12, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <path d="M12 9v4M12 17h.01"/>
                       </svg>
+                      <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.5, flex: 1 }}>{submitError}</p>
+                    </div>
+                  )}
+
+                  {/* Bouton Confirmer */}
+                  <button disabled={!formValide || submitting}
+                    onClick={passerRdv}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: (!formValide || submitting) ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: (!formValide || submitting) ? '#9CA3AF' : '#fff', fontWeight: 800, fontSize: '1rem', cursor: (!formValide || submitting) ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: (!formValide || submitting) ? 'none' : `0 6px 24px ${T.main}55`, opacity: (!formValide || submitting) ? 0.6 : 1, transition: 'all 0.2s' }}>
+                    {submitting ? 'Réservation en cours…' : (
+                      <>
+                        Confirmer mon RDV
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                        </svg>
+                      </>
                     )}
                   </button>
                   {!rgpdCommande && (
@@ -866,14 +1024,98 @@ export default function CommanderRdvSlug() {
                 </div>
               )}
 
-              {/* ─── ÉTAPE 4 — placeholder confirmation (sera RDV-4d) ─── */}
-              {etape === 4 && (
-                <div style={{ padding: '1.5rem 1rem 2rem', textAlign: 'center' }}>
-                  <p style={{ fontWeight: 800, color: T.ink, fontSize: '1.1rem', marginBottom: 8 }}>Étape 4 — Confirmation (à venir en RDV-4d)</p>
-                  <p style={{ fontSize: '0.85rem', color: T.muted, marginBottom: 6 }}>Insert DB + email confirmation + iCal + écran "Yoppé ! 🟣"</p>
-                  <button onClick={() => setEtape(3)}
-                    style={{ marginTop: 16, padding: '10px 22px', borderRadius: 100, border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                    ← Retour
+              {/* ─── ÉTAPE 4 — CONFIRMATION "C'est noté ! 🟣" ─── */}
+              {etape === 4 && rdvCree && (
+                <div style={{ padding: '1.5rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
+                  <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                    {/* Cercle vert avec check (signature succès Yoppaa, identique confirmation commande) */}
+                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg, #10B981, #6EE7B7)', marginBottom: '0.875rem', boxShadow: '0 8px 28px rgba(16,185,129,0.45), 0 0 0 6px #10B98122' }}>
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 12l5 5L20 7"/>
+                      </svg>
+                    </div>
+                    {/* Wordmark tricolore canonique fond clair */}
+                    <p style={{ fontWeight: 900, fontSize: '1rem', marginBottom: 4, letterSpacing: '-0.3px' }}>
+                      <span style={{ color: T.ink }}>yo</span>
+                      <span style={{ color: T.main }}>pp</span>
+                      <span style={{ color: T.mid }}>aa</span>
+                    </p>
+                    {rdvCree.numero_rdv && (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '6px 20px', marginBottom: 12, boxShadow: `0 4px 16px ${T.main}44` }}>
+                        <span style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px' }}>#{rdvCree.numero_rdv}</span>
+                      </div>
+                    )}
+                    <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>C&apos;est noté ! 🟣</h2>
+                    <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>Chez {commercant.nom}</p>
+                    <p style={{ color: T.muted, fontSize: '0.875rem' }}>
+                      {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} à {heureChoisie}
+                    </p>
+                  </div>
+
+                  {/* Card "Et après ?" */}
+                  <div style={{ background: `linear-gradient(135deg, ${T.pale}, #fff)`, borderRadius: 20, overflow: 'hidden', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
+                    <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
+                    <div style={{ padding: '1.25rem' }}>
+                      <p style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, color: T.ink, marginBottom: 12, fontSize: '1rem' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10"/>
+                          <path d="M12 8v4l3 3"/>
+                        </svg>
+                        Et après&nbsp;?
+                      </p>
+                      <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {[
+                          { n: 1, t: <>Tu reçois un email de confirmation avec ton RDV ajoutable à ton calendrier (iCal).</> },
+                          { n: 2, t: <>Tu te rends chez <strong>{commercant.nom}</strong> à ton créneau ({heureChoisie}).</> },
+                          { n: 3, t: <>Tu peux annuler ou reporter depuis ton espace Yoppaa jusqu&apos;à {commercant.rdv_delai_annulation_heures || 24}h avant.</> },
+                        ].map(s => (
+                          <li key={s.n} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '0.85rem', color: T.deep, lineHeight: 1.5 }}>
+                            <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 1, boxShadow: `0 2px 6px ${T.main}33` }}>{s.n}</span>
+                            <span style={{ paddingTop: 2 }}>{s.t}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  </div>
+
+                  {/* Récap RDV details */}
+                  <div style={{ background: '#fff', borderRadius: 16, border: `1px solid ${T.pale}`, padding: '1rem 1.125rem', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: `1px solid ${T.pale}` }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Prestation</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 800, color: T.ink, textAlign: 'right', maxWidth: '60%' }}>{prestationChoisie.nom}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: `1px solid ${T.pale}` }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Durée</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 800, color: T.ink }}>{formatDuree(prestationChoisie.duree_minutes)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: rdvCree.acompte_montant ? 8 : 0, paddingBottom: rdvCree.acompte_montant ? 8 : 0, borderBottom: rdvCree.acompte_montant ? `1px solid ${T.pale}` : 'none' }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Prix estimé</span>
+                      <span style={{ fontSize: '0.95rem', fontWeight: 900, color: T.main }}>{formatPrix(prestationChoisie)}</span>
+                    </div>
+                    {rdvCree.acompte_montant && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Acompte à régler</span>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: T.deep }}>{Number(rdvCree.acompte_montant).toFixed(2)} € sur place</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <button onClick={() => router.push('/commander')}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 6px 24px ${T.main}55`, marginBottom: 10 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
+                    </svg>
+                    Retour à l&apos;accueil
+                  </button>
+                  <button onClick={() => {
+                    setPrestationChoisie(null); setDateChoisie(null); setHeureChoisie(null)
+                    setClient(p => ({ ...p, notes: '' }))
+                    setRgpdCommande(false); setRgpdMarketing(true)
+                    setRdvCree(null); setSubmitError(null)
+                    setEtape(1)
+                  }}
+                    style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif' }}>
+                    Prendre un autre RDV chez {commercant.nom}
                   </button>
                 </div>
               )}

@@ -1970,9 +1970,11 @@ export default function Commander() {
                   </div>
                   <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>Yoppers</p>
                 </div>
-                <h2 style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-0.6px', margin: 0, position: 'relative', lineHeight: 1.1 }}>
+                <h2 style={{ fontWeight: 900, fontSize: '1.4rem', letterSpacing: '-0.6px', margin: 0, position: 'relative', lineHeight: 1.1 }}>
                   <span style={{ color: '#fff' }}>Mes </span>
                   <span style={{ color: T.light }}>commandes</span>
+                  <span style={{ color: '#fff' }}> et </span>
+                  <span style={{ color: T.mid }}>rendez-vous</span>
                 </h2>
                 {badgeCommandes > 0 && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(4px)', borderRadius: 100, padding: '4px 12px', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', position: 'relative' }}>

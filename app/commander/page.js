@@ -1595,10 +1595,13 @@ export default function Commander() {
   const card = { background: '#fff', borderRadius: 14, padding: '1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 6px rgba(107,53,196,0.05)' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }
   const statutStyle = {
-    recupere:       { bg: '#F0FDF4', color: '#10B981', label: 'Récupérée' },
+    // 'recupere' (historique) -> neutre gris pour eviter de confondre avec les RDVs (vert).
+    recupere:       { bg: '#F3F4F6', color: '#6B7280', label: 'Récupérée' },
+    // 'pret' garde le vert : seul statut a action immediate (signature couleur preservee).
     pret:           { bg: '#F0FDF4', color: '#10B981', label: 'Prête à retirer' },
     en_preparation: { bg: '#EFF6FF', color: '#2563EB', label: 'En préparation' },
-    en_attente:     { bg: '#F0FDF4', color: '#10B981', label: 'Validée' },
+    // 'en_attente' (Validee) -> violet (signature commande alimentaire, pas vert).
+    en_attente:     { bg: T.pale,    color: T.main,    label: 'Validée' },
   }
   // Sous-texte chaleureux par statut (affiche sous la pastille pour donner du contexte)
   const statutSousTexte = {
@@ -1973,7 +1976,9 @@ export default function Commander() {
                 </h2>
                 {badgeCommandes > 0 && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(4px)', borderRadius: 100, padding: '4px 12px', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', position: 'relative' }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', border: '1.5px solid #fff', boxShadow: '0 0 0 1.5px #10B98133, 0 0 8px #10B98199', animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
+                    {/* Point violet pale (T.light) au lieu de vert : le vert est reserve aux RDVs
+                        et au statut 'Prete a retirer'. Ici on cumule commandes + RDVs, neutre marque. */}
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.light, border: '1.5px solid #fff', boxShadow: `0 0 0 1.5px ${T.light}33, 0 0 8px ${T.light}99`, animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff' }}>{badgeCommandes} en cours</span>
                   </div>
                 )}
@@ -2126,7 +2131,7 @@ export default function Commander() {
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(c.total).toFixed(2)}€</p>
-                        <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: '#F0FDF4', color: '#10B981' }}>✓ Récupérée</span>
+                        <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: '#F3F4F6', color: '#6B7280' }}>✓ Récupérée</span>
                       </div>
                     </div>
                   ))}

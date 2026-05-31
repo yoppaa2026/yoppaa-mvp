@@ -54,6 +54,7 @@ function formatPrix(prestation) {
 const JOURS_LONGS = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi']
 const JOURS_COURTS = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam']
 const MOIS_COURTS = ['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc']
+const MOIS_LONGS  = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
 
 function timeToMinutes(t) {
   // "09:30" ou "09:30:00" → 570
@@ -183,6 +184,99 @@ function genererJoursDispos({ nbJours, horairesDetail, creneaux }) {
   return out
 }
 
+// ─── Mini-calendrier mensuel (deroulant depuis le picker horizontal de 14 jours) ─
+// Affiche les 60 jours regroupes par mois. Cellules cliquables si ouvert, gris si ferme.
+// Cellules hors fenetre 60j ou avant aujourd'hui : grisees non cliquables.
+// Tap sur un jour ouvert -> onSelect(date) + ferme le mini-cal.
+function MiniCalendrier({ jours, dateChoisie, onSelect }) {
+  // Group jours by month-year, en ordre chronologique
+  const months = []
+  const monthsByKey = {}
+  jours.forEach(j => {
+    const key = `${j.date.getFullYear()}-${j.date.getMonth()}`
+    if (!monthsByKey[key]) {
+      const m = {
+        label: `${MOIS_LONGS[j.date.getMonth()]} ${j.date.getFullYear()}`,
+        year: j.date.getFullYear(),
+        month: j.date.getMonth(),
+        joursMap: {},
+      }
+      monthsByKey[key] = m
+      months.push(m)
+    }
+    monthsByKey[key].joursMap[j.iso] = j
+  })
+
+  const dateChoisieIso = dateChoisie ? isoDate(dateChoisie) : null
+
+  return (
+    <div style={{ background: '#fff', border: '1.5px solid #EDE0FF', borderRadius: 14, padding: '0.875rem 0.875rem 0.75rem', marginBottom: 14, animation: 'fadeUp 0.2s ease' }}>
+      {months.map(m => {
+        const firstDay = new Date(m.year, m.month, 1)
+        // Lundi = 0, Dimanche = 6 (convention francaise/europeenne)
+        const firstWeekday = (firstDay.getDay() + 6) % 7
+        const daysInMonth = new Date(m.year, m.month + 1, 0).getDate()
+
+        const cells = []
+        for (let i = 0; i < firstWeekday; i++) cells.push({ empty: true })
+        for (let d = 1; d <= daysInMonth; d++) {
+          const iso = `${m.year}-${String(m.month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+          cells.push({ d, iso, j: m.joursMap[iso] })
+        }
+
+        return (
+          <div key={`${m.year}-${m.month}`} style={{ marginBottom: 12 }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: '#2D0F6B', textTransform: 'uppercase', letterSpacing: '0.8px', margin: 0, marginBottom: 8 }}>
+              {m.label}
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3, marginBottom: 4 }}>
+              {['L','M','M','J','V','S','D'].map((lbl, i) => (
+                <div key={i} style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textAlign: 'center', padding: '2px 0' }}>{lbl}</div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+              {cells.map((c, i) => {
+                if (c.empty) return <div key={i}/>
+                // Pas dans la fenetre 60j (avant aujourd'hui ou apres J+60)
+                if (!c.j) {
+                  return (
+                    <div key={i} style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#D1D5DB', fontWeight: 500 }}>
+                      {c.d}
+                    </div>
+                  )
+                }
+                const choisi = c.iso === dateChoisieIso
+                const ouvert = c.j.ouvert
+                return (
+                  <button key={i} onClick={() => ouvert && onSelect(c.j.date)} disabled={!ouvert}
+                    style={{
+                      aspectRatio: '1',
+                      borderRadius: 8,
+                      border: choisi ? '1.5px solid #6B35C4' : '1px solid transparent',
+                      background: choisi ? '#6B35C4' : (ouvert ? '#fff' : '#F9FAFB'),
+                      color: choisi ? '#fff' : (ouvert ? '#1A0840' : '#D1D5DB'),
+                      fontWeight: choisi ? 900 : (ouvert ? 700 : 500),
+                      fontSize: 13, fontFamily: '"DM Sans", sans-serif',
+                      cursor: ouvert ? 'pointer' : 'not-allowed',
+                      padding: 0,
+                      transition: 'all 0.12s',
+                      position: 'relative',
+                    }}>
+                    {c.d}
+                    {c.j.isToday && (
+                      <span style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', width: 4, height: 4, borderRadius: '50%', background: choisi ? '#fff' : '#6B35C4' }}/>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function CommanderRdvSlug() {
   const { slug } = useParams()
@@ -201,6 +295,7 @@ export default function CommanderRdvSlug() {
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
   const [slots, setSlots] = useState([])  // [{ heure, pris, motif }]
   const [reservationsJour, setReservationsJour] = useState([])  // [{ heure_debut, heure_fin }] pour la section 'Deja pris'
+  const [showMiniCal, setShowMiniCal] = useState(false)  // toggle mini-calendrier mensuel pour jours > J+14
   const [slotsLoading, setSlotsLoading] = useState(false)
   // RDV-4c : coordonnées client + RGPD (pré-fill depuis localStorage)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '', notes: '' })
@@ -318,9 +413,11 @@ export default function CommanderRdvSlug() {
     setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
   }
 
-  // Liste des jours disponibles (14 prochains)
+  // Liste des jours disponibles (60 prochains pour les RDV vitrines — l'anticipation
+  // est plus longue que pour de l'alimentaire C&C). Les 14 premiers sont affichés en scroll
+  // horizontal, les 46 suivants sont accessibles via le mini-calendrier deroulant.
   const joursDispos = commercant && creneauxConfig.length > 0
-    ? genererJoursDispos({ nbJours: 14, horairesDetail: commercant.horaires_detail, creneaux: creneauxConfig })
+    ? genererJoursDispos({ nbJours: 60, horairesDetail: commercant.horaires_detail, creneaux: creneauxConfig })
     : []
 
   // Auto-sélectionne le premier jour ouvert quand on entre à l'étape 2
@@ -878,9 +975,11 @@ export default function CommanderRdvSlug() {
                     <div style={{ flex: 1, height: 1, background: T.pale }}/>
                   </div>
 
-                  {/* Day picker horizontal scrollable */}
-                  <div className="day-scroll" style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 18, scrollbarWidth: 'none' }}>
-                    {joursDispos.map(j => {
+                  {/* Day picker horizontal scrollable — 14 premiers jours uniquement.
+                      Pour les RDVs plus eloignes (jusqu'a J+60), bouton 'Plus de jours' qui
+                      deroule un mini-calendrier mensuel sous le picker. */}
+                  <div className="day-scroll" style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: showMiniCal ? 8 : 12, scrollbarWidth: 'none' }}>
+                    {joursDispos.slice(0, 14).map(j => {
                       const choisi = dateChoisie && isoDate(dateChoisie) === j.iso
                       return (
                         <button key={j.iso} onClick={() => { if (j.ouvert) { setDateChoisie(j.date); setHeureChoisie(null) } }} disabled={!j.ouvert}
@@ -911,7 +1010,42 @@ export default function CommanderRdvSlug() {
                         </button>
                       )
                     })}
+                    {joursDispos.length > 14 && (
+                      <button onClick={() => setShowMiniCal(s => !s)}
+                        style={{
+                          flexShrink: 0, minWidth: 64,
+                          padding: '0.5rem 0.75rem', borderRadius: 12,
+                          border: `1.5px dashed ${showMiniCal ? T.main : T.pale}`,
+                          background: showMiniCal ? T.pale : '#fff',
+                          color: T.main,
+                          cursor: 'pointer',
+                          textAlign: 'center', fontFamily: '"DM Sans", sans-serif',
+                          transition: 'all 0.15s',
+                          display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 2,
+                        }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="4" width="18" height="18" rx="2"/>
+                          <path d="M16 2v4M8 2v4M3 10h18"/>
+                        </svg>
+                        <span style={{ fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.3px' }}>
+                          {showMiniCal ? 'Fermer' : 'Plus'}
+                        </span>
+                      </button>
+                    )}
                   </div>
+
+                  {/* Mini-calendrier mensuel — apparait au clic sur le bouton 'Plus' */}
+                  {showMiniCal && (
+                    <MiniCalendrier
+                      jours={joursDispos}
+                      dateChoisie={dateChoisie}
+                      onSelect={d => {
+                        setDateChoisie(d)
+                        setHeureChoisie(null)
+                        setShowMiniCal(false)
+                      }}
+                    />
+                  )}
 
                   {/* Section : choix du créneau */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>

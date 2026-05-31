@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
+import ModalNouveauRdv from './ModalNouveauRdv'
 
 const T = {
   bg:      '#F8F6FF',
@@ -475,7 +476,9 @@ export default function Dashboard() {
   const [commandes, setCommandes] = useState([])
   const [rdvs, setRdvs] = useState([])
   const [creneauxRdv, setCreneauxRdv] = useState([])  // rdv_creneaux du commercant, pour la grille agenda (pauses)
+  const [prestationsRdv, setPrestationsRdv] = useState([])  // rdv_prestations actives, pour la modale 'Nouveau RDV manuel'
   const [rdvSelectionne, setRdvSelectionne] = useState(null)  // RDV ouvert dans la modale details
+  const [nouveauRdvSlot, setNouveauRdvSlot] = useState(null)  // { date, heure } -> ouvre la modale d'ajout manuel
   const [commercant, setCommercant] = useState(null)
   const [loading, setLoading] = useState(true)
   const [listeCommercants, setListeCommercants] = useState([])
@@ -524,9 +527,9 @@ export default function Dashboard() {
 
   // Fetch des RDVs d'un commercant. Filtre deleted_at IS NULL (legal Belgique 7 ans
   // mais on cache les supprimes du dashboard quotidien). Tri par date + heure.
-  // Fetch aussi les rdv_creneaux pour la grille agenda (pauses, jours fermes).
+  // Fetch aussi les rdv_creneaux (pauses) et rdv_prestations (modale ajout manuel).
   const chargerRdvs = useCallback(async (id) => {
-    const [{ data: rdvData }, { data: crData }] = await Promise.all([
+    const [{ data: rdvData }, { data: crData }, { data: pData }] = await Promise.all([
       supabase
         .from('rdv_reservations')
         .select('*, prestation:rdv_prestations(nom, duree_minutes, prix)')
@@ -540,9 +543,18 @@ export default function Dashboard() {
         .eq('commercant_id', id)
         .eq('actif', true)
         .is('deleted_at', null),
+      supabase
+        .from('rdv_prestations')
+        .select('id, nom, duree_minutes, prix, prix_min, prix_max, acompte_pourcent, ordre')
+        .eq('commercant_id', id)
+        .eq('actif', true)
+        .is('deleted_at', null)
+        .order('ordre', { ascending: true })
+        .order('created_at', { ascending: true }),
     ])
     setRdvs(rdvData || [])
     setCreneauxRdv(crData || [])
+    setPrestationsRdv(pData || [])
   }, [])
 
   // ─── Init — mémoriser le commerce sélectionné ─────────────────────────────
@@ -1303,10 +1315,20 @@ export default function Dashboard() {
                     creneaux={creneauxRdv}
                     horairesDetail={commercant?.horaires_detail}
                     onSelectRdv={(r) => setRdvSelectionne(r)}
-                    onNouveauRdv={(date, heure) => {
-                      // VITRINE-4 : ouverture modale 'Nouveau RDV manuel' a brancher
-                      alert(`Nouveau RDV : ${date.toLocaleDateString('fr-BE')} ${heure}\n(modale d'ajout : VITRINE-4 a venir)`)
-                    }}
+                    onNouveauRdv={(date, heure) => setNouveauRdvSlot({ date, heure })}
+                  />
+                )}
+                {/* Modale 'Nouveau RDV manuel' — saisie rapide pour les RDV pris au telephone */}
+                {nouveauRdvSlot && commercant && (
+                  <ModalNouveauRdv
+                    commercant={commercant}
+                    prestations={prestationsRdv}
+                    creneaux={creneauxRdv}
+                    rdvsExistants={rdvs}
+                    dateInit={nouveauRdvSlot.date}
+                    heureInit={nouveauRdvSlot.heure}
+                    onClose={() => setNouveauRdvSlot(null)}
+                    onCreated={() => chargerRdvs(commercant.id)}
                   />
                 )}
                 {/* Modale details RDV : reutilise la CarteRdv qu'on avait codee pour l'ancienne vue liste */}

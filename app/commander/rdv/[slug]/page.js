@@ -894,7 +894,7 @@ export default function CommanderRdvSlug() {
                 </div>
 
                 {/* Horaires complets (collapsible) — meme widget que la fiche alimentaire */}
-                <div style={{ marginTop: 12, marginLeft: -4, marginRight: -4 }}>
+                <div style={{ marginTop: 12 }}>
                   <HorairesSection horaires={commercant.horaires_detail} variant="card"/>
                 </div>
               </div>

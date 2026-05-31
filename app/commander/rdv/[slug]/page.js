@@ -245,21 +245,18 @@ export default function CommanderRdvSlug() {
   }, [slug, router])
 
   // Fetch slots libres quand la date change (ou la prestation change)
+  // Utilise la RPC rdv_slots_busy (SECURITY DEFINER) pour bypass RLS : tout Yopper
+  // peut voir les slots déjà pris, sans exposer les infos perso des autres clients.
   useEffect(() => {
     if (etape !== 2 || !dateChoisie || !prestationChoisie || !commercant) return
     let annule = false
     ;(async () => {
       setSlotsLoading(true)
-      // Fetch réservations existantes du jour (statuts confirme + honore uniquement)
       const dateStr = isoDate(dateChoisie)
-      const { data: reservations } = await supabase
-        .from('rdv_reservations')
-        .select('heure_debut, heure_fin, statut')
-        .eq('commercant_id', commercant.id)
-        .eq('date_rdv', dateStr)
-        .in('statut', ['confirme', 'honore'])
-        .is('deleted_at', null)
+      const { data: reservations, error: errRpc } = await supabase
+        .rpc('rdv_slots_busy', { p_commercant_id: commercant.id, p_date: dateStr })
       if (annule) return
+      if (errRpc) console.warn('[rdv-slots] rpc error', errRpc)
       const slots = genererSlotsLibres({
         dateChoisie,
         dureeMinutes: prestationChoisie.duree_minutes,
@@ -353,116 +350,111 @@ export default function CommanderRdvSlug() {
 
   // ─── Insert RDV (étape 4 onClick "Confirmer mon RDV") ──────────────────────
   // Anti double-booking via UNIQUE INDEX DB (code 23505) — catché pour UX explicite.
+  // numero_rdv assigné automatiquement par trigger DB set_rdv_numero (BEFORE INSERT).
   async function passerRdv() {
     if (!formValide || !commercant) return
+    console.info('[rdv] passerRdv start')
     setSubmitting(true)
     setSubmitError(null)
 
-    const email = client.email.trim().toLowerCase()
-    const prenom = client.prenom.trim()
-    const nom = client.nom.trim()
-    const telephone = client.telephone.trim()
+    try {
+      const email = client.email.trim().toLowerCase()
+      const prenom = client.prenom.trim()
+      const nom = client.nom.trim()
+      const telephone = client.telephone.trim()
 
-    // 1. Get/create client + calcul heure_fin en parallèle inutile, on séquence simple
-    const cid = await getOuCreerClient(email, prenom, nom, telephone)
+      const cid = await getOuCreerClient(email, prenom, nom, telephone)
+      console.info('[rdv] client id =', cid)
 
-    // 2. Calcul heure_fin (heure_debut + durée prestation)
-    const debutMin = timeToMinutes(heureChoisie)
-    const finMin   = debutMin + prestationChoisie.duree_minutes
-    const heureFin = minutesToTime(finMin)
-    const dateStr  = isoDate(dateChoisie)
+      const debutMin = timeToMinutes(heureChoisie)
+      const finMin   = debutMin + prestationChoisie.duree_minutes
+      const heureFin = minutesToTime(finMin)
+      const dateStr  = isoDate(dateChoisie)
 
-    // 3. Prix estimé (figé dans la résa — si prix variable, on prend prix_min)
-    const prixEstime = prestationChoisie.prix != null
-      ? Number(prestationChoisie.prix)
-      : (prestationChoisie.prix_min != null ? Number(prestationChoisie.prix_min) : null)
+      // Prix estimé (figé — si prix variable, on prend prix_min)
+      const prixEstime = prestationChoisie.prix != null
+        ? Number(prestationChoisie.prix)
+        : (prestationChoisie.prix_min != null ? Number(prestationChoisie.prix_min) : null)
 
-    // 4. Acompte (figé)
-    const acomptePct = prestationChoisie.acompte_pourcent || commercant.rdv_acompte_global || 0
-    const acompteMontant = (prixEstime != null && acomptePct > 0)
-      ? Math.round(prixEstime * acomptePct) / 100
-      : null
+      // Acompte (figé)
+      const acomptePct = prestationChoisie.acompte_pourcent || commercant.rdv_acompte_global || 0
+      const acompteMontant = (prixEstime != null && acomptePct > 0)
+        ? Math.round(prixEstime * acomptePct) / 100
+        : null
 
-    // 5. Insert RDV
-    // On génère l'UUID côté client pour éviter d'avoir besoin de .select() après insert
-    // (ce qui simplifie la RLS : pas besoin de policy SELECT au moment du RETURNING).
-    const rdvId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null
-    const payload = {
-      ...(rdvId ? { id: rdvId } : {}),
-      commercant_id: commercant.id,
-      client_id: cid,
-      prestation_id: prestationChoisie.id,
-      client_email: email,
-      client_prenom: prenom,
-      client_nom: nom,
-      client_telephone: telephone,
-      date_rdv: dateStr,
-      heure_debut: heureChoisie,
-      heure_fin: heureFin,
-      duree_minutes: prestationChoisie.duree_minutes,
-      prix_estime: prixEstime,
-      acompte_montant: acompteMontant,
-      acompte_paye: false,
-      statut: 'confirme',
-      notes_client: client.notes.trim() || null,
-      rgpd_marketing: rgpdMarketing,
-    }
+      // UUID client-side : pas besoin de .select() après insert
+      const rdvId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null
+      const payload = {
+        ...(rdvId ? { id: rdvId } : {}),
+        commercant_id: commercant.id,
+        client_id: cid,
+        prestation_id: prestationChoisie.id,
+        client_email: email,
+        client_prenom: prenom,
+        client_nom: nom,
+        client_telephone: telephone,
+        date_rdv: dateStr,
+        heure_debut: heureChoisie,
+        heure_fin: heureFin,
+        duree_minutes: prestationChoisie.duree_minutes,
+        prix_estime: prixEstime,
+        acompte_montant: acompteMontant,
+        acompte_paye: false,
+        statut: 'confirme',
+        notes_client: client.notes.trim() || null,
+        rgpd_marketing: rgpdMarketing,
+      }
 
-    // Insert SANS .select() : évite la dépendance à la policy SELECT après RETURNING.
-    // Si on a besoin d'infos serveur (created_at, etc.) on les fetchera dans un second appel
-    // qui passera par la policy SELECT (commercant ou client connecté).
-    const { error } = await supabase.from('rdv_reservations').insert(payload)
+      console.info('[rdv] inserting', { id: rdvId, date: dateStr, heure: heureChoisie })
+      const { error } = await supabase.from('rdv_reservations').insert(payload)
 
-    if (error) {
-      // 23505 = unique_violation : un autre client a réservé ce slot pendant qu'on était sur le formulaire
-      if (error.code === '23505') {
-        setSubmitError('Ce créneau vient d\'être pris par un autre client. Choisis-en un autre.')
-        setHeureChoisie(null)
+      if (error) {
+        // 23505 = unique_violation : un autre client a pris ce slot entre-temps
+        if (error.code === '23505') {
+          console.warn('[rdv] double-booking caught')
+          setSubmitError('Ce créneau vient d\'être pris par un autre client. Choisis-en un autre.')
+          setHeureChoisie(null)
+          setSubmitting(false)
+          setTimeout(() => setEtape(2), 1200)
+          return
+        }
+        console.error('[rdv] insert error', error)
+        setSubmitError(`Erreur : ${error.message || error.code || 'inconnue'}`)
         setSubmitting(false)
-        setTimeout(() => setEtape(2), 1200)
         return
       }
-      // Toute autre erreur DB (RLS, contrainte, etc.)
-      console.error('[rdv] insert error', error)
-      setSubmitError(`Erreur : ${error.message || error.code}`)
-      setSubmitting(false)
-      return
-    }
 
-    // 6. Calcul numéro du jour (séquentiel pour UX commerçant côté dashboard)
-    // Best-effort : si la policy SELECT ne nous renvoie rien (anon non lié), on skip.
-    let numeroFinal = null
-    if (rdvId) {
-      try {
-        const { data: duJour } = await supabase
-          .from('rdv_reservations')
-          .select('id, heure_debut')
-          .eq('commercant_id', commercant.id)
-          .eq('date_rdv', dateStr)
-          .in('statut', ['confirme', 'honore'])
-          .is('deleted_at', null)
-          .order('heure_debut', { ascending: true })
-        if (duJour && duJour.length > 0) {
-          const idx = duJour.findIndex(r => r.id === rdvId)
-          numeroFinal = idx >= 0 ? idx + 1 : null
-          if (numeroFinal) {
-            await supabase.from('rdv_reservations').update({ numero_rdv: numeroFinal }).eq('id', rdvId)
-          }
+      console.info('[rdv] insert OK, fetching numero')
+
+      // Récupère le numero_rdv assigné par le trigger DB (RPC SECURITY DEFINER, bypass RLS)
+      let numeroFinal = null
+      if (rdvId) {
+        try {
+          const { data: numero } = await supabase.rpc('rdv_numero_pour_id', { p_rdv_id: rdvId })
+          numeroFinal = typeof numero === 'number' ? numero : null
+          console.info('[rdv] numero =', numeroFinal)
+        } catch (e) {
+          console.warn('[rdv] numero rpc skip', e)
         }
-      } catch (e) {
-        console.warn('[rdv] numero calc skip', e)
       }
-    }
 
-    // 7. État final pour écran confirmation (étape 4) — on reconstruit depuis le payload local
-    setRdvCree({
-      id: rdvId,
-      ...payload,
-      numero_rdv: numeroFinal,
-    })
-    setSubmitting(false)
-    setEtape(4)
-    setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
+      // État final pour écran confirmation (étape 4)
+      setRdvCree({
+        id: rdvId,
+        ...payload,
+        numero_rdv: numeroFinal,
+      })
+      setSubmitting(false)
+      setEtape(4)
+      setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
+      console.info('[rdv] success, etape=4')
+
+    } catch (e) {
+      // Filet de sécurité : toute exception non gérée tombe ici
+      console.error('[rdv] passerRdv exception', e)
+      setSubmitError(`Erreur inattendue : ${e?.message || String(e)}`)
+      setSubmitting(false)
+    }
   }
 
   // ─── Rendu ────────────────────────────────────────────────────────────────

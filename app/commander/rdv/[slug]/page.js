@@ -198,7 +198,8 @@ export default function CommanderRdvSlug() {
   const [prestationChoisie, setPrestationChoisie] = useState(null)
   const [dateChoisie, setDateChoisie] = useState(null)        // Date object
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
-  const [slots, setSlots] = useState([])  // [{ heure, pris }]
+  const [slots, setSlots] = useState([])  // [{ heure, pris, motif }]
+  const [reservationsJour, setReservationsJour] = useState([])  // [{ heure_debut, heure_fin }] pour la section 'Deja pris'
   const [slotsLoading, setSlotsLoading] = useState(false)
   // RDV-4c : coordonnées client + RGPD (pré-fill depuis localStorage)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '', notes: '' })
@@ -299,6 +300,9 @@ export default function CommanderRdvSlug() {
         horairesDetail: commercant.horaires_detail,
       })
       setSlots(list)
+      // Tri des reservations par heure_debut pour la section info 'Deja pris'
+      const sorted = (reservations || []).slice().sort((a, b) => (a.heure_debut || '').localeCompare(b.heure_debut || ''))
+      setReservationsJour(sorted)
       setSlotsLoading(false)
     })()
     return () => { annule = true }
@@ -309,7 +313,7 @@ export default function CommanderRdvSlug() {
     setEtape(2)
     setDateChoisie(null)
     setHeureChoisie(null)
-    setSlots([])
+    setSlots([]); setReservationsJour([])
     setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
   }
 
@@ -943,58 +947,19 @@ export default function CommanderRdvSlug() {
                     </div>
                   )}
 
-                  {dateChoisie && !slotsLoading && slots.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 6, marginBottom: 18 }}>
-                      {slots.map(({ heure, pris, motif }) => {
+                  {/* SECTION 1 : SLOTS LIBRES UNIQUEMENT — gros boutons, lecture immediate */}
+                  {dateChoisie && !slotsLoading && slots.filter(s => !s.pris).length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(82px, 1fr))', gap: 8, marginBottom: 14 }}>
+                      {slots.filter(s => !s.pris).map(({ heure }) => {
                         const choisi = heureChoisie === heure
-                        if (pris) {
-                          // 2 motifs visuels distincts :
-                          //  - 'reserve'      : un RDV commence pile a cette heure -> "Déjà réservé"
-                          //  - 'incompatible' : la duree de la prestation choisie deborderait sur
-                          //                     un RDV qui suit -> "Pas assez de temps". Le slot
-                          //                     lui-meme n'est pas pris, juste incompatible avec
-                          //                     la duree (clarification UX importante : sinon le
-                          //                     Yopper se demande pourquoi 14h est 'reserve' quand
-                          //                     seul 15h30 est pris en realite).
-                          const labelMap = { reserve: 'Déjà réservé', incompatible: 'Pas assez de temps' }
-                          const titleMap = { reserve: 'Créneau déjà réservé', incompatible: 'Cette prestation est trop longue pour rentrer avant le prochain RDV' }
-                          const styleMap = {
-                            reserve:      { bg: '#F3F4F6', border: '#D1D5DB' },
-                            incompatible: { bg: '#FAFAFA', border: '#E5E7EB' },
-                          }
-                          const variant = styleMap[motif] || styleMap.reserve
-                          return (
-                            <div key={heure} aria-disabled="true" title={titleMap[motif] || 'Indisponible'}
-                              style={{
-                                padding: '0.55rem 0.4rem', borderRadius: 10,
-                                border: `1.5px dashed ${variant.border}`,
-                                background: variant.bg,
-                                color: '#9CA3AF',
-                                fontWeight: 700, fontSize: '0.85rem',
-                                fontFamily: '"DM Sans", sans-serif',
-                                letterSpacing: '-0.2px',
-                                textAlign: 'center',
-                                textDecoration: 'line-through',
-                                textDecorationThickness: '1.5px',
-                                cursor: 'not-allowed',
-                                position: 'relative',
-                                userSelect: 'none',
-                              }}>
-                              {heure}
-                              <span style={{ display: 'block', fontSize: '0.5rem', fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.4px', textDecoration: 'none', marginTop: 1 }}>
-                                {labelMap[motif] || 'Indispo'}
-                              </span>
-                            </div>
-                          )
-                        }
                         return (
                           <button key={heure} onClick={() => setHeureChoisie(heure)}
                             style={{
-                              padding: '0.55rem 0.5rem', borderRadius: 10,
+                              padding: '0.75rem 0.5rem', borderRadius: 12,
                               border: `1.5px solid ${choisi ? T.main : T.pale}`,
                               background: choisi ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
                               color: choisi ? '#fff' : T.ink,
-                              fontWeight: 800, fontSize: '0.85rem',
+                              fontWeight: 800, fontSize: '0.95rem',
                               cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
                               transition: 'all 0.15s', letterSpacing: '-0.2px',
                               boxShadow: choisi ? `0 6px 18px ${T.main}55` : 'none',
@@ -1003,7 +968,7 @@ export default function CommanderRdvSlug() {
                             onMouseOver={e => { if (!choisi) { e.currentTarget.style.borderColor = T.main + '88'; e.currentTarget.style.transform = 'translateY(-1px)' } }}
                             onMouseOut={e => { if (!choisi) { e.currentTarget.style.borderColor = T.pale; e.currentTarget.style.transform = 'translateY(0)' } }}>
                             {choisi && (
-                              <span style={{ position: 'absolute', top: 3, right: 3, width: 14, height: 14, borderRadius: '50%', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
+                              <span style={{ position: 'absolute', top: 4, right: 4, width: 14, height: 14, borderRadius: '50%', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
                                 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
                               </span>
                             )}
@@ -1011,6 +976,29 @@ export default function CommanderRdvSlug() {
                           </button>
                         )
                       })}
+                    </div>
+                  )}
+
+                  {/* SECTION 2 : DEJA PRIS — info uniquement, jamais cliquable. Affichee seulement
+                      s'il existe au moins une reservation ce jour-la. Sert de preuve sociale
+                      ('le commerce a de l'activite') sans polluer la zone de selection. */}
+                  {dateChoisie && !slotsLoading && reservationsJour.length > 0 && (
+                    <div style={{ background: '#F9FAFB', border: `1px solid ${T.pale}`, borderRadius: 12, padding: '0.625rem 0.875rem', marginBottom: 16 }}>
+                      <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.62rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.6px', margin: 0, marginBottom: 6 }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10"/>
+                          <path d="M12 6v6l4 2"/>
+                        </svg>
+                        Déjà pris ce jour-là ({reservationsJour.length})
+                      </p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {reservationsJour.map((r, i) => (
+                          <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 100, fontSize: '0.72rem', fontWeight: 700, color: T.deep, fontFamily: '"DM Sans", sans-serif' }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.main }}/>
+                            {r.heure_debut?.slice(0,5)} – {r.heure_fin?.slice(0,5)}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   )}
 

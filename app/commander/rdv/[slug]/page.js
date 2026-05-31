@@ -247,25 +247,30 @@ function MiniCalendrier({ jours, dateChoisie, onSelect }) {
                 }
                 const choisi = c.iso === dateChoisieIso
                 const ouvert = c.j.ouvert
+                // Dot d'etat : vert si jour ouvert ET au moins 1 creneau libre, rouge sinon
+                // (jour ferme du shop OU complet). Reflete la dispo POUR LA PRESTATION CHOISIE.
+                const nbLibres = c.j.nbLibres || 0
+                const dotColor = !ouvert ? '#FCA5A5' : (nbLibres > 0 ? '#10B981' : '#FCA5A5')
                 return (
-                  <button key={i} onClick={() => ouvert && onSelect(c.j.date)} disabled={!ouvert}
+                  <button key={i} onClick={() => ouvert && nbLibres > 0 && onSelect(c.j.date)} disabled={!ouvert || nbLibres === 0}
+                    title={!ouvert ? 'Fermé' : nbLibres === 0 ? 'Complet' : `${nbLibres} créneau${nbLibres>1?'x':''} libre${nbLibres>1?'s':''}`}
                     style={{
                       aspectRatio: '1',
                       borderRadius: 8,
                       border: choisi ? '1.5px solid #6B35C4' : '1px solid transparent',
-                      background: choisi ? '#6B35C4' : (ouvert ? '#fff' : '#F9FAFB'),
-                      color: choisi ? '#fff' : (ouvert ? '#1A0840' : '#D1D5DB'),
-                      fontWeight: choisi ? 900 : (ouvert ? 700 : 500),
+                      background: choisi ? '#6B35C4' : (ouvert && nbLibres > 0 ? '#fff' : '#F9FAFB'),
+                      color: choisi ? '#fff' : (ouvert && nbLibres > 0 ? '#1A0840' : '#D1D5DB'),
+                      fontWeight: choisi ? 900 : (ouvert && nbLibres > 0 ? 700 : 500),
                       fontSize: 13, fontFamily: '"DM Sans", sans-serif',
-                      cursor: ouvert ? 'pointer' : 'not-allowed',
+                      cursor: (ouvert && nbLibres > 0) ? 'pointer' : 'not-allowed',
                       padding: 0,
                       transition: 'all 0.12s',
                       position: 'relative',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
                     }}>
-                    {c.d}
-                    {c.j.isToday && (
-                      <span style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', width: 4, height: 4, borderRadius: '50%', background: choisi ? '#fff' : '#6B35C4' }}/>
-                    )}
+                    <span style={{ lineHeight: 1 }}>{c.d}</span>
+                    {/* Dot d'etat : vert dispo / rouge non dispo. En blanc si la cellule est selectionnee. */}
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: choisi ? '#fff' : dotColor }}/>
                   </button>
                 )
               })}
@@ -376,6 +381,31 @@ export default function CommanderRdvSlug() {
     return () => { annule = true }
   }, [slug, router])
 
+  // Fetch toutes les reservations du commercant sur 60 jours (1 seul call), pour calculer
+  // les disponibilites par jour dans le mini-calendrier (dot vert = dispo, rouge = complet).
+  // Re-fetch quand la prestation change (la dispo depend de la duree choisie).
+  useEffect(() => {
+    if (etape !== 2 || !commercant || !prestationChoisie) return
+    let annule = false
+    ;(async () => {
+      const today = new Date(); today.setHours(0,0,0,0)
+      const end = new Date(today); end.setDate(today.getDate() + 60)
+      const { data, error } = await supabase.rpc('rdv_slots_busy_range', {
+        p_commercant_id: commercant.id,
+        p_date_start: isoDate(today),
+        p_date_end: isoDate(end),
+      })
+      if (annule) return
+      if (error) {
+        console.warn('[rdv-60j] rpc error', error)
+        setReservations60j([])
+        return
+      }
+      setReservations60j(data || [])
+    })()
+    return () => { annule = true }
+  }, [etape, commercant, prestationChoisie])
+
   // Fetch slots libres quand la date change (ou la prestation change)
   // Utilise la RPC rdv_slots_busy (SECURITY DEFINER) pour bypass RLS : tout Yopper
   // peut voir les slots déjà pris, sans exposer les infos perso des autres clients.
@@ -420,6 +450,22 @@ export default function CommanderRdvSlug() {
   const joursDispos = commercant && creneauxConfig.length > 0
     ? genererJoursDispos({ nbJours: 60, horairesDetail: commercant.horaires_detail, creneaux: creneauxConfig })
     : []
+
+  // Enrichit chaque jour avec le nombre de slots libres pour la prestation choisie
+  // (necessite reservations60j + commercant.horaires_detail). Utilise par le mini-calendrier
+  // pour afficher un dot vert (dispo) / rouge (complet ou ferme) par jour.
+  const joursAvecDispo = joursDispos.map(j => {
+    if (!j.ouvert || !prestationChoisie) return { ...j, nbLibres: 0 }
+    const resaDuJour = reservations60j.filter(r => r.date_rdv === j.iso)
+    const list = genererSlots({
+      dateChoisie: j.date,
+      dureeMinutes: prestationChoisie.duree_minutes,
+      creneaux: creneauxConfig,
+      reservations: resaDuJour,
+      horairesDetail: commercant?.horaires_detail,
+    })
+    return { ...j, nbLibres: list.filter(s => !s.pris).length }
+  })
 
   // Auto-sélectionne le premier jour ouvert quand on entre à l'étape 2
   useEffect(() => {
@@ -1035,10 +1081,11 @@ export default function CommanderRdvSlug() {
                     )}
                   </div>
 
-                  {/* Mini-calendrier mensuel — apparait au clic sur le bouton 'Plus' */}
+                  {/* Mini-calendrier mensuel — apparait au clic sur le bouton 'Plus'.
+                      joursAvecDispo embed nbLibres -> dots verts (libres) / rouges (complets) sur les cellules. */}
                   {showMiniCal && (
                     <MiniCalendrier
-                      jours={joursDispos}
+                      jours={joursAvecDispo}
                       dateChoisie={dateChoisie}
                       onSelect={d => {
                         setDateChoisie(d)

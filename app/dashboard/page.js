@@ -477,6 +477,15 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [listeCommercants, setListeCommercants] = useState([])
   const [ongletPrincipal, setOngletPrincipal] = useState('commandes')
+
+  // Pour les commerces vitrine purs (Dermae, coiffeur, etc.), on bascule auto sur l'onglet
+  // RDV des que commercant est charge - l'onglet Commandes n'a pas de sens pour eux.
+  useEffect(() => {
+    if (commercant?.categorie === 'vitrine' && ongletPrincipal === 'commandes') {
+      setOngletPrincipal('rdv')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commercant?.id])
   const [filtreStatut, setFiltreStatut] = useState('actives')
   const [jourSelectionne, setJourSelectionne] = useState(null) // null = aujourd'hui par défaut
   const [modeHistorique, setModeHistorique] = useState(false)
@@ -663,7 +672,14 @@ export default function Dashboard() {
 
   // ─── Stats & filtres ──────────────────────────────────────────────────────
   const todayKey = dateKey(new Date())
-  const joursDispos = getJoursDispos(commercant?.horizon_commande || 1)
+  // Horizon different selon l'onglet : commandes alimentaires = J+1 ou J+2 max (workflow C&C
+  // court), RDVs vitrines = J+14 (les clients reservent souvent 1-2 semaines a l'avance).
+  // De plus, pour RDV on n'affiche que les jours qui ont au moins 1 RDV (sinon le selecteur
+  // est pollue de 14 jours vides). Aujourd'hui et demain restent toujours visibles.
+  const _joursBase = ongletPrincipal === 'rdv' ? getJoursDispos(14) : getJoursDispos(commercant?.horizon_commande || 1)
+  const joursDispos = ongletPrincipal === 'rdv'
+    ? _joursBase.filter((j, idx) => idx < 2 || rdvs.some(r => r.date_rdv === j))
+    : _joursBase
 
   // Si aucun jour sélectionné ou jour inexistant → aujourd'hui
   const jourActif = (jourSelectionne && joursDispos.includes(jourSelectionne)) ? jourSelectionne : todayKey
@@ -1041,9 +1057,9 @@ export default function Dashboard() {
 
           <nav style={{ flex: 1 }}>
             {[
-              { key: 'commandes', label: 'Commandes', Icon: IconCommandes, visible: true },
-              { key: 'rdv',       label: 'Rendez-vous', Icon: IconRdv,     visible: !!commercant?.rdv_actif },
-              { key: 'config',    label: 'Paramètres', Icon: IconConfig,   visible: true },
+              { key: 'commandes', label: 'Commandes',   Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' },
+              { key: 'rdv',       label: 'Rendez-vous', Icon: IconRdv,       visible: !!commercant?.rdv_actif },
+              { key: 'config',    label: 'Paramètres',  Icon: IconConfig,    visible: true },
             ].filter(t => t.visible).map(({ key, label, Icon }) => {
               const actif = ongletPrincipal === key
               const badgeCount = key === 'commandes' ? stats.nouvelles : key === 'rdv' ? statsRdv.aujourdhui : 0
@@ -1112,7 +1128,7 @@ export default function Dashboard() {
 
               <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 3, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}>
                 {[
-                  { key: 'commandes', label: 'Cmd',    Icon: IconCommandes, visible: true },
+                  { key: 'commandes', label: 'Cmd',    Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' },
                   { key: 'rdv',       label: 'RDV',    Icon: IconRdv,       visible: !!commercant?.rdv_actif },
                   { key: 'config',    label: 'Config', Icon: IconConfig,    visible: true },
                 ].filter(t => t.visible).map(({ key, label, Icon }) => {

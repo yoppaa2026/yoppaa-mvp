@@ -1051,6 +1051,11 @@ export default function Commander() {
   const [onglet, setOngletState] = useState('accueil')
   function setOnglet(val) { setOngletState(val); localStorage.setItem('yoppaa_onglet', val) }
 
+  // Sous-onglet de l'onglet Commandes : 'alimentaires' (C&C) ou 'rdvs' (vitrines).
+  // Persistance sessionStorage pour conserver le dernier choix sans le mettre dans
+  // le localStorage long-terme (les RDVs sont plus rares, le default 'alimentaires' a la priorite).
+  const [sousOngletCmd, setSousOngletCmd] = useState('alimentaires')
+
   // Signal envoye a EditablePrenom pour ouvrir l'editor depuis le bandeau "Complete tes infos"
   // (cf memory feedback-zero-friction : on offre un raccourci direct au lieu d'une instruction)
   const [editProfilSignal, setEditProfilSignal] = useState(0)
@@ -1399,12 +1404,17 @@ export default function Commander() {
   async function chargerRdvsClient(email) {
     const { data } = await supabase
       .from('rdv_reservations')
-      .select('id, statut, date_rdv, heure_debut, prix_estime, commercant_id, commercant:commercants(nom, type, categorie)')
+      .select('id, statut, date_rdv, heure_debut, heure_fin, prix_estime, numero_rdv, commercant_id, prestation_id, commercant:commercants(nom, slug, type, categorie), prestation:rdv_prestations(nom, duree_minutes)')
       .eq('client_email', email)
       .is('deleted_at', null)
-      .in('statut', ['confirme', 'honore'])
+      .in('statut', ['confirme', 'honore', 'annule', 'no_show'])  // tous les statuts pour Historique complet
       .order('date_rdv', { ascending: false })
-    setClientRdvs(data || [])
+    // Flatten prestation.nom -> prestation_nom pour le composant
+    const enriched = (data || []).map(r => ({
+      ...r,
+      prestation_nom: r.prestation?.nom || null,
+    }))
+    setClientRdvs(enriched)
   }
 
   async function chargerCommandesClient(email) {
@@ -1544,20 +1554,23 @@ export default function Commander() {
     router.push(route)
   }
 
+  // Pour les stats profil on exclut les RDVs annules/no_show (sinon le compteur 'RDVs' du
+  // profil et 'temps economise' seraient gonfles par des RDVs ratees).
+  const rdvsActifs = clientRdvs.filter(r => r.statut === 'confirme' || r.statut === 'honore')
+
   // Temps economise : commandes retirees (~7-15min par type, file evitee) + RDVs pris en
-  // ligne (~3min par RDV, appel/deplacement evite). On compte les RDVs confirmes ET honores
-  // car la prise en ligne reste un gain meme si le RDV n'a pas encore eu lieu.
+  // ligne (~3min par RDV, appel/deplacement evite).
   const tempsEconomise =
     clientCommandes.filter(c => c.statut === 'recupere').reduce((acc, c) => acc + getTemps(c.commercant?.type), 0)
-    + clientRdvs.length * 3
+    + rdvsActifs.length * 3
 
   // Statistiques additionnelles (cards grid 2x2)
   const totalDepense =
     clientCommandes.reduce((acc, c) => acc + Number(c.total || 0), 0)
-    + clientRdvs.filter(r => r.statut === 'honore').reduce((acc, r) => acc + Number(r.prix_estime || 0), 0)
+    + rdvsActifs.filter(r => r.statut === 'honore').reduce((acc, r) => acc + Number(r.prix_estime || 0), 0)
   const commercesUniques = new Set([
     ...clientCommandes.map(c => c.commercant_id),
-    ...clientRdvs.map(r => r.commercant_id),
+    ...rdvsActifs.map(r => r.commercant_id),
   ].filter(Boolean)).size
 
   const commercantsFiltres = commercants
@@ -1567,7 +1580,17 @@ export default function Commander() {
   const commandesASwiper = clientCommandes.filter(c => c.statut === 'pret')
   const commandesEnCours = clientCommandes.filter(c => ['en_attente','en_preparation'].includes(c.statut))
   const commandesTerminees = clientCommandes.filter(c => c.statut === 'recupere')
-  const badgeCommandes = commandesASwiper.length + commandesEnCours.length
+  // RDV vitrine a venir : statut confirme + date >= aujourd'hui
+  const _todayMidnight = new Date(); _todayMidnight.setHours(0,0,0,0)
+  const rdvsAVenir = clientRdvs
+    .filter(r => r.statut === 'confirme' && r.date_rdv && new Date(r.date_rdv) >= _todayMidnight)
+    .sort((a, b) => `${a.date_rdv}T${a.heure_debut || ''}`.localeCompare(`${b.date_rdv}T${b.heure_debut || ''}`))
+  const rdvsPasses = clientRdvs
+    .filter(r => !(r.statut === 'confirme' && r.date_rdv && new Date(r.date_rdv) >= _todayMidnight))
+    .sort((a, b) => `${b.date_rdv}T${b.heure_debut || ''}`.localeCompare(`${a.date_rdv}T${a.heure_debut || ''}`))
+
+  // Badge footer = commandes en cours/pretes + RDVs a venir (les 2 types se cumulent)
+  const badgeCommandes = commandesASwiper.length + commandesEnCours.length + rdvsAVenir.length
 
   const card = { background: '#fff', borderRadius: 14, padding: '1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 6px rgba(107,53,196,0.05)' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }
@@ -1951,11 +1974,48 @@ export default function Commander() {
                 {badgeCommandes > 0 && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(4px)', borderRadius: 100, padding: '4px 12px', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', position: 'relative' }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', border: '1.5px solid #fff', boxShadow: '0 0 0 1.5px #10B98133, 0 0 8px #10B98199', animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff' }}>{badgeCommandes} commande{badgeCommandes > 1 ? 's' : ''} en cours</span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff' }}>{badgeCommandes} en cours</span>
                   </div>
                 )}
               </div>
-              <div style={{ padding: '1rem 1rem 1rem' }}>
+
+              {/* Toggle Commandes / Rendez-vous — meme onglet, 2 vues distinctes.
+                  Labels en clair ("Commandes" / "Rendez-vous"), pas de jargon. Compteurs
+                  inline pour signaler la presence d'items dans chaque vue. */}
+              <div style={{ padding: '0.75rem 1rem 0', background: '#fff' }}>
+                <div style={{ display: 'flex', background: '#F3F4F6', borderRadius: 12, padding: 4, gap: 4 }}>
+                  {[
+                    { key: 'alimentaires', label: 'Commandes',    count: commandesASwiper.length + commandesEnCours.length + commandesTerminees.length },
+                    { key: 'rdvs',          label: 'Rendez-vous', count: clientRdvs.length },
+                  ].map(tab => {
+                    const actif = sousOngletCmd === tab.key
+                    return (
+                      <button key={tab.key} onClick={() => setSousOngletCmd(tab.key)}
+                        style={{
+                          flex: 1, padding: '0.625rem 0.5rem',
+                          border: 'none', borderRadius: 9,
+                          background: actif ? '#fff' : 'transparent',
+                          color: actif ? T.main : T.muted,
+                          fontWeight: 800, fontSize: '0.85rem',
+                          fontFamily: '"DM Sans", sans-serif',
+                          cursor: 'pointer', transition: 'all 0.15s',
+                          boxShadow: actif ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          letterSpacing: '-0.2px',
+                        }}>
+                        {tab.label}
+                        {tab.count > 0 && (
+                          <span style={{ background: actif ? T.main : T.muted, color: '#fff', borderRadius: 100, padding: '1px 7px', fontSize: '0.65rem', fontWeight: 900 }}>
+                            {tab.count}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div style={{ padding: '1rem 1rem 1rem', display: sousOngletCmd === 'alimentaires' ? 'block' : 'none' }}>
               {commandesASwiper.length > 0 && (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -2072,6 +2132,104 @@ export default function Commander() {
                   ))}
                 </div>
               )}
+
+              {/* Empty state alimentaires si Yopper connecte sans commande */}
+              {client.email && commandesASwiper.length === 0 && commandesEnCours.length === 0 && commandesTerminees.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: T.muted }}>
+                  <p style={{ fontSize: '0.9rem', fontWeight: 700, color: T.deep, marginBottom: 6 }}>Aucune commande pour l'instant</p>
+                  <p style={{ fontSize: '0.78rem', lineHeight: 1.5 }}>Tape sur l'onglet Accueil pour commander chez un boulanger, pizzaiolo, etc.</p>
+                </div>
+              )}
+              </div>
+
+              {/* ─── SOUS-ONGLET 'RENDEZ-VOUS' ─── */}
+              <div style={{ padding: '1rem 1rem 1rem', display: sousOngletCmd === 'rdvs' ? 'block' : 'none' }}>
+                {/* RDVs a venir */}
+                {rdvsAVenir.length > 0 && (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>À venir</span>
+                      <span style={{ background: '#10B981', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{rdvsAVenir.length}</span>
+                    </div>
+                    {rdvsAVenir.map(r => {
+                      const dateObj = r.date_rdv ? new Date(r.date_rdv + 'T12:00:00') : null
+                      const heureD = r.heure_debut?.slice(0,5)
+                      const heureF = r.heure_fin?.slice(0,5)
+                      const dureeM = (heureEnMinutes(r.heure_fin) - heureEnMinutes(r.heure_debut)) || 0
+                      const dureeT = dureeM >= 60 ? `${Math.floor(dureeM/60)}h${dureeM%60>0?(dureeM%60)+'min':''}` : `${dureeM}min`
+                      return (
+                        <div key={r.id} style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', marginBottom: '0.75rem', border: `1.5px solid #10B98133`, boxShadow: '0 2px 8px rgba(16,185,129,0.08)' }}>
+                          {/* Bande 3px verte = signature vitrine (cohérent avec les cards accueil) */}
+                          <div style={{ height: 3, background: 'linear-gradient(90deg, #047857 0%, #10B981 60%, #6EE7B7 100%)' }}/>
+                          <div style={{ padding: '0.875rem 1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ fontSize: '0.62rem', fontWeight: 800, color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
+                                  {dateObj ? dateObj.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' }) : '—'} · {heureD}
+                                </p>
+                                <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.95rem', letterSpacing: '-0.2px', lineHeight: 1.25, marginBottom: 4 }}>
+                                  {r.prestation_nom || 'Prestation'}
+                                </p>
+                                <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.4 }}>
+                                  {dureeT} · chez <strong style={{ color: T.deep }}>{r.commercant?.nom}</strong>
+                                </p>
+                              </div>
+                              {r.prix_estime != null && (
+                                <p style={{ fontWeight: 900, color: T.main, fontSize: '0.95rem', letterSpacing: '-0.3px', flexShrink: 0 }}>{Number(r.prix_estime).toFixed(0)}€</p>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#F0FDF4', borderRadius: 100, padding: '3px 9px', border: '1px solid #10B98122' }}>
+                                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981' }}/>
+                                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#10B981' }}>Confirmé · {heureD}–{heureF}</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </>
+                )}
+
+                {/* RDVs passes / annules */}
+                {rdvsPasses.length > 0 && (
+                  <div style={{ marginTop: rdvsAVenir.length > 0 ? '1.5rem' : 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historique</span>
+                      <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                    </div>
+                    {rdvsPasses.slice(0, 5).map(r => {
+                      const dateObj = r.date_rdv ? new Date(r.date_rdv + 'T12:00:00') : null
+                      const statutLabel = r.statut === 'honore' ? '✓ Effectué' : r.statut === 'annule' ? 'Annulé' : r.statut
+                      const statutBg = r.statut === 'honore' ? '#F0FDF4' : '#FEF2F2'
+                      const statutColor = r.statut === 'honore' ? '#10B981' : '#DC2626'
+                      return (
+                        <div key={r.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.875rem' }}>
+                              {r.commercant?.nom} <span style={{ color: T.muted, fontWeight: 600 }}>— {r.prestation_nom || 'RDV'}</span>
+                            </p>
+                            <p style={{ fontSize: '0.7rem', color: T.muted }}>
+                              {dateObj?.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })} · {r.heure_debut?.slice(0,5)}
+                            </p>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            {r.prix_estime != null && <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(r.prix_estime).toFixed(0)}€</p>}
+                            <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: statutBg, color: statutColor }}>{statutLabel}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Empty state */}
+                {rdvsAVenir.length === 0 && rdvsPasses.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: T.muted }}>
+                    <p style={{ fontSize: '0.9rem', fontWeight: 700, color: T.deep, marginBottom: 6 }}>Aucun rendez-vous pour l'instant</p>
+                    <p style={{ fontSize: '0.78rem', lineHeight: 1.5 }}>Réserve chez un coiffeur, esthéticien ou autre service depuis l'onglet Accueil.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2339,7 +2497,7 @@ export default function Commander() {
                     selon si le Yopper a des RDVs ou seulement des commandes. */}
                 {(() => {
                   const nbCmdRec = clientCommandes.filter(c => c.statut === 'recupere').length
-                  const nbRdv = clientRdvs.length
+                  const nbRdv = rdvsActifs.length
                   const sousTitre = nbRdv > 0
                     ? `${nbCmdRec + nbRdv} moment${(nbCmdRec + nbRdv) > 1 ? 's' : ''} sans friction`
                     : `${nbCmdRec} commande${nbCmdRec > 1 ? 's' : ''} sans faire la file`
@@ -2371,7 +2529,7 @@ export default function Commander() {
                       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>,
                     },
                     {
-                      label: 'RDV', value: clientRdvs.length, color: '#10B981', bg: '#F0FDF4',
+                      label: 'RDV', value: rdvsActifs.length, color: '#10B981', bg: '#F0FDF4',
                       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
                     },
                     {
@@ -2510,10 +2668,16 @@ export default function Commander() {
                   </svg>
                 )}
                 {item.key === 'commandes' && (
+                  /* Icone hybride : sac de retrait (anse + corps) avec 3 ticks calendrier
+                     en bas pour signaler que l'onglet contient aussi des RDVs (agenda). */
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
                     <rect x="2" y="9" width="20" height="13" rx="3" stroke={stroke} strokeWidth="2" strokeLinejoin="round" opacity={op}/>
                     <path d="M2,13 L22,13" stroke={stroke} strokeWidth="2" opacity={op}/>
                     <path d="M8,9 L8,5 Q8,2 12,2 Q16,2 16,5 L16,9" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
+                    {/* 3 marques calendrier en bas = signature agenda RDV */}
+                    <circle cx="7"  cy="18" r="1" fill={stroke} opacity={op}/>
+                    <circle cx="12" cy="18" r="1" fill={stroke} opacity={op}/>
+                    <circle cx="17" cy="18" r="1" fill={stroke} opacity={op}/>
                   </svg>
                 )}
                 {item.key === 'services' && (

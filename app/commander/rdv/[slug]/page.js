@@ -78,10 +78,12 @@ function isToday(d) {
     && d.getDate() === now.getDate()
 }
 
-// Calcule les slots libres pour une date donnée, durée prestation, créneaux du commerçant
+// Calcule les slots pour une date donnée, durée prestation, créneaux du commerçant
 // et réservations existantes (statuts confirme + honore).
-// Retourne un array de strings "HH:MM" triés.
-function genererSlotsLibres({ dateChoisie, dureeMinutes, creneaux, reservations }) {
+// Retourne un array d'objets { heure: "HH:MM", pris: boolean } triés.
+// Les slots passés / chevauchant une pause sont retirés ; les slots reservés sont
+// retournés avec pris=true pour rendu grisé+barré côté UI (preuve sociale).
+function genererSlots({ dateChoisie, dureeMinutes, creneaux, reservations }) {
   if (!dateChoisie || !dureeMinutes || !creneaux?.length) return []
   const dateStr = isoDate(dateChoisie)
   const jour    = jourSemaineDate(dateChoisie)
@@ -100,7 +102,7 @@ function genererSlotsLibres({ dateChoisie, dureeMinutes, creneaux, reservations 
     end:   timeToMinutes(r.heure_fin),
   }))
 
-  const slotsLibres = new Set()
+  const slotsMap = new Map()  // heure "HH:MM" → { heure, pris }
   for (const cr of creneauxJour) {
     const debut      = timeToMinutes(cr.heure_debut)
     const fin        = timeToMinutes(cr.heure_fin)
@@ -114,13 +116,14 @@ function genererSlotsLibres({ dateChoisie, dureeMinutes, creneaux, reservations 
       if (nowMin >= 0 && t <= nowMin) continue
       // Exclure si chevauche la pause
       if (pauseDebut != null && pauseFin != null && t < pauseFin && slotEnd > pauseDebut) continue
-      // Exclure si overlap avec une réservation existante
-      const collision = plagesReservees.some(p => t < p.end && slotEnd > p.start)
-      if (collision) continue
-      slotsLibres.add(minutesToTime(t))
+      const heure = minutesToTime(t)
+      // Si déjà présent en mode "libre" via un autre créneau, ne pas écraser
+      if (slotsMap.has(heure) && !slotsMap.get(heure).pris) continue
+      const pris = plagesReservees.some(p => t < p.end && slotEnd > p.start)
+      slotsMap.set(heure, { heure, pris })
     }
   }
-  return [...slotsLibres].sort()
+  return [...slotsMap.values()].sort((a, b) => a.heure.localeCompare(b.heure))
 }
 
 // Génère N jours à partir d'aujourd'hui, en marquant lesquels sont ouverts (au moins 1 créneau).
@@ -164,7 +167,7 @@ export default function CommanderRdvSlug() {
   const [prestationChoisie, setPrestationChoisie] = useState(null)
   const [dateChoisie, setDateChoisie] = useState(null)        // Date object
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
-  const [slotsLibres, setSlotsLibres] = useState([])
+  const [slots, setSlots] = useState([])  // [{ heure, pris }]
   const [slotsLoading, setSlotsLoading] = useState(false)
   // RDV-4c : coordonnées client + RGPD (pré-fill depuis localStorage)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '', notes: '' })
@@ -257,13 +260,13 @@ export default function CommanderRdvSlug() {
         .rpc('rdv_slots_busy', { p_commercant_id: commercant.id, p_date: dateStr })
       if (annule) return
       if (errRpc) console.warn('[rdv-slots] rpc error', errRpc)
-      const slots = genererSlotsLibres({
+      const list = genererSlots({
         dateChoisie,
         dureeMinutes: prestationChoisie.duree_minutes,
         creneaux: creneauxConfig,
         reservations: reservations || [],
       })
-      setSlotsLibres(slots)
+      setSlots(list)
       setSlotsLoading(false)
     })()
     return () => { annule = true }
@@ -274,7 +277,7 @@ export default function CommanderRdvSlug() {
     setEtape(2)
     setDateChoisie(null)
     setHeureChoisie(null)
-    setSlotsLibres([])
+    setSlots([])
     setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
   }
 
@@ -804,11 +807,14 @@ export default function CommanderRdvSlug() {
                       À quelle heure
                     </span>
                     <div style={{ flex: 1, height: 1, background: T.pale }}/>
-                    {dateChoisie && !slotsLoading && (
-                      <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>
-                        {slotsLibres.length} {slotsLibres.length > 1 ? 'créneaux libres' : slotsLibres.length === 1 ? 'créneau libre' : 'plus de créneau'}
-                      </span>
-                    )}
+                    {dateChoisie && !slotsLoading && (() => {
+                      const nbLibres = slots.filter(s => !s.pris).length
+                      return (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>
+                          {nbLibres} {nbLibres > 1 ? 'créneaux libres' : nbLibres === 1 ? 'créneau libre' : 'plus de créneau'}
+                        </span>
+                      )
+                    })()}
                   </div>
 
                   {!dateChoisie && (
@@ -823,7 +829,7 @@ export default function CommanderRdvSlug() {
                     </div>
                   )}
 
-                  {dateChoisie && !slotsLoading && slotsLibres.length === 0 && (
+                  {dateChoisie && !slotsLoading && slots.filter(s => !s.pris).length === 0 && (
                     <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.875rem 1rem', textAlign: 'center' }}>
                       <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.5 }}>
                         Aucun créneau libre ce jour-là. Essaie un autre jour ↑
@@ -831,12 +837,39 @@ export default function CommanderRdvSlug() {
                     </div>
                   )}
 
-                  {dateChoisie && !slotsLoading && slotsLibres.length > 0 && (
+                  {dateChoisie && !slotsLoading && slots.length > 0 && (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 6, marginBottom: 18 }}>
-                      {slotsLibres.map(slot => {
-                        const choisi = heureChoisie === slot
+                      {slots.map(({ heure, pris }) => {
+                        const choisi = heureChoisie === heure
+                        if (pris) {
+                          // Slot déjà réservé : grisé + barré + label "Pris". Non cliquable.
+                          // Affichage maintenu pour preuve sociale (commerçant a de l'activité).
+                          return (
+                            <div key={heure} aria-disabled="true" title="Créneau déjà réservé"
+                              style={{
+                                padding: '0.55rem 0.5rem', borderRadius: 10,
+                                border: `1.5px dashed #D1D5DB`,
+                                background: '#F3F4F6',
+                                color: '#9CA3AF',
+                                fontWeight: 700, fontSize: '0.85rem',
+                                fontFamily: '"DM Sans", sans-serif',
+                                letterSpacing: '-0.2px',
+                                textAlign: 'center',
+                                textDecoration: 'line-through',
+                                textDecorationThickness: '1.5px',
+                                cursor: 'not-allowed',
+                                position: 'relative',
+                                userSelect: 'none',
+                              }}>
+                              {heure}
+                              <span style={{ display: 'block', fontSize: '0.55rem', fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.5px', textDecoration: 'none', marginTop: 1 }}>
+                                Pris
+                              </span>
+                            </div>
+                          )
+                        }
                         return (
-                          <button key={slot} onClick={() => setHeureChoisie(slot)}
+                          <button key={heure} onClick={() => setHeureChoisie(heure)}
                             style={{
                               padding: '0.55rem 0.5rem', borderRadius: 10,
                               border: `1.5px solid ${choisi ? T.main : T.pale}`,
@@ -855,7 +888,7 @@ export default function CommanderRdvSlug() {
                                 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
                               </span>
                             )}
-                            {slot}
+                            {heure}
                           </button>
                         )
                       })}

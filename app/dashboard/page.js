@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
+import AgendaRdv from './AgendaRdv'
 
 const T = {
   bg:      '#F8F6FF',
@@ -473,6 +474,8 @@ function CarteRdv({ rdv, onChangerStatut }) {
 export default function Dashboard() {
   const [commandes, setCommandes] = useState([])
   const [rdvs, setRdvs] = useState([])
+  const [creneauxRdv, setCreneauxRdv] = useState([])  // rdv_creneaux du commercant, pour la grille agenda (pauses)
+  const [rdvSelectionne, setRdvSelectionne] = useState(null)  // RDV ouvert dans la modale details
   const [commercant, setCommercant] = useState(null)
   const [loading, setLoading] = useState(true)
   const [listeCommercants, setListeCommercants] = useState([])
@@ -521,15 +524,25 @@ export default function Dashboard() {
 
   // Fetch des RDVs d'un commercant. Filtre deleted_at IS NULL (legal Belgique 7 ans
   // mais on cache les supprimes du dashboard quotidien). Tri par date + heure.
+  // Fetch aussi les rdv_creneaux pour la grille agenda (pauses, jours fermes).
   const chargerRdvs = useCallback(async (id) => {
-    const { data } = await supabase
-      .from('rdv_reservations')
-      .select('*, prestation:rdv_prestations(nom, duree_minutes, prix)')
-      .eq('commercant_id', id)
-      .is('deleted_at', null)
-      .order('date_rdv', { ascending: true })
-      .order('heure_debut', { ascending: true })
-    setRdvs(data || [])
+    const [{ data: rdvData }, { data: crData }] = await Promise.all([
+      supabase
+        .from('rdv_reservations')
+        .select('*, prestation:rdv_prestations(nom, duree_minutes, prix)')
+        .eq('commercant_id', id)
+        .is('deleted_at', null)
+        .order('date_rdv', { ascending: true })
+        .order('heure_debut', { ascending: true }),
+      supabase
+        .from('rdv_creneaux')
+        .select('*')
+        .eq('commercant_id', id)
+        .eq('actif', true)
+        .is('deleted_at', null),
+    ])
+    setRdvs(rdvData || [])
+    setCreneauxRdv(crData || [])
   }, [])
 
   // ─── Init — mémoriser le commerce sélectionné ─────────────────────────────
@@ -1160,7 +1173,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Sticky header — RDV : stats RDV + selecteur jour + filtres statut RDV */}
+          {/* Sticky header — RDV : stats compactes uniquement (la grille AgendaRdv a sa propre nav) */}
           {ongletPrincipal === 'rdv' && (
             <div className="sticky-header">
               <div className="stats-grid">
@@ -1172,43 +1185,6 @@ export default function Dashboard() {
                     </div>
                     <p style={{ fontSize: '1.4rem', fontWeight: 900, color: s.color, letterSpacing: '-1px', lineHeight: 1 }}>{s.value}</p>
                   </div>
-                ))}
-              </div>
-
-              {/* Selecteur jours pour RDVs (memes 7 jours + Historique) */}
-              {joursDispos.length > 0 && (
-                <div className="jours-wrap">
-                  {joursDispos.map(jour => {
-                    const actif = !modeHistorique && jour === jourActif
-                    const nbRdvs = rdvs.filter(r => r.date_rdv === jour).length
-                    const nbActifs = rdvs.filter(r => r.date_rdv === jour && r.statut === 'confirme').length
-                    return (
-                      <button key={jour} className="pill" onClick={() => { setJourSelectionne(jour); setModeHistorique(false); setFiltreStatut('actives') }}
-                        style={{ borderColor: actif ? T.main : `${T.main}28`, background: actif ? T.main : '#fff', color: actif ? '#fff' : T.ink, display: 'flex', alignItems: 'center', gap: 5 }}>
-                        {dateLabel(jour + 'T00:00:00')}
-                        {nbActifs > 0 && (
-                          <span style={{ background: actif ? 'rgba(255,255,255,0.3)' : '#10B981', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>{nbActifs}</span>
-                        )}
-                        {nbActifs === 0 && nbRdvs > 0 && (
-                          <span style={{ background: actif ? 'rgba(255,255,255,0.2)' : T.pale, color: actif ? '#fff' : T.main, fontSize: '0.6rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>{nbRdvs}</span>
-                        )}
-                      </button>
-                    )
-                  })}
-                  <button className="pill" onClick={() => { setModeHistorique(true); setFiltreStatut('tout') }}
-                    style={{ borderColor: modeHistorique ? '#6B7280' : `${T.main}28`, background: modeHistorique ? '#6B7280' : '#fff', color: modeHistorique ? '#fff' : T.muted, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    📋 Historique
-                  </button>
-                </div>
-              )}
-
-              {/* Filtres statut RDV */}
-              <div className="filtres-wrap">
-                {filtresStatutRdv.map(f => (
-                  <button key={f.key} className="pill" onClick={() => setFiltreStatut(f.key)}
-                    style={{ borderColor: filtreStatut === f.key ? (f.color || T.main) : `${T.main}28`, background: filtreStatut === f.key ? (f.color || T.main) : '#fff', color: filtreStatut === f.key ? '#fff' : T.ink }}>
-                    {f.label}{f.count > 0 ? ` · ${f.count}` : ''}
-                  </button>
                 ))}
               </div>
             </div>
@@ -1321,20 +1297,31 @@ export default function Dashboard() {
                     ))}
                   </div>
                 )}
-                {!loading && rdvsFiltres.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '4rem 0' }}>
-                    <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>📅</div>
-                    <p style={{ fontWeight: 800, color: T.ink, marginBottom: 4 }}>Aucun RDV ici</p>
-                    <p style={{ fontSize: '0.875rem', color: T.muted }}>
-                      {filtreStatut === 'actives' ? 'Aucun RDV à venir ce jour.' : 'Rien dans ce filtre pour ce jour.'}
-                    </p>
+                {!loading && (
+                  <AgendaRdv
+                    rdvs={rdvs}
+                    creneaux={creneauxRdv}
+                    horairesDetail={commercant?.horaires_detail}
+                    onSelectRdv={(r) => setRdvSelectionne(r)}
+                    onNouveauRdv={(date, heure) => {
+                      // VITRINE-4 : ouverture modale 'Nouveau RDV manuel' a brancher
+                      alert(`Nouveau RDV : ${date.toLocaleDateString('fr-BE')} ${heure}\n(modale d'ajout : VITRINE-4 a venir)`)
+                    }}
+                  />
+                )}
+                {/* Modale details RDV : reutilise la CarteRdv qu'on avait codee pour l'ancienne vue liste */}
+                {rdvSelectionne && (
+                  <div onClick={() => setRdvSelectionne(null)}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(26,8,64,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem', backdropFilter: 'blur(4px)' }}>
+                    <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '85vh', overflowY: 'auto' }}>
+                      <CarteRdv rdv={rdvSelectionne} onChangerStatut={(id, st) => { changerStatutRdv(id, st); setRdvSelectionne(null) }}/>
+                      <button onClick={() => setRdvSelectionne(null)}
+                        style={{ width: '100%', marginTop: 12, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>
+                        Fermer
+                      </button>
+                    </div>
                   </div>
                 )}
-                <div className="commandes-grid">
-                  {rdvsFiltres.map(rdv => (
-                    <CarteRdv key={rdv.id} rdv={rdv} onChangerStatut={changerStatutRdv}/>
-                  ))}
-                </div>
               </>
             )}
 

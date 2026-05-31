@@ -1120,10 +1120,14 @@ export default function Commander() {
   }, [])
 
   // ─── Polling client 5s ─────────────────────────────────────────────────────
+  // IMPORTANT : on relit localStorage à CHAQUE tick (pas seulement au mount).
+  // Sinon après "Se déconnecter", la closure conservait l'ancien email et le
+  // polling continuait à re-fetch les commandes, faisant réapparaître l'onglet
+  // Commandes côté UI après le clear state.
   useEffect(() => {
-    const email = localStorage.getItem('yoppaa_email')
-    if (!email) return
     const iv = setInterval(() => {
+      const email = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_email') : null
+      if (!email) return  // utilisateur déconnecté → on saute ce tick (mais on laisse l'interval tourner pour le cas re-login)
       chargerCommandesClient(email)
     }, 5000)
     return () => clearInterval(iv)

@@ -296,6 +296,7 @@ export default function CommanderRdvSlug() {
   const [slots, setSlots] = useState([])  // [{ heure, pris, motif }]
   const [reservationsJour, setReservationsJour] = useState([])  // [{ heure_debut, heure_fin }] pour la section 'Deja pris'
   const [showMiniCal, setShowMiniCal] = useState(false)  // toggle mini-calendrier mensuel pour jours > J+14
+  const [reservations60j, setReservations60j] = useState([])  // toutes les resa du commercant sur 60j, pour points dispo mini-cal
   const [slotsLoading, setSlotsLoading] = useState(false)
   // RDV-4c : coordonnées client + RGPD (pré-fill depuis localStorage)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '', notes: '' })
@@ -1047,14 +1048,19 @@ export default function CommanderRdvSlug() {
                     />
                   )}
 
-                  {/* Section : choix du créneau */}
+                  {/* Section : choix du créneau.
+                      Le titre integre la DATE selectionnee pour confirmer visuellement la
+                      selection (critique quand le user a clique un jour > J+14 dans le mini-cal :
+                      sans ce titre, il ne sait pas si son clic est bien passe). */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="10"/>
                         <path d="M12 6v6l4 2"/>
                       </svg>
-                      À quelle heure
+                      {dateChoisie
+                        ? `Créneaux ${JOURS_LONGS[dateChoisie.getDay()].toLowerCase()} ${dateChoisie.getDate()} ${MOIS_COURTS[dateChoisie.getMonth()]}`
+                        : 'À quelle heure'}
                     </span>
                     <div style={{ flex: 1, height: 1, background: T.pale }}/>
                     {dateChoisie && !slotsLoading && (() => {

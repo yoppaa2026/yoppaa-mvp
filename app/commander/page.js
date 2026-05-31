@@ -2670,11 +2670,10 @@ export default function Commander() {
                   </svg>
                 )}
                 {item.key === 'commandes' && (
-                  /* Icone v3 : calendrier (semantique 'agenda') + 3 traits courts a
-                     l'interieur (semantique 'items dans ma liste'). Volontairement clean
-                     et neutre — les 2 pastilles violette/verte font tout le job de
-                     distinction commandes vs RDVs au-dessus. */
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
+                  /* Icone v4 : agrandie 36px + decalee vers le bas (marginTop 6) pour
+                     laisser de la place aux pastilles qui descendent aussi (top 6).
+                     Sans ce decalage, pastilles + icone faisaient effet 'oreilles de Mickey'. */
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision" style={{ marginTop: 6 }}>
                     {/* Cadre calendrier */}
                     <rect x="3" y="5" width="18" height="16" rx="2.5" stroke={stroke} strokeWidth="2" strokeLinejoin="round" opacity={op}/>
                     {/* Barre header */}
@@ -2724,12 +2723,12 @@ export default function Commander() {
                     Verte    en haut GAUCHE = RDVs a venir.
                     Si une seule est >0, l'autre n'est pas rendue (pas de "0"). */}
                 {item.key === 'commandes' && item.badgeCmd > 0 && (
-                  <span style={{ position: 'absolute', top: 0, left: 'calc(50% + 8px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: T.main, color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: `0 2px 8px ${T.main}99, 0 0 0 1.5px ${T.main}44`, lineHeight: 1, letterSpacing: '-0.2px' }}>
+                  <span style={{ position: 'absolute', top: 6, left: 'calc(50% + 10px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: T.main, color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: `0 2px 8px ${T.main}99, 0 0 0 1.5px ${T.main}44`, lineHeight: 1, letterSpacing: '-0.2px' }}>
                     {item.badgeCmd > 9 ? '9+' : item.badgeCmd}
                   </span>
                 )}
                 {item.key === 'commandes' && item.badgeRdv > 0 && (
-                  <span style={{ position: 'absolute', top: 0, right: 'calc(50% + 8px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: '#10B981', color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: '0 2px 8px rgba(16,185,129,0.55), 0 0 0 1.5px rgba(16,185,129,0.27)', lineHeight: 1, letterSpacing: '-0.2px' }}>
+                  <span style={{ position: 'absolute', top: 6, right: 'calc(50% + 10px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: '#10B981', color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: '0 2px 8px rgba(16,185,129,0.55), 0 0 0 1.5px rgba(16,185,129,0.27)', lineHeight: 1, letterSpacing: '-0.2px' }}>
                     {item.badgeRdv > 9 ? '9+' : item.badgeRdv}
                   </span>
                 )}

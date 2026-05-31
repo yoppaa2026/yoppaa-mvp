@@ -384,7 +384,11 @@ export default function CommanderRdvSlug() {
       : null
 
     // 5. Insert RDV
+    // On génère l'UUID côté client pour éviter d'avoir besoin de .select() après insert
+    // (ce qui simplifie la RLS : pas besoin de policy SELECT au moment du RETURNING).
+    const rdvId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null
     const payload = {
+      ...(rdvId ? { id: rdvId } : {}),
       commercant_id: commercant.id,
       client_id: cid,
       prestation_id: prestationChoisie.id,
@@ -404,17 +408,15 @@ export default function CommanderRdvSlug() {
       rgpd_marketing: rgpdMarketing,
     }
 
-    const { data: nouveauRdv, error } = await supabase
-      .from('rdv_reservations')
-      .insert(payload)
-      .select('*')
-      .single()
+    // Insert SANS .select() : évite la dépendance à la policy SELECT après RETURNING.
+    // Si on a besoin d'infos serveur (created_at, etc.) on les fetchera dans un second appel
+    // qui passera par la policy SELECT (commercant ou client connecté).
+    const { error } = await supabase.from('rdv_reservations').insert(payload)
 
     if (error) {
       // 23505 = unique_violation : un autre client a réservé ce slot pendant qu'on était sur le formulaire
       if (error.code === '23505') {
         setSubmitError('Ce créneau vient d\'être pris par un autre client. Choisis-en un autre.')
-        // Reset au step 2 pour reload les slots dispos
         setHeureChoisie(null)
         setSubmitting(false)
         setTimeout(() => setEtape(2), 1200)
@@ -428,27 +430,36 @@ export default function CommanderRdvSlug() {
     }
 
     // 6. Calcul numéro du jour (séquentiel pour UX commerçant côté dashboard)
+    // Best-effort : si la policy SELECT ne nous renvoie rien (anon non lié), on skip.
     let numeroFinal = null
-    try {
-      const { data: duJour } = await supabase
-        .from('rdv_reservations')
-        .select('id, heure_debut')
-        .eq('commercant_id', commercant.id)
-        .eq('date_rdv', dateStr)
-        .in('statut', ['confirme', 'honore'])
-        .is('deleted_at', null)
-        .order('heure_debut', { ascending: true })
-      const idx = (duJour || []).findIndex(r => r.id === nouveauRdv.id)
-      numeroFinal = idx >= 0 ? idx + 1 : null
-      if (numeroFinal) {
-        await supabase.from('rdv_reservations').update({ numero_rdv: numeroFinal }).eq('id', nouveauRdv.id)
+    if (rdvId) {
+      try {
+        const { data: duJour } = await supabase
+          .from('rdv_reservations')
+          .select('id, heure_debut')
+          .eq('commercant_id', commercant.id)
+          .eq('date_rdv', dateStr)
+          .in('statut', ['confirme', 'honore'])
+          .is('deleted_at', null)
+          .order('heure_debut', { ascending: true })
+        if (duJour && duJour.length > 0) {
+          const idx = duJour.findIndex(r => r.id === rdvId)
+          numeroFinal = idx >= 0 ? idx + 1 : null
+          if (numeroFinal) {
+            await supabase.from('rdv_reservations').update({ numero_rdv: numeroFinal }).eq('id', rdvId)
+          }
+        }
+      } catch (e) {
+        console.warn('[rdv] numero calc skip', e)
       }
-    } catch (e) {
-      console.warn('[rdv] numero calc skip', e)
     }
 
-    // 7. État final pour écran confirmation (étape 4)
-    setRdvCree({ ...nouveauRdv, numero_rdv: numeroFinal })
+    // 7. État final pour écran confirmation (étape 4) — on reconstruit depuis le payload local
+    setRdvCree({
+      id: rdvId,
+      ...payload,
+      numero_rdv: numeroFinal,
+    })
     setSubmitting(false)
     setEtape(4)
     setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)

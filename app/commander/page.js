@@ -1970,10 +1970,8 @@ export default function Commander() {
                   </div>
                   <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>Yoppers</p>
                 </div>
-                <h2 style={{ fontWeight: 900, fontSize: '1.4rem', letterSpacing: '-0.6px', margin: 0, position: 'relative', lineHeight: 1.1 }}>
-                  <span style={{ color: T.light }}>Commandes</span>
-                  <span style={{ color: '#fff' }}> et </span>
-                  <span style={{ color: T.mid }}>rendez-vous</span>
+                <h2 style={{ fontWeight: 900, fontSize: '1.4rem', letterSpacing: '-0.6px', margin: 0, position: 'relative', lineHeight: 1.1, color: '#fff' }}>
+                  Commandes et rendez-vous
                 </h2>
                 {badgeCommandes > 0 && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(4px)', borderRadius: 100, padding: '4px 12px', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', position: 'relative' }}>
@@ -2266,9 +2264,8 @@ export default function Commander() {
                     </div>
                     <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>Officiel</p>
                   </div>
-                  <h2 style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-0.6px', margin: 0, lineHeight: 1.1, position: 'relative' }}>
-                    <span style={{ color: '#fff' }}>Services </span>
-                    <span style={{ color: T.light }}>&amp; administrations</span>
+                  <h2 style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-0.6px', margin: 0, lineHeight: 1.1, position: 'relative', color: '#fff' }}>
+                    Services &amp; administrations
                   </h2>
                   {commune?.nom && (
                     <p style={{ fontSize: '0.78rem', color: T.light, marginTop: 6, fontWeight: 600, opacity: 0.85, position: 'relative' }}>

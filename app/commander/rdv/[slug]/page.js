@@ -78,54 +78,76 @@ function isToday(d) {
     && d.getDate() === now.getDate()
 }
 
-// Calcule les slots pour une date donnée, durée prestation, créneaux du commerçant
-// et réservations existantes (statuts confirme + honore).
-// Retourne un array d'objets { heure: "HH:MM", pris: boolean } triés.
-// Les slots passés / chevauchant une pause sont retirés ; les slots reservés sont
-// retournés avec pris=true pour rendu grisé+barré côté UI (preuve sociale).
-function genererSlots({ dateChoisie, dureeMinutes, creneaux, reservations }) {
+// Calcule les slots pour une date donnée, durée prestation, créneaux du commerçant,
+// horaires d'ouverture du shop, et reservations existantes.
+//
+// Triple filtre applique :
+//   1. rdv_creneaux (heure_debut..heure_fin, pause_debut..pause_fin, pas_minutes, actif)
+//   2. horaires_detail du shop ce jour-la (clip a l'heure d'ouverture/fermeture reelle).
+//      Sans ce 2eme filtre, un merchant qui aurait mis rdv_creneaux 9h-23h mais shop
+//      ferme a 19h proposerait des RDV jusqu'a 23h -> bug. Defense en profondeur.
+//   3. Slot end ne peut pas depasser le min(creneau.fin, shop.fin) ni chevaucher pause.
+//
+// Retourne un array de { heure: "HH:MM", pris: bool, motif: 'reserve'|'incompatible'|null }
+//   - pris=false                   : slot cliquable libre
+//   - pris=true,  motif='reserve'  : RDV commence pile a cette heure
+//   - pris=true,  motif='incompatible' : la duree de la prestation deborderait sur un
+//                                        RDV qui suit (slot lui-meme libre mais inutilisable)
+function genererSlots({ dateChoisie, dureeMinutes, creneaux, reservations, horairesDetail }) {
   if (!dateChoisie || !dureeMinutes || !creneaux?.length) return []
   const dateStr = isoDate(dateChoisie)
   const jour    = jourSemaineDate(dateChoisie)
   const nowMin  = isToday(dateChoisie) ? new Date().getHours() * 60 + new Date().getMinutes() : -1
 
-  // Filtre creneaux : ceux qui matchent ce jour-là (par jour_semaine récurrent ou par date_specifique ponctuelle)
+  // ── Filtre 2 : horaires shop ce jour-la ────────────────────────────────────
+  // Si shop ferme (ouvert:false) => aucun slot (meme si rdv_creneaux dit ouvert).
+  // Sinon on memorise les bornes shop pour clipper plus bas.
+  const horaireJour = horairesDetail?.[jour]
+  if (horaireJour && horaireJour.ouvert === false) {
+    console.info('[rdv-slots] shop ferme', { jour })
+    return []
+  }
+  const shopOpen  = horaireJour?.debut ? timeToMinutes(horaireJour.debut) : null
+  const shopClose = horaireJour?.fin   ? timeToMinutes(horaireJour.fin)   : null
+
+  // ── Filtre 1 : rdv_creneaux applicables ce jour ────────────────────────────
   const creneauxJour = creneaux.filter(c =>
     c.actif !== false
     && (c.date_specifique === dateStr || (!c.date_specifique && c.jour_semaine === jour))
   )
   if (creneauxJour.length === 0) return []
 
-  // Map des plages réservées (en minutes depuis minuit) pour overlap check
+  // ── Reservations existantes (en minutes depuis minuit) ─────────────────────
   const plagesReservees = (reservations || []).map(r => ({
     start: timeToMinutes(r.heure_debut),
     end:   timeToMinutes(r.heure_fin),
   }))
-  // Ensemble des heures de DEBUT exactes des reservations existantes.
-  // Permet de distinguer 2 cas d'indisponibilite :
-  //  - heure = debut exact d'une reservation -> 'reserve' (un RDV commence ici)
-  //  - heure overlap mais pas debut exact   -> 'incompatible' (la duree de la
-  //    prestation choisie deborderait sur un RDV qui suit, exemple : 2h a 14h
-  //    si un RDV existe deja a 15h30. Ce slot n'est pas REserve, il est juste
-  //    incompatible pour cette duree).
   const startTimes = new Set(plagesReservees.map(p => minutesToTime(p.start)))
+  console.info('[rdv-slots] genererSlots', {
+    jour, dureeMinutes, nbCreneaux: creneauxJour.length, shopOpen, shopClose,
+    nbResas: plagesReservees.length,
+    resas: plagesReservees.map(p => `${minutesToTime(p.start)}-${minutesToTime(p.end)}`),
+  })
 
-  const slotsMap = new Map()  // heure "HH:MM" → { heure, pris, motif }
+  const slotsMap = new Map()
   for (const cr of creneauxJour) {
-    const debut      = timeToMinutes(cr.heure_debut)
-    const fin        = timeToMinutes(cr.heure_fin)
+    // Clip aux bornes du shop : RDV impossible si le shop est ferme a ce moment.
+    let debut = timeToMinutes(cr.heure_debut)
+    let fin   = timeToMinutes(cr.heure_fin)
+    if (shopOpen  !== null) debut = Math.max(debut, shopOpen)
+    if (shopClose !== null) fin   = Math.min(fin,   shopClose)
+    if (fin - debut < dureeMinutes) continue  // creneau trop court apres clip
+
     const pauseDebut = cr.pause_debut ? timeToMinutes(cr.pause_debut) : null
     const pauseFin   = cr.pause_fin   ? timeToMinutes(cr.pause_fin)   : null
     const pas        = cr.pas_minutes || 15
 
     for (let t = debut; t + dureeMinutes <= fin; t += pas) {
       const slotEnd = t + dureeMinutes
-      // Si aujourd'hui, exclure les créneaux passés
-      if (nowMin >= 0 && t <= nowMin) continue
-      // Exclure si chevauche la pause
+      if (nowMin >= 0 && t <= nowMin) continue  // passe (today)
+      // Pause : la prestation chevauche la pause -> skip
       if (pauseDebut != null && pauseFin != null && t < pauseFin && slotEnd > pauseDebut) continue
       const heure = minutesToTime(t)
-      // Si déjà présent en mode "libre" via un autre créneau, ne pas écraser
       if (slotsMap.has(heure) && !slotsMap.get(heure).pris) continue
       const overlap = plagesReservees.some(p => t < p.end && slotEnd > p.start)
       const motif = !overlap ? null : (startTimes.has(heure) ? 'reserve' : 'incompatible')
@@ -274,6 +296,7 @@ export default function CommanderRdvSlug() {
         dureeMinutes: prestationChoisie.duree_minutes,
         creneaux: creneauxConfig,
         reservations: reservations || [],
+        horairesDetail: commercant.horaires_detail,
       })
       setSlots(list)
       setSlotsLoading(false)
@@ -383,12 +406,15 @@ export default function CommanderRdvSlug() {
       const heureFin = minutesToTime(finMin)
       const dateStr  = isoDate(dateChoisie)
 
-      // Filet anti-overlap : on relit les reservations existantes JUSTE avant l'insert
-      // et on verifie qu'aucune ne chevauche la plage choisie [heureChoisie, heureFin].
-      // L'UNIQUE INDEX DB ne couvre que les collisions exactes (heure_debut = heure_debut),
-      // pas les overlaps partiels (ex: nouveau 14h-16h vs existant 14h30-15h30).
-      // Sans ce check, un soin de 2h pourrait etre book a 14h alors que 14h30 est deja pris.
+      // Filet anti-overlap + check horaires shop + check pause, JUSTE avant l'insert.
+      // L'UNIQUE INDEX DB ne couvre que les collisions exactes ; cette validation
+      // server-side rattrape :
+      //  - overlap partiel (nouveau 14h-16h vs existant 14h30-15h30)
+      //  - debordement des horaires shop (slot 18h30 pour 2h alors que shop ferme 19h)
+      //  - chevauchement de pause (creneau 12h pour 2h alors que pause 12h-13h30)
       const { data: busy } = await supabase.rpc('rdv_slots_busy', { p_commercant_id: commercant.id, p_date: dateStr })
+
+      // 1. Overlap reservations
       const overlap = (busy || []).some(r => {
         const rStart = timeToMinutes(r.heure_debut)
         const rEnd   = timeToMinutes(r.heure_fin)
@@ -401,6 +427,37 @@ export default function CommanderRdvSlug() {
         setSubmitting(false)
         setTimeout(() => setEtape(2), 1200)
         return
+      }
+
+      // 2. Bornes shop ce jour-la (horaires_detail)
+      const jourSem = jourSemaineDate(dateChoisie)
+      const horaireJour = commercant.horaires_detail?.[jourSem]
+      if (horaireJour && horaireJour.ouvert === false) {
+        setSubmitError(`${commercant.nom} est fermé ce jour-là. Choisis un autre jour.`)
+        setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
+      }
+      if (horaireJour?.fin && finMin > timeToMinutes(horaireJour.fin)) {
+        setSubmitError(`Cette prestation dépasse l'heure de fermeture (${horaireJour.fin.slice(0,5)}). Choisis un créneau plus tôt.`)
+        setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
+      }
+      if (horaireJour?.debut && debutMin < timeToMinutes(horaireJour.debut)) {
+        setSubmitError(`Trop tôt — ${commercant.nom} ouvre à ${horaireJour.debut.slice(0,5)}.`)
+        setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
+      }
+
+      // 3. Chevauchement avec pause d'un des creneaux du jour
+      const creneauxJourCheck = (creneauxConfig || []).filter(c =>
+        c.actif !== false
+        && (c.date_specifique === dateStr || (!c.date_specifique && c.jour_semaine === jourSem))
+      )
+      const pauseConflict = creneauxJourCheck.some(c => {
+        if (!c.pause_debut || !c.pause_fin) return false
+        const pStart = timeToMinutes(c.pause_debut), pEnd = timeToMinutes(c.pause_fin)
+        return debutMin < pEnd && finMin > pStart
+      })
+      if (pauseConflict) {
+        setSubmitError('Ce créneau chevauche la pause du commerçant. Choisis-en un autre.')
+        setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
       }
 
       // Prix estimé (figé — si prix variable, on prend prix_min)

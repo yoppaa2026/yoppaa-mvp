@@ -1111,12 +1111,33 @@ export default function Commander() {
     const email = localStorage.getItem('yoppaa_email')
     const nom = localStorage.getItem('yoppaa_nom')
     const prenom = localStorage.getItem('yoppaa_prenom')
+    const telephone = localStorage.getItem('yoppaa_telephone')
     const id = localStorage.getItem('yoppaa_client_id')
     if (email && id) {
-      setClient(p => ({ ...p, email, nom: nom || '', prenom: prenom || '' }))
+      setClient(p => ({ ...p, email, nom: nom || '', prenom: prenom || '', telephone: telephone || '' }))
       setClientId(id)
       chargerFavoris(id)
       chargerCommandesClient(email)
+      // Si telephone manquant en local (cas Magic Link sans signup complet, ou EditablePrenom save sans reload),
+      // recharger depuis la DB pour synchroniser le state + localStorage. Sinon le bandeau "Profil incomplet"
+      // reapparait apres chaque reload alors que la valeur est bien en DB.
+      if (!telephone) {
+        supabase.from('clients').select('prenom, nom, telephone').eq('id', id).maybeSingle().then(({ data }) => {
+          if (!data) return
+          if (data.telephone) {
+            localStorage.setItem('yoppaa_telephone', data.telephone)
+            setClient(p => ({ ...p, telephone: data.telephone }))
+          }
+          if (data.prenom && !prenom) {
+            localStorage.setItem('yoppaa_prenom', data.prenom)
+            setClient(p => ({ ...p, prenom: data.prenom }))
+          }
+          if (data.nom && !nom) {
+            localStorage.setItem('yoppaa_nom', data.nom)
+            setClient(p => ({ ...p, nom: data.nom }))
+          }
+        })
+      }
       // Charge la commune du Yopper. Si null → modale ConfirmCommune au prochain rendu.
       supabase
         .from('clients')

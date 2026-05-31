@@ -374,6 +374,26 @@ export default function CommanderRdvSlug() {
       const heureFin = minutesToTime(finMin)
       const dateStr  = isoDate(dateChoisie)
 
+      // Filet anti-overlap : on relit les reservations existantes JUSTE avant l'insert
+      // et on verifie qu'aucune ne chevauche la plage choisie [heureChoisie, heureFin].
+      // L'UNIQUE INDEX DB ne couvre que les collisions exactes (heure_debut = heure_debut),
+      // pas les overlaps partiels (ex: nouveau 14h-16h vs existant 14h30-15h30).
+      // Sans ce check, un soin de 2h pourrait etre book a 14h alors que 14h30 est deja pris.
+      const { data: busy } = await supabase.rpc('rdv_slots_busy', { p_commercant_id: commercant.id, p_date: dateStr })
+      const overlap = (busy || []).some(r => {
+        const rStart = timeToMinutes(r.heure_debut)
+        const rEnd   = timeToMinutes(r.heure_fin)
+        return debutMin < rEnd && finMin > rStart
+      })
+      if (overlap) {
+        console.warn('[rdv] overlap detected before insert', { debutMin, finMin, busy })
+        setSubmitError('Ce créneau chevauche un RDV déjà pris. Choisis-en un autre.')
+        setHeureChoisie(null)
+        setSubmitting(false)
+        setTimeout(() => setEtape(2), 1200)
+        return
+      }
+
       // Prix estimé (figé — si prix variable, on prend prix_min)
       const prixEstime = prestationChoisie.prix != null
         ? Number(prestationChoisie.prix)

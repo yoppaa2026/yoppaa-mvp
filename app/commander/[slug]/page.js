@@ -1195,6 +1195,7 @@ export default function CommanderSlug() {
     if (!creneauChoisi || !client.prenom || !client.nom || !client.email || !client.telephone || !rgpdCommande || !commercant) return
     setLoadingCommande(true)
     setErreurCommande(null)
+    try {
 
     const nomComplet = `${client.prenom} ${client.nom}`.trim()
     const jourDate = joursDispos[jourSelectionne]?.date || new Date()
@@ -1228,6 +1229,7 @@ export default function CommanderSlug() {
     // Le trigger DB set_commande_numero (BEFORE INSERT) l'assigne automatiquement,
     // de façon FIGÉE par ordre d'arrivée dans la semaine ISO (lundi→dimanche).
     // Plus de re-numérotation après-coup, plus de conflits.
+    const cidPromise = getOuCreerClient(client.email, client.prenom, client.nom)
     const [{ data: dejaCommandes }, cid] = await Promise.all([
       stockCheckPromise,
       cidPromise,
@@ -1299,6 +1301,13 @@ export default function CommanderSlug() {
     setDerniereCommande({ ...commande, client_id: cid, numeroSequentiel: commande.numero_commande })
     setEtape(4)
     setLoadingCommande(false)
+    } catch (e) {
+      // Garde-fou anti-freeze : sans ce catch, toute exception (cidPromise undefined,
+      // RLS deny, network) laissait le bouton bloque sur "En cours..." sans signal.
+      console.error('[passerCommande] erreur', e)
+      setErreurCommande(`Erreur : ${e?.message || 'inconnue'}. Reessaie ou contacte-nous.`)
+      setLoadingCommande(false)
+    }
   }
 
   const formValide = creneauChoisi && client.prenom.trim() && client.nom.trim() && client.email.trim() && client.telephone.trim() && rgpdCommande

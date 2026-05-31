@@ -171,6 +171,38 @@ function IconClock({ size = 12, color = 'currentColor' }) {
     </svg>
   )
 }
+function IconRdv({ size = 20, color = '#fff', opacity = 1 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ opacity, flexShrink: 0 }}>
+      <rect x="3" y="5" width="18" height="16" rx="2.5" stroke={color} strokeWidth="2.2" strokeLinejoin="round"/>
+      <path d="M3 9.5h18" stroke={color} strokeWidth="2.2"/>
+      <path d="M8 3v4M16 3v4" stroke={color} strokeWidth="2.2" strokeLinecap="round"/>
+    </svg>
+  )
+}
+function IconPhone({ size = 12, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+
+// Statuts RDV (parallele de STATUTS pour les commandes).
+// Vert pour 'honore', rouge pour 'annule' / 'no_show', violet pour 'confirme'.
+const STATUTS_RDV = {
+  'confirme':  { label: 'Confirmé',    couleur: { border: '#6B35C4', badge: '#6B35C4', cardBg: '#EDE0FF' }, icon: '🟣', actions: ['honore', 'no_show', 'annule'] },
+  'honore':    { label: 'Honoré',      couleur: { border: '#10B981', badge: '#10B981', cardBg: '#F0FDF4' }, icon: '✓', actions: [] },
+  'no_show':   { label: 'No-show',     couleur: { border: '#9CA3AF', badge: '#6B7280', cardBg: '#F9FAFB' }, icon: '⊘', actions: ['confirme'] },
+  'annule':    { label: 'Annulé',      couleur: { border: '#DC2626', badge: '#DC2626', cardBg: '#FFF0F0' }, icon: '✕', actions: ['confirme'] },
+}
+
+const ACTIONS_RDV_LABEL = {
+  honore:   { label: 'Marquer honoré',  bg: '#10B981', border: '#10B98144' },
+  no_show:  { label: 'No-show',          bg: '#6B7280', border: '#6B728044' },
+  annule:   { label: 'Annuler',          bg: '#DC2626', border: '#DC262644' },
+  confirme: { label: 'Remettre en confirmé', bg: '#6B35C4', border: '#6B35C444' },
+}
 
 // ─── Carte commande ───────────────────────────────────────────────────────────
 function CarteCommande({ commande, numero, onChangerStatut, modeHistorique = false }) {
@@ -318,9 +350,129 @@ function CarteCommande({ commande, numero, onChangerStatut, modeHistorique = fal
   )
 }
 
+// ─── Carte RDV (vitrine) ──────────────────────────────────────────────────────
+// Affichage d'un RDV pour le commercant : heure, prestation, duree, client (nom/tel/email),
+// notes du client, prix estime. Actions : Honore / No-show / Annuler.
+function CarteRdv({ rdv, onChangerStatut }) {
+  const statut = STATUTS_RDV[rdv.statut] || STATUTS_RDV['confirme']
+  const { couleur } = statut
+
+  const heureD = rdv.heure_debut?.slice(0,5)
+  const heureF = rdv.heure_fin?.slice(0,5)
+  const dateRef = rdv.date_rdv
+  const dateFormatee = dateRef
+    ? new Date(dateRef + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'short', day: '2-digit', month: '2-digit' })
+    : null
+
+  const dureeMin = rdv.duree_minutes
+  const dureeTexte = dureeMin
+    ? (dureeMin >= 60 ? `${Math.floor(dureeMin/60)}h${dureeMin%60>0?(dureeMin%60)+'min':''}` : `${dureeMin}min`)
+    : null
+
+  const prenom = rdv.client_prenom || rdv.client_nom?.split(' ')[0] || 'Client'
+  const nomComplet = [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' ') || rdv.client_nom
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: `0 2px 12px ${couleur.border}14`, border: `1.5px solid ${couleur.border}22`, transition: 'transform 0.15s, box-shadow 0.15s' }}
+      onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 8px 28px ${couleur.border}28` }}
+      onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 2px 12px ${couleur.border}14` }}>
+      <div style={{ height: 4, background: `linear-gradient(90deg, ${couleur.border}, ${couleur.border}88)` }}/>
+      <div style={{ padding: '0.875rem 1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.625rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Numero RDV + date */}
+            <div style={{ minWidth: 44, borderRadius: 10, background: `linear-gradient(135deg, ${couleur.border}, ${couleur.border}bb)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0, boxShadow: `0 3px 10px ${couleur.border}44`, padding: '6px 6px', gap: 2 }}>
+              <span style={{ fontWeight: 900, fontSize: '0.9rem', lineHeight: 1 }}>#{rdv.numero_rdv || '?'}</span>
+              {dateFormatee && <span style={{ fontSize: '0.55rem', fontWeight: 700, opacity: 0.85, textAlign: 'center', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{dateFormatee}</span>}
+            </div>
+            <div>
+              <p style={{ fontWeight: 800, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{nomComplet}</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                <IconClock size={11} color={couleur.border}/>
+                <span style={{ fontSize: '0.75rem', color: couleur.border, fontWeight: 700 }}>{heureD}–{heureF}{dureeTexte ? ` · ${dureeTexte}` : ''}</span>
+              </div>
+              {rdv.client_telephone && (
+                <a href={`tel:${rdv.client_telephone}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 3, textDecoration: 'none', color: T.muted }}>
+                  <IconPhone size={11} color={T.muted}/>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 600 }}>{rdv.client_telephone}</span>
+                </a>
+              )}
+            </div>
+          </div>
+          {/* Statut badge a droite */}
+          <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '4px 9px', borderRadius: 100, background: couleur.cardBg, color: couleur.badge, border: `1px solid ${couleur.border}33`, whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {statut.icon} {statut.label}
+          </span>
+        </div>
+
+        {/* Prestation */}
+        <div style={{ background: '#F9FAFB', borderRadius: 10, padding: '0.625rem 0.75rem', marginBottom: 8, border: '1px solid #F3F4F6' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+            <p style={{ fontSize: '0.85rem', fontWeight: 700, color: T.ink, margin: 0, lineHeight: 1.3, flex: 1, minWidth: 0 }}>
+              {rdv.prestation?.nom || 'Prestation'}
+            </p>
+            {rdv.prix_estime != null && (
+              <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px', flexShrink: 0 }}>
+                {Number(rdv.prix_estime).toFixed(0)}€
+              </span>
+            )}
+          </div>
+          {rdv.acompte_montant != null && rdv.acompte_montant > 0 && (
+            <p style={{ fontSize: '0.7rem', color: T.muted, marginTop: 3, fontWeight: 600 }}>
+              Acompte : {Number(rdv.acompte_montant).toFixed(2)}€ {rdv.acompte_paye ? '✓ payé' : '· en attente'}
+            </p>
+          )}
+        </div>
+
+        {/* Notes client si presentes */}
+        {rdv.notes_client && (
+          <div style={{ background: '#FFFBEB', borderRadius: 8, padding: '0.5rem 0.75rem', marginBottom: 8, border: '1px solid #FDE68A' }}>
+            <p style={{ fontSize: '0.62rem', fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 3 }}>Note du client</p>
+            <p style={{ fontSize: '0.78rem', color: '#78350F', lineHeight: 1.4, margin: 0 }}>{rdv.notes_client}</p>
+          </div>
+        )}
+
+        {/* Actions selon statut */}
+        {statut.actions.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: statut.actions.length === 3 ? '2fr 1fr 1fr' : '1fr', gap: 6, marginTop: 10 }}>
+            {statut.actions.map(action => {
+              const cfg = ACTIONS_RDV_LABEL[action]
+              if (!cfg) return null
+              const isPrincipal = action === 'honore' || action === 'confirme'
+              return (
+                <button key={action} onClick={() => {
+                  const msg = action === 'no_show' ? 'Marquer ce client en NO-SHOW ?'
+                            : action === 'annule' ? 'ANNULER ce RDV ? Le client sera notifie.'
+                            : action === 'honore' ? null
+                            : 'Remettre ce RDV en CONFIRMÉ ?'
+                  if (msg && !window.confirm(msg)) return
+                  onChangerStatut(rdv.id, action)
+                }}
+                  style={{
+                    padding: '0.5rem 0.5rem', borderRadius: 10,
+                    border: isPrincipal ? 'none' : `1.5px solid ${cfg.border}`,
+                    background: isPrincipal ? cfg.bg : 'transparent',
+                    color: isPrincipal ? '#fff' : cfg.bg,
+                    fontWeight: 700, fontSize: '0.75rem',
+                    cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                    boxShadow: isPrincipal ? `0 3px 10px ${cfg.bg}44` : 'none',
+                    transition: 'all 0.15s',
+                  }}>
+                  {cfg.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function Dashboard() {
   const [commandes, setCommandes] = useState([])
+  const [rdvs, setRdvs] = useState([])
   const [commercant, setCommercant] = useState(null)
   const [loading, setLoading] = useState(true)
   const [listeCommercants, setListeCommercants] = useState([])
@@ -358,6 +510,19 @@ export default function Dashboard() {
     setJourSelectionne(todayKey)
   }, [])
 
+  // Fetch des RDVs d'un commercant. Filtre deleted_at IS NULL (legal Belgique 7 ans
+  // mais on cache les supprimes du dashboard quotidien). Tri par date + heure.
+  const chargerRdvs = useCallback(async (id) => {
+    const { data } = await supabase
+      .from('rdv_reservations')
+      .select('*, prestation:rdv_prestations(nom, duree_minutes, prix)')
+      .eq('commercant_id', id)
+      .is('deleted_at', null)
+      .order('date_rdv', { ascending: true })
+      .order('heure_debut', { ascending: true })
+    setRdvs(data || [])
+  }, [])
+
   // ─── Init — mémoriser le commerce sélectionné ─────────────────────────────
   useEffect(() => {
     async function init() {
@@ -375,7 +540,7 @@ export default function Dashboard() {
       if (data.length === 1) {
         setCommercant(data[0])
         localStorage.setItem('yoppaa_dashboard_commercant_id', data[0].id)
-        chargerCommandes(data[0].id)
+        chargerCommandes(data[0].id); chargerRdvs(data[0].id)
       } else {
         // Multi-commerces — restaurer depuis localStorage
         const savedId = localStorage.getItem('yoppaa_dashboard_commercant_id')
@@ -383,7 +548,7 @@ export default function Dashboard() {
           const found = data.find(c => c.id === savedId)
           if (found) {
             setCommercant(found)
-            chargerCommandes(found.id)
+            chargerCommandes(found.id); chargerRdvs(found.id)
             return
           }
         }
@@ -443,6 +608,17 @@ export default function Dashboard() {
 
       dernierNombreRef.current = triees.length
       setCommandes(triees)
+
+      // Polling RDVs : meme interval pour eviter de multiplier les setInterval.
+      // Pas de notif son speciale ici (ajoutee dans RDV-10).
+      const { data: rdvsData } = await supabase
+        .from('rdv_reservations')
+        .select('*, prestation:rdv_prestations(nom, duree_minutes, prix)')
+        .eq('commercant_id', commercant.id)
+        .is('deleted_at', null)
+        .order('date_rdv', { ascending: true })
+        .order('heure_debut', { ascending: true })
+      if (rdvsData) setRdvs(rdvsData)
     }, 5000)
 
     return () => { if (pollingRef.current) clearInterval(pollingRef.current) }
@@ -451,6 +627,16 @@ export default function Dashboard() {
   async function changerStatut(commandeId, statut) {
     await supabase.from('commandes').update({ statut }).eq('id', commandeId)
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, statut } : c))
+  }
+
+  async function changerStatutRdv(rdvId, statut) {
+    const { error } = await supabase.from('rdv_reservations').update({ statut }).eq('id', rdvId)
+    if (error) {
+      console.error('[dashboard] changerStatutRdv', error)
+      alert(`Erreur : ${error.message}`)
+      return
+    }
+    setRdvs(prev => prev.map(r => r.id === rdvId ? { ...r, statut } : r))
   }
 
   async function seDeconnecter() {
@@ -534,6 +720,43 @@ export default function Dashboard() {
     { label: 'En prépa',   value: stats.enPrepa,             color: '#EA580C', bg: '#FFF7ED', border: '#EA580C18', pulse: false },
     { label: 'Prêtes',     value: stats.pretes,              color: '#10B981', bg: '#F0FDF4', border: '#10B98118', pulse: false },
     { label: 'CA du jour', value: `${stats.ca.toFixed(2)}€`, color: T.main,   bg: T.pale,   border: `${T.main}18`, pulse: false },
+  ]
+
+  // ─── RDVs : calculs derives ────────────────────────────────────────────────
+  // Tous les filtres sur 'rdvs' qui alimentent l'onglet RDV (similaire a stats commandes).
+  const rdvsDuJour = modeHistorique
+    ? rdvs.filter(r => new Date(r.date_rdv) < new Date(dateKey(new Date())))  // historique = passes
+    : rdvs.filter(r => r.date_rdv === jourActif)
+  const statsRdv = {
+    aujourdhui: rdvs.filter(r => r.date_rdv === dateKey(new Date()) && r.statut === 'confirme').length,
+    duJour:     rdvsDuJour.length,
+    confirmes:  rdvsDuJour.filter(r => r.statut === 'confirme').length,
+    honores:    rdvsDuJour.filter(r => r.statut === 'honore').length,
+    annules:    rdvsDuJour.filter(r => r.statut === 'annule').length,
+    noShow:     rdvsDuJour.filter(r => r.statut === 'no_show').length,
+    caEstime:   rdvsDuJour.filter(r => r.statut === 'honore').reduce((acc, r) => acc + Number(r.prix_estime || 0), 0),
+  }
+  // Filtre statut RDV
+  const rdvsFiltres = rdvsDuJour.filter(r => {
+    if (filtreStatut === 'actives')  return r.statut === 'confirme'
+    if (filtreStatut === 'confirme') return r.statut === 'confirme'
+    if (filtreStatut === 'honore')   return r.statut === 'honore'
+    if (filtreStatut === 'no_show')  return r.statut === 'no_show'
+    if (filtreStatut === 'annule')   return r.statut === 'annule'
+    return true
+  })
+  const filtresStatutRdv = [
+    { key: 'actives',  label: 'À venir',    count: statsRdv.confirmes,           color: T.main },
+    { key: 'honore',   label: 'Honorés',    count: statsRdv.honores,             color: '#10B981' },
+    { key: 'no_show',  label: 'No-show',    count: statsRdv.noShow,              color: '#6B7280' },
+    { key: 'annule',   label: 'Annulés',    count: statsRdv.annules,             color: '#DC2626' },
+    { key: 'tout',     label: 'Tout',       count: rdvsDuJour.length },
+  ]
+  const statsCardsRdv = [
+    { label: 'À venir',     value: statsRdv.confirmes,                    color: T.main,    bg: T.pale,   border: `${T.main}18`,   pulse: statsRdv.confirmes > 0 },
+    { label: 'Honorés',     value: statsRdv.honores,                       color: '#10B981', bg: '#F0FDF4', border: '#10B98118',     pulse: false },
+    { label: 'No-show',     value: statsRdv.noShow,                        color: '#6B7280', bg: '#F9FAFB', border: '#9CA3AF22',     pulse: false },
+    { label: 'CA honoré',   value: `${statsRdv.caEstime.toFixed(0)}€`,    color: T.main,    bg: T.pale,   border: `${T.main}18`,   pulse: false },
   ]
 
   // ─── Sélecteur commerce ───────────────────────────────────────────────────
@@ -818,17 +1041,19 @@ export default function Dashboard() {
 
           <nav style={{ flex: 1 }}>
             {[
-              { key: 'commandes', label: 'Commandes', Icon: IconCommandes },
-              { key: 'config',    label: 'Paramètres', Icon: IconConfig },
-            ].map(({ key, label, Icon }) => {
+              { key: 'commandes', label: 'Commandes', Icon: IconCommandes, visible: true },
+              { key: 'rdv',       label: 'Rendez-vous', Icon: IconRdv,     visible: !!commercant?.rdv_actif },
+              { key: 'config',    label: 'Paramètres', Icon: IconConfig,   visible: true },
+            ].filter(t => t.visible).map(({ key, label, Icon }) => {
               const actif = ongletPrincipal === key
+              const badgeCount = key === 'commandes' ? stats.nouvelles : key === 'rdv' ? statsRdv.aujourdhui : 0
               return (
                 <button key={key} className="sidebar-nav-btn" onClick={() => setOngletPrincipal(key)}
                   style={{ background: actif ? `linear-gradient(135deg, ${T.main}55, ${T.mid}33)` : 'transparent', color: actif ? '#fff' : T.light, borderLeft: `3px solid ${actif ? T.main : 'transparent'}`, boxShadow: actif ? `0 4px 16px ${T.main}33` : 'none' }}>
                   <Icon size={18} color={actif ? '#fff' : T.light} opacity={actif ? 1 : 0.6}/>
                   {label}
-                  {key === 'commandes' && stats.nouvelles > 0 && (
-                    <span style={{ marginLeft: 'auto', background: '#DC2626', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100, animation: 'pulse 2s ease infinite' }}>{stats.nouvelles}</span>
+                  {badgeCount > 0 && (
+                    <span style={{ marginLeft: 'auto', background: key === 'rdv' ? '#10B981' : '#DC2626', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100, animation: key === 'commandes' ? 'pulse 2s ease infinite' : 'none' }}>{badgeCount}</span>
                   )}
                 </button>
               )
@@ -887,17 +1112,19 @@ export default function Dashboard() {
 
               <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 3, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}>
                 {[
-                  { key: 'commandes', label: 'Commandes', Icon: IconCommandes },
-                  { key: 'config',    label: 'Config',    Icon: IconConfig },
-                ].map(({ key, label, Icon }) => {
+                  { key: 'commandes', label: 'Cmd',    Icon: IconCommandes, visible: true },
+                  { key: 'rdv',       label: 'RDV',    Icon: IconRdv,       visible: !!commercant?.rdv_actif },
+                  { key: 'config',    label: 'Config', Icon: IconConfig,    visible: true },
+                ].filter(t => t.visible).map(({ key, label, Icon }) => {
                   const actif = ongletPrincipal === key
+                  const badgeCount = key === 'commandes' ? stats.nouvelles : key === 'rdv' ? statsRdv.aujourdhui : 0
                   return (
                     <button key={key} onClick={() => setOngletPrincipal(key)}
                       style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '0.35rem 0.625rem', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.72rem', transition: 'all 0.2s', background: actif ? T.main : 'transparent', color: actif ? '#fff' : T.light, boxShadow: actif ? `0 3px 12px ${T.main}55` : 'none', position: 'relative', whiteSpace: 'nowrap' }}>
                       <Icon size={13} color={actif ? '#fff' : T.light}/>
                       {label}
-                      {key === 'commandes' && stats.nouvelles > 0 && (
-                        <span style={{ position: 'absolute', top: -4, right: -4, background: '#DC2626', color: '#fff', fontSize: '0.55rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100, animation: 'pulse 2s ease infinite' }}>{stats.nouvelles}</span>
+                      {badgeCount > 0 && (
+                        <span style={{ position: 'absolute', top: -4, right: -4, background: key === 'rdv' ? '#10B981' : '#DC2626', color: '#fff', fontSize: '0.55rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100, animation: key === 'commandes' ? 'pulse 2s ease infinite' : 'none' }}>{badgeCount}</span>
                       )}
                     </button>
                   )
@@ -916,6 +1143,60 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
+          {/* Sticky header — RDV : stats RDV + selecteur jour + filtres statut RDV */}
+          {ongletPrincipal === 'rdv' && (
+            <div className="sticky-header">
+              <div className="stats-grid">
+                {statsCardsRdv.map((s, i) => (
+                  <div key={i} style={{ background: s.bg, borderRadius: 12, padding: '0.5rem 0.75rem', border: `1.5px solid ${s.border}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                      {s.pulse && <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.color, display: 'inline-block', animation: 'pulse 1.5s ease infinite', flexShrink: 0 }}/>}
+                      <p style={{ fontSize: '0.58rem', color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{s.label}</p>
+                    </div>
+                    <p style={{ fontSize: '1.4rem', fontWeight: 900, color: s.color, letterSpacing: '-1px', lineHeight: 1 }}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Selecteur jours pour RDVs (memes 7 jours + Historique) */}
+              {joursDispos.length > 0 && (
+                <div className="jours-wrap">
+                  {joursDispos.map(jour => {
+                    const actif = !modeHistorique && jour === jourActif
+                    const nbRdvs = rdvs.filter(r => r.date_rdv === jour).length
+                    const nbActifs = rdvs.filter(r => r.date_rdv === jour && r.statut === 'confirme').length
+                    return (
+                      <button key={jour} className="pill" onClick={() => { setJourSelectionne(jour); setModeHistorique(false); setFiltreStatut('actives') }}
+                        style={{ borderColor: actif ? T.main : `${T.main}28`, background: actif ? T.main : '#fff', color: actif ? '#fff' : T.ink, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        {dateLabel(jour + 'T00:00:00')}
+                        {nbActifs > 0 && (
+                          <span style={{ background: actif ? 'rgba(255,255,255,0.3)' : '#10B981', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>{nbActifs}</span>
+                        )}
+                        {nbActifs === 0 && nbRdvs > 0 && (
+                          <span style={{ background: actif ? 'rgba(255,255,255,0.2)' : T.pale, color: actif ? '#fff' : T.main, fontSize: '0.6rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>{nbRdvs}</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                  <button className="pill" onClick={() => { setModeHistorique(true); setFiltreStatut('tout') }}
+                    style={{ borderColor: modeHistorique ? '#6B7280' : `${T.main}28`, background: modeHistorique ? '#6B7280' : '#fff', color: modeHistorique ? '#fff' : T.muted, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    📋 Historique
+                  </button>
+                </div>
+              )}
+
+              {/* Filtres statut RDV */}
+              <div className="filtres-wrap">
+                {filtresStatutRdv.map(f => (
+                  <button key={f.key} className="pill" onClick={() => setFiltreStatut(f.key)}
+                    style={{ borderColor: filtreStatut === f.key ? (f.color || T.main) : `${T.main}28`, background: filtreStatut === f.key ? (f.color || T.main) : '#fff', color: filtreStatut === f.key ? '#fff' : T.ink }}>
+                    {f.label}{f.count > 0 ? ` · ${f.count}` : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Sticky header */}
           {ongletPrincipal === 'commandes' && (
@@ -1011,6 +1292,32 @@ export default function Dashboard() {
                       />
                     )
                   })}
+                </div>
+              </>
+            )}
+
+            {ongletPrincipal === 'rdv' && (
+              <>
+                {loading && (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem', gap: 10 }}>
+                    {[0,1,2].map(i => (
+                      <div key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: [T.light, T.mid, T.main][i], animation: `dotPulse 0.8s ease-in-out ${i*0.2}s infinite alternate` }}/>
+                    ))}
+                  </div>
+                )}
+                {!loading && rdvsFiltres.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '4rem 0' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>📅</div>
+                    <p style={{ fontWeight: 800, color: T.ink, marginBottom: 4 }}>Aucun RDV ici</p>
+                    <p style={{ fontSize: '0.875rem', color: T.muted }}>
+                      {filtreStatut === 'actives' ? 'Aucun RDV à venir ce jour.' : 'Rien dans ce filtre pour ce jour.'}
+                    </p>
+                  </div>
+                )}
+                <div className="commandes-grid">
+                  {rdvsFiltres.map(rdv => (
+                    <CarteRdv key={rdv.id} rdv={rdv} onChangerStatut={changerStatutRdv}/>
+                  ))}
                 </div>
               </>
             )}

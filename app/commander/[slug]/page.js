@@ -706,6 +706,12 @@ export default function CommanderSlug() {
   }, [slug])
 
   function hydrate(data) {
+    // Garde-fou : si on tape /commander/[slug] pour un commercant VITRINE (coiffeur, esthe, etc.),
+    // on redirige vers la fiche RDV native (cette page est pour l'alimentaire C&C uniquement).
+    if (data.commercant?.categorie === 'vitrine' && data.commercant?.slug) {
+      router.replace(`/commander/rdv/${data.commercant.slug}`)
+      return
+    }
     setCommercant(data.commercant)
     setArticles(data.articles)
     setCreneaux(data.creneaux)

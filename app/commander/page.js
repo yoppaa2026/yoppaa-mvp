@@ -1472,7 +1472,11 @@ export default function Commander() {
   function selectionnerCommercant(c) {
     if (!c.slug) return
     localStorage.setItem('yoppaa_onglet', 'accueil')
-    router.push(`/commander/${c.slug}`)
+    // Routing par catégorie :
+    //   • vitrine (coiffeur, esthe, etc.) → /commander/rdv/[slug] (module RDV natif)
+    //   • alimentaire (boulangerie, etc.) → /commander/[slug] (Click & Collect)
+    const route = c.categorie === 'vitrine' ? `/commander/rdv/${c.slug}` : `/commander/${c.slug}`
+    router.push(route)
   }
 
   const tempsEconomise = clientCommandes.filter(c => c.statut==='recupere').reduce((acc,c) => acc+getTemps(c.commercant?.type), 0)

@@ -2025,7 +2025,7 @@ export default function Commander() {
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                     <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>Prêtes à retirer</span>
-                    <span style={{ background: '#10B981', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{commandesASwiper.length}</span>
+                    <span style={{ background: T.main, color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{commandesASwiper.length}</span>
                   </div>
                   {commandesASwiper.map(c => {
                     const ok = peutRetirer(c)
@@ -2033,18 +2033,22 @@ export default function Commander() {
                     const heureCreneau = c.creneau?.heure_debut?.slice(0,5)
                     const prenom = client.prenom || client.nom?.split(' ')[0] || 'Yopper'
                     return (
-                    <div key={c.id} style={{ background: 'linear-gradient(135deg, #F0FDF4, #fff)', borderRadius: 16, overflow: 'hidden', marginBottom: '0.75rem', border: '2px solid #10B98133', boxShadow: '0 4px 16px rgba(16,185,129,0.1)' }}>
-                      {/* Bande 3px verte : signature pour les commandes pretes a retirer */}
-                      <div style={{ height: 3, background: 'linear-gradient(90deg, #047857 0%, #10B981 60%, #6EE7B7 100%)' }}/>
+                    /* Card 'Prete a retirer' : signature violette renforcee.
+                       L'effet 'action urgente' est cree par glow violet intense + bordure plus
+                       epaisse (2px) + animation pulse sur le dot + bouton CTA gradient marque
+                       — pas par le vert (reserve aux RDVs et au design system canonique). */
+                    <div key={c.id} style={{ background: `linear-gradient(135deg, ${T.pale}, #fff)`, borderRadius: 16, overflow: 'hidden', marginBottom: '0.75rem', border: `2px solid ${T.main}44`, boxShadow: `0 6px 20px ${T.main}26` }}>
+                      {/* Bande 3px canonique Yoppaa (Ink -> Main -> Light) */}
+                      <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
                       <div style={{ padding: '1rem 1.125rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem' }}>
                         <div>
                           <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>
                             {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.main, fontWeight: 700 }}> — commande #{c.numeroAffiche}</span>}
                           </p>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#F0FDF4', borderRadius: 100, padding: '3px 10px', border: '1px solid #10B98122' }}>
-                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', border: '1.5px solid #fff', boxShadow: '0 0 0 1.5px #10B98133, 0 0 8px #10B98199', animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#10B981' }}>Prête à retirer{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: T.pale, borderRadius: 100, padding: '3px 10px', border: `1px solid ${T.main}33` }}>
+                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.main, border: '1.5px solid #fff', boxShadow: `0 0 0 1.5px ${T.main}44, 0 0 8px ${T.main}99`, animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.main }}>Prête à retirer{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</span>
                           </span>
                         </div>
                         <p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>

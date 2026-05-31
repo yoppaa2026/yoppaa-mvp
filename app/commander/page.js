@@ -887,15 +887,14 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
       onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 12px 32px rgba(26,8,64,0.12)`; e.currentTarget.style.borderColor = T.light }}
       onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(26,8,64,0.04)'; e.currentTarget.style.borderColor = T.pale }}>
 
-      {/* Bande haute fine 3px — signature visuelle Yoppaa, variant par catégorie :
+      {/* Bande haute fine 3px — marqueur de categorie au stade decouverte :
           • vitrine (services / RDV) → VERT (Forest → Emerald → Mint)
-          • alimentaire (C&C) → VIOLET canonique (Ink → Main → Light)
-          • plan ON pur (présence simple) → dégradé violet pâle (inactif) */}
+          • alimentaire (C&C ou non) → VIOLET canonique TOUJOURS (Ink → Main → Light)
+          Pas de variant 'plan ON pale' : decision Alexandre 2026-05-31, la bande
+          identifie la categorie, pas le niveau d'activation. */}
       <div style={{ height: 3, background: isVitrine(c)
         ? 'linear-gradient(90deg, #047857 0%, #10B981 60%, #6EE7B7 100%)'
-        : peutCommander
-          ? `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`
-          : `linear-gradient(90deg, ${T.pale}, ${T.light})` }}/>
+        : `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
 
       <div style={{ padding: '0.625rem 0.875rem 0.75rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>

@@ -867,7 +867,7 @@ export default function CommanderRdvSlug() {
                           return (
                             <div key={heure} aria-disabled="true" title="Créneau déjà réservé"
                               style={{
-                                padding: '0.55rem 0.5rem', borderRadius: 10,
+                                padding: '0.55rem 0.4rem', borderRadius: 10,
                                 border: `1.5px dashed #D1D5DB`,
                                 background: '#F3F4F6',
                                 color: '#9CA3AF',
@@ -882,8 +882,8 @@ export default function CommanderRdvSlug() {
                                 userSelect: 'none',
                               }}>
                               {heure}
-                              <span style={{ display: 'block', fontSize: '0.55rem', fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.5px', textDecoration: 'none', marginTop: 1 }}>
-                                Pris
+                              <span style={{ display: 'block', fontSize: '0.5rem', fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.4px', textDecoration: 'none', marginTop: 1 }}>
+                                Déjà réservé
                               </span>
                             </div>
                           )
@@ -973,13 +973,6 @@ export default function CommanderRdvSlug() {
                           Connecte-toi pour pré-remplir →
                         </a>
                       </p>
-                    </div>
-                  )}
-
-                  {yopperConnecte && (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#F0FDF4', border: '1px solid #10B98133', borderRadius: 100, padding: '4px 10px', marginBottom: 14 }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#10B981', letterSpacing: '-0.2px' }}>Coordonnées Yopper pré-remplies</span>
                     </div>
                   )}
 

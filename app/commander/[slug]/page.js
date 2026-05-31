@@ -2076,13 +2076,6 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {client.email && clientId && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#F0FDF4', border: '1px solid #10B98133', borderRadius: 100, padding: '4px 10px', marginBottom: 14 }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#10B981', letterSpacing: '-0.2px' }}>Coordonnées Yopper pré-remplies</span>
-                  </div>
-                )}
-
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

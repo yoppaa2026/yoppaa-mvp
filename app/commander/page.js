@@ -2271,7 +2271,19 @@ export default function Commander() {
                       setEditProfilSignal(s => s + 1)
                       window.scrollTo({ top: 0, behavior: 'smooth' })
                     }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)', border: '1.5px solid #F59E0B', borderRadius: 14, padding: '12px 14px', marginBottom: '0.875rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 2px 8px rgba(245,158,11,0.15)' }}>
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
+                        background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
+                        border: '1.5px solid #F59E0B', borderRadius: 14, padding: '12px 14px',
+                        marginBottom: '0.875rem',
+                        // Compensation du marginTop:-1.25rem du parent : sans ce push down,
+                        // le label PROFIL INCOMPLET tombe dans la zone violette du hero et est masque.
+                        // Seule la card 'Temps economise' garde l'effet d'overlap visuel.
+                        marginTop: '1.5rem',
+                        position: 'relative', zIndex: 1,
+                        cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                        boxShadow: '0 2px 8px rgba(245,158,11,0.15)',
+                      }}>
                       <div style={{ width: 36, height: 36, borderRadius: 10, background: '#FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1.5px solid #F59E0B' }}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                           <circle cx="12" cy="12" r="10"/>

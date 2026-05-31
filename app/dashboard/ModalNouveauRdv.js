@@ -7,6 +7,7 @@
 // Validations server-side : overlap RDV existants + horaires shop + pause.
 
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 
 const T = {
@@ -85,6 +86,16 @@ export default function ModalNouveauRdv({
     setError(null)
     try {
       const dateStr = isoDate(dateInit)
+      const jourKey = JOURS_KEY[jourIdxLun(dateInit)]
+      const horaireJour = commercant.horaires_detail?.[jourKey]
+      // Logs diag : si la modale accepte un RDV qui chevauche pause/fermeture, on saura
+      // immediatement quel input est manquant (creneaux vide, horaireJour null, etc.)
+      console.info('[ModalNouveauRdv] valider — context', {
+        dateStr, jourKey, heureInit, dureeMin, debutMin, finMin,
+        horaireJour,
+        nbCreneaux: (creneaux || []).length,
+        nbRdvsExistants: (rdvsExistants || []).length,
+      })
       // 1) Overlap avec un RDV existant : on regarde dans rdvsExistants (state du dashboard)
       const overlap = (rdvsExistants || []).some(r => {
         if (r.date_rdv !== dateStr) return false
@@ -100,8 +111,6 @@ export default function ModalNouveauRdv({
       }
 
       // 2) Bornes shop ce jour-la
-      const jourKey = JOURS_KEY[jourIdxLun(dateInit)]
-      const horaireJour = commercant.horaires_detail?.[jourKey]
       if (!horaireJour || horaireJour.ouvert === false) {
         setError(`Ton commerce est fermé ce jour-là.`)
         setSubmitting(false)
@@ -123,13 +132,38 @@ export default function ModalNouveauRdv({
         c.actif !== false
         && (c.date_specifique === dateStr || (!c.date_specifique && c.jour_semaine === jourKey))
       )
+      console.info('[ModalNouveauRdv] check pause', {
+        jourKey,
+        creneauxJour: creneauxJour.map(c => ({ jour: c.jour_semaine, pauseD: c.pause_debut, pauseF: c.pause_fin })),
+      })
       const pauseConflict = creneauxJour.some(c => {
         if (!c.pause_debut || !c.pause_fin) return false
         const pS = timeToMinutes(c.pause_debut), pE = timeToMinutes(c.pause_fin)
-        return debutMin < pE && finMin > pS
+        const conflict = debutMin < pE && finMin > pS
+        if (conflict) console.warn('[ModalNouveauRdv] pause conflict detected', { debutMin, finMin, pS, pE })
+        return conflict
       })
       if (pauseConflict) {
         setError('Ce RDV chevauche ta pause.')
+        setSubmitting(false)
+        return
+      }
+
+      // 3b) Chevauchement avec la BORNE DU CRENEAU (debut/fin du creneau jour)
+      // Important : un RDV qui demarre dans le creneau mais le DEPASSE doit etre refuse
+      // (ex: 11h+2h sur un creneau 9h-12h -> dépasse à 13h).
+      const creneauOverflow = creneauxJour.some(c => {
+        const cDebut = timeToMinutes(c.heure_debut)
+        const cFin   = timeToMinutes(c.heure_fin)
+        if (debutMin < cDebut || debutMin >= cFin) return false  // pas dans ce creneau
+        if (finMin > cFin) {
+          console.warn('[ModalNouveauRdv] creneau overflow', { debutMin, finMin, cDebut, cFin })
+          return true
+        }
+        return false
+      })
+      if (creneauOverflow) {
+        setError('Ce RDV dépasse la fin du créneau d\'ouverture (déborde sur pause ou fermeture).')
         setSubmitting(false)
         return
       }
@@ -193,9 +227,16 @@ export default function ModalNouveauRdv({
   }
   const labelSt = { fontSize: '0.65rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: 4 }
 
-  return (
+  // React Portal : rend la modale au niveau document.body, ce qui la fait sortir de tous
+  // les stacking contexts du dashboard (sidebar, topbar, ancestors avec transform/filter).
+  // Sans le portal, la modale etait partiellement masquee par le layout dashboard.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  if (!mounted || typeof document === 'undefined') return null
+
+  return createPortal(
     <div onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(26,8,64,0.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 200, padding: '1rem', backdropFilter: 'blur(4px)', overflowY: 'auto' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(26,8,64,0.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 9999, padding: '1rem', backdropFilter: 'blur(4px)', overflowY: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 460, background: '#fff', borderRadius: 18, overflow: 'hidden', marginTop: '2rem', marginBottom: '2rem', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 20px 60px rgba(22,6,54,0.4)' }}>
 
@@ -300,6 +341,7 @@ export default function ModalNouveauRdv({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

@@ -2648,7 +2648,9 @@ export default function Commander() {
           {[
             { key: 'accueil',   label: 'Accueil',   badge: 0 },
             { key: 'services',  label: 'Officiel',  badge: alerteUrgenteActive ? 1 : 0 },
-            { key: 'commandes', label: 'Commandes', badge: badgeCommandes },
+            // Onglet 'commandes' : pas de label (label vide) + icône plus grande pour compenser,
+            // 2 pastilles distinctes (violette = commandes en cours, verte = RDVs a venir).
+            { key: 'commandes', label: '', badgeCmd: commandesASwiper.length + commandesEnCours.length, badgeRdv: rdvsAVenir.length, badge: badgeCommandes },
             { key: 'tribu',     label: 'Tribu',     badge: 0 },
             { key: 'profil',    label: 'Profil',    badge: 0 },
           ].map(item => {
@@ -2669,12 +2671,12 @@ export default function Commander() {
                 )}
                 {item.key === 'commandes' && (
                   /* Icone hybride : sac de retrait (anse + corps) avec 3 ticks calendrier
-                     en bas pour signaler que l'onglet contient aussi des RDVs (agenda). */
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
+                     en bas. PLUS GROSSE (32px) car cet onglet n'a pas de label en dessous
+                     pour compenser visuellement. Les 3 ticks signalent la dimension agenda RDV. */
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
                     <rect x="2" y="9" width="20" height="13" rx="3" stroke={stroke} strokeWidth="2" strokeLinejoin="round" opacity={op}/>
                     <path d="M2,13 L22,13" stroke={stroke} strokeWidth="2" opacity={op}/>
                     <path d="M8,9 L8,5 Q8,2 12,2 Q16,2 16,5 L16,9" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
-                    {/* 3 marques calendrier en bas = signature agenda RDV */}
                     <circle cx="7"  cy="18" r="1" fill={stroke} opacity={op}/>
                     <circle cx="12" cy="18" r="1" fill={stroke} opacity={op}/>
                     <circle cx="17" cy="18" r="1" fill={stroke} opacity={op}/>
@@ -2712,16 +2714,26 @@ export default function Commander() {
                   </svg>
                 )}
 
-                {/* Badge nombre commandes : grandi + lisible (uniquement pour l'onglet commandes). */}
-                {item.key === 'commandes' && item.badge > 0 && (
-                  <span style={{ position: 'absolute', top: 4, left: 'calc(50% + 6px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: T.main, color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: `0 2px 8px ${T.main}99, 0 0 0 1.5px ${T.main}44`, lineHeight: 1, letterSpacing: '-0.2px' }}>
-                    {item.badge > 9 ? '9+' : item.badge}
+                {/* Onglet 'commandes' : 2 pastilles distinctes.
+                    Violette en haut DROITE = commandes (pretes a retirer + en cours).
+                    Verte    en haut GAUCHE = RDVs a venir.
+                    Si une seule est >0, l'autre n'est pas rendue (pas de "0"). */}
+                {item.key === 'commandes' && item.badgeCmd > 0 && (
+                  <span style={{ position: 'absolute', top: 0, left: 'calc(50% + 8px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: T.main, color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: `0 2px 8px ${T.main}99, 0 0 0 1.5px ${T.main}44`, lineHeight: 1, letterSpacing: '-0.2px' }}>
+                    {item.badgeCmd > 9 ? '9+' : item.badgeCmd}
+                  </span>
+                )}
+                {item.key === 'commandes' && item.badgeRdv > 0 && (
+                  <span style={{ position: 'absolute', top: 0, right: 'calc(50% + 8px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: '#10B981', color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: '0 2px 8px rgba(16,185,129,0.55), 0 0 0 1.5px rgba(16,185,129,0.27)', lineHeight: 1, letterSpacing: '-0.2px' }}>
+                    {item.badgeRdv > 9 ? '9+' : item.badgeRdv}
                   </span>
                 )}
 
-                <span style={{ fontSize: '0.62rem', fontWeight: 700, color: actif ? '#fff' : '#6B7280', letterSpacing: '0.2px', fontFamily: '"DM Sans", sans-serif' }}>
-                  {item.label}
-                </span>
+                {item.label && (
+                  <span style={{ fontSize: '0.62rem', fontWeight: 700, color: actif ? '#fff' : '#6B7280', letterSpacing: '0.2px', fontFamily: '"DM Sans", sans-serif' }}>
+                    {item.label}
+                  </span>
+                )}
                 {actif && <div style={{ position: 'absolute', bottom: 5, left: '50%', transform: 'translateX(-50%)', width: 22, height: 3, borderRadius: 3, background: T.light, boxShadow: `0 0 6px ${T.light}66` }}/>}
               </button>
             )

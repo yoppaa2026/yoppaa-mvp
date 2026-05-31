@@ -1224,19 +1224,12 @@ export default function CommanderSlug() {
           .eq('commande.commercant_id', commercant.id)
           .neq('commande.statut', 'non_retire')
       : Promise.resolve({ data: [] })
-    const numeroPromise = supabase
-      .from('commandes')
-      .select('numero_commande')
-      .eq('commercant_id', commercant.id)
-      .eq('date_commande', dateStr)
-      .order('numero_commande', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    const cidPromise = getOuCreerClient(client.email, client.prenom, client.nom)
-
-    const [{ data: dejaCommandes }, { data: derniereCmd }, cid] = await Promise.all([
+    // Note : numero_commande n'est PLUS calculé côté client.
+    // Le trigger DB set_commande_numero (BEFORE INSERT) l'assigne automatiquement,
+    // de façon FIGÉE par ordre d'arrivée dans la semaine ISO (lundi→dimanche).
+    // Plus de re-numérotation après-coup, plus de conflits.
+    const [{ data: dejaCommandes }, cid] = await Promise.all([
       stockCheckPromise,
-      numeroPromise,
       cidPromise,
     ])
 
@@ -1258,32 +1251,19 @@ export default function CommanderSlug() {
       }
     }
 
-    const numero_commande = ((derniereCmd?.numero_commande) ?? 0) + 1
-
     const insertPayload = {
       commercant_id: commercant.id, creneau_id: creneauChoisi,
       client_nom: nomComplet, client_email: client.email, client_telephone: client.telephone,
       rgpd_commande: true, rgpd_marketing: rgpdMarketing,
       total: totalPanier(), statut: 'en_attente',
       date_commande: dateStr,
-      numero_commande,
+      // numero_commande non fourni : le trigger DB l'assigne
     }
-    let { data: commande, error: errInsert } = await supabase.from('commandes').insert(insertPayload).select().single()
+    const { data: commande, error: errInsert } = await supabase.from('commandes').insert(insertPayload).select().single()
 
-    // Fallback sans numero_commande si la colonne pose problème
-    if (errInsert) {
-      const { numero_commande: _, ...payloadSansNumero } = insertPayload
-      const { data: c2, error: e2 } = await supabase.from('commandes').insert(payloadSansNumero).select().single()
-      if (!e2 && c2) { commande = c2; errInsert = null }
-      else {
-        const msg = errInsert?.message || errInsert?.code || e2?.message || 'inconnue'
-        setErreurCommande(`Erreur : ${msg}`)
-        setLoadingCommande(false)
-        return
-      }
-    }
-    if (!commande) {
-      setErreurCommande('Commande non créée. Réessaie.')
+    if (errInsert || !commande) {
+      const msg = errInsert?.message || errInsert?.code || 'inconnue'
+      setErreurCommande(`Erreur : ${msg}`)
       setLoadingCommande(false)
       return
     }
@@ -1314,25 +1294,9 @@ export default function CommanderSlug() {
     )
     try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
 
-    // FIX NUMÉRO : calculer la position réelle dans le jour pour ce commerce —
-    // même logique que le dashboard (getNumeroJour) et que le PickupScreen,
-    // pour que les 3 affichages soient parfaitement alignés.
-    let numeroFinal = commande.numero_commande
-    if (!numeroFinal) {
-      const { data: duJour } = await supabase
-        .from('commandes')
-        .select('id, created_at, creneau:creneaux(heure_debut)')
-        .eq('commercant_id', commercant.id)
-        .eq('date_commande', dateStr)
-        .order('created_at', { ascending: true })
-      const tri = (duJour || []).sort((a, b) =>
-        (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '') ||
-        new Date(a.created_at) - new Date(b.created_at)
-      )
-      const idx = tri.findIndex(c => c.id === commande.id)
-      numeroFinal = idx >= 0 ? idx + 1 : (numero_commande || 1)
-    }
-    setDerniereCommande({ ...commande, client_id: cid, numeroSequentiel: numeroFinal })
+    // Le numero_commande retourné par .select() après insert = celui assigné par le trigger
+    // (semaine ISO, ordre d'arrivée, figé). Pas de re-calcul nécessaire.
+    setDerniereCommande({ ...commande, client_id: cid, numeroSequentiel: commande.numero_commande })
     setEtape(4)
     setLoadingCommande(false)
   }

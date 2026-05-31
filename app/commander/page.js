@@ -1082,6 +1082,7 @@ export default function Commander() {
   const [client, setClient] = useState({ nom: '', email: '', telephone: '', prenom: '' })
   const [clientId, setClientId] = useState(null)
   const [clientCommandes, setClientCommandes] = useState([])
+  const [clientRdvs, setClientRdvs] = useState([])
   // Commune du Yopper (référentiel `communes` joint via clients.commune_id)
   // commune = null  : pas encore chargé ou client pas connecté
   // commune = false : client connecté mais aucune commune setée → modale ConfirmCommune
@@ -1116,7 +1117,7 @@ export default function Commander() {
       setClient(p => ({ ...p, email, nom: nom || '', prenom: prenom || '', telephone: telephone || '' }))
       setClientId(id)
       chargerFavoris(id)
-      chargerCommandesClient(email)
+      chargerCommandesClient(email); chargerRdvsClient(email)
       // Si telephone manquant en local (cas Magic Link sans signup complet, ou EditablePrenom save sans reload),
       // recharger depuis la DB pour synchroniser le state + localStorage. Sinon le bandeau "Profil incomplet"
       // reapparait apres chaque reload alors que la valeur est bien en DB.
@@ -1163,7 +1164,7 @@ export default function Commander() {
     const iv = setInterval(() => {
       const email = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_email') : null
       if (!email) return  // utilisateur déconnecté → on saute ce tick (mais on laisse l'interval tourner pour le cas re-login)
-      chargerCommandesClient(email)
+      chargerCommandesClient(email); chargerRdvsClient(email)
     }, 5000)
     return () => clearInterval(iv)
   }, [])
@@ -1392,6 +1393,20 @@ export default function Commander() {
     }
   }
 
+  // Fetch tous les RDVs du Yopper (vitrines, services). On garde les statuts vivants
+  // (confirme, honore) pour les stats profil ; les annules / no-show sont retires pour
+  // ne pas polluer le compteur "RDVs".
+  async function chargerRdvsClient(email) {
+    const { data } = await supabase
+      .from('rdv_reservations')
+      .select('id, statut, date_rdv, heure_debut, prix_estime, commercant_id, commercant:commercants(nom, type, categorie)')
+      .eq('client_email', email)
+      .is('deleted_at', null)
+      .in('statut', ['confirme', 'honore'])
+      .order('date_rdv', { ascending: false })
+    setClientRdvs(data || [])
+  }
+
   async function chargerCommandesClient(email) {
     const { data } = await supabase.from('commandes').select('*, commercant:commercants(nom, type), creneau:creneaux(heure_debut, heure_fin)').eq('client_email', email).order('created_at', { ascending: false })
     if (!data || data.length === 0) { setClientCommandes([]); return }
@@ -1486,7 +1501,7 @@ export default function Commander() {
     }
     if (!id) return null
     setClientId(id); localStorage.setItem('yoppaa_client_id', id); localStorage.setItem('yoppaa_email', email); localStorage.setItem('yoppaa_nom', nom)
-    if (ex) { chargerFavoris(id); chargerCommandesClient(email) }
+    if (ex) { chargerFavoris(id); chargerCommandesClient(email); chargerRdvsClient(email) }
     return id
   }
 
@@ -1529,7 +1544,21 @@ export default function Commander() {
     router.push(route)
   }
 
-  const tempsEconomise = clientCommandes.filter(c => c.statut==='recupere').reduce((acc,c) => acc+getTemps(c.commercant?.type), 0)
+  // Temps economise : commandes retirees (~7-15min par type, file evitee) + RDVs pris en
+  // ligne (~3min par RDV, appel/deplacement evite). On compte les RDVs confirmes ET honores
+  // car la prise en ligne reste un gain meme si le RDV n'a pas encore eu lieu.
+  const tempsEconomise =
+    clientCommandes.filter(c => c.statut === 'recupere').reduce((acc, c) => acc + getTemps(c.commercant?.type), 0)
+    + clientRdvs.length * 3
+
+  // Statistiques additionnelles (cards grid 2x2)
+  const totalDepense =
+    clientCommandes.reduce((acc, c) => acc + Number(c.total || 0), 0)
+    + clientRdvs.filter(r => r.statut === 'honore').reduce((acc, r) => acc + Number(r.prix_estime || 0), 0)
+  const commercesUniques = new Set([
+    ...clientCommandes.map(c => c.commercant_id),
+    ...clientRdvs.map(r => r.commercant_id),
+  ].filter(Boolean)).size
 
   const commercantsFiltres = commercants
     .filter(c => categorieActive === 'Tous' || parseTypes(c.type).some(t => t===categorieActive || t.includes(categorieActive)))
@@ -2305,36 +2334,63 @@ export default function Commander() {
                   )
                 })()}
 
-                {/* Card stat principale : temps economise — bande 3px canonique + visuel signature */}
-                <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', marginBottom: '0.875rem', boxShadow: `0 4px 20px ${T.main}14`, border: `1px solid ${T.pale}` }}>
-                  <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
-                  <div style={{ padding: '1.5rem', textAlign: 'center' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
-                      <IconClock size={12} color={T.muted}/>
-                      <p style={{ fontSize: '0.65rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Temps économisé en file</p>
+                {/* Card stat principale : temps economise — taille reduite pour rééquilibrer avec
+                    le grid 2x2 en dessous (avant la hero etait trop dominante). Sous-titre adapte
+                    selon si le Yopper a des RDVs ou seulement des commandes. */}
+                {(() => {
+                  const nbCmdRec = clientCommandes.filter(c => c.statut === 'recupere').length
+                  const nbRdv = clientRdvs.length
+                  const sousTitre = nbRdv > 0
+                    ? `${nbCmdRec + nbRdv} moment${(nbCmdRec + nbRdv) > 1 ? 's' : ''} sans friction`
+                    : `${nbCmdRec} commande${nbCmdRec > 1 ? 's' : ''} sans faire la file`
+                  return (
+                    <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', marginBottom: '0.625rem', boxShadow: `0 4px 20px ${T.main}14`, border: `1px solid ${T.pale}` }}>
+                      <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
+                      <div style={{ padding: '1.125rem 1rem 1rem', textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+                          <IconClock size={11} color={T.muted}/>
+                          <p style={{ fontSize: '0.6rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Temps économisé</p>
+                        </div>
+                        <p style={{ fontSize: '2.5rem', fontWeight: 900, color: T.main, letterSpacing: '-2px', marginBottom: 2, lineHeight: 1 }}>
+                          {tempsEconomise >= 60 ? `${Math.floor(tempsEconomise/60)}h${tempsEconomise%60>0?(tempsEconomise%60)+'min':''}` : `${tempsEconomise} min`}
+                        </p>
+                        <p style={{ fontSize: '0.78rem', color: T.muted, margin: 0 }}>
+                          {sousTitre}
+                        </p>
+                      </div>
                     </div>
-                    <p style={{ fontSize: '3.5rem', fontWeight: 900, color: T.main, letterSpacing: '-3px', marginBottom: 4, lineHeight: 1 }}>
-                      {tempsEconomise >= 60 ? `${Math.floor(tempsEconomise/60)}h${tempsEconomise%60>0?tempsEconomise%60+'min':''}` : `${tempsEconomise} min`}
-                    </p>
-                    <p style={{ fontSize: '0.82rem', color: T.muted }}>
-                      {clientCommandes.filter(c=>c.statut==='recupere').length} commande{clientCommandes.filter(c=>c.statut==='recupere').length>1?'s':''} sans faire la file
-                    </p>
-                  </div>
-                </div>
+                  )
+                })()}
 
-                <div className="grid2" style={{ marginBottom: '0.875rem' }}>
+                {/* Grid 2x2 stats : Commandes / RDV / Total depense / Commerces.
+                    4 metriques egales en visuel pour equilibrer la page profil. */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.875rem' }}>
                   {[
-                    { label: 'Commandes', value: clientCommandes.length, color: T.main, bg: T.pale, Icon: IconBox },
-                    { label: 'Total dépensé', value: `${clientCommandes.reduce((acc,c)=>acc+Number(c.total),0).toFixed(0)}€`, color: T.mid, bg: `${T.mid}18`, Icon: IconEuro },
-                  ].map((s,i) => (
+                    {
+                      label: 'Commandes', value: clientCommandes.length, color: T.main, bg: T.pale,
+                      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>,
+                    },
+                    {
+                      label: 'RDV', value: clientRdvs.length, color: '#10B981', bg: '#F0FDF4',
+                      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
+                    },
+                    {
+                      label: 'Total dépensé', value: `${totalDepense.toFixed(0)}€`, color: T.mid, bg: `${T.mid}18`,
+                      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.mid} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 9.5c-1-1-2.5-1.5-4-1.5C7 8 5 10 5 12s2 4 5 4c1.5 0 3-.5 4-1.5"/><path d="M3 10h6M3 14h6"/></svg>,
+                    },
+                    {
+                      label: 'Commerces', value: commercesUniques, color: T.deep, bg: `${T.deep}14`,
+                      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M3 9v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9"/><path d="M3 9c0 1.5 1 3 3 3s3-1.5 3-3 1 3 3 3 3-1.5 3-3 1 3 3 3 3-1.5 3-3"/></svg>,
+                    },
+                  ].map((s, i) => (
                     <div key={i} style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>
                       <div style={{ height: 2, background: `linear-gradient(90deg, ${s.color}, ${s.color}55)` }}/>
-                      <div style={{ padding: '1rem', textAlign: 'center' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 10, background: s.bg, marginBottom: 6 }}>
-                          <s.Icon size={20} color={s.color}/>
+                      <div style={{ padding: '0.75rem 0.75rem 0.875rem', textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: s.bg, marginBottom: 5 }}>
+                          {s.icon}
                         </div>
-                        <p style={{ fontSize: '0.62rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 5 }}>{s.label}</p>
-                        <p style={{ fontSize: '1.75rem', fontWeight: 900, color: s.color, letterSpacing: '-1px' }}>{s.value}</p>
+                        <p style={{ fontSize: '0.58rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 3, marginTop: 0 }}>{s.label}</p>
+                        <p style={{ fontSize: '1.4rem', fontWeight: 900, color: s.color, letterSpacing: '-0.8px', margin: 0, lineHeight: 1 }}>{s.value}</p>
                       </div>
                     </div>
                   ))}

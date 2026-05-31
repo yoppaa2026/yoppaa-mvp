@@ -488,12 +488,23 @@ function SuggestionForm({ clientId }) {
 }
 
 // ─── Édition prénom inline ────────────────────────────────────────────────────
-function EditablePrenom({ client, setClient, clientId }) {
+function EditablePrenom({ client, setClient, clientId, openSignal }) {
   const [editing, setEditing] = useState(false)
   const [vPrenom, setVPrenom] = useState(client.prenom || '')
   const [vNom, setVNom]       = useState(client.nom || '')
   const [vTel, setVTel]       = useState(client.telephone || '')
   const [saving, setSaving] = useState(false)
+  // openSignal : compteur incrementé par le parent (bandeau "Complete tes infos")
+  // pour declencher l'edit mode depuis l'exterieur sans coupler tightly l'etat.
+  useEffect(() => {
+    if (openSignal && openSignal > 0) {
+      setVPrenom(client.prenom || '')
+      setVNom(client.nom || '')
+      setVTel(client.telephone || '')
+      setEditing(true)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSignal])
 
   async function sauvegarder() {
     if (!vPrenom.trim()) return
@@ -1040,6 +1051,10 @@ export default function Commander() {
 
   const [onglet, setOngletState] = useState('accueil')
   function setOnglet(val) { setOngletState(val); localStorage.setItem('yoppaa_onglet', val) }
+
+  // Signal envoye a EditablePrenom pour ouvrir l'editor depuis le bandeau "Complete tes infos"
+  // (cf memory feedback-zero-friction : on offre un raccourci direct au lieu d'une instruction)
+  const [editProfilSignal, setEditProfilSignal] = useState(0)
 
   // Toast : message ephemere en bas d'ecran (3.5s). Tout ce qui a besoin d'un feedback rapide passe par ici.
   const [toast, setToast] = useState(null)
@@ -2199,7 +2214,7 @@ export default function Commander() {
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     {client.email
-                      ? <EditablePrenom client={client} setClient={setClient} clientId={clientId}/>
+                      ? <EditablePrenom client={client} setClient={setClient} clientId={clientId} openSignal={editProfilSignal}/>
                       : <div>
                           <p style={{ fontWeight: 900, marginBottom: 10, fontSize: '1.2rem', letterSpacing: '-0.4px' }}>
                             <span style={{ color: '#fff' }}>Les </span>
@@ -2217,6 +2232,47 @@ export default function Commander() {
               </div>
 
               <div style={{ padding: '0 1rem 1rem', marginTop: '-1.25rem' }}>
+                {/* Bandeau profil incomplet — visible si Yopper connecte mais qu'il manque
+                    nom et/ou telephone (cas typique : auth via Magic Link sans signup complet).
+                    Clic = ouvre directement EditablePrenom en edit mode + scroll vers le haut. */}
+                {client.email && (() => {
+                  const champsManquants = []
+                  if (!client.prenom || !client.prenom.trim()) champsManquants.push('prénom')
+                  if (!client.nom || !client.nom.trim()) champsManquants.push('nom')
+                  if (!client.telephone || !client.telephone.trim()) champsManquants.push('téléphone')
+                  if (champsManquants.length === 0) return null
+                  const texteManquants = champsManquants.length === 1
+                    ? `ton ${champsManquants[0]}`
+                    : champsManquants.length === 2
+                      ? `ton ${champsManquants[0]} et ton ${champsManquants[1]}`
+                      : `ton ${champsManquants[0]}, ton ${champsManquants[1]} et ton ${champsManquants[2]}`
+                  return (
+                    <button onClick={() => {
+                      setEditProfilSignal(s => s + 1)
+                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)', border: '1.5px solid #F59E0B', borderRadius: 14, padding: '12px 14px', marginBottom: '0.875rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 2px 8px rgba(245,158,11,0.15)' }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: '#FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1.5px solid #F59E0B' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10"/>
+                          <path d="M12 8v4M12 16h.01"/>
+                        </svg>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 10, fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.6px', margin: 0, marginBottom: 2 }}>
+                          Profil incomplet
+                        </p>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: '#78350F', margin: 0, lineHeight: 1.35 }}>
+                          Il manque {texteManquants} — clique pour compléter
+                        </p>
+                      </div>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <path d="M9 18l6-6-6-6"/>
+                      </svg>
+                    </button>
+                  )
+                })()}
+
                 {/* Card stat principale : temps economise — bande 3px canonique + visuel signature */}
                 <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', marginBottom: '0.875rem', boxShadow: `0 4px 20px ${T.main}14`, border: `1px solid ${T.pale}` }}>
                   <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>

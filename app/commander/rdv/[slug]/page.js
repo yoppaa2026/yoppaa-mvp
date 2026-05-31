@@ -406,22 +406,35 @@ export default function CommanderRdvSlug() {
       const heureFin = minutesToTime(finMin)
       const dateStr  = isoDate(dateChoisie)
 
-      // Filet anti-overlap + check horaires shop + check pause, JUSTE avant l'insert.
-      // L'UNIQUE INDEX DB ne couvre que les collisions exactes ; cette validation
-      // server-side rattrape :
-      //  - overlap partiel (nouveau 14h-16h vs existant 14h30-15h30)
-      //  - debordement des horaires shop (slot 18h30 pour 2h alors que shop ferme 19h)
-      //  - chevauchement de pause (creneau 12h pour 2h alors que pause 12h-13h30)
-      const { data: busy } = await supabase.rpc('rdv_slots_busy', { p_commercant_id: commercant.id, p_date: dateStr })
+      // ── Validation server-side AVANT insert ───────────────────────────────────
+      // Triple check fail-CLOSED : tout echec d'une verification (y compris RPC down
+      // ou horaires absents) REFUSE le RDV. Mieux vaut un faux negatif (RDV refuse
+      // alors qu'il etait OK) qu'un faux positif (RDV cree alors qu'il chevauche).
+      const jourSem = jourSemaineDate(dateChoisie)
+      const horaireJour = commercant.horaires_detail?.[jourSem]
+      console.info('[rdv] validation pre-insert', {
+        date: dateStr, jour: jourSem, debutMin, finMin,
+        heure: heureChoisie, heureFin,
+        horaireJour, hasHoraires: !!commercant.horaires_detail,
+        nbCreneauxConfig: (creneauxConfig || []).length,
+      })
 
-      // 1. Overlap reservations
+      // 1. Overlap avec une reservation existante (RPC)
+      const { data: busy, error: errBusy } = await supabase.rpc('rdv_slots_busy', { p_commercant_id: commercant.id, p_date: dateStr })
+      if (errBusy) {
+        console.error('[rdv] RPC rdv_slots_busy KO', errBusy)
+        setSubmitError('Impossible de vérifier la disponibilité (RPC). Reessaie dans quelques secondes.')
+        setSubmitting(false); return
+      }
+      console.info('[rdv] reservations existantes', busy)
       const overlap = (busy || []).some(r => {
         const rStart = timeToMinutes(r.heure_debut)
         const rEnd   = timeToMinutes(r.heure_fin)
-        return debutMin < rEnd && finMin > rStart
+        const ov = debutMin < rEnd && finMin > rStart
+        if (ov) console.warn('[rdv] overlap', { nouveau: `${debutMin}-${finMin}`, existant: `${rStart}-${rEnd}` })
+        return ov
       })
       if (overlap) {
-        console.warn('[rdv] overlap detected before insert', { debutMin, finMin, busy })
         setSubmitError('Ce créneau chevauche un RDV déjà pris. Choisis-en un autre.')
         setHeureChoisie(null)
         setSubmitting(false)
@@ -429,18 +442,22 @@ export default function CommanderRdvSlug() {
         return
       }
 
-      // 2. Bornes shop ce jour-la (horaires_detail)
-      const jourSem = jourSemaineDate(dateChoisie)
-      const horaireJour = commercant.horaires_detail?.[jourSem]
-      if (horaireJour && horaireJour.ouvert === false) {
+      // 2. Bornes shop ce jour-la (fail-closed si horaires absents pour ce jour)
+      if (!horaireJour) {
+        console.error('[rdv] horaires_detail manquant pour', jourSem, commercant.horaires_detail)
+        setSubmitError(`Horaires de ${commercant.nom} non configurés pour ce jour. Contacte le commerçant.`)
+        setSubmitting(false); return
+      }
+      if (horaireJour.ouvert === false) {
         setSubmitError(`${commercant.nom} est fermé ce jour-là. Choisis un autre jour.`)
         setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
       }
-      if (horaireJour?.fin && finMin > timeToMinutes(horaireJour.fin)) {
+      if (horaireJour.fin && finMin > timeToMinutes(horaireJour.fin)) {
+        console.warn('[rdv] depassement fermeture', { finMin, fermeture: timeToMinutes(horaireJour.fin) })
         setSubmitError(`Cette prestation dépasse l'heure de fermeture (${horaireJour.fin.slice(0,5)}). Choisis un créneau plus tôt.`)
         setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
       }
-      if (horaireJour?.debut && debutMin < timeToMinutes(horaireJour.debut)) {
+      if (horaireJour.debut && debutMin < timeToMinutes(horaireJour.debut)) {
         setSubmitError(`Trop tôt — ${commercant.nom} ouvre à ${horaireJour.debut.slice(0,5)}.`)
         setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
       }
@@ -453,12 +470,15 @@ export default function CommanderRdvSlug() {
       const pauseConflict = creneauxJourCheck.some(c => {
         if (!c.pause_debut || !c.pause_fin) return false
         const pStart = timeToMinutes(c.pause_debut), pEnd = timeToMinutes(c.pause_fin)
-        return debutMin < pEnd && finMin > pStart
+        const ov = debutMin < pEnd && finMin > pStart
+        if (ov) console.warn('[rdv] pause overlap', { debutMin, finMin, pause: `${pStart}-${pEnd}` })
+        return ov
       })
       if (pauseConflict) {
         setSubmitError('Ce créneau chevauche la pause du commerçant. Choisis-en un autre.')
         setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
       }
+      console.info('[rdv] validation OK, insert')
 
       // Prix estimé (figé — si prix variable, on prend prix_min)
       const prixEstime = prestationChoisie.prix != null

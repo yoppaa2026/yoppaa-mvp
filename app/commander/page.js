@@ -1416,13 +1416,16 @@ export default function Commander() {
   // (confirme, honore) pour les stats profil ; les annules / no-show sont retires pour
   // ne pas polluer le compteur "RDVs".
   async function chargerRdvsClient(email) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('rdv_reservations')
       .select('id, statut, date_rdv, heure_debut, heure_fin, prix_estime, numero_rdv, commercant_id, prestation_id, commercant:commercants(nom, slug, type, categorie), prestation:rdv_prestations(nom, duree_minutes)')
       .eq('client_email', email)
       .is('deleted_at', null)
       .in('statut', ['confirme', 'honore', 'annule', 'no_show'])  // tous les statuts pour Historique complet
       .order('date_rdv', { ascending: false })
+    // Log diagnostic : si erreur RLS ou data vide alors qu'il devrait y avoir des RDVs, le log aide a debug terrain
+    if (error) console.error('[chargerRdvsClient] error', error)
+    else console.info('[chargerRdvsClient]', { email, count: (data || []).length, data })
     // Flatten prestation.nom -> prestation_nom pour le composant
     const enriched = (data || []).map(r => ({
       ...r,

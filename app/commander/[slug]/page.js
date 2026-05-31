@@ -2049,6 +2049,31 @@ export default function CommanderSlug() {
                   )}
                 </div>
 
+                {/* Encart invite : rassure (pas besoin de compte) + raccourci Yopper existant.
+                    Wording cohérent avec /commander/rdv/[slug] étape 3. */}
+                {!(client.email && clientId) && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: T.pale, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: 14, border: `1px solid ${T.main}22` }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    <p style={{ fontSize: '0.78rem', color: T.deep, lineHeight: 1.5, flex: 1, margin: 0 }}>
+                      <strong style={{ color: T.ink }}>Pas besoin de compte</strong> pour commander — remplis juste tes coordonnées ci-dessous.<br/>
+                      Déjà Yopper ?{' '}
+                      <a href={`/commander/auth?redirect=/commander/${slug}`} style={{ color: T.main, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                        Connecte-toi pour pré-remplir →
+                      </a>
+                    </p>
+                  </div>
+                )}
+
+                {client.email && clientId && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#F0FDF4', border: '1px solid #10B98133', borderRadius: 100, padding: '4px 10px', marginBottom: 14 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#10B981', letterSpacing: '-0.2px' }}>Coordonnées Yopper pré-remplies</span>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -2253,6 +2278,38 @@ export default function CommanderSlug() {
                     </svg>
                   </a>
                   <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', marginTop: 8 }}>ICI ON EST YOPPERS 🟣</p>
+                </div>
+              )}
+
+              {/* CTA invite : creation de compte post-commande, cohérent avec /commander/rdv/[slug].
+                  Le bon moment pour pousser l'inscription : la commande est confirmee et stockee. */}
+              {!(client.email && clientId) && (
+                <div style={{ background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 100%)`, borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '1rem', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 20%, ${T.main}55 0%, transparent 55%)`, pointerEvents: 'none' }}/>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                        <path d="M2 17l10 5 10-5"/>
+                        <path d="M2 12l10 5 10-5"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: '0.95rem', fontWeight: 900, color: '#fff', margin: 0, marginBottom: 4, letterSpacing: '-0.3px' }}>
+                        Suis ta commande depuis ton espace 🟣
+                      </p>
+                      <p style={{ fontSize: '0.78rem', color: T.light, lineHeight: 1.45, margin: 0, marginBottom: 10, opacity: 0.95 }}>
+                        Crée ton compte Yopper en 30s pour suivre tes commandes en temps réel, retrouver tes favoris et économiser ton temps à chaque retrait.
+                      </p>
+                      <button onClick={() => router.push(`/commander/auth?redirect=/commander`)}
+                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0.625rem 1.125rem', background: '#fff', color: T.main, border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 14px rgba(0,0,0,0.18)' }}>
+                        Créer mon compte Yopper
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 

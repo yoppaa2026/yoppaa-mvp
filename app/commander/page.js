@@ -887,16 +887,31 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
       onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 12px 32px rgba(26,8,64,0.12)`; e.currentTarget.style.borderColor = T.light }}
       onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(26,8,64,0.04)'; e.currentTarget.style.borderColor = T.pale }}>
 
-      {/* Bande haute fine 3px — marqueur de categorie au stade decouverte :
-          • vitrine (services / RDV) → VERT (Forest → Emerald → Mint)
-          • alimentaire (C&C ou non) → VIOLET canonique TOUJOURS (Ink → Main → Light)
-          Pas de variant 'plan ON pale' : decision Alexandre 2026-05-31, la bande
-          identifie la categorie, pas le niveau d'activation. */}
-      <div style={{ height: 3, background: isVitrine(c)
-        ? 'linear-gradient(90deg, #047857 0%, #10B981 60%, #6EE7B7 100%)'
-        : `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
+      {/* Bande haute 'type' : marqueur de categorie (couleur) + type de commerce (texte) en une seule
+          zone, signature visuelle compacte. Plus de pastilles couleur sous le nom = card moins chargee.
+          • vitrine (services / RDV) → degrade VERT (Forest → Emerald → Mint)
+          • alimentaire (C&C ou non) → degrade VIOLET canonique (Ink → Main → Light) */}
+      <div style={{
+        height: 24,
+        background: isVitrine(c)
+          ? 'linear-gradient(90deg, #047857 0%, #10B981 60%, #6EE7B7 100%)'
+          : `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`,
+        display: 'flex', alignItems: 'center', padding: '0 0.875rem',
+      }}>
+        <span style={{
+          color: '#fff',
+          fontSize: '0.62rem',
+          fontWeight: 800,
+          textTransform: 'uppercase',
+          letterSpacing: '0.8px',
+          textShadow: '0 1px 2px rgba(0,0,0,0.18)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {c.type || 'Commerce'}
+        </span>
+      </div>
 
-      <div style={{ padding: '0.625rem 0.875rem 0.75rem' }}>
+      <div style={{ padding: '0.5rem 0.875rem 0.625rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -912,8 +927,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
                 </svg>
               </button>
             </div>
-            <Badges type={c.type}/>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <Etoiles note={noteInfo?.moyenne || 0} taille={11}/>
               <span style={{ fontSize: '0.68rem', color: noteInfo?.count > 0 ? T.muted : '#D1D5DB' }}>
                 {noteInfo?.count > 0 ? `${noteInfo.count} avis` : 'Pas encore d\'avis'}

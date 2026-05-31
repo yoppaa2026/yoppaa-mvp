@@ -2670,29 +2670,21 @@ export default function Commander() {
                   </svg>
                 )}
                 {item.key === 'commandes' && (
-                  /* Icone hybride v2 : calendrier comme base (signature 'agenda') avec
-                     2 lignes d'items distincts a l'interieur :
-                       - Ligne du haut : mini-sac (commandes alimentaires C&C)
-                       - Ligne du bas  : mini-horloge (RDVs vitrines)
-                     Lecture immediate : 'mon agenda contient des commandes ET des RDVs'.
-                     Taille 32px (au lieu de 24px) car cet onglet n'a pas de label. */
+                  /* Icone v3 : calendrier (semantique 'agenda') + 3 traits courts a
+                     l'interieur (semantique 'items dans ma liste'). Volontairement clean
+                     et neutre — les 2 pastilles violette/verte font tout le job de
+                     distinction commandes vs RDVs au-dessus. */
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
                     {/* Cadre calendrier */}
-                    <rect x="2.5" y="5" width="19" height="16.5" rx="2.5" stroke={stroke} strokeWidth="2" strokeLinejoin="round" opacity={op}/>
-                    {/* Barre de separation header */}
-                    <path d="M2.5,9.5 L21.5,9.5" stroke={stroke} strokeWidth="2" opacity={op}/>
+                    <rect x="3" y="5" width="18" height="16" rx="2.5" stroke={stroke} strokeWidth="2" strokeLinejoin="round" opacity={op}/>
+                    {/* Barre header */}
+                    <path d="M3,9.5 L21,9.5" stroke={stroke} strokeWidth="2" opacity={op}/>
                     {/* Anneaux du haut */}
                     <path d="M8,3 L8,7 M16,3 L16,7" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
-
-                    {/* Ligne 1 : mini-sac (commandes) */}
-                    <path d="M6.5,13 L6.5,12.2 Q6.5,11 7.7,11 Q8.9,11 8.9,12.2 L8.9,13" stroke={stroke} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
-                    <rect x="5.7" y="13" width="4" height="3.2" rx="0.4" stroke={stroke} strokeWidth="1.4" strokeLinejoin="round" opacity={op}/>
-                    <path d="M12,14.5 L18.5,14.5" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" opacity={op * 0.7}/>
-
-                    {/* Ligne 2 : mini-horloge (RDVs) */}
-                    <circle cx="7.7" cy="18.5" r="1.7" stroke={stroke} strokeWidth="1.4" opacity={op}/>
-                    <path d="M7.7,17.5 L7.7,18.5 L8.5,19" stroke={stroke} strokeWidth="1.2" strokeLinecap="round" opacity={op}/>
-                    <path d="M12,18.5 L18.5,18.5" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" opacity={op * 0.7}/>
+                    {/* 3 traits 'items de la liste' a l'interieur */}
+                    <path d="M7,13   L17,13"   stroke={stroke} strokeWidth="1.8" strokeLinecap="round" opacity={op * 0.85}/>
+                    <path d="M7,16   L15,16"   stroke={stroke} strokeWidth="1.8" strokeLinecap="round" opacity={op * 0.85}/>
+                    <path d="M7,19   L13,19"   stroke={stroke} strokeWidth="1.8" strokeLinecap="round" opacity={op * 0.85}/>
                   </svg>
                 )}
                 {item.key === 'services' && (

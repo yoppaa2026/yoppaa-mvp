@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { canDo } from '@/lib/plans'
+import { canDo, isVitrine } from '@/lib/plans'
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
@@ -876,10 +876,15 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
       onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 12px 32px rgba(26,8,64,0.12)`; e.currentTarget.style.borderColor = T.light }}
       onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(26,8,64,0.04)'; e.currentTarget.style.borderColor = T.pale }}>
 
-      {/* Bande haute fine 3px — signature visuelle canonique Yoppaa (Ink → Main → Light). */}
-      <div style={{ height: 3, background: peutCommander
-        ? `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`
-        : `linear-gradient(90deg, ${T.pale}, ${T.light})` }}/>
+      {/* Bande haute fine 3px — signature visuelle Yoppaa, variant par catégorie :
+          • vitrine (services / RDV) → VERT (Forest → Emerald → Mint)
+          • alimentaire (C&C) → VIOLET canonique (Ink → Main → Light)
+          • plan ON pur (présence simple) → dégradé violet pâle (inactif) */}
+      <div style={{ height: 3, background: isVitrine(c)
+        ? 'linear-gradient(90deg, #047857 0%, #10B981 60%, #6EE7B7 100%)'
+        : peutCommander
+          ? `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`
+          : `linear-gradient(90deg, ${T.pale}, ${T.light})` }}/>
 
       <div style={{ padding: '0.625rem 0.875rem 0.75rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>

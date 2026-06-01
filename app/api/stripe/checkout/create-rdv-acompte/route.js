@@ -66,13 +66,16 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'paiement en ligne désactivé pour ce commerçant' }, { status: 400 })
     }
 
-    // Prix estimé + acompte
+    // Prix estimé + acompte.
+    // acompte_pourcent est stocké en DB comme un entier (20 = 20%, PAS 0.20),
+    // donc la formule est prix * pct / 100. Bug initial : *100 au lieu de /100
+    // → un acompte de 20% sur 60€ donnait 1200€ au lieu de 12€ (testé en mode test, fix avant prod).
     const prixBase = prestation.prix != null ? Number(prestation.prix) : (prestation.prix_min != null ? Number(prestation.prix_min) : null)
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
     if (!prixBase || acomptePct <= 0) {
       return NextResponse.json({ ok: false, error: 'cette prestation ne demande pas d\'acompte en ligne' }, { status: 400 })
     }
-    const acompteMontant = Math.round(prixBase * acomptePct * 100) / 100   // EUR, 2 décimales
+    const acompteMontant = Math.round(prixBase * acomptePct) / 100         // EUR, 2 décimales
     const acompteCents = Math.round(acompteMontant * 100)                    // centimes pour Stripe
 
     if (acompteCents < 50) {

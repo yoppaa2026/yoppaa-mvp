@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { canDo, detecterProviderReservation } from '@/lib/plans'
+import TabPaiements from './TabPaiements'
 
 const T = {
   bg:      '#F8F6FF',
@@ -2945,12 +2946,21 @@ export default function ConfigDashboard({ commercantId }) {
     return () => { annule = true }
   }, [commercantId, tab])
 
+  // Onglet 'Paiements' visible si le commerçant peut prendre des paiements en ligne :
+  //   • Vitrine PRO / PRO+ (acompte RDV)
+  //   • Alimentaire BOOST / MAX (paiement obligatoire commande C&C - Phase 1.5)
+  const peutPaiements = (
+    (estVitrine && (commercant?.plan === 'pro' || commercant?.plan === 'proplus'))
+    || (!estVitrine && (commercant?.plan === 'boost' || commercant?.plan === 'max'))
+  )
+
   // Vitrine : on parle de "Vitrine" plutôt que "Menu", et on masque "Créneaux" (pas de C&C)
   const tabs = [
     { id: 'menu',     label: estVitrine ? 'Vitrine' : 'Menu', icon: 'menu' },
     peutDeals && { id: 'deals', label: 'Deals', icon: 'tag' },
     peutActus && { id: 'actus', label: 'Actus', icon: 'sliders' },
     !estVitrine && { id: 'creneaux', label: 'Créneaux', icon: 'clock' },
+    peutPaiements && { id: 'paiements', label: 'Paiements', icon: 'tag' },
     { id: 'profil',   label: 'Profil',   icon: 'shop' },
     { id: 'avis',     label: 'Avis',     icon: 'star' },
     { id: 'signalements', label: 'Signalements', icon: 'sliders', badge: signalementsEnAttente },
@@ -2977,6 +2987,7 @@ export default function ConfigDashboard({ commercantId }) {
       {tab === 'deals'    && peutDeals && <TabDeals commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'actus'    && peutActus && <TabActus commercantId={commercantId} toast={showToast} />}
       {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
+      {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
       {tab === 'signalements' && <TabSignalements commercantId={commercantId} toast={showToast} />}

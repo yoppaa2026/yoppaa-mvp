@@ -315,6 +315,61 @@ export default function CommanderRdvSlug() {
 
   const scrollRef = useRef(null)
 
+  // ─── Retour Stripe Checkout (paiement acompte en ligne) ────────────────────
+  // URL params possibles :
+  //   ?paiement=ok&session_id=cs_xxx -> paiement reussi, RDV cree par webhook
+  //   ?paiement=annule              -> user a annule Stripe Checkout
+  // L'etat (presta/date/heure/client) est restaure depuis sessionStorage (sauve
+  // avant la redirection Stripe), sinon l'ecran de confirmation crashe.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const paiement = params.get('paiement')
+    if (!paiement) return
+
+    const STORAGE_KEY = `yoppaa.rdv.stripe.${slug}`
+    let snapshot = null
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY)
+      if (raw) snapshot = JSON.parse(raw)
+    } catch (_) {}
+
+    if (paiement === 'ok') {
+      const sessionId = params.get('session_id')
+      window.history.replaceState({}, '', window.location.pathname)
+
+      if (snapshot) {
+        if (snapshot.prestationChoisie) setPrestationChoisie(snapshot.prestationChoisie)
+        if (snapshot.dateChoisie) setDateChoisie(new Date(snapshot.dateChoisie))
+        if (snapshot.heureChoisie) setHeureChoisie(snapshot.heureChoisie)
+        if (snapshot.client) setClient(p => ({ ...p, ...snapshot.client }))
+        setRdvCree({
+          _viaStripe: true,
+          stripe_checkout_session_id: sessionId,
+          statut: 'confirme',
+          acompte_montant: snapshot.acompteMontant ?? null,
+        })
+        setEtape(4)
+      } else {
+        // Pas de snapshot (cookies cleared ?) → fallback : message + retour accueil
+        setSubmitError('Paiement reçu, mais impossible d\'afficher le récap (session expirée). Ton RDV est confirmé, tu recevras l\'email de confirmation.')
+      }
+      try { sessionStorage.removeItem(STORAGE_KEY) } catch (_) {}
+    } else if (paiement === 'annule') {
+      window.history.replaceState({}, '', window.location.pathname)
+      // Restaure l'etat pour ne pas faire perdre la saisie au user
+      if (snapshot) {
+        if (snapshot.prestationChoisie) setPrestationChoisie(snapshot.prestationChoisie)
+        if (snapshot.dateChoisie) setDateChoisie(new Date(snapshot.dateChoisie))
+        if (snapshot.heureChoisie) setHeureChoisie(snapshot.heureChoisie)
+        if (snapshot.client) setClient(p => ({ ...p, ...snapshot.client }))
+        setEtape(3)
+      }
+      setSubmitError('Paiement annulé. Ton RDV n\'a pas été créé. Tu peux réessayer.')
+      try { sessionStorage.removeItem(STORAGE_KEY) } catch (_) {}
+    }
+  }, [slug])
+
   // ─── Chargement initial ────────────────────────────────────────────────────
   useEffect(() => {
     if (!slug) return
@@ -641,6 +696,63 @@ export default function CommanderRdvSlug() {
       const acompteMontant = (prixEstime != null && acomptePct > 0)
         ? Math.round(prixEstime * acomptePct) / 100
         : null
+
+      // ─── STRIPE PAIEMENT ACOMPTE EN LIGNE ─────────────────────────────────────
+      // Si le commercant a active l'acompte en ligne ET que la prestation a un %
+      // d'acompte > 0 ET que son compte Stripe est operationnel : on passe par Stripe
+      // Checkout. Le RDV sera cree par le webhook payment_intent.succeeded apres paiement.
+      const acompteEnLigneRequis = !!(
+        commercant.rdv_acompte_en_ligne_actif
+        && commercant.stripe_account_charges_enabled
+        && acompteMontant && acompteMontant >= 0.5
+      )
+
+      if (acompteEnLigneRequis) {
+        console.info('[rdv] paiement acompte en ligne requis', { montant: acompteMontant })
+        // Sauve l'etat avant redirection Stripe — sera restaure au retour ?paiement=ok|annule
+        try {
+          sessionStorage.setItem(`yoppaa.rdv.stripe.${slug}`, JSON.stringify({
+            prestationChoisie,
+            dateChoisie: dateChoisie?.toISOString(),
+            heureChoisie,
+            client: { email, prenom, nom, telephone, notes: client.notes },
+            acompteMontant,
+          }))
+        } catch (e) { console.warn('[rdv] sessionStorage save fail', e) }
+
+        try {
+          const res = await fetch('/api/stripe/checkout/create-rdv-acompte', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              commercant_id: commercant.id,
+              prestation_id: prestationChoisie.id,
+              date_rdv: dateStr,
+              heure_debut: heureChoisie,
+              heure_fin: heureFin,
+              duree_minutes: prestationChoisie.duree_minutes,
+              client_email: email,
+              client_prenom: prenom,
+              client_nom: nom,
+              client_telephone: telephone,
+              notes_client: client.notes.trim() || null,
+              rgpd_marketing: rgpdMarketing,
+            }),
+          })
+          const j = await res.json()
+          if (!j.ok || !j.url) {
+            throw new Error(j.error || 'Erreur création Checkout')
+          }
+          // Redirect Stripe Checkout. Au retour ?paiement=ok le webhook aura cree le RDV.
+          window.location.href = j.url
+          return
+        } catch (e) {
+          console.error('[rdv] erreur Stripe Checkout', e)
+          setSubmitError(`Erreur paiement : ${e.message}. Reessaie ou contacte ${commercant.nom}.`)
+          setSubmitting(false)
+          return
+        }
+      }
 
       // UUID client-side : pas besoin de .select() après insert
       const rdvId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null
@@ -1331,19 +1443,35 @@ export default function CommanderRdvSlug() {
                     </div>
                   )}
 
-                  {/* Bouton Confirmer */}
-                  <button disabled={!formValide || submitting}
-                    onClick={passerRdv}
-                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: (!formValide || submitting) ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: (!formValide || submitting) ? '#9CA3AF' : '#fff', fontWeight: 800, fontSize: '1rem', cursor: (!formValide || submitting) ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: (!formValide || submitting) ? 'none' : `0 6px 24px ${T.main}55`, opacity: (!formValide || submitting) ? 0.6 : 1, transition: 'all 0.2s' }}>
-                    {submitting ? 'Réservation en cours…' : (
+                  {/* Bouton Confirmer — wording adapté si paiement en ligne requis */}
+                  {(() => {
+                    const acompteEnLigne = !!(commercant?.rdv_acompte_en_ligne_actif && commercant?.stripe_account_charges_enabled && prestationChoisie?.acompte_pourcent > 0)
+                    const prixBase = prestationChoisie?.prix != null ? Number(prestationChoisie.prix) : (prestationChoisie?.prix_min != null ? Number(prestationChoisie.prix_min) : null)
+                    const acompteMnt = (prixBase != null && prestationChoisie?.acompte_pourcent > 0)
+                      ? Math.round(prixBase * prestationChoisie.acompte_pourcent) / 100
+                      : null
+                    return (
                       <>
-                        Confirmer mon RDV
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
-                        </svg>
+                        <button disabled={!formValide || submitting}
+                          onClick={passerRdv}
+                          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: (!formValide || submitting) ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: (!formValide || submitting) ? '#9CA3AF' : '#fff', fontWeight: 800, fontSize: '1rem', cursor: (!formValide || submitting) ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: (!formValide || submitting) ? 'none' : `0 6px 24px ${T.main}55`, opacity: (!formValide || submitting) ? 0.6 : 1, transition: 'all 0.2s' }}>
+                          {submitting ? 'Réservation en cours…' : (
+                            <>
+                              {acompteEnLigne && acompteMnt ? `Payer ${acompteMnt.toFixed(2)}€ et confirmer` : 'Confirmer mon RDV'}
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                              </svg>
+                            </>
+                          )}
+                        </button>
+                        {acompteEnLigne && acompteMnt && !submitting && (
+                          <p style={{ fontSize: '0.72rem', color: T.muted, textAlign: 'center', marginTop: 6, lineHeight: 1.4 }}>
+                            🔒 Paiement sécurisé Stripe · Solde de {prixBase ? (prixBase - acompteMnt).toFixed(2) : '?'}€ à régler sur place
+                          </p>
+                        )}
                       </>
-                    )}
-                  </button>
+                    )
+                  })()}
                   {!rgpdCommande && (
                     <p style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: '#DC2626', textAlign: 'center', marginTop: 6, fontWeight: 600, justifyContent: 'center', width: '100%' }}>
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -1387,6 +1515,24 @@ export default function CommanderRdvSlug() {
                     </p>
                   </div>
 
+                  {/* Bandeau paiement Stripe reçu — cas _viaStripe (retour Checkout) */}
+                  {rdvCree._viaStripe && (
+                    <div style={{ background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', border: '1.5px solid #10B981', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                        <path d="M2 7h20M6 11h12M9 15h6M11 19h2"/>
+                        <circle cx="12" cy="12" r="10" opacity="0"/>
+                      </svg>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontWeight: 800, fontSize: '0.88rem', color: '#065F46', margin: 0, marginBottom: 2 }}>
+                          Acompte payé · paiement sécurisé Stripe
+                        </p>
+                        <p style={{ fontSize: '0.76rem', color: '#047857', lineHeight: 1.4, margin: 0 }}>
+                          Ton RDV est confirmé. Tu vas recevoir l&apos;email de confirmation et le reçu de paiement d&apos;ici quelques secondes.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Card "Et après ?" */}
                   <div style={{ background: `linear-gradient(135deg, ${T.pale}, #fff)`, borderRadius: 20, overflow: 'hidden', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
                     <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
@@ -1429,8 +1575,10 @@ export default function CommanderRdvSlug() {
                     </div>
                     {rdvCree.acompte_montant && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Acompte à régler</span>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: T.deep }}>{Number(rdvCree.acompte_montant).toFixed(2)} € sur place</span>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Acompte</span>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: rdvCree._viaStripe ? '#059669' : T.deep }}>
+                          {Number(rdvCree.acompte_montant).toFixed(2)} € {rdvCree._viaStripe ? '✓ payé en ligne' : 'sur place'}
+                        </span>
                       </div>
                     )}
                   </div>

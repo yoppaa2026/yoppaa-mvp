@@ -905,7 +905,7 @@ export default function Dashboard() {
 
         .dash-layout {
           display: flex;
-          height: 100dvh;
+          height: var(--dash-h, 100dvh);
           width: 100vw;
           overflow: hidden;
           background: ${T.bg};
@@ -920,7 +920,7 @@ export default function Dashboard() {
           padding: 1.5rem 1rem;
           display: none;
           flex-direction: column;
-          height: 100dvh;
+          height: var(--dash-h, 100dvh);
           overflow-y: auto;
         }
 
@@ -930,7 +930,7 @@ export default function Dashboard() {
           display: flex;
           flex-direction: column;
           min-width: 0;
-          height: 100dvh;
+          height: var(--dash-h, 100dvh);
           overflow: hidden;
         }
 
@@ -1109,40 +1109,37 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="dash-layout">
+      {/* ── Banner sticky MODE ADMIN — hors dash-layout pour ne pas recouvrir le contenu.
+          dash-layout a height: 100dvh, on lui retire 42px et on decale du meme montant. */}
+      {impersonating && commercant && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9998,
+          background: 'linear-gradient(90deg, #F59E0B, #FB923C)',
+          color: '#fff', padding: '0.5rem 0.875rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+          fontFamily: '"DM Sans", sans-serif', fontSize: 13, fontWeight: 700,
+          boxShadow: '0 2px 12px rgba(245,158,11,0.35)',
+          letterSpacing: '-0.1px',
+          flexWrap: 'wrap',
+          height: 42,
+        }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            </svg>
+            <strong>MODE ADMIN</strong>
+          </span>
+          <span style={{ opacity: 0.92 }}>
+            Tu es connecté en tant que <strong>{commercant.nom}</strong>
+          </span>
+          <button onClick={quitterImpersonation}
+            style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', borderRadius: 100, padding: '4px 12px', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+            Quitter →
+          </button>
+        </div>
+      )}
 
-        {/* ── Banner sticky MODE ADMIN si impersonation ──
-            Visible uniquement par l'admin Yoppaa, jamais par le commercant.
-            Position fixed top + z-index 9998 (sous les modales eventuelles).
-            Style ambre intense pour signaler clairement "tu n'es pas chez toi". */}
-        {impersonating && commercant && (
-          <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9998,
-            background: 'linear-gradient(90deg, #F59E0B, #FB923C)',
-            color: '#fff', padding: '0.5rem 0.875rem',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-            fontFamily: '"DM Sans", sans-serif', fontSize: 13, fontWeight: 700,
-            boxShadow: '0 2px 12px rgba(245,158,11,0.35)',
-            letterSpacing: '-0.1px',
-            flexWrap: 'wrap',
-          }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-              </svg>
-              <strong>MODE ADMIN</strong>
-            </span>
-            <span style={{ opacity: 0.92 }}>
-              Tu es connecté en tant que <strong>{commercant.nom}</strong>
-            </span>
-            <button onClick={quitterImpersonation}
-              style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', borderRadius: 100, padding: '4px 12px', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-              Quitter →
-            </button>
-          </div>
-        )}
-        {/* Reserve l'espace du banner sticky (taille variable selon largeur ecran) */}
-        {impersonating && <div style={{ height: 42 }}/>}
+      <div className="dash-layout" style={impersonating ? { marginTop: 42, '--dash-h': 'calc(100dvh - 42px)' } : undefined}>
 
         {/* ── SIDEBAR PC ── */}
         <aside className="sidebar">

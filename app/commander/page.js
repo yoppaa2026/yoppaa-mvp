@@ -1337,6 +1337,28 @@ export default function Commander() {
     }
   }
 
+  // Refresh deals/actus quand le user revient sur l'onglet (cas typique : il a cree une
+  // actu cote dashboard et revient sur l'app client). + polling 60s en backup.
+  // Sans ces 2 mecanismes, les nouvelles actus/deals ne sont jamais visibles cote client
+  // sans hard refresh. Bug rapporte Alex 2026-06-01.
+  useEffect(() => {
+    if (commercants.length === 0) return
+    const ids = commercants.map(c => c.id)
+    const refresh = () => {
+      if (document.visibilityState === 'visible') chargerActiviteAujourdhui(ids)
+    }
+    const onVisChange = () => refresh()
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', onVisChange)
+    const interval = setInterval(refresh, 60000)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisChange)
+      clearInterval(interval)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commercants.length])
+
   // Charge les deals et actus actifs aujourd'hui pour piloter le dot LIVE des pills
   async function chargerActiviteAujourdhui(ids) {
     if (!ids?.length) return

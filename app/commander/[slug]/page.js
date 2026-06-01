@@ -1112,15 +1112,17 @@ export default function CommanderSlug() {
   }
 
   async function getOuCreerClient(email, prenom, nom) {
-    const nomComplet = `${prenom} ${nom}`.trim()
     const telephone = client.telephone || ''
-    // Fetch tout d'un coup pour comparer et eviter un UPDATE inutile sur chaque commande
+    // IMPORTANT : on UPDATE clients.nom avec `nom` SEUL (pas `${prenom} ${nom}`).
+    // Sinon a chaque commande/RDV, clients.nom devient 'Alexandre Verstappen' alors que
+    // dans le Profil le user a saisi nom='Verstappen' uniquement. Au reload, fetch DB
+    // ecrase la modif propre. Bug rapporte par Alex 2026-06-01.
     const { data: ex } = await supabase.from('clients').select('id, prenom, nom, telephone').eq('email', email).maybeSingle()
     let id = ex?.id
     if (!ex) {
-      // Nouveau client : INSERT avec tous les champs
+      // Nouveau client : INSERT avec tous les champs SEPARES
       const { data: { user } } = await supabase.auth.getUser()
-      const base = { email, prenom, nom: nomComplet, telephone }
+      const base = { email, prenom, nom, telephone }
       const payload = user ? { ...base, auth_user_id: user.id } : base
       const { data: inserted } = await supabase.from('clients').insert(payload).select('id').single()
       id = inserted?.id
@@ -1129,10 +1131,10 @@ export default function CommanderSlug() {
       const needsUpdate = (
         (telephone && ex.telephone !== telephone) ||
         (prenom    && ex.prenom    !== prenom) ||
-        (nomComplet && ex.nom      !== nomComplet)
+        (nom       && ex.nom       !== nom)
       )
       if (needsUpdate) {
-        await supabase.from('clients').update({ prenom, nom: nomComplet, telephone }).eq('id', id)
+        await supabase.from('clients').update({ prenom, nom, telephone }).eq('id', id)
       }
     }
     if (!id) return null

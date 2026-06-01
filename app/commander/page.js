@@ -883,7 +883,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
 
   return (
     <div onClick={() => onSelect(c)}
-      style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', marginBottom: '0.5rem', cursor: 'pointer', boxShadow: '0 1px 4px rgba(26,8,64,0.04)', border: `1px solid ${T.pale}`, transition: 'all 0.2s' }}
+      style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', marginBottom: '0.5rem', cursor: 'pointer', boxShadow: '0 1px 4px rgba(26,8,64,0.04)', border: `1px solid ${T.pale}`, transition: 'all 0.2s', position: 'relative' }}
       onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 12px 32px rgba(26,8,64,0.12)`; e.currentTarget.style.borderColor = T.light }}
       onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(26,8,64,0.04)'; e.currentTarget.style.borderColor = T.pale }}>
 
@@ -911,21 +911,34 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
         </span>
       </div>
 
+      {/* Bouton favori en absolute coin haut droit (pattern UX standard Doctolib/Airbnb).
+          Positionne juste sous la bande type (24px) avec un fond glassmorph subtil pour
+          la lisibilite, et z-index pour passer au-dessus du logo. */}
+      <button onClick={e => onToggleFavori(c.id, e)}
+        aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+        style={{
+          position: 'absolute', top: 32, right: 10, zIndex: 2,
+          background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(6px)',
+          border: `1px solid ${estFavori ? T.light : T.pale}`,
+          cursor: 'pointer', padding: 5,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'transform 0.15s, box-shadow 0.15s',
+          borderRadius: '50%',
+          boxShadow: estFavori ? `0 2px 8px ${T.main}33` : '0 1px 3px rgba(0,0,0,0.06)',
+        }}
+        onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,8,64,0.18)' }}
+        onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = estFavori ? `0 2px 8px ${T.main}33` : '0 1px 3px rgba(0,0,0,0.06)' }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill={estFavori ? '#C4A0F4' : 'none'} xmlns="http://www.w3.org/2000/svg">
+          <path d="M12,3 L14.5,9 L21.5,9.5 L16.5,14 L18.2,21 L12,17.5 L5.8,21 L7.5,14 L2.5,9.5 L9.5,9 Z"
+            stroke={estFavori ? '#9660E0' : '#9CA3AF'} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+        </svg>
+      </button>
+
       <div style={{ padding: '0.5rem 0.875rem 0.625rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <p style={{ fontWeight: 900, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.3px', lineHeight: 1.2, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nom}</p>
-              <button onClick={e => onToggleFavori(c.id, e)}
-                aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s' }}
-                onMouseOver={e => e.currentTarget.style.transform = 'scale(1.2)'}
-                onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill={estFavori ? '#C4A0F4' : 'none'} xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12,3 L14.5,9 L21.5,9.5 L16.5,14 L18.2,21 L12,17.5 L5.8,21 L7.5,14 L2.5,9.5 L9.5,9 Z"
-                    stroke={estFavori ? '#9660E0' : '#D1D5DB'} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
-                </svg>
-              </button>
+            <div style={{ marginBottom: 4 }}>
+              <p style={{ fontWeight: 900, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.3px', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 32 }}>{c.nom}</p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <Etoiles note={noteInfo?.moyenne || 0} taille={11}/>
@@ -956,10 +969,10 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
             </div>
           </div>
 
-          <div style={{ width: 48, height: 48, borderRadius: 12, background: c.logo_url ? '#fff' : T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(26,8,64,0.08)', border: c.logo_url ? `1px solid ${T.pale}` : 'none', flexShrink: 0 }}>
+          <div style={{ width: 68, height: 68, borderRadius: 14, background: c.logo_url ? '#fff' : T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 3px 10px rgba(26,8,64,0.10)', border: c.logo_url ? `1px solid ${T.pale}` : 'none', flexShrink: 0 }}>
             {c.logo_url
               ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-              : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              : <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 9 4 5h16l1 4v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0Z"/>
                   <path d="M5 11v10h14V11"/>
                   <path d="M9 21v-6h6v6"/>
@@ -2006,17 +2019,22 @@ export default function Commander() {
               <div style={{ padding: '0.75rem 1rem 0', background: '#fff' }}>
                 <div style={{ display: 'flex', background: '#F3F4F6', borderRadius: 12, padding: 4, gap: 4 }}>
                   {[
-                    { key: 'alimentaires', label: 'Commandes',    count: commandesASwiper.length + commandesEnCours.length + commandesTerminees.length },
-                    { key: 'rdvs',          label: 'Rendez-vous', count: clientRdvs.length },
+                    // Compteurs = items ACTIFS uniquement (pas l'historique total).
+                    // Commandes actives = pretes a retirer + en cours (en_attente/en_preparation/pret).
+                    // RDVs actifs = a venir (statut=confirme && date >= aujourd'hui).
+                    { key: 'alimentaires', label: 'Commandes',    count: commandesASwiper.length + commandesEnCours.length },
+                    { key: 'rdvs',          label: 'Rendez-vous', count: rdvsAVenir.length },
                   ].map(tab => {
                     const actif = sousOngletCmd === tab.key
+                    // Couleur identite : violet pour Commandes (alimentaire), vert pour Rendez-vous (vitrine).
+                    const couleurId = tab.key === 'rdvs' ? '#10B981' : T.main
                     return (
                       <button key={tab.key} onClick={() => setSousOngletCmd(tab.key)}
                         style={{
                           flex: 1, padding: '0.625rem 0.5rem',
                           border: 'none', borderRadius: 9,
                           background: actif ? '#fff' : 'transparent',
-                          color: actif ? T.main : T.muted,
+                          color: actif ? couleurId : T.muted,
                           fontWeight: 800, fontSize: '0.85rem',
                           fontFamily: '"DM Sans", sans-serif',
                           cursor: 'pointer', transition: 'all 0.15s',
@@ -2026,7 +2044,7 @@ export default function Commander() {
                         }}>
                         {tab.label}
                         {tab.count > 0 && (
-                          <span style={{ background: actif ? T.main : T.muted, color: '#fff', borderRadius: 100, padding: '1px 7px', fontSize: '0.65rem', fontWeight: 900 }}>
+                          <span style={{ background: actif ? couleurId : T.muted, color: '#fff', borderRadius: 100, padding: '1px 7px', fontSize: '0.65rem', fontWeight: 900 }}>
                             {tab.count}
                           </span>
                         )}
@@ -2743,16 +2761,17 @@ export default function Commander() {
                 )}
 
                 {/* Onglet 'commandes' : 2 pastilles distinctes.
-                    Violette en haut DROITE = commandes (pretes a retirer + en cours).
-                    Verte    en haut GAUCHE = RDVs a venir.
+                    Violette en haut GAUCHE = commandes (pretes a retirer + en cours).
+                    Verte    en haut DROITE = RDVs a venir.
+                    Ordre coherent avec le toggle interne (Commandes a gauche / RDVs a droite).
                     Si une seule est >0, l'autre n'est pas rendue (pas de "0"). */}
                 {item.key === 'commandes' && item.badgeCmd > 0 && (
-                  <span style={{ position: 'absolute', top: 6, left: 'calc(50% + 10px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: T.main, color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: `0 2px 8px ${T.main}99, 0 0 0 1.5px ${T.main}44`, lineHeight: 1, letterSpacing: '-0.2px' }}>
+                  <span style={{ position: 'absolute', top: 6, right: 'calc(50% + 10px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: T.main, color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: `0 2px 8px ${T.main}99, 0 0 0 1.5px ${T.main}44`, lineHeight: 1, letterSpacing: '-0.2px' }}>
                     {item.badgeCmd > 9 ? '9+' : item.badgeCmd}
                   </span>
                 )}
                 {item.key === 'commandes' && item.badgeRdv > 0 && (
-                  <span style={{ position: 'absolute', top: 6, right: 'calc(50% + 10px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: '#10B981', color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: '0 2px 8px rgba(16,185,129,0.55), 0 0 0 1.5px rgba(16,185,129,0.27)', lineHeight: 1, letterSpacing: '-0.2px' }}>
+                  <span style={{ position: 'absolute', top: 6, left: 'calc(50% + 10px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: '#10B981', color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: '0 2px 8px rgba(16,185,129,0.55), 0 0 0 1.5px rgba(16,185,129,0.27)', lineHeight: 1, letterSpacing: '-0.2px' }}>
                     {item.badgeRdv > 9 ? '9+' : item.badgeRdv}
                   </span>
                 )}

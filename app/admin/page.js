@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import SectionTousCommercants from './SectionTousCommercants'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
@@ -212,6 +213,9 @@ export default function AdminPage() {
             ))}
           </div>
         </section>
+
+        {/* Tous les commerçants (édition + impersonation) */}
+        <SectionTousCommercants toast={(msg, type) => setToast({ msg, type })} />
 
         {/* Historique */}
         <section>

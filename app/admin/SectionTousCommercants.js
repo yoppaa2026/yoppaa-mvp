@@ -87,18 +87,28 @@ export default function SectionTousCommercants({ toast }) {
   }
 
   async function voirDashboard(c) {
-    // STRIPE-7 (impersonation) sera live dans le prochain commit.
-    // Pour l'instant on simule via un flag localStorage que le dashboard saura lire.
+    // Demarre une session d'impersonation : POST /api/admin/impersonate-start qui logue
+    // dans admin_impersonations (conformite RGPD). Retourne l'impersonation_id qu'on garde
+    // en localStorage pour le fermer proprement via impersonate-end au "Quitter".
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/admin/impersonate-start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ commercant_id: c.id, raison: 'Acces depuis liste admin' }),
+      })
+      const j = await res.json()
+      if (!j.ok) throw new Error(j.error || 'Erreur impersonation')
+
       if (typeof window !== 'undefined') {
         localStorage.setItem('yoppaa_dashboard_commercant_id', c.id)
         localStorage.setItem('yoppaa_admin_impersonating', c.id)
-        // TODO commit suivant : POST /api/admin/impersonate-start pour logger dans admin_impersonations
+        localStorage.setItem('yoppaa_admin_impersonation_session_id', j.impersonation_id)
       }
       router.push('/dashboard')
     } catch (e) {
       console.error('[voirDashboard]', e)
-      toast?.('Erreur ouverture dashboard', 'error')
+      toast?.(`Erreur impersonation : ${e.message}`, 'error')
     }
   }
 

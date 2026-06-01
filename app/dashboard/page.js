@@ -479,6 +479,11 @@ export default function Dashboard() {
   const [prestationsRdv, setPrestationsRdv] = useState([])  // rdv_prestations actives, pour la modale 'Nouveau RDV manuel'
   const [rdvSelectionne, setRdvSelectionne] = useState(null)  // RDV ouvert dans la modale details
   const [nouveauRdvSlot, setNouveauRdvSlot] = useState(null)  // { date, heure } -> ouvre la modale d'ajout manuel
+  // Mode impersonation : admin Yoppaa connecte en tant qu'un commercant pour le support.
+  // Detecte via localStorage yoppaa_admin_impersonating (set depuis /admin "Voir Dashboard").
+  // Affiche un banner sticky en haut + bouton Quitter qui revient sur /admin.
+  const [impersonating, setImpersonating] = useState(false)
+  const [impersonationId, setImpersonationId] = useState(null)
   const [commercant, setCommercant] = useState(null)
   const [loading, setLoading] = useState(true)
   const [listeCommercants, setListeCommercants] = useState([])
@@ -562,11 +567,33 @@ export default function Dashboard() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
+
+      // ─── MODE IMPERSONATION ADMIN ───
+      // Si l'admin Yoppaa a cliqué "Voir Dashboard" depuis /admin, on a un flag
+      // dans localStorage. On fetch ce commerçant directement (sans filtrer par auth_user_id)
+      // grâce a la policy RLS "Admin Yoppaa FULL" qui autorise l'admin a tout voir.
+      const adminEmail = 'verstappenalexandre@gmail.com'
+      const impersonatingId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_admin_impersonating') : null
+      if (user.email === adminEmail && impersonatingId) {
+        const { data: c } = await supabase.from('commercants').select('*').eq('id', impersonatingId).maybeSingle()
+        if (c) {
+          setCommercant(c)
+          setImpersonating(true)
+          setImpersonationId(localStorage.getItem('yoppaa_admin_impersonation_session_id'))
+          chargerCommandes(c.id); chargerRdvs(c.id)
+          return
+        } else {
+          // Le commercant impersonne n'existe plus. On nettoie et retombe sur le flow normal.
+          localStorage.removeItem('yoppaa_admin_impersonating')
+          localStorage.removeItem('yoppaa_admin_impersonation_session_id')
+        }
+      }
+      // ─── FLOW NORMAL : commercant connecte par son propre compte ───
       const { data } = await supabase.from('commercants').select('*').eq('auth_user_id', user.id).order('nom')
       if (!data || data.length === 0) {
         // Pas de commerçant lié : si c'est l'admin Yoppaa, on l'envoie vers /admin.
         // Sinon /login (cas où une session traîne sans onboarding finalisé).
-        if (user.email === 'verstappenalexandre@gmail.com') router.push('/admin')
+        if (user.email === adminEmail) router.push('/admin')
         else router.push('/login')
         return
       }
@@ -592,6 +619,28 @@ export default function Dashboard() {
     }
     init()
   }, [chargerCommandes, router])
+
+  // Fonction pour quitter le mode impersonation (logue end + nettoie flags + retour /admin)
+  const quitterImpersonation = useCallback(async () => {
+    const impId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_admin_impersonation_session_id') : null
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (impId) {
+        await fetch('/api/admin/impersonate-end', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || ''}` },
+          body: JSON.stringify({ impersonation_id: impId }),
+        })
+      }
+    } catch (e) {
+      console.warn('[dashboard] impersonate-end failed', e)
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('yoppaa_admin_impersonating')
+      localStorage.removeItem('yoppaa_admin_impersonation_session_id')
+    }
+    router.push('/admin')
+  }, [router])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1061,6 +1110,39 @@ export default function Dashboard() {
       )}
 
       <div className="dash-layout">
+
+        {/* ── Banner sticky MODE ADMIN si impersonation ──
+            Visible uniquement par l'admin Yoppaa, jamais par le commercant.
+            Position fixed top + z-index 9998 (sous les modales eventuelles).
+            Style ambre intense pour signaler clairement "tu n'es pas chez toi". */}
+        {impersonating && commercant && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9998,
+            background: 'linear-gradient(90deg, #F59E0B, #FB923C)',
+            color: '#fff', padding: '0.5rem 0.875rem',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+            fontFamily: '"DM Sans", sans-serif', fontSize: 13, fontWeight: 700,
+            boxShadow: '0 2px 12px rgba(245,158,11,0.35)',
+            letterSpacing: '-0.1px',
+            flexWrap: 'wrap',
+          }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              </svg>
+              <strong>MODE ADMIN</strong>
+            </span>
+            <span style={{ opacity: 0.92 }}>
+              Tu es connecté en tant que <strong>{commercant.nom}</strong>
+            </span>
+            <button onClick={quitterImpersonation}
+              style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', borderRadius: 100, padding: '4px 12px', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+              Quitter →
+            </button>
+          </div>
+        )}
+        {/* Reserve l'espace du banner sticky (taille variable selon largeur ecran) */}
+        {impersonating && <div style={{ height: 42 }}/>}
 
         {/* ── SIDEBAR PC ── */}
         <aside className="sidebar">

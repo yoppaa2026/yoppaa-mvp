@@ -19,21 +19,26 @@
   }
 }
 
-html, body {
+html {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
-  /* BLOCAGE HORIZONTAL TOTAL au niveau global.
-     - overflow-x: hidden empêche tout scroll horizontal natif
-     - max-width: 100vw + width: 100% empêche le débordement (et le bloque même si un enfant essaie)
-     - touch-action: pan-y pinch-zoom interdit le pan horizontal au niveau touch
-     - overscroll-behavior: contain empêche le rebond iOS qui pourrait être perçu comme un mouvement latéral */
+}
+
+/* BLOCAGE HORIZONTAL TOTAL au niveau body (pas html — sinon casse le scroll souris desktop).
+   - overflow-x: hidden empêche tout scroll horizontal natif
+   - max-width: 100vw + width: 100% empêche le débordement (et le bloque même si un enfant essaie)
+   - touch-action: pan-y pinch-zoom interdit le pan horizontal au niveau touch
+   - overscroll-behavior: contain empêche le rebond iOS qui pourrait être perçu comme un mouvement latéral */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
   width: 100%;
   max-width: 100vw;
   overflow-x: hidden;
   touch-action: pan-y pinch-zoom;
   overscroll-behavior: contain;
-  position: relative;
 }
 
 /* Box-sizing global cohérent (évite les débordements liés aux paddings) */

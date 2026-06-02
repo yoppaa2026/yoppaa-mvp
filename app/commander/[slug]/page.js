@@ -1750,7 +1750,7 @@ export default function CommanderSlug() {
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                             onCommanderDemain={commanderPourJour}
-                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}/>
+                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}/>
                         ))}
                       </div>
                     </div>
@@ -1768,7 +1768,7 @@ export default function CommanderSlug() {
                           ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                           stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                           onCommanderDemain={commanderPourJour}
-                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}/>
+                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}/>
                       ))}
                     </div>
                   </div>

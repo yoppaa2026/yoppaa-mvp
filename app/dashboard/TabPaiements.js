@@ -36,7 +36,7 @@ export default function TabPaiements({ commercantId, toast }) {
     setLoading(true)
     const { data } = await supabase
       .from('commercants')
-      .select('id, nom, plan, categorie, stripe_account_id, stripe_account_charges_enabled, stripe_account_details_submitted, stripe_account_payouts_enabled, stripe_onboarding_done_at, rdv_acompte_en_ligne_actif')
+      .select('id, nom, plan, categorie, stripe_account_id, stripe_account_charges_enabled, stripe_account_details_submitted, stripe_account_payouts_enabled, stripe_onboarding_done_at, rdv_acompte_en_ligne_actif, accepte_paiement_cash')
       .eq('id', commercantId)
       .maybeSingle()
     setCommercant(data)
@@ -118,6 +118,21 @@ export default function TabPaiements({ commercantId, toast }) {
     }
     setCommercant(c => ({ ...c, rdv_acompte_en_ligne_actif: actif }))
     toast?.(actif ? 'Acompte en ligne activé' : 'Acompte en ligne désactivé', 'success')
+  }
+
+  async function togglePaiementCash(actif) {
+    setSavingToggle(true)
+    const { error } = await supabase
+      .from('commercants')
+      .update({ accepte_paiement_cash: actif })
+      .eq('id', commercantId)
+    setSavingToggle(false)
+    if (error) {
+      toast?.(`Erreur : ${error.message}`, 'error')
+      return
+    }
+    setCommercant(c => ({ ...c, accepte_paiement_cash: actif }))
+    toast?.(actif ? 'Paiement cash accepté' : 'Paiement cash désactivé', 'success')
   }
 
   if (loading) {
@@ -251,6 +266,45 @@ export default function TabPaiements({ commercantId, toast }) {
           </div>
         </div>
       )}
+
+      {/* ─── SECTION 3 : Toggle 'Accepter le paiement cash sur place' ─── */}
+      {/* Dispo pour les 2 catégories FULL. Permet au commerçant de proposer le cash
+          en plus du paiement en ligne (utile alim C&C ou vitrine sans acompte exigé). */}
+      <div style={{ background: '#fff', borderRadius: 14, padding: 20, border: `1px solid ${T.hairline}`, boxShadow: '0 1px 3px rgba(22,6,54,0.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0, marginBottom: 4 }}>Paiement sur place</p>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 900, color: T.ink, margin: 0, letterSpacing: '-0.3px' }}>Accepter le cash / carte sur place</h3>
+            <p style={{ fontSize: '0.82rem', color: T.muted, lineHeight: 1.5, marginTop: 6 }}>
+              Quand activé, tes clients peuvent payer en espèces ou par carte directement chez toi
+              (en plus du paiement en ligne). Désactivé = paiement en ligne obligatoire.
+            </p>
+          </div>
+          <label style={{ position: 'relative', display: 'inline-block', width: 48, height: 26, flexShrink: 0, cursor: 'pointer' }}>
+            <input type="checkbox"
+              checked={!!commercant.accepte_paiement_cash}
+              disabled={savingToggle}
+              onChange={(e) => togglePaiementCash(e.target.checked)}
+              style={{ opacity: 0, width: 0, height: 0 }}/>
+            <span style={{
+              position: 'absolute', cursor: 'pointer',
+              top: 0, left: 0, right: 0, bottom: 0,
+              background: commercant.accepte_paiement_cash ? T.main : '#D1D5DB',
+              borderRadius: 100, transition: '0.2s',
+            }}>
+              <span style={{
+                position: 'absolute',
+                height: 20, width: 20,
+                left: commercant.accepte_paiement_cash ? 24 : 4,
+                top: 3,
+                background: '#fff', borderRadius: '50%',
+                transition: '0.2s',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+              }}/>
+            </span>
+          </label>
+        </div>
+      </div>
 
       {/* ─── Info doc / sécurité ─── */}
       <div style={{ background: T.pale, borderRadius: 10, padding: '12px 14px', border: `1px solid ${T.main}22` }}>

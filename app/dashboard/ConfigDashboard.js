@@ -2143,7 +2143,7 @@ function TabProfil({ commercantId, toast }) {
     const { data } = await supabase.from('commercants').select('*').eq('id', commercantId).single()
     if (data) {
       const defaultHoraires = { lundi: { ouvert: true, debut: '07:00', fin: '14:00' }, mardi: { ouvert: true, debut: '07:00', fin: '14:00' }, mercredi: { ouvert: true, debut: '07:00', fin: '14:00' }, jeudi: { ouvert: true, debut: '07:00', fin: '14:00' }, vendredi: { ouvert: true, debut: '07:00', fin: '14:00' }, samedi: { ouvert: true, debut: '07:00', fin: '13:00' }, dimanche: { ouvert: false, debut: '07:00', fin: '12:00' } }
-      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire' })
+      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'on' })
       setLogoPreview(data.logo_url || null)
     }
     setLoading(false)
@@ -2172,7 +2172,7 @@ function TabProfil({ commercantId, toast }) {
   async function saveProfil() {
     if (!form.nom.trim()) return toast('Le nom est obligatoire', 'error')
     setSaving(true)
-    await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail }).eq('id', commercantId)
+    await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, fidelite_actif: !!form.fidelite_actif }).eq('id', commercantId)
     setSaving(false); toast('Profil mis à jour ✓')
   }
 
@@ -2264,6 +2264,36 @@ function TabProfil({ commercantId, toast }) {
             <Input type="time" value={form.heure_ouverture_resa} onChange={e => setForm(p => ({ ...p, heure_ouverture_resa: e.target.value }))} style={{ width: 140 }} />
           </div>
         </div>
+
+        {/* ─── Toggles FULL (alimentaire uniquement) ─── */}
+        {/* Les commercants FULL alim peuvent choisir d'activer/desactiver
+            certaines features (livraison, fidelite). La pill client reflete l'etat. */}
+        {form.plan === 'full' && form.categorie === 'alimentaire' && (
+          <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
+            <p style={{ ...s.label, marginBottom: 12 }}>Fonctionnalités activables (plan FULL)</p>
+
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.livraison_actif ? T.main : T.pale}`, background: form.livraison_actif ? T.pale : '#fff', cursor: 'pointer', marginBottom: 10, transition: 'all 0.15s' }}>
+              <input type="checkbox" checked={!!form.livraison_actif} onChange={e => setForm(p => ({ ...p, livraison_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>🚴 Activer la livraison</p>
+                <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
+                  Affiche la pill « LIVRAISON » sur ta fiche. Configuration complète (zone, frais, créneaux) à venir.
+                </p>
+              </div>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.fidelite_actif ? T.main : T.pale}`, background: form.fidelite_actif ? T.pale : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
+              <input type="checkbox" checked={!!form.fidelite_actif} onChange={e => setForm(p => ({ ...p, fidelite_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>⭐ Activer le programme fidélité</p>
+                <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
+                  Programme tampon : la 10ème commande offerte. Module fidélité complet à venir.
+                </p>
+              </div>
+            </label>
+          </div>
+        )}
+
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
           <button style={{ ...s.btn, ...s.btnPrimary, padding: '11px 24px', fontSize: 14 }} onClick={saveProfil} disabled={saving}>
             {saving ? 'Enregistrement...' : '✓ Enregistrer'}

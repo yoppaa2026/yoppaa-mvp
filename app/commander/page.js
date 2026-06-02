@@ -1359,6 +1359,31 @@ export default function Commander() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commercants.length])
 
+  // Refresh commandes + RDVs client au focus/visibilitychange + polling 60s.
+  // Sans ça, la pastille verte du footer (rdvsAVenir.length) ne se met pas a jour
+  // quand un RDV est cree dans un autre onglet ou par le webhook Stripe en arriere-plan.
+  // Bug rapporte Alex 2026-06-02 ("pastille verte qui disparait").
+  useEffect(() => {
+    const email = client?.email
+    if (!email) return
+    const refresh = () => {
+      if (document.visibilityState === 'visible') {
+        chargerCommandesClient(email)
+        chargerRdvsClient(email)
+      }
+    }
+    const onVisChange = () => refresh()
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', onVisChange)
+    const interval = setInterval(refresh, 60000)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisChange)
+      clearInterval(interval)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client?.email])
+
   // Charge les deals et actus actifs aujourd'hui pour piloter le dot LIVE des pills
   async function chargerActiviteAujourdhui(ids) {
     if (!ids?.length) return

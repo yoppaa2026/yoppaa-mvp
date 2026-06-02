@@ -620,6 +620,30 @@ export default function Dashboard() {
     init()
   }, [chargerCommandes, router])
 
+  // Refresh commandes + RDVs commercant au focus/visibilitychange + polling 60s.
+  // Sans ça, les nouveaux RDVs crees par les Yoppers (notamment via webhook Stripe
+  // en arriere-plan) n'apparaissent pas tant que le commercant ne hard-refresh pas.
+  // Bug rapporte Alex 2026-06-02 ("3 RDVs visibles alors qu'il y en a plus de 10").
+  useEffect(() => {
+    if (!commercant?.id) return
+    const cid = commercant.id
+    const refresh = () => {
+      if (document.visibilityState === 'visible') {
+        chargerCommandes(cid)
+        chargerRdvs(cid)
+      }
+    }
+    const onVisChange = () => refresh()
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', onVisChange)
+    const interval = setInterval(refresh, 60000)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisChange)
+      clearInterval(interval)
+    }
+  }, [commercant?.id, chargerCommandes, chargerRdvs])
+
   // Fonction pour quitter le mode impersonation (logue end + nettoie flags + retour /admin)
   const quitterImpersonation = useCallback(async () => {
     const impId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_admin_impersonation_session_id') : null

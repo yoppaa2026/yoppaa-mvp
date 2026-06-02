@@ -85,7 +85,14 @@ export async function POST(request) {
     // TODO : valider l'overlap/horaires/pause ici (réutiliser logique existante).
     // Pour l'instant, le FE valide. Mais on devrait re-vérifier server-side pour sécurité.
 
-    // Crée la Checkout Session avec Direct Charge (transfer_data.destination = commercant)
+    // Crée la Checkout Session en DIRECT CHARGE (cf. memory project-paiement-stripe).
+    // Le paiement est cree DANS le compte du connected account (pas la plateforme),
+    // donc les frais Stripe sont preleves sur le commercant (1.4% + 0.25€) et le
+    // montant net arrive direct sur son IBAN. Yoppaa = zero commission, zero frais.
+    //
+    // Difference vs Destination Charge : on passe { stripeAccount } comme 2eme arg
+    // de create(), au lieu de transfer_data.destination dans payment_intent_data.
+    // Le success_url/cancel_url restent sur la plateforme (chemin standard).
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card', 'bancontact'],
@@ -105,7 +112,6 @@ export async function POST(request) {
       cancel_url:   `${STRIPE_CONFIG.appUrl}/commander/rdv/${commercant.slug}?paiement=annule`,
       payment_intent_data: {
         application_fee_amount: calculApplicationFee(acompteCents, commercant),    // 0 (zéro commission Yoppaa)
-        transfer_data: { destination: commercant.stripe_account_id },               // l'argent va direct au commerçant
         metadata: buildPaymentMetadata({
           kind: PAYMENT_KIND.RDV_ACOMPTE,
           commercantId: commercant.id,
@@ -130,6 +136,8 @@ export async function POST(request) {
         kind: PAYMENT_KIND.RDV_ACOMPTE,
         commercantId: commercant.id,
       }),
+    }, {
+      stripeAccount: commercant.stripe_account_id,
     })
 
     return NextResponse.json({ ok: true, url: session.url, session_id: session.id })

@@ -834,10 +834,17 @@ export default function CommanderRdvSlug() {
     <>
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { height: 100%; overflow-x: hidden; }
-        body { font-family: "DM Sans", sans-serif; background: ${T.bg}; color: ${T.ink}; }
-        .page-wrap { display: flex; flex-direction: column; min-height: 100dvh; max-width: 760px; margin: 0 auto; background: ${T.bg}; }
+        html, body { height: 100%; overflow-x: hidden; max-width: 100vw; }
+        body { font-family: "DM Sans", sans-serif; background: ${T.bg}; color: ${T.ink}; position: relative; }
+        .page-wrap { display: flex; flex-direction: column; min-height: 100dvh; max-width: 760px; margin: 0 auto; background: ${T.bg}; overflow-x: hidden; width: 100%; }
         .scroll-body { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+        .topbar-rdv { overflow: hidden; max-width: 100%; }
+        .step-label { display: inline; }
+        @media (max-width: 479px) {
+          .step-label { display: none; }
+          .step-pill { padding: 3px 7px !important; }
+          .step-sep { width: 4px !important; }
+        }
         .action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 0.4rem 0.75rem; border-radius: 100px; border: 1px solid ${T.pale}; background: #fff; color: ${T.ink}; font-weight: 700; font-size: 0.74rem; cursor: pointer; transition: all 0.15s; line-height: 1.1; }
         .action-btn:hover { border-color: ${T.main}; color: ${T.main}; background: ${T.pale}; }
         .prest-card { transition: all 0.15s; }
@@ -851,8 +858,11 @@ export default function CommanderRdvSlug() {
 
       <div className="page-wrap">
 
-        {/* ── TOPBAR (bande 3px canonique + retour + step indicator) ── */}
-        <div style={{ background: T.bgPanel, padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, borderBottom: `1px solid ${T.main}33`, position: 'relative' }}>
+        {/* ── TOPBAR (bande 3px canonique + retour + step indicator) ──
+            overflow:hidden + max-width:100% : empeche le step indicator de creer un
+            scroll-x latent qui restait bloque sur Chrome iOS standalone apres un
+            swipe involontaire (bug Yoppaa 4 du 2026-06-02). */}
+        <div className="topbar-rdv" style={{ background: T.bgPanel, padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, borderBottom: `1px solid ${T.main}33`, position: 'relative' }}>
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
           <button onClick={() => router.push('/commander')}
             aria-label="Retour"
@@ -879,13 +889,13 @@ export default function CommanderRdvSlug() {
                 const active = etape === s.n
                 return (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: active ? T.main : done ? '#10B98122' : 'rgba(255,255,255,0.08)', border: `1.5px solid ${active ? T.light : done ? '#10B981' : 'rgba(255,255,255,0.15)'}`, borderRadius: 100, padding: '3px 10px', transition: 'all 0.3s', boxShadow: active ? `0 4px 12px ${T.main}44` : 'none' }}>
+                    <div className="step-pill" style={{ display: 'flex', alignItems: 'center', gap: 5, background: active ? T.main : done ? '#10B98122' : 'rgba(255,255,255,0.08)', border: `1.5px solid ${active ? T.light : done ? '#10B981' : 'rgba(255,255,255,0.15)'}`, borderRadius: 100, padding: '3px 10px', transition: 'all 0.3s', boxShadow: active ? `0 4px 12px ${T.main}44` : 'none' }}>
                       <span style={{ width: 16, height: 16, borderRadius: '50%', background: active ? '#fff' : done ? '#10B981' : 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 900, color: active ? T.main : '#fff', flexShrink: 0 }}>
                         {done ? <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> : s.n}
                       </span>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: active ? '#fff' : done ? '#10B981' : 'rgba(255,255,255,0.5)' }}>{s.label}</span>
+                      <span className="step-label" style={{ fontSize: '0.7rem', fontWeight: 700, color: active ? '#fff' : done ? '#10B981' : 'rgba(255,255,255,0.5)' }}>{s.label}</span>
                     </div>
-                    {i < 2 && <div style={{ width: 8, height: 1.5, background: etape > s.n ? '#10B981' : 'rgba(255,255,255,0.15)' }}/>}
+                    {i < 2 && <div className="step-sep" style={{ width: 8, height: 1.5, background: etape > s.n ? '#10B981' : 'rgba(255,255,255,0.15)' }}/>}
                   </div>
                 )
               })}

@@ -13,6 +13,7 @@
 import { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { canDo } from '@/lib/plans'
 
 // ─── Tokens design system (canoniques) ─────────────────────────────
 const T = {
@@ -67,7 +68,7 @@ const LAUNCH_DATE = new Date(2026, 0, 1) // 1er janvier 2026
 
 // ─── Fetch des deals + actus de la commune affichée ──────────────
 // Filtre côté DB : actifs + date du jour. Filtre côté JS : commerçant
-// publié + plan LIVE/BOOST/MAX + code postal dans la commune.
+// publié + plan FULL (canDo morning) + code postal dans la commune.
 async function fetchMorningData(commune) {
   if (!commune?.codes_postaux?.length) return { deals: [], actus: [] }
   const today = new Date().toISOString().slice(0, 10)
@@ -95,12 +96,11 @@ async function fetchMorningData(commune) {
   ])
 
   const cpDeLaCommune = new Set(commune.codes_postaux)
-  const PLANS_OK = new Set(['live', 'boost', 'max'])
 
   function commercantEligible(c) {
     if (!c) return false
     if (c.statut_publication !== 'publie') return false
-    if (!PLANS_OK.has((c.plan || '').toLowerCase())) return false
+    if (!canDo(c.plan, 'morning')) return false
     const cp = extraireCodePostal(c.adresse)
     return cp && cpDeLaCommune.has(cp)
   }

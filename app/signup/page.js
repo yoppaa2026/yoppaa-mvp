@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { PLAN_LABEL, PLAN_PRIX, PLANS, plansDispoPourCategorie } from '@/lib/plans'
+import { PLAN_LABEL, PLANS, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
 
 // Types de commerce séparés par catégorie : la liste affichée à l'étape 2
 // dépend du choix fait à l'étape 1 (alimentaire vs vitrine).
@@ -236,8 +236,8 @@ function Etape1Compte({ session, commercant, onCompte }) {
   const dejaConnecte = !!session
   const plansDispos = plansDispoPourCategorie(categorie)
 
-  // Si la catégorie change et que le plan choisi n'est plus dispo (ex: BOOST avec vitrine),
-  // on redescend automatiquement sur le plan le plus haut dispo (PRO+ pour vitrine, MAX pour alimentaire).
+  // Si la catégorie change et que le plan choisi n'est plus dispo, on redescend
+  // automatiquement sur le plan le plus haut dispo (FULL pour les 2 catégories).
   useEffect(() => {
     if (!plansDispos.includes(plan)) {
       setPlan(plansDispos[plansDispos.length - 1])
@@ -385,18 +385,17 @@ function Etape1Compte({ session, commercant, onCompte }) {
       <Card titre="Choisis ton plan" sous="Tu pourras changer plus tard depuis ton dashboard.">
         <div style={{ display: 'grid', gap: 10 }}>
           {plansDispos.map(p => (
-            <CardPlan key={p} plan={p} actif={plan === p} onClick={() => setPlan(p)}/>
+            <CardPlan key={p} plan={p} categorie={categorie} actif={plan === p} onClick={() => setPlan(p)}/>
           ))}
         </div>
         {categorie === 'vitrine' && (
           <p style={{ fontSize: 11, color: T.muted, marginTop: 12, lineHeight: 1.5, background: T.pale, padding: '8px 10px', borderRadius: 8, border: `1px solid ${T.main}22` }}>
-            <strong style={{ color: T.bgPanel }}>PRO et PRO+</strong> incluent le module de réservation RDV natif Yoppaa : prestations, créneaux, agenda, fidélité automatique. <strong>Zéro commission</strong>, jamais. Tu peux aussi rester en <strong>ON gratuit</strong> avec un simple lien vers ton agenda externe (Optios, Doctolib, Planity…).
+            <strong style={{ color: T.bgPanel }}>FULL</strong> inclut le module de réservation RDV natif Yoppaa : prestations, créneaux, agenda, fidélité automatique, multi-praticiens. <strong>Zéro commission</strong>, jamais. Tu peux aussi rester en <strong>ON gratuit</strong> (présence + horaires + avis).
           </p>
         )}
         {categorie === 'alimentaire' && (
           <p style={{ fontSize: 11, color: T.muted, marginTop: 12, lineHeight: 1.5 }}>
-            Plans payants : 30 jours gratuits si tu souscris dès maintenant.
-            Tu peux aussi démarrer en plan ON gratuit et upgrader à tout moment.
+            <strong style={{ color: T.bgPanel }}>FULL</strong> : Click &amp; Collect, livraison, fidélité, deals, hardware caisse, dashboard commandes. Tu peux démarrer en <strong>ON gratuit</strong> et upgrader à tout moment.
           </p>
         )}
       </Card>
@@ -434,28 +433,27 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
     { icone: '📢', titre: 'Actualité',      desc: 'Tu communiques une nouveauté (nouveau produit, événement, créneau libre). Affichée en bandeau violet sur ta page, push aux favoris à la publication.' },
     { icone: '🚨', titre: 'Alerte',         desc: 'Information urgente (fermeture exceptionnelle, indisponibilité). Bandeau rouge prioritaire sur ta page client.' },
     { icone: '☀️', titre: 'Good Morning Yoppers', desc: categorie === 'vitrine'
-        ? 'Push quotidien envoyé à 7h30 aux clients de ta zone. Plans PRO/PRO+ peuvent y inscrire deals + actus + créneaux dispos, à soumettre avant 23h la veille.'
-        : 'Push quotidien envoyé à 7h30 aux clients de ta zone. Les commerçants LIVE/BOOST/MAX peuvent y inscrire 1 deal/jour, à soumettre avant 23h la veille.' },
+        ? 'Push quotidien envoyé à 7h30 aux clients de ta zone. Plan FULL peut y inscrire deals + actus + créneaux dispos, à soumettre avant 23h la veille.'
+        : 'Push quotidien envoyé à 7h30 aux clients de ta zone. Les commerçants FULL peuvent y inscrire 1 deal/jour, à soumettre avant 23h la veille.' },
   ]
 
   // Features alimentaire uniquement
   const featuresAlimentaire = [
-    { icone: '🛒', titre: 'Click & Collect', desc: 'Le client commande à l\'avance, choisit un créneau de retrait. Tu reçois la commande dans ton dashboard, valides, marques prête. Cœur de l\'expérience Yoppaa alimentaire.' },
-    { icone: '🚴', titre: 'Livraison',       desc: 'Module complet : zone configurable, frais configurables, créneaux livraison séparés, suivi commande client. Réservé au plan MAX.' },
-    { icone: '⭐', titre: 'Fidélité',        desc: 'BOOST : programme tampon simple (le 10e offert). MAX : points configurables, récompenses custom, analytics fidélité.' },
-    { icone: '🛍️', titre: 'Kit Yoppaa',      desc: 'Tablette + imprimante thermique pour gérer les commandes en boutique. 399€ HTVA comptant ou 3×133€ (Stripe ou Alma). Réservé aux plans BOOST et MAX.' },
+    { icone: '🛒', titre: 'Click & Collect', desc: 'Le client commande à l\'avance, choisit un créneau de retrait. Tu reçois la commande dans ton dashboard, valides, marques prête. Cœur de l\'expérience Yoppaa alimentaire. Inclus dans FULL.' },
+    { icone: '🚴', titre: 'Livraison',       desc: 'Module complet : zone configurable, frais configurables, créneaux livraison séparés, suivi commande client. Inclus dans FULL alimentaire.' },
+    { icone: '⭐', titre: 'Fidélité',        desc: 'Programme points configurables, récompenses custom, analytics fidélité. Inclus dans FULL.' },
+    { icone: '🛍️', titre: 'Kit Yoppaa',      desc: 'Tablette + imprimante thermique pour gérer les commandes en boutique. 399€ HTVA comptant ou 3×133€ (Stripe ou Alma). Optionnel, recommandé pour FULL alimentaire.' },
   ]
 
   // Features vitrine uniquement
   const featuresVitrine = [
-    { icone: '📅', titre: 'Module RDV natif', desc: 'Inclus dès PRO (34,90€/m). Le client choisit une prestation, une date et un créneau, valide en 3 clics. Tu reçois la notification dans ton dashboard. Zéro commission. iCal joint pour son calendrier.' },
+    { icone: '📅', titre: 'Module RDV natif', desc: 'Inclus dans FULL vitrine (39,90€/m). Le client choisit une prestation, une date et un créneau, valide en 3 clics. Tu reçois la notification dans ton dashboard. Zéro commission. iCal joint pour son calendrier.' },
     { icone: '🧰', titre: 'Prestations',     desc: 'Catalogue de tes services : nom, durée (15min à 3h), prix fixe ou fourchette, acompte optionnel. Modifiable à tout moment depuis ton dashboard.' },
     { icone: '⏰', titre: 'Créneaux RDV',    desc: 'Tu définis tes plages horaires par jour de la semaine (avec pause déjeuner si tu veux). Pas configurable (15min/30min/1h). Exceptions ponctuelles (date spécifique) supportées.' },
     { icone: '⭐', titre: 'Fidélité auto',    desc: 'Active le programme : tes RDV honorés incrémentent automatiquement le compteur du client. Récompense (% de remise) déclenchée au seuil que tu choisis (ex. 10 RDV → -10%).' },
-    { icone: '👥', titre: 'Multi-praticiens', desc: 'Réservé PRO+ (49,90€/m). Tu ajoutes tes praticien·nes avec photo + spécialités. Chaque RDV est associé à une personne. Planning et stats par praticien. Le client peut choisir ou laisser "Premier disponible".' },
+    { icone: '👥', titre: 'Multi-praticiens', desc: 'Inclus dans FULL vitrine. Tu ajoutes tes praticien·nes avec photo + spécialités. Chaque RDV est associé à une personne. Planning et stats par praticien. Le client peut choisir ou laisser "Premier disponible".' },
     { icone: '📊', titre: 'Export comptable', desc: 'Exporte tes RDV honorés en CSV ou PDF mensuel pour ta comptabilité. Conservation 7 ans (loi belge).' },
     { icone: '📱', titre: 'Tablette Yoppaa',  desc: 'Optionnel — 199€ comptant, sans obligation. Une tablette dédiée pour consulter ton agenda et gérer tes RDV en temps réel à ton comptoir. Tu peux aussi utiliser ton téléphone ou ton ordinateur, le dashboard est responsive.' },
-    { icone: '🔗', titre: 'Lien externe (ON gratuit)', desc: 'Plan ON : tu n\'as pas le module natif mais tu peux mettre un lien vers ton agenda externe (Optios, Doctolib, Planity, Booksy, TheFork). Un bouton "Réserver" apparaît sur ta page Yoppaa.' },
   ]
 
   const features = categorie === 'vitrine'
@@ -1039,25 +1037,23 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, avancer,
 }
 
 // ─── ÉTAPE 5 : SUCCESS PACK + SOUMISSION ──────────────────────────────────────
-// - Choix optionnel d'un Success Pack (STARTER 49€, ESSENTIEL 149€, PREMIUM 299€)
+// - Choix optionnel d'un Success Pack (STARTER 49€ ou PREMIUM 249€)
 // - Calcul du score automatique 0-100 (visible en live)
 // - Soumission (statut = en_attente_validation + email Yoppaa via Resend)
 // - Bouton verrouille si score < 60
+//
+// Refactor 2026-06-02 : 3 packs → 2 packs alignés sur le nouveau modèle ON / FULL.
+// - Starter dispo tous plans (ON + FULL), Premium réservé FULL (ali + vitrine).
 const SUCCESS_PACKS = [
   {
     type: 'starter', label: 'Starter', prix: 49,
-    desc: 'Aide rédaction + guide photo personnalisé + vérif profil + 1 session WhatsApp 30 min',
-    bullets: ['Disponible tous plans', 'Livré sous 48 h'],
+    desc: 'Aide rédaction + guide photo personnalisé + vérif profil + 1 session WhatsApp 30 min + 1er deal créé ensemble',
+    bullets: ['Tous plans (ON + FULL)', 'Livré sous 48 h'],
   },
   {
-    type: 'essentiel', label: 'Essentiel', prix: 149,
-    desc: 'Tout Starter + création menu (≤30 articles) + horaires + créneaux + 1er deal créé ensemble + session vidéo 1 h',
-    bullets: ['LIVE / BOOST / MAX', 'Livré sous 5 jours ouvrés'],
-  },
-  {
-    type: 'premium', label: 'Premium', prix: 299,
-    desc: 'Tout Essentiel + séance photo demi-journée + descriptions articles + fidélité + formation équipe 2 h + suivi J+30',
-    bullets: ['BOOST / MAX uniquement', 'Rayon 50 km Mettet'],
+    type: 'premium', label: 'Premium', prix: 249,
+    desc: 'Tout Starter + séance photo demi-journée + création complète menu ou prestations + fidélité paramétrée + formation équipe 1 h + suivi J+30',
+    bullets: ['FULL alimentaire + FULL vitrine', 'Livré sous 7 jours ouvrés', 'Rayon 50 km Mettet'],
   },
 ]
 
@@ -1397,19 +1393,17 @@ function CategorieCard({ actif, onClick, titre, sous, exemples, icone }) {
   )
 }
 
-function CardPlan({ plan, actif, onClick }) {
-  const p = PLAN_PRIX[plan]
+function CardPlan({ plan, categorie, actif, onClick }) {
+  const p = getPrixPlan(plan, categorie)
   const label = PLAN_LABEL[plan]
+  // Features descriptions par plan + categorie (FULL diffère entre alimentaire et vitrine)
   const features = {
-    // Alimentaire
-    on:      'Page live + menu sans prix + horaires + avis. Idéal pour démarrer.',
-    live:    'Tout ON + prix visibles + photos articles + deals + actualités + Good Morning Yoppers.',
-    boost:   'Tout LIVE + Click & Collect + fidélité + dashboard commandes + kit hardware.',
-    max:     'Tout BOOST + module livraison complet + fidélité avancée + support prioritaire.',
-    // Vitrine (RDV : coiffeur / esthe / barbier / etc.)
-    pro:     'Module RDV complet (prestations, créneaux, agenda) + deals + actualités + fidélité automatique + export comptable + Good Morning Yoppers. Zéro commission, jamais.',
-    proplus: 'Tout PRO + multi-praticiens illimité (planning par praticien, stats segmentées). Pour les salons avec équipe.',
+    on: 'Page live + horaires + avis. Idéal pour démarrer en gratuit.',
+    full: categorie === 'vitrine'
+      ? 'Module RDV complet (prestations, créneaux, agenda, multi-praticiens) + prix + photos + deals + actualités + fidélité automatique + Good Morning Yoppers. Zéro commission, jamais.'
+      : 'Click & Collect + livraison + prix visibles + photos articles + deals + actualités + fidélité + dashboard commandes + kit hardware + Good Morning Yoppers.',
   }
+  if (!p) return null
   return (
     <button onClick={onClick}
       style={{ width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 14, border: `2px solid ${actif ? T.bgPanel : T.hairline}`, background: actif ? T.bgPanel : '#fff', color: actif ? '#fff' : T.ink, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s', boxShadow: actif ? `0 8px 24px rgba(22,6,54,0.2)` : 'none' }}>

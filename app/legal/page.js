@@ -164,20 +164,22 @@ export default function LegalPage() {
 
             <H3>1. Abonnement et tarification</H3>
             <Ul items={[
-              'Plan Découverte : 0,25€ par commande, sans plafond, sans engagement',
-              'Plan Pro : 99€ HTVA/mois, commandes illimitées, résiliable en fin de mois',
-              'Module Livraison (option) : 50€ HTVA de setup unique + 30€ HTVA/mois (1€/jour)',
+              'Plan ON : gratuit à vie, présence basique (page Yoppaa + horaires + avis), sans engagement',
+              'Plan FULL alimentaire : 59,90€ HTVA/mois (ou 599€ HTVA/an, soit 49,92€/mois) — Click & Collect, livraison, fidélité, deals, Good Morning Yoppers, dashboard commandes, kit hardware optionnel',
+              'Plan FULL vitrine : 39,90€ HTVA/mois (ou 399€ HTVA/an, soit 33,25€/mois) — Module RDV natif (prestations, créneaux, agenda, multi-praticiens), fidélité automatique, deals, Good Morning Yoppers. Zéro commission sur les acomptes RDV.',
+              'Plan PUBLIC (services & administrations) : gratuit à vie — actus + alertes officielles uniquement',
             ]}/>
-            <P>Les Commerçants Ambassadeurs Fondateurs bénéficient de 4 mois gratuits, suivis de 8 mois à 69€ HTVA/mois, puis du tarif standard. Le forfait démarrage de 125€ HTVA est offert pour les Ambassadeurs.</P>
+            <P>Les Commerçants Ambassadeurs Fondateurs bénéficient de conditions préférentielles définies dans leur contrat individuel d&rsquo;ambassadeur, sans engagement de durée au-delà de ce qui y est précisé.</P>
 
-            <H3>2. Forfait démarrage</H3>
-            <P>Un forfait de démarrage unique de 125€ HTVA est facturé à J+30 après l'activation du compte, si le Commerçant décide de poursuivre. Pas convaincu après 30 jours = zéro facture.</P>
+            <H3>2. Facturation et paiement</H3>
+            <P>La facturation est effectuée automatiquement via Stripe Billing pour les plans FULL. Le Commerçant renseigne son moyen de paiement (carte ou IBAN) lors de l&rsquo;activation. En cas d&rsquo;échec de paiement, Stripe effectue 3 tentatives automatiques avant suspension du compte (downgrade vers ON, données conservées).</P>
 
-            <H3>3. Facturation et paiement</H3>
-            <P>La facturation est effectuée automatiquement via Stripe Billing. Le Commerçant renseigne son moyen de paiement (carte ou IBAN) lors de l'activation. En cas d'échec de paiement, Stripe effectue 3 tentatives automatiques avant suspension du compte.</P>
+            <H3>2bis. Indexation tarifaire</H3>
+            <P>Les tarifs sont révisables annuellement au 1er janvier, sur base de l&rsquo;IPC du mois d&rsquo;octobre publié par Statbel. Le Commerçant est notifié au plus tard le 1er décembre précédant la révision. Les tarifs préférentiels Ambassadeurs Fondateurs ne sont pas soumis à indexation pendant leur durée garantie.</P>
 
-            <H3>3bis. Indexation tarifaire</H3>
-            <P>Les tarifs sont révisables annuellement au 1er janvier, sur base de l'IPC du mois d'octobre publié par Statbel. Le Commerçant est notifié au plus tard le 1er décembre précédant la révision. Les tarifs préférentiels Ambassadeurs Fondateurs ne sont pas soumis à indexation pendant leur durée garantie.</P>
+            <H3>2ter. Paiements en ligne et frais Stripe (plan FULL uniquement)</H3>
+            <P>Les paiements en ligne (acomptes RDV pour les vitrines, commandes Click &amp; Collect pour l&rsquo;alimentaire) sont traités via Stripe Connect Express en Direct Charge. L&rsquo;argent est versé directement sur le compte bancaire du Commerçant (sous 7 jours ouvrés). Les frais Stripe (environ 1,4% + 0,25€ par transaction pour les cartes européennes) sont supportés par le Commerçant et prélevés à la source par Stripe. Yoppaa ne prélève aucune commission sur les transactions.</P>
+            <P>Le Commerçant garantit Yoppaa contre tout chargeback, remboursement, contestation de paiement ou solde négatif lié à son activité sur la plateforme. En cas de solde négatif persistant sur son compte Stripe Connect, le Commerçant s&rsquo;engage à régler Yoppaa du montant correspondant sous 30 jours à compter de la notification écrite.</P>
 
             <H3>4. Obligations du Commerçant</H3>
             <Ul items={[
@@ -188,7 +190,7 @@ export default function LegalPage() {
             ]}/>
 
             <H3>5. Résiliation</H3>
-            <P>Le Commerçant peut résilier son abonnement ou effectuer un downgrade du Plan Pro vers Découverte moyennant un préavis d'un mois calendrier, prenant effet le 1er jour du mois suivant. Pour que le préavis prenne effet le 1er du mois M+1, il doit être notifié au plus tard le 17e jour du mois M (14 jours avant).</P>
+            <P>Le Commerçant peut résilier son abonnement FULL ou effectuer un downgrade vers le plan ON gratuit moyennant un préavis d&rsquo;un mois calendrier, prenant effet le 1er jour du mois suivant. Pour que le préavis prenne effet le 1er du mois M+1, il doit être notifié au plus tard le 17e jour du mois M (14 jours avant). En cas de downgrade vers ON, les données du Commerçant sont conservées mais les fonctionnalités FULL (paiement en ligne, RDV ou Click &amp; Collect, livraison, fidélité, etc.) sont désactivées.</P>
             <P>Le préavis doit être notifié par courrier recommandé à Avcotech SRL (Rue de Prée 9G, 5640 Mettet) ou par email à facturation@yoppaa.app.</P>
             <InfoBox>
               Exemple : préavis notifié le 10 mars → effet le 1er avril ✓{'\n'}

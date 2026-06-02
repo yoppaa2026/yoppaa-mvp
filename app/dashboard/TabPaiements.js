@@ -5,9 +5,9 @@
 //   • Voir l'état de son compte (charges_enabled, payouts_enabled, requirements)
 //   • Activer / désactiver le toggle "Acompte en ligne" pour ses RDVs vitrine
 //
-// Onglet visible uniquement si :
-//   • Vitrine : plan PRO ou PRO+ (acompte en ligne)
-//   • Alimentaire : plan BOOST ou MAX (paiement obligatoire à la commande - Phase 1.5)
+// Onglet visible uniquement si plan === 'full' :
+//   • Vitrine FULL : acompte en ligne RDV
+//   • Alimentaire FULL : paiement obligatoire à la commande C&C (Phase 1.5)
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'

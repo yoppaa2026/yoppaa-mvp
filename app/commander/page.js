@@ -876,7 +876,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
   }
 
   const physique = getStatutPhysique()
-  // Pas de reservation si le plan ne permet pas la commande (ON, LIVE)
+  // Pas de reservation si le plan ne permet pas la commande (plan ON)
   const peutCommander = canDo(c.plan, 'commande')
   const isPlanOn = c.plan === 'on'
   const resa = peutCommander ? getStatutResa() : null

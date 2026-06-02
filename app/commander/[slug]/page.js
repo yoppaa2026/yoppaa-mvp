@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { canDo, isVitrine, detecterProviderReservation } from '@/lib/plans'
+import { canDo, isVitrine } from '@/lib/plans'
 import PillsStatut from '../PillsStatut'
 import CTAUpgrade from '../CTAUpgrade'
 import ModalSignalement from '../ModalSignalement'
@@ -1287,13 +1287,11 @@ export default function CommanderSlug() {
 
   // Plans YOPPAA : single source of truth via lib/plans.js
   // peutCommander = BOOST/MAX uniquement (active panier + creneaux)
-  // Bloque aussi catégorie vitrine (coiffeur/opticien : pas de C&C, RDV externe à la place)
+  // Bloque aussi catégorie vitrine (coiffeur/opticien : pas de C&C, module RDV natif Yoppaa à la place)
   const vitrine = isVitrine(commercant)
   const peutCommander = !vitrine && canDo(commercant?.plan, 'commande')
-  // Bouton réservation externe : si url_reservation fournie, on construit le label
-  // depuis l'override ou via auto-détection du provider (Optios/Doctolib/Planity/…).
-  const urlResa = commercant?.url_reservation?.trim() || null
-  const labelResa = (commercant?.label_reservation?.trim()) || (urlResa ? detecterProviderReservation(urlResa).label : null)
+  // Module RDV natif : si vitrine FULL avec rdv_actif=true, on propose le bouton "Prendre RDV"
+  const peutPrendreRdv = vitrine && canDo(commercant?.plan, 'rdv') && commercant?.rdv_actif === true
 
   return (
     <>
@@ -1664,18 +1662,17 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {/* Bouton réservation externe — Optios, Doctolib, Planity, TheFork…
-                    Le tracking des clics sera ajouté plus tard (table reservation_clicks). */}
-                {urlResa && (
+                {/* Bouton Prendre RDV — module natif Yoppaa pour vitrine FULL avec rdv_actif */}
+                {peutPrendreRdv && (
                   <div style={{ margin: '0 12px 12px' }}>
-                    <a href={urlResa} target="_blank" rel="noopener noreferrer"
+                    <a href={`/commander/rdv/${commercant.slug}`}
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 18px', borderRadius: 14, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', textDecoration: 'none', boxShadow: `0 6px 22px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                           <rect x="3" y="5" width="18" height="16" rx="2"/>
                           <path d="M3 9h18M8 3v4M16 3v4"/>
                         </svg>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelResa || 'Réserver en ligne'}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Prendre rendez-vous</span>
                       </span>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                         <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
@@ -1686,15 +1683,15 @@ export default function CommanderSlug() {
 
                 {commercant.horaires_detail && <HorairesSection horaires={commercant.horaires_detail}/>}
 
-                {/* Mention discrete si le plan ne permet pas la commande (ON ou LIVE) ou vitrine */}
+                {/* Mention discrete + signal Yopper si le plan/feature n'est pas active */}
                 {!peutCommander && !vitrine && (
                   <div style={{ background: T.pale, borderTop: `1px solid ${T.main}22`, borderBottom: `1px solid ${T.main}22`, padding: '10px 16px', fontSize: 12, color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
                     Envie de commander à l&rsquo;avance&nbsp;? Demandez à <strong style={{ color: T.bgPanel, fontWeight: 800 }}>{commercant.nom}</strong> d&rsquo;activer Yoppaa Click &amp; Collect.
                   </div>
                 )}
-                {vitrine && !urlResa && (
+                {vitrine && !peutPrendreRdv && (
                   <div style={{ background: T.pale, borderTop: `1px solid ${T.main}22`, borderBottom: `1px solid ${T.main}22`, padding: '10px 16px', fontSize: 12, color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
-                    Passe directement à la boutique ou appelle <strong style={{ color: T.bgPanel, fontWeight: 800 }}>{commercant.nom}</strong> pour plus d&rsquo;infos.
+                    Passe directement à la boutique ou appelle <strong style={{ color: T.bgPanel, fontWeight: 800 }}>{commercant.nom}</strong> pour plus d&rsquo;infos. Tu peux aussi signaler que tu aimerais prendre RDV en ligne.
                   </div>
                 )}
               </div>

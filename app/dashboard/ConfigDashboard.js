@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { canDo, detecterProviderReservation } from '@/lib/plans'
+import { canDo } from '@/lib/plans'
 import TabPaiements from './TabPaiements'
 
 const T = {
@@ -1262,7 +1262,7 @@ function TabDeals({ commercantId, commercant, toast }) {
                 ))}
               </select>
               <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
-                Si tu lies un produit, le badge DEAL s&rsquo;affiche dessus dans le menu et la réduction est appliquée automatiquement au panier (plans BOOST &amp; MAX).
+                Si tu lies un produit, le badge DEAL s&rsquo;affiche dessus dans le menu et la réduction est appliquée automatiquement au panier (plan FULL alimentaire).
               </p>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -2143,7 +2143,7 @@ function TabProfil({ commercantId, toast }) {
     const { data } = await supabase.from('commercants').select('*').eq('id', commercantId).single()
     if (data) {
       const defaultHoraires = { lundi: { ouvert: true, debut: '07:00', fin: '14:00' }, mardi: { ouvert: true, debut: '07:00', fin: '14:00' }, mercredi: { ouvert: true, debut: '07:00', fin: '14:00' }, jeudi: { ouvert: true, debut: '07:00', fin: '14:00' }, vendredi: { ouvert: true, debut: '07:00', fin: '14:00' }, samedi: { ouvert: true, debut: '07:00', fin: '13:00' }, dimanche: { ouvert: false, debut: '07:00', fin: '12:00' } }
-      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', url_reservation: data.url_reservation || '', label_reservation: data.label_reservation || '' })
+      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire' })
       setLogoPreview(data.logo_url || null)
     }
     setLoading(false)
@@ -2172,7 +2172,7 @@ function TabProfil({ commercantId, toast }) {
   async function saveProfil() {
     if (!form.nom.trim()) return toast('Le nom est obligatoire', 'error')
     setSaving(true)
-    await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, url_reservation: form.url_reservation.trim() || null, label_reservation: form.label_reservation.trim() || null }).eq('id', commercantId)
+    await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail }).eq('id', commercantId)
     setSaving(false); toast('Profil mis à jour ✓')
   }
 
@@ -2229,33 +2229,6 @@ function TabProfil({ commercantId, toast }) {
             <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Décrivez votre commerce..." />
           </div>
 
-          {/* ─── Réservation externe ─── */}
-          {/* Lien Optios/Doctolib/Planity/TheFork/Calendly… Affiche un bouton CTA sur la fiche client. */}
-          <div>
-            <label style={s.label}>Lien réservation externe (optionnel)</label>
-            <p style={{ fontSize: 11, color: T.muted, marginBottom: 6, lineHeight: 1.5 }}>
-              Colle le lien de ton système de réservation. Un bouton « Réserver » s'affichera sur ta page Yoppaa. Compatible Optios, Doctolib, Planity, TheFork, Calendly, Booksy, Treatwell…
-            </p>
-            <Input
-              value={form.url_reservation}
-              onChange={e => setForm(p => ({ ...p, url_reservation: e.target.value }))}
-              placeholder="https://salonchezmarie.optios.com"
-              type="url"
-            />
-            <ApercuReservation url={form.url_reservation} labelOverride={form.label_reservation}/>
-            <label style={{ ...s.label, marginTop: 12 }}>Label personnalisé du bouton (optionnel)</label>
-            <Input
-              value={form.label_reservation}
-              onChange={e => setForm(p => ({ ...p, label_reservation: e.target.value }))}
-              placeholder={detecterProviderReservation(form.url_reservation).label || 'Réserver en ligne'}
-            />
-            <p style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
-              Si vide, le label est détecté automatiquement depuis l'URL.
-            </p>
-            <p style={{ fontSize: 11, color: T.main, marginTop: 8, padding: '6px 10px', background: T.pale, borderRadius: 8, fontWeight: 600, border: `1px dashed ${T.main}33` }}>
-              💡 Bientôt — Yoppaa intégrera son propre module de réservation natif. En attendant, ton outil existant reste la solution la plus rapide.
-            </p>
-          </div>
           <div>
             <label style={s.label}>Horaires d'ouverture</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
@@ -2303,41 +2276,6 @@ function TabProfil({ commercantId, toast }) {
       </div>
 
       <QRCodeSection commercantId={commercantId} toast={toast} />
-    </div>
-  )
-}
-
-// ─── Aperçu bouton réservation externe ────────────────────────────────────────
-// Affiche en preview le bouton qui apparaîtra sur la fiche client, avec auto-détection
-// du provider depuis l'URL collée. Si label custom, prend le custom.
-function ApercuReservation({ url, labelOverride }) {
-  if (!url || url.trim().length < 5) return null
-  const detection = detecterProviderReservation(url)
-  if (!detection.provider) {
-    return (
-      <p style={{ fontSize: 11, color: '#DC2626', fontWeight: 700, marginTop: 6 }}>
-        ⚠️ URL invalide. Vérifie que le lien commence par https://
-      </p>
-    )
-  }
-  const label = labelOverride?.trim() || detection.label
-  const isAutreProvider = detection.provider === 'autre'
-  return (
-    <div style={{ marginTop: 10, padding: 10, background: T.pale, border: `1px solid ${T.main}22`, borderRadius: 10 }}>
-      <p style={{ fontSize: 10, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px' }}>
-        Aperçu sur ta page Yoppaa
-      </p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', borderRadius: 100, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 14, boxShadow: `0 4px 16px ${T.main}44` }}>
-        <span style={{ fontSize: 16 }}>📅</span>
-        <span style={{ flex: 1 }}>{label}</span>
-        <span style={{ fontSize: 16 }}>→</span>
-      </div>
-      <p style={{ fontSize: 11, color: T.muted, margin: '8px 0 0', fontWeight: 600 }}>
-        {isAutreProvider
-          ? 'Provider non reconnu — le lien fonctionnera quand même.'
-          : <>Provider détecté : <strong style={{ color: T.main, textTransform: 'capitalize' }}>{detection.provider}</strong></>
-        }
-      </p>
     </div>
   )
 }
@@ -2946,13 +2884,10 @@ export default function ConfigDashboard({ commercantId }) {
     return () => { annule = true }
   }, [commercantId, tab])
 
-  // Onglet 'Paiements' visible si le commerçant peut prendre des paiements en ligne :
-  //   • Vitrine PRO / PRO+ (acompte RDV)
-  //   • Alimentaire BOOST / MAX (paiement obligatoire commande C&C - Phase 1.5)
-  const peutPaiements = (
-    (estVitrine && (commercant?.plan === 'pro' || commercant?.plan === 'proplus'))
-    || (!estVitrine && (commercant?.plan === 'boost' || commercant?.plan === 'max'))
-  )
+  // Onglet 'Paiements' visible uniquement pour les commerçants FULL :
+  //   • Vitrine FULL → acompte RDV en ligne
+  //   • Alimentaire FULL → paiement obligatoire commande C&C (Phase 1.5)
+  const peutPaiements = commercant?.plan === 'full'
 
   // Vitrine : on parle de "Vitrine" plutôt que "Menu", et on masque "Créneaux" (pas de C&C)
   const tabs = [

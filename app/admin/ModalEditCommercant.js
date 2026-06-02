@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
+import { PLANS } from '@/lib/plans'
 
 const T = {
   bg:       '#F8F6FF',
@@ -23,7 +24,6 @@ const T = {
   hairline: '#EEE9F5',
 }
 
-const PLANS = ['on', 'live', 'boost', 'max', 'pro', 'proplus']
 const STATUTS_PUB = ['publie', 'en_attente', 'rejete', 'suspendu']
 const CATEGORIES = ['alimentaire', 'vitrine']
 const TYPES_COMMUNS = [

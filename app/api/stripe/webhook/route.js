@@ -170,7 +170,7 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase) {
   }
 
   if (kind === PAYMENT_KIND.COMMANDE_TOTAL) {
-    // TODO Phase 1.5 : créer la commande C&C pour BOOST/MAX
+    // TODO Phase 1.5 : créer la commande C&C pour plan FULL alimentaire
     console.info('[stripe/webhook] commande C&C à créer (pas encore implémenté)', { pi: paymentIntent.id })
     return
   }

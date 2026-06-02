@@ -29,12 +29,9 @@ const BADGE_STATUT = {
 }
 
 const BADGE_PLAN = {
-  on:      { bg: '#F3F4F6', color: '#6B7280' },
-  live:    { bg: '#DBEAFE', color: '#1E40AF' },
-  boost:   { bg: '#FED7AA', color: '#9A3412' },
-  max:     { bg: '#FECACA', color: '#991B1B' },
-  pro:     { bg: '#EDE0FF', color: '#6B35C4' },
-  proplus: { bg: '#DDD6FE', color: '#5B21B6' },
+  on:     { bg: '#F3F4F6', color: '#6B7280' },
+  full:   { bg: '#EDE0FF', color: '#6B35C4' },
+  public: { bg: '#DBEAFE', color: '#1E40AF' },
 }
 
 export default function SectionTousCommercants({ toast }) {

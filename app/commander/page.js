@@ -1478,7 +1478,7 @@ export default function Commander() {
   async function chargerRdvsClient(email) {
     const { data, error } = await supabase
       .from('rdv_reservations')
-      .select('id, statut, date_rdv, heure_debut, heure_fin, prix_estime, numero_rdv, commercant_id, prestation_id, commercant:commercants(nom, slug, type, categorie), prestation:rdv_prestations(nom, duree_minutes)')
+      .select('id, statut, date_rdv, heure_debut, heure_fin, prix_estime, numero_rdv, commercant_id, prestation_id, acompte_paye_en_ligne, acompte_montant, acompte_paye_date, commercant:commercants(nom, slug, type, categorie), prestation:rdv_prestations(nom, duree_minutes)')
       .eq('client_email', email)
       .is('deleted_at', null)
       .in('statut', ['confirme', 'honore', 'annule', 'no_show'])  // tous les statuts pour Historique complet
@@ -2268,11 +2268,21 @@ export default function Commander() {
                                 <p style={{ fontWeight: 900, color: T.main, fontSize: '0.95rem', letterSpacing: '-0.3px', flexShrink: 0 }}>{Number(r.prix_estime).toFixed(0)}€</p>
                               )}
                             </div>
-                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#F0FDF4', borderRadius: 100, padding: '3px 9px', border: '1px solid #10B98122' }}>
                                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981' }}/>
                                 <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#10B981' }}>Confirmé · {heureD}–{heureF}</span>
                               </span>
+                              {r.acompte_paye_en_ligne && r.acompte_montant && (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: T.pale, borderRadius: 100, padding: '3px 9px', border: `1px solid ${T.main}22` }}>
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                                    <rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 11h20"/>
+                                  </svg>
+                                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: T.main }}>
+                                    Acompte {Number(r.acompte_montant).toFixed(2)}€ payé
+                                  </span>
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>

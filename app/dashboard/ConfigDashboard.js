@@ -2172,8 +2172,14 @@ function TabProfil({ commercantId, toast }) {
   async function saveProfil() {
     if (!form.nom.trim()) return toast('Le nom est obligatoire', 'error')
     setSaving(true)
-    await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, fidelite_actif: !!form.fidelite_actif, notif_mode: form.notif_mode || 'recap_jour' }).eq('id', commercantId)
-    setSaving(false); toast('Profil mis à jour ✓')
+    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, fidelite_actif: !!form.fidelite_actif, notif_mode: form.notif_mode || 'recap_jour' }).eq('id', commercantId)
+    setSaving(false)
+    if (error) {
+      console.error('[ConfigDashboard.saveProfil]', error)
+      toast(`Erreur enregistrement : ${error.message}`, 'error')
+      return
+    }
+    toast('Profil mis à jour ✓')
   }
 
   if (loading || !form) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>

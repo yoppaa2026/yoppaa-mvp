@@ -45,18 +45,33 @@ export async function GET(request) {
     }
 
     let session = null
-    if (stripeAccountId) {
+    const triedAccounts = []
+    const errors = []
+
+    // 1) Tentative compte plateforme (sans stripeAccount header).
+    //    Si la session a ete creee par notre route en Direct Charge (avec
+    //    stripeAccount), elle est sur le compte connected. Mais on tente
+    //    sur la plateforme aussi au cas ou (Destination Charge ou autre).
+    try {
+      session = await stripe.checkout.sessions.retrieve(sessionId)
+      if (session) console.info('[from-session] trouvee sur plateforme')
+    } catch (e) {
+      errors.push({ account: 'platform', slug: null, error: e.message, type: e.type, code: e.code })
+    }
+
+    // 2) Tentative avec le compte du commercant via slug (Direct Charge attendu).
+    if (!session && stripeAccountId) {
+      triedAccounts.push(stripeAccountId)
       try {
         session = await stripe.checkout.sessions.retrieve(sessionId, { stripeAccount: stripeAccountId })
+        if (session) console.info('[from-session] trouvee sur compte slug', stripeAccountId)
       } catch (e) {
-        console.warn('[api/rdv/from-session] retrieve KO sur compte', stripeAccountId, e.message)
+        errors.push({ account: stripeAccountId, slug, error: e.message, type: e.type, code: e.code })
       }
     }
 
-    // Fallback : boucle sur TOUS les comptes Connect (filtre charges_enabled retire,
-    // car en mode test Stripe peut etre flag a false meme apres onboarding complet).
-    const triedAccounts = stripeAccountId ? [stripeAccountId] : []
-    const errors = []
+    // 3) Fallback : boucle sur TOUS les comptes Connect (au cas ou le slug
+    //    serait mauvais ou le commercant pas trouve via slug).
     if (!session) {
       const { data: comptes } = await supabase
         .from('commercants')
@@ -70,7 +85,7 @@ export async function GET(request) {
           session = await stripe.checkout.sessions.retrieve(sessionId, { stripeAccount: c.stripe_account_id })
           if (session) break
         } catch (e) {
-          errors.push({ account: c.stripe_account_id, slug: c.slug, error: e.message })
+          errors.push({ account: c.stripe_account_id, slug: c.slug, error: e.message, type: e.type, code: e.code })
         }
       }
     }

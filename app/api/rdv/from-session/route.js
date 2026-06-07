@@ -53,27 +53,37 @@ export async function GET(request) {
       }
     }
 
-    // Fallback : boucle sur tous les comptes Connect actifs (si slug pas fourni ou compte mauvais)
+    // Fallback : boucle sur TOUS les comptes Connect (filtre charges_enabled retire,
+    // car en mode test Stripe peut etre flag a false meme apres onboarding complet).
+    const triedAccounts = stripeAccountId ? [stripeAccountId] : []
+    const errors = []
     if (!session) {
       const { data: comptes } = await supabase
         .from('commercants')
-        .select('stripe_account_id')
+        .select('stripe_account_id, slug')
         .not('stripe_account_id', 'is', null)
-        .eq('stripe_account_charges_enabled', true)
 
       for (const c of (comptes || [])) {
-        if (c.stripe_account_id === stripeAccountId) continue  // deja tente
+        if (triedAccounts.includes(c.stripe_account_id)) continue
+        triedAccounts.push(c.stripe_account_id)
         try {
           session = await stripe.checkout.sessions.retrieve(sessionId, { stripeAccount: c.stripe_account_id })
           if (session) break
         } catch (e) {
-          // Continue
+          errors.push({ account: c.stripe_account_id, slug: c.slug, error: e.message })
         }
       }
     }
 
     if (!session) {
-      return NextResponse.json({ ok: false, error: 'session introuvable', not_found: true }, { status: 404 })
+      // Debug : on retourne les comptes testes et les erreurs pour comprendre
+      console.warn('[api/rdv/from-session] session introuvable', { sessionId, triedAccounts, errors })
+      return NextResponse.json({
+        ok: false,
+        error: 'session introuvable',
+        not_found: true,
+        debug: { tried_accounts: triedAccounts, slug_resolved: !!stripeAccountId, errors },
+      }, { status: 404 })
     }
 
     const paymentIntentId = session.payment_intent

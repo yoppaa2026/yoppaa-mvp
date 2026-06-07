@@ -350,6 +350,30 @@ export default function CommanderRdvSlug() {
           acompte_montant: snapshot.acompteMontant ?? null,
         })
         setEtape(4)
+
+        // Poll pour recuperer le numero_rdv assigne par le webhook (max ~10s).
+        // Le webhook arrive async, donc on tente plusieurs fois jusqu'a ce que
+        // le RDV soit trouve en DB.
+        if (sessionId) {
+          let attempts = 0
+          const MAX_ATTEMPTS = 10
+          const pollInterval = setInterval(async () => {
+            attempts++
+            try {
+              const res = await fetch(`/api/rdv/from-session?session_id=${encodeURIComponent(sessionId)}`)
+              const j = await res.json()
+              if (j.ok && j.rdv?.numero_rdv) {
+                setRdvCree(p => ({ ...(p || {}), id: j.rdv.id, numero_rdv: j.rdv.numero_rdv, acompte_montant: j.rdv.acompte_montant ?? p?.acompte_montant }))
+                clearInterval(pollInterval)
+              } else if (attempts >= MAX_ATTEMPTS) {
+                console.warn('[rdv stripe] poll numero_rdv timeout')
+                clearInterval(pollInterval)
+              }
+            } catch (e) {
+              if (attempts >= MAX_ATTEMPTS) clearInterval(pollInterval)
+            }
+          }, 1000)
+        }
       } else {
         // Pas de snapshot (cookies cleared ?) → fallback : message + retour accueil
         setSubmitError('Paiement reçu, mais impossible d\'afficher le récap (session expirée). Ton RDV est confirmé, tu recevras l\'email de confirmation.')

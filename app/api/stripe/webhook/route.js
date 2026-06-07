@@ -86,7 +86,13 @@ export async function POST(request) {
     switch (event.type) {
 
       case 'payment_intent.succeeded':
-        await handlePaymentIntentSucceeded(event.data.object, supabase)
+        await handlePaymentIntentSucceeded(event.data.object, supabase, event.account)
+        break
+
+      case 'checkout.session.completed':
+        // Backup : stocke session_id direct depuis l'event (sans aller chercher
+        // la session via Stripe API qui peut echouer en mode test).
+        await handleCheckoutSessionCompleted(event.data.object, supabase)
         break
 
       case 'payment_intent.payment_failed':
@@ -124,7 +130,7 @@ export async function POST(request) {
 // ─── Handlers spécifiques par event.type ────────────────────────────────────
 
 // payment_intent.succeeded : crée le RDV en DB depuis les metadata
-async function handlePaymentIntentSucceeded(paymentIntent, supabase) {
+async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccount = null) {
   const meta = paymentIntent.metadata || {}
   const kind = meta.yoppaa_kind
 
@@ -168,13 +174,15 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase) {
     if (error) throw error
     console.info('[stripe/webhook] RDV créé via paiement Stripe', { rdvId, pi: paymentIntent.id })
 
-    // Recupere le session_id de la Checkout Session associee et le stocke dans
-    // rdv_reservations. Permet au frontend (retour Stripe success_url) de retrouver
-    // le RDV pour afficher le numero_rdv assigne par le trigger DB.
-    // Direct Charge : utiliser stripeAccount header pour matcher le compte connected.
+    // Tentative de stockage du session_id via Stripe API.
+    // En mode test Direct Charge ca peut echouer (bug Stripe sandbox).
+    // Le backup checkout.session.completed handler le stockera plus tard si echec ici.
     try {
-      const stripeAccountId = paymentIntent.on_behalf_of || null  // compte connected pour Direct Charge
+      // Utilise eventAccount (= event.account passe depuis le webhook) qui est plus
+      // fiable que paymentIntent.on_behalf_of (parfois null en Direct Charge).
+      const stripeAccountId = eventAccount || paymentIntent.on_behalf_of || null
       const listOpts = stripeAccountId ? { stripeAccount: stripeAccountId } : {}
+      console.info('[webhook/PI succeeded] tentative list sessions', { pi: paymentIntent.id, stripeAccountId })
       const sessions = await stripe.checkout.sessions.list(
         { payment_intent: paymentIntent.id, limit: 1 },
         listOpts
@@ -185,12 +193,12 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase) {
           .from('rdv_reservations')
           .update({ stripe_checkout_session_id: sessionId })
           .eq('id', rdvId || meta.yoppaa_rdv_id)
-        console.info('[stripe/webhook] session_id stocke', { rdvId, sessionId })
+        console.info('[stripe/webhook] session_id stocke OK', { rdvId, sessionId })
       } else {
-        console.warn('[stripe/webhook] session_id non trouve pour PI', paymentIntent.id)
+        console.warn('[stripe/webhook] session_id non trouve via list, fallback sur checkout.session.completed', paymentIntent.id)
       }
     } catch (e) {
-      console.error('[stripe/webhook] retrieve+stockage session_id KO (non-bloquant)', e?.message)
+      console.error('[stripe/webhook] list+stockage session_id KO (non-bloquant)', e?.message)
     }
 
     // Envoi des emails (non-bloquant : si l'envoi plante, on garde le RDV cree)
@@ -247,6 +255,51 @@ async function handleChargeRefunded(charge, supabase) {
     await supabase.from('commandes').update(updateData).eq('id', cmd.id)
     console.info('[stripe/webhook] refund enregistré sur commande', { cmdId: cmd.id, refund: refund.id })
   }
+}
+
+// checkout.session.completed : stocke le session_id sur le RDV qui correspond
+// au payment_intent associe. Sert de BACKUP au cas ou la list dans
+// handlePaymentIntentSucceeded a echoue (mode test Stripe peut etre capricieux).
+//
+// Cet event a TOUTES les infos directement (session.id + session.payment_intent).
+// Pas besoin d'appel Stripe API → fiable a 100%.
+//
+// Ordre des events Stripe :
+//   1. checkout.session.completed (juste apres paiement)
+//   2. payment_intent.succeeded (juste apres aussi, parfois avant)
+// Si #2 arrive en premier, #1 fait juste l'UPDATE post-creation.
+// Si #1 arrive en premier, le RDV n'existe pas encore → on retry plus tard
+// (mais ce cas est rare car les 2 events sont quasi-simultanes).
+async function handleCheckoutSessionCompleted(session, supabase) {
+  const sessionId = session.id
+  const paymentIntentId = session.payment_intent
+  if (!sessionId || !paymentIntentId) {
+    console.warn('[webhook/session.completed] session ou PI manquant', { sessionId, paymentIntentId })
+    return
+  }
+
+  // Cherche le RDV cree par payment_intent.succeeded
+  const { data: rdv } = await supabase
+    .from('rdv_reservations')
+    .select('id, stripe_checkout_session_id')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle()
+
+  if (!rdv) {
+    console.info('[webhook/session.completed] RDV pas encore cree, skip (sera fait par PI handler)', { sessionId, paymentIntentId })
+    return
+  }
+
+  if (rdv.stripe_checkout_session_id === sessionId) {
+    console.info('[webhook/session.completed] session_id deja stocke, skip', { rdvId: rdv.id })
+    return
+  }
+
+  await supabase
+    .from('rdv_reservations')
+    .update({ stripe_checkout_session_id: sessionId })
+    .eq('id', rdv.id)
+  console.info('[webhook/session.completed] session_id stocke via backup handler', { rdvId: rdv.id, sessionId })
 }
 
 // Helper : envoie emailRdvConfirme (Yopper + iCal) + emailNouveauRdvCommercant

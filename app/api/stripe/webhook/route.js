@@ -168,6 +168,31 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase) {
     if (error) throw error
     console.info('[stripe/webhook] RDV créé via paiement Stripe', { rdvId, pi: paymentIntent.id })
 
+    // Recupere le session_id de la Checkout Session associee et le stocke dans
+    // rdv_reservations. Permet au frontend (retour Stripe success_url) de retrouver
+    // le RDV pour afficher le numero_rdv assigne par le trigger DB.
+    // Direct Charge : utiliser stripeAccount header pour matcher le compte connected.
+    try {
+      const stripeAccountId = paymentIntent.on_behalf_of || null  // compte connected pour Direct Charge
+      const listOpts = stripeAccountId ? { stripeAccount: stripeAccountId } : {}
+      const sessions = await stripe.checkout.sessions.list(
+        { payment_intent: paymentIntent.id, limit: 1 },
+        listOpts
+      )
+      const sessionId = sessions?.data?.[0]?.id || null
+      if (sessionId) {
+        await supabase
+          .from('rdv_reservations')
+          .update({ stripe_checkout_session_id: sessionId })
+          .eq('id', rdvId || meta.yoppaa_rdv_id)
+        console.info('[stripe/webhook] session_id stocke', { rdvId, sessionId })
+      } else {
+        console.warn('[stripe/webhook] session_id non trouve pour PI', paymentIntent.id)
+      }
+    } catch (e) {
+      console.error('[stripe/webhook] retrieve+stockage session_id KO (non-bloquant)', e?.message)
+    }
+
     // Envoi des emails (non-bloquant : si l'envoi plante, on garde le RDV cree)
     try {
       await envoyerEmailsRdvConfirme(supabase, rdvId || meta.yoppaa_rdv_id, payload)

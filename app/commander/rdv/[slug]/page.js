@@ -351,25 +351,30 @@ export default function CommanderRdvSlug() {
         })
         setEtape(4)
 
-        // Poll pour recuperer le numero_rdv assigne par le webhook (max ~10s).
+        // Poll pour recuperer le numero_rdv assigne par le webhook (max ~15s).
         // Le webhook arrive async, donc on tente plusieurs fois jusqu'a ce que
-        // le RDV soit trouve en DB.
-        if (sessionId) {
+        // le RDV soit trouve en DB. On passe le slug du commercant pour que
+        // l'API trouve directement le bon compte Connect (vs boucle sur tous).
+        if (sessionId && slug) {
           let attempts = 0
-          const MAX_ATTEMPTS = 10
+          const MAX_ATTEMPTS = 15
           const pollInterval = setInterval(async () => {
             attempts++
+            console.info('[rdv stripe] poll attempt', attempts, '/', MAX_ATTEMPTS)
             try {
-              const res = await fetch(`/api/rdv/from-session?session_id=${encodeURIComponent(sessionId)}`)
+              const res = await fetch(`/api/rdv/from-session?session_id=${encodeURIComponent(sessionId)}&slug=${encodeURIComponent(slug)}`)
               const j = await res.json()
+              console.info('[rdv stripe] poll response', j)
               if (j.ok && j.rdv?.numero_rdv) {
                 setRdvCree(p => ({ ...(p || {}), id: j.rdv.id, numero_rdv: j.rdv.numero_rdv, acompte_montant: j.rdv.acompte_montant ?? p?.acompte_montant }))
                 clearInterval(pollInterval)
+                console.info('[rdv stripe] numero recupere', j.rdv.numero_rdv)
               } else if (attempts >= MAX_ATTEMPTS) {
-                console.warn('[rdv stripe] poll numero_rdv timeout')
+                console.warn('[rdv stripe] poll numero_rdv timeout — RDV pas trouve apres 15s')
                 clearInterval(pollInterval)
               }
             } catch (e) {
+              console.error('[rdv stripe] poll error', e)
               if (attempts >= MAX_ATTEMPTS) clearInterval(pollInterval)
             }
           }, 1000)

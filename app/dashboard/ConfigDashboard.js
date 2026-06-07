@@ -2143,7 +2143,7 @@ function TabProfil({ commercantId, toast }) {
     const { data } = await supabase.from('commercants').select('*').eq('id', commercantId).single()
     if (data) {
       const defaultHoraires = { lundi: { ouvert: true, debut: '07:00', fin: '14:00' }, mardi: { ouvert: true, debut: '07:00', fin: '14:00' }, mercredi: { ouvert: true, debut: '07:00', fin: '14:00' }, jeudi: { ouvert: true, debut: '07:00', fin: '14:00' }, vendredi: { ouvert: true, debut: '07:00', fin: '14:00' }, samedi: { ouvert: true, debut: '07:00', fin: '13:00' }, dimanche: { ouvert: false, debut: '07:00', fin: '12:00' } }
-      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'on', notif_rdv_mode: data.notif_rdv_mode || 'recap_jour', rdv_actif: !!data.rdv_actif })
+      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'on', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif })
       setLogoPreview(data.logo_url || null)
     }
     setLoading(false)
@@ -2172,7 +2172,7 @@ function TabProfil({ commercantId, toast }) {
   async function saveProfil() {
     if (!form.nom.trim()) return toast('Le nom est obligatoire', 'error')
     setSaving(true)
-    await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, fidelite_actif: !!form.fidelite_actif, notif_rdv_mode: form.notif_rdv_mode || 'recap_jour' }).eq('id', commercantId)
+    await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, fidelite_actif: !!form.fidelite_actif, notif_mode: form.notif_mode || 'recap_jour' }).eq('id', commercantId)
     setSaving(false); toast('Profil mis à jour ✓')
   }
 
@@ -2265,38 +2265,44 @@ function TabProfil({ commercantId, toast }) {
           </div>
         </div>
 
-        {/* ─── Notifications RDV (vitrine avec rdv_actif uniquement) ─── */}
-        {/* Le commercant choisit comment etre notifie des nouveaux RDV par email :
-            instantane / recap quotidien 8h / aucun. Cron Vercel gere recap_jour. */}
-        {form.categorie === 'vitrine' && form.rdv_actif && (
-          <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
-            <p style={{ ...s.label, marginBottom: 6 }}>Notifications RDV par email</p>
-            <p style={{ fontSize: 11, color: T.muted, marginBottom: 10, lineHeight: 1.5 }}>
-              Comment veux-tu être prévenu(e) des nouveaux RDV en plus du dashboard ?
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {[
-                { val: 'chaque',     icone: '⚡', label: 'À chaque nouveau RDV',         desc: 'Email instantané à chaque réservation. Idéal si tu n\'ouvres pas le dashboard souvent.' },
-                { val: 'recap_jour', icone: '📋', label: 'Récap quotidien (8h)',          desc: 'Un seul email chaque matin avec tous tes RDV de la journée. Moins intrusif.' },
-                { val: 'aucun',      icone: '🔕', label: 'Aucun email',                   desc: 'Tu consultes uniquement ton dashboard. Aucun email automatique.' },
-              ].map(opt => {
-                const actif = form.notif_rdv_mode === opt.val
-                return (
-                  <label key={opt.val}
-                    style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${actif ? T.main : T.pale}`, background: actif ? T.pale : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
-                    <input type="radio" name="notif_rdv_mode" checked={actif}
-                      onChange={() => setForm(p => ({ ...p, notif_rdv_mode: opt.val }))}
-                      style={{ width: 16, height: 16, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>{opt.icone} {opt.label}</p>
-                      <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>{opt.desc}</p>
-                    </div>
-                  </label>
-                )
-              })}
+        {/* ─── Notifications RDV ou Commandes ─── */}
+        {/* Toggle unique notif_mode (chaque/recap_jour/aucun) qui s'applique aux RDV
+            pour les vitrines ET aux commandes C&C pour les alimentaires FULL.
+            Label adapte selon categorie (un commercant n'est jamais les deux). */}
+        {((form.categorie === 'vitrine' && form.rdv_actif) || (form.categorie === 'alimentaire' && form.plan === 'full')) && (() => {
+          const estVitrine = form.categorie === 'vitrine'
+          const noun = estVitrine ? 'RDV' : 'commandes'
+          const nounSing = estVitrine ? 'RDV' : 'commande'
+          return (
+            <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
+              <p style={{ ...s.label, marginBottom: 6 }}>Notifications {noun} par email</p>
+              <p style={{ fontSize: 11, color: T.muted, marginBottom: 10, lineHeight: 1.5 }}>
+                Comment veux-tu être prévenu(e) des nouvelles {noun} en plus du dashboard ?
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {[
+                  { val: 'chaque',     icone: '⚡', label: `À chaque nouvelle ${nounSing.toLowerCase() === 'rdv' ? 'demande' : nounSing}`, desc: `Email instantané à chaque ${nounSing.toLowerCase() === 'rdv' ? 'réservation' : 'commande'}. Idéal si tu n'ouvres pas le dashboard souvent.` },
+                  { val: 'recap_jour', icone: '📋', label: 'Récap quotidien (8h)',           desc: `Un seul email chaque matin avec tous tes ${noun} de la journée. Moins intrusif.` },
+                  { val: 'aucun',      icone: '🔕', label: 'Aucun email',                    desc: 'Tu consultes uniquement ton dashboard. Aucun email automatique.' },
+                ].map(opt => {
+                  const actif = form.notif_mode === opt.val
+                  return (
+                    <label key={opt.val}
+                      style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${actif ? T.main : T.pale}`, background: actif ? T.pale : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
+                      <input type="radio" name="notif_mode" checked={actif}
+                        onChange={() => setForm(p => ({ ...p, notif_mode: opt.val }))}
+                        style={{ width: 16, height: 16, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>{opt.icone} {opt.label}</p>
+                        <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>{opt.desc}</p>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* ─── Toggles FULL (alimentaire uniquement) ─── */}
         {/* Les commercants FULL alim peuvent choisir d'activer/desactiver

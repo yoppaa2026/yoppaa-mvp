@@ -22,6 +22,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
+import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant } from '@/lib/resend'
+import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 
 // Désactive le body parsing automatique de Next pour récupérer le raw body
 export const config = { api: { bodyParser: false } }
@@ -165,7 +167,13 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase) {
     const { error } = await supabase.from('rdv_reservations').insert(payload)
     if (error) throw error
     console.info('[stripe/webhook] RDV créé via paiement Stripe', { rdvId, pi: paymentIntent.id })
-    // TODO : envoyer email confirmation au client + alerte au commerçant (RDV-9)
+
+    // Envoi des emails (non-bloquant : si l'envoi plante, on garde le RDV cree)
+    try {
+      await envoyerEmailsRdvConfirme(supabase, rdvId || meta.yoppaa_rdv_id, payload)
+    } catch (e) {
+      console.error('[stripe/webhook] envoi emails RDV KO (non-bloquant)', e)
+    }
     return
   }
 
@@ -213,6 +221,101 @@ async function handleChargeRefunded(charge, supabase) {
   if (cmd) {
     await supabase.from('commandes').update(updateData).eq('id', cmd.id)
     console.info('[stripe/webhook] refund enregistré sur commande', { cmdId: cmd.id, refund: refund.id })
+  }
+}
+
+// Helper : envoie emailRdvConfirme (Yopper + iCal) + emailNouveauRdvCommercant
+// (si notif_mode='chaque'). Appelé depuis handlePaymentIntentSucceeded apres
+// insert RDV. Non-bloquant : erreurs loguees mais ne font pas planter le webhook.
+async function envoyerEmailsRdvConfirme(supabase, rdvId, fallbackPayload) {
+  // Fetch les jointures fraiches pour avoir nom commercant + presta + email
+  const { data: rdv } = await supabase
+    .from('rdv_reservations')
+    .select(`
+      id, date_rdv, heure_debut, heure_fin, duree_minutes, prix_estime,
+      acompte_paye_en_ligne, acompte_montant,
+      client_email, client_prenom, client_nom, client_telephone, notes_client,
+      commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode),
+      prestation:rdv_prestations(nom)
+    `)
+    .eq('id', rdvId)
+    .maybeSingle()
+
+  // Fallback : si le RDV n'est pas (encore) findable, on construit depuis le payload.
+  // Mais sans nom commercant ni presta, on ne peut pas envoyer un email decent → skip.
+  if (!rdv?.commercant?.nom || !rdv?.prestation?.nom) {
+    console.warn('[webhook/emails] RDV jointures incompletes, skip emails', { rdvId })
+    return
+  }
+
+  // 1) Email Yopper + iCal
+  if (rdv.client_email) {
+    const ics = generateRdvIcs({
+      id: rdv.id,
+      date_rdv: rdv.date_rdv,
+      heure_debut: rdv.heure_debut,
+      heure_fin: rdv.heure_fin,
+      prestation_nom: rdv.prestation.nom,
+      commercant_nom: rdv.commercant.nom,
+      commercant_adresse: rdv.commercant.adresse || '',
+      commercant_telephone: rdv.commercant.telephone,
+      commercant_email: rdv.commercant.email,
+      prix_estime: rdv.prix_estime,
+      rappel_24h: true,
+      status: 'CONFIRMED',
+      method: 'REQUEST',
+      sequence: 0,
+    })
+    const attachment = icsToBase64Attachment(ics, `rdv-${rdv.id}.ics`)
+
+    const html = emailRdvConfirme({
+      yopper_prenom:           rdv.client_prenom || 'Yopper',
+      commercant_nom:          rdv.commercant.nom,
+      commercant_adresse:      rdv.commercant.adresse || '',
+      commercant_slug:         rdv.commercant.slug || '',
+      prestation_nom:          rdv.prestation.nom,
+      date_rdv:                rdv.date_rdv,
+      heure_debut:             rdv.heure_debut,
+      heure_fin:               rdv.heure_fin,
+      duree_minutes:           rdv.duree_minutes,
+      prix_estime:             rdv.prix_estime,
+      acompte_paye:            !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),
+      acompte_montant:         rdv.acompte_montant,
+      delai_annulation_heures: rdv.commercant.rdv_delai_annulation_heures || 24,
+    })
+
+    await envoyerAuCommercant({
+      to: rdv.client_email,
+      subject: `Ton RDV chez ${rdv.commercant.nom} est confirmé`,
+      html,
+      attachments: [attachment],
+    })
+  }
+
+  // 2) Email Commercant si notif_mode='chaque'
+  if (rdv.commercant.notif_mode === 'chaque' && rdv.commercant.email) {
+    const html = emailNouveauRdvCommercant({
+      nom_commercant:  rdv.commercant.nom,
+      yopper_prenom:   rdv.client_prenom,
+      yopper_nom:      rdv.client_nom,
+      yopper_email:    rdv.client_email,
+      yopper_telephone:rdv.client_telephone,
+      prestation_nom:  rdv.prestation.nom,
+      date_rdv:        rdv.date_rdv,
+      heure_debut:     rdv.heure_debut,
+      heure_fin:       rdv.heure_fin,
+      duree_minutes:   rdv.duree_minutes,
+      prix_estime:     rdv.prix_estime,
+      acompte_paye:    !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),
+      acompte_montant: rdv.acompte_montant,
+      notes_client:    rdv.notes_client,
+    })
+
+    await envoyerAuCommercant({
+      to: rdv.commercant.email,
+      subject: `Nouveau RDV — ${rdv.client_prenom || 'Yopper'} ${rdv.date_rdv}`,
+      html,
+    })
   }
 }
 

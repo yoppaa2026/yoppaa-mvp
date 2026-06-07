@@ -821,6 +821,15 @@ export default function CommanderRdvSlug() {
       setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
       console.info('[rdv] success, etape=4')
 
+      // Envoi emails post-confirmation (non-bloquant, fire-and-forget)
+      if (rdvId) {
+        fetch('/api/emails/rdv-confirme', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rdv_id: rdvId }),
+        }).catch(e => console.warn('[rdv] emails fire-and-forget KO', e))
+      }
+
     } catch (e) {
       // Filet de sécurité : toute exception non gérée tombe ici
       console.error('[rdv] passerRdv exception', e)

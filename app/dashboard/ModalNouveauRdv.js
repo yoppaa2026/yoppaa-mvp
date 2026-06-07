@@ -208,7 +208,17 @@ export default function ModalNouveauRdv({
         return
       }
 
-      // 6) Success : callback + close
+      // 6) Email de confirmation au Yopper (non-bloquant, fire-and-forget).
+      //    Pas d'email commercant (c'est lui qui cree le RDV, il sait deja).
+      if (rdvId && (email.trim() || null)) {
+        fetch('/api/emails/rdv-confirme', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rdv_id: rdvId }),
+        }).catch(e => console.warn('[ModalNouveauRdv] emails fire-and-forget KO', e))
+      }
+
+      // 7) Success : callback + close
       if (onCreated) onCreated()
       onClose()
 

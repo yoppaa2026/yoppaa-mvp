@@ -1,0 +1,112 @@
+// POST /api/emails/commande-confirmee
+//
+// Envoie 2 emails apres confirmation d'une commande C&C alim :
+//   1. emailCommandeConfirmee → au Yopper
+//   2. emailNouvelleCommandeCommercant → au commercant si notif_mode='chaque'
+//
+// Body : { commande_id: UUID }
+
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { envoyerAuCommercant, emailCommandeConfirmee, emailNouvelleCommandeCommercant } from '@/lib/resend'
+
+export async function POST(request) {
+  try {
+    const { commande_id } = await request.json()
+    if (!commande_id) {
+      return NextResponse.json({ ok: false, error: 'commande_id requis' }, { status: 400 })
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      { auth: { persistSession: false } }
+    )
+
+    // Fetch commande + articles + commercant + creneau
+    const { data: cmd, error: errCmd } = await supabase
+      .from('commandes')
+      .select(`
+        id, numero_commande, total, notes_client, date_commande,
+        client_email, client_prenom, client_nom, client_telephone,
+        commercant:commercants(id, nom, slug, adresse, email, notif_mode),
+        creneau:creneaux(heure_debut, heure_fin),
+        articles:commande_articles(quantite, prix_unitaire, prix_total, option_libelle, article:articles(nom))
+      `)
+      .eq('id', commande_id)
+      .single()
+
+    if (errCmd || !cmd) {
+      console.error('[emails/commande-confirmee] Commande introuvable', { commande_id, errCmd })
+      return NextResponse.json({ ok: false, error: 'Commande introuvable' }, { status: 404 })
+    }
+
+    // Mise a plat des articles pour le template
+    const articlesFlat = (cmd.articles || []).map(a => ({
+      nom:            a.article?.nom || '—',
+      quantite:       a.quantite,
+      option_libelle: a.option_libelle,
+      prix_total:     a.prix_total,
+    }))
+
+    // 1) Email Yopper
+    if (cmd.client_email) {
+      try {
+        const html = emailCommandeConfirmee({
+          yopper_prenom:     cmd.client_prenom || 'Yopper',
+          commercant_nom:    cmd.commercant?.nom || '',
+          commercant_adresse:cmd.commercant?.adresse || '',
+          commercant_slug:   cmd.commercant?.slug || '',
+          numero_commande:   cmd.numero_commande,
+          articles:          articlesFlat,
+          total:             cmd.total,
+          date_retrait:      cmd.date_commande,
+          heure_debut:       cmd.creneau?.heure_debut,
+          heure_fin:         cmd.creneau?.heure_fin,
+        })
+
+        await envoyerAuCommercant({
+          to: cmd.client_email,
+          subject: `Ta commande chez ${cmd.commercant?.nom || 'le commerçant'} est confirmée`,
+          html,
+        })
+      } catch (e) {
+        console.error('[emails/commande-confirmee] envoi Yopper KO', e)
+      }
+    }
+
+    // 2) Email Commercant si notif_mode='chaque'
+    if (cmd.commercant?.notif_mode === 'chaque' && cmd.commercant?.email) {
+      try {
+        const html = emailNouvelleCommandeCommercant({
+          nom_commercant:  cmd.commercant.nom,
+          yopper_prenom:   cmd.client_prenom,
+          yopper_nom:      cmd.client_nom,
+          yopper_email:    cmd.client_email,
+          yopper_telephone:cmd.client_telephone,
+          numero_commande: cmd.numero_commande,
+          articles:        articlesFlat,
+          total:           cmd.total,
+          date_retrait:    cmd.date_commande,
+          heure_debut:     cmd.creneau?.heure_debut,
+          heure_fin:       cmd.creneau?.heure_fin,
+          notes_client:    cmd.notes_client,
+        })
+
+        await envoyerAuCommercant({
+          to: cmd.commercant.email,
+          subject: `Nouvelle commande #${cmd.numero_commande || ''} — ${cmd.client_prenom || 'Yopper'}`,
+          html,
+        })
+      } catch (e) {
+        console.error('[emails/commande-confirmee] envoi Commercant KO', e)
+      }
+    }
+
+    return NextResponse.json({ ok: true })
+
+  } catch (e) {
+    console.error('[emails/commande-confirmee] exception', e)
+    return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })
+  }
+}

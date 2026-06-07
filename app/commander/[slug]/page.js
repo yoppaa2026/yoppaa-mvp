@@ -1257,6 +1257,16 @@ export default function CommanderSlug() {
     setDerniereCommande({ ...commande, client_id: cid, numeroSequentiel: commande.numero_commande })
     setEtape(4)
     setLoadingCommande(false)
+
+    // Email confirmation Yopper + email commercant si notif_mode='chaque'
+    // (non-bloquant, fire-and-forget — le user voit deja l'ecran de confirmation)
+    if (commande?.id) {
+      fetch('/api/emails/commande-confirmee', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commande_id: commande.id }),
+      }).catch(e => console.warn('[commande] emails fire-and-forget KO', e))
+    }
     } catch (e) {
       // Garde-fou anti-freeze : sans ce catch, toute exception (cidPromise undefined,
       // RLS deny, network) laissait le bouton bloque sur "En cours..." sans signal.

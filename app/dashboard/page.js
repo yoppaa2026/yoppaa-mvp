@@ -734,6 +734,16 @@ export default function Dashboard() {
   async function changerStatut(commandeId, statut) {
     await supabase.from('commandes').update({ statut }).eq('id', commandeId)
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, statut } : c))
+
+    // Si on passe a 'pret' : email au Yopper pour le prevenir
+    // (non-bloquant, fire-and-forget — l'UI commercant est deja a jour)
+    if (statut === 'pret') {
+      fetch('/api/emails/commande-prete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commande_id: commandeId }),
+      }).catch(e => console.warn('[dashboard] email commande-prete KO', e))
+    }
   }
 
   async function changerStatutRdv(rdvId, statut) {

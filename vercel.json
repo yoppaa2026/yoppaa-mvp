@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/recap-jour-8h",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/rdv-reminder-9h",
+      "schedule": "0 7 * * *"
+    }
+  ]
+}

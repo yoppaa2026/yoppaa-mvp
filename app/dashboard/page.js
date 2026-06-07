@@ -754,6 +754,21 @@ export default function Dashboard() {
       return
     }
     setRdvs(prev => prev.map(r => r.id === rdvId ? { ...r, statut } : r))
+
+    // Si statut change → emails contextuels (non-bloquant, fire-and-forget)
+    if (statut === 'annule') {
+      fetch('/api/emails/rdv-annule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rdv_id: rdvId, raison_annulation: 'commercant' }),
+      }).catch(e => console.warn('[dashboard] email rdv-annule KO', e))
+    } else if (statut === 'honore') {
+      fetch('/api/emails/rdv-honore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rdv_id: rdvId }),
+      }).catch(e => console.warn('[dashboard] email rdv-honore KO', e))
+    }
   }
 
   async function seDeconnecter() {

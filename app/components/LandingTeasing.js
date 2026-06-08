@@ -221,7 +221,7 @@ export default function LandingTeasing() {
 
         {/* Footer minimal */}
         <footer style={{ marginTop: 60, fontSize: 11, color: T.light, opacity: 0.6, lineHeight: 1.7 }}>
-          <p style={{ margin: 0 }}>📧 bonjour@yoppaa.app · 📍 Mettet, Belgique</p>
+          <p style={{ margin: 0 }}>📧 hello@yoppaa.app · 📍 Mettet, Belgique</p>
           <p style={{ margin: '6px 0 0' }}>Yoppaa est un projet d'Avcotech SRL · BCE 0731.637.148</p>
         </footer>
       </main>

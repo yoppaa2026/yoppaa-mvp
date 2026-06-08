@@ -107,7 +107,7 @@ export default function LegalPage() {
               Avcotech SRL · Forme juridique : Société à Responsabilité Limitée (SRL) de droit belge{'\n'}
               Numéro d'entreprise (BCE) : 0731.637.148 · Numéro de TVA : BE0731.637.148{'\n'}
               Siège social : Rue de Prée 9G, 5640 Mettet, Belgique{'\n'}
-              Email : bonjour@yoppaa.app · Support : support@yoppaa.app
+              Email : hello@yoppaa.app · Support : support@yoppaa.app
             </InfoBox>
             <P>Yoppaa est un produit et une marque commerciale d'Avcotech SRL.</P>
 

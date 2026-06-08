@@ -72,7 +72,7 @@ export default function LegalPage() {
         </div>
         <h1 style={{ fontWeight: 900, fontSize: '2rem', color: '#fff', letterSpacing: '-1px', marginBottom: 6 }}>yoppaa</h1>
         <p style={{ fontSize: '0.85rem', color: T.light, fontWeight: 600 }}>Mentions légales & Conditions d'utilisation</p>
-        <p style={{ fontSize: '0.75rem', color: 'rgba(196,160,244,0.6)', marginTop: 6 }}>Avcotech SRL · BCE 0731.367.148 · Rue de Prée 9G, 5640 Mettet</p>
+        <p style={{ fontSize: '0.75rem', color: 'rgba(196,160,244,0.6)', marginTop: 6 }}>Avcotech SRL · BCE 0731.637.148 · Rue de Prée 9G, 5640 Mettet</p>
       </div>
 
       <style>{`
@@ -105,7 +105,7 @@ export default function LegalPage() {
             <P>La plateforme Yoppaa (accessible via yoppaa.app) est éditée par :</P>
             <InfoBox>
               Avcotech SRL · Forme juridique : Société à Responsabilité Limitée (SRL) de droit belge{'\n'}
-              Numéro d'entreprise (BCE) : 0731.367.148 · Numéro de TVA : BE0731.367.148{'\n'}
+              Numéro d'entreprise (BCE) : 0731.637.148 · Numéro de TVA : BE0731.637.148{'\n'}
               Siège social : Rue de Prée 9G, 5640 Mettet, Belgique{'\n'}
               Email : bonjour@yoppaa.app · Support : support@yoppaa.app
             </InfoBox>
@@ -201,7 +201,7 @@ export default function LegalPage() {
           {/* 4. CONFIDENTIALITÉ */}
           <Section id="confidentialite" title="4. Politique de confidentialité et cookies">
             <H3>Responsable du traitement</H3>
-            <P>Avcotech SRL · BCE 0731.367.148 · dpo@yoppaa.app</P>
+            <P>Avcotech SRL · BCE 0731.637.148 · dpo@yoppaa.app</P>
 
             <H3>Données collectées</H3>
             <P><strong>Clients :</strong> prénom, nom, email, téléphone, historique des commandes, consentements RGPD, données de localisation (si autorisées).</P>
@@ -291,7 +291,7 @@ export default function LegalPage() {
                 Document établi le {new Date().toLocaleDateString('fr-BE', { day: 'numeric', month: 'long', year: 'numeric' })}
               </p>
               <p style={{ fontSize: '0.75rem', color: T.muted }}>
-                Avcotech SRL · BCE 0731.367.148 · TVA BE0731.367.148 · Rue de Prée 9G, 5640 Mettet
+                Avcotech SRL · BCE 0731.637.148 · TVA BE0731.637.148 · Rue de Prée 9G, 5640 Mettet
               </p>
               <p style={{ fontSize: '0.72rem', color: '#9CA3AF', marginTop: 8, fontStyle: 'italic' }}>
                 Ces textes constituent une base légale sérieuse mais ne remplacent pas l'avis d'un juriste qualifié.

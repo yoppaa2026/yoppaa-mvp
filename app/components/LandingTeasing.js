@@ -130,7 +130,7 @@ export default function LandingTeasing() {
         </h1>
         <p style={{ fontSize: '1.05rem', color: T.light, lineHeight: 1.6, maxWidth: 480, margin: '0 0 36px', opacity: 0.92 }}>
           Un projet belge. Un projet pour ton quartier.<br/>
-          Reveal complet le <strong style={{ color: '#fff' }}>7 juillet 2026</strong>.
+          Lancement complet le <strong style={{ color: '#fff' }}>7 juillet 2026</strong>.
         </p>
 
         {/* Compteur */}
@@ -161,7 +161,7 @@ export default function LandingTeasing() {
           <form onSubmit={soumettre} style={{ background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 18, padding: '24px 22px', maxWidth: 460, width: '100%', backdropFilter: 'blur(12px)' }}>
             <p style={{ fontSize: 14, fontWeight: 800, color: '#fff', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.8 }}>Sois prévenu en premier</p>
             <p style={{ fontSize: 12, color: T.light, margin: '0 0 16px', opacity: 0.85, lineHeight: 1.5 }}>
-              Laisse-nous ton email et le 7 juillet, tu seras le premier à découvrir Yoppaa.
+              Laisse-nous ton email et le 7 juillet, tu seras parmi les premiers à découvrir Yoppaa.
             </p>
 
             <input type="email" required placeholder="Ton email"
@@ -204,7 +204,7 @@ export default function LandingTeasing() {
 
             <button type="submit" disabled={statut.envoi === 'envoi' || !formValide}
               style={{ width: '100%', padding: '14px', borderRadius: 100, border: 'none', background: !formValide || statut.envoi === 'envoi' ? 'rgba(255,255,255,0.12)' : `linear-gradient(135deg, ${T.light}, ${T.mid})`, color: !formValide || statut.envoi === 'envoi' ? 'rgba(255,255,255,0.5)' : T.ink, fontWeight: 900, fontSize: 14, letterSpacing: 0.5, textTransform: 'uppercase', cursor: !formValide || statut.envoi === 'envoi' ? 'not-allowed' : 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s', marginTop: 4 }}>
-              {statut.envoi === 'envoi' ? 'Envoi…' : 'Me prévenir du reveal'}
+              {statut.envoi === 'envoi' ? 'Envoi…' : 'Me prévenir du lancement'}
             </button>
 
             {statut.envoi === 'ko' && statut.message && (
@@ -222,7 +222,7 @@ export default function LandingTeasing() {
         {/* Footer minimal */}
         <footer style={{ marginTop: 60, fontSize: 11, color: T.light, opacity: 0.6, lineHeight: 1.7 }}>
           <p style={{ margin: 0 }}>📧 bonjour@yoppaa.app · 📍 Mettet, Belgique</p>
-          <p style={{ margin: '6px 0 0' }}>Yoppaa est un projet d'Avcotech SRL · BCE 0731.637.418</p>
+          <p style={{ margin: '6px 0 0' }}>Yoppaa est un projet d'Avcotech SRL · BCE 0731.367.148</p>
         </footer>
       </main>
 

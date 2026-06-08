@@ -1,0 +1,180 @@
+// POST /api/pre-inscription
+//
+// Endpoint public pour capturer les inscriptions de la landing page.
+// Mode Teasing : capture minimaliste (email + code postal + type + message libre).
+// Mode Reveal : meme structure (le type discrimine la liste Brevo cible).
+//
+// Workflow :
+//   1. Verification Cloudflare Turnstile (anti-bot)
+//   2. Validation format email + code postal belge (4 chiffres)
+//   3. Insert dans Supabase (table pre_inscriptions, UNIQUE email+type → upsert)
+//   4. Sync avec Brevo (liste Teasing / Yoppers / Commercants selon mode+type)
+//   5. Envoi email Resend "Merci, tu seras prevenu"
+//
+// Body :
+//   {
+//     email: string,
+//     code_postal: string,            // 4 chiffres belges
+//     type_utilisateur: 'yopper' | 'commercant' | 'curieux',
+//     message?: string,
+//     turnstile_token: string,
+//     consentement_marketing: boolean,
+//     utm_source?, utm_medium?, utm_campaign?
+//   }
+//
+// Le mode_landing est determine par le serveur via la date courante vs
+// LANDING_REVEAL_DATE (pas par le client). Plus fiable.
+
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { verifyTurnstileToken } from '@/lib/turnstile'
+import { syncContactToBrevo, pickBrevoListId } from '@/lib/brevo'
+import { envoyerAuCommercant } from '@/lib/resend'
+import { emailMerciPreinscription } from '@/lib/resend-landing'
+import { getLandingMode } from '@/lib/landing-mode'
+
+const TYPES_AUTORISES = ['yopper', 'commercant', 'curieux']
+const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const RE_CP_BE = /^\d{4}$/
+
+export async function POST(request) {
+  try {
+    const body = await request.json()
+    const {
+      email, code_postal, type_utilisateur, message,
+      turnstile_token, consentement_marketing,
+      utm_source, utm_medium, utm_campaign,
+    } = body || {}
+
+    // 1) Validations basiques
+    if (!email || !RE_EMAIL.test(email.trim().toLowerCase())) {
+      return NextResponse.json({ ok: false, error: 'Email invalide' }, { status: 400 })
+    }
+    if (!code_postal || !RE_CP_BE.test(String(code_postal).trim())) {
+      return NextResponse.json({ ok: false, error: 'Code postal belge requis (4 chiffres)' }, { status: 400 })
+    }
+    if (!TYPES_AUTORISES.includes(type_utilisateur)) {
+      return NextResponse.json({ ok: false, error: 'Type utilisateur invalide' }, { status: 400 })
+    }
+    if (consentement_marketing !== true) {
+      return NextResponse.json({ ok: false, error: 'Consentement marketing requis' }, { status: 400 })
+    }
+
+    // 2) Verification Turnstile
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null
+    const turnstileResult = await verifyTurnstileToken(turnstile_token, ip)
+    if (!turnstileResult.success && !turnstileResult.skipped) {
+      return NextResponse.json({ ok: false, error: 'Verification Turnstile echouee', codes: turnstileResult.errorCodes }, { status: 401 })
+    }
+
+    // 3) Determine le mode landing actuel (cote serveur, pas confiance au client)
+    const mode_landing = getLandingMode()
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      { auth: { persistSession: false } }
+    )
+
+    const emailNormalise = String(email).trim().toLowerCase()
+    const codePostalNormalise = String(code_postal).trim()
+    const messageNormalise = message ? String(message).trim().slice(0, 1000) : null
+
+    // 4) Upsert dans Supabase (UNIQUE email+type → on update si existe deja)
+    const { data: rowExistant } = await supabase
+      .from('pre_inscriptions')
+      .select('id')
+      .eq('type_utilisateur', type_utilisateur)
+      .ilike('email', emailNormalise)
+      .maybeSingle()
+
+    let preInscriptionId = rowExistant?.id || null
+
+    if (preInscriptionId) {
+      // Update : on rafraichit le code postal et le message au cas ou
+      await supabase
+        .from('pre_inscriptions')
+        .update({
+          code_postal: codePostalNormalise,
+          message: messageNormalise,
+          mode_landing,
+          source: mode_landing === 'teasing' ? 'teasing' : (utm_source || 'direct'),
+          utm_source, utm_medium, utm_campaign,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', preInscriptionId)
+    } else {
+      const userAgent = request.headers.get('user-agent') || null
+      const { data: nouvelle, error: errIns } = await supabase
+        .from('pre_inscriptions')
+        .insert({
+          email: emailNormalise,
+          code_postal: codePostalNormalise,
+          type_utilisateur,
+          message: messageNormalise,
+          mode_landing,
+          source: mode_landing === 'teasing' ? 'teasing' : (utm_source || 'direct'),
+          utm_source, utm_medium, utm_campaign,
+          user_agent: userAgent,
+          consentement_marketing: true,
+        })
+        .select('id')
+        .single()
+      if (errIns) {
+        console.error('[pre-inscription] insert KO', errIns)
+        return NextResponse.json({ ok: false, error: 'Erreur enregistrement' }, { status: 500 })
+      }
+      preInscriptionId = nouvelle.id
+    }
+
+    // 5) Sync Brevo (non-bloquant : si Brevo down, on garde la pre-inscription)
+    try {
+      const listId = pickBrevoListId({ mode_landing, type_utilisateur })
+      if (listId) {
+        const brevoRes = await syncContactToBrevo({
+          email: emailNormalise,
+          listId,
+          attributes: {
+            CODE_POSTAL: codePostalNormalise,
+            TYPE_UTILISATEUR: type_utilisateur,
+            MODE_LANDING: mode_landing,
+            SOURCE: mode_landing === 'teasing' ? 'teasing' : (utm_source || 'direct'),
+            MESSAGE: messageNormalise || '',
+          },
+        })
+        await supabase
+          .from('pre_inscriptions')
+          .update({
+            brevo_contact_id: brevoRes.id ? String(brevoRes.id) : null,
+            brevo_sync_at: new Date().toISOString(),
+          })
+          .eq('id', preInscriptionId)
+      }
+    } catch (e) {
+      console.error('[pre-inscription] sync Brevo KO (non-bloquant)', e?.message)
+    }
+
+    // 6) Envoi email de remerciement (non-bloquant)
+    try {
+      const html = emailMerciPreinscription({
+        mode_landing,
+        type_utilisateur,
+      })
+      await envoyerAuCommercant({
+        to: emailNormalise,
+        subject: mode_landing === 'teasing'
+          ? 'Merci 🟣 Tu fais partie des premiers curieux'
+          : 'Bienvenue dans la communauté Yoppaa 🟣',
+        html,
+      })
+    } catch (e) {
+      console.error('[pre-inscription] email remerciement KO (non-bloquant)', e?.message)
+    }
+
+    return NextResponse.json({ ok: true, mode_landing })
+
+  } catch (e) {
+    console.error('[pre-inscription] exception', e)
+    return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })
+  }
+}

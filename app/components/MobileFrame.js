@@ -100,18 +100,19 @@ export default function MobileFrame({ children }) {
           mise en page mobile normale.
           margin auto centre horizontalement.
           Background blanc + bord arrondi + ombre élégante = look "device". */}
-      <div style={{
+      <div className="yp-mobile-frame" style={{
         position: 'relative',
         maxWidth: 600,
         margin: '24px auto',
-        background: '#1a1a1a',                   // bord noir du device
-        minHeight: 'calc(100vh - 48px)',
-        border: '13px solid #1a1a1a',            // épaisseur du cadre device
-        borderRadius: 60,                        // courbure iPhone moderne
-        boxShadow: '0 40px 120px rgba(0,0,0,0.55), 0 0 0 1px rgba(196,160,244,0.2), 0 0 100px rgba(150,96,244,0.35), inset 0 0 0 1px rgba(255,255,255,0.04)',
+        background: '#fff',                       // contenu blanc directement
+        border: '13px solid #1a1a1a',             // épaisseur du cadre noir
+        borderRadius: 60,                         // courbure iPhone moderne
+        boxShadow: '0 40px 120px rgba(0,0,0,0.55), 0 0 0 1px rgba(196,160,244,0.2), 0 0 100px rgba(150,96,244,0.35)',
         zIndex: 1,
+        // PAS de minHeight ni d'overflow : le cadre s'etire avec le contenu,
+        // le scroll wheel passe normalement, pas de blocage.
       }}>
-        {/* Encoche / Dynamic Island en haut centré (style iPhone moderne) */}
+        {/* Encoche / Dynamic Island en haut centrée (style iPhone moderne) */}
         <div style={{
           position: 'absolute',
           top: -3, left: '50%', transform: 'translateX(-50%)',
@@ -121,18 +122,23 @@ export default function MobileFrame({ children }) {
           zIndex: 100,
           boxShadow: '0 1px 3px rgba(0,0,0,0.6)',
         }}/>
-
-        {/* Inner screen blanc avec bord arrondi qui suit le cadre */}
-        <div style={{
-          background: '#fff',
-          borderRadius: 44,
-          overflow: 'hidden',
-          minHeight: '100%',
-          position: 'relative',
-        }}>
-          {children}
-        </div>
+        {children}
       </div>
+
+      {/* CSS global : force 1 colonne pour les grids 2 cols a l'interieur du
+          mobile frame. Sur ecran >= 1024px, les cards qui sont en grid
+          repeat(2, ...) deviennent etroites (300px) car la frame fait 600px.
+          On force grid-template-columns: 1fr pour avoir 1 colonne pleine
+          largeur, beaucoup plus lisible. */}
+      <style jsx global>{`
+        @media (min-width: 1024px) {
+          .yp-mobile-frame [style*="repeat(2"],
+          .yp-mobile-frame [style*="grid-template-columns:repeat(2"],
+          .yp-mobile-frame .grid-2col {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </>
   )
 }

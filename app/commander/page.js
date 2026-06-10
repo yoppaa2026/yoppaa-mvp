@@ -1071,23 +1071,29 @@ function CategoriesScroll({ categorieActive, setCategorieActive }) {
 
 // ─── Icône SVG : enveloppe ouverte avec soleil dedans (Option D) ──────────────
 // Concept : le rabat de l'enveloppe est plié vers le haut (ouvert), révélant un
-// petit soleil au centre. Métaphore "le matin contenu dans une lettre" : le
+// soleil rayonnant au centre. Métaphore "le matin contenu dans une lettre" : le
 // yopper ouvre sa lettre du jour et le soleil en sort. Style outline cohérent
 // avec les autres icônes du header Yoppaa.
-function IconCourrierMatin({ size = 20, color = '#fff' }) {
+function IconCourrierMatin({ size = 24, color = '#fff' }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
       {/* Rabat triangulaire ouvert vers le haut */}
-      <polyline points="4 9 12 4 20 9"/>
+      <polyline points="3 9 12 3 21 9"/>
       {/* Corps de l'enveloppe */}
-      <rect x="4" y="9" width="16" height="12" rx="1.8"/>
+      <rect x="3" y="9" width="18" height="13" rx="2"/>
       {/* Soleil plein au centre du corps */}
-      <circle cx="12" cy="15" r="1.9" fill={color} stroke="none"/>
-      {/* 4 rayons compacts (haut/bas/gauche/droite) */}
-      <line x1="12"   y1="11.5" x2="12"   y2="12.2"/>
-      <line x1="12"   y1="17.8" x2="12"   y2="18.5"/>
-      <line x1="8.5"  y1="15"   x2="9.2"  y2="15"/>
-      <line x1="14.8" y1="15"   x2="15.5" y2="15"/>
+      <circle cx="12" cy="15.5" r="1.9" fill={color} stroke="none"/>
+      {/* 8 rayons (cardinaux + diagonaux) pour effet 'sparkle' / soleil éclatant */}
+      {/* Cardinaux */}
+      <line x1="12"    y1="11.3" x2="12"    y2="12.4"/>
+      <line x1="12"    y1="18.6" x2="12"    y2="19.7"/>
+      <line x1="7.8"   y1="15.5" x2="8.9"   y2="15.5"/>
+      <line x1="15.1"  y1="15.5" x2="16.2"  y2="15.5"/>
+      {/* Diagonaux (à 45°) */}
+      <line x1="9"     y1="12.5" x2="9.8"   y2="13.3"/>
+      <line x1="14.2"  y1="17.7" x2="15"    y2="18.5"/>
+      <line x1="15"    y1="12.5" x2="14.2"  y2="13.3"/>
+      <line x1="9.8"   y1="17.7" x2="9"     y2="18.5"/>
     </svg>
   )
 }
@@ -1101,7 +1107,7 @@ function BoutonGoodMorning({ onClick, nonVu }) {
       aria-label={nonVu ? 'Bon matin, ton Good Morning Yoppers est arrivé' : 'Good Morning Yoppers'}
       style={{
         position: 'relative',
-        width: 38, height: 38, borderRadius: '50%',
+        width: 44, height: 44, borderRadius: '50%',
         background: nonVu ? 'rgba(196,160,244,0.28)' : 'rgba(255,255,255,0.12)',
         backdropFilter: 'blur(12px)',
         border: `1px solid ${nonVu ? 'rgba(196,160,244,0.6)' : 'rgba(255,255,255,0.18)'}`,
@@ -1110,7 +1116,7 @@ function BoutonGoodMorning({ onClick, nonVu }) {
         fontFamily: 'inherit',
         transition: 'all 0.2s',
       }}>
-      <IconCourrierMatin size={18} color="#fff"/>
+      <IconCourrierMatin size={24} color="#fff"/>
       {nonVu && (
         <>
           <span aria-hidden="true" style={{

@@ -103,14 +103,35 @@ export default function MobileFrame({ children }) {
       <div style={{
         position: 'relative',
         maxWidth: 600,
-        margin: '0 auto',
-        background: '#fff',
-        minHeight: '100vh',
-        boxShadow: '0 40px 120px rgba(0,0,0,0.55), 0 0 0 1px rgba(196,160,244,0.2), 0 0 100px rgba(150,96,224,0.35)',
-        borderRadius: 0,
+        margin: '24px auto',
+        background: '#1a1a1a',                   // bord noir du device
+        minHeight: 'calc(100vh - 48px)',
+        border: '13px solid #1a1a1a',            // épaisseur du cadre device
+        borderRadius: 60,                        // courbure iPhone moderne
+        boxShadow: '0 40px 120px rgba(0,0,0,0.55), 0 0 0 1px rgba(196,160,244,0.2), 0 0 100px rgba(150,96,244,0.35), inset 0 0 0 1px rgba(255,255,255,0.04)',
         zIndex: 1,
       }}>
-        {children}
+        {/* Encoche / Dynamic Island en haut centré (style iPhone moderne) */}
+        <div style={{
+          position: 'absolute',
+          top: -3, left: '50%', transform: 'translateX(-50%)',
+          width: 130, height: 28,
+          background: '#0a0a0a',
+          borderRadius: '0 0 22px 22px',
+          zIndex: 100,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.6)',
+        }}/>
+
+        {/* Inner screen blanc avec bord arrondi qui suit le cadre */}
+        <div style={{
+          background: '#fff',
+          borderRadius: 44,
+          overflow: 'hidden',
+          minHeight: '100%',
+          position: 'relative',
+        }}>
+          {children}
+        </div>
       </div>
     </>
   )

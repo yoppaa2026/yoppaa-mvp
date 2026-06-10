@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import ModalSignalement from '../../ModalSignalement'
+import ModalSignalerProbleme from './ModalSignalerProbleme'
 import PillStatutOuverture, { getDayBrussels, getCreneauxJour } from '@/app/components/PillStatutOuverture'
 
 // Design system canonique
@@ -343,6 +344,9 @@ export default function FicheServicePublic({ params }) {
   const [showSignalement, setShowSignalement] = useState(false)
   const [signalementSent, setSignalementSent] = useState(false)
   const [showSurtaxe, setShowSurtaxe] = useState(false)
+  // État pour ModalSignalerProbleme : null = fermée, sinon le type ('nid_poule', 'depot_sauvage', 'egout', 'autre')
+  const [signalerType, setSignalerType] = useState(null)
+  const [signalerSent, setSignalerSent] = useState(false)
 
   useEffect(() => {
     Promise.resolve(params).then(p => setSlug(p?.slug))
@@ -512,6 +516,55 @@ export default function FicheServicePublic({ params }) {
         <AgentQuartierPicker agents={service.donnees_riches.agents_quartier}/>
       )}
 
+      {/* Section "Signaler un problème" — uniquement pour les fiches type=commune */}
+      {service.type === 'commune' && (
+        <div style={{ padding: '14px 18px 8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap' }}>
+              Signaler un problème
+            </span>
+            <div style={{ flex: 1, height: 1, background: T.hairline }}/>
+          </div>
+          <p style={{ fontSize: 12, color: T.muted, margin: '0 0 12px', lineHeight: 1.5 }}>
+            Vu un nid de poule, un dépôt sauvage&nbsp;? Préviens la commune en 3 clics avec photo géolocalisée.
+          </p>
+
+          {signalerSent ? (
+            <div style={{ background: '#D1FAE5', borderRadius: 12, padding: '14px 16px', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontSize: 13, color: '#065F46', fontWeight: 800 }}>
+                ✓ Merci, signalement envoyé à la commune 🟣
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+              {[
+                { type: 'nid_poule',     emoji: '🕳️',  label: 'Nid de poule' },
+                { type: 'depot_sauvage', emoji: '🗑️', label: 'Dépôt sauvage' },
+                { type: 'egout',         emoji: '🚰', label: 'Égout bouché' },
+              ].map(item => (
+                <button key={item.type} onClick={() => setSignalerType(item.type)}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '16px 10px', background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', transition: 'all 0.15s' }}
+                  onMouseOver={e => { e.currentTarget.style.borderColor = T.main; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 6px 16px ${T.main}25` }}
+                  onMouseOut={e => { e.currentTarget.style.borderColor = T.pale; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}>
+                  <span style={{ fontSize: 28, lineHeight: 1 }}>{item.emoji}</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: T.ink, letterSpacing: '-0.1px' }}>{item.label}</span>
+                </button>
+              ))}
+              {/* Éclairage public = lien externe ORES (pas de signalement Yoppaa) */}
+              <a href="https://www.ores.be/panne-eclairage" target="_blank" rel="noopener noreferrer"
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '16px 10px', background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 14, textDecoration: 'none', textAlign: 'center', transition: 'all 0.15s' }}
+                onMouseOver={e => { e.currentTarget.style.borderColor = T.main; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 6px 16px ${T.main}25` }}
+                onMouseOut={e => { e.currentTarget.style.borderColor = T.pale; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}>
+                <span style={{ fontSize: 28, lineHeight: 1 }}>💡</span>
+                <span style={{ fontSize: 12, fontWeight: 800, color: T.ink, letterSpacing: '-0.1px' }}>
+                  Éclairage public <span style={{ fontSize: 9, color: T.muted, fontWeight: 600 }}>(ORES →)</span>
+                </span>
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Actions principales — Appeler / Email / Itinéraire / Site
           minmax(0, 1fr) au lieu de 1fr : empêche les colonnes de déborder du
           parent quand le contenu interne (ex : email zp.sambreetmeuse@police.belgium.eu)
@@ -661,6 +714,17 @@ export default function FicheServicePublic({ params }) {
           yopperId={typeof window !== 'undefined' ? localStorage.getItem('yoppaa_client_id') : null}
           onClose={() => setShowSignalement(false)}
           onSent={() => setSignalementSent(true)}
+        />
+      )}
+
+      {/* Modal signalement citoyen (nid de poule, dépôt sauvage, égout) */}
+      {signalerType && (
+        <ModalSignalerProbleme
+          service={{ id: service.id, nom: service.nom, slug: service.slug }}
+          type={signalerType}
+          yopperId={typeof window !== 'undefined' ? localStorage.getItem('yoppaa_client_id') : null}
+          onClose={() => setSignalerType(null)}
+          onSent={() => { setSignalerType(null); setSignalerSent(true) }}
         />
       )}
 

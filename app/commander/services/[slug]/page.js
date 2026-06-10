@@ -114,21 +114,16 @@ function AgentQuartierPicker({ agents }) {
   const matchedAgent = village ? agents.find(a => (a.villages || []).includes(village)) : null
 
   // T.deep / T.main / T.pale viennent de la portée parent (constantes en haut du fichier)
+  // Pas de titre interne : la description sert d'intro (la section "## Ton agent de quartier"
+  // dans le markdown du service introduit déjà le picker).
   return (
-    <div style={{ padding: '14px 18px 8px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap' }}>
-          Ton agent de quartier
-        </span>
-        <div style={{ flex: 1, height: 1, background: T.hairline }}/>
-      </div>
-
+    <div style={{ padding: '8px 18px 8px', boxSizing: 'border-box', maxWidth: '100%' }}>
       {/* Picker village */}
       <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, letterSpacing: '0.3px' }}>
         Sélectionne ton village
       </label>
       <select value={village} onChange={e => setVillage(e.target.value)}
-        style={{ width: '100%', padding: '12px 40px 12px 14px', fontSize: 14, fontWeight: 600, border: `1.5px solid ${T.pale}`, borderRadius: 12, background: '#fff', color: T.ink, fontFamily: 'inherit', cursor: 'pointer', WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none',
+        style={{ width: '100%', boxSizing: 'border-box', padding: '12px 40px 12px 14px', fontSize: 14, fontWeight: 600, border: `1.5px solid ${T.pale}`, borderRadius: 12, background: '#fff', color: T.ink, fontFamily: 'inherit', cursor: 'pointer', WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none',
           backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B35C4' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>")`,
           backgroundRepeat: 'no-repeat', backgroundPosition: 'right 16px center', marginBottom: 14 }}>
         <option value="">— Choisir mon village —</option>
@@ -136,7 +131,7 @@ function AgentQuartierPicker({ agents }) {
       </select>
 
       {/* Liste des agents avec highlight du match */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: '100%' }}>
         {agents.map(agent => {
           const isMatch  = matchedAgent && agent.nom === matchedAgent.nom
           const isDimmed = village && !isMatch
@@ -148,16 +143,16 @@ function AgentQuartierPicker({ agents }) {
                 background: isMatch ? `linear-gradient(135deg, ${T.ink}, ${T.main})` : '#fff',
                 color:      isMatch ? '#fff' : T.ink,
                 border:     isMatch ? 'none' : `1px solid ${T.pale}`,
-                borderLeft: isMatch ? 'none' : `4px solid ${T.deep}`,
+                borderLeft: isMatch ? `4px solid ${T.main}` : `4px solid ${T.deep}`,
                 borderRadius: 12, padding: '12px 14px',
                 opacity:    isDimmed ? 0.5 : 1,
-                transition: 'opacity 0.2s, transform 0.2s',
-                transform:  isMatch ? 'scale(1.02)' : 'scale(1)',
+                transition: 'opacity 0.2s, box-shadow 0.2s',
                 boxShadow:  isMatch ? `0 8px 22px ${T.main}55` : 'none',
+                boxSizing: 'border-box', maxWidth: '100%', overflow: 'hidden',
               }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 4 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 14, fontWeight: 800, margin: 0, color: isMatch ? '#fff' : T.ink, letterSpacing: '-0.2px' }}>
+                  <p style={{ fontSize: 14, fontWeight: 800, margin: 0, color: isMatch ? '#fff' : T.ink, letterSpacing: '-0.2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {agent.nom}
                   </p>
                   <p style={{ fontSize: 11, fontWeight: 600, margin: '2px 0 0', color: isMatch ? 'rgba(255,255,255,0.85)' : T.muted, letterSpacing: '0.2px' }}>
@@ -172,7 +167,7 @@ function AgentQuartierPicker({ agents }) {
               </div>
 
               {agent.villages && agent.villages.length > 0 && (
-                <p style={{ fontSize: 11, color: isMatch ? 'rgba(255,255,255,0.92)' : T.deep, margin: '6px 0 0', lineHeight: 1.4, fontWeight: 600 }}>
+                <p style={{ fontSize: 11, color: isMatch ? 'rgba(255,255,255,0.92)' : T.deep, margin: '6px 0 0', lineHeight: 1.4, fontWeight: 600, wordBreak: 'break-word' }}>
                   📍 {agent.villages.join(' · ')}
                 </p>
               )}

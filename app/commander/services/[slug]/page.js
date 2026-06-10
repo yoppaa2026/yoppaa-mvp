@@ -167,7 +167,7 @@ function AgentQuartierPicker({ agents }) {
               </div>
 
               {agent.villages && agent.villages.length > 0 && (
-                <p style={{ fontSize: 11, color: isMatch ? 'rgba(255,255,255,0.92)' : T.deep, margin: '6px 0 0', lineHeight: 1.4, fontWeight: 600, wordBreak: 'break-word' }}>
+                <p style={{ fontSize: 11, color: isMatch ? 'rgba(255,255,255,0.92)' : T.deep, margin: '6px 0 0', lineHeight: 1.4, fontWeight: 600, overflowWrap: 'anywhere' }}>
                   📍 {agent.villages.join(' · ')}
                 </p>
               )}
@@ -416,7 +416,7 @@ export default function FicheServicePublic({ params }) {
     : service.adresse ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(service.adresse)}` : null
 
   return (
-    <div style={{ minHeight: '100vh', background: T.bgPage, fontFamily: '"DM Sans", sans-serif', maxWidth: 760, margin: '0 auto' }}>
+    <div style={{ minHeight: '100vh', background: T.bgPage, fontFamily: '"DM Sans", sans-serif', maxWidth: 760, margin: '0 auto', overflowX: 'hidden' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 
       {/* Topbar : retour */}

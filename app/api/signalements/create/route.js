@@ -119,7 +119,7 @@ export async function POST(request) {
 
     // 6) Insert du signalement
     const { data: signalement, error: insertError } = await supabase
-      .from('signalements')
+      .from('signalements_citoyens')
       .insert({
         service_id,
         yopper_id,
@@ -175,7 +175,7 @@ export async function POST(request) {
         email_id = emailData?.id
         // Marquer le signalement comme "mail envoyé"
         await supabase
-          .from('signalements')
+          .from('signalements_citoyens')
           .update({ email_envoye_at: new Date().toISOString() })
           .eq('id', signalement.id)
       }

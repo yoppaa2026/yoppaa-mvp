@@ -67,7 +67,7 @@ INSERT INTO services_publics (
   NULL,
   NULL,
   NULL,
-  NULL,
+  ARRAY[]::text[],  -- codes_postaux NOT NULL en BDD : array vide pour les services nationaux
   NULL
 ),
 
@@ -83,7 +83,7 @@ INSERT INTO services_publics (
   E'⚠ Numéro surtaxé\n\nLe 0903 99 000 coûte 1,50 € par minute.\n\nSi vous le pouvez, utilisez plutôt le site officiel pharmacie.be qui est gratuit et indique la pharmacie de garde la plus proche.',
   NULL,
   'https://www.pharmacie.be/trouver-une-pharmacie-de-garde',
-  NULL,
+  ARRAY[]::text[],  -- codes_postaux NOT NULL en BDD : array vide pour les services nationaux
   NULL
 )
 

@@ -603,9 +603,78 @@ export default function CommanderSlug() {
 
   const [categorieActive, setCategorieActive] = useState(null)
   const [catBarVisible, setCatBarVisible] = useState(false)
+
+  // Favoris + partage : 2 boutons en overlay sur le hero photo (pattern TGTG)
+  const [estFavori, setEstFavori] = useState(false)
+  const [favoriLoading, setFavoriLoading] = useState(false)
+  const [toastMessage, setToastMessage] = useState(null)
   const catRefs = useRef({})
   const headerRef = useRef(null)
   const scrollRef = useRef(null)
+
+  // Lecture de l'état favori au mount (et quand clientId / commercant changent)
+  useEffect(() => {
+    if (!clientId || !commercant?.id) return
+    let annule = false
+    ;(async () => {
+      const { data } = await supabase
+        .from('favoris')
+        .select('client_id')
+        .eq('client_id', clientId)
+        .eq('commercant_id', commercant.id)
+        .maybeSingle()
+      if (!annule) setEstFavori(!!data)
+    })()
+    return () => { annule = true }
+  }, [clientId, commercant?.id])
+
+  // Toggle favori (création/suppression dans la table favoris)
+  async function toggleFavori() {
+    if (!commercant?.id || favoriLoading) return
+    if (!client.email || !clientId) {
+      // Pas connecté → redirige vers auth avec retour sur cette fiche
+      router.push(`/commander/auth?redirect=/commander/${slug}`)
+      return
+    }
+    setFavoriLoading(true)
+    try {
+      if (estFavori) {
+        await supabase.from('favoris').delete().eq('client_id', clientId).eq('commercant_id', commercant.id)
+        setEstFavori(false)
+        setToastMessage('Retiré de tes favoris')
+      } else {
+        await supabase.from('favoris').insert({ client_id: clientId, commercant_id: commercant.id })
+        setEstFavori(true)
+        setToastMessage(`${commercant.nom} ajouté à tes favoris 🟣`)
+      }
+      setTimeout(() => setToastMessage(null), 2500)
+    } finally {
+      setFavoriLoading(false)
+    }
+  }
+
+  // Partage natif (Web Share API) avec fallback copy URL
+  async function partagerFiche() {
+    const url = typeof window !== 'undefined' ? window.location.href : `https://www.yoppaa.app/commander/${slug}`
+    const text = commercant ? `Découvre ${commercant.nom} sur Yoppaa 🟣` : 'Découvre ce commerce sur Yoppaa'
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title: commercant?.nom || 'Yoppaa', text, url })
+      } catch (e) {
+        // L'utilisateur a annulé : on ne fait rien (AbortError est normal)
+        if (e.name !== 'AbortError') console.warn('[share] échec', e)
+      }
+      return
+    }
+    // Fallback : copier l'URL dans le presse-papier
+    try {
+      await navigator.clipboard.writeText(url)
+      setToastMessage('Lien copié dans le presse-papier 🟣')
+    } catch (e) {
+      setToastMessage('Impossible de partager — copie l\'URL manuellement')
+    }
+    setTimeout(() => setToastMessage(null), 2500)
+  }
 
   useEffect(() => {
     // Vrai "desktop" = mouse-only (hover + pointer fine). Exclut iPad/Android tablette qui peuvent
@@ -1525,6 +1594,45 @@ export default function CommanderSlug() {
                   }
                   {/* Voile dégradé bas pour finition visuelle */}
                   <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, background: 'linear-gradient(to top, rgba(22,6,54,0.5), transparent)' }}/>
+
+                  {/* Boutons overlay haut-droit : Partager + Favoris (pattern TGTG)
+                      Partage = viralité organique (crucial scalabilité).
+                      Favoris = engagement / retention du yopper. */}
+                  <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 5, display: 'flex', gap: 8 }}>
+                    <button onClick={partagerFiche} aria-label="Partager la fiche"
+                      style={{
+                        width: 42, height: 42, borderRadius: '50%',
+                        background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)',
+                        border: 'none', cursor: 'pointer', flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 4px 14px rgba(0,0,0,0.22)',
+                        fontFamily: 'inherit',
+                      }}>
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/>
+                        <polyline points="16 6 12 2 8 6"/>
+                        <line x1="12" y1="2" x2="12" y2="15"/>
+                      </svg>
+                    </button>
+                    <button onClick={toggleFavori} disabled={favoriLoading}
+                      aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                      style={{
+                        width: 42, height: 42, borderRadius: '50%',
+                        background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)',
+                        border: 'none', cursor: favoriLoading ? 'wait' : 'pointer', flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 4px 14px rgba(0,0,0,0.22)',
+                        fontFamily: 'inherit',
+                        transition: 'transform 0.15s',
+                      }}>
+                      <svg width="19" height="19" viewBox="0 0 24 24"
+                        fill={estFavori ? '#DC2626' : 'none'}
+                        stroke={estFavori ? '#DC2626' : T.deep}
+                        strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Card flottante : logo + type + nom + statut + actions
@@ -2301,6 +2409,21 @@ export default function CommanderSlug() {
           onClose={() => setShowSignalement(false)}
           onSent={() => setSignalementSent(true)}
         />
+      )}
+
+      {/* Toast de confirmation (favoris ajouté/retiré, lien copié) */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+          background: T.ink, color: '#fff', padding: '12px 22px', borderRadius: 100,
+          fontSize: 13, fontWeight: 700, zIndex: 1000,
+          boxShadow: '0 10px 30px rgba(26,8,64,0.45)',
+          animation: 'toastIn 0.25s ease',
+          maxWidth: '90vw',
+        }}>
+          {toastMessage}
+          <style>{`@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 10px) } to { opacity: 1; transform: translate(-50%, 0) } }`}</style>
+        </div>
       )}
     </>
   )

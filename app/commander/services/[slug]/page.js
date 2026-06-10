@@ -108,6 +108,7 @@ export default function FicheServicePublic({ params }) {
   const [slug, setSlug] = useState(null)
   const [showSignalement, setShowSignalement] = useState(false)
   const [signalementSent, setSignalementSent] = useState(false)
+  const [showSurtaxe, setShowSurtaxe] = useState(false)
 
   useEffect(() => {
     Promise.resolve(params).then(p => setSlug(p?.slug))
@@ -270,14 +271,21 @@ export default function FicheServicePublic({ params }) {
 
       {/* Actions principales — Appeler / Email / Itinéraire / Site */}
       <div style={{ padding: '12px 14px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-        {service.telephone && (
-          <a href={`tel:${service.telephone}`}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '14px 10px', borderRadius: 14, background: `linear-gradient(135deg, ${couleurAccent}, ${isUrgence ? '#991B1B' : T.main})`, color: '#fff', textDecoration: 'none', fontWeight: 800, fontSize: 13, gap: 6, boxShadow: `0 6px 18px ${isUrgence ? '#DC262633' : T.main + '33'}` }}>
-            <IconPhone size={20} color="#fff"/>
-            <span>Appeler</span>
-            <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.85 }}>{service.telephone}</span>
-          </a>
-        )}
+        {service.telephone && (() => {
+          // Si telephone_notice est défini : on intercepte avec une modal (ex : numéro surtaxé).
+          // Sinon : appel direct via lien tel:
+          const sharedStyle = { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '14px 10px', borderRadius: 14, background: `linear-gradient(135deg, ${couleurAccent}, ${isUrgence ? '#991B1B' : T.main})`, color: '#fff', textDecoration: 'none', fontWeight: 800, fontSize: 13, gap: 6, boxShadow: `0 6px 18px ${isUrgence ? '#DC262633' : T.main + '33'}`, fontFamily: 'inherit', border: 'none', cursor: 'pointer' }
+          const inner = (
+            <>
+              <IconPhone size={20} color="#fff"/>
+              <span>Appeler</span>
+              <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.85 }}>{service.telephone}</span>
+            </>
+          )
+          return service.telephone_notice
+            ? <button onClick={() => setShowSurtaxe(true)} style={sharedStyle}>{inner}</button>
+            : <a href={`tel:${service.telephone}`} style={sharedStyle}>{inner}</a>
+        })()}
         {mapsUrl && (
           <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
             style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '14px 10px', borderRadius: 14, background: '#fff', color: T.ink, textDecoration: 'none', fontWeight: 800, fontSize: 13, gap: 6, border: `1.5px solid ${T.pale}` }}>
@@ -380,6 +388,40 @@ export default function FicheServicePublic({ params }) {
           onClose={() => setShowSignalement(false)}
           onSent={() => setSignalementSent(true)}
         />
+      )}
+
+      {/* Modal de confirmation avant appel d'un numéro avec notice (ex : surtaxé) */}
+      {showSurtaxe && (
+        <div onClick={() => setShowSurtaxe(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(26,8,64,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 18, maxWidth: 380, width: '100%', padding: '24px 22px', boxShadow: '0 12px 40px rgba(26,8,64,0.35)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
+                  <path d="M12 9v4M12 17h.01"/>
+                </svg>
+              </div>
+              <p style={{ fontSize: 16, fontWeight: 800, color: T.ink, margin: 0, letterSpacing: '-0.3px' }}>
+                Avant d&rsquo;appeler
+              </p>
+            </div>
+            <p style={{ fontSize: 13.5, color: T.ink, margin: '0 0 18px', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
+              {service.telephone_notice}
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button onClick={() => setShowSurtaxe(false)}
+                style={{ padding: '12px 16px', borderRadius: 100, background: '#fff', color: T.ink, border: `1.5px solid ${T.pale}`, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Annuler
+              </button>
+              <a href={`tel:${service.telephone}`} onClick={() => setShowSurtaxe(false)}
+                style={{ padding: '12px 16px', borderRadius: 100, background: `linear-gradient(135deg, ${T.ink}, ${T.main})`, color: '#fff', border: 'none', textDecoration: 'none', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                Appeler quand même
+              </a>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

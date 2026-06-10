@@ -482,6 +482,13 @@ export default function GoodMorningYoppersPage() {
   const [visible, setVisible] = useState(false)
   const ctx = getMorningContext()
 
+  // Marque le Good Morning du jour comme "vu" → le badge violet pulse
+  // du bouton header disparait jusqu'au lendemain.
+  useEffect(() => {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Brussels' })  // YYYY-MM-DD
+    localStorage.setItem(`yoppaa_gm_seen_${today}`, '1')
+  }, [])
+
   // Communes : principale (du Yopper) + switch temporaire (session) + liste pour le sélecteur
   const [communePrincipale, setCommunePrincipale] = useState(null)
   const [communeSwitch, setCommuneSwitch] = useState(null)

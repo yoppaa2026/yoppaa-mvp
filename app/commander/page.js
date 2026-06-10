@@ -1069,9 +1069,72 @@ function CategoriesScroll({ categorieActive, setCategorieActive }) {
   )
 }
 
+// ─── Icône SVG : enveloppe + soleil pour Good Morning Yoppers ────────────────
+// Style outline cohérent avec les autres icônes du header. Le soleil au-dessus
+// évoque le matin, l'enveloppe en-dessous le "courrier du jour".
+function IconCourrierMatin({ size = 20, color = '#fff' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      {/* Soleil avec rayons (compact, au-dessus de l'enveloppe) */}
+      <circle cx="12" cy="5" r="2" fill={color} stroke="none"/>
+      <line x1="12" y1="0.5" x2="12" y2="1.8"/>
+      <line x1="6.7" y1="5"   x2="8"    y2="5"/>
+      <line x1="16"  y1="5"   x2="17.3" y2="5"/>
+      <line x1="8.3" y1="1.3" x2="9.2"  y2="2.2"/>
+      <line x1="14.8" y1="1.3" x2="15.7" y2="2.2"/>
+      {/* Enveloppe */}
+      <rect x="3" y="10" width="18" height="12" rx="2.5"/>
+      <polyline points="3 12.5 12 18 21 12.5"/>
+    </svg>
+  )
+}
+
+// ─── Bouton "Good Morning Yoppers" du header ─────────────────────────────────
+// Affiche un badge violet pulse si le yopper n'a pas vu son Good Morning
+// aujourd'hui (localStorage gm_seen_YYYY-MM-DD). Au tap, navigue vers /commander/morning.
+function BoutonGoodMorning({ onClick, nonVu }) {
+  return (
+    <button onClick={onClick}
+      aria-label={nonVu ? 'Bon matin, ton Good Morning Yoppers est arrivé' : 'Good Morning Yoppers'}
+      style={{
+        position: 'relative',
+        width: 38, height: 38, borderRadius: '50%',
+        background: nonVu ? 'rgba(196,160,244,0.28)' : 'rgba(255,255,255,0.12)',
+        backdropFilter: 'blur(12px)',
+        border: `1px solid ${nonVu ? 'rgba(196,160,244,0.6)' : 'rgba(255,255,255,0.18)'}`,
+        color: '#fff', cursor: 'pointer', flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: 'inherit',
+        transition: 'all 0.2s',
+      }}>
+      <IconCourrierMatin size={18} color="#fff"/>
+      {nonVu && (
+        <>
+          <span aria-hidden="true" style={{
+            position: 'absolute', top: 3, right: 3,
+            width: 9, height: 9, borderRadius: '50%',
+            background: '#C4A0F4',
+            boxShadow: '0 0 0 2px rgba(22,6,54,0.9), 0 0 8px rgba(196,160,244,0.7)',
+            animation: 'gmDotPulse 1.6s ease-in-out infinite',
+          }}/>
+          <style>{`@keyframes gmDotPulse { 0%,100% { transform: scale(1); opacity: 1 } 50% { transform: scale(1.35); opacity: 0.55 } }`}</style>
+        </>
+      )}
+    </button>
+  )
+}
+
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function Commander() {
   const router = useRouter()
+
+  // Good Morning Yoppers : badge pulse violet si le yopper n'a pas encore vu
+  // sa page morning aujourd'hui. Flag set quand il visite /commander/morning.
+  const [gmNonVu, setGmNonVu] = useState(false)
+  useEffect(() => {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Brussels' })  // YYYY-MM-DD
+    setGmNonVu(!localStorage.getItem(`yoppaa_gm_seen_${today}`))
+  }, [])
 
   const [showSplash, setShowSplash] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -1896,7 +1959,9 @@ export default function Commander() {
               </p>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
-              <button onClick={() => { if (!showLocManuelle) demanderGeolocalisation(); setShowLocManuelle(false) }}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <BoutonGoodMorning nonVu={gmNonVu} onClick={() => router.push('/commander/morning')}/>
+                <button onClick={() => { if (!showLocManuelle) demanderGeolocalisation(); setShowLocManuelle(false) }}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(12px)', border: `1px solid ${T.light}33`, borderRadius: 100, padding: '0.45rem 0.875rem 0.45rem 0.75rem', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', transition: 'all 0.2s', letterSpacing: '-0.2px' }}>
                 {geoLoading
                   ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="9" stroke="white" strokeWidth="2.5" strokeDasharray="30 10" strokeLinecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></circle></svg>
@@ -1909,6 +1974,7 @@ export default function Commander() {
                   {geoLoading ? 'Localisation...' : rue || locManuelle || (position ? 'Près de toi' : 'Activer GPS')}
                 </span>
               </button>
+              </div>
               <button onClick={() => setShowLocManuelle(v => !v)}
                 style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'rgba(196,160,244,0.7)', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}>
                 {showLocManuelle

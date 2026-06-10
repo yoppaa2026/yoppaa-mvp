@@ -463,7 +463,7 @@ export default function FicheServicePublic({ params }) {
                 {typeLabel}
               </span>
             </div>
-            <h1 style={{ fontWeight: 900, fontSize: '1.4rem', color: T.ink, letterSpacing: '-0.5px', margin: 0, lineHeight: 1.15 }}>
+            <h1 style={{ fontWeight: 900, fontSize: '1.4rem', color: T.ink, letterSpacing: '-0.5px', margin: 0, lineHeight: 1.15, overflowWrap: 'break-word', wordBreak: 'normal', hyphens: 'auto' }}>
               {service.nom}
             </h1>
             {/* Pill statut d'ouverture (temps réel Bruxelles) — visible si horaires_detail défini */}

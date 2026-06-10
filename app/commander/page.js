@@ -2008,27 +2008,10 @@ export default function Commander() {
                 </div>
               )}
 
-              {/* ─── Services & Administrations (Plan PUBLIC) ─────────────── */}
-              {/* Section single, urgences nationales en tête, services locaux après.
-                  Tri DB : national DESC, type, nom. */}
-              {servicesPublics.length > 0 && (
-                <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: `1px solid ${T.pale}` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '1.2px' }}>
-                      Services & administrations
-                    </span>
-                    <div style={{ flex: 1, height: 1, background: T.pale }}/>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>
-                      {servicesPublics.length}
-                    </span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
-                    {servicesPublics.map(s => (
-                      <CarteServicePublic key={s.id} s={s} onSelect={() => router.push(`/commander/services/${s.slug}`)}/>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* ─── Section "Services & administrations" RETIRÉE de la home ───
+                  Toutes ces fiches restent accessibles via l'onglet "Officiel".
+                  Le state servicesPublics + le fetch sont conservés car l'onglet
+                  Officiel et la détection d'alerte urgente les utilisent encore. */}
             </div>
           )}
 

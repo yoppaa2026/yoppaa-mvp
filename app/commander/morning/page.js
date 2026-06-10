@@ -473,26 +473,44 @@ function DealCard({ d, shown, delay }) {
 }
 
 function ActuCard({ d, shown, delay }) {
+  // Une alerte = bordure + accents rouges + badge ALERTE en tête
+  const isAlerte = d.alerte
   return (
     <div className="gmy-anim" style={{ opacity: shown ? 1 : 0, transform: shown ? 'translateY(0)' : 'translateY(8px)', transition: 'all 0.4s cubic-bezier(0.16,1,0.3,1)', transitionDelay: `${delay}ms` }}>
-      <div className="gmy-card-hover" style={{ border: `1px solid ${T.hairline}`, borderRadius: 16, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.2s ease', background: '#fff' }}>
+      <div className="gmy-card-hover" style={{
+        border: isAlerte ? '1px solid #FECACA' : `1px solid ${T.hairline}`,
+        borderLeft: isAlerte ? '4px solid #DC2626' : `1px solid ${T.hairline}`,
+        borderRadius: 16, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.2s ease',
+        background: isAlerte ? '#FEF2F2' : '#fff',
+        boxShadow: isAlerte ? '0 4px 16px rgba(220,38,38,0.10)' : 'none',
+      }}>
+        {/* Badge ALERTE en tête si urgence */}
+        {isAlerte && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px 3px 7px', background: '#DC2626', borderRadius: 100, marginBottom: 10 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', animation: 'gmyAlertPulse 1.4s ease-in-out infinite' }}/>
+            <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', letterSpacing: '0.7px', textTransform: 'uppercase' }}>
+              Alerte
+            </span>
+            <style>{`@keyframes gmyAlertPulse { 0%,100% { opacity: 1 } 50% { opacity: 0.45 } }`}</style>
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 10, background: T.bgPage, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 10, background: isAlerte ? '#FEE2E2' : T.bgPage, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>
             {d.type}
           </div>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: T.deep, letterSpacing: '0.8px', textTransform: 'uppercase' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: isAlerte ? '#991B1B' : T.deep, letterSpacing: '0.8px', textTransform: 'uppercase' }}>
               {d.commerce}
             </div>
-            <div style={{ fontSize: 10, color: T.main }}>{d.categorie}</div>
+            <div style={{ fontSize: 10, color: isAlerte ? '#DC2626' : T.main, fontWeight: isAlerte ? 700 : 400 }}>{d.categorie}</div>
           </div>
         </div>
-        <div style={{ height: 1, background: T.hairline, marginBottom: 10 }}/>
-        <div style={{ fontFamily: '"Playfair Display", serif', fontStyle: 'italic', fontSize: 13, color: T.deep, lineHeight: 1.55, marginBottom: 10 }}>
+        <div style={{ height: 1, background: isAlerte ? '#FECACA' : T.hairline, marginBottom: 10 }}/>
+        <div style={{ fontFamily: '"Playfair Display", serif', fontStyle: 'italic', fontSize: 13, color: isAlerte ? '#7F1D1D' : T.deep, lineHeight: 1.55, marginBottom: 10 }}>
           &laquo;&nbsp;{d.actu}&nbsp;&raquo;
         </div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: T.main, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-          Lire <IconArrow size={11} color={T.main}/>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: isAlerte ? '#DC2626' : T.main, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+          Lire <IconArrow size={11} color={isAlerte ? '#DC2626' : T.main}/>
         </div>
       </div>
     </div>

@@ -1108,7 +1108,7 @@ function BoutonGoodMorning({ onClick, nonVu }) {
       aria-label={nonVu ? 'Bon matin, ton Good Morning Yoppers est arrivé' : 'Good Morning Yoppers'}
       style={{
         position: 'relative',
-        width: 44, height: 44, borderRadius: '50%',
+        width: 46, height: 46, borderRadius: '50%',
         background: nonVu ? 'rgba(196,160,244,0.28)' : 'rgba(255,255,255,0.12)',
         backdropFilter: 'blur(12px)',
         border: `1px solid ${nonVu ? 'rgba(196,160,244,0.6)' : 'rgba(255,255,255,0.18)'}`,
@@ -1117,7 +1117,7 @@ function BoutonGoodMorning({ onClick, nonVu }) {
         fontFamily: 'inherit',
         transition: 'all 0.2s',
       }}>
-      <IconCourrierMatin size={24} color="#fff"/>
+      <IconCourrierMatin size={30} color="#fff"/>
       {nonVu && (
         <>
           <span aria-hidden="true" style={{

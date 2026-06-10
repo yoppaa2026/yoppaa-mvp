@@ -799,13 +799,13 @@ function CarteServicePublic({ s, onSelect }) {
           <span style={{ fontSize: 10, fontWeight: 600, color: T.muted, letterSpacing: '0.3px' }}>
             {typeLabel}
           </span>
+          {s.horaires_detail && Object.keys(s.horaires_detail).length > 0 && (
+            <PillStatutOuverture horaires={s.horaires_detail} compact/>
+          )}
         </div>
-        <p style={{ fontSize: 13.5, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px', margin: '0 0 4px', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <p style={{ fontSize: 13.5, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px', margin: 0, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {s.nom}
         </p>
-        {s.horaires_detail && Object.keys(s.horaires_detail).length > 0 && (
-          <PillStatutOuverture horaires={s.horaires_detail} compact/>
-        )}
       </div>
       {s.telephone && (
         <a href={`tel:${s.telephone}`} onClick={e => e.stopPropagation()}

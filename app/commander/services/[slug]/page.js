@@ -512,8 +512,11 @@ export default function FicheServicePublic({ params }) {
         <AgentQuartierPicker agents={service.donnees_riches.agents_quartier}/>
       )}
 
-      {/* Actions principales — Appeler / Email / Itinéraire / Site */}
-      <div style={{ padding: '12px 14px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+      {/* Actions principales — Appeler / Email / Itinéraire / Site
+          minmax(0, 1fr) au lieu de 1fr : empêche les colonnes de déborder du
+          parent quand le contenu interne (ex : email zp.sambreetmeuse@police.belgium.eu)
+          n'a pas d'opportunité de wrap. Sans ça, le grid 'explose' = grid blowout. */}
+      <div style={{ padding: '12px 14px', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
         {service.telephone && (() => {
           // Si telephone_notice est défini : on intercepte avec une modal (ex : numéro surtaxé).
           // Sinon : appel direct via lien tel:

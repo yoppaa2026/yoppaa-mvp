@@ -67,13 +67,18 @@ const MONTHS = ['janvier','février','mars','avril','mai','juin','juillet','aoû
 const LAUNCH_DATE = new Date(2026, 0, 1) // 1er janvier 2026
 
 // ─── Fetch des deals + actus de la commune affichée ──────────────
-// Filtre côté DB : actifs + date du jour. Filtre côté JS : commerçant
-// publié + plan FULL (canDo morning) + code postal dans la commune.
+// 3 sources pour les actus :
+//   - Commerçants alimentaires (plans BOOST/MAX, canDo morning required)
+//   - Vitrines / commerçants services (plans ON et + : retire restriction morning sur les actus)
+//   - Services publics locaux de la commune (commune, CPAS, police, écoles...)
+// Les deals restent réservés aux commerçants ayant accès au morning.
 async function fetchMorningData(commune) {
   if (!commune?.codes_postaux?.length) return { deals: [], actus: [] }
   const today = new Date().toISOString().slice(0, 10)
+  const cpDeLaCommune = new Set(commune.codes_postaux)
 
-  const [{ data: dealsRaw }, { data: actusRaw }] = await Promise.all([
+  const [{ data: dealsRaw }, { data: actusCommercantRaw }, { data: actusPubliqueRaw }] = await Promise.all([
+    // 1) Deals : commerçants alimentaires avec accès morning (plans BOOST/MAX)
     supabase
       .from('yoppaa_deals')
       .select(`
@@ -84,20 +89,35 @@ async function fetchMorningData(commune) {
       .eq('inclus_morning', true)
       .eq('date_deal', today),
 
+    // 2) Actus commerçant : TOUTES (vitrines + alimentaires) publiées
     supabase
       .from('actualites')
       .select(`
-        id, titre, contenu, type, date_debut, date_fin,
+        id, titre, contenu, type, date_debut, date_fin, urgence,
         commercant:commercants ( id, nom, type, adresse, plan, statut_publication )
       `)
+      .not('commercant_id', 'is', null)
+      .eq('actif', true)
+      .lte('date_debut', today)
+      .gte('date_fin', today),
+
+    // 3) Actus services publics locaux (commune, CPAS, police, écoles)
+    //    On exclut les nationaux (112, CEGENO, etc.) — trop génériques pour le morning
+    supabase
+      .from('actualites')
+      .select(`
+        id, titre, contenu, type, date_debut, date_fin, urgence,
+        service:services_publics ( id, nom, type, codes_postaux, national )
+      `)
+      .not('service_id', 'is', null)
       .eq('actif', true)
       .lte('date_debut', today)
       .gte('date_fin', today),
   ])
 
-  const cpDeLaCommune = new Set(commune.codes_postaux)
-
-  function commercantEligible(c) {
+  // Filtres
+  function commercantEligibleDeal(c) {
+    // Deals : commerçant publié + accès morning (plan BOOST/MAX) + CP commune
     if (!c) return false
     if (c.statut_publication !== 'publie') return false
     if (!canDo(c.plan, 'morning')) return false
@@ -105,9 +125,25 @@ async function fetchMorningData(commune) {
     return cp && cpDeLaCommune.has(cp)
   }
 
-  // Récupère les stocks des articles liés aux deals (pour le badge "X restants")
+  function commercantEligibleActu(c) {
+    // Actus : commerçant publié + CP commune (pas de restriction de plan, vitrines OK)
+    if (!c) return false
+    if (c.statut_publication !== 'publie') return false
+    const cp = extraireCodePostal(c.adresse)
+    return cp && cpDeLaCommune.has(cp)
+  }
+
+  function servicePublicEligible(s) {
+    // Service public publié + non national + CP overlap avec la commune
+    if (!s) return false
+    if (s.national === true) return false
+    if (!Array.isArray(s.codes_postaux) || s.codes_postaux.length === 0) return false
+    return s.codes_postaux.some(cp => cpDeLaCommune.has(cp))
+  }
+
+  // Stocks articles pour les deals
   const articleIds = (dealsRaw || [])
-    .filter(d => commercantEligible(d.commercant) && d.article_id)
+    .filter(d => commercantEligibleDeal(d.commercant) && d.article_id)
     .map(d => d.article_id)
   let stockParArticle = {}
   if (articleIds.length > 0) {
@@ -119,7 +155,7 @@ async function fetchMorningData(commune) {
   }
 
   const deals = (dealsRaw || [])
-    .filter(d => commercantEligible(d.commercant))
+    .filter(d => commercantEligibleDeal(d.commercant))
     .map(d => ({
       id: d.id,
       commerce: d.commercant.nom,
@@ -131,16 +167,40 @@ async function fetchMorningData(commune) {
       stock: d.article_id ? (stockParArticle[d.article_id] ?? null) : null,
     }))
 
-  const actus = (actusRaw || [])
-    .filter(a => commercantEligible(a.commercant))
+  // Emoji par type de service public
+  const SERVICE_EMOJI = {
+    commune: '🏛️', cpas: '🤝', police: '🚓', pompiers: '🚒',
+    ecole: '🏫', medecin_garde: '🩺', pharmacie_garde: '💊', urgence: '🚨', autre: '🏢',
+  }
+
+  const actusCommercant = (actusCommercantRaw || [])
+    .filter(a => commercantEligibleActu(a.commercant))
     .map(a => ({
-      id: a.id,
+      id: 'c-' + a.id,
       commerce: a.commercant.nom,
       type: emojiDuType(a.commercant.type),
       categorie: a.commercant.type || 'Commerce',
       actu: a.contenu || a.titre,
-      alerte: a.type === 'alerte',
+      alerte: a.type === 'alerte' || a.urgence === true,
     }))
+
+  const actusPubliques = (actusPubliqueRaw || [])
+    .filter(a => servicePublicEligible(a.service))
+    .map(a => ({
+      id: 'p-' + a.id,
+      commerce: a.service.nom,
+      type: SERVICE_EMOJI[a.service.type] || '🏛️',
+      categorie: 'Officiel',
+      actu: a.contenu || a.titre,
+      alerte: a.type === 'alerte' || a.urgence === true,
+    }))
+
+  // Tri : alertes en tête, puis actus services publics, puis commerçants
+  const actus = [...actusPubliques, ...actusCommercant].sort((a, b) => {
+    if (a.alerte && !b.alerte) return -1
+    if (!a.alerte && b.alerte) return 1
+    return 0
+  })
 
   return { deals, actus }
 }

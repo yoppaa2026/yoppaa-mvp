@@ -1069,22 +1069,25 @@ function CategoriesScroll({ categorieActive, setCategorieActive }) {
   )
 }
 
-// ─── Icône SVG : enveloppe + soleil pour Good Morning Yoppers ────────────────
-// Style outline cohérent avec les autres icônes du header. Le soleil au-dessus
-// évoque le matin, l'enveloppe en-dessous le "courrier du jour".
+// ─── Icône SVG : enveloppe ouverte avec soleil dedans (Option D) ──────────────
+// Concept : le rabat de l'enveloppe est plié vers le haut (ouvert), révélant un
+// petit soleil au centre. Métaphore "le matin contenu dans une lettre" : le
+// yopper ouvre sa lettre du jour et le soleil en sort. Style outline cohérent
+// avec les autres icônes du header Yoppaa.
 function IconCourrierMatin({ size = 20, color = '#fff' }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-      {/* Soleil avec rayons (compact, au-dessus de l'enveloppe) */}
-      <circle cx="12" cy="5" r="2" fill={color} stroke="none"/>
-      <line x1="12" y1="0.5" x2="12" y2="1.8"/>
-      <line x1="6.7" y1="5"   x2="8"    y2="5"/>
-      <line x1="16"  y1="5"   x2="17.3" y2="5"/>
-      <line x1="8.3" y1="1.3" x2="9.2"  y2="2.2"/>
-      <line x1="14.8" y1="1.3" x2="15.7" y2="2.2"/>
-      {/* Enveloppe */}
-      <rect x="3" y="10" width="18" height="12" rx="2.5"/>
-      <polyline points="3 12.5 12 18 21 12.5"/>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      {/* Rabat triangulaire ouvert vers le haut */}
+      <polyline points="4 9 12 4 20 9"/>
+      {/* Corps de l'enveloppe */}
+      <rect x="4" y="9" width="16" height="12" rx="1.8"/>
+      {/* Soleil plein au centre du corps */}
+      <circle cx="12" cy="15" r="1.9" fill={color} stroke="none"/>
+      {/* 4 rayons compacts (haut/bas/gauche/droite) */}
+      <line x1="12"   y1="11.5" x2="12"   y2="12.2"/>
+      <line x1="12"   y1="17.8" x2="12"   y2="18.5"/>
+      <line x1="8.5"  y1="15"   x2="9.2"  y2="15"/>
+      <line x1="14.8" y1="15"   x2="15.5" y2="15"/>
     </svg>
   )
 }

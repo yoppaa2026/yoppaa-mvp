@@ -98,6 +98,108 @@ function IconClock({ size = 14, color = T.deep }) {
   )
 }
 
+// ─── Rendu structuré d'une description ──────────────────────────────
+// Mini-parser Markdown léger pour aérer les contenus des fiches services.
+// Conventions reconnues dans le texte :
+//   ## Titre              → titre de section (h3 violet uppercase)
+//   > Texte               → callout neutre violet pâle
+//   ⚠ Texte               → callout warning ambre
+//   🚨 Texte              → callout danger rouge
+//   • Item   (ou - Item)  → puce de liste
+//   (ligne vide)          → séparateur entre blocs
+//   sinon                 → paragraphe normal
+function parseDescriptionBlocks(text) {
+  const lines = text.split('\n')
+  const blocks = []
+  let currentList = null
+  const flushList = () => { if (currentList) { blocks.push(currentList); currentList = null } }
+
+  for (const raw of lines) {
+    const line = raw.trim()
+    if (!line) { flushList(); continue }
+    if (line.startsWith('## ')) {
+      flushList()
+      blocks.push({ type: 'title', content: line.slice(3).trim() })
+    } else if (line.startsWith('> ')) {
+      flushList()
+      blocks.push({ type: 'callout-info', content: line.slice(2).trim() })
+    } else if (line.startsWith('⚠')) {
+      flushList()
+      blocks.push({ type: 'callout-warning', content: line.replace(/^⚠\s*/, '').trim() })
+    } else if (line.startsWith('🚨')) {
+      flushList()
+      blocks.push({ type: 'callout-danger', content: line.replace(/^🚨\s*/, '').trim() })
+    } else if (line.startsWith('• ') || line.startsWith('- ')) {
+      if (!currentList) currentList = { type: 'list', items: [] }
+      currentList.items.push(line.slice(2).trim())
+    } else {
+      flushList()
+      blocks.push({ type: 'paragraph', content: line })
+    }
+  }
+  flushList()
+  return blocks
+}
+
+function ServiceDescription({ text }) {
+  if (!text) return null
+  const blocks = parseDescriptionBlocks(text)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {blocks.map((b, i) => {
+        if (b.type === 'title') {
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: i === 0 ? 0 : 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap' }}>
+                {b.content}
+              </span>
+              <div style={{ flex: 1, height: 1, background: T.hairline }}/>
+            </div>
+          )
+        }
+        if (b.type === 'callout-warning') {
+          return (
+            <div key={i} style={{ background: '#FEF3C7', borderLeft: '3px solid #D97706', borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600, color: '#78350F', lineHeight: 1.5 }}>
+              ⚠ {b.content}
+            </div>
+          )
+        }
+        if (b.type === 'callout-danger') {
+          return (
+            <div key={i} style={{ background: '#FEE2E2', borderLeft: '3px solid #DC2626', borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600, color: '#7F1D1D', lineHeight: 1.5 }}>
+              🚨 {b.content}
+            </div>
+          )
+        }
+        if (b.type === 'callout-info') {
+          return (
+            <div key={i} style={{ background: T.pale, borderLeft: `3px solid ${T.main}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600, color: T.deep, lineHeight: 1.5 }}>
+              {b.content}
+            </div>
+          )
+        }
+        if (b.type === 'list') {
+          return (
+            <ul key={i} style={{ margin: '2px 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {b.items.map((item, j) => (
+                <li key={j} style={{ display: 'flex', gap: 8, fontSize: 14, color: T.ink, lineHeight: 1.5, fontWeight: 500 }}>
+                  <span style={{ color: T.main, fontWeight: 900, flexShrink: 0 }}>•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+        return (
+          <p key={i} style={{ fontSize: 14, color: T.ink, lineHeight: 1.55, margin: 0, fontWeight: 500 }}>
+            {b.content}
+          </p>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function FicheServicePublic({ params }) {
   const router = useRouter()
   const [service, setService] = useState(null)
@@ -260,12 +362,10 @@ export default function FicheServicePublic({ params }) {
         </div>
       )}
 
-      {/* Description */}
+      {/* Description structurée : parse les conventions ##/⚠/🚨/>/• */}
       {service.description && (
-        <div style={{ padding: '14px 18px 6px' }}>
-          <p style={{ fontSize: 14, color: T.ink, lineHeight: 1.55, margin: 0, fontWeight: 500 }}>
-            {service.description}
-          </p>
+        <div style={{ padding: '16px 18px 8px' }}>
+          <ServiceDescription text={service.description}/>
         </div>
       )}
 

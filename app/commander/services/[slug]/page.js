@@ -98,6 +98,114 @@ function IconClock({ size = 14, color = T.deep }) {
   )
 }
 
+// ─── Picker "Ton agent de quartier" ─────────────────────────────────
+// Pour les fiches type=police qui stockent leurs inspecteurs dans
+// service.donnees_riches.agents_quartier : on liste les villages couverts
+// (uniques, triés FR) dans un select natif, puis on highlight l'agent
+// dont les villages contiennent celui sélectionné par le yopper.
+function AgentQuartierPicker({ agents }) {
+  const [village, setVillage] = useState('')
+
+  // Tous les villages uniques (à plat), triés en français
+  const tousVillages = [...new Set(agents.flatMap(a => a.villages || []))]
+    .sort((a, b) => a.localeCompare(b, 'fr'))
+
+  const matchedAgent = village ? agents.find(a => (a.villages || []).includes(village)) : null
+
+  // T.deep / T.main / T.pale viennent de la portée parent (constantes en haut du fichier)
+  return (
+    <div style={{ padding: '14px 18px 8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap' }}>
+          Ton agent de quartier
+        </span>
+        <div style={{ flex: 1, height: 1, background: T.hairline }}/>
+      </div>
+
+      {/* Picker village */}
+      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, letterSpacing: '0.3px' }}>
+        Sélectionne ton village
+      </label>
+      <select value={village} onChange={e => setVillage(e.target.value)}
+        style={{ width: '100%', padding: '12px 40px 12px 14px', fontSize: 14, fontWeight: 600, border: `1.5px solid ${T.pale}`, borderRadius: 12, background: '#fff', color: T.ink, fontFamily: 'inherit', cursor: 'pointer', WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none',
+          backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B35C4' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>")`,
+          backgroundRepeat: 'no-repeat', backgroundPosition: 'right 16px center', marginBottom: 14 }}>
+        <option value="">— Choisir mon village —</option>
+        {tousVillages.map(v => <option key={v} value={v}>{v}</option>)}
+      </select>
+
+      {/* Liste des agents avec highlight du match */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {agents.map(agent => {
+          const isMatch  = matchedAgent && agent.nom === matchedAgent.nom
+          const isDimmed = village && !isMatch
+          const bgTag    = isMatch ? 'rgba(255,255,255,0.22)' : T.pale
+          const fgTag    = isMatch ? '#fff' : T.deep
+          return (
+            <div key={agent.nom}
+              style={{
+                background: isMatch ? `linear-gradient(135deg, ${T.ink}, ${T.main})` : '#fff',
+                color:      isMatch ? '#fff' : T.ink,
+                border:     isMatch ? 'none' : `1px solid ${T.pale}`,
+                borderLeft: isMatch ? 'none' : `4px solid ${T.deep}`,
+                borderRadius: 12, padding: '12px 14px',
+                opacity:    isDimmed ? 0.5 : 1,
+                transition: 'opacity 0.2s, transform 0.2s',
+                transform:  isMatch ? 'scale(1.02)' : 'scale(1)',
+                boxShadow:  isMatch ? `0 8px 22px ${T.main}55` : 'none',
+              }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 4 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 14, fontWeight: 800, margin: 0, color: isMatch ? '#fff' : T.ink, letterSpacing: '-0.2px' }}>
+                    {agent.nom}
+                  </p>
+                  <p style={{ fontSize: 11, fontWeight: 600, margin: '2px 0 0', color: isMatch ? 'rgba(255,255,255,0.85)' : T.muted, letterSpacing: '0.2px' }}>
+                    {agent.fonction}
+                  </p>
+                </div>
+                {isMatch && (
+                  <span style={{ fontSize: 9, fontWeight: 800, color: T.ink, background: '#fff', padding: '4px 9px', borderRadius: 100, letterSpacing: '0.7px', textTransform: 'uppercase', flexShrink: 0 }}>
+                    Pour toi
+                  </span>
+                )}
+              </div>
+
+              {agent.villages && agent.villages.length > 0 && (
+                <p style={{ fontSize: 11, color: isMatch ? 'rgba(255,255,255,0.92)' : T.deep, margin: '6px 0 0', lineHeight: 1.4, fontWeight: 600 }}>
+                  📍 {agent.villages.join(' · ')}
+                </p>
+              )}
+
+              {(agent.telephone || agent.mobile || agent.email) && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                  {agent.telephone && (
+                    <a href={`tel:${agent.telephone.replace(/\s/g, '')}`}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 100, background: bgTag, color: fgTag, fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
+                      📞 {agent.telephone}
+                    </a>
+                  )}
+                  {agent.mobile && (
+                    <a href={`tel:${agent.mobile.replace(/\s/g, '')}`}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 100, background: bgTag, color: fgTag, fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
+                      📱 {agent.mobile}
+                    </a>
+                  )}
+                  {agent.email && (
+                    <a href={`mailto:${agent.email}`}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 100, background: bgTag, color: fgTag, fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
+                      📧 Email
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Rendu structuré d'une description ──────────────────────────────
 // Mini-parser Markdown léger pour aérer les contenus des fiches services.
 // Conventions reconnues dans le texte :
@@ -367,6 +475,11 @@ export default function FicheServicePublic({ params }) {
         <div style={{ padding: '16px 18px 8px' }}>
           <ServiceDescription text={service.description}/>
         </div>
+      )}
+
+      {/* Section "Ton agent de quartier" — affichée si donnees_riches.agents_quartier non vide */}
+      {Array.isArray(service.donnees_riches?.agents_quartier) && service.donnees_riches.agents_quartier.length > 0 && (
+        <AgentQuartierPicker agents={service.donnees_riches.agents_quartier}/>
       )}
 
       {/* Actions principales — Appeler / Email / Itinéraire / Site */}

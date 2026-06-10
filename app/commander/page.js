@@ -6,6 +6,7 @@ import { canDo, isVitrine } from '@/lib/plans'
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
+import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 
 const T = {
   bg:      '#F8F6FF',
@@ -799,9 +800,12 @@ function CarteServicePublic({ s, onSelect }) {
             {typeLabel}
           </span>
         </div>
-        <p style={{ fontSize: 13.5, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px', margin: 0, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <p style={{ fontSize: 13.5, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px', margin: '0 0 4px', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {s.nom}
         </p>
+        {s.horaires_detail && Object.keys(s.horaires_detail).length > 0 && (
+          <PillStatutOuverture horaires={s.horaires_detail} compact/>
+        )}
       </div>
       {s.telephone && (
         <a href={`tel:${s.telephone}`} onClick={e => e.stopPropagation()}
@@ -1207,7 +1211,7 @@ export default function Commander() {
     const codesPostaux = commune?.codes_postaux || []
     let q = supabase
       .from('services_publics')
-      .select('id, slug, type, nom, description, codes_postaux, national, telephone, adresse, latitude, longitude, logo_url, photo_couverture_url')
+      .select('id, slug, type, nom, description, codes_postaux, national, telephone, adresse, latitude, longitude, logo_url, photo_couverture_url, horaires_detail')
       .eq('statut', 'valide')
       .order('national', { ascending: false })
       .order('type')

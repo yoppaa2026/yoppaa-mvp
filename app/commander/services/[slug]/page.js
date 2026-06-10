@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import ModalSignalement from '../../ModalSignalement'
+import PillStatutOuverture, { getDayBrussels, getCreneauxJour } from '@/app/components/PillStatutOuverture'
 
 // Design system canonique
 const T = {
@@ -95,95 +96,6 @@ function IconClock({ size = 14, color = T.deep }) {
       <circle cx="12" cy="12" r="10"/>
       <path d="M12 6v6l4 2"/>
     </svg>
-  )
-}
-
-// ─── Pill statut d'ouverture (temps réel, timezone Bruxelles) ───────
-const JOURS_ORDRE_PILL = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
-
-function getDayBrussels(date) {
-  // Renvoie 'lundi', 'mardi', ... selon le jour à Bruxelles (DST gérée par l'API)
-  const en = date.toLocaleString('en-US', { weekday: 'long', timeZone: 'Europe/Brussels' }).toLowerCase()
-  const map = { monday: 'lundi', tuesday: 'mardi', wednesday: 'mercredi', thursday: 'jeudi', friday: 'vendredi', saturday: 'samedi', sunday: 'dimanche' }
-  return map[en] || 'lundi'
-}
-function getMinutesBrussels(date) {
-  const t = date.toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Brussels' })
-  const [h, m] = t.split(':').map(n => parseInt(n, 10))
-  return h * 60 + m
-}
-function parseHHMM(s) {
-  const [h, m] = s.split(':').map(n => parseInt(n, 10))
-  return h * 60 + m
-}
-function getCreneauxJour(jourData) {
-  // Format actuel : { ouvert, creneaux: [[debut,fin],...] }
-  // Format legacy : { ouvert, debut, fin } → converti en un seul créneau
-  if (!jourData || jourData.ouvert === false) return []
-  if (Array.isArray(jourData.creneaux)) return jourData.creneaux
-  if (jourData.debut && jourData.fin) return [[jourData.debut, jourData.fin]]
-  return []
-}
-function calculerStatutOuverture(horaires, now) {
-  if (!horaires || Object.keys(horaires).length === 0) return null
-  const jour = getDayBrussels(now)
-  const minNow = getMinutesBrussels(now)
-  const creneauxAuj = getCreneauxJour(horaires[jour])
-
-  // 1) Dans un créneau → OUVERT
-  for (const [d, f] of creneauxAuj) {
-    if (minNow >= parseHHMM(d) && minNow < parseHHMM(f)) {
-      return { etat: 'ouvert', label: 'Ouvert', sousTitre: `Ferme à ${f}` }
-    }
-  }
-  // 2) Entre 2 créneaux du jour → PAUSE
-  for (let i = 0; i < creneauxAuj.length - 1; i++) {
-    if (minNow >= parseHHMM(creneauxAuj[i][1]) && minNow < parseHHMM(creneauxAuj[i+1][0])) {
-      return { etat: 'pause', label: 'Pause midi', sousTitre: `Réouvre à ${creneauxAuj[i+1][0]}` }
-    }
-  }
-  // 3) Avant l'ouverture du jour
-  if (creneauxAuj.length > 0 && minNow < parseHHMM(creneauxAuj[0][0])) {
-    return { etat: 'ferme', label: 'Fermé', sousTitre: `Ouvre aujourd'hui à ${creneauxAuj[0][0]}` }
-  }
-  // 4) Fermé maintenant, on cherche le prochain jour ouvert
-  const idx = JOURS_ORDRE_PILL.indexOf(jour)
-  for (let i = 1; i <= 7; i++) {
-    const next = JOURS_ORDRE_PILL[(idx + i) % 7]
-    const c = getCreneauxJour(horaires[next])
-    if (c.length > 0) {
-      const labelJour = i === 1 ? 'demain' : next
-      return { etat: 'ferme', label: 'Fermé', sousTitre: `Ouvre ${labelJour} à ${c[0][0]}` }
-    }
-  }
-  return { etat: 'ferme', label: 'Fermé', sousTitre: null }
-}
-
-function PillStatutOuverture({ horaires }) {
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60000)  // refresh chaque minute
-    return () => clearInterval(timer)
-  }, [])
-
-  const statut = calculerStatutOuverture(horaires, now)
-  if (!statut) return null
-
-  const couleurs = {
-    ouvert: { bg: '#D1FAE5',  fg: '#065F46', dot: '#10B981', border: '#10B98140' },
-    pause:  { bg: '#FEF3C7',  fg: '#92400E', dot: '#F59E0B', border: '#F59E0B40' },
-    ferme:  { bg: '#FEE2E2',  fg: '#991B1B', dot: '#DC2626', border: '#DC262640' },
-  }[statut.etat]
-
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '4px 12px 4px 9px', borderRadius: 100, background: couleurs.bg, border: `1px solid ${couleurs.border}`, fontSize: 11, fontWeight: 700, color: couleurs.fg, letterSpacing: '0.2px', maxWidth: '100%' }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: couleurs.dot, flexShrink: 0, animation: statut.etat === 'ouvert' ? 'pillPulse 2s ease-in-out infinite' : 'none' }}/>
-      <span style={{ fontWeight: 800, whiteSpace: 'nowrap' }}>{statut.label}</span>
-      {statut.sousTitre && (
-        <span style={{ fontWeight: 600, opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {statut.sousTitre}</span>
-      )}
-      <style>{`@keyframes pillPulse { 0%,100% { opacity: 1 } 50% { opacity: 0.45 } }`}</style>
-    </span>
   )
 }
 
@@ -338,6 +250,34 @@ function parseDescriptionBlocks(text) {
   return blocks
 }
 
+// Détecte les numéros de téléphone belges (fixe, mobile, courts 1XXX, +32) dans
+// un texte et les rend cliquables. Soulignage discret violet, ouverture du
+// composeur natif au tap.
+const PHONE_REGEX_BE = /(\+32\s?\d{1,3}(?:[\s./]?\d{2,3}){2,4}|0\d{1,3}(?:[\s./]?\d{2,3}){2,4}|\b1\d{2,3}\b)/g
+
+function linkifyTel(text) {
+  if (typeof text !== 'string') return text
+  const parts = []
+  let lastIdx = 0
+  let m
+  PHONE_REGEX_BE.lastIndex = 0
+  while ((m = PHONE_REGEX_BE.exec(text)) !== null) {
+    if (m.index > lastIdx) parts.push(text.slice(lastIdx, m.index))
+    const phone = m[0]
+    const clean = phone.replace(/[\s./]/g, '')
+    parts.push(
+      <a key={`tel-${m.index}`} href={`tel:${clean}`}
+        onClick={e => e.stopPropagation()}
+        style={{ color: T.main, fontWeight: 700, textDecoration: 'underline', textDecorationColor: T.light, textDecorationThickness: '1px', textUnderlineOffset: '2px' }}>
+        {phone}
+      </a>
+    )
+    lastIdx = m.index + phone.length
+  }
+  if (lastIdx < text.length) parts.push(text.slice(lastIdx))
+  return parts.length > 0 ? parts : text
+}
+
 function ServiceDescription({ text }) {
   if (!text) return null
   const blocks = parseDescriptionBlocks(text)
@@ -381,7 +321,7 @@ function ServiceDescription({ text }) {
               {b.items.map((item, j) => (
                 <li key={j} style={{ display: 'flex', gap: 8, fontSize: 14, color: T.ink, lineHeight: 1.5, fontWeight: 500 }}>
                   <span style={{ color: T.main, fontWeight: 900, flexShrink: 0 }}>•</span>
-                  <span>{item}</span>
+                  <span>{linkifyTel(item)}</span>
                 </li>
               ))}
             </ul>
@@ -389,7 +329,7 @@ function ServiceDescription({ text }) {
         }
         return (
           <p key={i} style={{ fontSize: 14, color: T.ink, lineHeight: 1.55, margin: 0, fontWeight: 500 }}>
-            {b.content}
+            {linkifyTel(b.content)}
           </p>
         )
       })}

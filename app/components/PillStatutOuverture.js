@@ -53,7 +53,7 @@ export function calculerStatutOuverture(horaires, now) {
 
   // Cas 24/24 (numéros nationaux d'urgence, garde, distributeurs, ...)
   if (horaires.always_open === true) {
-    return { etat: 'ouvert', label: 'Ouvert 24h/24', sousTitre: null, is24: true }
+    return { etat: 'always', label: '24h/24', sousTitre: null, is24: true }
   }
 
   const jour = getDayBrussels(now)
@@ -99,8 +99,13 @@ export default function PillStatutOuverture({ horaires, compact = false }) {
   const statut = calculerStatutOuverture(horaires, now)
   if (!statut) return null
 
+  // 'always' (24/24) = indigo neutre, sans pulse — cohabite avec les cards urgence rouges
+  // 'ouvert'           = vert + pulse (vivant, dynamique)
+  // 'pause'            = ambre (transition)
+  // 'ferme'            = rouge
   const couleurs = {
     ouvert: { bg: '#D1FAE5', fg: '#065F46', dot: '#10B981', border: '#10B98140' },
+    always: { bg: '#E0E7FF', fg: '#3730A3', dot: '#6366F1', border: '#6366F140' },
     pause:  { bg: '#FEF3C7', fg: '#92400E', dot: '#F59E0B', border: '#F59E0B40' },
     ferme:  { bg: '#FEE2E2', fg: '#991B1B', dot: '#DC2626', border: '#DC262640' },
   }[statut.etat]

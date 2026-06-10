@@ -1070,31 +1070,32 @@ function CategoriesScroll({ categorieActive, setCategorieActive }) {
 }
 
 // ─── Icône SVG : enveloppe ouverte avec soleil dedans (Option D) ──────────────
-// Concept : le rabat de l'enveloppe est plié vers le haut (ouvert), révélant un
-// soleil rayonnant au centre. Métaphore "le matin contenu dans une lettre" : le
-// yopper ouvre sa lettre du jour et le soleil en sort. Style outline cohérent
-// avec les autres icônes du header Yoppaa.
+// Hybride SVG + emoji : enveloppe dessinée en SVG monochrome (cohérent design
+// system Yoppaa) + soleil ☀️ emoji centré dans le corps. L'emoji natif du
+// système apporte une touche chaleureuse jaune/orange qui contraste joliment
+// avec le fond violet du header. Métaphore "lettre du matin" préservée.
 function IconCourrierMatin({ size = 24, color = '#fff' }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-      {/* Rabat triangulaire ouvert vers le haut */}
-      <polyline points="3 9 12 3 21 9"/>
-      {/* Corps de l'enveloppe */}
-      <rect x="3" y="9" width="18" height="13" rx="2"/>
-      {/* Soleil plein au centre du corps */}
-      <circle cx="12" cy="15.5" r="1.9" fill={color} stroke="none"/>
-      {/* 8 rayons (cardinaux + diagonaux) pour effet 'sparkle' / soleil éclatant */}
-      {/* Cardinaux */}
-      <line x1="12"    y1="11.3" x2="12"    y2="12.4"/>
-      <line x1="12"    y1="18.6" x2="12"    y2="19.7"/>
-      <line x1="7.8"   y1="15.5" x2="8.9"   y2="15.5"/>
-      <line x1="15.1"  y1="15.5" x2="16.2"  y2="15.5"/>
-      {/* Diagonaux (à 45°) */}
-      <line x1="9"     y1="12.5" x2="9.8"   y2="13.3"/>
-      <line x1="14.2"  y1="17.7" x2="15"    y2="18.5"/>
-      <line x1="15"    y1="12.5" x2="14.2"  y2="13.3"/>
-      <line x1="9.8"   y1="17.7" x2="9"     y2="18.5"/>
-    </svg>
+    <span style={{ display: 'inline-flex', position: 'relative', width: size, height: size, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+        {/* Rabat triangulaire ouvert vers le haut */}
+        <polyline points="3 9 12 3 21 9"/>
+        {/* Corps de l'enveloppe */}
+        <rect x="3" y="9" width="18" height="13" rx="2"/>
+      </svg>
+      {/* Soleil ☀️ emoji centré dans le corps (légèrement décalé vers le bas pour rester sous le rabat) */}
+      <span aria-hidden="true" style={{
+        position: 'absolute',
+        top: '62%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        fontSize: Math.round(size * 0.5),
+        lineHeight: 1,
+        pointerEvents: 'none',
+        userSelect: 'none',
+      }}>
+        ☀️
+      </span>
+    </span>
   )
 }
 

@@ -915,26 +915,28 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
         </span>
       </div>
 
-      {/* Bouton favori en absolute coin haut droit (pattern UX standard Doctolib/Airbnb).
-          Positionne juste sous la bande type (24px) avec un fond glassmorph subtil pour
-          la lisibilite, et z-index pour passer au-dessus du logo. */}
+      {/* Bouton favori en absolute coin haut droit de la vignette photo.
+          Pattern UX standard TGTG/Airbnb : cœur outline → rempli rouge si favori.
+          Cohérent avec la fiche détail commerçant (memo UX 2026-06-12). */}
       <button onClick={e => onToggleFavori(c.id, e)}
         aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
         style={{
           position: 'absolute', top: 32, right: 10, zIndex: 2,
-          background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(6px)',
-          border: `1px solid ${estFavori ? T.light : T.pale}`,
-          cursor: 'pointer', padding: 5,
+          background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)',
+          border: 'none',
+          cursor: 'pointer', padding: 6,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'transform 0.15s, box-shadow 0.15s',
           borderRadius: '50%',
-          boxShadow: estFavori ? `0 2px 8px ${T.main}33` : '0 1px 3px rgba(0,0,0,0.06)',
+          boxShadow: estFavori ? '0 3px 10px rgba(220,38,38,0.25)' : '0 1px 3px rgba(0,0,0,0.10)',
         }}
-        onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,8,64,0.18)' }}
-        onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = estFavori ? `0 2px 8px ${T.main}33` : '0 1px 3px rgba(0,0,0,0.06)' }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill={estFavori ? '#C4A0F4' : 'none'} xmlns="http://www.w3.org/2000/svg">
-          <path d="M12,3 L14.5,9 L21.5,9.5 L16.5,14 L18.2,21 L12,17.5 L5.8,21 L7.5,14 L2.5,9.5 L9.5,9 Z"
-            stroke={estFavori ? '#9660E0' : '#9CA3AF'} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+        onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,8,64,0.22)' }}
+        onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = estFavori ? '0 3px 10px rgba(220,38,38,0.25)' : '0 1px 3px rgba(0,0,0,0.10)' }}>
+        <svg width="17" height="17" viewBox="0 0 24 24"
+          fill={estFavori ? '#DC2626' : 'none'}
+          stroke={estFavori ? '#DC2626' : T.deep}
+          strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
         </svg>
       </button>
 

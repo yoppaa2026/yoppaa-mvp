@@ -180,6 +180,7 @@ async function fetchMorningData(commune) {
       commerce: a.commercant.nom,
       type: emojiDuType(a.commercant.type),
       categorie: a.commercant.type || 'Commerce',
+      titre: a.titre || null,
       actu: a.contenu || a.titre,
       alerte: a.type === 'alerte' || a.urgence === true,
     }))
@@ -191,6 +192,7 @@ async function fetchMorningData(commune) {
       commerce: a.service.nom,
       type: SERVICE_EMOJI[a.service.type] || '🏛️',
       categorie: 'Officiel',
+      titre: a.titre || null,
       actu: a.contenu || a.titre,
       alerte: a.type === 'alerte' || a.urgence === true,
     }))
@@ -506,8 +508,15 @@ function ActuCard({ d, shown, delay }) {
           </div>
         </div>
         <div style={{ height: 1, background: isAlerte ? '#FECACA' : T.hairline, marginBottom: 10 }}/>
-        <div style={{ fontFamily: '"Playfair Display", serif', fontStyle: 'italic', fontSize: 13, color: isAlerte ? '#7F1D1D' : T.deep, lineHeight: 1.55, marginBottom: 10 }}>
-          &laquo;&nbsp;{d.actu}&nbsp;&raquo;
+        {/* Titre en Playfair Display non-italic (signature morning, élégant) */}
+        {d.titre && d.titre !== d.actu && (
+          <div style={{ fontFamily: '"Playfair Display", serif', fontSize: 15, fontWeight: 700, color: isAlerte ? '#7F1D1D' : T.ink, lineHeight: 1.3, marginBottom: 6, letterSpacing: '-0.2px' }}>
+            {d.titre}
+          </div>
+        )}
+        {/* Contenu en DM Sans (lisible, infos pratiques) */}
+        <div style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 13.5, fontWeight: 500, color: isAlerte ? '#991B1B' : T.deep, lineHeight: 1.55, marginBottom: 10 }}>
+          {d.actu}
         </div>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: isAlerte ? '#DC2626' : T.main, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
           Lire <IconArrow size={11} color={isAlerte ? '#DC2626' : T.main}/>

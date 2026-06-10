@@ -36,11 +36,14 @@ export default function MobileFrame({ children }) {
 
   return (
     <>
-      {/* Background dégradé violet fixed derrière tout */}
+      {/* Background dégradé violet fixed derrière tout
+          pointerEvents: none = laisse passer le scroll wheel par-dessus
+          (sinon le scroll bloque quand la souris est sur le background) */}
       <div style={{
         position: 'fixed', inset: 0,
         background: 'linear-gradient(135deg, #160636 0%, #2D0F6B 50%, #1A0840 100%)',
         zIndex: -10,
+        pointerEvents: 'none',
       }}/>
 
       {/* Effets glow décoratifs */}
@@ -99,7 +102,7 @@ export default function MobileFrame({ children }) {
           Background blanc + bord arrondi + ombre élégante = look "device". */}
       <div style={{
         position: 'relative',
-        maxWidth: 480,
+        maxWidth: 600,
         margin: '0 auto',
         background: '#fff',
         minHeight: '100vh',

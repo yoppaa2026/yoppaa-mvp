@@ -767,9 +767,11 @@ function SectionMesAvis({ clientId }) {
   )
 }
 
-function CarteServicePublic({ s, onSelect }) {
+function CarteServicePublic({ s, onSelect, actusInfo }) {
   const isUrgence = s.national || s.type === 'urgence'
   const typeLabel = SERVICE_TYPE_LABEL[s.type] || 'Service'
+  const nbAlertes = actusInfo?.alertes || 0
+  const nbActus   = actusInfo?.actus   || 0
   return (
     <div onClick={onSelect}
       style={{
@@ -806,6 +808,35 @@ function CarteServicePublic({ s, onSelect }) {
         <p style={{ fontSize: 13.5, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px', margin: 0, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {s.nom}
         </p>
+        {/* Pills statut actu/alerte (pattern PillsStatut commerçant) :
+            alerte rouge pulse en priorité, actu violet juste à côté. */}
+        {(nbAlertes > 0 || nbActus > 0) && (
+          <div style={{ display: 'flex', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+            {nbAlertes > 0 && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '2px 8px 2px 6px', borderRadius: 100,
+                background: '#FEE2E2', color: '#991B1B',
+                fontSize: 9, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase',
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#DC2626', animation: 'pulseAlerte 1.4s ease-in-out infinite' }}/>
+                Alerte{nbAlertes > 1 ? `s · ${nbAlertes}` : ''}
+              </span>
+            )}
+            {nbActus > 0 && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '2px 8px 2px 6px', borderRadius: 100,
+                background: T.pale, color: T.deep,
+                fontSize: 9, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase',
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.main }}/>
+                Actu{nbActus > 1 ? `s · ${nbActus}` : ''}
+              </span>
+            )}
+            <style>{`@keyframes pulseAlerte { 0%,100% { opacity: 1; transform: scale(1) } 50% { opacity: 0.5; transform: scale(1.3) } }`}</style>
+          </div>
+        )}
       </div>
       {s.telephone && (
         <a href={`tel:${s.telephone}`} onClick={e => e.stopPropagation()}
@@ -1203,6 +1234,8 @@ export default function Commander() {
   const [servicesPublics, setServicesPublics] = useState([])
   // Badge rouge sur l'onglet Services s'il y a au moins une alerte urgente active
   const [alerteUrgenteActive, setAlerteUrgenteActive] = useState(false)
+  // Map service_id → { actus: n, alertes: n } pour afficher les pills sur les cards
+  const [actusParService, setActusParService] = useState(new Map())
   // Modal d'avis post-commande : commande pour laquelle on propose un avis
   // (déclenché auto quand statut='recupere' et pas encore d'avis pour cette commande)
   const [avisCommande, setAvisCommande] = useState(null)
@@ -1328,20 +1361,37 @@ export default function Commander() {
 
   // Vérifie s'il y a une alerte urgente active sur un service de la zone
   // → déclenche le badge rouge sur l'onglet Services
+  // ET groupe les actus/alertes par service_id pour afficher les pills sur les cards
   useEffect(() => {
-    if (servicesPublics.length === 0) { setAlerteUrgenteActive(false); return }
+    if (servicesPublics.length === 0) {
+      setAlerteUrgenteActive(false)
+      setActusParService(new Map())
+      return
+    }
     let annule = false
     const today = new Date().toISOString().slice(0, 10)
     const ids = servicesPublics.map(s => s.id)
     supabase
       .from('actualites')
-      .select('id', { count: 'exact', head: true })
+      .select('id, service_id, urgence')
       .in('service_id', ids)
       .eq('actif', true)
-      .eq('urgence', true)
       .lte('date_debut', today)
       .gte('date_fin', today)
-      .then(({ count }) => { if (!annule) setAlerteUrgenteActive((count || 0) > 0) })
+      .then(({ data }) => {
+        if (annule) return
+        // Groupage par service_id
+        const map = new Map()
+        let anyAlerte = false
+        for (const a of data || []) {
+          const cur = map.get(a.service_id) || { actus: 0, alertes: 0 }
+          if (a.urgence) { cur.alertes++; anyAlerte = true }
+          else cur.actus++
+          map.set(a.service_id, cur)
+        }
+        setActusParService(map)
+        setAlerteUrgenteActive(anyAlerte)
+      })
     return () => { annule = true }
   }, [servicesPublics])
 
@@ -2452,7 +2502,7 @@ export default function Commander() {
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
                       {urgences.map(s => (
-                        <CarteServicePublic key={s.id} s={s} onSelect={() => router.push(`/commander/services/${s.slug}`)}/>
+                        <CarteServicePublic key={s.id} s={s} actusInfo={actusParService.get(s.id)} onSelect={() => router.push(`/commander/services/${s.slug}`)}/>
                       ))}
                     </div>
                   </div>
@@ -2469,7 +2519,7 @@ export default function Commander() {
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
                       {locaux.map(s => (
-                        <CarteServicePublic key={s.id} s={s} onSelect={() => router.push(`/commander/services/${s.slug}`)}/>
+                        <CarteServicePublic key={s.id} s={s} actusInfo={actusParService.get(s.id)} onSelect={() => router.push(`/commander/services/${s.slug}`)}/>
                       ))}
                     </div>
                   </div>

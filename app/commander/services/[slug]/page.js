@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import ModalSignalement from '../../ModalSignalement'
 import ModalSignalerProbleme from './ModalSignalerProbleme'
+import ModalRdvPension from './ModalRdvPension'
 import PillStatutOuverture, { getDayBrussels, getCreneauxJour } from '@/app/components/PillStatutOuverture'
 
 // Design system canonique
@@ -347,6 +348,8 @@ export default function FicheServicePublic({ params }) {
   // État pour ModalSignalerProbleme : null = fermée, sinon le type ('nid_poule', 'depot_sauvage', 'egout', 'autre')
   const [signalerType, setSignalerType] = useState(null)
   const [signalerSent, setSignalerSent] = useState(false)
+  // État pour ModalRdvPension (mock visuel démo, pas de backend)
+  const [showRdvPension, setShowRdvPension] = useState(false)
 
   useEffect(() => {
     Promise.resolve(params).then(p => setSlug(p?.slug))
@@ -565,6 +568,55 @@ export default function FicheServicePublic({ params }) {
         </div>
       )}
 
+      {/* Section "Prendre RDV" — uniquement pour les fiches type=commune.
+          MOCK visuel démo conseil communal : pas de vrai backend, démontre
+          le concept "RDV admin en ligne" pour l'expert pension SFPD. */}
+      {service.type === 'commune' && (
+        <div style={{ padding: '14px 18px 8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap' }}>
+              Prendre rendez-vous
+            </span>
+            <div style={{ flex: 1, height: 1, background: T.hairline }}/>
+          </div>
+          <button onClick={() => setShowRdvPension(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              width: '100%', padding: '14px 16px',
+              background: '#fff',
+              border: `1px solid ${T.pale}`,
+              borderLeft: `4px solid ${T.main}`,
+              borderRadius: 14,
+              cursor: 'pointer', fontFamily: 'inherit',
+              textAlign: 'left',
+              boxShadow: 'none',
+              transition: 'all 0.15s',
+            }}
+            onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 6px 16px ${T.main}25` }}
+            onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}>
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8"  y1="2" x2="8"  y2="6"/>
+                <line x1="3"  y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px' }}>
+                Expert pension SFPD
+              </p>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.4 }}>
+                3e jeudi du mois · 13h30-15h30 · à l&rsquo;Hôtel de Ville
+              </p>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Actions principales — Appeler / Email / Itinéraire / Site
           minmax(0, 1fr) au lieu de 1fr : empêche les colonnes de déborder du
           parent quand le contenu interne (ex : email zp.sambreetmeuse@police.belgium.eu)
@@ -725,6 +777,14 @@ export default function FicheServicePublic({ params }) {
           yopperId={typeof window !== 'undefined' ? localStorage.getItem('yoppaa_client_id') : null}
           onClose={() => setSignalerType(null)}
           onSent={() => { setSignalerType(null); setSignalerSent(true) }}
+        />
+      )}
+
+      {/* Modal RDV expert pension (mock visuel démo) */}
+      {showRdvPension && (
+        <ModalRdvPension
+          service={service}
+          onClose={() => setShowRdvPension(false)}
         />
       )}
 

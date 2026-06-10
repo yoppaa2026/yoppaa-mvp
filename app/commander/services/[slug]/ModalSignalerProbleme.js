@@ -297,14 +297,20 @@ export default function ModalSignalerProbleme({
             )}
 
             <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: T.deep, letterSpacing: '0.6px', textTransform: 'uppercase', marginBottom: 6 }}>
-              Adresse du problème
+              Adresse exacte du problème
             </label>
             <input type="text" value={adresse} onChange={e => setAdresse(e.target.value)}
               placeholder="Ex : Rue de l'Église, 5640 Mettet"
               style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', fontSize: 14, fontWeight: 600, border: `1.5px solid ${T.pale}`, borderRadius: 12, color: T.ink, fontFamily: 'inherit', background: '#fff' }}/>
-            <p style={{ fontSize: 10, color: T.muted, margin: '6px 0 0', fontStyle: 'italic' }}>
-              Tu peux modifier si l'adresse détectée est imprécise.
-            </p>
+
+            {/* Callout ambre : alerte le yopper que la géoloc auto = position actuelle,
+                pas forcément le lieu du problème (cas du signalement "depuis le canapé") */}
+            <div style={{ marginTop: 10, background: '#FEF3C7', borderLeft: '3px solid #D97706', borderRadius: 10, padding: '10px 12px' }}>
+              <p style={{ fontSize: 12, color: '#78350F', margin: 0, fontWeight: 600, lineHeight: 1.5 }}>
+                ⚠ <strong>Tu n&rsquo;es plus sur place&nbsp;?</strong><br/>
+                L&rsquo;adresse détectée correspond à <em>ta position actuelle</em>. Modifie-la pour qu&rsquo;elle corresponde au lieu exact du problème.
+              </p>
+            </div>
           </div>
         )}
 

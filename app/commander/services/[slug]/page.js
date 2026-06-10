@@ -98,6 +98,95 @@ function IconClock({ size = 14, color = T.deep }) {
   )
 }
 
+// ─── Pill statut d'ouverture (temps réel, timezone Bruxelles) ───────
+const JOURS_ORDRE_PILL = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
+
+function getDayBrussels(date) {
+  // Renvoie 'lundi', 'mardi', ... selon le jour à Bruxelles (DST gérée par l'API)
+  const en = date.toLocaleString('en-US', { weekday: 'long', timeZone: 'Europe/Brussels' }).toLowerCase()
+  const map = { monday: 'lundi', tuesday: 'mardi', wednesday: 'mercredi', thursday: 'jeudi', friday: 'vendredi', saturday: 'samedi', sunday: 'dimanche' }
+  return map[en] || 'lundi'
+}
+function getMinutesBrussels(date) {
+  const t = date.toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Brussels' })
+  const [h, m] = t.split(':').map(n => parseInt(n, 10))
+  return h * 60 + m
+}
+function parseHHMM(s) {
+  const [h, m] = s.split(':').map(n => parseInt(n, 10))
+  return h * 60 + m
+}
+function getCreneauxJour(jourData) {
+  // Format actuel : { ouvert, creneaux: [[debut,fin],...] }
+  // Format legacy : { ouvert, debut, fin } → converti en un seul créneau
+  if (!jourData || jourData.ouvert === false) return []
+  if (Array.isArray(jourData.creneaux)) return jourData.creneaux
+  if (jourData.debut && jourData.fin) return [[jourData.debut, jourData.fin]]
+  return []
+}
+function calculerStatutOuverture(horaires, now) {
+  if (!horaires || Object.keys(horaires).length === 0) return null
+  const jour = getDayBrussels(now)
+  const minNow = getMinutesBrussels(now)
+  const creneauxAuj = getCreneauxJour(horaires[jour])
+
+  // 1) Dans un créneau → OUVERT
+  for (const [d, f] of creneauxAuj) {
+    if (minNow >= parseHHMM(d) && minNow < parseHHMM(f)) {
+      return { etat: 'ouvert', label: 'Ouvert', sousTitre: `Ferme à ${f}` }
+    }
+  }
+  // 2) Entre 2 créneaux du jour → PAUSE
+  for (let i = 0; i < creneauxAuj.length - 1; i++) {
+    if (minNow >= parseHHMM(creneauxAuj[i][1]) && minNow < parseHHMM(creneauxAuj[i+1][0])) {
+      return { etat: 'pause', label: 'Pause midi', sousTitre: `Réouvre à ${creneauxAuj[i+1][0]}` }
+    }
+  }
+  // 3) Avant l'ouverture du jour
+  if (creneauxAuj.length > 0 && minNow < parseHHMM(creneauxAuj[0][0])) {
+    return { etat: 'ferme', label: 'Fermé', sousTitre: `Ouvre aujourd'hui à ${creneauxAuj[0][0]}` }
+  }
+  // 4) Fermé maintenant, on cherche le prochain jour ouvert
+  const idx = JOURS_ORDRE_PILL.indexOf(jour)
+  for (let i = 1; i <= 7; i++) {
+    const next = JOURS_ORDRE_PILL[(idx + i) % 7]
+    const c = getCreneauxJour(horaires[next])
+    if (c.length > 0) {
+      const labelJour = i === 1 ? 'demain' : next
+      return { etat: 'ferme', label: 'Fermé', sousTitre: `Ouvre ${labelJour} à ${c[0][0]}` }
+    }
+  }
+  return { etat: 'ferme', label: 'Fermé', sousTitre: null }
+}
+
+function PillStatutOuverture({ horaires }) {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000)  // refresh chaque minute
+    return () => clearInterval(timer)
+  }, [])
+
+  const statut = calculerStatutOuverture(horaires, now)
+  if (!statut) return null
+
+  const couleurs = {
+    ouvert: { bg: '#D1FAE5',  fg: '#065F46', dot: '#10B981', border: '#10B98140' },
+    pause:  { bg: '#FEF3C7',  fg: '#92400E', dot: '#F59E0B', border: '#F59E0B40' },
+    ferme:  { bg: '#FEE2E2',  fg: '#991B1B', dot: '#DC2626', border: '#DC262640' },
+  }[statut.etat]
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '4px 12px 4px 9px', borderRadius: 100, background: couleurs.bg, border: `1px solid ${couleurs.border}`, fontSize: 11, fontWeight: 700, color: couleurs.fg, letterSpacing: '0.2px', maxWidth: '100%' }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: couleurs.dot, flexShrink: 0, animation: statut.etat === 'ouvert' ? 'pillPulse 2s ease-in-out infinite' : 'none' }}/>
+      <span style={{ fontWeight: 800, whiteSpace: 'nowrap' }}>{statut.label}</span>
+      {statut.sousTitre && (
+        <span style={{ fontWeight: 600, opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {statut.sousTitre}</span>
+      )}
+      <style>{`@keyframes pillPulse { 0%,100% { opacity: 1 } 50% { opacity: 0.45 } }`}</style>
+    </span>
+  )
+}
+
 // ─── Picker "Ton agent de quartier" ─────────────────────────────────
 // Pour les fiches type=police qui stockent leurs inspecteurs dans
 // service.donnees_riches.agents_quartier : on liste les villages couverts
@@ -442,6 +531,12 @@ export default function FicheServicePublic({ params }) {
             <h1 style={{ fontWeight: 900, fontSize: '1.4rem', color: T.ink, letterSpacing: '-0.5px', margin: 0, lineHeight: 1.15 }}>
               {service.nom}
             </h1>
+            {/* Pill statut d'ouverture (temps réel Bruxelles) — visible si horaires_detail défini */}
+            {service.horaires_detail && Object.keys(service.horaires_detail).length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <PillStatutOuverture horaires={service.horaires_detail}/>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -531,30 +626,58 @@ export default function FicheServicePublic({ params }) {
         )}
       </div>
 
-      {/* Horaires */}
-      {service.horaires_detail && Object.keys(service.horaires_detail).length > 0 && (
-        <div style={{ padding: '14px 18px 6px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <IconClock size={16} color={T.deep}/>
-            <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-              Horaires
-            </span>
+      {/* Horaires : multi-créneaux + ligne "Aujourd'hui" mise en valeur + notes spéciales */}
+      {service.horaires_detail && Object.keys(service.horaires_detail).length > 0 && (() => {
+        const jourBruxelles = getDayBrussels(new Date())
+        const entries = Object.entries(JOURS_LABEL)
+        return (
+          <div style={{ padding: '14px 18px 6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <IconClock size={16} color={T.deep}/>
+              <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                Horaires
+              </span>
+            </div>
+            <div style={{ background: '#fff', borderRadius: 14, padding: '4px 0', border: `1px solid ${T.hairline}`, overflow: 'hidden' }}>
+              {entries.map(([key, label], i) => {
+                const h = service.horaires_detail?.[key]
+                const creneaux = getCreneauxJour(h)
+                const isToday = key === jourBruxelles
+                const ferme = creneaux.length === 0
+                return (
+                  <div key={key} style={{ padding: '10px 14px', borderBottom: i < entries.length - 1 ? `1px solid ${T.hairline}` : 'none', background: isToday ? T.pale + '60' : 'transparent' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 12, fontWeight: isToday ? 800 : 700, color: T.ink, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {label}
+                        {isToday && (
+                          <span style={{ fontSize: 9, color: '#fff', background: T.main, fontWeight: 800, padding: '2px 7px', borderRadius: 100, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                            Aujourd&rsquo;hui
+                          </span>
+                        )}
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: ferme ? T.muted : T.main, textAlign: 'right' }}>
+                        {ferme
+                          ? 'Fermé'
+                          : creneaux.map(([d, f], j) => (
+                              <span key={j}>
+                                {j > 0 && <span style={{ margin: '0 6px', color: T.light }}>·</span>}
+                                {d} – {f}
+                              </span>
+                            ))}
+                      </span>
+                    </div>
+                    {h?.note && (
+                      <p style={{ margin: '6px 0 0', fontSize: 10.5, color: T.deep, fontStyle: 'italic', lineHeight: 1.4 }}>
+                        💡 {h.note}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
-          <div style={{ background: '#fff', borderRadius: 14, padding: '4px 0', border: `1px solid ${T.hairline}` }}>
-            {Object.entries(JOURS_LABEL).map(([key, label], i) => {
-              const h = service.horaires_detail?.[key]
-              return (
-                <div key={key} style={{ padding: '10px 14px', borderBottom: i < 6 ? `1px solid ${T.hairline}` : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: T.ink }}>{label}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: h?.ouvert === false ? T.muted : T.main }}>
-                    {h?.ouvert === false ? 'Fermé' : (h?.debut && h?.fin ? `${h.debut} – ${h.fin}` : '—')}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Périmètre couvert */}
       {service.codes_postaux && service.codes_postaux.length > 0 && !service.national && (

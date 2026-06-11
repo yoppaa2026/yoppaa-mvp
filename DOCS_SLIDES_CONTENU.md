@@ -1,23 +1,25 @@
-# 🟣 Yoppaa — Slides Conseil Communal Mettet (15 juin 2026)
+# 🟣 Yoppaa — Slides Collège Communal Mettet (lundi 15 juin 2026 · 14 h)
 
-> **Export texte des 17 slides** pour audit comparatif vs le brief de présentation initial.
+> **Export texte des 12 slides — version institutionnelle révisée**
 > URL live : `https://www.yoppaa.app/demo-mettet/slides`
-> Navigation : flèches gauche/droite, F (plein écran), 1-9 (saut direct), Home/End
+> Navigation : flèches gauche/droite, F (plein écran), 1-9 (saut direct)
+> **Audience** : Collège communal de Mettet (Bourgmestre Yves Delforge + échevins + Directeur général)
+> **Durée cible** : 8-10 minutes (séance de travail, échange en sortie)
 
 ---
 
 ## SLIDE 1 — Couverture
 
-**Visuel** : fond violet sombre dégradé + 2 glows + 3 dots tricolores
+**Visuel** : fond violet sombre dégradé + glows + dots tricolores
 
 **Contenu** :
 - Wordmark **yoppaa** (tricolore : yo blanc · pp violet clair · aa violet moyen)
 - Sous-titre : « Pour Mettet »
-- Pied : « Conseil communal · 15 juin 2026 »
+- Pied : « Collège communal · 15 juin 2026 · 14 h »
 
 ---
 
-## SLIDE 2 — Alexandre Verstappen
+## SLIDE 2 — Qui je suis
 
 **Visuel** : avatar circulaire « AV » sur gradient violet + badge « 🏠 Votre voisin » + bloc texte à droite
 
@@ -27,36 +29,36 @@
 - « Mettetois **depuis toujours** »
 - « 📍 Rue de Prée 9G — 5640 Mettet »
 - « 🏢 **Avcotech SRL** · BCE 0731.637.148 »
-- Citation : *« Yoppaa est née d'une intuition simple : le commerce de quartier mérite mieux qu'une page Facebook poussiéreuse. »*
+- Citation : *« Yoppaa est née d'une intuition simple : le commerce de quartier mérite mieux qu'une page Facebook oubliée. »*
 
 ---
 
 ## SLIDE 3 — Le constat
 
-**Visuel** : fond clair + accent rouge sur la chute
+**Visuel** : fond clair + accroche interrogative + pill rouge
 
 **Contenu** :
 - Eyebrow : « LE CONSTAT »
-- Titre : « Vos citoyens ouvrent leur téléphone **100 fois par jour** »
-- « Ils voient TGTG · Uber Eats · Deliveroo · Booking · Just Eat · Amazon... »
-- Chute en pill rouge : **« 0 % de leurs commerces de Mettet »**
+- Titre (accroche) : « Qui, ce soir, sait ce que nos commerces de Mettet **proposeront demain matin ?** »
+- Sous-texte : « Nos citoyens ouvrent leur téléphone cent fois par jour. Ils y trouvent toutes les grandes plateformes mondiales. »
+- Chute (pill rouge) : « ... mais presque jamais les commerces de Mettet. »
 
 ---
 
-## SLIDE 4 — Mettet Z'infos
+## SLIDE 4 — La communication de la commune
 
-**Visuel** : 4 cards en grid
+**Visuel** : 4 fiches en grid
 
 **Contenu** :
 - Eyebrow : « VOUS AUSSI, VOUS VOULEZ COMMUNIQUER »
-- Titre : « Mettet Z'infos est **excellent**... »
-- Sous-titre italique : « ... mais peut-il TOUT faire ? »
-- 4 cards :
-  - 📅 **Trimestriel** — 3 mois pour annoncer
+- Titre : « Votre bulletin communal est **excellent**... »
+- Sous-titre italique : « ... mais peut-il tout faire ? »
+- 4 fiches :
+  - 📅 **Bimestriel** — Jusqu'à deux mois pour annoncer
   - 📄 **Papier** — Perdu, jeté, oublié
-  - 🐢 **Pas instantané** — Pas d'alerte temps réel
-  - 👀 **Lecture passive** — Pas de retour citoyen
-- Chute : « Il faut **compléter**, pas remplacer. Un canal numérique instantané, gratuit, contrôlé par vous. »
+  - 🐢 **Pas instantané** — Aucune alerte en temps réel
+  - 👀 **Lecture passive** — Aucun retour des citoyens
+- Chute : « Il faut **compléter**, pas remplacer. Un canal numérique instantané, gratuit, que vous contrôlez. »
 
 ---
 
@@ -66,229 +68,158 @@
 
 **Contenu** :
 - Wordmark yoppaa en très grand
-- Tagline : « L'app belge des commerces de quartier »
+- Tagline : « L'application belge des commerces de quartier »
 - 3 piliers :
-  - 🏪 **Commerçants** — Vitrine + commande
-  - 👥 **Citoyens** — Découverte + RDV
-  - 🏛️ **Services publics** — Alertes + signalements
-- Pied : « 🇧🇪 Bootstrap · Ancré Mettet · Sans levée de fonds »
+  - 🏪 **Commerçants** — Vitrine et commande
+  - 👥 **Citoyens** — Découverte et rendez-vous
+  - 🏛️ **Services publics** — Alertes et signalements
+- Pied : « 🇧🇪 **Autofinancé** · Ancré à Mettet · Sans levée de fonds »
 
 ---
 
-## SLIDE 6 — Yoppaa vs les autres 🆕
+## SLIDE 6 — Une application, trois types de commerce
 
-**Visuel** : tableau comparatif 6 lignes
-
-**Contenu** :
-- Eyebrow : « CE QUI NOUS REND DIFFÉRENTS »
-- Titre : « Yoppaa **vs** Uber, TGTG, Booking »
-- Tableau :
-
-| Critère | Yoppaa | Les géants |
-|---|---|---|
-| Commission sur les ventes | **0 %** | 25 à 30 % |
-| Siège social | 🇧🇪 Mettet | 🇺🇸 / 🇩🇰 / 🇳🇱 |
-| Visibilité des commerces | Équitable, par défaut | Pay-to-play |
-| Données clients | Restent au commerçant | Captées et revendues |
-| Algorithme | Transparent | Boîte noire |
-| Engagement | Aucun, sortie libre | Contrats annuels |
-
-- Chute : « On ne joue pas dans la même cour. **On joue dans VOTRE cour.** »
-
----
-
-## SLIDE 7 — 3 types de commerce 🆕
-
-**Visuel** : 3 cards avec bordure top colorée
+**Visuel** : 3 cards avec bordure top colorée (ambre/vert/violet)
 
 **Contenu** :
-- Eyebrow : « UNE SEULE APP, 3 EXPÉRIENCES »
+- Eyebrow : « UNE SEULE APPLICATION, TROIS EXPÉRIENCES »
 - Titre : « Pensée pour **chaque type** de commerce »
-- 3 cards :
+- 3 fiches :
   - 🥖 **Alimentaire** (boulangerie, pizzeria, frites, traiteur, épicerie...)
-    - Click & Collect
-    - Livraison locale
-    - Deals quotidiens
-    - Stock temps réel
-  - 💄 **Vitrine service** (institut beauté, coiffeur, garagiste, dentiste, kiné...)
-    - Prise de RDV en ligne
-    - Acompte sécurisé Stripe
-    - Multi-praticiens
-    - Annulation 48h
-  - 🛍️ **Commerce de détail** (fleuriste, librairie, boutique de vêtements, déco...)
-    - Vitrine numérique
-    - Actus & deals
-    - Carte de fidélité
-    - Programme parrainage
-- Chute : « Un boulanger n'a pas les mêmes besoins qu'un coiffeur. On l'a compris. »
+    - Click & Collect · Livraison locale · Bons plans quotidiens · Stock en temps réel
+  - 💄 **Vitrine de service** (institut de beauté, coiffeur, garagiste, dentiste...)
+    - Rendez-vous en ligne · Acompte sécurisé · Plusieurs praticiens · Annulation jusqu'à 48 h
+  - 🛍️ **Commerce de détail** (fleuriste, librairie, vêtements, déco...)
+    - Vitrine numérique · Actualités et bons plans · Fidélité · Parrainage
+- Chute : « Un boulanger n'a pas les mêmes besoins qu'un coiffeur. Nous l'avons compris. »
 
 ---
 
-## SLIDE 8 — Notre transparence 🆕
+## SLIDE 7 — Notre transparence
 
-**Visuel** : 6 cards icônes + clincher final
+**Visuel** : 4 fiches icônes grid 2×2 + clincher final
 
 **Contenu** :
 - Eyebrow : « PAS DE PETITS CARACTÈRES »
 - Titre : « Notre **transparence** »
-- 6 cards :
-  - 💰 **0 % de commission** — Sur chaque vente, 100% du paiement va au commerçant. On n'est pas un intermédiaire.
-  - 🆓 **Plan ON gratuit à vie** — Présence + actus + favoris + signaux Yoppers. Zéro euro, à vie.
-  - 📋 **Plan FULL au prix unique** — ~40€/mois, tous secteurs confondus. Pas de tarif caché par catégorie.
-  - 🚪 **Sortie libre, à tout moment** — Vous résiliez ? Vous basculez en ON gratuit. Vos données restent à vous.
-  - 🔓 **Pas d'algorithme secret** — Vous décidez ce qui est mis en avant sur votre fiche. Pas de pay-to-play.
-  - 🇧🇪 **Données hébergées en UE** — Supabase Frankfurt. Conformité RGPD intégrale. Pas de transfert vers les US.
-- Clincher : « Si vous trouvez un piège dans nos CGV, on offre l'abonnement FULL à vie au commerçant qui le repère. 🟣 »
+- 4 fiches :
+  - 💰 **0 % de commission** — La totalité du paiement revient au commerçant. Nous ne sommes pas un intermédiaire qui prélève.
+  - 🆓 **Plan gratuit à vie** — Présence, actualités, favoris, signaux citoyens. Zéro euro, à vie.
+  - 🚪 **Sortie libre** — Vous résiliez, vous basculez vers le plan gratuit. Vos données restent les vôtres. Aucun engagement.
+  - 🇧🇪 **Données hébergées en UE** — Conformité RGPD intégrale. Aucun transfert hors d'Europe.
+- Clincher : « Si vous trouvez un piège dans nos conditions générales, l'abonnement complet est offert à vie au commerçant qui le repère. 🟣 »
 
 ---
 
-## SLIDE 9 — Notre communauté 🆕
+## SLIDE 8 — Démonstration ① · Vos citoyens trouvent vos commerces
 
-**Visuel** : fond violet sombre + 4 cards glassmorphism + punch line
-
-**Contenu** :
-- Eyebrow : « PLUS QU'UN SERVICE »
-- Titre : « Une **tribu**, pas un marché »
-- 4 cards :
-  - 👥 **Les Yoppers** — Des citoyens engagés pour leur quartier. Pas des consommateurs.
-  - 🏪 **Les commerçants** — Des partenaires. On ne les ponctionne pas, on les soutient.
-  - 🏛️ **Les communes** — Des alliées institutionnelles. Plan PUBLIC gratuit à vie.
-  - 🟣 **Yoppaa** — Bootstrap belge. Pas de levée pour vendre aux US dans 3 ans.
-- Punch line : « La Silicon Valley extrait. Nous, on **tisse**. »
-
----
-
-## SLIDE 10 — DÉMO LIVE ① · Vos citoyens trouvent vos commerces
-
-**Visuel** : texte à gauche + iPhone iframe à droite (chargeant `/commander?frame=1`)
+**Visuel** : texte à gauche + iPhone iframe (`/commander?frame=1`)
 
 **Contenu** :
-- Eyebrow : « DÉMO LIVE ① »
+- Eyebrow : « DÉMONSTRATION ① »
 - Titre : « Vos citoyens trouvent vos commerces »
-- Commentaire : « Plus de 10 commerçants Mettetois sont déjà actifs. Cards locales, statuts en temps réel, favoris, deals. »
-- Encadré bleu « 💡 À montrer en live » : « Tape sur n'importe quelle card pour montrer une fiche commerce complète. Bouton ♡ favoris + bouton partage = viralité. »
+- Commentaire : « Six commerçants mettetois ont déjà rejoint l'aventure : **Boulangerie Wilmot, Sandwicherie Le 9-15, Mozz'Art, P'tit Toqué, Miettes et Kebabistro**. Fiches locales, statuts en temps réel, favoris, bons plans. »
+- Note interne (prompteur) : « Toucher une fiche pour ouvrir un commerce complet. Bouton favoris et bouton partage = viralité. »
 
 ---
 
-## SLIDE 11 — DÉMO LIVE ② · Vous publiez, ils reçoivent
+## SLIDE 9 — Démonstration ② · Vous publiez, ils reçoivent (commune + Good Morning Yoppers)
 
-**Visuel** : texte à gauche + iPhone iframe (chargeant `/commander/services/commune-mettet?frame=1`)
+**Visuel** : texte à gauche + iPhone iframe (`/commander/services/commune-mettet?frame=1`)
 
 **Contenu** :
-- Eyebrow : « DÉMO LIVE ② »
-- Titre : « Vous publiez, ils reçoivent »
-- Commentaire : « Votre fiche Administration communale de Mettet — déjà construite. Alertes, actus, horaires, tous les numéros internes. »
-- Encadré : « L'alerte rouge 'Coupure d'eau AIEM' apparaît automatiquement dans tous les téléphones des Mettetois dès l'enregistrement. »
+- Eyebrow : « DÉMONSTRATION ② »
+- Titre : « Vous publiez, ils reçoivent — **instantanément** »
+- Commentaire : « Votre fiche d'administration communale est déjà construite. Une alerte — coupure d'eau, travaux — apparaît dans tous les téléphones des Mettetois dès l'enregistrement. Et chaque matin, le **Good Morning Yoppers** rassemble alertes, actualités et bons plans, comme le journal quotidien du quartier. »
+- Note interne : « Montrer l'alerte 'Coupure d'eau AIEM', puis basculer sur /commander/morning : la même information arrive en tête de flux. »
 
 ---
 
-## SLIDE 12 — DÉMO LIVE ③ · LA PÉPITE · Signalements citoyens
+## SLIDE 10 — Démonstration ③ · La pépite · Les signalements citoyens
 
 **Visuel** : texte à gauche + iPhone iframe
 
 **Contenu** :
-- Eyebrow : « DÉMO LIVE ③ · LA PÉPITE »
+- Eyebrow : « DÉMONSTRATION ③ · LA PÉPITE »
 - Titre : « Les signalements citoyens »
-- Commentaire : « 14h00, un Mettetois voit un nid de poule. 14h05, c'est dans la boîte mail de votre service voirie. Avec photo géolocalisée. »
-- Encadré : « Scroll jusqu'à 'Signaler un problème'. Choisis 'Nid de poule' → flow 3 étapes → email formaté arrive chez vous. »
+- Commentaire : « **14 h 00** : un Mettetois aperçoit un nid-de-poule. **14 h 05** : le signalement est dans la messagerie de votre service voirie, accompagné d'une photo géolocalisée. »
+- Note interne : « Aller jusqu'à 'Signaler un problème', choisir 'Nid-de-poule', dérouler les trois étapes : le message formaté arrive. »
 
 ---
 
-## SLIDE 13 — Good Morning Yoppers
+## SLIDE 11 — Déjà construit pour Mettet + Plan public gratuit
 
-**Visuel** : texte à gauche + iPhone iframe (chargeant `/commander/morning?frame=1`)
-
-**Contenu** :
-- Eyebrow : « LE RITUEL DU MATIN »
-- Titre : « Good Morning Yoppers »
-- Commentaire : « Chaque matin à 7h30, vos alertes et actus arrivent dans le téléphone de chaque Mettetois. Comme un journal local du jour. »
-- Encadré : « L'alerte AIEM en rouge en tête. Puis le marché du terroir. Puis les deals des commerçants. Tout dans le même flux. »
-
----
-
-## SLIDE 14 — Déjà construit pour Mettet
-
-**Visuel** : 6 cards en grid 3 colonnes avec checkmarks verts
+**Visuel** : 6 cards checkmarks + bloc offre violet en bas
 
 **Contenu** :
 - Eyebrow : « DÉJÀ CONSTRUIT POUR METTET »
-- Titre : « On n'attendait pas **votre validation**... »
-- 6 items :
-  - ✓ **5 fiches officielles** — Mairie, CPAS, Police, CEGENO (médecin), 112
-  - ✓ **23 numéros internes** — Tous les services communaux, cliquables direct
-  - ✓ **5 agents de quartier** — Auto-routés par village (Pierens, Meuter, Lerot...)
-  - ✓ **3 publications saisies** — Coupure d'eau · Travaux 22/06 · Marché terroir
-  - ✓ **Système signalements** — Opérationnel (nid de poule, dépôt, égout)
-  - ✓ **Dashboard commune** — Prêt à vous être attribué
-- Chute : *« Vous décidez quand on enclenche. »*
+- Titre : « Nous n'avons pas attendu votre validation pour préparer le terrain »
+- 6 éléments (coches vertes) :
+  - ✓ **5 fiches officielles** — Administration communale, CPAS, police, médecin de garde, 112
+  - ✓ **23 numéros internes** — Tous les services, cliquables
+  - ✓ **5 agents de quartier** — Dirigés automatiquement par village
+  - ✓ **3 publications saisies** — Coupure d'eau · Travaux · Marché du terroir
+  - ✓ **Signalements opérationnels** — Nid-de-poule, dépôt sauvage, égout
+  - ✓ **Tableau de bord communal** — Prêt à vous être attribué
+- Bloc offre (gradient violet) :
+  - « Notre proposition »
+  - **« Le plan public, gratuit à vie. »**
+  - « Aucun frais, aucun engagement. Vous gardez la main éditoriale, la publication est instantanée. »
+- Chute italique : *« Vous décidez du moment où nous l'activons. »*
 
 ---
 
-## SLIDE 15 — Notre proposition
+## SLIDE 12 — Comment nous soutenir + Vision
 
-**Visuel** : fond violet sombre + titre énorme + 3 cards glassmorphism
+**Visuel** : fond violet sombre + 3 cards glassmorphism + vision encadrée
 
 **Contenu** :
-- Eyebrow : « NOTRE PROPOSITION »
-- Titre : « Plan PUBLIC »
-- Énorme : « Gratuit. À vie. »
-- 3 piliers :
-  - **GRATUIT** — Aucun frais. Aucun engagement.
-  - **CONTRÔLE** — Vous gardez la main éditoriale.
-  - **IMMÉDIAT** — Publication instantanée.
+- Eyebrow : « SI VOUS Y CROYEZ »
+- Titre : « Trois manières simples de nous soutenir, à votre rythme »
+- Intro : « Nous vous offrons une infrastructure numérique gratuite, sans contrepartie financière. Si le projet vous convainc, voici comment lui donner un coup de pouce. Rien d'engageant, rien de daté. »
+- 3 fiches :
+  - **Un mot dans le bulletin communal** — Nous le rédigeons, vous validez. Vous restez maîtres du contenu.
+  - **Une mise en relation** — Une introduction à l'Union des commerçants de Mettet, pour leur présenter l'outil.
+  - **Un relais, le moment venu** — Un partage sur vos canaux, le jour où vous l'estimez pertinent. *(facultatif)*
+- Vision (encadrée, isolée) :
+  > *« Dans deux ans, lorsque nous présenterons Yoppaa à trente communes wallonnes, nous dirons :*
+  > ***« Mettet a été la première. »*** »
 
 ---
 
-## SLIDE 16 — En contrepartie
-
-**Visuel** : 3 cards numérotées 01 / 02 / 03
-
-**Contenu** :
-- Eyebrow : « EN CONTREPARTIE »
-- Titre : « Notre **carburant** »
-- Sous-titre : « Pas d'argent. De la **visibilité**. En échange de l'infrastructure, on vous demande 3 choses. »
-- 3 demandes :
-  - **01 · Mention officielle** — Une page dans le prochain Mettet Z'infos avec mention "Partenaire officiel Yoppaa".
-  - **02 · Relais Facebook** — Un post sur la page Facebook officielle de la commune au lancement (7 juillet).
-  - **03 · Mise en relation** — Une introduction à l'Union des commerçants de Mettet pour qu'on les onboarde.
-- Chute : « Vous nous offrez de la **crédibilité**. On vous offre **une infrastructure pro** sans coût. »
-
----
-
-## SLIDE 17 — Pourquoi maintenant + Vision
-
-**Visuel** : fond violet sombre + timeline 4 étapes + punch line finale
-
-**Contenu** :
-- Eyebrow : « POURQUOI MAINTENANT »
-- Titre : « Mettet sera **la commune pionnière** »
-- Timeline :
-  - 🚀 **12 juin** — Campagne FB démarre
-  - 🎯 **30 juin** — 100 Yoppers Mettetois
-  - 🎉 **7 juillet** — Lancement officiel
-  - 🇧🇪 **Été 2026** — 3 autres communes wallonnes
-- Punch line finale : *« Dans 2 ans, quand on présentera Yoppaa à 30 communes, on dira : « Mettet a été la première. » »*
-
----
-
-## 📊 RÉCAPITULATIF NARRATIF
+## 📊 STRUCTURE NARRATIVE
 
 ```
-ACT 1 — Setup            (Slides 1-2)    Qui je suis, ancrage local
-ACT 2 — Problème         (Slides 3-4)    Citoyens absents, comms commune limitée
-ACT 3 — Solution         (Slide 5)       Voici Yoppaa
-ACT 4 — Différenciation  (Slides 6-9)    Vs les géants, types, transparence, communauté
-ACT 5 — Démos live       (Slides 10-13)  Commerces, Commune, Signalements, GMY
-ACT 6 — Preuves          (Slide 14)      Ce qu'on a déjà construit pour Mettet
-ACT 7 — Offre            (Slide 15)      Plan PUBLIC gratuit à vie
-ACT 8 — Ask              (Slide 16)      3 demandes en échange
-ACT 9 — Close            (Slide 17)      Pourquoi maintenant + Mettet pionnière
+1-2    Présentation     Qui je suis, ancrage local
+3-4    Problème         Citoyens absents · Communication communale limitée
+5-7    Solution         Voici Yoppaa · Trois commerces · Transparence
+8-10   Démonstrations   Commerces · Commune + Good Morning · Signalements
+11     Preuve + Offre   Déjà construit + Plan public gratuit
+12     Soutien + Vision Demandes adoucies + clôture « Mettet pionnière »
 ```
 
-**Durée estimée** : 15-20 minutes (1 min/slide pour les non-démos, 2-3 min/slide pour les démos live).
+**Durée cible** : 8-10 minutes (séance de travail, dossiers enchaînés — laisser place à l'échange).
 
 ---
 
-*Document généré pour Avcotech SRL — Yoppaa*
+## 📝 RAPPELS POUR LA PRÉSENTATION
+
+- Le cœur émotionnel pour un élu = **démonstrations commune et signalements** (slides 9-10). Mettre l'énergie là.
+- **Apolitique** : on offre un service public à tous les citoyens.
+- **La gratuité est le bouclier** contre toute attaque. Répéter.
+- **Conclusion lente et isolée** : laisser *« Mettet a été la première »* résonner avant les questions.
+
+---
+
+## 🎯 PRINCIPES RÉDACTIONNELS APPLIQUÉS
+
+- **« Nous »** et non « on » partout.
+- **Aucun anglicisme** : application (pas « app »), fiches (pas « cards »), bons plans (pas « deals »), courriel (pas « email »), tableau de bord (pas « dashboard »), autofinancé (pas « bootstrap »).
+- **Pas de « vs »**, pas de majuscule d'emphase.
+- **Grammaire soignée** : « en temps réel », accords, tournures complètes.
+
+---
+
+*Document préparé pour Avcotech SRL — Yoppaa*
 *Slides en ligne : https://www.yoppaa.app/demo-mettet/slides*
-*Date : 11 juin 2026*
+*Version : 11 juin 2026 — refonte v2 institutionnelle*

@@ -1,6 +1,10 @@
 'use client'
 // ════════════════════════════════════════════════════════════════════
-// SLIDES PRÉSENTATION CONSEIL COMMUNAL METTET — 15 JUIN 2026
+// SLIDES PRÉSENTATION COLLÈGE COMMUNAL METTET — LUNDI 15 JUIN 2026 · 14H
+//
+// Refonte v2 — langue institutionnelle, ton soigné, ask adouci.
+// 12 slides ciblées sur l'exécutif (Bourgmestre + échevins + DG).
+// Durée cible : 8-10 minutes (séance de travail, dossiers enchaînés).
 //
 // Navigation :
 //   → ou Espace        Slide suivante
@@ -26,7 +30,6 @@ const T = {
   muted:  '#9B8FB8',
 }
 
-// Style commun à toutes les slides
 const slideBase = {
   position: 'absolute',
   inset: 0,
@@ -41,7 +44,7 @@ const slideBase = {
   textAlign: 'center',
 }
 
-// ────────── COMPOSANTS UTILITAIRES ──────────
+// ────────── UTILITAIRES ──────────
 
 function Wordmark({ size = 80, white = false }) {
   return (
@@ -86,13 +89,12 @@ function MiniWordmark({ white = true }) {
   )
 }
 
-// ────────── LES 13 SLIDES ──────────
+// ────────── LES 12 SLIDES ──────────
 
 // ─── 1. COUVERTURE ────────────────────────────────────────────────
 function Slide1() {
   return (
     <div style={{ ...slideBase, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 50%, ${T.ink} 100%)`, color: '#fff' }}>
-      {/* Glow décoratifs */}
       <div style={{ position: 'absolute', top: '15%', right: '12%', width: 600, height: 600, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}55 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
       <div style={{ position: 'absolute', bottom: '15%', left: '12%', width: 500, height: 500, borderRadius: '50%', background: `radial-gradient(circle, ${T.light}33 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
 
@@ -102,20 +104,19 @@ function Slide1() {
         <p style={{ margin: 0, fontSize: 32, fontWeight: 700, color: T.light, letterSpacing: '-0.5px' }}>
           Pour Mettet
         </p>
-        <div style={{ height: 1, width: 200, background: 'rgba(255,255,255,0.3)', margin: '8px 0' }}/>
-        <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'rgba(255,255,255,0.6)', letterSpacing: '3px', textTransform: 'uppercase' }}>
-          Conseil communal · 15 juin 2026
+        <div style={{ height: 1, width: 240, background: 'rgba(255,255,255,0.3)', margin: '8px 0' }}/>
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.65)', letterSpacing: '2.5px', textTransform: 'uppercase' }}>
+          Collège communal · 15 juin 2026 · 14 h
         </p>
       </div>
     </div>
   )
 }
 
-// ─── 2. ALEXANDRE ──────────────────────────────────────────────────
+// ─── 2. QUI JE SUIS ────────────────────────────────────────────────
 function Slide2() {
   return (
     <div style={{ ...slideBase, background: T.bg, justifyContent: 'center', flexDirection: 'row', gap: 80 }}>
-      {/* Visuel à gauche */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
         <div style={{ width: 280, height: 280, borderRadius: '50%', background: `linear-gradient(135deg, ${T.ink}, ${T.main})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 30px 80px ${T.main}40` }}>
           <span style={{ fontSize: 100, color: '#fff', fontWeight: 900, letterSpacing: '-4px' }}>AV</span>
@@ -125,7 +126,6 @@ function Slide2() {
         </span>
       </div>
 
-      {/* Texte à droite */}
       <div style={{ textAlign: 'left', maxWidth: 520 }}>
         <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
           Qui je suis
@@ -142,13 +142,13 @@ function Slide2() {
         <p style={{ margin: '8px 0', fontSize: 18, color: T.deep }}>
           🏢 <strong>Avcotech SRL</strong> · BCE 0731.637.148
         </p>
-        <p style={{ margin: '24px 0 0', fontSize: 16, color: T.muted, fontStyle: 'italic', lineHeight: 1.6 }}>
+        <p style={{ margin: '28px 0 0', fontSize: 16, color: T.muted, fontStyle: 'italic', lineHeight: 1.6 }}>
           Yoppaa est née d&rsquo;une intuition simple :<br/>
-          le commerce de quartier mérite mieux qu&rsquo;une page Facebook poussiéreuse.
+          le commerce de quartier mérite mieux qu&rsquo;une page Facebook oubliée.
         </p>
       </div>
       <MiniWordmark white={false}/>
-      <SlideNumber n={2} total={17}/>
+      <SlideNumber n={2} total={12}/>
     </div>
   )
 }
@@ -160,44 +160,45 @@ function Slide3() {
       <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
         Le constat
       </p>
-      <h2 style={{ margin: '16px 0 0', fontSize: 56, fontWeight: 900, color: T.ink, letterSpacing: '-2px', lineHeight: 1.1, maxWidth: 1000 }}>
-        Vos citoyens ouvrent leur téléphone<br/>
-        <span style={{ color: T.main }}>100 fois par jour</span>
+      <h2 style={{ margin: '20px 0 32px', fontSize: 44, fontWeight: 900, color: T.ink, letterSpacing: '-1.5px', lineHeight: 1.2, maxWidth: 1100 }}>
+        Qui, ce soir, sait ce que nos commerces<br/>
+        de Mettet <span style={{ color: T.main }}>proposeront demain matin&nbsp;?</span>
       </h2>
-      <p style={{ margin: '40px 0 12px', fontSize: 22, color: T.deep, fontWeight: 600 }}>
-        Ils voient TGTG · Uber Eats · Deliveroo · Booking · Just Eat · Amazon...
+      <p style={{ margin: '0 0 32px', fontSize: 22, color: T.deep, fontWeight: 500, maxWidth: 900, lineHeight: 1.5 }}>
+        Nos citoyens ouvrent leur téléphone cent fois par jour.<br/>
+        Ils y trouvent toutes les grandes plateformes mondiales.
       </p>
-      <div style={{ background: '#FEE2E2', padding: '20px 36px', borderRadius: 100, marginTop: 24, border: '2px solid #FCA5A5' }}>
-        <p style={{ margin: 0, fontSize: 32, fontWeight: 900, color: '#991B1B', letterSpacing: '-1px' }}>
-          0 % de leurs commerces de Mettet
+      <div style={{ background: '#FEE2E2', padding: '20px 36px', borderRadius: 100, border: '2px solid #FCA5A5' }}>
+        <p style={{ margin: 0, fontSize: 28, fontWeight: 900, color: '#991B1B', letterSpacing: '-0.8px' }}>
+          ... mais presque jamais les commerces de Mettet.
         </p>
       </div>
       <MiniWordmark white={false}/>
-      <SlideNumber n={3} total={17}/>
+      <SlideNumber n={3} total={12}/>
     </div>
   )
 }
 
-// ─── 4. METTET Z'INFOS ─────────────────────────────────────────────
+// ─── 4. LA COMMUNICATION DE LA COMMUNE ─────────────────────────────
 function Slide4() {
   return (
     <div style={{ ...slideBase, background: T.bg }}>
       <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
         Vous aussi, vous voulez communiquer
       </p>
-      <h2 style={{ margin: '16px 0 32px', fontSize: 52, fontWeight: 900, color: T.ink, letterSpacing: '-1.8px', lineHeight: 1.1, maxWidth: 1100 }}>
-        Mettet Z&rsquo;infos est <span style={{ color: T.main }}>excellent</span>...
+      <h2 style={{ margin: '16px 0 12px', fontSize: 52, fontWeight: 900, color: T.ink, letterSpacing: '-1.8px', lineHeight: 1.1, maxWidth: 1100 }}>
+        Votre bulletin communal est <span style={{ color: T.main }}>excellent</span>...
       </h2>
       <p style={{ margin: '0 0 36px', fontSize: 22, color: T.muted, fontStyle: 'italic' }}>
-        ... mais peut-il TOUT faire ?
+        ... mais peut-il tout faire&nbsp;?
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, maxWidth: 1100, width: '100%' }}>
         {[
-          { emoji: '📅', label: 'Trimestriel', detail: '3 mois pour annoncer' },
-          { emoji: '📄', label: 'Papier', detail: 'Perdu, jeté, oublié' },
-          { emoji: '🐢', label: 'Pas instantané', detail: 'Pas d\'alerte temps réel' },
-          { emoji: '👀', label: 'Lecture passive', detail: 'Pas de retour citoyen' },
+          { emoji: '📅', label: 'Bimestriel',       detail: 'Jusqu\'à deux mois pour annoncer' },
+          { emoji: '📄', label: 'Papier',           detail: 'Perdu, jeté, oublié' },
+          { emoji: '🐢', label: 'Pas instantané',   detail: 'Aucune alerte en temps réel' },
+          { emoji: '👀', label: 'Lecture passive',  detail: 'Aucun retour des citoyens' },
         ].map((b, i) => (
           <div key={i} style={{ background: '#fff', borderRadius: 16, padding: '24px 18px', boxShadow: '0 4px 16px rgba(26,8,64,0.06)', border: `1px solid ${T.pale}` }}>
             <p style={{ margin: 0, fontSize: 36, lineHeight: 1 }}>{b.emoji}</p>
@@ -207,13 +208,13 @@ function Slide4() {
         ))}
       </div>
 
-      <p style={{ margin: '40px 0 0', fontSize: 18, color: T.deep, fontWeight: 600, maxWidth: 800, lineHeight: 1.5 }}>
+      <p style={{ margin: '40px 0 0', fontSize: 18, color: T.deep, fontWeight: 600, maxWidth: 860, lineHeight: 1.5 }}>
         Il faut <strong style={{ color: T.main }}>compléter</strong>, pas remplacer.<br/>
-        Un canal numérique instantané, gratuit, contrôlé par vous.
+        Un canal numérique instantané, gratuit, que vous contrôlez.
       </p>
 
       <MiniWordmark white={false}/>
-      <SlideNumber n={4} total={17}/>
+      <SlideNumber n={4} total={12}/>
     </div>
   )
 }
@@ -228,16 +229,16 @@ function Slide5() {
         <Dots/>
         <Wordmark size={140} white/>
         <p style={{ margin: '24px 0 0', fontSize: 26, fontWeight: 700, color: T.light, letterSpacing: '-0.5px', maxWidth: 700, textAlign: 'center', lineHeight: 1.3 }}>
-          L&rsquo;app belge<br/>des commerces de quartier
+          L&rsquo;application belge<br/>des commerces de quartier
         </p>
 
         <div style={{ display: 'flex', gap: 32, marginTop: 60 }}>
           {[
-            { icon: '🏪', label: 'Commerçants', sub: 'Vitrine + commande' },
-            { icon: '👥', label: 'Citoyens', sub: 'Découverte + RDV' },
-            { icon: '🏛️', label: 'Services publics', sub: 'Alertes + signalements' },
+            { icon: '🏪', label: 'Commerçants',     sub: 'Vitrine et commande' },
+            { icon: '👥', label: 'Citoyens',        sub: 'Découverte et rendez-vous' },
+            { icon: '🏛️', label: 'Services publics', sub: 'Alertes et signalements' },
           ].map((p, i) => (
-            <div key={i} style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)', border: '1px solid rgba(196,160,244,0.3)', borderRadius: 16, padding: '24px 32px', textAlign: 'center', minWidth: 180 }}>
+            <div key={i} style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)', border: '1px solid rgba(196,160,244,0.3)', borderRadius: 16, padding: '24px 32px', textAlign: 'center', minWidth: 200 }}>
               <p style={{ margin: 0, fontSize: 36 }}>{p.icon}</p>
               <p style={{ margin: '12px 0 4px', fontSize: 18, fontWeight: 800, color: '#fff' }}>{p.label}</p>
               <p style={{ margin: 0, fontSize: 12, color: T.light, fontWeight: 600 }}>{p.sub}</p>
@@ -246,70 +247,25 @@ function Slide5() {
         </div>
 
         <p style={{ margin: '60px 0 0', fontSize: 14, color: 'rgba(255,255,255,0.6)', letterSpacing: '2px', textTransform: 'uppercase', fontWeight: 700 }}>
-          🇧🇪 Bootstrap · Ancré Mettet · Sans levée de fonds
+          🇧🇪 Autofinancé · Ancré à Mettet · Sans levée de fonds
         </p>
       </div>
-      <SlideNumber n={5} total={17}/>
+      <SlideNumber n={5} total={12}/>
     </div>
   )
 }
 
-// ─── 6. YOPPAA vs LES AUTRES (NOUVEAU) ─────────────────────────────
-function SlideDifferences() {
-  const rows = [
-    { critere: 'Commission sur les ventes',  yoppaa: '0 %',                   autres: '25 à 30 %' },
-    { critere: 'Siège social',               yoppaa: '🇧🇪 Mettet',            autres: '🇺🇸 / 🇩🇰 / 🇳🇱' },
-    { critere: 'Visibilité des commerces',   yoppaa: 'Équitable, par défaut', autres: 'Pay-to-play' },
-    { critere: 'Données clients',            yoppaa: 'Restent au commerçant', autres: 'Captées et revendues' },
-    { critere: 'Algorithme',                 yoppaa: 'Transparent',           autres: 'Boîte noire' },
-    { critere: 'Engagement',                 yoppaa: 'Aucun, sortie libre',   autres: 'Contrats annuels' },
-  ]
-  return (
-    <div style={{ ...slideBase, background: T.bg, justifyContent: 'flex-start', paddingTop: 80 }}>
-      <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
-        Ce qui nous rend différents
-      </p>
-      <h2 style={{ margin: '16px 0 32px', fontSize: 56, fontWeight: 900, color: T.ink, letterSpacing: '-2px', lineHeight: 1.1 }}>
-        Yoppaa <span style={{ color: T.main }}>vs</span> Uber, TGTG, Booking
-      </h2>
-
-      <div style={{ width: '100%', maxWidth: 1100, background: '#fff', borderRadius: 16, overflow: 'hidden', border: `1px solid ${T.pale}`, boxShadow: '0 8px 32px rgba(26,8,64,0.08)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '16px 24px', background: T.ink, color: '#fff' }}>
-          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '1.2px', textTransform: 'uppercase', opacity: 0.7 }}>Critère</span>
-          <span style={{ fontSize: 14, fontWeight: 900, color: T.light, letterSpacing: '0.5px' }}>Yoppaa</span>
-          <span style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.6)' }}>Les géants</span>
-        </div>
-        {rows.map((r, i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '14px 24px', borderBottom: i < rows.length - 1 ? `1px solid ${T.pale}` : 'none', alignItems: 'center', textAlign: 'left' }}>
-            <span style={{ fontSize: 14, color: T.muted, fontWeight: 600 }}>{r.critere}</span>
-            <span style={{ fontSize: 15, color: T.main, fontWeight: 800 }}>{r.yoppaa}</span>
-            <span style={{ fontSize: 14, color: T.muted, fontWeight: 600 }}>{r.autres}</span>
-          </div>
-        ))}
-      </div>
-
-      <p style={{ margin: '36px 0 0', fontSize: 18, color: T.deep, fontWeight: 600, maxWidth: 800, lineHeight: 1.5 }}>
-        On ne joue pas dans la même cour.<br/>
-        <span style={{ color: T.main, fontWeight: 800 }}>On joue dans VOTRE cour.</span>
-      </p>
-
-      <MiniWordmark white={false}/>
-      <SlideNumber n={6} total={17}/>
-    </div>
-  )
-}
-
-// ─── 7. 3 TYPES DE COMMERCE (NOUVEAU) ──────────────────────────────
-function SlideTypes() {
+// ─── 6. UNE APPLICATION, TROIS TYPES DE COMMERCE ───────────────────
+function Slide6() {
   const types = [
-    { emoji: '🥖', titre: 'Alimentaire', sub: 'Boulangerie, pizzeria, frites, traiteur, épicerie...', features: ['Click & Collect', 'Livraison locale', 'Deals quotidiens', 'Stock temps réel'], color: '#F59E0B' },
-    { emoji: '💄', titre: 'Vitrine service', sub: 'Institut beauté, coiffeur, garagiste, dentiste, kiné...', features: ['Prise de RDV en ligne', 'Acompte sécurisé Stripe', 'Multi-praticiens', 'Annulation 48h'], color: '#10B981' },
-    { emoji: '🛍️', titre: 'Commerce de détail', sub: 'Fleuriste, librairie, boutique de vêtements, déco...', features: ['Vitrine numérique', 'Actus & deals', 'Carte de fidélité', 'Programme parrainage'], color: '#6B35C4' },
+    { emoji: '🥖', titre: 'Alimentaire',          sub: 'Boulangerie, pizzeria, frites, traiteur, épicerie...', features: ['Click & Collect', 'Livraison locale', 'Bons plans quotidiens', 'Stock en temps réel'],    color: '#F59E0B' },
+    { emoji: '💄', titre: 'Vitrine de service',   sub: 'Institut de beauté, coiffeur, garagiste, dentiste...', features: ['Rendez-vous en ligne', 'Acompte sécurisé', 'Plusieurs praticiens', 'Annulation jusqu\'à 48 h'], color: '#10B981' },
+    { emoji: '🛍️', titre: 'Commerce de détail',  sub: 'Fleuriste, librairie, vêtements, déco...',              features: ['Vitrine numérique', 'Actualités et bons plans', 'Fidélité', 'Parrainage'],            color: '#6B35C4' },
   ]
   return (
     <div style={{ ...slideBase, background: T.bg, justifyContent: 'flex-start', paddingTop: 80 }}>
       <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
-        Une seule app, 3 expériences
+        Une seule application, trois expériences
       </p>
       <h2 style={{ margin: '16px 0 40px', fontSize: 52, fontWeight: 900, color: T.ink, letterSpacing: '-2px', lineHeight: 1.1 }}>
         Pensée pour <span style={{ color: T.main }}>chaque type</span> de commerce
@@ -333,24 +289,22 @@ function SlideTypes() {
       </div>
 
       <p style={{ margin: '36px 0 0', fontSize: 18, color: T.deep, fontWeight: 600, fontStyle: 'italic' }}>
-        Un boulanger n&rsquo;a pas les mêmes besoins qu&rsquo;un coiffeur. On l&rsquo;a compris.
+        Un boulanger n&rsquo;a pas les mêmes besoins qu&rsquo;un coiffeur. Nous l&rsquo;avons compris.
       </p>
 
       <MiniWordmark white={false}/>
-      <SlideNumber n={7} total={17}/>
+      <SlideNumber n={6} total={12}/>
     </div>
   )
 }
 
-// ─── 8. NOTRE TRANSPARENCE (NOUVEAU) ───────────────────────────────
-function SlideTransparence() {
+// ─── 7. NOTRE TRANSPARENCE ─────────────────────────────────────────
+function Slide7() {
   const items = [
-    { icon: '💰', label: '0 % de commission', detail: 'Sur chaque vente, 100% du paiement va au commerçant. On n\'est pas un intermédiaire.' },
-    { icon: '🆓', label: 'Plan ON gratuit à vie', detail: 'Présence + actus + favoris + signaux Yoppers. Zéro euro, à vie.' },
-    { icon: '📋', label: 'Plan FULL au prix unique', detail: '~40€/mois, tous secteurs confondus. Pas de tarif caché par catégorie.' },
-    { icon: '🚪', label: 'Sortie libre, à tout moment', detail: 'Vous résiliez ? Vous basculez en ON gratuit. Vos données restent à vous.' },
-    { icon: '🔓', label: 'Pas d\'algorithme secret', detail: 'Vous décidez ce qui est mis en avant sur votre fiche. Pas de pay-to-play.' },
-    { icon: '🇧🇪', label: 'Données hébergées en UE', detail: 'Supabase Frankfurt. Conformité RGPD intégrale. Pas de transfert vers les US.' },
+    { icon: '💰', label: '0 % de commission',        detail: 'La totalité du paiement revient au commerçant. Nous ne sommes pas un intermédiaire qui prélève.' },
+    { icon: '🆓', label: 'Plan gratuit à vie',       detail: 'Présence, actualités, favoris, signaux citoyens. Zéro euro, à vie.' },
+    { icon: '🚪', label: 'Sortie libre',             detail: 'Vous résiliez, vous basculez vers le plan gratuit. Vos données restent les vôtres. Aucun engagement.' },
+    { icon: '🇧🇪', label: 'Données hébergées en UE', detail: 'Conformité RGPD intégrale. Aucun transfert hors d\'Europe.' },
   ]
   return (
     <div style={{ ...slideBase, background: T.bg, justifyContent: 'flex-start', paddingTop: 70 }}>
@@ -361,315 +315,215 @@ function SlideTransparence() {
         Notre <span style={{ color: T.main }}>transparence</span>
       </h2>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, maxWidth: 1150, width: '100%' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20, maxWidth: 1000, width: '100%' }}>
         {items.map((it, i) => (
-          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '20px 22px', border: `1px solid ${T.pale}`, textAlign: 'left' }}>
-            <p style={{ margin: 0, fontSize: 28, lineHeight: 1 }}>{it.icon}</p>
-            <p style={{ margin: '10px 0 6px', fontSize: 16, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>{it.label}</p>
-            <p style={{ margin: 0, fontSize: 12.5, color: T.muted, lineHeight: 1.5, fontWeight: 500 }}>{it.detail}</p>
+          <div key={i} style={{ background: '#fff', borderRadius: 16, padding: '24px 26px', border: `1px solid ${T.pale}`, textAlign: 'left', display: 'flex', gap: 18, alignItems: 'flex-start' }}>
+            <p style={{ margin: 0, fontSize: 36, lineHeight: 1, flexShrink: 0 }}>{it.icon}</p>
+            <div>
+              <p style={{ margin: 0, fontSize: 18, fontWeight: 900, color: T.ink, letterSpacing: '-0.4px' }}>{it.label}</p>
+              <p style={{ margin: '6px 0 0', fontSize: 13.5, color: T.muted, lineHeight: 1.55, fontWeight: 500 }}>{it.detail}</p>
+            </div>
           </div>
         ))}
       </div>
 
-      <p style={{ margin: '36px 0 0', fontSize: 18, color: T.deep, fontWeight: 700, fontStyle: 'italic' }}>
-        Si vous trouvez un piège dans nos CGV, on offre l&rsquo;abonnement FULL à vie au commerçant qui le repère. 🟣
+      <p style={{ margin: '40px 0 0', fontSize: 17, color: T.deep, fontWeight: 700, fontStyle: 'italic', maxWidth: 900, lineHeight: 1.5 }}>
+        Si vous trouvez un piège dans nos conditions générales, l&rsquo;abonnement complet<br/>est offert à vie au commerçant qui le repère. 🟣
       </p>
 
       <MiniWordmark white={false}/>
-      <SlideNumber n={8} total={17}/>
+      <SlideNumber n={7} total={12}/>
     </div>
   )
 }
 
-// ─── 9. NOTRE COMMUNAUTÉ (NOUVEAU) ─────────────────────────────────
-function SlideCommunaute() {
-  return (
-    <div style={{ ...slideBase, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 60%, ${T.ink} 100%)`, color: '#fff' }}>
-      <div style={{ position: 'absolute', top: '15%', left: '12%', width: 500, height: 500, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}55 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
-      <div style={{ position: 'absolute', bottom: '15%', right: '12%', width: 400, height: 400, borderRadius: '50%', background: `radial-gradient(circle, ${T.light}33 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
-
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.light, letterSpacing: '3px', textTransform: 'uppercase' }}>
-          Plus qu&rsquo;un service
-        </p>
-        <h2 style={{ margin: '24px 0 50px', fontSize: 64, fontWeight: 900, color: '#fff', letterSpacing: '-2.5px', lineHeight: 1, textAlign: 'center' }}>
-          Une <span style={{ color: T.light }}>tribu</span>, pas un marché
-        </h2>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, maxWidth: 1150, width: '100%' }}>
-          {[
-            { emoji: '👥', titre: 'Les Yoppers',     detail: 'Des citoyens engagés pour leur quartier. Pas des consommateurs.' },
-            { emoji: '🏪', titre: 'Les commerçants', detail: 'Des partenaires. On ne les ponctionne pas, on les soutient.' },
-            { emoji: '🏛️', titre: 'Les communes',   detail: 'Des alliées institutionnelles. Plan PUBLIC gratuit à vie.' },
-            { emoji: '🟣', titre: 'Yoppaa',          detail: 'Bootstrap belge. Pas de levée pour vendre aux US dans 3 ans.' },
-          ].map((c, i) => (
-            <div key={i} style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)', border: '1px solid rgba(196,160,244,0.3)', borderRadius: 16, padding: '24px 18px', textAlign: 'left' }}>
-              <p style={{ margin: 0, fontSize: 38, lineHeight: 1 }}>{c.emoji}</p>
-              <p style={{ margin: '12px 0 6px', fontSize: 17, fontWeight: 900, color: '#fff' }}>{c.titre}</p>
-              <p style={{ margin: 0, fontSize: 12.5, color: T.light, fontWeight: 500, lineHeight: 1.5 }}>{c.detail}</p>
-            </div>
-          ))}
-        </div>
-
-        <p style={{ margin: '50px 0 0', fontSize: 22, fontWeight: 600, color: '#fff', fontStyle: 'italic', maxWidth: 900, textAlign: 'center', lineHeight: 1.5 }}>
-          La Silicon Valley extrait. <br/>
-          Nous, on <span style={{ color: T.light, fontWeight: 800 }}>tisse</span>.
-        </p>
-      </div>
-      <SlideNumber n={9} total={17}/>
-    </div>
-  )
-}
-
-// ─── DÉMO LIVE (Slides 10, 11, 12, 13) ─────────────────────────────
-// Template commun pour les slides démo : titre + iframe à droite + commentaire à gauche
-function SlideDemo({ num, label, titre, url, commentaire, focus, n }) {
+// ─── DÉMO LIVE — Template commun pour slides 8, 9, 10 ──────────────
+function SlideDemo({ label, titre, url, commentaire, note, n }) {
   return (
     <div style={{ ...slideBase, background: `linear-gradient(135deg, ${T.bg} 0%, ${T.pale} 100%)`, justifyContent: 'center', flexDirection: 'row', gap: 60, alignItems: 'center' }}>
       <div style={{ flex: 1, maxWidth: 520, textAlign: 'left' }}>
         <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
           {label}
         </p>
-        <h2 style={{ margin: '16px 0 32px', fontSize: 48, fontWeight: 900, color: T.ink, letterSpacing: '-2px', lineHeight: 1.1 }}>
+        <h2 style={{ margin: '16px 0 28px', fontSize: 44, fontWeight: 900, color: T.ink, letterSpacing: '-1.8px', lineHeight: 1.15 }}>
           {titre}
         </h2>
-        <p style={{ margin: '0 0 24px', fontSize: 20, color: T.deep, lineHeight: 1.5, fontWeight: 500 }}>
+        <p style={{ margin: '0 0 24px', fontSize: 19, color: T.deep, lineHeight: 1.55, fontWeight: 500 }}>
           {commentaire}
         </p>
-        {focus && (
+        {note && (
           <div style={{ background: '#fff', border: `2px solid ${T.main}`, borderRadius: 14, padding: '16px 20px' }}>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 6 }}>
-              💡 À montrer en live
+            <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: T.main, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 6 }}>
+              💡 Note interne
             </p>
-            <p style={{ margin: 0, fontSize: 15, color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
-              {focus}
+            <p style={{ margin: 0, fontSize: 14, color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
+              {note}
             </p>
           </div>
         )}
       </div>
 
-      {/* iPhone frame avec iframe — largeur 400px (iPhone 14/15) pour contenu non croppé */}
       <div style={{ position: 'relative', width: 400, height: 820, background: '#1a1a1a', borderRadius: 56, padding: 12, boxShadow: '0 30px 80px rgba(26,8,64,0.4), 0 0 0 1px rgba(196,160,244,0.3)', flexShrink: 0, boxSizing: 'border-box' }}>
         <div style={{ position: 'absolute', top: -2, left: '50%', transform: 'translateX(-50%)', width: 110, height: 24, background: '#0a0a0a', borderRadius: '0 0 20px 20px', zIndex: 10 }}/>
         <iframe src={url} title={titre} style={{ width: '100%', height: '100%', border: 'none', borderRadius: 44, background: '#fff', display: 'block' }}/>
       </div>
 
       <MiniWordmark white={false}/>
-      <SlideNumber n={n} total={17}/>
+      <SlideNumber n={n} total={12}/>
     </div>
   )
 }
 
-function Slide6() {
-  return (
-    <SlideDemo
-      num="①" label="DÉMO LIVE ①" n={10}
-      titre="Vos citoyens trouvent vos commerces"
-      url="/commander?frame=1"
-      commentaire="Plus de 10 commerçants Mettetois sont déjà actifs. Cards locales, statuts en temps réel, favoris, deals."
-      focus="Tape sur n'importe quelle card pour montrer une fiche commerce complète. Bouton ♡ favoris + bouton partage = viralité."
-    />
-  )
-}
-
-function Slide7() {
-  return (
-    <SlideDemo
-      num="②" label="DÉMO LIVE ②" n={11}
-      titre="Vous publiez, ils reçoivent"
-      url="/commander/services/commune-mettet?frame=1"
-      commentaire="Votre fiche Administration communale de Mettet — déjà construite. Alertes, actus, horaires, tous les numéros internes."
-      focus="L'alerte rouge 'Coupure d'eau AIEM' apparaît automatiquement dans tous les téléphones des Mettetois dès l'enregistrement."
-    />
-  )
-}
-
+// ─── 8. DÉMONSTRATION ① — Commerces ────────────────────────────────
 function Slide8() {
   return (
-    <SlideDemo
-      num="③" label="DÉMO LIVE ③ · LA PÉPITE" n={12}
-      titre="Les signalements citoyens"
-      url="/commander/services/commune-mettet?frame=1"
-      commentaire="14h00, un Mettetois voit un nid de poule. 14h05, c'est dans la boîte mail de votre service voirie. Avec photo géolocalisée."
-      focus="Scroll jusqu'à 'Signaler un problème'. Choisis 'Nid de poule' → flow 3 étapes → email formaté arrive chez vous."
+    <SlideDemo n={8}
+      label="Démonstration ①"
+      titre="Vos citoyens trouvent vos commerces"
+      url="/commander?frame=1"
+      commentaire={
+        <>
+          Six commerçants mettetois ont déjà rejoint l&rsquo;aventure : Boulangerie Wilmot, Sandwicherie Le 9-15, Mozz&rsquo;Art, P&rsquo;tit Toqué, Miettes et Kebabistro. Fiches locales, statuts en temps réel, favoris, bons plans.
+        </>
+      }
+      note="Toucher une fiche pour ouvrir un commerce complet. Bouton favoris et bouton partage = viralité."
     />
   )
 }
 
-// ─── 9. GOOD MORNING YOPPERS ───────────────────────────────────────
+// ─── 9. DÉMONSTRATION ② — Commune + Good Morning (fusionnée) ───────
 function Slide9() {
   return (
-    <SlideDemo
-      num="✨" label="LE RITUEL DU MATIN" n={13}
-      titre="Good Morning Yoppers"
-      url="/commander/morning?frame=1"
-      commentaire="Chaque matin à 7h30, vos alertes et actus arrivent dans le téléphone de chaque Mettetois. Comme un journal local du jour."
-      focus="L'alerte AIEM en rouge en tête. Puis le marché du terroir. Puis les deals des commerçants. Tout dans le même flux."
+    <SlideDemo n={9}
+      label="Démonstration ②"
+      titre="Vous publiez, ils reçoivent — instantanément"
+      url="/commander/services/commune-mettet?frame=1"
+      commentaire={
+        <>
+          Votre fiche d&rsquo;administration communale est déjà construite. Une alerte — coupure d&rsquo;eau, travaux — apparaît dans tous les téléphones des Mettetois dès l&rsquo;enregistrement. Et chaque matin, le <strong>Good Morning Yoppers</strong> rassemble alertes, actualités et bons plans, comme le journal quotidien du quartier.
+        </>
+      }
+      note="Montrer l'alerte 'Coupure d'eau AIEM', puis basculer sur /commander/morning : la même information arrive en tête de flux."
     />
   )
 }
 
-// ─── 10. CE QU'ON A DÉJÀ CONSTRUIT ─────────────────────────────────
+// ─── 10. DÉMONSTRATION ③ — Signalements (LA PÉPITE) ────────────────
 function Slide10() {
+  return (
+    <SlideDemo n={10}
+      label="Démonstration ③ · La pépite"
+      titre="Les signalements citoyens"
+      url="/commander/services/commune-mettet?frame=1"
+      commentaire={
+        <>
+          14 h 00 : un Mettetois aperçoit un nid-de-poule. 14 h 05 : le signalement est dans la messagerie de votre service voirie, accompagné d&rsquo;une photo géolocalisée.
+        </>
+      }
+      note="Aller jusqu'à 'Signaler un problème', choisir 'Nid-de-poule', dérouler les trois étapes : le message formaté arrive."
+    />
+  )
+}
+
+// ─── 11. DÉJÀ CONSTRUIT POUR METTET + PLAN PUBLIC GRATUIT (fusion) ─
+function Slide11() {
   const items = [
-    { label: '5 fiches officielles', detail: 'Mairie, CPAS, Police, CEGENO (médecin), 112' },
-    { label: '23 numéros internes', detail: 'Tous les services communaux, cliquables direct' },
-    { label: '5 agents de quartier', detail: 'Auto-routés par village (Pierens, Meuter, Lerot...)' },
-    { label: '3 publications saisies', detail: 'Coupure d\'eau · Travaux 22/06 · Marché terroir' },
-    { label: 'Système signalements', detail: 'Opérationnel (nid de poule, dépôt, égout)' },
-    { label: 'Dashboard commune', detail: 'Prêt à vous être attribué' },
+    { label: '5 fiches officielles',         detail: 'Administration communale, CPAS, police, médecin de garde, 112' },
+    { label: '23 numéros internes',          detail: 'Tous les services, cliquables' },
+    { label: '5 agents de quartier',         detail: 'Dirigés automatiquement par village' },
+    { label: '3 publications saisies',       detail: 'Coupure d\'eau · Travaux · Marché du terroir' },
+    { label: 'Signalements opérationnels',   detail: 'Nid-de-poule, dépôt sauvage, égout' },
+    { label: 'Tableau de bord communal',     detail: 'Prêt à vous être attribué' },
   ]
   return (
-    <div style={{ ...slideBase, background: T.bg, justifyContent: 'flex-start', paddingTop: 80 }}>
+    <div style={{ ...slideBase, background: T.bg, justifyContent: 'flex-start', paddingTop: 60 }}>
       <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
         Déjà construit pour Mettet
       </p>
-      <h2 style={{ margin: '16px 0 40px', fontSize: 52, fontWeight: 900, color: T.ink, letterSpacing: '-2px', lineHeight: 1.1 }}>
-        On n&rsquo;attendait pas <span style={{ color: T.main }}>votre validation</span>...
+      <h2 style={{ margin: '14px 0 28px', fontSize: 42, fontWeight: 900, color: T.ink, letterSpacing: '-1.6px', lineHeight: 1.1, maxWidth: 1100 }}>
+        Nous n&rsquo;avons pas attendu votre validation<br/>pour préparer le terrain
       </h2>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, maxWidth: 1100, width: '100%' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, maxWidth: 1100, width: '100%', marginBottom: 32 }}>
         {items.map((it, i) => (
-          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: `1px solid ${T.pale}`, display: 'flex', gap: 12, alignItems: 'flex-start', textAlign: 'left' }}>
-            <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '16px 18px', border: `1px solid ${T.pale}`, display: 'flex', gap: 12, alignItems: 'flex-start', textAlign: 'left' }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
             </div>
             <div>
-              <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: T.ink, letterSpacing: '-0.3px' }}>{it.label}</p>
-              <p style={{ margin: '4px 0 0', fontSize: 12, color: T.muted, fontWeight: 500, lineHeight: 1.4 }}>{it.detail}</p>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>{it.label}</p>
+              <p style={{ margin: '3px 0 0', fontSize: 12, color: T.muted, fontWeight: 500, lineHeight: 1.4 }}>{it.detail}</p>
             </div>
           </div>
         ))}
       </div>
 
-      <p style={{ margin: '40px 0 0', fontSize: 18, color: T.deep, fontWeight: 600, fontStyle: 'italic' }}>
-        Vous décidez quand on enclenche.
-      </p>
-      <MiniWordmark white={false}/>
-      <SlideNumber n={14} total={17}/>
-    </div>
-  )
-}
-
-// ─── 11. NOTRE PROPOSITION ─────────────────────────────────────────
-function Slide11() {
-  return (
-    <div style={{ ...slideBase, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 50%, ${T.ink} 100%)`, color: '#fff' }}>
-      <div style={{ position: 'absolute', top: '30%', left: '20%', width: 500, height: 500, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}55 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
-
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.light, letterSpacing: '3px', textTransform: 'uppercase' }}>
+      {/* Bloc offre intégré */}
+      <div style={{ background: `linear-gradient(135deg, ${T.ink}, ${T.main})`, color: '#fff', borderRadius: 18, padding: '22px 32px', maxWidth: 900, width: '100%', textAlign: 'left' }}>
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '2px', textTransform: 'uppercase' }}>
           Notre proposition
         </p>
-        <h2 style={{ margin: '24px 0 16px', fontSize: 56, fontWeight: 900, color: '#fff', letterSpacing: '-2px', lineHeight: 1 }}>
-          Plan PUBLIC
-        </h2>
-        <p style={{ margin: '0 0 60px', fontSize: 90, fontWeight: 900, color: T.light, letterSpacing: '-4px', lineHeight: 1 }}>
-          Gratuit. À vie.
+        <p style={{ margin: '6px 0', fontSize: 26, fontWeight: 900, letterSpacing: '-0.8px' }}>
+          Le plan public, gratuit à vie.
         </p>
-
-        <div style={{ display: 'flex', gap: 24 }}>
-          {[
-            { word: 'GRATUIT', detail: 'Aucun frais. Aucun engagement.' },
-            { word: 'CONTRÔLE', detail: 'Vous gardez la main éditoriale.' },
-            { word: 'IMMÉDIAT', detail: 'Publication instantanée.' },
-          ].map((w, i) => (
-            <div key={i} style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)', border: `1px solid ${T.light}55`, borderRadius: 14, padding: '20px 32px', textAlign: 'center', minWidth: 200 }}>
-              <p style={{ margin: 0, fontSize: 24, fontWeight: 900, color: '#fff', letterSpacing: '1px' }}>{w.word}</p>
-              <p style={{ margin: '8px 0 0', fontSize: 13, color: T.light, fontWeight: 600 }}>{w.detail}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-      <SlideNumber n={15} total={17}/>
-    </div>
-  )
-}
-
-// ─── 12. CE QU'ON DEMANDE ──────────────────────────────────────────
-function Slide12() {
-  return (
-    <div style={{ ...slideBase, background: T.bg }}>
-      <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
-        En contrepartie
-      </p>
-      <h2 style={{ margin: '16px 0 12px', fontSize: 52, fontWeight: 900, color: T.ink, letterSpacing: '-2px', lineHeight: 1.1 }}>
-        Notre <span style={{ color: T.main }}>carburant</span>
-      </h2>
-      <p style={{ margin: '0 0 48px', fontSize: 20, color: T.deep, fontWeight: 500, fontStyle: 'italic', maxWidth: 760, lineHeight: 1.5 }}>
-        Pas d&rsquo;argent. De la <strong style={{ color: T.main }}>visibilité</strong>.<br/>
-        En échange de l&rsquo;infrastructure, on vous demande 3 choses.
-      </p>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, maxWidth: 1100, width: '100%' }}>
-        {[
-          { num: '01', titre: 'Mention officielle', detail: 'Une page dans le prochain Mettet Z\'infos avec mention "Partenaire officiel Yoppaa".' },
-          { num: '02', titre: 'Relais Facebook', detail: 'Un post sur la page Facebook officielle de la commune au lancement (7 juillet).' },
-          { num: '03', titre: 'Mise en relation', detail: 'Une introduction à l\'Union des commerçants de Mettet pour qu\'on les onboarde.' },
-        ].map((d, i) => (
-          <div key={i} style={{ background: '#fff', borderRadius: 16, padding: '24px 22px', textAlign: 'left', border: `1px solid ${T.pale}`, boxShadow: '0 4px 16px rgba(26,8,64,0.06)' }}>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 900, color: T.main, letterSpacing: '2px' }}>{d.num}</p>
-            <p style={{ margin: '10px 0 8px', fontSize: 22, fontWeight: 900, color: T.ink, letterSpacing: '-0.6px' }}>{d.titre}</p>
-            <p style={{ margin: 0, fontSize: 14, color: T.muted, lineHeight: 1.55, fontWeight: 500 }}>{d.detail}</p>
-          </div>
-        ))}
+        <p style={{ margin: 0, fontSize: 14, color: 'rgba(255,255,255,0.85)', fontWeight: 500, lineHeight: 1.6 }}>
+          Aucun frais, aucun engagement. Vous gardez la main éditoriale, la publication est instantanée.
+        </p>
       </div>
 
-      <p style={{ margin: '40px 0 0', fontSize: 18, color: T.deep, fontWeight: 700, maxWidth: 800, lineHeight: 1.5 }}>
-        Vous nous offrez de la <span style={{ color: T.main }}>crédibilité</span>.<br/>
-        On vous offre <span style={{ color: T.main }}>une infrastructure pro</span> sans coût.
+      <p style={{ margin: '24px 0 0', fontSize: 17, color: T.deep, fontWeight: 700, fontStyle: 'italic' }}>
+        Vous décidez du moment où nous l&rsquo;activons.
       </p>
-
       <MiniWordmark white={false}/>
-      <SlideNumber n={16} total={17}/>
+      <SlideNumber n={11} total={12}/>
     </div>
   )
 }
 
-// ─── 13. POURQUOI MAINTENANT + VISION ──────────────────────────────
-function Slide13() {
+// ─── 12. COMMENT NOUS SOUTENIR + VISION (fusion) ───────────────────
+function Slide12() {
   return (
     <div style={{ ...slideBase, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 60%, ${T.ink} 100%)`, color: '#fff' }}>
       <div style={{ position: 'absolute', top: '10%', right: '10%', width: 600, height: 600, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}44 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
+      <div style={{ position: 'absolute', bottom: '15%', left: '10%', width: 400, height: 400, borderRadius: '50%', background: `radial-gradient(circle, ${T.light}33 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
 
       <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.light, letterSpacing: '3px', textTransform: 'uppercase' }}>
-          Pourquoi maintenant
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.light, letterSpacing: '2.5px', textTransform: 'uppercase' }}>
+          Si vous y croyez
         </p>
-        <h2 style={{ margin: '20px 0 50px', fontSize: 60, fontWeight: 900, color: '#fff', letterSpacing: '-2.5px', lineHeight: 1, textAlign: 'center' }}>
-          Mettet sera<br/>
-          <span style={{ color: T.light }}>la commune pionnière</span>
+        <h2 style={{ margin: '20px 0 16px', fontSize: 44, fontWeight: 900, color: '#fff', letterSpacing: '-1.8px', lineHeight: 1.1, textAlign: 'center', maxWidth: 1000 }}>
+          Trois manières simples<br/>de nous soutenir, à votre rythme
         </h2>
+        <p style={{ margin: '0 0 36px', fontSize: 17, color: 'rgba(255,255,255,0.8)', fontWeight: 500, maxWidth: 900, textAlign: 'center', lineHeight: 1.55 }}>
+          Nous vous offrons une infrastructure numérique gratuite, sans contrepartie financière.<br/>
+          Si le projet vous convainc, voici comment lui donner un coup de pouce. Rien d&rsquo;engageant, rien de daté.
+        </p>
 
-        {/* Timeline */}
-        <div style={{ display: 'flex', gap: 0, alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, maxWidth: 1100, width: '100%' }}>
           {[
-            { date: '12 juin', evt: 'Campagne FB démarre', emoji: '🚀' },
-            { date: '30 juin', evt: '100 Yoppers Mettetois', emoji: '🎯' },
-            { date: '7 juillet', evt: 'Lancement officiel', emoji: '🎉' },
-            { date: 'Été 2026', evt: '3 autres communes wallonnes', emoji: '🇧🇪' },
-          ].map((m, i, arr) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{ textAlign: 'center', minWidth: 180 }}>
-                <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(196,160,244,0.2)', border: `2px solid ${T.light}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', fontSize: 24 }}>
-                  {m.emoji}
-                </div>
-                <p style={{ margin: '12px 0 4px', fontSize: 14, color: T.light, fontWeight: 800, letterSpacing: '1px' }}>{m.date}</p>
-                <p style={{ margin: 0, fontSize: 14, color: '#fff', fontWeight: 700 }}>{m.evt}</p>
-              </div>
-              {i < arr.length - 1 && (
-                <div style={{ width: 40, height: 2, background: `linear-gradient(90deg, ${T.light}, ${T.mid})` }}/>
+            { titre: 'Un mot dans le bulletin communal', detail: 'Nous le rédigeons, vous validez. Vous restez maîtres du contenu.', optional: false },
+            { titre: 'Une mise en relation',              detail: 'Une introduction à l\'Union des commerçants de Mettet, pour leur présenter l\'outil.', optional: false },
+            { titre: 'Un relais, le moment venu',         detail: 'Un partage sur vos canaux, le jour où vous l\'estimez pertinent.', optional: true },
+          ].map((d, i) => (
+            <div key={i} style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)', border: `1px solid rgba(196,160,244,0.3)`, borderRadius: 16, padding: '22px 22px', textAlign: 'left' }}>
+              <p style={{ margin: 0, fontSize: 17, fontWeight: 900, color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.3 }}>{d.titre}</p>
+              <p style={{ margin: '10px 0 0', fontSize: 13, color: T.light, lineHeight: 1.55, fontWeight: 500 }}>{d.detail}</p>
+              {d.optional && (
+                <p style={{ margin: '8px 0 0', fontSize: 11, color: 'rgba(255,255,255,0.6)', fontStyle: 'italic' }}>(facultatif)</p>
               )}
             </div>
           ))}
         </div>
 
-        <p style={{ margin: '70px 0 0', fontSize: 22, fontWeight: 600, color: '#fff', fontStyle: 'italic', maxWidth: 800, textAlign: 'center', lineHeight: 1.5 }}>
-          Dans 2 ans, quand on présentera Yoppaa à 30 communes,<br/>
-          on dira : <strong style={{ color: T.light }}>« Mettet a été la première. »</strong>
-        </p>
+        <div style={{ marginTop: 60, padding: '24px 40px', borderTop: '1px solid rgba(255,255,255,0.15)', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+          <p style={{ margin: 0, fontSize: 22, fontWeight: 600, color: '#fff', fontStyle: 'italic', textAlign: 'center', lineHeight: 1.55, maxWidth: 900 }}>
+            Dans deux ans, lorsque nous présenterons Yoppaa<br/>
+            à trente communes wallonnes, nous dirons :<br/>
+            <strong style={{ color: T.light, fontWeight: 800 }}>« Mettet a été la première. »</strong>
+          </p>
+        </div>
       </div>
-      <SlideNumber n={17} total={17}/>
+      <SlideNumber n={12} total={12}/>
     </div>
   )
 }
@@ -679,16 +533,15 @@ function Slide13() {
 // ════════════════════════════════════════════════════════════════════
 
 const SLIDES = [
-  Slide1, Slide2, Slide3, Slide4, Slide5,
-  SlideDifferences, SlideTypes, SlideTransparence, SlideCommunaute,
-  Slide6, Slide7, Slide8, Slide9,
-  Slide10, Slide11, Slide12, Slide13,
+  Slide1, Slide2, Slide3, Slide4,
+  Slide5, Slide6, Slide7,
+  Slide8, Slide9, Slide10,
+  Slide11, Slide12,
 ]
 
 export default function PresentationSlides() {
   const [current, setCurrent] = useState(0)
 
-  // Navigation clavier
   useEffect(() => {
     function handler(e) {
       if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
@@ -718,12 +571,10 @@ export default function PresentationSlides() {
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&family=Playfair+Display:wght@400;700;800&display=swap" rel="stylesheet"/>
 
-      {/* Slide actuelle avec fade transition */}
       <div key={current} style={{ animation: 'slideFade 0.4s ease' }}>
         <SlideComponent/>
       </div>
 
-      {/* Contrôles bas (discrets) */}
       <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 14, zIndex: 1000, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(12px)', borderRadius: 100, padding: '8px 18px', border: '1px solid rgba(255,255,255,0.1)' }}>
         <button onClick={() => setCurrent(c => Math.max(0, c - 1))} disabled={current === 0}
           style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 18, padding: 4, opacity: current === 0 ? 0.3 : 1 }}>

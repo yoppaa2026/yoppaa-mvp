@@ -148,7 +148,7 @@ function Slide2() {
         </p>
       </div>
       <MiniWordmark white={false}/>
-      <SlideNumber n={2} total={13}/>
+      <SlideNumber n={2} total={17}/>
     </div>
   )
 }
@@ -173,7 +173,7 @@ function Slide3() {
         </p>
       </div>
       <MiniWordmark white={false}/>
-      <SlideNumber n={3} total={13}/>
+      <SlideNumber n={3} total={17}/>
     </div>
   )
 }
@@ -213,7 +213,7 @@ function Slide4() {
       </p>
 
       <MiniWordmark white={false}/>
-      <SlideNumber n={4} total={13}/>
+      <SlideNumber n={4} total={17}/>
     </div>
   )
 }
@@ -249,12 +249,179 @@ function Slide5() {
           🇧🇪 Bootstrap · Ancré Mettet · Sans levée de fonds
         </p>
       </div>
-      <SlideNumber n={5} total={13}/>
+      <SlideNumber n={5} total={17}/>
     </div>
   )
 }
 
-// ─── DÉMO LIVE (Slides 6, 7, 8, 9) ─────────────────────────────────
+// ─── 6. YOPPAA vs LES AUTRES (NOUVEAU) ─────────────────────────────
+function SlideDifferences() {
+  const rows = [
+    { critere: 'Commission sur les ventes',  yoppaa: '0 %',                   autres: '25 à 30 %' },
+    { critere: 'Siège social',               yoppaa: '🇧🇪 Mettet',            autres: '🇺🇸 / 🇩🇰 / 🇳🇱' },
+    { critere: 'Visibilité des commerces',   yoppaa: 'Équitable, par défaut', autres: 'Pay-to-play' },
+    { critere: 'Données clients',            yoppaa: 'Restent au commerçant', autres: 'Captées et revendues' },
+    { critere: 'Algorithme',                 yoppaa: 'Transparent',           autres: 'Boîte noire' },
+    { critere: 'Engagement',                 yoppaa: 'Aucun, sortie libre',   autres: 'Contrats annuels' },
+  ]
+  return (
+    <div style={{ ...slideBase, background: T.bg, justifyContent: 'flex-start', paddingTop: 80 }}>
+      <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
+        Ce qui nous rend différents
+      </p>
+      <h2 style={{ margin: '16px 0 32px', fontSize: 56, fontWeight: 900, color: T.ink, letterSpacing: '-2px', lineHeight: 1.1 }}>
+        Yoppaa <span style={{ color: T.main }}>vs</span> Uber, TGTG, Booking
+      </h2>
+
+      <div style={{ width: '100%', maxWidth: 1100, background: '#fff', borderRadius: 16, overflow: 'hidden', border: `1px solid ${T.pale}`, boxShadow: '0 8px 32px rgba(26,8,64,0.08)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '16px 24px', background: T.ink, color: '#fff' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '1.2px', textTransform: 'uppercase', opacity: 0.7 }}>Critère</span>
+          <span style={{ fontSize: 14, fontWeight: 900, color: T.light, letterSpacing: '0.5px' }}>Yoppaa</span>
+          <span style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.6)' }}>Les géants</span>
+        </div>
+        {rows.map((r, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '14px 24px', borderBottom: i < rows.length - 1 ? `1px solid ${T.pale}` : 'none', alignItems: 'center', textAlign: 'left' }}>
+            <span style={{ fontSize: 14, color: T.muted, fontWeight: 600 }}>{r.critere}</span>
+            <span style={{ fontSize: 15, color: T.main, fontWeight: 800 }}>{r.yoppaa}</span>
+            <span style={{ fontSize: 14, color: T.muted, fontWeight: 600 }}>{r.autres}</span>
+          </div>
+        ))}
+      </div>
+
+      <p style={{ margin: '36px 0 0', fontSize: 18, color: T.deep, fontWeight: 600, maxWidth: 800, lineHeight: 1.5 }}>
+        On ne joue pas dans la même cour.<br/>
+        <span style={{ color: T.main, fontWeight: 800 }}>On joue dans VOTRE cour.</span>
+      </p>
+
+      <MiniWordmark white={false}/>
+      <SlideNumber n={6} total={17}/>
+    </div>
+  )
+}
+
+// ─── 7. 3 TYPES DE COMMERCE (NOUVEAU) ──────────────────────────────
+function SlideTypes() {
+  const types = [
+    { emoji: '🥖', titre: 'Alimentaire', sub: 'Boulangerie, pizzeria, frites, traiteur, épicerie...', features: ['Click & Collect', 'Livraison locale', 'Deals quotidiens', 'Stock temps réel'], color: '#F59E0B' },
+    { emoji: '💄', titre: 'Vitrine service', sub: 'Institut beauté, coiffeur, garagiste, dentiste, kiné...', features: ['Prise de RDV en ligne', 'Acompte sécurisé Stripe', 'Multi-praticiens', 'Annulation 48h'], color: '#10B981' },
+    { emoji: '🛍️', titre: 'Commerce de détail', sub: 'Fleuriste, librairie, boutique de vêtements, déco...', features: ['Vitrine numérique', 'Actus & deals', 'Carte de fidélité', 'Programme parrainage'], color: '#6B35C4' },
+  ]
+  return (
+    <div style={{ ...slideBase, background: T.bg, justifyContent: 'flex-start', paddingTop: 80 }}>
+      <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
+        Une seule app, 3 expériences
+      </p>
+      <h2 style={{ margin: '16px 0 40px', fontSize: 52, fontWeight: 900, color: T.ink, letterSpacing: '-2px', lineHeight: 1.1 }}>
+        Pensée pour <span style={{ color: T.main }}>chaque type</span> de commerce
+      </h2>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, maxWidth: 1150, width: '100%' }}>
+        {types.map((t, i) => (
+          <div key={i} style={{ background: '#fff', borderRadius: 18, padding: '24px 22px', textAlign: 'left', border: `1px solid ${T.pale}`, boxShadow: '0 8px 24px rgba(26,8,64,0.08)', borderTop: `4px solid ${t.color}` }}>
+            <p style={{ margin: 0, fontSize: 48, lineHeight: 1 }}>{t.emoji}</p>
+            <p style={{ margin: '14px 0 6px', fontSize: 22, fontWeight: 900, color: T.ink, letterSpacing: '-0.6px' }}>{t.titre}</p>
+            <p style={{ margin: '0 0 18px', fontSize: 12, color: T.muted, fontWeight: 500, lineHeight: 1.4 }}>{t.sub}</p>
+            <div style={{ height: 1, background: T.pale, margin: '12px 0 14px' }}/>
+            {t.features.map((f, j) => (
+              <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: t.color, flexShrink: 0 }}/>
+                <span style={{ fontSize: 13, color: T.deep, fontWeight: 600 }}>{f}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <p style={{ margin: '36px 0 0', fontSize: 18, color: T.deep, fontWeight: 600, fontStyle: 'italic' }}>
+        Un boulanger n&rsquo;a pas les mêmes besoins qu&rsquo;un coiffeur. On l&rsquo;a compris.
+      </p>
+
+      <MiniWordmark white={false}/>
+      <SlideNumber n={7} total={17}/>
+    </div>
+  )
+}
+
+// ─── 8. NOTRE TRANSPARENCE (NOUVEAU) ───────────────────────────────
+function SlideTransparence() {
+  const items = [
+    { icon: '💰', label: '0 % de commission', detail: 'Sur chaque vente, 100% du paiement va au commerçant. On n\'est pas un intermédiaire.' },
+    { icon: '🆓', label: 'Plan ON gratuit à vie', detail: 'Présence + actus + favoris + signaux Yoppers. Zéro euro, à vie.' },
+    { icon: '📋', label: 'Plan FULL au prix unique', detail: '~40€/mois, tous secteurs confondus. Pas de tarif caché par catégorie.' },
+    { icon: '🚪', label: 'Sortie libre, à tout moment', detail: 'Vous résiliez ? Vous basculez en ON gratuit. Vos données restent à vous.' },
+    { icon: '🔓', label: 'Pas d\'algorithme secret', detail: 'Vous décidez ce qui est mis en avant sur votre fiche. Pas de pay-to-play.' },
+    { icon: '🇧🇪', label: 'Données hébergées en UE', detail: 'Supabase Frankfurt. Conformité RGPD intégrale. Pas de transfert vers les US.' },
+  ]
+  return (
+    <div style={{ ...slideBase, background: T.bg, justifyContent: 'flex-start', paddingTop: 70 }}>
+      <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
+        Pas de petits caractères
+      </p>
+      <h2 style={{ margin: '16px 0 36px', fontSize: 52, fontWeight: 900, color: T.ink, letterSpacing: '-2px', lineHeight: 1.1 }}>
+        Notre <span style={{ color: T.main }}>transparence</span>
+      </h2>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, maxWidth: 1150, width: '100%' }}>
+        {items.map((it, i) => (
+          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '20px 22px', border: `1px solid ${T.pale}`, textAlign: 'left' }}>
+            <p style={{ margin: 0, fontSize: 28, lineHeight: 1 }}>{it.icon}</p>
+            <p style={{ margin: '10px 0 6px', fontSize: 16, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>{it.label}</p>
+            <p style={{ margin: 0, fontSize: 12.5, color: T.muted, lineHeight: 1.5, fontWeight: 500 }}>{it.detail}</p>
+          </div>
+        ))}
+      </div>
+
+      <p style={{ margin: '36px 0 0', fontSize: 18, color: T.deep, fontWeight: 700, fontStyle: 'italic' }}>
+        Si vous trouvez un piège dans nos CGV, on offre l&rsquo;abonnement FULL à vie au commerçant qui le repère. 🟣
+      </p>
+
+      <MiniWordmark white={false}/>
+      <SlideNumber n={8} total={17}/>
+    </div>
+  )
+}
+
+// ─── 9. NOTRE COMMUNAUTÉ (NOUVEAU) ─────────────────────────────────
+function SlideCommunaute() {
+  return (
+    <div style={{ ...slideBase, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 60%, ${T.ink} 100%)`, color: '#fff' }}>
+      <div style={{ position: 'absolute', top: '15%', left: '12%', width: 500, height: 500, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}55 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
+      <div style={{ position: 'absolute', bottom: '15%', right: '12%', width: 400, height: 400, borderRadius: '50%', background: `radial-gradient(circle, ${T.light}33 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
+
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.light, letterSpacing: '3px', textTransform: 'uppercase' }}>
+          Plus qu&rsquo;un service
+        </p>
+        <h2 style={{ margin: '24px 0 50px', fontSize: 64, fontWeight: 900, color: '#fff', letterSpacing: '-2.5px', lineHeight: 1, textAlign: 'center' }}>
+          Une <span style={{ color: T.light }}>tribu</span>, pas un marché
+        </h2>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, maxWidth: 1150, width: '100%' }}>
+          {[
+            { emoji: '👥', titre: 'Les Yoppers',     detail: 'Des citoyens engagés pour leur quartier. Pas des consommateurs.' },
+            { emoji: '🏪', titre: 'Les commerçants', detail: 'Des partenaires. On ne les ponctionne pas, on les soutient.' },
+            { emoji: '🏛️', titre: 'Les communes',   detail: 'Des alliées institutionnelles. Plan PUBLIC gratuit à vie.' },
+            { emoji: '🟣', titre: 'Yoppaa',          detail: 'Bootstrap belge. Pas de levée pour vendre aux US dans 3 ans.' },
+          ].map((c, i) => (
+            <div key={i} style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)', border: '1px solid rgba(196,160,244,0.3)', borderRadius: 16, padding: '24px 18px', textAlign: 'left' }}>
+              <p style={{ margin: 0, fontSize: 38, lineHeight: 1 }}>{c.emoji}</p>
+              <p style={{ margin: '12px 0 6px', fontSize: 17, fontWeight: 900, color: '#fff' }}>{c.titre}</p>
+              <p style={{ margin: 0, fontSize: 12.5, color: T.light, fontWeight: 500, lineHeight: 1.5 }}>{c.detail}</p>
+            </div>
+          ))}
+        </div>
+
+        <p style={{ margin: '50px 0 0', fontSize: 22, fontWeight: 600, color: '#fff', fontStyle: 'italic', maxWidth: 900, textAlign: 'center', lineHeight: 1.5 }}>
+          La Silicon Valley extrait. <br/>
+          Nous, on <span style={{ color: T.light, fontWeight: 800 }}>tisse</span>.
+        </p>
+      </div>
+      <SlideNumber n={9} total={17}/>
+    </div>
+  )
+}
+
+// ─── DÉMO LIVE (Slides 10, 11, 12, 13) ─────────────────────────────
 // Template commun pour les slides démo : titre + iframe à droite + commentaire à gauche
 function SlideDemo({ num, label, titre, url, commentaire, focus, n }) {
   return (
@@ -281,14 +448,14 @@ function SlideDemo({ num, label, titre, url, commentaire, focus, n }) {
         )}
       </div>
 
-      {/* iPhone frame avec iframe */}
-      <div style={{ position: 'relative', width: 320, height: 670, background: '#1a1a1a', borderRadius: 48, padding: 10, boxShadow: '0 30px 80px rgba(26,8,64,0.4), 0 0 0 1px rgba(196,160,244,0.3)', flexShrink: 0 }}>
-        <div style={{ position: 'absolute', top: -2, left: '50%', transform: 'translateX(-50%)', width: 100, height: 22, background: '#0a0a0a', borderRadius: '0 0 18px 18px', zIndex: 10 }}/>
-        <iframe src={url} title={titre} style={{ width: '100%', height: '100%', border: 'none', borderRadius: 38, background: '#fff', display: 'block' }}/>
+      {/* iPhone frame avec iframe — largeur 400px (iPhone 14/15) pour contenu non croppé */}
+      <div style={{ position: 'relative', width: 400, height: 820, background: '#1a1a1a', borderRadius: 56, padding: 12, boxShadow: '0 30px 80px rgba(26,8,64,0.4), 0 0 0 1px rgba(196,160,244,0.3)', flexShrink: 0, boxSizing: 'border-box' }}>
+        <div style={{ position: 'absolute', top: -2, left: '50%', transform: 'translateX(-50%)', width: 110, height: 24, background: '#0a0a0a', borderRadius: '0 0 20px 20px', zIndex: 10 }}/>
+        <iframe src={url} title={titre} style={{ width: '100%', height: '100%', border: 'none', borderRadius: 44, background: '#fff', display: 'block' }}/>
       </div>
 
       <MiniWordmark white={false}/>
-      <SlideNumber n={n} total={13}/>
+      <SlideNumber n={n} total={17}/>
     </div>
   )
 }
@@ -296,7 +463,7 @@ function SlideDemo({ num, label, titre, url, commentaire, focus, n }) {
 function Slide6() {
   return (
     <SlideDemo
-      num="①" label="DÉMO LIVE ①" n={6}
+      num="①" label="DÉMO LIVE ①" n={10}
       titre="Vos citoyens trouvent vos commerces"
       url="/commander?frame=1"
       commentaire="Plus de 10 commerçants Mettetois sont déjà actifs. Cards locales, statuts en temps réel, favoris, deals."
@@ -308,7 +475,7 @@ function Slide6() {
 function Slide7() {
   return (
     <SlideDemo
-      num="②" label="DÉMO LIVE ②" n={7}
+      num="②" label="DÉMO LIVE ②" n={11}
       titre="Vous publiez, ils reçoivent"
       url="/commander/services/commune-mettet?frame=1"
       commentaire="Votre fiche Administration communale de Mettet — déjà construite. Alertes, actus, horaires, tous les numéros internes."
@@ -320,7 +487,7 @@ function Slide7() {
 function Slide8() {
   return (
     <SlideDemo
-      num="③" label="DÉMO LIVE ③ · LA PÉPITE" n={8}
+      num="③" label="DÉMO LIVE ③ · LA PÉPITE" n={12}
       titre="Les signalements citoyens"
       url="/commander/services/commune-mettet?frame=1"
       commentaire="14h00, un Mettetois voit un nid de poule. 14h05, c'est dans la boîte mail de votre service voirie. Avec photo géolocalisée."
@@ -333,7 +500,7 @@ function Slide8() {
 function Slide9() {
   return (
     <SlideDemo
-      num="✨" label="LE RITUEL DU MATIN" n={9}
+      num="✨" label="LE RITUEL DU MATIN" n={13}
       titre="Good Morning Yoppers"
       url="/commander/morning?frame=1"
       commentaire="Chaque matin à 7h30, vos alertes et actus arrivent dans le téléphone de chaque Mettetois. Comme un journal local du jour."
@@ -379,7 +546,7 @@ function Slide10() {
         Vous décidez quand on enclenche.
       </p>
       <MiniWordmark white={false}/>
-      <SlideNumber n={10} total={13}/>
+      <SlideNumber n={14} total={17}/>
     </div>
   )
 }
@@ -414,7 +581,7 @@ function Slide11() {
           ))}
         </div>
       </div>
-      <SlideNumber n={11} total={13}/>
+      <SlideNumber n={15} total={17}/>
     </div>
   )
 }
@@ -454,7 +621,7 @@ function Slide12() {
       </p>
 
       <MiniWordmark white={false}/>
-      <SlideNumber n={12} total={13}/>
+      <SlideNumber n={16} total={17}/>
     </div>
   )
 }
@@ -502,7 +669,7 @@ function Slide13() {
           on dira : <strong style={{ color: T.light }}>« Mettet a été la première. »</strong>
         </p>
       </div>
-      <SlideNumber n={13} total={13}/>
+      <SlideNumber n={17} total={17}/>
     </div>
   )
 }
@@ -511,7 +678,12 @@ function Slide13() {
 // COMPOSANT PRINCIPAL — NAVIGATION + RENDU
 // ════════════════════════════════════════════════════════════════════
 
-const SLIDES = [Slide1, Slide2, Slide3, Slide4, Slide5, Slide6, Slide7, Slide8, Slide9, Slide10, Slide11, Slide12, Slide13]
+const SLIDES = [
+  Slide1, Slide2, Slide3, Slide4, Slide5,
+  SlideDifferences, SlideTypes, SlideTransparence, SlideCommunaute,
+  Slide6, Slide7, Slide8, Slide9,
+  Slide10, Slide11, Slide12, Slide13,
+]
 
 export default function PresentationSlides() {
   const [current, setCurrent] = useState(0)

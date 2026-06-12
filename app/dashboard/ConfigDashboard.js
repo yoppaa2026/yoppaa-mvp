@@ -2458,7 +2458,7 @@ function QRCodeSection({ commercantId, toast }) {
     // ── "yoppaa" wordmark ──
     ctx.textAlign = 'center'
     ctx.fillStyle = '#FFFFFF'
-    ctx.font = '900 80px "DM Sans", Arial, sans-serif'
+    ctx.font = '800 80px "Plus Jakarta Sans", system-ui, Arial, sans-serif'
     ctx.fillText('yoppaa', W / 2, PAD + 108)
 
     // ── Séparateur subtil ──

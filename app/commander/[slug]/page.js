@@ -2284,7 +2284,7 @@ export default function CommanderSlug() {
                   </svg>
                 </div>
                 {/* Wordmark tricolore canonique fond clair : Yo Ink, pp Main, aa Mid */}
-                <p style={{ fontWeight: 900, fontSize: '1rem', marginBottom: 4, letterSpacing: '-0.3px' }}>
+                <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1rem', marginBottom: 4, letterSpacing: '-0.05em', lineHeight: 1 }}>
                   <span style={{ color: T.ink }}>yo</span>
                   <span style={{ color: T.main }}>pp</span>
                   <span style={{ color: T.mid }}>aa</span>

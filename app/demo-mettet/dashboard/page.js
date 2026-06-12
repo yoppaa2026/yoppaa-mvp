@@ -209,7 +209,7 @@ function Sidebar({ onglet, setOnglet }) {
         <p style={{ margin: 0, fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 600, letterSpacing: '0.4px', textTransform: 'uppercase' }}>
           Propulsé par
         </p>
-        <p style={{ margin: '4px 0 0', fontSize: 16, fontWeight: 900, letterSpacing: '-0.5px' }}>
+        <p style={{ margin: '4px 0 0', fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontSize: 16, fontWeight: 800, letterSpacing: '-0.05em', lineHeight: 1 }}>
           <span style={{ color: '#fff' }}>yo</span>
           <span style={{ color: T.light }}>pp</span>
           <span style={{ color: T.mid }}>aa</span>

@@ -322,7 +322,7 @@ function MorningHeader({ ctx, communeAffichee, communePrincipale, communes, onSw
         <div style={{ fontSize: gmFontSize, fontWeight: 800, color: T.ink, lineHeight: 1, letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
           Good Morning
         </div>
-        <div ref={yoppersRef} style={{ fontSize: 48, fontWeight: 800, letterSpacing: '-2px', lineHeight: 1, whiteSpace: 'nowrap' }}>
+        <div ref={yoppersRef} style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontSize: 48, fontWeight: 800, letterSpacing: '-0.05em', lineHeight: 1, whiteSpace: 'nowrap' }}>
           <span style={{ color: T.ink }}>Yo</span>
           <span style={{ color: T.main }}>pp</span>
           <span style={{ color: T.mid }}>ers</span>

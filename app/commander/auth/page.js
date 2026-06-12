@@ -189,20 +189,26 @@ function AuthForm() {
     <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', padding: '0 1.25rem' }}>
 
       <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 14 }}>
-          {[{c:'rgba(255,255,255,0.4)',s:8},{c:T.light,s:11},{c:T.mid,s:8}].map((d,i) => (
-            <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, boxShadow: `0 0 12px ${d.c}88` }}/>
-          ))}
-        </div>
-        {/* Wordmark canonique fond fonce : yo blanc, pp Light, aa Mid */}
-        <p style={{ fontWeight: 900, fontSize: '2.5rem', letterSpacing: '-2px', lineHeight: 1 }}>
+        {/* Identite complete canonique : wordmark, 5 dots V2-B, slogan */}
+        <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2.5rem', letterSpacing: '-0.05em', lineHeight: 1, marginBottom: 16 }}>
           <span style={{ color: '#fff' }}>yo</span>
           <span style={{ color: T.light }}>pp</span>
           <span style={{ color: T.mid }}>aa</span>
         </p>
-        <p style={{ fontSize: '0.72rem', color: T.light, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', marginTop: 4, opacity: 0.8 }}>
-          Ton quartier, dans ta poche.
+        {/* Dots V2-B sous le wordmark — animation pop cascade one-shot */}
+        <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 6, height: 14, marginBottom: 16 }}>
+          <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#fff', boxShadow: `0 0 10px #ffffffaa`, opacity: 0, animation: 'dot-pop-auth 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.1s forwards' }}/>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.light, marginTop: 4, boxShadow: `0 0 10px ${T.light}aa`, opacity: 0, animation: 'dot-pop-auth 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.2s forwards' }}/>
+          <span style={{ width: 10, height: 10, borderRadius: '50%', background: T.light, marginTop: 4, boxShadow: `0 0 10px ${T.light}aa`, opacity: 0, animation: 'dot-pop-auth 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.3s forwards' }}/>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.mid, marginTop: 4, boxShadow: `0 0 10px ${T.mid}aa`, opacity: 0, animation: 'dot-pop-auth 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.4s forwards' }}/>
+          <span style={{ width: 10, height: 10, borderRadius: '50%', background: T.mid, boxShadow: `0 0 10px ${T.mid}aa`, opacity: 0, animation: 'dot-pop-auth 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.5s forwards' }}/>
+        </div>
+        <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontSize: '0.95rem', color: T.light, fontWeight: 600, letterSpacing: '0.012em', marginTop: 0 }}>
+          Ton quartier dans ta poche
         </p>
+        <style jsx>{`
+          @keyframes dot-pop-auth { 0% { opacity:0; transform:scale(0) translateY(8px); } 70% { transform:scale(1.3) translateY(-4px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
+        `}</style>
       </div>
 
       <div style={{ display: 'flex', background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: 4, marginBottom: '1.5rem', gap: 4 }}>

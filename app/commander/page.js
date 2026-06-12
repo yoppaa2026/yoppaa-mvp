@@ -1248,8 +1248,16 @@ export default function Commander() {
   }, [])
 
   useEffect(() => {
-    const savedOnglet = localStorage.getItem('yoppaa_onglet')
-    if (savedOnglet) setOngletState(savedOnglet)
+    // Query param ?onglet=accueil prioritaire sur localStorage : utile pour
+    // la démo (slide 8 force l'onglet Accueil sans dépendre de l'historique).
+    const urlParams = new URLSearchParams(window.location.search)
+    const ongletFromUrl = urlParams.get('onglet')
+    if (ongletFromUrl) {
+      setOngletState(ongletFromUrl)
+    } else {
+      const savedOnglet = localStorage.getItem('yoppaa_onglet')
+      if (savedOnglet) setOngletState(savedOnglet)
+    }
     chargerCommercants()
     demanderGeolocalisation()
     const email = localStorage.getItem('yoppaa_email')

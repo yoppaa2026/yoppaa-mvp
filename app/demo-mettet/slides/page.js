@@ -405,7 +405,7 @@ function Slide8() {
     <SlideDemo n={8}
       label="Démonstration ①"
       titre="Vos habitants trouvent vos commerces"
-      url="/commander?frame=1"
+      url="/commander?frame=1&onglet=accueil"
       commentaire={
         <>
           Plusieurs commerçants de l&rsquo;entité de Mettet nous accompagnent déjà dans le développement et le lancement de ce projet. Fiches locales, statuts en temps réel, favoris, actus, bons plans et fidélité.

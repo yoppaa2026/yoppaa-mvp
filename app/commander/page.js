@@ -425,32 +425,42 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
 function SplashScreen({ onDone }) {
   const [phase, setPhase] = useState(0)
   useEffect(() => {
-    // Phasage allonge : ~4.5s total pour laisser respirer chaque element.
-    const t1 = setTimeout(() => setPhase(1), 1100) // wordmark
-    const t2 = setTimeout(() => setPhase(2), 2100) // tagline
-    const t3 = setTimeout(() => setPhase(3), 3700) // debut fadeOut
-    const t4 = setTimeout(() => onDone(),    4500) // fin
-    return () => [t1,t2,t3,t4].forEach(clearTimeout)
+    // Sequence canonique : wordmark, 5 dots V2-B, slogan.
+    const t1 = setTimeout(() => setPhase(1), 400)  // wordmark in
+    const t2 = setTimeout(() => setPhase(2), 1200) // 5 dots V2-B pop cascade
+    const t3 = setTimeout(() => setPhase(3), 2200) // slogan in
+    const t4 = setTimeout(() => setPhase(4), 3800) // debut fadeOut
+    const t5 = setTimeout(() => onDone(),    4600) // fin
+    return () => [t1,t2,t3,t4,t5].forEach(clearTimeout)
   }, [])
+  // Dimensions des 5 dots V2-B (spec : grand 18, mini 10, gap 10, offset 7.2)
+  const dotBase = 18, dotMini = 10, dotOffset = 7.2
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: `linear-gradient(160deg, #160636 0%, #2D0F6B 50%, #1A0840 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', animation: phase === 3 ? 'splash-out 0.8s ease-in forwards' : 'none', overflow: 'hidden' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: `linear-gradient(160deg, #160636 0%, #2D0F6B 50%, #1A0840 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', animation: phase === 4 ? 'splash-out 0.8s ease-in forwards' : 'none', overflow: 'hidden' }}>
       {/* Signature canonique YOPPAA : bande degradee 3px Ink → Main → Light en haut */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, #1A0840 0%, #6B35C4 60%, #C4A0F4 100%)` }}/>
 
-      <div style={{ display: 'flex', gap: 14, marginBottom: 22 }}>
-        {[{c:'#FFFFFF',d:'0s',o:0.5},{c:'#C4A0F4',d:'0.3s',o:1},{c:'#9660E0',d:'0.6s',o:1}].map((d, i) => (
-          <div key={i} style={{ width: 16, height: 16, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 18px ${d.c}88`, animation: `dot-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) ${d.d} both` }}/>
-        ))}
-      </div>
-
       {/* Wordmark tricolore canonique : yo blanc, pp Light, aa Mid */}
-      <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '3.5rem', letterSpacing: '-0.05em', lineHeight: 1, marginBottom: 14, animation: phase >= 1 ? 'wordmark-in 0.7s cubic-bezier(0.25,0.46,0.45,0.94) forwards' : 'none', opacity: phase >= 1 ? 1 : 0 }}>
+      <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '3.5rem', letterSpacing: '-0.05em', lineHeight: 1, marginBottom: 28, animation: phase >= 1 ? 'wordmark-in 0.7s cubic-bezier(0.25,0.46,0.45,0.94) forwards' : 'none', opacity: phase >= 1 ? 1 : 0 }}>
         <span style={{ color: '#fff' }}>yo</span>
         <span style={{ color: '#C4A0F4' }}>pp</span>
         <span style={{ color: '#9660E0' }}>aa</span>
       </p>
 
-      <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 600, fontSize: '0.95rem', color: '#C4A0F4', letterSpacing: '0.012em', animation: phase >= 2 ? 'tagline-in 0.6s ease forwards' : 'none', opacity: phase >= 2 ? 1 : 0 }}>Ton quartier dans ta poche</p>
+      {/* 5 dots V2-B : pop cascade nette de gauche a droite */}
+      <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 10, height: dotBase + dotOffset, marginBottom: 22, opacity: phase >= 2 ? 1 : 0 }}>
+        {[
+          { w: dotBase, c: '#FFFFFF',  marginTop: 0,         delay: '0s' },
+          { w: dotMini, c: '#C4A0F4',  marginTop: dotOffset, delay: '0.09s' },
+          { w: dotBase, c: '#C4A0F4',  marginTop: dotOffset, delay: '0.18s' },
+          { w: dotMini, c: '#9660E0',  marginTop: dotOffset, delay: '0.27s' },
+          { w: dotBase, c: '#9660E0',  marginTop: 0,         delay: '0.36s' },
+        ].map((d, i) => (
+          <span key={i} style={{ width: d.w, height: d.w, borderRadius: '50%', background: d.c, marginTop: d.marginTop, boxShadow: `0 0 14px ${d.c}88`, animation: phase >= 2 ? `dot-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) ${d.delay} both` : 'none', display: 'block' }}/>
+        ))}
+      </div>
+
+      <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 600, fontSize: '0.95rem', color: '#C4A0F4', letterSpacing: '0.012em', animation: phase >= 3 ? 'tagline-in 0.6s ease forwards' : 'none', opacity: phase >= 3 ? 1 : 0 }}>Ton quartier dans ta poche</p>
     </div>
   )
 }
@@ -1997,6 +2007,7 @@ export default function Commander() {
         @keyframes tribu-pulse2 { 0%,100% { opacity:0.85; transform:scale(1); } 50% { opacity:0.5; transform:scale(1.1); } }
         @keyframes tribu-pulse3 { 0%,100% { opacity:0.6; transform:scale(1); } 50% { opacity:0.3; transform:scale(1.05); } }
         @keyframes dot-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.4); opacity:0.7; } }
+        @keyframes dot-wave { 0%,60%,100% { transform: translateY(0); opacity:1; } 30% { transform: translateY(-3px); opacity:1; } }
         @keyframes yoppa-live-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.45); opacity:0.7; } }
         @keyframes toast-in { 0% { opacity:0; transform:translate(-50%, 12px) scale(0.95); } 100% { opacity:1; transform:translate(-50%, 0) scale(1); } }
         @keyframes dot-pop { 0% { opacity:0; transform:scale(0) translateY(8px); } 70% { transform:scale(1.3) translateY(-4px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
@@ -2017,20 +2028,20 @@ export default function Commander() {
           <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 10%, ${T.mid}33 0%, transparent 50%), radial-gradient(circle at 10% 90%, ${T.light}18 0%, transparent 50%), radial-gradient(circle at 50% 50%, ${T.main}22 0%, transparent 70%)`, pointerEvents: 'none' }}/>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0.875rem 1rem 0.625rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7 }}>
               {/* Wordmark tricolore : yo (blanc), pp (Light), aa (Mid) — canonique Good Morning Yoppers */}
               <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-0.05em', lineHeight: 1, margin: 0 }}>
                 <span style={{ color: '#fff' }}>yo</span>
                 <span style={{ color: T.light }}>pp</span>
                 <span style={{ color: T.mid }}>aa</span>
               </p>
-              {/* Dots V2-B sous le wordmark (spec canonique) */}
+              {/* Dots V2-B centres sous le wordmark — animation wave nette */}
               <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 4, height: 11 }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', boxShadow: `0 0 6px #fffaa`, animation: 'dot-pulse 2s ease-in-out 0s infinite' }}/>
-                <span style={{ width: 4, height: 4, borderRadius: '50%', background: T.light, marginTop: 2.8, boxShadow: `0 0 6px ${T.light}aa`, animation: 'dot-pulse 2s ease-in-out 0.15s infinite' }}/>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.light, marginTop: 2.8, boxShadow: `0 0 6px ${T.light}aa`, animation: 'dot-pulse 2s ease-in-out 0.3s infinite' }}/>
-                <span style={{ width: 4, height: 4, borderRadius: '50%', background: T.mid, marginTop: 2.8, boxShadow: `0 0 6px ${T.mid}aa`, animation: 'dot-pulse 2s ease-in-out 0.45s infinite' }}/>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.mid, boxShadow: `0 0 6px ${T.mid}aa`, animation: 'dot-pulse 2s ease-in-out 0.6s infinite' }}/>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', boxShadow: `0 0 6px #ffffffaa`, animation: 'dot-wave 1.8s cubic-bezier(0.4,0,0.2,1) 0s infinite' }}/>
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: T.light, marginTop: 2.8, boxShadow: `0 0 6px ${T.light}aa`, animation: 'dot-wave 1.8s cubic-bezier(0.4,0,0.2,1) 0.12s infinite' }}/>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.light, marginTop: 2.8, boxShadow: `0 0 6px ${T.light}aa`, animation: 'dot-wave 1.8s cubic-bezier(0.4,0,0.2,1) 0.24s infinite' }}/>
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: T.mid, marginTop: 2.8, boxShadow: `0 0 6px ${T.mid}aa`, animation: 'dot-wave 1.8s cubic-bezier(0.4,0,0.2,1) 0.36s infinite' }}/>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.mid, boxShadow: `0 0 6px ${T.mid}aa`, animation: 'dot-wave 1.8s cubic-bezier(0.4,0,0.2,1) 0.48s infinite' }}/>
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
@@ -2163,16 +2174,8 @@ export default function Commander() {
               <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #1e0950 100%)`, padding: '0.875rem 1rem 1.25rem', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
                 <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 20%, ${T.main}44 0%, transparent 55%), radial-gradient(circle at 10% 90%, ${T.light}14 0%, transparent 50%)`, pointerEvents: 'none' }}/>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, marginBottom: 4, position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4, position: 'relative' }}>
                   <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>Yoppers</p>
-                  {/* Dots V2-B sous le label (spec canonique) */}
-                  <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 3, height: 8 }}>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff', boxShadow: `0 0 6px #ffffffaa`, animation: 'dot-pulse 2s ease-in-out 0s infinite' }}/>
-                    <span style={{ width: 3, height: 3, borderRadius: '50%', background: T.light, marginTop: 2, boxShadow: `0 0 6px ${T.light}aa`, animation: 'dot-pulse 2s ease-in-out 0.15s infinite' }}/>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.light, marginTop: 2, boxShadow: `0 0 6px ${T.light}aa`, animation: 'dot-pulse 2s ease-in-out 0.3s infinite' }}/>
-                    <span style={{ width: 3, height: 3, borderRadius: '50%', background: T.mid, marginTop: 2, boxShadow: `0 0 6px ${T.mid}aa`, animation: 'dot-pulse 2s ease-in-out 0.45s infinite' }}/>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.mid, boxShadow: `0 0 6px ${T.mid}aa`, animation: 'dot-pulse 2s ease-in-out 0.6s infinite' }}/>
-                  </div>
                 </div>
                 <h2 style={{ fontWeight: 900, fontSize: '1.4rem', letterSpacing: '-0.6px', margin: 0, position: 'relative', lineHeight: 1.1, color: '#fff' }}>
                   Commandes et rendez-vous
@@ -2472,15 +2475,6 @@ export default function Commander() {
                   <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
                   <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 20%, ${T.light}33 0%, transparent 55%), radial-gradient(circle at 10% 90%, ${T.mid}22 0%, transparent 50%)`, pointerEvents: 'none' }}/>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, position: 'relative' }}>
-                    <div style={{ display: 'flex', gap: 3 }}>
-                      {[
-                        { c: '#fff',  o: 0.5, delay: '0s',   size: 5 },
-                        { c: T.light, o: 1,   delay: '0.3s', size: 6 },
-                        { c: T.mid,   o: 1,   delay: '0.6s', size: 5 },
-                      ].map((d, i) => (
-                        <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 8px ${d.c}aa`, animation: `dot-pulse 2s ease-in-out ${d.delay} infinite` }}/>
-                      ))}
-                    </div>
                     <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>Officiel</p>
                   </div>
                   <h2 style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-0.6px', margin: 0, lineHeight: 1.1, position: 'relative', color: '#fff' }}>

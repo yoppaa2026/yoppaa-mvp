@@ -47,13 +47,40 @@ const A4 = {
 
 // ────────── UTILITAIRES ──────────
 
+// Wordmark canonique : Jakarta 800, letter-spacing -5%, minuscules
 function Wordmark({ size = 56, white = false }) {
   return (
-    <p style={{ margin: 0, fontSize: size, fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 0.95 }}>
-      <span style={{ color: white ? '#fff' : T.ink }}>yo</span>
-      <span style={{ color: T.light }}>pp</span>
+    <p style={{
+      margin: 0,
+      fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif',
+      fontSize: size,
+      fontWeight: 800,
+      letterSpacing: '-0.05em',
+      lineHeight: 1,
+    }}>
+      <span style={{ color: white ? '#FFFFFF' : T.ink }}>yo</span>
+      <span style={{ color: white ? T.light : T.main }}>pp</span>
       <span style={{ color: T.mid }}>aa</span>
     </p>
+  )
+}
+
+// Dots V2-B : 5 dots maillon (spec validée 2026-06-12)
+function Dots({ base = 12, white = true }) {
+  const mini = base * 0.55
+  const gap = base * 0.55
+  const offset = base * 0.4
+  const c = white
+    ? { d1: '#FFFFFF', d2: T.light, d3: T.light, d4: T.mid, d5: T.mid }
+    : { d1: T.ink,     d2: T.main,  d3: T.main,  d4: T.mid, d5: T.mid }
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap, height: base + offset }}>
+      <span style={{ width: base, height: base, borderRadius: '50%', background: c.d1, display: 'block' }}/>
+      <span style={{ width: mini, height: mini, borderRadius: '50%', background: c.d2, marginTop: offset, display: 'block' }}/>
+      <span style={{ width: base, height: base, borderRadius: '50%', background: c.d3, marginTop: offset, display: 'block' }}/>
+      <span style={{ width: mini, height: mini, borderRadius: '50%', background: c.d4, marginTop: offset, display: 'block' }}/>
+      <span style={{ width: base, height: base, borderRadius: '50%', background: c.d5, display: 'block' }}/>
+    </div>
   )
 }
 
@@ -74,12 +101,8 @@ function PageGarde() {
       <div style={{ position: 'absolute', top: '20%', right: '15%', width: 300, height: 300, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}55 0%, transparent 70%)`, filter: 'blur(50px)' }}/>
 
       <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <span style={{ width: 12, height: 12, borderRadius: '50%', background: '#fff', opacity: 0.5 }}/>
-          <span style={{ width: 14, height: 14, borderRadius: '50%', background: T.light }}/>
-          <span style={{ width: 12, height: 12, borderRadius: '50%', background: T.mid }}/>
-        </div>
         <Wordmark size={130} white/>
+        <Dots base={16} white/>
         <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: T.light, lineHeight: 1.35 }}>
           Pour la commune de Mettet,<br/>ses commerçants et ses habitants
         </p>

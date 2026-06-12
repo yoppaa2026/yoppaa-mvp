@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,9 +12,17 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Plus Jakarta Sans — police canonique du logo Yoppaa (wordmark 800 + slogan 600)
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
+  weight: ["500", "600", "700", "800"],
+  subsets: ["latin"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Yoppaa — Skip the wait",
-  description: "Commande avant d'arriver, récupère sans attendre.",
+  title: "Yoppaa, ton quartier dans ta poche",
+  description: "Ton quartier dans ta poche. Commande avant d'arriver, récupère sans attendre.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -45,7 +53,7 @@ export default function RootLayout({
   return (
     <html
       lang="fr"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${jakarta.variable} h-full antialiased`}
     >
       <head>
         {/* theme-color, viewport, apple-web-app sont gérés par les exports metadata + viewport de Next.js */}

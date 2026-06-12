@@ -46,22 +46,39 @@ const slideBase = {
 
 // ────────── UTILITAIRES ──────────
 
+// Wordmark canonique : Jakarta 800, letter-spacing -5%, minuscules
 function Wordmark({ size = 80, white = false }) {
   return (
-    <p style={{ margin: 0, fontSize: size, fontWeight: 900, letterSpacing: '-3.5px', lineHeight: 0.95 }}>
-      <span style={{ color: white ? '#fff' : T.ink }}>yo</span>
-      <span style={{ color: T.light }}>pp</span>
+    <p style={{
+      margin: 0,
+      fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif',
+      fontSize: size,
+      fontWeight: 800,
+      letterSpacing: '-0.05em',
+      lineHeight: 1,
+    }}>
+      <span style={{ color: white ? '#FFFFFF' : T.ink }}>yo</span>
+      <span style={{ color: white ? T.light : T.main }}>pp</span>
       <span style={{ color: T.mid }}>aa</span>
     </p>
   )
 }
 
-function Dots() {
+// Dots V2-B : 5 dots maillon (3 grands + 2 minis), spec validée 2026-06-12
+function Dots({ base = 20, white = true }) {
+  const mini = base * 0.55
+  const gap = base * 0.55
+  const offset = base * 0.4
+  const c = white
+    ? { d1: '#FFFFFF', d2: T.light, d3: T.light, d4: T.mid, d5: T.mid }
+    : { d1: T.ink,     d2: T.main,  d3: T.main,  d4: T.mid, d5: T.mid }
   return (
-    <div style={{ display: 'flex', gap: 10 }}>
-      <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', opacity: 0.5 }}/>
-      <span style={{ width: 20, height: 20, borderRadius: '50%', background: T.light }}/>
-      <span style={{ width: 16, height: 16, borderRadius: '50%', background: T.mid }}/>
+    <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap, height: base + offset }}>
+      <span style={{ width: base, height: base, borderRadius: '50%', background: c.d1, display: 'block' }}/>
+      <span style={{ width: mini, height: mini, borderRadius: '50%', background: c.d2, marginTop: offset, display: 'block' }}/>
+      <span style={{ width: base, height: base, borderRadius: '50%', background: c.d3, marginTop: offset, display: 'block' }}/>
+      <span style={{ width: mini, height: mini, borderRadius: '50%', background: c.d4, marginTop: offset, display: 'block' }}/>
+      <span style={{ width: base, height: base, borderRadius: '50%', background: c.d5, display: 'block' }}/>
     </div>
   )
 }
@@ -77,9 +94,16 @@ function SlideNumber({ n, total }) {
 function MiniWordmark({ white = true }) {
   return (
     <div style={{ position: 'absolute', bottom: 24, left: 32, display: 'flex', alignItems: 'center', gap: 8 }}>
-      <p style={{ margin: 0, fontSize: 18, fontWeight: 900, letterSpacing: '-0.8px' }}>
-        <span style={{ color: white ? '#fff' : T.ink }}>yo</span>
-        <span style={{ color: T.light }}>pp</span>
+      <p style={{
+        margin: 0,
+        fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif',
+        fontSize: 18,
+        fontWeight: 800,
+        letterSpacing: '-0.05em',
+        lineHeight: 1,
+      }}>
+        <span style={{ color: white ? '#FFFFFF' : T.ink }}>yo</span>
+        <span style={{ color: white ? T.light : T.main }}>pp</span>
         <span style={{ color: T.mid }}>aa</span>
       </p>
       <span style={{ fontSize: 10, fontWeight: 700, color: white ? 'rgba(255,255,255,0.55)' : T.muted, letterSpacing: '1px', textTransform: 'uppercase' }}>

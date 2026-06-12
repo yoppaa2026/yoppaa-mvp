@@ -29,11 +29,19 @@ const T = {
 const URL_LIVE = 'https://www.yoppaa.app/demo-mettet/slides'
 const QR_URL = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(URL_LIVE)}&size=200x200&margin=0&color=1A0840&bgcolor=FFFFFF`
 
+// Wordmark canonique : Jakarta 800, letter-spacing -5%, minuscules
 function Wordmark({ size = 24 }) {
   return (
-    <p style={{ margin: 0, fontSize: size, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1 }}>
+    <p style={{
+      margin: 0,
+      fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif',
+      fontSize: size,
+      fontWeight: 800,
+      letterSpacing: '-0.05em',
+      lineHeight: 1,
+    }}>
       <span style={{ color: T.ink }}>yo</span>
-      <span style={{ color: T.light }}>pp</span>
+      <span style={{ color: T.main }}>pp</span>
       <span style={{ color: T.mid }}>aa</span>
     </p>
   )

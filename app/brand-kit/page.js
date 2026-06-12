@@ -40,21 +40,22 @@ const PALETTES = {
 }
 
 // ────────── GÉNÉRATEUR DE SVG LOGO COMPLET ──────────
-// viewBox = 360 × 220 (logo horizontal compact, wordmark + dots V2-B en dessous)
+// viewBox = 440 × 240 (logo horizontal, wordmark Jakarta 800 ~ 366 px + marges)
 function generateLogoSvg(palette, includeBg = false, fontDataUrl = null) {
   const fontFaceStyle = fontDataUrl
     ? `@font-face { font-family: 'Plus Jakarta Sans'; font-weight: 800; font-style: normal; src: url('${fontDataUrl}') format('woff2'); }`
     : `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@800&display=swap');`
-  const bgRect = includeBg ? `<rect width="360" height="220" fill="${palette.bg}"/>` : ''
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 220" preserveAspectRatio="xMidYMid meet" width="360" height="220">
+  const bgRect = includeBg ? `<rect width="440" height="240" fill="${palette.bg}"/>` : ''
+  // Dots width = 176.4, centrés horizontalement : x_start = (440 - 176.4) / 2 = 131.8
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 240" preserveAspectRatio="xMidYMid meet" width="440" height="240">
   <defs>
     <style>${fontFaceStyle}</style>
   </defs>
   ${bgRect}
-  <text x="180" y="110" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="110" letter-spacing="-5.5" text-anchor="middle">
+  <text x="220" y="120" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="110" letter-spacing="-5.5" text-anchor="middle">
     <tspan fill="${palette.yo}">yo</tspan><tspan fill="${palette.pp}">pp</tspan><tspan fill="${palette.aa}">aa</tspan>
   </text>
-  <g transform="translate(90, 145)">
+  <g transform="translate(131.8, 160)">
     <circle cx="14" cy="14" r="14" fill="${palette.d1}"/>
     <circle cx="51.1" cy="21.7" r="7.7" fill="${palette.d2}"/>
     <circle cx="88.2" cy="25.2" r="14" fill="${palette.d3}"/>
@@ -312,7 +313,7 @@ export default function BrandKit() {
               svgStringForPng={generateLogoSvg(PALETTES[a.mode], true, fontDataUrl)}
               previewBg={PALETTES[a.mode].bg}
               filename={a.filename}
-              pngSize={{ w: 1440, h: 880 }}
+              pngSize={{ w: 1760, h: 960 }}
               dark={a.dark}
             />
           ))}

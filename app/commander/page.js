@@ -2618,16 +2618,7 @@ export default function Commander() {
               <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #1e0950 100%)`, padding: '0.875rem 1rem 2.25rem', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
                 <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 50%, ${T.main}44 0%, transparent 55%), radial-gradient(circle at 10% 90%, ${T.light}18 0%, transparent 50%)`, pointerEvents: 'none' }}/>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, position: 'relative' }}>
-                  <div style={{ display: 'flex', gap: 3 }}>
-                    {[
-                      { c: '#fff',  o: 0.5, delay: '0s',   size: 5 },
-                      { c: T.light, o: 1,   delay: '0.3s', size: 6 },
-                      { c: T.mid,   o: 1,   delay: '0.6s', size: 5 },
-                    ].map((d, i) => (
-                      <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 8px ${d.c}aa`, animation: `dot-pulse 2s ease-in-out ${d.delay} infinite` }}/>
-                    ))}
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10, position: 'relative' }}>
                   <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>{client.email ? 'Mon profil' : 'Bienvenue'}</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>

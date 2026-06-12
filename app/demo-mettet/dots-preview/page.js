@@ -224,9 +224,58 @@ export default function DotsPreview() {
           </div>
         </div>
 
+        {/* ⑥ NOUVEAU — Centre plus gros (smiley) vs centre égal (sourire pur Amazon) */}
+        <p style={{ margin: '30px 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+          ⑥ Centre plus gros ou même taille&nbsp;?
+        </p>
+        <p style={{ margin: '0 0 18px', fontSize: 13, color: T.deep, lineHeight: 1.55 }}>
+          Avec le centre plus gros : effet « smiley » (le centre devient comme un nez). Avec tous de même taille : sourire pur, plus proche de la flèche Amazon. La couleur tricolore suffit à différencier les 3 points sans avoir besoin de variation de taille.
+        </p>
+
+        {/* Sur fond foncé — 3 variantes */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, marginBottom: 18 }}>
+          {[
+            { ratio: 1.0,  label: 'Tous même taille',   sub: 'sourire pur · esprit Amazon' },
+            { ratio: 1.15, label: 'Légèrement plus gros', sub: 'subtil, intermédiaire' },
+            { ratio: 1.35, label: 'Plus gros (proposé initial)', sub: 'smiley · effet nez' },
+          ].map((v, i) => (
+            <div key={i} style={{ background: T.ink, borderRadius: 14, padding: '50px 30px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
+              <p style={{ margin: 0, fontSize: 56, fontWeight: 900, letterSpacing: '-2.2px', lineHeight: 1 }}>
+                <span style={{ color: '#fff' }}>yo</span>
+                <span style={{ color: T.light }}>pp</span>
+                <span style={{ color: T.mid }}>aa</span>
+              </p>
+              <YoppaaDots base={20} centerRatio={v.ratio} yOffsetRatio={0.25} colors={dark}/>
+              <div style={{ textAlign: 'center', marginTop: 8 }}>
+                <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>{v.label}</p>
+                <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>{v.sub}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Sur fond clair — 3 variantes */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, marginBottom: 26 }}>
+          {[
+            { ratio: 1.0,  label: 'Tous même taille' },
+            { ratio: 1.15, label: 'Légèrement plus gros' },
+            { ratio: 1.35, label: 'Plus gros' },
+          ].map((v, i) => (
+            <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '50px 30px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, border: `1px solid ${T.pale}` }}>
+              <p style={{ margin: 0, fontSize: 56, fontWeight: 900, letterSpacing: '-2.2px', lineHeight: 1 }}>
+                <span style={{ color: T.ink }}>yo</span>
+                <span style={{ color: T.main }}>pp</span>
+                <span style={{ color: T.mid }}>aa</span>
+              </p>
+              <YoppaaDots base={20} centerRatio={v.ratio} yOffsetRatio={0.25} colors={lightB}/>
+              <p style={{ margin: '8px 0 0', fontSize: 11, fontWeight: 800, color: T.deep, letterSpacing: '1px', textTransform: 'uppercase' }}>{v.label}</p>
+            </div>
+          ))}
+        </div>
+
         {/* Tailles compactes pour usages réels */}
         <p style={{ margin: '30px 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-          ⑥ En usage réel — favicon, app icon, signature de bas de page
+          ⑦ En usage réel — favicon, app icon, signature de bas de page
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18 }}>
           {/* Favicon 32px */}

@@ -70,7 +70,7 @@ export default function LegalPage() {
             <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, opacity: d.o }}/>
           ))}
         </div>
-        <h1 style={{ fontWeight: 900, fontSize: '2rem', color: '#fff', letterSpacing: '-1px', marginBottom: 6 }}>yoppaa</h1>
+        <h1 style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2rem', color: '#fff', letterSpacing: '-0.05em', marginBottom: 6, lineHeight: 1 }}>yoppaa</h1>
         <p style={{ fontSize: '0.85rem', color: T.light, fontWeight: 600 }}>Mentions légales & Conditions d'utilisation</p>
         <p style={{ fontSize: '0.75rem', color: 'rgba(196,160,244,0.6)', marginTop: 6 }}>Avcotech SRL · BCE 0731.637.148 · Rue de Prée 9G, 5640 Mettet</p>
       </div>

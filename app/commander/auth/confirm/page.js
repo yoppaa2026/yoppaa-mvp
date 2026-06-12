@@ -79,7 +79,7 @@ export default function CommanderAuthConfirmPage() {
               <div key={i} style={{ width: 12, height: 12, borderRadius: '50%', background: d.c, opacity: d.o, animation: `pulse ${0.8+i*0.2}s ease-in-out infinite alternate` }}/>
             ))}
           </div>
-          <p style={{ fontWeight: 900, fontSize: '2rem', color: '#fff', letterSpacing: '-2px', marginBottom: 8 }}>yoppaa</p>
+          <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2rem', color: '#fff', letterSpacing: '-0.05em', marginBottom: 8, lineHeight: 1 }}>yoppaa</p>
           <p style={{ color: T.light, fontSize: '0.9rem', fontWeight: 600 }}>Connexion en cours...</p>
         </div>
         <Suspense fallback={null}>

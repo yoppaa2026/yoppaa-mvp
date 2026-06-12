@@ -243,7 +243,7 @@ function Slide5() {
         </div>
 
         <p style={{ margin: '60px 0 0', fontSize: 14, color: 'rgba(255,255,255,0.7)', letterSpacing: '1.5px', fontWeight: 600, maxWidth: 900, textAlign: 'center', lineHeight: 1.6 }}>
-          Créé à Mettet — Autofinancé pour préserver notre indépendance stratégique.
+          Créé à Mettet, autofinancé pour préserver notre indépendance stratégique.
         </p>
       </div>
       <SlideNumber n={5} total={12}/>
@@ -440,7 +440,7 @@ function Slide10() {
       url="/commander/services/commune-mettet?frame=1"
       commentaire={
         <>
-          14 h 00 : un habitant de Mettet — un <strong>Yopper</strong>, utilisateur de Yoppaa — aperçoit un nid-de-poule. 14 h 05 : le signalement est dans la messagerie et le tableau de bord du service concerné, accompagné d&rsquo;une photo géolocalisée et d&rsquo;un descriptif.
+          14 h 00 : un habitant de Mettet, un <strong>Yopper</strong>, utilisateur de Yoppaa aperçoit un nid-de-poule. 14 h 05 : le signalement est dans la messagerie et le tableau de bord du service concerné, accompagné d&rsquo;une photo géolocalisée et d&rsquo;un descriptif.
         </>
       }
     />
@@ -523,9 +523,9 @@ function Slide12() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, maxWidth: 1100, width: '100%' }}>
           {[
-            { titre: 'Un partenariat officiel',          detail: 'Un document de la commune, à l\'en-tête officiel, reconnaissant Yoppaa comme « Partenaire officiel ». Un appui institutionnel pour accélérer le développement.' },
+            { titre: 'Un partenariat officiel',          detail: 'Un document de la commune reconnaissant Yoppaa comme « Partenaire officiel ». Un appui institutionnel pour accélérer le développement.' },
             { titre: 'Une introduction',                  detail: 'Une mise en relation avec l\'association des commerçants de Mettet, pour leur présenter l\'outil.' },
-            { titre: 'Un relais, le moment venu',         detail: 'Un partage sur vos canaux, le jour où vous l\'estimez pertinent.' },
+            { titre: 'Un relais, le moment venu',         detail: 'Une parution dans le Mettet Z\'infos, un partage sur vos canaux (site internet, page Facebook), le jour où vous l\'estimez pertinent.' },
           ].map((d, i) => (
             <div key={i} style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)', border: `1px solid rgba(196,160,244,0.3)`, borderRadius: 16, padding: '22px 22px', textAlign: 'left' }}>
               <p style={{ margin: 0, fontSize: 17, fontWeight: 900, color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.3 }}>{d.titre}</p>

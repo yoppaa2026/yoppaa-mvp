@@ -169,6 +169,94 @@ export default function WordmarkPreview() {
           ))}
         </div>
 
+        {/* ①.c — MATCH FINAL JAKARTA vs MONA SANS */}
+        <p style={{ margin: '20px 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+          ①.c Match final — Plus Jakarta Sans vs Mona Sans
+        </p>
+        <p style={{ margin: '0 0 18px', fontSize: 13, color: T.deep, lineHeight: 1.55 }}>
+          Comparaison directe à 3 tailles, 3 graisses, mono-couleur et close-up letterforms.
+        </p>
+
+        {/* Match 1 : taille XL face à face */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18, marginBottom: 18 }}>
+          {[
+            { name: 'Plus Jakarta Sans', family: '"Plus Jakarta Sans", sans-serif', weight: 800 },
+            { name: 'Mona Sans',         family: '"Mona Sans", sans-serif',         weight: 900 },
+          ].map((f, i) => (
+            <div key={i} style={{ background: T.ink, borderRadius: 14, padding: '60px 30px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22 }}>
+              <Wordmark fontFamily={f.family} fontSize={108} colors={darkColors} fontWeight={f.weight} letterSpacing='-0.05em'/>
+              <YoppaaDotsV2B base={28} colors={dotsDark}/>
+              <p style={{ margin: '12px 0 0', fontSize: 13, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>{f.name} {f.weight}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Match 2 : 3 graisses pour chaque */}
+        <p style={{ margin: '24px 0 12px', fontSize: 11, color: T.muted, fontWeight: 700, letterSpacing: '0.5px' }}>
+          Graisses 700 / 800 / 900 — laquelle tient mieux à chaque épaisseur ?
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18, marginBottom: 18 }}>
+          {[
+            { name: 'Plus Jakarta Sans', family: '"Plus Jakarta Sans", sans-serif' },
+            { name: 'Mona Sans',         family: '"Mona Sans", sans-serif' },
+          ].map((f, fi) => (
+            <div key={fi} style={{ background: T.ink, borderRadius: 14, padding: '32px 24px 28px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+              {[700, 800, 900].map((w) => (
+                <div key={w} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <Wordmark fontFamily={f.family} fontSize={48} colors={darkColors} fontWeight={w} letterSpacing='-0.05em'/>
+                  <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>{w}</span>
+                </div>
+              ))}
+              <p style={{ margin: '8px 0 0', fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>{f.name}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Match 3 : mono-couleur (la vraie épreuve) */}
+        <p style={{ margin: '24px 0 12px', fontSize: 11, color: T.muted, fontWeight: 700, letterSpacing: '0.5px' }}>
+          Mono-couleur, le test ultime — sans le tricolore qui sauve, qui a le plus de personnalité ?
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18, marginBottom: 18 }}>
+          {/* Jakarta mono violet sur fond clair */}
+          <div style={{ background: '#fff', borderRadius: 14, padding: '40px 30px 28px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, border: `1px solid ${T.pale}` }}>
+            <Wordmark fontFamily='"Plus Jakarta Sans", sans-serif' fontSize={80} colors={[T.main, T.main, T.main]} fontWeight={800} letterSpacing='-0.05em'/>
+            <YoppaaDotsV2B base={20} colors={{ left: T.main, midLeft: T.main, center: T.main, midRight: T.main, right: T.main }}/>
+            <p style={{ margin: '8px 0 0', fontSize: 11, fontWeight: 800, color: T.deep, letterSpacing: '1px', textTransform: 'uppercase' }}>Jakarta · mono main</p>
+          </div>
+          {/* Mona Sans mono violet sur fond clair */}
+          <div style={{ background: '#fff', borderRadius: 14, padding: '40px 30px 28px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, border: `1px solid ${T.pale}` }}>
+            <Wordmark fontFamily='"Mona Sans", sans-serif' fontSize={80} colors={[T.main, T.main, T.main]} fontWeight={900} letterSpacing='-0.05em'/>
+            <YoppaaDotsV2B base={20} colors={{ left: T.main, midLeft: T.main, center: T.main, midRight: T.main, right: T.main }}/>
+            <p style={{ margin: '8px 0 0', fontSize: 11, fontWeight: 800, color: T.deep, letterSpacing: '1px', textTransform: 'uppercase' }}>Mona Sans · mono main</p>
+          </div>
+        </div>
+
+        {/* Match 4 : close-up letterforms — chaque lettre en énorme */}
+        <p style={{ margin: '24px 0 12px', fontSize: 11, color: T.muted, fontWeight: 700, letterSpacing: '0.5px' }}>
+          Close-up letterforms — chaque lettre en 200 px pour voir les détails
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18, marginBottom: 32 }}>
+          {[
+            { name: 'Plus Jakarta Sans', family: '"Plus Jakarta Sans", sans-serif', weight: 800 },
+            { name: 'Mona Sans',         family: '"Mona Sans", sans-serif',         weight: 900 },
+          ].map((f, i) => (
+            <div key={i} style={{ background: T.ink, borderRadius: 14, padding: '30px 20px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', width: '100%', padding: '0 12px' }}>
+                {['y', 'o', 'p', 'a'].map((letter, li) => {
+                  const colors = ['#fff', '#fff', T.light, T.mid]
+                  return (
+                    <div key={li} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                      <p style={{ margin: 0, fontFamily: f.family, fontSize: 110, fontWeight: f.weight, lineHeight: 1, color: colors[li], letterSpacing: '-0.05em' }}>{letter}</p>
+                      <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{letter}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <p style={{ margin: '8px 0 0', fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>{f.name}</p>
+            </div>
+          ))}
+        </div>
+
         {/* ② CAPITALISATION */}
         <p style={{ margin: '0 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
           ② Capitalisation — minuscules vs cap initiale

@@ -122,10 +122,10 @@ function Slide1() {
       <div style={{ position: 'absolute', top: '15%', right: '12%', width: 600, height: 600, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}55 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
       <div style={{ position: 'absolute', bottom: '15%', left: '12%', width: 500, height: 500, borderRadius: '50%', background: `radial-gradient(circle, ${T.light}33 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
 
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28 }}>
-        <Dots/>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
         <Wordmark size={160} white/>
-        <p style={{ margin: 0, fontSize: 24, fontWeight: 700, color: T.light, letterSpacing: '-0.4px', maxWidth: 900, textAlign: 'center', lineHeight: 1.35 }}>
+        <Dots base={26} white/>
+        <p style={{ margin: '8px 0 0', fontSize: 24, fontWeight: 700, color: T.light, letterSpacing: '-0.4px', maxWidth: 900, textAlign: 'center', lineHeight: 1.35 }}>
           Pour la commune de Mettet,<br/>ses commerçants et ses habitants
         </p>
         <div style={{ height: 1, width: 240, background: 'rgba(255,255,255,0.3)', margin: '8px 0' }}/>
@@ -247,8 +247,8 @@ function Slide5() {
       <div style={{ position: 'absolute', top: '20%', right: '15%', width: 500, height: 500, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}44 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
 
       <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Dots/>
         <Wordmark size={140} white/>
+        <Dots base={22} white/>
         <p style={{ margin: '24px 0 0', fontSize: 26, fontWeight: 700, color: T.light, letterSpacing: '-0.5px', maxWidth: 700, textAlign: 'center', lineHeight: 1.3 }}>
           L&rsquo;application belge<br/>des commerces de quartier
         </p>

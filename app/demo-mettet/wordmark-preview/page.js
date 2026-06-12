@@ -324,6 +324,63 @@ export default function WordmarkPreview() {
           </div>
         </div>
 
+        {/* ④.b CADENCE COULEURS FOND CLAIR — explorations à partir de B */}
+        <p style={{ margin: '20px 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+          ④.b Cadence couleurs fond clair — 6 variantes
+        </p>
+        <p style={{ margin: '0 0 18px', fontSize: 13, color: T.deep, lineHeight: 1.55 }}>
+          Problème de la B actuelle : <code>main</code> et <code>mid</code> sont des violets très proches. Visuellement on perd la progression. Je teste des cadences avec plus d&rsquo;écart entre les 3 segments.
+        </p>
+
+        {/* Récap palette en swatches pour reférence visuelle */}
+        <div style={{ background: '#fff', borderRadius: 12, padding: '14px 18px', marginBottom: 16, border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'center', gap: 14, fontSize: 11, color: T.deep, flexWrap: 'wrap' }}>
+          <strong>Palette :</strong>
+          {[
+            { name: 'ink',   hex: '#1A0840' },
+            { name: 'deep',  hex: '#2D0F6B' },
+            { name: 'main',  hex: '#6B35C4' },
+            { name: 'mid',   hex: '#9660E0' },
+            { name: 'light', hex: '#C4A0F4' },
+            { name: 'pale',  hex: '#EDE0FF' },
+          ].map((c, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 18, height: 18, borderRadius: '50%', background: c.hex, border: '1px solid rgba(0,0,0,0.06)' }}/>
+              <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{c.name}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Grille de 6 variantes */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18, marginBottom: 32 }}>
+          {[
+            { label: 'B1 · ink + main + mid (actuel)', colors: [T.ink, T.main, T.mid],   dots: { left: T.ink, midLeft: T.main, center: T.main, midRight: T.mid, right: T.mid },     sub: 'main/mid très proches, progression timide' },
+            { label: 'B2 · ink + main + light',         colors: [T.ink, T.main, T.light], dots: { left: T.ink, midLeft: T.main, center: T.main, midRight: T.light, right: T.light }, sub: 'progression franche, écho fond foncé' },
+            { label: 'B3 · ink + mid + light',          colors: [T.ink, T.mid, T.light],  dots: { left: T.ink, midLeft: T.mid, center: T.mid, midRight: T.light, right: T.light },   sub: 'sombre → moyen → clair, harmonieux' },
+            { label: 'B4 · deep + main + mid',          colors: [T.deep, T.main, T.mid],  dots: { left: T.deep, midLeft: T.main, center: T.main, midRight: T.mid, right: T.mid },   sub: 'sans ink, plus violet partout' },
+            { label: 'B5 · ink + deep + main',          colors: [T.ink, T.deep, T.main],  dots: { left: T.ink, midLeft: T.deep, center: T.deep, midRight: T.main, right: T.main },  sub: 'tout en sombres, premium feel' },
+            { label: 'B6 · main + mid + light',         colors: [T.main, T.mid, T.light], dots: { left: T.main, midLeft: T.mid, center: T.mid, midRight: T.light, right: T.light }, sub: 'miroir du fond foncé, sombre → clair' },
+          ].map((v, i) => (
+            <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '40px 24px 28px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, border: `1px solid ${T.pale}` }}>
+              <Wordmark fontFamily='"Plus Jakarta Sans", sans-serif' fontSize={72} colors={v.colors} fontWeight={800} letterSpacing='-0.05em'/>
+              <YoppaaDotsV2B base={20} colors={v.dots}/>
+              <div style={{ textAlign: 'center', marginTop: 10 }}>
+                <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: T.deep, letterSpacing: '1px', textTransform: 'uppercase' }}>{v.label}</p>
+                <p style={{ margin: '4px 0 0', fontSize: 10, color: T.muted, fontFamily: 'monospace' }}>{v.sub}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Rappel cadence fond foncé pour comparaison */}
+        <p style={{ margin: '0 0 12px', fontSize: 11, color: T.muted, fontWeight: 700, letterSpacing: '0.5px' }}>
+          Rappel cadence fond foncé (validée) : blanc → light → mid (du plus clair au plus saturé)
+        </p>
+        <div style={{ background: T.ink, borderRadius: 14, padding: '40px 30px 28px', marginBottom: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
+          <Wordmark fontFamily='"Plus Jakarta Sans", sans-serif' fontSize={72} colors={darkColors} fontWeight={800} letterSpacing='-0.05em'/>
+          <YoppaaDotsV2B base={20} colors={dotsDark}/>
+          <p style={{ margin: '8px 0 0', fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>Référence fond foncé</p>
+        </div>
+
         {/* ⑤ MONO-COULEURS — pour cas spéciaux */}
         <p style={{ margin: '0 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
           ⑤ Mono-couleurs — impression NB, gravure, broderie 1 fil

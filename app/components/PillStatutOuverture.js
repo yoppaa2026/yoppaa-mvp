@@ -89,7 +89,16 @@ export function calculerStatutOuverture(horaires, now) {
   return { etat: 'ferme', label: 'Fermé', sousTitre: null }
 }
 
-export default function PillStatutOuverture({ horaires, compact = false }) {
+// Couleurs semantiques universelles : portees uniquement par le dot.
+// Le label/bg restent dans la palette Yoppaa (glass translucide).
+const SEM_DOT = {
+  ouvert: '#10B981',  // vert
+  ferme:  '#DC2626',  // rouge
+  pause:  '#F59E0B',  // ambre
+  always: '#C4A0F4',  // light Yoppaa (24h/24 = neutre)
+}
+
+export default function PillStatutOuverture({ horaires, compact = false, dark = false }) {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000)
@@ -99,16 +108,12 @@ export default function PillStatutOuverture({ horaires, compact = false }) {
   const statut = calculerStatutOuverture(horaires, now)
   if (!statut) return null
 
-  // 'always' (24/24) = indigo neutre, sans pulse — cohabite avec les cards urgence rouges
-  // 'ouvert'           = vert + pulse (vivant, dynamique)
-  // 'pause'            = ambre (transition)
-  // 'ferme'            = rouge
-  const couleurs = {
-    ouvert: { bg: '#D1FAE5', fg: '#065F46', dot: '#10B981', border: '#10B98140' },
-    always: { bg: '#E0E7FF', fg: '#3730A3', dot: '#6366F1', border: '#6366F140' },
-    pause:  { bg: '#FEF3C7', fg: '#92400E', dot: '#F59E0B', border: '#F59E0B40' },
-    ferme:  { bg: '#FEE2E2', fg: '#991B1B', dot: '#DC2626', border: '#DC262640' },
-  }[statut.etat]
+  // Glass translucide : blanc sur fond fonce, ink sur fond clair.
+  // Le dot porte la semantique (vert/rouge/ambre/light) avec un halo discret.
+  const bg          = dark ? 'rgba(255,255,255,0.10)' : 'rgba(26,8,64,0.06)'
+  const borderColor = dark ? 'rgba(255,255,255,0.18)' : 'rgba(26,8,64,0.12)'
+  const fgColor     = dark ? 'rgba(255,255,255,0.92)' : '#2D0F6B'
+  const dotColor    = SEM_DOT[statut.etat]
 
   const showSousTitre = !compact && statut.sousTitre
 
@@ -116,18 +121,20 @@ export default function PillStatutOuverture({ horaires, compact = false }) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 6,
       padding: compact ? '3px 9px 3px 7px' : '4px 12px 4px 9px',
-      borderRadius: 100, background: couleurs.bg, border: `1px solid ${couleurs.border}`,
-      fontSize: compact ? 10 : 11, fontWeight: 700, color: couleurs.fg,
+      borderRadius: 100, background: bg, border: `1px solid ${borderColor}`,
+      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+      fontSize: compact ? 10 : 11, fontWeight: 700, color: fgColor,
       letterSpacing: '0.2px', maxWidth: '100%',
     }}>
       <span style={{
         width: compact ? 6 : 7, height: compact ? 6 : 7,
-        borderRadius: '50%', background: couleurs.dot, flexShrink: 0,
+        borderRadius: '50%', background: dotColor, flexShrink: 0,
+        boxShadow: `0 0 ${compact ? 6 : 8}px ${dotColor}99`,
         animation: statut.etat === 'ouvert' ? 'pillPulse 2s ease-in-out infinite' : 'none',
       }}/>
       <span style={{ fontWeight: 800, whiteSpace: 'nowrap' }}>{statut.label}</span>
       {showSousTitre && (
-        <span style={{ fontWeight: 600, opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{ fontWeight: 600, opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           · {statut.sousTitre}
         </span>
       )}

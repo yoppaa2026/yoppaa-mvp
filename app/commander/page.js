@@ -817,9 +817,6 @@ function CarteServicePublic({ s, onSelect, actusInfo }) {
           <span style={{ fontSize: 10, fontWeight: 600, color: T.muted, letterSpacing: '0.3px' }}>
             {typeLabel}
           </span>
-          {s.horaires_detail && Object.keys(s.horaires_detail).length > 0 && (
-            <PillStatutOuverture horaires={s.horaires_detail} compact/>
-          )}
         </div>
         <p style={{ fontSize: 13.5, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px', margin: 0, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {s.nom}
@@ -854,14 +851,23 @@ function CarteServicePublic({ s, onSelect, actusInfo }) {
           </div>
         )}
       </div>
-      {s.telephone && (
-        <a href={`tel:${s.telephone}`} onClick={e => e.stopPropagation()}
-          aria-label={`Appeler ${s.nom}`}
-          style={{ width: 34, height: 34, borderRadius: '50%', background: isUrgence ? '#DC2626' : T.main, color: '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8 19.79 19.79 0 01.22 2.18 2 2 0 012.2 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.11 6.11l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
-          </svg>
-        </a>
+      {/* Colonne droite : pill statut + bouton tel, alignes verticalement.
+          Affichee uniquement si au moins un des deux est present. */}
+      {((s.horaires_detail && Object.keys(s.horaires_detail).length > 0) || s.telephone) && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+          {s.horaires_detail && Object.keys(s.horaires_detail).length > 0 && (
+            <PillStatutOuverture horaires={s.horaires_detail} compact/>
+          )}
+          {s.telephone && (
+            <a href={`tel:${s.telephone}`} onClick={e => e.stopPropagation()}
+              aria-label={`Appeler ${s.nom}`}
+              style={{ width: 34, height: 34, borderRadius: '50%', background: isUrgence ? '#DC2626' : T.main, color: '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8 19.79 19.79 0 01.22 2.18 2 2 0 012.2 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.11 6.11l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+              </svg>
+            </a>
+          )}
+        </div>
       )}
     </div>
   )

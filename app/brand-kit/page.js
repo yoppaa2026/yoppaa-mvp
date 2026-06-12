@@ -31,23 +31,38 @@ const T = {
 }
 
 // ────────── PALETTES PAR MODE ──────────
+// slogan = couleur du slogan (sentence case, Jakarta 500)
 const PALETTES = {
-  dark:       { yo: '#FFFFFF', pp: T.light, aa: T.mid,  d1: '#FFFFFF', d2: T.light, d3: T.light, d4: T.mid,   d5: T.mid,   bg: T.ink },
-  light:      { yo: T.ink,     pp: T.main,  aa: T.mid,  d1: T.ink,     d2: T.main,  d3: T.main,  d4: T.mid,   d5: T.mid,   bg: '#FFFFFF' },
-  monoBlack:  { yo: '#000',    pp: '#000',  aa: '#000', d1: '#000',    d2: '#000',  d3: '#000',  d4: '#000',  d5: '#000',  bg: '#FFFFFF' },
-  monoWhite:  { yo: '#FFFFFF', pp: '#fff',  aa: '#fff', d1: '#fff',    d2: '#fff',  d3: '#fff',  d4: '#fff',  d5: '#fff',  bg: T.ink },
-  monoMain:   { yo: T.main,    pp: T.main,  aa: T.main, d1: T.main,    d2: T.main,  d3: T.main,  d4: T.main,  d5: T.main,  bg: '#FFFFFF' },
+  dark:       { yo: '#FFFFFF', pp: T.light, aa: T.mid,  d1: '#FFFFFF', d2: T.light, d3: T.light, d4: T.mid,   d5: T.mid,   bg: T.ink,   slogan: T.light },
+  light:      { yo: T.ink,     pp: T.main,  aa: T.mid,  d1: T.ink,     d2: T.main,  d3: T.main,  d4: T.mid,   d5: T.mid,   bg: '#FFFFFF', slogan: T.main },
+  monoBlack:  { yo: '#000',    pp: '#000',  aa: '#000', d1: '#000',    d2: '#000',  d3: '#000',  d4: '#000',  d5: '#000',  bg: '#FFFFFF', slogan: '#000' },
+  monoWhite:  { yo: '#FFFFFF', pp: '#fff',  aa: '#fff', d1: '#fff',    d2: '#fff',  d3: '#fff',  d4: '#fff',  d5: '#fff',  bg: T.ink,   slogan: '#FFFFFF' },
+  monoMain:   { yo: T.main,    pp: T.main,  aa: T.main, d1: T.main,    d2: T.main,  d3: T.main,  d4: T.main,  d5: T.main,  bg: '#FFFFFF', slogan: T.main },
 }
 
+const SLOGAN_TEXT = 'Ton quartier, dans ta poche.'
+
 // ────────── GÉNÉRATEUR DE SVG LOGO COMPLET ──────────
-// viewBox = 440 × 240 (logo horizontal, wordmark Jakarta 800 ~ 366 px + marges)
-function generateLogoSvg(palette, includeBg = false, fontDataUrl = null) {
-  const fontFaceStyle = fontDataUrl
-    ? `@font-face { font-family: 'Plus Jakarta Sans'; font-weight: 800; font-style: normal; src: url('${fontDataUrl}') format('woff2'); }`
-    : `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@800&display=swap');`
-  const bgRect = includeBg ? `<rect width="440" height="240" fill="${palette.bg}"/>` : ''
-  // Dots width = 176.4, centrés horizontalement : x_start = (440 - 176.4) / 2 = 131.8
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 240" preserveAspectRatio="xMidYMid meet" width="440" height="240">
+// viewBox = 440 × 240 sans slogan, 440 × 295 avec slogan
+function generateLogoSvg(palette, includeBg = false, fontDataUrls = {}, withSlogan = false) {
+  const { w800, w500 } = fontDataUrls
+  let fontFaceStyle = ''
+  if (w800 && (w500 || !withSlogan)) {
+    fontFaceStyle = `@font-face { font-family: 'Plus Jakarta Sans'; font-weight: 800; font-style: normal; src: url('${w800}') format('woff2'); }`
+    if (withSlogan && w500) {
+      fontFaceStyle += ` @font-face { font-family: 'Plus Jakarta Sans'; font-weight: 500; font-style: normal; src: url('${w500}') format('woff2'); }`
+    }
+  } else {
+    fontFaceStyle = withSlogan
+      ? `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;800&display=swap');`
+      : `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@800&display=swap');`
+  }
+  const height = withSlogan ? 295 : 240
+  const bgRect = includeBg ? `<rect width="440" height="${height}" fill="${palette.bg}"/>` : ''
+  const sloganText = withSlogan
+    ? `<text x="220" y="262" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="500" font-size="22" letter-spacing="0.4" text-anchor="middle" fill="${palette.slogan}">${SLOGAN_TEXT}</text>`
+    : ''
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 ${height}" preserveAspectRatio="xMidYMid meet" width="440" height="${height}">
   <defs>
     <style>${fontFaceStyle}</style>
   </defs>
@@ -62,6 +77,7 @@ function generateLogoSvg(palette, includeBg = false, fontDataUrl = null) {
     <circle cx="125.3" cy="21.7" r="7.7" fill="${palette.d4}"/>
     <circle cx="162.4" cy="14" r="14" fill="${palette.d5}"/>
   </g>
+  ${sloganText}
 </svg>`
 }
 
@@ -83,18 +99,27 @@ function generateDotsSvg(palette, includeBg = false) {
 
 // ────────── GÉNÉRATEUR FORMATS RÉSEAUX SOCIAUX ──────────
 function generateSocialSvg(width, height, palette, options = {}) {
-  const { logoScale = 1, gradient = false, fontDataUrl = null } = options
-  const fontFaceStyle = fontDataUrl
-    ? `@font-face { font-family: 'Plus Jakarta Sans'; font-weight: 800; font-style: normal; src: url('${fontDataUrl}') format('woff2'); }`
-    : `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@800&display=swap');`
+  const { logoScale = 1, gradient = false, fontDataUrls = {}, withSlogan = false } = options
+  const { w800, w500 } = fontDataUrls
+  let fontFaceStyle = ''
+  if (w800 && (w500 || !withSlogan)) {
+    fontFaceStyle = `@font-face { font-family: 'Plus Jakarta Sans'; font-weight: 800; font-style: normal; src: url('${w800}') format('woff2'); }`
+    if (withSlogan && w500) {
+      fontFaceStyle += ` @font-face { font-family: 'Plus Jakarta Sans'; font-weight: 500; font-style: normal; src: url('${w500}') format('woff2'); }`
+    }
+  } else {
+    fontFaceStyle = withSlogan
+      ? `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;800&display=swap');`
+      : `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@800&display=swap');`
+  }
 
   const bg = gradient
     ? `<defs><linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${T.ink}"/><stop offset="100%" stop-color="${T.main}"/></linearGradient></defs><rect width="${width}" height="${height}" fill="url(#bgGrad)"/>`
     : `<rect width="${width}" height="${height}" fill="${palette.bg}"/>`
 
-  // Calculer la position du logo centré
+  // Logo dimensions (sans slogan : 360 × 220 · avec slogan : 360 × 295)
   const logoWidth = 360 * logoScale
-  const logoHeight = 220 * logoScale
+  const logoHeight = (withSlogan ? 280 : 220) * logoScale
   const logoX = (width - logoWidth) / 2
   const logoY = (height - logoHeight) / 2
   const fontSize = 110 * logoScale
@@ -103,6 +128,12 @@ function generateSocialSvg(width, height, palette, options = {}) {
   const dotsX = (width - 176.4 * logoScale) / 2
   const dotsY = logoY + (145 * logoScale)
   const dotsScale = logoScale
+
+  const sloganSize = 22 * logoScale
+  const sloganY = logoY + (250 * logoScale)
+  const sloganText = withSlogan
+    ? `<text x="${wordmarkX}" y="${sloganY}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="500" font-size="${sloganSize}" letter-spacing="${0.4 * logoScale}" text-anchor="middle" fill="${palette.slogan}">${SLOGAN_TEXT}</text>`
+    : ''
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
   <defs>
@@ -119,6 +150,7 @@ function generateSocialSvg(width, height, palette, options = {}) {
     <circle cx="125.3" cy="21.7" r="7.7" fill="${palette.d4}"/>
     <circle cx="162.4" cy="14" r="14" fill="${palette.d5}"/>
   </g>
+  ${sloganText}
 </svg>`
 }
 
@@ -212,25 +244,28 @@ function AssetCard({ title, sub, svgString, svgStringForPng, previewBg, filename
 }
 
 export default function BrandKit() {
-  // Charger Plus Jakarta Sans 800 en data URL (pour PNG conversion sans CORS)
-  const [fontDataUrl, setFontDataUrl] = useState(null)
+  // Charger Plus Jakarta Sans 800 + 500 en data URL (pour PNG conversion sans CORS)
+  const [fontDataUrls, setFontDataUrls] = useState({ w800: null, w500: null })
   const [fontStatus, setFontStatus] = useState('loading')
+  const [withSlogan, setWithSlogan] = useState(false)
 
   useEffect(() => {
-    // CDN public jsDelivr — pas de problème CORS sur fontsource
-    fetch('https://cdn.jsdelivr.net/npm/@fontsource/plus-jakarta-sans@5.0.20/files/plus-jakarta-sans-latin-800-normal.woff2')
-      .then(r => {
-        if (!r.ok) throw new Error('Font fetch ' + r.status)
-        return r.blob()
-      })
-      .then(blob => new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result)
-        reader.onerror = () => reject(new Error('FileReader'))
-        reader.readAsDataURL(blob)
-      }))
-      .then(dataUrl => {
-        setFontDataUrl(dataUrl)
+    const fetchFont = (weight) =>
+      fetch(`https://cdn.jsdelivr.net/npm/@fontsource/plus-jakarta-sans@5.0.20/files/plus-jakarta-sans-latin-${weight}-normal.woff2`)
+        .then(r => {
+          if (!r.ok) throw new Error('Font fetch ' + r.status)
+          return r.blob()
+        })
+        .then(blob => new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result)
+          reader.onerror = () => reject(new Error('FileReader'))
+          reader.readAsDataURL(blob)
+        }))
+
+    Promise.all([fetchFont(800), fetchFont(500)])
+      .then(([w800, w500]) => {
+        setFontDataUrls({ w800, w500 })
         setFontStatus('ready')
       })
       .catch(err => {
@@ -282,11 +317,33 @@ export default function BrandKit() {
           </p>
         </div>
 
+        {/* TOGGLE AVEC / SANS SLOGAN */}
+        <div style={{ background: '#fff', borderRadius: 14, padding: '14px 18px', marginBottom: 14, border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: T.deep, letterSpacing: '0.3px' }}>
+              Variante slogan
+            </p>
+            <p style={{ margin: '3px 0 0', fontSize: 11, color: T.muted }}>
+              {withSlogan ? 'Slogan « Ton quartier, dans ta poche. » affiché sous les dots' : 'Logo simple, sans slogan'}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, background: T.bg, padding: 4, borderRadius: 10 }}>
+            <button onClick={() => setWithSlogan(false)}
+              style={{ padding: '8px 16px', background: !withSlogan ? T.main : 'transparent', color: !withSlogan ? '#fff' : T.deep, border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer', letterSpacing: '0.3px' }}>
+              Sans slogan
+            </button>
+            <button onClick={() => setWithSlogan(true)}
+              style={{ padding: '8px 16px', background: withSlogan ? T.main : 'transparent', color: withSlogan ? '#fff' : T.deep, border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer', letterSpacing: '0.3px' }}>
+              Avec slogan
+            </button>
+          </div>
+        </div>
+
         {/* STATUT POLICE */}
         <div style={{ background: fontStatus === 'ready' ? '#ECFDF5' : fontStatus === 'fallback' ? '#FEF3C7' : T.pale, borderRadius: 12, padding: '12px 18px', marginBottom: 14, borderLeft: `4px solid ${fontStatus === 'ready' ? '#10B981' : fontStatus === 'fallback' ? '#F59E0B' : T.main}`, fontSize: 12, color: T.deep, lineHeight: 1.55 }}>
-          {fontStatus === 'loading' && <p style={{ margin: 0 }}>⏳ Chargement de Plus Jakarta Sans pour générer les PNG...</p>}
-          {fontStatus === 'ready' && <p style={{ margin: 0 }}><strong>✅ Police prête</strong>. Les PNG seront générés avec la vraie Plus Jakarta Sans 800.</p>}
-          {fontStatus === 'fallback' && <p style={{ margin: 0 }}><strong>⚠️ Police non chargée</strong>. Les PNG utiliseront une police système en fallback. Les SVG restent corrects.</p>}
+          {fontStatus === 'loading' && <p style={{ margin: 0 }}>⏳ Chargement de Plus Jakarta Sans (800 + 500) pour générer les PNG...</p>}
+          {fontStatus === 'ready' && <p style={{ margin: 0 }}><strong>✅ Polices prêtes</strong>. Les PNG seront générés avec Plus Jakarta Sans 800 (wordmark) et 500 (slogan).</p>}
+          {fontStatus === 'fallback' && <p style={{ margin: 0 }}><strong>⚠️ Polices non chargées</strong>. Les PNG utiliseront une police système en fallback. Les SVG restent corrects.</p>}
         </div>
 
         {/* NOTE TECHNIQUE */}
@@ -309,11 +366,11 @@ export default function BrandKit() {
               key={i}
               title={a.title}
               sub={a.sub}
-              svgString={generateLogoSvg(PALETTES[a.mode], false, null)}
-              svgStringForPng={generateLogoSvg(PALETTES[a.mode], true, fontDataUrl)}
+              svgString={generateLogoSvg(PALETTES[a.mode], false, {}, withSlogan)}
+              svgStringForPng={generateLogoSvg(PALETTES[a.mode], true, fontDataUrls, withSlogan)}
               previewBg={PALETTES[a.mode].bg}
-              filename={a.filename}
-              pngSize={{ w: 1760, h: 960 }}
+              filename={withSlogan ? `${a.filename}-slogan` : a.filename}
+              pngSize={{ w: 1760, h: withSlogan ? 1180 : 960 }}
               dark={a.dark}
             />
           ))}
@@ -355,10 +412,10 @@ export default function BrandKit() {
               key={i}
               title={a.title}
               sub={`${a.dims.w}×${a.dims.h}px · ${a.sub}`}
-              svgString={generateSocialSvg(a.dims.w, a.dims.h, PALETTES[a.mode], { logoScale: a.scale, gradient: a.gradient, fontDataUrl: null })}
-              svgStringForPng={generateSocialSvg(a.dims.w, a.dims.h, PALETTES[a.mode], { logoScale: a.scale, gradient: a.gradient, fontDataUrl })}
+              svgString={generateSocialSvg(a.dims.w, a.dims.h, PALETTES[a.mode], { logoScale: a.scale, gradient: a.gradient, fontDataUrls: {}, withSlogan })}
+              svgStringForPng={generateSocialSvg(a.dims.w, a.dims.h, PALETTES[a.mode], { logoScale: a.scale, gradient: a.gradient, fontDataUrls, withSlogan })}
               previewBg={a.gradient ? `linear-gradient(135deg, ${T.ink}, ${T.main})` : PALETTES[a.mode].bg}
-              filename={a.filename}
+              filename={withSlogan ? `${a.filename}-slogan` : a.filename}
               pngSize={{ w: a.dims.w, h: a.dims.h }}
               dark={a.mode === 'dark' || a.mode === 'monoWhite' || a.gradient}
             />

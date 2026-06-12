@@ -169,32 +169,120 @@ export default function DotsPreview() {
           ]}
         />
 
-        {/* 5. CONTEXTE RÉEL — à côté du wordmark */}
+        {/* 5. POSITIONNEMENT — au-dessus vs en dessous (esprit Amazon) */}
         <p style={{ margin: '40px 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-          ⑤ En contexte — combinés au wordmark
+          ⑤ Positionnement — au-dessus ou en dessous du wordmark&nbsp;?
         </p>
-        <div style={{ background: T.ink, borderRadius: 14, padding: '40px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24 }}>
-          <YoppaaDots base={20} colors={dark}/>
-          <p style={{ margin: 0, fontSize: 64, fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1 }}>
-            <span style={{ color: '#fff' }}>yo</span>
-            <span style={{ color: T.light }}>pp</span>
-            <span style={{ color: T.mid }}>aa</span>
-          </p>
+
+        {/* Comparatif sur fond foncé */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18, marginBottom: 22 }}>
+          {/* En haut */}
+          <div style={{ background: T.ink, borderRadius: 14, padding: '50px 40px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
+            <YoppaaDots base={22} colors={dark}/>
+            <p style={{ margin: 0, fontSize: 64, fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1 }}>
+              <span style={{ color: '#fff' }}>yo</span>
+              <span style={{ color: T.light }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            <p style={{ margin: '10px 0 0', fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1.5px', textTransform: 'uppercase' }}>A · Points au-dessus</p>
+            <p style={{ margin: 0, fontSize: 10, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>style « intro classique »</p>
+          </div>
+          {/* En dessous (style Amazon) */}
+          <div style={{ background: T.ink, borderRadius: 14, padding: '50px 40px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
+            <p style={{ margin: 0, fontSize: 64, fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1 }}>
+              <span style={{ color: '#fff' }}>yo</span>
+              <span style={{ color: T.light }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            <YoppaaDots base={22} colors={dark}/>
+            <p style={{ margin: '10px 0 0', fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1.5px', textTransform: 'uppercase' }}>B · Points en dessous ✨</p>
+            <p style={{ margin: 0, fontSize: 10, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>esprit Amazon, sourire complet</p>
+          </div>
         </div>
-        <div style={{ background: '#fff', borderRadius: 14, padding: '40px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24, border: `1px solid ${T.pale}` }}>
-          <YoppaaDots base={20} colors={lightB}/>
-          <p style={{ margin: 0, fontSize: 64, fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1 }}>
-            <span style={{ color: T.ink }}>yo</span>
-            <span style={{ color: T.main }}>pp</span>
-            <span style={{ color: T.mid }}>aa</span>
-          </p>
+
+        {/* Comparatif sur fond clair */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18, marginBottom: 22 }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: '50px 40px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, border: `1px solid ${T.pale}` }}>
+            <YoppaaDots base={22} colors={lightB}/>
+            <p style={{ margin: 0, fontSize: 64, fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1 }}>
+              <span style={{ color: T.ink }}>yo</span>
+              <span style={{ color: T.main }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            <p style={{ margin: '10px 0 0', fontSize: 11, fontWeight: 800, color: T.deep, letterSpacing: '1.5px', textTransform: 'uppercase' }}>A · Points au-dessus</p>
+            <p style={{ margin: 0, fontSize: 10, color: T.muted, fontFamily: 'monospace' }}>fond clair</p>
+          </div>
+          <div style={{ background: '#fff', borderRadius: 14, padding: '50px 40px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, border: `1px solid ${T.pale}` }}>
+            <p style={{ margin: 0, fontSize: 64, fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1 }}>
+              <span style={{ color: T.ink }}>yo</span>
+              <span style={{ color: T.main }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            <YoppaaDots base={22} colors={lightB}/>
+            <p style={{ margin: '10px 0 0', fontSize: 11, fontWeight: 800, color: T.deep, letterSpacing: '1.5px', textTransform: 'uppercase' }}>B · Points en dessous ✨</p>
+            <p style={{ margin: 0, fontSize: 10, color: T.muted, fontFamily: 'monospace' }}>fond clair</p>
+          </div>
+        </div>
+
+        {/* Tailles compactes pour usages réels */}
+        <p style={{ margin: '30px 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+          ⑥ En usage réel — favicon, app icon, signature de bas de page
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18 }}>
+          {/* Favicon 32px */}
+          <div style={{ background: T.ink, borderRadius: 8, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, aspectRatio: '1', minHeight: 110 }}>
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1 }}>
+              <span style={{ color: '#fff' }}>yo</span>
+              <span style={{ color: T.light }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            <YoppaaDots base={8} colors={dark}/>
+            <p style={{ margin: '4px 0 0', fontSize: 8, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>favicon · base 8</p>
+          </div>
+          {/* Footer signature */}
+          <div style={{ background: '#fff', borderRadius: 8, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, border: `1px solid ${T.pale}`, minHeight: 110 }}>
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1 }}>
+              <span style={{ color: T.ink }}>yo</span>
+              <span style={{ color: T.main }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            <YoppaaDots base={8} colors={lightB}/>
+            <p style={{ margin: '4px 0 0', fontSize: 8, color: T.muted, fontFamily: 'monospace' }}>signature · base 8</p>
+          </div>
+          {/* App icon style */}
+          <div style={{ background: `linear-gradient(135deg, ${T.ink}, ${T.main})`, borderRadius: 18, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, aspectRatio: '1', minHeight: 110 }}>
+            <p style={{ margin: 0, fontSize: 26, fontWeight: 900, letterSpacing: '-1.2px', lineHeight: 1 }}>
+              <span style={{ color: '#fff' }}>yo</span>
+              <span style={{ color: T.light }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            <YoppaaDots base={10} colors={dark}/>
+            <p style={{ margin: '4px 0 0', fontSize: 8, color: 'rgba(255,255,255,0.6)', fontFamily: 'monospace' }}>app icon</p>
+          </div>
+          {/* OG image teaser */}
+          <div style={{ background: T.ink, borderRadius: 8, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 110 }}>
+            <p style={{ margin: 0, fontSize: 30, fontWeight: 900, letterSpacing: '-1.4px', lineHeight: 1 }}>
+              <span style={{ color: '#fff' }}>yo</span>
+              <span style={{ color: T.light }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            <YoppaaDots base={12} colors={dark}/>
+            <p style={{ margin: '4px 0 0', fontSize: 8, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>partage social</p>
+          </div>
         </div>
 
         {/* Footer décisionnel */}
         <div style={{ marginTop: 40, padding: '20px 24px', background: T.pale, borderRadius: 12, borderLeft: `4px solid ${T.main}` }}>
           <p style={{ margin: 0, fontSize: 13, color: T.deep, lineHeight: 1.6, fontWeight: 500 }}>
-            💡 Décisions à valider : <strong>(1)</strong> ratio centre — 1,25, 1,35 ou 1,50 ? · <strong>(2)</strong> décalage vertical — 0, 25 % ou 40 % ? · <strong>(3)</strong> palette fond clair — option A (fidèle wordmark) ou option B (centre saturé) ? · <strong>(4)</strong> on garde aussi le wordmark adapté sur fond clair (yo ink, pp main, aa mid) ou tu préfères revoir ?
+            💡 Décisions à valider :
           </p>
+          <ol style={{ margin: '8px 0 0', paddingLeft: 22, fontSize: 13, color: T.deep, lineHeight: 1.7 }}>
+            <li><strong>Ratio centre</strong> : 1,25 · <strong>1,35</strong> · 1,50 ?</li>
+            <li><strong>Décalage vertical (sourire)</strong> : 0 · <strong>+25 %</strong> · +40 % ?</li>
+            <li><strong>Palette fond clair</strong> : Option A (fidèle wordmark) · <strong>Option B (centre saturé)</strong> ?</li>
+            <li><strong>Positionnement</strong> : Points <strong>au-dessus</strong> du wordmark (classique) ou <strong>en dessous</strong> (esprit Amazon, sourire complet) ?</li>
+            <li><strong>Wordmark fond clair</strong> : on adopte aussi le wordmark adapté (yo ink, pp main, aa mid) ?</li>
+          </ol>
         </div>
 
       </div>

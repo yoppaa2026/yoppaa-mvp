@@ -40,7 +40,7 @@ const PALETTES = {
   monoMain:   { yo: T.main,    pp: T.main,  aa: T.main, d1: T.main,    d2: T.main,  d3: T.main,  d4: T.main,  d5: T.main,  bg: '#FFFFFF', slogan: T.main },
 }
 
-const SLOGAN_TEXT = 'Ton quartier, dans ta poche.'
+const SLOGAN_TEXT = 'Ton quartier, dans ta poche'
 
 // ────────── GÉNÉRATEUR DE SVG LOGO COMPLET ──────────
 // viewBox = 440 × 240 sans slogan, 440 × 295 avec slogan
@@ -324,7 +324,7 @@ export default function BrandKit() {
               Variante slogan
             </p>
             <p style={{ margin: '3px 0 0', fontSize: 11, color: T.muted }}>
-              {withSlogan ? 'Slogan « Ton quartier, dans ta poche. » affiché sous les dots' : 'Logo simple, sans slogan'}
+              {withSlogan ? 'Slogan « Ton quartier, dans ta poche » affiché sous les dots' : 'Logo simple, sans slogan'}
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, background: T.bg, padding: 4, borderRadius: 10 }}>

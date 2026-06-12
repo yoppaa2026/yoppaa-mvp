@@ -47,7 +47,9 @@ const A4 = {
 
 // ────────── UTILITAIRES ──────────
 
-// Wordmark canonique : Jakarta 800, letter-spacing -5%, minuscules
+import YoppaaLogo from '../../../components/YoppaaLogo'
+
+// Wordmark seul (pour usages sans dots)
 function Wordmark({ size = 56, white = false }) {
   return (
     <p style={{
@@ -62,25 +64,6 @@ function Wordmark({ size = 56, white = false }) {
       <span style={{ color: white ? T.light : T.main }}>pp</span>
       <span style={{ color: T.mid }}>aa</span>
     </p>
-  )
-}
-
-// Dots V2-B : 5 dots maillon (spec validée 2026-06-12)
-function Dots({ base = 12, white = true }) {
-  const mini = base * 0.55
-  const gap = base * 0.55
-  const offset = base * 0.4
-  const c = white
-    ? { d1: '#FFFFFF', d2: T.light, d3: T.light, d4: T.mid, d5: T.mid }
-    : { d1: T.ink,     d2: T.main,  d3: T.main,  d4: T.mid, d5: T.mid }
-  return (
-    <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap, height: base + offset }}>
-      <span style={{ width: base, height: base, borderRadius: '50%', background: c.d1, display: 'block' }}/>
-      <span style={{ width: mini, height: mini, borderRadius: '50%', background: c.d2, marginTop: offset, display: 'block' }}/>
-      <span style={{ width: base, height: base, borderRadius: '50%', background: c.d3, marginTop: offset, display: 'block' }}/>
-      <span style={{ width: mini, height: mini, borderRadius: '50%', background: c.d4, marginTop: offset, display: 'block' }}/>
-      <span style={{ width: base, height: base, borderRadius: '50%', background: c.d5, display: 'block' }}/>
-    </div>
   )
 }
 
@@ -101,8 +84,7 @@ function PageGarde() {
       <div style={{ position: 'absolute', top: '20%', right: '15%', width: 300, height: 300, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}55 0%, transparent 70%)`, filter: 'blur(50px)' }}/>
 
       <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22 }}>
-        <Wordmark size={130} white/>
-        <Dots base={16} white/>
+        <YoppaaLogo size={130} mode="dark"/>
         <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: T.light, lineHeight: 1.35 }}>
           Pour la commune de Mettet,<br/>ses commerçants et ses habitants
         </p>

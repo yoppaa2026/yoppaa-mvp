@@ -46,7 +46,9 @@ const slideBase = {
 
 // ────────── UTILITAIRES ──────────
 
-// Wordmark canonique : Jakarta 800, letter-spacing -5%, minuscules
+import YoppaaLogo from '../../components/YoppaaLogo'
+
+// Wordmark canonique seul (pour les MiniWordmark et autres usages sans dots)
 function Wordmark({ size = 80, white = false }) {
   return (
     <p style={{
@@ -61,25 +63,6 @@ function Wordmark({ size = 80, white = false }) {
       <span style={{ color: white ? T.light : T.main }}>pp</span>
       <span style={{ color: T.mid }}>aa</span>
     </p>
-  )
-}
-
-// Dots V2-B : 5 dots maillon (3 grands + 2 minis), spec validée 2026-06-12
-function Dots({ base = 20, white = true }) {
-  const mini = base * 0.55
-  const gap = base * 0.55
-  const offset = base * 0.4
-  const c = white
-    ? { d1: '#FFFFFF', d2: T.light, d3: T.light, d4: T.mid, d5: T.mid }
-    : { d1: T.ink,     d2: T.main,  d3: T.main,  d4: T.mid, d5: T.mid }
-  return (
-    <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap, height: base + offset }}>
-      <span style={{ width: base, height: base, borderRadius: '50%', background: c.d1, display: 'block' }}/>
-      <span style={{ width: mini, height: mini, borderRadius: '50%', background: c.d2, marginTop: offset, display: 'block' }}/>
-      <span style={{ width: base, height: base, borderRadius: '50%', background: c.d3, marginTop: offset, display: 'block' }}/>
-      <span style={{ width: mini, height: mini, borderRadius: '50%', background: c.d4, marginTop: offset, display: 'block' }}/>
-      <span style={{ width: base, height: base, borderRadius: '50%', background: c.d5, display: 'block' }}/>
-    </div>
   )
 }
 
@@ -122,9 +105,8 @@ function Slide1() {
       <div style={{ position: 'absolute', top: '15%', right: '12%', width: 600, height: 600, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}55 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
       <div style={{ position: 'absolute', bottom: '15%', left: '12%', width: 500, height: 500, borderRadius: '50%', background: `radial-gradient(circle, ${T.light}33 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
 
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
-        <Wordmark size={160} white/>
-        <Dots base={26} white/>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28 }}>
+        <YoppaaLogo size={160} mode="dark"/>
         <p style={{ margin: '8px 0 0', fontSize: 24, fontWeight: 700, color: T.light, letterSpacing: '-0.4px', maxWidth: 900, textAlign: 'center', lineHeight: 1.35 }}>
           Pour la commune de Mettet,<br/>ses commerçants et ses habitants
         </p>
@@ -247,8 +229,7 @@ function Slide5() {
       <div style={{ position: 'absolute', top: '20%', right: '15%', width: 500, height: 500, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}44 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
 
       <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Wordmark size={140} white/>
-        <Dots base={22} white/>
+        <YoppaaLogo size={140} mode="dark"/>
         <p style={{ margin: '24px 0 0', fontSize: 26, fontWeight: 700, color: T.light, letterSpacing: '-0.5px', maxWidth: 700, textAlign: 'center', lineHeight: 1.3 }}>
           L&rsquo;application belge<br/>des commerces de quartier
         </p>

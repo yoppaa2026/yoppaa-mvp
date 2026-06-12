@@ -43,8 +43,10 @@ export default function YoppaaLogo({ size = 48, mode = 'dark', withSlogan = fals
   const dotMini = dotBase * 0.55
   const dotGap = dotBase * 0.55
   const dotOffset = dotBase * 0.4
-  const wordmarkToDots = size * 0.13  // gap baseline wordmark → top dots
-  const dotsToSlogan = size * 0.18
+  // Jakarta 800 a des descenders importants (y/p ~22% de l'em).
+  // wordmarkToDots doit donc être ≥ 0.25*size pour éviter le chevauchement.
+  const wordmarkToDots = size * 0.28
+  const dotsToSlogan = size * 0.25
   const sloganSize = size * 0.236     // 26/110 dans la spec
 
   return (

@@ -481,17 +481,69 @@ export default function DotsPreview() {
           </div>
         </div>
 
+        {/* ⑨ V2-B UNIFIÉE — preuve technique aux 4 tailles avec ratio mini généreux */}
+        <p style={{ margin: '40px 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+          ⑨ V2-B identité unique — viabilité aux 4 échelles
+        </p>
+        <p style={{ margin: '0 0 18px', fontSize: 13, color: T.deep, lineHeight: 1.55 }}>
+          Solution : passer les minis de <strong>ratio 0,4 à 0,55</strong> (plus charnus). Test aux 4 tailles canoniques. À 16 px, les minis tombent à 2,2 px, à la limite mais perceptibles avec un bon rendu pixel.
+        </p>
+
+        {/* MaillonDots : composant 5 dots avec ratio mini paramétrable */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
+          {[
+            { label: 'OG image · base 32', big: 32, fontSize: 80 },
+            { label: 'App icon · base 16', big: 16, fontSize: 44 },
+            { label: 'Header · base 10',   big: 10, fontSize: 28 },
+            { label: 'Favicon · base 4',   big: 4,  fontSize: 14, isFavicon: true },
+          ].map((c, i) => {
+            const miniSize = Math.max(2.2, c.big * 0.55)
+            const gap = c.big * 0.55
+            return (
+              <div key={i} style={{ background: T.ink, borderRadius: c.isFavicon ? 4 : 10, padding: '24px 12px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: c.big * 0.7, minHeight: 150 }}>
+                <p style={{ margin: 0, fontSize: c.fontSize, fontWeight: 900, letterSpacing: '-0.05em', lineHeight: 1 }}>
+                  <span style={{ color: '#fff' }}>yo</span>
+                  <span style={{ color: T.light }}>pp</span>
+                  <span style={{ color: T.mid }}>aa</span>
+                </p>
+                <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap, height: c.big + (c.big * 0.4) }}>
+                  <span style={{ width: c.big, height: c.big, borderRadius: '50%', background: '#fff', marginTop: 0 }}/>
+                  <span style={{ width: miniSize, height: miniSize, borderRadius: '50%', background: T.light, marginTop: c.big * 0.4 }}/>
+                  <span style={{ width: c.big, height: c.big, borderRadius: '50%', background: T.light, marginTop: c.big * 0.4 }}/>
+                  <span style={{ width: miniSize, height: miniSize, borderRadius: '50%', background: T.mid, marginTop: c.big * 0.4 }}/>
+                  <span style={{ width: c.big, height: c.big, borderRadius: '50%', background: T.mid, marginTop: 0 }}/>
+                </div>
+                <p style={{ margin: '8px 0 0', fontSize: 9, fontWeight: 700, color: T.light, letterSpacing: '0.5px', textAlign: 'center' }}>{c.label}</p>
+                <p style={{ margin: 0, fontSize: 8, color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>mini = {miniSize.toFixed(1)} px</p>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Récap honnêteté technique */}
+        <div style={{ background: T.bg, borderRadius: 10, padding: '14px 18px', marginBottom: 28, fontSize: 12, color: T.deep, lineHeight: 1.6 }}>
+          <p style={{ margin: 0, fontWeight: 700 }}>🔎 Vérité technique sur 5 dots partout :</p>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+            <li><strong>OG image, app icon, header, slides</strong> : aucun souci, c&rsquo;est superbe</li>
+            <li><strong>Favicon 32 px</strong> : minis à 2-3 px, perceptibles, bien rendus en SVG</li>
+            <li><strong>Favicon 16 px</strong> : minis à 2 px, à la limite (peuvent paraître flous selon le moteur de rendu). Acceptable.</li>
+            <li><strong>Broderie textile</strong> : si tu fais des t-shirts/casquettes plus tard, les minis passent à partir de 2 cm de largeur de logo</li>
+          </ul>
+          <p style={{ margin: '8px 0 0' }}>Verdict : <strong>oui, 5 dots est faisable comme identité unique</strong>, à condition d&rsquo;adopter le ratio mini 0,55 (au lieu de 0,4 testé jusqu&rsquo;ici).</p>
+        </div>
+
         {/* Footer décisionnel */}
-        <div style={{ marginTop: 40, padding: '20px 24px', background: T.pale, borderRadius: 12, borderLeft: `4px solid ${T.main}` }}>
+        <div style={{ marginTop: 20, padding: '20px 24px', background: T.pale, borderRadius: 12, borderLeft: `4px solid ${T.main}` }}>
           <p style={{ margin: 0, fontSize: 13, color: T.deep, lineHeight: 1.6, fontWeight: 500 }}>
             💡 Décisions à valider :
           </p>
           <ol style={{ margin: '8px 0 0', paddingLeft: 22, fontSize: 13, color: T.deep, lineHeight: 1.7 }}>
-            <li><strong>Ratio centre</strong> : 1,25 · <strong>1,35</strong> · 1,50 ?</li>
+            <li><strong>Format final unique</strong> : V1 (3 dots) ou <strong>V2-B (5 dots maillon)</strong> ?</li>
+            <li><strong>Ratio mini</strong> (si V2-B) : 0,4 (élégant grandes tailles) ou <strong>0,55 (robuste à toutes les tailles)</strong> ?</li>
+            <li><strong>Couleurs minis</strong> (si V2-B) : blanc·light·light·mid·mid (progression linéaire tricolore)</li>
             <li><strong>Décalage vertical (sourire)</strong> : 0 · <strong>+25 %</strong> · +40 % ?</li>
+            <li><strong>Positionnement</strong> : <strong>en dessous du wordmark</strong> (esprit Amazon, validé)</li>
             <li><strong>Palette fond clair</strong> : Option A (fidèle wordmark) · <strong>Option B (centre saturé)</strong> ?</li>
-            <li><strong>Positionnement</strong> : Points <strong>au-dessus</strong> du wordmark (classique) ou <strong>en dessous</strong> (esprit Amazon, sourire complet) ?</li>
-            <li><strong>Wordmark fond clair</strong> : on adopte aussi le wordmark adapté (yo ink, pp main, aa mid) ?</li>
           </ol>
         </div>
 

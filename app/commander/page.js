@@ -2163,17 +2163,16 @@ export default function Commander() {
               <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #1e0950 100%)`, padding: '0.875rem 1rem 1.25rem', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
                 <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 20%, ${T.main}44 0%, transparent 55%), radial-gradient(circle at 10% 90%, ${T.light}14 0%, transparent 50%)`, pointerEvents: 'none' }}/>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, position: 'relative' }}>
-                  <div style={{ display: 'flex', gap: 3 }}>
-                    {[
-                      { c: '#fff',  o: 0.5, delay: '0s',   size: 5 },
-                      { c: T.light, o: 1,   delay: '0.3s', size: 6 },
-                      { c: T.mid,   o: 1,   delay: '0.6s', size: 5 },
-                    ].map((d, i) => (
-                      <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 8px ${d.c}aa`, animation: `dot-pulse 2s ease-in-out ${d.delay} infinite` }}/>
-                    ))}
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, marginBottom: 4, position: 'relative' }}>
                   <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>Yoppers</p>
+                  {/* Dots V2-B sous le label (spec canonique) */}
+                  <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 3, height: 8 }}>
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff', boxShadow: `0 0 6px #ffffffaa`, animation: 'dot-pulse 2s ease-in-out 0s infinite' }}/>
+                    <span style={{ width: 3, height: 3, borderRadius: '50%', background: T.light, marginTop: 2, boxShadow: `0 0 6px ${T.light}aa`, animation: 'dot-pulse 2s ease-in-out 0.15s infinite' }}/>
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.light, marginTop: 2, boxShadow: `0 0 6px ${T.light}aa`, animation: 'dot-pulse 2s ease-in-out 0.3s infinite' }}/>
+                    <span style={{ width: 3, height: 3, borderRadius: '50%', background: T.mid, marginTop: 2, boxShadow: `0 0 6px ${T.mid}aa`, animation: 'dot-pulse 2s ease-in-out 0.45s infinite' }}/>
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.mid, boxShadow: `0 0 6px ${T.mid}aa`, animation: 'dot-pulse 2s ease-in-out 0.6s infinite' }}/>
+                  </div>
                 </div>
                 <h2 style={{ fontWeight: 900, fontSize: '1.4rem', letterSpacing: '-0.6px', margin: 0, position: 'relative', lineHeight: 1.1, color: '#fff' }}>
                   Commandes et rendez-vous
@@ -2550,24 +2549,22 @@ export default function Commander() {
                 {/* Barre dégradée fine en haut — signature visuelle Yoppaa */}
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
 
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 16 }}>
-                  {[
-                    { c: '#fff', delay: '0s', size: 38, opacity: 0.9, anim: 'tribu-pulse' },
-                    { c: T.light, delay: '0.3s', size: 46, opacity: 1, anim: 'tribu-pulse2' },
-                    { c: T.mid, delay: '0.6s', size: 38, opacity: 0.85, anim: 'tribu-pulse3' },
-                  ].map((d, i) => (
-                    <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.opacity, boxShadow: `0 4px 20px ${d.c}66`, animation: `${d.anim} 2s ease-in-out ${d.delay} infinite` }}/>
-                  ))}
-                </div>
-
-                <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2.5px', marginBottom: 4, opacity: 0.85 }}>
+                <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2.5px', marginBottom: 8, opacity: 0.85 }}>
                   La tribu
                 </p>
-                <p style={{ fontWeight: 900, fontSize: '2.4rem', letterSpacing: '-2px', lineHeight: 1, marginBottom: 14 }}>
+                <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2.4rem', letterSpacing: '-0.05em', lineHeight: 1, marginBottom: 10 }}>
                   <span style={{ color: '#fff' }}>Yo</span>
                   <span style={{ color: T.light }}>pp</span>
                   <span style={{ color: T.mid }}>ers</span>
                 </p>
+                {/* Dots V2-B sous le wordmark Yoppers (spec canonique) */}
+                <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 9, height: 22, marginBottom: 14 }}>
+                  <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', opacity: 0.9, boxShadow: `0 4px 14px #ffffff66`, animation: 'tribu-pulse 2s ease-in-out 0s infinite' }}/>
+                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: T.light, marginTop: 6.4, boxShadow: `0 4px 14px ${T.light}66`, animation: 'tribu-pulse2 2s ease-in-out 0.15s infinite' }}/>
+                  <span style={{ width: 16, height: 16, borderRadius: '50%', background: T.light, marginTop: 6.4, boxShadow: `0 4px 14px ${T.light}66`, animation: 'tribu-pulse2 2s ease-in-out 0.3s infinite' }}/>
+                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: T.mid, marginTop: 6.4, boxShadow: `0 4px 14px ${T.mid}66`, animation: 'tribu-pulse3 2s ease-in-out 0.45s infinite' }}/>
+                  <span style={{ width: 16, height: 16, borderRadius: '50%', background: T.mid, opacity: 0.95, boxShadow: `0 4px 14px ${T.mid}66`, animation: 'tribu-pulse3 2s ease-in-out 0.6s infinite' }}/>
+                </div>
                 <p style={{ fontSize: '0.85rem', color: T.light, lineHeight: 1.55, opacity: 0.92, maxWidth: 320, margin: '0 auto' }}>
                   Tu fais vivre Yoppaa. Suggère un commerce qu&rsquo;on devrait ajouter, ou signale un souci sur une fiche.
                 </p>

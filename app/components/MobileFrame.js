@@ -125,11 +125,14 @@ export default function MobileFrame({ children }) {
             boxShadow: '0 1px 3px rgba(0,0,0,0.6)',
           }}/>
 
-          {/* Iframe avec le contenu mobile */}
+          {/* Iframe avec le contenu mobile
+              sandbox isole l'historique iframe du parent : sans ça, un bouton "Retour"
+              dans l'app fait reculer la page parent au lieu de naviguer dans l'iframe */}
           {iframeUrl && (
             <iframe
               src={iframeUrl}
               title="Aperçu mobile Yoppaa"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
               style={{
                 width: '100%',
                 height: '100%',

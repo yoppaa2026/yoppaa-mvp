@@ -98,11 +98,11 @@ function Slide1() {
       <div style={{ position: 'absolute', top: '15%', right: '12%', width: 600, height: 600, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}55 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
       <div style={{ position: 'absolute', bottom: '15%', left: '12%', width: 500, height: 500, borderRadius: '50%', background: `radial-gradient(circle, ${T.light}33 0%, transparent 70%)`, filter: 'blur(80px)' }}/>
 
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32 }}>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28 }}>
         <Dots/>
-        <Wordmark size={180} white/>
-        <p style={{ margin: 0, fontSize: 32, fontWeight: 700, color: T.light, letterSpacing: '-0.5px' }}>
-          Pour Mettet
+        <Wordmark size={160} white/>
+        <p style={{ margin: 0, fontSize: 24, fontWeight: 700, color: T.light, letterSpacing: '-0.4px', maxWidth: 900, textAlign: 'center', lineHeight: 1.35 }}>
+          Pour la commune de Mettet,<br/>ses commerçants et ses habitants
         </p>
         <div style={{ height: 1, width: 240, background: 'rgba(255,255,255,0.3)', margin: '8px 0' }}/>
         <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.65)', letterSpacing: '2.5px', textTransform: 'uppercase' }}>
@@ -134,15 +134,12 @@ function Slide2() {
           Alexandre<br/>Verstappen
         </h1>
         <p style={{ margin: '24px 0 8px', fontSize: 20, color: T.deep, lineHeight: 1.5 }}>
-          Mettetois <strong>depuis toujours</strong>
+          <strong>Djobin depuis 9 ans</strong>
         </p>
         <p style={{ margin: '8px 0', fontSize: 18, color: T.deep }}>
           📍 Rue de Prée 9G — 5640 Mettet
         </p>
-        <p style={{ margin: '8px 0', fontSize: 18, color: T.deep }}>
-          🏢 <strong>Avcotech SRL</strong> · BCE 0731.637.148
-        </p>
-        <p style={{ margin: '28px 0 0', fontSize: 16, color: T.muted, fontStyle: 'italic', lineHeight: 1.6 }}>
+        <p style={{ margin: '32px 0 0', fontSize: 16, color: T.muted, fontStyle: 'italic', lineHeight: 1.6 }}>
           Yoppaa est née d&rsquo;une intuition simple :<br/>
           le commerce de quartier mérite mieux qu&rsquo;une page Facebook oubliée.
         </p>
@@ -161,16 +158,16 @@ function Slide3() {
         Le constat
       </p>
       <h2 style={{ margin: '20px 0 32px', fontSize: 44, fontWeight: 900, color: T.ink, letterSpacing: '-1.5px', lineHeight: 1.2, maxWidth: 1100 }}>
-        Qui, ce soir, sait ce que nos commerces<br/>
-        de Mettet <span style={{ color: T.main }}>proposeront demain matin&nbsp;?</span>
+        Qui, maintenant, sait ce que les commerces<br/>
+        de l&rsquo;entité <span style={{ color: T.main }}>proposeront demain matin&nbsp;?</span>
       </h2>
       <p style={{ margin: '0 0 32px', fontSize: 22, color: T.deep, fontWeight: 500, maxWidth: 900, lineHeight: 1.5 }}>
-        Nos citoyens ouvrent leur téléphone cent fois par jour.<br/>
+        Vos habitants ouvrent leur téléphone cent fois par jour.<br/>
         Ils y trouvent toutes les grandes plateformes mondiales.
       </p>
       <div style={{ background: '#FEE2E2', padding: '20px 36px', borderRadius: 100, border: '2px solid #FCA5A5' }}>
         <p style={{ margin: 0, fontSize: 28, fontWeight: 900, color: '#991B1B', letterSpacing: '-0.8px' }}>
-          ... mais presque jamais les commerces de Mettet.
+          ... mais presque jamais les commerces de proximité.
         </p>
       </div>
       <MiniWordmark white={false}/>
@@ -186,19 +183,19 @@ function Slide4() {
       <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
         Vous aussi, vous voulez communiquer
       </p>
-      <h2 style={{ margin: '16px 0 12px', fontSize: 52, fontWeight: 900, color: T.ink, letterSpacing: '-1.8px', lineHeight: 1.1, maxWidth: 1100 }}>
-        Votre bulletin communal est <span style={{ color: T.main }}>excellent</span>...
+      <h2 style={{ margin: '16px 0 12px', fontSize: 48, fontWeight: 900, color: T.ink, letterSpacing: '-1.8px', lineHeight: 1.15, maxWidth: 1100 }}>
+        Votre <span style={{ color: T.main }}>bulletin</span>, votre <span style={{ color: T.main }}>site</span>, votre <span style={{ color: T.main }}>page Facebook</span> sont précieux...
       </h2>
       <p style={{ margin: '0 0 36px', fontSize: 22, color: T.muted, fontStyle: 'italic' }}>
-        ... mais peut-il tout faire&nbsp;?
+        ... mais peuvent-ils tout faire&nbsp;?
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, maxWidth: 1100, width: '100%' }}>
         {[
-          { emoji: '📅', label: 'Bimestriel',       detail: 'Jusqu\'à deux mois pour annoncer' },
-          { emoji: '📄', label: 'Papier',           detail: 'Perdu, jeté, oublié' },
+          { emoji: '📅', label: 'Bulletin',         detail: 'Bimestriel, jusqu\'à deux mois de délai' },
+          { emoji: '🌐', label: 'Site internet',    detail: 'Statique, l\'habitant doit venir' },
+          { emoji: '📣', label: 'Facebook',         detail: 'L\'algorithme décide qui voit quoi' },
           { emoji: '🐢', label: 'Pas instantané',   detail: 'Aucune alerte en temps réel' },
-          { emoji: '👀', label: 'Lecture passive',  detail: 'Aucun retour des citoyens' },
         ].map((b, i) => (
           <div key={i} style={{ background: '#fff', borderRadius: 16, padding: '24px 18px', boxShadow: '0 4px 16px rgba(26,8,64,0.06)', border: `1px solid ${T.pale}` }}>
             <p style={{ margin: 0, fontSize: 36, lineHeight: 1 }}>{b.emoji}</p>
@@ -208,9 +205,9 @@ function Slide4() {
         ))}
       </div>
 
-      <p style={{ margin: '40px 0 0', fontSize: 18, color: T.deep, fontWeight: 600, maxWidth: 860, lineHeight: 1.5 }}>
+      <p style={{ margin: '40px 0 0', fontSize: 18, color: T.deep, fontWeight: 600, maxWidth: 900, lineHeight: 1.5 }}>
         Il faut <strong style={{ color: T.main }}>compléter</strong>, pas remplacer.<br/>
-        Un canal numérique instantané, gratuit, que vous contrôlez.
+        Un canal numérique instantané, interactif, que vous contrôlez.
       </p>
 
       <MiniWordmark white={false}/>
@@ -234,20 +231,19 @@ function Slide5() {
 
         <div style={{ display: 'flex', gap: 32, marginTop: 60 }}>
           {[
-            { icon: '🏪', label: 'Commerçants',     sub: 'Vitrine et commande' },
-            { icon: '👥', label: 'Citoyens',        sub: 'Découverte et rendez-vous' },
-            { icon: '🏛️', label: 'Services publics', sub: 'Alertes et signalements' },
+            { icon: '🏪', label: 'Commerçants' },
+            { icon: '👥', label: 'Citoyens' },
+            { icon: '🏛️', label: 'Services publics' },
           ].map((p, i) => (
-            <div key={i} style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)', border: '1px solid rgba(196,160,244,0.3)', borderRadius: 16, padding: '24px 32px', textAlign: 'center', minWidth: 200 }}>
-              <p style={{ margin: 0, fontSize: 36 }}>{p.icon}</p>
-              <p style={{ margin: '12px 0 4px', fontSize: 18, fontWeight: 800, color: '#fff' }}>{p.label}</p>
-              <p style={{ margin: 0, fontSize: 12, color: T.light, fontWeight: 600 }}>{p.sub}</p>
+            <div key={i} style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)', border: '1px solid rgba(196,160,244,0.3)', borderRadius: 16, padding: '28px 36px', textAlign: 'center', minWidth: 220 }}>
+              <p style={{ margin: 0, fontSize: 42 }}>{p.icon}</p>
+              <p style={{ margin: '14px 0 0', fontSize: 20, fontWeight: 800, color: '#fff' }}>{p.label}</p>
             </div>
           ))}
         </div>
 
-        <p style={{ margin: '60px 0 0', fontSize: 14, color: 'rgba(255,255,255,0.6)', letterSpacing: '2px', textTransform: 'uppercase', fontWeight: 700 }}>
-          🇧🇪 Autofinancé · Ancré à Mettet · Sans levée de fonds
+        <p style={{ margin: '60px 0 0', fontSize: 14, color: 'rgba(255,255,255,0.7)', letterSpacing: '1.5px', fontWeight: 600, maxWidth: 900, textAlign: 'center', lineHeight: 1.6 }}>
+          Créé à Mettet — Autofinancé pour préserver notre indépendance stratégique.
         </p>
       </div>
       <SlideNumber n={5} total={12}/>
@@ -255,40 +251,63 @@ function Slide5() {
   )
 }
 
-// ─── 6. UNE APPLICATION, TROIS TYPES DE COMMERCE ───────────────────
+// ─── 6. UNE APPLICATION, TROIS TYPES DE COMMERCE + LES POSSIBILITÉS ─
 function Slide6() {
   const types = [
-    { emoji: '🥖', titre: 'Alimentaire',          sub: 'Boulangerie, pizzeria, frites, traiteur, épicerie...', features: ['Click & Collect', 'Livraison locale', 'Bons plans quotidiens', 'Stock en temps réel'],    color: '#F59E0B' },
-    { emoji: '💄', titre: 'Vitrine de service',   sub: 'Institut de beauté, coiffeur, garagiste, dentiste...', features: ['Rendez-vous en ligne', 'Acompte sécurisé', 'Plusieurs praticiens', 'Annulation jusqu\'à 48 h'], color: '#10B981' },
-    { emoji: '🛍️', titre: 'Commerce de détail',  sub: 'Fleuriste, librairie, vêtements, déco...',              features: ['Vitrine numérique', 'Actualités et bons plans', 'Fidélité', 'Parrainage'],            color: '#6B35C4' },
+    { emoji: '🥖', titre: 'Commerce alimentaire',  sub: 'Boulangerie, pizzeria, friterie, traiteur, épicerie, chocolatier...',      color: '#F59E0B' },
+    { emoji: '💄', titre: 'Commerces de service',  sub: 'Institut de beauté, coiffeur, salle de fitness, garagiste...',              color: '#10B981' },
+    { emoji: '🛍️', titre: 'Commerce de détail',   sub: 'Fleuriste, magasin de vêtements, déco, informatique...',                    color: '#6B35C4' },
+  ]
+  const possibilites = [
+    { emoji: '🛒', label: 'Click & Collect' },
+    { emoji: '🚲', label: 'Livraison locale' },
+    { emoji: '🔔', label: 'Bons plans quotidiens via notifications' },
+    { emoji: '☀️', label: 'Good Morning Yoppers, le rendez-vous matinal du quartier' },
+    { emoji: '📦', label: 'Disponibilité des stocks en temps réel' },
+    { emoji: '📅', label: 'Prise de rendez-vous en ligne' },
+    { emoji: '🔒', label: 'Paiements sécurisés' },
+    { emoji: '👥', label: 'Gestion multi-praticiens' },
+    { emoji: '🪟', label: 'Vitrine numérique' },
+    { emoji: '⭐', label: 'Système de fidélité' },
+    { emoji: '📸', label: 'Accompagnement visibilité (photos, vidéos courtes)' },
   ]
   return (
-    <div style={{ ...slideBase, background: T.bg, justifyContent: 'flex-start', paddingTop: 80 }}>
-      <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
+    <div style={{ ...slideBase, background: T.bg, justifyContent: 'flex-start', paddingTop: 50 }}>
+      <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>
         Une seule application, trois expériences
       </p>
-      <h2 style={{ margin: '16px 0 40px', fontSize: 52, fontWeight: 900, color: T.ink, letterSpacing: '-2px', lineHeight: 1.1 }}>
+      <h2 style={{ margin: '12px 0 24px', fontSize: 42, fontWeight: 900, color: T.ink, letterSpacing: '-1.6px', lineHeight: 1.1 }}>
         Pensée pour <span style={{ color: T.main }}>chaque type</span> de commerce
       </h2>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, maxWidth: 1150, width: '100%' }}>
+      {/* 3 cards de types — compactes */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, maxWidth: 1150, width: '100%', marginBottom: 32 }}>
         {types.map((t, i) => (
-          <div key={i} style={{ background: '#fff', borderRadius: 18, padding: '24px 22px', textAlign: 'left', border: `1px solid ${T.pale}`, boxShadow: '0 8px 24px rgba(26,8,64,0.08)', borderTop: `4px solid ${t.color}` }}>
-            <p style={{ margin: 0, fontSize: 48, lineHeight: 1 }}>{t.emoji}</p>
-            <p style={{ margin: '14px 0 6px', fontSize: 22, fontWeight: 900, color: T.ink, letterSpacing: '-0.6px' }}>{t.titre}</p>
-            <p style={{ margin: '0 0 18px', fontSize: 12, color: T.muted, fontWeight: 500, lineHeight: 1.4 }}>{t.sub}</p>
-            <div style={{ height: 1, background: T.pale, margin: '12px 0 14px' }}/>
-            {t.features.map((f, j) => (
-              <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: t.color, flexShrink: 0 }}/>
-                <span style={{ fontSize: 13, color: T.deep, fontWeight: 600 }}>{f}</span>
-              </div>
-            ))}
+          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '16px 18px', textAlign: 'left', border: `1px solid ${T.pale}`, borderTop: `4px solid ${t.color}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <span style={{ fontSize: 28 }}>{t.emoji}</span>
+              <p style={{ margin: 0, fontSize: 16, fontWeight: 900, color: T.ink, letterSpacing: '-0.4px' }}>{t.titre}</p>
+            </div>
+            <p style={{ margin: 0, fontSize: 12, color: T.muted, fontWeight: 500, lineHeight: 1.45 }}>{t.sub}</p>
           </div>
         ))}
       </div>
 
-      <p style={{ margin: '36px 0 0', fontSize: 18, color: T.deep, fontWeight: 600, fontStyle: 'italic' }}>
+      {/* Section possibilités */}
+      <p style={{ margin: '0 0 14px', fontSize: 12, fontWeight: 800, color: T.deep, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+        Et pour chacun, ces possibilités
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, maxWidth: 1150, width: '100%' }}>
+        {possibilites.map((p, i) => (
+          <div key={i} style={{ background: '#fff', borderRadius: 10, padding: '10px 12px', border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 18, flexShrink: 0 }}>{p.emoji}</span>
+            <span style={{ fontSize: 11.5, color: T.deep, fontWeight: 600, lineHeight: 1.3, textAlign: 'left' }}>{p.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <p style={{ margin: '24px 0 0', fontSize: 16, color: T.deep, fontWeight: 600, fontStyle: 'italic' }}>
         Un boulanger n&rsquo;a pas les mêmes besoins qu&rsquo;un coiffeur. Nous l&rsquo;avons compris.
       </p>
 
@@ -365,7 +384,13 @@ function SlideDemo({ label, titre, url, commentaire, note, n }) {
 
       <div style={{ position: 'relative', width: 400, height: 820, background: '#1a1a1a', borderRadius: 56, padding: 12, boxShadow: '0 30px 80px rgba(26,8,64,0.4), 0 0 0 1px rgba(196,160,244,0.3)', flexShrink: 0, boxSizing: 'border-box' }}>
         <div style={{ position: 'absolute', top: -2, left: '50%', transform: 'translateX(-50%)', width: 110, height: 24, background: '#0a0a0a', borderRadius: '0 0 20px 20px', zIndex: 10 }}/>
-        <iframe src={url} title={titre} style={{ width: '100%', height: '100%', border: 'none', borderRadius: 44, background: '#fff', display: 'block' }}/>
+        {/* sandbox isole l'historique iframe du parent : bouton "Retour" dans l'app ne fait plus reculer la page slides */}
+        <iframe
+          src={url}
+          title={titre}
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+          style={{ width: '100%', height: '100%', border: 'none', borderRadius: 44, background: '#fff', display: 'block' }}
+        />
       </div>
 
       <MiniWordmark white={false}/>
@@ -379,14 +404,13 @@ function Slide8() {
   return (
     <SlideDemo n={8}
       label="Démonstration ①"
-      titre="Vos citoyens trouvent vos commerces"
+      titre="Vos habitants trouvent vos commerces"
       url="/commander?frame=1"
       commentaire={
         <>
-          Six commerçants mettetois ont déjà rejoint l&rsquo;aventure : Boulangerie Wilmot, Sandwicherie Le 9-15, Mozz&rsquo;Art, P&rsquo;tit Toqué, Miettes et Kebabistro. Fiches locales, statuts en temps réel, favoris, bons plans.
+          Plusieurs commerçants de l&rsquo;entité de Mettet nous accompagnent déjà dans le développement et le lancement de ce projet. Fiches locales, statuts en temps réel, favoris, actus, bons plans et fidélité.
         </>
       }
-      note="Toucher une fiche pour ouvrir un commerce complet. Bouton favoris et bouton partage = viralité."
     />
   )
 }
@@ -396,14 +420,13 @@ function Slide9() {
   return (
     <SlideDemo n={9}
       label="Démonstration ②"
-      titre="Vous publiez, ils reçoivent — instantanément"
+      titre="Vous publiez, ils reçoivent instantanément"
       url="/commander/services/commune-mettet?frame=1"
       commentaire={
         <>
-          Votre fiche d&rsquo;administration communale est déjà construite. Une alerte — coupure d&rsquo;eau, travaux — apparaît dans tous les téléphones des Mettetois dès l&rsquo;enregistrement. Et chaque matin, le <strong>Good Morning Yoppers</strong> rassemble alertes, actualités et bons plans, comme le journal quotidien du quartier.
+          Votre fiche de l&rsquo;administration communale de Mettet est déjà construite. Une alerte, une coupure d&rsquo;eau, des travaux, cela apparaît instantanément dans les téléphones des habitants de l&rsquo;entité dès l&rsquo;enregistrement par vos services. Et chaque matin, le <strong>Good Morning Yoppers</strong> rassemble les alertes, les actualités et bons plans, comme le journal quotidien.
         </>
       }
-      note="Montrer l'alerte 'Coupure d'eau AIEM', puis basculer sur /commander/morning : la même information arrive en tête de flux."
     />
   )
 }
@@ -412,15 +435,14 @@ function Slide9() {
 function Slide10() {
   return (
     <SlideDemo n={10}
-      label="Démonstration ③ · La pépite"
+      label="Démonstration ③"
       titre="Les signalements citoyens"
       url="/commander/services/commune-mettet?frame=1"
       commentaire={
         <>
-          14 h 00 : un Mettetois aperçoit un nid-de-poule. 14 h 05 : le signalement est dans la messagerie de votre service voirie, accompagné d&rsquo;une photo géolocalisée.
+          14 h 00 : un habitant de Mettet — un <strong>Yopper</strong>, utilisateur de Yoppaa — aperçoit un nid-de-poule. 14 h 05 : le signalement est dans la messagerie et le tableau de bord du service concerné, accompagné d&rsquo;une photo géolocalisée et d&rsquo;un descriptif.
         </>
       }
-      note="Aller jusqu'à 'Signaler un problème', choisir 'Nid-de-poule', dérouler les trois étapes : le message formaté arrive."
     />
   )
 }
@@ -501,24 +523,21 @@ function Slide12() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, maxWidth: 1100, width: '100%' }}>
           {[
-            { titre: 'Un mot dans le bulletin communal', detail: 'Nous le rédigeons, vous validez. Vous restez maîtres du contenu.', optional: false },
-            { titre: 'Une mise en relation',              detail: 'Une introduction à l\'Union des commerçants de Mettet, pour leur présenter l\'outil.', optional: false },
-            { titre: 'Un relais, le moment venu',         detail: 'Un partage sur vos canaux, le jour où vous l\'estimez pertinent.', optional: true },
+            { titre: 'Un partenariat officiel',          detail: 'Un document de la commune, à l\'en-tête officiel, reconnaissant Yoppaa comme « Partenaire officiel ». Un appui institutionnel pour accélérer le développement.' },
+            { titre: 'Une introduction',                  detail: 'Une mise en relation avec l\'association des commerçants de Mettet, pour leur présenter l\'outil.' },
+            { titre: 'Un relais, le moment venu',         detail: 'Un partage sur vos canaux, le jour où vous l\'estimez pertinent.' },
           ].map((d, i) => (
             <div key={i} style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)', border: `1px solid rgba(196,160,244,0.3)`, borderRadius: 16, padding: '22px 22px', textAlign: 'left' }}>
               <p style={{ margin: 0, fontSize: 17, fontWeight: 900, color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.3 }}>{d.titre}</p>
               <p style={{ margin: '10px 0 0', fontSize: 13, color: T.light, lineHeight: 1.55, fontWeight: 500 }}>{d.detail}</p>
-              {d.optional && (
-                <p style={{ margin: '8px 0 0', fontSize: 11, color: 'rgba(255,255,255,0.6)', fontStyle: 'italic' }}>(facultatif)</p>
-              )}
             </div>
           ))}
         </div>
 
         <div style={{ marginTop: 60, padding: '24px 40px', borderTop: '1px solid rgba(255,255,255,0.15)', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 600, color: '#fff', fontStyle: 'italic', textAlign: 'center', lineHeight: 1.55, maxWidth: 900 }}>
-            Dans deux ans, lorsque nous présenterons Yoppaa<br/>
-            à trente communes wallonnes, nous dirons :<br/>
+            Dans les prochains mois, lorsque nous présenterons Yoppaa<br/>
+            à d&rsquo;autres communes, nous dirons :<br/>
             <strong style={{ color: T.light, fontWeight: 800 }}>« Mettet a été la première. »</strong>
           </p>
         </div>

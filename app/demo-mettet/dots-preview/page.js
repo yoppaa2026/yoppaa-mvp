@@ -273,9 +273,102 @@ export default function DotsPreview() {
           ))}
         </div>
 
+        {/* ⑦ NOUVEAU — Explorations : écartement + maillon/tribu */}
+        <p style={{ margin: '30px 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+          ⑦ Explorations — écartement, maillon, liaison
+        </p>
+        <p style={{ margin: '0 0 18px', fontSize: 13, color: T.deep, lineHeight: 1.55 }}>
+          Idée tribu / maillon / ensemble : 4 pistes à comparer. Sur fond foncé, ratio centre 1.0 (tous égaux) avec décalage 25 %.
+        </p>
+
+        {/* 4 variantes sur fond foncé */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18, marginBottom: 22 }}>
+
+          {/* V1 — Écartement large */}
+          <div style={{ background: T.ink, borderRadius: 14, padding: '50px 30px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
+            <p style={{ margin: 0, fontSize: 56, fontWeight: 900, letterSpacing: '-2.2px', lineHeight: 1 }}>
+              <span style={{ color: '#fff' }}>yo</span>
+              <span style={{ color: T.light }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            <YoppaaDots base={20} centerRatio={1.0} yOffsetRatio={0.25} gapRatio={1.0} colors={dark}/>
+            <div style={{ textAlign: 'center', marginTop: 6 }}>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>V1 · Écartement large</p>
+              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>gap × 1,0 · respire, aéré</p>
+            </div>
+          </div>
+
+          {/* V2 — Avec 2 mini-dots intermédiaires (maillon) */}
+          <div style={{ background: T.ink, borderRadius: 14, padding: '50px 30px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
+            <p style={{ margin: 0, fontSize: 56, fontWeight: 900, letterSpacing: '-2.2px', lineHeight: 1 }}>
+              <span style={{ color: '#fff' }}>yo</span>
+              <span style={{ color: T.light }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            {/* 5 dots : 3 principaux + 2 mini intermédiaires, sourire en U */}
+            <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 12, height: 30 }}>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', opacity: 0.55, marginTop: 0 }}/>
+              <span style={{ width: 8,  height: 8,  borderRadius: '50%', background: T.light, opacity: 0.6, marginTop: 8 }}/>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', background: T.light, marginTop: 8 }}/>
+              <span style={{ width: 8,  height: 8,  borderRadius: '50%', background: T.mid, opacity: 0.6, marginTop: 8 }}/>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', background: T.mid, marginTop: 0 }}/>
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 6 }}>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>V2 · Maillon (5 dots) ✨</p>
+              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>tribu, ensemble, communauté</p>
+            </div>
+          </div>
+
+          {/* V3 — Liaison ligne courbée */}
+          <div style={{ background: T.ink, borderRadius: 14, padding: '50px 30px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
+            <p style={{ margin: 0, fontSize: 56, fontWeight: 900, letterSpacing: '-2.2px', lineHeight: 1 }}>
+              <span style={{ color: '#fff' }}>yo</span>
+              <span style={{ color: T.light }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            {/* SVG : 3 dots reliés par un arc courbé */}
+            <svg width="140" height="36" viewBox="0 0 140 36" style={{ overflow: 'visible' }}>
+              <path d="M 12 8 Q 70 38 128 8" stroke="rgba(196,160,244,0.45)" strokeWidth="1.5" fill="none" strokeDasharray="0"/>
+              <circle cx="12" cy="8" r="9" fill="#fff" opacity="0.55"/>
+              <circle cx="70" cy="22" r="9" fill={T.light}/>
+              <circle cx="128" cy="8" r="9" fill={T.mid}/>
+            </svg>
+            <div style={{ textAlign: 'center', marginTop: 6 }}>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>V3 · Arc relié</p>
+              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>liaison subtile, sourire évident</p>
+            </div>
+          </div>
+
+          {/* V4 — Constellation : dots + petites particules autour */}
+          <div style={{ background: T.ink, borderRadius: 14, padding: '50px 30px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
+            <p style={{ margin: 0, fontSize: 56, fontWeight: 900, letterSpacing: '-2.2px', lineHeight: 1 }}>
+              <span style={{ color: '#fff' }}>yo</span>
+              <span style={{ color: T.light }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            <div style={{ position: 'relative', width: 180, height: 30, display: 'flex', alignItems: 'flex-start' }}>
+              {/* Particules de fond */}
+              <span style={{ position: 'absolute', top: 22, left: 4,  width: 3, height: 3, borderRadius: '50%', background: '#fff', opacity: 0.3 }}/>
+              <span style={{ position: 'absolute', top: 26, left: 40, width: 2, height: 2, borderRadius: '50%', background: T.light, opacity: 0.5 }}/>
+              <span style={{ position: 'absolute', top: 18, left: 90, width: 3, height: 3, borderRadius: '50%', background: T.mid, opacity: 0.45 }}/>
+              <span style={{ position: 'absolute', top: 24, left: 140, width: 2, height: 2, borderRadius: '50%', background: '#fff', opacity: 0.4 }}/>
+              <span style={{ position: 'absolute', top: 28, left: 168, width: 3, height: 3, borderRadius: '50%', background: T.light, opacity: 0.3 }}/>
+              {/* Les 3 dots principaux centrés */}
+              <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)' }}>
+                <YoppaaDots base={20} centerRatio={1.0} yOffsetRatio={0.25} gapRatio={1.0} colors={dark}/>
+              </div>
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 6 }}>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>V4 · Constellation</p>
+              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>3 dots + poussière d&rsquo;étoiles</p>
+            </div>
+          </div>
+
+        </div>
+
         {/* Tailles compactes pour usages réels */}
         <p style={{ margin: '30px 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-          ⑦ En usage réel — favicon, app icon, signature de bas de page
+          ⑧ En usage réel — favicon, app icon, signature de bas de page
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18 }}>
           {/* Favicon 32px */}

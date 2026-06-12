@@ -273,97 +273,165 @@ export default function DotsPreview() {
           ))}
         </div>
 
-        {/* ⑦ NOUVEAU — Explorations : écartement + maillon/tribu */}
+        {/* ⑦ NOUVEAU — Couleurs des minis sur V2 (maillon) */}
         <p style={{ margin: '30px 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-          ⑦ Explorations — écartement, maillon, liaison
+          ⑦ V2 (maillon) — quelle couleur pour les 2 minis ?
         </p>
         <p style={{ margin: '0 0 18px', fontSize: 13, color: T.deep, lineHeight: 1.55 }}>
-          Idée tribu / maillon / ensemble : 4 pistes à comparer. Sur fond foncé, ratio centre 1.0 (tous égaux) avec décalage 25 %.
+          Dot gauche corrigé en <strong>blanc pur</strong> (avant 0,55 opacité = gris). Minis en <strong>opacité 1</strong>. Reste à choisir leur couleur : 3 options.
         </p>
 
-        {/* 4 variantes sur fond foncé */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18, marginBottom: 22 }}>
+        {/* 3 variantes de couleurs minis sur fond foncé */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, marginBottom: 26 }}>
 
-          {/* V1 — Écartement large */}
-          <div style={{ background: T.ink, borderRadius: 14, padding: '50px 30px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
-            <p style={{ margin: 0, fontSize: 56, fontWeight: 900, letterSpacing: '-2.2px', lineHeight: 1 }}>
+          {/* V2-A — Mini gauche reprend le grand de gauche, mini droit reprend le grand de droite */}
+          <div style={{ background: T.ink, borderRadius: 14, padding: '50px 24px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+            <p style={{ margin: 0, fontSize: 50, fontWeight: 900, letterSpacing: '-2px', lineHeight: 1 }}>
               <span style={{ color: '#fff' }}>yo</span>
               <span style={{ color: T.light }}>pp</span>
               <span style={{ color: T.mid }}>aa</span>
             </p>
-            <YoppaaDots base={20} centerRatio={1.0} yOffsetRatio={0.25} gapRatio={1.0} colors={dark}/>
-            <div style={{ textAlign: 'center', marginTop: 6 }}>
-              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>V1 · Écartement large</p>
-              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>gap × 1,0 · respire, aéré</p>
-            </div>
-          </div>
-
-          {/* V2 — Avec 2 mini-dots intermédiaires (maillon) */}
-          <div style={{ background: T.ink, borderRadius: 14, padding: '50px 30px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
-            <p style={{ margin: 0, fontSize: 56, fontWeight: 900, letterSpacing: '-2.2px', lineHeight: 1 }}>
-              <span style={{ color: '#fff' }}>yo</span>
-              <span style={{ color: T.light }}>pp</span>
-              <span style={{ color: T.mid }}>aa</span>
-            </p>
-            {/* 5 dots : 3 principaux + 2 mini intermédiaires, sourire en U */}
             <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 12, height: 30 }}>
-              <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', opacity: 0.55, marginTop: 0 }}/>
-              <span style={{ width: 8,  height: 8,  borderRadius: '50%', background: T.light, opacity: 0.6, marginTop: 8 }}/>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', marginTop: 0 }}/>
+              <span style={{ width: 8,  height: 8,  borderRadius: '50%', background: '#fff', marginTop: 8 }}/>
               <span style={{ width: 20, height: 20, borderRadius: '50%', background: T.light, marginTop: 8 }}/>
-              <span style={{ width: 8,  height: 8,  borderRadius: '50%', background: T.mid, opacity: 0.6, marginTop: 8 }}/>
+              <span style={{ width: 8,  height: 8,  borderRadius: '50%', background: T.mid, marginTop: 8 }}/>
               <span style={{ width: 20, height: 20, borderRadius: '50%', background: T.mid, marginTop: 0 }}/>
             </div>
             <div style={{ textAlign: 'center', marginTop: 6 }}>
-              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>V2 · Maillon (5 dots) ✨</p>
-              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>tribu, ensemble, communauté</p>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>V2-A · Mini = couleur du grand à côté</p>
+              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>blanc · blanc · light · mid · mid</p>
             </div>
           </div>
 
-          {/* V3 — Liaison ligne courbée */}
-          <div style={{ background: T.ink, borderRadius: 14, padding: '50px 30px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
-            <p style={{ margin: 0, fontSize: 56, fontWeight: 900, letterSpacing: '-2.2px', lineHeight: 1 }}>
+          {/* V2-B — Mini en transition : suit la couleur du grand suivant */}
+          <div style={{ background: T.ink, borderRadius: 14, padding: '50px 24px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+            <p style={{ margin: 0, fontSize: 50, fontWeight: 900, letterSpacing: '-2px', lineHeight: 1 }}>
               <span style={{ color: '#fff' }}>yo</span>
               <span style={{ color: T.light }}>pp</span>
               <span style={{ color: T.mid }}>aa</span>
             </p>
-            {/* SVG : 3 dots reliés par un arc courbé */}
-            <svg width="140" height="36" viewBox="0 0 140 36" style={{ overflow: 'visible' }}>
-              <path d="M 12 8 Q 70 38 128 8" stroke="rgba(196,160,244,0.45)" strokeWidth="1.5" fill="none" strokeDasharray="0"/>
-              <circle cx="12" cy="8" r="9" fill="#fff" opacity="0.55"/>
-              <circle cx="70" cy="22" r="9" fill={T.light}/>
-              <circle cx="128" cy="8" r="9" fill={T.mid}/>
-            </svg>
+            <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 12, height: 30 }}>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', marginTop: 0 }}/>
+              <span style={{ width: 8,  height: 8,  borderRadius: '50%', background: T.light, marginTop: 8 }}/>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', background: T.light, marginTop: 8 }}/>
+              <span style={{ width: 8,  height: 8,  borderRadius: '50%', background: T.mid, marginTop: 8 }}/>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', background: T.mid, marginTop: 0 }}/>
+            </div>
             <div style={{ textAlign: 'center', marginTop: 6 }}>
-              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>V3 · Arc relié</p>
-              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>liaison subtile, sourire évident</p>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>V2-B · Mini = couleur du grand qu&rsquo;il rejoint ✨</p>
+              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>blanc · light · light · mid · mid</p>
             </div>
           </div>
 
-          {/* V4 — Constellation : dots + petites particules autour */}
-          <div style={{ background: T.ink, borderRadius: 14, padding: '50px 30px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
-            <p style={{ margin: 0, fontSize: 56, fontWeight: 900, letterSpacing: '-2.2px', lineHeight: 1 }}>
+          {/* V2-C — Minis neutres (light pour les 2) */}
+          <div style={{ background: T.ink, borderRadius: 14, padding: '50px 24px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+            <p style={{ margin: 0, fontSize: 50, fontWeight: 900, letterSpacing: '-2px', lineHeight: 1 }}>
               <span style={{ color: '#fff' }}>yo</span>
               <span style={{ color: T.light }}>pp</span>
               <span style={{ color: T.mid }}>aa</span>
             </p>
-            <div style={{ position: 'relative', width: 180, height: 30, display: 'flex', alignItems: 'flex-start' }}>
-              {/* Particules de fond */}
-              <span style={{ position: 'absolute', top: 22, left: 4,  width: 3, height: 3, borderRadius: '50%', background: '#fff', opacity: 0.3 }}/>
-              <span style={{ position: 'absolute', top: 26, left: 40, width: 2, height: 2, borderRadius: '50%', background: T.light, opacity: 0.5 }}/>
-              <span style={{ position: 'absolute', top: 18, left: 90, width: 3, height: 3, borderRadius: '50%', background: T.mid, opacity: 0.45 }}/>
-              <span style={{ position: 'absolute', top: 24, left: 140, width: 2, height: 2, borderRadius: '50%', background: '#fff', opacity: 0.4 }}/>
-              <span style={{ position: 'absolute', top: 28, left: 168, width: 3, height: 3, borderRadius: '50%', background: T.light, opacity: 0.3 }}/>
-              {/* Les 3 dots principaux centrés */}
-              <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)' }}>
-                <YoppaaDots base={20} centerRatio={1.0} yOffsetRatio={0.25} gapRatio={1.0} colors={dark}/>
-              </div>
+            <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 12, height: 30 }}>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', marginTop: 0 }}/>
+              <span style={{ width: 8,  height: 8,  borderRadius: '50%', background: T.light, marginTop: 8 }}/>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', background: T.light, marginTop: 8 }}/>
+              <span style={{ width: 8,  height: 8,  borderRadius: '50%', background: T.light, marginTop: 8 }}/>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', background: T.mid, marginTop: 0 }}/>
             </div>
             <div style={{ textAlign: 'center', marginTop: 6 }}>
-              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>V4 · Constellation</p>
-              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>3 dots + poussière d&rsquo;étoiles</p>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>V2-C · Minis neutres en light</p>
+              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>blanc · light · light · light · mid</p>
             </div>
           </div>
 
+        </div>
+
+        {/* ⑧ COMPARATIF FINAL V1 vs V2 avec les bons réglages */}
+        <p style={{ margin: '30px 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+          ⑧ Le match final — V1 (3 dots purs) vs V2-B (maillon)
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18, marginBottom: 22 }}>
+          {/* V1 final */}
+          <div style={{ background: T.ink, borderRadius: 14, padding: '60px 40px 44px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 22 }}>
+            <p style={{ margin: 0, fontSize: 72, fontWeight: 900, letterSpacing: '-3px', lineHeight: 1 }}>
+              <span style={{ color: '#fff' }}>yo</span>
+              <span style={{ color: T.light }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 22, height: 32 }}>
+              <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#fff', marginTop: 0 }}/>
+              <span style={{ width: 24, height: 24, borderRadius: '50%', background: T.light, marginTop: 10 }}/>
+              <span style={{ width: 24, height: 24, borderRadius: '50%', background: T.mid, marginTop: 0 }}/>
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 10 }}>
+              <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: T.light, letterSpacing: '1.5px', textTransform: 'uppercase' }}>V1 · Pur 3 dots</p>
+              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>minimaliste, iconique</p>
+            </div>
+          </div>
+
+          {/* V2-B final */}
+          <div style={{ background: T.ink, borderRadius: 14, padding: '60px 40px 44px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 22 }}>
+            <p style={{ margin: 0, fontSize: 72, fontWeight: 900, letterSpacing: '-3px', lineHeight: 1 }}>
+              <span style={{ color: '#fff' }}>yo</span>
+              <span style={{ color: T.light }}>pp</span>
+              <span style={{ color: T.mid }}>aa</span>
+            </p>
+            <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 14, height: 32 }}>
+              <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#fff', marginTop: 0 }}/>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: T.light, marginTop: 10 }}/>
+              <span style={{ width: 24, height: 24, borderRadius: '50%', background: T.light, marginTop: 10 }}/>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: T.mid, marginTop: 10 }}/>
+              <span style={{ width: 24, height: 24, borderRadius: '50%', background: T.mid, marginTop: 0 }}/>
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 10 }}>
+              <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: T.light, letterSpacing: '1.5px', textTransform: 'uppercase' }}>V2-B · Maillon</p>
+              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>raconte la tribu</p>
+            </div>
+          </div>
+        </div>
+
+        {/* En favicon — V1 vs V2 */}
+        <p style={{ margin: '14px 0 12px', fontSize: 11, color: T.muted, fontWeight: 700, letterSpacing: '0.5px' }}>
+          En favicon 32×32 : la V2 simplifie ses minis quasi-invisibles. Test côte à côte :
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 22 }}>
+          {[
+            { label: 'V1 · favicon', big: false },
+            { label: 'V2 · favicon (3 dots)', big: false, v2: true, smallOnly: true },
+            { label: 'V1 · app icon', big: true },
+            { label: 'V2 · app icon (5 dots)', big: true, v2: true },
+          ].map((c, i) => (
+            <div key={i} style={{ background: c.big ? `linear-gradient(135deg, ${T.ink}, ${T.main})` : T.ink, borderRadius: c.big ? 16 : 6, padding: '14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, aspectRatio: '1', minHeight: 110 }}>
+              <p style={{ margin: 0, fontSize: c.big ? 22 : 18, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1 }}>
+                <span style={{ color: '#fff' }}>yo</span>
+                <span style={{ color: T.light }}>pp</span>
+                <span style={{ color: T.mid }}>aa</span>
+              </p>
+              {!c.v2 ? (
+                <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: c.big ? 5 : 3, height: c.big ? 10 : 7 }}>
+                  <span style={{ width: c.big ? 6 : 4, height: c.big ? 6 : 4, borderRadius: '50%', background: '#fff' }}/>
+                  <span style={{ width: c.big ? 6 : 4, height: c.big ? 6 : 4, borderRadius: '50%', background: T.light, marginTop: c.big ? 3 : 2 }}/>
+                  <span style={{ width: c.big ? 6 : 4, height: c.big ? 6 : 4, borderRadius: '50%', background: T.mid }}/>
+                </div>
+              ) : c.smallOnly ? (
+                <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 3, height: 7 }}>
+                  <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#fff' }}/>
+                  <span style={{ width: 4, height: 4, borderRadius: '50%', background: T.light, marginTop: 2 }}/>
+                  <span style={{ width: 4, height: 4, borderRadius: '50%', background: T.mid }}/>
+                </div>
+              ) : (
+                <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 3, height: 10 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }}/>
+                  <span style={{ width: 3, height: 3, borderRadius: '50%', background: T.light, marginTop: 3 }}/>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.light, marginTop: 3 }}/>
+                  <span style={{ width: 3, height: 3, borderRadius: '50%', background: T.mid, marginTop: 3 }}/>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.mid }}/>
+                </div>
+              )}
+              <p style={{ margin: '6px 0 0', fontSize: 7, color: 'rgba(255,255,255,0.55)', fontWeight: 700, letterSpacing: '0.5px', textAlign: 'center' }}>{c.label}</p>
+            </div>
+          ))}
         </div>
 
         {/* Tailles compactes pour usages réels */}

@@ -90,7 +90,7 @@ export default function WordmarkPreview() {
     <div style={{ minHeight: '100vh', background: T.bg, padding: '40px 20px 80px', fontFamily: 'system-ui, sans-serif' }}>
       {/* Import Google Fonts */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800;900&family=Manrope:wght@700;800&family=Outfit:wght@700;800;900&family=DM+Sans:wght@700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800;900&family=Manrope:wght@700;800&family=Outfit:wght@700;800;900&family=DM+Sans:wght@700;900&family=Sora:wght@700;800&family=Lexend:wght@700;800&family=Mona+Sans:wght@800;900&family=Onest:wght@800;900&family=Bricolage+Grotesque:wght@700;800&family=Wix+Madefor+Display:wght@700;800&display=swap');
       `}</style>
 
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -126,6 +126,44 @@ export default function WordmarkPreview() {
               <div style={{ textAlign: 'center', marginTop: 8 }}>
                 <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: T.light, letterSpacing: '1px', textTransform: 'uppercase' }}>{f.name}</p>
                 <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>{f.vibe}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ①.b — 6 ALTERNATIVES À JAKARTA */}
+        <p style={{ margin: '20px 0 14px', fontSize: 12, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+          ①.b Polices alternatives — 6 candidates supplémentaires
+        </p>
+        <p style={{ margin: '0 0 18px', fontSize: 13, color: T.deep, lineHeight: 1.55 }}>
+          Toutes en minuscules <code>yoppaa</code> (validé), avec dots V2-B, sur fond foncé.
+        </p>
+
+        {/* Rappel Jakarta en grand */}
+        <div style={{ background: T.deep, borderRadius: 14, padding: '40px 30px 28px', marginBottom: 18, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, border: `2px solid ${T.main}` }}>
+          <Wordmark fontFamily='"Plus Jakarta Sans", sans-serif' fontSize={88} colors={darkColors} fontWeight={800}/>
+          <YoppaaDotsV2B base={24} colors={dotsDark}/>
+          <div style={{ marginTop: 8, padding: '5px 12px', background: T.main, borderRadius: 999 }}>
+            <p style={{ margin: 0, fontSize: 10, fontWeight: 800, color: '#fff', letterSpacing: '1.5px', textTransform: 'uppercase' }}>★ Référence : Plus Jakarta Sans 800</p>
+          </div>
+        </div>
+
+        {/* Grille de 6 alternatives */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 32 }}>
+          {[
+            { name: 'Sora',                family: '"Sora", sans-serif',                weight: 800, vibe: 'géométrique, distinctive, tech' },
+            { name: 'Lexend',              family: '"Lexend", sans-serif',              weight: 800, vibe: 'ultra lisible, dyslexie-friendly' },
+            { name: 'Mona Sans',           family: '"Mona Sans", sans-serif',           weight: 900, vibe: 'GitHub, moderne, équilibrée' },
+            { name: 'Onest',               family: '"Onest", sans-serif',               weight: 900, vibe: 'clean, géométrique, neutre' },
+            { name: 'Bricolage Grotesque', family: '"Bricolage Grotesque", sans-serif', weight: 800, vibe: 'caractère, hint humaniste' },
+            { name: 'Wix Madefor Display', family: '"Wix Madefor Display", sans-serif', weight: 800, vibe: 'amicale, accessible, ronde' },
+          ].map((f, i) => (
+            <div key={i} style={{ background: T.ink, borderRadius: 14, padding: '32px 18px 22px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <Wordmark fontFamily={f.family} fontSize={48} colors={darkColors} fontWeight={f.weight}/>
+              <YoppaaDotsV2B base={14} colors={dotsDark}/>
+              <div style={{ textAlign: 'center', marginTop: 6 }}>
+                <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '0.5px' }}>{f.name}</p>
+                <p style={{ margin: '4px 0 0', fontSize: 9, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>{f.vibe}</p>
               </div>
             </div>
           ))}

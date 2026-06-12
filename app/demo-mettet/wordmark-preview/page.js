@@ -98,11 +98,20 @@ export default function WordmarkPreview() {
         <div style={{ marginBottom: 28 }}>
           <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>Brand · 2026-06-12</p>
           <h1 style={{ margin: '6px 0 8px', fontSize: 32, fontWeight: 900, color: T.ink, letterSpacing: '-1px' }}>
-            Wordmark Yoppaa — spec
+            Wordmark Yoppaa, spec
           </h1>
           <p style={{ margin: 0, fontSize: 14, color: T.muted, lineHeight: 1.5 }}>
             Dots <strong>V2-B</strong> validés. Reste : police, capitalisation, letter-spacing, mono-couleurs, identité complète.
           </p>
+        </div>
+
+        {/* HERO — identité complète mise en avant */}
+        <div style={{ background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 100%)`, borderRadius: 22, padding: '80px 40px 60px', marginBottom: 36, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28, boxShadow: '0 10px 40px rgba(26, 8, 64, 0.2)' }}>
+          <Wordmark fontFamily='"Plus Jakarta Sans", sans-serif' fontSize={140} colors={darkColors}/>
+          <YoppaaDotsV2B base={36} colors={dotsDark}/>
+          <div style={{ marginTop: 16, padding: '6px 14px', background: 'rgba(255,255,255,0.08)', borderRadius: 999, border: '1px solid rgba(196,160,244,0.3)' }}>
+            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: T.light, letterSpacing: '2px', textTransform: 'uppercase' }}>Identité complète · wordmark + 5 dots V2-B</p>
+          </div>
         </div>
 
         {/* ① POLICES CANDIDATES */}

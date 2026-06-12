@@ -1,0 +1,329 @@
+'use client'
+// ════════════════════════════════════════════════════════════════════
+// BRAND KIT YOPPAA — la totale, prête à télécharger
+//
+// URL : yoppaa.app/brand-kit
+//
+// Contient :
+//   - 5 variantes du logo complet (foncé, clair, mono noir/blanc/main)
+//   - Logo dots seuls (favicon)
+//   - 8 formats réseaux sociaux pré-templatés
+//
+// Tous téléchargeables en SVG + PNG.
+//
+// Note police : SVG embarque référence Google Fonts Plus Jakarta Sans.
+// Pour print/broderie, ouvrir dans Illustrator/Inkscape et faire
+// "Convert text to outlines" (Cmd+Shift+O sur Illustrator).
+// ════════════════════════════════════════════════════════════════════
+
+import { useState } from 'react'
+
+const T = {
+  ink:    '#1A0840',
+  panel:  '#160636',
+  deep:   '#2D0F6B',
+  main:   '#6B35C4',
+  mid:    '#9660E0',
+  light:  '#C4A0F4',
+  pale:   '#EDE0FF',
+  bg:     '#F8F6FF',
+  muted:  '#6B7280',
+}
+
+// ────────── PALETTES PAR MODE ──────────
+const PALETTES = {
+  dark:       { yo: '#FFFFFF', pp: T.light, aa: T.mid,  d1: '#FFFFFF', d2: T.light, d3: T.light, d4: T.mid,   d5: T.mid,   bg: T.ink },
+  light:      { yo: T.ink,     pp: T.main,  aa: T.mid,  d1: T.ink,     d2: T.main,  d3: T.main,  d4: T.mid,   d5: T.mid,   bg: '#FFFFFF' },
+  monoBlack:  { yo: '#000',    pp: '#000',  aa: '#000', d1: '#000',    d2: '#000',  d3: '#000',  d4: '#000',  d5: '#000',  bg: '#FFFFFF' },
+  monoWhite:  { yo: '#FFFFFF', pp: '#fff',  aa: '#fff', d1: '#fff',    d2: '#fff',  d3: '#fff',  d4: '#fff',  d5: '#fff',  bg: T.ink },
+  monoMain:   { yo: T.main,    pp: T.main,  aa: T.main, d1: T.main,    d2: T.main,  d3: T.main,  d4: T.main,  d5: T.main,  bg: '#FFFFFF' },
+}
+
+// ────────── GÉNÉRATEUR DE SVG LOGO COMPLET ──────────
+// viewBox = 360 × 220 (logo horizontal compact, wordmark + dots V2-B en dessous)
+function generateLogoSvg(palette, includeBg = false) {
+  const fontFaceImport = `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@800&display=swap');`
+  const bgRect = includeBg ? `<rect width="360" height="220" fill="${palette.bg}"/>` : ''
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 220" preserveAspectRatio="xMidYMid meet" width="360" height="220">
+  <defs>
+    <style>${fontFaceImport}</style>
+  </defs>
+  ${bgRect}
+  <text x="180" y="110" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="110" letter-spacing="-5.5" text-anchor="middle">
+    <tspan fill="${palette.yo}">yo</tspan><tspan fill="${palette.pp}">pp</tspan><tspan fill="${palette.aa}">aa</tspan>
+  </text>
+  <g transform="translate(90, 145)">
+    <circle cx="14" cy="14" r="14" fill="${palette.d1}"/>
+    <circle cx="51.1" cy="21.7" r="7.7" fill="${palette.d2}"/>
+    <circle cx="88.2" cy="25.2" r="14" fill="${palette.d3}"/>
+    <circle cx="125.3" cy="21.7" r="7.7" fill="${palette.d4}"/>
+    <circle cx="162.4" cy="14" r="14" fill="${palette.d5}"/>
+  </g>
+</svg>`
+}
+
+// ────────── GÉNÉRATEUR DE SVG DOTS SEULS (V2-B) ──────────
+// viewBox = 200 × 50
+function generateDotsSvg(palette, includeBg = false) {
+  const bgRect = includeBg ? `<rect width="200" height="50" fill="${palette.bg}"/>` : ''
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50" preserveAspectRatio="xMidYMid meet" width="200" height="50">
+  ${bgRect}
+  <g transform="translate(12, 7)">
+    <circle cx="14" cy="14" r="14" fill="${palette.d1}"/>
+    <circle cx="51.1" cy="21.7" r="7.7" fill="${palette.d2}"/>
+    <circle cx="88.2" cy="25.2" r="14" fill="${palette.d3}"/>
+    <circle cx="125.3" cy="21.7" r="7.7" fill="${palette.d4}"/>
+    <circle cx="162.4" cy="14" r="14" fill="${palette.d5}"/>
+  </g>
+</svg>`
+}
+
+// ────────── GÉNÉRATEUR FORMATS RÉSEAUX SOCIAUX ──────────
+function generateSocialSvg(width, height, palette, options = {}) {
+  const { logoScale = 1, gradient = false } = options
+  const fontFaceImport = `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@800&display=swap');`
+
+  const bg = gradient
+    ? `<defs><linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${T.ink}"/><stop offset="100%" stop-color="${T.main}"/></linearGradient></defs><rect width="${width}" height="${height}" fill="url(#bgGrad)"/>`
+    : `<rect width="${width}" height="${height}" fill="${palette.bg}"/>`
+
+  // Calculer la position du logo centré
+  const logoWidth = 360 * logoScale
+  const logoHeight = 220 * logoScale
+  const logoX = (width - logoWidth) / 2
+  const logoY = (height - logoHeight) / 2
+  const fontSize = 110 * logoScale
+  const wordmarkX = width / 2
+  const wordmarkY = logoY + (110 * logoScale)
+  const dotsX = (width - 176.4 * logoScale) / 2
+  const dotsY = logoY + (145 * logoScale)
+  const dotsScale = logoScale
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
+  <defs>
+    <style>${fontFaceImport}</style>
+  </defs>
+  ${bg}
+  <text x="${wordmarkX}" y="${wordmarkY}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="${fontSize}" letter-spacing="${-5.5 * logoScale}" text-anchor="middle">
+    <tspan fill="${palette.yo}">yo</tspan><tspan fill="${palette.pp}">pp</tspan><tspan fill="${palette.aa}">aa</tspan>
+  </text>
+  <g transform="translate(${dotsX}, ${dotsY}) scale(${dotsScale})">
+    <circle cx="14" cy="14" r="14" fill="${palette.d1}"/>
+    <circle cx="51.1" cy="21.7" r="7.7" fill="${palette.d2}"/>
+    <circle cx="88.2" cy="25.2" r="14" fill="${palette.d3}"/>
+    <circle cx="125.3" cy="21.7" r="7.7" fill="${palette.d4}"/>
+    <circle cx="162.4" cy="14" r="14" fill="${palette.d5}"/>
+  </g>
+</svg>`
+}
+
+// ────────── DOWNLOAD HELPERS ──────────
+function downloadSvg(svgString, filename) {
+  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 100)
+}
+
+function downloadPng(svgString, filename, width, height) {
+  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const img = new Image()
+  img.onload = () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0, width, height)
+    canvas.toBlob(b => {
+      const dlUrl = URL.createObjectURL(b)
+      const a = document.createElement('a')
+      a.href = dlUrl
+      a.download = filename
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(dlUrl), 100)
+    }, 'image/png', 1)
+    URL.revokeObjectURL(url)
+  }
+  img.onerror = () => alert('Erreur de génération PNG, télécharge le SVG et convertis-le avec Illustrator ou un convertisseur en ligne.')
+  img.src = url
+}
+
+// ────────── CARD GÉNÉRIQUE ──────────
+function AssetCard({ title, sub, svgString, previewBg, filename, pngSize, dark = false }) {
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, padding: 18, border: `1px solid ${T.pale}`, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ background: previewBg, borderRadius: 10, padding: dark ? 14 : 14, minHeight: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', border: previewBg === '#FFFFFF' ? `1px solid ${T.pale}` : 'none' }}
+        dangerouslySetInnerHTML={{ __html: svgString.replace(/width="\d+"/, 'width="240"').replace(/height="\d+"/, 'height="auto"') }}
+      />
+      <div>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: T.deep, letterSpacing: '0.3px' }}>{title}</p>
+        {sub && <p style={{ margin: '3px 0 0', fontSize: 10, color: T.muted, fontFamily: 'monospace' }}>{sub}</p>}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={() => downloadSvg(svgString, `${filename}.svg`)}
+          style={{ flex: 1, padding: '8px 12px', background: T.main, color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 800, cursor: 'pointer', letterSpacing: '0.3px' }}>
+          ↓ SVG
+        </button>
+        <button onClick={() => downloadPng(svgString, `${filename}.png`, pngSize.w, pngSize.h)}
+          style={{ flex: 1, padding: '8px 12px', background: T.deep, color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 800, cursor: 'pointer', letterSpacing: '0.3px' }}>
+          ↓ PNG {pngSize.w}px
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default function BrandKit() {
+  // ────────── ASSETS LOGO COMPLET ──────────
+  const logoAssets = [
+    { mode: 'dark',      title: 'Logo principal (fond foncé)',   sub: 'blanc · light · mid · à utiliser sur fond ink ou photo sombre',  filename: 'yoppaa-logo-dark',       dark: true },
+    { mode: 'light',     title: 'Logo principal (fond clair)',    sub: 'ink · main · mid · à utiliser sur fond blanc ou clair',         filename: 'yoppaa-logo-light' },
+    { mode: 'monoBlack', title: 'Mono noir',                       sub: 'impression NB, fax, gravure',                                    filename: 'yoppaa-logo-mono-black' },
+    { mode: 'monoWhite', title: 'Mono blanc',                       sub: 'sur photo sombre ou fond couleur intense',                       filename: 'yoppaa-logo-mono-white', dark: true },
+    { mode: 'monoMain',  title: 'Mono violet (main)',               sub: 'signature couleur unique, broderie',                             filename: 'yoppaa-logo-mono-main' },
+  ]
+
+  // ────────── ASSETS DOTS SEULS ──────────
+  const dotsAssets = [
+    { mode: 'dark',     title: '5 dots V2-B (fond foncé)',  sub: 'favicon, signature compacte',  filename: 'yoppaa-dots-dark',      dark: true },
+    { mode: 'light',    title: '5 dots V2-B (fond clair)',  sub: 'favicon clair, signature email', filename: 'yoppaa-dots-light' },
+    { mode: 'monoMain', title: '5 dots mono violet',         sub: 'watermark, motif',               filename: 'yoppaa-dots-mono-main' },
+  ]
+
+  // ────────── ASSETS RÉSEAUX SOCIAUX ──────────
+  const socialAssets = [
+    { title: 'Avatar carré',         dims: { w: 1080, h: 1080 }, scale: 1.6, mode: 'dark', filename: 'yoppaa-avatar-1080', sub: 'Instagram, Twitter, Facebook · profil', gradient: false },
+    { title: 'App icon',              dims: { w: 1024, h: 1024 }, scale: 1.6, mode: 'dark', filename: 'yoppaa-app-icon-1024', sub: 'iOS, Android · stores', gradient: true },
+    { title: 'OG image / Cover FB',  dims: { w: 1200, h: 630 },  scale: 1.4, mode: 'dark', filename: 'yoppaa-og-1200x630', sub: 'partage social, lien preview', gradient: false },
+    { title: 'Twitter header',       dims: { w: 1500, h: 500 },  scale: 1.3, mode: 'dark', filename: 'yoppaa-twitter-header', sub: 'bannière X/Twitter', gradient: true },
+    { title: 'LinkedIn banner',      dims: { w: 1584, h: 396 },  scale: 1.1, mode: 'dark', filename: 'yoppaa-linkedin-1584x396', sub: 'bannière LinkedIn profil/page', gradient: false },
+    { title: 'Instagram story',      dims: { w: 1080, h: 1920 }, scale: 1.5, mode: 'dark', filename: 'yoppaa-story-1080x1920', sub: 'IG Stories, TikTok, Snapchat', gradient: true },
+    { title: 'Post carré 1080',      dims: { w: 1080, h: 1080 }, scale: 1.8, mode: 'dark', filename: 'yoppaa-post-1080', sub: 'feed Instagram, Facebook', gradient: false },
+    { title: 'Avatar fond clair',    dims: { w: 1080, h: 1080 }, scale: 1.6, mode: 'light', filename: 'yoppaa-avatar-light-1080', sub: 'profil fond blanc, variante', gradient: false },
+  ]
+
+  return (
+    <div style={{ minHeight: '100vh', background: T.bg, padding: '40px 20px 80px', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+
+        {/* HEADER */}
+        <div style={{ marginBottom: 32 }}>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>Brand Kit · 2026-06-12</p>
+          <h1 style={{ margin: '6px 0 8px', fontSize: 32, fontWeight: 900, color: T.ink, letterSpacing: '-1px' }}>
+            La totale, prête à télécharger
+          </h1>
+          <p style={{ margin: 0, fontSize: 14, color: T.muted, lineHeight: 1.5 }}>
+            Logos officiels, dots seuls, formats réseaux sociaux. Tous en SVG (vectoriel scalable) et PNG.
+          </p>
+        </div>
+
+        {/* NOTE TECHNIQUE */}
+        <div style={{ background: T.pale, borderRadius: 12, padding: '14px 18px', marginBottom: 32, borderLeft: `4px solid ${T.main}`, fontSize: 12, color: T.deep, lineHeight: 1.55 }}>
+          <p style={{ margin: 0 }}>
+            <strong>📌 Note police :</strong> les SVG embarquent une référence Google Fonts pour Plus Jakarta Sans. Pour <strong>impression / broderie / gravure</strong>, ouvre le SVG dans Illustrator ou Inkscape puis fais <code>Texte → Vectoriser le texte</code> (Cmd+Shift+O sur Illustrator) avant export final. Sinon, télécharge la police gratuitement sur <a href="https://fonts.google.com/specimen/Plus+Jakarta+Sans" target="_blank" rel="noreferrer" style={{ color: T.main, fontWeight: 700 }}>fonts.google.com</a> et installe-la sur la machine cible.
+          </p>
+        </div>
+
+        {/* SECTION 1 : LOGOS OFFICIELS */}
+        <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>
+          1 · Logos officiels
+        </h2>
+        <p style={{ margin: '0 0 18px', fontSize: 13, color: T.muted }}>
+          5 variantes. Toujours utiliser la version qui contraste avec son fond.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 40 }}>
+          {logoAssets.map((a, i) => (
+            <AssetCard
+              key={i}
+              title={a.title}
+              sub={a.sub}
+              svgString={generateLogoSvg(PALETTES[a.mode])}
+              previewBg={PALETTES[a.mode].bg}
+              filename={a.filename}
+              pngSize={{ w: 1440, h: 880 }}
+              dark={a.dark}
+            />
+          ))}
+        </div>
+
+        {/* SECTION 2 : DOTS SEULS */}
+        <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>
+          2 · Dots seuls (V2-B)
+        </h2>
+        <p style={{ margin: '0 0 18px', fontSize: 13, color: T.muted }}>
+          Pour favicon, watermark, motif décoratif.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 40 }}>
+          {dotsAssets.map((a, i) => (
+            <AssetCard
+              key={i}
+              title={a.title}
+              sub={a.sub}
+              svgString={generateDotsSvg(PALETTES[a.mode])}
+              previewBg={PALETTES[a.mode].bg}
+              filename={a.filename}
+              pngSize={{ w: 800, h: 200 }}
+              dark={a.dark}
+            />
+          ))}
+        </div>
+
+        {/* SECTION 3 : RÉSEAUX SOCIAUX */}
+        <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>
+          3 · Réseaux sociaux
+        </h2>
+        <p style={{ margin: '0 0 18px', fontSize: 13, color: T.muted }}>
+          Formats officiels prêts à l&rsquo;emploi. PNG aux dimensions exactes recommandées par chaque plateforme.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 40 }}>
+          {socialAssets.map((a, i) => (
+            <AssetCard
+              key={i}
+              title={a.title}
+              sub={`${a.dims.w}×${a.dims.h}px · ${a.sub}`}
+              svgString={generateSocialSvg(a.dims.w, a.dims.h, PALETTES[a.mode], { logoScale: a.scale, gradient: a.gradient })}
+              previewBg={a.gradient ? `linear-gradient(135deg, ${T.ink}, ${T.main})` : PALETTES[a.mode].bg}
+              filename={a.filename}
+              pngSize={{ w: a.dims.w, h: a.dims.h }}
+              dark={a.mode === 'dark' || a.mode === 'monoWhite' || a.gradient}
+            />
+          ))}
+        </div>
+
+        {/* SECTION 4 : RÈGLES D'USAGE */}
+        <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>
+          4 · Règles d&rsquo;usage
+        </h2>
+        <div style={{ background: '#fff', borderRadius: 12, padding: '20px 24px', border: `1px solid ${T.pale}`, fontSize: 13, color: T.deep, lineHeight: 1.7 }}>
+          <p style={{ margin: '0 0 10px', fontWeight: 800 }}>✅ À faire</p>
+          <ul style={{ margin: '0 0 16px', paddingLeft: 20 }}>
+            <li>Utiliser <strong>Plus Jakarta Sans 800</strong> avec letter-spacing <strong>-0,05em</strong></li>
+            <li>Garder les dots V2-B <strong>en dessous</strong> du wordmark, jamais à côté ou au-dessus</li>
+            <li>Respecter la cadence tricolore selon le fond (foncé : blanc-light-mid · clair : ink-main-mid)</li>
+            <li>Conserver une marge minimale autour du logo équivalente à <strong>1 grand dot</strong> de hauteur</li>
+            <li>Pour print/broderie : vectoriser le texte avant export</li>
+          </ul>
+          <p style={{ margin: '0 0 10px', fontWeight: 800, color: '#B91C1C' }}>❌ À ne jamais faire</p>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            <li>Changer la police, même temporairement</li>
+            <li>Modifier les proportions des dots (toujours mini = 0,55 × grand)</li>
+            <li>Mettre les dots au-dessus ou à côté du wordmark</li>
+            <li>Ajouter un contour, une ombre ou un effet sur le logo</li>
+            <li>Compresser ou déformer (toujours scale uniforme)</li>
+            <li>Utiliser les variantes mono quand la tricolore est possible</li>
+          </ul>
+        </div>
+
+        {/* FOOTER */}
+        <div style={{ marginTop: 32, padding: '16px 20px', textAlign: 'center', fontSize: 11, color: T.muted, fontFamily: 'monospace' }}>
+          Spec figée le 2026-06-12 · wordmark Plus Jakarta Sans 800 + dots V2-B maillon (mini 0,55 · en dessous · décalage 25 %)
+        </div>
+
+      </div>
+    </div>
+  )
+}

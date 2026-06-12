@@ -16,7 +16,7 @@
 // "Convert text to outlines" (Cmd+Shift+O sur Illustrator).
 // ════════════════════════════════════════════════════════════════════
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const T = {
   ink:    '#1A0840',
@@ -41,12 +41,14 @@ const PALETTES = {
 
 // ────────── GÉNÉRATEUR DE SVG LOGO COMPLET ──────────
 // viewBox = 360 × 220 (logo horizontal compact, wordmark + dots V2-B en dessous)
-function generateLogoSvg(palette, includeBg = false) {
-  const fontFaceImport = `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@800&display=swap');`
+function generateLogoSvg(palette, includeBg = false, fontDataUrl = null) {
+  const fontFaceStyle = fontDataUrl
+    ? `@font-face { font-family: 'Plus Jakarta Sans'; font-weight: 800; font-style: normal; src: url('${fontDataUrl}') format('woff2'); }`
+    : `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@800&display=swap');`
   const bgRect = includeBg ? `<rect width="360" height="220" fill="${palette.bg}"/>` : ''
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 220" preserveAspectRatio="xMidYMid meet" width="360" height="220">
   <defs>
-    <style>${fontFaceImport}</style>
+    <style>${fontFaceStyle}</style>
   </defs>
   ${bgRect}
   <text x="180" y="110" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="110" letter-spacing="-5.5" text-anchor="middle">
@@ -63,7 +65,7 @@ function generateLogoSvg(palette, includeBg = false) {
 }
 
 // ────────── GÉNÉRATEUR DE SVG DOTS SEULS (V2-B) ──────────
-// viewBox = 200 × 50
+// viewBox = 200 × 50 (pas de texte, donc pas de problème de police)
 function generateDotsSvg(palette, includeBg = false) {
   const bgRect = includeBg ? `<rect width="200" height="50" fill="${palette.bg}"/>` : ''
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50" preserveAspectRatio="xMidYMid meet" width="200" height="50">
@@ -80,8 +82,10 @@ function generateDotsSvg(palette, includeBg = false) {
 
 // ────────── GÉNÉRATEUR FORMATS RÉSEAUX SOCIAUX ──────────
 function generateSocialSvg(width, height, palette, options = {}) {
-  const { logoScale = 1, gradient = false } = options
-  const fontFaceImport = `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@800&display=swap');`
+  const { logoScale = 1, gradient = false, fontDataUrl = null } = options
+  const fontFaceStyle = fontDataUrl
+    ? `@font-face { font-family: 'Plus Jakarta Sans'; font-weight: 800; font-style: normal; src: url('${fontDataUrl}') format('woff2'); }`
+    : `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@800&display=swap');`
 
   const bg = gradient
     ? `<defs><linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${T.ink}"/><stop offset="100%" stop-color="${T.main}"/></linearGradient></defs><rect width="${width}" height="${height}" fill="url(#bgGrad)"/>`
@@ -101,7 +105,7 @@ function generateSocialSvg(width, height, palette, options = {}) {
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
   <defs>
-    <style>${fontFaceImport}</style>
+    <style>${fontFaceStyle}</style>
   </defs>
   ${bg}
   <text x="${wordmarkX}" y="${wordmarkY}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="${fontSize}" letter-spacing="${-5.5 * logoScale}" text-anchor="middle">
@@ -129,31 +133,60 @@ function downloadSvg(svgString, filename) {
 }
 
 function downloadPng(svgString, filename, width, height) {
-  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
+  // Encoder via data URL plutôt que blob URL — meilleur support du @font-face dans canvas
+  const encoded = encodeURIComponent(svgString).replace(/'/g, '%27').replace(/"/g, '%22')
+  const dataUrl = `data:image/svg+xml;charset=utf-8,${encoded}`
   const img = new Image()
+  img.crossOrigin = 'anonymous'
   img.onload = () => {
     const canvas = document.createElement('canvas')
     canvas.width = width
     canvas.height = height
     const ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, width, height)
     ctx.drawImage(img, 0, 0, width, height)
-    canvas.toBlob(b => {
-      const dlUrl = URL.createObjectURL(b)
-      const a = document.createElement('a')
-      a.href = dlUrl
-      a.download = filename
-      a.click()
-      setTimeout(() => URL.revokeObjectURL(dlUrl), 100)
-    }, 'image/png', 1)
-    URL.revokeObjectURL(url)
+    try {
+      canvas.toBlob(b => {
+        if (!b) {
+          fallbackToConverter(svgString, filename)
+          return
+        }
+        const dlUrl = URL.createObjectURL(b)
+        const a = document.createElement('a')
+        a.href = dlUrl
+        a.download = filename
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(dlUrl), 100)
+      }, 'image/png', 1)
+    } catch (e) {
+      fallbackToConverter(svgString, filename)
+    }
   }
-  img.onerror = () => alert('Erreur de génération PNG, télécharge le SVG et convertis-le avec Illustrator ou un convertisseur en ligne.')
-  img.src = url
+  img.onerror = () => fallbackToConverter(svgString, filename)
+  img.src = dataUrl
+}
+
+function fallbackToConverter(svgString, filename) {
+  // Fallback : télécharger le SVG et ouvrir un convertisseur en ligne
+  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename.replace('.png', '.svg')
+  a.click()
+  setTimeout(() => {
+    URL.revokeObjectURL(url)
+    if (confirm('PNG indisponible dans ce navigateur (limite de sécurité sur les polices). Le SVG a été téléchargé. Ouvrir CloudConvert pour le convertir en PNG ?')) {
+      window.open('https://cloudconvert.com/svg-to-png', '_blank')
+    }
+  }, 200)
 }
 
 // ────────── CARD GÉNÉRIQUE ──────────
-function AssetCard({ title, sub, svgString, previewBg, filename, pngSize, dark = false }) {
+function AssetCard({ title, sub, svgString, svgStringForPng, previewBg, filename, pngSize, dark = false }) {
+  // Si pas de version PNG dédiée, on utilise la même que pour SVG (avec fond)
+  const pngSvg = svgStringForPng || svgString
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: 18, border: `1px solid ${T.pale}`, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ background: previewBg, borderRadius: 10, padding: dark ? 14 : 14, minHeight: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', border: previewBg === '#FFFFFF' ? `1px solid ${T.pale}` : 'none' }}
@@ -168,7 +201,7 @@ function AssetCard({ title, sub, svgString, previewBg, filename, pngSize, dark =
           style={{ flex: 1, padding: '8px 12px', background: T.main, color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 800, cursor: 'pointer', letterSpacing: '0.3px' }}>
           ↓ SVG
         </button>
-        <button onClick={() => downloadPng(svgString, `${filename}.png`, pngSize.w, pngSize.h)}
+        <button onClick={() => downloadPng(pngSvg, `${filename}.png`, pngSize.w, pngSize.h)}
           style={{ flex: 1, padding: '8px 12px', background: T.deep, color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 800, cursor: 'pointer', letterSpacing: '0.3px' }}>
           ↓ PNG {pngSize.w}px
         </button>
@@ -178,6 +211,33 @@ function AssetCard({ title, sub, svgString, previewBg, filename, pngSize, dark =
 }
 
 export default function BrandKit() {
+  // Charger Plus Jakarta Sans 800 en data URL (pour PNG conversion sans CORS)
+  const [fontDataUrl, setFontDataUrl] = useState(null)
+  const [fontStatus, setFontStatus] = useState('loading')
+
+  useEffect(() => {
+    // CDN public jsDelivr — pas de problème CORS sur fontsource
+    fetch('https://cdn.jsdelivr.net/npm/@fontsource/plus-jakarta-sans@5.0.20/files/plus-jakarta-sans-latin-800-normal.woff2')
+      .then(r => {
+        if (!r.ok) throw new Error('Font fetch ' + r.status)
+        return r.blob()
+      })
+      .then(blob => new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = () => reject(new Error('FileReader'))
+        reader.readAsDataURL(blob)
+      }))
+      .then(dataUrl => {
+        setFontDataUrl(dataUrl)
+        setFontStatus('ready')
+      })
+      .catch(err => {
+        console.error('Font load failed:', err)
+        setFontStatus('fallback')
+      })
+  }, [])
+
   // ────────── ASSETS LOGO COMPLET ──────────
   const logoAssets = [
     { mode: 'dark',      title: 'Logo principal (fond foncé)',   sub: 'blanc · light · mid · à utiliser sur fond ink ou photo sombre',  filename: 'yoppaa-logo-dark',       dark: true },
@@ -221,10 +281,17 @@ export default function BrandKit() {
           </p>
         </div>
 
+        {/* STATUT POLICE */}
+        <div style={{ background: fontStatus === 'ready' ? '#ECFDF5' : fontStatus === 'fallback' ? '#FEF3C7' : T.pale, borderRadius: 12, padding: '12px 18px', marginBottom: 14, borderLeft: `4px solid ${fontStatus === 'ready' ? '#10B981' : fontStatus === 'fallback' ? '#F59E0B' : T.main}`, fontSize: 12, color: T.deep, lineHeight: 1.55 }}>
+          {fontStatus === 'loading' && <p style={{ margin: 0 }}>⏳ Chargement de Plus Jakarta Sans pour générer les PNG...</p>}
+          {fontStatus === 'ready' && <p style={{ margin: 0 }}><strong>✅ Police prête</strong>. Les PNG seront générés avec la vraie Plus Jakarta Sans 800.</p>}
+          {fontStatus === 'fallback' && <p style={{ margin: 0 }}><strong>⚠️ Police non chargée</strong>. Les PNG utiliseront une police système en fallback. Les SVG restent corrects.</p>}
+        </div>
+
         {/* NOTE TECHNIQUE */}
         <div style={{ background: T.pale, borderRadius: 12, padding: '14px 18px', marginBottom: 32, borderLeft: `4px solid ${T.main}`, fontSize: 12, color: T.deep, lineHeight: 1.55 }}>
           <p style={{ margin: 0 }}>
-            <strong>📌 Note police :</strong> les SVG embarquent une référence Google Fonts pour Plus Jakarta Sans. Pour <strong>impression / broderie / gravure</strong>, ouvre le SVG dans Illustrator ou Inkscape puis fais <code>Texte → Vectoriser le texte</code> (Cmd+Shift+O sur Illustrator) avant export final. Sinon, télécharge la police gratuitement sur <a href="https://fonts.google.com/specimen/Plus+Jakarta+Sans" target="_blank" rel="noreferrer" style={{ color: T.main, fontWeight: 700 }}>fonts.google.com</a> et installe-la sur la machine cible.
+            <strong>📌 Note :</strong> les SVG embarquent la police. Pour <strong>impression / broderie / gravure</strong>, ouvre le SVG dans Illustrator ou Inkscape puis fais <code>Texte → Vectoriser le texte</code> (Cmd+Shift+O sur Illustrator) avant export final. La police est aussi disponible gratuitement sur <a href="https://fonts.google.com/specimen/Plus+Jakarta+Sans" target="_blank" rel="noreferrer" style={{ color: T.main, fontWeight: 700 }}>fonts.google.com</a>.
           </p>
         </div>
 
@@ -241,7 +308,8 @@ export default function BrandKit() {
               key={i}
               title={a.title}
               sub={a.sub}
-              svgString={generateLogoSvg(PALETTES[a.mode])}
+              svgString={generateLogoSvg(PALETTES[a.mode], false, null)}
+              svgStringForPng={generateLogoSvg(PALETTES[a.mode], true, fontDataUrl)}
               previewBg={PALETTES[a.mode].bg}
               filename={a.filename}
               pngSize={{ w: 1440, h: 880 }}
@@ -264,6 +332,7 @@ export default function BrandKit() {
               title={a.title}
               sub={a.sub}
               svgString={generateDotsSvg(PALETTES[a.mode])}
+              svgStringForPng={generateDotsSvg(PALETTES[a.mode], true)}
               previewBg={PALETTES[a.mode].bg}
               filename={a.filename}
               pngSize={{ w: 800, h: 200 }}
@@ -285,7 +354,8 @@ export default function BrandKit() {
               key={i}
               title={a.title}
               sub={`${a.dims.w}×${a.dims.h}px · ${a.sub}`}
-              svgString={generateSocialSvg(a.dims.w, a.dims.h, PALETTES[a.mode], { logoScale: a.scale, gradient: a.gradient })}
+              svgString={generateSocialSvg(a.dims.w, a.dims.h, PALETTES[a.mode], { logoScale: a.scale, gradient: a.gradient, fontDataUrl: null })}
+              svgStringForPng={generateSocialSvg(a.dims.w, a.dims.h, PALETTES[a.mode], { logoScale: a.scale, gradient: a.gradient, fontDataUrl })}
               previewBg={a.gradient ? `linear-gradient(135deg, ${T.ink}, ${T.main})` : PALETTES[a.mode].bg}
               filename={a.filename}
               pngSize={{ w: a.dims.w, h: a.dims.h }}

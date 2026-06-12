@@ -31,11 +31,11 @@ const URL_LIVE = 'https://www.yoppaa.app/demo-mettet/slides'
 const QR_URL = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(URL_LIVE)}&size=400x400&margin=0&color=1A0840&bgcolor=FFFFFF`
 
 // Container A4 paysage : 297mm × 210mm
+// La className 'a4-page' permet au CSS print de gerer le page-break
+// uniformement (et exclure la derniere page via :last-child).
 const A4 = {
   width: '297mm',
   height: '210mm',
-  pageBreakAfter: 'always',
-  breakAfter: 'page',
   position: 'relative',
   overflow: 'hidden',
   boxSizing: 'border-box',
@@ -70,7 +70,7 @@ function Footer({ n, total = 12 }) {
 
 function PageGarde() {
   return (
-    <div style={{ ...A4, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 50%, ${T.ink} 100%)`, color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40mm' }}>
+    <div className="a4-page" style={{ ...A4, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 50%, ${T.ink} 100%)`, color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40mm' }}>
       <div style={{ position: 'absolute', top: '20%', right: '15%', width: 300, height: 300, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}55 0%, transparent 70%)`, filter: 'blur(50px)' }}/>
 
       <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22 }}>
@@ -100,7 +100,7 @@ function PageGarde() {
 // ─── 1 ─────────────────────────────────────────────────────────────
 function Slide1() {
   return (
-    <div style={{ ...A4, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 50%, ${T.ink} 100%)`, color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '50mm' }}>
+    <div className="a4-page" style={{ ...A4, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 50%, ${T.ink} 100%)`, color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '50mm' }}>
       <div style={{ position: 'absolute', top: '20%', right: '15%', width: 300, height: 300, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}55 0%, transparent 70%)`, filter: 'blur(50px)' }}/>
 
       <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
@@ -121,7 +121,7 @@ function Slide1() {
 // ─── 2 ─────────────────────────────────────────────────────────────
 function Slide2() {
   return (
-    <div style={{ ...A4, background: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '30mm 40mm', gap: '20mm' }}>
+    <div className="a4-page" style={{ ...A4, background: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '30mm 40mm', gap: '20mm' }}>
       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
         <div style={{ width: 180, height: 180, borderRadius: '50%', background: `linear-gradient(135deg, ${T.ink}, ${T.main})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ fontSize: 64, color: '#fff', fontWeight: 900, letterSpacing: '-3px' }}>AV</span>
@@ -147,7 +147,7 @@ function Slide2() {
 // ─── 3 ─────────────────────────────────────────────────────────────
 function Slide3() {
   return (
-    <div style={{ ...A4, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '30mm 40mm', textAlign: 'center' }}>
+    <div className="a4-page" style={{ ...A4, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '30mm 40mm', textAlign: 'center' }}>
       <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>Le constat</p>
       <h2 style={{ margin: '14px 0 24px', fontSize: 34, fontWeight: 900, color: T.ink, letterSpacing: '-1.2px', lineHeight: 1.2, maxWidth: 800 }}>
         Qui, maintenant, sait ce que les commerces<br/>de l&rsquo;entité <span style={{ color: T.main }}>proposeront demain matin&nbsp;?</span>
@@ -173,7 +173,7 @@ function Slide4() {
     { emoji: '🐢', label: 'Pas instantané',   detail: 'Aucune alerte en temps réel' },
   ]
   return (
-    <div style={{ ...A4, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '25mm 35mm', textAlign: 'center' }}>
+    <div className="a4-page" style={{ ...A4, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '25mm 35mm', textAlign: 'center' }}>
       <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>Vous aussi, vous voulez communiquer</p>
       <h2 style={{ margin: '12px 0 8px', fontSize: 28, fontWeight: 900, color: T.ink, letterSpacing: '-1px', lineHeight: 1.2 }}>
         Votre <span style={{ color: T.main }}>bulletin</span>, votre <span style={{ color: T.main }}>site</span>, votre <span style={{ color: T.main }}>page Facebook</span> sont précieux...
@@ -200,7 +200,7 @@ function Slide4() {
 // ─── 5 ─────────────────────────────────────────────────────────────
 function Slide5() {
   return (
-    <div style={{ ...A4, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 60%, ${T.ink} 100%)`, color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '30mm 40mm', textAlign: 'center' }}>
+    <div className="a4-page" style={{ ...A4, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 60%, ${T.ink} 100%)`, color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '30mm 40mm', textAlign: 'center' }}>
       <Wordmark size={100} white/>
       <p style={{ margin: '20px 0 0', fontSize: 20, fontWeight: 700, color: T.light, lineHeight: 1.3, textAlign: 'center' }}>
         L&rsquo;application belge<br/>des commerces de quartier
@@ -246,7 +246,7 @@ function Slide6() {
     { emoji: '📸', label: 'Accompagnement visibilité' },
   ]
   return (
-    <div style={{ ...A4, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '18mm 30mm', textAlign: 'center' }}>
+    <div className="a4-page" style={{ ...A4, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '18mm 30mm', textAlign: 'center' }}>
       <p style={{ margin: 0, fontSize: 10, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>Une seule application, trois expériences</p>
       <h2 style={{ margin: '10px 0 18px', fontSize: 26, fontWeight: 900, color: T.ink, letterSpacing: '-1px', lineHeight: 1.1 }}>
         Pensée pour <span style={{ color: T.main }}>chaque type</span> de commerce
@@ -288,7 +288,7 @@ function Slide7() {
     { icon: '🇧🇪', label: 'Données hébergées en UE', detail: 'Conformité RGPD intégrale. Aucun transfert hors d\'Europe.' },
   ]
   return (
-    <div style={{ ...A4, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '25mm 35mm', textAlign: 'center' }}>
+    <div className="a4-page" style={{ ...A4, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '25mm 35mm', textAlign: 'center' }}>
       <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>Pas de petits caractères</p>
       <h2 style={{ margin: '12px 0 24px', fontSize: 32, fontWeight: 900, color: T.ink, letterSpacing: '-1.2px' }}>
         Notre <span style={{ color: T.main }}>transparence</span>
@@ -315,7 +315,7 @@ function Slide7() {
 // ─── 8, 9, 10 (DÉMOS) ──────────────────────────────────────────────
 function SlideDemo({ n, label, titre, commentaire, ecran }) {
   return (
-    <div style={{ ...A4, background: `linear-gradient(135deg, ${T.bg} 0%, ${T.pale} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20mm 30mm', gap: '20mm' }}>
+    <div className="a4-page" style={{ ...A4, background: `linear-gradient(135deg, ${T.bg} 0%, ${T.pale} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20mm 30mm', gap: '20mm' }}>
       <div style={{ flex: 1, maxWidth: 400, textAlign: 'left' }}>
         <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>{label}</p>
         <h2 style={{ margin: '12px 0 20px', fontSize: 26, fontWeight: 900, color: T.ink, letterSpacing: '-1px', lineHeight: 1.15 }}>{titre}</h2>
@@ -385,7 +385,7 @@ function Slide11() {
     { label: 'Tableau de bord communal',     detail: 'Prêt à vous être attribué' },
   ]
   return (
-    <div style={{ ...A4, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '18mm 30mm', textAlign: 'center' }}>
+    <div className="a4-page" style={{ ...A4, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '18mm 30mm', textAlign: 'center' }}>
       <p style={{ margin: 0, fontSize: 10, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>Déjà construit pour Mettet</p>
       <h2 style={{ margin: '10px 0 20px', fontSize: 24, fontWeight: 900, color: T.ink, letterSpacing: '-1px', lineHeight: 1.1, maxWidth: 800 }}>
         Nous n&rsquo;avons pas attendu votre validation pour préparer le terrain
@@ -419,7 +419,7 @@ function Slide11() {
 // ─── 12 ────────────────────────────────────────────────────────────
 function Slide12() {
   return (
-    <div style={{ ...A4, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 60%, ${T.ink} 100%)`, color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '22mm 35mm', textAlign: 'center' }}>
+    <div className="a4-page" style={{ ...A4, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 60%, ${T.ink} 100%)`, color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '22mm 35mm', textAlign: 'center' }}>
       <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, letterSpacing: '2.5px', textTransform: 'uppercase' }}>Si vous y croyez</p>
       <h2 style={{ margin: '14px 0 12px', fontSize: 28, fontWeight: 900, color: '#fff', letterSpacing: '-1.2px', lineHeight: 1.15, maxWidth: 900 }}>
         Trois manières simples<br/>de nous soutenir, à votre rythme
@@ -456,7 +456,7 @@ function Slide12() {
 
 function PageRecap() {
   return (
-    <div style={{ ...A4, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '25mm 35mm', gap: '25mm' }}>
+    <div className="a4-page" style={{ ...A4, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '25mm 35mm', gap: '25mm' }}>
       {/* Colonne gauche : récap */}
       <div style={{ flex: 1, maxWidth: 460 }}>
         <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.main, letterSpacing: '2px', textTransform: 'uppercase' }}>Pour aller plus loin</p>
@@ -517,8 +517,8 @@ export default function PrintSlides() {
         <strong>Version imprimable</strong> · Pour générer le PDF : <kbd style={{ background: 'rgba(255,255,255,0.15)', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>Ctrl + P</kbd> · Format A4 paysage · Marges 0 · Activer « graphiques d&rsquo;arrière-plan » dans les options
       </div>
 
-      <div style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-        <PageGarde/>
+      <div className="a4-container" style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+        {/* PageGarde supprimee : Slide1 fait deja office de couverture (contenu identique) */}
         <Slide1/>
         <Slide2/>
         <Slide3/>
@@ -535,12 +535,33 @@ export default function PrintSlides() {
       </div>
 
       <style jsx global>{`
-        body { margin: 0; background: #f0f0f0; }
+        body { margin: 0; padding: 0; background: #f0f0f0; }
+        html, body { margin: 0; padding: 0; }
         @page { size: A4 landscape; margin: 0; }
         @media print {
           .print-help { display: none !important; }
           body { background: #fff !important; }
-          html, body { width: 297mm; }
+          html, body { width: 297mm; margin: 0 !important; padding: 0 !important; }
+          .a4-container {
+            padding: 0 !important;
+            gap: 0 !important;
+            display: block !important;
+          }
+          .a4-page {
+            width: 297mm !important;
+            height: 210mm !important;
+            page-break-after: always;
+            break-after: page;
+            page-break-inside: avoid;
+            break-inside: avoid;
+            margin: 0 !important;
+            overflow: hidden;
+            box-shadow: none !important;
+          }
+          .a4-page:last-child {
+            page-break-after: auto;
+            break-after: auto;
+          }
         }
       `}</style>
     </div>

@@ -103,7 +103,7 @@ function Login() {
               <div key={i} style={{ width: 14, height: 14, borderRadius: '50%', background: d.color, opacity: d.opacity, boxShadow: `0 0 12px ${d.color}66` }}/>
             ))}
           </div>
-          <p style={{ fontWeight: 900, fontSize: '2.5rem', letterSpacing: '-2px', color: '#fff', lineHeight: 1, marginBottom: 6 }}>yoppaa</p>
+          <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2.5rem', letterSpacing: '-0.05em', color: '#fff', lineHeight: 1, marginBottom: 6 }}>yoppaa</p>
           <p style={{ color: T.light, fontSize: '0.8rem', fontWeight: 600, letterSpacing: '2px', textTransform: 'uppercase' }}>
             {modeAdmin ? '🔒 Espace admin' : 'Espace commerçant'}
           </p>

@@ -76,7 +76,7 @@ function VisuelYoppaa() {
       </div>
 
       {/* Wordmark */}
-      <p style={{ fontWeight: 900, fontSize: '3.5rem', color: '#fff', letterSpacing: '-2px', lineHeight: 1, fontFamily: '"DM Sans", sans-serif' }}>
+      <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '3.5rem', color: '#fff', letterSpacing: '-0.05em', lineHeight: 1 }}>
         yoppaa
       </p>
 

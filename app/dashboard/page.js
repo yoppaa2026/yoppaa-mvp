@@ -910,7 +910,7 @@ export default function Dashboard() {
               <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: d.c, opacity: d.o }}/>
             ))}
           </div>
-          <p style={{ fontWeight: 900, fontSize: '2rem', letterSpacing: '-2px', color: '#fff', marginBottom: 4 }}>yoppaa</p>
+          <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2rem', letterSpacing: '-0.05em', color: '#fff', marginBottom: 4, lineHeight: 1 }}>yoppaa</p>
           <p style={{ color: T.light, fontSize: '0.82rem', fontWeight: 600, opacity: 0.8 }}>Choisir un commerce</p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1198,7 +1198,7 @@ export default function Dashboard() {
                 <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: d.c, opacity: d.o }}/>
               ))}
             </div>
-            <p style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-2px', color: '#fff', marginBottom: 2, lineHeight: 1 }}>yoppaa</p>
+            <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-0.05em', color: '#fff', marginBottom: 2, lineHeight: 1 }}>yoppaa</p>
             <p style={{ fontSize: '0.6rem', color: T.light, fontWeight: 700, opacity: 0.7, letterSpacing: '0.5px', textTransform: 'uppercase' }}>Pro</p>
           </div>
 
@@ -1273,7 +1273,7 @@ export default function Dashboard() {
                       <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: d.c, opacity: d.o }}/>
                     ))}
                   </div>
-                  <p style={{ fontWeight: 900, fontSize: '1.1rem', letterSpacing: '-1.5px', color: '#fff', lineHeight: 1 }}>yoppaa</p>
+                  <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.05em', color: '#fff', lineHeight: 1 }}>yoppaa</p>
                   <span style={{ fontSize: '0.55rem', fontWeight: 700, color: T.light, background: `${T.main}44`, padding: '2px 6px', borderRadius: 100, border: `1px solid ${T.light}33` }}>PRO</span>
                 </div>
                 <p style={{ color: T.light, fontWeight: 600, fontSize: '0.68rem', opacity: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 'clamp(100px, 25vw, 240px)' }}>{commercant?.nom}</p>

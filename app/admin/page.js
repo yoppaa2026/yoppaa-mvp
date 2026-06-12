@@ -170,7 +170,7 @@ export default function AdminPage() {
                 <div key={i} style={{ width: 9, height: 9, borderRadius: '50%', background: d.c, opacity: d.o }}/>
               ))}
             </div>
-            <p style={{ fontWeight: 900, fontSize: 24, letterSpacing: '-1.2px', color: '#fff', margin: 0, lineHeight: 1 }}>yoppaa</p>
+            <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 24, letterSpacing: '-0.05em', color: '#fff', margin: 0, lineHeight: 1 }}>yoppaa</p>
             <span style={{ fontSize: 11, fontWeight: 800, color: T.light, background: `${T.main}55`, padding: '4px 10px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '1px', border: `1px solid ${T.light}44` }}>Admin</span>
           </div>
           <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}

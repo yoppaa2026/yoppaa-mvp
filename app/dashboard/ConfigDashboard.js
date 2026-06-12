@@ -2610,7 +2610,7 @@ function QRCodeSection({ commercantId, toast }) {
         </div>
 
         {/* yoppaa wordmark */}
-        <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '1.9rem', color: '#fff', letterSpacing: '-2px', lineHeight: 1, marginBottom: 2 }}>yoppaa</p>
+        <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.9rem', color: '#fff', letterSpacing: '-0.05em', lineHeight: 1, marginBottom: 2 }}>yoppaa</p>
 
         {/* Séparateur */}
         <div style={{ width: 40, height: 1, background: 'rgba(196,160,244,0.3)', margin: '8px auto' }}/>

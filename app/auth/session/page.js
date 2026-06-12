@@ -78,7 +78,7 @@ export default function SessionPage() {
           ))}
         </div>
 
-        <p style={{ fontWeight: 900, fontSize: '2rem', letterSpacing: '-2px', color: '#fff', marginBottom: 4, lineHeight: 1 }}>yoppaa</p>
+        <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2rem', letterSpacing: '-0.05em', color: '#fff', marginBottom: 4, lineHeight: 1 }}>yoppaa</p>
         <p style={{ fontSize: '0.65rem', fontWeight: 700, color: '#C4A0F4', letterSpacing: '3px', textTransform: 'uppercase', opacity: 0.7, marginBottom: 32 }}>Pro</p>
 
         {phase === 'loading' && (

@@ -126,7 +126,7 @@ export default function Signup() {
                 <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: d.c, opacity: d.o }}/>
               ))}
             </div>
-            <p style={{ fontWeight: 900, fontSize: '1.4rem', letterSpacing: '-1.5px', color: '#fff', lineHeight: 1, margin: 0 }}>yoppaa</p>
+            <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.4rem', letterSpacing: '-0.05em', color: '#fff', lineHeight: 1, margin: 0 }}>yoppaa</p>
             <span style={{ fontSize: '0.6rem', fontWeight: 800, color: T.light, background: `${T.main}55`, padding: '3px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '1px', border: `1px solid ${T.light}44` }}>Inscription pro</span>
           </div>
           {session && (

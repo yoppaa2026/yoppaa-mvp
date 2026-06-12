@@ -84,13 +84,13 @@ export default function MobileFrame({ children }) {
         display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4,
         pointerEvents: 'none',
       }}>
-        <p style={{ margin: 0, fontSize: 26, fontWeight: 900, letterSpacing: '-1.2px', lineHeight: 1, fontFamily: '"DM Sans", -apple-system, sans-serif' }}>
+        <p style={{ margin: 0, fontSize: 26, fontWeight: 800, letterSpacing: '-0.05em', lineHeight: 1, fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif' }}>
           <span style={{ color: '#fff' }}>yo</span>
           <span style={{ color: '#C4A0F4' }}>pp</span>
           <span style={{ color: '#9660E0' }}>aa</span>
         </p>
-        <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: 'rgba(196,160,244,0.75)', letterSpacing: '1.5px', textTransform: 'uppercase', fontFamily: '"DM Sans", sans-serif' }}>
-          L&rsquo;app des commerces de quartier
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: 'rgba(196,160,244,0.85)', letterSpacing: '0.012em', fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif' }}>
+          Ton quartier dans ta poche
         </p>
       </div>
 

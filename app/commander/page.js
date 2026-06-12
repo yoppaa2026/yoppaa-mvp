@@ -357,7 +357,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
           <div style={{ width: 12, height: 12, borderRadius: '50%', background: C.mid, boxShadow: `0 0 16px ${C.mid}88`, animation: 'yopDot3 1.2s ease-in-out infinite' }}/>
         </div>
         {/* Wordmark tricolore canonique fond clair : Yo Ink, pp Main, aa Mid */}
-        <p style={{ fontWeight: 900, fontSize: '2.2rem', letterSpacing: '-2px', lineHeight: 1, marginBottom: 8, animation: 'yopWordmark 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards' }}>
+        <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2.2rem', letterSpacing: '-0.05em', lineHeight: 1, marginBottom: 8, animation: 'yopWordmark 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards' }}>
           <span style={{ color: C.ink }}>yo</span>
           <span style={{ color: C.main }}>pp</span>
           <span style={{ color: C.mid }}>aa</span>
@@ -441,13 +441,13 @@ function SplashScreen({ onDone }) {
       </div>
 
       {/* Wordmark tricolore canonique : yo blanc, pp Light, aa Mid */}
-      <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '3.5rem', letterSpacing: '-2px', lineHeight: 1, marginBottom: 14, animation: phase >= 1 ? 'wordmark-in 0.7s cubic-bezier(0.25,0.46,0.45,0.94) forwards' : 'none', opacity: phase >= 1 ? 1 : 0 }}>
+      <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '3.5rem', letterSpacing: '-0.05em', lineHeight: 1, marginBottom: 14, animation: phase >= 1 ? 'wordmark-in 0.7s cubic-bezier(0.25,0.46,0.45,0.94) forwards' : 'none', opacity: phase >= 1 ? 1 : 0 }}>
         <span style={{ color: '#fff' }}>yo</span>
         <span style={{ color: '#C4A0F4' }}>pp</span>
         <span style={{ color: '#9660E0' }}>aa</span>
       </p>
 
-      <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#C4A0F4', letterSpacing: '1.5px', textTransform: 'uppercase', animation: phase >= 2 ? 'tagline-in 0.6s ease forwards' : 'none', opacity: phase >= 2 ? 1 : 0 }}>Ton quartier, dans ta poche</p>
+      <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 600, fontSize: '0.95rem', color: '#C4A0F4', letterSpacing: '0.012em', animation: phase >= 2 ? 'tagline-in 0.6s ease forwards' : 'none', opacity: phase >= 2 ? 1 : 0 }}>Ton quartier dans ta poche</p>
     </div>
   )
 }
@@ -653,7 +653,7 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
             <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, animation: `pu-pulse 2s ease-in-out ${i*0.3}s infinite` }}/>
           ))}
         </div>
-        <p style={{ fontWeight: 900, fontSize: '2.2rem', letterSpacing: '-2px', lineHeight: 1, animation: 'pu-glow 2s ease-in-out infinite' }}>
+        <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2.2rem', letterSpacing: '-0.05em', lineHeight: 1, animation: 'pu-glow 2s ease-in-out infinite' }}>
           <span style={{ color: '#fff' }}>yo</span>
           <span style={{ color: '#C4A0F4' }}>pp</span>
           <span style={{ color: '#9660E0' }}>aa</span>
@@ -2022,7 +2022,7 @@ export default function Commander() {
                 ))}
               </div>
               {/* Wordmark tricolore : yo (blanc), pp (Light), aa (Mid) — canonique Good Morning Yoppers */}
-              <p style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-1.5px', lineHeight: 1, margin: 0 }}>
+              <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-0.05em', lineHeight: 1, margin: 0 }}>
                 <span style={{ color: '#fff' }}>yo</span>
                 <span style={{ color: T.light }}>pp</span>
                 <span style={{ color: T.mid }}>aa</span>

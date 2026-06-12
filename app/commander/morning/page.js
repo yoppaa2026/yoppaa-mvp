@@ -548,7 +548,7 @@ function MorningFooter({ tomorrowStr, onExplore }) {
         <span style={{ fontSize: 9, fontWeight: 500, color: 'rgba(196,160,244,0.5)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
           propulsé par
         </span>
-        <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '-0.5px' }}>
+        <span style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontSize: 13, fontWeight: 800, letterSpacing: '-0.05em' }}>
           <span style={{ color: '#fff' }}>yo</span>
           <span style={{ color: T.light }}>pp</span>
           <span style={{ color: T.mid }}>aa</span>

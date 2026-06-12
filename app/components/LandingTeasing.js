@@ -107,18 +107,20 @@ export default function LandingTeasing() {
 
       <main style={{ maxWidth: 720, margin: '0 auto', padding: '40px 20px 60px', position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', minHeight: '100dvh', justifyContent: 'center' }}>
 
-        {/* Logo wordmark tricolore */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32 }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: '#fff', opacity: 0.85 }}/>
-            <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: T.light }}/>
-            <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: T.mid }}/>
-          </div>
-          <p style={{ margin: 0, fontWeight: 900, fontSize: 28, letterSpacing: '-1.2px', lineHeight: 1 }}>
+        {/* Logo wordmark tricolore — canonique V2-B (dots EN DESSOUS) */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginBottom: 32 }}>
+          <p style={{ margin: 0, fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 36, letterSpacing: '-0.05em', lineHeight: 1 }}>
             <span style={{ color: '#fff' }}>yo</span>
             <span style={{ color: T.light }}>pp</span>
             <span style={{ color: T.mid }}>aa</span>
           </p>
+          <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 5, height: 13 }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#fff' }}/>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.light, marginTop: 3.6 }}/>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: T.light, marginTop: 3.6 }}/>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.mid, marginTop: 3.6 }}/>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: T.mid }}/>
+          </div>
         </div>
 
         {/* Symbole pulse */}

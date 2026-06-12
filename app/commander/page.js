@@ -351,17 +351,20 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
           @keyframes yopWordmark { 0%{opacity:0;letter-spacing:8px;transform:translateY(8px)} 100%{opacity:1;letter-spacing:-2px;transform:translateY(0)} }
           @keyframes yopSub { 0%{opacity:0;transform:translateY(6px)} 100%{opacity:1;transform:translateY(0)} }
         `}</style>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 16, height: 32, alignItems: 'flex-end' }}>
-          <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#fff', boxShadow: `0 0 16px ${C.main}88`, animation: 'yopDot1 1.2s ease-in-out infinite' }}/>
-          <div style={{ width: 16, height: 16, borderRadius: '50%', background: C.light, boxShadow: `0 0 20px ${C.light}88`, animation: 'yopDot2 1.2s ease-in-out infinite' }}/>
-          <div style={{ width: 12, height: 12, borderRadius: '50%', background: C.mid, boxShadow: `0 0 16px ${C.mid}88`, animation: 'yopDot3 1.2s ease-in-out infinite' }}/>
-        </div>
-        {/* Wordmark tricolore canonique fond clair : Yo Ink, pp Main, aa Mid */}
-        <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2.2rem', letterSpacing: '-0.05em', lineHeight: 1, marginBottom: 8, animation: 'yopWordmark 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards' }}>
+        {/* Wordmark tricolore canonique fond clair : yo Ink, pp Main, aa Mid */}
+        <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2.2rem', letterSpacing: '-0.05em', lineHeight: 1, marginBottom: 12, animation: 'yopWordmark 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards' }}>
           <span style={{ color: C.ink }}>yo</span>
           <span style={{ color: C.main }}>pp</span>
           <span style={{ color: C.mid }}>aa</span>
         </p>
+        {/* Dots V2-B sous le wordmark, animation tour à tour */}
+        <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 6, height: 17, marginBottom: 12 }}>
+          <span style={{ width: 11, height: 11, borderRadius: '50%', background: C.ink, animation: 'yopDot1 1.2s ease-in-out infinite' }}/>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.main, marginTop: 4.4, animation: 'yopDot2 1.2s ease-in-out infinite' }}/>
+          <span style={{ width: 11, height: 11, borderRadius: '50%', background: C.main, marginTop: 4.4, animation: 'yopDot2 1.2s ease-in-out infinite' }}/>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.mid, marginTop: 4.4, animation: 'yopDot3 1.2s ease-in-out infinite' }}/>
+          <span style={{ width: 11, height: 11, borderRadius: '50%', background: C.mid, animation: 'yopDot3 1.2s ease-in-out infinite' }}/>
+        </div>
         <p style={{ fontWeight: 700, fontSize: '0.9rem', color: C.deep, animation: 'yopSub 0.5s ease 0.3s both', letterSpacing: '-0.2px' }}>
           Bien joué {clientPrenom || 'Yopper'} 🟣
         </p>
@@ -648,16 +651,19 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
       <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle at 80% 20%, #9660E033 0%, transparent 50%), radial-gradient(circle at 20% 80%, #6B35C422 0%, transparent 50%)', pointerEvents: 'none' }}/>
       {/* Logo : 3 points tricolores + wordmark canonique (yo blanc, pp Light, aa Mid) */}
       <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', animation: 'pu-fadein 0.5s ease' }}>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 10 }}>
-          {[{c:'rgba(255,255,255,0.35)',s:10},{c:'#C4A0F4',s:14},{c:'#9660E0',s:10}].map((d,i) => (
-            <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, animation: `pu-pulse 2s ease-in-out ${i*0.3}s infinite` }}/>
-          ))}
-        </div>
-        <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2.2rem', letterSpacing: '-0.05em', lineHeight: 1, animation: 'pu-glow 2s ease-in-out infinite' }}>
+        <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2.2rem', letterSpacing: '-0.05em', lineHeight: 1, animation: 'pu-glow 2s ease-in-out infinite', marginBottom: 10 }}>
           <span style={{ color: '#fff' }}>yo</span>
           <span style={{ color: '#C4A0F4' }}>pp</span>
           <span style={{ color: '#9660E0' }}>aa</span>
         </p>
+        {/* Dots V2-B sous le wordmark */}
+        <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 5, height: 14 }}>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#fff', animation: 'pu-pulse 2s ease-in-out 0s infinite' }}/>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#C4A0F4', marginTop: 3.6, animation: 'pu-pulse 2s ease-in-out 0.15s infinite' }}/>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#C4A0F4', marginTop: 3.6, animation: 'pu-pulse 2s ease-in-out 0.3s infinite' }}/>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#9660E0', marginTop: 3.6, animation: 'pu-pulse 2s ease-in-out 0.45s infinite' }}/>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#9660E0', animation: 'pu-pulse 2s ease-in-out 0.6s infinite' }}/>
+        </div>
       </div>
       {/* Numéro + infos */}
       <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', animation: 'pu-fadein 0.6s ease 0.1s both' }}>
@@ -2011,22 +2017,21 @@ export default function Commander() {
           <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 10%, ${T.mid}33 0%, transparent 50%), radial-gradient(circle at 10% 90%, ${T.light}18 0%, transparent 50%), radial-gradient(circle at 50% 50%, ${T.main}22 0%, transparent 70%)`, pointerEvents: 'none' }}/>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0.875rem 1rem 0.625rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ display: 'flex', gap: 5 }}>
-                {[
-                  { c: '#fff',  o: 0.45, delay: '0s',    size: 7 },
-                  { c: T.light, o: 1,    delay: '0.3s',  size: 9 },
-                  { c: T.mid,   o: 1,    delay: '0.6s',  size: 7 },
-                ].map((d, i) => (
-                  <div key={i} style={{ width: d.size, height: d.size, borderRadius: '50%', background: d.c, opacity: d.o, boxShadow: `0 0 10px ${d.c}aa`, animation: `dot-pulse 2s ease-in-out ${d.delay} infinite` }}/>
-                ))}
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
               {/* Wordmark tricolore : yo (blanc), pp (Light), aa (Mid) — canonique Good Morning Yoppers */}
               <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-0.05em', lineHeight: 1, margin: 0 }}>
                 <span style={{ color: '#fff' }}>yo</span>
                 <span style={{ color: T.light }}>pp</span>
                 <span style={{ color: T.mid }}>aa</span>
               </p>
+              {/* Dots V2-B sous le wordmark (spec canonique) */}
+              <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 4, height: 11 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', boxShadow: `0 0 6px #fffaa`, animation: 'dot-pulse 2s ease-in-out 0s infinite' }}/>
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: T.light, marginTop: 2.8, boxShadow: `0 0 6px ${T.light}aa`, animation: 'dot-pulse 2s ease-in-out 0.15s infinite' }}/>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.light, marginTop: 2.8, boxShadow: `0 0 6px ${T.light}aa`, animation: 'dot-pulse 2s ease-in-out 0.3s infinite' }}/>
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: T.mid, marginTop: 2.8, boxShadow: `0 0 6px ${T.mid}aa`, animation: 'dot-pulse 2s ease-in-out 0.45s infinite' }}/>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.mid, boxShadow: `0 0 6px ${T.mid}aa`, animation: 'dot-pulse 2s ease-in-out 0.6s infinite' }}/>
+              </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

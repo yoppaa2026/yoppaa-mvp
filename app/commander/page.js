@@ -2035,13 +2035,13 @@ export default function Commander() {
                 <span style={{ color: T.light }}>pp</span>
                 <span style={{ color: T.mid }}>aa</span>
               </p>
-              {/* Dots V2-B centres sous le wordmark — animation wave nette */}
+              {/* Dots V2-B centres sous le wordmark — animation pop cascade UNE FOIS au chargement */}
               <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 4, height: 11 }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', boxShadow: `0 0 6px #ffffffaa`, animation: 'dot-wave 1.8s cubic-bezier(0.4,0,0.2,1) 0s infinite' }}/>
-                <span style={{ width: 4, height: 4, borderRadius: '50%', background: T.light, marginTop: 2.8, boxShadow: `0 0 6px ${T.light}aa`, animation: 'dot-wave 1.8s cubic-bezier(0.4,0,0.2,1) 0.12s infinite' }}/>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.light, marginTop: 2.8, boxShadow: `0 0 6px ${T.light}aa`, animation: 'dot-wave 1.8s cubic-bezier(0.4,0,0.2,1) 0.24s infinite' }}/>
-                <span style={{ width: 4, height: 4, borderRadius: '50%', background: T.mid, marginTop: 2.8, boxShadow: `0 0 6px ${T.mid}aa`, animation: 'dot-wave 1.8s cubic-bezier(0.4,0,0.2,1) 0.36s infinite' }}/>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.mid, boxShadow: `0 0 6px ${T.mid}aa`, animation: 'dot-wave 1.8s cubic-bezier(0.4,0,0.2,1) 0.48s infinite' }}/>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', boxShadow: `0 0 6px #ffffffaa`, opacity: 0, animation: 'dot-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.1s forwards' }}/>
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: T.light, marginTop: 2.8, boxShadow: `0 0 6px ${T.light}aa`, opacity: 0, animation: 'dot-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.19s forwards' }}/>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.light, marginTop: 2.8, boxShadow: `0 0 6px ${T.light}aa`, opacity: 0, animation: 'dot-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.28s forwards' }}/>
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: T.mid, marginTop: 2.8, boxShadow: `0 0 6px ${T.mid}aa`, opacity: 0, animation: 'dot-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.37s forwards' }}/>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.mid, boxShadow: `0 0 6px ${T.mid}aa`, opacity: 0, animation: 'dot-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.46s forwards' }}/>
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
@@ -2551,13 +2551,13 @@ export default function Commander() {
                   <span style={{ color: T.light }}>pp</span>
                   <span style={{ color: T.mid }}>ers</span>
                 </p>
-                {/* Dots V2-B sous le wordmark Yoppers (spec canonique) */}
+                {/* Dots V2-B sous le wordmark Yoppers — animation pop cascade UNE FOIS au chargement de l'onglet */}
                 <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 9, height: 22, marginBottom: 14 }}>
-                  <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', opacity: 0.9, boxShadow: `0 4px 14px #ffffff66`, animation: 'tribu-pulse 2s ease-in-out 0s infinite' }}/>
-                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: T.light, marginTop: 6.4, boxShadow: `0 4px 14px ${T.light}66`, animation: 'tribu-pulse2 2s ease-in-out 0.15s infinite' }}/>
-                  <span style={{ width: 16, height: 16, borderRadius: '50%', background: T.light, marginTop: 6.4, boxShadow: `0 4px 14px ${T.light}66`, animation: 'tribu-pulse2 2s ease-in-out 0.3s infinite' }}/>
-                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: T.mid, marginTop: 6.4, boxShadow: `0 4px 14px ${T.mid}66`, animation: 'tribu-pulse3 2s ease-in-out 0.45s infinite' }}/>
-                  <span style={{ width: 16, height: 16, borderRadius: '50%', background: T.mid, opacity: 0.95, boxShadow: `0 4px 14px ${T.mid}66`, animation: 'tribu-pulse3 2s ease-in-out 0.6s infinite' }}/>
+                  <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: `0 4px 14px #ffffff66`, opacity: 0, animation: 'dot-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.1s forwards' }}/>
+                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: T.light, marginTop: 6.4, boxShadow: `0 4px 14px ${T.light}66`, opacity: 0, animation: 'dot-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.2s forwards' }}/>
+                  <span style={{ width: 16, height: 16, borderRadius: '50%', background: T.light, marginTop: 6.4, boxShadow: `0 4px 14px ${T.light}66`, opacity: 0, animation: 'dot-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.3s forwards' }}/>
+                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: T.mid, marginTop: 6.4, boxShadow: `0 4px 14px ${T.mid}66`, opacity: 0, animation: 'dot-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.4s forwards' }}/>
+                  <span style={{ width: 16, height: 16, borderRadius: '50%', background: T.mid, boxShadow: `0 4px 14px ${T.mid}66`, opacity: 0, animation: 'dot-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.5s forwards' }}/>
                 </div>
                 <p style={{ fontSize: '0.85rem', color: T.light, lineHeight: 1.55, opacity: 0.92, maxWidth: 320, margin: '0 auto' }}>
                   Tu fais vivre Yoppaa. Suggère un commerce qu&rsquo;on devrait ajouter, ou signale un souci sur une fiche.

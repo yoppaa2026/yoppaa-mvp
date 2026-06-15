@@ -225,7 +225,7 @@ export default function NoteSecuritePrint() {
           <H3>4.3 · Protection contre les abus</H3>
           <Ul items={[
             'Cloudflare Turnstile sur les formulaires sensibles (anti-bot)',
-            'Rate limiting sur les routes sensibles',
+            'Rate limiting en cours de déploiement progressif sur les routes sensibles',
             'Audit régulier des dépendances (mises à jour de sécurité automatiques)',
             'Vérification BCE des commerçants à l\'inscription (registre belge)',
           ]} small/>
@@ -286,8 +286,8 @@ export default function NoteSecuritePrint() {
             'Sauvegardes automatiques quotidiennes (rétention 7 jours, point-in-time recovery)',
             'Réplication géographique au sein de l\'UE',
             'Monitoring continu (Vercel Analytics + alertes anomalies)',
-            'Plan de reprise d\'activité (PRA) : RTO < 4h, RPO < 24h',
-            'Procédure documentée d\'escalade et de communication',
+            'Plan de reprise d\'activité (PRA) avec objectifs cibles : RTO < 4h, RPO < 24h',
+            'Procédure d\'escalade et de communication en cours de formalisation',
           ]} small/>
 
           <H2>8 · Notre engagement</H2>

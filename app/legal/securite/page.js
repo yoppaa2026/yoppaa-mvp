@@ -247,8 +247,8 @@ export default function NoteSecurite() {
             <H3>4.3. Protection contre les abus</H3>
             <Ul items={[
               'Cloudflare Turnstile sur les formulaires d\'inscription et de contact (protection bots)',
-              'Limitation du nombre de requêtes par adresse IP (rate limiting) sur les routes sensibles',
-              'Audit régulier des dépendances (Dependabot, mises à jour de sécurité automatiques)',
+              'Limitation du nombre de requêtes par adresse IP (rate limiting) en cours de déploiement progressif sur les routes sensibles',
+              'Audit régulier des dépendances (mises à jour de sécurité automatiques)',
               'Vérification BCE des commerçants à l\'inscription (registre belge)',
             ]}/>
 
@@ -325,8 +325,8 @@ export default function NoteSecurite() {
               'Sauvegardes automatiques quotidiennes de la base de données (rétention 7 jours, point-in-time recovery)',
               'Réplication géographique des données par Supabase au sein de l\'UE',
               'Monitoring continu de l\'infrastructure (Vercel Analytics + alertes anomalies)',
-              'Plan de reprise d\'activité (PRA) avec objectif de reprise (RTO) sous 4 heures et perte de données maximale (RPO) inférieure à 24 heures',
-              'Procédure documentée d\'escalade et de communication en cas d\'incident majeur',
+              'Plan de reprise d\'activité (PRA) avec objectifs cibles : reprise (RTO) sous 4 heures, perte de données maximale (RPO) inférieure à 24 heures',
+              'Procédure d\'escalade et de communication en cas d\'incident majeur en cours de formalisation',
             ]}/>
           </Section>
 

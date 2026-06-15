@@ -784,7 +784,7 @@ export default function CommanderSlug() {
       supabase.from('avis').select('note').eq('commercant_id', c.id),
       supabase.from('commandes').select('creneau_id, commande_articles(quantite, article:articles(temps_prepa))').eq('commercant_id', c.id).not('statut', 'in', '(recupere,non_retire)'),
       supabase.from('commercant_photos').select('*').eq('commercant_id', c.id).order('ordre'),
-      supabase.from('yoppaa_deals').select('*').eq('commercant_id', c.id).eq('actif', true).lte('date_debut', new Date().toISOString()).gte('date_fin', new Date().toISOString()),
+      supabase.from('yoppaa_deals').select('*').eq('commercant_id', c.id).eq('actif', true),
       supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', c.id).gte('date_fin', new Date().toISOString()),
       supabase.from('actualites').select('*').eq('commercant_id', c.id).eq('actif', true).order('created_at', { ascending: false }),
     ])
@@ -831,7 +831,17 @@ export default function CommanderSlug() {
 
     const couverture = (photosData||[]).find(p => p.type === 'couverture') || null
     const galerieAutres = (photosData||[]).filter(p => p.type !== 'couverture' && p.url)
-    const dealsActifs = dealsData || []
+    // Filtre des deals actifs aujourd'hui : aligne sur la logique home (commander/page.js).
+    // Accepte les 2 formats : date_deal ponctuelle = aujourd'hui OU intervalle date_debut/date_fin.
+    const aujourdhuiDate = new Date().toISOString().slice(0, 10)
+    const dealsActifs = (dealsData || []).filter(d => {
+      const dateDeal = d.date_deal || null
+      const dStart = d.date_debut ? d.date_debut.slice(0,10) : null
+      const dEnd   = d.date_fin   ? d.date_fin.slice(0,10)   : null
+      if (dateDeal === aujourdhuiDate) return true
+      if (dStart && dEnd && dStart <= aujourdhuiDate && aujourdhuiDate <= dEnd) return true
+      return false
+    })
     // Deal "vedette" affiche en bandeau : 1er deal SANS article_id (générique),
     // sinon le 1er deal (avec article_id) pour ne pas avoir un bandeau vide
     const deal = dealsActifs.find(d => !d.article_id) || dealsActifs[0] || null

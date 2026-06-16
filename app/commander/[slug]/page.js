@@ -1750,7 +1750,7 @@ export default function CommanderSlug() {
                 <div style={{ height: 12, background: T.bg }}/>
 
                 {/* Bandeau alertes/actualités (alertes en rouge, prioritaires) */}
-                {canDo(commercant.plan, 'actus') && actualites.length > 0 && (
+                {canDo(commercant.plan, 'actus_illimitees') && actualites.length > 0 && (
                   <div style={{ margin: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {actualites.map(a => {
                       const isAlerte = a.type === 'alerte'

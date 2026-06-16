@@ -2942,7 +2942,7 @@ export default function ConfigDashboard({ commercantId }) {
 
   // Onglets dynamiques selon le plan + la catégorie
   const peutDeals = canDo(commercant?.plan, 'deals')
-  const peutActus = canDo(commercant?.plan, 'actus')
+  const peutActus = canDo(commercant?.plan, 'actus_illimitees')
   const estVitrine = commercant?.categorie === 'vitrine'
 
   // Compteur des signalements en attente → badge rouge sur l'onglet Signalements

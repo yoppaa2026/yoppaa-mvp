@@ -41,24 +41,48 @@ export default function AbonnementPage() {
   const [error, setError] = useState(null)
   const [checkoutResult, setCheckoutResult] = useState(null)
 
-  // Chargement du commerçant lié au user connecté
+  // Chargement du commerçant lié au user connecté.
+  // Réplique le pattern du dashboard principal (impersonation admin + multi-commerce + localStorage).
   useEffect(() => {
     let mounted = true
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data: cmrc, error: err } = await supabase
-        .from('commercants')
-        .select('*')
-        .eq('auth_user_id', user.id)
-        .maybeSingle()
+
+      const adminEmail = 'verstappenalexandre@gmail.com'
+      const isAdmin = user.email === adminEmail
+
+      // 1. Mode impersonation admin (depuis /admin → "Voir Dashboard")
+      const impersonatingId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_admin_impersonating') : null
+      if (isAdmin && impersonatingId) {
+        const { data: c } = await supabase.from('commercants').select('*').eq('id', impersonatingId).maybeSingle()
+        if (mounted && c) { setCommercant(c); setLoading(false); return }
+      }
+
+      // 2. Commerçant déjà sélectionné via le dashboard
+      const savedId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_dashboard_commercant_id') : null
+      if (savedId) {
+        const { data: c } = await supabase.from('commercants').select('*').eq('id', savedId).maybeSingle()
+        if (mounted && c) { setCommercant(c); setLoading(false); return }
+      }
+
+      // 3. Flow normal : lookup par auth_user_id
+      const { data } = await supabase.from('commercants').select('*').eq('auth_user_id', user.id).order('nom')
       if (!mounted) return
-      if (err || !cmrc) {
-        setError('Impossible de charger votre fiche commerçant.')
+      if (!data || data.length === 0) {
+        if (isAdmin) {
+          setError('Aucun commerçant sélectionné. Allez sur /admin et cliquez "Voir Dashboard" depuis un commerçant.')
+        } else {
+          setError('Impossible de charger votre fiche commerçant.')
+        }
         setLoading(false)
         return
       }
-      setCommercant(cmrc)
+
+      setCommercant(data[0])
+      if (data.length === 1) {
+        localStorage.setItem('yoppaa_dashboard_commercant_id', data[0].id)
+      }
       setLoading(false)
     }
     load()

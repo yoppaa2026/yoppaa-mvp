@@ -233,17 +233,17 @@ async function handleSubscriptionDeleted(subscription, supabase) {
   })
 }
 
-// invoice.payment_failed → marque past_due (Stripe Smart Retries va relancer
-// automatiquement le paiement selon la config du dunning).
+// invoice.payment_failed → marque past_due + stamp subscription_past_due_since
+// (Stripe Smart Retries va relancer automatiquement selon la config du dunning,
+// et notre cron /api/cron/billing-relances calcule J+1, J+4, J+7 depuis ce
+// timestamp).
 async function handleInvoicePaymentFailed(invoice, supabase) {
   const customerId = invoice.customer
   if (!customerId) return
 
-  // Ne touche que les commercants liés à une sub Billing (évite les invoices
-  // d'autres flows si on en ajoute plus tard).
   const { data: commercant } = await supabase
     .from('commercants')
-    .select('id, subscription_status')
+    .select('id, subscription_status, subscription_past_due_since')
     .eq('stripe_customer_id', customerId)
     .maybeSingle()
 
@@ -252,9 +252,17 @@ async function handleInvoicePaymentFailed(invoice, supabase) {
     return
   }
 
+  // Stamp UNIQUEMENT si pas déjà set (= premier échec du cycle). Si on stampait
+  // à chaque payment_failed, on reset le compteur J+1/J+4/J+7 à chaque retry
+  // Stripe → relances jamais envoyées.
+  const updates = { subscription_status: 'past_due' }
+  if (!commercant.subscription_past_due_since) {
+    updates.subscription_past_due_since = new Date().toISOString()
+  }
+
   const { error } = await supabase
     .from('commercants')
-    .update({ subscription_status: 'past_due' })
+    .update(updates)
     .eq('id', commercant.id)
 
   if (error) throw error
@@ -262,29 +270,41 @@ async function handleInvoicePaymentFailed(invoice, supabase) {
     commercantId: commercant.id,
     invoiceId: invoice.id,
     amount: invoice.amount_due,
+    pastDueStamped: !commercant.subscription_past_due_since,
   })
 }
 
-// invoice.payment_succeeded → repasse en active si past_due (Smart Retry a réussi).
+// invoice.payment_succeeded → repasse en active + reset subscription_past_due_since
+// si on était past_due (Smart Retry a réussi à débiter la nouvelle carte). Sans
+// reset, le prochain cycle past_due hériterait du vieux timestamp et déclencherait
+// la bascule en exister immédiatement.
 async function handleInvoicePaymentSucceeded(invoice, supabase) {
   const customerId = invoice.customer
   if (!customerId) return
 
   const { data: commercant } = await supabase
     .from('commercants')
-    .select('id, subscription_status')
+    .select('id, subscription_status, subscription_past_due_since')
     .eq('stripe_customer_id', customerId)
     .maybeSingle()
 
-  if (!commercant?.id || commercant.subscription_status !== 'past_due') return
+  if (!commercant?.id) return
+
+  // Si pas past_due et pas de timestamp, rien à faire (paiement régulier).
+  const wasPastDue = commercant.subscription_status === 'past_due' || commercant.subscription_past_due_since
+
+  if (!wasPastDue) return
 
   const { error } = await supabase
     .from('commercants')
-    .update({ subscription_status: 'active' })
+    .update({
+      subscription_status: 'active',
+      subscription_past_due_since: null,
+    })
     .eq('id', commercant.id)
 
   if (error) throw error
-  console.info('[billing/webhook] past_due → active après retry réussi', {
+  console.info('[billing/webhook] past_due → active après retry réussi (reset du compteur)', {
     commercantId: commercant.id,
     invoiceId: invoice.id,
   })

@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/rdv-reminder-9h",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/billing-relances",
+      "schedule": "0 8 * * *"
     }
   ]
 }

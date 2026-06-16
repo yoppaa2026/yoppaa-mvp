@@ -38,6 +38,7 @@ export default function AbonnementPage() {
   const [commercant, setCommercant] = useState(null)
   const [loading, setLoading] = useState(true)
   const [actionPlan, setActionPlan] = useState(null)  // 'communiquer' | 'vendre' pendant l'appel API
+  const [portalLoading, setPortalLoading] = useState(false)
   const [error, setError] = useState(null)
   const [checkoutResult, setCheckoutResult] = useState(null)
 
@@ -104,20 +105,52 @@ export default function AbonnementPage() {
     setActionPlan(targetPlan)
     setError(null)
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Session expirée, reconnectez-vous')
+
       const res = await fetch('/api/stripe/billing/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ commercantId: commercant.id, targetPlan }),
       })
       const json = await res.json()
       if (!res.ok || !json?.url) {
         throw new Error(json?.error || 'Erreur lors de la création de la session de paiement')
       }
-      // Redirection vers Stripe Checkout
       window.location.href = json.url
     } catch (e) {
       setError(e?.message || 'Erreur inconnue')
       setActionPlan(null)
+    }
+  }
+
+  async function handleOpenPortal() {
+    if (!commercant?.id) return
+    setPortalLoading(true)
+    setError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Session expirée, reconnectez-vous')
+
+      const res = await fetch('/api/stripe/billing/portal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ commercantId: commercant.id }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json?.url) {
+        throw new Error(json?.error || 'Impossible d\'ouvrir le portail client')
+      }
+      window.location.href = json.url
+    } catch (e) {
+      setError(e?.message || 'Erreur inconnue')
+      setPortalLoading(false)
     }
   }
 
@@ -193,9 +226,26 @@ export default function AbonnementPage() {
             </p>
           )}
           {hasActiveSub && (
-            <p style={{ fontSize: 13, color: T.muted, margin: '12px 0 0', lineHeight: 1.55 }}>
-              Pour mettre à jour votre carte, changer de formule ou résilier, l'accès au portail client sera disponible très prochainement.
-            </p>
+            <>
+              <p style={{ fontSize: 13, color: T.muted, margin: '12px 0 16px', lineHeight: 1.55 }}>
+                Gérez votre carte bancaire, changez de formule, téléchargez vos factures ou résiliez votre abonnement depuis le portail sécurisé Stripe.
+              </p>
+              <button
+                onClick={handleOpenPortal}
+                disabled={portalLoading}
+                style={{
+                  padding: '11px 22px',
+                  background: T.main,
+                  color: '#fff',
+                  border: 'none', borderRadius: 100,
+                  cursor: portalLoading ? 'wait' : 'pointer',
+                  fontWeight: 800, fontSize: 14, letterSpacing: '-0.2px',
+                  opacity: portalLoading ? 0.6 : 1,
+                }}
+              >
+                {portalLoading ? 'Redirection…' : 'Gérer mon abonnement'}
+              </button>
+            </>
           )}
         </div>
 

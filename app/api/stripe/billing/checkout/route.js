@@ -11,6 +11,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createCheckoutSession } from '@/lib/stripe-billing'
 
+const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
+
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -20,6 +22,19 @@ function getSupabaseAdmin() {
 
 export async function POST(req) {
   try {
+    // Auth obligatoire : JWT Supabase via header Authorization
+    const authHeader = req.headers.get('authorization') || ''
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+    if (!token) {
+      return NextResponse.json({ error: 'Authentification requise' }, { status: 401 })
+    }
+
+    const supabase = getSupabaseAdmin()
+    const { data: { user }, error: errAuth } = await supabase.auth.getUser(token)
+    if (errAuth || !user) {
+      return NextResponse.json({ error: 'Token invalide' }, { status: 401 })
+    }
+
     const body = await req.json()
     const { commercantId, targetPlan } = body || {}
 
@@ -32,8 +47,6 @@ export async function POST(req) {
         error: 'targetPlan invalide (attendu communiquer ou vendre)',
       }, { status: 400 })
     }
-
-    const supabase = getSupabaseAdmin()
 
     // Charger le commerçant
     const { data: commercant, error: errFetch } = await supabase
@@ -48,6 +61,12 @@ export async function POST(req) {
     }
     if (!commercant) {
       return NextResponse.json({ error: 'Commerçant introuvable' }, { status: 404 })
+    }
+
+    // Auth check ownership : l'user doit être owner du commerçant, ou admin Yoppaa
+    const isAdmin = user.email === ADMIN_EMAIL
+    if (!isAdmin && commercant.auth_user_id !== user.id) {
+      return NextResponse.json({ error: 'Accès non autorisé à ce commerçant' }, { status: 403 })
     }
 
     // Bloquer si subscription active existante : il doit passer par le portail

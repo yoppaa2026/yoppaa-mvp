@@ -11,15 +11,24 @@ const TYPES_ALIMENTAIRE = [
   'Friterie', 'Pizzeria', 'Coffee shop', 'Épicerie', 'Traiteur',
   'Boucherie', 'Food truck', 'Distributeur automatique', 'Autre alimentaire',
 ]
+// Vitrine = commerces de SERVICES (RDV : coiffeur, esthéticienne, garagiste…)
 const TYPES_VITRINE = [
   'Coiffeur', 'Barbier', 'Esthéticienne', 'Opticien', 'Pharmacie',
-  'Fleuriste', 'Pressing', 'Vêtements', 'Chaussures', 'Bijouterie',
-  'Librairie', 'Garagiste', 'Toiletteur', 'Tatoueur', 'Studio photo',
-  'Salle de sport', 'Autre service',
+  'Pressing', 'Garagiste', 'Toiletteur', 'Tatoueur', 'Studio photo',
+  'Salle de sport', 'Cours / coaching', 'Autre service',
+]
+
+// Detail = commerces de PRODUITS NON ALIMENTAIRES (réservation produit / retrait)
+const TYPES_DETAIL = [
+  'Vêtements', 'Chaussures', 'Bijouterie', 'Fleuriste', 'Librairie',
+  'Décoration / maison', 'Sport / équipement', 'Loisirs créatifs', 'Jouets',
+  'Électroménager', 'Autre détail',
 ]
 
 function typesPourCategorie(categorie) {
-  return categorie === 'vitrine' ? TYPES_VITRINE : TYPES_ALIMENTAIRE
+  if (categorie === 'vitrine') return TYPES_VITRINE
+  if (categorie === 'detail')  return TYPES_DETAIL
+  return TYPES_ALIMENTAIRE
 }
 
 // ─── PALETTE ──────────────────────────────────────────────────────────────────
@@ -359,14 +368,14 @@ function Etape1Compte({ session, commercant, onCompte }) {
         </Card>
       )}
 
-      <Card titre="Ton activité" sous="Yoppaa s'adapte : Click & Collect pour l'alimentaire, vitrine + RDV externe pour les autres.">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <Card titre="Ton activité" sous="Yoppaa s'adapte à ton type de commerce.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
           <CategorieCard
             value="alimentaire"
             actif={categorie === 'alimentaire'}
             onClick={() => setCategorie('alimentaire')}
             titre="Alimentaire"
-            sous="Click & Collect"
+            sous="Click & Collect, livraison"
             exemples="Boulangerie, friterie, traiteur, snack…"
             icone="🥐"
           />
@@ -374,10 +383,19 @@ function Etape1Compte({ session, commercant, onCompte }) {
             value="vitrine"
             actif={categorie === 'vitrine'}
             onClick={() => setCategorie('vitrine')}
-            titre="Vitrine"
-            sous="Présence + RDV"
-            exemples="Coiffeur, opticien, fleuriste, pressing…"
+            titre="Service"
+            sous="Présence + prise de RDV"
+            exemples="Coiffeur, opticien, esthéticienne, garagiste…"
             icone="💇"
+          />
+          <CategorieCard
+            value="detail"
+            actif={categorie === 'detail'}
+            onClick={() => setCategorie('detail')}
+            titre="Détail"
+            sous="Réservation produit, retrait"
+            exemples="Vêtements, chaussures, fleuriste, librairie…"
+            icone="🛍️"
           />
         </div>
       </Card>

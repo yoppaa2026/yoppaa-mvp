@@ -229,7 +229,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
   const [email, setEmail] = useState(session?.user?.email || '')
   const [password, setPassword] = useState('')
   const [categorie, setCategorie] = useState(commercant?.categorie || 'alimentaire')
-  const [plan, setPlan] = useState(commercant?.plan || 'on')
+  const [plan, setPlan] = useState(commercant?.plan || 'exister')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -333,15 +333,15 @@ function Etape1Compte({ session, commercant, onCompte }) {
         Crée ton compte et choisis ton plan. Tu pourras tout configurer en quelques minutes.
       </p>
 
-      {/* Bandeau d'accroche : rassure sur la gratuité du plan ON */}
+      {/* Bandeau d'accroche : rassure sur la gratuité du plan Exister + essai 30j sur Communiquer/Vendre */}
       <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, color: '#fff', borderRadius: 14, padding: '14px 18px', marginBottom: 22, display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ fontSize: 22, flexShrink: 0 }}>🟣</span>
         <div>
           <p style={{ fontWeight: 900, fontSize: 14, margin: 0, letterSpacing: '-0.3px' }}>
-            Vous ne rêvez pas — le forfait ON est <span style={{ color: T.light }}>gratuit à vie</span>.
+            La formule <span style={{ color: T.light }}>Exister</span> est gratuite à vie. <span style={{ color: T.light }}>Communiquer</span> et <span style={{ color: T.light }}>Vendre</span> incluent 30 jours d'essai gratuit.
           </p>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', margin: '3px 0 0', lineHeight: 1.4 }}>
-            Aucune carte demandée. Aucun engagement. Upgrade quand tu veux.
+            Sans engagement. Tu peux changer de formule ou résilier à tout moment depuis ton tableau de bord.
           </p>
         </div>
       </div>
@@ -382,22 +382,15 @@ function Etape1Compte({ session, commercant, onCompte }) {
         </div>
       </Card>
 
-      <Card titre="Choisis ton plan" sous="Tu pourras changer plus tard depuis ton dashboard.">
-        <div style={{ display: 'grid', gap: 10 }}>
+      <Card titre="Choisis ta formule" sous="Tu pourras changer plus tard depuis ton tableau de bord.">
+        <div style={{ display: 'grid', gap: 12, marginTop: 4 }}>
           {plansDispos.map(p => (
             <CardPlan key={p} plan={p} categorie={categorie} actif={plan === p} onClick={() => setPlan(p)}/>
           ))}
         </div>
-        {categorie === 'vitrine' && (
-          <p style={{ fontSize: 11, color: T.muted, marginTop: 12, lineHeight: 1.5, background: T.pale, padding: '8px 10px', borderRadius: 8, border: `1px solid ${T.main}22` }}>
-            <strong style={{ color: T.bgPanel }}>FULL</strong> inclut le module de réservation RDV natif Yoppaa : prestations, créneaux, agenda, fidélité automatique, multi-praticiens. <strong>Zéro commission</strong>, jamais. Tu peux aussi rester en <strong>ON gratuit</strong> (présence + horaires + avis).
-          </p>
-        )}
-        {categorie === 'alimentaire' && (
-          <p style={{ fontSize: 11, color: T.muted, marginTop: 12, lineHeight: 1.5 }}>
-            <strong style={{ color: T.bgPanel }}>FULL</strong> : Click &amp; Collect, livraison, fidélité, deals, hardware caisse, dashboard commandes. Tu peux démarrer en <strong>ON gratuit</strong> et upgrader à tout moment.
-          </p>
-        )}
+        <p style={{ fontSize: 11, color: T.muted, marginTop: 14, lineHeight: 1.5, textAlign: 'center' }}>
+          Tous les tarifs sont HTVA. La TVA applicable sera ajoutée au moment du paiement selon ton statut et ton pays.
+        </p>
       </Card>
 
       {/* Mini-glossaire des fonctionnalités — contextuel selon la catégorie choisie */}
@@ -417,6 +410,19 @@ function Etape1Compte({ session, commercant, onCompte }) {
       <p style={{ fontSize: 11, color: T.muted, textAlign: 'center', marginTop: 12 }}>
         Déjà inscrit ? <a href="/login" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>Se connecter</a>
       </p>
+
+      {/* Lien discret pour les administrations communales : redirige vers une page
+          de contact où ils peuvent demander à être contactés par Yoppaa pour un
+          onboarding manuel (plan Public, gratuit à vie, dédié au secteur public). */}
+      <div style={{ marginTop: 28, padding: '14px 16px', background: T.pale, borderRadius: 12, border: `1px solid ${T.main}22`, textAlign: 'center' }}>
+        <p style={{ fontSize: 12, color: T.deep, margin: 0, lineHeight: 1.5 }}>
+          Vous représentez une <strong>administration communale ou un service public</strong> ?
+          <br />
+          <a href="/administrations" style={{ color: T.main, fontWeight: 800, textDecoration: 'none' }}>
+            Demander un contact Yoppaa →
+          </a>
+        </p>
+      </div>
     </div>
   )
 }
@@ -1393,30 +1399,122 @@ function CategorieCard({ actif, onClick, titre, sous, exemples, icone }) {
   )
 }
 
+// Cards plan refondues 16/06 (S1) : 3 paliers Yoppaa avec features cohérentes
+// avec lib/plans.js (source unique). Features varient légèrement selon la
+// catégorie pour les plans "Vendre" (RDV vs Click&Collect).
 function CardPlan({ plan, categorie, actif, onClick }) {
-  const p = getPrixPlan(plan, categorie)
+  const p = getPrixPlan(plan)
   const label = PLAN_LABEL[plan]
-  // Features descriptions par plan + categorie (FULL diffère entre alimentaire et vitrine)
-  const features = {
-    on: 'Page live + horaires + avis. Idéal pour démarrer en gratuit.',
-    full: categorie === 'vitrine'
-      ? 'Module RDV complet (prestations, créneaux, agenda, multi-praticiens) + prix + photos + deals + actualités + fidélité automatique + Good Morning Yoppers. Zéro commission, jamais.'
-      : 'Click & Collect + livraison + prix visibles + photos articles + deals + actualités + fidélité + dashboard commandes + kit hardware + Good Morning Yoppers.',
-  }
   if (!p) return null
+
+  // Tagline + 4 features clés par plan. Pour Vendre, on adapte selon la
+  // catégorie (alimentaire = Click & Collect, vitrine = RDV).
+  const VENDRE_FEATURE_TRANSACTIONNEL = categorie === 'vitrine'
+    ? 'Module RDV complet : prestations, créneaux, multi-praticiens'
+    : categorie === 'detail'
+      ? 'Réservation produit + retrait en magasin'
+      : 'Click & Collect + livraison + réservation table'
+
+  const PLAN_CONFIG = {
+    exister: {
+      tagline: 'Présence sur Yoppaa, sans coût',
+      essai: false,
+      features: [
+        'Fiche commerce, photos, horaires',
+        'Apparition dans Good Morning Yoppers',
+        'Favoris et signaux des Yoppers',
+        'Statistiques de base',
+      ],
+      note: 'Aucune information de paiement demandée',
+    },
+    communiquer: {
+      tagline: 'Pour grandir ton audience',
+      essai: true,
+      features: [
+        'Tout Exister, plus :',
+        'Actus illimitées, deals, Bonnes affaires',
+        'Push ciblés aux Yoppers favoris',
+        'Newsletter, segmentation, IA assistant',
+      ],
+      note: 'Sans engagement, résiliable en 1 clic',
+    },
+    vendre: {
+      tagline: 'Pour transactionner et fidéliser',
+      essai: true,
+      recommande: true,
+      features: [
+        'Tout Communiquer, plus :',
+        VENDRE_FEATURE_TRANSACTIONNEL,
+        'Paiement en ligne (0 % commission)',
+        'Fidélité, IA avancée, export comptable',
+      ],
+      note: 'Sans engagement, résiliable en 1 clic',
+    },
+  }
+  const cfg = PLAN_CONFIG[plan]
+  if (!cfg) return null
+
   return (
     <button onClick={onClick}
-      style={{ width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 14, border: `2px solid ${actif ? T.bgPanel : T.hairline}`, background: actif ? T.bgPanel : '#fff', color: actif ? '#fff' : T.ink, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s', boxShadow: actif ? `0 8px 24px rgba(22,6,54,0.2)` : 'none' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 900, fontSize: 18, letterSpacing: '-0.3px' }}>{label}</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: actif ? T.light : T.main }}>{p.label_annuel}</span>
-      </div>
-      {p.label_mensuel !== '—' && (
-        <p style={{ fontSize: 11, color: actif ? 'rgba(255,255,255,0.65)' : T.muted, margin: '0 0 6px', fontWeight: 600 }}>
-          ou {p.label_mensuel}
-        </p>
+      style={{
+        width: '100%', textAlign: 'left', padding: '16px 18px', borderRadius: 16,
+        border: `2px solid ${actif ? T.bgPanel : T.hairline}`,
+        background: actif ? T.bgPanel : '#fff',
+        color: actif ? '#fff' : T.ink,
+        cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+        transition: 'all 0.15s',
+        boxShadow: actif ? `0 12px 28px rgba(22,6,54,0.25)` : 'none',
+        position: 'relative',
+      }}>
+      {cfg.recommande && !actif && (
+        <span style={{
+          position: 'absolute', top: -10, right: 14,
+          background: T.main, color: '#fff', fontSize: 10, fontWeight: 800,
+          padding: '3px 10px', borderRadius: 100, letterSpacing: '0.5px', textTransform: 'uppercase',
+        }}>Recommandé</span>
       )}
-      <p style={{ fontSize: 12, color: actif ? 'rgba(255,255,255,0.85)' : T.deep, margin: 0, lineHeight: 1.4 }}>{features[plan]}</p>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 900, fontSize: 20, letterSpacing: '-0.4px' }}>{label}</span>
+        {p.mensuel === 0 ? (
+          <span style={{ fontSize: 13, fontWeight: 800, color: actif ? T.light : T.main }}>Gratuit à vie</span>
+        ) : (
+          <span style={{ fontSize: 16, fontWeight: 900, color: actif ? '#fff' : T.ink }}>
+            {p.mensuel.toFixed(2).replace('.', ',')}€<span style={{ fontSize: 11, fontWeight: 600, color: actif ? T.light : T.muted, marginLeft: 2 }}>HTVA/mois</span>
+          </span>
+        )}
+      </div>
+
+      <p style={{ fontSize: 12, color: actif ? T.light : T.main, fontWeight: 700, margin: '0 0 10px' }}>
+        {cfg.tagline}
+      </p>
+
+      {cfg.essai && (
+        <p style={{
+          fontSize: 11, fontWeight: 800,
+          color: actif ? '#fff' : '#065F46',
+          background: actif ? 'rgba(255,255,255,0.12)' : '#ECFDF5',
+          padding: '4px 9px', borderRadius: 100, display: 'inline-block',
+          margin: '0 0 10px', letterSpacing: '0.3px',
+        }}>30 jours d'essai gratuit</p>
+      )}
+
+      <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {cfg.features.map((f, i) => (
+          <li key={i} style={{
+            fontSize: 12, lineHeight: 1.45,
+            color: actif ? 'rgba(255,255,255,0.92)' : T.deep,
+            display: 'flex', alignItems: 'flex-start', gap: 6,
+          }}>
+            <span style={{ color: actif ? T.light : T.main, fontSize: 13, flexShrink: 0, marginTop: 1 }}>{f.startsWith('Tout ') ? '✦' : '✓'}</span>
+            <span style={{ fontWeight: f.startsWith('Tout ') ? 800 : 500 }}>{f}</span>
+          </li>
+        ))}
+      </ul>
+
+      <p style={{ fontSize: 10.5, color: actif ? 'rgba(255,255,255,0.65)' : T.muted, margin: 0, fontStyle: 'italic' }}>
+        {cfg.note}
+      </p>
     </button>
   )
 }

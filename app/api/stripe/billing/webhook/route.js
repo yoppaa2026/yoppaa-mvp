@@ -17,6 +17,16 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe } from '@/lib/stripe'
+import { isStripeTestMode } from '@/lib/stripe-billing'
+
+// Récupère les 2 secrets webhook Billing (Test + Live) avec priorité sur celui
+// du mode détecté dans STRIPE_SECRET_KEY. On tente quand même l'autre en
+// fallback pour supporter les bascules ponctuelles Test/Live sans recompiler.
+function getWebhookSecretsOrdered() {
+  const test = process.env.STRIPE_BILLING_WEBHOOK_SECRET_TEST
+  const live = process.env.STRIPE_BILLING_WEBHOOK_SECRET_LIVE
+  return (isStripeTestMode() ? [test, live] : [live, test]).filter(Boolean)
+}
 
 function getSupabaseAdmin() {
   return createClient(
@@ -47,9 +57,9 @@ function tsToIso(ts) {
 }
 
 export async function POST(request) {
-  const webhookSecret = process.env.STRIPE_BILLING_WEBHOOK_SECRET
-  if (!stripe || !webhookSecret) {
-    return NextResponse.json({ ok: false, error: 'Stripe Billing non configuré' }, { status: 503 })
+  const secrets = getWebhookSecretsOrdered()
+  if (!stripe || secrets.length === 0) {
+    return NextResponse.json({ ok: false, error: 'Stripe Billing non configuré (aucun STRIPE_BILLING_WEBHOOK_SECRET_TEST/LIVE)' }, { status: 503 })
   }
 
   const signature = request.headers.get('stripe-signature')
@@ -59,11 +69,20 @@ export async function POST(request) {
 
   const rawBody = await request.text()
 
-  let event
-  try {
-    event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret)
-  } catch (e) {
-    console.error('[stripe/billing/webhook] invalid signature', e.message)
+  // Tente les 2 secrets (Test + Live) dans l'ordre. Le 1er qui valide gagne.
+  // Stripe envoie chaque event signé avec le secret du webhook dans son mode.
+  let event, lastError
+  for (const secret of secrets) {
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, signature, secret)
+      lastError = null
+      break
+    } catch (e) {
+      lastError = e
+    }
+  }
+  if (!event) {
+    console.error('[stripe/billing/webhook] invalid signature (aucun secret n\'a validé)', lastError?.message)
     return NextResponse.json({ ok: false, error: 'signature invalide' }, { status: 401 })
   }
 

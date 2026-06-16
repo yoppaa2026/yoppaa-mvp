@@ -294,6 +294,7 @@ export default function BrandKit() {
   const socialAssets = [
     { title: 'Avatar carré',         dims: { w: 1080, h: 1080 }, scale: 1.6, mode: 'dark', filename: 'yoppaa-avatar-1080', sub: 'Instagram, Twitter, Facebook · profil', gradient: false },
     { title: 'App icon',              dims: { w: 1024, h: 1024 }, scale: 1.6, mode: 'dark', filename: 'yoppaa-app-icon-1024', sub: 'iOS, Android · stores', gradient: true },
+    { title: 'Stripe icon (512)',    dims: { w: 512,  h: 512 },  scale: 1.6, mode: 'dark', filename: 'yoppaa-stripe-icon-512', sub: 'Stripe Brand settings · portail + emails', gradient: true },
     { title: 'OG image / Cover FB',  dims: { w: 1200, h: 630 },  scale: 1.4, mode: 'dark', filename: 'yoppaa-og-1200x630', sub: 'partage social, lien preview', gradient: false },
     { title: 'Twitter header',       dims: { w: 1500, h: 500 },  scale: 1.3, mode: 'dark', filename: 'yoppaa-twitter-header', sub: 'bannière X/Twitter', gradient: true },
     { title: 'LinkedIn banner',      dims: { w: 1584, h: 396 },  scale: 1.1, mode: 'dark', filename: 'yoppaa-linkedin-1584x396', sub: 'bannière LinkedIn profil/page', gradient: false },

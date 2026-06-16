@@ -25,10 +25,9 @@ import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 
-// Désactive le body parsing automatique de Next pour récupérer le raw body
-export const config = { api: { bodyParser: false } }
-
 // Service role (bypass RLS pour les UPDATE depuis webhook)
+// Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
+// (vestige du Pages Router). request.text() ci-dessous retourne déjà le raw body intact.
 function getSupabaseAdmin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,

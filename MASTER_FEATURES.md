@@ -2,9 +2,9 @@
 
 > **Source unique de vérité** pour toutes les fonctionnalités Yoppaa, leurs descriptions officielles, leur disponibilité par plan, et le vocabulaire de marque associé.
 >
-> 📌 À mettre à jour à chaque ajout ou modification d'une feature dans `lib/plans.js`.
-> 📌 Toutes les UI (signup, dashboard, fiche `/commander/[slug]`, emails, landing, pitch deck, slides commerciales) doivent référencer ce document.
-> 📌 Document maintenu par : Alex Verstappen (Avcotech SRL). Dernière révision : 2026-06-17.
+> **À mettre à jour** à chaque ajout ou modification d'une feature dans `lib/plans.js`.
+> **Référencé partout** : toutes les UI (signup, dashboard, fiche `/commander/[slug]`, emails, landing, pitch deck, slides commerciales) doivent s'aligner sur ce document.
+> **Maintenu par** : Alex Verstappen (Avcotech SRL). Dernière révision : 2026-06-17.
 
 ---
 
@@ -27,7 +27,7 @@ Les Yoppers voient les fiches commerçants, mettent en favori, envoient des sign
 - *"Ta table est Yoppée !"* (réservation restaurant)
 - *"Ton article est Yoppé !"* (réservation produit détail)
 
-**Spécification visuelle obligatoire** : un check vert ✓ (V en vert) systématiquement affiché au-dessus du texte de confirmation pour imager visuellement la validation. Toujours violet 🟣 pour la signature de marque.
+**Spécification visuelle obligatoire** : un check vert ✓ (V en vert) systématiquement affiché au-dessus du texte de confirmation pour imager visuellement la validation. Signature de marque dans les couleurs canoniques violet Yoppaa (main #6B35C4 / mid #9660E0).
 
 ### Commerçant
 L'utilisateur professionnel. Crée son compte, choisit une formule (Exister, Communiquer, Vendre), configure sa fiche, reçoit ses Yoppers. **Le commerçant est aussi un Yopper** et fait partie de la même tribu.
@@ -141,56 +141,56 @@ Assistant IA intégré pour aider le commerçant à rédiger ses actus, deals, n
 
 ## 2. Matrice synthétique des features par plan
 
-Légende : ✅ inclus · ❌ non inclus · 🎯 plan recommandé · 📦 boutique optionnelle
+Légende : ✓ inclus · — non inclus · *(à venir : badge "plan recommandé" et "boutique optionnelle" en SVG dans l'UI)*
 
 | Feature | Exister | Communiquer | Vendre | Public |
 |---|:-:|:-:|:-:|:-:|
 | **Visibilité** | | | | |
-| Fiche commerce (vitrine) | ✅ | ✅ | ✅ | ✅ |
-| Prix affichés sur la fiche | ✅ | ✅ | ✅ | ❌ |
-| Photos + galerie illimitée | ✅ | ✅ | ✅ | ✅ |
-| Horaires détaillés (jour par jour) | ✅ | ✅ | ✅ | ✅ |
-| Description longue | ✅ | ✅ | ✅ | ✅ |
+| Fiche commerce (vitrine) | ✓ | ✓ | ✓ | ✓ |
+| Prix affichés sur la fiche | ✓ | ✓ | ✓ | — |
+| Photos + galerie illimitée | ✓ | ✓ | ✓ | ✓ |
+| Horaires détaillés (jour par jour) | ✓ | ✓ | ✓ | ✓ |
+| Description longue | ✓ | ✓ | ✓ | ✓ |
 | **Référencement** | | | | |
-| Apparition dans `/commander` | ✅ | ✅ | ✅ | ✅ |
-| Référencement Google (SEO + sitemap + schema.org) | ✅ | ✅ | ✅ | ✅ |
-| Recherche par catégorie | ✅ | ✅ | ✅ | ✅ |
+| Apparition dans `/commander` | ✓ | ✓ | ✓ | ✓ |
+| Référencement Google (SEO + sitemap + schema.org) | ✓ | ✓ | ✓ | ✓ |
+| Recherche par catégorie | ✓ | ✓ | ✓ | ✓ |
 | **Engagement client** | | | | |
-| Favoris (Yoppers te suivent) | ✅ | ✅ | ✅ | ✅ |
-| Signaux des Yoppers | ✅ | ✅ | ✅ | ❌ |
+| Favoris (Yoppers te suivent) | ✓ | ✓ | ✓ | ✓ |
+| Signaux des Yoppers | ✓ | ✓ | ✓ | — |
 | **Statistiques** | | | | |
-| Stats de base (vues, favoris) | ✅ | ✅ | ✅ | ✅ |
-| Historique d'activité | ✅ | ✅ | ✅ | ✅ |
-| Stats signaux | ✅ | ✅ | ✅ | ❌ |
-| Stats détaillées (engagement push, ouvertures, etc.) | ❌ | ✅ | ✅ | ❌ |
+| Stats de base (vues, favoris) | ✓ | ✓ | ✓ | ✓ |
+| Historique d'activité | ✓ | ✓ | ✓ | ✓ |
+| Stats signaux | ✓ | ✓ | ✓ | — |
+| Stats détaillées (engagement push, ouvertures, etc.) | — | ✓ | ✓ | — |
 | **Good Morning Yoppers** | | | | |
-| Apparition automatique dans GMY | ✅ | ✅ | ✅ | ✅ |
-| Publier 1 actu/jour dans GMY | ✅ | ✅ | ✅ | ❌ |
-| Apparition prioritaire dans GMY | ❌ | ✅ | ✅ | ❌ |
+| Apparition automatique dans GMY | ✓ | ✓ | ✓ | ✓ |
+| Publier 1 actu/jour dans GMY | ✓ | ✓ | ✓ | — |
+| Apparition prioritaire dans GMY | — | ✓ | ✓ | — |
 | **Communication** | | | | |
-| Actualités illimitées (page fiche + push) | ❌ | ✅ | ✅ | ✅ |
-| Deals (promotions limitées) | ❌ | ✅ | ✅ | ❌ |
-| Mise en avant Bonnes affaires | ❌ | ✅ | ✅ | ❌ |
-| Push ciblés aux Yoppers favoris | ❌ | ✅ | ✅ | ❌ |
-| Newsletter ciblée + segmentation | ❌ | ✅ | ✅ | ❌ |
-| Alertes (bandeau rouge prioritaire) | ❌ | ✅ | ✅ | ✅ |
+| Actualités illimitées (page fiche + push) | — | ✓ | ✓ | ✓ |
+| Deals (promotions limitées) | — | ✓ | ✓ | — |
+| Mise en avant Bonnes affaires | — | ✓ | ✓ | — |
+| Push ciblés aux Yoppers favoris | — | ✓ | ✓ | — |
+| Newsletter ciblée + segmentation | — | ✓ | ✓ | — |
+| Alertes (bandeau rouge prioritaire) | — | ✓ | ✓ | ✓ |
 | **IA Yoppaa** | | | | |
-| IA bridée (reformulation, suggestions, correction) | ❌ | ✅ | ✅ | ❌ |
-| IA avancée (rédaction, segmentation auto, benchmarking) | ❌ | ❌ | ✅ | ❌ |
+| IA bridée (reformulation, suggestions, correction) | — | ✓ | ✓ | — |
+| IA avancée (rédaction, segmentation auto, benchmarking) | — | — | ✓ | — |
 | **Transactionnel** | | | | |
-| Click & Collect *(catégorie alimentaire)* | ❌ | ❌ | ✅ | ❌ |
-| Livraison *(catégorie alimentaire)* | ❌ | ❌ | ✅ | ❌ |
-| Réservation de table *(restaurant alimentaire)* | ❌ | ❌ | ✅ | ❌ |
-| RDV natif *(catégorie service)* | ❌ | ❌ | ✅ | ❌ |
-| Multi-praticiens *(catégorie service)* | ❌ | ❌ | ✅ | ❌ |
-| Réservation produit *(catégorie détail)* | ❌ | ❌ | ✅ | ❌ |
-| Paiement en ligne (Stripe Connect, 0 % commission) | ❌ | ❌ | ✅ | ❌ |
-| Encaissement cash en boutique | ❌ | ❌ | ✅ | ❌ |
-| Fidélité configurable | ❌ | ❌ | ✅ | ❌ |
-| Export comptable (CSV / PDF) | ❌ | ❌ | ✅ | ❌ |
+| Click & Collect *(catégorie alimentaire)* | — | — | ✓ | — |
+| Livraison *(catégorie alimentaire)* | — | — | ✓ | — |
+| Réservation de table *(restaurant alimentaire)* | — | — | ✓ | — |
+| RDV natif *(catégorie service)* | — | — | ✓ | — |
+| Multi-praticiens *(catégorie service)* | — | — | ✓ | — |
+| Réservation produit *(catégorie détail)* | — | — | ✓ | — |
+| Paiement en ligne (Stripe Connect, 0 % commission) | — | — | ✓ | — |
+| Encaissement cash en boutique | — | — | ✓ | — |
+| Fidélité configurable | — | — | ✓ | — |
+| Export comptable (CSV / PDF) | — | — | ✓ | — |
 | **Spécifique Public** | | | | |
-| Push notifications de zone (code postal) | ❌ | ❌ | ❌ | ✅ |
-| Alertes urgentes (sécurité, coupures, etc.) | ❌ | ❌ | ❌ | ✅ |
+| Push notifications de zone (code postal) | — | ✗ | — | ✓ |
+| Alertes urgentes (sécurité, coupures, etc.) | — | ✗ | — | ✓ |
 
 ---
 
@@ -231,7 +231,7 @@ Disponibles à l'inscription **ET** à tout moment depuis le tableau de bord.
 
 Cette section sert de copywriting de référence pour toutes les UI.
 
-### 🪟 Visibilité & présence
+### Visibilité & présence
 
 #### Fiche commerce (vitrine en ligne)
 **Description officielle** : Ta page publique sur Yoppaa. Elle affiche ton nom, ton activité, tes horaires, tes photos, ta description et toutes tes informations de contact. Accessible depuis l'application Yoppaa, depuis Google et depuis n'importe quel navigateur web.
@@ -258,7 +258,7 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Flag** : `description`
 **Disponible avec** : tous les plans
 
-### 🔍 Référencement & diffusion
+### Référencement & diffusion
 
 #### Apparition dans `/commander`
 **Description officielle** : Ton commerce est listé dans le moteur de recherche public de Yoppaa, accessible à tous les Yoppers.
@@ -275,7 +275,7 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Flag** : `recherche_categorie`
 **Disponible avec** : tous les plans
 
-### ❤️ Engagement client
+### Engagement client
 
 #### Favoris
 **Description officielle** : Les Yoppers qui aiment ton commerce te mettent en favori. Tu vois le nombre de favoris dans tes statistiques et tu peux leur envoyer des actus, deals et notifications (selon ton plan).
@@ -287,7 +287,7 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Flag** : `signaux_yoppers`
 **Disponible avec** : Exister · Communiquer · Vendre (PAS Public)
 
-### 📊 Statistiques
+### Statistiques
 
 #### Stats de base
 **Description officielle** : Compteur des vues de ta fiche, du nombre de favoris, du nombre de signaux reçus. Mis à jour en temps réel.
@@ -304,7 +304,7 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Flag** : `stats_detaillees`
 **Disponible avec** : Communiquer · Vendre
 
-### ☀️ Good Morning Yoppers (GMY)
+### Good Morning Yoppers (GMY) — soleil (seule exception emoji autorisée pour la signature visuelle du push matinal)
 
 #### Apparition automatique
 **Description officielle** : Chaque matin à 7h30, ta fiche apparaît dans le push notification GMY envoyé aux Yoppers de ta zone.
@@ -321,7 +321,7 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Flag** : `morning_prioritaire`
 **Disponible avec** : Communiquer · Vendre
 
-### 📢 Communication
+### Communication
 
 #### Actualités illimitées
 **Description officielle** : Publie autant d'actus que tu veux. Chaque actu apparaît sur ta fiche et envoie un push aux Yoppers qui t'ont mis en favori.
@@ -363,7 +363,7 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Flag** : `alertes_urgentes`
 **Disponible avec** : Communiquer · Vendre · Public. **PAS Exister**.
 
-### 🤖 IA Yoppaa
+### IA Yoppaa
 
 #### IA bridée
 **Description officielle** : Une intelligence artificielle qui t'aide à rédiger. Elle reformule tes textes, te suggère des idées d'actus, corrige tes fautes. Limite de tokens par mois pour éviter les abus.
@@ -375,7 +375,7 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Flag** : `ia_avancee`
 **Disponible avec** : Vendre uniquement
 
-### 🛒 Transactionnel (catégorie alimentaire)
+### Transactionnel (catégorie alimentaire)
 
 #### Click & Collect
 **Description officielle** : Le Yopper commande tes produits à l'avance et choisit son créneau de retrait. Tu reçois la commande dans ton tableau de bord, tu valides, tu marques *"prête"*. C'est le cœur de l'expérience Yoppaa alimentaire.
@@ -403,7 +403,7 @@ Cette section sert de copywriting de référence pour toutes les UI.
 - **Confirmations** : *"Ta table est Yoppée !"* côté Yopper + email avec rappel J-1.
 - **MVP V1** : pas de plan de table graphique. Juste le compteur par capacité. Plan de table interactif = V2.
 
-### 📅 Transactionnel (catégorie service)
+### Transactionnel (catégorie service)
 
 #### RDV natif
 **Description officielle** : Le Yopper choisit une prestation, une date et un créneau, valide en 3 clics. Tu reçois la notification dans ton tableau de bord. Fichier iCal joint à l'email du Yopper pour son agenda.
@@ -417,7 +417,7 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Catégorie requise** : service
 **Disponible avec** : Vendre
 
-### 📦 Transactionnel (catégorie détail)
+### Transactionnel (catégorie détail)
 
 #### Réservation produit
 **Description officielle** : Le Yopper réserve un article à venir chercher en magasin. Tu le mets de côté, tu reçois la notification, tu confirmes la disponibilité. Parfait pour vêtements, livres, fleurs, jouets, etc.
@@ -425,7 +425,7 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Catégorie requise** : détail
 **Disponible avec** : Vendre
 
-### 💳 Paiement & encaissement
+### Paiement & encaissement
 
 #### Paiement en ligne
 **Description officielle** : Stripe Connect intégré : le Yopper paie son acompte ou sa commande directement sur ta fiche. **0 % de commission Yoppaa, jamais**. Ton argent va directement sur ton compte bancaire.
@@ -437,21 +437,21 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Flag** : `paiement_cash`
 **Disponible avec** : Vendre
 
-### ⭐ Fidélité
+### Fidélité
 
 #### Fidélité configurable
 **Description officielle** : Programme à points entièrement paramétrable : règle de gain (X € = Y points), seuils de récompense, type de récompense (% de remise, produit offert). Statistiques fidélité dans ton tableau de bord.
 **Flag** : `fidelite`
 **Disponible avec** : Vendre
 
-### 📤 Comptabilité
+### Comptabilité
 
 #### Export comptable
 **Description officielle** : Exporte tes ventes, RDV ou réservations en CSV ou PDF mensuel pour ta comptabilité. Conservation des données 7 ans (loi belge).
 **Flag** : `export_comptable`
 **Disponible avec** : Vendre
 
-### 🏛️ Spécifique Public
+### Spécifique Public
 
 #### Push notifications de zone
 **Description officielle** : La commune ou administration peut envoyer un push à tous les Yoppers d'un code postal donné, indépendamment des favoris.
@@ -463,7 +463,7 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Flag** : `alertes_urgentes`
 **Disponible avec** : Public · Communiquer · Vendre
 
-### 📱 Compatibilité matériel
+### Compatibilité matériel
 
 #### Tableau de bord Android & iOS
 **Description officielle** : Ton tableau de bord Yoppaa fonctionne sur n'importe quel téléphone, tablette ou ordinateur. Android, iPhone, iPad, Mac, PC : pas besoin de matériel spécifique pour démarrer.
@@ -474,18 +474,18 @@ Cette section sert de copywriting de référence pour toutes les UI.
 ## 5. Conventions de copy (à respecter partout)
 
 ### Vocabulaire bancaire belge
-- ✅ *"informations de paiement"* / *"moyen de paiement"* / *"carte de paiement"*
-- ✅ *"Bancontact"* (à privilégier comme exemple)
-- ✅ *"carte de crédit"* uniquement pour les vraies cartes de crédit
-- ❌ Jamais *"CB"* (francisme inadapté au marché belge)
+- ✓ *"informations de paiement"* / *"moyen de paiement"* / *"carte de paiement"*
+- ✓ *"Bancontact"* (à privilégier comme exemple)
+- ✓ *"carte de crédit"* uniquement pour les vraies cartes de crédit
+- ✗ Jamais *"CB"* (francisme inadapté au marché belge)
 
 ### Ponctuation française
-- ❌ Pas de tirets cadratins `—` (em-dash) en français
-- ✅ Utiliser virgules, deux-points, parenthèses ou points
+- ✗ Pas de tirets cadratins `—` (em-dash) en français
+- ✓ Utiliser virgules, deux-points, parenthèses ou points
 
 ### Habitants de Mettet
-- ✅ *"habitants de Mettet"* ou *"Djobin / Djobine"*
-- ❌ Jamais *"Mettetois"*
+- ✓ *"habitants de Mettet"* ou *"Djobin / Djobine"*
+- ✗ Jamais *"Mettetois"*
 
 ### Ton
 - Tutoiement systématique
@@ -496,7 +496,18 @@ Cette section sert de copywriting de référence pour toutes les UI.
   - *"Ta table est Yoppée !"* (réservation restaurant)
   - *"Ton article est Yoppé !"* (réservation produit détail)
   - **Check vert ✓ obligatoire** au-dessus du texte de confirmation pour imager visuellement la validation
-- Emoji violet 🟣 comme signature visuelle (parfois)
+
+### Iconographie : pas d'emojis, SVG uniquement
+**Règle stricte Yoppaa** : aucun emoji n'est utilisé dans les UI, les emails, les supports commerciaux ou la documentation produit. Tout signe visuel passe par un SVG aligné sur la charte graphique Yoppaa (couleurs canoniques : ink #1A0840, main #6B35C4, mid #9660E0, light #C4A0F4, pale #EDE0FF).
+
+**Pourquoi cette règle** :
+- Les emojis ne sont pas rendus de la même façon selon les OS (Apple, Android, Windows) et cassent la cohérence visuelle
+- Les SVG s'alignent sur la palette Yoppaa et sont contrôlables (couleur, taille, animation)
+- Cohérent avec la charte canonique Yoppaa (logo, 5 dots V2-B, wordmark Plus Jakarta Sans)
+
+**Unique exception autorisée** : l'icône **soleil** dans la signature visuelle du Good Morning Yoppers (GMY). Cette exception est culturelle : le soleil incarne le push matinal de 7h30, c'est l'identité visuelle du GMY. Préférer toutefois un SVG soleil custom plutôt que l'emoji `☀️` quand c'est possible (notamment dans les emails et le dashboard).
+
+**Bibliothèque d'icônes recommandée** : Lucide Icons ou Heroicons (libres, propres, alignées sur design system). À intégrer comme composants SVG inline pour pouvoir customiser la couleur via `currentColor`.
 
 ### Tarification
 - Toujours préciser **HTVA** (et non TTC) car notre cible est B2B

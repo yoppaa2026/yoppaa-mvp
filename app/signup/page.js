@@ -3,6 +3,15 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { PLAN_LABEL, PLANS, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
+// Icônes Lucide React : SVG inline alignés sur la charte canonique Yoppaa.
+// Convention : stroke-width 1.8, currentColor pour hériter de la palette parent.
+// Aucun emoji dans l'UI (règle Master), sauf exceptions soleil GMY + 🟣 signature.
+import {
+  Croissant, Scissors, ShoppingBag,
+  User, Heart, Radio, Sun, Megaphone, Flame, AlertTriangle, Bell, Mail, Sparkles, BarChart3,
+  ShoppingCart, Bike, Utensils, Calendar, Briefcase, Clock, Users, Package, CreditCard, Star, Download,
+  Smartphone, Printer, Camera, FileText, Pencil, CheckCircle, Check, Circle,
+} from 'lucide-react'
 
 // Types de commerce séparés par catégorie : la liste affichée à l'étape 2
 // dépend du choix fait à l'étape 1 (alimentaire vs vitrine).
@@ -246,7 +255,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
   const plansDispos = plansDispoPourCategorie(categorie)
 
   // Si la catégorie change et que le plan choisi n'est plus dispo, on redescend
-  // automatiquement sur le plan le plus haut dispo (FULL pour les 2 catégories).
+  // automatiquement sur le plan le plus haut dispo (Vendre pour toutes catégories).
   useEffect(() => {
     if (!plansDispos.includes(plan)) {
       setPlan(plansDispos[plansDispos.length - 1])
@@ -377,7 +386,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
             titre="Alimentaire"
             sous="Click & Collect, livraison"
             exemples="Boulangerie, friterie, traiteur, snack…"
-            icone="🥐"
+            Icon={Croissant}
           />
           <CategorieCard
             value="vitrine"
@@ -386,7 +395,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
             titre="Service"
             sous="Vitrine en ligne + prise de RDV"
             exemples="Coiffeur, opticien, esthéticienne, garagiste…"
-            icone="💇"
+            Icon={Scissors}
           />
           <CategorieCard
             value="detail"
@@ -395,7 +404,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
             titre="Détail"
             sous="Réservation produit, retrait"
             exemples="Vêtements, chaussures, fleuriste, librairie…"
-            icone="🛍️"
+            Icon={ShoppingBag}
           />
         </div>
       </Card>
@@ -477,61 +486,67 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
   const [ouvert, setOuvert] = useState(false)
 
   // ─── Section 1 : Les fondamentaux Yoppaa (toujours affichés) ─────────────
-  // Qui est un Yopper, qu'est-ce qu'un signal, un favori, GMY, etc.
+  // Refactor 17/06 : remplacement de tous les emojis par des composants Lucide.
+  // Descriptions alignées sur MASTER_FEATURES.md (source unique de vérité).
   const fondamentaux = [
     {
-      icone: '👤', titre: 'Yopper',
-      desc: 'C\'est ton client final : un habitant du quartier qui utilise l\'application Yoppaa pour découvrir, suivre et soutenir les commerces autour de lui. Les Yoppers voient ta fiche, te mettent en favori, reçoivent tes actus selon leurs préférences.',
+      Icon: User, titre: 'Yopper',
+      desc: 'C\'est ton client final : un habitant du quartier qui utilise l\'application Yoppaa pour découvrir, suivre et soutenir les commerces autour de lui. Les commerçants sont aussi des Yoppers : la tribu est unique.',
       plan: 'exister',
     },
     {
-      icone: '❤️', titre: 'Favori',
-      desc: 'Quand un Yopper te met en favori, il choisit de te suivre. Il reçoit alors tes actus, tes deals et tes notifications selon ton plan. Tu vois combien de Yoppers t\'ont mis en favori dans tes statistiques.',
+      Icon: Heart, titre: 'Favori',
+      desc: 'Quand un Yopper te met en favori, il choisit de te suivre. Il reçoit tes actus, tes deals et tes notifications selon ton plan. Tu vois le nombre de favoris dans tes statistiques (jamais leur identité directe : tout passe par Yoppaa pour respecter le RGPD).',
       plan: 'exister',
     },
     {
-      icone: '📡', titre: 'Signal',
-      desc: 'Un Yopper t\'envoie un signal pour te dire qu\'il est intéressé sans encore commander : "j\'aimerais ce produit", "je passerais bien demain", "tenez-moi au courant". Tu reçois ces signaux dans ton tableau de bord et tu peux y répondre.',
+      Icon: Radio, titre: 'Signal',
+      desc: 'Un Yopper t\'envoie un signal préenregistré : "Je voudrais commander à l\'avance", "Vous livrez ?", "Avez-vous en stock ?" (catalogue adapté à ta catégorie). Tu vois les signaux dans ton tableau de bord et tu peux répondre rapidement. Les signaux ne sont pas un chat : ils servent à mesurer la demande et à débloquer les bonnes fonctions au bon moment.',
       plan: 'exister',
     },
     {
-      icone: '☀️', titre: 'Good Morning Yoppers',
-      desc: 'Push notification quotidien envoyé chaque matin à 7h30 aux Yoppers de ta zone. Avec Exister, tu y apparais automatiquement. Avec Communiquer et Vendre, tu peux y faire remonter tes deals, actus et créneaux du jour.',
+      Icon: Sun, titre: 'Good Morning Yoppers',
+      desc: 'Push quotidien envoyé chaque matin à 7h30 aux Yoppers de ta zone. Exister : tu apparais automatiquement + tu peux y publier 1 actu basique. Communiquer / Vendre : tu fais remonter tes deals et actus enrichies. Public : la commune publie ses infos et alertes du jour. Deadline de publication : 23h la veille.',
       plan: 'exister',
     },
     {
-      icone: '📢', titre: 'Actualité',
-      desc: 'Une nouvelle que tu publies : nouveau produit, événement, créneau libre, etc. Affichée en bandeau sur ta fiche et envoyée aux Yoppers qui t\'ont mis en favori. Exister : 1 actu visible dans Good Morning Yoppers. Communiquer/Vendre : actus illimitées avec push ciblé.',
+      Icon: Megaphone, titre: 'Actualité',
+      desc: 'Une nouvelle que tu publies : nouveau produit, événement, créneau libre. Exister : 1 actu basique par jour, visible uniquement dans Good Morning Yoppers (pas de bandeau sur ta fiche). Communiquer / Vendre : actus enrichies illimitées (titre + photo + description longue), visibles sur ta fiche + push aux favoris.',
       plan: 'communiquer',
     },
     {
-      icone: '🔥', titre: 'Deal',
-      desc: 'Une promotion limitée dans le temps. Visible sur ta fiche et poussée aux Yoppers favoris. Catégorisée "Bonne affaire" si tu coches l\'option.',
+      Icon: Flame, titre: 'Deal',
+      desc: 'Une promotion à durée libre que tu fixes (quelques heures, plusieurs jours, plusieurs semaines). Visible sur ta fiche et envoyée en push à tes Yoppers favoris. Sur Communiquer, le Deal est informatif (le Yopper passe en boutique). Sur Vendre, le Yopper peut commander ou réserver directement depuis le deal.',
       plan: 'communiquer',
     },
     {
-      icone: '🚨', titre: 'Alerte',
-      desc: 'Information urgente : fermeture exceptionnelle, rupture, indisponibilité. Bandeau rouge prioritaire sur ta fiche, push immédiat aux Yoppers favoris.',
+      Icon: Flame, titre: 'Bonne affaire',
+      desc: 'Une promotion publiée le jour J pour le jour J uniquement : valable de la publication jusqu\'à minuit. Impossible de la programmer pour demain. Elle apparaît dans la section "Bonnes affaires" transverse de l\'app, visible par tous les Yoppers de la zone (pas seulement tes favoris). Si publiée avant 7h30, elle remonte aussi dans le Good Morning Yoppers. Idéale pour écouler un stock du jour, créer de l\'urgence et faire découvrir ton commerce.',
       plan: 'communiquer',
     },
     {
-      icone: '🔔', titre: 'Push ciblé',
-      desc: 'Notification push envoyée uniquement aux Yoppers qui t\'ont mis en favori. Tu choisis quand l\'envoyer et tu peux segmenter par centre d\'intérêt.',
+      Icon: AlertTriangle, titre: 'Alerte',
+      desc: 'Information urgente : fermeture exceptionnelle, rupture, indisponibilité. Bandeau rouge prioritaire sur ta fiche, push immédiat à tes Yoppers favoris. Réservée aux plans Communiquer et Vendre, pas disponible sur Exister.',
       plan: 'communiquer',
     },
     {
-      icone: '💌', titre: 'Newsletter',
-      desc: 'Email envoyé à tes Yoppers favoris, avec segmentation possible (par catégorie, par ancienneté, par engagement). Idéale pour les communications plus longues qu\'un push.',
+      Icon: Bell, titre: 'Push ciblé',
+      desc: 'Notification push envoyée uniquement à tes Yoppers favoris. Tu choisis le moment et tu peux segmenter (par centre d\'intérêt, ancienneté, dernière interaction). Yoppaa relaie le message via OneSignal : tu ne vois jamais les emails ou identités individuelles, tout reste conforme au RGPD.',
       plan: 'communiquer',
     },
     {
-      icone: '🤖', titre: 'IA Yoppaa',
-      desc: 'Communiquer : IA bridée qui reformule tes textes, suggère des idées d\'actus et corrige tes fautes. Vendre : IA avancée qui rédige des textes complets, segmente automatiquement tes Yoppers et analyse tes performances.',
+      Icon: Mail, titre: 'Newsletter ciblée',
+      desc: 'Email envoyé à tes Yoppers favoris via Brevo (notre service intégré). Plus long et structuré qu\'un push. Tu rédiges dans ton tableau de bord, Yoppaa envoie pour toi. Désabonnement automatique conforme RGPD. Stats d\'ouverture et de clic dans ton tableau de bord.',
       plan: 'communiquer',
     },
     {
-      icone: '📊', titre: 'Statistiques',
-      desc: 'Exister : compteur vues, favoris, signaux. Communiquer : engagement push, taux d\'ouverture, performance newsletter. Vendre : suivi conversion complet, ROI par action.',
+      Icon: Sparkles, titre: 'IA Yoppaa',
+      desc: 'Assistant IA intégré pour rédiger plus vite. Communiquer (IA bridée) : reformulation de textes, suggestions d\'idées d\'actus, correction orthographique. Vendre (IA avancée) : rédaction complète, segmentation automatique des Yoppers, analyse de performance, benchmarking. Tu valides toujours avant publication, l\'IA propose, tu décides.',
+      plan: 'communiquer',
+    },
+    {
+      Icon: BarChart3, titre: 'Statistiques',
+      desc: 'Exister : compteur vues, favoris, signaux. Communiquer : engagement push, taux d\'ouverture, performance newsletter. Vendre : suivi conversion complet, ROI par action, export comptable.',
       plan: 'exister',
     },
   ]
@@ -540,40 +555,40 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
   // Seulement débloquées avec le plan Vendre.
   const featuresAlimentaire = [
     {
-      icone: '🛒', titre: 'Click & Collect',
-      desc: 'Le Yopper commande tes produits à l\'avance et choisit son créneau de retrait. Tu reçois la commande dans ton dashboard, tu valides, tu marques prête. C\'est le cœur de l\'expérience Yoppaa alimentaire.',
+      Icon: ShoppingCart, titre: 'Click & Collect',
+      desc: 'Le Yopper commande tes produits à l\'avance et choisit son créneau de retrait. Tu reçois la commande dans ton tableau de bord, tu valides, tu marques prête. Confirmation "Ta commande est Yoppée !" côté Yopper. C\'est le cœur de l\'expérience Yoppaa alimentaire.',
       plan: 'vendre',
     },
     {
-      icone: '🚴', titre: 'Livraison',
+      Icon: Bike, titre: 'Livraison',
       desc: 'Module complet : zone géographique configurable, frais paramétrables, créneaux dédiés à la livraison, suivi de la commande côté Yopper.',
       plan: 'vendre',
     },
     {
-      icone: '🍽️', titre: 'Réservation de table',
-      desc: 'Pour les restaurateurs : tes Yoppers réservent leur table directement depuis ta fiche, choisissent l\'horaire et le nombre de personnes.',
+      Icon: Utensils, titre: 'Réservation de table',
+      desc: 'Pour les restaurateurs : tu configures tes capacités (X tables de 2, Y tables de 4, etc.) et tes créneaux par service (midi, soir). Le Yopper réserve depuis ta fiche, choisit l\'horaire et le nombre de personnes. Acompte optionnel. Confirmation "Ta table est Yoppée !" côté Yopper.',
       plan: 'vendre',
     },
   ]
 
   const featuresVitrine = [
     {
-      icone: '📅', titre: 'Module RDV natif',
-      desc: 'Le Yopper choisit une prestation, une date et un créneau, valide en 3 clics. Tu reçois la notification dans ton dashboard. Fichier iCal joint à son email pour son calendrier. Aucune commission.',
+      Icon: Calendar, titre: 'Module RDV natif',
+      desc: 'Le Yopper choisit une prestation, une date et un créneau, valide en 3 clics. Tu reçois la notification dans ton tableau de bord. Confirmation "Ton RDV est Yoppé !" côté Yopper, avec fichier iCal joint pour son calendrier. Aucune commission Yoppaa.',
       plan: 'vendre',
     },
     {
-      icone: '🧰', titre: 'Prestations',
-      desc: 'Catalogue de tes services : nom, durée (15 min à 3h), prix fixe ou fourchette, acompte optionnel. Modifiable à tout moment depuis ton dashboard.',
+      Icon: Briefcase, titre: 'Prestations',
+      desc: 'Catalogue de tes services : nom, durée (15 min à 3h), prix fixe ou fourchette, acompte optionnel. Modifiable à tout moment depuis ton tableau de bord.',
       plan: 'vendre',
     },
     {
-      icone: '⏰', titre: 'Créneaux RDV',
+      Icon: Clock, titre: 'Créneaux RDV',
       desc: 'Tu définis tes plages horaires par jour de la semaine, avec pause déjeuner si tu veux. Pas configurable (15 min, 30 min, 1h). Exceptions ponctuelles supportées.',
       plan: 'vendre',
     },
     {
-      icone: '👥', titre: 'Multi-praticiens',
+      Icon: Users, titre: 'Multi-praticiens',
       desc: 'Tu ajoutes tes praticiens avec photo et spécialités. Chaque RDV est associé à une personne. Planning et statistiques par praticien. Le Yopper peut choisir ou laisser "Premier disponible".',
       plan: 'vendre',
     },
@@ -581,8 +596,8 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
 
   const featuresDetail = [
     {
-      icone: '📦', titre: 'Réservation produit',
-      desc: 'Le Yopper réserve un article à venir chercher en magasin. Tu le mets de côté, tu reçois la notification, tu confirmes la disponibilité. Parfait pour vêtements, livres, fleurs, etc.',
+      Icon: Package, titre: 'Réservation produit',
+      desc: 'Le Yopper réserve un article à venir chercher en magasin. Tu le mets de côté, tu reçois la notification, tu confirmes la disponibilité. Confirmation "Ton article est Yoppé !" côté Yopper. Parfait pour vêtements, livres, fleurs, jouets, etc.',
       plan: 'vendre',
     },
   ]
@@ -590,17 +605,17 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
   // ─── Section 3 : Communes aux plans payants ──────────────────────────────
   const featuresVendre = [
     {
-      icone: '💳', titre: 'Paiement en ligne',
-      desc: 'Stripe Connect intégré : ton Yopper paie son acompte ou sa commande directement sur ta fiche. Aucune commission Yoppaa. Tu reçois ton argent sur ton compte bancaire.',
+      Icon: CreditCard, titre: 'Paiement en ligne',
+      desc: 'Stripe Connect intégré : ton Yopper paie son acompte ou sa commande directement sur ta fiche. Aucune commission Yoppaa. Ton argent va directement sur ton compte bancaire.',
       plan: 'vendre',
     },
     {
-      icone: '⭐', titre: 'Fidélité configurable',
-      desc: 'Programme à points entièrement paramétrable : règle de gain (X € = Y points), seuils de récompense, type de récompense (% de remise, produit offert). Analytics fidélité dans ton tableau de bord.',
+      Icon: Star, titre: 'Fidélité configurable',
+      desc: 'Programme à points entièrement paramétrable : règle de gain (X € = Y points), seuils de récompense, type de récompense (% de remise, produit offert). Statistiques fidélité dans ton tableau de bord.',
       plan: 'vendre',
     },
     {
-      icone: '📤', titre: 'Export comptable',
+      Icon: Download, titre: 'Export comptable',
       desc: 'Exporte tes ventes, RDV ou réservations en CSV ou PDF mensuel pour ta comptabilité. Conservation des données 7 ans (loi belge).',
       plan: 'vendre',
     },
@@ -609,13 +624,13 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
   // ─── Section 4 : Hardware et accessoires (optionnels) ────────────────────
   const featuresHardware = [
     {
-      icone: '📱', titre: 'Compatibilité Android & iOS',
+      Icon: Smartphone, titre: 'Compatibilité Android & iOS',
       desc: 'Ton tableau de bord Yoppaa fonctionne sur n\'importe quel téléphone, tablette ou ordinateur. Android, iPhone, iPad, Mac, PC : pas besoin de matériel spécifique pour démarrer.',
       plan: 'exister',
     },
     {
-      icone: '🖨️', titre: 'Kit Yoppaa hardware',
-      desc: 'Optionnel et disponible à tout moment : imprimante thermique pour imprimer les tickets de commande ou de RDV. Pratique en boutique alimentaire ou en commerce de détail avec retraits fréquents. Détail des kits dans ta boutique Yoppaa.',
+      Icon: Printer, titre: 'Kit Yoppaa hardware',
+      desc: 'Optionnel et disponible à tout moment depuis ton tableau de bord : Kit Yoppaa Pro (tablette + imprimante thermique, 399 € HTVA) ou Kit Yoppaa Light (imprimante seule, 179 € HTVA). Surtout utile en alimentaire (Click & Collect avec gestion comptoir). Les commerces de service ou de détail peuvent gérer leur activité sans hardware spécifique.',
       plan: null,
     },
   ]
@@ -651,16 +666,21 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
       </button>
       {ouvert && (
         <div style={{ padding: '4px 18px 16px', borderTop: `1px solid ${T.hairline}`, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {features.map(f => (
-            <div key={f.titre} style={{ display: 'flex', gap: 10, paddingTop: 12, borderBottom: `1px dashed ${T.hairline}`, paddingBottom: 12 }}>
-              <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1.3, marginTop: 1 }}>{f.icone}</span>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: 0 }}>{f.titre}</p>
-                <p style={{ fontSize: 12, color: T.deep, margin: '3px 0 0', lineHeight: 1.5 }}>{f.desc}</p>
-                {f.plan && <BadgePlan plan={f.plan} />}
+          {features.map(f => {
+            const FeatureIcon = f.Icon
+            return (
+              <div key={f.titre} style={{ display: 'flex', gap: 10, paddingTop: 12, borderBottom: `1px dashed ${T.hairline}`, paddingBottom: 12 }}>
+                <span style={{ flexShrink: 0, marginTop: 2, color: T.main }}>
+                  {FeatureIcon ? <FeatureIcon size={20} strokeWidth={1.8}/> : null}
+                </span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: 0 }}>{f.titre}</p>
+                  <p style={{ fontSize: 12, color: T.deep, margin: '3px 0 0', lineHeight: 1.5 }}>{f.desc}</p>
+                  {f.plan && <BadgePlan plan={f.plan} />}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
           <p style={{ fontSize: 11, color: T.muted, margin: '4px 0 0', textAlign: 'center', lineHeight: 1.5 }}>
             Tout ce qu&apos;a Exister, Communiquer l&apos;a aussi. Tout ce qu&apos;a Communiquer, Vendre l&apos;a aussi.
           </p>
@@ -1034,7 +1054,7 @@ function UploadZone({ url, uploading, aspect, minHeight, label, onFile, maxWidth
           <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
         ) : (
           <div style={{ textAlign: 'center', padding: 16 }}>
-            <p style={{ fontSize: '1.4rem', marginBottom: 6 }}>📷</p>
+            <Camera size={26} strokeWidth={1.8} color={T.main} style={{ marginBottom: 6 }}/>
             <p style={{ fontSize: 13, color: T.muted, fontWeight: 700 }}>{label}</p>
             <p style={{ fontSize: 11, color: T.muted, fontWeight: 500, marginTop: 4 }}>JPG, PNG ou WEBP · 8 MB max</p>
           </div>
@@ -1409,7 +1429,9 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
   if (submitted) {
     return (
       <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-        <div style={{ fontSize: '3.5rem', marginBottom: 16 }}>✅</div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: '50%', background: '#ECFDF5', marginBottom: 16 }}>
+          <CheckCircle size={36} strokeWidth={2} color="#10B981"/>
+        </div>
         <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 12px' }}>
           Demande envoyée&nbsp;!
         </h1>
@@ -1452,7 +1474,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
       {commercant.motif_rejet && (
         <div style={{ background: '#FFF7ED', border: '1px solid #FB923C', borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <span style={{ fontSize: 18 }}>📝</span>
+            <FileText size={18} strokeWidth={1.8} color="#9A3412"/>
             <p style={{ fontSize: 11, fontWeight: 800, color: '#9A3412', margin: 0, textTransform: 'uppercase', letterSpacing: '0.7px' }}>
               Ta précédente demande a été refusée
             </p>
@@ -1466,13 +1488,13 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
           </p>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
             {[
-              { n: 2, icon: '✏️', label: 'Infos commerce' },
-              { n: 3, icon: '📷', label: 'Visuels' },
-              { n: 4, icon: '🕐', label: 'Horaires' },
+              { n: 2, Icon: Pencil,  label: 'Infos commerce' },
+              { n: 3, Icon: Camera,  label: 'Visuels' },
+              { n: 4, Icon: Clock,   label: 'Horaires' },
             ].map(s => (
               <button key={s.n} type="button" onClick={() => aller && aller(s.n)}
                 style={{ padding: '7px 12px', borderRadius: 100, border: '1.5px solid #FB923C', background: '#fff', color: '#9A3412', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                <span>{s.icon}</span> {s.label}
+                <s.Icon size={13} strokeWidth={1.8}/> {s.label}
               </button>
             ))}
           </div>
@@ -1750,7 +1772,7 @@ function FieldPassword({ value, onChange }) {
             const ok = r.test(value || '')
             return (
               <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: ok ? '#10B981' : T.muted, fontWeight: 600 }}>
-                <span style={{ fontSize: 12, lineHeight: 1 }}>{ok ? '✓' : '○'}</span>
+                {ok ? <Check size={13} strokeWidth={2.4}/> : <Circle size={13} strokeWidth={1.8}/>}
                 <span>{r.label}</span>
               </li>
             )
@@ -1761,7 +1783,8 @@ function FieldPassword({ value, onChange }) {
   )
 }
 
-function CategorieCard({ actif, onClick, titre, sous, exemples, icone }) {
+// Card de catégorie. Icon est maintenant un composant React (Lucide), pas une string emoji.
+function CategorieCard({ actif, onClick, titre, sous, exemples, Icon }) {
   return (
     <button type="button" onClick={onClick}
       style={{
@@ -1774,7 +1797,7 @@ function CategorieCard({ actif, onClick, titre, sous, exemples, icone }) {
         boxShadow: actif ? `0 8px 24px rgba(22,6,54,0.2)` : 'none',
         display: 'flex', flexDirection: 'column', gap: 4,
       }}>
-      <span style={{ fontSize: 26, lineHeight: 1, marginBottom: 2 }}>{icone}</span>
+      {Icon && <Icon size={28} strokeWidth={1.8} color={actif ? T.light : T.main} style={{ marginBottom: 4 }}/>}
       <span style={{ fontWeight: 900, fontSize: 15, letterSpacing: '-0.3px' }}>{titre}</span>
       <span style={{ fontSize: 12, fontWeight: 700, color: actif ? T.light : T.main }}>{sous}</span>
       <span style={{ fontSize: 11, color: actif ? 'rgba(255,255,255,0.7)' : T.muted, lineHeight: 1.4, marginTop: 4 }}>{exemples}</span>
@@ -1889,7 +1912,9 @@ function CardPlan({ plan, categorie, actif, onClick }) {
             color: actif ? 'rgba(255,255,255,0.92)' : T.deep,
             display: 'flex', alignItems: 'flex-start', gap: 6,
           }}>
-            <span style={{ color: actif ? T.light : T.main, fontSize: 13, flexShrink: 0, marginTop: 1 }}>{f.startsWith('Tout ') ? '✦' : '✓'}</span>
+            <span style={{ color: actif ? T.light : T.main, flexShrink: 0, marginTop: 2 }}>
+              {f.startsWith('Tout ') ? <Sparkles size={13} strokeWidth={2}/> : <Check size={13} strokeWidth={2.4}/>}
+            </span>
             <span style={{ fontWeight: f.startsWith('Tout ') ? 800 : 500 }}>{f}</span>
           </li>
         ))}

@@ -257,7 +257,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
   async function creerCompte() {
     setError('')
     if (!email.trim() || !password.trim()) return setError('Email et mot de passe obligatoires')
-    if (password.length < 6) return setError('Mot de passe : 6 caractères minimum')
+    if (!isPasswordStrong(password)) return setError('Ton mot de passe doit faire au moins 8 caractères et contenir 1 minuscule, 1 majuscule, 1 chiffre et 1 caractère spécial.')
     setLoading(true)
 
     // 1) Création du compte Supabase Auth
@@ -384,7 +384,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
             actif={categorie === 'vitrine'}
             onClick={() => setCategorie('vitrine')}
             titre="Service"
-            sous="Présence + prise de RDV"
+            sous="Vitrine en ligne + prise de RDV"
             exemples="Coiffeur, opticien, esthéticienne, garagiste…"
             icone="💇"
           />
@@ -445,48 +445,195 @@ function Etape1Compte({ session, commercant, onCompte }) {
   )
 }
 
-// ─── GLOSSAIRE FEATURES — explique chaque fonction utilisee dans les plans ───
-// Contextuel selon categorie (alimentaire vs vitrine).
-// Features communes en haut, features specifiques ensuite.
+// ─── GLOSSAIRE FEATURES — chaque concept Yoppaa expliqué clairement ─────────
+// Refondu 17/06 pour la clarté : explique TOUS les concepts (Yopper, signal,
+// favori, GMY, push…) + précise pour chaque feature dans quel plan elle est
+// incluse. Adapté à la catégorie sélectionnée.
+//
+// Principe : "la clarté fait le succès". Le commerçant doit comprendre
+// instantanément ce qu'il a, ce qu'il n'a pas, et ce qu'il débloque en
+// passant au plan supérieur.
+
+// Petit composant pour afficher le badge "Inclus avec Exister/Communiquer/Vendre".
+function BadgePlan({ plan }) {
+  const COLORS = {
+    exister:     { bg: '#ECFDF5', fg: '#065F46', label: 'Inclus avec Exister' },
+    communiquer: { bg: '#EDE0FF', fg: '#2D0F6B', label: 'Inclus avec Communiquer' },
+    vendre:      { bg: '#FEF3C7', fg: '#78350F', label: 'Inclus avec Vendre' },
+  }
+  const c = COLORS[plan]
+  if (!c) return null
+  return (
+    <span style={{
+      display: 'inline-block', fontSize: 10, fontWeight: 800,
+      background: c.bg, color: c.fg,
+      padding: '2px 8px', borderRadius: 100, marginTop: 4,
+      letterSpacing: '0.3px',
+    }}>{c.label}</span>
+  )
+}
+
 function GlossaireFeatures({ categorie = 'alimentaire' }) {
   const [ouvert, setOuvert] = useState(false)
 
-  // Features communes aux 2 categories (visibilite, communication)
-  const featuresCommunes = [
-    { icone: '🔥', titre: 'Deal',           desc: 'Une promo limitée dans le temps. Bandeau visible sur ta page client, push aux favoris si tu actives la notif, possibilité d\'apparaître dans le Good Morning Yoppers.' },
-    { icone: '📢', titre: 'Actualité',      desc: 'Tu communiques une nouveauté (nouveau produit, événement, créneau libre). Affichée en bandeau violet sur ta page, push aux favoris à la publication.' },
-    { icone: '🚨', titre: 'Alerte',         desc: 'Information urgente (fermeture exceptionnelle, indisponibilité). Bandeau rouge prioritaire sur ta page client.' },
-    { icone: '☀️', titre: 'Good Morning Yoppers', desc: categorie === 'vitrine'
-        ? 'Push quotidien envoyé à 7h30 aux clients de ta zone. Plan FULL peut y inscrire deals + actus + créneaux dispos, à soumettre avant 23h la veille.'
-        : 'Push quotidien envoyé à 7h30 aux clients de ta zone. Les commerçants FULL peuvent y inscrire 1 deal/jour, à soumettre avant 23h la veille.' },
+  // ─── Section 1 : Les fondamentaux Yoppaa (toujours affichés) ─────────────
+  // Qui est un Yopper, qu'est-ce qu'un signal, un favori, GMY, etc.
+  const fondamentaux = [
+    {
+      icone: '👤', titre: 'Yopper',
+      desc: 'C\'est ton client final : un habitant du quartier qui utilise l\'application Yoppaa pour découvrir, suivre et soutenir les commerces autour de lui. Les Yoppers voient ta fiche, te mettent en favori, reçoivent tes actus selon leurs préférences.',
+      plan: 'exister',
+    },
+    {
+      icone: '❤️', titre: 'Favori',
+      desc: 'Quand un Yopper te met en favori, il choisit de te suivre. Il reçoit alors tes actus, tes deals et tes notifications selon ton plan. Tu vois combien de Yoppers t\'ont mis en favori dans tes statistiques.',
+      plan: 'exister',
+    },
+    {
+      icone: '📡', titre: 'Signal',
+      desc: 'Un Yopper t\'envoie un signal pour te dire qu\'il est intéressé sans encore commander : "j\'aimerais ce produit", "je passerais bien demain", "tenez-moi au courant". Tu reçois ces signaux dans ton tableau de bord et tu peux y répondre.',
+      plan: 'exister',
+    },
+    {
+      icone: '☀️', titre: 'Good Morning Yoppers',
+      desc: 'Push notification quotidien envoyé chaque matin à 7h30 aux Yoppers de ta zone. Avec Exister, tu y apparais automatiquement. Avec Communiquer et Vendre, tu peux y faire remonter tes deals, actus et créneaux du jour.',
+      plan: 'exister',
+    },
+    {
+      icone: '📢', titre: 'Actualité',
+      desc: 'Une nouvelle que tu publies : nouveau produit, événement, créneau libre, etc. Affichée en bandeau sur ta fiche et envoyée aux Yoppers qui t\'ont mis en favori. Exister : 1 actu visible dans Good Morning Yoppers. Communiquer/Vendre : actus illimitées avec push ciblé.',
+      plan: 'communiquer',
+    },
+    {
+      icone: '🔥', titre: 'Deal',
+      desc: 'Une promotion limitée dans le temps. Visible sur ta fiche et poussée aux Yoppers favoris. Catégorisée "Bonne affaire" si tu coches l\'option.',
+      plan: 'communiquer',
+    },
+    {
+      icone: '🚨', titre: 'Alerte',
+      desc: 'Information urgente : fermeture exceptionnelle, rupture, indisponibilité. Bandeau rouge prioritaire sur ta fiche, push immédiat aux Yoppers favoris.',
+      plan: 'communiquer',
+    },
+    {
+      icone: '🔔', titre: 'Push ciblé',
+      desc: 'Notification push envoyée uniquement aux Yoppers qui t\'ont mis en favori. Tu choisis quand l\'envoyer et tu peux segmenter par centre d\'intérêt.',
+      plan: 'communiquer',
+    },
+    {
+      icone: '💌', titre: 'Newsletter',
+      desc: 'Email envoyé à tes Yoppers favoris, avec segmentation possible (par catégorie, par ancienneté, par engagement). Idéale pour les communications plus longues qu\'un push.',
+      plan: 'communiquer',
+    },
+    {
+      icone: '🤖', titre: 'IA Yoppaa',
+      desc: 'Communiquer : IA bridée qui reformule tes textes, suggère des idées d\'actus et corrige tes fautes. Vendre : IA avancée qui rédige des textes complets, segmente automatiquement tes Yoppers et analyse tes performances.',
+      plan: 'communiquer',
+    },
+    {
+      icone: '📊', titre: 'Statistiques',
+      desc: 'Exister : compteur vues, favoris, signaux. Communiquer : engagement push, taux d\'ouverture, performance newsletter. Vendre : suivi conversion complet, ROI par action.',
+      plan: 'exister',
+    },
   ]
 
-  // Features alimentaire uniquement
+  // ─── Section 2 : Fonctions transactionnelles (selon catégorie) ───────────
+  // Seulement débloquées avec le plan Vendre.
   const featuresAlimentaire = [
-    { icone: '🛒', titre: 'Click & Collect', desc: 'Le client commande à l\'avance, choisit un créneau de retrait. Tu reçois la commande dans ton dashboard, valides, marques prête. Cœur de l\'expérience Yoppaa alimentaire. Inclus dans FULL.' },
-    { icone: '🚴', titre: 'Livraison',       desc: 'Module complet : zone configurable, frais configurables, créneaux livraison séparés, suivi commande client. Inclus dans FULL alimentaire.' },
-    { icone: '⭐', titre: 'Fidélité',        desc: 'Programme points configurables, récompenses custom, analytics fidélité. Inclus dans FULL.' },
-    { icone: '🛍️', titre: 'Kit Yoppaa',      desc: 'Tablette + imprimante thermique pour gérer les commandes en boutique. 399€ HTVA comptant ou 3×133€ (Stripe ou Alma). Optionnel, recommandé pour FULL alimentaire.' },
+    {
+      icone: '🛒', titre: 'Click & Collect',
+      desc: 'Le Yopper commande tes produits à l\'avance et choisit son créneau de retrait. Tu reçois la commande dans ton dashboard, tu valides, tu marques prête. C\'est le cœur de l\'expérience Yoppaa alimentaire.',
+      plan: 'vendre',
+    },
+    {
+      icone: '🚴', titre: 'Livraison',
+      desc: 'Module complet : zone géographique configurable, frais paramétrables, créneaux dédiés à la livraison, suivi de la commande côté Yopper.',
+      plan: 'vendre',
+    },
+    {
+      icone: '🍽️', titre: 'Réservation de table',
+      desc: 'Pour les restaurateurs : tes Yoppers réservent leur table directement depuis ta fiche, choisissent l\'horaire et le nombre de personnes.',
+      plan: 'vendre',
+    },
   ]
 
-  // Features vitrine uniquement
   const featuresVitrine = [
-    { icone: '📅', titre: 'Module RDV natif', desc: 'Inclus dans FULL vitrine (39,90€/m). Le client choisit une prestation, une date et un créneau, valide en 3 clics. Tu reçois la notification dans ton dashboard. Zéro commission. iCal joint pour son calendrier.' },
-    { icone: '🧰', titre: 'Prestations',     desc: 'Catalogue de tes services : nom, durée (15min à 3h), prix fixe ou fourchette, acompte optionnel. Modifiable à tout moment depuis ton dashboard.' },
-    { icone: '⏰', titre: 'Créneaux RDV',    desc: 'Tu définis tes plages horaires par jour de la semaine (avec pause déjeuner si tu veux). Pas configurable (15min/30min/1h). Exceptions ponctuelles (date spécifique) supportées.' },
-    { icone: '⭐', titre: 'Fidélité auto',    desc: 'Active le programme : tes RDV honorés incrémentent automatiquement le compteur du client. Récompense (% de remise) déclenchée au seuil que tu choisis (ex. 10 RDV → -10%).' },
-    { icone: '👥', titre: 'Multi-praticiens', desc: 'Inclus dans FULL vitrine. Tu ajoutes tes praticien·nes avec photo + spécialités. Chaque RDV est associé à une personne. Planning et stats par praticien. Le client peut choisir ou laisser "Premier disponible".' },
-    { icone: '📊', titre: 'Export comptable', desc: 'Exporte tes RDV honorés en CSV ou PDF mensuel pour ta comptabilité. Conservation 7 ans (loi belge).' },
-    { icone: '📱', titre: 'Tablette Yoppaa',  desc: 'Optionnel — 199€ comptant, sans obligation. Une tablette dédiée pour consulter ton agenda et gérer tes RDV en temps réel à ton comptoir. Tu peux aussi utiliser ton téléphone ou ton ordinateur, le dashboard est responsive.' },
+    {
+      icone: '📅', titre: 'Module RDV natif',
+      desc: 'Le Yopper choisit une prestation, une date et un créneau, valide en 3 clics. Tu reçois la notification dans ton dashboard. Fichier iCal joint à son email pour son calendrier. Aucune commission.',
+      plan: 'vendre',
+    },
+    {
+      icone: '🧰', titre: 'Prestations',
+      desc: 'Catalogue de tes services : nom, durée (15 min à 3h), prix fixe ou fourchette, acompte optionnel. Modifiable à tout moment depuis ton dashboard.',
+      plan: 'vendre',
+    },
+    {
+      icone: '⏰', titre: 'Créneaux RDV',
+      desc: 'Tu définis tes plages horaires par jour de la semaine, avec pause déjeuner si tu veux. Pas configurable (15 min, 30 min, 1h). Exceptions ponctuelles supportées.',
+      plan: 'vendre',
+    },
+    {
+      icone: '👥', titre: 'Multi-praticiens',
+      desc: 'Tu ajoutes tes praticiens avec photo et spécialités. Chaque RDV est associé à une personne. Planning et statistiques par praticien. Le Yopper peut choisir ou laisser "Premier disponible".',
+      plan: 'vendre',
+    },
   ]
 
-  const features = categorie === 'vitrine'
-    ? [...featuresCommunes, ...featuresVitrine]
-    : [...featuresCommunes, ...featuresAlimentaire]
+  const featuresDetail = [
+    {
+      icone: '📦', titre: 'Réservation produit',
+      desc: 'Le Yopper réserve un article à venir chercher en magasin. Tu le mets de côté, tu reçois la notification, tu confirmes la disponibilité. Parfait pour vêtements, livres, fleurs, etc.',
+      plan: 'vendre',
+    },
+  ]
 
-  const sousTitre = categorie === 'vitrine'
-    ? 'Deal, Actu, Module RDV, Prestations, Fidélité auto…'
-    : 'Deal, Actu, Good Morning Yoppers, Click & Collect…'
+  // ─── Section 3 : Communes aux plans payants ──────────────────────────────
+  const featuresVendre = [
+    {
+      icone: '💳', titre: 'Paiement en ligne',
+      desc: 'Stripe Connect intégré : ton Yopper paie son acompte ou sa commande directement sur ta fiche. Aucune commission Yoppaa. Tu reçois ton argent sur ton compte bancaire.',
+      plan: 'vendre',
+    },
+    {
+      icone: '⭐', titre: 'Fidélité configurable',
+      desc: 'Programme à points entièrement paramétrable : règle de gain (X € = Y points), seuils de récompense, type de récompense (% de remise, produit offert). Analytics fidélité dans ton tableau de bord.',
+      plan: 'vendre',
+    },
+    {
+      icone: '📤', titre: 'Export comptable',
+      desc: 'Exporte tes ventes, RDV ou réservations en CSV ou PDF mensuel pour ta comptabilité. Conservation des données 7 ans (loi belge).',
+      plan: 'vendre',
+    },
+  ]
+
+  // ─── Section 4 : Hardware et accessoires (optionnels) ────────────────────
+  const featuresHardware = [
+    {
+      icone: '📱', titre: 'Compatibilité Android & iOS',
+      desc: 'Ton tableau de bord Yoppaa fonctionne sur n\'importe quel téléphone, tablette ou ordinateur. Android, iPhone, iPad, Mac, PC : pas besoin de matériel spécifique pour démarrer.',
+      plan: 'exister',
+    },
+    {
+      icone: '🖨️', titre: 'Kit Yoppaa hardware',
+      desc: 'Optionnel et disponible à tout moment : imprimante thermique pour imprimer les tickets de commande ou de RDV. Pratique en boutique alimentaire ou en commerce de détail avec retraits fréquents. Détail des kits dans ta boutique Yoppaa.',
+      plan: null,
+    },
+  ]
+
+  // Assemblage selon la catégorie
+  const featuresParCategorie =
+    categorie === 'vitrine' ? featuresVitrine :
+    categorie === 'detail'  ? featuresDetail  :
+                              featuresAlimentaire
+
+  const features = [
+    ...fondamentaux,
+    ...featuresParCategorie,
+    ...featuresVendre,
+    ...featuresHardware,
+  ]
+
+  const sousTitre = 'Yopper, signal, favori, Good Morning Yoppers, deal, actu, push, IA…'
 
   return (
     <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${T.hairline}`, marginBottom: 14, overflow: 'hidden' }}>
@@ -503,16 +650,20 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
         <span style={{ fontSize: 14, color: T.main, fontWeight: 800, transform: ouvert ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>⌄</span>
       </button>
       {ouvert && (
-        <div style={{ padding: '0 18px 16px', borderTop: `1px solid ${T.hairline}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ padding: '4px 18px 16px', borderTop: `1px solid ${T.hairline}`, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {features.map(f => (
-            <div key={f.titre} style={{ display: 'flex', gap: 10, paddingTop: 12 }}>
-              <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1.3 }}>{f.icone}</span>
-              <div>
+            <div key={f.titre} style={{ display: 'flex', gap: 10, paddingTop: 12, borderBottom: `1px dashed ${T.hairline}`, paddingBottom: 12 }}>
+              <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1.3, marginTop: 1 }}>{f.icone}</span>
+              <div style={{ flex: 1 }}>
                 <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: 0 }}>{f.titre}</p>
-                <p style={{ fontSize: 12, color: T.deep, margin: '2px 0 0', lineHeight: 1.5 }}>{f.desc}</p>
+                <p style={{ fontSize: 12, color: T.deep, margin: '3px 0 0', lineHeight: 1.5 }}>{f.desc}</p>
+                {f.plan && <BadgePlan plan={f.plan} />}
               </div>
             </div>
           ))}
+          <p style={{ fontSize: 11, color: T.muted, margin: '4px 0 0', textAlign: 'center', lineHeight: 1.5 }}>
+            Tout ce qu&apos;a Exister, Communiquer l&apos;a aussi. Tout ce qu&apos;a Communiquer, Vendre l&apos;a aussi.
+          </p>
         </div>
       )}
     </div>
@@ -1384,14 +1535,57 @@ function FieldEmail({ value, onChange }) {
   )
 }
 
+// Règles de force du mot de passe (durci 17/06 pour la prod).
+// Min 8 chars + 1 minuscule + 1 majuscule + 1 chiffre + 1 caractère spécial.
+// Exposé pour réutilisation dans la validation côté creerCompte().
+export const PASSWORD_RULES = [
+  { test: (s) => s.length >= 8,           label: '8 caractères minimum' },
+  { test: (s) => /[a-z]/.test(s),         label: '1 minuscule' },
+  { test: (s) => /[A-Z]/.test(s),         label: '1 majuscule' },
+  { test: (s) => /\d/.test(s),            label: '1 chiffre' },
+  { test: (s) => /[^A-Za-z0-9]/.test(s),  label: '1 caractère spécial (!@#$%...)' },
+]
+
+export function isPasswordStrong(pwd) {
+  return PASSWORD_RULES.every(r => r.test(pwd))
+}
+
 function FieldPassword({ value, onChange }) {
+  const [focused, setFocused] = useState(false)
+  const showRules = focused || (value && !isPasswordStrong(value))
+
   return (
     <div>
       <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 5, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-        Mot de passe (6 caractères min)
+        Mot de passe
       </label>
-      <input type="password" value={value} onChange={e => onChange(e.target.value)} placeholder="••••••••" autoComplete="new-password"
-        style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 14, color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: '"DM Sans", sans-serif' }}/>
+      <input
+        type="password"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        placeholder="••••••••"
+        autoComplete="new-password"
+        style={{
+          width: '100%', padding: '12px 14px', borderRadius: 10,
+          border: `1.5px solid ${value && !isPasswordStrong(value) ? '#DC2626' : value && isPasswordStrong(value) ? '#10B981' : T.hairline}`,
+          fontSize: 14, color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: '"DM Sans", sans-serif',
+        }}
+      />
+      {showRules && (
+        <ul style={{ listStyle: 'none', padding: '8px 0 0', margin: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {PASSWORD_RULES.map((r, i) => {
+            const ok = r.test(value || '')
+            return (
+              <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: ok ? '#10B981' : T.muted, fontWeight: 600 }}>
+                <span style={{ fontSize: 12, lineHeight: 1 }}>{ok ? '✓' : '○'}</span>
+                <span>{r.label}</span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </div>
   )
 }
@@ -1435,13 +1629,13 @@ function CardPlan({ plan, categorie, actif, onClick }) {
 
   const PLAN_CONFIG = {
     exister: {
-      tagline: 'Présence sur Yoppaa, sans coût',
+      tagline: 'Ton commerce visible sur Yoppaa, sans coût',
       essai: false,
       features: [
         'Fiche commerce, photos, horaires',
-        'Apparition dans Good Morning Yoppers',
-        'Favoris et signaux des Yoppers',
-        'Statistiques de base',
+        'Tu apparais chaque jour dans Good Morning Yoppers',
+        'Tes Yoppers peuvent te mettre en favori et t\'envoyer des signaux',
+        'Statistiques de base sur ta fiche',
       ],
       note: 'Aucune information de paiement demandée',
     },

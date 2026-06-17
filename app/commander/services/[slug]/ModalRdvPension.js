@@ -16,6 +16,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { useState } from 'react'
+import { Lightbulb } from 'lucide-react'
 
 const T = {
   bgPage:   '#F5F3FA',
@@ -102,7 +103,7 @@ export default function ModalRdvPension({ service, onClose }) {
               </svg>
             </div>
             <h2 style={{ fontSize: 22, fontWeight: 900, color: T.ink, margin: '0 0 8px', letterSpacing: '-0.5px' }}>
-              Rendez-vous confirmé 🟣
+              Ton RDV est Yoppé ! 🟣
             </h2>
             <p style={{ fontSize: 14, color: T.muted, margin: '0 0 6px', lineHeight: 1.5 }}>
               <strong style={{ color: T.deep }}>{formatDateLong(creneauChoisi.date)}</strong>
@@ -222,7 +223,7 @@ export default function ModalRdvPension({ service, onClose }) {
 
               <div style={{ background: '#FEF3C7', borderLeft: '3px solid #D97706', borderRadius: 10, padding: '10px 12px', marginBottom: 16 }}>
                 <p style={{ fontSize: 11, color: '#78350F', margin: 0, fontWeight: 600, lineHeight: 1.5 }}>
-                  💡 Pense à apporter ta carte d&rsquo;identité ainsi qu&rsquo;une copie de ta dernière fiche de paie si tu en disposes.
+                  <Lightbulb size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Pense à apporter ta carte d&rsquo;identité ainsi qu&rsquo;une copie de ta dernière fiche de paie si tu en disposes.
                 </p>
               </div>
             </div>

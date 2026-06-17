@@ -16,6 +16,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect } from 'react'
+import { AlertTriangle, Trash2, Droplet, Lightbulb } from 'lucide-react'
 
 // Palette canonique Yoppaa
 const T = {
@@ -32,10 +33,10 @@ const T = {
 }
 
 const TYPE_CONFIG = {
-  nid_poule:     { emoji: '🕳️',  titre: 'Nid de poule', sousTitre: 'Dégât de voirie, trou, affaissement' },
-  depot_sauvage: { emoji: '🗑️', titre: 'Dépôt sauvage', sousTitre: 'Immondices abandonnés sur la voie publique' },
-  egout:         { emoji: '🚰', titre: 'Égout bouché',  sousTitre: 'Écoulement d\'eau perturbé, avaloir bouché' },
-  autre:         { emoji: '⚠️',  titre: 'Autre problème', sousTitre: 'Tout autre incident à signaler à la commune' },
+  nid_poule:     { Icon: AlertTriangle, titre: 'Nid de poule', sousTitre: 'Dégât de voirie, trou, affaissement' },
+  depot_sauvage: { Icon: Trash2,        titre: 'Dépôt sauvage', sousTitre: 'Immondices abandonnés sur la voie publique' },
+  egout:         { Icon: Droplet,       titre: 'Égout bouché',  sousTitre: 'Écoulement d\'eau perturbé, avaloir bouché' },
+  autre:         { Icon: AlertTriangle, titre: 'Autre problème', sousTitre: 'Tout autre incident à signaler à la commune' },
 }
 
 const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -233,8 +234,8 @@ export default function ModalSignalerProbleme({
 
         {/* Header sticky avec emoji + titre + fermer */}
         <div style={{ position: 'sticky', top: 0, background: '#fff', borderBottom: `1px solid ${T.hairline}`, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12, zIndex: 2 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>
-            {config.emoji}
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: T.main }}>
+            {config.Icon ? <config.Icon size={24} strokeWidth={1.8}/> : null}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>
@@ -405,7 +406,7 @@ export default function ModalSignalerProbleme({
               style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', fontSize: 14, border: `1.5px solid ${T.pale}`, borderRadius: 12, color: T.ink, fontFamily: 'inherit', background: '#fff' }}/>
 
             <p style={{ fontSize: 10, color: T.muted, margin: '8px 0 0', lineHeight: 1.5 }}>
-              💡 La commune pourra te répondre directement à cette adresse.
+              <Lightbulb size={12} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> La commune pourra te répondre directement à cette adresse.
             </p>
 
             {erreur && (

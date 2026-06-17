@@ -17,6 +17,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect } from 'react'
+import { Check, AlertTriangle, X } from 'lucide-react'
 
 const T = {
   ink:    '#1A0840',
@@ -343,8 +344,8 @@ export default function BrandKit() {
         {/* STATUT POLICE */}
         <div style={{ background: fontStatus === 'ready' ? '#ECFDF5' : fontStatus === 'fallback' ? '#FEF3C7' : T.pale, borderRadius: 12, padding: '12px 18px', marginBottom: 14, borderLeft: `4px solid ${fontStatus === 'ready' ? '#10B981' : fontStatus === 'fallback' ? '#F59E0B' : T.main}`, fontSize: 12, color: T.deep, lineHeight: 1.55 }}>
           {fontStatus === 'loading' && <p style={{ margin: 0 }}>⏳ Chargement de Plus Jakarta Sans (800 + 600) pour générer les PNG...</p>}
-          {fontStatus === 'ready' && <p style={{ margin: 0 }}><strong>✅ Polices prêtes</strong>. Les PNG seront générés avec Plus Jakarta Sans 800 (wordmark) et 600 (slogan).</p>}
-          {fontStatus === 'fallback' && <p style={{ margin: 0 }}><strong>⚠️ Polices non chargées</strong>. Les PNG utiliseront une police système en fallback. Les SVG restent corrects.</p>}
+          {fontStatus === 'ready' && <p style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Check size={15} strokeWidth={2.2} color="#10B981"/><strong>Polices prêtes</strong>. Les PNG seront générés avec Plus Jakarta Sans 800 (wordmark) et 600 (slogan).</p>}
+          {fontStatus === 'fallback' && <p style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={15} strokeWidth={1.8}/><strong>Polices non chargées</strong>. Les PNG utiliseront une police système en fallback. Les SVG restent corrects.</p>}
         </div>
 
         {/* NOTE TECHNIQUE */}
@@ -428,7 +429,7 @@ export default function BrandKit() {
           4 · Règles d&rsquo;usage
         </h2>
         <div style={{ background: '#fff', borderRadius: 12, padding: '20px 24px', border: `1px solid ${T.pale}`, fontSize: 13, color: T.deep, lineHeight: 1.7 }}>
-          <p style={{ margin: '0 0 10px', fontWeight: 800 }}>✅ À faire</p>
+          <p style={{ margin: '0 0 10px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Check size={16} strokeWidth={2.2} color="#10B981"/> À faire</p>
           <ul style={{ margin: '0 0 16px', paddingLeft: 20 }}>
             <li>Utiliser <strong>Plus Jakarta Sans 800</strong> avec letter-spacing <strong>-0,05em</strong></li>
             <li>Garder les dots V2-B <strong>en dessous</strong> du wordmark, jamais à côté ou au-dessus</li>
@@ -436,7 +437,7 @@ export default function BrandKit() {
             <li>Conserver une marge minimale autour du logo équivalente à <strong>1 grand dot</strong> de hauteur</li>
             <li>Pour print/broderie : vectoriser le texte avant export</li>
           </ul>
-          <p style={{ margin: '0 0 10px', fontWeight: 800, color: '#B91C1C' }}>❌ À ne jamais faire</p>
+          <p style={{ margin: '0 0 10px', fontWeight: 800, color: '#B91C1C', display: 'inline-flex', alignItems: 'center', gap: 6 }}><X size={16} strokeWidth={2.2}/> À ne jamais faire</p>
           <ul style={{ margin: 0, paddingLeft: 20 }}>
             <li>Changer la police, même temporairement</li>
             <li>Modifier les proportions des dots (toujours mini = 0,55 × grand)</li>

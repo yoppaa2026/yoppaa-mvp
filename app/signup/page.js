@@ -987,6 +987,15 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
     avancer()
   }
 
+  // Save on back : on flush le debounce pour ne pas perdre les saisies en cours
+  // si le user clique Retour avant le delai de sauvegarde auto.
+  async function retourAvecSauvegarde() {
+    clearTimeout(debounceRef.current)
+    if (saving) return retour()
+    await sauvegarder(form)
+    retour()
+  }
+
   return (
     <div>
       <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 6px' }}>
@@ -1047,7 +1056,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
           style={{ ...inputStyle(), minHeight: 90, resize: 'vertical' }}/>
       </Card>
 
-      <NavEtape retour={retour} continuer={continuer} valide={valide} saving={saving} hint={valide ? null : 'Complète tous les champs pour continuer.'}/>
+      <NavEtape retour={retourAvecSauvegarde} continuer={continuer} valide={valide} saving={saving} hint={valide ? null : 'Complète tous les champs pour continuer.'}/>
     </div>
   )
 }
@@ -1478,6 +1487,14 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
     avancer()
   }
 
+  // Save on back : flush le debounce pour ne pas perdre les saisies horaires
+  async function retourAvecSauvegarde() {
+    clearTimeout(debounceRef.current)
+    if (saving) return retour()
+    await sauvegarder(horaires)
+    retour()
+  }
+
   async function configurerPlusTard() {
     clearTimeout(debounceRef.current)
     if (onboarding) {
@@ -1531,7 +1548,7 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
       </Card>
 
       <NavEtape
-        retour={retour}
+        retour={retourAvecSauvegarde}
         continuer={continuer}
         valide={valide}
         saving={saving}
@@ -1607,6 +1624,59 @@ function classerProduitsParCategorie(categorie) {
   const principaux = SHOP_PRODUCTS.filter(p => p.categories.includes(categorie))
   const secondaires = SHOP_PRODUCTS.filter(p => !p.categories.includes(categorie))
   return { principaux, secondaires }
+}
+
+// Bandeau recap adapte au plan choisi affiche en tete de l'etape 5.
+// Resume ce qui se passe a la soumission : essai 30j si paye, gratuit si Exister.
+function BandeauRecapPlan({ plan, commercant }) {
+  const tarif = getPrixPlan(plan)
+  if (plan === 'exister') {
+    return (
+      <div style={{ background: '#ECFDF5', border: '1px solid #10B98144', borderRadius: 14, padding: '14px 16px', marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+          <CheckCircle size={18} strokeWidth={2.2} color="#10B981"/>
+          <p style={{ fontSize: 13, fontWeight: 800, color: '#065F46', margin: 0 }}>
+            Tu es pret(e) a exister sur Yoppaa
+          </p>
+        </div>
+        <p style={{ fontSize: 12.5, color: '#065F46', margin: 0, lineHeight: 1.5 }}>
+          Plan <strong>Exister</strong> : <strong>gratuit a vie</strong>, sans informations de paiement.
+          Ta fiche sera publiee apres validation par l&rsquo;equipe Yoppaa, sous 24h.
+        </p>
+      </div>
+    )
+  }
+  if (plan === 'public') {
+    return (
+      <div style={{ background: '#EFF6FF', border: '1px solid #3B82F644', borderRadius: 14, padding: '14px 16px', marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+          <Briefcase size={18} strokeWidth={2.2} color="#1D4ED8"/>
+          <p style={{ fontSize: 13, fontWeight: 800, color: '#1E3A8A', margin: 0 }}>
+            Plan Public (commune, CPAS, service)
+          </p>
+        </div>
+        <p style={{ fontSize: 12.5, color: '#1E3A8A', margin: 0, lineHeight: 1.5 }}>
+          Acces sur invitation Yoppaa. Validation manuelle apres reception de ta demande.
+        </p>
+      </div>
+    )
+  }
+  const tarifFormate = tarif.mensuel.toFixed(2).replace('.', ',')
+  return (
+    <div style={{ background: `linear-gradient(135deg, ${T.pale} 0%, #fff 100%)`, border: `1px solid ${T.light}66`, borderRadius: 14, padding: '14px 16px', marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+        <Sparkles size={18} strokeWidth={2.2} color={T.main}/>
+        <p style={{ fontSize: 13, fontWeight: 800, color: T.deep, margin: 0 }}>
+          Plan <span style={{ color: T.main }}>{PLAN_LABEL[plan]}</span> &middot; essai 30 jours gratuit
+        </p>
+      </div>
+      <p style={{ fontSize: 12.5, color: T.deep, margin: 0, lineHeight: 1.5 }}>
+        Aucun prelevement pendant 30 jours. Apres, <strong>{tarifFormate}&euro; HTVA / mois</strong>,
+        sans engagement, resiliable a tout moment. Tu seras invite(e) a renseigner tes
+        informations de paiement apres validation de ta fiche par l&rsquo;equipe Yoppaa.
+      </p>
+    </div>
+  )
 }
 
 function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, retour, aller }) {
@@ -1775,9 +1845,11 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
       <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 6px' }}>
         Dernière étape&nbsp;: validation
       </h1>
-      <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 24px' }}>
+      <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 18px' }}>
         Choisis si tu veux être accompagné, puis envoie ta demande d&rsquo;activation.
       </p>
+
+      <BandeauRecapPlan plan={getPlanActif(commercant, onboarding)} commercant={commercant}/>
 
       {/* Bandeau de rejet : motif de l'admin si la demande précédente a été refusée.
           Affiché tant que le commerçant n'a pas re-soumis (motif_rejet est mis à null
@@ -1894,7 +1966,11 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
           </button>
           <button onClick={soumettre} disabled={!peutSoumettre || submitting}
             style={{ flex: 1, padding: '0.875rem 1.5rem', borderRadius: 100, border: 'none', background: (!peutSoumettre || submitting) ? `${T.muted}66` : `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 15, cursor: (!peutSoumettre || submitting) ? 'not-allowed' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: peutSoumettre ? `0 6px 20px ${T.main}55` : 'none' }}>
-            {submitting ? 'Envoi…' : 'Envoyer ma demande d’activation →'}
+            {submitting ? 'Envoi…' : (
+              getPlanActif(commercant, onboarding) === 'exister' || getPlanActif(commercant, onboarding) === 'public'
+                ? 'Envoyer ma demande d’activation →'
+                : 'Demarrer mon essai 30 jours gratuit →'
+            )}
           </button>
         </div>
       </div>

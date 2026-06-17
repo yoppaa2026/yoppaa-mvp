@@ -1,6 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  Bell, MapPin, Croissant, Sandwich, Pizza, Flame, Package, Star, History, Gift,
+} from 'lucide-react'
 
 const T = {
   bg:      '#F8F6FF',
@@ -26,17 +29,17 @@ const ECRANS = [
   },
   {
     id: 'notifications',
-    emoji: '🔔',
+    Icon: Bell,
     visuel: 'notifs',
     titre: 'Mets en favori,\nrate plus rien.',
-    sousTitre: 'Mets ★ sur tes commerçants préférés et tu recevras leurs deals et actus. 1 notif par jour max — jamais de spam.',
+    sousTitre: 'Marque tes commerçants préférés et tu recevras leurs deals et actus. 1 notif par jour maximum, jamais de spam.',
     cta: 'Activer les notifications',
     ctaSecondaire: 'Pas maintenant',
     skip: true,
   },
   {
     id: 'localisation',
-    emoji: '📍',
+    Icon: MapPin,
     visuel: 'maps',
     titre: 'Les commerçants\nprès de chez toi.',
     sousTitre: 'Yoppaa utilise ta position pour te montrer ce qui est ouvert autour de toi en ce moment.',
@@ -46,7 +49,8 @@ const ECRANS = [
   },
   {
     id: 'connexion',
-    emoji: '🟣',
+    Icon: null, // ecran "Rejoins les Yoppers" - identite Yoppaa, on utilise le wordmark
+
     visuel: 'connexion',
     titre: 'Rejoins\nles Yoppers.',
     sousTitre: 'Connecte-toi pour commander, suivre tes commandes et accéder à ton historique sur tous tes appareils.',
@@ -83,9 +87,9 @@ function VisuelYoppaa() {
       {/* Cards commerçants simulées */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 280 }}>
         {[
-          { nom: 'Au Pain Doré', type: 'Boulangerie', statut: 'Ouvert', deal: '🔥 Deal: Tarte -20%', emoji: '🥐' },
-          { nom: 'Kebabistro', type: 'Snack', statut: 'Ouvert', emoji: '🌯' },
-          { nom: "Le 9-15", type: 'Sandwicherie', statut: 'Ouvert', emoji: '🥪' },
+          { nom: 'Au Pain Doré', type: 'Boulangerie',   statut: 'Ouvert', deal: 'Deal : Tarte -20%', DealIcon: Flame,   Icon: Croissant },
+          { nom: 'Kebabistro',   type: 'Snack',         statut: 'Ouvert',                                                 Icon: Sandwich  },
+          { nom: 'Le 9-15',      type: 'Sandwicherie',  statut: 'Ouvert',                                                 Icon: Sandwich  },
         ].map((c, i) => (
           <div key={i} style={{
             background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)',
@@ -94,13 +98,13 @@ function VisuelYoppaa() {
             display: 'flex', alignItems: 'center', gap: 10,
             animation: `slideUp 0.5s ease ${0.1 + i * 0.15}s both`,
           }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>
-              {c.emoji}
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
+              {c.Icon ? <c.Icon size={18} strokeWidth={1.8}/> : null}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontWeight: 800, fontSize: '0.82rem', color: '#fff', letterSpacing: '-0.2px' }}>{c.nom}</p>
               <p style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>{c.type}</p>
-              {c.deal && <p style={{ fontSize: '0.65rem', fontWeight: 700, color: T.light, marginTop: 2 }}>{c.deal}</p>}
+              {c.deal && <p style={{ fontSize: '0.65rem', fontWeight: 700, color: T.light, marginTop: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}>{c.DealIcon && <c.DealIcon size={11} strokeWidth={2}/>} {c.deal}</p>}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ADE80', animation: 'pulse 2s infinite' }}/>
@@ -116,9 +120,9 @@ function VisuelYoppaa() {
 // ── Visuel écran 2 — Notifications ───────────────────────────────────────────
 function VisuelNotifs() {
   const notifs = [
-    { commerce: 'Au Pain Doré', message: '🔥 Tarte au riz -20% jusqu\'à 11h !', time: 'maintenant', color: T.main },
-    { commerce: 'Kebabistro', message: '🌯 Menu midi disponible — 8,50€', time: '5 min', color: T.mid },
-    { commerce: 'Le 9-15', message: '📦 Plus que 3 sandwichs au thon !', time: '12 min', color: T.deep },
+    { commerce: 'Au Pain Doré', Icon: Flame,    message: 'Tarte au riz -20% jusqu\'à 11h !',    time: 'maintenant', color: T.main },
+    { commerce: 'Kebabistro',   Icon: Sandwich, message: 'Menu midi disponible, 8,50€',       time: '5 min',      color: T.mid  },
+    { commerce: 'Le 9-15',      Icon: Package,  message: 'Plus que 3 sandwichs au thon !',     time: '12 min',     color: T.deep },
   ]
   return (
     <div style={{ width: '100%', maxWidth: 300 }}>
@@ -147,7 +151,7 @@ function VisuelNotifs() {
               <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.3)' }}>{n.time}</span>
             </div>
             <p style={{ fontSize: '0.7rem', fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 2 }}>{n.commerce}</p>
-            <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>{n.message}</p>
+            <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff', lineHeight: 1.3, display: 'inline-flex', alignItems: 'center', gap: 5 }}>{n.Icon && <n.Icon size={12} strokeWidth={2}/>} {n.message}</p>
           </div>
         ))}
       </div>
@@ -182,18 +186,18 @@ function VisuelMaps() {
 
         {/* Marqueurs commerçants */}
         {[
-          { x: '25%', y: '35%', nom: '🥐', color: T.main },
-          { x: '70%', y: '25%', nom: '🌯', color: T.mid },
-          { x: '65%', y: '65%', nom: '🥪', color: T.deep },
-          { x: '20%', y: '70%', nom: '🍕', color: T.main },
+          { x: '25%', y: '35%', Icon: Croissant, color: T.main },
+          { x: '70%', y: '25%', Icon: Sandwich,  color: T.mid  },
+          { x: '65%', y: '65%', Icon: Sandwich,  color: T.deep },
+          { x: '20%', y: '70%', Icon: Pizza,     color: T.main },
         ].map((m, i) => (
           <div key={i} style={{
             position: 'absolute', left: m.x, top: m.y,
             transform: 'translate(-50%,-50%)',
             animation: `popIn 0.3s ease ${0.2 + i * 0.1}s both`,
           }}>
-            <div style={{ width: 32, height: 32, borderRadius: 10, background: m.color, border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', boxShadow: `0 4px 12px ${m.color}66` }}>
-              {m.nom}
+            <div style={{ width: 32, height: 32, borderRadius: 10, background: m.color, border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: `0 4px 12px ${m.color}66` }}>
+              <m.Icon size={16} strokeWidth={1.8}/>
             </div>
           </div>
         ))}
@@ -201,7 +205,7 @@ function VisuelMaps() {
 
       {/* Badge GPS */}
       <div style={{ position: 'absolute', bottom: -12, left: '50%', transform: 'translateX(-50%)', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '6px 16px', boxShadow: `0 4px 16px ${T.main}66`, whiteSpace: 'nowrap' }}>
-        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#fff' }}>📍 4 commerçants autour de toi</span>
+        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 4 }}><MapPin size={13} strokeWidth={2}/> 4 commerçants autour de toi</span>
       </div>
     </div>
   )
@@ -222,10 +226,10 @@ function VisuelConnexion() {
 
       {/* Avantages compte */}
       {[
-        { icon: '📦', label: 'Suis tes commandes en temps réel' },
-        { icon: '⭐', label: 'Accède à tes commerçants favoris' },
-        { icon: '🔄', label: 'Retrouve ton historique partout' },
-        { icon: '🎁', label: 'Accède aux offres exclusives Yoppers' },
+        { Icon: Package, label: 'Suis tes commandes en temps réel' },
+        { Icon: Star,    label: 'Accède à tes commerçants favoris' },
+        { Icon: History, label: 'Retrouve ton historique partout' },
+        { Icon: Gift,    label: 'Accède aux offres exclusives Yoppers' },
       ].map((a, i) => (
         <div key={i} style={{
           display: 'flex', alignItems: 'center', gap: 10,
@@ -233,7 +237,7 @@ function VisuelConnexion() {
           border: '1px solid rgba(255,255,255,0.1)',
           animation: `slideUp 0.4s ease ${0.1 + i * 0.1}s both`,
         }}>
-          <span style={{ fontSize: '1rem', flexShrink: 0 }}>{a.icon}</span>
+          <span style={{ flexShrink: 0, color: T.light, display: 'inline-flex' }}><a.Icon size={16} strokeWidth={1.8}/></span>
           <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{a.label}</span>
         </div>
       ))}
@@ -381,10 +385,10 @@ export default function OnboardingPage() {
           {/* Zone texte + boutons */}
           <div style={{ padding: '1.5rem 1.5rem 2rem', flexShrink: 0 }}>
 
-            {/* Emoji */}
-            {ecran.emoji && (
-              <div style={{ fontSize: '2rem', marginBottom: 12, animation: 'slideUp 0.4s ease 0.1s both' }}>
-                {ecran.emoji}
+            {/* Icone de l'ecran */}
+            {ecran.Icon && (
+              <div style={{ marginBottom: 12, animation: 'slideUp 0.4s ease 0.1s both', color: T.main }}>
+                <ecran.Icon size={32} strokeWidth={1.8}/>
               </div>
             )}
 

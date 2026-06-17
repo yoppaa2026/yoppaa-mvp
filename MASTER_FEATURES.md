@@ -505,7 +505,11 @@ Cette section sert de copywriting de référence pour toutes les UI.
 - Les SVG s'alignent sur la palette Yoppaa et sont contrôlables (couleur, taille, animation)
 - Cohérent avec la charte canonique Yoppaa (logo, 5 dots V2-B, wordmark Plus Jakarta Sans)
 
-**Unique exception autorisée** : l'icône **soleil** dans la signature visuelle du Good Morning Yoppers (GMY). Cette exception est culturelle : le soleil incarne le push matinal de 7h30, c'est l'identité visuelle du GMY. Préférer toutefois un SVG soleil custom plutôt que l'emoji `☀️` quand c'est possible (notamment dans les emails et le dashboard).
+**2 exceptions autorisées** :
+
+1. **L'icône soleil dans le Good Morning Yoppers (GMY)** : exception culturelle, le soleil incarne le push matinal de 7h30. Préférer un SVG soleil custom plutôt que l'emoji `☀️` quand c'est possible.
+
+2. **Le rond violet `🟣`** : signature identitaire Yoppaa. Représente l'un des 5 dots du logo. Autorisé uniquement comme **élément de signature** (fin d'une phrase Yoppé, accroche de bandeau, footer de marque), **pas comme bullet décoratif** dans une liste. Règle : si tu peux le remplacer par un tiret ou un point sans perdre l'identité, fais-le.
 
 **Bibliothèque d'icônes recommandée** : Lucide Icons ou Heroicons (libres, propres, alignées sur design system). À intégrer comme composants SVG inline pour pouvoir customiser la couleur via `currentColor`.
 

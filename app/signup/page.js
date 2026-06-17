@@ -40,6 +40,24 @@ function typesPourCategorie(categorie) {
   return TYPES_ALIMENTAIRE
 }
 
+// ─── SKIP-LOGIC (esprit ODOO : adaptive selon plan + categorie) ────────────────
+// La structure 5 etapes reste constante, mais le CONTENU et les contraintes
+// s'adaptent au profil du commercant. Source : MASTER_FEATURES.md section 4.
+function getPlanActif(commercant, onboarding) {
+  return onboarding?.plan_choisi || commercant?.plan || 'exister'
+}
+// Exister = gratuit a vie : visuels et horaires sont fortement optionnels
+// (on offre une experience zero friction). Le commercant peut tout completer
+// depuis son dashboard apres signup.
+function peutSkipperVisuels(plan) {
+  return plan === 'exister' || plan === 'communiquer'
+}
+// Horaires d'ouverture obligatoires SAUF pour services vitrine en plan Exister
+// (un coiffeur peut etre purement sur RDV sans horaires fixes).
+function peutSkipperHoraires(plan, categorie) {
+  return plan === 'exister' && categorie === 'vitrine'
+}
+
 // ─── PALETTE ──────────────────────────────────────────────────────────────────
 const T = {
   bg:       '#F8F6FF',
@@ -1117,7 +1135,13 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
         </div>
       )}
 
-      <NavEtape retour={retour} continuer={continuer} valide={true} saving={saving} hint={couvertureUrl ? null : 'Tu peux passer cette étape et ajouter les photos plus tard depuis ton dashboard.'}/>
+      <NavEtape
+        retour={retour}
+        continuer={continuer}
+        valide={true}
+        saving={saving}
+        hint={couvertureUrl || logoUrl ? null : (peutSkipperVisuels(getPlanActif(commercant, onboarding)) ? 'Tu peux passer et ajouter tes visuels plus tard depuis le dashboard.' : 'Recommande pour ta visibilite.')}
+      />
     </div>
   )
 }
@@ -1170,7 +1194,7 @@ function inputStyle() {
   return { width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 14, color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: '"DM Sans", sans-serif' }
 }
 
-function NavEtape({ retour, continuer, valide, saving, hint }) {
+function NavEtape({ retour, continuer, valide, saving, hint, plusTard, plusTardLabel }) {
   return (
     <div style={{ marginTop: 8 }}>
       {hint && (
@@ -1186,6 +1210,15 @@ function NavEtape({ retour, continuer, valide, saving, hint }) {
           {saving ? 'Enregistrement…' : 'Continuer →'}
         </button>
       </div>
+      {/* Lien discret "Configurer plus tard" : seulement si la skip-logic l'autorise. */}
+      {plusTard && (
+        <div style={{ textAlign: 'center', marginTop: 14 }}>
+          <button onClick={plusTard} disabled={saving}
+            style={{ background: 'transparent', border: 'none', color: T.muted, fontWeight: 600, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: '"DM Sans", sans-serif', textDecoration: 'underline', textUnderlineOffset: 3 }}>
+            {plusTardLabel || 'Je ferai ça plus tard depuis mon dashboard →'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -1250,6 +1283,11 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
   // Valide si au moins 1 jour est ouvert
   const valide = Object.values(horaires).some(h => h.ouvert)
 
+  // Skip-logic : un service vitrine en plan Exister peut ne pas avoir d'horaires
+  // (coiffeur 100% RDV, garagiste sur appel...). Master section 4.
+  const plan = getPlanActif(commercant, onboarding)
+  const skipAutorise = peutSkipperHoraires(plan, commercant.categorie)
+
   async function continuer() {
     if (!valide) return
     clearTimeout(debounceRef.current)
@@ -1257,6 +1295,16 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
     if (onboarding) {
       const { data } = await supabase.from('onboarding_commercants')
         .update({ horaires_ok: true }).eq('id', onboarding.id).select().single()
+      if (data) onUpdateOb(data)
+    }
+    avancer()
+  }
+
+  async function configurerPlusTard() {
+    clearTimeout(debounceRef.current)
+    if (onboarding) {
+      const { data } = await supabase.from('onboarding_commercants')
+        .update({ horaires_ok: false }).eq('id', onboarding.id).select().single()
       if (data) onUpdateOb(data)
     }
     avancer()
@@ -1304,7 +1352,15 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
         </div>
       </Card>
 
-      <NavEtape retour={retour} continuer={continuer} valide={valide} saving={saving} hint={valide ? null : 'Coche au moins un jour d\'ouverture.'}/>
+      <NavEtape
+        retour={retour}
+        continuer={continuer}
+        valide={valide}
+        saving={saving}
+        hint={valide ? null : (skipAutorise ? 'Tu peux passer cette etape si tu fonctionnes uniquement sur RDV.' : 'Coche au moins un jour d\'ouverture.')}
+        plusTard={skipAutorise ? configurerPlusTard : null}
+        plusTardLabel="Je fonctionne sur RDV uniquement, je configurerai plus tard →"
+      />
     </div>
   )
 }

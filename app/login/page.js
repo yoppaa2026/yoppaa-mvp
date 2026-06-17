@@ -2,6 +2,7 @@
 import { Suspense, useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 
 const T = {
   bg:      '#F8F6FF',
@@ -105,7 +106,7 @@ function Login() {
           </div>
           <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2.5rem', letterSpacing: '-0.05em', color: '#fff', lineHeight: 1, marginBottom: 6 }}>yoppaa</p>
           <p style={{ color: T.light, fontSize: '0.8rem', fontWeight: 600, letterSpacing: '2px', textTransform: 'uppercase' }}>
-            {modeAdmin ? '🔒 Espace admin' : 'Espace commerçant'}
+            {modeAdmin ? <><Lock size={14} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/>Espace admin</> : 'Espace commerçant'}
           </p>
         </div>
 
@@ -184,7 +185,7 @@ function Login() {
                       onClick={() => setShowPassword(p => !p)}
                       style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: T.light, fontSize: '1.1rem', padding: 4 }}
                     >
-                      {showPassword ? '🙈' : '👁️'}
+                      {showPassword ? <EyeOff size={16} strokeWidth={1.8}/> : <Eye size={16} strokeWidth={1.8}/>}
                     </button>
                   </div>
                 </>
@@ -197,7 +198,7 @@ function Login() {
                 </p>
               )}
 
-              {error && <p style={{ fontSize: '0.78rem', color: '#FCA5A5', marginBottom: 12 }}>⚠️ {error}</p>}
+              {error && <p style={{ fontSize: '0.78rem', color: '#FCA5A5', marginBottom: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}><AlertTriangle size={13} strokeWidth={1.8}/> {error}</p>}
 
               <button
                 onClick={mode === 'magic' ? envoyerMagicLink : connexionMotDePasse}

@@ -312,7 +312,7 @@ function AuthForm() {
         <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, opacity: 0.8 }}>Avec un compte Yopper</p>
         {['Suis tes commandes en temps réel', 'Accède à tes favoris partout', 'Retrouve ton historique', 'Offres exclusives Yoppers'].map((a, i) => (
           <p key={i} style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ color: T.mid, fontSize: '0.65rem' }}>🟣</span> {a}
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.mid, flexShrink: 0, display: 'inline-block' }}/> {a}
           </p>
         ))}
       </div>

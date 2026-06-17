@@ -2,6 +2,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { CheckCircle, Lightbulb } from 'lucide-react'
 
 const T = {
   bgPanel: '#160636',
@@ -88,7 +89,7 @@ export default function SessionPage() {
         {phase === 'open-pwa' && (
           <div style={{ animation: 'fadeUp 0.4s ease' }}>
             <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 16, padding: '1.25rem', marginBottom: 20, border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)' }}>
-              <p style={{ fontWeight: 800, color: '#fff', fontSize: '0.95rem', marginBottom: 6, letterSpacing: '-0.3px' }}>✅ Connexion réussie !</p>
+              <p style={{ fontWeight: 800, color: '#fff', fontSize: '0.95rem', marginBottom: 6, letterSpacing: '-0.3px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><CheckCircle size={16} strokeWidth={2.2} color="#10B981"/> Connexion réussie !</p>
               <p style={{ fontSize: '0.8rem', color: '#C4A0F4', opacity: 0.8, lineHeight: 1.5 }}>
                 Ouvre l'app <strong style={{ color: '#fff' }}>Yoppaa Pro</strong> depuis ton écran d'accueil pour continuer.
               </p>
@@ -99,7 +100,7 @@ export default function SessionPage() {
             </a>
             <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: '0.875rem', border: '1px solid rgba(255,255,255,0.08)' }}>
               <p style={{ fontSize: '0.72rem', color: '#C4A0F4', opacity: 0.7, lineHeight: 1.6 }}>
-                💡 Si ça ne s'ouvre pas :<br/>
+                <Lightbulb size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Si ça ne s'ouvre pas :<br/>
                 Retourne sur l'écran d'accueil → tape <strong style={{ color: '#fff' }}>Yoppaa Pro</strong>
               </p>
             </div>

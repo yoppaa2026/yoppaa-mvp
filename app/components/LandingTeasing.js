@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Script from 'next/script'
+import { Lock } from 'lucide-react'
 
 const T = {
   ink:     '#1A0840',
@@ -216,7 +217,7 @@ export default function LandingTeasing() {
             )}
 
             <p style={{ margin: '14px 0 0', fontSize: 11, color: T.light, opacity: 0.7, textAlign: 'center', lineHeight: 1.5 }}>
-              🔒 Aucun spam. Données protégées.
+              <Lock size={11} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Aucun spam. Données protégées.
             </p>
           </form>
         )}

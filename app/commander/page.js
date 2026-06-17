@@ -105,7 +105,6 @@ function Etoiles({ note, taille = 13 }) {
 
 // ─── Icônes SVG réutilisables (design system canonique) ─────────────────────
 // Remplace les emojis UI : strokeWidth 2, round caps, palette stricte.
-// Les emojis types de commerce (🥐 🌯 🍕…) restent (illustration légitime).
 function IconBag({ size = 28, color = T.muted }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -482,7 +481,7 @@ function SuggestionForm({ clientId }) {
         <IconSparkle size={28} color={T.main}/>
       </div>
       <p style={{ fontWeight: 800, color: '#10B981', marginBottom: 6 }}>Merci pour ta suggestion !</p>
-      <p style={{ fontSize: '0.875rem', color: T.muted }}>On va contacter ce commerçant. Tu contribues à faire grandir la Tribu Yoppaa 🫂</p>
+      <p style={{ fontSize: '0.875rem', color: T.muted }}>On va contacter ce commerçant. Tu contribues à faire grandir la Tribu Yoppaa.</p>
       <button onClick={() => { setSent(false); setForm({ nom: '', adresse: '', type: '', commentaire: '' }) }} style={{ marginTop: '1rem', padding: '0.75rem 1.5rem', background: T.main, color: '#fff', border: 'none', borderRadius: 100, fontWeight: 700, cursor: 'pointer' }}>Suggérer un autre commerçant</button>
     </div>
   )
@@ -704,12 +703,7 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
 // ─── Carte commerce — redesignée ──────────────────────────────────────────────
 // ─── Carte d'un service public (Plan PUBLIC) ────────────────────────────────
 // Affichée dans la section "Services & administrations" sur /commander.
-// Différencie urgences nationales (badge rouge ⚠) vs services locaux (badge violet OFFICIEL).
-const SERVICE_TYPE_EMOJI = {
-  commune: '🏛️', cpas: '🤝', police: '🚓', pompiers: '🚒',
-  ecole: '🏫', urgence: '🚨', medecin_garde: '🩺',
-  pharmacie_garde: '💊', autre: '🏢',
-}
+// Différencie urgences nationales (badge rouge OFFICIEL) vs services locaux (badge violet OFFICIEL).
 const SERVICE_TYPE_LABEL = {
   commune: 'Commune', cpas: 'CPAS', police: 'Police',
   pompiers: 'Pompiers', ecole: 'École', urgence: 'Urgence',
@@ -1012,7 +1006,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
               </span>
               {resa && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: resa.bg, borderRadius: 100, padding: '3px 8px', border: `1px solid ${resa.dot}22` }}>
-                  <span style={{ fontSize: '0.5rem', lineHeight: 1 }}>🟣</span>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: resa.dot, flexShrink: 0 }}/>
                   <span style={{ fontSize: '0.66rem', fontWeight: 700, color: resa.color }}>{resa.label}</span>
                 </span>
               )}
@@ -2495,7 +2489,9 @@ export default function Commander() {
 
                 {servicesPublics.length === 0 && (
                   <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-                    <p style={{ fontSize: '3rem', marginBottom: 12 }}>🏛️</p>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: 16, background: T.pale, marginBottom: 12 }}>
+                      <IconService type="commune" size={36} color={T.main}/>
+                    </div>
                     <p style={{ fontWeight: 800, color: T.ink, marginBottom: 6 }}>Pas de services pour ta zone</p>
                     <p style={{ fontSize: '0.875rem', color: T.muted, lineHeight: 1.5 }}>
                       On ajoute les communes au fil de l&rsquo;eau. Reviens bientôt.

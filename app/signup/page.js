@@ -58,6 +58,94 @@ function peutSkipperHoraires(plan, categorie) {
   return plan === 'exister' && categorie === 'vitrine'
 }
 
+// ─── GENERATEURS DE VISUELS AUTO (fallback branded Yoppaa) ────────────────────
+// Quand le commercant n'a pas de logo/photo, on lui propose de generer un
+// visuel propre dans la charte Yoppaa. Esprit Gmail/Notion : cercle initiale.
+// Cover : gradient violet + nom + 3 dots tricolores (signature canonique).
+async function canvasVersBlob(canvas) {
+  return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/png', 0.95))
+}
+
+function genererLogoCanvas(nom) {
+  const taille = 512
+  const canvas = document.createElement('canvas')
+  canvas.width = taille
+  canvas.height = taille
+  const ctx = canvas.getContext('2d')
+  // Gradient radial violet : du clair au centre vers le sombre en bord
+  const grad = ctx.createRadialGradient(taille * 0.4, taille * 0.35, 30, taille / 2, taille / 2, taille / 2)
+  grad.addColorStop(0, '#9660E0')
+  grad.addColorStop(0.6, '#6B35C4')
+  grad.addColorStop(1, '#2D0F6B')
+  ctx.fillStyle = grad
+  ctx.beginPath()
+  ctx.arc(taille / 2, taille / 2, taille / 2, 0, Math.PI * 2)
+  ctx.fill()
+  // Initiale en blanc, Plus Jakarta Sans 800
+  const nomClean = (nom || 'Y').trim()
+  const initiale = nomClean.charAt(0).toUpperCase()
+  ctx.fillStyle = '#FFFFFF'
+  ctx.font = 'bold 300px "Plus Jakarta Sans", system-ui, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(initiale, taille / 2, taille / 2 + 12)
+  return canvas
+}
+
+function genererCoverCanvas(nom) {
+  const w = 1600, h = 900
+  const canvas = document.createElement('canvas')
+  canvas.width = w; canvas.height = h
+  const ctx = canvas.getContext('2d')
+  // Gradient diagonal sombre Yoppaa
+  const grad = ctx.createLinearGradient(0, 0, w, h)
+  grad.addColorStop(0, '#160636')
+  grad.addColorStop(0.5, '#2D0F6B')
+  grad.addColorStop(1, '#1A0840')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, w, h)
+  // Halo violet en haut a droite (rappel du header Yoppaa)
+  const halo = ctx.createRadialGradient(w * 0.85, h * 0.15, 0, w * 0.85, h * 0.15, w * 0.55)
+  halo.addColorStop(0, 'rgba(150, 96, 224, 0.35)')
+  halo.addColorStop(1, 'rgba(150, 96, 224, 0)')
+  ctx.fillStyle = halo
+  ctx.fillRect(0, 0, w, h)
+  // 3 dots tricolores au-dessus du nom (signature Yoppaa canonique)
+  const dotY = h / 2 - 100
+  const dotR = 14
+  const dotGap = 32
+  const dots = [
+    { c: '#FFFFFF', alpha: 0.55 },
+    { c: '#C4A0F4', alpha: 1 },
+    { c: '#9660E0', alpha: 1 },
+  ]
+  dots.forEach((d, i) => {
+    ctx.globalAlpha = d.alpha
+    ctx.fillStyle = d.c
+    ctx.beginPath()
+    ctx.arc(w / 2 - dotGap + i * dotGap, dotY, dotR, 0, Math.PI * 2)
+    ctx.fill()
+  })
+  ctx.globalAlpha = 1
+  // Nom du commerce centre, Plus Jakarta Sans 800, blanc
+  ctx.fillStyle = '#FFFFFF'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  let fontSize = 110
+  ctx.font = `bold ${fontSize}px "Plus Jakarta Sans", system-ui, sans-serif`
+  const nomClean = (nom || 'Mon commerce').trim()
+  while (ctx.measureText(nomClean).width > w * 0.82 && fontSize > 50) {
+    fontSize -= 6
+    ctx.font = `bold ${fontSize}px "Plus Jakarta Sans", system-ui, sans-serif`
+  }
+  ctx.fillText(nomClean, w / 2, h / 2 + 40)
+  // Tagline sous le nom
+  ctx.fillStyle = 'rgba(196, 160, 244, 0.85)'
+  ctx.font = '600 32px "DM Sans", system-ui, sans-serif'
+  ctx.fillText('sur Yoppaa', w / 2, h / 2 + 130)
+  return canvas
+}
+
 // ─── PALETTE ──────────────────────────────────────────────────────────────────
 const T = {
   bg:       '#F8F6FF',
@@ -1008,6 +1096,62 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     setUploadingLogo(false)
   }
 
+  // Fallback "Genere-moi" : produit un cercle violet avec initiale du nom
+  // dans la charte Yoppaa. Pas de friction, propre, identitaire.
+  async function genererLogoAuto() {
+    setError('')
+    setUploadingLogo(true)
+    onSaving?.('saving')
+    try {
+      const nom = commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Y'
+      const canvas = genererLogoCanvas(nom)
+      const blob = await canvasVersBlob(canvas)
+      if (!blob) { setError('Generation logo impossible.'); return }
+      const fileName = `logo-${commercant.id}-${Date.now()}.png`
+      const { error: upErr } = await supabase.storage.from('logos').upload(fileName, blob, { upsert: true, contentType: 'image/png' })
+      if (upErr) { setError(`Upload echoue : ${upErr.message}`); return }
+      const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+      const url = urlData.publicUrl
+      const { data: c } = await supabase.from('commercants').update({ logo_url: url }).eq('id', commercant.id).select().single()
+      if (c) onUpdate(c)
+      setLogoUrl(url)
+      onSaving?.('saved')
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
+  async function genererCoverAuto() {
+    setError(''); setWarningCover(null)
+    setUploadingCover(true)
+    onSaving?.('saving')
+    try {
+      const nom = commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Mon commerce'
+      const canvas = genererCoverCanvas(nom)
+      const blob = await canvasVersBlob(canvas)
+      if (!blob) { setError('Generation cover impossible.'); return }
+      const fileName = `cover-${commercant.id}-${Date.now()}.png`
+      const { error: upErr } = await supabase.storage.from('logos').upload(fileName, blob, { upsert: true, contentType: 'image/png' })
+      if (upErr) { setError(`Upload echoue : ${upErr.message}`); return }
+      const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+      const url = urlData.publicUrl
+      await supabase.from('commercant_photos')
+        .delete()
+        .eq('commercant_id', commercant.id)
+        .eq('type', 'couverture')
+      await supabase.from('commercant_photos').insert({
+        commercant_id: commercant.id,
+        type: 'couverture',
+        url,
+        ordre: 0,
+      })
+      setCouvertureUrl(url)
+      onSaving?.('saved')
+    } finally {
+      setUploadingCover(false)
+    }
+  }
+
   async function uploadCouverture(file) {
     setError('')
     setWarningCover(null)
@@ -1105,10 +1249,12 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
           onFile={f => uploadCouverture(f)}
         />
         {warningCover && (
-          <div style={{ marginTop: 10, padding: '8px 12px', background: '#FFF7ED', borderLeft: '3px solid #EA580C', borderRadius: 6, fontSize: 12, color: '#7C2D12', fontWeight: 600, lineHeight: 1.45 }}>
-            ⚠️ {warningCover}
+          <div style={{ marginTop: 10, padding: '8px 12px', background: '#FFF7ED', borderLeft: '3px solid #EA580C', borderRadius: 6, fontSize: 12, color: '#7C2D12', fontWeight: 600, lineHeight: 1.45, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <AlertTriangle size={14} strokeWidth={2.2} style={{ flexShrink: 0, marginTop: 1 }}/>
+            <span>{warningCover}</span>
           </div>
         )}
+        <BoutonGenererVisuel onClick={genererCoverAuto} disabled={uploadingCover} libelle="Je n'ai pas de photo, genere une couverture branded Yoppaa"/>
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
           <strong style={{ color: T.bgPanel }}>Idéal :</strong> ta façade telle qu'on la voit depuis la rue — c'est le <strong style={{ color: T.bgPanel }}>premier repère</strong> pour le client qui arrive à pied. Enseigne nette et lisible, couleurs vives, lumière du jour. Format paysage 16:9, qualité maximale. Si pas de façade exploitable (boutique en galerie, food truck mobile), prends un produit phare très photogénique.
         </div>
@@ -1124,6 +1270,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
           onFile={uploadLogo}
           maxWidth={140}
         />
+        <BoutonGenererVisuel onClick={genererLogoAuto} disabled={uploadingLogo} libelle="Je n'ai pas de logo, genere un cercle violet avec mon initiale"/>
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
           <strong style={{ color: T.bgPanel }}>Idéal :</strong> ton logo seul sur fond uni (blanc ou couleur). Si tu n'en as pas, une photo carrée recadrée sur ton enseigne fait l'affaire.
         </div>
@@ -1192,6 +1339,21 @@ function Field({ label, children }) {
 
 function inputStyle() {
   return { width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 14, color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: '"DM Sans", sans-serif' }
+}
+
+// Lien discret affichee sous chaque UploadZone pour proposer la generation
+// auto d'un visuel branded Yoppaa quand le commercant n'a pas de logo/photo.
+function BoutonGenererVisuel({ onClick, disabled, libelle }) {
+  return (
+    <button onClick={onClick} disabled={disabled} type="button"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '8px 14px', background: T.pale, border: `1px dashed ${T.light}`, borderRadius: 100, color: T.deep, fontSize: 12, fontWeight: 700, cursor: disabled ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s' }}
+      onMouseEnter={e => { if (!disabled) { e.currentTarget.style.background = T.light; e.currentTarget.style.color = '#fff' } }}
+      onMouseLeave={e => { if (!disabled) { e.currentTarget.style.background = T.pale; e.currentTarget.style.color = T.deep } }}
+    >
+      <Sparkles size={13} strokeWidth={2.2}/>
+      {libelle}
+    </button>
+  )
 }
 
 function NavEtape({ retour, continuer, valide, saving, hint, plusTard, plusTardLabel }) {

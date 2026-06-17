@@ -18,6 +18,8 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { isVitrine } from '@/lib/plans'
 import HorairesSection from '../../HorairesSection'
+// Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
+import { Lock } from 'lucide-react'
 
 const T = {
   bg:       '#F8F6FF',
@@ -1513,8 +1515,8 @@ export default function CommanderRdvSlug() {
                           )}
                         </button>
                         {acompteEnLigne && acompteMnt && !submitting && (
-                          <p style={{ fontSize: '0.72rem', color: T.muted, textAlign: 'center', marginTop: 6, lineHeight: 1.4 }}>
-                            🔒 Paiement sécurisé Stripe · Solde de {prixBase ? (prixBase - acompteMnt).toFixed(2) : '?'}€ à régler sur place
+                          <p style={{ fontSize: '0.72rem', color: T.muted, textAlign: 'center', marginTop: 6, lineHeight: 1.4, display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
+                            <Lock size={11} strokeWidth={2}/> Paiement sécurisé Stripe · Solde de {prixBase ? (prixBase - acompteMnt).toFixed(2) : '?'}€ à régler sur place
                           </p>
                         )}
                       </>
@@ -1535,7 +1537,7 @@ export default function CommanderRdvSlug() {
                 </div>
               )}
 
-              {/* ─── ÉTAPE 4 — CONFIRMATION "C'est noté ! 🟣" ─── */}
+              {/* ─── ÉTAPE 4 — CONFIRMATION "Ton RDV est Yoppé ! 🟣" ─── */}
               {etape === 4 && rdvCree && (
                 <div style={{ padding: '1.5rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
                   <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
@@ -1556,7 +1558,7 @@ export default function CommanderRdvSlug() {
                         <span style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px' }}>#{rdvCree.numero_rdv}</span>
                       </div>
                     )}
-                    <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>C&apos;est noté ! 🟣</h2>
+                    <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>Ton RDV est Yoppé ! 🟣</h2>
                     <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>Chez {commercant.nom}</p>
                     <p style={{ color: T.muted, fontSize: '0.875rem' }}>
                       {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} à {heureChoisie}

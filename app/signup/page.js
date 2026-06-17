@@ -1217,27 +1217,100 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, avancer,
 // - Soumission (statut = en_attente_validation + email Yoppaa via Resend)
 // - Bouton verrouille si score < 60
 //
-// Refactor 2026-06-02 : 3 packs → 2 packs alignés sur le nouveau modèle ON / FULL.
-// - Starter dispo tous plans (ON + FULL), Premium réservé FULL (ali + vitrine).
-const SUCCESS_PACKS = [
+// Refactor 17/06 (S2a) : passage de 2 packs uniques (Starter 49 + Premium 249)
+// à une vraie boutique Yoppaa avec 4 produits cumulables.
+// 1 service humain : Success Pack on-site 199€
+// 2 kits hardware optionnels (surtout utiles en alimentaire) : Pro 399 + Light 179
+// 1 consommable : Rouleau d'étiquettes 44,90€
+//
+// CATEGORIES_RECOMMANDEES indique pour quelles catégories chaque produit est
+// considéré comme principal (affiché en haut sans mention spéciale). Les
+// autres catégories le voient en bas avec une mention "principalement utile
+// en alimentaire" pour éviter qu'un opticien achète une imprimante par erreur.
+const SHOP_PRODUCTS = [
   {
-    type: 'starter', label: 'Starter', prix: 49,
-    desc: 'Aide rédaction + guide photo personnalisé + vérif profil + 1 session WhatsApp 30 min + 1er deal créé ensemble',
-    bullets: ['Tous plans (ON + FULL)', 'Livré sous 48 h'],
+    type: 'success_pack',
+    label: 'Success Pack on-site',
+    prix: 199,
+    desc: 'On vient chez toi : photos pro de ton commerce, setup complet de ton menu ou de tes prestations, formation rapide, suivi à J+30. Idéal pour démarrer sereinement.',
+    badge: 'Service humain',
+    badgeColor: '#10B981',
+    categories: ['alimentaire', 'vitrine', 'detail'],
+    mention: null,
   },
   {
-    type: 'premium', label: 'Premium', prix: 249,
-    desc: 'Tout Starter + séance photo demi-journée + création complète menu ou prestations + fidélité paramétrée + formation équipe 1 h + suivi J+30',
-    bullets: ['FULL alimentaire + FULL vitrine', 'Livré sous 7 jours ouvrés', 'Rayon 50 km Mettet'],
+    type: 'kit_pro',
+    label: 'Kit Yoppaa Pro',
+    prix: 399,
+    desc: 'Tablette tactile + imprimante thermique. Tu gères tes commandes ou tes RDV au comptoir, sans téléphone à la main. Configuration plug-and-play livrée prête à l\'emploi.',
+    badge: 'Hardware',
+    badgeColor: '#6B35C4',
+    categories: ['alimentaire'],
+    mention: 'Surtout utile en alimentaire (gestion comptoir Click & Collect). Tu peux aussi gérer ton activité depuis n\'importe quel téléphone, tablette ou PC sans hardware.',
+  },
+  {
+    type: 'kit_light',
+    label: 'Kit Yoppaa Light',
+    prix: 179,
+    desc: 'Imprimante thermique seule. Idéale pour imprimer les tickets de commande, les bons de retrait ou les étiquettes produits. Connecte-la à ton téléphone ou ta tablette existante.',
+    badge: 'Hardware',
+    badgeColor: '#6B35C4',
+    categories: ['alimentaire'],
+    mention: 'Surtout utile en alimentaire. Pour service ou détail, ton smartphone ou ton PC suffisent largement.',
+  },
+  {
+    type: 'rouleau_etiquettes',
+    label: 'Rouleau d\'étiquettes',
+    prix: 44.90,
+    desc: 'Recharge papier thermique compatible Kit Pro et Kit Light. Tu peux en commander à tout moment quand tu seras à court, depuis ton tableau de bord.',
+    badge: 'Consommable',
+    badgeColor: '#F59E0B',
+    categories: ['alimentaire'],
+    mention: 'Nécessite un Kit Pro ou Kit Light.',
   },
 ]
 
+// Helper : retourne les produits "recommandés" pour la catégorie + ceux affichés en "options secondaires"
+function classerProduitsParCategorie(categorie) {
+  const principaux = SHOP_PRODUCTS.filter(p => p.categories.includes(categorie))
+  const secondaires = SHOP_PRODUCTS.filter(p => !p.categories.includes(categorie))
+  return { principaux, secondaires }
+}
+
 function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour, aller }) {
-  const [packChoisi, setPackChoisi] = useState(onboarding.success_pack_choisi || null)
+  // S2a (17/06) : shopChoices = Set des types de produits choisis.
+  // Persistance locale pour l'instant ; migration DB + paiement Stripe en S2b.
+  // Pour compat ascendante : si onboarding.success_pack_choisi existe (ancien
+  // schéma à un seul item), on l'inclut dans le Set initial.
+  const initialChoices = onboarding.success_pack_choisi
+    ? new Set([onboarding.success_pack_choisi === 'starter' || onboarding.success_pack_choisi === 'premium'
+        ? 'success_pack'  // mapping legacy → nouveau Success Pack
+        : onboarding.success_pack_choisi])
+    : new Set()
+  const [shopChoices, setShopChoices] = useState(initialChoices)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(onboarding.statut === 'en_attente_validation' || onboarding.statut === 'valide')
   const [error, setError] = useState('')
   const [stockMenu, setStockMenu] = useState(0)
+
+  // Classement des produits selon la catégorie du commerçant
+  const { principaux, secondaires } = classerProduitsParCategorie(commercant.categorie)
+
+  // Toggle d'un produit dans le panier
+  const toggleProduit = (type) => {
+    setShopChoices(prev => {
+      const next = new Set(prev)
+      if (next.has(type)) next.delete(type)
+      else next.add(type)
+      return next
+    })
+  }
+
+  // Total des produits choisis
+  const totalChoisis = [...shopChoices]
+    .map(type => SHOP_PRODUCTS.find(p => p.type === type))
+    .filter(Boolean)
+    .reduce((sum, p) => sum + p.prix, 0)
 
   // Compte les articles du commerçant (pour le score)
   useEffect(() => {
@@ -1263,24 +1336,22 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
   })()
   const peutSoumettre = score >= 60
 
-  async function selectPack(type) {
-    setPackChoisi(type)
-    await supabase.from('onboarding_commercants')
-      .update({ success_pack_choisi: type })
-      .eq('id', onboarding.id)
-  }
-
   async function soumettre() {
     if (!peutSoumettre || submitting) return
     setSubmitting(true)
     setError('')
 
-    // 1) Update onboarding : statut + score
+    // S2a : on persiste UNIQUEMENT le success_pack dans onboarding_commercants
+    // (compat schéma existant). Les kits hardware + rouleau sont collectés en
+    // local state pour l'instant et seront persistés en S2b après migration DB.
+    const aSuccessPack = shopChoices.has('success_pack')
+
+    // 1) Update onboarding : statut + score + success_pack_choisi (legacy)
     const { data: ob, error: obErr } = await supabase.from('onboarding_commercants')
       .update({
         statut: 'en_attente_validation',
         validation_auto_score: score,
-        success_pack_choisi: packChoisi,
+        success_pack_choisi: aSuccessPack ? 'success_pack' : null,
         completed_at: new Date().toISOString(),
       })
       .eq('id', onboarding.id)
@@ -1289,16 +1360,17 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
     if (obErr) { setError(`Erreur : ${obErr.message}`); setSubmitting(false); return }
     onUpdateOb(ob)
 
-    // 2) Si pack choisi : créer la ligne success_packs (statut en_attente)
-    if (packChoisi) {
-      const pack = SUCCESS_PACKS.find(p => p.type === packChoisi)
+    // 2) Si Success Pack choisi : créer la ligne success_packs (statut en_attente)
+    if (aSuccessPack) {
       await supabase.from('success_packs').insert({
         commercant_id: commercant.id,
-        type: packChoisi,
+        type: 'success_pack',
         statut: 'en_attente',
-        montant_ht: pack?.prix || 0,
+        montant_ht: 199,
       })
     }
+    // TODO S2b : persister aussi kit_pro / kit_light / rouleau_etiquettes
+    // dans une table commercant_shop_orders dédiée + déclencher checkout Stripe
 
     // 3) Update commerçant : statut publication = brouillon → en_attente
     //    Et on efface le motif_rejet précédent : la re-soumission corrige
@@ -1323,7 +1395,9 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
           type: commercant.type,
           plan: commercant.plan,
           score,
-          success_pack: packChoisi,
+          success_pack: shopChoices.has('success_pack') ? 'success_pack' : null,
+          shop_choices: [...shopChoices],
+          shop_total_ht: totalChoisis,
         }),
       })
     } catch { /* email non bloquant pour la soumission */ }
@@ -1347,7 +1421,12 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
             <li><strong>Commerce :</strong> {commercant.nom}</li>
             <li><strong>Plan choisi :</strong> {PLAN_LABEL[commercant.plan]}</li>
             <li><strong>Score profil :</strong> {score} / 100</li>
-            {packChoisi && <li><strong>Success Pack :</strong> {SUCCESS_PACKS.find(p => p.type === packChoisi)?.label} ({SUCCESS_PACKS.find(p => p.type === packChoisi)?.prix}€ HT)</li>}
+            {[...shopChoices].map(type => {
+              const p = SHOP_PRODUCTS.find(p => p.type === type)
+              if (!p) return null
+              return <li key={type}><strong>{p.label} :</strong> {p.prix.toFixed(2).replace('.', ',')}€ HT</li>
+            })}
+            {shopChoices.size > 0 && <li style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.hairline}` }}><strong>Total boutique :</strong> {totalChoisis.toFixed(2).replace('.', ',')}€ HT</li>}
           </ul>
         </Card>
         <p style={{ fontSize: 12, color: T.muted, marginTop: 16 }}>
@@ -1417,27 +1496,49 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
         </div>
       </Card>
 
-      {/* Success Packs */}
-      <Card titre="Voulez-vous être accompagné pour votre démarrage ?" sous="Optionnel — tu peux te débrouiller seul si tu préfères.">
+      {/* Boutique Yoppaa : Success Pack + Kits hardware + Consommables */}
+      <Card titre="Boutique Yoppaa" sous="Service d'accompagnement et matériel optionnels. Tu pourras aussi commander à tout moment depuis ton tableau de bord.">
+
+        {/* Produits principaux pour la catégorie */}
         <div style={{ display: 'grid', gap: 10 }}>
-          {SUCCESS_PACKS.map(p => (
-            <button key={p.type} type="button" onClick={() => selectPack(p.type === packChoisi ? null : p.type)}
-              style={{ width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 14, border: `2px solid ${packChoisi === p.type ? T.bgPanel : T.hairline}`, background: packChoisi === p.type ? T.bgPanel : '#fff', color: packChoisi === p.type ? '#fff' : T.ink, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s', boxShadow: packChoisi === p.type ? `0 8px 24px rgba(22,6,54,0.2)` : 'none' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 900, fontSize: 17, letterSpacing: '-0.3px' }}>{p.label}</span>
-                <span style={{ fontSize: 14, fontWeight: 800, color: packChoisi === p.type ? T.light : T.main }}>{p.prix}€ HT</span>
-              </div>
-              <p style={{ fontSize: 12, color: packChoisi === p.type ? 'rgba(255,255,255,0.85)' : T.deep, margin: '0 0 4px', lineHeight: 1.4 }}>{p.desc}</p>
-              <p style={{ fontSize: 11, color: packChoisi === p.type ? 'rgba(255,255,255,0.55)' : T.muted, margin: 0, fontWeight: 600 }}>
-                {p.bullets.join(' · ')}
-              </p>
-            </button>
+          {principaux.map(p => (
+            <ProduitCard key={p.type} produit={p} actif={shopChoices.has(p.type)} onToggle={() => toggleProduit(p.type)}/>
           ))}
-          <button type="button" onClick={() => selectPack(null)}
-            style={{ width: '100%', padding: '12px 16px', borderRadius: 14, border: `1.5px dashed ${T.hairline}`, background: '#fff', color: T.muted, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13 }}>
-            Je me débrouille seul → Continuer
-          </button>
         </div>
+
+        {/* Produits secondaires (hors catégorie principale) avec mention adaptative */}
+        {secondaires.length > 0 && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px dashed ${T.hairline}` }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, letterSpacing: '0.7px', textTransform: 'uppercase', margin: '0 0 10px' }}>
+              Autres produits disponibles
+            </p>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {secondaires.map(p => (
+                <ProduitCard key={p.type} produit={p} actif={shopChoices.has(p.type)} onToggle={() => toggleProduit(p.type)} secondaire/>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Récap total */}
+        {shopChoices.size > 0 ? (
+          <div style={{ marginTop: 14, padding: '12px 14px', background: T.bgPanel, borderRadius: 12, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>
+              {shopChoices.size} produit{shopChoices.size > 1 ? 's' : ''} sélectionné{shopChoices.size > 1 ? 's' : ''}
+            </span>
+            <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: '-0.3px' }}>
+              Total : {totalChoisis.toFixed(2).replace('.', ',')}€ HT
+            </span>
+          </div>
+        ) : (
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 14, textAlign: 'center', fontStyle: 'italic' }}>
+            Aucun produit sélectionné. Tu peux continuer sans rien ajouter, c'est optionnel.
+          </p>
+        )}
+
+        <p style={{ fontSize: 10.5, color: T.muted, marginTop: 14, lineHeight: 1.5, textAlign: 'center' }}>
+          Paiement sécurisé Stripe. Tu peux ajouter ou commander d'autres produits à tout moment depuis ton tableau de bord.
+        </p>
       </Card>
 
       {error && (
@@ -1464,6 +1565,76 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour
         </div>
       </div>
     </div>
+  )
+}
+
+// Carte d'un produit dans la boutique signup (Success Pack, Kit Pro/Light,
+// Rouleau étiquettes). Checkbox visuelle, badge catégorie, mention adaptative
+// pour les produits "secondaires" (hors catégorie principale du commerçant).
+function ProduitCard({ produit, actif, onToggle, secondaire = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      style={{
+        width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 14,
+        border: `2px solid ${actif ? T.bgPanel : T.hairline}`,
+        background: actif ? T.bgPanel : '#fff',
+        color: actif ? '#fff' : T.ink,
+        cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+        transition: 'all 0.15s',
+        boxShadow: actif ? `0 8px 24px rgba(22,6,54,0.2)` : 'none',
+        opacity: secondaire && !actif ? 0.85 : 1,
+        position: 'relative',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 6 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, flexWrap: 'wrap' }}>
+            <span style={{
+              display: 'inline-block', fontSize: 9, fontWeight: 800,
+              background: actif ? 'rgba(255,255,255,0.18)' : produit.badgeColor + '22',
+              color: actif ? '#fff' : produit.badgeColor,
+              padding: '2px 7px', borderRadius: 100, letterSpacing: '0.5px', textTransform: 'uppercase',
+            }}>{produit.badge}</span>
+            <span style={{ fontWeight: 900, fontSize: 16, letterSpacing: '-0.3px' }}>{produit.label}</span>
+          </div>
+          <p style={{ fontSize: 12, color: actif ? 'rgba(255,255,255,0.85)' : T.deep, margin: 0, lineHeight: 1.45 }}>
+            {produit.desc}
+          </p>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <span style={{ fontSize: 15, fontWeight: 900, color: actif ? T.light : T.main, whiteSpace: 'nowrap' }}>
+            {produit.prix.toFixed(2).replace('.', ',')}€
+          </span>
+          <p style={{ fontSize: 10, color: actif ? 'rgba(255,255,255,0.55)' : T.muted, margin: '1px 0 0', fontWeight: 700 }}>HT</p>
+        </div>
+      </div>
+
+      {/* Mention adaptative (visible uniquement pour produits "secondaires") */}
+      {secondaire && produit.mention && (
+        <p style={{
+          fontSize: 10.5,
+          color: actif ? 'rgba(255,255,255,0.6)' : T.muted,
+          margin: '6px 0 0',
+          fontStyle: 'italic',
+          lineHeight: 1.4,
+        }}>
+          {produit.mention}
+        </p>
+      )}
+
+      {/* Indicateur checkbox visuel en bas */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 11, fontWeight: 700, color: actif ? T.light : T.muted }}>
+        <span style={{
+          display: 'inline-block', width: 14, height: 14, borderRadius: 4,
+          border: `1.5px solid ${actif ? T.light : T.hairline}`,
+          background: actif ? T.main : '#fff',
+          textAlign: 'center', lineHeight: '11px', fontSize: 10, color: '#fff', fontWeight: 900,
+        }}>{actif ? '✓' : ''}</span>
+        <span>{actif ? 'Ajouté à ta commande' : 'Cliquer pour ajouter'}</span>
+      </div>
+    </button>
   )
 }
 

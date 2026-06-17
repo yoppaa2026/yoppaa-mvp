@@ -12,6 +12,8 @@ import { supabase } from '@/lib/supabase'
 import ModalSignalement from '../../ModalSignalement'
 import ModalSignalerProbleme from './ModalSignalerProbleme'
 import ModalRdvPension from './ModalRdvPension'
+// Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
+import { Phone, Smartphone, AlertTriangle, Lightbulb, Trash2, Droplet } from 'lucide-react'
 import PillStatutOuverture, { getDayBrussels, getCreneauxJour } from '@/app/components/PillStatutOuverture'
 
 // Design system canonique
@@ -179,13 +181,13 @@ function AgentQuartierPicker({ agents }) {
                   {agent.telephone && (
                     <a href={`tel:${agent.telephone.replace(/\s/g, '')}`}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 100, background: bgTag, color: fgTag, fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
-                      📞 {agent.telephone}
+                      <Phone size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> {agent.telephone}
                     </a>
                   )}
                   {agent.mobile && (
                     <a href={`tel:${agent.mobile.replace(/\s/g, '')}`}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 100, background: bgTag, color: fgTag, fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
-                      📱 {agent.mobile}
+                      <Smartphone size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> {agent.mobile}
                     </a>
                   )}
                   {agent.email && (
@@ -301,7 +303,7 @@ function ServiceDescription({ text }) {
         if (b.type === 'callout-danger') {
           return (
             <div key={i} style={{ background: '#FEE2E2', borderLeft: '3px solid #DC2626', borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600, color: '#7F1D1D', lineHeight: 1.5 }}>
-              🚨 {b.content}
+              <AlertTriangle size={14} strokeWidth={2} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> {b.content}
             </div>
           )
         }
@@ -541,15 +543,15 @@ export default function FicheServicePublic({ params }) {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
               {[
-                { type: 'nid_poule',     emoji: '🕳️',  label: 'Nid de poule' },
-                { type: 'depot_sauvage', emoji: '🗑️', label: 'Dépôt sauvage' },
-                { type: 'egout',         emoji: '🚰', label: 'Égout bouché' },
+                { type: 'nid_poule',     Icon: AlertTriangle, label: 'Nid de poule' },
+                { type: 'depot_sauvage', Icon: Trash2,        label: 'Dépôt sauvage' },
+                { type: 'egout',         Icon: Droplet,       label: 'Égout bouché' },
               ].map(item => (
                 <button key={item.type} onClick={() => setSignalerType(item.type)}
                   style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '16px 10px', background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', transition: 'all 0.15s' }}
                   onMouseOver={e => { e.currentTarget.style.borderColor = T.main; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 6px 16px ${T.main}25` }}
                   onMouseOut={e => { e.currentTarget.style.borderColor = T.pale; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}>
-                  <span style={{ fontSize: 28, lineHeight: 1 }}>{item.emoji}</span>
+                  <item.Icon size={28} strokeWidth={1.6} color={T.main}/>
                   <span style={{ fontSize: 12, fontWeight: 800, color: T.ink, letterSpacing: '-0.1px' }}>{item.label}</span>
                 </button>
               ))}
@@ -558,7 +560,7 @@ export default function FicheServicePublic({ params }) {
                 style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '16px 10px', background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 14, textDecoration: 'none', textAlign: 'center', transition: 'all 0.15s' }}
                 onMouseOver={e => { e.currentTarget.style.borderColor = T.main; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 6px 16px ${T.main}25` }}
                 onMouseOut={e => { e.currentTarget.style.borderColor = T.pale; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}>
-                <span style={{ fontSize: 28, lineHeight: 1 }}>💡</span>
+                <Lightbulb size={28} strokeWidth={1.6} color={T.main}/>
                 <span style={{ fontSize: 12, fontWeight: 800, color: T.ink, letterSpacing: '-0.1px' }}>
                   Éclairage public <span style={{ fontSize: 9, color: T.muted, fontWeight: 600 }}>(ORES →)</span>
                 </span>
@@ -711,7 +713,7 @@ export default function FicheServicePublic({ params }) {
                     </div>
                     {h?.note && (
                       <p style={{ margin: '6px 0 0', fontSize: 10.5, color: T.deep, fontStyle: 'italic', lineHeight: 1.4 }}>
-                        💡 {h.note}
+                        <Lightbulb size={11} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 3 }}/> {h.note}
                       </p>
                     )}
                   </div>

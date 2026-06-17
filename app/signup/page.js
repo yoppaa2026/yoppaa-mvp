@@ -70,6 +70,18 @@ export default function Signup() {
   const [commercant, setCommercant] = useState(null)
   const [onboarding, setOnboarding] = useState(null)
   const [etape, setEtape] = useState(1)
+  // Etat de sauvegarde global affiche dans le bandeau recap (entete sticky).
+  // Cycle : null -> 'saving' -> 'saved' (auto -> null apres 2s).
+  const [etatSauvegarde, setEtatSauvegarde] = useState(null)
+  const timerSavedRef = useRef(null)
+
+  function signalerSauvegarde(status) {
+    clearTimeout(timerSavedRef.current)
+    setEtatSauvegarde(status)
+    if (status === 'saved') {
+      timerSavedRef.current = setTimeout(() => setEtatSauvegarde(null), 2000)
+    }
+  }
 
   // Au chargement : récupère la session + l'éventuel onboarding en cours
   useEffect(() => {
@@ -133,6 +145,11 @@ export default function Signup() {
   return (
     <div style={{ minHeight: '100vh', background: T.bg, fontFamily: '"DM Sans", sans-serif' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+      {/* Animations globales du signup (slide entre etapes + pulse indicateur sauvegarde) */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes yopSlideIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes yopPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+      ` }}/>
 
       {/* En-tête violet foncé */}
       <header style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.ink} 100%)`, padding: '1.25rem 1.25rem 1rem', color: '#fff', position: 'relative', overflow: 'hidden' }}>
@@ -161,8 +178,11 @@ export default function Signup() {
         </div>
       </header>
 
-      {/* Contenu de l'étape */}
-      <main style={{ maxWidth: 720, margin: '0 auto', padding: '1.5rem 1.25rem 4rem' }}>
+      {/* Bandeau recap sticky : visible des qu'on a un nom de commerce reel (etapes 2+) */}
+      <RecapHeader commercant={commercant} etatSauvegarde={etatSauvegarde}/>
+
+      {/* Contenu de l'etape - key={etape} declenche l'animation slide a chaque changement */}
+      <main key={etape} style={{ maxWidth: 720, margin: '0 auto', padding: '1.5rem 1.25rem 4rem', animation: 'yopSlideIn 0.3s ease-out' }}>
         {etape === 1 && (
           <Etape1Compte
             session={session}
@@ -178,6 +198,7 @@ export default function Signup() {
             onboarding={onboarding}
             onUpdate={c => setCommercant(c)}
             onUpdateOb={ob => setOnboarding(ob)}
+            onSaving={signalerSauvegarde}
             avancer={() => avancerVers(3)}
             retour={() => avancerVers(1)}
           />
@@ -188,6 +209,7 @@ export default function Signup() {
             onboarding={onboarding}
             onUpdate={c => setCommercant(c)}
             onUpdateOb={ob => setOnboarding(ob)}
+            onSaving={signalerSauvegarde}
             avancer={() => avancerVers(4)}
             retour={() => avancerVers(2)}
           />
@@ -198,6 +220,7 @@ export default function Signup() {
             onboarding={onboarding}
             onUpdate={c => setCommercant(c)}
             onUpdateOb={ob => setOnboarding(ob)}
+            onSaving={signalerSauvegarde}
             avancer={() => avancerVers(5)}
             retour={() => avancerVers(3)}
           />
@@ -208,6 +231,7 @@ export default function Signup() {
             onboarding={onboarding}
             onUpdate={c => setCommercant(c)}
             onUpdateOb={ob => setOnboarding(ob)}
+            onSaving={signalerSauvegarde}
             retour={() => avancerVers(4)}
             aller={n => avancerVers(n)}
           />
@@ -215,6 +239,60 @@ export default function Signup() {
       </main>
     </div>
   )
+}
+
+// ─── RECAP HEADER STICKY ──────────────────────────────────────────────────────
+// Bandeau persistant juste sous le header violet. Affiche "{nom} · {ville}"
+// des que le commercant a un vrai nom (apres l'etape 1) + indicateur sauvegarde
+// type Notion sur la droite.
+function extractVille(adresse) {
+  if (!adresse) return null
+  const parts = adresse.split(',').map(p => p.trim())
+  // Format Nominatim typique : "Rue X 12, 5640 Mettet, Belgique"
+  for (const part of parts) {
+    const m = part.match(/^\d{4}\s+(.+)$/)
+    if (m) return m[1]
+  }
+  return null
+}
+
+function RecapHeader({ commercant, etatSauvegarde }) {
+  if (!commercant) return null
+  const nomAffiche = commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : null
+  if (!nomAffiche) return null
+  const ville = extractVille(commercant.adresse)
+  return (
+    <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(248,246,255,0.92)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', borderBottom: `1px solid ${T.hairline}` }}>
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: '0.625rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <p style={{ fontSize: '0.85rem', fontWeight: 800, color: T.deep, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+          {nomAffiche}
+          {ville && <span style={{ color: T.muted, fontWeight: 500 }}> · {ville}</span>}
+        </p>
+        <IndicateurSauvegarde etat={etatSauvegarde}/>
+      </div>
+    </div>
+  )
+}
+
+function IndicateurSauvegarde({ etat }) {
+  if (!etat) return <span style={{ width: 1, flexShrink: 0 }}/>
+  if (etat === 'saving') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', color: T.muted, fontWeight: 600, flexShrink: 0 }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.mid, animation: 'yopPulse 1.2s infinite', flexShrink: 0 }}/>
+        Enregistrement…
+      </span>
+    )
+  }
+  if (etat === 'saved') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', color: '#10B981', fontWeight: 700, flexShrink: 0 }}>
+        <Check size={13} strokeWidth={2.6}/>
+        Enregistré
+      </span>
+    )
+  }
+  return null
 }
 
 // ─── BARRE DE PROGRESSION ─────────────────────────────────────────────────────
@@ -694,7 +772,7 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
 // - Nom, type, adresse (autocomplete Nominatim), téléphone, description ≥20
 // - Sauvegarde auto champ par champ (debounce 600ms)
 // - Update onboarding_commercants.infos_ok = true quand tous les champs requis
-function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, avancer, retour }) {
+function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, avancer, retour }) {
   const [form, setForm] = useState({
     nom: commercant.nom === 'Mon commerce' ? '' : (commercant.nom || ''),
     type: commercant.type === 'À définir' ? '' : (commercant.type || ''),
@@ -727,7 +805,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, avancer, re
   }
 
   async function sauvegarder(values) {
-    setSaving(true)
+    setSaving(true); onSaving?.('saving')
     const payload = {
       nom: values.nom.trim() || 'Mon commerce',
       type: values.type.trim() || 'À définir',
@@ -739,7 +817,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, avancer, re
     }
     const { data } = await supabase.from('commercants').update(payload).eq('id', commercant.id).select().single()
     if (data) onUpdate(data)
-    setSaving(false)
+    setSaving(false); onSaving?.('saved')
   }
 
   // Autocomplete Nominatim (Belgique en priorité)
@@ -857,7 +935,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, avancer, re
 // - Validation : JPG / PNG / WEBP, 800px min, 8MB max
 // - Stockage Supabase Storage bucket 'logos' (existant) avec préfixes différents
 // - URL couverture insérée dans commercant_photos (type='couverture')
-function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, avancer, retour }) {
+function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, avancer, retour }) {
   const [logoUrl, setLogoUrl] = useState(commercant.logo_url || null)
   const [couvertureUrl, setCouvertureUrl] = useState(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -1125,7 +1203,7 @@ const JOURS = [
   { key: 'dimanche', label: 'Dimanche' },
 ]
 
-function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, avancer, retour }) {
+function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, avancer, retour }) {
   const initial = commercant.horaires_detail || {}
   const [horaires, setHoraires] = useState(() => {
     const out = {}
@@ -1159,14 +1237,14 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, avancer,
   }
 
   async function sauvegarder(values) {
-    setSaving(true)
+    setSaving(true); onSaving?.('saving')
     const { data } = await supabase.from('commercants')
       .update({ horaires_detail: values })
       .eq('id', commercant.id)
       .select()
       .single()
     if (data) onUpdate(data)
-    setSaving(false)
+    setSaving(false); onSaving?.('saved')
   }
 
   // Valide si au moins 1 jour est ouvert
@@ -1297,7 +1375,7 @@ function classerProduitsParCategorie(categorie) {
   return { principaux, secondaires }
 }
 
-function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, retour, aller }) {
+function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, retour, aller }) {
   // S2a (17/06) : shopChoices = Set des types de produits choisis.
   // Persistance locale pour l'instant ; migration DB + paiement Stripe en S2b.
   // Pour compat ascendante : si onboarding.success_pack_choisi existe (ancien

@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import SectionTousCommercants from './SectionTousCommercants'
+import { Sparkles, Store, Scissors, Croissant, Phone, Eye, Lock } from 'lucide-react'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
@@ -196,7 +197,7 @@ export default function AdminPage() {
 
           {!loading && aValider.length === 0 && (
             <div style={{ background: '#fff', borderRadius: 14, padding: '32px 20px', textAlign: 'center', border: `1px solid ${T.hairline}` }}>
-              <p style={{ fontSize: 36, margin: '0 0 8px' }}>✨</p>
+              <Sparkles size={36} strokeWidth={1.6} style={{ margin: '0 auto 8px', display: 'block' }}/>
               <p style={{ color: T.muted, margin: 0, fontWeight: 600 }}>Aucune demande en attente.</p>
               <p style={{ color: T.muted, margin: '4px 0 0', fontSize: 13 }}>Pause méritée.</p>
             </div>
@@ -310,7 +311,7 @@ function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
         <div style={{ width: 64, height: 64, borderRadius: 14, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
           {c.logo_url
             ? <img src={c.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-            : <span style={{ fontSize: 26 }}>🏪</span>}
+            : <Store size={26} strokeWidth={1.6}/>}
         </div>
 
         {/* Infos */}
@@ -321,7 +322,9 @@ function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
               {(c.plan || 'on').toUpperCase()}
             </span>
             <span style={{ fontSize: 10, fontWeight: 800, color: T.main, background: '#fff', border: `1px solid ${T.main}33`, padding: '3px 9px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              {c.categorie === 'vitrine' ? '💇 Vitrine' : '🥐 Alimentaire'}
+              {c.categorie === 'vitrine'
+                ? <><Scissors size={12} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/>Vitrine</>
+                : <><Croissant size={12} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/>Alimentaire</>}
             </span>
             {score != null && (
               <span style={{ fontSize: 11, fontWeight: 800, color: couleurScore, background: '#F9FAFB', padding: '3px 9px', borderRadius: 100, border: `1px solid ${couleurScore}33` }}>
@@ -344,7 +347,7 @@ function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
           )}
           <div style={{ display: 'grid', gap: 4, fontSize: 12, color: T.muted }}>
             {c.adresse && <div>📍 {c.adresse}{c.latitude && c.longitude ? <span style={{ color: '#10B981', marginLeft: 6 }}>✓ géocodée</span> : <span style={{ color: '#EA580C', marginLeft: 6 }}>⚠ pas géocodée</span>}</div>}
-            {c.telephone && <div>📞 {c.telephone}</div>}
+            {c.telephone && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Phone size={12} strokeWidth={1.8}/> {c.telephone}</div>}
             {c.email && <div>✉ {c.email}</div>}
           </div>
           {c.motif_rejet && (
@@ -360,7 +363,7 @@ function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
         {c.slug && (
           <a href={`/commander/${c.slug}`} target="_blank" rel="noopener noreferrer"
             style={{ padding: '9px 16px', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.muted, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}>
-            👁 Aperçu fiche
+            <Eye size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Aperçu fiche
           </a>
         )}
         <button onClick={onRejeter} disabled={disabled}
@@ -381,7 +384,7 @@ function CenteredMsg({ children, variant }) {
   return (
     <div style={{ minHeight: '100vh', background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.ink} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans", sans-serif' }}>
       <div style={{ background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(20px)', borderRadius: 18, padding: '28px 32px', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', textAlign: 'center', maxWidth: 420 }}>
-        {variant === 'error' && <p style={{ fontSize: 38, margin: '0 0 8px' }}>🔒</p>}
+        {variant === 'error' && <Lock size={38} strokeWidth={1.6} color="#DC2626" style={{ margin: '0 auto 8px', display: 'block' }}/>}
         <div style={{ color: '#fff', fontSize: 15, lineHeight: 1.6 }}>{children}</div>
       </div>
     </div>

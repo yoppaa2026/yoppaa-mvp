@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
 import ModalNouveauRdv from './ModalNouveauRdv'
+import { Reply, ClipboardList } from 'lucide-react'
 
 const T = {
   bg:      '#F8F6FF',
@@ -25,9 +26,9 @@ const T = {
 }
 
 const STATUTS = {
-  'en_attente':     { label: 'Nouvelle',    couleur: T.rouge,  icon: '🔴', next: 'en_preparation', nextLabel: 'Démarrer la prépa' },
-  'en_preparation': { label: 'En prépa',    couleur: T.orange, icon: '🟠', next: 'pret',            nextLabel: 'Marquer prête' },
-  'pret':           { label: 'Prête',       couleur: T.vert,   icon: '🟢', next: null,              nextLabel: null },
+  'en_attente':     { label: 'Nouvelle',    couleur: T.rouge,  icon: '●', next: 'en_preparation', nextLabel: 'Démarrer la prépa' },
+  'en_preparation': { label: 'En prépa',    couleur: T.orange, icon: '●', next: 'pret',            nextLabel: 'Marquer prête' },
+  'pret':           { label: 'Prête',       couleur: T.vert,   icon: '●', next: null,              nextLabel: null },
   'recupere':       { label: 'Récupérée',   couleur: T.bleu,   icon: '🔵', next: null,              nextLabel: null },
   'non_retire':     { label: 'Non retiré',  couleur: { border: '#9CA3AF', badge: '#6B7280', cardBg: '#F9FAFB' }, icon: '⚫', next: null, nextLabel: null },
 }
@@ -111,7 +112,7 @@ function envoyerNotification(titre, body) {
 }
 
 function jouerSon() {
-  envoyerNotification('🔔 Nouvelle commande !', 'Une nouvelle commande vient d\'arriver sur Yoppaa.')
+  envoyerNotification('Nouvelle commande !', 'Une nouvelle commande vient d\'arriver sur Yoppaa.')
 }
 
 // Son distinct pour le retrait client (yop.mp3 — plus court, plus festif)
@@ -193,7 +194,7 @@ function IconPhone({ size = 12, color = 'currentColor' }) {
 // Statuts RDV (parallele de STATUTS pour les commandes).
 // Vert pour 'honore', rouge pour 'annule' / 'no_show', violet pour 'confirme'.
 const STATUTS_RDV = {
-  'confirme':  { label: 'Confirmé',    couleur: { border: '#6B35C4', badge: '#6B35C4', cardBg: '#EDE0FF' }, icon: '🟣', actions: ['honore', 'no_show', 'annule'] },
+  'confirme':  { label: 'Confirmé',    couleur: { border: '#6B35C4', badge: '#6B35C4', cardBg: '#EDE0FF' }, icon: '●', actions: ['honore', 'no_show', 'annule'] },
   'honore':    { label: 'Honoré',      couleur: { border: '#10B981', badge: '#10B981', cardBg: '#F0FDF4' }, icon: '✓', actions: [] },
   'no_show':   { label: 'No-show',     couleur: { border: '#9CA3AF', badge: '#6B7280', cardBg: '#F9FAFB' }, icon: '⊘', actions: ['confirme'] },
   'annule':    { label: 'Annulé',      couleur: { border: '#DC2626', badge: '#DC2626', cardBg: '#FFF0F0' }, icon: '✕', actions: ['confirme'] },
@@ -344,7 +345,7 @@ function CarteCommande({ commande, numero, onChangerStatut, modeHistorique = fal
             }
           }}
             style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: '#6B7280', border: '1.5px solid #E5E7EB', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem', fontFamily: '"DM Sans", sans-serif', marginTop: 6 }}>
-            ↩ Annuler — remettre en Prête
+            <Reply size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Annuler, remettre en Prête
           </button>
         )}
       </div>
@@ -785,7 +786,7 @@ export default function Dashboard() {
       const ok = await demanderPermissionNotif()
       if (ok) {
         // Test immédiat
-        envoyerNotification('🔔 Alertes Yoppaa activées !', 'Tu recevras une notification à chaque nouvelle commande.')
+        envoyerNotification('Alertes Yoppaa activées !', 'Tu recevras une notification à chaque nouvelle commande.')
       } else {
         // Pas de permission — fallback audio seulement
         try { new Audio('/sounds/notification.mp3').play().catch(()=>{}) } catch(e) {}
@@ -1369,7 +1370,7 @@ export default function Dashboard() {
                   {/* Onglet Historique */}
                   <button className="pill" onClick={() => { setModeHistorique(true); setFiltreStatut('tout') }}
                     style={{ borderColor: modeHistorique ? '#6B7280' : `${T.main}28`, background: modeHistorique ? '#6B7280' : '#fff', color: modeHistorique ? '#fff' : T.muted, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    📋 Historique
+                    <ClipboardList size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Historique
                     {commandesHistorique.length > 0 && (
                       <span style={{ background: modeHistorique ? 'rgba(255,255,255,0.3)' : '#E5E7EB', color: modeHistorique ? '#fff' : T.muted, fontSize: '0.6rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>{commandesHistorique.length}</span>
                     )}
@@ -1402,7 +1403,7 @@ export default function Dashboard() {
                 )}
                 {!loading && commandesFiltrees.length === 0 && (
                   <div style={{ textAlign: 'center', padding: '4rem 0' }}>
-                    <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>🎉</div>
+                    <div style={{ marginBottom: '0.75rem' }}/>
                     <p style={{ fontWeight: 800, color: T.ink, marginBottom: 4 }}>Aucune commande ici</p>
                     <p style={{ fontSize: '0.875rem', color: T.muted }}>
                       {filtreStatut === 'actives' ? 'Toutes les commandes sont traitées !' : 'Rien dans ce filtre pour ce jour.'}

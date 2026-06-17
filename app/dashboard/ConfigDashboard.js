@@ -3,6 +3,14 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { canDo } from '@/lib/plans'
 import TabPaiements from './TabPaiements'
+// Icônes Lucide React (alignées sur la charte canonique Yoppaa).
+// Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
+import {
+  Check, X, AlertTriangle, Calendar, Clock, Lock, Trash2, Copy, Zap, Save, Phone,
+  Sun, Star, Settings, Package, Lightbulb, Camera, Store, Scissors, Croissant,
+  Bell, BellOff, ClipboardList, Bike, MapPin, FileText, Printer, Download,
+  Eye, Globe, Users, MessageCircle, Sparkles, Reply,
+} from 'lucide-react'
 
 const T = {
   bg:      '#F8F6FF',
@@ -312,7 +320,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     setCatActive(nouvelleCat.trim())
     setNouvelleCat('')
     setShowCatForm(false)
-    toast('Catégorie créée ✓')
+    toast('Catégorie créée')
   }
 
   // ─── Renommer une catégorie ────────────────────────────────────────────────
@@ -1262,7 +1270,7 @@ function TabDeals({ commercantId, commercant, toast }) {
                 ))}
               </select>
               <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
-                Si tu lies un produit, le badge DEAL s&rsquo;affiche dessus dans le menu et la réduction est appliquée automatiquement au panier (plan FULL alimentaire).
+                Si tu lies un produit, le badge DEAL s&rsquo;affiche dessus dans le menu et la réduction est appliquée automatiquement au panier (plan Vendre alimentaire).
               </p>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -1636,14 +1644,14 @@ function TabCreneaux({ commercantId, toast }) {
     setSavingHorizon(true)
     await supabase.from('commercants').update({ horizon_commande: val }).eq('id', commercantId)
     setHorizon(val); setSavingHorizon(false)
-    toast('Horizon mis à jour ✓')
+    toast('Horizon mis à jour')
   }
 
   async function saveModeGlobal(val) {
     setSavingMode(true)
     await supabase.from('commercants').update({ mode_capacite: val }).eq('id', commercantId)
     setModeGlobal(val); setSavingMode(false)
-    toast('Mode mis à jour ✓')
+    toast('Mode mis à jour')
   }
 
   async function updateCapaciteTemps(id, val) {
@@ -1679,7 +1687,7 @@ function TabCreneaux({ commercantId, toast }) {
     if (cmdLiees?.length > 0) { toast(`Impossible — ${cmdLiees.length} commande(s) active(s) sur ce créneau`, 'error'); return }
     const { error } = await supabase.from('creneaux').delete().eq('id', id)
     if (error) { toast('Erreur suppression : ' + error.message, 'error'); return }
-    toast('Créneau supprimé ✓'); fetchAll()
+    toast('Créneau supprimé'); fetchAll()
   }
 
   // ─── Fix toutSupprimer — delete un par un pour éviter bug .in() ───────────
@@ -1705,7 +1713,7 @@ function TabCreneaux({ commercantId, toast }) {
       toast('Impossible — tous ont des commandes actives', 'error'); return
     }
     if (avecCmd.length > 0) {
-      if (!confirm(`⚠️ ${avecCmd.length} créneau(x) ont des commandes actives.\nOK = supprimer uniquement les ${sansCmd.length} créneaux libres`)) return
+      if (!confirm(`${avecCmd.length} créneau(x) ont des commandes actives.\nOK = supprimer uniquement les ${sansCmd.length} créneaux libres`)) return
     }
 
     // Supprimer un par un (évite le bug .in())
@@ -1714,7 +1722,7 @@ function TabCreneaux({ commercantId, toast }) {
       const { error } = await supabase.from('creneaux').delete().eq('id', id)
       if (!error) ok++
     }
-    toast(`${ok} créneau(x) supprimé(s) ✓`); fetchAll()
+    toast(`${ok} créneau(x) supprimé(s)`); fetchAll()
   }
 
   // ─── Ajouter créneau sur le jour actif ────────────────────────────────────
@@ -1726,7 +1734,7 @@ function TabCreneaux({ commercantId, toast }) {
     if (jourOuvert(jourActif) && horaires?.[jourActif]) {
       const h = horaireJour(jourActif)
       if (form.heure_debut < h.debut || form.heure_fin > h.fin) {
-        if (!confirm(`⚠️ Ce créneau est hors des horaires d'ouverture (${h.debut}–${h.fin}).\nContinuer quand même ?`)) return
+        if (!confirm(`Ce créneau est hors des horaires d'ouverture (${h.debut}–${h.fin}).\nContinuer quand même ?`)) return
       }
     }
 
@@ -1734,7 +1742,7 @@ function TabCreneaux({ commercantId, toast }) {
     const existants = creneauxDuJour(jourActif)
     for (const e of existants) {
       if (form.heure_debut < e.heure_fin.slice(0,5) && form.heure_fin > e.heure_debut.slice(0,5)) {
-        toast('⚠️ Ce créneau chevauche un créneau existant', 'error'); return
+        toast('Ce créneau chevauche un créneau existant', 'error'); return
       }
     }
 
@@ -1750,7 +1758,7 @@ function TabCreneaux({ commercantId, toast }) {
       capacite_temps: parseFloat(form.capacite_temps) || 30
     })
     if (error) { toast('Erreur : ' + error.message, 'error'); setSaving(false); return }
-    toast('Créneau ajouté ✓'); setSaving(false); setShowForm(false)
+    toast('Créneau ajouté'); setSaving(false); setShowForm(false)
     setForm({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true, capacite_temps: 30 })
     fetchAll()
   }
@@ -1768,7 +1776,7 @@ function TabCreneaux({ commercantId, toast }) {
 
     // Vérif hors horaires
     if (debut < h.debut || fin > h.fin) {
-      toast(`⚠️ Hors horaires d'ouverture (${h.debut}–${h.fin}) — génération annulée`, 'error'); return
+      toast(`Hors horaires d'ouverture (${h.debut}–${h.fin}) — génération annulée`, 'error'); return
     }
 
     const slots = []
@@ -1785,12 +1793,12 @@ function TabCreneaux({ commercantId, toast }) {
 
     const existants = creneauxDuJour(jourActif)
     if (existants.length > 0) {
-      if (!confirm(`⚠️ ${existants.length} créneau(x) existent déjà pour ${jourActif}.\nOK = remplacer · Annuler = abandonner`)) return
+      if (!confirm(`${existants.length} créneau(x) existent déjà pour ${jourActif}.\nOK = remplacer · Annuler = abandonner`)) return
       for (const c of existants) await supabase.from('creneaux').delete().eq('id', c.id)
     }
 
     await supabase.from('creneaux').insert(slots)
-    toast(`${slots.length} créneaux générés pour ${jourActif} ✓`); fetchAll()
+    toast(`${slots.length} créneaux générés pour ${jourActif}`); fetchAll()
   }
 
   // ─── Copier vers d'autres jours ───────────────────────────────────────────
@@ -1819,7 +1827,7 @@ function TabCreneaux({ commercantId, toast }) {
       await supabase.from('creneaux').insert(copies)
       total += copies.length
     }
-    toast(`${total} créneau(x) copiés ✓`); setShowCopier(false); setJoursCibles([]); fetchAll()
+    toast(`${total} créneau(x) copiés`); setShowCopier(false); setJoursCibles([]); fetchAll()
   }
 
   // ─── Fermetures exceptionnelles ───────────────────────────────────────────
@@ -1834,14 +1842,14 @@ function TabCreneaux({ commercantId, toast }) {
       motif: fermetureForm.motif.trim() || null
     })
     if (error) { toast('Erreur : ' + error.message, 'error'); setSavingFermeture(false); return }
-    toast('Fermeture ajoutée ✓'); setSavingFermeture(false); setShowFermetureForm(false)
+    toast('Fermeture ajoutée'); setSavingFermeture(false); setShowFermetureForm(false)
     setFermetureForm({ date_debut: '', date_fin: '', motif: '' }); fetchAll()
   }
 
   async function deleteFermeture(id) {
     if (!confirm('Supprimer cette fermeture ?')) return
     await supabase.from('fermetures_exceptionnelles').delete().eq('id', id)
-    toast('Fermeture supprimée ✓'); fetchAll()
+    toast('Fermeture supprimée'); fetchAll()
   }
 
   if (loading) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
@@ -2160,7 +2168,7 @@ function TabProfil({ commercantId, toast }) {
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
     await supabase.from('commercants').update({ logo_url: urlData.publicUrl }).eq('id', commercantId)
     setLogoPreview(urlData.publicUrl)
-    toast('Logo mis à jour ✓'); setUploadingLogo(false)
+    toast('Logo mis à jour'); setUploadingLogo(false)
   }
 
   async function supprimerLogo() {
@@ -2179,7 +2187,7 @@ function TabProfil({ commercantId, toast }) {
       toast(`Erreur enregistrement : ${error.message}`, 'error')
       return
     }
-    toast('Profil mis à jour ✓')
+    toast('Profil mis à jour')
   }
 
   if (loading || !form) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
@@ -2273,9 +2281,9 @@ function TabProfil({ commercantId, toast }) {
 
         {/* ─── Notifications RDV ou Commandes ─── */}
         {/* Toggle unique notif_mode (chaque/recap_jour/aucun) qui s'applique aux RDV
-            pour les vitrines ET aux commandes C&C pour les alimentaires FULL.
+            pour les vitrines ET aux commandes C&C pour les alimentaires Vendre.
             Label adapte selon categorie (un commercant n'est jamais les deux). */}
-        {((form.categorie === 'vitrine' && form.rdv_actif) || (form.categorie === 'alimentaire' && form.plan === 'full')) && (() => {
+        {((form.categorie === 'vitrine' && form.rdv_actif) || (form.categorie === 'alimentaire' && canDo(form.plan, 'commande'))) && (() => {
           const estVitrine = form.categorie === 'vitrine'
           const noun = estVitrine ? 'RDV' : 'commandes'
           const nounSing = estVitrine ? 'RDV' : 'commande'
@@ -2310,12 +2318,12 @@ function TabProfil({ commercantId, toast }) {
           )
         })()}
 
-        {/* ─── Toggles FULL (alimentaire uniquement) ─── */}
-        {/* Les commercants FULL alim peuvent choisir d'activer/desactiver
+        {/* ─── Toggles Vendre (alimentaire uniquement) ─── */}
+        {/* Les commerçants Vendre alim peuvent choisir d'activer/désactiver
             certaines features (livraison, fidelite). La pill client reflete l'etat. */}
-        {form.plan === 'full' && form.categorie === 'alimentaire' && (
+        {canDo(form.plan, 'commande') && form.categorie === 'alimentaire' && (
           <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
-            <p style={{ ...s.label, marginBottom: 12 }}>Fonctionnalités activables (plan FULL)</p>
+            <p style={{ ...s.label, marginBottom: 12 }}>Fonctionnalités activables (plan Vendre)</p>
 
             <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.livraison_actif ? T.main : T.pale}`, background: form.livraison_actif ? T.pale : '#fff', cursor: 'pointer', marginBottom: 10, transition: 'all 0.15s' }}>
               <input type="checkbox" checked={!!form.livraison_actif} onChange={e => setForm(p => ({ ...p, livraison_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
@@ -2563,7 +2571,7 @@ function QRCodeSection({ commercantId, toast }) {
     const a = document.createElement('a')
     a.download = `yoppaa-qr-${slug}.png`
     a.href = canvas.toDataURL('image/png')
-    a.click(); toast('PNG téléchargé ✓')
+    a.click(); toast('PNG téléchargé')
   }
 
   async function downloadPDF(format) {
@@ -2581,7 +2589,7 @@ function QRCodeSection({ commercantId, toast }) {
       const imgH = imgW * (canvas.height / canvas.width)
       pdf.addImage(imgData, 'PNG', (W - imgW) / 2, (H - imgH) / 2, imgW, imgH)
       pdf.save(`yoppaa-qr-${slug}-${format}.pdf`)
-      toast(`PDF ${format} téléchargé ✓`)
+      toast(`PDF ${format} téléchargé`)
     } catch (e) { console.error(e); toast('Erreur PDF', 'error') }
   }
 
@@ -2638,7 +2646,7 @@ function QRCodeSection({ commercantId, toast }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.pale, borderRadius: 10, padding: '8px 12px', marginBottom: 16 }}>
         <span style={{ fontSize: 11, color: T.main, flex: 1, wordBreak: 'break-all' }}>{url}</span>
         <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 11, flexShrink: 0 }}
-          onClick={() => { navigator.clipboard.writeText(url); toast('URL copiée ✓') }}>📋</button>
+          onClick={() => { navigator.clipboard.writeText(url); toast('URL copiée') }}>📋</button>
       </div>
 
       {/* PNG */}
@@ -2844,7 +2852,7 @@ function TabAvis({ commercantId, toast }) {
     if (!texte) return toast('Réponse vide', 'error')
     setSaving(avisId)
     await supabase.from('avis').update({ reponse_commercant: texte }).eq('id', avisId)
-    toast('Réponse publiée ✓'); setSaving(null)
+    toast('Réponse publiée'); setSaving(null)
     setReponses(p => ({ ...p, [avisId]: '' })); fetchAvis()
   }
 
@@ -2959,10 +2967,10 @@ export default function ConfigDashboard({ commercantId }) {
     return () => { annule = true }
   }, [commercantId, tab])
 
-  // Onglet 'Paiements' visible uniquement pour les commerçants FULL :
-  //   • Vitrine FULL → acompte RDV en ligne
-  //   • Alimentaire FULL → paiement obligatoire commande C&C (Phase 1.5)
-  const peutPaiements = commercant?.plan === 'full'
+  // Onglet 'Paiements' visible uniquement pour les commerçants Vendre :
+  //   • Vitrine Vendre → acompte RDV en ligne
+  //   • Alimentaire Vendre → paiement obligatoire commande C&C (Phase 1.5)
+  const peutPaiements = canDo(commercant?.plan, 'paiement_ligne')
 
   // Vitrine : on parle de "Vitrine" plutôt que "Menu", et on masque "Créneaux" (pas de C&C)
   const tabs = [

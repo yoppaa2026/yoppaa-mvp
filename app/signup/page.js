@@ -12,6 +12,9 @@ import {
   ShoppingCart, Bike, Utensils, Calendar, Briefcase, Clock, Users, Package, CreditCard, Star, Download,
   Smartphone, Printer, Camera, FileText, Pencil, CheckCircle, Check, Circle,
 } from 'lucide-react'
+// Logo canonique Yoppaa : wordmark + 5 dots V2-B (spec validee 12/06).
+// Ne JAMAIS redessiner les dots ailleurs : importer YoppaaLogo ou YoppaaDots.
+import YoppaaLogo from '@/app/components/YoppaaLogo'
 
 // Types de commerce séparés par catégorie : la liste affichée à l'étape 2
 // dépend du choix fait à l'étape 1 (alimentaire vs vitrine).
@@ -92,6 +95,36 @@ function genererLogoCanvas(nom) {
   return canvas
 }
 
+// Dots V2-B (5 dots maillon) — spec canonique 2026-06-12, fond fonce.
+// Sequence : grand / mini / grand / mini / grand, decalage vertical 0.4*base
+// sur les 4 dots du milieu pour former le sourire.
+function dessinerDotsV2B(ctx, centerX, topY, base, colors) {
+  const mini = base * 0.55
+  const gap = base * 0.55
+  const offset = base * 0.4
+  const total = 3 * base + 2 * mini + 4 * gap
+  let x = centerX - total / 2
+  // d1 grand (pas d'offset)
+  ctx.fillStyle = colors[0]
+  ctx.beginPath(); ctx.arc(x + base / 2, topY + base / 2, base / 2, 0, Math.PI * 2); ctx.fill()
+  x += base + gap
+  // d2 mini (offset)
+  ctx.fillStyle = colors[1]
+  ctx.beginPath(); ctx.arc(x + mini / 2, topY + offset + mini / 2, mini / 2, 0, Math.PI * 2); ctx.fill()
+  x += mini + gap
+  // d3 grand (offset)
+  ctx.fillStyle = colors[2]
+  ctx.beginPath(); ctx.arc(x + base / 2, topY + offset + base / 2, base / 2, 0, Math.PI * 2); ctx.fill()
+  x += base + gap
+  // d4 mini (offset)
+  ctx.fillStyle = colors[3]
+  ctx.beginPath(); ctx.arc(x + mini / 2, topY + offset + mini / 2, mini / 2, 0, Math.PI * 2); ctx.fill()
+  x += mini + gap
+  // d5 grand (pas d'offset)
+  ctx.fillStyle = colors[4]
+  ctx.beginPath(); ctx.arc(x + base / 2, topY + base / 2, base / 2, 0, Math.PI * 2); ctx.fill()
+}
+
 function genererCoverCanvas(nom) {
   const w = 1600, h = 900
   const canvas = document.createElement('canvas')
@@ -110,39 +143,27 @@ function genererCoverCanvas(nom) {
   halo.addColorStop(1, 'rgba(150, 96, 224, 0)')
   ctx.fillStyle = halo
   ctx.fillRect(0, 0, w, h)
-  // 3 dots tricolores au-dessus du nom (signature Yoppaa canonique)
-  const dotY = h / 2 - 100
-  const dotR = 14
-  const dotGap = 32
-  const dots = [
-    { c: '#FFFFFF', alpha: 0.55 },
-    { c: '#C4A0F4', alpha: 1 },
-    { c: '#9660E0', alpha: 1 },
-  ]
-  dots.forEach((d, i) => {
-    ctx.globalAlpha = d.alpha
-    ctx.fillStyle = d.c
-    ctx.beginPath()
-    ctx.arc(w / 2 - dotGap + i * dotGap, dotY, dotR, 0, Math.PI * 2)
-    ctx.fill()
-  })
-  ctx.globalAlpha = 1
-  // Nom du commerce centre, Plus Jakarta Sans 800, blanc
+  // Nom du commerce centre (Plus Jakarta Sans 800 minuscules style wordmark)
   ctx.fillStyle = '#FFFFFF'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  let fontSize = 110
-  ctx.font = `bold ${fontSize}px "Plus Jakarta Sans", system-ui, sans-serif`
+  let fontSize = 130
+  ctx.font = `800 ${fontSize}px "Plus Jakarta Sans", system-ui, sans-serif`
   const nomClean = (nom || 'Mon commerce').trim()
   while (ctx.measureText(nomClean).width > w * 0.82 && fontSize > 50) {
     fontSize -= 6
-    ctx.font = `bold ${fontSize}px "Plus Jakarta Sans", system-ui, sans-serif`
+    ctx.font = `800 ${fontSize}px "Plus Jakarta Sans", system-ui, sans-serif`
   }
-  ctx.fillText(nomClean, w / 2, h / 2 + 40)
-  // Tagline sous le nom
-  ctx.fillStyle = 'rgba(196, 160, 244, 0.85)'
-  ctx.font = '600 32px "DM Sans", system-ui, sans-serif'
-  ctx.fillText('sur Yoppaa', w / 2, h / 2 + 130)
+  ctx.fillText(nomClean, w / 2, h / 2 - 40)
+  // Dots V2-B SOUS le nom (5 dots maillon, palette fond fonce)
+  // Couleurs : blanc / light / light / mid / mid (cf. composant YoppaaLogo)
+  const dotBase = 56
+  const dotsTopY = h / 2 + 60
+  dessinerDotsV2B(ctx, w / 2, dotsTopY, dotBase, ['#FFFFFF', '#C4A0F4', '#C4A0F4', '#9660E0', '#9660E0'])
+  // Slogan "sur Yoppaa" SOUS les dots
+  ctx.fillStyle = 'rgba(196, 160, 244, 0.9)'
+  ctx.font = '600 34px "Plus Jakarta Sans", system-ui, sans-serif'
+  ctx.fillText('sur Yoppaa', w / 2, dotsTopY + dotBase + 50)
   return canvas
 }
 
@@ -261,13 +282,8 @@ export default function Signup() {
       <header style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.ink} 100%)`, padding: '1.25rem 1.25rem 1rem', color: '#fff', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 20%, ${T.mid}33 0%, transparent 50%)`, pointerEvents: 'none' }}/>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', maxWidth: 720, margin: '0 auto', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ display: 'flex', gap: 5 }}>
-              {[{c:'#fff',o:0.4},{c:T.light,o:1},{c:T.mid,o:1}].map((d,i) => (
-                <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: d.c, opacity: d.o }}/>
-              ))}
-            </div>
-            <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.4rem', letterSpacing: '-0.05em', color: '#fff', lineHeight: 1, margin: 0 }}>yoppaa</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <YoppaaLogo size={28} mode="dark"/>
             <span style={{ fontSize: '0.6rem', fontWeight: 800, color: T.light, background: `${T.main}55`, padding: '3px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '1px', border: `1px solid ${T.light}44` }}>Inscription pro</span>
           </div>
           {session && (

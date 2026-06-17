@@ -7,6 +7,8 @@ import PillsStatut from '../PillsStatut'
 import CTAUpgrade from '../CTAUpgrade'
 import ModalSignalement from '../ModalSignalement'
 import HorairesSection from '../HorairesSection'
+// Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
+import { Star, Flame, Calendar, Store } from 'lucide-react'
 
 const T = {
   bg:      '#F8F6FF',
@@ -42,7 +44,7 @@ function maintenant() {
 }
 function Etoiles({ note, taille = 14 }) {
   const n = note ? Math.round(note) : 0
-  return <span style={{ display: 'inline-flex', gap: 1 }}>{[1,2,3,4,5].map(i => <span key={i} style={{ fontSize: taille, color: i<=n ? '#F59E0B' : '#D1D5DB' }}>★</span>)}</span>
+  return <span style={{ display: 'inline-flex', gap: 1 }}>{[1,2,3,4,5].map(i => <Star key={i} size={taille} strokeWidth={1.6} color={i<=n ? '#F59E0B' : '#D1D5DB'} fill={i<=n ? '#F59E0B' : 'none'}/>)}</span>
 }
 
 // ─── Skeleton loader ──────────────────────────────────────────────────────────
@@ -114,7 +116,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
             <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, animation: `swipePulse 0.6s ease-in-out ${d.d} infinite alternate`, boxShadow: `0 0 12px ${d.c}88` }}/>
           ))}
         </div>
-        <p style={{ fontWeight: 900, fontSize: '1.1rem', color: C.ink, letterSpacing: '-0.3px', marginBottom: 4 }}>Récupéré ! 🎉</p>
+        <p style={{ fontWeight: 900, fontSize: '1.1rem', color: C.ink, letterSpacing: '-0.3px', marginBottom: 4 }}>Récupéré !</p>
         <p style={{ fontSize: '0.82rem', color: '#6B7280', fontWeight: 600 }}>Profite bien {clientPrenom} !</p>
       </div>
     )
@@ -1430,7 +1432,7 @@ export default function CommanderSlug() {
             {/* En-tête violet foncé */}
             <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, padding: '20px 22px 24px', color: '#fff' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
-                <span style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px', background: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: 100, border: '1px solid rgba(255,255,255,0.2)' }}>🔥 Deal du jour</span>
+                <span style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px', background: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: 100, border: '1px solid rgba(255,255,255,0.2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Flame size={11} strokeWidth={2}/> Deal du jour</span>
                 <button onClick={() => setDealDetailOuvert(null)} aria-label="Fermer"
                   style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 30, height: 30, color: '#fff', cursor: 'pointer', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
               </div>
@@ -1453,7 +1455,7 @@ export default function CommanderSlug() {
               )}
               {dealDetailOuvert.date_deal && (
                 <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 600, margin: '0 0 6px' }}>
-                  📅 Valable le {new Date(dealDetailOuvert.date_deal + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })}
+                  <Calendar size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Valable le {new Date(dealDetailOuvert.date_deal + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })}
                 </p>
               )}
               {dealDetailOuvert.article_id && (
@@ -1653,7 +1655,7 @@ export default function CommanderSlug() {
                     <div style={{ width: 64, height: 64, borderRadius: 16, background: commercant.logo_url ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, border: '3px solid #fff', boxShadow: `0 6px 20px rgba(22,6,54,0.22)`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: -28 }}>
                       {commercant.logo_url
                         ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                        : <span style={{ fontSize: '1.8rem' }}>🏪</span>
+                        : <Store size={32} strokeWidth={1.6} color={T.muted}/>
                       }
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1774,7 +1776,7 @@ export default function CommanderSlug() {
                   <div style={{ margin: '0 12px 12px' }}>
                     <button onClick={() => setDealDetailOuvert(dealActif)}
                       style={{ width: '100%', background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, animation: 'dealGlow 1.8s ease-in-out infinite', border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
-                      <span style={{ fontSize: 18 }}>🔥</span>
+                      <Flame size={20} strokeWidth={2} color={T.light} style={{ flexShrink: 0 }}/>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>Deal du jour</p>
                         <p style={{ fontSize: '0.9rem', fontWeight: 800, color: '#fff', marginTop: 2, lineHeight: 1.3 }}>{dealActif.titre}</p>

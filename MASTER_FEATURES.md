@@ -79,21 +79,28 @@ Promotion limitée dans le temps publiée par le commerçant.
 - **Disponible avec** : Communiquer · Vendre (pas Exister)
 - **Différence Communiquer vs Vendre** : sur Communiquer, le deal est informatif (le Yopper voit la promo mais doit passer en magasin). Sur Vendre, le Yopper peut commander/réserver/payer directement depuis le deal.
 
-### Bonne affaire (deal de dernière minute)
-**Définition validée 17/06** : un deal devient *"Bonne affaire"* quand il **expire dans moins de 24 heures**. C'est la distinction officielle entre Deal et Bonne affaire.
+### Bonne affaire (jour J uniquement)
+**Définition validée 17/06** : une *"Bonne affaire"* est une promotion publiée par le commerçant **le jour J pour le jour J uniquement**. Elle est valable du moment de sa publication jusqu'à minuit le même jour. **Impossible de programmer une bonne affaire pour demain ou plus tard.**
 
 **Pourquoi cette mécanique** :
-- Crée de l'**urgence** et de la **chasse aux promos quotidiennes**
-- Pousse les Yoppers à ouvrir l'app tous les jours pour ne pas manquer
-- Bénéfice business pour le commerçant : écoulement rapide de stock, créneau de fin de journée, etc.
+- Crée une **urgence forte** (le Yopper a quelques heures pour en profiter)
+- Pousse les Yoppers à **ouvrir l'app tous les jours** (sinon ils ratent les bonnes affaires du jour)
+- Bénéfice business pour le commerçant : écoulement de stock du jour, créneau du soir, fin de production, etc.
+- Différencie clairement Deal (durée libre) de Bonne affaire (jour J uniquement)
 
 **Comment ça se passe en pratique** :
-- Le commerçant crée un Deal normal avec une date d'expiration. Quand l'expiration arrive à <24h, le Deal bascule automatiquement en *"Bonne affaire"* et apparaît dans la section dédiée de l'app Yoppaa.
-- OU le commerçant crée directement une *"Bonne affaire"* avec durée max 24h.
+- Le commerçant crée une *"Bonne affaire"* à n'importe quel moment de la journée (matin, midi, fin d'après-midi)
+- Elle est immédiatement visible dans la section *"Bonnes affaires"* de l'app
+- À minuit, elle bascule automatiquement en archive (plus visible côté Yopper, accessible en stats côté commerçant)
+- Le commerçant peut créer **plusieurs bonnes affaires dans la même journée** (1 le matin pour le service midi, 1 le soir pour écouler ce qui reste)
 
-**Section dédiée dans l'app** : *"Bonnes affaires"* est une section transverse de l'app Yoppaa qui agrège TOUTES les bonnes affaires de la zone, peu importe le commerçant. Visible par tous les Yoppers, pas seulement les favoris. Crée la découverte de nouveaux commerces.
+**Section dédiée dans l'app** : *"Bonnes affaires"* est une section transverse de l'app Yoppaa qui agrège TOUTES les bonnes affaires du jour pour la zone, peu importe le commerçant. Visible par tous les Yoppers (pas seulement les favoris). Crée la découverte de nouveaux commerces.
 
 **Disponible avec** : Communiquer · Vendre.
+
+**Différence clé avec un Deal classique** :
+- **Deal** : promotion à durée libre (heures, jours, semaines) configurée par le commerçant. Visible sur la fiche du commerçant et envoyée en push aux favoris.
+- **Bonne affaire** : promotion strictement jour J pour jour J. Visible dans la section "Bonnes affaires" transverse à toute l'app. Apparaît dans le GMY du matin si publiée avant 7h30.
 
 ### Alerte
 Information urgente : fermeture exceptionnelle, rupture, indisponibilité. Bandeau rouge prioritaire sur la fiche, push immédiat aux Yoppers favoris.
@@ -326,11 +333,15 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Flag** : `deals`
 **Disponible avec** : Communiquer · Vendre
 
-#### Mise en avant Bonnes affaires (deal de dernière minute)
-**Description officielle** : Une *"Bonne affaire"* est un deal qui expire dans moins de **24 heures**. Quand un deal atteint cette urgence, il bascule automatiquement dans la section *"Bonnes affaires"* de l'application Yoppaa, visible par tous les Yoppers de la zone (pas seulement tes favoris). Crée l'urgence, écoule ton stock de fin de journée, fait découvrir ton commerce à de nouveaux Yoppers.
+#### Mise en avant Bonnes affaires (jour J uniquement)
+**Description officielle** : Crée une *"Bonne affaire"* publiée **le jour J pour le jour J uniquement**. Valable de l'instant de publication jusqu'à minuit. Elle apparaît dans la section *"Bonnes affaires"* de l'application Yoppaa, visible par tous les Yoppers de la zone (pas seulement tes favoris). Si publiée avant 7h30, elle remonte aussi dans le Good Morning Yoppers du matin.
 **Flag** : `bonnes_affaires`
 **Disponible avec** : Communiquer · Vendre
-**Règle automatique** : un Deal classique bascule en *"Bonne affaire"* à expiration -24h. Le commerçant peut aussi créer directement une *"Bonne affaire"* avec durée max 24h.
+**Règles** :
+- **Impossible de programmer pour demain** : la création d'une Bonne affaire la rend immédiatement active jusqu'à 23h59 du jour même
+- **Archivage automatique à minuit** : disparaît de l'app côté Yopper, reste en stats côté commerçant
+- **Plusieurs par jour autorisées** : 1 le matin pour le midi, 1 l'après-midi pour le soir, etc.
+- **Différence avec un Deal classique** : un Deal a une durée libre (heures, jours, semaines). Une Bonne affaire est strictement jour J pour jour J.
 
 #### Push ciblés aux favoris
 **Description officielle** : Envoie des notifications push manuelles à tes Yoppers favoris quand tu veux. Tu choisis le moment, tu segmentes si tu veux.

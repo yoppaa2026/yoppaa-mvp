@@ -1308,11 +1308,11 @@ function TabDeals({ commercantId, commercant, toast }) {
             )}
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: form.inclus_morning ? '#FFF7ED' : '#FAFAFA', border: `1.5px solid ${form.inclus_morning ? '#EA580C' : T.hairline}`, borderRadius: 10, cursor: 'pointer' }}>
               <input type="checkbox" checked={form.inclus_morning} onChange={e => setForm(p => ({ ...p, inclus_morning: e.target.checked }))} style={{ width: 18, height: 18, cursor: 'pointer' }}/>
-              <span style={{ fontSize: 13, color: T.ink, fontWeight: 700 }}>☀️ Inclure dans le Good Morning Yoppers</span>
+              <span style={{ fontSize: 13, color: T.ink, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Sun size={14} strokeWidth={1.8} color="#EA580C"/> Inclure dans le Good Morning Yoppers</span>
             </label>
             {warningSoumission && (
               <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#7F1D1D', fontWeight: 600 }}>
-                ⚠️ Deadline dépassée — ce deal ne sera pas dans le Good Morning Yoppers de demain.
+                <AlertTriangle size={14} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Deadline dépassée, ce deal ne sera pas dans le Good Morning Yoppers de demain.
               </div>
             )}
             {/* CTA Appeler pour réserver : à activer pour les deals qui nécessitent
@@ -1320,7 +1320,7 @@ function TabDeals({ commercantId, commercant, toast }) {
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: form.cta_appeler_reserver ? T.pale : '#FAFAFA', border: `1.5px solid ${form.cta_appeler_reserver ? T.bgPanel : T.hairline}`, borderRadius: 10, cursor: 'pointer' }}>
               <input type="checkbox" checked={form.cta_appeler_reserver} onChange={e => setForm(p => ({ ...p, cta_appeler_reserver: e.target.checked }))} style={{ width: 18, height: 18, cursor: 'pointer' }}/>
               <div style={{ flex: 1 }}>
-                <span style={{ fontSize: 13, color: T.ink, fontWeight: 700, display: 'block' }}>📞 Bouton « Appeler pour réserver »</span>
+                <span style={{ fontSize: 13, color: T.ink, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Phone size={14} strokeWidth={1.8}/> Bouton « Appeler pour réserver »</span>
                 <span style={{ fontSize: 11, color: T.muted, fontWeight: 500 }}>Active un bouton d&rsquo;appel direct dans la modale du deal côté client</span>
               </div>
             </label>
@@ -1369,7 +1369,7 @@ function DealRow({ d, today, onEdit, onToggle, onDelete, passe = false }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
             <span style={{ fontWeight: 800, color: T.ink, fontSize: 15 }}>{d.titre}</span>
             {isToday && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#F0FDF4', color: '#10B981' }}>Aujourd&rsquo;hui</span>}
-            {d.inclus_morning && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#FFF7ED', color: '#EA580C' }}>☀️ Morning</span>}
+            {d.inclus_morning && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#FFF7ED', color: '#EA580C', display: 'inline-flex', alignItems: 'center', gap: 3 }}><Sun size={11} strokeWidth={2}/> Morning</span>}
             <span style={{ ...s.tag, background: d.actif ? T.bgPanel : '#F3F4F6', color: d.actif ? '#fff' : T.muted }}>{d.actif ? 'Actif' : 'Inactif'}</span>
           </div>
           {d.description && <p style={{ fontSize: 12.5, color: T.muted, margin: '0 0 6px', lineHeight: 1.4 }}>{d.description}</p>}
@@ -1871,7 +1871,7 @@ function TabCreneaux({ commercantId, toast }) {
     <div>
       {/* ─── Horizon ─── */}
       <div style={{ ...s.card, marginBottom: 16, background: T.pale, border: `1.5px solid ${T.main}22`, boxShadow: 'none' }}>
-        <h3 style={{ fontWeight: 800, fontSize: 14, color: T.deep, marginBottom: 4 }}>📅 Horizon de réservation</h3>
+        <h3 style={{ fontWeight: 800, fontSize: 14, color: T.deep, marginBottom: 4, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Calendar size={15} strokeWidth={1.8}/> Horizon de réservation</h3>
         <p style={{ fontSize: 12, color: T.muted, marginBottom: 12, lineHeight: 1.5 }}>Jusqu'à combien de jours à l'avance tes clients peuvent réserver ?</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
           {HORIZONS.map(h => (
@@ -1886,12 +1886,12 @@ function TabCreneaux({ commercantId, toast }) {
 
       {/* ─── Mode capacité ─── */}
       <div style={{ ...s.card, marginBottom: 16 }}>
-        <h3 style={{ fontWeight: 800, fontSize: 14, color: T.deep, marginBottom: 4 }}>⚙️ Mode de capacité</h3>
+        <h3 style={{ fontWeight: 800, fontSize: 14, color: T.deep, marginBottom: 4, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Settings size={15} strokeWidth={1.8}/> Mode de capacité</h3>
         <p style={{ fontSize: 12, color: T.muted, marginBottom: 12, lineHeight: 1.5 }}>Comment la capacité de tes créneaux est calculée.</p>
         <div style={{ display: 'flex', gap: 8 }}>
           {[
-            { val: 'commandes', label: '📦 Commandes max', desc: 'Nombre de commandes par créneau' },
-            { val: 'temps', label: '⏱ Temps de préparation', desc: 'Capacité en minutes · 1 unité = 1 min' },
+            { val: 'commandes', label: 'Commandes max', desc: 'Nombre de commandes par créneau' },
+            { val: 'temps', label: 'Temps de préparation', desc: 'Capacité en minutes · 1 unité = 1 min' },
           ].map(m => (
             <button key={m.val} onClick={() => saveModeGlobal(m.val)} disabled={savingMode}
               style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: '2px solid ' + (modeGlobal === m.val ? T.main : T.pale), background: modeGlobal === m.val ? T.main : '#fff', cursor: 'pointer', textAlign: 'left', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s' }}>
@@ -1901,7 +1901,7 @@ function TabCreneaux({ commercantId, toast }) {
           ))}
         </div>
         {modeGlobal === 'temps' && (
-          <p style={{ fontSize: 11, color: T.main, marginTop: 10, fontWeight: 600 }}>💡 Capacité = durée créneau × nb de cuisiniers — Ex: 15 min × 2 = 30 min</p>
+          <p style={{ fontSize: 11, color: T.main, marginTop: 10, fontWeight: 600, display: 'inline-flex', alignItems: 'flex-start', gap: 5 }}><Lightbulb size={13} strokeWidth={1.8} style={{ flexShrink: 0, marginTop: 1 }}/> Capacité = durée créneau × nombre de cuisiniers (exemple : 15 min × 2 = 30 min)</p>
         )}
       </div>
 
@@ -1927,7 +1927,7 @@ function TabCreneaux({ commercantId, toast }) {
       {/* ─── Contenu du jour actif ─── */}
       {!jourOuvert(jourActif) ? (
         <div style={{ ...s.card, textAlign: 'center', padding: 32, background: '#FEF2F2', border: '1.5px solid #DC262622' }}>
-          <p style={{ fontSize: 20, marginBottom: 8 }}>🔒</p>
+          <Lock size={22} strokeWidth={1.8} color={T.muted} style={{ marginBottom: 8 }}/>
           <p style={{ fontWeight: 700, color: '#DC2626' }}>{jourActif} — Commerce fermé</p>
           <p style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>Modifie les horaires dans l'onglet Profil pour ouvrir ce jour.</p>
         </div>
@@ -1939,18 +1939,18 @@ function TabCreneaux({ commercantId, toast }) {
               <h2 style={{ ...s.h2, margin: 0, textTransform: 'capitalize' }}>{jourActif}</h2>
               {horaires?.[jourActif] && (
                 <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
-                  🕐 {horaireJour(jourActif).debut} – {horaireJour(jourActif).fin}
+                  <Clock size={12} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> {horaireJour(jourActif).debut} – {horaireJour(jourActif).fin}
                 </p>
               )}
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {crensJourActif.length > 0 && (
                 <>
-                  <button style={{ ...s.btn, ...s.btnGhost, fontSize: 12, padding: '6px 12px' }} onClick={() => { setShowCopier(v => !v); setShowForm(false) }}>📋 Copier vers...</button>
-                  <button style={{ ...s.btn, ...s.btnDanger, fontSize: 12, padding: '6px 12px' }} onClick={toutSupprimer}>🗑 Vider</button>
+                  <button style={{ ...s.btn, ...s.btnGhost, fontSize: 12, padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={() => { setShowCopier(v => !v); setShowForm(false) }}><Copy size={13} strokeWidth={1.8}/> Copier vers…</button>
+                  <button style={{ ...s.btn, ...s.btnDanger, fontSize: 12, padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={toutSupprimer}><Trash2 size={13} strokeWidth={1.8}/> Vider</button>
                 </>
               )}
-              <button style={{ ...s.btn, ...s.btnGhost, fontSize: 12, padding: '6px 12px' }} onClick={genererJour}>⚡ Générer</button>
+              <button style={{ ...s.btn, ...s.btnGhost, fontSize: 12, padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={genererJour}><Zap size={13} strokeWidth={1.8}/> Générer</button>
               <button style={{ ...s.btn, ...s.btnPrimary, fontSize: 12, padding: '6px 12px' }} onClick={() => { setShowForm(v => !v); setShowCopier(false) }}>+ Ajouter</button>
             </div>
           </div>
@@ -1959,7 +1959,7 @@ function TabCreneaux({ commercantId, toast }) {
           {horsHoraires.length > 0 && (
             <div style={{ background: '#FEF3C7', border: '1.5px solid #F59E0B44', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
               <p style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>
-                ⚠️ {horsHoraires.length} créneau(x) hors des horaires d'ouverture ({horaireJour(jourActif).debut}–{horaireJour(jourActif).fin})
+                <AlertTriangle size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> {horsHoraires.length} créneau(x) hors des horaires d'ouverture ({horaireJour(jourActif).debut}–{horaireJour(jourActif).fin})
               </p>
             </div>
           )}
@@ -1967,7 +1967,7 @@ function TabCreneaux({ commercantId, toast }) {
           {/* Panel copier vers */}
           {showCopier && (
             <div style={{ ...s.cardActive, marginBottom: 12 }}>
-              <p style={{ fontWeight: 700, fontSize: 13, color: T.ink, marginBottom: 10 }}>📋 Copier les créneaux de {jourActif} vers :</p>
+              <p style={{ fontWeight: 700, fontSize: 13, color: T.ink, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Copy size={14} strokeWidth={1.8}/> Copier les créneaux de {jourActif} vers :</p>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                 {JOURS_SEMAINE.filter(j => j !== jourActif).map(jour => {
                   const ouvert = jourOuvert(jour)
@@ -1981,7 +1981,7 @@ function TabCreneaux({ commercantId, toast }) {
                 })}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button style={{ ...s.btn, ...s.btnPrimary }} onClick={copierVers} disabled={!joursCibles.length}>✓ Copier</button>
+                <button style={{ ...s.btn, ...s.btnPrimary }} onClick={copierVers} disabled={!joursCibles.length}>Copier</button>
                 <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => { setShowCopier(false); setJoursCibles([]) }}>Annuler</button>
               </div>
             </div>
@@ -2015,7 +2015,7 @@ function TabCreneaux({ commercantId, toast }) {
               )}
               <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Créneau actif" />
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveCreneau} disabled={saving}>{saving ? 'Enregistrement...' : '✓ Enregistrer'}</button>
+                <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveCreneau} disabled={saving}>{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
                 <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowForm(false)}>Annuler</button>
               </div>
             </div>
@@ -2026,7 +2026,7 @@ function TabCreneaux({ commercantId, toast }) {
             <div style={{ ...s.card, textAlign: 'center', padding: 32 }}>
               <p style={{ color: T.muted, marginBottom: 8 }}>Aucun créneau pour {jourActif}</p>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-                <button style={{ ...s.btn, ...s.btnGhost }} onClick={genererJour}>⚡ Générer auto</button>
+                <button style={{ ...s.btn, ...s.btnGhost, display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={genererJour}><Zap size={14} strokeWidth={1.8}/> Générer auto</button>
                 <button style={{ ...s.btn, ...s.btnPrimary }} onClick={() => setShowForm(true)}>+ Ajouter manuellement</button>
               </div>
             </div>
@@ -2039,7 +2039,7 @@ function TabCreneaux({ commercantId, toast }) {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 18, fontWeight: 800, color: T.ink, letterSpacing: '-0.5px' }}>{c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}</div>
-                        {horsH && <span style={{ fontSize: 10, fontWeight: 700, color: '#92400E', background: '#FEF3C7', padding: '1px 6px', borderRadius: 100 }}>⚠️ Hors horaires</span>}
+                        {horsH && <span style={{ fontSize: 10, fontWeight: 700, color: '#92400E', background: '#FEF3C7', padding: '1px 6px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 3 }}><AlertTriangle size={11} strokeWidth={2}/> Hors horaires</span>}
                         {modeGlobal === 'commandes' && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 8 }}>
                             <span style={{ fontSize: 11, color: T.muted }}>Max :</span>
@@ -2070,7 +2070,7 @@ function TabCreneaux({ commercantId, toast }) {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
                         <Toggle value={c.actif} onChange={() => toggleCreneau(c)} />
-                        <button style={{ ...s.btn, ...s.btnDanger, padding: '3px 8px', fontSize: 11, marginTop: 4 }} onClick={() => deleteCreneau(c.id)}>🗑</button>
+                        <button style={{ ...s.btn, ...s.btnDanger, padding: '3px 8px', fontSize: 11, marginTop: 4, display: 'inline-flex', alignItems: 'center' }} onClick={() => deleteCreneau(c.id)} aria-label="Supprimer"><Trash2 size={12} strokeWidth={1.8}/></button>
                       </div>
                     </div>
                   </div>
@@ -2084,7 +2084,7 @@ function TabCreneaux({ commercantId, toast }) {
       {/* ─── Fermetures exceptionnelles ─── */}
       <div style={{ marginTop: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ ...s.h2, margin: 0 }}>🔒 Fermetures exceptionnelles</h2>
+          <h2 style={{ ...s.h2, margin: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Lock size={16} strokeWidth={1.8}/> Fermetures exceptionnelles</h2>
           <button style={{ ...s.btn, ...s.btnGhost, fontSize: 12, padding: '6px 12px' }} onClick={() => setShowFermetureForm(v => !v)}>+ Ajouter</button>
         </div>
 
@@ -2100,7 +2100,7 @@ function TabCreneaux({ commercantId, toast }) {
               <Input value={fermetureForm.motif} onChange={e => setFermetureForm(p => ({ ...p, motif: e.target.value }))} placeholder="Ex: Congés annuels, Jour férié, Formation..." />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveFermeture} disabled={savingFermeture}>{savingFermeture ? 'Enregistrement...' : '✓ Enregistrer'}</button>
+              <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveFermeture} disabled={savingFermeture}>{savingFermeture ? 'Enregistrement...' : 'Enregistrer'}</button>
               <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowFermetureForm(false)}>Annuler</button>
             </div>
           </div>
@@ -2124,7 +2124,7 @@ function TabCreneaux({ commercantId, toast }) {
                     </p>
                     {f.motif && <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{f.motif}</p>}
                   </div>
-                  <button style={{ ...s.btn, ...s.btnDanger, padding: '4px 10px', fontSize: 12, flexShrink: 0 }} onClick={() => deleteFermeture(f.id)}>🗑</button>
+                  <button style={{ ...s.btn, ...s.btnDanger, padding: '4px 10px', fontSize: 12, flexShrink: 0, display: 'inline-flex', alignItems: 'center' }} onClick={() => deleteFermeture(f.id)} aria-label="Supprimer"><Trash2 size={13} strokeWidth={1.8}/></button>
                 </div>
               )
             })}
@@ -2198,7 +2198,11 @@ function TabProfil({ commercantId, toast }) {
 
       {/* Badge catégorie — lecture seule. Pour changer, contacter support. */}
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px 6px 8px', borderRadius: 100, background: T.pale, border: `1px solid ${T.main}33`, marginBottom: 14 }}>
-        <span style={{ fontSize: 14 }}>{form.categorie === 'vitrine' ? '💇' : '🥐'}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+          {form.categorie === 'vitrine' ? <Scissors size={14} strokeWidth={1.8}/>
+            : form.categorie === 'detail' ? <Package size={14} strokeWidth={1.8}/>
+            : <Croissant size={14} strokeWidth={1.8}/>}
+        </span>
         <span style={{ fontSize: 11, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           {form.categorie === 'vitrine' ? 'Vitrine · Présence + RDV' : 'Alimentaire · Click & Collect'}
         </span>
@@ -2210,14 +2214,14 @@ function TabProfil({ commercantId, toast }) {
         <p style={{ fontSize: 12, color: T.muted, marginBottom: 14 }}>Format carré · 512×512px · JPG ou PNG · Max 512KB</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ width: 88, height: 88, borderRadius: 14, background: T.pale, border: `2px dashed ${logoPreview ? T.main : T.light}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
-            {logoPreview ? <img src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <span style={{ fontSize: 28 }}>🏪</span>}
+            {logoPreview ? <img src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <Store size={28} strokeWidth={1.6} color={T.muted}/>}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <label style={{ ...s.btn, ...s.btnPrimary, cursor: uploadingLogo ? 'wait' : 'pointer' }}>
-              {uploadingLogo ? 'Upload...' : '📷 Choisir un logo'}
+              {uploadingLogo ? 'Upload…' : <><Camera size={14} strokeWidth={1.8} style={{ marginRight: 5, display: 'inline', verticalAlign: 'text-bottom' }}/>Choisir un logo</>}
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files[0]) uploadLogo(e.target.files[0]) }} disabled={uploadingLogo} />
             </label>
-            {logoPreview && <button style={{ ...s.btn, ...s.btnDanger, fontSize: 12 }} onClick={supprimerLogo}>🗑 Supprimer</button>}
+            {logoPreview && <button style={{ ...s.btn, ...s.btnDanger, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={supprimerLogo}><Trash2 size={13} strokeWidth={1.8}/> Supprimer</button>}
           </div>
         </div>
       </div>
@@ -2295,9 +2299,9 @@ function TabProfil({ commercantId, toast }) {
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {[
-                  { val: 'chaque',     icone: '⚡', label: `À chaque nouvelle ${nounSing.toLowerCase() === 'rdv' ? 'demande' : nounSing}`, desc: `Email instantané à chaque ${nounSing.toLowerCase() === 'rdv' ? 'réservation' : 'commande'}. Idéal si tu n'ouvres pas le dashboard souvent.` },
-                  { val: 'recap_jour', icone: '📋', label: 'Récap quotidien (8h)',           desc: `Un seul email chaque matin avec tous tes ${noun} de la journée. Moins intrusif.` },
-                  { val: 'aucun',      icone: '🔕', label: 'Aucun email',                    desc: 'Tu consultes uniquement ton dashboard. Aucun email automatique.' },
+                  { val: 'chaque',     Icon: Zap,           label: `À chaque nouvelle ${nounSing.toLowerCase() === 'rdv' ? 'demande' : nounSing}`, desc: `Email instantané à chaque ${nounSing.toLowerCase() === 'rdv' ? 'réservation' : 'commande'}. Idéal si tu n'ouvres pas le dashboard souvent.` },
+                  { val: 'recap_jour', Icon: ClipboardList, label: 'Récap quotidien (8h)',           desc: `Un seul email chaque matin avec tous tes ${noun} de la journée. Moins intrusif.` },
+                  { val: 'aucun',      Icon: BellOff,       label: 'Aucun email',                    desc: 'Tu consultes uniquement ton dashboard. Aucun email automatique.' },
                 ].map(opt => {
                   const actif = form.notif_mode === opt.val
                   return (
@@ -2307,7 +2311,7 @@ function TabProfil({ commercantId, toast }) {
                         onChange={() => setForm(p => ({ ...p, notif_mode: opt.val }))}
                         style={{ width: 16, height: 16, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>{opt.icone} {opt.label}</p>
+                        <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><opt.Icon size={14} strokeWidth={1.8}/> {opt.label}</p>
                         <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>{opt.desc}</p>
                       </div>
                     </label>
@@ -2328,7 +2332,7 @@ function TabProfil({ commercantId, toast }) {
             <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.livraison_actif ? T.main : T.pale}`, background: form.livraison_actif ? T.pale : '#fff', cursor: 'pointer', marginBottom: 10, transition: 'all 0.15s' }}>
               <input type="checkbox" checked={!!form.livraison_actif} onChange={e => setForm(p => ({ ...p, livraison_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>🚴 Activer la livraison</p>
+                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Bike size={15} strokeWidth={1.8}/> Activer la livraison</p>
                 <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
                   Affiche la pill « LIVRAISON » sur ta fiche. Configuration complète (zone, frais, créneaux) à venir.
                 </p>
@@ -2338,7 +2342,7 @@ function TabProfil({ commercantId, toast }) {
             <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.fidelite_actif ? T.main : T.pale}`, background: form.fidelite_actif ? T.pale : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
               <input type="checkbox" checked={!!form.fidelite_actif} onChange={e => setForm(p => ({ ...p, fidelite_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>⭐ Activer le programme fidélité</p>
+                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Star size={15} strokeWidth={1.8}/> Activer le programme fidélité</p>
                 <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
                   Programme tampon : la 10ème commande offerte. Module fidélité complet à venir.
                 </p>
@@ -2349,13 +2353,13 @@ function TabProfil({ commercantId, toast }) {
 
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
           <button style={{ ...s.btn, ...s.btnPrimary, padding: '11px 24px', fontSize: 14 }} onClick={saveProfil} disabled={saving}>
-            {saving ? 'Enregistrement...' : '✓ Enregistrer'}
+            {saving ? 'Enregistrement...' : 'Enregistrer'}
           </button>
         </div>
       </div>
 
       <div style={{ ...s.card, background: T.pale, boxShadow: 'none', border: 'none' }}>
-        <p style={{ fontSize: 12, color: T.main, fontWeight: 600 }}>💡 URL client : yoppaa.app/commander</p>
+        <p style={{ fontSize: 12, color: T.main, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Lightbulb size={13} strokeWidth={1.8}/> URL client : yoppaa.app/commander</p>
       </div>
 
       <QRCodeSection commercantId={commercantId} toast={toast} />
@@ -2596,7 +2600,7 @@ function QRCodeSection({ commercantId, toast }) {
   if (loading) return null
   if (!slug) return (
     <div style={{ ...s.card, background: '#FEF3C7', border: '1.5px solid #F59E0B33', marginTop: 12 }}>
-      <p style={{ fontSize: 13, color: '#92400E', fontWeight: 600 }}>⚠️ Aucun slug — contacte le support.</p>
+      <p style={{ fontSize: 13, color: '#92400E', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><AlertTriangle size={14} strokeWidth={1.8}/> Aucun slug, contacte le support.</p>
     </div>
   )
 
@@ -2645,27 +2649,27 @@ function QRCodeSection({ commercantId, toast }) {
       {/* URL copiable */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.pale, borderRadius: 10, padding: '8px 12px', marginBottom: 16 }}>
         <span style={{ fontSize: 11, color: T.main, flex: 1, wordBreak: 'break-all' }}>{url}</span>
-        <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 11, flexShrink: 0 }}
-          onClick={() => { navigator.clipboard.writeText(url); toast('URL copiée') }}>📋</button>
+        <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 11, flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}
+          onClick={() => { navigator.clipboard.writeText(url); toast('URL copiée') }} aria-label="Copier l'URL"><Copy size={13} strokeWidth={1.8}/></button>
       </div>
 
       {/* PNG */}
-      <button style={{ ...s.btn, ...s.btnGhost, width: '100%', justifyContent: 'center', marginBottom: 10 }} onClick={downloadPNG} disabled={!qrDataUrl}>
-        ⬇️ Télécharger PNG
+      <button style={{ ...s.btn, ...s.btnGhost, width: '100%', justifyContent: 'center', marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={downloadPNG} disabled={!qrDataUrl}>
+        <Download size={14} strokeWidth={1.8}/> Télécharger PNG
       </button>
 
       {/* PDF */}
       <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>PDF</p>
       <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-        <button style={{ ...s.btn, ...s.btnGhost, flex: 1, justifyContent: 'center' }} onClick={() => downloadPDF('A5')} disabled={!qrDataUrl}>📄 A5</button>
-        <button style={{ ...s.btn, ...s.btnGhost, flex: 1, justifyContent: 'center' }} onClick={() => downloadPDF('A4')} disabled={!qrDataUrl}>📄 A4</button>
+        <button style={{ ...s.btn, ...s.btnGhost, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => downloadPDF('A5')} disabled={!qrDataUrl}><FileText size={13} strokeWidth={1.8}/> A5</button>
+        <button style={{ ...s.btn, ...s.btnGhost, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => downloadPDF('A4')} disabled={!qrDataUrl}><FileText size={13} strokeWidth={1.8}/> A4</button>
       </div>
 
       {/* Impression */}
       <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Impression</p>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center' }} onClick={() => printQR('A5')} disabled={!qrDataUrl}>🖨️ A5</button>
-        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center' }} onClick={() => printQR('A4')} disabled={!qrDataUrl}>🖨️ A4</button>
+        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => printQR('A5')} disabled={!qrDataUrl}><Printer size={13} strokeWidth={1.8}/> A5</button>
+        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => printQR('A4')} disabled={!qrDataUrl}><Printer size={13} strokeWidth={1.8}/> A4</button>
       </div>
     </div>
   )
@@ -2689,8 +2693,14 @@ const SIGN_TYPE_LABEL = {
   autre:     'Autre',
 }
 const SIGN_TYPE_ICON = {
-  ferme: '🔒', horaires: '🕐', adresse: '📍', telephone: '📞',
-  articles: '🍞', site_web: '🌐', doublon: '👯', autre: '💬',
+  ferme:     Lock,
+  horaires:  Clock,
+  adresse:   MapPin,
+  telephone: Phone,
+  articles:  Package,
+  site_web:  Globe,
+  doublon:   Users,
+  autre:     MessageCircle,
 }
 
 function TabSignalements({ commercantId, toast }) {
@@ -2761,7 +2771,7 @@ function TabSignalements({ commercantId, toast }) {
 
       {!loading && liste.length === 0 && (
         <div style={{ ...s.card, textAlign: 'center', padding: '2rem 1rem' }}>
-          <p style={{ fontSize: '2rem', marginBottom: 8 }}>✨</p>
+          <Sparkles size={32} strokeWidth={1.6} color={T.main} style={{ marginBottom: 8 }}/>
           <p style={{ fontWeight: 800, color: T.ink, marginBottom: 4 }}>
             {filtre === 'en_attente' ? 'Aucun signalement en attente' : 'Aucun signalement dans ce filtre'}
           </p>
@@ -2774,7 +2784,7 @@ function TabSignalements({ commercantId, toast }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {liste.map(sig => {
           const typeLabel = SIGN_TYPE_LABEL[sig.type] || sig.type
-          const typeIcon  = SIGN_TYPE_ICON[sig.type] || '💬'
+          const TypeIcon  = SIGN_TYPE_ICON[sig.type] || MessageCircle
           const couleurStatut = sig.statut === 'en_attente' ? '#DC2626'
                               : sig.statut === 'vu'         ? '#EA580C'
                               : sig.statut === 'traite'     ? '#10B981'
@@ -2782,7 +2792,7 @@ function TabSignalements({ commercantId, toast }) {
           return (
             <div key={sig.id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: `1px solid ${T.hairline}`, borderLeft: `4px solid ${couleurStatut}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 20, flexShrink: 0 }}>{typeIcon}</span>
+                <span style={{ flexShrink: 0, color: T.main, marginTop: 2 }}><TypeIcon size={20} strokeWidth={1.6}/></span>
                 <span style={{ fontWeight: 800, fontSize: 14, color: T.ink, flex: 1, minWidth: 0 }}>{typeLabel}</span>
                 <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: couleurStatut, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   {sig.statut === 'en_attente' ? 'À traiter' : sig.statut === 'vu' ? 'Vu' : sig.statut === 'traite' ? 'Traité' : 'Ignoré'}
@@ -2801,11 +2811,11 @@ function TabSignalements({ commercantId, toast }) {
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <button onClick={() => setStatut(sig.id, 'traite')}
                     style={{ ...s.btn, ...s.btnPrimary, padding: '7px 14px', fontSize: 12 }}>
-                    ✓ Marquer comme traité
+                    <Check size={13} strokeWidth={2.2} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Marquer comme traité
                   </button>
                   <button onClick={() => setStatut(sig.id, 'vu')}
                     style={{ ...s.btn, ...s.btnGhost, padding: '7px 14px', fontSize: 12 }}>
-                    👁 Vu, j&rsquo;y reviens
+                    <Eye size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Vu, j&rsquo;y reviens
                   </button>
                   <button onClick={() => setStatut(sig.id, 'ignore')}
                     style={{ ...s.btn, padding: '7px 14px', fontSize: 12, background: '#fff', color: T.muted, border: `1px solid ${T.hairline}` }}>
@@ -2816,7 +2826,7 @@ function TabSignalements({ commercantId, toast }) {
               {sig.statut === 'vu' && (
                 <button onClick={() => setStatut(sig.id, 'traite')}
                   style={{ ...s.btn, ...s.btnPrimary, padding: '7px 14px', fontSize: 12 }}>
-                  ✓ Maintenant traité
+                  <Check size={13} strokeWidth={2.2} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Maintenant traité
                 </button>
               )}
               {(sig.statut === 'traite' || sig.statut === 'ignore') && (
@@ -2861,7 +2871,7 @@ function TabAvis({ commercantId, toast }) {
   function Etoiles({ note, taille = 15 }) {
     return (
       <span style={{ display: 'inline-flex', gap: 1 }}>
-        {[1,2,3,4,5].map(i => <span key={i} style={{ fontSize: taille, color: i <= note ? '#F59E0B' : '#E5E7EB' }}>★</span>)}
+        {[1,2,3,4,5].map(i => <Star key={i} size={taille} strokeWidth={1.6} color={i <= note ? '#F59E0B' : '#E5E7EB'} fill={i <= note ? '#F59E0B' : 'none'}/>)}
       </span>
     )
   }
@@ -2882,7 +2892,7 @@ function TabAvis({ commercantId, toast }) {
 
       {avis.length === 0 ? (
         <div style={{ ...s.card, textAlign: 'center', padding: 40 }}>
-          <p style={{ fontSize: 28, marginBottom: 10 }}>⭐</p>
+          <Star size={32} strokeWidth={1.6} color={T.main} style={{ marginBottom: 10 }}/>
           <p style={{ color: T.muted, fontWeight: 700 }}>Pas encore d'avis</p>
           <p style={{ color: T.light, fontSize: 13, marginTop: 4 }}>Les avis apparaissent après les premières commandes.</p>
         </div>
@@ -2911,7 +2921,7 @@ function TabAvis({ commercantId, toast }) {
             <div style={{ marginTop: 10 }}>
               <Textarea placeholder="Répondre à cet avis..." value={reponses[a.id] || ''} onChange={e => setReponses(p => ({ ...p, [a.id]: e.target.value }))} style={{ minHeight: 60, fontSize: 13 }} />
               <button style={{ ...s.btn, ...s.btnPrimary, marginTop: 8, padding: '7px 14px', fontSize: 13 }} onClick={() => repondre(a.id)} disabled={saving === a.id}>
-                {saving === a.id ? 'Publication...' : '↩ Répondre'}
+                {saving === a.id ? 'Publication…' : <><Reply size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/>Répondre</>}
               </button>
             </div>
           )}

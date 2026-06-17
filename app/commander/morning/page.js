@@ -13,6 +13,13 @@
 import { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+// Icônes Lucide React (charte Yoppaa, charte durcie 17/06 : pas d'emoji
+// décoratif, même comme illustration de type de commerce).
+import {
+  Croissant, Cookie, Cake, Sandwich, Pizza, Coffee, ShoppingCart, Utensils, Beef,
+  Flower, Pill, Truck, Scissors, Glasses, Shirt, School, Stethoscope,
+  AlertTriangle, Building2, Store, Zap,
+} from 'lucide-react'
 import { canDo } from '@/lib/plans'
 
 // ─── Tokens design system (canoniques) ─────────────────────────────
@@ -30,22 +37,34 @@ const T = {
   urgentFg: '#CC3333',
 }
 
-// ─── Mapping type de commerce → emoji (pour illustrer la card) ────
-// Les emojis restent autorisés sur les cards commerçant comme illustration
-// du type de commerce (cf. design system : exception emoji autorisée).
-const EMOJI_TYPE = {
-  'Boulangerie': '🥐', 'Pâtisserie': '🧁', 'Chocolatier': '🍫',
-  'Sandwicherie': '🥪', 'Snack': '🌯', 'Friterie': '🍟',
-  'Pizzeria': '🍕', 'Coffee shop': '☕', 'Épicerie': '🛒',
-  'Traiteur': '🍽️', 'Boucherie': '🥩', 'Fleuriste': '💐',
-  'Pharmacie': '💊', 'Food truck': '🚚',
-  'Coiffeur': '💇', 'Opticien': '👓', 'Pressing': '👔',
+// ─── Mapping type de commerce → composant Icon Lucide (illustration card) ─
+// Refonte 17/06 : passage des emojis aux SVG Lucide pour respecter la charte
+// canonique Yoppaa (durcie : aucun emoji décoratif, exception : ☀️ GMY et
+// 🟣 signature uniquement).
+const ICON_TYPE = {
+  'Boulangerie': Croissant,
+  'Pâtisserie':  Cake,
+  'Chocolatier': Cookie,
+  'Sandwicherie': Sandwich,
+  'Snack':       Utensils,
+  'Friterie':    Utensils,
+  'Pizzeria':    Pizza,
+  'Coffee shop': Coffee,
+  'Épicerie':    ShoppingCart,
+  'Traiteur':    Utensils,
+  'Boucherie':   Beef,
+  'Fleuriste':   Flower,
+  'Pharmacie':   Pill,
+  'Food truck':  Truck,
+  'Coiffeur':    Scissors,
+  'Opticien':    Glasses,
+  'Pressing':    Shirt,
 }
-function emojiDuType(type) {
-  if (!type) return '🏪'
+function iconDuType(type) {
+  if (!type) return Store
   // Cas "Boulangerie & Pâtisserie" → prend le premier
   const first = type.split(/\s*[&\/,]\s*/)[0].trim()
-  return EMOJI_TYPE[first] || EMOJI_TYPE[type] || '🏪'
+  return ICON_TYPE[first] || ICON_TYPE[type] || Store
 }
 
 // Codes postaux belges = 4 chiffres. Extrait depuis l'adresse libre.
@@ -159,7 +178,7 @@ async function fetchMorningData(commune) {
     .map(d => ({
       id: d.id,
       commerce: d.commercant.nom,
-      type: emojiDuType(d.commercant.type),
+      Icon: iconDuType(d.commercant.type),
       categorie: d.commercant.type || 'Commerce',
       deal: d.titre,
       prix: fmtPrix(d.prix_deal),
@@ -167,10 +186,17 @@ async function fetchMorningData(commune) {
       stock: d.article_id ? (stockParArticle[d.article_id] ?? null) : null,
     }))
 
-  // Emoji par type de service public
-  const SERVICE_EMOJI = {
-    commune: '🏛️', cpas: '🤝', police: '🚓', pompiers: '🚒',
-    ecole: '🏫', medecin_garde: '🩺', pharmacie_garde: '💊', urgence: '🚨', autre: '🏢',
+  // Icône par type de service public (Lucide React components)
+  const SERVICE_ICON = {
+    commune:           Building2,
+    cpas:              Building2,
+    police:            AlertTriangle,
+    pompiers:          AlertTriangle,
+    ecole:             School,
+    medecin_garde:     Stethoscope,
+    pharmacie_garde:   Pill,
+    urgence:           AlertTriangle,
+    autre:             Building2,
   }
 
   const actusCommercant = (actusCommercantRaw || [])
@@ -178,7 +204,7 @@ async function fetchMorningData(commune) {
     .map(a => ({
       id: 'c-' + a.id,
       commerce: a.commercant.nom,
-      type: emojiDuType(a.commercant.type),
+      Icon: iconDuType(a.commercant.type),
       categorie: a.commercant.type || 'Commerce',
       titre: a.titre || null,
       actu: a.contenu || a.titre,
@@ -190,7 +216,7 @@ async function fetchMorningData(commune) {
     .map(a => ({
       id: 'p-' + a.id,
       commerce: a.service.nom,
-      type: SERVICE_EMOJI[a.service.type] || '🏛️',
+      Icon: SERVICE_ICON[a.service.type] || Building2,
       categorie: 'Officiel',
       titre: a.titre || null,
       actu: a.contenu || a.titre,
@@ -448,8 +474,8 @@ function DealCard({ d, shown, delay }) {
     <div className="gmy-anim" style={{ opacity: shown ? 1 : 0, transform: shown ? 'translateY(0)' : 'translateY(8px)', transition: 'all 0.4s cubic-bezier(0.16,1,0.3,1)', transitionDelay: `${delay}ms` }}>
       <div className="gmy-card-hover" style={{ border: `1px solid ${T.hairline}`, borderRadius: 16, padding: '14px 16px', cursor: 'pointer', background: '#fff', transition: 'all 0.2s ease' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: T.bgPage, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
-            {d.type}
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: T.bgPage, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.main }}>
+            {d.Icon ? <d.Icon size={20} strokeWidth={1.8}/> : null}
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: T.deep, letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 2 }}>
@@ -464,8 +490,8 @@ function DealCard({ d, shown, delay }) {
           {d.prix && <div style={{ fontSize: 20, fontWeight: 800, color: T.ink }}>{d.prix}</div>}
           {d.prixNormal && <div style={{ fontSize: 12, color: T.mid, textDecoration: 'line-through' }}>{d.prixNormal}</div>}
           {hasStock && (
-            <div style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: isUrgent ? T.urgentBg : T.pale, color: isUrgent ? T.urgentFg : T.deep }}>
-              {isUrgent ? '⚡ ' : ''}{d.stock} restants
+            <div style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: isUrgent ? T.urgentBg : T.pale, color: isUrgent ? T.urgentFg : T.deep, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              {isUrgent && <Zap size={10} strokeWidth={2}/>}{d.stock} restants
             </div>
           )}
         </div>
@@ -497,8 +523,8 @@ function ActuCard({ d, shown, delay }) {
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 10, background: isAlerte ? '#FEE2E2' : T.bgPage, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>
-            {d.type}
+          <div style={{ width: 32, height: 32, borderRadius: 10, background: isAlerte ? '#FEE2E2' : T.bgPage, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isAlerte ? '#DC2626' : T.main }}>
+            {d.Icon ? <d.Icon size={16} strokeWidth={1.8}/> : null}
           </div>
           <div>
             <div style={{ fontSize: 10, fontWeight: 700, color: isAlerte ? '#991B1B' : T.deep, letterSpacing: '0.8px', textTransform: 'uppercase' }}>

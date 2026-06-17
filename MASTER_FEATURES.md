@@ -10,67 +10,125 @@
 
 ## 1. Glossaire fondamentaux Yoppaa
 
-Les concepts de base que tout le monde (commerçant, équipe, partenaire) doit comprendre de la même façon.
+Les concepts de base que tout le monde (commerçant, équipe, partenaire) doit comprendre de la même façon. **Section validée par Alex le 17/06/2026.**
 
 ### Yoppaa
 La plateforme. Application mobile + tableau de bord web qui connecte les commerces locaux à leurs clients d'un même quartier. Belgique, démarrage Mettet.
 
 ### Yopper
-Le client final. Un habitant qui utilise l'application Yoppaa pour découvrir, suivre et soutenir les commerces de son quartier. Les Yoppers voient les fiches commerçants, mettent en favori, envoient des signaux, reçoivent des notifications, passent commande ou réservent.
+Tout utilisateur de l'application Yoppaa, **incluant les commerçants eux-mêmes**. La tribu Yoppers est unique : un commerçant est aussi un Yopper qui découvre, met en favori et soutient d'autres commerces de son quartier.
 
-### Yoppé
-Confirmation contextuelle pour Click & Collect : *"Ta commande est Yoppée !"*. Pour les RDV on dit *"C'est noté !"*. Toujours violet 🟣.
+Les Yoppers voient les fiches commerçants, mettent en favori, envoient des signaux, reçoivent des notifications, passent commande ou réservent. **Connexion (login) obligatoire** pour mettre en favori, envoyer un signal, commander ou réserver.
+
+### Yoppé !
+**Confirmation universelle Yoppaa**, utilisée pour TOUTES les actions de validation transactionnelle :
+- *"Ta commande est Yoppée !"* (Click & Collect alimentaire)
+- *"Ton RDV est Yoppé !"* (service)
+- *"Ta table est Yoppée !"* (réservation restaurant)
+- *"Ton article est Yoppé !"* (réservation produit détail)
+
+**Spécification visuelle obligatoire** : un check vert ✓ (V en vert) systématiquement affiché au-dessus du texte de confirmation pour imager visuellement la validation. Toujours violet 🟣 pour la signature de marque.
 
 ### Commerçant
-L'utilisateur professionnel. Crée son compte, choisit une formule (Exister, Communiquer, Vendre), configure sa fiche, reçoit ses Yoppers.
+L'utilisateur professionnel. Crée son compte, choisit une formule (Exister, Communiquer, Vendre), configure sa fiche, reçoit ses Yoppers. **Le commerçant est aussi un Yopper** et fait partie de la même tribu.
 
 ### Favori
-Quand un Yopper met un commerçant en favori, il choisit de le suivre. Le commerçant voit ses favoris dans ses statistiques. Le favori est le canal d'engagement principal : les actus, deals et push ciblés sont envoyés en priorité aux favoris.
+Quand un Yopper met un commerçant en favori, il choisit de le suivre.
+
+**Mécanique technique validée 17/06** :
+- **Login Yopper obligatoire** pour mettre en favori
+- **Données transférées au commerçant** : prénom (si fourni), code postal (zone, pas adresse précise), date d'ajout en favori. **PAS d'email direct** : le commerçant envoie ses push et newsletters via Yoppaa qui relaie. Le commerçant ne voit jamais l'email individuel d'un Yopper.
+- **Quand un Yopper retire le favori** : soft-delete avec `unfavorited_at` timestamp. La ligne reste en DB pour stats historiques, mais le Yopper disparaît immédiatement des listes du commerçant.
+- **Plus aucun contact possible** après retrait : ni push, ni newsletter. Le retrait est un signal RGPD clair de non-consentement.
+- **Exception newsletter de relance** : seulement si le Yopper a opt-in explicitement à une newsletter "info commerce" séparée du favori (consentement distinct).
+
+Le favori est le canal d'engagement principal : les actus, deals et push ciblés sont envoyés en priorité aux favoris.
 
 ### Signal
-Un Yopper envoie un signal au commerçant pour exprimer un intérêt sans commander tout de suite : *"j'aimerais ce produit"*, *"je passerais bien demain"*, *"tenez-moi au courant"*. Le commerçant reçoit le signal dans son tableau de bord et peut y répondre.
+Mécanisme de feedback léger pour qu'un Yopper exprime un intérêt envers un commerçant sans commander tout de suite.
+
+**Mécanique technique validée 17/06** :
+- **Login Yopper obligatoire** pour envoyer un signal
+- **Signaux pré-enregistrés** : le Yopper choisit dans un catalogue fixe, **pas de rédaction libre**. Évite le côté messagerie/chat (qui n'est PAS le but de Yoppaa).
+- **Catalogue par catégorie de commerce** : alimentaire / service / détail / public ont chacun leurs propres options pertinentes (voir section 4 *Catalogue des signaux* ci-dessous).
+- **Objectif business** : créer de la preuve sociale pour pousser le commerçant Exister/Communiquer vers Vendre. Exemple : *"Tu as reçu 12 signaux 'Je voudrais commander à l'avance' ce mois → passe à Vendre pour activer Click & Collect"*.
+
+Le commerçant reçoit ses signaux dans son tableau de bord, voit le compteur par type, et peut répondre rapidement (réponse pré-enregistrée également, type "Merci, on te recontacte").
 
 ### Good Morning Yoppers (GMY)
-Push notification quotidien envoyé chaque matin à **7h30** aux Yoppers de la zone du commerçant. Variable selon le plan :
-- **Exister** : le commerçant apparaît dans le GMY avec sa fiche basique + peut publier 1 actu visible
-- **Communiquer / Vendre** : le commerçant peut faire remonter deals, actus et créneaux du jour
-- **Public** : la commune ou administration publie ses propres infos/alertes pour les habitants
+Push notification quotidien envoyé chaque matin à **7h30** aux Yoppers de la zone du commerçant. Différenciation claire par plan :
 
-Pour qu'un contenu apparaisse dans le GMY du lendemain, il doit être publié avant **23h00 la veille**.
+- **Exister** : le commerçant apparaît dans le GMY avec sa fiche basique. Peut publier **1 actu basique par jour** (texte court non cliquable, pas de page actu détaillée). **Pas de deal possible** sur Exister.
+- **Communiquer / Vendre** : le commerçant peut publier des deals **et** des actus enrichies (avec photo + description détaillée + lien). Les deals peuvent être liés à un produit ou un service. **Différence Communiquer vs Vendre** : sur Communiquer, les deals NE SONT PAS commandables/réservables (pas de bouton "commander" ou "réserver"). Sur Vendre, oui.
+- **Public** : full access pour les actus et alertes enrichies. La commune publie ses propres infos/alertes pour les habitants de la zone.
+
+**Deadline de publication** : pour qu'un contenu apparaisse dans le GMY du lendemain, il doit être publié avant **23h00 la veille**.
 
 ### Actualité
-Une nouvelle publiée par le commerçant : nouveau produit, événement, créneau libre, changement d'horaires, etc. Affichée en bandeau sur la fiche du commerçant. Envoyée en push aux Yoppers favoris (selon plan).
+Une nouvelle publiée par le commerçant : nouveau produit, événement, créneau libre, changement d'horaires, etc.
+
+**Différenciation par plan** :
+- **Exister** : actu basique (texte court, pas cliquable). Visible dans GMY uniquement, 1 par jour maximum.
+- **Communiquer / Vendre** : actu enrichie (titre + texte long + photo + lien CTA optionnel). Apparaît sur la fiche du commerçant + envoyée en push aux Yoppers favoris. Actus illimitées.
+- **Public** : actu enrichie illimitée. Visible sur la fiche commune + push aux Yoppers de la zone par code postal.
 
 ### Deal
-Une promotion limitée dans le temps (durée définie par le commerçant). Affichée en bandeau sur la fiche, envoyée en push aux Yoppers favoris. Peut être catégorisée *"Bonne affaire"* pour apparaître dans la section dédiée de l'app.
+Promotion limitée dans le temps publiée par le commerçant.
+- **Durée** : configurable par le commerçant (de 1 heure à plusieurs semaines)
+- **Visibilité** : affichée en bandeau sur la fiche du commerçant + envoyée en push aux Yoppers favoris
+- **Disponible avec** : Communiquer · Vendre (pas Exister)
+- **Différence Communiquer vs Vendre** : sur Communiquer, le deal est informatif (le Yopper voit la promo mais doit passer en magasin). Sur Vendre, le Yopper peut commander/réserver/payer directement depuis le deal.
+
+### Bonne affaire (deal de dernière minute)
+**Définition validée 17/06** : un deal devient *"Bonne affaire"* quand il **expire dans moins de 24 heures**. C'est la distinction officielle entre Deal et Bonne affaire.
+
+**Pourquoi cette mécanique** :
+- Crée de l'**urgence** et de la **chasse aux promos quotidiennes**
+- Pousse les Yoppers à ouvrir l'app tous les jours pour ne pas manquer
+- Bénéfice business pour le commerçant : écoulement rapide de stock, créneau de fin de journée, etc.
+
+**Comment ça se passe en pratique** :
+- Le commerçant crée un Deal normal avec une date d'expiration. Quand l'expiration arrive à <24h, le Deal bascule automatiquement en *"Bonne affaire"* et apparaît dans la section dédiée de l'app Yoppaa.
+- OU le commerçant crée directement une *"Bonne affaire"* avec durée max 24h.
+
+**Section dédiée dans l'app** : *"Bonnes affaires"* est une section transverse de l'app Yoppaa qui agrège TOUTES les bonnes affaires de la zone, peu importe le commerçant. Visible par tous les Yoppers, pas seulement les favoris. Crée la découverte de nouveaux commerces.
+
+**Disponible avec** : Communiquer · Vendre.
 
 ### Alerte
 Information urgente : fermeture exceptionnelle, rupture, indisponibilité. Bandeau rouge prioritaire sur la fiche, push immédiat aux Yoppers favoris.
 
-### Bonnes affaires
-Section spécifique de l'app Yoppaa qui regroupe tous les deals des commerçants marqués comme *"Bonnes affaires"*. Pour Communiquer et Vendre uniquement.
+**Disponible avec** : Communiquer · Vendre · Public. **PAS Exister** (validation Alex 17/06).
 
 ### Push ciblé
 Notification push envoyée par le commerçant uniquement à ses Yoppers favoris. Le commerçant choisit le moment et peut segmenter (par centre d'intérêt, par ancienneté du favori, par dernière interaction).
 
+**Architecture technique** : voir section 9 *Architecture technique Push / Newsletter / IA*.
+
 ### Newsletter ciblée
-Email envoyé par le commerçant à ses Yoppers favoris, avec possibilité de segmentation. Idéal pour les communications plus longues qu'un push.
+Email envoyé par le commerçant à ses Yoppers favoris, avec possibilité de segmentation. Idéal pour les communications plus longues qu'un push (édito, dossier produit, événement).
+
+**Architecture technique** : voir section 9 *Architecture technique Push / Newsletter / IA*.
 
 ### IA Yoppaa
-- **IA bridée** (Communiquer) : reformulation de textes, suggestions d'idées d'actus, correction orthographique. Limites de tokens par mois.
-- **IA avancée** (Vendre) : rédaction complète de textes, segmentation automatique des Yoppers, analyse de performance, benchmarking concurrentiel. Limites étendues.
+Assistant IA intégré pour aider le commerçant à rédiger ses actus, deals, newsletters.
+
+- **IA bridée** (Communiquer) : reformulation de textes, suggestions d'idées d'actus, correction orthographique. ~50 000 tokens / mois (≈30-50 générations).
+- **IA avancée** (Vendre) : rédaction complète, segmentation automatique des Yoppers, analyse de performance, benchmarking concurrentiel. ~150 000 tokens / mois (≈30-100 générations).
+
+**Architecture technique** : voir section 9 *Architecture technique Push / Newsletter / IA*.
 
 ### Plans Yoppaa
 - **Exister** (gratuit à vie) : présence simple
 - **Communiquer** (19,90 € HTVA/mois, essai 30 jours) : communication active
 - **Vendre** (49,90 € HTVA/mois, essai 30 jours) : transactionnel complet
-- **Public** (gratuit à vie, sur invitation) : administrations communales et services publics
+- **Public** (gratuit à vie, sur **invitation et validation manuelle par Alex**) : services et administrations communales sélectionnés selon l'intérêt et la pertinence
 
 ### Catégories de commerce
-- **Alimentaire** : Click & Collect, livraison, réservation table (boulangerie, friterie, traiteur, restaurant…)
-- **Service** (= "vitrine" dans le code) : RDV, prestations (coiffeur, opticien, esthéticienne, garagiste…)
-- **Détail** : réservation produit, retrait en magasin (vêtements, chaussures, fleuriste, librairie…)
-- **Publique** : services et administrations communales (mairie, CPAS, syndicat d'initiative…)
+- **Alimentaire** : Click & Collect, livraison, réservation table (boulangerie, friterie, traiteur, restaurant, snack…)
+- **Service** (= "vitrine" dans le code) : RDV, prestations (coiffeur, opticien, esthéticienne, garagiste, pressing…)
+- **Détail** : réservation produit, retrait en magasin (vêtements, chaussures, fleuriste, librairie, jouets…)
+- **Publique** : services et administrations communales validés manuellement par Yoppaa. Exemples : **commune**, **CPAS**, **services communaux** (bibliothèque, piscine, parc, etc.). **Pas de syndicat d'initiative**. Le terme "mairie" n'existe pas en Belgique, on dit toujours **commune**.
 
 ---
 
@@ -268,10 +326,11 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Flag** : `deals`
 **Disponible avec** : Communiquer · Vendre
 
-#### Mise en avant Bonnes affaires
-**Description officielle** : Marque ton deal comme *"Bonne affaire"* pour qu'il apparaisse dans la section dédiée de l'application Yoppaa, visible par tous les Yoppers (pas seulement tes favoris).
+#### Mise en avant Bonnes affaires (deal de dernière minute)
+**Description officielle** : Une *"Bonne affaire"* est un deal qui expire dans moins de **24 heures**. Quand un deal atteint cette urgence, il bascule automatiquement dans la section *"Bonnes affaires"* de l'application Yoppaa, visible par tous les Yoppers de la zone (pas seulement tes favoris). Crée l'urgence, écoule ton stock de fin de journée, fait découvrir ton commerce à de nouveaux Yoppers.
 **Flag** : `bonnes_affaires`
 **Disponible avec** : Communiquer · Vendre
+**Règle automatique** : un Deal classique bascule en *"Bonne affaire"* à expiration -24h. Le commerçant peut aussi créer directement une *"Bonne affaire"* avec durée max 24h.
 
 #### Push ciblés aux favoris
 **Description officielle** : Envoie des notifications push manuelles à tes Yoppers favoris quand tu veux. Tu choisis le moment, tu segmentes si tu veux.
@@ -289,9 +348,9 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Disponible avec** : Communiquer · Vendre
 
 #### Alertes urgentes
-**Description officielle** : Bandeau rouge prioritaire sur ta fiche + push immédiat à tes favoris. Pour les fermetures exceptionnelles, ruptures, indisponibilités.
-**Flag** : `alertes_urgentes` (le flag est nommé ainsi pour Public, mais les commerçants Communiquer/Vendre ont la même fonctionnalité via le système d'actus/deals)
-**Disponible avec** : Communiquer · Vendre · Public
+**Description officielle** : Bandeau rouge prioritaire sur ta fiche + push immédiat à tes favoris. Pour les fermetures exceptionnelles, ruptures, indisponibilités. Pour Public : alertes communales (coupure d'eau, événement sécurité).
+**Flag** : `alertes_urgentes`
+**Disponible avec** : Communiquer · Vendre · Public. **PAS Exister**.
 
 ### 🤖 IA Yoppaa
 
@@ -320,10 +379,18 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Disponible avec** : Vendre
 
 #### Réservation de table
-**Description officielle** : Pour les restaurateurs : tes Yoppers réservent leur table directement depuis ta fiche, choisissent l'horaire et le nombre de personnes. Tu valides ou tu ajustes.
+**Description officielle** : Module complet de réservation pour les restaurateurs. Tes Yoppers réservent leur table directement depuis ta fiche, choisissent l'horaire, le nombre de personnes et reçoivent une confirmation Yoppée.
 **Flag** : `reservation_table`
 **Catégorie requise** : alimentaire (sous-type restaurant)
 **Disponible avec** : Vendre
+
+**Configuration côté restaurateur** (dashboard) :
+- **Capacités de tables** : encoder le nombre de tables par capacité. Exemple : 4 tables de 2, 6 tables de 4, 2 tables de 6, 1 table de 8.
+- **Optimisation remplissage** : une table de 4 accepte aussi les groupes de 3 (3 personnes minimum sur une table de 4 pour ne pas perdre de capacité).
+- **Créneaux par service** : définir les services (midi 12h-14h, soir 18h-22h) avec créneaux de 15/30 min. Possibilité de bloquer un service certains jours.
+- **Acompte optionnel** : le restaurateur peut exiger un acompte (montant fixe ou % du prix moyen) au moment de la réservation. Si annulation par le Yopper, politique de remboursement configurable.
+- **Confirmations** : *"Ta table est Yoppée !"* côté Yopper + email avec rappel J-1.
+- **MVP V1** : pas de plan de table graphique. Juste le compteur par capacité. Plan de table interactif = V2.
 
 ### 📅 Transactionnel (catégorie service)
 
@@ -412,7 +479,12 @@ Cette section sert de copywriting de référence pour toutes les UI.
 ### Ton
 - Tutoiement systématique
 - Chaleureux, communautaire, pas froid SaaS américain
-- Confirmations contextuelles : *"Yoppé !"* pour Click & Collect, *"C'est noté !"* pour RDV
+- **Confirmation universelle "Yoppé !"** pour TOUTES les actions transactionnelles :
+  - *"Ta commande est Yoppée !"* (Click & Collect)
+  - *"Ton RDV est Yoppé !"* (service)
+  - *"Ta table est Yoppée !"* (réservation restaurant)
+  - *"Ton article est Yoppé !"* (réservation produit détail)
+  - **Check vert ✓ obligatoire** au-dessus du texte de confirmation pour imager visuellement la validation
 - Emoji violet 🟣 comme signature visuelle (parfois)
 
 ### Tarification
@@ -466,7 +538,119 @@ Vérification finale : aucune UI ne doit dire *"tu auras X"* si `canDo(plan, X)`
 
 ---
 
-## 8. Références croisées
+## 8. Catalogue des signaux par catégorie de commerce
+
+Les signaux sont **pré-enregistrés** et adaptés à la catégorie du commerce. Le Yopper sélectionne dans la liste, pas de rédaction libre. Objectif : feedback léger qui pousse le commerçant Exister/Communiquer vers Vendre.
+
+### Signaux Alimentaire
+- *"Je voudrais commander à l'avance"* (push vers Click & Collect)
+- *"Vous livrez ?"* (push vers Livraison)
+- *"Vous prenez les groupes ?"* (push vers Réservation table)
+- *"Quel est le menu du jour ?"* (push vers Actu / publication)
+- *"Vous êtes ouvert ce soir ?"* (push vers Horaires détaillés)
+- *"Avez-vous des allergènes ?"* (push vers Description détaillée)
+
+### Signaux Service
+- *"Je voudrais un RDV"* (push vers RDV natif)
+- *"Vous prenez sans RDV ?"* (push vers Horaires détaillés)
+- *"Combien coûte cette prestation ?"* (push vers Prix affichés)
+- *"Avez-vous des disponibilités cette semaine ?"* (push vers RDV)
+- *"Vous êtes ouvert le samedi ?"* (push vers Horaires détaillés)
+
+### Signaux Détail
+- *"Avez-vous cet article en stock ?"* (push vers Réservation produit)
+- *"Je voudrais réserver"* (push vers Réservation produit)
+- *"Cette taille est-elle disponible ?"* (push vers Catalogue + Réservation produit)
+- *"Cette couleur est-elle disponible ?"* (push vers Catalogue)
+- *"Vous faites des retouches / réparations ?"* (push vers Description / Services)
+
+### Signaux Public
+**Pas de signaux pour la catégorie Public** (la commune publie des infos, ne reçoit pas de signaux individuels). Si besoin d'un retour citoyen, ce sera traité par d'autres canaux (formulaire de contact, signalement, etc., hors périmètre Yoppaa MVP).
+
+### Implémentation technique
+- Table `signal_templates(id, categorie, label, ordre, plan_recommande)` qui contient le catalogue
+- Table `signaux(id, yopper_id, commercant_id, signal_template_id, created_at, vu_par_commercant_at)` qui stocke les signaux envoyés
+- Le commerçant voit dans son dashboard : compteur par template avec lien direct vers la feature qui débloque ("12 Yoppers veulent commander à l'avance → Active Click & Collect avec Vendre")
+- Réponse pré-enregistrée du commerçant (type "Merci, on vous recontacte") pour ne pas tomber dans la messagerie chat
+
+---
+
+## 9. Architecture technique Push / Newsletter / IA
+
+**Section validée par Alex le 17/06/2026.** Détaille les choix techniques pour implémenter les fonctionnalités de communication avancées de Communiquer et Vendre.
+
+### Push ciblé (OneSignal)
+**Stack** : OneSignal (gratuit jusqu'à 10 000 abonnés, ensuite ~9 $ / mois). Yoppaa absorbe le coût (compris dans Communiquer / Vendre).
+
+**Flux** :
+1. Quand un Yopper met un commerçant en favori, ligne créée dans la table `favoris(yopper_id, commercant_id, created_at)`
+2. Le commerçant compose un push dans son dashboard (titre + corps + lien optionnel)
+3. Au clic "Envoyer", le backend Yoppaa appelle l'API OneSignal avec la liste des `yopper_id` favoris
+4. OneSignal envoie le push sur les téléphones (via les tokens Apple / Google)
+5. Tracking : taux d'ouverture, taux de clic, désabonnements remontés en webhook OneSignal → stockés en DB → affichés dans le dashboard commerçant
+
+**Ce que le commerçant voit** : stats agrégées uniquement (nombre de favoris, taux d'engagement, performance par push). **Jamais l'email ou l'identité individuelle d'un Yopper**. Conformité RGPD.
+
+### Newsletter ciblée (Brevo)
+**Stack** : Brevo (anciennement Sendinblue, basé en France, ~25 € / mois pour ~20 000 emails). Yoppaa absorbe le coût.
+
+**Flux** :
+1. Le commerçant compose son email dans le dashboard (éditeur WYSIWYG, template Yoppaa pré-configuré avec logo / couleurs)
+2. Il choisit son segment (tous les favoris, ou segment ciblé)
+3. Yoppaa appelle l'API Brevo avec la liste des emails Yoppers favoris (récupérée via la jointure `favoris` ↔ `yoppers`)
+4. Brevo envoie les emails et tracke (ouverture, clic, désabonnement)
+5. Webhook Brevo remonte les stats → stockées en DB → affichées dans le dashboard
+6. Lien de désabonnement obligatoire géré automatiquement par Brevo (conforme RGPD)
+
+**À coder** :
+- Composant éditeur WYSIWYG dans le dashboard (probablement TipTap ou Lexical)
+- API route `/api/newsletter/send` qui appelle Brevo
+- Webhook `/api/brevo/webhook` pour recevoir les stats
+- Table `newsletters(id, commercant_id, subject, body_html, sent_at, brevo_message_id, stats_json)`
+
+### IA Yoppaa (Anthropic Claude)
+**Stack** : API Anthropic Claude. Deux modèles selon le plan :
+- **Haiku 4.5** pour IA bridée Communiquer (rapide, peu cher)
+- **Sonnet 4.6** pour IA avancée Vendre (plus puissant)
+
+**Flux** :
+1. Le commerçant tape son brouillon dans le champ "actu" du dashboard
+2. Au clic "Aide IA", le backend Yoppaa envoie à Claude un prompt structuré incluant le contexte (nom commerce, catégorie, dernière actu publiée, brouillon en cours)
+3. Claude renvoie 2 à 3 suggestions
+4. Le commerçant choisit ou édite avant de publier
+
+**Cas d'usage MVP (Communiquer)** :
+- Reformulation d'un texte existant pour le rendre plus engageant
+- Correction orthographique et grammaticale
+- Suggestion d'idées d'actus selon la saison ou la catégorie
+
+**Cas d'usage avancé (Vendre)** :
+- Génération complète d'une newsletter à partir d'un brief court
+- Segmentation automatique des Yoppers favoris (par centre d'intérêt, engagement)
+- Analyse de performance avec insights ("Tes Yoppers ouvrent plus tes pushs le jeudi matin")
+- Benchmarking anonyme avec des commerces de même catégorie
+
+**Limites par plan** :
+- Communiquer (Haiku) : ~50 000 tokens / mois ≈ 30-50 générations
+- Vendre (Sonnet) : ~150 000 tokens / mois ≈ 30-100 générations
+- Au-delà : message *"Tu as utilisé ton quota IA du mois. Quota remis à zéro le 1er du mois prochain."*
+
+**Coût Anthropic estimé pour Yoppaa** :
+- Haiku : ~0,80 $ / 1M tokens. À 50k tokens × 100 commerçants = 5M tokens = **4 $ / mois global**.
+- Sonnet : ~3 $ / 1M tokens. À 150k × 50 commerçants = 7,5M tokens = **22 $ / mois global**.
+- **Total ~30 $ / mois** côté Anthropic pour 150 commerçants actifs. Marge ultra confortable.
+
+**À coder** :
+- Endpoints `/api/ai/reformulate`, `/api/ai/suggest-actu`, `/api/ai/generate-newsletter`
+- Composant React `<BoutonAideIA>` réutilisable dans le dashboard
+- Compteur de tokens par commerçant par mois (table `ai_usage(commercant_id, mois, tokens_utilises)`)
+- Toujours afficher en UI : *"L'IA propose, tu valides toujours avant de publier"*. Le commerçant garde le contrôle.
+
+**Faisabilité confirmée** : 8 à 12 h de coding pour le MVP. Pas de magie, l'IA reformule et suggère uniquement à partir du contexte fourni. On démarre par les cas safe (reformulation, correction) avant la génération complète Vendre.
+
+---
+
+## 10. Références croisées
 
 - Source technique : [`lib/plans.js`](./lib/plans.js)
 - Refonte 4 paliers (15/06/2026) : voir `project_refonte_modele_on_full.md` dans la mémoire

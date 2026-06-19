@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import SectionTousCommercants from './SectionTousCommercants'
+import SectionKYBAValider from './SectionKYBAValider'
 import { Sparkles, Store, Scissors, Croissant, Phone, Eye, Lock } from 'lucide-react'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
@@ -214,6 +215,9 @@ export default function AdminPage() {
             ))}
           </div>
         </section>
+
+        {/* KYB en attente (S5.3 - 19/06) : valider/rejeter les verifications entreprise */}
+        <SectionKYBAValider toast={(msg, type) => setToast({ msg, type })} />
 
         {/* Tous les commerçants (édition + impersonation) */}
         <SectionTousCommercants toast={(msg, type) => setToast({ msg, type })} />

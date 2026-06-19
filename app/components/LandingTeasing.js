@@ -193,14 +193,14 @@ export default function LandingTeasing() {
           // MODE TEASING : compteur + formulaire pre-inscription
           <>
             <h1 style={{ fontSize: 'clamp(2.2rem, 6vw, 3.4rem)', fontWeight: 900, letterSpacing: '-1.8px', lineHeight: 1.1, margin: '0 0 14px', maxWidth: 620 }}>
-              Quelque chose se prépare<br/>à <span style={{ color: T.light }}>Mettet</span>.
+              Quelque chose se<br/>prépare à <span style={{ color: T.light }}>Mettet</span>.
               <span style={{ display: 'block', marginTop: 14, fontSize: '0.62em', fontWeight: 700, opacity: 0.88, letterSpacing: '-0.8px' }}>
                 Et bientôt près de chez toi.
               </span>
             </h1>
             <p style={{ fontSize: '1.05rem', color: T.light, lineHeight: 1.6, maxWidth: 480, margin: '0 0 36px', opacity: 0.92 }}>
               Un projet belge. Un projet pour ton quartier.<br/>
-              L&rsquo;app arrive le <strong style={{ color: '#fff' }}>21 juillet 2026</strong>, jour de la fête nationale 🇧🇪. 🟣
+              L&rsquo;app arrive le <strong style={{ color: '#fff' }}>21 juillet 2026</strong>, jour de la fête nationale <DrapeauBelge/>. 🟣
             </p>
 
             {/* Compteur */}
@@ -308,6 +308,21 @@ export default function LandingTeasing() {
         }
       `}</style>
     </div>
+  )
+}
+
+// Drapeau belge SVG inline : 3 bandes verticales noir / jaune / rouge.
+// On evite l'emoji 🇧🇪 qui sur Windows + certains navigateurs s'affiche en
+// "BE" (Regional Indicator Symbols non rendus comme drapeau par Microsoft).
+// SVG = rendu identique partout + respecte la charte Yoppaa (pas d'emoji).
+function DrapeauBelge() {
+  return (
+    <svg width="20" height="14" viewBox="0 0 30 20" aria-label="Belgique"
+      style={{ display: 'inline-block', verticalAlign: '-0.15em', marginLeft: 4, borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+      <rect width="10" height="20" fill="#000000"/>
+      <rect x="10" width="10" height="20" fill="#FAE042"/>
+      <rect x="20" width="10" height="20" fill="#ED2939"/>
+    </svg>
   )
 }
 

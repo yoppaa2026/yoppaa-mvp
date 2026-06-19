@@ -271,9 +271,22 @@ function generateMarketingSvg(width, height, options = {}) {
   // - wordmarkToDots >= 0.28 * wordmarkSize (eviter chevauchement descenders)
   // RÈGLE A RESPECTER PARTOUT ou les dots sont sous le wordmark.
   if (bigCenter) {
-    // 1) On part du wordmark comme reference (pas l'inverse)
-    const wordmarkSize = Math.min(width, height) * 0.28
-    // 2) Dots calcules proportionnellement au wordmark (ratio canonique)
+    // Fond specifique teaser : gradient radial centre (pas le gradient diagonal
+    // partage qui creait une perception de "bandes" sur fond FB). Centre lumineux
+    // deep, bords plus sombres ink. Effet de vignette inversee subtile.
+    const bgTeaser = `
+      <defs>
+        <radialGradient id="teaserBg" cx="0.5" cy="0.5" r="0.75">
+          <stop offset="0%" stop-color="${T.deep}"/>
+          <stop offset="100%" stop-color="${T.ink}"/>
+        </radialGradient>
+      </defs>
+      <rect width="${width}" height="${height}" fill="url(#teaserBg)"/>
+    `
+    // 1) Wordmark comme reference. Reduit de 0.28 a 0.22 * min(w,h) pour avoir
+    //    une marge confortable aux bords (largeur visuelle ~67% au lieu de 85%).
+    const wordmarkSize = Math.min(width, height) * 0.22
+    // 2) Dots = wordmarkSize * 0.254 (RATIO CANONIQUE STRICT, spec V2-B)
     const dotBase = wordmarkSize * 0.254
     const dotMini = dotBase * 0.55
     const dotGap = dotBase * 0.55
@@ -293,7 +306,7 @@ function generateMarketingSvg(width, height, options = {}) {
     const dotsStartX = (width - dotsTotalW) / 2
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
   <defs><style>${fontFaceStyle}</style></defs>
-  ${bg}
+  ${bgTeaser}
   <text x="${width/2}" y="${wordmarkY}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="${wordmarkSize}" letter-spacing="${-wordmarkSize * 0.05}" text-anchor="middle">
     <tspan fill="#FFFFFF">yo</tspan><tspan fill="${T.light}">pp</tspan><tspan fill="${T.mid}">aa</tspan>
   </text>

@@ -192,8 +192,11 @@ export default function LandingTeasing() {
         ) : (
           // MODE TEASING : compteur + formulaire pre-inscription
           <>
-            <h1 style={{ fontSize: 'clamp(2.2rem, 6vw, 3.4rem)', fontWeight: 900, letterSpacing: '-1.8px', lineHeight: 1.1, margin: '0 0 14px', maxWidth: 580 }}>
+            <h1 style={{ fontSize: 'clamp(2.2rem, 6vw, 3.4rem)', fontWeight: 900, letterSpacing: '-1.8px', lineHeight: 1.1, margin: '0 0 14px', maxWidth: 620 }}>
               Quelque chose se prépare<br/>à <span style={{ color: T.light }}>Mettet</span>.
+              <span style={{ display: 'block', marginTop: 14, fontSize: '0.62em', fontWeight: 700, opacity: 0.88, letterSpacing: '-0.8px' }}>
+                Et bientôt près de chez toi.
+              </span>
             </h1>
             <p style={{ fontSize: '1.05rem', color: T.light, lineHeight: 1.6, maxWidth: 480, margin: '0 0 36px', opacity: 0.92 }}>
               Un projet belge. Un projet pour ton quartier.<br/>

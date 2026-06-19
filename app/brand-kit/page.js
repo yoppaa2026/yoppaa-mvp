@@ -262,20 +262,36 @@ function generateMarketingSvg(width, height, options = {}) {
 </svg>`
   }
 
-  // Mode bigCenter (teaser) : grands dots centres, rien d'autre
+  // Mode bigCenter (teaser) : wordmark "yoppaa" + grands dots V2-B + "Bientot..."
+  // Composition canonique du logo (wordmark au-dessus des dots, spec V2-B 12/06).
   if (bigCenter) {
-    const dotBase = Math.min(width, height) * 0.12
+    const dotBase = Math.min(width, height) * 0.10
     const dotMini = dotBase * 0.55
     const dotGap = dotBase * 0.55
     const dotOffset = dotBase * 0.4
-    const total = 3 * dotBase + 2 * dotMini + 4 * dotGap
-    const dotsY = (height - dotBase - dotOffset) / 2
-    const dotsStartX = (width - total) / 2
+    const dotsTotalW = 3 * dotBase + 2 * dotMini + 4 * dotGap
+    const dotsBlockH = dotBase + dotOffset
+    // Tailles wordmark + texte teaser (proportionnels au dotBase)
+    const wordmarkSize = dotBase * 3.4
+    const bientotSize = dotBase * 0.78
+    const gapWordmark = dotBase * 0.5
+    const gapBientot = dotBase * 1.1
+    // Hauteur totale pour centrer verticalement
+    const totalH = wordmarkSize + gapWordmark + dotsBlockH + gapBientot + bientotSize
+    const startY = (height - totalH) / 2
+    // Positions (baseline pour text = startY + size * 0.85 approximativement)
+    const wordmarkY = startY + wordmarkSize * 0.85
+    const dotsY = startY + wordmarkSize + gapWordmark
+    const bientotY = dotsY + dotsBlockH + gapBientot + bientotSize * 0.85
+    const dotsStartX = (width - dotsTotalW) / 2
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
   <defs><style>${fontFaceStyle}</style></defs>
   ${bg}
+  <text x="${width/2}" y="${wordmarkY}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="${wordmarkSize}" letter-spacing="${-wordmarkSize * 0.05}" text-anchor="middle">
+    <tspan fill="#FFFFFF">yo</tspan><tspan fill="${T.light}">pp</tspan><tspan fill="${T.mid}">aa</tspan>
+  </text>
   ${renderDotsV2B(dotsStartX, dotsY, dotBase, ['#FFFFFF', T.light, T.light, T.mid, T.mid])}
-  <text x="${width/2}" y="${dotsY + dotBase + dotOffset + dotBase * 1.5}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="${dotBase * 0.7}" letter-spacing="${-dotBase * 0.025}" text-anchor="middle" fill="#FFFFFF">Bientot</text>
+  <text x="${width/2}" y="${bientotY}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="600" font-size="${bientotSize}" letter-spacing="0.5" text-anchor="middle" fill="${T.light}">Bient&#244;t&#8230;</text>
 </svg>`
   }
 

@@ -224,31 +224,30 @@ function generateMarketingSvg(width, height, options = {}) {
   const contentCenterX = avatarSafe ? avatarReserveW + (width - avatarReserveW) / 2 : width / 2
   const contentW = avatarSafe ? width - avatarReserveW - 40 : width - 80
 
-  // Mode coverFBLayout (cover Facebook 1640x624) : safe zone universelle
-  // desktop + mobile. Contenu uniquement dans le tier superieur (0-290px)
-  // avec marges horizontales 225px chaque cote (mobile crop le ratio 1.91:1).
-  // Pas de footer ici (100% mange par l'avatar). 5 dots V2-B en signature
-  // discrete coin haut-droit (visible sur desktop).
+  // Mode coverFBLayout (cover Facebook 1640x624) : VRAIE safe zone universelle
+  // desktop + mobile. Mobile crop horizontal tres agressif (FB recommande 640px
+  // centres horizontalement pour le contenu critique). Vertical : tier superieur
+  // uniquement (0-290px) car au-dela = avatar masque sur les 2 vues.
+  // Pas de dots ici : deja dans l'avatar (redondance UX). Texte SEUL.
   if (coverFBLayout) {
-    const safeHmargin = 225 // marges gauche/droite (mobile crop)
-    const safeTop = 50
-    const safeBottom = 290 // limite verticale (au-dela = avatar masque)
-    const safeW = width - safeHmargin * 2
+    const safeHmargin = 500 // marges gauche/droite (mobile crop critique)
+    const safeTop = 60
+    const safeBottom = 290
+    const safeW = width - safeHmargin * 2 // ~640px sur 1640 total
     const cx = width / 2
-    // Tailles : plus compactes car peu d'espace
-    const titreSize = 78
-    const sousTitreSize = 30
-    const lineH = titreSize * 1.05
-    const subLineH = sousTitreSize * 1.35
-    // Wrap selon largeur safe (1190px pour 1640 total)
-    const charsLigne = Math.max(20, Math.round(safeW / (titreSize * 0.5)))
-    const subCharsLigne = Math.max(35, Math.round(safeW / (sousTitreSize * 0.5)))
+    // Tailles plus compactes pour tenir dans 640px
+    const titreSize = 64
+    const sousTitreSize = 24
+    const lineH = titreSize * 1.1
+    const subLineH = sousTitreSize * 1.4
+    // Wrap automatique selon largeur safe
+    const charsLigne = Math.max(12, Math.round(safeW / (titreSize * 0.5)))
+    const subCharsLigne = Math.max(22, Math.round(safeW / (sousTitreSize * 0.5)))
     const tLines = wrapText(titre, charsLigne)
     const stLines = wrapText(sousTitre, subCharsLigne)
-    // Centrage vertical dans la safe zone
     const titreBlocH = tLines.length * lineH
     const sousTitreBlocH = stLines.length * subLineH
-    const gap = 28
+    const gap = 24
     const totalH = titreBlocH + (stLines.length > 0 ? gap + sousTitreBlocH : 0)
     const startY = safeTop + (safeBottom - safeTop - totalH) / 2
     const tSVG = tLines.map((line, i) =>
@@ -258,17 +257,9 @@ function generateMarketingSvg(width, height, options = {}) {
     const stSVG = stLines.map((line, i) =>
       `<text x="${cx}" y="${stStartY + i * subLineH}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="600" font-size="${sousTitreSize}" letter-spacing="0.3" text-anchor="middle" fill="${T.light}">${escapeXml(line)}</text>`
     ).join('')
-    // Mini signature 5 dots V2-B en coin haut-droit (decoratif, visible desktop)
-    const dotBase = 14
-    const dotMini = dotBase * 0.55
-    const dotGap = dotBase * 0.55
-    const dotTotal = 3 * dotBase + 2 * dotMini + 4 * dotGap
-    const dotsSigX = width - safeHmargin - dotTotal
-    const dotsSigY = 40
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
   <defs><style>${fontFaceStyle}</style></defs>
   ${bg}
-  ${renderDotsV2B(dotsSigX, dotsSigY, dotBase, ['#FFFFFF', T.light, T.light, T.mid, T.mid])}
   ${tSVG}
   ${stSVG}
 </svg>`
@@ -528,10 +519,10 @@ export default function BrandKit() {
       title: 'Cover FB · Tribu',
       dims: { w: 1640, h: 624 },
       filename: 'yoppaa-fb-cover-tribu-1640x624',
-      sub: 'banniere page Facebook · safe zone universelle desktop + mobile',
+      sub: 'banniere page Facebook · safe zone 640px centree (mobile FB crop tres serre)',
       options: {
-        titre: 'Rejoins la tribu Yoppaa',
-        sousTitre: 'Commercants, citoyens, services publics. Une seule app belge.',
+        titre: 'Rejoins la tribu',
+        sousTitre: "L'app belge du commerce local. Sans commission.",
         coverFBLayout: true,
       },
     },

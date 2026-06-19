@@ -155,6 +155,171 @@ function generateSocialSvg(width, height, palette, options = {}) {
 </svg>`
 }
 
+// ────────── GÉNÉRATEUR MARKETING (cover FB Tribu + posts FB) ──────────
+// Composition adaptee : texte titre/sous-titre/signature + footer optionnel.
+// avatarSafe=true : decale tout le contenu a droite (ou utilise la moitie
+// droite du canvas pour la cover FB 1640x624 dont l'avatar mange ~340x340
+// en bas-gauche).
+function wrapText(text, maxChars) {
+  if (!text) return []
+  const words = text.split(' ')
+  const lines = []
+  let current = ''
+  for (const word of words) {
+    const candidate = current ? current + ' ' + word : word
+    if (candidate.length > maxChars && current) {
+      lines.push(current)
+      current = word
+    } else {
+      current = candidate
+    }
+  }
+  if (current) lines.push(current)
+  return lines
+}
+
+function generateMarketingSvg(width, height, options = {}) {
+  const {
+    titre = '',
+    sousTitre = '',
+    showFooter = true,
+    showWordmarkBig = false,
+    fontDataUrls = {},
+    avatarSafe = false,
+    bigDotsSignature = false,
+    bigCenter = false, // teaser-style : pas de texte, juste dots geants au centre
+  } = options
+  const { w800, w600 } = fontDataUrls
+
+  let fontFaceStyle = ''
+  if (w800 && w600) {
+    fontFaceStyle = `@font-face { font-family: 'Plus Jakarta Sans'; font-weight: 800; font-style: normal; src: url('${w800}') format('woff2'); }`
+    fontFaceStyle += ` @font-face { font-family: 'Plus Jakarta Sans'; font-weight: 600; font-style: normal; src: url('${w600}') format('woff2'); }`
+  } else {
+    fontFaceStyle = `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;800&display=swap');`
+  }
+
+  // Fond : gradient diagonal Yoppaa + halo violet haut-droit
+  const bg = `
+    <defs>
+      <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="${T.ink}"/>
+        <stop offset="50%" stop-color="${T.deep}"/>
+        <stop offset="100%" stop-color="${T.main}"/>
+      </linearGradient>
+      <radialGradient id="halo" cx="0.85" cy="0.15" r="0.55">
+        <stop offset="0%" stop-color="${T.light}" stop-opacity="0.35"/>
+        <stop offset="100%" stop-color="${T.light}" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="${width}" height="${height}" fill="url(#bgGrad)"/>
+    <rect width="${width}" height="${height}" fill="url(#halo)"/>
+  `
+
+  // Layout : si avatarSafe, on reserve 380px en bas-gauche pour l'avatar FB
+  // mais on garde le contenu centre horizontalement et decale legerement vers
+  // le haut pour ne pas se chevaucher avec la zone avatar.
+  const avatarReserveW = avatarSafe ? Math.min(380, width * 0.23) : 0
+  const contentCenterX = avatarSafe ? avatarReserveW + (width - avatarReserveW) / 2 : width / 2
+  const contentW = avatarSafe ? width - avatarReserveW - 40 : width - 80
+
+  // Mode bigCenter (teaser) : grands dots centres, rien d'autre
+  if (bigCenter) {
+    const dotBase = Math.min(width, height) * 0.12
+    const dotMini = dotBase * 0.55
+    const dotGap = dotBase * 0.55
+    const dotOffset = dotBase * 0.4
+    const total = 3 * dotBase + 2 * dotMini + 4 * dotGap
+    const dotsY = (height - dotBase - dotOffset) / 2
+    const dotsStartX = (width - total) / 2
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
+  <defs><style>${fontFaceStyle}</style></defs>
+  ${bg}
+  ${renderDotsV2B(dotsStartX, dotsY, dotBase, ['#FFFFFF', T.light, T.light, T.mid, T.mid])}
+  <text x="${width/2}" y="${dotsY + dotBase + dotOffset + dotBase * 1.5}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="${dotBase * 0.7}" letter-spacing="${-dotBase * 0.025}" text-anchor="middle" fill="#FFFFFF">Bientot</text>
+</svg>`
+  }
+
+  // Polices auto-adaptatives + wrap
+  const titreSize = Math.min(width * 0.055, height * 0.12, 90)
+  const sousTitreSize = titreSize * 0.4
+  const lineH = titreSize * 1.15
+
+  const charsParLigne = Math.max(12, Math.round(contentW / (titreSize * 0.55)))
+  const titreLines = wrapText(titre, charsParLigne)
+  const sousTitreLines = wrapText(sousTitre, Math.round(contentW / (sousTitreSize * 0.52)))
+
+  // Calcul vertical : bloc texte centre, footer dots+slogan en bas
+  const titreBlocH = titreLines.length * lineH
+  const sousTitreBlocH = sousTitre ? sousTitreLines.length * sousTitreSize * 1.4 + 30 : 0
+  const blocTotalH = titreBlocH + sousTitreBlocH
+  const blocStartY = (height - blocTotalH) / 2 - (showFooter ? 30 : 0)
+
+  const titreSVG = titreLines.map((line, i) =>
+    `<text x="${contentCenterX}" y="${blocStartY + (i + 1) * lineH * 0.92}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="${titreSize}" letter-spacing="${-titreSize * 0.05}" text-anchor="middle" fill="#FFFFFF">${escapeXml(line)}</text>`
+  ).join('')
+
+  const sousTitreStartY = blocStartY + titreBlocH + 40
+  const sousTitreSVG = sousTitre ? sousTitreLines.map((line, i) =>
+    `<text x="${contentCenterX}" y="${sousTitreStartY + i * sousTitreSize * 1.4}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="600" font-size="${sousTitreSize}" letter-spacing="0.2" text-anchor="middle" fill="${T.light}">${escapeXml(line)}</text>`
+  ).join('') : ''
+
+  // Footer : 5 dots V2-B + slogan
+  let footerSVG = ''
+  if (showFooter) {
+    const dotBase = bigDotsSignature ? 28 : 18
+    const dotMini = dotBase * 0.55
+    const dotGap = dotBase * 0.55
+    const dotOffset = dotBase * 0.4
+    const dotsTotalW = 3 * dotBase + 2 * dotMini + 4 * dotGap
+    const dotsY = height - 90
+    const dotsStartX = contentCenterX - dotsTotalW / 2
+    const sloganY = dotsY + dotBase + dotOffset + dotBase * 1.6
+    const sloganSize = dotBase * 0.95
+    footerSVG = `
+      ${renderDotsV2B(dotsStartX, dotsY, dotBase, ['#FFFFFF', T.light, T.light, T.mid, T.mid])}
+      <text x="${contentCenterX}" y="${sloganY}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="600" font-size="${sloganSize}" letter-spacing="0.3" text-anchor="middle" fill="${T.light}" opacity="0.9">Ton quartier dans ta poche</text>
+    `
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
+  <defs><style>${fontFaceStyle}</style></defs>
+  ${bg}
+  ${titreSVG}
+  ${sousTitreSVG}
+  ${footerSVG}
+</svg>`
+}
+
+// Dots V2-B en SVG pur (5 dots maillon avec sourire). Couleurs passees en
+// array : [d1 grand, d2 mini, d3 grand, d4 mini, d5 grand].
+function renderDotsV2B(startX, topY, base, colors) {
+  const mini = base * 0.55
+  const gap = base * 0.55
+  const offset = base * 0.4
+  let x = startX
+  const c1 = `<circle cx="${x + base/2}" cy="${topY + base/2}" r="${base/2}" fill="${colors[0]}"/>`
+  x += base + gap
+  const c2 = `<circle cx="${x + mini/2}" cy="${topY + offset + mini/2}" r="${mini/2}" fill="${colors[1]}"/>`
+  x += mini + gap
+  const c3 = `<circle cx="${x + base/2}" cy="${topY + offset + base/2}" r="${base/2}" fill="${colors[2]}"/>`
+  x += base + gap
+  const c4 = `<circle cx="${x + mini/2}" cy="${topY + offset + mini/2}" r="${mini/2}" fill="${colors[3]}"/>`
+  x += mini + gap
+  const c5 = `<circle cx="${x + base/2}" cy="${topY + base/2}" r="${base/2}" fill="${colors[4]}"/>`
+  return c1 + c2 + c3 + c4 + c5
+}
+
+// Echappe les caracteres XML reserves dans le texte SVG.
+function escapeXml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
 // ────────── DOWNLOAD HELPERS ──────────
 function downloadSvg(svgString, filename) {
   const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
@@ -297,12 +462,92 @@ export default function BrandKit() {
     { title: 'App icon',              dims: { w: 1024, h: 1024 }, scale: 1.6, mode: 'dark', filename: 'yoppaa-app-icon-1024', sub: 'iOS, Android · stores', gradient: true },
     { title: 'Stripe icon (512)',    dims: { w: 512,  h: 512 },  scale: 0.8, mode: 'dark', filename: 'yoppaa-stripe-icon-512', sub: 'Stripe Brand settings · portail + emails', gradient: true },
     { title: 'OG image (partage lien)', dims: { w: 1200, h: 630 },  scale: 1.4, mode: 'dark', filename: 'yoppaa-og-1200x630', sub: 'preview lien social, Slack, WhatsApp, Telegram', gradient: false },
-    { title: 'Cover page Facebook',  dims: { w: 1640, h: 624 },  scale: 1.3, mode: 'dark', filename: 'yoppaa-fb-cover-1640x624', sub: 'bannière page Facebook HD (display 820×312)', gradient: true },
     { title: 'Twitter header',       dims: { w: 1500, h: 500 },  scale: 1.3, mode: 'dark', filename: 'yoppaa-twitter-header', sub: 'bannière X/Twitter', gradient: true },
     { title: 'LinkedIn banner',      dims: { w: 1584, h: 396 },  scale: 1.1, mode: 'dark', filename: 'yoppaa-linkedin-1584x396', sub: 'bannière LinkedIn profil/page', gradient: false },
     { title: 'Instagram story',      dims: { w: 1080, h: 1920 }, scale: 1.5, mode: 'dark', filename: 'yoppaa-story-1080x1920', sub: 'IG Stories, TikTok, Snapchat', gradient: true },
     { title: 'Post carré 1080',      dims: { w: 1080, h: 1080 }, scale: 1.8, mode: 'dark', filename: 'yoppaa-post-1080', sub: 'feed Instagram, Facebook', gradient: false },
     { title: 'Avatar fond clair',    dims: { w: 1080, h: 1080 }, scale: 1.6, mode: 'light', filename: 'yoppaa-avatar-light-1080', sub: 'profil fond blanc, variante', gradient: false },
+  ]
+
+  // ────────── ASSETS MARKETING (cover FB Tribu + posts FB lancement) ──────────
+  // 7 visuels prets a poster pour la sortie publique Yoppaa. Composition adaptee
+  // a la zone safe avatar pour la cover FB (texte decale a droite).
+  const marketingAssets = [
+    {
+      title: 'Cover FB · Tribu',
+      dims: { w: 1640, h: 624 },
+      filename: 'yoppaa-fb-cover-tribu-1640x624',
+      sub: 'banniere page Facebook · avatar safe zone respectee',
+      options: {
+        titre: 'Rejoins la tribu Yoppaa',
+        sousTitre: 'Commercants belges, citoyens engages, services publics. Une seule app.',
+        avatarSafe: true,
+        showFooter: true,
+        bigDotsSignature: false,
+      },
+    },
+    {
+      title: 'Post FB · Teaser',
+      dims: { w: 1080, h: 1080 },
+      filename: 'yoppaa-post-fb-teaser-1080',
+      sub: 'serie lancement 1/6 · teaser dots geants',
+      options: { bigCenter: true, showFooter: false },
+    },
+    {
+      title: 'Post FB · Reveal',
+      dims: { w: 1080, h: 1080 },
+      filename: 'yoppaa-post-fb-reveal-1080',
+      sub: 'serie lancement 2/6 · annonce officielle',
+      options: {
+        titre: "L'app belge du commerce local arrive.",
+        sousTitre: 'Sans commission. Sans frais cache. Vraiment.',
+        showFooter: true, bigDotsSignature: true,
+      },
+    },
+    {
+      title: 'Post FB · Pitch killer',
+      dims: { w: 1080, h: 1080 },
+      filename: 'yoppaa-post-fb-pitch-1080',
+      sub: 'serie lancement 3/6 · differenciation Appetito',
+      options: {
+        titre: 'Vraiment 0 commission. Vraiment 0 frais caches.',
+        sousTitre: "19,90 EUR HTVA / mois, c'est tout.",
+        showFooter: true, bigDotsSignature: true,
+      },
+    },
+    {
+      title: 'Post FB · Tribu',
+      dims: { w: 1080, h: 1080 },
+      filename: 'yoppaa-post-fb-tribu-1080',
+      sub: 'serie lancement 4/6 · communaute',
+      options: {
+        titre: 'Rejoins la tribu Yoppaa',
+        sousTitre: 'Tu commences ici. Avec ceux d\'a cote.',
+        showFooter: true, bigDotsSignature: true,
+      },
+    },
+    {
+      title: 'Post FB · Commercants',
+      dims: { w: 1080, h: 1080 },
+      filename: 'yoppaa-post-fb-commercants-1080',
+      sub: 'serie lancement 5/6 · CTA commercants',
+      options: {
+        titre: 'Tu es commercant ?',
+        sousTitre: 'Cree ta fiche Yoppaa en 5 minutes sur www.yoppaa.app',
+        showFooter: true, bigDotsSignature: true,
+      },
+    },
+    {
+      title: 'Post FB · Yopper',
+      dims: { w: 1080, h: 1080 },
+      filename: 'yoppaa-post-fb-yopper-1080',
+      sub: 'serie lancement 6/6 · CTA citoyens',
+      options: {
+        titre: 'Deviens Yopper.',
+        sousTitre: 'Ton quartier dans ta poche. Telecharge gratuitement.',
+        showFooter: true, bigDotsSignature: true,
+      },
+    },
   ]
 
   return (
@@ -425,9 +670,32 @@ export default function BrandKit() {
           ))}
         </div>
 
-        {/* SECTION 4 : RÈGLES D'USAGE */}
+        {/* SECTION 4 : MARKETING & COM (cover FB Tribu + posts FB) */}
         <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>
-          4 · Règles d&rsquo;usage
+          4 · Marketing &amp; com
+        </h2>
+        <p style={{ margin: '0 0 18px', fontSize: 13, color: T.muted }}>
+          Cover Facebook avec safe zone avatar respect&eacute;e + s&eacute;rie de 6 posts pour le lancement. Tout prêt à uploader.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 40 }}>
+          {marketingAssets.map((a, i) => (
+            <AssetCard
+              key={i}
+              title={a.title}
+              sub={`${a.dims.w}×${a.dims.h}px · ${a.sub}`}
+              svgString={generateMarketingSvg(a.dims.w, a.dims.h, { ...a.options, fontDataUrls: {} })}
+              svgStringForPng={generateMarketingSvg(a.dims.w, a.dims.h, { ...a.options, fontDataUrls })}
+              previewBg={`linear-gradient(135deg, ${T.ink}, ${T.main})`}
+              filename={a.filename}
+              pngSize={{ w: a.dims.w, h: a.dims.h }}
+              dark
+            />
+          ))}
+        </div>
+
+        {/* SECTION 5 : RÈGLES D'USAGE */}
+        <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>
+          5 · Règles d&rsquo;usage
         </h2>
         <div style={{ background: '#fff', borderRadius: 12, padding: '20px 24px', border: `1px solid ${T.pale}`, fontSize: 13, color: T.deep, lineHeight: 1.7 }}>
           <p style={{ margin: '0 0 10px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Check size={16} strokeWidth={2.2} color="#10B981"/> À faire</p>

@@ -559,6 +559,83 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
   )
 }
 
+// ─── HeroCarousel : photo couverture + galerie scroll-snap horizontal ────────
+// S4 : si une seule photo (ou aucune), comportement identique a l'ancien hero
+// (image fullbleed ou fallback gradient branded). Si 2+ photos, scroll snap
+// horizontal avec dots pagination en bas du hero.
+function HeroCarousel({ couverture, galerie, nomCommerce }) {
+  const scrollRef = useRef(null)
+  const [active, setActive] = useState(0)
+
+  // Liste des photos a afficher : couverture en premier, puis galerie par ordre
+  const photos = []
+  if (couverture?.url) photos.push({ id: 'couverture', url: couverture.url })
+  ;(galerie || []).forEach(p => { if (p?.url) photos.push({ id: p.id, url: p.url }) })
+
+  function onScroll() {
+    const el = scrollRef.current
+    if (!el) return
+    const idx = Math.round(el.scrollLeft / el.clientWidth)
+    if (idx !== active) setActive(idx)
+  }
+  function goTo(i) {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' })
+  }
+
+  // Aucune photo : fallback gradient branded (comportement initial)
+  if (photos.length === 0) {
+    return (
+      <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)` }}>
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}55 0%, transparent 60%), radial-gradient(circle at 20% 80%, ${T.light}22 0%, transparent 50%)` }}/>
+      </div>
+    )
+  }
+  // Une seule photo : pas de carousel, image fullbleed
+  if (photos.length === 1) {
+    return <img src={photos[0].url} alt={nomCommerce} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+  }
+  // 2+ photos : scroll snap horizontal natif + dots pagination
+  return (
+    <>
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        style={{
+          width: '100%', height: '100%', overflowX: 'auto', overflowY: 'hidden',
+          display: 'flex', scrollSnapType: 'x mandatory', scrollBehavior: 'auto',
+          WebkitOverflowScrolling: 'touch',
+        }}
+        className="hero-carousel-track"
+      >
+        {photos.map(p => (
+          <div key={p.id} style={{ flex: '0 0 100%', height: '100%', scrollSnapAlign: 'start' }}>
+            <img src={p.url} alt={nomCommerce} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
+          </div>
+        ))}
+      </div>
+      {/* Pagination dots */}
+      <div style={{ position: 'absolute', bottom: 14, left: 0, right: 0, zIndex: 4, display: 'flex', justifyContent: 'center', gap: 6, pointerEvents: 'none' }}>
+        {photos.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => goTo(i)}
+            aria-label={`Photo ${i + 1}`}
+            style={{
+              width: active === i ? 22 : 8, height: 8, borderRadius: 100,
+              background: active === i ? '#fff' : 'rgba(255,255,255,0.5)',
+              border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+              pointerEvents: 'auto', padding: 0,
+            }}
+          />
+        ))}
+      </div>
+      <style dangerouslySetInnerHTML={{ __html: `.hero-carousel-track::-webkit-scrollbar { display: none; } .hero-carousel-track { scrollbar-width: none; }` }}/>
+    </>
+  )
+}
+
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function CommanderSlug() {
   const { slug } = useParams()
@@ -1596,14 +1673,11 @@ export default function CommanderSlug() {
                 <div className="fiche-hero" style={{ position: 'relative', overflow: 'hidden' }}>
                   {/* Bande 3px canonique YOPPAA en haut du hero (Ink → Main → Light) */}
                   <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 3 }}/>
-                  {photoCouverture?.url
-                    ? <img src={photoCouverture.url} alt={commercant.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                    : (
-                      <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)` }}>
-                        <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}55 0%, transparent 60%), radial-gradient(circle at 20% 80%, ${T.light}22 0%, transparent 50%)` }}/>
-                      </div>
-                    )
-                  }
+                  <HeroCarousel
+                    couverture={photoCouverture}
+                    galerie={galerie}
+                    nomCommerce={commercant.nom}
+                  />
                   {/* Voile dégradé bas pour finition visuelle */}
                   <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, background: 'linear-gradient(to top, rgba(22,6,54,0.5), transparent)' }}/>
 

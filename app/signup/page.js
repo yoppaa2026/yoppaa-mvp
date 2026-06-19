@@ -1069,21 +1069,30 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
 function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, avancer, retour }) {
   const [logoUrl, setLogoUrl] = useState(commercant.logo_url || null)
   const [couvertureUrl, setCouvertureUrl] = useState(null)
+  // S4 : galerie = jusqu'a 4 photos supplementaires affichees en carrousel
+  // sur la fiche client. Stockees en commercant_photos type='galerie'.
+  const [galerie, setGalerie] = useState([])
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingCover, setUploadingCover] = useState(false)
+  const [uploadingGalerie, setUploadingGalerie] = useState(false)
   const [warningCover, setWarningCover] = useState(null) // avertissement non bloquant (orientation, qualité…)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const MAX_GALERIE = 4
 
-  // Charge la photo de couverture existante au mount
+  // Charge couverture + galerie au mount
   useEffect(() => {
     let annule = false
     supabase.from('commercant_photos')
-      .select('url')
+      .select('id, url, type, ordre')
       .eq('commercant_id', commercant.id)
-      .eq('type', 'couverture')
-      .maybeSingle()
-      .then(({ data }) => { if (!annule && data?.url) setCouvertureUrl(data.url) })
+      .order('ordre')
+      .then(({ data }) => {
+        if (annule) return
+        const couv = (data || []).find(p => p.type === 'couverture')
+        if (couv?.url) setCouvertureUrl(couv.url)
+        setGalerie((data || []).filter(p => p.type === 'galerie' && p.url))
+      })
     return () => { annule = true }
   }, [commercant.id])
 
@@ -1211,6 +1220,50 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     setUploadingCover(false)
   }
 
+  // S4 : ajout d'une photo a la galerie (max 4). Ordre = max courant + 1
+  // pour preserver l'ordre d'affichage du carousel cote fiche client.
+  async function uploadPhotoGalerie(file) {
+    if (galerie.length >= MAX_GALERIE) {
+      setError(`Maximum ${MAX_GALERIE} photos supplementaires.`)
+      return
+    }
+    setError('')
+    const { error: err } = await validerFichier(file)
+    if (err) { setError(err); return }
+    setUploadingGalerie(true)
+    onSaving?.('saving')
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+    const fileName = `gal-${commercant.id}-${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, file, { upsert: true })
+    if (upErr) { setError(`Upload echoue : ${upErr.message}`); setUploadingGalerie(false); return }
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    const url = urlData.publicUrl
+    const ordreSuivant = galerie.length > 0 ? Math.max(...galerie.map(p => p.ordre || 0)) + 1 : 1
+    const { data: row, error: insErr } = await supabase.from('commercant_photos').insert({
+      commercant_id: commercant.id,
+      type: 'galerie',
+      url,
+      ordre: ordreSuivant,
+    }).select().single()
+    if (insErr) { setError(`Enregistrement echoue : ${insErr.message}`); setUploadingGalerie(false); return }
+    setGalerie(prev => [...prev, row])
+    setUploadingGalerie(false)
+    onSaving?.('saved')
+  }
+
+  async function supprimerPhotoGalerie(photo) {
+    onSaving?.('saving')
+    await supabase.from('commercant_photos').delete().eq('id', photo.id)
+    // Supprime aussi le fichier dans storage (nom = derniere segment de l'url)
+    try {
+      const segments = (photo.url || '').split('/')
+      const objectName = segments[segments.length - 1]
+      if (objectName) await supabase.storage.from('logos').remove([objectName])
+    } catch { /* nettoyage best-effort, l'image orpheline ne casse rien */ }
+    setGalerie(prev => prev.filter(p => p.id !== photo.id))
+    onSaving?.('saved')
+  }
+
   async function continuer() {
     setSaving(true)
     if (onboarding) {
@@ -1285,6 +1338,19 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
         </div>
       </Card>
 
+      <Card titre={`Photos supplementaires (${galerie.length}/${MAX_GALERIE})`} sous="Affichees en carrousel sous la couverture sur ta page client. Optionnel mais conseille : interieur, produits, equipe...">
+        <GalerieMini
+          photos={galerie}
+          max={MAX_GALERIE}
+          uploading={uploadingGalerie}
+          onFile={uploadPhotoGalerie}
+          onSupprimer={supprimerPhotoGalerie}
+        />
+        <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
+          <strong style={{ color: T.bgPanel }}>Conseil :</strong> varie les angles (interieur ambiance + produit signature + equipe en action). Format paysage 16:9 ideal, mais on accepte tous les ratios.
+        </div>
+      </Card>
+
       <Card titre="Logo" sous="Affiché dans la card flottante de ta page client. Format carré conseillé.">
         <UploadZone
           url={logoUrl}
@@ -1314,6 +1380,44 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
         saving={saving}
         hint={couvertureUrl || logoUrl ? null : (peutSkipperVisuels(getPlanActif(commercant, onboarding)) ? 'Tu peux passer et ajouter tes visuels plus tard depuis le dashboard.' : 'Recommande pour ta visibilite.')}
       />
+    </div>
+  )
+}
+
+// Grille de thumbs galerie + bouton "+" pour ajouter une photo (max atteint).
+// Affiche une croix sur chaque thumb pour supprimer.
+function GalerieMini({ photos, max, uploading, onFile, onSupprimer }) {
+  const inputRef = useRef(null)
+  const peutAjouter = photos.length < max
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10 }}>
+        {photos.map(p => (
+          <div key={p.id} style={{ position: 'relative', aspectRatio: '4/3', borderRadius: 12, overflow: 'hidden', border: `1px solid ${T.hairline}` }}>
+            <img src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            <button type="button" onClick={() => onSupprimer(p)} aria-label="Supprimer"
+              style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(22,6,54,0.85)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, lineHeight: 1, padding: 0 }}>
+              <span style={{ marginTop: -1 }}>×</span>
+            </button>
+          </div>
+        ))}
+        {peutAjouter && (
+          <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
+            style={{ aspectRatio: '4/3', borderRadius: 12, border: `2px dashed ${T.hairline}`, background: '#FAFAFA', cursor: uploading ? 'wait' : 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, fontFamily: '"DM Sans", sans-serif' }}>
+            {uploading ? (
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.bgPanel }}>Upload…</span>
+            ) : (
+              <>
+                <Camera size={20} strokeWidth={1.8} color={T.main}/>
+                <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>Ajouter</span>
+              </>
+            )}
+          </button>
+        )}
+      </div>
+      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp"
+        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = '' }}
+        style={{ display: 'none' }}/>
     </div>
   )
 }

@@ -188,6 +188,7 @@ function generateMarketingSvg(width, height, options = {}) {
     avatarSafe = false,
     bigDotsSignature = false,
     bigCenter = false, // teaser-style : pas de texte, juste dots geants au centre
+    coverFBLayout = false, // safe zone FB cover (top only, marges horizontales)
   } = options
   const { w800, w600 } = fontDataUrls
 
@@ -222,6 +223,56 @@ function generateMarketingSvg(width, height, options = {}) {
   const avatarReserveW = avatarSafe ? Math.min(380, width * 0.23) : 0
   const contentCenterX = avatarSafe ? avatarReserveW + (width - avatarReserveW) / 2 : width / 2
   const contentW = avatarSafe ? width - avatarReserveW - 40 : width - 80
+
+  // Mode coverFBLayout (cover Facebook 1640x624) : safe zone universelle
+  // desktop + mobile. Contenu uniquement dans le tier superieur (0-290px)
+  // avec marges horizontales 225px chaque cote (mobile crop le ratio 1.91:1).
+  // Pas de footer ici (100% mange par l'avatar). 5 dots V2-B en signature
+  // discrete coin haut-droit (visible sur desktop).
+  if (coverFBLayout) {
+    const safeHmargin = 225 // marges gauche/droite (mobile crop)
+    const safeTop = 50
+    const safeBottom = 290 // limite verticale (au-dela = avatar masque)
+    const safeW = width - safeHmargin * 2
+    const cx = width / 2
+    // Tailles : plus compactes car peu d'espace
+    const titreSize = 78
+    const sousTitreSize = 30
+    const lineH = titreSize * 1.05
+    const subLineH = sousTitreSize * 1.35
+    // Wrap selon largeur safe (1190px pour 1640 total)
+    const charsLigne = Math.max(20, Math.round(safeW / (titreSize * 0.5)))
+    const subCharsLigne = Math.max(35, Math.round(safeW / (sousTitreSize * 0.5)))
+    const tLines = wrapText(titre, charsLigne)
+    const stLines = wrapText(sousTitre, subCharsLigne)
+    // Centrage vertical dans la safe zone
+    const titreBlocH = tLines.length * lineH
+    const sousTitreBlocH = stLines.length * subLineH
+    const gap = 28
+    const totalH = titreBlocH + (stLines.length > 0 ? gap + sousTitreBlocH : 0)
+    const startY = safeTop + (safeBottom - safeTop - totalH) / 2
+    const tSVG = tLines.map((line, i) =>
+      `<text x="${cx}" y="${startY + (i + 1) * lineH * 0.92}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="${titreSize}" letter-spacing="${-titreSize * 0.05}" text-anchor="middle" fill="#FFFFFF">${escapeXml(line)}</text>`
+    ).join('')
+    const stStartY = startY + titreBlocH + gap + sousTitreSize
+    const stSVG = stLines.map((line, i) =>
+      `<text x="${cx}" y="${stStartY + i * subLineH}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="600" font-size="${sousTitreSize}" letter-spacing="0.3" text-anchor="middle" fill="${T.light}">${escapeXml(line)}</text>`
+    ).join('')
+    // Mini signature 5 dots V2-B en coin haut-droit (decoratif, visible desktop)
+    const dotBase = 14
+    const dotMini = dotBase * 0.55
+    const dotGap = dotBase * 0.55
+    const dotTotal = 3 * dotBase + 2 * dotMini + 4 * dotGap
+    const dotsSigX = width - safeHmargin - dotTotal
+    const dotsSigY = 40
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
+  <defs><style>${fontFaceStyle}</style></defs>
+  ${bg}
+  ${renderDotsV2B(dotsSigX, dotsSigY, dotBase, ['#FFFFFF', T.light, T.light, T.mid, T.mid])}
+  ${tSVG}
+  ${stSVG}
+</svg>`
+  }
 
   // Mode bigCenter (teaser) : grands dots centres, rien d'autre
   if (bigCenter) {
@@ -477,13 +528,11 @@ export default function BrandKit() {
       title: 'Cover FB · Tribu',
       dims: { w: 1640, h: 624 },
       filename: 'yoppaa-fb-cover-tribu-1640x624',
-      sub: 'banniere page Facebook · avatar safe zone respectee',
+      sub: 'banniere page Facebook · safe zone universelle desktop + mobile',
       options: {
         titre: 'Rejoins la tribu Yoppaa',
-        sousTitre: 'Commercants belges, citoyens engages, services publics. Une seule app.',
-        avatarSafe: true,
-        showFooter: true,
-        bigDotsSignature: false,
+        sousTitre: 'Commercants, citoyens, services publics. Une seule app belge.',
+        coverFBLayout: true,
       },
     },
     {

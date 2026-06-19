@@ -1,5 +1,5 @@
 'use client'
-// LandingTeasing — page mysterieuse pendant la phase teasing → lancement 21/07.
+// LandingTeasing : page mysterieuse pendant la phase teasing -> lancement 21/07.
 // Hero violet sombre + compteur en temps reel + formulaire pre-inscription
 // minimaliste avec Cloudflare Turnstile invisible.
 //
@@ -123,7 +123,7 @@ export default function LandingTeasing() {
 
       <main style={{ maxWidth: 720, margin: '0 auto', padding: '40px 20px 60px', position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', minHeight: '100dvh', justifyContent: 'center' }}>
 
-        {/* Logo wordmark tricolore — canonique V2-B (dots EN DESSOUS) */}
+        {/* Logo wordmark tricolore : canonique V2-B (dots EN DESSOUS) */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginBottom: 32 }}>
           <p style={{ margin: 0, fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 36, letterSpacing: '-0.05em', lineHeight: 1 }}>
             <span style={{ color: '#fff' }}>yo</span>
@@ -200,7 +200,7 @@ export default function LandingTeasing() {
             </h1>
             <p style={{ fontSize: '1.05rem', color: T.light, lineHeight: 1.6, maxWidth: 480, margin: '0 0 36px', opacity: 0.92 }}>
               Un projet belge. Un projet pour ton quartier.<br/>
-              L&rsquo;app arrive le <strong style={{ color: '#fff' }}>21 juillet 2026</strong> — jour de la fête nationale. 🟣
+              L&rsquo;app arrive le <strong style={{ color: '#fff' }}>21 juillet 2026</strong>, jour de la fête nationale 🇧🇪. 🟣
             </p>
 
             {/* Compteur */}

@@ -262,30 +262,34 @@ function generateMarketingSvg(width, height, options = {}) {
 </svg>`
   }
 
-  // Mode bigCenter (teaser) : wordmark "yoppaa" + grands dots V2-B + "Bientot..."
-  // Composition canonique du logo (wordmark au-dessus des dots, spec V2-B 12/06).
+  // Mode bigCenter (teaser) : wordmark "yoppaa" + dots V2-B + "Bientot..."
+  // PROPORTIONS CANONIQUES YoppaaLogo (memory project-logo-dots-v2b 12/06) :
+  // - dotBase   = wordmarkSize * 0.254  (28/110 dans la spec SVG)
+  // - dotMini   = dotBase * 0.55
+  // - dotGap    = dotBase * 0.55
+  // - dotOffset = dotBase * 0.4  (sourire)
+  // - wordmarkToDots >= 0.28 * wordmarkSize (eviter chevauchement descenders)
+  // RÈGLE A RESPECTER PARTOUT ou les dots sont sous le wordmark.
   if (bigCenter) {
-    const dotBase = Math.min(width, height) * 0.10
+    // 1) On part du wordmark comme reference (pas l'inverse)
+    const wordmarkSize = Math.min(width, height) * 0.28
+    // 2) Dots calcules proportionnellement au wordmark (ratio canonique)
+    const dotBase = wordmarkSize * 0.254
     const dotMini = dotBase * 0.55
     const dotGap = dotBase * 0.55
     const dotOffset = dotBase * 0.4
     const dotsTotalW = 3 * dotBase + 2 * dotMini + 4 * dotGap
     const dotsBlockH = dotBase + dotOffset
-    // Tailles wordmark + texte teaser (proportionnels au dotBase).
-    // wordmark "yoppaa" Jakarta 800 letter-spacing -0.05em : largeur reelle
-    // approx = 6 * size * 0.55 - 5 * size * 0.05 = ~3.05 * size. Avec un
-    // facteur 2.4 et marge de 10%, on tient dans 1080 sans deborder.
-    const wordmarkSize = dotBase * 2.4
-    const bientotSize = dotBase * 0.78
-    const gapWordmark = dotBase * 0.55
-    const gapBientot = dotBase * 1.1
-    // Hauteur totale pour centrer verticalement
-    const totalH = wordmarkSize + gapWordmark + dotsBlockH + gapBientot + bientotSize
+    // 3) Texte teaser et gaps proportionnels au wordmark
+    const wordmarkToDots = wordmarkSize * 0.28
+    const dotsToBientot = wordmarkSize * 0.40
+    const bientotSize = wordmarkSize * 0.20
+    // 4) Centrage vertical de l'ensemble
+    const totalH = wordmarkSize + wordmarkToDots + dotsBlockH + dotsToBientot + bientotSize
     const startY = (height - totalH) / 2
-    // Positions (baseline pour text = startY + size * 0.85 approximativement)
     const wordmarkY = startY + wordmarkSize * 0.85
-    const dotsY = startY + wordmarkSize + gapWordmark
-    const bientotY = dotsY + dotsBlockH + gapBientot + bientotSize * 0.85
+    const dotsY = startY + wordmarkSize + wordmarkToDots
+    const bientotY = dotsY + dotsBlockH + dotsToBientot + bientotSize * 0.85
     const dotsStartX = (width - dotsTotalW) / 2
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
   <defs><style>${fontFaceStyle}</style></defs>

@@ -11,6 +11,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Script from 'next/script'
 import { Lock } from 'lucide-react'
+import YoppaaLogo from '@/app/components/YoppaaLogo'
 
 const T = {
   ink:     '#1A0840',
@@ -123,24 +124,13 @@ export default function LandingTeasing() {
 
       <main style={{ maxWidth: 720, margin: '0 auto', padding: '40px 20px 60px', position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', minHeight: '100dvh', justifyContent: 'center' }}>
 
-        {/* Logo wordmark tricolore : canonique V2-B (dots EN DESSOUS) */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginBottom: 32 }}>
-          <p style={{ margin: 0, fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 36, letterSpacing: '-0.05em', lineHeight: 1 }}>
-            <span style={{ color: '#fff' }}>yo</span>
-            <span style={{ color: T.light }}>pp</span>
-            <span style={{ color: T.mid }}>aa</span>
-          </p>
-          <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 5, height: 13 }}>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#fff' }}/>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.light, marginTop: 3.6 }}/>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: T.light, marginTop: 3.6 }}/>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.mid, marginTop: 3.6 }}/>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: T.mid }}/>
-          </div>
+        {/* Logo canonique Yoppaa : wordmark + 5 dots V2-B (proportions strictes
+            dotBase = wordmarkSize * 0.254, cf. composant <YoppaaLogo>).
+            Le pulse hero est applique sur l'ensemble du logo (signature
+            d'arrivee animee) au lieu d'un gros dot pulse separe. */}
+        <div style={{ marginBottom: 48, animation: 'pulse 2.4s ease-in-out infinite' }}>
+          <YoppaaLogo size={64} mode="dark"/>
         </div>
-
-        {/* Symbole pulse */}
-        <div style={{ fontSize: 60, marginBottom: 16, animation: 'pulse 2.4s ease-in-out infinite' }}>🟣</div>
 
         {/* ─── BASCULE date-conditionnelle ─── */}
         {temps.lance ? (
@@ -200,7 +190,7 @@ export default function LandingTeasing() {
             </h1>
             <p style={{ fontSize: '1.05rem', color: T.light, lineHeight: 1.6, maxWidth: 480, margin: '0 0 36px', opacity: 0.92 }}>
               Un projet belge. Un projet pour ton quartier.<br/>
-              L&rsquo;app arrive le <strong style={{ color: '#fff' }}>21 juillet 2026</strong>, jour de la fête nationale <DrapeauBelge/>. 🟣
+              L&rsquo;app arrive le <strong style={{ color: '#fff' }}>21 juillet 2026</strong>, jour de la fête nationale <DrapeauBelge/> 🟣
             </p>
 
             {/* Compteur */}

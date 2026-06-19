@@ -224,38 +224,29 @@ function generateMarketingSvg(width, height, options = {}) {
   const contentCenterX = avatarSafe ? avatarReserveW + (width - avatarReserveW) / 2 : width / 2
   const contentW = avatarSafe ? width - avatarReserveW - 40 : width - 80
 
-  // Mode coverFBLayout (cover Facebook 1640x624) : avatar en bas-gauche sur
-  // desktop ET mobile (le preview FB Business Suite mobile est trompeur :
-  // en realite l'app FB place aussi l'avatar en bas-gauche sur mobile).
-  // On reserve la zone avatar bas-gauche (~440px de large x 440px de haut) et
-  // on centre le texte dans la zone restante. Pas de dots redondants ici
-  // (deja dans l'avatar).
+  // Mode coverFBLayout (cover Facebook 1640x624) : composition finale validee
+  // par Alex 19/06. Texte CENTRE horizontalement et verticalement (avatar bas-
+  // gauche sur desktop ET mobile FB reel = ne chevauche pas le centre du
+  // canvas). Pas de dots redondants. Pas de sous-titre obligatoire (rester
+  // evasif au lancement, ajouter du contenu plus tard).
   if (coverFBLayout) {
-    const avatarReserveW = 440 // largeur reservee en bas-gauche pour l'avatar
-    const safeMargin = 80 // marges horizontales generales
-    const safeTopY = 80
-    const safeBottomY = height - 60
-    // Zone texte : centree horizontalement avec un offset pour respecter
-    // l'avatar bas-gauche (on decale le centre vers la droite)
-    const contentLeft = avatarReserveW + safeMargin
-    const contentRight = width - safeMargin
-    const cx = (contentLeft + contentRight) / 2
-    const safeW = contentRight - contentLeft
-    // Tailles confortables avec safeW ~1040px
-    const titreSize = 86
-    const sousTitreSize = 34
+    const safeMargin = 100
+    const cx = width / 2
+    const cy = height / 2
+    const safeW = width - safeMargin * 2
+    const titreSize = 96
+    const sousTitreSize = 36
     const lineH = titreSize * 1.1
     const subLineH = sousTitreSize * 1.4
-    // Wrap automatique
-    const charsLigne = Math.max(14, Math.round(safeW / (titreSize * 0.5)))
-    const subCharsLigne = Math.max(28, Math.round(safeW / (sousTitreSize * 0.5)))
+    const charsLigne = Math.max(16, Math.round(safeW / (titreSize * 0.5)))
+    const subCharsLigne = Math.max(32, Math.round(safeW / (sousTitreSize * 0.5)))
     const tLines = wrapText(titre, charsLigne)
-    const stLines = wrapText(sousTitre, subCharsLigne)
+    const stLines = sousTitre ? wrapText(sousTitre, subCharsLigne) : []
     const titreBlocH = tLines.length * lineH
     const sousTitreBlocH = stLines.length * subLineH
-    const gap = 30
+    const gap = stLines.length > 0 ? 30 : 0
     const totalH = titreBlocH + (stLines.length > 0 ? gap + sousTitreBlocH : 0)
-    const startY = safeTopY + (safeBottomY - safeTopY - totalH) / 2
+    const startY = cy - totalH / 2
     const tSVG = tLines.map((line, i) =>
       `<text x="${cx}" y="${startY + (i + 1) * lineH * 0.92}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="${titreSize}" letter-spacing="${-titreSize * 0.05}" text-anchor="middle" fill="#FFFFFF">${escapeXml(line)}</text>`
     ).join('')
@@ -522,13 +513,13 @@ export default function BrandKit() {
   // a la zone safe avatar pour la cover FB (texte decale a droite).
   const marketingAssets = [
     {
-      title: 'Cover FB · Tribu',
+      title: 'Cover FB · Lancement',
       dims: { w: 1640, h: 624 },
-      filename: 'yoppaa-fb-cover-tribu-1640x624',
-      sub: 'banniere FB · texte decale a droite de l\'avatar (desktop + mobile)',
+      filename: 'yoppaa-fb-cover-lancement-1640x624',
+      sub: 'banniere FB · accroche centree, evasive (phase teasing)',
       options: {
-        titre: 'Rejoins la tribu Yoppaa',
-        sousTitre: "L'app belge du commerce local. Sans commission, sans frais caches.",
+        titre: "L'app belge du commerce local",
+        sousTitre: '',
         coverFBLayout: true,
       },
     },

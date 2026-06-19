@@ -271,10 +271,13 @@ function generateMarketingSvg(width, height, options = {}) {
     const dotOffset = dotBase * 0.4
     const dotsTotalW = 3 * dotBase + 2 * dotMini + 4 * dotGap
     const dotsBlockH = dotBase + dotOffset
-    // Tailles wordmark + texte teaser (proportionnels au dotBase)
-    const wordmarkSize = dotBase * 3.4
+    // Tailles wordmark + texte teaser (proportionnels au dotBase).
+    // wordmark "yoppaa" Jakarta 800 letter-spacing -0.05em : largeur reelle
+    // approx = 6 * size * 0.55 - 5 * size * 0.05 = ~3.05 * size. Avec un
+    // facteur 2.4 et marge de 10%, on tient dans 1080 sans deborder.
+    const wordmarkSize = dotBase * 2.4
     const bientotSize = dotBase * 0.78
-    const gapWordmark = dotBase * 0.5
+    const gapWordmark = dotBase * 0.55
     const gapBientot = dotBase * 1.1
     // Hauteur totale pour centrer verticalement
     const totalH = wordmarkSize + gapWordmark + dotsBlockH + gapBientot + bientotSize
@@ -295,14 +298,16 @@ function generateMarketingSvg(width, height, options = {}) {
 </svg>`
   }
 
-  // Polices auto-adaptatives + wrap
-  const titreSize = Math.min(width * 0.055, height * 0.12, 90)
-  const sousTitreSize = titreSize * 0.4
-  const lineH = titreSize * 1.15
+  // Polices auto-adaptatives + wrap. Pour posts FB 1080x1080 carres on veut
+  // un titre VRAIMENT gros et visible (Insta-style). titreSize remonte de
+  // 0.055*w (90px) a 0.085*w (95-110px pour 1080+) et plafond 130px.
+  const titreSize = Math.min(width * 0.085, height * 0.16, 130)
+  const sousTitreSize = titreSize * 0.36
+  const lineH = titreSize * 1.1
 
-  const charsParLigne = Math.max(12, Math.round(contentW / (titreSize * 0.55)))
+  const charsParLigne = Math.max(10, Math.round(contentW / (titreSize * 0.5)))
   const titreLines = wrapText(titre, charsParLigne)
-  const sousTitreLines = wrapText(sousTitre, Math.round(contentW / (sousTitreSize * 0.52)))
+  const sousTitreLines = wrapText(sousTitre, Math.max(20, Math.round(contentW / (sousTitreSize * 0.5))))
 
   // Calcul vertical : bloc texte centre, footer dots+slogan en bas
   const titreBlocH = titreLines.length * lineH

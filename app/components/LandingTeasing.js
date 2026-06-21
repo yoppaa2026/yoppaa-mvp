@@ -25,30 +25,55 @@ const T = {
   muted:   '#9CA3AF',
 }
 
-// Source unique de verite pour la date de lancement (compteur ET bascule).
-// Format ISO avec offset CEST belge +02:00 (juillet = ete belge).
-// Configurable via NEXT_PUBLIC_LAUNCH_DATE en Vercel. Fallback de retro-
-// compatibilite vers l'ancien NEXT_PUBLIC_LANDING_REVEAL_DATE si present.
-const LAUNCH_DATE = new Date(
-  process.env.NEXT_PUBLIC_LAUNCH_DATE
+// Retroplanning Yoppaa 2 dates cles (strategie Alex 21/06) :
+//
+// 1) REVEAL_DATE = 21 juillet 2026 (fete nationale belge) = DEVOILEMENT.
+//    Le grand post + revelation des premiers partenaires. Pas de stores.
+// 2) LAUNCH_DATE = 1er septembre 2026 (rentree) = LANCEMENT APP.
+//    L'app devient telechargeable sur App Store + Play Store.
+//
+// Pourquoi 2 dates : on dissocie le temps fort symbolique (21/07) du
+// lancement produit (01/09) qui beneficie de la rentree + d'un ete
+// d'onboarding commercants pour atteindre 20-30 commerces (densite
+// avant tout).
+//
+// Format ISO avec offset CEST belge +02:00 (juillet + septembre).
+// Variables d'env Vercel :
+// - NEXT_PUBLIC_REVEAL_DATE  (defaut 2026-07-21T10:00:00+02:00)
+// - NEXT_PUBLIC_LAUNCH_DATE  (defaut 2026-09-01T10:00:00+02:00)
+// Retro-compat : NEXT_PUBLIC_LANDING_REVEAL_DATE (ancien nom) -> REVEAL_DATE.
+const REVEAL_DATE = new Date(
+  process.env.NEXT_PUBLIC_REVEAL_DATE
   || process.env.NEXT_PUBLIC_LANDING_REVEAL_DATE
   || '2026-07-21T10:00:00+02:00'
+)
+const LAUNCH_DATE = new Date(
+  process.env.NEXT_PUBLIC_LAUNCH_DATE
+  || '2026-09-01T10:00:00+02:00'
 )
 
 function pad(n) { return String(n).padStart(2, '0') }
 
-function calculerTempsRestant() {
+// 3 phases de rendu :
+// - phase='teasing'  : avant REVEAL_DATE, compteur vers REVEAL_DATE
+// - phase='devoile'  : entre REVEAL et LAUNCH, compteur vers LAUNCH_DATE
+// - phase='lancement': apres LAUNCH_DATE, boutons stores
+function calculerEtatTemps() {
   const now = new Date()
-  const diff = Math.max(0, LAUNCH_DATE.getTime() - now.getTime())
+  const revealAtteint = now >= REVEAL_DATE
+  const launchAtteint = now >= LAUNCH_DATE
+  const cible = launchAtteint ? LAUNCH_DATE : (revealAtteint ? LAUNCH_DATE : REVEAL_DATE)
+  const diff = Math.max(0, cible.getTime() - now.getTime())
   const jours    = Math.floor(diff / (1000 * 60 * 60 * 24))
   const heures   = Math.floor((diff / (1000 * 60 * 60)) % 24)
   const minutes  = Math.floor((diff / (1000 * 60)) % 60)
   const secondes = Math.floor((diff / 1000) % 60)
-  return { jours, heures, minutes, secondes, lance: diff === 0 }
+  const phase = launchAtteint ? 'lancement' : (revealAtteint ? 'devoile' : 'teasing')
+  return { jours, heures, minutes, secondes, phase }
 }
 
 export default function LandingTeasing() {
-  const [temps, setTemps] = useState(calculerTempsRestant())
+  const [temps, setTemps] = useState(calculerEtatTemps())
   const [form, setForm] = useState({
     email: '', code_postal: '', type_utilisateur: 'yopper', message: '', consentement_marketing: true,
   })
@@ -56,11 +81,11 @@ export default function LandingTeasing() {
   const [turnstileToken, setTurnstileToken] = useState(null)
   const turnstileRef = useRef(null)
 
-  // Compteur en temps reel (tick chaque seconde). Quand temps.lance passe a
-  // true, le rendu bascule automatiquement vers le mode "L'app est arrivee".
+  // Compteur en temps reel (tick chaque seconde). Quand on franchit
+  // REVEAL_DATE ou LAUNCH_DATE, le rendu bascule automatiquement.
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const tick = () => setTemps(calculerTempsRestant())
+    const tick = () => setTemps(calculerEtatTemps())
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [])
@@ -113,6 +138,12 @@ export default function LandingTeasing() {
   const playstoreUrl = process.env.NEXT_PUBLIC_PLAYSTORE_URL || ''
   const storesPretsAuTelechargement = !!(appstoreUrl && playstoreUrl)
 
+  // Texte du sous-bloc formulaire : different selon la phase (avant dev. on
+  // promet la decouverte ; entre dev. et lancement on promet le telechargement)
+  const sousTexteForm = temps.phase === 'devoile'
+    ? 'Laisse-nous ton email, et le 1er septembre tu seras parmi les premiers à télécharger Yoppaa.'
+    : 'Laisse-nous ton email, et le 21 juillet tu seras parmi les premiers à découvrir Yoppaa.'
+
   return (
     <div style={{ minHeight: '100dvh', background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`, color: '#fff', fontFamily: '"DM Sans", sans-serif', position: 'relative', overflowX: 'hidden' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
@@ -132,9 +163,9 @@ export default function LandingTeasing() {
           <YoppaaLogo size={64} mode="dark"/>
         </div>
 
-        {/* ─── BASCULE date-conditionnelle ─── */}
-        {temps.lance ? (
-          // MODE LANCEMENT : l'app est dispo
+        {/* ─── BASCULE date-conditionnelle 3 modes ─── */}
+        {temps.phase === 'lancement' ? (
+          // MODE LANCEMENT (>= 01/09) : l'app est dispo
           <>
             <h1 style={{ fontSize: 'clamp(2.2rem, 6vw, 3.4rem)', fontWeight: 900, letterSpacing: '-1.8px', lineHeight: 1.1, margin: '0 0 14px', maxWidth: 580 }}>
               Yoppaa est arrivé. 🟣
@@ -179,8 +210,33 @@ export default function LandingTeasing() {
               </div>
             )}
           </>
+        ) : temps.phase === 'devoile' ? (
+          // MODE DEVOILE (21/07 → 31/08) : Yoppaa annonce + compteur vers 01/09
+          <>
+            <h1 style={{ fontSize: 'clamp(2.2rem, 6vw, 3.4rem)', fontWeight: 900, letterSpacing: '-1.8px', lineHeight: 1.1, margin: '0 0 14px', maxWidth: 620 }}>
+              Yoppaa, c&rsquo;est <span style={{ color: T.light }}>dévoilé</span>. 🟣
+              <span style={{ display: 'block', marginTop: 14, fontSize: '0.62em', fontWeight: 700, opacity: 0.88, letterSpacing: '-0.8px' }}>
+                Lancement complet le 1<sup style={{ fontSize: '0.6em' }}>er</sup> septembre.
+              </span>
+            </h1>
+            <p style={{ fontSize: '1.05rem', color: T.light, lineHeight: 1.6, maxWidth: 520, margin: '0 0 36px', opacity: 0.92 }}>
+              L&rsquo;app belge de ton quartier arrive le <strong style={{ color: '#fff' }}>1<sup style={{ fontSize: '0.7em' }}>er</sup> septembre 2026</strong>.<br/>
+              D&rsquo;ici là, regarde ton quartier rejoindre Yoppaa tout l&rsquo;été. <DrapeauBelge/> 🟣
+            </p>
+            <CompteurEtForm
+              temps={temps}
+              statut={statut}
+              form={form}
+              setForm={setForm}
+              soumettre={soumettre}
+              formValide={formValide}
+              siteKey={siteKey}
+              turnstileRef={turnstileRef}
+              sousTexteForm={sousTexteForm}
+            />
+          </>
         ) : (
-          // MODE TEASING : compteur + formulaire pre-inscription
+          // MODE TEASING (< 21/07) : compteur vers le devoilement
           <>
             <h1 style={{ fontSize: 'clamp(2.2rem, 6vw, 3.4rem)', fontWeight: 900, letterSpacing: '-1.8px', lineHeight: 1.1, margin: '0 0 14px', maxWidth: 620 }}>
               Quelque chose se<br/>prépare à <span style={{ color: T.light }}>Mettet</span>.
@@ -190,94 +246,19 @@ export default function LandingTeasing() {
             </h1>
             <p style={{ fontSize: '1.05rem', color: T.light, lineHeight: 1.6, maxWidth: 480, margin: '0 0 36px', opacity: 0.92 }}>
               Un projet belge. Un projet pour ton quartier.<br/>
-              L&rsquo;app arrive le <strong style={{ color: '#fff' }}>21 juillet 2026</strong>, jour de la fête nationale <DrapeauBelge/> 🟣
+              Le grand dévoilement le <strong style={{ color: '#fff' }}>21 juillet 2026</strong>, jour de la fête nationale <DrapeauBelge/> 🟣
             </p>
-
-            {/* Compteur */}
-            <div style={{ display: 'flex', gap: 'clamp(10px, 3vw, 22px)', marginBottom: 44, justifyContent: 'center', flexWrap: 'wrap' }}>
-              {[
-                { val: temps.jours,    label: 'jours' },
-                { val: temps.heures,   label: 'heures' },
-                { val: temps.minutes,  label: 'minutes' },
-                { val: temps.secondes, label: 'secondes' },
-              ].map(({ val, label }) => (
-                <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 64 }}>
-                  <span style={{ fontSize: 'clamp(2.4rem, 7vw, 3.6rem)', fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1, color: '#fff', fontVariantNumeric: 'tabular-nums', textShadow: `0 4px 24px ${T.main}80` }}>
-                    {pad(val)}
-                  </span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: 1.2, marginTop: 4, opacity: 0.85 }}>{label}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Formulaire pre-inscription */}
-            {statut.envoi === 'ok' ? (
-              <div style={{ background: 'rgba(16,185,129,0.15)', border: `1.5px solid #10B98166`, borderRadius: 18, padding: '24px 22px', maxWidth: 460, width: '100%', backdropFilter: 'blur(12px)' }}>
-                <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#A7F3D0' }}>
-                  ✓ {statut.message}
-                </p>
-              </div>
-            ) : (
-              <form onSubmit={soumettre} style={{ background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 18, padding: '24px 22px', maxWidth: 460, width: '100%', backdropFilter: 'blur(12px)' }}>
-                <p style={{ fontSize: 14, fontWeight: 800, color: '#fff', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.8 }}>Sois prévenu en premier</p>
-                <p style={{ fontSize: 12, color: T.light, margin: '0 0 16px', opacity: 0.85, lineHeight: 1.5 }}>
-                  Laisse-nous ton email, et le 21 juillet tu seras parmi les premiers à télécharger Yoppaa.
-                </p>
-
-                <input type="email" required placeholder="Ton email"
-                  value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                  style={inputStyle}/>
-
-                <input type="text" required inputMode="numeric" pattern="\d{4}" maxLength={4} placeholder="Ton code postal (4 chiffres)"
-                  value={form.code_postal} onChange={e => setForm(p => ({ ...p, code_postal: e.target.value.replace(/\D/g, '').slice(0,4) }))}
-                  style={inputStyle}/>
-
-                <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                  {[
-                    { val: 'yopper',     label: 'Je suis curieux' },
-                    { val: 'commercant', label: 'Je suis commerçant' },
-                  ].map(opt => {
-                    const actif = form.type_utilisateur === opt.val
-                    return (
-                      <button key={opt.val} type="button"
-                        onClick={() => setForm(p => ({ ...p, type_utilisateur: opt.val }))}
-                        style={{ flex: 1, padding: '11px 12px', borderRadius: 12, border: `1.5px solid ${actif ? T.light : 'rgba(255,255,255,0.18)'}`, background: actif ? 'rgba(196,160,244,0.18)' : 'transparent', color: actif ? '#fff' : T.light, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s' }}>
-                        {opt.label}
-                      </button>
-                    )
-                  })}
-                </div>
-
-                <textarea placeholder="Un message ? (optionnel)" rows={2}
-                  value={form.message} onChange={e => setForm(p => ({ ...p, message: e.target.value.slice(0, 500) }))}
-                  style={{ ...inputStyle, resize: 'vertical', minHeight: 50 }}/>
-
-                {/* Cloudflare Turnstile invisible */}
-                {siteKey && (
-                  <div ref={turnstileRef} className="cf-turnstile"
-                    data-sitekey={siteKey}
-                    data-callback="onTurnstileSuccess"
-                    data-expired-callback="onTurnstileExpired"
-                    data-error-callback="onTurnstileError"
-                    data-size="invisible"/>
-                )}
-
-                <button type="submit" disabled={statut.envoi === 'envoi' || !formValide}
-                  style={{ width: '100%', padding: '14px', borderRadius: 100, border: 'none', background: !formValide || statut.envoi === 'envoi' ? 'rgba(255,255,255,0.12)' : `linear-gradient(135deg, ${T.light}, ${T.mid})`, color: !formValide || statut.envoi === 'envoi' ? 'rgba(255,255,255,0.5)' : T.ink, fontWeight: 900, fontSize: 14, letterSpacing: 0.5, textTransform: 'uppercase', cursor: !formValide || statut.envoi === 'envoi' ? 'not-allowed' : 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s', marginTop: 4 }}>
-                  {statut.envoi === 'envoi' ? 'Envoi…' : 'Me prévenir du lancement'}
-                </button>
-
-                {statut.envoi === 'ko' && statut.message && (
-                  <p style={{ margin: '12px 0 0', fontSize: 12, color: '#FCA5A5', fontWeight: 700, textAlign: 'center' }}>
-                    ⚠ {statut.message}
-                  </p>
-                )}
-
-                <p style={{ margin: '14px 0 0', fontSize: 11, color: T.light, opacity: 0.7, textAlign: 'center', lineHeight: 1.5 }}>
-                  <Lock size={11} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Aucun spam. Données protégées.
-                </p>
-              </form>
-            )}
+            <CompteurEtForm
+              temps={temps}
+              statut={statut}
+              form={form}
+              setForm={setForm}
+              soumettre={soumettre}
+              formValide={formValide}
+              siteKey={siteKey}
+              turnstileRef={turnstileRef}
+              sousTexteForm={sousTexteForm}
+            />
           </>
         )}
 
@@ -313,6 +294,101 @@ function DrapeauBelge() {
       <rect x="10" width="10" height="20" fill="#FAE042"/>
       <rect x="20" width="10" height="20" fill="#ED2939"/>
     </svg>
+  )
+}
+
+// Bloc compteur + formulaire pre-inscription. Partage entre les modes teasing
+// et devoile (le compteur cible REVEAL_DATE en teasing, LAUNCH_DATE en devoile
+// via la valeur de temps.phase qui pilote calculerEtatTemps).
+function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, siteKey, turnstileRef, sousTexteForm }) {
+  return (
+    <>
+      {/* Compteur */}
+      <div style={{ display: 'flex', gap: 'clamp(10px, 3vw, 22px)', marginBottom: 44, justifyContent: 'center', flexWrap: 'wrap' }}>
+        {[
+          { val: temps.jours,    label: 'jours' },
+          { val: temps.heures,   label: 'heures' },
+          { val: temps.minutes,  label: 'minutes' },
+          { val: temps.secondes, label: 'secondes' },
+        ].map(({ val, label }) => (
+          <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 64 }}>
+            <span style={{ fontSize: 'clamp(2.4rem, 7vw, 3.6rem)', fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1, color: '#fff', fontVariantNumeric: 'tabular-nums', textShadow: '0 4px 24px #6B35C480' }}>
+              {pad(val)}
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#C4A0F4', textTransform: 'uppercase', letterSpacing: 1.2, marginTop: 4, opacity: 0.85 }}>{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Formulaire pre-inscription */}
+      {statut.envoi === 'ok' ? (
+        <div style={{ background: 'rgba(16,185,129,0.15)', border: '1.5px solid #10B98166', borderRadius: 18, padding: '24px 22px', maxWidth: 460, width: '100%', backdropFilter: 'blur(12px)' }}>
+          <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#A7F3D0' }}>
+            ✓ {statut.message}
+          </p>
+        </div>
+      ) : (
+        <form onSubmit={soumettre} style={{ background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 18, padding: '24px 22px', maxWidth: 460, width: '100%', backdropFilter: 'blur(12px)' }}>
+          <p style={{ fontSize: 14, fontWeight: 800, color: '#fff', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.8 }}>Sois prévenu en premier</p>
+          <p style={{ fontSize: 12, color: '#C4A0F4', margin: '0 0 16px', opacity: 0.85, lineHeight: 1.5 }}>
+            {sousTexteForm}
+          </p>
+
+          <input type="email" required placeholder="Ton email"
+            value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+            style={inputStyle}/>
+
+          <input type="text" required inputMode="numeric" pattern="\d{4}" maxLength={4} placeholder="Ton code postal (4 chiffres)"
+            value={form.code_postal} onChange={e => setForm(p => ({ ...p, code_postal: e.target.value.replace(/\D/g, '').slice(0,4) }))}
+            style={inputStyle}/>
+
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+            {[
+              { val: 'yopper',     label: 'Je suis curieux' },
+              { val: 'commercant', label: 'Je suis commerçant' },
+            ].map(opt => {
+              const actif = form.type_utilisateur === opt.val
+              return (
+                <button key={opt.val} type="button"
+                  onClick={() => setForm(p => ({ ...p, type_utilisateur: opt.val }))}
+                  style={{ flex: 1, padding: '11px 12px', borderRadius: 12, border: `1.5px solid ${actif ? '#C4A0F4' : 'rgba(255,255,255,0.18)'}`, background: actif ? 'rgba(196,160,244,0.18)' : 'transparent', color: actif ? '#fff' : '#C4A0F4', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s' }}>
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <textarea placeholder="Un message ? (optionnel)" rows={2}
+            value={form.message} onChange={e => setForm(p => ({ ...p, message: e.target.value.slice(0, 500) }))}
+            style={{ ...inputStyle, resize: 'vertical', minHeight: 50 }}/>
+
+          {/* Cloudflare Turnstile invisible */}
+          {siteKey && (
+            <div ref={turnstileRef} className="cf-turnstile"
+              data-sitekey={siteKey}
+              data-callback="onTurnstileSuccess"
+              data-expired-callback="onTurnstileExpired"
+              data-error-callback="onTurnstileError"
+              data-size="invisible"/>
+          )}
+
+          <button type="submit" disabled={statut.envoi === 'envoi' || !formValide}
+            style={{ width: '100%', padding: '14px', borderRadius: 100, border: 'none', background: !formValide || statut.envoi === 'envoi' ? 'rgba(255,255,255,0.12)' : 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: !formValide || statut.envoi === 'envoi' ? 'rgba(255,255,255,0.5)' : '#1A0840', fontWeight: 900, fontSize: 14, letterSpacing: 0.5, textTransform: 'uppercase', cursor: !formValide || statut.envoi === 'envoi' ? 'not-allowed' : 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s', marginTop: 4 }}>
+            {statut.envoi === 'envoi' ? 'Envoi…' : 'Me prévenir du lancement'}
+          </button>
+
+          {statut.envoi === 'ko' && statut.message && (
+            <p style={{ margin: '12px 0 0', fontSize: 12, color: '#FCA5A5', fontWeight: 700, textAlign: 'center' }}>
+              ⚠ {statut.message}
+            </p>
+          )}
+
+          <p style={{ margin: '14px 0 0', fontSize: 11, color: '#C4A0F4', opacity: 0.7, textAlign: 'center', lineHeight: 1.5 }}>
+            <Lock size={11} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Aucun spam. Données protégées.
+          </p>
+        </form>
+      )}
+    </>
   )
 }
 

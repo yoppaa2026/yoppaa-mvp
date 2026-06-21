@@ -1142,10 +1142,10 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
       const nom = commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Y'
       const canvas = genererLogoCanvas(nom)
       const blob = await canvasVersBlob(canvas)
-      if (!blob) { setError('Generation logo impossible.'); return }
+      if (!blob) { setError('Génération du logo impossible.'); return }
       const fileName = `logo-${commercant.id}-${Date.now()}.png`
       const { error: upErr } = await supabase.storage.from('logos').upload(fileName, blob, { upsert: true, contentType: 'image/png' })
-      if (upErr) { setError(`Upload echoue : ${upErr.message}`); return }
+      if (upErr) { setError(`Upload échoué : ${upErr.message}`); return }
       const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
       const url = urlData.publicUrl
       const { data: c } = await supabase.from('commercants').update({ logo_url: url }).eq('id', commercant.id).select().single()
@@ -1165,10 +1165,10 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
       const nom = commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Mon commerce'
       const canvas = genererCoverCanvas(nom)
       const blob = await canvasVersBlob(canvas)
-      if (!blob) { setError('Generation cover impossible.'); return }
+      if (!blob) { setError('Génération de la couverture impossible.'); return }
       const fileName = `cover-${commercant.id}-${Date.now()}.png`
       const { error: upErr } = await supabase.storage.from('logos').upload(fileName, blob, { upsert: true, contentType: 'image/png' })
-      if (upErr) { setError(`Upload echoue : ${upErr.message}`); return }
+      if (upErr) { setError(`Upload échoué : ${upErr.message}`); return }
       const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
       const url = urlData.publicUrl
       await supabase.from('commercant_photos')
@@ -1226,7 +1226,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
   // pour preserver l'ordre d'affichage du carousel cote fiche client.
   async function uploadPhotoGalerie(file) {
     if (galerie.length >= MAX_GALERIE) {
-      setError(`Maximum ${MAX_GALERIE} photos supplementaires.`)
+      setError(`Maximum ${MAX_GALERIE} photos supplémentaires.`)
       return
     }
     setError('')
@@ -1237,7 +1237,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
     const fileName = `gal-${commercant.id}-${Date.now()}.${ext}`
     const { error: upErr } = await supabase.storage.from('logos').upload(fileName, file, { upsert: true })
-    if (upErr) { setError(`Upload echoue : ${upErr.message}`); setUploadingGalerie(false); return }
+    if (upErr) { setError(`Upload échoué : ${upErr.message}`); setUploadingGalerie(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
     const url = urlData.publicUrl
     const ordreSuivant = galerie.length > 0 ? Math.max(...galerie.map(p => p.ordre || 0)) + 1 : 1
@@ -1247,7 +1247,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
       url,
       ordre: ordreSuivant,
     }).select().single()
-    if (insErr) { setError(`Enregistrement echoue : ${insErr.message}`); setUploadingGalerie(false); return }
+    if (insErr) { setError(`Enregistrement échoué : ${insErr.message}`); setUploadingGalerie(false); return }
     setGalerie(prev => [...prev, row])
     setUploadingGalerie(false)
     onSaving?.('saved')
@@ -1742,12 +1742,12 @@ function BandeauRecapPlan({ plan, commercant }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <CheckCircle size={18} strokeWidth={2.2} color="#10B981"/>
           <p style={{ fontSize: 13, fontWeight: 800, color: '#065F46', margin: 0 }}>
-            Tu es pret(e) a exister sur Yoppaa
+            Tu es prêt(e) à exister sur Yoppaa
           </p>
         </div>
         <p style={{ fontSize: 12.5, color: '#065F46', margin: 0, lineHeight: 1.5 }}>
-          Plan <strong>Exister</strong> : <strong>gratuit a vie</strong>, sans informations de paiement.
-          Ta fiche sera publiee apres validation par l&rsquo;equipe Yoppaa, sous 24h.
+          Plan <strong>Exister</strong> : <strong>gratuit à vie</strong>, sans informations de paiement.
+          Ta fiche sera publiée après validation par l&rsquo;équipe Yoppaa, sous 24h.
         </p>
       </div>
     )
@@ -1762,7 +1762,7 @@ function BandeauRecapPlan({ plan, commercant }) {
           </p>
         </div>
         <p style={{ fontSize: 12.5, color: '#1E3A8A', margin: 0, lineHeight: 1.5 }}>
-          Acces sur invitation Yoppaa. Validation manuelle apres reception de ta demande.
+          Accès sur invitation Yoppaa. Validation manuelle après réception de ta demande.
         </p>
       </div>
     )
@@ -1777,9 +1777,9 @@ function BandeauRecapPlan({ plan, commercant }) {
         </p>
       </div>
       <p style={{ fontSize: 12.5, color: T.deep, margin: 0, lineHeight: 1.5 }}>
-        Aucun prelevement pendant 30 jours. Apres, <strong>{tarifFormate}&euro; HTVA / mois</strong>,
-        sans engagement, resiliable a tout moment. Tu seras invite(e) a renseigner tes
-        informations de paiement apres validation de ta fiche par l&rsquo;equipe Yoppaa.
+        Aucun prélèvement pendant 30 jours. Après, <strong>{tarifFormate}&euro; HTVA / mois</strong>,
+        sans engagement, résiliable à tout moment. Tu seras invité(e) à renseigner tes
+        informations de paiement après validation de ta fiche par l&rsquo;équipe Yoppaa.
       </p>
     </div>
   )
@@ -1832,7 +1832,7 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
     // Validation cote client : type + taille
     const okType = /^(image\/(jpeg|jpg|png)|application\/pdf)$/.test(file.type)
     if (!okType) { setErreurLocal('Format invalide. JPG, PNG ou PDF uniquement.'); return }
-    if (file.size > 5 * 1024 * 1024) { setErreurLocal('Fichier trop lourd. Max 5 MB.'); return }
+    if (file.size > 5 * 1024 * 1024) { setErreurLocal('Fichier trop lourd. Maximum 5 Mo.'); return }
     const setUploading = kind === 'recto' ? setUploadingRecto : setUploadingVerso
     const setUrl = kind === 'recto' ? setRectoUrl : setVersoUrl
     const colonne = kind === 'recto' ? 'kyb_id_recto_url' : 'kyb_id_verso_url'
@@ -1840,7 +1840,7 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
     onSaving?.('saving')
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setErreurLocal('Session expiree, reconnecte-toi.'); return }
+      if (!user) { setErreurLocal('Session expirée, reconnecte-toi.'); return }
       const ext = file.name.split('.').pop().toLowerCase()
       // Path = ${auth.uid}/${commercant_id}_${kind}.${ext} (matche policy RLS)
       const fileName = `${user.id}/${commercant.id}_${kind}_${Date.now()}.${ext}`
@@ -1862,14 +1862,14 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
   const rejete = statut === 'rejete'
 
   return (
-    <Card titre="Verification de ton entreprise" sous="Conforme RGPD. Obligatoire avant publication de ta fiche. Ces infos restent privees.">
+    <Card titre="Vérification de ton entreprise" sous="Conforme RGPD. Obligatoire avant publication de ta fiche. Ces infos restent privées.">
       {/* Badge statut KYB */}
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 100, marginBottom: 12,
         background: statut === 'valide' ? '#ECFDF5' : statut === 'en_attente' ? '#FEF3C7' : statut === 'rejete' ? '#FEE2E2' : T.bg,
         border: `1px solid ${statut === 'valide' ? '#10B98144' : statut === 'en_attente' ? '#F59E0B44' : statut === 'rejete' ? '#EF444466' : T.hairline}` }}>
         <Shield size={13} strokeWidth={2.2} color={statut === 'valide' ? '#10B981' : statut === 'en_attente' ? '#D97706' : statut === 'rejete' ? '#DC2626' : T.muted}/>
         <span style={{ fontSize: 11, fontWeight: 800, color: statut === 'valide' ? '#065F46' : statut === 'en_attente' ? '#92400E' : statut === 'rejete' ? '#991B1B' : T.muted, letterSpacing: '0.3px' }}>
-          {statut === 'valide' ? 'KYB valide' : statut === 'en_attente' ? 'En attente de verification Yoppaa' : statut === 'rejete' ? 'KYB rejete a corriger' : 'A completer'}
+          {statut === 'valide' ? 'KYB validé' : statut === 'en_attente' ? 'En attente de vérification Yoppaa' : statut === 'rejete' ? 'KYB rejeté à corriger' : 'À compléter'}
         </span>
       </div>
 
@@ -1882,7 +1882,7 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
       {/* BCE */}
       <div style={{ marginBottom: 14 }}>
         <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: T.deep, marginBottom: 6, letterSpacing: '0.3px' }}>
-          Numero d&apos;entreprise (BCE) *
+          Numéro d&apos;entreprise (BCE) *
         </label>
         <input
           type="text"
@@ -1899,7 +1899,7 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
         />
         {bce.length > 0 && !verifBce.valide && (
           <p style={{ fontSize: 11, color: '#DC2626', marginTop: 4, fontWeight: 600 }}>
-            Numero invalide. Format BE : 10 chiffres, commencent par 0.
+            Numéro invalide. Format BE : 10 chiffres, commencent par 0.
           </p>
         )}
         {verifBce.valide && (
@@ -1909,17 +1909,17 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
         )}
       </div>
 
-      {/* Representant legal */}
+      {/* Représentant légal */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
         <div>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: T.deep, marginBottom: 6, letterSpacing: '0.3px' }}>
-            Prenom du representant legal *
+            Prénom du représentant légal *
           </label>
           <input
             type="text"
             value={prenomRep}
             onChange={e => setPrenomRep(e.target.value)}
-            placeholder="Prenom"
+            placeholder="Prénom"
             disabled={dejaSoumis}
             style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 14, fontWeight: 600, color: T.ink, fontFamily: '"DM Sans", sans-serif', outline: 'none', background: dejaSoumis ? T.bg : '#fff' }}
           />
@@ -1939,7 +1939,7 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
         </div>
       </div>
       <p style={{ fontSize: 11, color: T.muted, marginTop: -8, marginBottom: 14, lineHeight: 1.5, fontStyle: 'italic' }}>
-        Le nom doit figurer dans les statuts publies au BCE.
+        Le prénom et le nom doivent figurer dans les statuts publiés au BCE.
       </p>
 
       {/* Upload carte ID */}
@@ -1962,7 +1962,7 @@ function UploadIdentite({ kind, url, uploading, onFile, disabled }) {
   return (
     <div>
       <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: T.deep, marginBottom: 6, letterSpacing: '0.3px' }}>
-        Carte ID {kind === 'recto' ? 'recto' : 'verso'} *
+        Carte d&apos;identité {kind === 'recto' ? 'recto' : 'verso'} *
       </label>
       <button type="button" onClick={() => !disabled && inputRef.current?.click()} disabled={uploading || disabled}
         style={{
@@ -1974,18 +1974,18 @@ function UploadIdentite({ kind, url, uploading, onFile, disabled }) {
           fontFamily: '"DM Sans", sans-serif', padding: 12,
         }}>
         {uploading ? (
-          <span style={{ fontSize: 12, fontWeight: 700, color: T.bgPanel }}>Upload…</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: T.bgPanel }}>Téléversement…</span>
         ) : url ? (
           <>
             <CheckCircle size={22} strokeWidth={2.2} color="#10B981"/>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#065F46' }}>Fichier ajoute</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#065F46' }}>Fichier ajouté</span>
             {!disabled && <span style={{ fontSize: 10, fontWeight: 600, color: '#065F46', textDecoration: 'underline' }}>Remplacer</span>}
           </>
         ) : (
           <>
             <IdCard size={22} strokeWidth={1.8} color={T.main}/>
             <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textAlign: 'center' }}>Ajouter le {kind}</span>
-            <span style={{ fontSize: 10, fontWeight: 500, color: T.muted }}>JPG, PNG, PDF · 5MB max</span>
+            <span style={{ fontSize: 10, fontWeight: 500, color: T.muted }}>JPG, PNG, PDF · 5 Mo max</span>
           </>
         )}
       </button>
@@ -2295,7 +2295,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
         {!peutSoumettre && (
           <p style={{ fontSize: 12, color: '#EA580C', fontWeight: 700, textAlign: 'center', marginBottom: 12 }}>
             {!kybRempli
-              ? 'Verification entreprise incomplete. Renseigne BCE, representant legal et carte ID ci-dessus.'
+              ? 'Vérification entreprise incomplète. Renseigne BCE, représentant légal et carte d\'identité ci-dessus.'
               : `Score trop bas (${score}/100). Reviens sur les etapes precedentes pour completer ton profil.`}
           </p>
         )}

@@ -32,6 +32,15 @@ const T = {
 const TARIF_COMMUNIQUER = parseFloat(process.env.NEXT_PUBLIC_TARIF_COMMUNIQUER || '19.90')
 const TARIF_VENDRE      = parseFloat(process.env.NEXT_PUBLIC_TARIF_VENDRE      || '49.90')
 
+// Date de lancement client (sync avec landing + stripe-billing).
+// Tant que now < LAUNCH_DATE, on est en "trial differe" : l'essai 30j ne
+// demarre pas a l'inscription mais le 1er septembre, jour ou les premiers
+// clients arrivent sur l'app. Regle d'or retroplanning 21/06.
+const LAUNCH_DATE = new Date(
+  process.env.NEXT_PUBLIC_LAUNCH_DATE
+  || '2026-09-01T10:00:00+02:00'
+)
+
 export default function AbonnementPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -227,8 +236,21 @@ export default function AbonnementPage() {
           )}
           {hasActiveSub && (
             <>
+              {/* S6 trial differe : bandeau pedagogique si on est avant le 01/09
+                  (= avant le lancement client). Le commercant doit comprendre que
+                  son essai 30j ne demarre pas a l'inscription mais a l'arrivee
+                  des clients (regle d'or retroplanning). */}
+              {commercant.subscription_status === 'trialing' && new Date() < LAUNCH_DATE && (
+                <div style={{ background: T.pale, borderRadius: 10, padding: '14px 16px', marginTop: 14, marginBottom: 14, borderLeft: `3px solid ${T.main}` }}>
+                  <p style={{ fontSize: 13, color: T.deep, margin: 0, lineHeight: 1.55, fontWeight: 600 }}>
+                    Ton essai 30 jours démarre quand les clients arrivent :
+                    le <strong>1<sup style={{ fontSize: '0.7em' }}>er</sup> septembre 2026</strong>.
+                    D&rsquo;ici là, c&rsquo;est offert. 🟣
+                  </p>
+                </div>
+              )}
               <p style={{ fontSize: 13, color: T.muted, margin: '12px 0 16px', lineHeight: 1.55 }}>
-                Gérez votre carte bancaire, changez de formule, téléchargez vos factures ou résiliez votre abonnement depuis le portail sécurisé Stripe.
+                Gérez votre carte de paiement, changez de formule, téléchargez vos factures ou résiliez votre abonnement depuis le portail sécurisé Stripe.
               </p>
               <button
                 onClick={handleOpenPortal}

@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { canDo, isVitrine } from '@/lib/plans'
+import { canDo, isVitrine, PLAN_PUBLIC_ENABLED } from '@/lib/plans'
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
@@ -1266,13 +1266,17 @@ export default function Commander() {
   useEffect(() => {
     // Query param ?onglet=accueil prioritaire sur localStorage : utile pour
     // la démo (slide 8 force l'onglet Accueil sans dépendre de l'historique).
+    // Garde-fou V1 : si l'onglet demandé est 'services' (Officiel) et que le
+    // flag PLAN_PUBLIC_ENABLED est OFF, on retombe sur 'accueil' au lieu
+    // d'afficher une vue vide.
     const urlParams = new URLSearchParams(window.location.search)
     const ongletFromUrl = urlParams.get('onglet')
+    const normaliser = (v) => (v === 'services' && !PLAN_PUBLIC_ENABLED) ? 'accueil' : v
     if (ongletFromUrl) {
-      setOngletState(ongletFromUrl)
+      setOngletState(normaliser(ongletFromUrl))
     } else {
       const savedOnglet = localStorage.getItem('yoppaa_onglet')
-      if (savedOnglet) setOngletState(savedOnglet)
+      if (savedOnglet) setOngletState(normaliser(savedOnglet))
     }
     chargerCommercants()
     demanderGeolocalisation()
@@ -2466,7 +2470,7 @@ export default function Commander() {
 
           {/* FAVORIS */}
           {/* SERVICES — onglet dédié, hero + 2 sections (Urgences nationales / Locaux) */}
-          {onglet === 'services' && (() => {
+          {onglet === 'services' && PLAN_PUBLIC_ENABLED && (() => {
             const urgences = servicesPublics.filter(s => s.national || s.type === 'urgence')
             const locaux   = servicesPublics.filter(s => !s.national && s.type !== 'urgence')
             return (
@@ -2858,7 +2862,9 @@ export default function Commander() {
         <div className="navbar-tabs">
           {[
             { key: 'accueil',   label: 'Accueil',   badge: 0 },
-            { key: 'services',  label: 'Officiel',  badge: alerteUrgenteActive ? 1 : 0 },
+            // Onglet "Officiel" (services publics) : neutralisé V1 via PLAN_PUBLIC_ENABLED.
+            // Réactivation phase 2 sans toucher au code (juste flipper l'env var).
+            ...(PLAN_PUBLIC_ENABLED ? [{ key: 'services',  label: 'Officiel',  badge: alerteUrgenteActive ? 1 : 0 }] : []),
             // Onglet 'commandes' : pas de label (label vide) + icône plus grande pour compenser,
             // 2 pastilles distinctes (violette = commandes en cours, verte = RDVs a venir).
             { key: 'commandes', label: '', badgeCmd: commandesASwiper.length + commandesEnCours.length, badgeRdv: rdvsAVenir.length, badge: badgeCommandes },

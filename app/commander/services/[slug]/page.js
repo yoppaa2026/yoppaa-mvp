@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { PLAN_PUBLIC_ENABLED } from '@/lib/plans'
 import ModalSignalement from '../../ModalSignalement'
 import ModalSignalerProbleme from './ModalSignalerProbleme'
 import ModalRdvPension from './ModalRdvPension'
@@ -352,6 +353,15 @@ export default function FicheServicePublic({ params }) {
   const [signalerSent, setSignalerSent] = useState(false)
   // État pour ModalRdvPension (mock visuel démo, pas de backend)
   const [showRdvPension, setShowRdvPension] = useState(false)
+
+  // Garde-fou V1 : si le Plan Public est neutralisé (PLAN_PUBLIC_ENABLED=false),
+  // toute fiche service publique redirige vers /commander. Réversible : il
+  // suffit de remettre le flag à true et tout réapparaît instantanément.
+  useEffect(() => {
+    if (!PLAN_PUBLIC_ENABLED) {
+      router.replace('/commander')
+    }
+  }, [router])
 
   useEffect(() => {
     Promise.resolve(params).then(p => setSlug(p?.slug))

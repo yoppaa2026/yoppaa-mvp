@@ -770,6 +770,42 @@ export default function CommanderSlug() {
     return () => mq.removeListener(check)
   }, [])
 
+  // Retour Stripe Checkout : success_url=?paiement=ok&commande_id=X&session_id=Y
+  //                         cancel_url=?paiement=annule&commande_id=X
+  // On nettoie l'URL via replaceState pour éviter de rejouer au refresh.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !slug) return
+    const params = new URLSearchParams(window.location.search)
+    const paiement = params.get('paiement')
+    const commandeId = params.get('commande_id')
+    if (!paiement || !commandeId) return
+
+    window.history.replaceState({}, '', window.location.pathname)
+
+    if (paiement === 'annule') {
+      setErreurCommande('Paiement annulé. Tu peux relancer ta commande quand tu veux 🟣')
+      setEtape(3)
+      return
+    }
+
+    if (paiement === 'ok') {
+      // Statut peut encore être 'paiement_en_attente' si webhook pas encore arrivé :
+      // on affiche quand même l'écran de confirmation (Stripe a confirmé le paiement).
+      ;(async () => {
+        const { data } = await supabase
+          .from('commandes')
+          .select('id, numero_commande, total, date_commande, statut, client_nom')
+          .eq('id', commandeId)
+          .single()
+        if (data) {
+          setDerniereCommande({ ...data, numeroSequentiel: data.numero_commande })
+          setEtape(4)
+          try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
+        }
+      })()
+    }
+  }, [slug])
+
   useEffect(() => {
     if (!slug) return
     const email = localStorage.getItem('yoppaa_email')
@@ -1310,126 +1346,67 @@ export default function CommanderSlug() {
     setLoadingCommande(true)
     setErreurCommande(null)
     try {
+      // Persistance client (localStorage + clients DB) — utile pour favoris/historique
+      await getOuCreerClient(client.email, client.prenom, client.nom)
 
-    const nomComplet = `${client.prenom} ${client.nom}`.trim()
-    const jourDate = joursDispos[jourSelectionne]?.date || new Date()
-    const d = new Date(jourDate)
-    const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+      const jourDate = joursDispos[jourSelectionne]?.date || new Date()
+      const d = new Date(jourDate)
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 
-    // ── Validation stock — race condition (qq'un a commandé entre-temps) ──────
-    // Stock brut = entrée article_stock_jour pour ce jour si présente, sinon
-    // articles.stock_jour global. On valide tout article dont un stock est géré.
-    const jourNomDateChoisie = JOURS[jourIdx(jourDate)]
-    function stockBrutPourJour(item) {
-      const entry = (stocksJour[item.id] || {})[jourNomDateChoisie]
-      if (entry) return entry.actif === false ? 0 : (entry.stock || 0)
-      return item.stock_jour || 0
-    }
-    const articlesAValider = Object.values(panier).filter(i => stockBrutPourJour(i) > 0 || ((stocksJour[i.id] || {})[jourNomDateChoisie]))
+      // Payload articles avec options structurées (groupe_id + valeur_ids)
+      // La route recalcule tout server-side (anti-tampering)
+      const articlesPayload = Object.values(panier).map(i => ({
+        id: i.id,
+        quantite: i.quantite,
+        options: i.options
+          ? Object.entries(i.options).map(([groupe_id, valeurs]) => ({
+              groupe_id,
+              valeur_ids: valeurs.map(v => v.id),
+            }))
+          : [],
+      }))
 
-    // PERF : parallelisation des 3 queries independantes (stock check, numero max, client)
-    // au lieu de 3 round-trips sequentiels. Sur reseau lent ca passe de ~6-10s a ~2-3s.
-    const artIds = articlesAValider.map(i => i.id)
-    const stockCheckPromise = articlesAValider.length > 0
-      ? supabase
-          .from('commande_articles')
-          .select('article_id, quantite, commande:commandes!inner(date_commande, statut, commercant_id)')
-          .in('article_id', artIds)
-          .eq('commande.date_commande', dateStr)
-          .eq('commande.commercant_id', commercant.id)
-          .neq('commande.statut', 'non_retire')
-      : Promise.resolve({ data: [] })
-    // Note : numero_commande n'est PLUS calculé côté client.
-    // Le trigger DB set_commande_numero (BEFORE INSERT) l'assigne automatiquement,
-    // de façon FIGÉE par ordre d'arrivée dans la semaine ISO (lundi→dimanche).
-    // Plus de re-numérotation après-coup, plus de conflits.
-    const cidPromise = getOuCreerClient(client.email, client.prenom, client.nom)
-    const [{ data: dejaCommandes }, cid] = await Promise.all([
-      stockCheckPromise,
-      cidPromise,
-    ])
-
-    if (articlesAValider.length > 0) {
-      const qteDeja = {}
-      ;(dejaCommandes || []).forEach(r => {
-        qteDeja[r.article_id] = (qteDeja[r.article_id] || 0) + r.quantite
-      })
-      for (const item of articlesAValider) {
-        const deja = qteDeja[item.id] || 0
-        const stockBrut = stockBrutPourJour(item)
-        const stockDisponible = stockBrut - deja
-        if (item.quantite > stockDisponible) {
-          setErreurCommande(`Stock insuffisant pour "${item.nom}" : il ne reste que ${stockDisponible} disponible${stockDisponible > 1 ? 's' : ''} (quelqu'un a commandé entre-temps).`)
-          setAjustementStock({ articleId: item.id, nom: item.nom, stockDisponible })
-          setLoadingCommande(false)
-          return
-        }
-      }
-    }
-
-    const insertPayload = {
-      commercant_id: commercant.id, creneau_id: creneauChoisi,
-      client_nom: nomComplet, client_email: client.email, client_telephone: client.telephone,
-      rgpd_commande: true, rgpd_marketing: rgpdMarketing,
-      total: totalPanier(), statut: 'en_attente',
-      date_commande: dateStr,
-      // numero_commande non fourni : le trigger DB l'assigne
-    }
-    const { data: commande, error: errInsert } = await supabase.from('commandes').insert(insertPayload).select().single()
-
-    if (errInsert || !commande) {
-      const msg = errInsert?.message || errInsert?.code || 'inconnue'
-      setErreurCommande(`Erreur : ${msg}`)
-      setLoadingCommande(false)
-      return
-    }
-
-    // Persistance options + prix_unitaire INCLUANT les suppléments
-    // (le commerçant voit ainsi sauce/extras + le bon total par ligne)
-    await supabase.from('commande_articles').insert(
-      Object.values(panier).map(i => {
-        const optionsFlat = i.options
-          ? Object.entries(i.options).flatMap(([groupeId, valeurs]) => {
-              const groupe = (optionsParArticle[i.id] || []).find(g => String(g.id) === String(groupeId))
-              return valeurs.map(v => ({
-                groupe_nom: groupe?.nom || '',
-                valeur_nom: v.nom,
-                prix_supplement: Number(v.prix_supplement || 0),
-              }))
-            })
-          : []
-        const supplement = optionsFlat.reduce((s, o) => s + o.prix_supplement, 0)
-        return {
-          commande_id: commande.id,
-          article_id: i.id,
-          quantite: i.quantite,
-          prix_unitaire: Number(i.prix) + supplement,
-          options: optionsFlat.length > 0 ? optionsFlat : null,
-        }
-      })
-    )
-    try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
-
-    // Le numero_commande retourné par .select() après insert = celui assigné par le trigger
-    // (semaine ISO, ordre d'arrivée, figé). Pas de re-calcul nécessaire.
-    setDerniereCommande({ ...commande, client_id: cid, numeroSequentiel: commande.numero_commande })
-    setEtape(4)
-    setLoadingCommande(false)
-
-    // Email confirmation Yopper + email commercant si notif_mode='chaque'
-    // (non-bloquant, fire-and-forget — le user voit deja l'ecran de confirmation)
-    if (commande?.id) {
-      fetch('/api/emails/commande-confirmee', {
+      const res = await fetch('/api/stripe/checkout/create-commande', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commande_id: commande.id }),
-      }).catch(e => console.warn('[commande] emails fire-and-forget KO', e))
-    }
+        body: JSON.stringify({
+          commercant_id: commercant.id,
+          creneau_id: creneauChoisi,
+          date_commande: dateStr,
+          articles: articlesPayload,
+          client_email: client.email,
+          client_prenom: client.prenom,
+          client_nom: client.nom,
+          client_telephone: client.telephone,
+          rgpd_marketing: rgpdMarketing,
+        }),
+      })
+      const data = await res.json()
+
+      if (!res.ok || !data.ok) {
+        // Stock épuisé entre-temps (409) : populate la modal d'ajustement existante
+        if (res.status === 409 && data.article_id) {
+          const item = panier[data.article_id]
+          setAjustementStock({
+            articleId: data.article_id,
+            nom: item?.nom || 'cet article',
+            stockDisponible: data.stock_disponible || 0,
+          })
+        }
+        setErreurCommande(data?.error || 'Erreur lors de la création de la commande.')
+        setLoadingCommande(false)
+        return
+      }
+
+      // NB : on ne clear PAS le panier ici. Si Stripe redirige vers cancel_url,
+      // le user retrouve son panier (hydraté depuis localStorage) pour réessayer.
+      // Le clear se fait uniquement au retour ?paiement=ok (useEffect dédié).
+      window.location.href = data.url
     } catch (e) {
-      // Garde-fou anti-freeze : sans ce catch, toute exception (cidPromise undefined,
-      // RLS deny, network) laissait le bouton bloque sur "En cours..." sans signal.
+      // Garde-fou anti-freeze : sans ce catch, toute exception (network, RLS)
+      // laissait le bouton bloqué sur "En cours..." sans signal.
       console.error('[passerCommande] erreur', e)
-      setErreurCommande(`Erreur : ${e?.message || 'inconnue'}. Reessaie ou contacte-nous.`)
+      setErreurCommande(`Erreur : ${e?.message || 'inconnue'}. Réessaie ou contacte-nous.`)
       setLoadingCommande(false)
     }
   }
@@ -2338,9 +2315,9 @@ export default function CommanderSlug() {
 
                 <button onClick={passerCommande} disabled={loadingCommande || !formValide}
                   style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: !formValide ? 0.45 : 1, cursor: !formValide ? 'default' : 'pointer' }}>
-                  {loadingCommande ? 'En cours…' : (
+                  {loadingCommande ? 'Redirection…' : (
                     <>
-                      Confirmer ma commande — {totalPanier().toFixed(2)}€
+                      Payer &amp; confirmer — {totalPanier().toFixed(2)}€
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
                     </>
                   )}
@@ -2354,7 +2331,6 @@ export default function CommanderSlug() {
                     Accepte le traitement de ta commande pour continuer
                   </p>
                 )}
-                <p style={{ fontSize: '0.78rem', color: '#9a8ab0', textAlign: 'center', marginTop: 8, marginBottom: 24 }}>Le paiement sera activé prochainement</p>
               </div>
             </div>
           )}

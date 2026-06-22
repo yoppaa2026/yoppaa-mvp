@@ -95,8 +95,9 @@ export async function POST(request) {
         break
 
       case 'payment_intent.payment_failed':
-        console.warn('[stripe/webhook] payment failed', { id: event.data.object.id, error: event.data.object.last_payment_error })
-        // Pas de RDV créé. Pourrait envoyer un email "ton paiement a échoué" plus tard.
+      case 'payment_intent.canceled':
+        console.warn('[stripe/webhook] payment failed/canceled', { id: event.data.object.id, type: event.type })
+        await handlePaymentIntentFailed(event.data.object, supabase)
         break
 
       case 'charge.refunded':
@@ -210,12 +211,138 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
   }
 
   if (kind === PAYMENT_KIND.COMMANDE_TOTAL) {
-    // TODO Phase 1.5 : créer la commande C&C pour plan FULL alimentaire
-    console.info('[stripe/webhook] commande C&C à créer (pas encore implémenté)', { pi: paymentIntent.id })
+    await handleCommandeSucceeded(paymentIntent, supabase, eventAccount)
     return
   }
 
   console.warn('[stripe/webhook] kind non reconnu dans payment_intent.succeeded', { kind, meta })
+}
+
+// ─── Commande C&C : paiement OK → bascule paiement_en_attente -> en_attente ─
+//
+// La commande EXISTE déjà en DB (créée par /api/stripe/checkout/create-commande
+// avec statut='paiement_en_attente'). Le webhook fait juste la transition
+// d'état + envoie les emails de confirmation.
+async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = null) {
+  const meta = paymentIntent.metadata || {}
+  const commandeId = meta.yoppaa_commande_id
+  if (!commandeId) {
+    console.warn('[webhook/commande] yoppaa_commande_id absent dans metadata', { pi: paymentIntent.id })
+    return
+  }
+
+  // Idempotence : si commande déjà confirmée (statut autre que paiement_en_attente
+  // ET paye_en_ligne déjà true), on skip.
+  const { data: existing } = await supabase
+    .from('commandes')
+    .select('id, statut, paye_en_ligne, commercant_id')
+    .eq('id', commandeId)
+    .maybeSingle()
+  if (!existing) {
+    console.warn('[webhook/commande] commande introuvable', { commandeId, pi: paymentIntent.id })
+    return
+  }
+  if (existing.statut !== 'paiement_en_attente' && existing.paye_en_ligne === true) {
+    console.info('[webhook/commande] commande déjà confirmée, skip', { commandeId, statut: existing.statut })
+    return
+  }
+
+  // Bascule paiement_en_attente → en_attente + paye_en_ligne=true
+  const { error: errUpd } = await supabase
+    .from('commandes')
+    .update({
+      statut: 'en_attente',
+      paye_en_ligne: true,
+      paye_en_ligne_date: new Date().toISOString(),
+      stripe_payment_intent_id: paymentIntent.id,
+    })
+    .eq('id', commandeId)
+  if (errUpd) throw errUpd
+
+  // Tentative stockage session_id (peut échouer en sandbox Stripe → backup
+  // par handleCheckoutSessionCompleted)
+  try {
+    const stripeAccountId = eventAccount || paymentIntent.on_behalf_of || null
+    const listOpts = stripeAccountId ? { stripeAccount: stripeAccountId } : {}
+    const sessions = await stripe.checkout.sessions.list(
+      { payment_intent: paymentIntent.id, limit: 1 },
+      listOpts
+    )
+    const sessionId = sessions?.data?.[0]?.id || null
+    if (sessionId) {
+      await supabase
+        .from('commandes')
+        .update({ stripe_checkout_session_id: sessionId })
+        .eq('id', commandeId)
+    }
+  } catch (e) {
+    console.error('[webhook/commande] list session_id KO (non-bloquant)', e?.message)
+  }
+
+  // Libération des réservations stock : la commande EST désormais le stock
+  // consommé, plus besoin de la garde TTL 5 min.
+  await supabase
+    .from('commande_stock_reservation')
+    .delete()
+    .eq('commande_id', commandeId)
+
+  // Email confirmation Yopper + commerçant (route existante, fire-and-forget)
+  try {
+    await fetch(`${STRIPE_CONFIG.appUrl}/api/emails/commande-confirmee`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commande_id: commandeId }),
+    })
+  } catch (e) {
+    console.error('[webhook/commande] email fire-and-forget KO (non-bloquant)', e?.message)
+  }
+
+  console.info('[webhook/commande] confirmée OK', { commandeId, pi: paymentIntent.id })
+}
+
+// ─── Paiement KO (failed/canceled) : commande -> annulee_paiement_ko ────────
+//
+// Couvre :
+//   - payment_intent.payment_failed : 3DS refusé, carte refusée, etc.
+//   - payment_intent.canceled : client a fermé Stripe Checkout (cancel_url)
+//                                ou timeout session (24h Stripe default)
+//
+// Effet : libère immédiatement le stock réservé pour ne pas bloquer d'autres
+// clients (au lieu d'attendre l'expiration TTL 5 min).
+async function handlePaymentIntentFailed(paymentIntent, supabase) {
+  const meta = paymentIntent.metadata || {}
+  if (meta.yoppaa_kind !== PAYMENT_KIND.COMMANDE_TOTAL) {
+    return  // RDV failed = pas de RDV créé, rien à faire
+  }
+  const commandeId = meta.yoppaa_commande_id
+  if (!commandeId) return
+
+  const { data: existing } = await supabase
+    .from('commandes')
+    .select('id, statut')
+    .eq('id', commandeId)
+    .maybeSingle()
+  if (!existing) {
+    console.warn('[webhook/PI failed] commande introuvable', { commandeId })
+    return
+  }
+  if (existing.statut !== 'paiement_en_attente') {
+    console.info('[webhook/PI failed] commande déjà traitée, skip', { commandeId, statut: existing.statut })
+    return
+  }
+
+  await supabase
+    .from('commandes')
+    .update({ statut: 'annulee_paiement_ko' })
+    .eq('id', commandeId)
+
+  // Libère immédiatement les réservations stock
+  await supabase
+    .from('commande_stock_reservation')
+    .delete()
+    .eq('commande_id', commandeId)
+
+  console.info('[webhook/PI failed] commande annulée KO + stock libéré', { commandeId, pi: paymentIntent.id })
 }
 
 // charge.refunded : met à jour le RDV/commande avec l'info de refund
@@ -244,15 +371,24 @@ async function handleChargeRefunded(charge, supabase) {
     return
   }
 
-  // Sinon update commande si trouvée
+  // Sinon update commande si trouvée + transition statut → 'annulee_client_refund'
   const { data: cmd } = await supabase
     .from('commandes')
-    .select('id')
+    .select('id, statut')
     .eq('stripe_payment_intent_id', paymentIntentId)
     .maybeSingle()
   if (cmd) {
-    await supabase.from('commandes').update(updateData).eq('id', cmd.id)
-    console.info('[stripe/webhook] refund enregistré sur commande', { cmdId: cmd.id, refund: refund.id })
+    // Si refund total (montant = total commande), on bascule en annulée.
+    // Si refund partiel, on garde le statut courant (commande honorée + remboursement partiel).
+    const isRefundTotal = Math.abs((refund.amount / 100) - Number(charge.amount) / 100) < 0.01
+    const updates = { ...updateData }
+    if (isRefundTotal && !['annulee_client_refund', 'annulee_paiement_ko'].includes(cmd.statut)) {
+      updates.statut = 'annulee_client_refund'
+    }
+    await supabase.from('commandes').update(updates).eq('id', cmd.id)
+    console.info('[stripe/webhook] refund enregistré sur commande', {
+      cmdId: cmd.id, refund: refund.id, isRefundTotal, newStatut: updates.statut || cmd.statut,
+    })
   }
 }
 
@@ -277,28 +413,37 @@ async function handleCheckoutSessionCompleted(session, supabase) {
     return
   }
 
-  // Cherche le RDV cree par payment_intent.succeeded
+  // Cherche d'abord un RDV créé par payment_intent.succeeded
   const { data: rdv } = await supabase
     .from('rdv_reservations')
     .select('id, stripe_checkout_session_id')
     .eq('stripe_payment_intent_id', paymentIntentId)
     .maybeSingle()
-
-  if (!rdv) {
-    console.info('[webhook/session.completed] RDV pas encore cree, skip (sera fait par PI handler)', { sessionId, paymentIntentId })
+  if (rdv) {
+    if (rdv.stripe_checkout_session_id !== sessionId) {
+      await supabase
+        .from('rdv_reservations')
+        .update({ stripe_checkout_session_id: sessionId })
+        .eq('id', rdv.id)
+      console.info('[webhook/session.completed] session_id RDV stocké via backup', { rdvId: rdv.id, sessionId })
+    }
     return
   }
 
-  if (rdv.stripe_checkout_session_id === sessionId) {
-    console.info('[webhook/session.completed] session_id deja stocke, skip', { rdvId: rdv.id })
-    return
+  // Sinon cherche une commande (créée AVANT le paiement par create-commande,
+  // puis confirmée par handleCommandeSucceeded au payment_intent.succeeded)
+  const { data: commande } = await supabase
+    .from('commandes')
+    .select('id, stripe_checkout_session_id')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle()
+  if (commande && commande.stripe_checkout_session_id !== sessionId) {
+    await supabase
+      .from('commandes')
+      .update({ stripe_checkout_session_id: sessionId })
+      .eq('id', commande.id)
+    console.info('[webhook/session.completed] session_id commande stocké via backup', { commandeId: commande.id, sessionId })
   }
-
-  await supabase
-    .from('rdv_reservations')
-    .update({ stripe_checkout_session_id: sessionId })
-    .eq('id', rdv.id)
-  console.info('[webhook/session.completed] session_id stocke via backup handler', { rdvId: rdv.id, sessionId })
 }
 
 // Helper : envoie emailRdvConfirme (Yopper + iCal) + emailNouveauRdvCommercant

@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { canDo, isVitrine } from '@/lib/plans'
+import { redirectTop } from '@/lib/redirect-top'
 import PillsStatut from '../PillsStatut'
 import CTAUpgrade from '../CTAUpgrade'
 import ModalSignalement from '../ModalSignalement'
@@ -1404,11 +1405,12 @@ export default function CommanderSlug() {
       // le user retrouve son panier (hydraté depuis localStorage) pour réessayer.
       // Le clear se fait uniquement au retour ?paiement=ok (useEffect dédié).
       //
-      // window.top.location : sur PC desktop la PWA tourne dans un iframe MobileFrame.
-      // window.location.href = url redirigerait l'iframe vers Stripe Checkout, mais
-      // Stripe refuse l'iframe (X-Frame-Options) → écran blanc. On force la nav
-      // dans la fenêtre parent. Sur mobile window.top === window donc identique.
-      ;(window.top || window).location.href = data.url
+      // redirectTop : sur PC desktop la PWA tourne dans un iframe MobileFrame.
+      // window.location.href redirigerait l'iframe vers Stripe Checkout, mais
+      // Stripe refuse l'iframe (X-Frame-Options) → écran blanc. Le helper utilise
+      // <a target="_top"> qui navigue la fenêtre parent (sandbox autorise via
+      // allow-top-navigation-by-user-activation). Sur mobile, fallback direct.
+      redirectTop(data.url)
     } catch (e) {
       // Garde-fou anti-freeze : sans ce catch, toute exception (network, RLS)
       // laissait le bouton bloqué sur "En cours..." sans signal.

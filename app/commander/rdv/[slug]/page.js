@@ -17,6 +17,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { isVitrine } from '@/lib/plans'
+import { redirectTop } from '@/lib/redirect-top'
 import HorairesSection from '../../HorairesSection'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Lock } from 'lucide-react'
@@ -775,9 +776,8 @@ export default function CommanderRdvSlug() {
             throw new Error(j.error || 'Erreur création Checkout')
           }
           // Redirect Stripe Checkout. Au retour ?paiement=ok le webhook aura cree le RDV.
-          // window.top : sortir de l'iframe MobileFrame sur PC desktop (sinon Stripe
-          // refuse l'iframe via X-Frame-Options et l'écran reste blanc).
-          ;(window.top || window).location.href = j.url
+          // redirectTop : sort de l'iframe MobileFrame sur PC desktop via <a target="_top">.
+          redirectTop(j.url)
           return
         } catch (e) {
           console.error('[rdv] erreur Stripe Checkout', e)

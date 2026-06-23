@@ -302,10 +302,11 @@ async function envoyerEmailsCommande(commandeId, supabase) {
   // NB : la table commandes a client_email/client_nom/client_telephone.
   // commande_articles a quantite/prix_unitaire/options (jsonb). PAS de
   // prix_total ni option_libelle (calculés ici côté JS pour les templates).
+  // PAS de notes_client non plus (la table commandes ne l'a pas).
   const { data: cmd, error: errCmd } = await supabase
     .from('commandes')
     .select(`
-      id, numero_commande, total, notes_client, date_commande,
+      id, numero_commande, total, date_commande,
       client_email, client_nom, client_telephone,
       annulation_token,
       commercant:commercants(id, nom, slug, adresse, email, notif_mode, delai_annulation_heures),

@@ -11,6 +11,14 @@
     {
       "path": "/api/cron/billing-relances",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/expire-reservations",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/non-retire-daily",
+      "schedule": "30 0 * * *"
     }
   ]
 }

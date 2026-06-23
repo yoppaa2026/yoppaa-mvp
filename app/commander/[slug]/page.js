@@ -1401,7 +1401,12 @@ export default function CommanderSlug() {
       // NB : on ne clear PAS le panier ici. Si Stripe redirige vers cancel_url,
       // le user retrouve son panier (hydraté depuis localStorage) pour réessayer.
       // Le clear se fait uniquement au retour ?paiement=ok (useEffect dédié).
-      window.location.href = data.url
+      //
+      // window.top.location : sur PC desktop la PWA tourne dans un iframe MobileFrame.
+      // window.location.href = url redirigerait l'iframe vers Stripe Checkout, mais
+      // Stripe refuse l'iframe (X-Frame-Options) → écran blanc. On force la nav
+      // dans la fenêtre parent. Sur mobile window.top === window donc identique.
+      ;(window.top || window).location.href = data.url
     } catch (e) {
       // Garde-fou anti-freeze : sans ce catch, toute exception (network, RLS)
       // laissait le bouton bloqué sur "En cours..." sans signal.

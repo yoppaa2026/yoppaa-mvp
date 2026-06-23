@@ -132,7 +132,7 @@ export default function MobileFrame({ children }) {
             <iframe
               src={iframeUrl}
               title="Aperçu mobile Yoppaa"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-top-navigation-by-user-activation"
               style={{
                 width: '100%',
                 height: '100%',

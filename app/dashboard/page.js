@@ -683,6 +683,10 @@ export default function Dashboard() {
         .from('commandes')
         .select(`*, creneau:creneaux(*), commande_articles(*, article:articles(*))`)
         .eq('commercant_id', commercant.id)
+        // Exclut 'paiement_en_attente' : commande créée mais Stripe Checkout pas
+        // encore validé. Sinon la notif "Nouvelle commande !" tomberait trop tôt
+        // (dès le clic Payer & confirmer, avant la confirmation paiement).
+        .neq('statut', 'paiement_en_attente')
         .order('created_at', { ascending: true })
       const triees = trierCommandes(data)
 

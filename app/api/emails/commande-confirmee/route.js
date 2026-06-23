@@ -29,7 +29,8 @@ export async function POST(request) {
       .select(`
         id, numero_commande, total, notes_client, date_commande,
         client_email, client_prenom, client_nom, client_telephone,
-        commercant:commercants(id, nom, slug, adresse, email, notif_mode),
+        annulation_token,
+        commercant:commercants(id, nom, slug, adresse, email, notif_mode, delai_annulation_heures),
         creneau:creneaux(heure_debut, heure_fin),
         articles:commande_articles(quantite, prix_unitaire, prix_total, option_libelle, article:articles(nom))
       `)
@@ -53,16 +54,18 @@ export async function POST(request) {
     if (cmd.client_email) {
       try {
         const html = emailCommandeConfirmee({
-          yopper_prenom:     cmd.client_prenom || 'Yopper',
-          commercant_nom:    cmd.commercant?.nom || '',
-          commercant_adresse:cmd.commercant?.adresse || '',
-          commercant_slug:   cmd.commercant?.slug || '',
-          numero_commande:   cmd.numero_commande,
-          articles:          articlesFlat,
-          total:             cmd.total,
-          date_retrait:      cmd.date_commande,
-          heure_debut:       cmd.creneau?.heure_debut,
-          heure_fin:         cmd.creneau?.heure_fin,
+          yopper_prenom:           cmd.client_prenom || 'Yopper',
+          commercant_nom:          cmd.commercant?.nom || '',
+          commercant_adresse:      cmd.commercant?.adresse || '',
+          commercant_slug:         cmd.commercant?.slug || '',
+          numero_commande:         cmd.numero_commande,
+          articles:                articlesFlat,
+          total:                   cmd.total,
+          date_retrait:            cmd.date_commande,
+          heure_debut:             cmd.creneau?.heure_debut,
+          heure_fin:               cmd.creneau?.heure_fin,
+          annulation_token:        cmd.annulation_token,
+          delai_annulation_heures: cmd.commercant?.delai_annulation_heures ?? 2,
         })
 
         await envoyerAuCommercant({

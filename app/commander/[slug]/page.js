@@ -655,6 +655,8 @@ export default function CommanderSlug() {
   const [loadingCommande, setLoadingCommande] = useState(false)
   const [erreurCommande, setErreurCommande] = useState(null)
   const [ajustementStock, setAjustementStock] = useState(null)
+  const [loadingCancel, setLoadingCancel] = useState(false)
+  const [cancelResult, setCancelResult] = useState(null)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '' })
   const [rgpdCommande, setRgpdCommande] = useState(false)
   // Marketing pre-coche par defaut : maximise le taux d'opt-in (l'utilisateur peut decocher s'il refuse)
@@ -1413,6 +1415,34 @@ export default function CommanderSlug() {
       console.error('[passerCommande] erreur', e)
       setErreurCommande(`Erreur : ${e?.message || 'inconnue'}. Réessaie ou contacte-nous.`)
       setLoadingCommande(false)
+    }
+  }
+
+  // Annulation de la commande depuis l'étape 4. Le user a le delai_annulation_heures
+  // configuré par le commerçant (default 2h) pour annuler. Refund Stripe automatique.
+  async function annulerCommande() {
+    if (!derniereCommande?.id || !client.email) return
+    if (!window.confirm('Confirmer l\'annulation de ta commande ? Le remboursement sera lancé automatiquement (5 à 10 jours).')) return
+    setLoadingCancel(true)
+    try {
+      const res = await fetch('/api/commande/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commande_id: derniereCommande.id, client_email: client.email }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        alert(`Annulation impossible : ${data?.error || 'erreur inconnue'}`)
+        return
+      }
+      setCancelResult(data)
+      setToastMessage(data?.message || 'Commande annulée 🟣')
+      setTimeout(() => setToastMessage(null), 5000)
+    } catch (e) {
+      console.error('[annulerCommande] erreur', e)
+      alert(`Erreur : ${e?.message || 'inconnue'}. Réessaie ou contacte-nous.`)
+    } finally {
+      setLoadingCancel(false)
     }
   }
 
@@ -2459,10 +2489,20 @@ export default function CommanderSlug() {
                 </svg>
                 Retour à l&apos;accueil
               </button>
-              <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(true); setErreurCommande(null); setAjustementStock(null); setEtape(2) }}
-                style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
-                Continuer chez {commercant.nom}
-              </button>
+              {!cancelResult && (
+                <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(true); setErreurCommande(null); setAjustementStock(null); setEtape(2) }}
+                  style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', marginBottom: 10 }}>
+                  Continuer chez {commercant.nom}
+                </button>
+              )}
+              {/* Lien d'annulation discret : visible avant le cutoff configuré par le commerçant
+                  (la route refuse si le délai est passé). Masque une fois annulée. */}
+              {!cancelResult && (
+                <button onClick={annulerCommande} disabled={loadingCancel}
+                  style={{ width: '100%', padding: '0.75rem', background: 'transparent', color: T.muted, border: 'none', fontWeight: 600, cursor: loadingCancel ? 'default' : 'pointer', fontSize: '0.82rem', textDecoration: 'underline', opacity: loadingCancel ? 0.5 : 1 }}>
+                  {loadingCancel ? 'Annulation en cours…' : 'Annuler ma commande'}
+                </button>
+              )}
             </div>
           )}
         </div>

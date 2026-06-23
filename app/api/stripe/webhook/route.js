@@ -299,8 +299,9 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
 // ─── (commerçant si notif_mode='chaque'). Fire-and-forget : try/catch par email
 // ─── pour qu'une erreur Resend n'interrompe pas l'autre envoi.
 async function envoyerEmailsCommande(commandeId, supabase) {
-  // NB : la table commandes stocke client_nom (nom complet "prenom nom") et
-  // client_telephone, mais PAS client_prenom séparé. On splitte pour les emails.
+  // NB : la table commandes a client_email/client_nom/client_telephone.
+  // commande_articles a quantite/prix_unitaire/options (jsonb). PAS de
+  // prix_total ni option_libelle (calculés ici côté JS pour les templates).
   const { data: cmd, error: errCmd } = await supabase
     .from('commandes')
     .select(`
@@ -309,7 +310,7 @@ async function envoyerEmailsCommande(commandeId, supabase) {
       annulation_token,
       commercant:commercants(id, nom, slug, adresse, email, notif_mode, delai_annulation_heures),
       creneau:creneaux(heure_debut, heure_fin),
-      articles:commande_articles(quantite, prix_unitaire, prix_total, option_libelle, article:articles(nom))
+      articles:commande_articles(quantite, prix_unitaire, options, article:articles(nom))
     `)
     .eq('id', commandeId)
     .single()
@@ -323,11 +324,17 @@ async function envoyerEmailsCommande(commandeId, supabase) {
   const prenom = parts[0] || 'Yopper'
   const nom = parts.slice(1).join(' ')
 
+  // Format les options jsonb [{groupe_nom, valeur_nom, prix_supplement}] en libellé
+  function formatOptions(opts) {
+    if (!Array.isArray(opts) || opts.length === 0) return null
+    return opts.map(o => `${o.groupe_nom ? o.groupe_nom + ': ' : ''}${o.valeur_nom || ''}`).join(' · ')
+  }
+
   const articlesFlat = (cmd.articles || []).map(a => ({
     nom:            a.article?.nom || '—',
     quantite:       a.quantite,
-    option_libelle: a.option_libelle,
-    prix_total:     a.prix_total,
+    option_libelle: formatOptions(a.options),
+    prix_total:     Number(a.prix_unitaire || 0) * Number(a.quantite || 0),
   }))
 
   // 1) Email Yopper

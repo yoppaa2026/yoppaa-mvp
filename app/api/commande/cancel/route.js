@@ -163,20 +163,26 @@ export async function POST(request) {
     // ─── 8) Email confirmation annulation ──────────────────────────────────
     // Appel DIRECT des helpers (pas de fetch HTTP interne fragile, cf. pattern RDV)
     const refundManuel = !!refundError
-    // Fetch articles + créneau (pas chargés à l'étape 1 car pas nécessaires pour cancel)
+    // Fetch articles + créneau (pas chargés à l'étape 1 car pas nécessaires pour cancel).
+    // NB : commande_articles a quantite/prix_unitaire/options(jsonb), PAS prix_total
+    // ni option_libelle (calculés ici côté JS).
     const { data: details } = await supabase
       .from('commandes')
       .select(`
         creneau:creneaux(heure_debut, heure_fin),
-        articles:commande_articles(quantite, prix_unitaire, prix_total, option_libelle, article:articles(nom))
+        articles:commande_articles(quantite, prix_unitaire, options, article:articles(nom))
       `)
       .eq('id', cmd.id)
       .single()
+    function formatOptions(opts) {
+      if (!Array.isArray(opts) || opts.length === 0) return null
+      return opts.map(o => `${o.groupe_nom ? o.groupe_nom + ': ' : ''}${o.valeur_nom || ''}`).join(' · ')
+    }
     const articlesFlat = (details?.articles || []).map(a => ({
       nom:            a.article?.nom || '—',
       quantite:       a.quantite,
-      option_libelle: a.option_libelle,
-      prix_total:     a.prix_total,
+      option_libelle: formatOptions(a.options),
+      prix_total:     Number(a.prix_unitaire || 0) * Number(a.quantite || 0),
     }))
 
     if (cmd.client_email) {

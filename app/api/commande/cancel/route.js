@@ -25,11 +25,11 @@ export async function POST(request) {
     const body = await request.json()
     const { commande_id, token, client_email } = body
 
-    if (!commande_id) {
-      return NextResponse.json({ ok: false, error: 'commande_id requis.' }, { status: 400 })
-    }
-    if (!token && !client_email) {
-      return NextResponse.json({ ok: false, error: 'Token ou email requis pour identifier le client.' }, { status: 400 })
+    // 2 modes d'auth (au moins un requis) :
+    //   - commande_id + client_email : bouton "Annuler" depuis l'étape 4 confirmation
+    //   - token (seul)               : lien direct depuis email confirmation
+    if (!commande_id && !token) {
+      return NextResponse.json({ ok: false, error: 'commande_id (+ client_email) ou token requis.' }, { status: 400 })
     }
 
     const supabase = createClient(
@@ -38,17 +38,17 @@ export async function POST(request) {
       { auth: { persistSession: false } }
     )
 
-    // ─── 1) Récup commande + commerçant ────────────────────────────────────
-    const { data: cmd, error: errCmd } = await supabase
-      .from('commandes')
-      .select(`
-        id, statut, paye_en_ligne, total, stripe_payment_intent_id,
-        client_email, client_nom, annulation_token, created_at, commercant_id,
-        numero_commande, date_commande,
-        commercants:commercant_id (id, nom, slug, stripe_account_id, delai_annulation_heures)
-      `)
-      .eq('id', commande_id)
-      .single()
+    // ─── 1) Récup commande + commerçant (lookup par id OU par token) ───────
+    const selectCols = `
+      id, statut, paye_en_ligne, total, stripe_payment_intent_id,
+      client_email, client_nom, annulation_token, created_at, commercant_id,
+      numero_commande, date_commande,
+      commercants:commercant_id (id, nom, slug, stripe_account_id, delai_annulation_heures)
+    `
+    const query = supabase.from('commandes').select(selectCols)
+    const { data: cmd, error: errCmd } = await (commande_id
+      ? query.eq('id', commande_id).single()
+      : query.eq('annulation_token', token).single())
     if (errCmd || !cmd) {
       return NextResponse.json({ ok: false, error: 'Commande introuvable.' }, { status: 404 })
     }

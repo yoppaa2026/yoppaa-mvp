@@ -26,11 +26,13 @@ const T = {
 }
 
 const STATUTS = {
-  'en_attente':     { label: 'Nouvelle',    couleur: T.rouge,  icon: '●', next: 'en_preparation', nextLabel: 'Démarrer la prépa' },
-  'en_preparation': { label: 'En prépa',    couleur: T.orange, icon: '●', next: 'pret',            nextLabel: 'Marquer prête' },
-  'pret':           { label: 'Prête',       couleur: T.vert,   icon: '●', next: null,              nextLabel: null },
-  'recupere':       { label: 'Récupérée',   couleur: T.bleu,   icon: '🔵', next: null,              nextLabel: null },
-  'non_retire':     { label: 'Non retiré',  couleur: { border: '#9CA3AF', badge: '#6B7280', cardBg: '#F9FAFB' }, icon: '⚫', next: null, nextLabel: null },
+  'en_attente':              { label: 'Nouvelle',           couleur: T.rouge,  icon: '●', next: 'en_preparation', nextLabel: 'Démarrer la prépa' },
+  'en_preparation':          { label: 'En prépa',           couleur: T.orange, icon: '●', next: 'pret',            nextLabel: 'Marquer prête' },
+  'pret':                    { label: 'Prête',              couleur: T.vert,   icon: '●', next: null,              nextLabel: null },
+  'recupere':                { label: 'Récupérée',          couleur: T.bleu,   icon: '🔵', next: null,              nextLabel: null },
+  'non_retire':              { label: 'Non retiré',         couleur: T.gris,   icon: '⚫', next: null, nextLabel: null },
+  'annulee_client_refund':   { label: 'Annulée par client', couleur: T.rouge,  icon: '✕', next: null, nextLabel: null },
+  'annulee_paiement_ko':     { label: 'Paiement échoué',    couleur: T.gris,   icon: '⊘', next: null, nextLabel: null },
 }
 
 // ─── Helpers dates ────────────────────────────────────────────────────────────
@@ -834,7 +836,9 @@ export default function Dashboard() {
     enPrepa:    commandesDuJour.filter(c => c.statut === 'en_preparation').length,
     pretes:     commandesDuJour.filter(c => c.statut === 'pret').length,
     recuperees: commandesDuJour.filter(c => c.statut === 'recupere').length,
-    ca:         commandesDuJour.reduce((acc, c) => acc + Number(c.total), 0),
+    annulees:   commandesDuJour.filter(c => c.statut === 'annulee_client_refund' || c.statut === 'annulee_paiement_ko').length,
+    // CA = uniquement commandes effectivement honorées (exclut les annulees pour ne pas fausser)
+    ca:         commandesDuJour.filter(c => c.statut !== 'annulee_client_refund' && c.statut !== 'annulee_paiement_ko').reduce((acc, c) => acc + Number(c.total), 0),
   }
 
   const commandesFiltrees = commandesDuJour.filter(c => {
@@ -844,6 +848,7 @@ export default function Dashboard() {
     if (filtreStatut === 'pret')           return c.statut === 'pret'
     if (filtreStatut === 'recupere')       return c.statut === 'recupere'
     if (filtreStatut === 'non_retire')     return c.statut === 'non_retire'
+    if (filtreStatut === 'annulees')       return c.statut === 'annulee_client_refund' || c.statut === 'annulee_paiement_ko'
     return true
   })
 
@@ -856,6 +861,7 @@ export default function Dashboard() {
     { key: 'pret',           label: 'Prêtes',       count: stats.pretes,     color: '#10B981' },
     { key: 'recupere',       label: 'Récupérées',   count: stats.recuperees, color: '#2563EB' },
     { key: 'non_retire',     label: 'Non retirés',  count: nonRetires,       color: '#6B7280' },
+    { key: 'annulees',       label: 'Annulées',     count: stats.annulees,   color: '#DC2626' },
     { key: 'tout',           label: 'Tout',         count: commandesDuJour.length },
   ]
 

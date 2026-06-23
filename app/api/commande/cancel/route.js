@@ -15,7 +15,8 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { stripe, requireStripe, STRIPE_CONFIG } from '@/lib/stripe'
+import { stripe, requireStripe } from '@/lib/stripe'
+import { envoyerAuCommercant, emailCommandeAnnuleeYopper, emailCommandeAnnuleeCommercant } from '@/lib/resend'
 
 export async function POST(request) {
   try {
@@ -159,16 +160,75 @@ export async function POST(request) {
       .delete()
       .eq('commande_id', cmd.id)
 
-    // ─── 8) Email confirmation annulation (fire-and-forget) ────────────────
-    fetch(`${STRIPE_CONFIG.appUrl}/api/emails/commande-annulee`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        commande_id: cmd.id,
-        refund_status: refundStatus,
-        refund_error: refundError,
-      }),
-    }).catch(e => console.warn('[commande/cancel] email fire-and-forget KO', e?.message))
+    // ─── 8) Email confirmation annulation ──────────────────────────────────
+    // Appel DIRECT des helpers (pas de fetch HTTP interne fragile, cf. pattern RDV)
+    const refundManuel = !!refundError
+    // Fetch articles + créneau (pas chargés à l'étape 1 car pas nécessaires pour cancel)
+    const { data: details } = await supabase
+      .from('commandes')
+      .select(`
+        creneau:creneaux(heure_debut, heure_fin),
+        articles:commande_articles(quantite, prix_unitaire, prix_total, option_libelle, article:articles(nom))
+      `)
+      .eq('id', cmd.id)
+      .single()
+    const articlesFlat = (details?.articles || []).map(a => ({
+      nom:            a.article?.nom || '—',
+      quantite:       a.quantite,
+      option_libelle: a.option_libelle,
+      prix_total:     a.prix_total,
+    }))
+
+    if (cmd.client_email) {
+      try {
+        const html = emailCommandeAnnuleeYopper({
+          yopper_prenom:   cmd.client_nom?.split(' ')[0] || 'Yopper',
+          commercant_nom:  commercant?.nom || '',
+          numero_commande: cmd.numero_commande,
+          total:           cmd.total,
+          refund_ok:       refundStatus === 'succeeded' || refundStatus === 'pending',
+          refund_manuel:   refundManuel,
+          paye_en_ligne:   !!cmd.paye_en_ligne,
+        })
+        await envoyerAuCommercant({
+          to: cmd.client_email,
+          subject: `Ta commande chez ${commercant?.nom || 'le commerçant'} a été annulée`,
+          html,
+        })
+      } catch (e) {
+        console.error('[commande/cancel] envoi email Yopper KO', e?.message)
+      }
+    }
+    // Récup email commerçant
+    const { data: commercantFull } = await supabase
+      .from('commercants')
+      .select('email')
+      .eq('id', commercant.id)
+      .single()
+    if (commercantFull?.email) {
+      try {
+        const html = emailCommandeAnnuleeCommercant({
+          nom_commercant:  commercant.nom,
+          yopper_prenom:   cmd.client_nom?.split(' ')[0],
+          yopper_nom:      cmd.client_nom?.split(' ').slice(1).join(' '),
+          numero_commande: cmd.numero_commande,
+          articles:        articlesFlat,
+          total:           cmd.total,
+          date_retrait:    cmd.date_commande,
+          heure_debut:     details?.creneau?.heure_debut,
+          heure_fin:       details?.creneau?.heure_fin,
+          refund_manuel:   refundManuel,
+          paye_en_ligne:   !!cmd.paye_en_ligne,
+        })
+        await envoyerAuCommercant({
+          to: commercantFull.email,
+          subject: `Commande #${cmd.numero_commande || ''} annulée — ${cmd.client_nom?.split(' ')[0] || 'Yopper'}`,
+          html,
+        })
+      } catch (e) {
+        console.error('[commande/cancel] envoi email commerçant KO', e?.message)
+      }
+    }
 
     return NextResponse.json({
       ok: true,

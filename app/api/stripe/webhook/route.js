@@ -22,7 +22,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
-import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant } from '@/lib/resend'
+import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailCommandeConfirmee, emailNouvelleCommandeCommercant } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
@@ -286,18 +286,96 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
     .delete()
     .eq('commande_id', commandeId)
 
-  // Email confirmation Yopper + commerçant (route existante, fire-and-forget)
-  try {
-    await fetch(`${STRIPE_CONFIG.appUrl}/api/emails/commande-confirmee`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ commande_id: commandeId }),
-    })
-  } catch (e) {
-    console.error('[webhook/commande] email fire-and-forget KO (non-bloquant)', e?.message)
-  }
+  // Email confirmation Yopper + commerçant
+  // NB : appel DIRECT des helpers (pas de fetch HTTP interne vers /api/emails/...)
+  // Évite le 307 yoppaa.app → www.yoppaa.app qui peut casser le POST côté Node fetch.
+  // Pattern aligné sur les RDV qui marchent déjà comme ça.
+  await envoyerEmailsCommande(commandeId, supabase)
 
   console.info('[webhook/commande] confirmée OK', { commandeId, pi: paymentIntent.id })
+}
+
+// ─── Helper : envoie emailCommandeConfirmee (Yopper) + emailNouvelleCommandeCommercant
+// ─── (commerçant si notif_mode='chaque'). Fire-and-forget : try/catch par email
+// ─── pour qu'une erreur Resend n'interrompe pas l'autre envoi.
+async function envoyerEmailsCommande(commandeId, supabase) {
+  const { data: cmd, error: errCmd } = await supabase
+    .from('commandes')
+    .select(`
+      id, numero_commande, total, notes_client, date_commande,
+      client_email, client_prenom, client_nom, client_telephone,
+      annulation_token,
+      commercant:commercants(id, nom, slug, adresse, email, notif_mode, delai_annulation_heures),
+      creneau:creneaux(heure_debut, heure_fin),
+      articles:commande_articles(quantite, prix_unitaire, prix_total, option_libelle, article:articles(nom))
+    `)
+    .eq('id', commandeId)
+    .single()
+  if (errCmd || !cmd) {
+    console.error('[webhook/commande] email helper KO : commande introuvable', { commandeId, errCmd })
+    return
+  }
+
+  const articlesFlat = (cmd.articles || []).map(a => ({
+    nom:            a.article?.nom || '—',
+    quantite:       a.quantite,
+    option_libelle: a.option_libelle,
+    prix_total:     a.prix_total,
+  }))
+
+  // 1) Email Yopper
+  if (cmd.client_email) {
+    try {
+      const html = emailCommandeConfirmee({
+        yopper_prenom:           cmd.client_prenom || 'Yopper',
+        commercant_nom:          cmd.commercant?.nom || '',
+        commercant_adresse:      cmd.commercant?.adresse || '',
+        commercant_slug:         cmd.commercant?.slug || '',
+        numero_commande:         cmd.numero_commande,
+        articles:                articlesFlat,
+        total:                   cmd.total,
+        date_retrait:            cmd.date_commande,
+        heure_debut:             cmd.creneau?.heure_debut,
+        heure_fin:               cmd.creneau?.heure_fin,
+        annulation_token:        cmd.annulation_token,
+        delai_annulation_heures: cmd.commercant?.delai_annulation_heures ?? 2,
+      })
+      await envoyerAuCommercant({
+        to: cmd.client_email,
+        subject: `Ta commande chez ${cmd.commercant?.nom || 'le commerçant'} est confirmée`,
+        html,
+      })
+    } catch (e) {
+      console.error('[webhook/commande] envoi email Yopper KO', e?.message)
+    }
+  }
+
+  // 2) Email commerçant (si notif_mode='chaque')
+  if (cmd.commercant?.notif_mode === 'chaque' && cmd.commercant?.email) {
+    try {
+      const html = emailNouvelleCommandeCommercant({
+        nom_commercant:  cmd.commercant.nom,
+        yopper_prenom:   cmd.client_prenom,
+        yopper_nom:      cmd.client_nom,
+        yopper_email:    cmd.client_email,
+        yopper_telephone:cmd.client_telephone,
+        numero_commande: cmd.numero_commande,
+        articles:        articlesFlat,
+        total:           cmd.total,
+        date_retrait:    cmd.date_commande,
+        heure_debut:     cmd.creneau?.heure_debut,
+        heure_fin:       cmd.creneau?.heure_fin,
+        notes_client:    cmd.notes_client,
+      })
+      await envoyerAuCommercant({
+        to: cmd.commercant.email,
+        subject: `Nouvelle commande #${cmd.numero_commande || ''} — ${cmd.client_prenom || 'Yopper'}`,
+        html,
+      })
+    } catch (e) {
+      console.error('[webhook/commande] envoi email commerçant KO', e?.message)
+    }
+  }
 }
 
 // ─── Paiement KO (failed/canceled) : commande -> annulee_paiement_ko ────────

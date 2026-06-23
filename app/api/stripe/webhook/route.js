@@ -299,11 +299,13 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
 // ─── (commerçant si notif_mode='chaque'). Fire-and-forget : try/catch par email
 // ─── pour qu'une erreur Resend n'interrompe pas l'autre envoi.
 async function envoyerEmailsCommande(commandeId, supabase) {
+  // NB : la table commandes stocke client_nom (nom complet "prenom nom") et
+  // client_telephone, mais PAS client_prenom séparé. On splitte pour les emails.
   const { data: cmd, error: errCmd } = await supabase
     .from('commandes')
     .select(`
       id, numero_commande, total, notes_client, date_commande,
-      client_email, client_prenom, client_nom, client_telephone,
+      client_email, client_nom, client_telephone,
       annulation_token,
       commercant:commercants(id, nom, slug, adresse, email, notif_mode, delai_annulation_heures),
       creneau:creneaux(heure_debut, heure_fin),
@@ -316,6 +318,11 @@ async function envoyerEmailsCommande(commandeId, supabase) {
     return
   }
 
+  // Split client_nom (= "Alexandre Verstappen") → prenom + nom pour l'email
+  const parts = (cmd.client_nom || '').trim().split(/\s+/)
+  const prenom = parts[0] || 'Yopper'
+  const nom = parts.slice(1).join(' ')
+
   const articlesFlat = (cmd.articles || []).map(a => ({
     nom:            a.article?.nom || '—',
     quantite:       a.quantite,
@@ -327,7 +334,7 @@ async function envoyerEmailsCommande(commandeId, supabase) {
   if (cmd.client_email) {
     try {
       const html = emailCommandeConfirmee({
-        yopper_prenom:           cmd.client_prenom || 'Yopper',
+        yopper_prenom:           prenom,
         commercant_nom:          cmd.commercant?.nom || '',
         commercant_adresse:      cmd.commercant?.adresse || '',
         commercant_slug:         cmd.commercant?.slug || '',
@@ -354,22 +361,22 @@ async function envoyerEmailsCommande(commandeId, supabase) {
   if (cmd.commercant?.notif_mode === 'chaque' && cmd.commercant?.email) {
     try {
       const html = emailNouvelleCommandeCommercant({
-        nom_commercant:  cmd.commercant.nom,
-        yopper_prenom:   cmd.client_prenom,
-        yopper_nom:      cmd.client_nom,
-        yopper_email:    cmd.client_email,
-        yopper_telephone:cmd.client_telephone,
-        numero_commande: cmd.numero_commande,
-        articles:        articlesFlat,
-        total:           cmd.total,
-        date_retrait:    cmd.date_commande,
-        heure_debut:     cmd.creneau?.heure_debut,
-        heure_fin:       cmd.creneau?.heure_fin,
-        notes_client:    cmd.notes_client,
+        nom_commercant:   cmd.commercant.nom,
+        yopper_prenom:    prenom,
+        yopper_nom:       nom,
+        yopper_email:     cmd.client_email,
+        yopper_telephone: cmd.client_telephone,
+        numero_commande:  cmd.numero_commande,
+        articles:         articlesFlat,
+        total:            cmd.total,
+        date_retrait:     cmd.date_commande,
+        heure_debut:      cmd.creneau?.heure_debut,
+        heure_fin:        cmd.creneau?.heure_fin,
+        notes_client:     cmd.notes_client,
       })
       await envoyerAuCommercant({
         to: cmd.commercant.email,
-        subject: `Nouvelle commande #${cmd.numero_commande || ''} — ${cmd.client_prenom || 'Yopper'}`,
+        subject: `Nouvelle commande #${cmd.numero_commande || ''} — ${prenom}`,
         html,
       })
     } catch (e) {

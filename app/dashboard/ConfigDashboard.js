@@ -2730,7 +2730,7 @@ function TabRdv({ commercantId, commercant, toast }) {
       </div>
       {subTab === 'prestations' && <TabRdvPrestations commercantId={commercantId} toast={toast} />}
       {subTab === 'praticiens'  && <TabRdvPraticiens commercantId={commercantId} toast={toast} />}
-      {subTab === 'creneaux'    && <TabRdvPlaceholder label="Créneaux RDV" detail="Configuration des créneaux par praticien à venir en Sess 5c." />}
+      {subTab === 'creneaux'    && <TabRdvCreneaux commercantId={commercantId} toast={toast} />}
     </div>
   )
 }
@@ -3172,6 +3172,333 @@ function TabRdvPraticiens({ commercantId, toast }) {
               <button onClick={save} disabled={saving}
                 style={{ flex: 2, padding: '12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: saving ? 0.6 : 1, boxShadow: `0 4px 14px ${T.main}55` }}>
                 {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : 'Créer le praticien')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Sess 5c : CRUD Créneaux RDV par praticien. Différent de TabCreneaux (C&C) car
+// pour RDV on a praticien_id (nullable = tous), pas_minutes (granularité réservation),
+// pause optionnelle (déjeuner par exemple). Pas de capacite_temps ni max_commandes.
+// V1 : créneaux récurrents par jour_semaine. Fermetures exceptionnelles = Sess fermetures
+// reportée Sprint 3 (avec multi-prat fermetures par praticien).
+function TabRdvCreneaux({ commercantId, toast }) {
+  const JOURS_SEMAINE = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
+  const JOURS_LABELS  = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dim.']
+  const PAS_OPTIONS = [5, 10, 15, 30, 60]
+
+  const [creneaux, setCreneaux] = useState([])
+  const [praticiens, setPraticiens] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [jourActif, setJourActif] = useState('lundi')
+  const [praticienFiltre, setPraticienFiltre] = useState('all')  // 'all' | 'tous' | praticienId
+  const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const initialForm = {
+    praticien_id: 'tous',
+    jour_semaine: 'lundi',
+    heure_debut: '09:00',
+    heure_fin: '18:00',
+    pas_minutes: 15,
+    avec_pause: false,
+    pause_debut: '12:00',
+    pause_fin: '13:00',
+    actif: true,
+  }
+  const [form, setForm] = useState(initialForm)
+
+  useEffect(() => { fetchAll() }, [commercantId])
+
+  async function fetchAll() {
+    setLoading(true)
+    const [{ data: cren }, { data: prat }] = await Promise.all([
+      supabase
+        .from('rdv_creneaux')
+        .select('*')
+        .eq('commercant_id', commercantId)
+        .is('deleted_at', null)
+        .order('jour_semaine')
+        .order('heure_debut'),
+      supabase
+        .from('rdv_praticiens')
+        .select('id, prenom, nom, couleur_hex, actif')
+        .eq('commercant_id', commercantId)
+        .is('deleted_at', null)
+        .order('ordre', { ascending: true }),
+    ])
+    setCreneaux(cren || [])
+    setPraticiens(prat || [])
+    setLoading(false)
+  }
+
+  // Helper : récupère le nom d'un praticien à partir de son id (pour affichage)
+  function praticienLabel(praticien_id) {
+    if (!praticien_id) return 'Tous les praticiens'
+    const p = praticiens.find(x => x.id === praticien_id)
+    return p ? `${p.prenom}${p.nom ? ' ' + p.nom : ''}` : 'Praticien inconnu'
+  }
+  function praticienCouleur(praticien_id) {
+    if (!praticien_id) return '#6B35C4'
+    const p = praticiens.find(x => x.id === praticien_id)
+    return p?.couleur_hex || '#6B35C4'
+  }
+
+  function creneauxDuJour() {
+    return creneaux
+      .filter(c => c.jour_semaine === jourActif)
+      .filter(c => {
+        if (praticienFiltre === 'all') return true
+        if (praticienFiltre === 'tous') return c.praticien_id === null
+        return c.praticien_id === praticienFiltre
+      })
+      .sort((a, b) => (a.heure_debut || '').localeCompare(b.heure_debut || ''))
+  }
+
+  function openNew() {
+    setForm({ ...initialForm, jour_semaine: jourActif })
+    setEditId(null); setShowForm(true)
+  }
+  function openEdit(c) {
+    setForm({
+      praticien_id: c.praticien_id || 'tous',
+      jour_semaine: c.jour_semaine || 'lundi',
+      heure_debut: (c.heure_debut || '09:00').slice(0,5),
+      heure_fin: (c.heure_fin || '18:00').slice(0,5),
+      pas_minutes: c.pas_minutes || 15,
+      avec_pause: !!(c.pause_debut && c.pause_fin),
+      pause_debut: (c.pause_debut || '12:00').slice(0,5),
+      pause_fin: (c.pause_fin || '13:00').slice(0,5),
+      actif: c.actif !== false,
+    })
+    setEditId(c.id); setShowForm(true)
+  }
+
+  async function save() {
+    if (form.heure_fin <= form.heure_debut) return toast('Heure de fin doit être après l\'heure de début', 'error')
+    if (form.avec_pause && form.pause_fin <= form.pause_debut) return toast('La pause est mal définie', 'error')
+    const payload = {
+      commercant_id: commercantId,
+      praticien_id: form.praticien_id === 'tous' ? null : form.praticien_id,
+      jour_semaine: form.jour_semaine,
+      heure_debut: form.heure_debut + ':00',
+      heure_fin: form.heure_fin + ':00',
+      pas_minutes: parseInt(form.pas_minutes, 10) || 15,
+      pause_debut: form.avec_pause ? form.pause_debut + ':00' : null,
+      pause_fin:   form.avec_pause ? form.pause_fin + ':00'   : null,
+      actif: !!form.actif,
+    }
+    setSaving(true)
+    const { error } = editId
+      ? await supabase.from('rdv_creneaux').update(payload).eq('id', editId)
+      : await supabase.from('rdv_creneaux').insert(payload)
+    setSaving(false)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    toast(editId ? 'Créneau mis à jour' : 'Créneau créé')
+    setShowForm(false); setEditId(null); setForm(initialForm)
+    fetchAll()
+  }
+
+  async function toggleActif(c) {
+    const { error } = await supabase.from('rdv_creneaux').update({ actif: !c.actif }).eq('id', c.id)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    fetchAll()
+  }
+
+  async function softDelete(c) {
+    if (!window.confirm(`Supprimer ce créneau (${c.jour_semaine} ${c.heure_debut?.slice(0,5)} – ${c.heure_fin?.slice(0,5)}) ?`)) return
+    const { error } = await supabase.from('rdv_creneaux').update({ deleted_at: new Date().toISOString() }).eq('id', c.id)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    toast('Créneau supprimé')
+    fetchAll()
+  }
+
+  if (loading) return <p style={{ color: T.muted, padding: 16 }}>Chargement…</p>
+
+  // Praticiens actifs uniquement pour le sélecteur du form (mais filtre garde tous)
+  const praticiensActifs = praticiens.filter(p => p.actif !== false)
+  const creneauxAffiches = creneauxDuJour()
+
+  return (
+    <div>
+      {/* Header avec bouton "Ajouter" */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div>
+          <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>Créneaux RDV</p>
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>Horaires hebdomadaires, avec ou sans praticien spécifique</p>
+        </div>
+        <button onClick={openNew}
+          style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
+          + Ajouter un créneau
+        </button>
+      </div>
+
+      {/* Filtre par praticien si ≥2 praticiens existent */}
+      {praticiens.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+          {[
+            { key: 'all', label: 'Tous' },
+            { key: 'tous', label: 'Communs (tous prat.)' },
+            ...praticiens.map(p => ({ key: p.id, label: `${p.prenom}${p.nom ? ' ' + p.nom[0] : ''}.`, color: p.couleur_hex })),
+          ].map(opt => (
+            <button key={opt.key} onClick={() => setPraticienFiltre(opt.key)}
+              style={{ padding: '6px 12px', borderRadius: 100, border: `1.5px solid ${praticienFiltre === opt.key ? T.main : T.hairline}`, background: praticienFiltre === opt.key ? T.pale : '#fff', color: praticienFiltre === opt.key ? T.main : T.muted, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {opt.color && <span style={{ width: 8, height: 8, borderRadius: '50%', background: opt.color }}/>}
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Tabs jour de la semaine */}
+      <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 14, border: `1px solid ${T.hairline}`, overflowX: 'auto' }}>
+        {JOURS_SEMAINE.map((j, i) => {
+          const nbCreneaux = creneaux.filter(c => c.jour_semaine === j).length
+          return (
+            <button key={j} onClick={() => setJourActif(j)}
+              style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 12, background: jourActif === j ? T.bgPanel : 'transparent', color: jourActif === j ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {JOURS_LABELS[i]}
+              {nbCreneaux > 0 && (
+                <span style={{ background: jourActif === j ? T.main : T.pale, color: jourActif === j ? '#fff' : T.main, fontSize: 10, fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>
+                  {nbCreneaux}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Liste des créneaux du jour actif */}
+      {creneauxAffiches.length === 0 ? (
+        <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucun créneau ce jour</p>
+          <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
+            Ajoute un créneau pour ouvrir tes RDV ce jour-là. Tu peux créer des créneaux globaux (tous les praticiens) ou spécifiques à un praticien.
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {creneauxAffiches.map(c => {
+            const couleur = praticienCouleur(c.praticien_id)
+            const label = praticienLabel(c.praticien_id)
+            return (
+              <div key={c.id} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: `1px solid ${T.hairline}`, borderLeft: `4px solid ${couleur}`, opacity: c.actif ? 1 : 0.55, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontWeight: 800, fontSize: 14, color: T.ink, marginBottom: 2 }}>
+                    {c.heure_debut?.slice(0,5)} – {c.heure_fin?.slice(0,5)}
+                    <span style={{ fontSize: 11, color: T.muted, fontWeight: 600, marginLeft: 8 }}>· Pas {c.pas_minutes} min</span>
+                  </p>
+                  <div style={{ fontSize: 11, color: T.muted, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: couleur }}/>
+                      {label}
+                    </span>
+                    {c.pause_debut && c.pause_fin && (
+                      <span>Pause {c.pause_debut.slice(0,5)} – {c.pause_fin.slice(0,5)}</span>
+                    )}
+                    {!c.actif && <span style={{ color: '#DC2626', fontWeight: 700 }}>Inactif</span>}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  <button onClick={() => toggleActif(c)} title={c.actif ? 'Désactiver' : 'Activer'}
+                    style={{ padding: '6px 10px', border: `1px solid ${T.hairline}`, background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: T.muted, fontFamily: '"DM Sans", sans-serif' }}>
+                    {c.actif ? 'Désact.' : 'Activer'}
+                  </button>
+                  <button onClick={() => openEdit(c)}
+                    style={{ padding: '6px 10px', border: `1px solid ${T.main}44`, background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: T.main, fontFamily: '"DM Sans", sans-serif' }}>
+                    Modif.
+                  </button>
+                  <button onClick={() => softDelete(c)}
+                    style={{ padding: '6px 10px', border: '1px solid #DC262644', background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: '#DC2626', fontFamily: '"DM Sans", sans-serif' }}>
+                    Suppr.
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Modal form création/édition */}
+      {showForm && (
+        <div onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 18, padding: 22, maxWidth: 460, width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
+            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? 'Modifier le créneau' : 'Nouveau créneau'}</p>
+
+            {/* Praticien */}
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Pour qui ?</label>
+            <select value={form.praticien_id} onChange={e => setForm({ ...form, praticien_id: e.target.value })}
+              style={{ width: '100%', padding: '10px 12px', border: `1.5px solid ${T.hairline}`, borderRadius: 8, fontSize: 14, fontFamily: '"DM Sans", sans-serif', marginBottom: 10, background: '#fff' }}>
+              <option value="tous">Tous les praticiens (créneau commun)</option>
+              {praticiensActifs.map(p => (
+                <option key={p.id} value={p.id}>{p.prenom}{p.nom ? ' ' + p.nom : ''}</option>
+              ))}
+            </select>
+
+            {/* Jour */}
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Jour de la semaine</label>
+            <select value={form.jour_semaine} onChange={e => setForm({ ...form, jour_semaine: e.target.value })}
+              style={{ width: '100%', padding: '10px 12px', border: `1.5px solid ${T.hairline}`, borderRadius: 8, fontSize: 14, fontFamily: '"DM Sans", sans-serif', marginBottom: 10, background: '#fff' }}>
+              {JOURS_SEMAINE.map((j, i) => <option key={j} value={j}>{JOURS_LABELS[i] === 'Dim.' ? 'Dimanche' : JOURS_LABELS[i]}</option>)}
+            </select>
+
+            {/* Horaires début/fin */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Début</label>
+                <Input type="time" value={form.heure_debut} onChange={e => setForm({ ...form, heure_debut: e.target.value })}/>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Fin</label>
+                <Input type="time" value={form.heure_fin} onChange={e => setForm({ ...form, heure_fin: e.target.value })}/>
+              </div>
+            </div>
+
+            {/* Pas de réservation */}
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Granularité réservation</label>
+            <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
+              {PAS_OPTIONS.map(p => (
+                <button key={p} onClick={() => setForm({ ...form, pas_minutes: p })} type="button"
+                  style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: `1.5px solid ${form.pas_minutes === p ? T.main : T.hairline}`, background: form.pas_minutes === p ? T.pale : '#fff', color: form.pas_minutes === p ? T.main : T.muted, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                  {p} min
+                </button>
+              ))}
+            </div>
+
+            {/* Pause optionnelle */}
+            <div style={{ marginBottom: 10, padding: 10, background: T.bg, borderRadius: 10 }}>
+              <Toggle value={form.avec_pause} onChange={v => setForm({ ...form, avec_pause: v })} label="Pause déjeuner ou autre"/>
+              {form.avec_pause && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Pause début</label>
+                    <Input type="time" value={form.pause_debut} onChange={e => setForm({ ...form, pause_debut: e.target.value })}/>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Pause fin</label>
+                    <Input type="time" value={form.pause_fin} onChange={e => setForm({ ...form, pause_fin: e.target.value })}/>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <Toggle value={form.actif} onChange={v => setForm({ ...form, actif: v })} label="Créneau actif"/>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowForm(false)}
+                style={{ flex: 1, padding: '12px', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.deep, fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14 }}>
+                Annuler
+              </button>
+              <button onClick={save} disabled={saving}
+                style={{ flex: 2, padding: '12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: saving ? 0.6 : 1, boxShadow: `0 4px 14px ${T.main}55` }}>
+                {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : 'Créer le créneau')}
               </button>
             </div>
           </div>

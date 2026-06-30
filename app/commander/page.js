@@ -1285,6 +1285,12 @@ export default function Commander() {
       const savedOnglet = localStorage.getItem('yoppaa_onglet')
       if (savedOnglet) setOngletState(normaliser(savedOnglet))
     }
+    // Sous-onglet pour la page "Yoppers" (commandes vs rdvs). Param ?tab=rdvs
+    // utilise depuis les emails RDV pour ouvrir directement la liste des RDV.
+    const tabFromUrl = urlParams.get('tab')
+    if (tabFromUrl === 'rdvs' || tabFromUrl === 'alimentaires') {
+      setSousOngletCmd(tabFromUrl)
+    }
     chargerCommercants()
     demanderGeolocalisation()
     const email = localStorage.getItem('yoppaa_email')

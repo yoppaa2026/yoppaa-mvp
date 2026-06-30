@@ -1222,6 +1222,13 @@ export default function Commander() {
     toastTimerRef.current = setTimeout(() => setToast(null), 3500)
   }
 
+  // Modal confirmation custom (remplace window.confirm() qui est bloque/silencieux
+  // en PWA installee iPhone). Utilisee pour confirmer annulations RDV et commandes.
+  const [confirmModal, setConfirmModal] = useState(null)
+  function askConfirm({ title, message, confirmLabel = 'Confirmer', danger = false, onConfirm }) {
+    setConfirmModal({ title, message, confirmLabel, danger, onConfirm })
+  }
+
   const [commercants, setCommercants] = useState([])
   const [notesParCommerce, setNotesParCommerce] = useState({})
   const [statutsCommerce, setStatutsCommerce] = useState({})
@@ -1659,29 +1666,34 @@ export default function Commander() {
   // Refund Stripe automatique côté serveur si acompte payé en ligne + avant cutoff.
   async function annulerRdv(rdv) {
     if (!rdv?.id || !rdv?.client_email) return
-    if (!window.confirm('Confirmer l\'annulation de ce RDV ? L\'acompte sera remboursé automatiquement si tu en as payé un.')) return
-    try {
-      const res = await fetch('/api/rdv/cancel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rdv_id: rdv.id, client_email: rdv.client_email }),
-      })
-      const data = await res.json()
-      if (!res.ok || !data.ok) {
-        alert(`Annulation impossible : ${data?.error || 'erreur inconnue'}`)
-        return
-      }
-      // Refresh : recharger les RDV pour voir le statut basculer en annule_client.
-      // Toast de confirmation (mémoire feedback_confirmations_yoppaa : "C'est noté !" pour RDV).
-      await chargerRdvsClient(rdv.client_email)
-      const message = rdv.acompte_paye_en_ligne
-        ? 'C\'est noté ! RDV annulé, remboursement de l\'acompte en cours 🟣'
-        : 'C\'est noté ! Ton RDV est annulé 🟣'
-      showToast(message)
-    } catch (e) {
-      console.error('[annulerRdv] erreur', e)
-      alert(`Erreur : ${e?.message || 'inconnue'}`)
-    }
+    askConfirm({
+      title: 'Annuler ce RDV ?',
+      message: 'L\'acompte sera remboursé automatiquement si tu en as payé un.',
+      confirmLabel: 'Annuler le RDV',
+      danger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetch('/api/rdv/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rdv_id: rdv.id, client_email: rdv.client_email }),
+          })
+          const data = await res.json()
+          if (!res.ok || !data.ok) {
+            alert(`Annulation impossible : ${data?.error || 'erreur inconnue'}`)
+            return
+          }
+          await chargerRdvsClient(rdv.client_email)
+          const message = rdv.acompte_paye_en_ligne
+            ? 'C\'est noté ! RDV annulé, remboursement de l\'acompte en cours 🟣'
+            : 'C\'est noté ! Ton RDV est annulé 🟣'
+          showToast({ msg: message, type: 'success' })
+        } catch (e) {
+          console.error('[annulerRdv] erreur', e)
+          alert(`Erreur : ${e?.message || 'inconnue'}`)
+        }
+      },
+    })
   }
 
   // Annulation d'une commande C&C depuis la vue Mes Commandes (parallèle au RDV).
@@ -1690,28 +1702,34 @@ export default function Commander() {
   async function annulerCommandeFromList(c) {
     const email = c?.client_email || client.email
     if (!c?.id || !email) return
-    if (!window.confirm('Confirmer l\'annulation de cette commande ? Si tu as payé en ligne, le remboursement sera lancé automatiquement.')) return
-    try {
-      const res = await fetch('/api/commande/cancel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commande_id: c.id, client_email: email }),
-      })
-      const data = await res.json()
-      if (!res.ok || !data.ok) {
-        alert(`Annulation impossible : ${data?.error || 'erreur inconnue'}`)
-        return
-      }
-      // Refresh + toast "Yoppé !" (mémoire feedback_confirmations_yoppaa : "Yoppé !" pour C&C)
-      await chargerCommandesClient(email)
-      const message = c.paye_en_ligne
-        ? 'Yoppé ! Commande annulée, remboursement en cours 🟣'
-        : 'Yoppé ! Ta commande est annulée 🟣'
-      showToast(message)
-    } catch (e) {
-      console.error('[annulerCommandeFromList] erreur', e)
-      alert(`Erreur : ${e?.message || 'inconnue'}`)
-    }
+    askConfirm({
+      title: 'Annuler cette commande ?',
+      message: 'Si tu as payé en ligne, le remboursement sera lancé automatiquement.',
+      confirmLabel: 'Annuler la commande',
+      danger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetch('/api/commande/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ commande_id: c.id, client_email: email }),
+          })
+          const data = await res.json()
+          if (!res.ok || !data.ok) {
+            alert(`Annulation impossible : ${data?.error || 'erreur inconnue'}`)
+            return
+          }
+          await chargerCommandesClient(email)
+          const message = c.paye_en_ligne
+            ? 'Yoppé ! Commande annulée, remboursement en cours 🟣'
+            : 'Yoppé ! Ta commande est annulée 🟣'
+          showToast({ msg: message, type: 'success' })
+        } catch (e) {
+          console.error('[annulerCommandeFromList] erreur', e)
+          alert(`Erreur : ${e?.message || 'inconnue'}`)
+        }
+      },
+    })
   }
 
   async function chargerCommandesClient(email) {
@@ -1876,7 +1894,10 @@ export default function Commander() {
 
   const commandesASwiper = clientCommandes.filter(c => c.statut === 'pret')
   const commandesEnCours = clientCommandes.filter(c => ['en_attente','en_preparation'].includes(c.statut))
-  const commandesTerminees = clientCommandes.filter(c => c.statut === 'recupere')
+  // Historique : commandes recuperees + annulees (par client ou paiement_ko) + non_retire.
+  // On garde la commande visible avec son statut final pour que le Yopper ait toujours
+  // accès à son historique (signale par Alex : la commande annulee ne doit pas disparaitre).
+  const commandesTerminees = clientCommandes.filter(c => ['recupere', 'annulee_client_refund', 'annulee_paiement_ko', 'non_retire'].includes(c.statut))
   // RDV vitrine a venir : statut confirme + date >= aujourd'hui
   const _todayMidnight = new Date(); _todayMidnight.setHours(0,0,0,0)
   const rdvsAVenir = clientRdvs
@@ -2077,6 +2098,7 @@ export default function Commander() {
         @keyframes dot-wave { 0%,60%,100% { transform: translateY(0); opacity:1; } 30% { transform: translateY(-3px); opacity:1; } }
         @keyframes yoppa-live-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.45); opacity:0.7; } }
         @keyframes toast-in { 0% { opacity:0; transform:translate(-50%, 12px) scale(0.95); } 100% { opacity:1; transform:translate(-50%, 0) scale(1); } }
+        @keyframes modal-in { 0% { opacity:0; transform:translateY(12px) scale(0.96); } 100% { opacity:1; transform:translateY(0) scale(1); } }
         @keyframes dot-pop { 0% { opacity:0; transform:scale(0) translateY(8px); } 70% { transform:scale(1.3) translateY(-4px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
         @keyframes wordmark-in { 0% { opacity:0; letter-spacing: 8px; } 100% { opacity:1; letter-spacing: -2px; } }
         @keyframes tagline-in { 0% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
@@ -2409,20 +2431,30 @@ export default function Commander() {
                     <span style={{ fontWeight: 700, fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historique</span>
                     <div style={{ flex: 1, height: 1, background: T.pale }}/>
                   </div>
-                  {commandesTerminees.slice(0, 5).map(c => (
-                    <div key={c.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.875rem' }}>
-                          {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.muted, fontWeight: 600 }}> — commande #{c.numeroAffiche}</span>}
-                        </p>
-                        <p style={{ fontSize: '0.7rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
+                  {commandesTerminees.slice(0, 5).map(c => {
+                    // Mapping statuts terminaux vers libellés FR + couleur
+                    const statutMapCmd = {
+                      recupere:              { label: '✓ Récupérée',           bg: '#F3F4F6', color: '#6B7280' },
+                      annulee_client_refund: { label: 'Annulée par toi',       bg: '#FEF2F2', color: '#DC2626' },
+                      annulee_paiement_ko:   { label: 'Paiement échoué',       bg: '#FEF2F2', color: '#DC2626' },
+                      non_retire:            { label: 'Non retirée',           bg: '#F9FAFB', color: '#6B7280' },
+                    }
+                    const sc = statutMapCmd[c.statut] || { label: c.statut, bg: T.pale, color: T.muted }
+                    return (
+                      <div key={c.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.875rem' }}>
+                            {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.muted, fontWeight: 600 }}> — commande #{c.numeroAffiche}</span>}
+                          </p>
+                          <p style={{ fontSize: '0.7rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(c.total).toFixed(2)}€</p>
+                          <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: sc.bg, color: sc.color }}>{sc.label}</span>
+                        </div>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(c.total).toFixed(2)}€</p>
-                        <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: '#F3F4F6', color: '#6B7280' }}>✓ Récupérée</span>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
@@ -2927,6 +2959,41 @@ export default function Commander() {
             </div>
           )}
         </div>
+
+        {/* Modal confirmation custom : remplace window.confirm() qui est bloque/silencieux
+            en PWA installee iPhone. Boutons Confirmer / Annuler. Clic backdrop = ferme. */}
+        {confirmModal && (
+          <div role="dialog" aria-modal="true"
+            onClick={(e) => { if (e.target === e.currentTarget) setConfirmModal(null) }}
+            style={{ position: 'fixed', inset: 0, zIndex: 1300, background: 'rgba(22,6,54,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+            <div style={{ background: '#fff', borderRadius: 20, maxWidth: 380, width: '100%', padding: '1.75rem 1.5rem 1.25rem', boxShadow: '0 30px 80px rgba(0,0,0,0.45)', animation: 'modal-in 0.22s cubic-bezier(0.34,1.56,0.64,1)' }}>
+              <h2 style={{ fontWeight: 900, fontSize: '1.2rem', color: T.ink, marginBottom: 8, letterSpacing: '-0.3px', textAlign: 'center' }}>
+                {confirmModal.title}
+              </h2>
+              {confirmModal.message && (
+                <p style={{ fontSize: '0.9rem', color: T.muted, lineHeight: 1.5, textAlign: 'center', marginBottom: 20 }}>
+                  {confirmModal.message}
+                </p>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <button
+                  onClick={async () => {
+                    const cb = confirmModal.onConfirm
+                    setConfirmModal(null)
+                    if (cb) await cb()
+                  }}
+                  style={{ width: '100%', padding: '0.9rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '0.95rem', background: confirmModal.danger ? 'linear-gradient(135deg, #DC2626, #B91C1C)' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: confirmModal.danger ? '0 6px 22px rgba(220,38,38,0.5)' : `0 6px 22px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }}>
+                  {confirmModal.confirmLabel || 'Confirmer'}
+                </button>
+                <button
+                  onClick={() => setConfirmModal(null)}
+                  style={{ width: '100%', padding: '0.75rem', background: 'transparent', color: T.deep, border: `1.5px solid ${T.pale}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif' }}>
+                  Annuler
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Toast global : feedback ephemere 3.5s (favori, info), flotte au-dessus de la nav */}
         {toast && (

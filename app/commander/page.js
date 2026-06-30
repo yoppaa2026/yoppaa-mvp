@@ -1684,6 +1684,36 @@ export default function Commander() {
     }
   }
 
+  // Annulation d'une commande C&C depuis la vue Mes Commandes (parallèle au RDV).
+  // Auth par commande_id + client_email. La route /api/commande/cancel verifie le
+  // cutoff (created vs heure de retrait) et refund Stripe si paye_en_ligne=true.
+  async function annulerCommandeFromList(c) {
+    const email = c?.client_email || client.email
+    if (!c?.id || !email) return
+    if (!window.confirm('Confirmer l\'annulation de cette commande ? Si tu as payé en ligne, le remboursement sera lancé automatiquement.')) return
+    try {
+      const res = await fetch('/api/commande/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commande_id: c.id, client_email: email }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        alert(`Annulation impossible : ${data?.error || 'erreur inconnue'}`)
+        return
+      }
+      // Refresh + toast "Yoppé !" (mémoire feedback_confirmations_yoppaa : "Yoppé !" pour C&C)
+      await chargerCommandesClient(email)
+      const message = c.paye_en_ligne
+        ? 'Yoppé ! Commande annulée, remboursement en cours 🟣'
+        : 'Yoppé ! Ta commande est annulée 🟣'
+      showToast(message)
+    } catch (e) {
+      console.error('[annulerCommandeFromList] erreur', e)
+      alert(`Erreur : ${e?.message || 'inconnue'}`)
+    }
+  }
+
   async function chargerCommandesClient(email) {
     const { data } = await supabase.from('commandes').select('*, commercant:commercants(nom, type), creneau:creneaux(heure_debut, heure_fin)').eq('client_email', email).order('created_at', { ascending: false })
     if (!data || data.length === 0) { setClientCommandes([]); return }
@@ -2351,6 +2381,12 @@ export default function Commander() {
                             {sousTexte}
                           </p>
                         )}
+                        {/* Lien discret "Annuler cette commande". La route vérifie le cutoff
+                            (delai_annulation_heures, default 2h avant retrait) et refund Stripe si OK. */}
+                        <button onClick={() => annulerCommandeFromList(c)}
+                          style={{ marginTop: 10, padding: '6px 12px', background: 'transparent', color: '#DC2626', border: '1px solid #DC262644', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem', fontFamily: '"DM Sans", sans-serif' }}>
+                          Annuler cette commande
+                        </button>
                         </div>
                       </div>
                     )

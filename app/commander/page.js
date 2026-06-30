@@ -1635,10 +1635,13 @@ export default function Commander() {
   async function chargerRdvsClient(email) {
     const { data, error } = await supabase
       .from('rdv_reservations')
-      .select('id, statut, date_rdv, heure_debut, heure_fin, prix_estime, numero_rdv, commercant_id, prestation_id, acompte_paye_en_ligne, acompte_montant, acompte_paye_date, commercant:commercants(nom, slug, type, categorie), prestation:rdv_prestations(nom, duree_minutes)')
+      .select('id, statut, date_rdv, heure_debut, heure_fin, prix_estime, numero_rdv, commercant_id, prestation_id, acompte_paye_en_ligne, acompte_montant, acompte_paye_date, annulation_token, client_email, commercant:commercants(nom, slug, type, categorie, rdv_delai_annulation_heures), prestation:rdv_prestations(nom, duree_minutes)')
       .eq('client_email', email)
       .is('deleted_at', null)
-      .in('statut', ['confirme', 'honore', 'annule', 'no_show'])  // tous les statuts pour Historique complet
+      // Tous les statuts cibles : confirme (à venir), honore (effectué), no_show (manqué),
+      // annule_client / annule_commercant (annulés, le statut en base est jamais 'annule' tout court),
+      // reporte (rare, RDV décalé). Filtrage et libellé géré dans le rendu plus bas.
+      .in('statut', ['confirme', 'honore', 'annule_client', 'annule_commercant', 'no_show', 'reporte'])
       .order('date_rdv', { ascending: false })
     // Log diagnostic : si erreur RLS ou data vide alors qu'il devrait y avoir des RDVs, le log aide a debug terrain
     if (error) console.error('[chargerRdvsClient] error', error)
@@ -1649,6 +1652,31 @@ export default function Commander() {
       prestation_nom: r.prestation?.nom || null,
     }))
     setClientRdvs(enriched)
+  }
+
+  // Annulation d'un RDV depuis la vue Mes RDVs. Auth par rdv_id + client_email
+  // (pas besoin du token dans ce contexte, le user est déjà identifié côté front).
+  // Refund Stripe automatique côté serveur si acompte payé en ligne + avant cutoff.
+  async function annulerRdv(rdv) {
+    if (!rdv?.id || !rdv?.client_email) return
+    if (!window.confirm('Confirmer l\'annulation de ce RDV ? L\'acompte sera remboursé automatiquement si tu en as payé un.')) return
+    try {
+      const res = await fetch('/api/rdv/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rdv_id: rdv.id, client_email: rdv.client_email }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        alert(`Annulation impossible : ${data?.error || 'erreur inconnue'}`)
+        return
+      }
+      // Refresh : recharger les RDV pour voir le statut basculé en annule_client
+      await chargerRdvsClient(rdv.client_email)
+    } catch (e) {
+      console.error('[annulerRdv] erreur', e)
+      alert(`Erreur : ${e?.message || 'inconnue'}`)
+    }
   }
 
   async function chargerCommandesClient(email) {
@@ -2418,6 +2446,12 @@ export default function Commander() {
                                 </span>
                               )}
                             </div>
+                            {/* Lien discret "Annuler ce RDV". La route vérifie le cutoff
+                                (rdv_delai_annulation_heures) et refund l'acompte si OK. */}
+                            <button onClick={() => annulerRdv(r)}
+                              style={{ marginTop: 10, padding: '6px 12px', background: 'transparent', color: '#DC2626', border: '1px solid #DC262644', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem', fontFamily: '"DM Sans", sans-serif' }}>
+                              Annuler ce RDV
+                            </button>
                           </div>
                         </div>
                       )
@@ -2434,9 +2468,18 @@ export default function Commander() {
                     </div>
                     {rdvsPasses.slice(0, 5).map(r => {
                       const dateObj = r.date_rdv ? new Date(r.date_rdv + 'T12:00:00') : null
-                      const statutLabel = r.statut === 'honore' ? '✓ Effectué' : r.statut === 'annule' ? 'Annulé' : r.statut
-                      const statutBg = r.statut === 'honore' ? '#F0FDF4' : '#FEF2F2'
-                      const statutColor = r.statut === 'honore' ? '#10B981' : '#DC2626'
+                      // Mapping statuts vers libellés FR + couleur (badge)
+                      const statutMap = {
+                        honore:             { label: '✓ Effectué',                 bg: '#F0FDF4', color: '#10B981' },
+                        annule_client:      { label: 'Annulé par toi',             bg: '#FEF2F2', color: '#DC2626' },
+                        annule_commercant:  { label: 'Annulé par le commerçant',   bg: '#FEF2F2', color: '#DC2626' },
+                        no_show:            { label: 'Non honoré',                 bg: '#F9FAFB', color: '#6B7280' },
+                        reporte:            { label: 'Reporté',                    bg: '#FFF7ED', color: '#EA580C' },
+                      }
+                      const st = statutMap[r.statut] || { label: r.statut, bg: T.pale, color: T.muted }
+                      const statutLabel = st.label
+                      const statutBg = st.bg
+                      const statutColor = st.color
                       return (
                         <div key={r.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>

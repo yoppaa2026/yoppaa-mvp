@@ -1671,8 +1671,13 @@ export default function Commander() {
         alert(`Annulation impossible : ${data?.error || 'erreur inconnue'}`)
         return
       }
-      // Refresh : recharger les RDV pour voir le statut basculé en annule_client
+      // Refresh : recharger les RDV pour voir le statut basculer en annule_client.
+      // Toast de confirmation (mémoire feedback_confirmations_yoppaa : "C'est noté !" pour RDV).
       await chargerRdvsClient(rdv.client_email)
+      const message = rdv.acompte_paye_en_ligne
+        ? 'C\'est noté ! RDV annulé, remboursement de l\'acompte en cours 🟣'
+        : 'C\'est noté ! Ton RDV est annulé 🟣'
+      showToast(message)
     } catch (e) {
       console.error('[annulerRdv] erreur', e)
       alert(`Erreur : ${e?.message || 'inconnue'}`)

@@ -2729,7 +2729,7 @@ function TabRdv({ commercantId, commercant, toast }) {
         ))}
       </div>
       {subTab === 'prestations' && <TabRdvPrestations commercantId={commercantId} toast={toast} />}
-      {subTab === 'praticiens'  && <TabRdvPlaceholder label="Praticiens" detail="Gestion des praticiens (CRUD + photo + couleur) à venir en Sess 5b." />}
+      {subTab === 'praticiens'  && <TabRdvPraticiens commercantId={commercantId} toast={toast} />}
       {subTab === 'creneaux'    && <TabRdvPlaceholder label="Créneaux RDV" detail="Configuration des créneaux par praticien à venir en Sess 5c." />}
     </div>
   )
@@ -2945,6 +2945,233 @@ function TabRdvPrestations({ commercantId, toast }) {
               <button onClick={save} disabled={saving}
                 style={{ flex: 2, padding: '12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: saving ? 0.6 : 1, boxShadow: `0 4px 14px ${T.main}55` }}>
                 {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : 'Créer la prestation')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Sess 5b : CRUD Praticiens RDV. prenom, nom, description, couleur_hex,
+// photo_url (bucket Supabase Storage 'logos' avec naming praticien-{id}-{ts}),
+// ordre, actif. Soft delete via deleted_at (compteurs RDV reservations preserves).
+function TabRdvPraticiens({ commercantId, toast }) {
+  const [praticiens, setPraticiens] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const initialForm = { prenom: '', nom: '', description: '', couleur_hex: '#6B35C4', photo_url: '', actif: true }
+  const [form, setForm] = useState(initialForm)
+  const firstLoadRef = useRef(true)
+  const fileInputRef = useRef(null)
+
+  useEffect(() => { fetchPraticiens() }, [commercantId])
+
+  async function fetchPraticiens() {
+    if (firstLoadRef.current) setLoading(true)
+    const { data } = await supabase
+      .from('rdv_praticiens')
+      .select('*')
+      .eq('commercant_id', commercantId)
+      .is('deleted_at', null)
+      .order('ordre', { ascending: true })
+      .order('created_at', { ascending: true })
+    setPraticiens(data || [])
+    if (firstLoadRef.current) { setLoading(false); firstLoadRef.current = false }
+  }
+
+  function openNew() { setForm(initialForm); setEditId(null); setShowForm(true) }
+  function openEdit(p) {
+    setForm({
+      prenom: p.prenom || '',
+      nom: p.nom || '',
+      description: p.description || '',
+      couleur_hex: p.couleur_hex || '#6B35C4',
+      photo_url: p.photo_url || '',
+      actif: p.actif !== false,
+    })
+    setEditId(p.id); setShowForm(true)
+  }
+
+  // Upload photo praticien dans le bucket 'logos' existant (pas de nouveau bucket
+  // nécessaire). Naming praticien-{commercantId}-{ts}.{ext} pour distinguer
+  // des logos commerçants.
+  async function uploadPhoto(file) {
+    if (!file) return
+    if (file.size > 1024 * 1024) { toast('Photo trop lourde, max 1 Mo', 'error'); return }
+    if (!file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
+    setUploading(true)
+    const ext = file.name.split('.').pop()
+    const fileName = `praticien-${commercantId}-${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('logos').upload(fileName, file, { upsert: true })
+    if (error) { toast('Erreur upload photo', 'error'); setUploading(false); return }
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    setForm(f => ({ ...f, photo_url: urlData.publicUrl }))
+    setUploading(false)
+  }
+
+  async function save() {
+    if (!form.prenom.trim()) return toast('Prénom obligatoire', 'error')
+    const payload = {
+      commercant_id: commercantId,
+      prenom: form.prenom.trim(),
+      nom: form.nom.trim() || null,
+      description: form.description.trim() || null,
+      couleur_hex: form.couleur_hex || '#6B35C4',
+      photo_url: form.photo_url || null,
+      actif: !!form.actif,
+    }
+    setSaving(true)
+    const { error } = editId
+      ? await supabase.from('rdv_praticiens').update(payload).eq('id', editId)
+      : await supabase.from('rdv_praticiens').insert(payload)
+    setSaving(false)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    toast(editId ? 'Praticien mis à jour' : 'Praticien créé')
+    setShowForm(false); setEditId(null); setForm(initialForm)
+    fetchPraticiens()
+  }
+
+  async function toggleActif(p) {
+    const { error } = await supabase.from('rdv_praticiens').update({ actif: !p.actif }).eq('id', p.id)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    fetchPraticiens()
+  }
+
+  async function softDelete(p) {
+    if (!window.confirm(`Supprimer le praticien "${p.prenom}${p.nom ? ' ' + p.nom : ''}" ? Les RDV existants ne seront pas affectés.`)) return
+    const { error } = await supabase.from('rdv_praticiens').update({ deleted_at: new Date().toISOString() }).eq('id', p.id)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    toast('Praticien supprimé')
+    fetchPraticiens()
+  }
+
+  if (loading) return <p style={{ color: T.muted, padding: 16 }}>Chargement…</p>
+
+  return (
+    <div>
+      {/* Header avec bouton "Ajouter" */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div>
+          <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>Praticiens</p>
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{praticiens.length} praticien{praticiens.length > 1 ? 's' : ''}</p>
+        </div>
+        <button onClick={openNew}
+          style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
+          + Ajouter un praticien
+        </button>
+      </div>
+
+      {praticiens.length === 0 ? (
+        <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucun praticien</p>
+          <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>Ajoute tes praticiens (ex : Sophie, Pierre) pour permettre aux clients de choisir avec qui ils prennent RDV. Si tu travailles seul, crée juste un praticien.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {praticiens.map(p => (
+            <div key={p.id} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: `1px solid ${T.hairline}`, opacity: p.actif ? 1 : 0.55, display: 'flex', alignItems: 'center', gap: 12 }}>
+              {/* Avatar circulaire avec photo ou initiales */}
+              <div style={{ flexShrink: 0, width: 44, height: 44, borderRadius: '50%', background: p.couleur_hex || '#6B35C4', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, border: `2px solid ${p.couleur_hex || '#6B35C4'}33`, overflow: 'hidden' }}>
+                {p.photo_url ? (
+                  <img src={p.photo_url} alt={p.prenom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                ) : (
+                  <span>{(p.prenom?.[0] || '?').toUpperCase()}{(p.nom?.[0] || '').toUpperCase()}</span>
+                )}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontWeight: 800, fontSize: 14, color: T.ink }}>
+                  {p.prenom} {p.nom || ''}
+                  {!p.actif && <span style={{ color: '#DC2626', fontWeight: 700, fontSize: 11, marginLeft: 8 }}>Inactif</span>}
+                </p>
+                {p.description && <p style={{ fontSize: 12, color: T.muted, marginTop: 2, lineHeight: 1.4 }}>{p.description}</p>}
+              </div>
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                <button onClick={() => toggleActif(p)} title={p.actif ? 'Désactiver' : 'Activer'}
+                  style={{ padding: '6px 10px', border: `1px solid ${T.hairline}`, background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: T.muted, fontFamily: '"DM Sans", sans-serif' }}>
+                  {p.actif ? 'Désactiver' : 'Activer'}
+                </button>
+                <button onClick={() => openEdit(p)} title="Modifier"
+                  style={{ padding: '6px 10px', border: `1px solid ${T.main}44`, background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: T.main, fontFamily: '"DM Sans", sans-serif' }}>
+                  Modifier
+                </button>
+                <button onClick={() => softDelete(p)} title="Supprimer"
+                  style={{ padding: '6px 10px', border: '1px solid #DC262644', background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: '#DC2626', fontFamily: '"DM Sans", sans-serif' }}>
+                  Suppr.
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Modal formulaire création/édition */}
+      {showForm && (
+        <div onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 18, padding: 22, maxWidth: 460, width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
+            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? 'Modifier le praticien' : 'Nouveau praticien'}</p>
+
+            {/* Photo + couleur en haut */}
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14, padding: 12, background: T.bg, borderRadius: 12 }}>
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <div style={{ width: 70, height: 70, borderRadius: '50%', background: form.couleur_hex, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 24, overflow: 'hidden', border: `3px solid ${form.couleur_hex}55` }}>
+                  {form.photo_url ? (
+                    <img src={form.photo_url} alt="Praticien" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                  ) : (
+                    <span>{(form.prenom?.[0] || '?').toUpperCase()}{(form.nom?.[0] || '').toUpperCase()}</span>
+                  )}
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadPhoto(e.target.files?.[0])}/>
+                <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                  style={{ padding: '8px 12px', border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, borderRadius: 8, cursor: uploading ? 'default' : 'pointer', fontWeight: 700, fontSize: 12, fontFamily: '"DM Sans", sans-serif', marginBottom: 6 }}>
+                  {uploading ? 'Upload…' : (form.photo_url ? 'Changer la photo' : 'Ajouter une photo')}
+                </button>
+                {form.photo_url && (
+                  <button onClick={() => setForm(f => ({ ...f, photo_url: '' }))}
+                    style={{ display: 'block', padding: '4px 8px', border: 'none', background: 'transparent', color: '#DC2626', cursor: 'pointer', fontWeight: 600, fontSize: 11, fontFamily: '"DM Sans", sans-serif' }}>
+                    Retirer la photo
+                  </button>
+                )}
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>Couleur</label>
+                  <input type="color" value={form.couleur_hex} onChange={e => setForm({ ...form, couleur_hex: e.target.value })}
+                    style={{ width: 36, height: 26, border: 'none', borderRadius: 6, cursor: 'pointer', background: 'none' }}/>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Prénom *</label>
+                <Input value={form.prenom} onChange={e => setForm({ ...form, prenom: e.target.value })} placeholder="Sophie"/>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Nom</label>
+                <Input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder="Martin"/>
+              </div>
+            </div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Description (optionnel)</label>
+            <Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Spécialiste coupe femme, 10 ans d'expérience" rows={2} style={{ marginBottom: 14 }}/>
+
+            <div style={{ marginBottom: 16 }}>
+              <Toggle value={form.actif} onChange={v => setForm({ ...form, actif: v })} label="Praticien actif (visible côté client)"/>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowForm(false)}
+                style={{ flex: 1, padding: '12px', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.deep, fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14 }}>
+                Annuler
+              </button>
+              <button onClick={save} disabled={saving}
+                style={{ flex: 2, padding: '12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: saving ? 0.6 : 1, boxShadow: `0 4px 14px ${T.main}55` }}>
+                {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : 'Créer le praticien')}
               </button>
             </div>
           </div>

@@ -39,6 +39,7 @@ export async function POST(request) {
         id, numero_rdv, date_rdv, heure_debut, heure_fin, duree_minutes,
         prix_estime, acompte_paye, acompte_paye_en_ligne, acompte_montant,
         client_email, client_prenom, client_nom, client_telephone, notes_client,
+        annulation_token,
         commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode),
         prestation:rdv_prestations(nom, duree_minutes)
       `)
@@ -85,6 +86,7 @@ export async function POST(request) {
           acompte_paye:            !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),
           acompte_montant:         rdv.acompte_montant,
           delai_annulation_heures: rdv.commercant?.rdv_delai_annulation_heures || 24,
+          annulation_token:        rdv.annulation_token,
         })
 
         await envoyerAuCommercant({   // helper reutilise, accepte n'importe quel 'to'

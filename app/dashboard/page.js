@@ -194,19 +194,22 @@ function IconPhone({ size = 12, color = 'currentColor' }) {
 }
 
 // Statuts RDV (parallele de STATUTS pour les commandes).
-// Vert pour 'honore', rouge pour 'annule' / 'no_show', violet pour 'confirme'.
+// Vert pour 'honore', rouge pour annule_*, gris pour 'no_show', violet pour 'confirme'.
+// NB : le CHECK DB sur rdv_reservations.statut n'accepte que les valeurs ci-dessous
+// (jamais 'annule' tout court). annule_client vs annule_commercant = qui a annule.
 const STATUTS_RDV = {
-  'confirme':  { label: 'Confirmé',    couleur: { border: '#6B35C4', badge: '#6B35C4', cardBg: '#EDE0FF' }, icon: '●', actions: ['honore', 'no_show', 'annule'] },
-  'honore':    { label: 'Honoré',      couleur: { border: '#10B981', badge: '#10B981', cardBg: '#F0FDF4' }, icon: '✓', actions: [] },
-  'no_show':   { label: 'No-show',     couleur: { border: '#9CA3AF', badge: '#6B7280', cardBg: '#F9FAFB' }, icon: '⊘', actions: ['confirme'] },
-  'annule':    { label: 'Annulé',      couleur: { border: '#DC2626', badge: '#DC2626', cardBg: '#FFF0F0' }, icon: '✕', actions: ['confirme'] },
+  'confirme':          { label: 'Confirmé',           couleur: { border: '#6B35C4', badge: '#6B35C4', cardBg: '#EDE0FF' }, icon: '●', actions: ['honore', 'no_show', 'annule_commercant'] },
+  'honore':            { label: 'Honoré',             couleur: { border: '#10B981', badge: '#10B981', cardBg: '#F0FDF4' }, icon: '✓', actions: [] },
+  'no_show':           { label: 'No-show',            couleur: { border: '#9CA3AF', badge: '#6B7280', cardBg: '#F9FAFB' }, icon: '⊘', actions: ['confirme'] },
+  'annule_client':     { label: 'Annulé par client',  couleur: { border: '#DC2626', badge: '#DC2626', cardBg: '#FFF0F0' }, icon: '✕', actions: [] },
+  'annule_commercant': { label: 'Annulé',             couleur: { border: '#DC2626', badge: '#DC2626', cardBg: '#FFF0F0' }, icon: '✕', actions: ['confirme'] },
 }
 
 const ACTIONS_RDV_LABEL = {
-  honore:   { label: 'Marquer honoré',  bg: '#10B981', border: '#10B98144' },
-  no_show:  { label: 'No-show',          bg: '#6B7280', border: '#6B728044' },
-  annule:   { label: 'Annuler',          bg: '#DC2626', border: '#DC262644' },
-  confirme: { label: 'Remettre en confirmé', bg: '#6B35C4', border: '#6B35C444' },
+  honore:            { label: 'Marquer honoré',          bg: '#10B981', border: '#10B98144' },
+  no_show:           { label: 'No-show',                 bg: '#6B7280', border: '#6B728044' },
+  annule_commercant: { label: 'Annuler',                 bg: '#DC2626', border: '#DC262644' },
+  confirme:          { label: 'Remettre en confirmé',    bg: '#6B35C4', border: '#6B35C444' },
 }
 
 // ─── Carte commande ───────────────────────────────────────────────────────────
@@ -446,8 +449,8 @@ function CarteRdv({ rdv, onChangerStatut }) {
               const isPrincipal = action === 'honore' || action === 'confirme'
               return (
                 <button key={action} onClick={() => {
-                  const msg = action === 'no_show' ? 'Marquer ce client en NO-SHOW ?'
-                            : action === 'annule' ? 'ANNULER ce RDV ? Le client sera notifie.'
+                  const msg = action === 'no_show' ? 'Marquer ce client en NO-SHOW ? Le client sera notifié et tu gardes l\'acompte (le créneau était bloqué).'
+                            : action === 'annule_commercant' ? 'ANNULER ce RDV ? Le client sera notifié et son acompte (si payé) sera remboursé.'
                             : action === 'honore' ? null
                             : 'Remettre ce RDV en CONFIRMÉ ?'
                   if (msg && !window.confirm(msg)) return
@@ -763,7 +766,9 @@ export default function Dashboard() {
     setRdvs(prev => prev.map(r => r.id === rdvId ? { ...r, statut } : r))
 
     // Si statut change → emails contextuels (non-bloquant, fire-and-forget)
-    if (statut === 'annule') {
+    if (statut === 'annule_commercant') {
+      // TODO Sess 4/8 suite : refund Stripe acompte côté commerçant.
+      // Pour l'instant on notifie juste le Yopper, le commerçant refund manuellement via Stripe Dashboard.
       fetch('/api/emails/rdv-annule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -775,6 +780,14 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rdv_id: rdvId }),
       }).catch(e => console.warn('[dashboard] email rdv-honore KO', e))
+    } else if (statut === 'no_show') {
+      // Notif Yopper qu'il a été marqué absent (transparence + permet contestation).
+      // L'acompte n'est PAS refundé (le commerçant a bloqué le créneau pour rien).
+      fetch('/api/emails/rdv-no-show', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rdv_id: rdvId }),
+      }).catch(e => console.warn('[dashboard] email rdv-no-show KO', e))
     }
   }
 

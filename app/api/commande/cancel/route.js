@@ -38,12 +38,13 @@ export async function POST(request) {
       { auth: { persistSession: false } }
     )
 
-    // ─── 1) Récup commande + commerçant (lookup par id OU par token) ───────
+    // ─── 1) Récup commande + commerçant + créneau (lookup par id OU par token) ─
     const selectCols = `
       id, statut, paye_en_ligne, total, stripe_payment_intent_id,
       client_email, client_nom, annulation_token, created_at, commercant_id,
-      numero_commande, date_commande,
-      commercants:commercant_id (id, nom, slug, stripe_account_id, delai_annulation_heures)
+      numero_commande, date_commande, creneau_id,
+      commercants:commercant_id (id, nom, slug, stripe_account_id, delai_annulation_heures),
+      creneau:creneaux!creneau_id (heure_debut)
     `
     const query = supabase.from('commandes').select(selectCols)
     const { data: cmd, error: errCmd } = await (commande_id
@@ -89,18 +90,28 @@ export async function POST(request) {
       }, { status: 400 })
     }
 
-    // ─── 4) Vérif cutoff (created_at + delai_annulation_heures) ─────────────
+    // ─── 4) Vérif cutoff (X heures AVANT le créneau de retrait) ────────────
+    // Logique : on annule jusqu'à `delai_annulation_heures` heures AVANT
+    // l'heure de retrait (default 2h). Pas basé sur le paiement : un client
+    // qui paie 3 jours à l'avance pour un retrait à J+3 doit pouvoir annuler
+    // jusqu'à 2h avant J+3, pas seulement les 2h qui suivent le paiement.
     const commercant = cmd.commercants
     const delaiH = commercant?.delai_annulation_heures ?? 2
-    const createdAt = new Date(cmd.created_at)
-    const cutoffDate = new Date(createdAt.getTime() + delaiH * 60 * 60 * 1000)
+    const heureDebut = cmd.creneau?.heure_debut || '23:59:59'
+    // Construction du timestamp retrait en heure Europe/Brussels (+02:00 été, +01:00 hiver).
+    // Heuristique simple : on utilise +02:00 toute l'année — décalage ±1h en hiver acceptable
+    // pour V1 (un user qui paye à 2h du matin n'est pas notre cas critique).
+    const retraitISO = `${cmd.date_commande}T${heureDebut}+02:00`
+    const retraitDate = new Date(retraitISO)
+    const cutoffDate = new Date(retraitDate.getTime() - delaiH * 60 * 60 * 1000)
     const now = new Date()
     if (now > cutoffDate) {
+      const heureFR = heureDebut.slice(0, 5)
       return NextResponse.json({
         ok: false,
         cutoff_expired: true,
         cutoff_date: cutoffDate.toISOString(),
-        error: `Délai d'annulation dépassé (${delaiH}h après la commande). Contacte directement ${commercant?.nom || 'le commerçant'}.`,
+        error: `Délai d'annulation dépassé. Tu pouvais annuler jusqu'à ${delaiH}h avant ton retrait (${heureFR}). Contacte directement ${commercant?.nom || 'le commerçant'}.`,
       }, { status: 403 })
     }
 

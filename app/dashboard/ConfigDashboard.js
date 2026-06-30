@@ -2703,6 +2703,257 @@ const SIGN_TYPE_ICON = {
   autre:     MessageCircle,
 }
 
+// ═════════════════════════════════════════════════════════════════════════
+// TAB RDV — Configuration vitrine (Prestations / Praticiens / Créneaux)
+// Visible uniquement pour les commerçants vitrine au plan "vendre" (rdv_actif).
+// 3 sous-onglets : Prestations | Praticiens | Créneaux RDV.
+// Sess 5a : Prestations CRUD. Sess 5b : Praticiens. Sess 5c : Créneaux.
+// ═════════════════════════════════════════════════════════════════════════
+
+function TabRdv({ commercantId, commercant, toast }) {
+  const [subTab, setSubTab] = useState('prestations')
+  const subTabs = [
+    { id: 'prestations', label: 'Prestations' },
+    { id: 'praticiens',  label: 'Praticiens' },
+    { id: 'creneaux',    label: 'Créneaux RDV' },
+  ]
+  return (
+    <div>
+      {/* Barre sous-onglets RDV */}
+      <div style={{ display: 'flex', gap: 6, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 16, boxShadow: '0 1px 6px rgba(22,6,54,0.05)', border: `1px solid ${T.hairline}` }}>
+        {subTabs.map(t => (
+          <button key={t.id} onClick={() => setSubTab(t.id)}
+            style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, background: subTab === t.id ? T.main : 'transparent', color: subTab === t.id ? '#fff' : T.muted, transition: 'all 0.2s' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {subTab === 'prestations' && <TabRdvPrestations commercantId={commercantId} toast={toast} />}
+      {subTab === 'praticiens'  && <TabRdvPlaceholder label="Praticiens" detail="Gestion des praticiens (CRUD + photo + couleur) à venir en Sess 5b." />}
+      {subTab === 'creneaux'    && <TabRdvPlaceholder label="Créneaux RDV" detail="Configuration des créneaux par praticien à venir en Sess 5c." />}
+    </div>
+  )
+}
+
+function TabRdvPlaceholder({ label, detail }) {
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, padding: 24, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
+      <p style={{ fontSize: 14, fontWeight: 800, color: T.ink, marginBottom: 6 }}>{label}</p>
+      <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>{detail}</p>
+    </div>
+  )
+}
+
+// Sess 5a : CRUD Prestations RDV. nom, description, durée_minutes, prix
+// (fixe ou fourchette prix_min/max), acompte_pourcent, ordre, actif.
+// Soft delete via deleted_at (conformité 7 ans Belgique).
+function TabRdvPrestations({ commercantId, toast }) {
+  const [prestations, setPrestations] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const initialForm = { nom: '', description: '', duree_minutes: '30', prix_mode: 'fixe', prix: '', prix_min: '', prix_max: '', acompte_pourcent: '0', actif: true }
+  const [form, setForm] = useState(initialForm)
+  const firstLoadRef = useRef(true)
+
+  useEffect(() => { fetchPrestations() }, [commercantId])
+
+  async function fetchPrestations() {
+    if (firstLoadRef.current) setLoading(true)
+    const { data } = await supabase
+      .from('rdv_prestations')
+      .select('*')
+      .eq('commercant_id', commercantId)
+      .is('deleted_at', null)
+      .order('ordre', { ascending: true })
+      .order('created_at', { ascending: true })
+    setPrestations(data || [])
+    if (firstLoadRef.current) { setLoading(false); firstLoadRef.current = false }
+  }
+
+  function openNew() {
+    setForm(initialForm); setEditId(null); setShowForm(true)
+  }
+  function openEdit(p) {
+    const isFourchette = p.prix == null && (p.prix_min != null || p.prix_max != null)
+    setForm({
+      nom: p.nom || '',
+      description: p.description || '',
+      duree_minutes: String(p.duree_minutes || 30),
+      prix_mode: isFourchette ? 'fourchette' : 'fixe',
+      prix: p.prix != null ? String(p.prix) : '',
+      prix_min: p.prix_min != null ? String(p.prix_min) : '',
+      prix_max: p.prix_max != null ? String(p.prix_max) : '',
+      acompte_pourcent: String(p.acompte_pourcent ?? 0),
+      actif: p.actif !== false,
+    })
+    setEditId(p.id); setShowForm(true)
+  }
+
+  async function save() {
+    if (!form.nom.trim()) return toast('Nom obligatoire', 'error')
+    const duree = parseInt(form.duree_minutes, 10)
+    if (!duree || duree < 5) return toast('Durée minimum 5 min', 'error')
+    const payload = {
+      commercant_id: commercantId,
+      nom: form.nom.trim(),
+      description: form.description.trim() || null,
+      duree_minutes: duree,
+      prix:     form.prix_mode === 'fixe'       ? (form.prix ? Number(form.prix) : null) : null,
+      prix_min: form.prix_mode === 'fourchette' ? (form.prix_min ? Number(form.prix_min) : null) : null,
+      prix_max: form.prix_mode === 'fourchette' ? (form.prix_max ? Number(form.prix_max) : null) : null,
+      acompte_pourcent: Math.max(0, Math.min(100, parseInt(form.acompte_pourcent, 10) || 0)),
+      actif: !!form.actif,
+    }
+    setSaving(true)
+    const { error } = editId
+      ? await supabase.from('rdv_prestations').update(payload).eq('id', editId)
+      : await supabase.from('rdv_prestations').insert(payload)
+    setSaving(false)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    toast(editId ? 'Prestation mise à jour' : 'Prestation créée')
+    setShowForm(false); setEditId(null); setForm(initialForm)
+    fetchPrestations()
+  }
+
+  async function toggleActif(p) {
+    const { error } = await supabase.from('rdv_prestations').update({ actif: !p.actif }).eq('id', p.id)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    fetchPrestations()
+  }
+
+  async function softDelete(p) {
+    if (!window.confirm(`Supprimer la prestation "${p.nom}" ? Les RDV existants liés à cette prestation ne seront pas affectés.`)) return
+    const { error } = await supabase.from('rdv_prestations').update({ deleted_at: new Date().toISOString() }).eq('id', p.id)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    toast('Prestation supprimée')
+    fetchPrestations()
+  }
+
+  if (loading) return <p style={{ color: T.muted, padding: 16 }}>Chargement…</p>
+
+  return (
+    <div>
+      {/* Header avec bouton "Ajouter" */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div>
+          <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>Prestations</p>
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{prestations.length} prestation{prestations.length > 1 ? 's' : ''}</p>
+        </div>
+        <button onClick={openNew}
+          style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
+          + Ajouter une prestation
+        </button>
+      </div>
+
+      {prestations.length === 0 ? (
+        <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucune prestation</p>
+          <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>Crée ta première prestation (ex : "Coupe femme · 30 min · 35 €") pour permettre aux clients de réserver chez toi.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {prestations.map(p => {
+            const prixLabel = p.prix != null
+              ? `${Number(p.prix).toFixed(2)} €`
+              : (p.prix_min != null || p.prix_max != null)
+                ? `${p.prix_min ? Number(p.prix_min).toFixed(0) : '?'} – ${p.prix_max ? Number(p.prix_max).toFixed(0) : '?'} €`
+                : 'Prix sur demande'
+            return (
+              <div key={p.id} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: `1px solid ${T.hairline}`, opacity: p.actif ? 1 : 0.55, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontWeight: 800, fontSize: 14, color: T.ink, marginBottom: 2 }}>{p.nom}</p>
+                  {p.description && <p style={{ fontSize: 12, color: T.muted, marginBottom: 4, lineHeight: 1.4 }}>{p.description}</p>}
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12, color: T.muted }}>
+                    <span><strong style={{ color: T.deep }}>{p.duree_minutes} min</strong></span>
+                    <span><strong style={{ color: T.main }}>{prixLabel}</strong></span>
+                    {p.acompte_pourcent > 0 && <span>Acompte <strong style={{ color: T.ink }}>{p.acompte_pourcent}%</strong></span>}
+                    {!p.actif && <span style={{ color: '#DC2626', fontWeight: 700 }}>Inactif</span>}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  <button onClick={() => toggleActif(p)} title={p.actif ? 'Désactiver' : 'Activer'}
+                    style={{ padding: '6px 10px', border: `1px solid ${T.hairline}`, background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: T.muted, fontFamily: '"DM Sans", sans-serif' }}>
+                    {p.actif ? 'Désactiver' : 'Activer'}
+                  </button>
+                  <button onClick={() => openEdit(p)} title="Modifier"
+                    style={{ padding: '6px 10px', border: `1px solid ${T.main}44`, background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: T.main, fontFamily: '"DM Sans", sans-serif' }}>
+                    Modifier
+                  </button>
+                  <button onClick={() => softDelete(p)} title="Supprimer"
+                    style={{ padding: '6px 10px', border: '1px solid #DC262644', background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: '#DC2626', fontFamily: '"DM Sans", sans-serif' }}>
+                    Suppr.
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Modal formulaire création/édition */}
+      {showForm && (
+        <div onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 18, padding: 22, maxWidth: 460, width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
+            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? 'Modifier la prestation' : 'Nouvelle prestation'}</p>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Nom *</label>
+            <Input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder="Coupe femme" style={{ marginBottom: 10 }}/>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Description (optionnel)</label>
+            <Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Shampoing, coupe, brushing" rows={2} style={{ marginBottom: 10 }}/>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Durée (min) *</label>
+                <Input type="number" min="5" step="5" value={form.duree_minutes} onChange={e => setForm({ ...form, duree_minutes: e.target.value })}/>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Acompte (%)</label>
+                <Input type="number" min="0" max="100" value={form.acompte_pourcent} onChange={e => setForm({ ...form, acompte_pourcent: e.target.value })}/>
+              </div>
+            </div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 6 }}>Tarification</label>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              <button onClick={() => setForm({ ...form, prix_mode: 'fixe' })} style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${form.prix_mode === 'fixe' ? T.main : T.hairline}`, background: form.prix_mode === 'fixe' ? T.pale : '#fff', color: form.prix_mode === 'fixe' ? T.main : T.muted, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>Prix fixe</button>
+              <button onClick={() => setForm({ ...form, prix_mode: 'fourchette' })} style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${form.prix_mode === 'fourchette' ? T.main : T.hairline}`, background: form.prix_mode === 'fourchette' ? T.pale : '#fff', color: form.prix_mode === 'fourchette' ? T.main : T.muted, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>Fourchette</button>
+            </div>
+            {form.prix_mode === 'fixe' ? (
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Prix (€)</label>
+                <Input type="number" min="0" step="0.50" value={form.prix} onChange={e => setForm({ ...form, prix: e.target.value })} placeholder="35.00"/>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Min (€)</label>
+                  <Input type="number" min="0" step="0.50" value={form.prix_min} onChange={e => setForm({ ...form, prix_min: e.target.value })} placeholder="30"/>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Max (€)</label>
+                  <Input type="number" min="0" step="0.50" value={form.prix_max} onChange={e => setForm({ ...form, prix_max: e.target.value })} placeholder="50"/>
+                </div>
+              </div>
+            )}
+            <div style={{ marginBottom: 16 }}>
+              <Toggle value={form.actif} onChange={v => setForm({ ...form, actif: v })} label="Prestation active (visible côté client)"/>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowForm(false)}
+                style={{ flex: 1, padding: '12px', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.deep, fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14 }}>
+                Annuler
+              </button>
+              <button onClick={save} disabled={saving}
+                style={{ flex: 2, padding: '12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: saving ? 0.6 : 1, boxShadow: `0 4px 14px ${T.main}55` }}>
+                {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : 'Créer la prestation')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TabSignalements({ commercantId, toast }) {
   const [signalements, setSignalements] = useState([])
   const [loading, setLoading] = useState(true)
@@ -2982,12 +3233,17 @@ export default function ConfigDashboard({ commercantId }) {
   //   • Alimentaire Vendre → paiement obligatoire commande C&C (Phase 1.5)
   const peutPaiements = canDo(commercant?.plan, 'paiement_ligne')
 
+  // Onglet 'RDV' visible uniquement pour vitrine au plan Vendre (canDo rdv).
+  // Regroupe Prestations + Praticiens + Créneaux RDV en sous-onglets.
+  const peutRdv = estVitrine && canDo(commercant?.plan, 'rdv')
+
   // Vitrine : on parle de "Vitrine" plutôt que "Menu", et on masque "Créneaux" (pas de C&C)
   const tabs = [
     { id: 'menu',     label: estVitrine ? 'Vitrine' : 'Menu', icon: 'menu' },
     peutDeals && { id: 'deals', label: 'Deals', icon: 'tag' },
     peutActus && { id: 'actus', label: 'Actus', icon: 'sliders' },
     !estVitrine && { id: 'creneaux', label: 'Créneaux', icon: 'clock' },
+    peutRdv && { id: 'rdv', label: 'RDV', icon: 'clock' },
     peutPaiements && { id: 'paiements', label: 'Paiements', icon: 'tag' },
     { id: 'profil',   label: 'Profil',   icon: 'shop' },
     { id: 'avis',     label: 'Avis',     icon: 'star' },
@@ -3015,6 +3271,7 @@ export default function ConfigDashboard({ commercantId }) {
       {tab === 'deals'    && peutDeals && <TabDeals commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'actus'    && peutActus && <TabActus commercantId={commercantId} toast={showToast} />}
       {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
+      {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}

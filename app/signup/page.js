@@ -1817,7 +1817,8 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
   saveTexteRef.current = async () => {
     if (!champsTextOk) return
     onSaving?.('saving')
-    const { data } = await supabase.from('commercants')
+    console.log('[S5 saveTexte] UPDATE commercants', { id: commercant.id, bce: verifBce.raw, nom: nomRep.trim(), prenom: prenomRep.trim() })
+    const { data, error } = await supabase.from('commercants')
       .update({
         bce: verifBce.raw,
         representant_legal_nom: nomRep.trim(),
@@ -1826,7 +1827,20 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
       .eq('id', commercant.id)
       .select()
       .single()
-    if (data) onUpdate(data)
+    if (error) {
+      console.error('[S5 saveTexte] ERREUR Supabase', error)
+      setErreurLocal(`Sauvegarde échouée : ${error.message}`)
+      onSaving?.('saved')
+      return
+    }
+    if (!data) {
+      console.error('[S5 saveTexte] Aucune ligne modifiée (RLS ?)', { commercantId: commercant.id })
+      setErreurLocal('Sauvegarde refusée par les permissions Supabase (RLS). Ta session a peut-être expiré : reconnecte-toi.')
+      onSaving?.('saved')
+      return
+    }
+    console.log('[S5 saveTexte] OK', { bce: data.bce, nom: data.representant_legal_nom, prenom: data.representant_legal_prenom })
+    onUpdate(data)
     onSaving?.('saved')
   }
 

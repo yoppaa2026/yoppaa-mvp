@@ -862,10 +862,14 @@ export default function CommanderSlug() {
 
     const cacheKey = `yoppaa_commerce_${slug}`
     const cached = localStorage.getItem(cacheKey)
+    // TTL cache reduit a 30s : les alertes/actus/deals peuvent etre publies
+    // en temps reel, un cache 5 min bloquait la fraicheur. Compromis :
+    // navigation immediate depuis /commander (cache < 30s) mais refresh regulier
+    // sur les fiches revisitees.
     if (cached) {
       try {
         const { data, ts } = JSON.parse(cached)
-        if (Date.now() - ts < 5 * 60 * 1000) {
+        if (Date.now() - ts < 30 * 1000) {
           hydrate(data)
           return
         }

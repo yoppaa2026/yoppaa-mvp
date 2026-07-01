@@ -295,6 +295,7 @@ export default function CommanderRdvSlug() {
   const [creneauxConfig, setCreneauxConfig] = useState([])  // les rdv_creneaux du commerçant
   const [praticiens, setPraticiens] = useState([])          // rdv_praticiens actifs
   const [junctionMap, setJunctionMap] = useState({})        // { prestation_id: [praticien_id, ...] }
+  const [fermetures, setFermetures] = useState([])          // Sess 6 : rdv_fermetures futures (date_fin >= today)
   const [loading, setLoading] = useState(true)
   const [erreur, setErreur] = useState(null)
 
@@ -445,8 +446,9 @@ export default function CommanderRdvSlug() {
       }
       setCommercant(c)
 
-      // 2. Fetch prestations + créneaux config + praticiens + junction en parallèle
-      const [{ data: prest }, { data: cren }, { data: prat }, { data: junction }] = await Promise.all([
+      // 2. Fetch prestations + créneaux config + praticiens + junction + fermetures en parallèle
+      const todayISO = new Date().toISOString().slice(0, 10)
+      const [{ data: prest }, { data: cren }, { data: prat }, { data: junction }, { data: ferm }] = await Promise.all([
         supabase
           .from('rdv_prestations')
           .select('*')
@@ -473,6 +475,14 @@ export default function CommanderRdvSlug() {
         supabase
           .from('rdv_prestation_praticiens')
           .select('prestation_id, praticien_id'),
+        // Sess 6 : fermetures exceptionnelles futures uniquement (date_fin >= today).
+        // Filtrage cote client sur date_debut/date_fin pour bloquer les jours concernes.
+        supabase
+          .from('rdv_fermetures')
+          .select('date_debut, date_fin, praticien_id')
+          .eq('commercant_id', c.id)
+          .is('deleted_at', null)
+          .gte('date_fin', todayISO),
       ])
 
       if (annule) return
@@ -486,6 +496,7 @@ export default function CommanderRdvSlug() {
         jm[row.prestation_id].push(row.praticien_id)
       })
       setJunctionMap(jm)
+      setFermetures(ferm || [])
       setLoading(false)
     })()
     return () => { annule = true }
@@ -582,11 +593,26 @@ export default function CommanderRdvSlug() {
     ? creneauxConfig.filter(c => c.praticien_id === praticienChoisi.id || c.praticien_id === null)
     : creneauxConfig
 
+  // Helper Sess 6 : est-ce que la date ISO est dans une fermeture applicable ?
+  // Fermeture applicable = globale (praticien_id null) OU celle du praticien choisi.
+  // Si "Sans préférence" (praticienChoisi null) : seules les fermetures globales bloquent
+  // (un praticien peut peut-être encore prendre, sinon pas de créneau dispo = déjà filtré).
+  function estFerme(iso) {
+    return fermetures.some(f => {
+      if (iso < f.date_debut || iso > f.date_fin) return false
+      if (f.praticien_id === null) return true  // fermeture globale, bloque tout
+      if (praticienChoisi && f.praticien_id === praticienChoisi.id) return true  // praticien choisi indispo
+      return false
+    })
+  }
+
   // Liste des jours disponibles (60 prochains pour les RDV vitrines — l'anticipation
   // est plus longue que pour de l'alimentaire C&C). Les 14 premiers sont affichés en scroll
   // horizontal, les 46 suivants sont accessibles via le mini-calendrier deroulant.
+  // Sess 6 : filtre les fermetures exceptionnelles (marque ouvert:false pour ces jours).
   const joursDispos = commercant && creneauxFiltres.length > 0
     ? genererJoursDispos({ nbJours: 60, horairesDetail: commercant.horaires_detail, creneaux: creneauxFiltres })
+        .map(j => estFerme(j.iso) ? { ...j, ouvert: false, motifFerme: 'Fermeture' } : j)
     : []
 
   // Enrichit chaque jour avec le nombre de slots libres pour la prestation choisie

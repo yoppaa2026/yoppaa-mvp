@@ -2715,7 +2715,8 @@ function TabRdv({ commercantId, commercant, toast }) {
   const subTabs = [
     { id: 'prestations', label: 'Prestations' },
     { id: 'praticiens',  label: 'Praticiens' },
-    { id: 'creneaux',    label: 'Créneaux RDV' },
+    { id: 'creneaux',    label: 'Créneaux' },
+    { id: 'fermetures',  label: 'Fermetures' },
   ]
   return (
     <div>
@@ -2731,6 +2732,7 @@ function TabRdv({ commercantId, commercant, toast }) {
       {subTab === 'prestations' && <TabRdvPrestations commercantId={commercantId} toast={toast} />}
       {subTab === 'praticiens'  && <TabRdvPraticiens commercantId={commercantId} toast={toast} />}
       {subTab === 'creneaux'    && <TabRdvCreneaux commercantId={commercantId} toast={toast} />}
+      {subTab === 'fermetures'  && <TabRdvFermetures commercantId={commercantId} toast={toast} />}
     </div>
   )
 }
@@ -3586,6 +3588,192 @@ function TabRdvCreneaux({ commercantId, toast }) {
               <button onClick={save} disabled={saving}
                 style={{ flex: 2, padding: '12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: saving ? 0.6 : 1, boxShadow: `0 4px 14px ${T.main}55` }}>
                 {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : 'Créer le créneau')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Sess 6 : CRUD Fermetures exceptionnelles (congés, jours fériés, formation, etc).
+// Une fermeture bloque une plage de dates pour tous les praticiens (praticien_id = null)
+// ou pour un praticien spécifique. Impact : l'app Yopper ne propose plus ces jours à
+// la réservation, et l'AgendaRdv commerçant grise les cellules concernées.
+function TabRdvFermetures({ commercantId, toast }) {
+  const [fermetures, setFermetures] = useState([])
+  const [praticiens, setPraticiens] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const today = new Date().toISOString().slice(0, 10)
+  const initialForm = { praticien_id: 'tous', date_debut: today, date_fin: today, motif: '' }
+  const [form, setForm] = useState(initialForm)
+
+  useEffect(() => { fetchAll() }, [commercantId])
+
+  async function fetchAll() {
+    setLoading(true)
+    const [{ data: fer }, { data: prat }] = await Promise.all([
+      supabase.from('rdv_fermetures').select('*').eq('commercant_id', commercantId).is('deleted_at', null).order('date_debut', { ascending: true }),
+      supabase.from('rdv_praticiens').select('id, prenom, nom, couleur_hex, photo_url, actif').eq('commercant_id', commercantId).eq('actif', true).is('deleted_at', null).order('ordre', { ascending: true }),
+    ])
+    setFermetures(fer || [])
+    setPraticiens(prat || [])
+    setLoading(false)
+  }
+
+  function openNew() { setForm(initialForm); setEditId(null); setShowForm(true) }
+  function openEdit(f) {
+    setForm({
+      praticien_id: f.praticien_id || 'tous',
+      date_debut: f.date_debut,
+      date_fin: f.date_fin,
+      motif: f.motif || '',
+    })
+    setEditId(f.id); setShowForm(true)
+  }
+
+  async function save() {
+    if (!form.date_debut || !form.date_fin) return toast('Dates obligatoires', 'error')
+    if (form.date_fin < form.date_debut) return toast('La date de fin doit être après la date de début', 'error')
+    const payload = {
+      commercant_id: commercantId,
+      praticien_id: form.praticien_id === 'tous' ? null : form.praticien_id,
+      date_debut: form.date_debut,
+      date_fin: form.date_fin,
+      motif: form.motif.trim() || null,
+    }
+    setSaving(true)
+    const { error } = editId
+      ? await supabase.from('rdv_fermetures').update(payload).eq('id', editId)
+      : await supabase.from('rdv_fermetures').insert(payload)
+    setSaving(false)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    toast(editId ? 'Fermeture mise à jour' : 'Fermeture enregistrée')
+    setShowForm(false); setEditId(null); setForm(initialForm)
+    fetchAll()
+  }
+
+  async function softDelete(f) {
+    const label = f.date_debut === f.date_fin
+      ? `Supprimer la fermeture du ${f.date_debut} ?`
+      : `Supprimer la fermeture du ${f.date_debut} au ${f.date_fin} ?`
+    if (!window.confirm(label)) return
+    const { error } = await supabase.from('rdv_fermetures').update({ deleted_at: new Date().toISOString() }).eq('id', f.id)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    toast('Fermeture supprimée')
+    fetchAll()
+  }
+
+  function praticienLabel(pid) {
+    if (!pid) return 'Tous les praticiens'
+    const p = praticiens.find(x => x.id === pid)
+    return p ? `${p.prenom}${p.nom ? ' ' + p.nom : ''}` : 'Praticien inconnu'
+  }
+  function praticienCouleur(pid) {
+    if (!pid) return T.main
+    const p = praticiens.find(x => x.id === pid)
+    return p?.couleur_hex || T.main
+  }
+  function formatDateLabel(iso) {
+    const d = new Date(iso + 'T12:00:00')
+    return d.toLocaleDateString('fr-BE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+  }
+
+  if (loading) return <p style={{ color: T.muted, padding: 16 }}>Chargement…</p>
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div>
+          <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>Fermetures exceptionnelles</p>
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>Congés, jours fériés, formation, autre. Bloque les RDV côté client.</p>
+        </div>
+        <button onClick={openNew}
+          style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
+          + Ajouter une fermeture
+        </button>
+      </div>
+
+      {fermetures.length === 0 ? (
+        <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucune fermeture prévue</p>
+          <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>Note tes prochains congés ou jours de fermeture ici. Les clients ne pourront pas prendre RDV sur ces dates.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {fermetures.map(f => {
+            const couleur = praticienCouleur(f.praticien_id)
+            const isPast = f.date_fin < today
+            return (
+              <div key={f.id} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: `1px solid ${T.hairline}`, borderLeft: `4px solid ${couleur}`, opacity: isPast ? 0.55 : 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontWeight: 800, fontSize: 14, color: T.ink, marginBottom: 2 }}>
+                    {f.date_debut === f.date_fin
+                      ? formatDateLabel(f.date_debut)
+                      : `${formatDateLabel(f.date_debut)} → ${formatDateLabel(f.date_fin)}`}
+                    {isPast && <span style={{ fontSize: 11, color: T.muted, fontWeight: 600, marginLeft: 8 }}>(passée)</span>}
+                  </p>
+                  <div style={{ fontSize: 12, color: T.muted, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: couleur }}/>
+                      {praticienLabel(f.praticien_id)}
+                    </span>
+                    {f.motif && <span style={{ fontStyle: 'italic' }}>{f.motif}</span>}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  <button onClick={() => openEdit(f)}
+                    style={{ padding: '6px 10px', border: `1px solid ${T.main}44`, background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: T.main, fontFamily: '"DM Sans", sans-serif' }}>Modif.</button>
+                  <button onClick={() => softDelete(f)}
+                    style={{ padding: '6px 10px', border: '1px solid #DC262644', background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: '#DC2626', fontFamily: '"DM Sans", sans-serif' }}>Suppr.</button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {showForm && (
+        <div onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 18, padding: 22, maxWidth: 460, width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
+            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? 'Modifier la fermeture' : 'Nouvelle fermeture'}</p>
+
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Pour qui ?</label>
+            <select value={form.praticien_id} onChange={e => setForm({ ...form, praticien_id: e.target.value })}
+              style={{ width: '100%', padding: '10px 12px', border: `1.5px solid ${T.hairline}`, borderRadius: 8, fontSize: 14, fontFamily: '"DM Sans", sans-serif', marginBottom: 10, background: '#fff' }}>
+              <option value="tous">Tous les praticiens (fermeture complète)</option>
+              {praticiens.map(p => (
+                <option key={p.id} value={p.id}>{p.prenom}{p.nom ? ' ' + p.nom : ''}</option>
+              ))}
+            </select>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Du</label>
+                <Input type="date" value={form.date_debut} onChange={e => setForm({ ...form, date_debut: e.target.value })}/>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Au</label>
+                <Input type="date" value={form.date_fin} onChange={e => setForm({ ...form, date_fin: e.target.value })}/>
+              </div>
+            </div>
+
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Motif (optionnel)</label>
+            <Input value={form.motif} onChange={e => setForm({ ...form, motif: e.target.value })} placeholder="Congés d'été, jour férié, formation..." style={{ marginBottom: 16 }}/>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowForm(false)}
+                style={{ flex: 1, padding: '12px', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.deep, fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14 }}>
+                Annuler
+              </button>
+              <button onClick={save} disabled={saving}
+                style={{ flex: 2, padding: '12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: saving ? 0.6 : 1, boxShadow: `0 4px 14px ${T.main}55` }}>
+                {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : 'Créer la fermeture')}
               </button>
             </div>
           </div>

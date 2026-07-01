@@ -142,7 +142,8 @@ export default function SectionTousCommercants({ toast }) {
           style={{ padding: '0.55rem 0.75rem', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', color: T.ink, outline: 'none', cursor: 'pointer', background: '#fff' }}>
           <option value="tous">Toutes catégories</option>
           <option value="alimentaire">Alimentaire</option>
-          <option value="vitrine">Vitrine</option>
+          <option value="vitrine">Service</option>
+          <option value="detail">Détail</option>
         </select>
       </div>
 

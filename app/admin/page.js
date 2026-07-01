@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import SectionTousCommercants from './SectionTousCommercants'
 import SectionKYBAValider from './SectionKYBAValider'
-import { Sparkles, Store, Scissors, Croissant, Phone, Eye, Lock } from 'lucide-react'
+import { Sparkles, Store, Scissors, Croissant, ShoppingBag, Phone, Eye, Lock } from 'lucide-react'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
@@ -326,9 +326,13 @@ function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
               {(c.plan || 'exister').toUpperCase()}
             </span>
             <span style={{ fontSize: 10, fontWeight: 800, color: T.main, background: '#fff', border: `1px solid ${T.main}33`, padding: '3px 9px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              {c.categorie === 'vitrine'
-                ? <><Scissors size={12} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/>Vitrine</>
-                : <><Croissant size={12} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/>Alimentaire</>}
+              {c.categorie === 'vitrine' ? (
+                <><Scissors size={12} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/>Service</>
+              ) : c.categorie === 'detail' ? (
+                <><ShoppingBag size={12} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/>Détail</>
+              ) : (
+                <><Croissant size={12} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/>Alimentaire</>
+              )}
             </span>
             {score != null && (
               <span style={{ fontSize: 11, fontWeight: 800, color: couleurScore, background: '#F9FAFB', padding: '3px 9px', borderRadius: 100, border: `1px solid ${couleurScore}33` }}>

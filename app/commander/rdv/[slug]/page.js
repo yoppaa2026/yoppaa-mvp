@@ -780,15 +780,20 @@ export default function CommanderRdvSlug() {
         nbCreneauxConfig: (creneauxConfig || []).length,
       })
 
-      // 1. Overlap avec une reservation existante (RPC)
+      // 1. Overlap avec une reservation existante (RPC + filtre praticien).
+      // Bug 7.1 : sans filtre praticien, un RDV Carole 9h-10h bloquait aussi
+      // le "Payer" pour un RDV Alex 9h-10h (RPC retourne tous les RDV du
+      // commercant). Meme logique que filtrerReservationsPourSlots utilise
+      // pour l'affichage des slots dispo.
       const { data: busy, error: errBusy } = await supabase.rpc('rdv_slots_busy', { p_commercant_id: commercant.id, p_date: dateStr })
       if (errBusy) {
         console.error('[rdv] RPC rdv_slots_busy KO', errBusy)
         setSubmitError('Impossible de vérifier la disponibilité (RPC). Reessaie dans quelques secondes.')
         setSubmitting(false); return
       }
-      console.info('[rdv] reservations existantes', busy)
-      const overlap = (busy || []).some(r => {
+      const busyFiltres = filtrerReservationsPourSlots(busy, praticienChoisi, praticiensEligibles)
+      console.info('[rdv] reservations bloquantes apres filtre praticien', busyFiltres)
+      const overlap = busyFiltres.some(r => {
         const rStart = timeToMinutes(r.heure_debut)
         const rEnd   = timeToMinutes(r.heure_fin)
         const ov = debutMin < rEnd && finMin > rStart
@@ -1031,7 +1036,15 @@ export default function CommanderRdvSlug() {
             swipe involontaire (bug Yoppaa 4 du 2026-06-02). */}
         <div className="topbar-rdv" style={{ background: T.bgPanel, padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, borderBottom: `1px solid ${T.main}33`, position: 'relative' }}>
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
-          <button onClick={() => router.push('/commander')}
+          <button onClick={() => {
+              // Bug 7.3 : bouton Retour intelligent selon l'etape courante.
+              // Etape 1 : sortir du wizard vers l'accueil / la fiche
+              // Etape 2 : revenir a etape 1 (choix prestation), reset date+heure
+              // Etape 3 : revenir a etape 2 (choix creneau), garder les choix
+              if (etape === 1) { router.push('/commander') }
+              else if (etape === 2) { setPrestationChoisie(null); setEtape(1); setDateChoisie(null); setHeureChoisie(null) }
+              else if (etape === 3) { setEtape(2) }
+            }}
             aria-label="Retour"
             style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.45rem 0.7rem 0.45rem 0.6rem', fontWeight: 700, fontSize: '0.82rem', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1528,25 +1541,40 @@ export default function CommanderRdvSlug() {
                   {/* SECTION 2 : DEJA PRIS — info uniquement, jamais cliquable. Affichee seulement
                       s'il existe au moins une reservation ce jour-la. Sert de preuve sociale
                       ('le commerce a de l'activite') sans polluer la zone de selection. */}
-                  {dateChoisie && !slotsLoading && reservationsJour.length > 0 && (
-                    <div style={{ background: '#F9FAFB', border: `1px solid ${T.pale}`, borderRadius: 12, padding: '0.625rem 0.875rem', marginBottom: 16 }}>
-                      <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.62rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.6px', margin: 0, marginBottom: 6 }}>
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="10"/>
-                          <path d="M12 6v6l4 2"/>
-                        </svg>
-                        Déjà pris ce jour-là ({reservationsJour.length})
-                      </p>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {reservationsJour.map((r, i) => (
-                          <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 100, fontSize: '0.72rem', fontWeight: 700, color: T.deep, fontFamily: '"DM Sans", sans-serif' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.main }}/>
-                            {r.heure_debut?.slice(0,5)} – {r.heure_fin?.slice(0,5)}
-                          </span>
-                        ))}
+                  {/* Bug 7.2 : filtrage praticien-aware + affichage du prenom.
+                      - Praticien X choisi : uniquement les RDV de X et null (legacy)
+                      - Sans preference : tous, avec le nom pour clarifier
+                      Evite l'ambiguite du screenshot Alex qui montrait un RDV Carole
+                      sur une reservation avec Alex. */}
+                  {(() => {
+                    const rdvsAffiches = praticienChoisi
+                      ? reservationsJour.filter(r => r.praticien_id === praticienChoisi.id || r.praticien_id === null)
+                      : reservationsJour
+                    if (!dateChoisie || slotsLoading || rdvsAffiches.length === 0) return null
+                    return (
+                      <div style={{ background: '#F9FAFB', border: `1px solid ${T.pale}`, borderRadius: 12, padding: '0.625rem 0.875rem', marginBottom: 16 }}>
+                        <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.62rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.6px', margin: 0, marginBottom: 6 }}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                          </svg>
+                          Déjà pris ce jour-là ({rdvsAffiches.length})
+                        </p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {rdvsAffiches.map((r, i) => {
+                            const p = r.praticien_id ? praticiens.find(x => x.id === r.praticien_id) : null
+                            return (
+                              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 100, fontSize: '0.72rem', fontWeight: 700, color: T.deep, fontFamily: '"DM Sans", sans-serif' }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: p?.couleur_hex || T.main }}/>
+                                {r.heure_debut?.slice(0,5)} – {r.heure_fin?.slice(0,5)}
+                                {p && <span style={{ color: T.muted, fontWeight: 600, marginLeft: 2 }}>· {p.prenom}</span>}
+                              </span>
+                            )
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   {/* Bouton Continuer */}
                   {heureChoisie && (

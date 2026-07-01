@@ -1809,25 +1809,41 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
   const verifBce = validerBCE(bce)
   const champsTextOk = verifBce.valide && nomRep.trim().length >= 2 && prenomRep.trim().length >= 2
 
-  // Sauvegarde texte (BCE + nom + prenom) avec debounce 600ms
+  // Sauvegarde immediate des 3 champs texte (BCE + nom + prenom) en DB, sans
+  // debounce. Utilisee par onBlur des inputs et par le cleanup useEffect au
+  // demontage du composant (evite la perte de saisie si l'utilisateur clique
+  // Suivant avant que le debounce ait fire).
+  const saveTexteRef = useRef(null)
+  saveTexteRef.current = async () => {
+    if (!champsTextOk) return
+    onSaving?.('saving')
+    const { data } = await supabase.from('commercants')
+      .update({
+        bce: verifBce.raw,
+        representant_legal_nom: nomRep.trim(),
+        representant_legal_prenom: prenomRep.trim(),
+      })
+      .eq('id', commercant.id)
+      .select()
+      .single()
+    if (data) onUpdate(data)
+    onSaving?.('saved')
+  }
+
+  // Debounce 600ms pendant la frappe (feedback "saving..." puis "saved"). Au
+  // demontage, on FLUSH (execute immediatement) au lieu d'annuler, pour
+  // garantir la persistence meme si l'utilisateur clique Suivant vite.
   useEffect(() => {
     if (!champsTextOk) return
     clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(async () => {
-      onSaving?.('saving')
-      const { data } = await supabase.from('commercants')
-        .update({
-          bce: verifBce.raw,
-          representant_legal_nom: nomRep.trim(),
-          representant_legal_prenom: prenomRep.trim(),
-        })
-        .eq('id', commercant.id)
-        .select()
-        .single()
-      if (data) onUpdate(data)
-      onSaving?.('saved')
-    }, 600)
-    return () => clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => { saveTexteRef.current?.() }, 600)
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current)
+        // Flush : execute immediatement au lieu de perdre le save
+        saveTexteRef.current?.()
+      }
+    }
   }, [bce, nomRep, prenomRep, champsTextOk])
 
   async function uploaderIdentite(file, kind) {
@@ -1892,6 +1908,7 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
           type="text"
           value={bce}
           onChange={e => setBce(e.target.value)}
+          onBlur={() => saveTexteRef.current?.()}
           placeholder="0123.456.789"
           disabled={dejaSoumis}
           style={{
@@ -1938,6 +1955,7 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
             type="text"
             value={prenomRep}
             onChange={e => setPrenomRep(e.target.value)}
+            onBlur={() => saveTexteRef.current?.()}
             placeholder="Prénom"
             disabled={dejaSoumis}
             style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 14, fontWeight: 600, color: T.ink, fontFamily: '"DM Sans", sans-serif', outline: 'none', background: dejaSoumis ? T.bg : '#fff' }}
@@ -1951,6 +1969,7 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
             type="text"
             value={nomRep}
             onChange={e => setNomRep(e.target.value)}
+            onBlur={() => saveTexteRef.current?.()}
             placeholder="Nom"
             disabled={dejaSoumis}
             style={{ width: '100%', padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 14, fontWeight: 600, color: T.ink, fontFamily: '"DM Sans", sans-serif', outline: 'none', background: dejaSoumis ? T.bg : '#fff' }}

@@ -1332,6 +1332,7 @@ function TabDeals({ commercantId, commercant, toast }) {
                   </label>
                   <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
                     Une photo attractive multiplie les clics. Compressée automatiquement.
+                    <br/>Format idéal : paysage 4:3, minimum 1200×900 px. Les photos carrées ou portrait seront centrées et croppées.
                   </p>
                 </div>
               </div>
@@ -1738,6 +1739,7 @@ function TabActus({ commercantId, commercant, toast }) {
                   </label>
                   <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
                     Optionnel. Rendra la publication plus visible côté Yopper.
+                    <br/>Format idéal : paysage 4:3, minimum 1200×900 px. Les photos carrées ou portrait seront centrées et croppées.
                   </p>
                 </div>
               </div>

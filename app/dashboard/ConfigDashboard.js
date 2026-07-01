@@ -2749,6 +2749,11 @@ function TabRdvPlaceholder({ label, detail }) {
 // Soft delete via deleted_at (conformité 7 ans Belgique).
 function TabRdvPrestations({ commercantId, toast }) {
   const [prestations, setPrestations] = useState([])
+  const [praticiens, setPraticiens] = useState([])
+  // Sess 5d : junction prestation ↔ praticien. Aucun coché = tous les praticiens
+  // peuvent faire la prestation (pattern Yoppaa aligne sur le wizard client).
+  const [junctionMap, setJunctionMap] = useState({})  // { prestation_id: Set(praticien_id) }
+  const [selectedPraticiens, setSelectedPraticiens] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
@@ -2757,23 +2762,43 @@ function TabRdvPrestations({ commercantId, toast }) {
   const [form, setForm] = useState(initialForm)
   const firstLoadRef = useRef(true)
 
-  useEffect(() => { fetchPrestations() }, [commercantId])
+  useEffect(() => { fetchAll() }, [commercantId])
 
-  async function fetchPrestations() {
+  async function fetchAll() {
     if (firstLoadRef.current) setLoading(true)
-    const { data } = await supabase
-      .from('rdv_prestations')
-      .select('*')
-      .eq('commercant_id', commercantId)
-      .is('deleted_at', null)
-      .order('ordre', { ascending: true })
-      .order('created_at', { ascending: true })
-    setPrestations(data || [])
+    const [{ data: prest }, { data: prat }, { data: junction }] = await Promise.all([
+      supabase
+        .from('rdv_prestations')
+        .select('*')
+        .eq('commercant_id', commercantId)
+        .is('deleted_at', null)
+        .order('ordre', { ascending: true })
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('rdv_praticiens')
+        .select('id, prenom, nom, couleur_hex, photo_url, actif')
+        .eq('commercant_id', commercantId)
+        .eq('actif', true)
+        .is('deleted_at', null)
+        .order('ordre', { ascending: true }),
+      supabase
+        .from('rdv_prestation_praticiens')
+        .select('prestation_id, praticien_id'),
+    ])
+    setPrestations(prest || [])
+    setPraticiens(prat || [])
+    // Build junction map : prestation_id -> Set(praticien_id)
+    const jm = {}
+    ;(junction || []).forEach(row => {
+      if (!jm[row.prestation_id]) jm[row.prestation_id] = new Set()
+      jm[row.prestation_id].add(row.praticien_id)
+    })
+    setJunctionMap(jm)
     if (firstLoadRef.current) { setLoading(false); firstLoadRef.current = false }
   }
 
   function openNew() {
-    setForm(initialForm); setEditId(null); setShowForm(true)
+    setForm(initialForm); setEditId(null); setSelectedPraticiens(new Set()); setShowForm(true)
   }
   function openEdit(p) {
     const isFourchette = p.prix == null && (p.prix_min != null || p.prix_max != null)
@@ -2788,7 +2813,19 @@ function TabRdvPrestations({ commercantId, toast }) {
       acompte_pourcent: String(p.acompte_pourcent ?? 0),
       actif: p.actif !== false,
     })
-    setEditId(p.id); setShowForm(true)
+    setEditId(p.id)
+    // Précharge les praticiens autorisés depuis la junction existante
+    setSelectedPraticiens(new Set(junctionMap[p.id] || []))
+    setShowForm(true)
+  }
+
+  function togglePraticien(praticienId) {
+    setSelectedPraticiens(prev => {
+      const next = new Set(prev)
+      if (next.has(praticienId)) next.delete(praticienId)
+      else next.add(praticienId)
+      return next
+    })
   }
 
   async function save() {
@@ -2807,20 +2844,34 @@ function TabRdvPrestations({ commercantId, toast }) {
       actif: !!form.actif,
     }
     setSaving(true)
-    const { error } = editId
-      ? await supabase.from('rdv_prestations').update(payload).eq('id', editId)
-      : await supabase.from('rdv_prestations').insert(payload)
+    // INSERT/UPDATE prestation
+    let prestationId = editId
+    if (editId) {
+      const { error } = await supabase.from('rdv_prestations').update(payload).eq('id', editId)
+      if (error) { setSaving(false); return toast(`Erreur : ${error.message}`, 'error') }
+    } else {
+      const { data: created, error } = await supabase.from('rdv_prestations').insert(payload).select('id').single()
+      if (error || !created) { setSaving(false); return toast(`Erreur : ${error?.message || 'échec création'}`, 'error') }
+      prestationId = created.id
+    }
+    // Sync junction prestation ↔ praticiens : delete existing puis insert selected
+    // Pattern simple pour V1 (peu de lignes). Optimisable en delta plus tard si besoin.
+    await supabase.from('rdv_prestation_praticiens').delete().eq('prestation_id', prestationId)
+    if (selectedPraticiens.size > 0) {
+      const rows = Array.from(selectedPraticiens).map(pid => ({ prestation_id: prestationId, praticien_id: pid }))
+      const { error: errJ } = await supabase.from('rdv_prestation_praticiens').insert(rows)
+      if (errJ) console.warn('[TabRdvPrestations] junction insert error', errJ)
+    }
     setSaving(false)
-    if (error) return toast(`Erreur : ${error.message}`, 'error')
     toast(editId ? 'Prestation mise à jour' : 'Prestation créée')
-    setShowForm(false); setEditId(null); setForm(initialForm)
-    fetchPrestations()
+    setShowForm(false); setEditId(null); setForm(initialForm); setSelectedPraticiens(new Set())
+    fetchAll()
   }
 
   async function toggleActif(p) {
     const { error } = await supabase.from('rdv_prestations').update({ actif: !p.actif }).eq('id', p.id)
     if (error) return toast(`Erreur : ${error.message}`, 'error')
-    fetchPrestations()
+    fetchAll()
   }
 
   async function softDelete(p) {
@@ -2828,7 +2879,7 @@ function TabRdvPrestations({ commercantId, toast }) {
     const { error } = await supabase.from('rdv_prestations').update({ deleted_at: new Date().toISOString() }).eq('id', p.id)
     if (error) return toast(`Erreur : ${error.message}`, 'error')
     toast('Prestation supprimée')
-    fetchPrestations()
+    fetchAll()
   }
 
   if (loading) return <p style={{ color: T.muted, padding: 16 }}>Chargement…</p>
@@ -2934,6 +2985,42 @@ function TabRdvPrestations({ commercantId, toast }) {
                 </div>
               </div>
             )}
+            {/* Junction prestation ↔ praticiens : optionnel, aucun coché = tous éligibles */}
+            {praticiens.length > 0 && (
+              <div style={{ marginBottom: 14, padding: 12, background: T.bg, borderRadius: 10 }}>
+                <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, marginBottom: 2 }}>Praticiens autorisés</p>
+                <p style={{ fontSize: 11, color: T.muted, marginBottom: 10, lineHeight: 1.4 }}>
+                  Coche uniquement les praticiens qui peuvent réaliser cette prestation. Aucun coché = tous les praticiens peuvent la faire.
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {praticiens.map(p => {
+                    const checked = selectedPraticiens.has(p.id)
+                    const initiales = `${(p.prenom?.[0] || '').toUpperCase()}${(p.nom?.[0] || '').toUpperCase()}`
+                    return (
+                      <button key={p.id} type="button" onClick={() => togglePraticien(p.id)}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px 6px 6px', border: `1.5px solid ${checked ? p.couleur_hex || T.main : T.hairline}`, background: checked ? `${p.couleur_hex || T.main}15` : '#fff', borderRadius: 100, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                        <span style={{ width: 22, height: 22, borderRadius: '50%', background: p.couleur_hex || T.main, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 10, overflow: 'hidden' }}>
+                          {p.photo_url ? (
+                            <img src={p.photo_url} alt={p.prenom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                          ) : (
+                            <span>{initiales || '?'}</span>
+                          )}
+                        </span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: checked ? T.ink : T.muted }}>
+                          {p.prenom}{p.nom ? ' ' + p.nom[0] + '.' : ''}
+                        </span>
+                        {checked && (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={p.couleur_hex || T.main} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M5 12l5 5L20 7"/>
+                          </svg>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             <div style={{ marginBottom: 16 }}>
               <Toggle value={form.actif} onChange={v => setForm({ ...form, actif: v })} label="Prestation active (visible côté client)"/>
             </div>

@@ -1,4 +1,4 @@
-// Composant CTAUpgrade — mini-CTA contextuel sur les sections grisées d'un commerçant.
+// Composant CTAUpgrade - mini-CTA contextuel sur les sections grisées d'un commerçant.
 // Cliquer envoie un signal d'intérêt au commerçant (table upgrade_requests).
 // Anti-spam : 1 demande max / client / commerce / semaine / type.
 //

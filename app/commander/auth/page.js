@@ -73,7 +73,7 @@ function AuthForm() {
     if (error) {
       setMessage({ type: 'error', text: "Erreur lors de l'envoi. Vérifie ton adresse email." })
     } else {
-      setMessage({ type: 'success', text: `Lien envoyé à ${email} — vérifie ta boîte mail !` })
+      setMessage({ type: 'success', text: `Lien envoyé à ${email} - vérifie ta boîte mail !` })
     }
     setLoading(false)
   }
@@ -195,7 +195,7 @@ function AuthForm() {
           <span style={{ color: T.light }}>pp</span>
           <span style={{ color: T.mid }}>aa</span>
         </p>
-        {/* Dots V2-B sous le wordmark — animation pop cascade one-shot */}
+        {/* Dots V2-B sous le wordmark - animation pop cascade one-shot */}
         <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 6, height: 14, marginBottom: 16 }}>
           <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#fff', boxShadow: `0 0 10px #ffffffaa`, opacity: 0, animation: 'dot-pop-auth 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.1s forwards' }}/>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.light, marginTop: 4, boxShadow: `0 0 10px ${T.light}aa`, opacity: 0, animation: 'dot-pop-auth 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.2s forwards' }}/>
@@ -252,7 +252,7 @@ function AuthForm() {
       {mode === 'magic' && (
         <div>
           <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.82rem', fontWeight: 500, lineHeight: 1.6, marginBottom: '1.25rem', textAlign: 'center' }}>
-            Reçois un lien magique par email.<br/>Un clic et tu es connecté — sans mot de passe.
+            Reçois un lien magique par email.<br/>Un clic et tu es connecté - sans mot de passe.
           </p>
           <input placeholder="ton@email.com" type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && envoyerMagicLink()} style={inputSt} autoFocus/>
           <button onClick={envoyerMagicLink} disabled={!email.trim() || loading}

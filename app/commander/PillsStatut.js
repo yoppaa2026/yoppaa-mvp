@@ -1,4 +1,4 @@
-// Composant 5 pills statut YOPPAA — réutilisé partout (card listing, fiche commerçant)
+// Composant 5 pills statut YOPPAA - réutilisé partout (card listing, fiche commerçant)
 // Pills par catégorie commerçant (5 toujours, layout stable) :
 //   • alimentaire : EN LIGNE / DEAL / ACTU / COMMANDE / LIVRAISON
 //   • vitrine     : EN LIGNE / DEAL / ACTU / RDV / FIDÉLITÉ

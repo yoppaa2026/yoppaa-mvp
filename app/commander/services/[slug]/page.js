@@ -1,6 +1,6 @@
 'use client'
 // ════════════════════════════════════════════════════════════════════
-// FICHE SERVICE PUBLIC — Plan PUBLIC (commune, CPAS, police, urgences…)
+// FICHE SERVICE PUBLIC - Plan PUBLIC (commune, CPAS, police, urgences…)
 //
 // Lecture seule côté client. Pas de menu, pas de panier, pas de
 // réservation. Vise à donner les infos de contact + actus officielles.
@@ -131,7 +131,7 @@ function AgentQuartierPicker({ agents }) {
         style={{ width: '100%', boxSizing: 'border-box', padding: '12px 40px 12px 14px', fontSize: 14, fontWeight: 600, border: `1.5px solid ${T.pale}`, borderRadius: 12, background: '#fff', color: T.ink, fontFamily: 'inherit', cursor: 'pointer', WebkitAppearance: 'none', MozAppearance: 'none', appearance: 'none',
           backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B35C4' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>")`,
           backgroundRepeat: 'no-repeat', backgroundPosition: 'right 16px center', marginBottom: 14 }}>
-        <option value="">— Choisir mon village —</option>
+        <option value="">- Choisir mon village -</option>
         {tousVillages.map(v => <option key={v} value={v}>{v}</option>)}
       </select>
 
@@ -343,7 +343,7 @@ export default function FicheServicePublic({ params }) {
   const [actus, setActus] = useState([])
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
-  // Next.js 15+ : params est un Promise — on l'attend
+  // Next.js 15+ : params est un Promise - on l'attend
   const [slug, setSlug] = useState(null)
   const [showSignalement, setShowSignalement] = useState(false)
   const [signalementSent, setSignalementSent] = useState(false)
@@ -485,7 +485,7 @@ export default function FicheServicePublic({ params }) {
             <h1 style={{ fontWeight: 900, fontSize: '1.4rem', color: T.ink, letterSpacing: '-0.5px', margin: 0, lineHeight: 1.15, overflowWrap: 'break-word', wordBreak: 'normal', hyphens: 'auto' }}>
               {service.nom}
             </h1>
-            {/* Pill statut d'ouverture (temps réel Bruxelles) — visible si horaires_detail défini */}
+            {/* Pill statut d'ouverture (temps réel Bruxelles) - visible si horaires_detail défini */}
             {service.horaires_detail && Object.keys(service.horaires_detail).length > 0 && (
               <div style={{ marginTop: 8 }}>
                 <PillStatutOuverture horaires={service.horaires_detail}/>
@@ -526,12 +526,12 @@ export default function FicheServicePublic({ params }) {
         </div>
       )}
 
-      {/* Section "Ton agent de quartier" — affichée si donnees_riches.agents_quartier non vide */}
+      {/* Section "Ton agent de quartier" - affichée si donnees_riches.agents_quartier non vide */}
       {Array.isArray(service.donnees_riches?.agents_quartier) && service.donnees_riches.agents_quartier.length > 0 && (
         <AgentQuartierPicker agents={service.donnees_riches.agents_quartier}/>
       )}
 
-      {/* Section "Signaler un problème" — uniquement pour les fiches type=commune */}
+      {/* Section "Signaler un problème" - uniquement pour les fiches type=commune */}
       {service.type === 'commune' && (
         <div style={{ padding: '14px 18px 8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -580,7 +580,7 @@ export default function FicheServicePublic({ params }) {
         </div>
       )}
 
-      {/* Section "Prendre RDV" — uniquement pour les fiches type=commune.
+      {/* Section "Prendre RDV" - uniquement pour les fiches type=commune.
           MOCK visuel démo conseil communal : pas de vrai backend, démontre
           le concept "RDV admin en ligne" pour l'expert pension SFPD. */}
       {service.type === 'commune' && (
@@ -629,7 +629,7 @@ export default function FicheServicePublic({ params }) {
         </div>
       )}
 
-      {/* Actions principales — Appeler / Email / Itinéraire / Site
+      {/* Actions principales - Appeler / Email / Itinéraire / Site
           minmax(0, 1fr) au lieu de 1fr : empêche les colonnes de déborder du
           parent quand le contenu interne (ex : email zp.sambreetmeuse@police.belgium.eu)
           n'a pas d'opportunité de wrap. Sans ça, le grid 'explose' = grid blowout. */}
@@ -753,7 +753,7 @@ export default function FicheServicePublic({ params }) {
               <circle cx="12" cy="12" r="10"/>
               <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
             </svg>
-            Service national — disponible dans toute la Belgique
+            Service national - disponible dans toute la Belgique
           </div>
         </div>
       )}

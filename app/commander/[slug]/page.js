@@ -254,7 +254,7 @@ function OptionsSelector({ article, groupes, onAjouter }) {
   )
 }
 
-// ─── RecapPanier — FIX STOCK : prop getStockMax, bouton + bloqué ──────────────
+// ─── RecapPanier - FIX STOCK : prop getStockMax, bouton + bloqué ──────────────
 function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockMax }) {
   const items = Object.entries(panier)
   if (items.length === 0) return null
@@ -456,14 +456,14 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
             )}
           </div>
 
-          {/* Indicateur stock 3 niveaux — clair et pro */}
+          {/* Indicateur stock 3 niveaux - clair et pro */}
           {stockGere && (() => {
             // Pastilles status : dot taille 9 statique pour harmonisation YOPPAA (status indicator, pas live event)
             if (inactifCeJour) {
               return prochain ? (
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F9FAFB', color: T.muted, padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
                   <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#9CA3AF', flexShrink: 0 }}/>
-                  Fermé — dispo {prochain.nom}
+                  Fermé - dispo {prochain.nom}
                 </span>
               ) : (
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F9FAFB', color: T.muted, padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
@@ -781,7 +781,7 @@ export default function CommanderSlug() {
       await navigator.clipboard.writeText(url)
       setToastMessage('Lien copié dans le presse-papier 🟣')
     } catch (e) {
-      setToastMessage('Impossible de partager — copie l\'URL manuellement')
+      setToastMessage('Impossible de partager - copie l\'URL manuellement')
     }
     setTimeout(() => setToastMessage(null), 2500)
   }
@@ -906,7 +906,7 @@ export default function CommanderSlug() {
     ])
     if (!c) { router.push('/commander'); return }
     // Bloque l'accès aux fiches non publiées (brouillon, en_attente, refusée).
-    // L'admin a une route d'aperçu dédiée — à coder plus tard.
+    // L'admin a une route d'aperçu dédiée - à coder plus tard.
     if (c.statut_publication !== 'publie') {
       setLoading(false)
       setCommercant({ ...c, _nonPublie: true })
@@ -1123,7 +1123,7 @@ export default function CommanderSlug() {
     chargerCommandesJour()
   }, [chargerCommandesJour])
 
-  // Rafraîchit articles + stocks de fond — garantit que le client voit toujours
+  // Rafraîchit articles + stocks de fond - garantit que le client voit toujours
   // les vrais stocks configurés par le commerçant, même si le cache localStorage
   // est encore "frais" ou si Supabase Realtime n'est pas activé sur ces tables.
   const rafraichirArticlesEtStocks = useCallback(async () => {
@@ -1310,7 +1310,7 @@ export default function CommanderSlug() {
   function commanderPourJour(idxJour) {
     // Vient du bouton "Commander [jour] →" sur un article épuisé aujourd'hui.
     // Change le jour (avec confirmation si panier non vide) sans passer
-    // immédiatement à l'étape 3 — l'utilisateur doit pouvoir compléter son panier
+    // immédiatement à l'étape 3 - l'utilisateur doit pouvoir compléter son panier
     // avec d'autres articles du jour ciblé avant de choisir son créneau.
     changerJour(idxJour)
   }
@@ -1377,7 +1377,7 @@ export default function CommanderSlug() {
     setLoadingCommande(true)
     setErreurCommande(null)
     try {
-      // Persistance client (localStorage + clients DB) — utile pour favoris/historique
+      // Persistance client (localStorage + clients DB) - utile pour favoris/historique
       await getOuCreerClient(client.email, client.prenom, client.nom)
 
       const jourDate = joursDispos[jourSelectionne]?.date || new Date()
@@ -1824,7 +1824,7 @@ export default function CommanderSlug() {
             </>
           )}
 
-          {/* ÉTAPE 2 — Articles */}
+          {/* ÉTAPE 2 - Articles */}
           {/* Fiche non publiée (brouillon, en_attente_validation, refusée) → bloc d'info */}
           {!loading && commercant?._nonPublie && (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
@@ -1900,7 +1900,7 @@ export default function CommanderSlug() {
                 </div>
 
                 {/* Card flottante : logo + type + nom + statut + actions
-                    Chevauche le hero photo (marginTop -36) — donc placée JUSTE
+                    Chevauche le hero photo (marginTop -36) - donc placée JUSTE
                     après le hero pour ne pas recouvrir les bandeaux actus/deal */}
                 <div style={{ background: '#fff', margin: '-36px 12px 0', borderRadius: 22, padding: '1.125rem 1.25rem 1rem', boxShadow: `0 12px 36px rgba(22,6,54,0.18), 0 2px 8px ${T.main}22`, border: `1px solid ${T.pale}`, position: 'relative' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
@@ -1931,7 +1931,7 @@ export default function CommanderSlug() {
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <Etoiles note={notesInfo.moyenne} taille={13}/>
                       <span style={{ fontSize: '0.78rem', fontWeight: 700, color: T.ink }}>
-                        {notesInfo.moyenne > 0 ? notesInfo.moyenne.toFixed(1) : '—'}
+                        {notesInfo.moyenne > 0 ? notesInfo.moyenne.toFixed(1) : '-'}
                       </span>
                       <span style={{ fontSize: '0.72rem', color: T.muted }}>
                         {notesInfo.count > 0 ? `· ${notesInfo.count} avis` : '· Pas encore d\'avis'}
@@ -1980,7 +1980,7 @@ export default function CommanderSlug() {
                   </div>
                 </div>
 
-                {/* Galerie photos (si présentes) — carrousel horizontal */}
+                {/* Galerie photos (si présentes) - carrousel horizontal */}
                 {galerie.length > 0 && (
                   <div style={{ marginTop: 18, paddingLeft: 12 }}>
                     <p style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.7rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8, paddingRight: 12 }}>
@@ -2041,7 +2041,7 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {/* Bandeau deal du jour — cliquable pour ouvrir le détail */}
+                {/* Bandeau deal du jour - cliquable pour ouvrir le détail */}
                 {canDo(commercant.plan, 'deals') && dealActif && (
                   <div style={{ margin: '0 12px 12px' }}>
                     <button onClick={() => setDealDetailOuvert(dealActif)}
@@ -2062,7 +2062,7 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {/* Bouton Prendre RDV — module natif Yoppaa pour vitrine FULL avec rdv_actif */}
+                {/* Bouton Prendre RDV - module natif Yoppaa pour vitrine FULL avec rdv_actif */}
                 {peutPrendreRdv && (
                   <div style={{ margin: '0 12px 12px' }}>
                     <a href={`/commander/rdv/${commercant.slug}`}
@@ -2096,7 +2096,7 @@ export default function CommanderSlug() {
                 )}
               </div>
 
-              {/* Sélecteur de jour de retrait — pilote les stocks affichés et les créneaux dispo */}
+              {/* Sélecteur de jour de retrait - pilote les stocks affichés et les créneaux dispo */}
               {peutCommander && joursDispos.length > 0 && (
                 <div style={{ background: '#fff', borderBottom: `1px solid ${T.pale}`, padding: '0.625rem 1rem 0.5rem' }}>
                   <p style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.65rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
@@ -2198,7 +2198,7 @@ export default function CommanderSlug() {
                   />
                 )}
 
-                {/* CTAs contextuels selon le plan — sections grisées du commerce.
+                {/* CTAs contextuels selon le plan - sections grisées du commerce.
                     Pour la catégorie vitrine, on masque le CTA "commande" (pas pertinent
                     pour coiffeur/opticien) et on garde uniquement le CTA "prix" si plan ON. */}
                 {!peutCommander && (
@@ -2211,7 +2211,7 @@ export default function CommanderSlug() {
                     )}
                   </div>
                 )}
-                {/* CTA livraison pour BOOST (n'a pas la livraison) — affichage discret en banner */}
+                {/* CTA livraison pour BOOST (n'a pas la livraison) - affichage discret en banner */}
                 {peutCommander && !canDo(commercant.plan, 'livraison') && (
                   <div style={{ marginTop: 24 }}>
                     <CTAUpgrade type="livraison" commercant={commercant} variant="banner"/>
@@ -2237,7 +2237,7 @@ export default function CommanderSlug() {
             </>
           )}
 
-          {/* ÉTAPE 3 — Créneau + coordonnées : pattern hero canonique */}
+          {/* ÉTAPE 3 - Créneau + coordonnées : pattern hero canonique */}
           {!loading && etape === 3 && commercant && (
             <div>
               <div style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.main} 100%)`, padding: '0.875rem 1rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
@@ -2290,7 +2290,7 @@ export default function CommanderSlug() {
                   </div>
                 </div>
 
-                {/* Jour verrouille — choisi a l'etape 2 (menu) */}
+                {/* Jour verrouille - choisi a l'etape 2 (menu) */}
                 {joursDispos[jourSelectionne] && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: '1rem', background: T.pale, border: `1.5px solid ${T.main}33`, borderRadius: 14, padding: '0.625rem 0.875rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -2420,7 +2420,7 @@ export default function CommanderSlug() {
                       <path d="M12 16v-4M12 8h.01"/>
                     </svg>
                     <p style={{ fontSize: '0.78rem', color: T.deep, lineHeight: 1.5, flex: 1, margin: 0 }}>
-                      <strong style={{ color: T.ink }}>Pas besoin de compte</strong> pour commander — remplis juste tes coordonnées ci-dessous.<br/>
+                      <strong style={{ color: T.ink }}>Pas besoin de compte</strong> pour commander - remplis juste tes coordonnées ci-dessous.<br/>
                       Déjà Yopper ?{' '}
                       <a href={`/commander/auth?redirect=/commander/${slug}`} style={{ color: T.main, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                         Connecte-toi pour pré-remplir →
@@ -2477,7 +2477,7 @@ export default function CommanderSlug() {
                   ))}
                 </div>
 
-                {/* Message erreur stock — uniquement si stock change entre-temps */}
+                {/* Message erreur stock - uniquement si stock change entre-temps */}
                 {erreurCommande && (
                   <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.875rem 1rem', marginBottom: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -2536,7 +2536,7 @@ export default function CommanderSlug() {
                   style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: !formValide ? 0.45 : 1, cursor: !formValide ? 'default' : 'pointer' }}>
                   {loadingCommande ? 'Redirection…' : (
                     <>
-                      Payer &amp; confirmer — {totalPanier().toFixed(2)}€
+                      Payer &amp; confirmer - {totalPanier().toFixed(2)}€
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
                     </>
                   )}
@@ -2554,7 +2554,7 @@ export default function CommanderSlug() {
             </div>
           )}
 
-          {/* ÉTAPE 4 — Confirmation */}
+          {/* ÉTAPE 4 - Confirmation */}
           {!loading && etape === 4 && commercant && (
             <div style={{ padding: '1.5rem 1rem', animation: 'fadeUp 0.4s ease' }}>
               <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
@@ -2590,7 +2590,7 @@ export default function CommanderSlug() {
                     </svg>
                     Et après ?
                   </p>
-                  {/* 3 etapes concretes — plus parlant pour un newcomer que "confirme depuis l'onglet Commandes" */}
+                  {/* 3 etapes concretes - plus parlant pour un newcomer que "confirme depuis l'onglet Commandes" */}
                   <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {[
                       { n: 1, t: <>On te notifie quand ta commande est <strong>prête à retirer</strong>.</> },

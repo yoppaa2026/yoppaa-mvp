@@ -33,7 +33,7 @@ function ConfirmHandler() {
             localStorage.setItem('yoppaa_prenom', parts[0] || '')
             localStorage.setItem('yoppaa_nom', parts.slice(1).join(' ') || '')
           } else {
-            // Nouveau client via magic link — créer le profil
+            // Nouveau client via magic link - créer le profil
             const { data: newClient } = await supabase
               .from('clients')
               .insert({ email })
@@ -49,7 +49,7 @@ function ConfirmHandler() {
           router.replace('/commander/auth?error=lien-invalide')
         }
       } else {
-        // Pas de token — vérifier session existante
+        // Pas de token - vérifier session existante
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
           localStorage.setItem('yoppaa_onboarding_done', '1'); router.replace(next)

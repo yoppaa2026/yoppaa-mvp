@@ -1,6 +1,6 @@
 'use client'
 // ════════════════════════════════════════════════════════════════════
-// GOOD MORNING YOPPERS — Écran 7h30 quotidien
+// GOOD MORNING YOPPERS - Écran 7h30 quotidien
 //
 // Data live depuis Supabase : yoppaa_deals (inclus_morning + date_deal
 // du jour) + actualites (fenêtre date_debut/date_fin) + services_publics
@@ -123,7 +123,7 @@ async function fetchMorningData(commune) {
       .gte('date_fin', today),
 
     // 3) Actus services publics locaux (commune, CPAS, police, écoles)
-    //    On exclut les nationaux (112, CEGENO, etc.) — trop génériques pour le morning
+    //    On exclut les nationaux (112, CEGENO, etc.) - trop génériques pour le morning
     supabase
       .from('actualites')
       .select(`
@@ -329,7 +329,7 @@ function MorningHeader({ ctx, communeAffichee, communePrincipale, communes, onSw
 
   return (
     <div style={{ padding: '24px 24px 20px', borderBottom: `1px solid ${T.hairline}`, position: 'relative' }}>
-      {/* Barre dégradée fine en haut — signature visuelle Yoppaa */}
+      {/* Barre dégradée fine en haut - signature visuelle Yoppaa */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
 
       {/* Ligne date + numéro d'édition */}
@@ -345,7 +345,7 @@ function MorningHeader({ ctx, communeAffichee, communePrincipale, communes, onSw
         </span>
       </div>
 
-      {/* Wordmark "Good Morning Yoppers" — tricolore */}
+      {/* Wordmark "Good Morning Yoppers" - tricolore */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={{ fontSize: gmFontSize, fontWeight: 800, color: T.ink, lineHeight: 1, letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
           Good Morning
@@ -383,7 +383,7 @@ function MorningHeader({ ctx, communeAffichee, communePrincipale, communes, onSw
           <div style={{ width: 5, height: 5, borderRadius: '50%', background: T.mid }}/>
         </div>
 
-        {/* Dropdown communes — popup ancré sous le bouton */}
+        {/* Dropdown communes - popup ancré sous le bouton */}
         {openSwitch && (
           <>
             {/* overlay clic-pour-fermer */}
@@ -673,7 +673,7 @@ export default function GoodMorningYoppersPage() {
   useEffect(() => {
     let annule = false
     if (!communeAffichee) {
-      // Commune pas encore chargée — on attend
+      // Commune pas encore chargée - on attend
       return
     }
     setLoadingData(true)
@@ -686,7 +686,7 @@ export default function GoodMorningYoppersPage() {
     return () => { annule = true }
   }, [communeAffichee?.id])
 
-  // Items affichés selon l'onglet (deals ou actus) — source de la cascade animation
+  // Items affichés selon l'onglet (deals ou actus) - source de la cascade animation
   const itemsAffiches = tab === 'deals' ? realDeals : realActus
 
   // Animation entrée de la card (1 fois)
@@ -760,7 +760,7 @@ export default function GoodMorningYoppersPage() {
                 Pas de {tab === 'deals' ? 'deals' : 'actus'} à {communeAffichee?.nom || 'cet endroit'} ce matin
               </p>
               <p style={{ fontSize: 12, color: T.muted, margin: 0, lineHeight: 1.5 }}>
-                Rendez-vous demain à 07h30 — ou switche de commune pour voir ailleurs.
+                Rendez-vous demain à 07h30 - ou switche de commune pour voir ailleurs.
               </p>
             </div>
           )}

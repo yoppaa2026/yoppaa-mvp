@@ -1,6 +1,6 @@
 'use client'
 // ════════════════════════════════════════════════════════════════════
-// ModalRdvPension — flow de prise de RDV avec l'expert pension SFPD
+// ModalRdvPension - flow de prise de RDV avec l'expert pension SFPD
 // qui se déplace à la commune le 3e jeudi du mois 13h30-15h30.
 //
 // ⚠ MOCK VISUEL pour la démo conseil communal Mettet 15/06/2026 :

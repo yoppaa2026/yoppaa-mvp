@@ -1,6 +1,6 @@
 'use client'
 // ════════════════════════════════════════════════════════════════════
-// ModalSignalerProbleme — flow yopper pour signaler un problème citoyen
+// ModalSignalerProbleme - flow yopper pour signaler un problème citoyen
 // à la commune (nid de poule, dépôt sauvage, égout bouché, autre).
 //
 // Flow en 3 étapes :

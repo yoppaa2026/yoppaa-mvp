@@ -284,7 +284,7 @@ function maintenant() {
 }
 
 // ─── Splash Screen ────────────────────────────────────────────────────────────
-// ─── FIX SWIPE : SwipeRetrait — YOP → SWIPE, instructions claires ────────────
+// ─── FIX SWIPE : SwipeRetrait - YOP → SWIPE, instructions claires ────────────
 function SwipeRetrait({ onConfirm, clientPrenom }) {
   const [swipeX, setSwipeX] = useState(0)
   const [swiping, setSwiping] = useState(false)
@@ -340,7 +340,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
   const p = swipeX / (getMaxX() || 1)
   const TRACK_H = THUMB + 16
 
-  // ─── Phase succès — animation 3 points + wordmark ─────────────────────────
+  // ─── Phase succès - animation 3 points + wordmark ─────────────────────────
   if (phase === 'success' || phase === 'done') {
     return (
       <div style={{ textAlign: 'center', padding: '1rem 0' }}>
@@ -382,7 +382,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
         @keyframes swipeArrowPulse { 0%,100%{opacity:0.3;transform:translateX(0)} 50%{opacity:1;transform:translateX(5px)} }
       `}</style>
 
-      {/* FIX : label "Glisse pour récupérer" — sans "YOP!" */}
+      {/* FIX : label "Glisse pour récupérer" - sans "YOP!" */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
         <div style={{ display: 'flex', gap: 3 }}>
           {[0,1,2].map(i => (
@@ -401,14 +401,14 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
         onMouseDown={onStart} onMouseMove={onMove} onMouseUp={onEnd} onMouseLeave={onEnd}
         onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}>
 
-        {/* Texte central — apparaît après 70% */}
+        {/* Texte central - apparaît après 70% */}
         {p > 0.7 && (
           <div style={{ position: 'absolute', top: 0, bottom: 0, left: THUMB + 12, right: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 900, color: C.main, letterSpacing: '1px', textTransform: 'uppercase' }}>Lâche !</span>
           </div>
         )}
 
-        {/* FIX : thumb — "YOP" → "SWIPE" */}
+        {/* FIX : thumb - "YOP" → "SWIPE" */}
         <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: `linear-gradient(135deg, ${C.main}, ${C.mid})`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 20px ${C.main}66, 0 0 0 ${p > 0.5 ? '3px' : '0px'} ${C.light}`, transition: swiping ? 'none' : 'left 0.3s, box-shadow 0.2s', userSelect: 'none', gap: 2 }}>
           <div style={{ display: 'flex', gap: 3 }}>
             {[{c:'rgba(255,255,255,0.5)',s:4},{c:'rgba(196,160,244,0.9)',s:5},{c:'rgba(150,96,224,0.9)',s:4}].map((d,i) => (
@@ -591,7 +591,7 @@ function EditablePrenom({ client, setClient, clientId, openSignal }) {
 
 // ─── Écran pick-up hype ───────────────────────────────────────────────────────
 // FIX NUMÉRO : numero_commande de la DB en priorité ; si manquant (anciennes
-// commandes), on calcule la position du jour côté commerçant — même logique que
+// commandes), on calcule la position du jour côté commerçant - même logique que
 // le dashboard (getNumeroJour) pour que client et commerçant voient le même #.
 function PickupScreen({ commande, clientPrenom, onConfirm }) {
   const [numeroCalcule, setNumeroCalcule] = useState(null)
@@ -648,7 +648,7 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
     ? `${commande.creneau.heure_debut.slice(0,5)} – ${commande.creneau.heure_fin.slice(0,5)}`
     : null
   return (
-    // FIX FOOTER : position: fixed + zIndex: 9999 — rendu HORS de page-wrap (voir return principal)
+    // FIX FOOTER : position: fixed + zIndex: 9999 - rendu HORS de page-wrap (voir return principal)
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'linear-gradient(160deg, #1A0840 0%, #2D0F6B 40%, #6B35C4 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '3rem 2rem calc(2.5rem + env(safe-area-inset-bottom, 0px))', overflow: 'hidden' }}>
       {/* Bande 3px canonique YOPPAA */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #1A0840 0%, #6B35C4 60%, #C4A0F4 100%)', zIndex: 3 }}/>
@@ -693,7 +693,7 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
           <p style={{ fontWeight: 900, fontSize: '1rem', color: '#fff', letterSpacing: '-0.3px' }}>PRIORITÉ YOPPERS 🟣</p>
         </div>
       </div>
-      {/* FIX : SwipeRetrait en bas — pas de conflit avec la navbar (rendu hors page-wrap) */}
+      {/* FIX : SwipeRetrait en bas - pas de conflit avec la navbar (rendu hors page-wrap) */}
       <div style={{ position: 'relative', zIndex: 2, width: '100%', animation: 'pu-fadein 0.6s ease 0.3s both' }}>
         <SwipeRetrait clientPrenom={clientPrenom} onConfirm={onConfirm}/>
       </div>
@@ -701,7 +701,7 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
   )
 }
 
-// ─── Carte commerce — redesignée ──────────────────────────────────────────────
+// ─── Carte commerce - redesignée ──────────────────────────────────────────────
 // ─── Carte d'un service public (Plan PUBLIC) ────────────────────────────────
 // Affichée dans la section "Services & administrations" sur /commander.
 // Différencie urgences nationales (badge rouge OFFICIEL) vs services locaux (badge violet OFFICIEL).
@@ -712,7 +712,7 @@ const SERVICE_TYPE_LABEL = {
   autre: 'Service',
 }
 
-// ─── Section "Mes avis" — affichée dans l'onglet Profil ────────────────────
+// ─── Section "Mes avis" - affichée dans l'onglet Profil ────────────────────
 // Liste compacte des avis vérifiés (liés à une commande) postés par le Yopper.
 function SectionMesAvis({ clientId }) {
   const [avis, setAvis] = useState([])
@@ -1498,7 +1498,7 @@ export default function Commander() {
 
   // Cache reverse geocoding : si on a deja resolu une position proche (~100m), on
   // reutilise la valeur en localStorage et on evite de pinger Nominatim a chaque refresh
-  // (leur API publique gratuite a une politique 1 req/s max — sinon ils repondent vide).
+  // (leur API publique gratuite a une politique 1 req/s max - sinon ils repondent vide).
   function libelleAdresse(addr) {
     if (!addr) return null
     const rue = addr.road || addr.pedestrian || addr.footway || addr.street || addr.path
@@ -1809,7 +1809,7 @@ export default function Commander() {
     if (!data || data.length === 0) { setClientCommandes([]); return }
 
     // FIX NUMÉRO : enrichir chaque commande avec son numéro affiché
-    // (numero_commande DB en priorité, sinon position du jour — même logique
+    // (numero_commande DB en priorité, sinon position du jour - même logique
     // que le dashboard et le PickupScreen).
     function dateKeyOf(c) {
       const ref = c.date_commande || c.created_at
@@ -2120,7 +2120,7 @@ export default function Commander() {
           width: 100%;
           max-width: 100vw;
           overflow-x: hidden !important;
-          /* Bloque tout pan horizontal — seul le pan vertical et le pinch-zoom restent */
+          /* Bloque tout pan horizontal - seul le pan vertical et le pinch-zoom restent */
           touch-action: pan-y pinch-zoom !important;
           overscroll-behavior-x: none;
         }
@@ -2144,7 +2144,7 @@ export default function Commander() {
         }
         .scroll-body > * { max-width: 100%; }
         /* Hero + footer alignes sur la largeur des cards (760px max via page-wrap).
-           La classe .hero-fullwidth est conservee mais ne fait plus rien — gardee pour ne pas
+           La classe .hero-fullwidth est conservee mais ne fait plus rien - gardee pour ne pas
            casser les references existantes. Le rendu suit naturellement la largeur du parent. */
         .hero-fullwidth { /* no-op */ }
         /* Grille 2 cols pour les commerces sur PC/tablette large */
@@ -2194,19 +2194,19 @@ export default function Commander() {
 
         {/* ── HERO HEADER ── */}
         <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #3D1580 100%)`, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
-          {/* Barre dégradée fine 3px en haut — signature visuelle Yoppaa (design system canonique) */}
+          {/* Barre dégradée fine 3px en haut - signature visuelle Yoppaa (design system canonique) */}
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
           <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 10%, ${T.mid}33 0%, transparent 50%), radial-gradient(circle at 10% 90%, ${T.light}18 0%, transparent 50%), radial-gradient(circle at 50% 50%, ${T.main}22 0%, transparent 70%)`, pointerEvents: 'none' }}/>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0.875rem 1rem 0.625rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7 }}>
-              {/* Wordmark tricolore : yo (blanc), pp (Light), aa (Mid) — canonique Good Morning Yoppers */}
+              {/* Wordmark tricolore : yo (blanc), pp (Light), aa (Mid) - canonique Good Morning Yoppers */}
               <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-0.05em', lineHeight: 1, margin: 0 }}>
                 <span style={{ color: '#fff' }}>yo</span>
                 <span style={{ color: T.light }}>pp</span>
                 <span style={{ color: T.mid }}>aa</span>
               </p>
-              {/* Dots V2-B centres sous le wordmark — meme animation que la page Tribu */}
+              {/* Dots V2-B centres sous le wordmark - meme animation que la page Tribu */}
               <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 4, height: 11 }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', boxShadow: `0 0 6px #ffffffaa`, opacity: 0, animation: 'dot-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.1s forwards' }}/>
                 <span style={{ width: 4, height: 4, borderRadius: '50%', background: T.light, marginTop: 2.8, boxShadow: `0 0 6px ${T.light}aa`, opacity: 0, animation: 'dot-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.2s forwards' }}/>
@@ -2341,7 +2341,7 @@ export default function Commander() {
           {/* COMMANDES */}
           {onglet === 'commandes' && (
             <div>
-              {/* Hero header commandes — pattern canonique : 3px bar + radial multi + 3 points tricolores + eyebrow */}
+              {/* Hero header commandes - pattern canonique : 3px bar + radial multi + 3 points tricolores + eyebrow */}
               <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #1e0950 100%)`, padding: '0.875rem 1rem 1.25rem', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
                 <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 20%, ${T.main}44 0%, transparent 55%), radial-gradient(circle at 10% 90%, ${T.light}14 0%, transparent 50%)`, pointerEvents: 'none' }}/>
@@ -2361,7 +2361,7 @@ export default function Commander() {
                 )}
               </div>
 
-              {/* Toggle Commandes / Rendez-vous — meme onglet, 2 vues distinctes.
+              {/* Toggle Commandes / Rendez-vous - meme onglet, 2 vues distinctes.
                   Labels en clair ("Commandes" / "Rendez-vous"), pas de jargon. Compteurs
                   inline pour signaler la presence d'items dans chaque vue. */}
               <div style={{ padding: '0.75rem 1rem 0', background: '#fff' }}>
@@ -2418,7 +2418,7 @@ export default function Commander() {
                     /* Card 'Prete a retirer' : signature violette renforcee.
                        L'effet 'action urgente' est cree par glow violet intense + bordure plus
                        epaisse (2px) + animation pulse sur le dot + bouton CTA gradient marque
-                       — pas par le vert (reserve aux RDVs et au design system canonique). */
+                       - pas par le vert (reserve aux RDVs et au design system canonique). */
                     <div key={c.id} style={{ background: `linear-gradient(135deg, ${T.pale}, #fff)`, borderRadius: 16, overflow: 'hidden', marginBottom: '0.75rem', border: `2px solid ${T.main}44`, boxShadow: `0 6px 20px ${T.main}26` }}>
                       {/* Bande 3px canonique Yoppaa (Ink -> Main -> Light) */}
                       <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
@@ -2426,7 +2426,7 @@ export default function Commander() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem' }}>
                         <div>
                           <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>
-                            {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.main, fontWeight: 700 }}> — commande #{c.numeroAffiche}</span>}
+                            {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.main, fontWeight: 700 }}> - commande #{c.numeroAffiche}</span>}
                           </p>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: T.pale, borderRadius: 100, padding: '3px 10px', border: `1px solid ${T.main}33` }}>
                             <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.main, border: '1.5px solid #fff', boxShadow: `0 0 0 1.5px ${T.main}44, 0 0 8px ${T.main}99`, animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
@@ -2465,13 +2465,13 @@ export default function Commander() {
                     const sousTexte = statutSousTexte[c.statut]
                     return (
                       <div key={c.id} style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', marginBottom: '0.625rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>
-                        {/* Bande 3px canonique YOPPAA (Ink → Main → Light) — signature pour les commandes en cours */}
+                        {/* Bande 3px canonique YOPPAA (Ink → Main → Light) - signature pour les commandes en cours */}
                         <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
                         <div style={{ padding: '0.875rem 1rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>
-                              {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.main, fontWeight: 700 }}> — commande #{c.numeroAffiche}</span>}
+                              {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.main, fontWeight: 700 }}> - commande #{c.numeroAffiche}</span>}
                             </p>
                             <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
                           </div>
@@ -2526,7 +2526,7 @@ export default function Commander() {
                       <div key={c.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.875rem' }}>
-                            {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.muted, fontWeight: 600 }}> — commande #{c.numeroAffiche}</span>}
+                            {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.muted, fontWeight: 600 }}> - commande #{c.numeroAffiche}</span>}
                           </p>
                           <p style={{ fontSize: '0.7rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
                         </div>
@@ -2572,7 +2572,7 @@ export default function Commander() {
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <p style={{ fontSize: '0.62rem', fontWeight: 800, color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
-                                  {dateObj ? dateObj.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' }) : '—'} · {heureD}
+                                  {dateObj ? dateObj.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' }) : '-'} · {heureD}
                                 </p>
                                 <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.95rem', letterSpacing: '-0.2px', lineHeight: 1.25, marginBottom: 4 }}>
                                   {r.prestation_nom || 'Prestation'}
@@ -2645,7 +2645,7 @@ export default function Commander() {
                         <div key={r.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
                             <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.875rem' }}>
-                              {r.commercant?.nom} <span style={{ color: T.muted, fontWeight: 600 }}>— {r.prestation_nom || 'RDV'}</span>
+                              {r.commercant?.nom} <span style={{ color: T.muted, fontWeight: 600 }}>- {r.prestation_nom || 'RDV'}</span>
                             </p>
                             <p style={{ fontSize: '0.7rem', color: T.muted }}>
                               {dateObj?.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })} · {r.heure_debut?.slice(0,5)}
@@ -2673,7 +2673,7 @@ export default function Commander() {
           )}
 
           {/* FAVORIS */}
-          {/* SERVICES — onglet dédié, hero + 2 sections (Urgences nationales / Locaux) */}
+          {/* SERVICES - onglet dédié, hero + 2 sections (Urgences nationales / Locaux) */}
           {onglet === 'services' && PLAN_PUBLIC_ENABLED && (() => {
             const urgences = servicesPublics.filter(s => s.national || s.type === 'urgence')
             const locaux   = servicesPublics.filter(s => !s.national && s.type !== 'urgence')
@@ -2747,10 +2747,10 @@ export default function Commander() {
           {/* TRIBU */}
           {onglet === 'tribu' && (
             <div>
-              {/* Hero — wordmark "Yoppers" tricolore (cohérence design system) + 3 cercles animés */}
+              {/* Hero - wordmark "Yoppers" tricolore (cohérence design system) + 3 cercles animés */}
               <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.main} 100%)`, padding: '2rem 1rem 2.25rem', position: 'relative', overflow: 'hidden', textAlign: 'center' }}>
                 <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 50% 100%, ${T.light}33 0%, transparent 60%)`, pointerEvents: 'none' }}/>
-                {/* Barre dégradée fine en haut — signature visuelle Yoppaa */}
+                {/* Barre dégradée fine en haut - signature visuelle Yoppaa */}
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
 
                 <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2.5px', marginBottom: 8, opacity: 0.85 }}>
@@ -2761,7 +2761,7 @@ export default function Commander() {
                   <span style={{ color: T.light }}>pp</span>
                   <span style={{ color: T.mid }}>ers</span>
                 </p>
-                {/* Dots V2-B sous le wordmark Yoppers — animation pop cascade UNE FOIS au chargement de l'onglet */}
+                {/* Dots V2-B sous le wordmark Yoppers - animation pop cascade UNE FOIS au chargement de l'onglet */}
                 <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 9, height: 22, marginBottom: 14 }}>
                   <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: `0 4px 14px #ffffff66`, opacity: 0, animation: 'dot-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.1s forwards' }}/>
                   <span style={{ width: 9, height: 9, borderRadius: '50%', background: T.light, marginTop: 6.4, boxShadow: `0 4px 14px ${T.light}66`, opacity: 0, animation: 'dot-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.2s forwards' }}/>
@@ -2858,7 +2858,7 @@ export default function Commander() {
               </div>
 
               <div style={{ padding: '0 1rem 1rem', marginTop: '-1.25rem' }}>
-                {/* Bandeau profil incomplet — visible si Yopper connecte mais qu'il manque
+                {/* Bandeau profil incomplet - visible si Yopper connecte mais qu'il manque
                     nom et/ou telephone (cas typique : auth via Magic Link sans signup complet).
                     Clic = ouvre directement EditablePrenom en edit mode + scroll vers le haut. */}
                 {client.email && (() => {
@@ -2901,7 +2901,7 @@ export default function Commander() {
                           Profil incomplet
                         </p>
                         <p style={{ fontSize: 13, fontWeight: 700, color: '#78350F', margin: 0, lineHeight: 1.35 }}>
-                          Il manque {texteManquants} — clique pour compléter
+                          Il manque {texteManquants} - clique pour compléter
                         </p>
                       </div>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -2911,7 +2911,7 @@ export default function Commander() {
                   )
                 })()}
 
-                {/* Card stat principale : temps economise — taille reduite pour rééquilibrer avec
+                {/* Card stat principale : temps economise - taille reduite pour rééquilibrer avec
                     le grid 2x2 en dessous (avant la hero etait trop dominante). Sous-titre adapte
                     selon si le Yopper a des RDVs ou seulement des commandes. */}
                 {(() => {
@@ -2973,12 +2973,12 @@ export default function Commander() {
                   ))}
                 </div>
 
-                {/* Mes avis — derniers avis vérifiés laissés par le Yopper */}
+                {/* Mes avis - derniers avis vérifiés laissés par le Yopper */}
                 {client.email && (
                   <SectionMesAvis clientId={clientId}/>
                 )}
 
-                {/* Mes favoris — accessible si Yopper connecté.
+                {/* Mes favoris - accessible si Yopper connecté.
                     Déplacé ici depuis l'ancien onglet "Favoris" du footer (remplacé par Services). */}
                 {client.email && (
                   <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px 12px', marginBottom: '0.875rem', border: `1px solid ${T.pale}` }}>
@@ -3001,7 +3001,7 @@ export default function Commander() {
                   </div>
                 )}
 
-                {/* Card "Ma commune" — accessible si Yopper connecté.
+                {/* Card "Ma commune" - accessible si Yopper connecté.
                     Clic sur "Changer" ouvre la modale ConfirmCommune en mode 'change'
                     (fermable + liste manuelle directe). */}
                 {client.email && (

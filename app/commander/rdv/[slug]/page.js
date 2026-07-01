@@ -1,6 +1,6 @@
 'use client'
 // ─────────────────────────────────────────────────────────────────────────────
-// /commander/rdv/[slug] — Fiche commerçant VITRINE avec prise de RDV native
+// /commander/rdv/[slug] - Fiche commerçant VITRINE avec prise de RDV native
 //
 // Distinct de :
 //   • /commander/[slug]         → commerçant ALIMENTAIRE (Click & Collect)
@@ -421,7 +421,7 @@ export default function CommanderRdvSlug() {
                 clearInterval(pollInterval)
                 console.info('[rdv stripe] numero recupere', j.rdv.numero_rdv)
               } else if (attempts >= MAX_ATTEMPTS) {
-                console.warn('[rdv stripe] poll numero_rdv timeout — RDV pas trouve apres 15s')
+                console.warn('[rdv stripe] poll numero_rdv timeout - RDV pas trouve apres 15s')
                 clearInterval(pollInterval)
               }
             } catch (e) {
@@ -651,7 +651,7 @@ export default function CommanderRdvSlug() {
     })
   }
 
-  // Liste des jours disponibles (60 prochains pour les RDV vitrines — l'anticipation
+  // Liste des jours disponibles (60 prochains pour les RDV vitrines - l'anticipation
   // est plus longue que pour de l'alimentaire C&C). Les 14 premiers sont affichés en scroll
   // horizontal, les 46 suivants sont accessibles via le mini-calendrier deroulant.
   // Sess 6 : filtre les fermetures exceptionnelles (marque ouvert:false pour ces jours).
@@ -745,7 +745,7 @@ export default function CommanderRdvSlug() {
   }
 
   // ─── Insert RDV (étape 4 onClick "Confirmer mon RDV") ──────────────────────
-  // Anti double-booking via UNIQUE INDEX DB (code 23505) — catché pour UX explicite.
+  // Anti double-booking via UNIQUE INDEX DB (code 23505) - catché pour UX explicite.
   // numero_rdv assigné automatiquement par trigger DB set_rdv_numero (BEFORE INSERT).
   async function passerRdv() {
     if (!formValide || !commercant) return
@@ -824,7 +824,7 @@ export default function CommanderRdvSlug() {
         setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
       }
       if (horaireJour.debut && debutMin < timeToMinutes(horaireJour.debut)) {
-        setSubmitError(`Trop tôt — ${commercant.nom} ouvre à ${horaireJour.debut.slice(0,5)}.`)
+        setSubmitError(`Trop tôt - ${commercant.nom} ouvre à ${horaireJour.debut.slice(0,5)}.`)
         setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
       }
 
@@ -846,7 +846,7 @@ export default function CommanderRdvSlug() {
       }
       console.info('[rdv] validation OK, insert')
 
-      // Prix estimé (figé — si prix variable, on prend prix_min)
+      // Prix estimé (figé - si prix variable, on prend prix_min)
       const prixEstime = prestationChoisie.prix != null
         ? Number(prestationChoisie.prix)
         : (prestationChoisie.prix_min != null ? Number(prestationChoisie.prix_min) : null)
@@ -869,7 +869,7 @@ export default function CommanderRdvSlug() {
 
       if (acompteEnLigneRequis) {
         console.info('[rdv] paiement acompte en ligne requis', { montant: acompteMontant })
-        // Sauve l'etat avant redirection Stripe — sera restaure au retour ?paiement=ok|annule
+        // Sauve l'etat avant redirection Stripe - sera restaure au retour ?paiement=ok|annule
         try {
           sessionStorage.setItem(`yoppaa.rdv.stripe.${slug}`, JSON.stringify({
             prestationChoisie,
@@ -1197,7 +1197,7 @@ export default function CommanderRdvSlug() {
                   )}
                 </div>
 
-                {/* Horaires complets (collapsible) — meme widget que la fiche alimentaire */}
+                {/* Horaires complets (collapsible) - meme widget que la fiche alimentaire */}
                 <div style={{ marginTop: 12 }}>
                   <HorairesSection horaires={commercant.horaires_detail} variant="card"/>
                 </div>
@@ -1219,7 +1219,7 @@ export default function CommanderRdvSlug() {
                 </div>
               )}
 
-              {/* ─── ÉTAPE 1 — LISTE PRESTATIONS ─── */}
+              {/* ─── ÉTAPE 1 - LISTE PRESTATIONS ─── */}
               {!commercant._rdvDesactive && etape === 1 && (
                 <div style={{ padding: '1.5rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
@@ -1291,7 +1291,7 @@ export default function CommanderRdvSlug() {
                 </div>
               )}
 
-              {/* ─── ÉTAPE 2 — CALENDRIER + SLOTS CRÉNEAUX ─── */}
+              {/* ─── ÉTAPE 2 - CALENDRIER + SLOTS CRÉNEAUX ─── */}
               {etape === 2 && prestationChoisie && (
                 <div style={{ padding: '1.25rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
                   {/* Recap prestation choisie + bouton Changer */}
@@ -1388,7 +1388,7 @@ export default function CommanderRdvSlug() {
                     <div style={{ flex: 1, height: 1, background: T.pale }}/>
                   </div>
 
-                  {/* Day picker horizontal scrollable — 14 premiers jours uniquement.
+                  {/* Day picker horizontal scrollable - 14 premiers jours uniquement.
                       Pour les RDVs plus eloignes (jusqu'a J+60), bouton 'Plus de jours' qui
                       deroule un mini-calendrier mensuel sous le picker. */}
                   <div className="day-scroll" style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: showMiniCal ? 8 : 12, scrollbarWidth: 'none' }}>
@@ -1447,7 +1447,7 @@ export default function CommanderRdvSlug() {
                     )}
                   </div>
 
-                  {/* Mini-calendrier mensuel — apparait au clic sur le bouton 'Plus'.
+                  {/* Mini-calendrier mensuel - apparait au clic sur le bouton 'Plus'.
                       joursAvecDispo embed nbLibres -> dots verts (libres) / rouges (complets) sur les cellules. */}
                   {showMiniCal && (
                     <MiniCalendrier
@@ -1506,7 +1506,7 @@ export default function CommanderRdvSlug() {
                     </div>
                   )}
 
-                  {/* SECTION 1 : SLOTS LIBRES UNIQUEMENT — gros boutons, lecture immediate */}
+                  {/* SECTION 1 : SLOTS LIBRES UNIQUEMENT - gros boutons, lecture immediate */}
                   {dateChoisie && !slotsLoading && slots.filter(s => !s.pris).length > 0 && (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(82px, 1fr))', gap: 8, marginBottom: 14 }}>
                       {slots.filter(s => !s.pris).map(({ heure }) => {
@@ -1538,7 +1538,7 @@ export default function CommanderRdvSlug() {
                     </div>
                   )}
 
-                  {/* SECTION 2 : DEJA PRIS — info uniquement, jamais cliquable. Affichee seulement
+                  {/* SECTION 2 : DEJA PRIS - info uniquement, jamais cliquable. Affichee seulement
                       s'il existe au moins une reservation ce jour-la. Sert de preuve sociale
                       ('le commerce a de l'activite') sans polluer la zone de selection. */}
                   {/* Bug 7.2 : filtrage praticien-aware + affichage du prenom.
@@ -1580,7 +1580,7 @@ export default function CommanderRdvSlug() {
                   {heureChoisie && (
                     <button onClick={() => setEtape(3)}
                       style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '1rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 6px 24px ${T.main}55`, animation: 'fadeUp 0.3s ease' }}>
-                      Continuer — {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} à {heureChoisie}
+                      Continuer - {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} à {heureChoisie}
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
                       </svg>
@@ -1589,7 +1589,7 @@ export default function CommanderRdvSlug() {
                 </div>
               )}
 
-              {/* ─── ÉTAPE 3 — COORDONNÉES + RGPD ─── */}
+              {/* ─── ÉTAPE 3 - COORDONNÉES + RGPD ─── */}
               {etape === 3 && prestationChoisie && dateChoisie && heureChoisie && (
                 <div style={{ padding: '1.25rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
                   {/* Recap RDV verrouillé */}
@@ -1619,7 +1619,7 @@ export default function CommanderRdvSlug() {
 
                   {/* Encart Yopper connecté vs invité.
                       Wording : on rassure d'abord (PAS besoin de compte) puis on offre
-                      le raccourci aux Yoppers existants — pas de pression a creer un compte
+                      le raccourci aux Yoppers existants - pas de pression a creer un compte
                       au milieu du flow (le CTA d'inscription arrive en etape 4 post-RDV). */}
                   {!yopperConnecte && (
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: T.pale, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: 14, border: `1px solid ${T.main}22` }}>
@@ -1628,7 +1628,7 @@ export default function CommanderRdvSlug() {
                         <path d="M12 16v-4M12 8h.01"/>
                       </svg>
                       <p style={{ fontSize: '0.78rem', color: T.deep, lineHeight: 1.5, flex: 1, margin: 0 }}>
-                        <strong style={{ color: T.ink }}>Pas besoin de compte</strong> pour réserver — remplis juste tes coordonnées ci-dessous.<br/>
+                        <strong style={{ color: T.ink }}>Pas besoin de compte</strong> pour réserver - remplis juste tes coordonnées ci-dessous.<br/>
                         Déjà Yopper ?{' '}
                         <a href={`/commander/auth?redirect=/commander/rdv/${slug}`} style={{ color: T.main, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                           Connecte-toi pour pré-remplir →
@@ -1661,7 +1661,7 @@ export default function CommanderRdvSlug() {
                     style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: 12, border: `1.5px solid ${T.pale}`, fontSize: '0.95rem', fontFamily: '"DM Sans", sans-serif', color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}/>
 
                   {/* Notes optionnelles */}
-                  <textarea placeholder="Une précision pour le commerçant ? (optionnel — allergie, demande spécifique…)"
+                  <textarea placeholder="Une précision pour le commerçant ? (optionnel - allergie, demande spécifique…)"
                     value={client.notes} onChange={e => setClient(p => ({ ...p, notes: e.target.value }))}
                     rows={3}
                     style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: 12, border: `1.5px solid ${T.pale}`, fontSize: '0.85rem', fontFamily: '"DM Sans", sans-serif', color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box', marginBottom: 16, resize: 'vertical' }}/>
@@ -1710,7 +1710,7 @@ export default function CommanderRdvSlug() {
                     </div>
                   )}
 
-                  {/* Bouton Confirmer — wording adapté si paiement en ligne requis */}
+                  {/* Bouton Confirmer - wording adapté si paiement en ligne requis */}
                   {(() => {
                     const acompteEnLigne = !!(commercant?.rdv_acompte_en_ligne_actif && commercant?.stripe_account_charges_enabled && prestationChoisie?.acompte_pourcent > 0)
                     const prixBase = prestationChoisie?.prix != null ? Number(prestationChoisie.prix) : (prestationChoisie?.prix_min != null ? Number(prestationChoisie.prix_min) : null)
@@ -1754,7 +1754,7 @@ export default function CommanderRdvSlug() {
                 </div>
               )}
 
-              {/* ─── ÉTAPE 4 — CONFIRMATION "Ton RDV est Yoppé ! 🟣" ─── */}
+              {/* ─── ÉTAPE 4 - CONFIRMATION "Ton RDV est Yoppé ! 🟣" ─── */}
               {etape === 4 && rdvCree && (
                 <div style={{ padding: '1.5rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
                   <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
@@ -1782,7 +1782,7 @@ export default function CommanderRdvSlug() {
                     </p>
                   </div>
 
-                  {/* Bandeau paiement Stripe reçu — cas _viaStripe (retour Checkout) */}
+                  {/* Bandeau paiement Stripe reçu - cas _viaStripe (retour Checkout) */}
                   {rdvCree._viaStripe && (
                     <div style={{ background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', border: '1.5px solid #10B981', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>

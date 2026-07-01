@@ -143,7 +143,7 @@ export default function ConfirmCommune({ clientId, currentCommuneId, mode = 'fir
           position: 'relative',
         }}>
 
-        {/* Barre dégradée fine en haut — signature design system */}
+        {/* Barre dégradée fine en haut - signature design system */}
         <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
 
         {/* Bouton fermer si mode change */}
@@ -166,7 +166,7 @@ export default function ConfirmCommune({ clientId, currentCommuneId, mode = 'fir
                 On regarde où tu es…
               </h2>
               <p style={{ fontSize: 13, color: T.muted, margin: '0 0 4px', lineHeight: 1.5 }}>
-                Accepte la demande de localisation de ton navigateur — on l'utilise uniquement pour te proposer ta commune.
+                Accepte la demande de localisation de ton navigateur - on l'utilise uniquement pour te proposer ta commune.
               </p>
               <p style={{ fontSize: 11, color: T.mid, margin: '8px 0 0', fontWeight: 600 }}>
                 On ne stocke pas ta position GPS.
@@ -232,7 +232,7 @@ export default function ConfirmCommune({ clientId, currentCommuneId, mode = 'fir
                 value={selectedId || ''}
                 onChange={e => setSelectedId(e.target.value)}
                 style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${T.hairline}`, fontSize: 14, fontFamily: 'inherit', color: T.ink, background: '#fff', cursor: 'pointer', outline: 'none', boxSizing: 'border-box', marginBottom: 16 }}>
-                <option value="">— Sélectionne une commune —</option>
+                <option value="">- Sélectionne une commune -</option>
                 {communes.map(c => (
                   <option key={c.id} value={c.id}>
                     {c.nom}{c.province ? ` (${c.province})` : ''}

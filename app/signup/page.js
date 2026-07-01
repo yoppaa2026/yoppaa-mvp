@@ -1902,8 +1902,23 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
           }}
         />
         {bce.length > 0 && !verifBce.valide && (
-          <p style={{ fontSize: 11, color: '#DC2626', marginTop: 4, fontWeight: 600 }}>
-            Numéro invalide. Format BE : 10 chiffres, commencent par 0.
+          <p style={{ fontSize: 11, color: '#DC2626', marginTop: 4, fontWeight: 600, lineHeight: 1.45 }}>
+            {verifBce.raison === 'checksum' ? (
+              <>
+                Ce numéro n&rsquo;existe pas au registre BCE (contrôle mod 97 échoué).
+                <br/>
+                Vérifie le numéro exact sur{' '}
+                <a href="https://kbopub.economie.fgov.be/kbopub/zoeknummerform.html?lang=fr"
+                   target="_blank" rel="noopener noreferrer"
+                   style={{ color: '#DC2626', fontWeight: 800, textDecoration: 'underline' }}>
+                  kbopub.economie.fgov.be
+                </a>.
+              </>
+            ) : verifBce.raison === 'prefixe' ? (
+              <>Format BE : 10 chiffres qui commencent par 0 ou 1.</>
+            ) : (
+              <>Format BE : 10 chiffres (ex. 0123.456.789).</>
+            )}
           </p>
         )}
         {verifBce.valide && (

@@ -679,6 +679,32 @@ export default function CommanderSlug() {
   const [dealsParArticle, setDealsParArticle] = useState({})
   // Modale detail deal (titre + description + dates + prix)
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
+  // Deduplication tracking stats deals : chaque event compte 1x par session client.
+  const dealsVuesRef = useRef(new Set())
+  const dealsCtaCliquesRef = useRef(new Set())
+
+  // Fire-and-forget vers /api/deals/track (V1 : pas de retry ni de gestion erreur
+  // cote UX, le tracking est best-effort et non bloquant pour le Yopper).
+  async function trackDeal(dealId, event) {
+    if (!dealId) return
+    const seen = event === 'view' ? dealsVuesRef.current : dealsCtaCliquesRef.current
+    if (seen.has(dealId)) return
+    seen.add(dealId)
+    try {
+      await fetch('/api/deals/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deal_id: dealId, event }),
+      })
+    } catch (e) {
+      console.warn('[trackDeal] envoi echoue', e?.message)
+      seen.delete(dealId)  // retry autorise la prochaine fois
+    }
+  }
+
+  useEffect(() => {
+    if (dealDetailOuvert?.id) trackDeal(dealDetailOuvert.id, 'view')
+  }, [dealDetailOuvert?.id])
   const [fermetures, setFermetures] = useState([])
   const [derniereCommande, setDerniereCommande] = useState(null)
   const [isDesktop, setIsDesktop] = useState(false)
@@ -1612,6 +1638,7 @@ export default function CommanderSlug() {
               {dealDetailOuvert.cta_appeler_reserver && commercant.telephone ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
                   <a href={`tel:${commercant.telephone}`}
+                    onClick={() => trackDeal(dealDetailOuvert.id, 'cta_click')}
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0.95rem', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 6px 20px ${T.main}55`, textDecoration: 'none' }}>
                     <Phone size={16} strokeWidth={2.4}/>
                     Appeler pour réserver

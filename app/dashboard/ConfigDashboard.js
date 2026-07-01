@@ -1457,6 +1457,7 @@ function DealRow({ d, today, onEdit, onToggle, onDelete, passe = false }) {
             <span style={{ fontWeight: 800, color: T.ink, fontSize: 15 }}>{d.titre}</span>
             {isToday && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#F0FDF4', color: '#10B981' }}>Aujourd&rsquo;hui</span>}
             {d.inclus_morning && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#FFF7ED', color: '#EA580C', display: 'inline-flex', alignItems: 'center', gap: 3 }}><Sun size={11} strokeWidth={2}/> Morning</span>}
+            {d.est_bonne_affaire && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, background: '#FEF3C7', color: '#7C2D12', display: 'inline-flex', alignItems: 'center', gap: 3 }}><Star size={11} strokeWidth={2.4}/> Bonne affaire</span>}
             <span style={{ ...s.tag, background: d.actif ? T.bgPanel : '#F3F4F6', color: d.actif ? '#fff' : T.muted }}>{d.actif ? 'Actif' : 'Inactif'}</span>
           </div>
           {d.description && <p style={{ fontSize: 12.5, color: T.muted, margin: '0 0 6px', lineHeight: 1.4 }}>{d.description}</p>}
@@ -1469,6 +1470,25 @@ function DealRow({ d, today, onEdit, onToggle, onDelete, passe = false }) {
               </span>
             )}
           </div>
+          {/* Stats deal : vues + clics CTA. Affichees seulement si au moins un
+              event a ete comptabilise, pour ne pas polluer les deals fraichement crees. */}
+          {((d.vues ?? 0) > 0 || (d.cta_clics ?? 0) > 0) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${T.hairline}`, fontSize: 11.5, color: T.muted, fontWeight: 700 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Eye size={12} strokeWidth={2.2}/> {d.vues || 0} vue{(d.vues || 0) > 1 ? 's' : ''}
+              </span>
+              {(d.cta_clics ?? 0) > 0 && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: T.main }}>
+                  <Phone size={12} strokeWidth={2.2}/> {d.cta_clics} clic{d.cta_clics > 1 ? 's' : ''} CTA
+                </span>
+              )}
+              {(d.vues ?? 0) > 0 && (d.cta_clics ?? 0) > 0 && (
+                <span style={{ color: T.deep, fontWeight: 800 }}>
+                  {Math.round((d.cta_clics / d.vues) * 100)}% conv.
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
           <Toggle value={d.actif} onChange={() => onToggle(d)}/>

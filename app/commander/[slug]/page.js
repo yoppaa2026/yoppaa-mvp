@@ -9,7 +9,7 @@ import CTAUpgrade from '../CTAUpgrade'
 import ModalSignalement from '../ModalSignalement'
 import HorairesSection from '../HorairesSection'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
-import { Star, Flame, Calendar, Store } from 'lucide-react'
+import { Star, Flame, Calendar, Store, Check, Phone } from 'lucide-react'
 
 const T = {
   bg:      '#F8F6FF',
@@ -1514,35 +1514,88 @@ export default function CommanderSlug() {
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 
-      {/* Modale détail deal — titre + description complète + dates + prix */}
+      {/* Modale détail deal enrichie : photo hero + description longue + badge
+          Bonne affaire + CTA transactionnel (Vendre uniquement).
+          Fallback header violet si pas de photo (compat deals anciens). */}
       {dealDetailOuvert && (
         <div onClick={() => setDealDetailOuvert(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeUp 0.2s ease' }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 22, maxWidth: 440, width: '100%', boxShadow: '0 24px 48px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
-            {/* En-tête violet foncé */}
-            <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, padding: '20px 22px 24px', color: '#fff' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
-                <span style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px', background: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: 100, border: '1px solid rgba(255,255,255,0.2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Flame size={11} strokeWidth={2}/> Deal du jour</span>
-                <button onClick={() => setDealDetailOuvert(null)} aria-label="Fermer"
-                  style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 30, height: 30, color: '#fff', cursor: 'pointer', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-              </div>
-              <h2 style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.2, margin: 0 }}>
-                {dealDetailOuvert.titre}
-              </h2>
-              {dealDetailOuvert.prix_deal && (
-                <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, marginTop: 12, background: 'rgba(255,255,255,0.1)', padding: '8px 14px', borderRadius: 12 }}>
-                  <span style={{ fontWeight: 900, fontSize: '1.6rem', color: T.light, letterSpacing: '-0.5px' }}>{Number(dealDetailOuvert.prix_deal).toFixed(2)}€</span>
-                  {dealDetailOuvert.prix_original && (
-                    <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.5)', textDecoration: 'line-through' }}>{Number(dealDetailOuvert.prix_original).toFixed(2)}€</span>
+            style={{ background: '#fff', borderRadius: 22, maxWidth: 440, width: '100%', boxShadow: '0 24px 48px rgba(0,0,0,0.35)', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+
+            {/* Photo hero enrichie si dispo, sinon en-tête violet fallback */}
+            {dealDetailOuvert.photo_url ? (
+              <div style={{ position: 'relative', width: '100%', paddingTop: '62%', background: T.pale, flexShrink: 0 }}>
+                <img src={dealDetailOuvert.photo_url} alt={dealDetailOuvert.titre}
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}/>
+                {/* Overlay gradient bas pour la lisibilité des badges */}
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(22,6,54,0.35) 0%, transparent 30%, transparent 65%, rgba(22,6,54,0.55) 100%)' }}/>
+                {/* Badge Deal + Bonne affaire en haut à gauche */}
+                <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '1.2px', background: 'rgba(22,6,54,0.65)', padding: '4px 10px', borderRadius: 100, backdropFilter: 'blur(8px)', display: 'inline-flex', alignItems: 'center', gap: 4, width: 'fit-content' }}>
+                    <Flame size={11} strokeWidth={2.2}/> Deal
+                  </span>
+                  {dealDetailOuvert.est_bonne_affaire && (
+                    <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#7C2D12', textTransform: 'uppercase', letterSpacing: '1.2px', background: 'rgba(252,211,77,0.95)', padding: '4px 10px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4, width: 'fit-content', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
+                      <Star size={11} strokeWidth={2.5}/> Bonne affaire
+                    </span>
                   )}
                 </div>
-              )}
-            </div>
-            {/* Corps blanc */}
-            <div style={{ padding: '18px 22px 22px' }}>
+                {/* Bouton fermer en haut à droite */}
+                <button onClick={() => setDealDetailOuvert(null)} aria-label="Fermer"
+                  style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(22,6,54,0.65)', backdropFilter: 'blur(8px)', border: 'none', borderRadius: '50%', width: 34, height: 34, color: '#fff', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                {/* Titre + prix en overlay bas */}
+                <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '16px 20px', color: '#fff' }}>
+                  <h2 style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.2, margin: 0, textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>
+                    {dealDetailOuvert.titre}
+                  </h2>
+                  {dealDetailOuvert.prix_deal && (
+                    <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
+                      <span style={{ fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.5px', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{Number(dealDetailOuvert.prix_deal).toFixed(2)}€</span>
+                      {dealDetailOuvert.prix_original && (
+                        <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.75)', textDecoration: 'line-through', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{Number(dealDetailOuvert.prix_original).toFixed(2)}€</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, padding: '20px 22px 24px', color: '#fff', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px', background: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: 100, border: '1px solid rgba(255,255,255,0.2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Flame size={11} strokeWidth={2}/> Deal</span>
+                    {dealDetailOuvert.est_bonne_affaire && (
+                      <span style={{ fontSize: '0.62rem', fontWeight: 800, color: '#7C2D12', textTransform: 'uppercase', letterSpacing: '1.2px', background: '#FCD34D', padding: '4px 10px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Star size={11} strokeWidth={2.2}/> Bonne affaire</span>
+                    )}
+                  </div>
+                  <button onClick={() => setDealDetailOuvert(null)} aria-label="Fermer"
+                    style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 30, height: 30, color: '#fff', cursor: 'pointer', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                </div>
+                <h2 style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.2, margin: 0 }}>
+                  {dealDetailOuvert.titre}
+                </h2>
+                {dealDetailOuvert.prix_deal && (
+                  <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, marginTop: 12, background: 'rgba(255,255,255,0.1)', padding: '8px 14px', borderRadius: 12 }}>
+                    <span style={{ fontWeight: 900, fontSize: '1.6rem', color: T.light, letterSpacing: '-0.5px' }}>{Number(dealDetailOuvert.prix_deal).toFixed(2)}€</span>
+                    {dealDetailOuvert.prix_original && (
+                      <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.5)', textDecoration: 'line-through' }}>{Number(dealDetailOuvert.prix_original).toFixed(2)}€</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Corps blanc scrollable */}
+            <div style={{ padding: '18px 22px 22px', overflowY: 'auto', flex: 1 }}>
               {dealDetailOuvert.description && (
-                <p style={{ fontSize: '0.9rem', color: T.ink, lineHeight: 1.55, margin: '0 0 14px' }}>{dealDetailOuvert.description}</p>
+                <p style={{ fontSize: '0.9rem', color: T.ink, lineHeight: 1.55, margin: '0 0 14px', fontWeight: 600 }}>
+                  {dealDetailOuvert.description}
+                </p>
+              )}
+              {dealDetailOuvert.description_longue && (
+                <div style={{ fontSize: '0.88rem', color: T.deep, lineHeight: 1.65, margin: '0 0 16px', whiteSpace: 'pre-wrap' }}>
+                  {dealDetailOuvert.description_longue}
+                </div>
               )}
               {dealDetailOuvert.date_deal && (
                 <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 600, margin: '0 0 6px' }}>
@@ -1551,18 +1604,16 @@ export default function CommanderSlug() {
               )}
               {dealDetailOuvert.article_id && (
                 <p style={{ fontSize: '0.78rem', color: T.main, fontWeight: 700, margin: '0 0 6px' }}>
-                  ✓ Appliqué automatiquement à l&rsquo;article concerné dans le menu
+                  <Check size={13} strokeWidth={2.4} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Appliqué automatiquement à l&rsquo;article concerné dans le menu
                 </p>
               )}
-              {/* Bouton "Appeler pour réserver" : uniquement si le commerçant
-                  l'a active sur ce deal (cta_appeler_reserver) ET telephone OK */}
+
+              {/* Bouton "Appeler pour réserver" (héritage Communiquer/Vendre) */}
               {dealDetailOuvert.cta_appeler_reserver && commercant.telephone ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
                   <a href={`tel:${commercant.telephone}`}
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0.95rem', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 6px 20px ${T.main}55`, textDecoration: 'none' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8 19.79 19.79 0 01.22 2.18 2 2 0 012.2 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.11 6.11l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
-                    </svg>
+                    <Phone size={16} strokeWidth={2.4}/>
                     Appeler pour réserver
                   </a>
                   <button onClick={() => setDealDetailOuvert(null)}

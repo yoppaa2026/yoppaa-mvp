@@ -2075,13 +2075,13 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
   // S5 : KYB obligatoire avant soumission. Sans KYB rempli (BCE + nom prenom +
   // recto + verso), bouton "Envoyer" disabled. La validation FINALE (kyb_statut
   // = 'valide') est faite par Yoppaa cote admin avant publication de la fiche.
-  const kybRempli =
-    !!commercant.bce &&
-    validerBCE(commercant.bce).valide &&
-    !!commercant.representant_legal_nom &&
-    !!commercant.representant_legal_prenom &&
-    !!commercant.kyb_id_recto_url &&
-    !!commercant.kyb_id_verso_url
+  const kybManques = []
+  if (!commercant.bce || !validerBCE(commercant.bce).valide) kybManques.push('numéro BCE')
+  if (!commercant.representant_legal_prenom) kybManques.push('prénom du représentant légal')
+  if (!commercant.representant_legal_nom) kybManques.push('nom du représentant légal')
+  if (!commercant.kyb_id_recto_url) kybManques.push('carte d\'identité recto')
+  if (!commercant.kyb_id_verso_url) kybManques.push('carte d\'identité verso')
+  const kybRempli = kybManques.length === 0
   const peutSoumettre = score >= 60 && kybRempli
 
   async function soumettre() {
@@ -2312,10 +2312,18 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
 
       <div style={{ marginTop: 8 }}>
         {!peutSoumettre && (
-          <p style={{ fontSize: 12, color: '#EA580C', fontWeight: 700, textAlign: 'center', marginBottom: 12 }}>
-            {!kybRempli
-              ? 'Vérification entreprise incomplète. Renseigne BCE, représentant légal et carte d\'identité ci-dessus.'
-              : `Score trop bas (${score}/100). Reviens sur les etapes precedentes pour completer ton profil.`}
+          <p style={{ fontSize: 12, color: '#EA580C', fontWeight: 700, textAlign: 'center', marginBottom: 12, lineHeight: 1.5 }}>
+            {!kybRempli ? (
+              <>
+                Vérification entreprise incomplète. Il manque : {kybManques.join(', ')}.
+                <br/>
+                <span style={{ fontWeight: 500, color: T.muted }}>
+                  Reviens à l&rsquo;étape précédente pour compléter, puis attends quelques secondes que la sauvegarde soit prise en compte.
+                </span>
+              </>
+            ) : (
+              `Score trop bas (${score}/100). Reviens sur les étapes précédentes pour compléter ton profil.`
+            )}
           </p>
         )}
         <div style={{ display: 'flex', gap: 10 }}>

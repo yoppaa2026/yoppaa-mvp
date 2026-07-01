@@ -1066,13 +1066,15 @@ function TabDeals({ commercantId, commercant, toast }) {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({
-    titre: '', description: '', prix_deal: '', prix_original: '',
+    titre: '', description: '', description_longue: '', prix_deal: '', prix_original: '',
     date_debut: tomorrow, date_fin: tomorrow,
     heure_debut: '00:00', heure_fin: '23:59',
     inclus_morning: false, actif: true, article_id: '',
     cta_appeler_reserver: false,
+    photo_url: '', est_bonne_affaire: false,
   })
   const [saving, setSaving] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const firstLoadRef = useRef(true)
 
   // Heure limite Morning (par défaut 23:00, configurable par commerçant)
@@ -1101,11 +1103,12 @@ function TabDeals({ commercantId, commercant, toast }) {
   }
 
   function openNew() {
-    setForm({ titre: '', description: '', prix_deal: '', prix_original: '',
+    setForm({ titre: '', description: '', description_longue: '', prix_deal: '', prix_original: '',
       date_debut: tomorrow, date_fin: tomorrow,
       heure_debut: '00:00', heure_fin: '23:59',
       inclus_morning: false, actif: true, article_id: '',
-      cta_appeler_reserver: false })
+      cta_appeler_reserver: false,
+      photo_url: '', est_bonne_affaire: false })
     setEditId(null); setShowForm(true)
   }
   function openEdit(d) {
@@ -1117,6 +1120,7 @@ function TabDeals({ commercantId, commercant, toast }) {
     setForm({
       titre: d.titre || '',
       description: d.description || '',
+      description_longue: d.description_longue || '',
       prix_deal: String(d.prix_deal ?? ''),
       prix_original: String(d.prix_original ?? ''),
       date_debut: dDebut,
@@ -1127,8 +1131,26 @@ function TabDeals({ commercantId, commercant, toast }) {
       actif: d.actif !== false,
       article_id: d.article_id || '',
       cta_appeler_reserver: !!d.cta_appeler_reserver,
+      photo_url: d.photo_url || '',
+      est_bonne_affaire: !!d.est_bonne_affaire,
     })
     setEditId(d.id); setShowForm(true)
+  }
+
+  // Upload photo deal dans le bucket 'logos' existant. Compression client
+  // 1200x1200 JPEG q=0.85 pour la modale enrichie cote client (photo hero).
+  async function uploadPhotoDeal(file) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
+    if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
+    setUploadingPhoto(true)
+    const compressed = await compresserImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.85 })
+    const fileName = `deal-${commercantId}-${Date.now()}.jpg`
+    const { error } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
+    if (error) { toast('Erreur upload photo', 'error'); setUploadingPhoto(false); return }
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    setForm(f => ({ ...f, photo_url: urlData.publicUrl }))
+    setUploadingPhoto(false)
   }
 
   // Quand on choisit un article, on pré-remplit prix_original
@@ -1163,10 +1185,20 @@ function TabDeals({ commercantId, commercant, toast }) {
     setSaving(true)
     const dateDebut = `${dDebut}T${form.heure_debut || '00:00'}:00`
     const dateFin   = `${dFin}T${form.heure_fin || '23:59'}:59`
+    // Validation prix : prix_deal doit etre inferieur au prix_original (audit M4.2 bug)
+    if (form.prix_deal && form.prix_original) {
+      const pd = parseFloat(form.prix_deal)
+      const po = parseFloat(form.prix_original)
+      if (pd >= po) {
+        setSaving(false)
+        return toast('Le prix deal doit être inférieur au prix d\'origine', 'error')
+      }
+    }
     const payload = {
       commercant_id: commercantId,
       titre: form.titre.trim(),
       description: form.description.trim() || null,
+      description_longue: form.description_longue.trim() || null,
       prix_deal: form.prix_deal ? parseFloat(form.prix_deal) : null,
       prix_original: form.prix_original ? parseFloat(form.prix_original) : null,
       // date_deal = 1er jour de la période (utilisé pour la sélection Good Morning Yoppers)
@@ -1177,6 +1209,11 @@ function TabDeals({ commercantId, commercant, toast }) {
       actif: !!form.actif,
       article_id: form.article_id || null,
       cta_appeler_reserver: !!form.cta_appeler_reserver,
+      photo_url: form.photo_url || null,
+      est_bonne_affaire: !!form.est_bonne_affaire,
+      // Reset statut_morning a 'pending' si on remet inclus_morning=true a l'edition,
+      // pour que le cron 7h30 le repique le lendemain
+      ...(form.inclus_morning ? { statut_morning: 'pending' } : {}),
     }
 
     // Règle : 1 seul deal coché pour le Morning par jour → décocher les autres
@@ -1258,7 +1295,45 @@ function TabDeals({ commercantId, commercant, toast }) {
           </h3>
           <div style={{ display: 'grid', gap: 12 }}>
             <div><label style={s.label}>Titre *</label><Input value={form.titre} onChange={e => setForm(p => ({ ...p, titre: e.target.value }))} placeholder="Ex: 2 croissants achetés, 1 offert"/></div>
-            <div><label style={s.label}>Description</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Détails du deal, conditions…"/></div>
+
+            {/* Photo du deal (utilisee en hero dans la modale enrichie cote client) */}
+            <div>
+              <label style={s.label}>Photo du deal</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {form.photo_url ? (
+                  <div style={{ position: 'relative', width: 88, height: 88, borderRadius: 12, overflow: 'hidden', border: `1.5px solid ${T.pale}`, flexShrink: 0 }}>
+                    <img src={form.photo_url} alt="Photo deal" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                    <button type="button" onClick={() => setForm(f => ({ ...f, photo_url: '' }))}
+                      style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="Retirer la photo">×</button>
+                  </div>
+                ) : (
+                  <div style={{ width: 88, height: 88, borderRadius: 12, background: '#FAFAFA', border: `1.5px dashed ${T.hairline}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Camera size={22} strokeWidth={1.8} color={T.muted}/>
+                  </div>
+                )}
+                <div style={{ flex: 1 }}>
+                  <label style={{ ...s.btn, ...s.btnGhost, cursor: 'pointer', display: 'inline-flex' }}>
+                    <Icon name="camera" size={14} color={T.bgPanel}/>
+                    {uploadingPhoto ? 'Chargement…' : (form.photo_url ? 'Remplacer' : 'Ajouter une photo')}
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadPhotoDeal(e.target.files?.[0])} disabled={uploadingPhoto}/>
+                  </label>
+                  <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
+                    Une photo attractive multiplie les clics. Compressée automatiquement.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div><label style={s.label}>Accroche courte</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Une ou deux phrases affichées sur la card du deal…"/></div>
+
+            <div>
+              <label style={s.label}>Description enrichie</label>
+              <Textarea value={form.description_longue} onChange={e => setForm(p => ({ ...p, description_longue: e.target.value }))} placeholder="Détails complets affichés sur la fiche du deal : conditions, composition, avantages…" style={{ minHeight: 110 }}/>
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
+                Visible dans la fiche complète du deal côté Yopper. Idéal pour raconter l&rsquo;histoire du produit ou détailler les conditions.
+              </p>
+            </div>
             <div>
               <label style={s.label}>Article concerné (optionnel)</label>
               <select value={form.article_id} onChange={e => onArticleChange(e.target.value)}
@@ -1325,6 +1400,17 @@ function TabDeals({ commercantId, commercant, toast }) {
                 <span style={{ fontSize: 11, color: T.muted, fontWeight: 500 }}>Active un bouton d&rsquo;appel direct dans la modale du deal côté client</span>
               </div>
             </label>
+
+            {/* Bonne affaire : badge qui met le deal en avant sur la fiche et dans les listes.
+                Visible à partir du plan Communiquer. */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: form.est_bonne_affaire ? '#FEF3C7' : '#FAFAFA', border: `1.5px solid ${form.est_bonne_affaire ? '#F59E0B' : T.hairline}`, borderRadius: 10, cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.est_bonne_affaire} onChange={e => setForm(p => ({ ...p, est_bonne_affaire: e.target.checked }))} style={{ width: 18, height: 18, cursor: 'pointer' }}/>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: 13, color: T.ink, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Star size={14} strokeWidth={1.8} color="#F59E0B"/> Marquer comme « Bonne affaire »</span>
+                <span style={{ fontSize: 11, color: T.muted, fontWeight: 500 }}>Ajoute un badge doré et met le deal en avant côté Yopper.</span>
+              </div>
+            </label>
+
             <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Deal actif (visible côté client)"/>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>

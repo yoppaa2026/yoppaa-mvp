@@ -1,9 +1,11 @@
 'use client'
 // ════════════════════════════════════════════════════════════════════
-// GOOD MORNING YOPPERS — Écran 7h30 quotidien (Phase 1 — MVP visuel)
+// GOOD MORNING YOPPERS — Écran 7h30 quotidien
 //
-// Données encore mockées : on branche les vraies tables yoppaa_deals
-// et actualites une fois le rendu validé visuellement.
+// Data live depuis Supabase : yoppaa_deals (inclus_morning + date_deal
+// du jour) + actualites (fenêtre date_debut/date_fin) + services_publics
+// locaux de la commune.
+// Le push OneSignal est déclenché par le cron /api/cron/morning-yoppers.
 //
 // Référence canonique : lib/morning/_reference.jsx
 // Spec : memory/project_good_morning_yoppers.md

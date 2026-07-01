@@ -1517,17 +1517,35 @@ function DealRow({ d, today, onEdit, onToggle, onDelete, passe = false }) {
 }
 
 // ─── Onglet ACTUS / ALERTES ───────────────────────────────────────────────────
-function TabActus({ commercantId, toast }) {
+function TabActus({ commercantId, commercant, toast }) {
   const today = new Date().toISOString().slice(0, 10)
   const [actus, setActus] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({
-    titre: '', contenu: '', type: 'actu', date_debut: today, date_fin: '', actif: true,
+    titre: '', contenu: '', contenu_long: '', type: 'actu', date_debut: today, date_fin: '', actif: true,
+    photo_url: '', inclus_gmy: false,
   })
   const [saving, setSaving] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const firstLoadRef = useRef(true)
+
+  // Palier Exister limite a 1 apparition GMY par semaine calendaire lundi-dim
+  // (decision Alex 01/07 anti-cannibalisation Communiquer). Communiquer + Vendre
+  // sont illimites cote UI (rate limit push cote OneSignal si abus futur).
+  const planResolu = commercant?.plan === 'on' ? 'exister' : commercant?.plan === 'full' ? 'vendre' : commercant?.plan
+  const estExister = planResolu === 'exister'
+
+  // Retourne le lundi 00:00 de la semaine calendaire d'une date (locale Brussels).
+  function lundiSemaineFR(d) {
+    const dt = new Date(d)
+    const jour = dt.getDay()  // 0=dim, 1=lundi...
+    const offset = jour === 0 ? -6 : 1 - jour
+    dt.setDate(dt.getDate() + offset)
+    dt.setHours(0, 0, 0, 0)
+    return dt
+  }
 
   useEffect(() => { fetchActus() }, [commercantId])
 
@@ -1542,39 +1560,96 @@ function TabActus({ commercantId, toast }) {
   }
 
   function openNew() {
-    setForm({ titre: '', contenu: '', type: 'actu', date_debut: today, date_fin: '', actif: true })
+    setForm({ titre: '', contenu: '', contenu_long: '', type: 'actu', date_debut: today, date_fin: '', actif: true,
+      photo_url: '', inclus_gmy: false })
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
     setForm({
       titre: a.titre || '',
       contenu: a.contenu || '',
+      contenu_long: a.contenu_long || '',
       type: a.type || 'actu',
       date_debut: a.date_debut || today,
       date_fin: a.date_fin || '',
       actif: a.actif !== false,
+      photo_url: a.photo_url || '',
+      inclus_gmy: !!a.inclus_gmy,
     })
     setEditId(a.id); setShowForm(true)
   }
 
+  async function uploadPhotoActu(file) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
+    if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
+    setUploadingPhoto(true)
+    const compressed = await compresserImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.85 })
+    const fileName = `actu-${commercantId}-${Date.now()}.jpg`
+    const { error } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
+    if (error) { toast('Erreur upload photo', 'error'); setUploadingPhoto(false); return }
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    setForm(f => ({ ...f, photo_url: urlData.publicUrl }))
+    setUploadingPhoto(false)
+  }
+
   async function saveActu() {
     if (!form.titre.trim()) return toast('Titre obligatoire', 'error')
+
+    // Validation Exister : 1 apparition GMY par semaine calendaire (lundi-dim).
+    // On check les actus existantes du commercant avec inclus_gmy=true dont
+    // la date_debut est dans la meme semaine que la date_debut de la nouvelle.
+    if (estExister && form.inclus_gmy) {
+      const dateRef = form.date_debut ? new Date(form.date_debut + 'T00:00:00') : new Date()
+      const lundi = lundiSemaineFR(dateRef)
+      const dimanche = new Date(lundi)
+      dimanche.setDate(dimanche.getDate() + 6)
+      dimanche.setHours(23, 59, 59, 999)
+
+      const { data: dejaGmy } = await supabase.from('actualites')
+        .select('id, titre, date_debut')
+        .eq('commercant_id', commercantId)
+        .eq('inclus_gmy', true)
+        .gte('date_debut', lundi.toISOString().slice(0, 10))
+        .lte('date_debut', dimanche.toISOString().slice(0, 10))
+
+      const conflit = (dejaGmy || []).find(a => a.id !== editId)
+      if (conflit) {
+        toast(`Palier Exister : une seule apparition GMY par semaine (déjà : « ${conflit.titre} »). Passe à Communiquer pour publier plus.`, 'error')
+        return
+      }
+    }
+
     setSaving(true)
     const payload = {
       commercant_id: commercantId,
       titre: form.titre.trim(),
       contenu: form.contenu.trim() || null,
+      contenu_long: form.contenu_long.trim() || null,
       type: form.type,
       date_debut: form.date_debut || null,
       date_fin: form.date_fin || null,
       actif: !!form.actif,
+      photo_url: form.photo_url || null,
+      inclus_gmy: !!form.inclus_gmy,
     }
-    const { error } = editId
-      ? await supabase.from('actualites').update(payload).eq('id', editId)
-      : await supabase.from('actualites').insert(payload)
+    const { data, error } = editId
+      ? await supabase.from('actualites').update(payload).eq('id', editId).select()
+      : await supabase.from('actualites').insert(payload).select()
     setSaving(false)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast(editId ? 'Actualité mise à jour' : 'Actualité publiée')
+
+    // Push OneSignal aux favoris a la CREATION d'une actu active. Anti-spam :
+    // pas d'envoi a l'edition. Alerte = high_priority cote route.
+    if (!editId && payload.actif && data?.[0]?.id) {
+      fetch('/api/actus/notify-favoris', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actu_id: data[0].id }),
+      }).catch(e => console.warn('[actus/notify-favoris] envoi echoue', e?.message))
+    }
+
     setShowForm(false); fetchActus()
   }
 
@@ -1638,11 +1713,63 @@ function TabActus({ commercantId, toast }) {
               </div>
             </div>
             <div><label style={s.label}>Titre *</label><Input value={form.titre} onChange={e => setForm(p => ({ ...p, titre: e.target.value }))} placeholder={form.type === 'alerte' ? 'Ex: Fermé exceptionnellement vendredi' : 'Ex: Nouveau menu d&rsquo;hiver dès lundi'}/></div>
-            <div><label style={s.label}>Contenu</label><Textarea value={form.contenu} onChange={e => setForm(p => ({ ...p, contenu: e.target.value }))} placeholder="Détails (optionnel)"/></div>
+
+            {/* Photo (utilisee comme hero dans la modale enrichie cote client) */}
+            <div>
+              <label style={s.label}>Photo</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {form.photo_url ? (
+                  <div style={{ position: 'relative', width: 88, height: 88, borderRadius: 12, overflow: 'hidden', border: `1.5px solid ${T.pale}`, flexShrink: 0 }}>
+                    <img src={form.photo_url} alt="Photo actu" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                    <button type="button" onClick={() => setForm(f => ({ ...f, photo_url: '' }))}
+                      style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="Retirer la photo">×</button>
+                  </div>
+                ) : (
+                  <div style={{ width: 88, height: 88, borderRadius: 12, background: '#FAFAFA', border: `1.5px dashed ${T.hairline}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Camera size={22} strokeWidth={1.8} color={T.muted}/>
+                  </div>
+                )}
+                <div style={{ flex: 1 }}>
+                  <label style={{ ...s.btn, ...s.btnGhost, cursor: 'pointer', display: 'inline-flex' }}>
+                    <Icon name="camera" size={14} color={T.bgPanel}/>
+                    {uploadingPhoto ? 'Chargement…' : (form.photo_url ? 'Remplacer' : 'Ajouter une photo')}
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadPhotoActu(e.target.files?.[0])} disabled={uploadingPhoto}/>
+                  </label>
+                  <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
+                    Optionnel. Rendra la publication plus visible côté Yopper.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div><label style={s.label}>Accroche courte</label><Textarea value={form.contenu} onChange={e => setForm(p => ({ ...p, contenu: e.target.value }))} placeholder="Une phrase visible sur la fiche"/></div>
+
+            <div>
+              <label style={s.label}>Contenu enrichi</label>
+              <Textarea value={form.contenu_long} onChange={e => setForm(p => ({ ...p, contenu_long: e.target.value }))} placeholder="Détails complets affichés dans la fiche de l&rsquo;actualité" style={{ minHeight: 110 }}/>
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
+                Visible dans la fiche complète de l&rsquo;actualité côté Yopper. Idéal pour raconter le contexte.
+              </p>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div><label style={s.label}>Date début</label><Input type="date" value={form.date_debut} onChange={e => setForm(p => ({ ...p, date_debut: e.target.value }))}/></div>
               <div><label style={s.label}>Date fin (vide = pas d&rsquo;échéance)</label><Input type="date" value={form.date_fin} min={form.date_debut} onChange={e => setForm(p => ({ ...p, date_fin: e.target.value }))}/></div>
             </div>
+
+            {/* Inclure dans Good Morning Yoppers. Exister limite a 1/semaine
+                calendaire. Communiquer / Vendre : illimite cote UI. */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: form.inclus_gmy ? '#FFF7ED' : '#FAFAFA', border: `1.5px solid ${form.inclus_gmy ? '#EA580C' : T.hairline}`, borderRadius: 10, cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.inclus_gmy} onChange={e => setForm(p => ({ ...p, inclus_gmy: e.target.checked }))} style={{ width: 18, height: 18, cursor: 'pointer' }}/>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: 13, color: T.ink, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Sun size={14} strokeWidth={1.8} color="#EA580C"/> Inclure dans Le Good Morning Yoppers</span>
+                <span style={{ fontSize: 11, color: T.muted, fontWeight: 500 }}>
+                  {estExister ? 'Palier Exister : 1 apparition GMY par semaine calendaire (lundi-dimanche).' : 'Ta publication apparaîtra dans le push du matin 7h30 aux Yoppers de ta zone.'}
+                </span>
+              </div>
+            </label>
+
             <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Publication active"/>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
@@ -4222,7 +4349,7 @@ export default function ConfigDashboard({ commercantId }) {
 
       {tab === 'menu'     && <TabMenu     commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'deals'    && peutDeals && <TabDeals commercantId={commercantId} commercant={commercant} toast={showToast} />}
-      {tab === 'actus'    && peutActus && <TabActus commercantId={commercantId} toast={showToast} />}
+      {tab === 'actus'    && peutActus && <TabActus commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
       {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}

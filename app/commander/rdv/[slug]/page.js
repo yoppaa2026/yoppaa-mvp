@@ -293,12 +293,15 @@ export default function CommanderRdvSlug() {
   const [commercant, setCommercant] = useState(null)
   const [prestations, setPrestations] = useState([])
   const [creneauxConfig, setCreneauxConfig] = useState([])  // les rdv_creneaux du commerçant
+  const [praticiens, setPraticiens] = useState([])          // rdv_praticiens actifs
+  const [junctionMap, setJunctionMap] = useState({})        // { prestation_id: [praticien_id, ...] }
   const [loading, setLoading] = useState(true)
   const [erreur, setErreur] = useState(null)
 
   // État du flow (4 étapes)
   const [etape, setEtape] = useState(1)
   const [prestationChoisie, setPrestationChoisie] = useState(null)
+  const [praticienChoisi, setPraticienChoisi] = useState(null)  // null = "Sans préférence" (V1 : garde null en base)
   const [dateChoisie, setDateChoisie] = useState(null)        // Date object
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
   const [slots, setSlots] = useState([])  // [{ heure, pris, motif }]
@@ -442,8 +445,8 @@ export default function CommanderRdvSlug() {
       }
       setCommercant(c)
 
-      // 2. Fetch prestations + créneaux config en parallèle
-      const [{ data: prest }, { data: cren }] = await Promise.all([
+      // 2. Fetch prestations + créneaux config + praticiens + junction en parallèle
+      const [{ data: prest }, { data: cren }, { data: prat }, { data: junction }] = await Promise.all([
         supabase
           .from('rdv_prestations')
           .select('*')
@@ -458,11 +461,31 @@ export default function CommanderRdvSlug() {
           .eq('commercant_id', c.id)
           .eq('actif', true)
           .is('deleted_at', null),
+        supabase
+          .from('rdv_praticiens')
+          .select('id, prenom, nom, description, photo_url, couleur_hex, ordre, actif')
+          .eq('commercant_id', c.id)
+          .eq('actif', true)
+          .is('deleted_at', null)
+          .order('ordre', { ascending: true }),
+        // Junction : quelles prestations sont limitées à quels praticiens.
+        // Junction vide pour une prestation = TOUS les praticiens peuvent (pattern Yoppaa).
+        supabase
+          .from('rdv_prestation_praticiens')
+          .select('prestation_id, praticien_id'),
       ])
 
       if (annule) return
       setPrestations(prest || [])
       setCreneauxConfig(cren || [])
+      setPraticiens(prat || [])
+      // Build junction map : prestation_id -> [praticien_id, ...]
+      const jm = {}
+      ;(junction || []).forEach(row => {
+        if (!jm[row.prestation_id]) jm[row.prestation_id] = []
+        jm[row.prestation_id].push(row.praticien_id)
+      })
+      setJunctionMap(jm)
       setLoading(false)
     })()
     return () => { annule = true }
@@ -509,7 +532,7 @@ export default function CommanderRdvSlug() {
       const list = genererSlots({
         dateChoisie,
         dureeMinutes: prestationChoisie.duree_minutes,
-        creneaux: creneauxConfig,
+        creneaux: creneauxFiltres,
         reservations: reservations || [],
         horairesDetail: commercant.horaires_detail,
       })
@@ -520,10 +543,11 @@ export default function CommanderRdvSlug() {
       setSlotsLoading(false)
     })()
     return () => { annule = true }
-  }, [etape, dateChoisie, prestationChoisie, commercant, creneauxConfig])
+  }, [etape, dateChoisie, prestationChoisie, praticienChoisi, commercant, creneauxConfig])
 
   function choisirPrestation(p) {
     setPrestationChoisie(p)
+    setPraticienChoisi(null)  // reset le praticien : sera auto-select via useEffect ci-dessous si 1 seul dispo
     setEtape(2)
     setDateChoisie(null)
     setHeureChoisie(null)
@@ -531,11 +555,38 @@ export default function CommanderRdvSlug() {
     setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
   }
 
+  // Praticiens éligibles pour la prestation choisie (junction) :
+  //   • junction vide pour cette prestation = TOUS les praticiens actifs peuvent
+  //   • junction renseignée = SEULS les praticiens listés (avec fallback si supprimés)
+  const praticiensEligibles = (() => {
+    if (!prestationChoisie || praticiens.length === 0) return []
+    const junctionIds = junctionMap[prestationChoisie.id]
+    if (!junctionIds || junctionIds.length === 0) return praticiens  // tous éligibles
+    return praticiens.filter(p => junctionIds.includes(p.id))
+  })()
+
+  // Auto-select silencieux si 1 seul praticien éligible pour cette prestation
+  // (l'UI de sélection n'est pas montrée). Si aucun praticien : praticienChoisi
+  // reste null et l'utilisateur pourra quand même prendre RDV (créneaux communs).
+  useEffect(() => {
+    if (!prestationChoisie) return
+    if (praticiensEligibles.length === 1 && !praticienChoisi) {
+      setPraticienChoisi(praticiensEligibles[0])
+    }
+  }, [prestationChoisie, praticiens])
+
+  // Filtre les créneaux config selon le praticien choisi :
+  //   • praticienChoisi = null (Sans préférence ou pas encore choisi) : tous créneaux
+  //   • praticienChoisi = X : créneaux de X + créneaux communs (praticien_id = null)
+  const creneauxFiltres = praticienChoisi
+    ? creneauxConfig.filter(c => c.praticien_id === praticienChoisi.id || c.praticien_id === null)
+    : creneauxConfig
+
   // Liste des jours disponibles (60 prochains pour les RDV vitrines — l'anticipation
   // est plus longue que pour de l'alimentaire C&C). Les 14 premiers sont affichés en scroll
   // horizontal, les 46 suivants sont accessibles via le mini-calendrier deroulant.
-  const joursDispos = commercant && creneauxConfig.length > 0
-    ? genererJoursDispos({ nbJours: 60, horairesDetail: commercant.horaires_detail, creneaux: creneauxConfig })
+  const joursDispos = commercant && creneauxFiltres.length > 0
+    ? genererJoursDispos({ nbJours: 60, horairesDetail: commercant.horaires_detail, creneaux: creneauxFiltres })
     : []
 
   // Enrichit chaque jour avec le nombre de slots libres pour la prestation choisie
@@ -759,6 +810,7 @@ export default function CommanderRdvSlug() {
             body: JSON.stringify({
               commercant_id: commercant.id,
               prestation_id: prestationChoisie.id,
+              praticien_id: praticienChoisi?.id || null,
               date_rdv: dateStr,
               heure_debut: heureChoisie,
               heure_fin: heureFin,
@@ -794,6 +846,7 @@ export default function CommanderRdvSlug() {
         commercant_id: commercant.id,
         client_id: cid,
         prestation_id: prestationChoisie.id,
+        praticien_id: praticienChoisi?.id || null,  // null = Sans préférence (à assigner par commerçant)
         client_email: email,
         client_prenom: prenom,
         client_nom: nom,
@@ -1175,6 +1228,66 @@ export default function CommanderRdvSlug() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Section : Avec qui ? (praticiens éligibles pour cette prestation).
+                      Affichée seulement si ≥2 praticiens éligibles. Si 1 seul, auto-select
+                      silencieux via useEffect. Si aucun praticien : la section reste masquée
+                      et le RDV se prend sur les créneaux communs. */}
+                  {praticiensEligibles.length >= 2 && (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="8" r="4"/>
+                            <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>
+                          </svg>
+                          Avec qui
+                        </span>
+                        <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, marginBottom: 14, scrollbarWidth: 'none' }}>
+                        {/* Card "Sans préférence" - premier dispo */}
+                        <button onClick={() => { setPraticienChoisi(null); setDateChoisie(null); setHeureChoisie(null) }}
+                          style={{
+                            flexShrink: 0, minWidth: 96, padding: '10px 8px',
+                            background: !praticienChoisi ? `linear-gradient(135deg, ${T.pale}, #fff)` : '#fff',
+                            border: `2px solid ${!praticienChoisi ? T.main : T.pale}`,
+                            borderRadius: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                            boxShadow: !praticienChoisi ? `0 4px 14px ${T.main}22` : 'none',
+                          }}>
+                          <div style={{ width: 44, height: 44, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 18 }}>?</div>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: !praticienChoisi ? T.main : T.deep, textAlign: 'center', lineHeight: 1.2 }}>Sans préférence</span>
+                        </button>
+                        {praticiensEligibles.map(p => {
+                          const actif = praticienChoisi?.id === p.id
+                          const initiales = `${(p.prenom?.[0] || '').toUpperCase()}${(p.nom?.[0] || '').toUpperCase()}`
+                          return (
+                            <button key={p.id} onClick={() => { setPraticienChoisi(p); setDateChoisie(null); setHeureChoisie(null) }}
+                              style={{
+                                flexShrink: 0, minWidth: 96, padding: '10px 8px',
+                                background: actif ? `linear-gradient(135deg, ${T.pale}, #fff)` : '#fff',
+                                border: `2px solid ${actif ? T.main : T.pale}`,
+                                borderRadius: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                                boxShadow: actif ? `0 4px 14px ${T.main}22` : 'none',
+                              }}>
+                              <div style={{ width: 44, height: 44, borderRadius: '50%', background: p.couleur_hex || T.main, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 14, overflow: 'hidden' }}>
+                                {p.photo_url ? (
+                                  <img src={p.photo_url} alt={p.prenom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                                ) : (
+                                  <span>{initiales || '?'}</span>
+                                )}
+                              </div>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: actif ? T.main : T.deep, textAlign: 'center', lineHeight: 1.2 }}>
+                                {p.prenom}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
 
                   {/* Section : choix du jour */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>

@@ -30,7 +30,7 @@ export async function POST(request) {
 
     const body = await request.json()
     const {
-      commercant_id, prestation_id, date_rdv, heure_debut, heure_fin, duree_minutes,
+      commercant_id, prestation_id, praticien_id, date_rdv, heure_debut, heure_fin, duree_minutes,
       client_email, client_prenom, client_nom, client_telephone,
       notes_client, rgpd_marketing,
     } = body
@@ -117,6 +117,7 @@ export async function POST(request) {
           commercantId: commercant.id,
           extra: {
             prestation_id: String(prestation_id),
+            ...(praticien_id ? { praticien_id: String(praticien_id) } : {}),
             date_rdv,
             heure_debut: heure_debut.slice(0,5),
             heure_fin: heure_fin.slice(0,5),

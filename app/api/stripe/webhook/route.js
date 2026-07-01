@@ -151,6 +151,7 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       ...(rdvId ? { id: rdvId } : {}),
       commercant_id: meta.yoppaa_commercant_id,
       prestation_id: meta.prestation_id,
+      praticien_id: meta.praticien_id || null,
       client_email: meta.client_email,
       client_prenom: meta.client_prenom,
       client_nom: meta.client_nom,

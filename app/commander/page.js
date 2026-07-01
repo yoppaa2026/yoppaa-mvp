@@ -867,10 +867,11 @@ function CarteServicePublic({ s, onSelect, actusInfo }) {
   )
 }
 
-function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsActifs, actusActives, onSelect, onToggleFavori }) {
+function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsActifs, actusActives, bonnesAffairesActives, onSelect, onToggleFavori }) {
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
   const statut = statutsCommerce[c.id]
+  const bonneAffaire = bonnesAffairesActives?.has(c.id) || false
 
   function getStatutPhysique() {
     const JOURS_MAP = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
@@ -946,7 +947,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
       <div style={{
         height: 24,
         background: bandeauCategorie(c),
-        display: 'flex', alignItems: 'center', padding: '0 0.875rem',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '0 0.875rem',
       }}>
         <span style={{
           color: '#fff',
@@ -956,9 +957,26 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
           letterSpacing: '0.8px',
           textShadow: '0 1px 2px rgba(0,0,0,0.18)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          flex: 1, minWidth: 0,
         }}>
           {c.type || 'Commerce'}
         </span>
+        {bonneAffaire && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            background: '#FCD34D', color: '#7C2D12',
+            padding: '2px 8px', borderRadius: 100,
+            fontSize: '0.58rem', fontWeight: 900,
+            textTransform: 'uppercase', letterSpacing: '0.6px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
+            flexShrink: 0,
+          }}>
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="#7C2D12" stroke="#7C2D12" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+            Bonne affaire
+          </span>
+        )}
       </div>
 
       {/* Bouton favori en absolute coin haut droit de la vignette photo.
@@ -1234,6 +1252,7 @@ export default function Commander() {
   // Set des commerçants qui ont un deal/actu actif aujourd'hui (pour dot LIVE sur pills)
   const [dealsActifs, setDealsActifs] = useState(new Set())
   const [actusActives, setActusActives] = useState(new Set())
+  const [bonnesAffairesActives, setBonnesAffairesActives] = useState(new Set())
   const [position, setPosition] = useState(null)
   const [geoLoading, setGeoLoading] = useState(false)
   const [rue, setRue] = useState(null)
@@ -1599,9 +1618,10 @@ export default function Commander() {
     if (!ids?.length) return
     const aujourdhui = new Date().toISOString().slice(0, 10)
     const [{ data: deals }, { data: actus }] = await Promise.all([
-      // Deals actifs : date_deal = aujourd'hui, OU intervalle date_debut/date_fin qui englobe
+      // Deals actifs : date_deal = aujourd'hui, OU intervalle date_debut/date_fin qui englobe.
+      // On charge aussi est_bonne_affaire pour piloter le badge dore sur la card.
       supabase.from('yoppaa_deals')
-        .select('commercant_id, date_deal, date_debut, date_fin, actif')
+        .select('commercant_id, date_deal, date_debut, date_fin, actif, est_bonne_affaire')
         .in('commercant_id', ids)
         .eq('actif', true),
       supabase.from('actualites')
@@ -1610,13 +1630,17 @@ export default function Commander() {
         .eq('actif', true),
     ])
     const dealSet = new Set()
+    const bonneAffaireSet = new Set()
     ;(deals || []).forEach(d => {
       const dateDeal = d.date_deal || null
       const dStart = d.date_debut ? d.date_debut.slice(0,10) : null
       const dEnd   = d.date_fin   ? d.date_fin.slice(0,10)   : null
       const dans = dateDeal === aujourdhui
         || (dStart && dEnd && dStart <= aujourdhui && aujourdhui <= dEnd)
-      if (dans) dealSet.add(d.commercant_id)
+      if (dans) {
+        dealSet.add(d.commercant_id)
+        if (d.est_bonne_affaire) bonneAffaireSet.add(d.commercant_id)
+      }
     })
     const actuSet = new Set()
     ;(actus || []).forEach(a => {
@@ -1629,6 +1653,7 @@ export default function Commander() {
       if (dans) actuSet.add(a.commercant_id)
     })
     setDealsActifs(dealSet)
+    setBonnesAffairesActives(bonneAffaireSet)
     setActusActives(actuSet)
   }
 
@@ -2291,7 +2316,7 @@ export default function Commander() {
                 </div>
               ) : (
                 <div className="commerces-grid">
-                  {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} dealsActifs={dealsActifs} actusActives={actusActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
+                  {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
                 </div>
               )}
 
@@ -2959,7 +2984,7 @@ export default function Commander() {
                       </p>
                     ) : (
                       <div className="commerces-grid" style={{ marginTop: 4 }}>
-                        {commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} dealsActifs={dealsActifs} actusActives={actusActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
+                        {commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
                       </div>
                     )}
                   </div>

@@ -1438,23 +1438,37 @@ export default function Commander() {
 
   // ─── Détection commandes récupérées → propose modale d'avis ─────────────
   // Avis vérifié = uniquement lié à une vraie commande (pas d'avis spontané = anti-troll).
-  // Trigger : commande passée à statut='recupere' + pas encore d'avis + pas déjà dismissed.
+  // Trigger : commande passée à statut='recupere' DEPUIS AU MOINS 60 MIN, pas
+  // encore d'avis posté, pas ignoré côté serveur.
+  //
+  // Décision Alex 01/07/2026 :
+  //   - Délai de 60 minutes après recupere_at pour laisser le Yopper goûter
+  //     ou utiliser avant de solliciter l'évaluation.
+  //   - Le dismiss est persisté côté serveur (commandes.avis_ignore_at) au
+  //     lieu de localStorage, pour ne plus reproposer sur les autres devices.
   useEffect(() => {
     if (!clientId || avisCommande) return
     if (!clientCommandes.length) return
-    const candidates = clientCommandes.filter(c => c.statut === 'recupere' && c.commercant_id)
+
+    const nowMs = Date.now()
+    const DELAI_MIN_MS = 60 * 60 * 1000  // 60 minutes
+
+    const candidates = clientCommandes.filter(c => {
+      if (c.statut !== 'recupere' || !c.commercant_id) return false
+      if (c.avis_ignore_at) return false  // dismiss serveur
+      if (!c.recupere_at) return false    // pas encore setté = trop tôt
+      const recupereMs = new Date(c.recupere_at).getTime()
+      return (nowMs - recupereMs) >= DELAI_MIN_MS
+    })
     if (candidates.length === 0) return
 
     let annule = false
-    const dismissed = JSON.parse(typeof window !== 'undefined' ? (localStorage.getItem('yoppaa_avis_proposes') || '[]') : '[]')
-
-    // Filtre côté DB : les avis déjà existants pour ce client
     supabase.from('avis').select('commande_id').eq('client_id', clientId)
       .then(({ data: avisExistants }) => {
         if (annule) return
         const dejaAvis = new Set((avisExistants || []).map(a => a.commande_id).filter(Boolean))
         // Prend la commande la plus récente (clientCommandes est ordonné par created_at desc côté chargerCommandesClient)
-        const prochaine = candidates.find(c => !dejaAvis.has(c.id) && !dismissed.includes(c.id))
+        const prochaine = candidates.find(c => !dejaAvis.has(c.id))
         if (prochaine) setAvisCommande(prochaine)
       })
     return () => { annule = true }
@@ -1712,25 +1726,25 @@ export default function Commander() {
   // (confirme, honore) pour les stats profil ; les annules / no-show sont retires pour
   // ne pas polluer le compteur "RDVs".
   async function chargerRdvsClient(email) {
-    const { data, error } = await supabase
-      .from('rdv_reservations')
-      .select('id, statut, date_rdv, heure_debut, heure_fin, prix_estime, numero_rdv, commercant_id, prestation_id, praticien_id, acompte_paye_en_ligne, acompte_montant, acompte_paye_date, annulation_token, client_email, commercant:commercants(nom, slug, type, categorie, rdv_delai_annulation_heures), prestation:rdv_prestations(nom, duree_minutes), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url)')
-      .eq('client_email', email)
-      .is('deleted_at', null)
-      // Tous les statuts cibles : confirme (à venir), honore (effectué), no_show (manqué),
-      // annule_client / annule_commercant (annulés, le statut en base est jamais 'annule' tout court),
-      // reporte (rare, RDV décalé). Filtrage et libellé géré dans le rendu plus bas.
-      .in('statut', ['confirme', 'honore', 'annule_client', 'annule_commercant', 'no_show', 'reporte'])
-      .order('date_rdv', { ascending: false })
-    // Log diagnostic : si erreur RLS ou data vide alors qu'il devrait y avoir des RDVs, le log aide a debug terrain
-    if (error) console.error('[chargerRdvsClient] error', error)
-    else console.info('[chargerRdvsClient]', { email, count: (data || []).length, data })
-    // Flatten prestation.nom -> prestation_nom pour le composant
-    const enriched = (data || []).map(r => ({
-      ...r,
-      prestation_nom: r.prestation?.nom || null,
-    }))
-    setClientRdvs(enriched)
+    // Le SELECT direct Supabase echoue silencieusement sur les Yoppers non-auth
+    // (RLS "Client voit ses RDV" exige auth.uid()). On passe par une route
+    // serveur qui bypass RLS via service_role + auth cookie yopper HTTP-only.
+    // Le param email est conserve pour compat (deja passe partout), la route
+    // ignore et utilise le cookie serveur pour identifier le Yopper.
+    try {
+      const res = await fetch('/api/rdv/mes-rdvs', { credentials: 'include' })
+      const body = await res.json().catch(() => ({}))
+      if (!body?.ok) {
+        console.warn('[chargerRdvsClient] route KO', body)
+        setClientRdvs([])
+        return
+      }
+      console.info('[chargerRdvsClient]', { email, count: body.count })
+      setClientRdvs(body.rdvs || [])
+    } catch (e) {
+      console.error('[chargerRdvsClient] exception', e?.message)
+      setClientRdvs([])
+    }
   }
 
   // Annulation d'un RDV depuis la vue Mes RDVs. Auth par rdv_id + client_email
@@ -2070,29 +2084,34 @@ export default function Commander() {
         />
       )}
 
-      {/* Modal d'avis post-commande : déclenchée auto si une commande passe à
-          'recupere' et qu'aucun avis n'existe encore. Au close (Plus tard ou Envoyer),
-          la commande est ajoutée à localStorage 'yoppaa_avis_proposes' pour ne plus
-          réafficher (mais l'avis peut être posté plus tard depuis l'historique). */}
+      {/* Modal d'avis post-commande : déclenchée auto 60 min après recupere_at,
+          si aucun avis n'existe et si le Yopper n'a pas dismiss cette commande
+          serveur (avis_ignore_at). Le dismiss est persiste via l'API pour ne
+          plus reproposer sur les autres devices (fix Alex 01/07). */}
       {avisCommande && clientId && avisCommande.commercant && (
         <ModalAvis
           commercant={{ id: avisCommande.commercant_id, nom: avisCommande.commercant.nom, type: avisCommande.commercant.type }}
           clientId={clientId}
           commandeId={avisCommande.id}
-          onClose={() => {
+          onClose={async () => {
             try {
-              const dismissed = JSON.parse(localStorage.getItem('yoppaa_avis_proposes') || '[]')
-              if (!dismissed.includes(avisCommande.id)) dismissed.push(avisCommande.id)
-              localStorage.setItem('yoppaa_avis_proposes', JSON.stringify(dismissed))
-            } catch {}
+              await fetch('/api/commande/ignore-avis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ commande_id: avisCommande.id }),
+              })
+            } catch (e) {
+              console.warn('[commande/ignore-avis] échoué', e?.message)
+            }
+            // Rafraîchir les commandes pour récupérer avis_ignore_at à jour
+            chargerCommandesClient(client.email)
             setAvisCommande(null)
           }}
           onSent={() => {
-            try {
-              const dismissed = JSON.parse(localStorage.getItem('yoppaa_avis_proposes') || '[]')
-              if (!dismissed.includes(avisCommande.id)) dismissed.push(avisCommande.id)
-              localStorage.setItem('yoppaa_avis_proposes', JSON.stringify(dismissed))
-            } catch {}
+            // L'avis pose dans la table 'avis' bloquera naturellement la
+            // re-proposition (filtre dejaAvis dans le useEffect). Pas besoin
+            // de flag additionnel cote commande.
           }}
         />
       )}

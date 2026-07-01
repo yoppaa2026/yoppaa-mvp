@@ -1318,8 +1318,10 @@ export default function CommanderRdvSlug() {
                         <div style={{ flex: 1, height: 1, background: T.pale }}/>
                       </div>
                       <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, marginBottom: 14, scrollbarWidth: 'none' }}>
-                        {/* Card "Sans préférence" - premier dispo */}
-                        <button onClick={() => { setPraticienChoisi(null); setDateChoisie(null); setHeureChoisie(null) }}
+                        {/* Card "Sans préférence" - premier dispo. On garde la date deja choisie
+                            (sinon le useEffect etape 2 la reset a aujourd'hui, bug UX signale par Alex),
+                            on reset juste l'heure car les slots changent selon le praticien. */}
+                        <button onClick={() => { setPraticienChoisi(null); setHeureChoisie(null) }}
                           style={{
                             flexShrink: 0, minWidth: 96, padding: '10px 8px',
                             background: !praticienChoisi ? `linear-gradient(135deg, ${T.pale}, #fff)` : '#fff',
@@ -1335,7 +1337,7 @@ export default function CommanderRdvSlug() {
                           const actif = praticienChoisi?.id === p.id
                           const initiales = `${(p.prenom?.[0] || '').toUpperCase()}${(p.nom?.[0] || '').toUpperCase()}`
                           return (
-                            <button key={p.id} onClick={() => { setPraticienChoisi(p); setDateChoisie(null); setHeureChoisie(null) }}
+                            <button key={p.id} onClick={() => { setPraticienChoisi(p); setHeureChoisie(null) }}
                               style={{
                                 flexShrink: 0, minWidth: 96, padding: '10px 8px',
                                 background: actif ? `linear-gradient(135deg, ${T.pale}, #fff)` : '#fff',

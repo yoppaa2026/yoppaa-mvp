@@ -540,11 +540,23 @@ export default function CommanderRdvSlug() {
         .rpc('rdv_slots_busy', { p_commercant_id: commercant.id, p_date: dateStr })
       if (annule) return
       if (errRpc) console.warn('[rdv-slots] rpc error', errRpc)
+      // Bug 6.1 : filtrer les reservations "busy" selon le praticien choisi.
+      // Chaque praticien a son propre planning independant. Sans ce filtre,
+      // un RDV Carole 9h-10h bloque aussi Alex sur ce creneau (bug).
+      // Regles :
+      //   - Sans preference (praticienChoisi null) : on ne peut pas savoir a l'avance
+      //     quel praticien sera assigne, donc TOUS les RDV bloquent (safe fallback)
+      //   - Praticien choisi X : seuls les RDV de X ET les RDV sans praticien assigne
+      //     (rdvs legacy avant multi-prat, ou RDV pris en "Sans preference") bloquent
+      const reservationsFiltrees = (reservations || []).filter(r => {
+        if (!praticienChoisi) return true  // Sans preference : all block
+        return r.praticien_id === praticienChoisi.id || r.praticien_id === null
+      })
       const list = genererSlots({
         dateChoisie,
         dureeMinutes: prestationChoisie.duree_minutes,
         creneaux: creneauxFiltres,
-        reservations: reservations || [],
+        reservations: reservationsFiltrees,
         horairesDetail: commercant.horaires_detail,
       })
       setSlots(list)
@@ -620,11 +632,14 @@ export default function CommanderRdvSlug() {
   // pour afficher un dot vert (dispo) / rouge (complet ou ferme) par jour.
   const joursAvecDispo = joursDispos.map(j => {
     if (!j.ouvert || !prestationChoisie) return { ...j, nbLibres: 0 }
-    const resaDuJour = reservations60j.filter(r => r.date_rdv === j.iso)
+    // Bug 6.1 : filtrage par praticien pour l'indicateur de dispo par jour aussi
+    const resaDuJour = reservations60j
+      .filter(r => r.date_rdv === j.iso)
+      .filter(r => !praticienChoisi || r.praticien_id === praticienChoisi.id || r.praticien_id === null)
     const list = genererSlots({
       dateChoisie: j.date,
       dureeMinutes: prestationChoisie.duree_minutes,
-      creneaux: creneauxConfig,
+      creneaux: creneauxFiltres,
       reservations: resaDuJour,
       horairesDetail: commercant?.horaires_detail,
     })

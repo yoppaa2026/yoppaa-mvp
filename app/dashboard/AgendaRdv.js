@@ -338,7 +338,12 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                           <div style={{ fontWeight: 800, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prenom}</div>
                           {hauteur > 36 && (
                             <div style={{ fontSize: 9, opacity: 0.85, fontWeight: 600, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {r.prestation?.nom || 'RDV'}
+                              {/* Bug 6.2 : quand filtre "Tous", afficher le prenom du praticien
+                                  a cote de la prestation pour identifier d'un coup d'oeil qui
+                                  fait le RDV. Filtre specifique praticien = deja identifie. */}
+                              {praticienFiltre === 'all' && r.praticien?.prenom
+                                ? `${r.praticien.prenom} · ${r.prestation?.nom || 'RDV'}`
+                                : (r.prestation?.nom || 'RDV')}
                             </div>
                           )}
                         </div>

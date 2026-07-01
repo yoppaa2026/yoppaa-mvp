@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { canDo, isVitrine, PLAN_PUBLIC_ENABLED } from '@/lib/plans'
+import { canDo, isVitrine, PLAN_PUBLIC_ENABLED, bandeauCategorie } from '@/lib/plans'
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
@@ -939,13 +939,13 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
 
       {/* Bande haute 'type' : marqueur de categorie (couleur) + type de commerce (texte) en une seule
           zone, signature visuelle compacte. Plus de pastilles couleur sous le nom = card moins chargee.
+          Dispatch centralise via bandeauCategorie() (lib/plans.js) :
+          • alimentaire (C&C) → degrade VIOLET canonique (Ink → Main → Light)
           • vitrine (services / RDV) → degrade VERT (Forest → Emerald → Mint)
-          • alimentaire (C&C ou non) → degrade VIOLET canonique (Ink → Main → Light) */}
+          • detail (boutique / mise de cote) → degrade ORANGE chaud (Rust → Orange → Peach) */}
       <div style={{
         height: 24,
-        background: isVitrine(c)
-          ? 'linear-gradient(90deg, #047857 0%, #10B981 60%, #6EE7B7 100%)'
-          : `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`,
+        background: bandeauCategorie(c),
         display: 'flex', alignItems: 'center', padding: '0 0.875rem',
       }}>
         <span style={{

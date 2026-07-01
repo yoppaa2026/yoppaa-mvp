@@ -1238,6 +1238,18 @@ function TabDeals({ commercantId, commercant, toast }) {
       return
     }
     toast(editId ? 'Deal mis à jour' : 'Deal créé')
+
+    // Push OneSignal aux favoris du commercant, uniquement a la CREATION
+    // d'un deal actif (pas a chaque edit, evite spam). Fire-and-forget non
+    // bloquant. Gating cote route API (plan Communiquer/Vendre + publie).
+    if (!editId && payload.actif && data[0]?.id) {
+      fetch('/api/deals/notify-favoris', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deal_id: data[0].id }),
+      }).catch(e => console.warn('[deals/notify-favoris] envoi echoue', e?.message))
+    }
+
     setShowForm(false); fetchDeals()
   }
 

@@ -1648,7 +1648,7 @@ export default function Commander() {
   async function chargerRdvsClient(email) {
     const { data, error } = await supabase
       .from('rdv_reservations')
-      .select('id, statut, date_rdv, heure_debut, heure_fin, prix_estime, numero_rdv, commercant_id, prestation_id, acompte_paye_en_ligne, acompte_montant, acompte_paye_date, annulation_token, client_email, commercant:commercants(nom, slug, type, categorie, rdv_delai_annulation_heures), prestation:rdv_prestations(nom, duree_minutes)')
+      .select('id, statut, date_rdv, heure_debut, heure_fin, prix_estime, numero_rdv, commercant_id, prestation_id, praticien_id, acompte_paye_en_ligne, acompte_montant, acompte_paye_date, annulation_token, client_email, commercant:commercants(nom, slug, type, categorie, rdv_delai_annulation_heures), prestation:rdv_prestations(nom, duree_minutes), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url)')
       .eq('client_email', email)
       .is('deleted_at', null)
       // Tous les statuts cibles : confirme (à venir), honore (effectué), no_show (manqué),
@@ -2503,6 +2503,12 @@ export default function Commander() {
                                 </p>
                                 <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.4 }}>
                                   {dureeT} · chez <strong style={{ color: T.deep }}>{r.commercant?.nom}</strong>
+                                  {r.praticien?.prenom && (
+                                    <> · avec <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: T.deep, fontWeight: 700 }}>
+                                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: r.praticien.couleur_hex || T.main, display: 'inline-block' }}/>
+                                      {r.praticien.prenom}
+                                    </span></>
+                                  )}
                                 </p>
                               </div>
                               {r.prix_estime != null && (

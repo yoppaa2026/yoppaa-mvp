@@ -1293,16 +1293,57 @@ export default function Commander() {
     }
     chargerCommercants()
     demanderGeolocalisation()
-    const email = localStorage.getItem('yoppaa_email')
-    const nom = localStorage.getItem('yoppaa_nom')
-    const prenom = localStorage.getItem('yoppaa_prenom')
-    const telephone = localStorage.getItem('yoppaa_telephone')
-    const id = localStorage.getItem('yoppaa_client_id')
-    if (email && id) {
-      setClient(p => ({ ...p, email, nom: nom || '', prenom: prenom || '', telephone: telephone || '' }))
-      setClientId(id)
-      chargerFavoris(id)
-      chargerCommandesClient(email); chargerRdvsClient(email)
+
+    // Sess 7 : Safari iOS ITP purge le localStorage apres 7j sans visite,
+    // ce qui fait "disparaitre" les RDV/commandes cote client iPhone. Fallback :
+    // cookie HTTP-only Same-Site (route /api/yopper/session) qui survit a ITP.
+    // Priorite : localStorage (rapide, aucune requete), puis cookie serveur en
+    // dernier recours. A chaque hydratation reussie, on re-sync le cookie pour
+    // reset son Max-Age.
+    async function hydrateYopper() {
+      let email = localStorage.getItem('yoppaa_email')
+      let nom = localStorage.getItem('yoppaa_nom')
+      let prenom = localStorage.getItem('yoppaa_prenom')
+      let telephone = localStorage.getItem('yoppaa_telephone')
+      let id = localStorage.getItem('yoppaa_client_id')
+      // Fallback cookie si localStorage vide (Safari iOS ITP purge probable)
+      if (!email || !id) {
+        try {
+          const res = await fetch('/api/yopper/session')
+          const data = await res.json()
+          if (data.ok && data.identity?.email && data.identity?.client_id) {
+            id       = data.identity.client_id
+            email    = data.identity.email
+            prenom   = data.identity.prenom || ''
+            nom      = data.identity.nom || ''
+            telephone= data.identity.telephone || ''
+            // Restore localStorage pour les prochains reload rapides
+            localStorage.setItem('yoppaa_client_id', id)
+            localStorage.setItem('yoppaa_email', email)
+            if (prenom)    localStorage.setItem('yoppaa_prenom', prenom)
+            if (nom)       localStorage.setItem('yoppaa_nom', nom)
+            if (telephone) localStorage.setItem('yoppaa_telephone', telephone)
+          }
+        } catch (e) {
+          console.warn('[hydrate] cookie fallback KO', e?.message)
+        }
+      }
+      if (email && id) {
+        setClient(p => ({ ...p, email, nom: nom || '', prenom: prenom || '', telephone: telephone || '' }))
+        setClientId(id)
+        chargerFavoris(id)
+        chargerCommandesClient(email); chargerRdvsClient(email)
+        // Refresh cookie serveur (reset Max-Age 365j) - fire and forget
+        fetch('/api/yopper/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ client_id: id, email, prenom, nom, telephone }),
+        }).catch(() => {})
+      }
+      return { email, id, telephone, prenom, nom }
+    }
+    hydrateYopper().then(({ email, id, telephone, prenom, nom }) => {
+      if (!id) return
       // Si telephone manquant en local (cas Magic Link sans signup complet, ou EditablePrenom save sans reload),
       // recharger depuis la DB pour synchroniser le state + localStorage. Sinon le bandeau "Profil incomplet"
       // reapparait apres chaque reload alors que la valeur est bien en DB.
@@ -1337,7 +1378,7 @@ export default function Commander() {
             setShowConfirmCommune(true)
           }
         })
-    }
+    })
   }, [])
 
   // ─── Polling client 5s ─────────────────────────────────────────────────────

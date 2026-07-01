@@ -83,6 +83,50 @@ function isToday(d) {
     && d.getDate() === now.getDate()
 }
 
+// Bug 6.1 : filtre les reservations "busy" avant de generer les slots, selon le
+// praticien choisi et la logique Yoppaa multi-praticiens :
+//
+//   - Praticien X specifique choisi : seules les reservations de X et celles sans
+//     praticien assigne (rdvs legacy pre-multi-prat, ou pris en "Sans preference")
+//     bloquent les slots. Les rdvs des autres praticiens n'ont aucun impact sur X.
+//
+//   - "Sans preference" (praticienChoisi null) : un slot est bloque UNIQUEMENT si
+//     TOUS les praticiens eligibles a cette prestation sont occupes a cette heure.
+//     Si au moins un praticien eligible est libre, le slot reste dispo (il lui sera
+//     assigne). Pattern aligne sur Treatwell/Planity/Fresha. Les RDV avec praticien_id
+//     null (legacy) bloquent tout par safety (on ne peut pas savoir qui les fait).
+//
+// Retourne un tableau { heure_debut, heure_fin } pour genererSlots.
+function filtrerReservationsPourSlots(reservations, praticienChoisi, praticiensEligibles) {
+  const list = reservations || []
+  if (praticienChoisi) {
+    return list.filter(r => r.praticien_id === praticienChoisi.id || r.praticien_id === null)
+  }
+  // Sans preference : grouper par intervalle (heure_debut, heure_fin) et compter les
+  // praticiens eligibles uniques qui occupent chaque slot. Bloque si TOUS pris.
+  const eligibleIds = new Set((praticiensEligibles || []).map(p => p.id))
+  const nbEligibles = eligibleIds.size
+  if (nbEligibles === 0) return list  // aucun praticien configure : safe fallback
+  const slotMap = new Map()  // key "HH:MM:SS-HH:MM:SS" -> { praticiens: Set, hasNull: bool }
+  list.forEach(r => {
+    const key = `${r.heure_debut}-${r.heure_fin}`
+    if (!slotMap.has(key)) slotMap.set(key, { praticiens: new Set(), hasNull: false })
+    const entry = slotMap.get(key)
+    if (!r.praticien_id) entry.hasNull = true
+    else if (eligibleIds.has(r.praticien_id)) entry.praticiens.add(r.praticien_id)
+    // rdvs des praticiens non eligibles a cette prestation : ignores (ils n'occupent
+    // pas les praticiens qui pourraient faire cette prestation)
+  })
+  const bloquants = []
+  slotMap.forEach((entry, key) => {
+    if (entry.hasNull || entry.praticiens.size >= nbEligibles) {
+      const [heure_debut, heure_fin] = key.split('-')
+      bloquants.push({ heure_debut, heure_fin })
+    }
+  })
+  return bloquants
+}
+
 // Calcule les slots pour une date donnée, durée prestation, créneaux du commerçant,
 // horaires d'ouverture du shop, et reservations existantes.
 //
@@ -540,18 +584,7 @@ export default function CommanderRdvSlug() {
         .rpc('rdv_slots_busy', { p_commercant_id: commercant.id, p_date: dateStr })
       if (annule) return
       if (errRpc) console.warn('[rdv-slots] rpc error', errRpc)
-      // Bug 6.1 : filtrer les reservations "busy" selon le praticien choisi.
-      // Chaque praticien a son propre planning independant. Sans ce filtre,
-      // un RDV Carole 9h-10h bloque aussi Alex sur ce creneau (bug).
-      // Regles :
-      //   - Sans preference (praticienChoisi null) : on ne peut pas savoir a l'avance
-      //     quel praticien sera assigne, donc TOUS les RDV bloquent (safe fallback)
-      //   - Praticien choisi X : seuls les RDV de X ET les RDV sans praticien assigne
-      //     (rdvs legacy avant multi-prat, ou RDV pris en "Sans preference") bloquent
-      const reservationsFiltrees = (reservations || []).filter(r => {
-        if (!praticienChoisi) return true  // Sans preference : all block
-        return r.praticien_id === praticienChoisi.id || r.praticien_id === null
-      })
+      const reservationsFiltrees = filtrerReservationsPourSlots(reservations, praticienChoisi, praticiensEligibles)
       const list = genererSlots({
         dateChoisie,
         dureeMinutes: prestationChoisie.duree_minutes,
@@ -632,15 +665,13 @@ export default function CommanderRdvSlug() {
   // pour afficher un dot vert (dispo) / rouge (complet ou ferme) par jour.
   const joursAvecDispo = joursDispos.map(j => {
     if (!j.ouvert || !prestationChoisie) return { ...j, nbLibres: 0 }
-    // Bug 6.1 : filtrage par praticien pour l'indicateur de dispo par jour aussi
-    const resaDuJour = reservations60j
-      .filter(r => r.date_rdv === j.iso)
-      .filter(r => !praticienChoisi || r.praticien_id === praticienChoisi.id || r.praticien_id === null)
+    const resaDuJour = reservations60j.filter(r => r.date_rdv === j.iso)
+    const resaFiltree = filtrerReservationsPourSlots(resaDuJour, praticienChoisi, praticiensEligibles)
     const list = genererSlots({
       dateChoisie: j.date,
       dureeMinutes: prestationChoisie.duree_minutes,
       creneaux: creneauxFiltres,
-      reservations: resaDuJour,
+      reservations: resaFiltree,
       horairesDetail: commercant?.horaires_detail,
     })
     return { ...j, nbLibres: list.filter(s => !s.pris).length }

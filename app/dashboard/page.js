@@ -483,6 +483,7 @@ export default function Dashboard() {
   const [rdvs, setRdvs] = useState([])
   const [creneauxRdv, setCreneauxRdv] = useState([])  // rdv_creneaux du commercant, pour la grille agenda (pauses)
   const [prestationsRdv, setPrestationsRdv] = useState([])  // rdv_prestations actives, pour la modale 'Nouveau RDV manuel'
+  const [praticiensRdv, setPraticiensRdv] = useState([])    // rdv_praticiens actifs, pour AgendaRdv (filtre + badges)
   const [rdvSelectionne, setRdvSelectionne] = useState(null)  // RDV ouvert dans la modale details
   const [nouveauRdvSlot, setNouveauRdvSlot] = useState(null)  // { date, heure } -> ouvre la modale d'ajout manuel
   // Mode impersonation : admin Yoppaa connecte en tant qu'un commercant pour le support.
@@ -540,10 +541,10 @@ export default function Dashboard() {
   // mais on cache les supprimes du dashboard quotidien). Tri par date + heure.
   // Fetch aussi les rdv_creneaux (pauses) et rdv_prestations (modale ajout manuel).
   const chargerRdvs = useCallback(async (id) => {
-    const [{ data: rdvData }, { data: crData }, { data: pData }] = await Promise.all([
+    const [{ data: rdvData }, { data: crData }, { data: pData }, { data: praData }] = await Promise.all([
       supabase
         .from('rdv_reservations')
-        .select('*, prestation:rdv_prestations(nom, duree_minutes, prix)')
+        .select('*, prestation:rdv_prestations(nom, duree_minutes, prix), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url)')
         .eq('commercant_id', id)
         .is('deleted_at', null)
         .order('date_rdv', { ascending: true })
@@ -562,10 +563,18 @@ export default function Dashboard() {
         .is('deleted_at', null)
         .order('ordre', { ascending: true })
         .order('created_at', { ascending: true }),
+      supabase
+        .from('rdv_praticiens')
+        .select('id, prenom, nom, couleur_hex, photo_url, actif, ordre')
+        .eq('commercant_id', id)
+        .eq('actif', true)
+        .is('deleted_at', null)
+        .order('ordre', { ascending: true }),
     ])
     setRdvs(rdvData || [])
     setCreneauxRdv(crData || [])
     setPrestationsRdv(pData || [])
+    setPraticiensRdv(praData || [])
   }, [])
 
   // ─── Init — mémoriser le commerce sélectionné ─────────────────────────────
@@ -1465,6 +1474,7 @@ export default function Dashboard() {
                   <AgendaRdv
                     rdvs={rdvs}
                     creneaux={creneauxRdv}
+                    praticiens={praticiensRdv}
                     horairesDetail={commercant?.horaires_detail}
                     onSelectRdv={(r) => setRdvSelectionne(r)}
                     onNouveauRdv={(date, heure) => setNouveauRdvSlot({ date, heure })}

@@ -61,7 +61,11 @@ const COULEUR_STATUT = {
   annule:   { bg: '#FEE2E2', text: '#991B1B', border: '#DC2626' },
 }
 
-export default function AgendaRdv({ rdvs, creneaux, horairesDetail, onSelectRdv, onNouveauRdv }) {
+export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDetail, onSelectRdv, onNouveauRdv }) {
+  // Filtre praticien : 'all' = tous les praticiens, ou un praticien_id specifique.
+  // Sess 5f : le commercant multi-prat peut isoler l'agenda d'un praticien pour
+  // voir uniquement les RDV pris avec lui/elle.
+  const [praticienFiltre, setPraticienFiltre] = useState('all')
   // refDate : 1er jour visible. Sur desktop = aujourd'hui (vue semaine glissante).
   // Sur mobile = jour actif (vue 1 jour avec nav prev/next).
   const today = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d }, [])
@@ -143,9 +147,12 @@ export default function AgendaRdv({ rdvs, creneaux, horairesDetail, onSelectRdv,
   }
 
   // RDVs visibles dans la fenêtre (exclut annulés, garde confirme + honore pour visibilité)
+  // + filtre praticien si actif (Sess 5f)
   const rdvsVisibles = useMemo(() =>
-    (rdvs || []).filter(r => ['confirme', 'honore', 'no_show'].includes(r.statut))
-  , [rdvs])
+    (rdvs || [])
+      .filter(r => ['confirme', 'honore', 'no_show'].includes(r.statut))
+      .filter(r => praticienFiltre === 'all' || r.praticien_id === praticienFiltre)
+  , [rdvs, praticienFiltre])
 
   // RDVs par jour (indexé par iso)
   const rdvsParJour = useMemo(() => {
@@ -203,6 +210,29 @@ export default function AgendaRdv({ rdvs, creneaux, horairesDetail, onSelectRdv,
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6"/></svg>
         </button>
       </div>
+
+      {/* Filtre praticien — affiché uniquement si ≥2 praticiens sur ce commerce */}
+      {praticiens.length >= 2 && (
+        <div style={{ display: 'flex', gap: 5, padding: '8px 0.875rem', overflowX: 'auto', borderBottom: `1px solid ${T.pale}`, scrollbarWidth: 'none' }}>
+          <button onClick={() => setPraticienFiltre('all')}
+            style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 100, border: `1.5px solid ${praticienFiltre === 'all' ? T.main : T.pale}`, background: praticienFiltre === 'all' ? T.pale : '#fff', color: praticienFiltre === 'all' ? T.main : T.muted, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+            Tous
+          </button>
+          {praticiens.map(p => {
+            const actif = praticienFiltre === p.id
+            const initiales = `${(p.prenom?.[0] || '').toUpperCase()}${(p.nom?.[0] || '').toUpperCase()}`
+            return (
+              <button key={p.id} onClick={() => setPraticienFiltre(p.id)}
+                style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px 4px 4px', borderRadius: 100, border: `1.5px solid ${actif ? (p.couleur_hex || T.main) : T.pale}`, background: actif ? `${p.couleur_hex || T.main}18` : '#fff', color: actif ? T.ink : T.muted, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                <span style={{ width: 20, height: 20, borderRadius: '50%', background: p.couleur_hex || T.main, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 9, overflow: 'hidden' }}>
+                  {p.photo_url ? <img src={p.photo_url} alt={p.prenom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : (initiales || '?')}
+                </span>
+                {p.prenom}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Grille agenda — scroll vertical interne */}
       <div style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'hidden' }}>
@@ -297,7 +327,13 @@ export default function AgendaRdv({ rdvs, creneaux, horairesDetail, onSelectRdv,
                             flexDirection: 'column',
                             gap: 1,
                           }}
-                          title={`${heureD}–${heureF} · ${r.client_prenom || ''} ${r.client_nom || ''} · ${r.prestation?.nom || ''}`}>
+                          title={`${heureD}–${heureF} · ${r.client_prenom || ''} ${r.client_nom || ''} · ${r.prestation?.nom || ''}${r.praticien ? ' · avec ' + r.praticien.prenom : ''}`}>
+                          {/* Badge praticien en haut à droite (couleur_hex ou initiale) */}
+                          {r.praticien && (
+                            <div style={{ position: 'absolute', top: 2, right: 2, width: 12, height: 12, borderRadius: '50%', background: r.praticien.couleur_hex || '#6B35C4', border: '1.5px solid #fff', boxShadow: '0 0 0 1px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 7, fontWeight: 900 }}>
+                              {(r.praticien.prenom?.[0] || '').toUpperCase()}
+                            </div>
+                          )}
                           <div style={{ fontSize: 9, opacity: 0.9, fontWeight: 600, lineHeight: 1 }}>{heureD}</div>
                           <div style={{ fontWeight: 800, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prenom}</div>
                           {hauteur > 36 && (

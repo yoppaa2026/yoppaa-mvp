@@ -1829,7 +1829,15 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
       .single()
     if (error) {
       console.error('[S5 saveTexte] ERREUR Supabase', error)
-      setErreurLocal(`Sauvegarde échouée : ${error.message}`)
+      // Cas frequent : contrainte unique sur bce → deja utilise ailleurs
+      const isDuplicateBce =
+        error.code === '23505' &&
+        (error.message?.includes('bce') || error.message?.includes('commercant_bce_unique'))
+      if (isDuplicateBce) {
+        setErreurLocal('Ce numéro BCE est déjà associé à un autre compte Yoppaa. Utilise le numéro exact de ton entreprise, ou contacte-nous si tu penses à une erreur.')
+      } else {
+        setErreurLocal(`Sauvegarde échouée : ${error.message}`)
+      }
       onSaving?.('saved')
       return
     }

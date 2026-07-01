@@ -1610,7 +1610,14 @@ export default function CommanderSlug() {
         <div style={{ background: T.bgPanel, padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, borderBottom: `1px solid ${T.main}33`, position: 'relative' }}>
           {/* Bande 3px canonique YOPPAA (Ink → Main → Light) */}
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
-          <button onClick={() => router.push('/commander')}
+          <button onClick={() => {
+              // Regle globale Alex : bouton Retour selon l'etape courante.
+              // Etape 2 (menu+panier) : sortir vers /commander (etape 1 non utilisee pour C&C)
+              // Etape 3 (creneau+coords) : revenir a etape 2 (garde le panier)
+              // Etape 4 (confirmation post-paiement) : sortir vers /commander (RDV termine)
+              if (etape === 3) { setEtape(2); setCreneauChoisi(null); setErreurCommande(null); setAjustementStock(null) }
+              else { router.push('/commander') }
+            }}
             aria-label="Retour"
             style={{ background: `rgba(255,255,255,0.1)`, border: `1px solid rgba(255,255,255,0.15)`, color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.45rem 0.7rem 0.45rem 0.6rem', fontWeight: 700, fontSize: '0.82rem', flexShrink: 0, backdropFilter: 'blur(8px)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

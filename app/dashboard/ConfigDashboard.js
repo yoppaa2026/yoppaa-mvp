@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { canDo } from '@/lib/plans'
 import TabPaiements from './TabPaiements'
+import { compresserImage } from '@/lib/compress-image'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
 import {
@@ -2158,12 +2159,15 @@ function TabProfil({ commercantId, toast }) {
   }
 
   async function uploadLogo(file) {
-    if (file.size > 512 * 1024) { toast('Logo trop lourd — max 512KB', 'error'); return }
     if (!file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
+    // Compression client automatique (memoire feedback_zero_friction) : les
+    // photos iPhone natives pesaient 3-5 Mo, le user devait redimensionner
+    // manuellement. Compression 400x400 JPEG q=0.85 -> ~30-100 Ko.
+    if (file.size > 15 * 1024 * 1024) { toast('Logo trop lourd (max 15 Mo brut)', 'error'); return }
     setUploadingLogo(true)
-    const ext = file.name.split('.').pop()
-    const fileName = `${commercantId}-${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('logos').upload(fileName, file, { upsert: true })
+    const compressed = await compresserImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.85 })
+    const fileName = `${commercantId}-${Date.now()}.jpg`
+    const { error } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (error) { toast('Erreur upload logo', 'error'); setUploadingLogo(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
     await supabase.from('commercants').update({ logo_url: urlData.publicUrl }).eq('id', commercantId)
@@ -3091,12 +3095,14 @@ function TabRdvPraticiens({ commercantId, toast }) {
   // des logos commerçants.
   async function uploadPhoto(file) {
     if (!file) return
-    if (file.size > 1024 * 1024) { toast('Photo trop lourde, max 1 Mo', 'error'); return }
     if (!file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
+    // Bug UX iPhone : les photos natives pesent 3-5 Mo. Compression client 400x400
+    // JPEG q=0.85 -> ~30-100 Ko. Aucune action utilisateur requise.
+    if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
     setUploading(true)
-    const ext = file.name.split('.').pop()
-    const fileName = `praticien-${commercantId}-${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('logos').upload(fileName, file, { upsert: true })
+    const compressed = await compresserImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.85 })
+    const fileName = `praticien-${commercantId}-${Date.now()}.jpg`
+    const { error } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (error) { toast('Erreur upload photo', 'error'); setUploading(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
     setForm(f => ({ ...f, photo_url: urlData.publicUrl }))

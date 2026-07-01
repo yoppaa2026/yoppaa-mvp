@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { PLAN_LABEL, PLANS, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
+import { compresserImage } from '@/lib/compress-image'
 // Icônes Lucide React : SVG inline alignés sur la charte canonique Yoppaa.
 // Convention : stroke-width 1.8, currentColor pour hériter de la palette parent.
 // Aucun emoji dans l'UI (règle Master), sauf exceptions soleil GMY + 🟣 signature.
@@ -1120,9 +1121,10 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     const { error: err } = await validerFichier(file)
     if (err) { setError(err); return }
     setUploadingLogo(true)
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
-    const fileName = `logo-${commercant.id}-${Date.now()}.${ext}`
-    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, file, { upsert: true })
+    // Compression client automatique (feedback_zero_friction)
+    const compressed = await compresserImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.85 })
+    const fileName = `logo-${commercant.id}-${Date.now()}.jpg`
+    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { setError(`Upload échoué : ${upErr.message}`); setUploadingLogo(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
     const url = urlData.publicUrl
@@ -1201,9 +1203,10 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
       setWarningCover('La photo est un peu petite pour la couverture. Une image plus large (≥ 1200 px) rendra mieux sur grand écran.')
     }
     setUploadingCover(true)
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
-    const fileName = `cover-${commercant.id}-${Date.now()}.${ext}`
-    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, file, { upsert: true })
+    // Compression client automatique (feedback_zero_friction) — cover paysage
+    const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
+    const fileName = `cover-${commercant.id}-${Date.now()}.jpg`
+    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { setError(`Upload échoué : ${upErr.message}`); setUploadingCover(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
     const url = urlData.publicUrl
@@ -1234,9 +1237,10 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     if (err) { setError(err); return }
     setUploadingGalerie(true)
     onSaving?.('saving')
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
-    const fileName = `gal-${commercant.id}-${Date.now()}.${ext}`
-    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, file, { upsert: true })
+    // Compression client automatique (feedback_zero_friction) — galerie carousel
+    const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
+    const fileName = `gal-${commercant.id}-${Date.now()}.jpg`
+    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { setError(`Upload échoué : ${upErr.message}`); setUploadingGalerie(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
     const url = urlData.publicUrl

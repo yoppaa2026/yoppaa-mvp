@@ -739,7 +739,7 @@ export default function Dashboard() {
       // Pas de notif son speciale ici (ajoutee dans RDV-10).
       const { data: rdvsData } = await supabase
         .from('rdv_reservations')
-        .select('*, prestation:rdv_prestations(nom, duree_minutes, prix)')
+        .select('*, prestation:rdv_prestations(nom, duree_minutes, prix), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url)')
         .eq('commercant_id', commercant.id)
         .is('deleted_at', null)
         .order('date_rdv', { ascending: true })

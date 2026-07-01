@@ -16,7 +16,7 @@ export async function POST(request) {
       commercant_id,
       nom: nom || 'Commerçant sans nom',
       type: type || '—',
-      plan: plan || 'on',
+      plan: plan || 'exister',
       score: typeof score === 'number' ? score : 0,
       success_pack: success_pack || null,
     })

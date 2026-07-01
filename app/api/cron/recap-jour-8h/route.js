@@ -2,8 +2,8 @@
 //
 // Cron Vercel quotidien a 8h00 : envoie le recap matinal aux commercants
 // avec notif_mode='recap_jour'. Selon categorie :
-//   • vitrine FULL avec rdv_actif → emailRecapRdvJour (RDV du jour)
-//   • alimentaire FULL            → emailRecapCommandesJour (commandes du jour)
+//   • vitrine Vendre avec rdv_actif → emailRecapRdvJour (RDV du jour)
+//   • alimentaire Vendre            → emailRecapCommandesJour (commandes du jour)
 //
 // Securite : verifie le header Authorization: Bearer <CRON_SECRET>.
 // Configuration vercel.json : { "path": "...", "schedule": "0 8 * * *" }
@@ -11,6 +11,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRecapRdvJour, emailRecapCommandesJour } from '@/lib/resend'
+import { resolvePlan } from '@/lib/plans'
 
 export async function GET(request) {
   const authHeader = request.headers.get('authorization') || ''
@@ -46,7 +47,7 @@ export async function GET(request) {
 
     for (const c of (commercants || [])) {
       const estVitrine = c.categorie === 'vitrine'
-      const estAlim    = c.categorie === 'alimentaire' && c.plan === 'full'
+      const estAlim    = c.categorie === 'alimentaire' && resolvePlan(c.plan) === 'vendre'
 
       if (estVitrine && !c.rdv_actif) {
         continue  // pas concerne

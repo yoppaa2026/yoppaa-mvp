@@ -323,7 +323,7 @@ function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
             <h3 style={{ fontSize: 17, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px', margin: 0 }}>{c.nom}</h3>
             <span style={{ fontSize: 10, fontWeight: 800, color: T.bgPanel, background: T.pale, padding: '3px 9px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              {(c.plan || 'on').toUpperCase()}
+              {(c.plan || 'exister').toUpperCase()}
             </span>
             <span style={{ fontSize: 10, fontWeight: 800, color: T.main, background: '#fff', border: `1px solid ${T.main}33`, padding: '3px 9px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               {c.categorie === 'vitrine'

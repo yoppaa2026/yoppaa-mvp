@@ -1052,7 +1052,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
         </div>
         {/* Pills statut sur toute la largeur de la card : 5 pills une seule ligne, labels complets */}
         <div style={{ marginTop: 8 }}>
-          <PillsStatut commercant={c} dealActif={dealsActifs?.has(c.id) || false} actuActive={actusActives?.has(c.id) || false} size="xs"/>
+          <PillsStatut commercant={c} dealActif={dealsActifs?.has(c.id) || false} actuActive={actusActives?.has(c.id) || false} bonneAffaire={bonneAffaire} size="xs"/>
         </div>
       </div>
     </div>

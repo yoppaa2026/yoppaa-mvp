@@ -14,7 +14,7 @@ const C = {
   unavail:   { bg: '#FAFAFA', color: '#D1D5DB',  border: '#F3F4F6' }, // services-only
 }
 
-export default function PillsStatut({ commercant, dealActif = false, actuActive = false, size = 'sm' }) {
+export default function PillsStatut({ commercant, dealActif = false, actuActive = false, bonneAffaire = false, size = 'sm' }) {
   const pills = getPillsStatut(commercant, { dealActif, actuActive })
   const fontSize = size === 'lg' ? '0.7rem' : size === 'xs' ? '0.58rem' : '0.58rem'
   const padding  = size === 'lg' ? '5px 11px' : size === 'xs' ? '3.5px 7px' : '3px 8px'
@@ -42,8 +42,11 @@ export default function PillsStatut({ commercant, dealActif = false, actuActive 
             ))}
             {p.label}
             {/* Dot LIVE pulsant : violet pour DEAL, rouge pour ACTU.
-                Plus gros + animation marquee pour attirer l'oeil */}
-            {p.live && (() => {
+                Plus gros + animation marquee pour attirer l'oeil.
+                Cas special : le dot DEAL est SUPPRIME quand est_bonne_affaire=true
+                car le badge dore "Bonne affaire" sur le bandeau categorie prend
+                le relais visuel (evite le double signal, decision Alex 01/07). */}
+            {p.live && !(p.key === 'deal' && bonneAffaire) && (() => {
               const isDeal = p.key === 'deal'
               const liveColor = isDeal ? '#6B35C4' : '#DC2626' // violet ou rouge
               // Taille harmonisee : 7 sur card (xs), 10 sur fiche (sm/lg). Border 1.5px uniforme.

@@ -30,11 +30,31 @@ function pushOneSignal(cb) {
 
 // Export public : à appeler depuis les composants Yopper quand un favori est
 // ajouté/retiré pour maintenir les tags OneSignal en cohérence.
+// Si `ajoute=true` et que l'utilisateur n'a pas encore accepté les push,
+// on force l'affichage du prompt OneSignal (Slidedown) pour capter la
+// subscription au moment ou l'user marque son interet.
 export function taggerFavoriOneSignal(commercantId, ajoute) {
   if (!commercantId) return
   pushOneSignal(async (OneSignal) => {
     try {
       if (ajoute) {
+        // Force le prompt OneSignal si pas encore d'opt-in. Le clic sur le
+        // cœur favori est une user activation valide pour requestPermission.
+        try {
+          const optedIn = OneSignal.User?.PushSubscription?.optedIn
+          const permission = OneSignal.Notifications?.permission
+          if (!optedIn && permission !== true) {
+            // Le Slidedown est plus doux qu'un prompt natif direct : bandeau
+            // custom qui appelle ensuite requestPermission au clic Allow.
+            if (OneSignal.Slidedown?.promptPush) {
+              OneSignal.Slidedown.promptPush({ force: true })
+            } else if (OneSignal.Notifications?.requestPermission) {
+              await OneSignal.Notifications.requestPermission()
+            }
+          }
+        } catch (e) {
+          console.warn('[OneSignal] prompt push échoué', e?.message)
+        }
         await OneSignal.User.addTag(`favori:${commercantId}`, '1')
       } else {
         await OneSignal.User.removeTag(`favori:${commercantId}`)

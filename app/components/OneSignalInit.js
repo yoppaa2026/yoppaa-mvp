@@ -89,10 +89,19 @@ export default function OneSignalInit({ yopperId, codePostal, favoris = [] }) {
 
         // Sync tags initiaux (code postal + tous les favoris connus).
         // OneSignal accepte un batch via addTags plutôt que des addTag en série.
+        //
+        // Dédup obligatoire : yopperId et favoris se chargent en asynchrone côté
+        // page, donc cet effet peut se déclencher 2 fois avec les mêmes tags finaux.
+        // Sans garde, 2 opérations set-property identiques partent en concurrence et
+        // OneSignal renvoie un 409 Conflict qui fait échouer la synchro (tags jamais
+        // posés, ciblage push par favori cassé, constaté 03/07). On ne (ré)écrit que
+        // si la signature des tags a changé depuis la dernière écriture.
         const tags = {}
         if (codePostal) tags.code_postal = String(codePostal)
         favoris.forEach(f => { tags[`favori:${f}`] = '1' })
-        if (Object.keys(tags).length > 0) {
+        const tagsSignature = JSON.stringify(tags)
+        if (Object.keys(tags).length > 0 && OneSignal.__yoppaaTagsSig !== tagsSignature) {
+          OneSignal.__yoppaaTagsSig = tagsSignature
           await OneSignal.User.addTags(tags)
         }
       } catch (e) {

@@ -6,7 +6,7 @@ import { canDo, isVitrine, PLAN_PUBLIC_ENABLED, bandeauCategorie } from '@/lib/p
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
-import OneSignalInit, { taggerFavoriOneSignal } from '@/app/components/OneSignalInit'
+import OneSignalInit, { taggerFavoriOneSignal, syncYopperTags } from '@/app/components/OneSignalInit'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 
 const T = {
@@ -1928,14 +1928,17 @@ export default function Commander() {
       await supabase.from('favoris').delete().eq('client_id', cid).eq('commercant_id', commercantId)
       setFavoris(prev => prev.filter(id => id!==commercantId))
       setCommercantsFavoris(prev => prev.filter(c => c.id!==commercantId))
-      taggerFavoriOneSignal(commercantId, false)
+      // Retrait du tag OneSignal côté serveur (valeur vide = suppression du tag).
+      syncYopperTags({ [`favori:${commercantId}`]: '' })
       showToast({ type: 'info', msg: 'Retiré de tes favoris' })
     } else {
       await supabase.from('favoris').insert({ client_id: cid, commercant_id: commercantId })
       setFavoris(prev => [...prev, commercantId])
       const c = commercants.find(x => x.id===commercantId)
       if (c) setCommercantsFavoris(prev => [...prev, c])
+      // Prompt push (client, user activation) + pose du tag côté serveur.
       taggerFavoriOneSignal(commercantId, true)
+      syncYopperTags({ [`favori:${commercantId}`]: '1' })
       const nom = commercants.find(x => x.id===commercantId)?.nom
       showToast({ type: 'success', msg: `${nom ? nom + ' ajouté' : 'Ajouté'} aux favoris · tu recevras ses deals et actus` })
     }

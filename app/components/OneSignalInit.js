@@ -6,13 +6,19 @@
 //   • Chargé UNIQUEMENT dans le layout /commander/* (Yoppers)
 //   • Pas dans /dashboard (commerçants), /admin, /signup ni /landing
 //
-// Tags synchronisés :
-//   • yopper_id      : external_user_id OneSignal = clients.id
-//   • code_postal    : zone du Yopper (ex '5640') → GMY par zone
-//   • favori:<UUID>  : 1 tag par commerçant favori → push deal/actu aux favoris
+// Identité + tags :
+//   • login(clients.id)  : external_id OneSignal = clients.id, pour push individuel
+//   • tags (favori:*, code_postal) : posés CÔTÉ SERVEUR via /api/yopper/sync-tags.
 //
-// Compat safe : si les env vars NEXT_PUBLIC_ONESIGNAL_APP_ID sont absentes,
-// le composant est un no-op (rendu null). Aucun crash en local ni sur preview.
+// Pourquoi les tags côté serveur : la pose de tags côté navigateur
+// (OneSignal.User.addTags) entrait en course avec login() sur un user fraîchement
+// créé et renvoyait un 409 Conflict "set-property" abandonné sans retry (constaté
+// 03/07). Les tags favori:* ne se posaient jamais → ciblage push cassé. On passe
+// donc par l'API REST serveur (déterministe, pas de course). Voir setYopperTags
+// dans lib/onesignal.js et la route /api/yopper/sync-tags.
+//
+// Compat safe : si NEXT_PUBLIC_ONESIGNAL_APP_ID est absent, le composant est un
+// no-op (rendu null). Aucun crash en local ni sur preview.
 
 import Script from 'next/script'
 import { useEffect } from 'react'
@@ -28,39 +34,41 @@ function pushOneSignal(cb) {
   window.OneSignalDeferred.push(cb)
 }
 
-// Export public : à appeler depuis les composants Yopper quand un favori est
-// ajouté/retiré pour maintenir les tags OneSignal en cohérence.
-// Si `ajoute=true` et que l'utilisateur n'a pas encore accepté les push,
-// on force l'affichage du prompt OneSignal (Slidedown) pour capter la
-// subscription au moment ou l'user marque son interet.
+// Pose des tags OneSignal côté serveur (via l'API REST), en s'authentifiant par
+// le cookie Yopper. Best-effort : les échecs sont silencieux (le ciblage push
+// n'est pas critique au point de bloquer l'UI).
+export function syncYopperTags(tags) {
+  if (typeof window === 'undefined') return
+  if (!tags || Object.keys(tags).length === 0) return
+  fetch('/api/yopper/sync-tags', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tags }),
+  }).catch(() => {})
+}
+
+// À appeler quand un favori est ajouté : si l'utilisateur n'a pas encore accepté
+// les push, on force l'affichage du prompt OneSignal (Slidedown). Le clic sur le
+// cœur favori est une user activation valide pour requestPermission.
+//
+// NB : la pose du tag favori:* elle-même se fait côté serveur (syncYopperTags),
+// pas ici, pour éviter le 409 Conflict.
 export function taggerFavoriOneSignal(commercantId, ajoute) {
-  if (!commercantId) return
+  if (!commercantId || !ajoute) return
   pushOneSignal(async (OneSignal) => {
     try {
-      if (ajoute) {
-        // Force le prompt OneSignal si pas encore d'opt-in. Le clic sur le
-        // cœur favori est une user activation valide pour requestPermission.
-        try {
-          const optedIn = OneSignal.User?.PushSubscription?.optedIn
-          const permission = OneSignal.Notifications?.permission
-          if (!optedIn && permission !== true) {
-            // Le Slidedown est plus doux qu'un prompt natif direct : bandeau
-            // custom qui appelle ensuite requestPermission au clic Allow.
-            if (OneSignal.Slidedown?.promptPush) {
-              OneSignal.Slidedown.promptPush({ force: true })
-            } else if (OneSignal.Notifications?.requestPermission) {
-              await OneSignal.Notifications.requestPermission()
-            }
-          }
-        } catch (e) {
-          console.warn('[OneSignal] prompt push échoué', e?.message)
+      const optedIn = OneSignal.User?.PushSubscription?.optedIn
+      const permission = OneSignal.Notifications?.permission
+      if (!optedIn && permission !== true) {
+        if (OneSignal.Slidedown?.promptPush) {
+          OneSignal.Slidedown.promptPush({ force: true })
+        } else if (OneSignal.Notifications?.requestPermission) {
+          await OneSignal.Notifications.requestPermission()
         }
-        await OneSignal.User.addTag(`favori:${commercantId}`, '1')
-      } else {
-        await OneSignal.User.removeTag(`favori:${commercantId}`)
       }
     } catch (e) {
-      console.warn('[OneSignal] tag favori échoué', { commercantId, ajoute, e: e?.message })
+      console.warn('[OneSignal] prompt push échoué', e?.message)
     }
   })
 }
@@ -81,31 +89,26 @@ export default function OneSignalInit({ yopperId, codePostal, favoris = [] }) {
           OneSignal.__yoppaaInitDone = true
         }
 
-        // Login (external_user_id) : identifie le Yopper de manière stable
-        // pour envoyer des push individuels (ex: RDV rappel, commande prête).
+        // Login (external_user_id) : identifie le Yopper de manière stable pour
+        // les push individuels (RDV rappel, commande prête) ET pour que le
+        // serveur puisse poser les tags par external_id.
         if (yopperId) {
           await OneSignal.login(String(yopperId))
-        }
 
-        // Sync tags initiaux (code postal + tous les favoris connus).
-        // OneSignal accepte un batch via addTags plutôt que des addTag en série.
-        //
-        // Dédup obligatoire : yopperId et favoris se chargent en asynchrone côté
-        // page, donc cet effet peut se déclencher 2 fois avec les mêmes tags finaux.
-        // Sans garde, 2 opérations set-property identiques partent en concurrence et
-        // OneSignal renvoie un 409 Conflict qui fait échouer la synchro (tags jamais
-        // posés, ciblage push par favori cassé, constaté 03/07). On ne (ré)écrit que
-        // si la signature des tags a changé depuis la dernière écriture.
-        const tags = {}
-        if (codePostal) tags.code_postal = String(codePostal)
-        favoris.forEach(f => { tags[`favori:${f}`] = '1' })
-        const tagsSignature = JSON.stringify(tags)
-        if (Object.keys(tags).length > 0 && OneSignal.__yoppaaTagsSig !== tagsSignature) {
-          OneSignal.__yoppaaTagsSig = tagsSignature
-          await OneSignal.User.addTags(tags)
+          // login résolu => le user OneSignal existe côté serveur. On pose les
+          // tags initiaux (code postal + favoris) via l'API REST serveur. Dédup
+          // par signature : on ne re-synchronise pas si rien n'a changé.
+          const tags = {}
+          if (codePostal) tags.code_postal = String(codePostal)
+          favoris.forEach(f => { tags[`favori:${f}`] = '1' })
+          const signature = JSON.stringify(tags)
+          if (Object.keys(tags).length > 0 && OneSignal.__yoppaaTagsSig !== signature) {
+            OneSignal.__yoppaaTagsSig = signature
+            syncYopperTags(tags)
+          }
         }
       } catch (e) {
-        console.warn('[OneSignal] init/tag échoué', e?.message)
+        console.warn('[OneSignal] init/login/tags échoué', e?.message)
       }
     })
   }, [yopperId, codePostal, favoris?.join(',')])

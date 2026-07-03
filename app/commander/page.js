@@ -1859,13 +1859,15 @@ export default function Commander() {
   }, [position, commercants.length])
 
   async function calculerDistances(liste, pos) {
-    const apiKey = process.env.NEXT_PUBLIC_ORS_API_KEY
     const avecCoords = liste.filter(c => c.latitude && c.longitude)
     if (!avecCoords.length) return
     try {
-      const res = await fetch('https://api.openrouteservice.org/v2/matrix/driving-car', { method: 'POST', headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ locations: [[pos.lng, pos.lat], ...avecCoords.map(c => [parseFloat(c.longitude), parseFloat(c.latitude)])], metrics: ['distance'], units: 'm' }) })
+      // Appel via route serveur /api/distance (proxy ORS) : évite le CORS/403 du
+      // navigateur et garde la clé API côté serveur. Fallback Haversine ci-dessous.
+      const res = await fetch('/api/distance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ locations: [[pos.lng, pos.lat], ...avecCoords.map(c => [parseFloat(c.longitude), parseFloat(c.latitude)])] }) })
       if (!res.ok) throw new Error()
       const data = await res.json()
+      if (!data.ok || !data.distances) throw new Error()
       const distances = data.distances[0].slice(1)
       const avecDistance = liste.map(c => { const idx = avecCoords.findIndex(x => x.id===c.id); return { ...c, distance: idx===-1 ? null : distances[idx] } })
       avecDistance.sort((a,b) => (a.distance??Infinity)-(b.distance??Infinity))

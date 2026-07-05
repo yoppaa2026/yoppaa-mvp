@@ -2450,7 +2450,8 @@ export default function Commander() {
                   {commandesASwiper.map(c => {
                     const ok = peutRetirer(c)
                     const min = ok ? 0 : minutesAvantCreneau(c)
-                    const heureCreneau = c.creneau?.heure_debut?.slice(0,5)
+                    const cren = c.creneau || c.creneau_livraison
+                    const heureCreneau = cren?.heure_debut?.slice(0,5)
                     const prenom = client.prenom || client.nom?.split(' ')[0] || 'Yopper'
                     return (
                     /* Card 'Prete a retirer' : signature violette renforcee.
@@ -2468,7 +2469,7 @@ export default function Commander() {
                           </p>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: T.pale, borderRadius: 100, padding: '3px 10px', border: `1px solid ${T.main}33` }}>
                             <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.main, border: '1.5px solid #fff', boxShadow: `0 0 0 1.5px ${T.main}44, 0 0 8px ${T.main}99`, animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.main }}>Prête à retirer{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</span>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.main }}>{c.mode_retrait === 'livraison' ? 'Prête' : 'Prête à retirer'}{cren ? ` · ${cren.heure_debut.slice(0,5)}–${cren.heure_fin.slice(0,5)}` : ''}</span>
                           </span>
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} /></div><p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p></div>
@@ -2501,6 +2502,7 @@ export default function Commander() {
                   {commandesEnCours.map(c => {
                     const sc = statutStyle[c.statut]
                     const sousTexte = statutSousTexte[c.statut]
+                    const cren = c.creneau || c.creneau_livraison
                     return (
                       <div key={c.id} style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', marginBottom: '0.625rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>
                         {/* Bande 3px canonique YOPPAA (Ink → Main → Light) - signature pour les commandes en cours */}
@@ -2511,7 +2513,7 @@ export default function Commander() {
                             <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>
                               {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.main, fontWeight: 700 }}> - commande #{c.numeroAffiche}</span>}
                             </p>
-                            <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
+                            <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{cren ? ` · ${cren.heure_debut.slice(0,5)}–${cren.heure_fin.slice(0,5)}` : ''}</p>
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>
                             <div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} /></div>

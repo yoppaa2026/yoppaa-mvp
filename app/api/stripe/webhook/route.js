@@ -309,9 +309,10 @@ async function envoyerEmailsCommande(commandeId, supabase) {
     .select(`
       id, numero_commande, total, date_commande,
       client_email, client_nom, client_telephone,
-      annulation_token,
+      annulation_token, mode_retrait, adresse_livraison,
       commercant:commercants(id, nom, slug, adresse, email, notif_mode, delai_annulation_heures),
       creneau:creneaux(heure_debut, heure_fin),
+      creneau_livraison:livraison_creneaux(heure_debut, heure_fin),
       articles:commande_articles(quantite, prix_unitaire, options, article:articles(nom))
     `)
     .eq('id', commandeId)
@@ -342,6 +343,7 @@ async function envoyerEmailsCommande(commandeId, supabase) {
   // 1) Email Yopper
   if (cmd.client_email) {
     try {
+      const cren = cmd.mode_retrait === 'livraison' ? cmd.creneau_livraison : cmd.creneau
       const html = emailCommandeConfirmee({
         yopper_prenom:           prenom,
         commercant_nom:          cmd.commercant?.nom || '',
@@ -351,8 +353,10 @@ async function envoyerEmailsCommande(commandeId, supabase) {
         articles:                articlesFlat,
         total:                   cmd.total,
         date_retrait:            cmd.date_commande,
-        heure_debut:             cmd.creneau?.heure_debut,
-        heure_fin:               cmd.creneau?.heure_fin,
+        heure_debut:             cren?.heure_debut,
+        heure_fin:               cren?.heure_fin,
+        mode_retrait:            cmd.mode_retrait,
+        adresse_livraison:       cmd.adresse_livraison,
         annulation_token:        cmd.annulation_token,
         delai_annulation_heures: cmd.commercant?.delai_annulation_heures ?? 2,
       })

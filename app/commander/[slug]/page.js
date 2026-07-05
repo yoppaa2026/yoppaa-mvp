@@ -2351,10 +2351,17 @@ export default function CommanderSlug() {
                     )
                   })}
                   {modeCommande === 'livraison' && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginTop: 6, color: T.deep }}>
-                      <span style={{ fontWeight: 600 }}>Frais de livraison</span>
-                      <span style={{ fontWeight: 800 }}>{fraisLivraison() === 0 ? 'Offerts' : `+${fraisLivraison().toFixed(2)}€`}</span>
-                    </div>
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginTop: 6, color: T.deep }}>
+                        <span style={{ fontWeight: 600 }}>Frais de livraison</span>
+                        <span style={{ fontWeight: 800 }}>{fraisLivraison() === 0 ? 'Offerts' : `+${fraisLivraison().toFixed(2)}€`}</span>
+                      </div>
+                      {livraisonConfig?.gratuit_des != null && (
+                        fraisLivraison() > 0
+                          ? <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, margin: '4px 0 0' }}>Plus que {(Number(livraisonConfig.gratuit_des) - totalPanier()).toFixed(2)}€ pour la livraison offerte</p>
+                          : <p style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, margin: '4px 0 0' }}>Livraison offerte à partir de {Number(livraisonConfig.gratuit_des).toFixed(2)}€</p>
+                      )}
+                    </>
                   )}
                   <div style={{ borderTop: `1px solid ${T.pale}`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.82rem' }}>Total</span>

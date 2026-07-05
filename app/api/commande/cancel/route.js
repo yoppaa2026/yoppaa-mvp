@@ -18,6 +18,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe } from '@/lib/stripe'
 import { envoyerAuCommercant, emailCommandeAnnuleeYopper, emailCommandeAnnuleeCommercant } from '@/lib/resend'
 import { brusselsInstant } from '@/lib/timezone'
+import { annulerPush } from '@/lib/onesignal'
 
 export async function POST(request) {
   try {
@@ -43,7 +44,7 @@ export async function POST(request) {
     const selectCols = `
       id, statut, paye_en_ligne, total, stripe_payment_intent_id,
       client_email, client_nom, annulation_token, created_at, commercant_id,
-      numero_commande, date_commande, creneau_id,
+      numero_commande, date_commande, creneau_id, rappel_push_id,
       commercants:commercant_id (id, nom, slug, stripe_account_id, delai_annulation_heures),
       creneau:creneaux!creneau_id (heure_debut)
     `
@@ -161,6 +162,13 @@ export async function POST(request) {
     if (errUpd) {
       console.error('[commande/cancel] UPDATE statut KO', errUpd)
       return NextResponse.json({ ok: false, error: 'Erreur mise à jour commande.' }, { status: 500 })
+    }
+
+    // Annule le rappel push programmé (30 min avant retrait) s'il existe :
+    // sinon le Yopper recevrait « bientôt l'heure de ton retrait » sur une
+    // commande annulée. Best-effort, non bloquant.
+    if (cmd.rappel_push_id) {
+      annulerPush(cmd.rappel_push_id).catch(() => {})
     }
 
     // ─── 7) Cleanup réservations stock résiduelles ─────────────────────────

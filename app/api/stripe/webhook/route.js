@@ -24,6 +24,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailCommandeConfirmee, emailNouvelleCommandeCommercant } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
+import { programmerRappelCommande, programmerRappelRdv } from '@/lib/rappels'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -397,6 +398,10 @@ async function envoyerEmailsCommande(commandeId, supabase) {
       console.error('[webhook/commande] envoi email commerçant KO', e?.message)
     }
   }
+
+  // 3) Rappel push programmé 30 min avant le créneau (retrait uniquement).
+  //    Best-effort, non bloquant. Voir lib/rappels.js.
+  await programmerRappelCommande(commandeId, supabase)
 }
 
 // ─── Paiement KO (failed/canceled) : commande -> annulee_paiement_ko ────────
@@ -644,6 +649,9 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, fallbackPayload) {
       html,
     })
   }
+
+  // 3) Rappel push programmé 1h avant le RDV (best-effort, non bloquant).
+  await programmerRappelRdv(rdvId, supabase)
 }
 
 // account.updated : met à jour les flags charges_enabled / payouts_enabled / details_submitted

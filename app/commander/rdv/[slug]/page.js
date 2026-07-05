@@ -970,6 +970,16 @@ export default function CommanderRdvSlug() {
 
       console.info('[rdv] insert OK, fetching numero')
 
+      // Rappel push 1h avant le RDV (booking sans acompte). Fire-and-forget,
+      // non bloquant : le chemin avec acompte le programme via le webhook.
+      if (rdvId) {
+        fetch('/api/rdv/schedule-rappel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rdv_id: rdvId }),
+        }).catch(e => console.warn('[rdv] schedule-rappel KO', e?.message))
+      }
+
       // Récupère le numero_rdv assigné par le trigger DB (RPC SECURITY DEFINER, bypass RLS)
       let numeroFinal = null
       if (rdvId) {

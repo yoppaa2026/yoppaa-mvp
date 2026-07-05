@@ -19,6 +19,7 @@ import { stripe, requireStripe } from '@/lib/stripe'
 import { envoyerAuCommercant, emailRdvAnnule } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { brusselsInstant } from '@/lib/timezone'
+import { annulerPush } from '@/lib/onesignal'
 
 export async function POST(request) {
   try {
@@ -42,7 +43,7 @@ export async function POST(request) {
       id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id,
       stripe_refund_id, client_email, client_prenom, client_nom, annulation_token,
       date_rdv, heure_debut, heure_fin, duree_minutes, motif_annulation,
-      commercant_id,
+      commercant_id, rappel_push_id,
       commercant:commercants(id, nom, slug, adresse, stripe_account_id, rdv_delai_annulation_heures),
       prestation:rdv_prestations(nom)
     `
@@ -145,6 +146,11 @@ export async function POST(request) {
     if (errUpd) {
       console.error('[rdv/cancel] UPDATE statut KO', errUpd)
       return NextResponse.json({ ok: false, error: 'Erreur mise à jour RDV.' }, { status: 500 })
+    }
+
+    // Annule le rappel push programmé (1h avant) s'il existe. Best-effort.
+    if (rdv.rappel_push_id) {
+      annulerPush(rdv.rappel_push_id).catch(() => {})
     }
 
     // ─── 7) Email annulation Yopper (avec iCal CANCEL en pièce jointe) ─────

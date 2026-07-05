@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRdvAnnule } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
+import { annulerPush } from '@/lib/onesignal'
 
 export async function POST(request) {
   try {
@@ -28,12 +29,17 @@ export async function POST(request) {
       .from('rdv_reservations')
       .select(`
         id, date_rdv, heure_debut, heure_fin, acompte_paye_en_ligne, acompte_montant,
-        client_email, client_prenom,
+        client_email, client_prenom, rappel_push_id,
         commercant:commercants(nom, slug, adresse, telephone, email),
         prestation:rdv_prestations(nom)
       `)
       .eq('id', rdv_id)
       .single()
+
+    // Annule le rappel push programmé (1h avant) quel que soit le motif. Best-effort.
+    if (rdv?.rappel_push_id) {
+      annulerPush(rdv.rappel_push_id).catch(() => {})
+    }
 
     if (!rdv || !rdv.client_email) {
       return NextResponse.json({ ok: true, skipped: 'no_email' })

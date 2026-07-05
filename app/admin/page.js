@@ -103,7 +103,7 @@ export default function AdminPage() {
       })
       const json = await res.json()
       if (!res.ok || !json.ok) throw new Error(json.error || 'Erreur inconnue')
-      showToast(`Validé ✓ — email : ${json.email}`, 'success')
+      showToast(`Validé ✓ · email : ${json.email}`, 'success')
       await charger()
     } catch (e) {
       showToast(`Erreur : ${e.message}`, 'error')
@@ -134,7 +134,7 @@ export default function AdminPage() {
       })
       const json = await res.json()
       if (!res.ok || !json.ok) throw new Error(json.error || 'Erreur inconnue')
-      showToast(`Rejeté ✓ — email : ${json.email}`, 'success')
+      showToast(`Rejeté ✓ · email : ${json.email}`, 'success')
       setRejetEnCours(null)
       setMotifRejet('')
       await charger()

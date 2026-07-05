@@ -819,7 +819,7 @@ function OptionsArticle({ articleId, toast }) {
       )}
 
       {groupes.length === 0 && !showForm && (
-        <p style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Aucune option — clique sur «&nbsp;+ Groupe&nbsp;» pour en ajouter.</p>
+        <p style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Aucune option, clique sur «&nbsp;+ Groupe&nbsp;» pour en ajouter.</p>
       )}
 
       {groupes.map(g => (
@@ -1024,7 +1024,7 @@ function ArticleCard({ a, estVitrine = false, onEdit, onToggle, onUpdateStock, o
                   </div>
                   {consoEdit > 0 && (
                     <p style={{ fontSize: 11, color: T.muted, fontWeight: 600, margin: '8px 0 0' }}>
-                      {consoEdit} déjà commandé{consoEdit > 1 ? 's' : ''} aujourd&rsquo;hui — sera ajouté automatiquement au total brut interne.
+                      {consoEdit} déjà commandé{consoEdit > 1 ? 's' : ''} aujourd&rsquo;hui, sera ajouté automatiquement au total brut interne.
                     </p>
                   )}
                 </div>
@@ -1828,7 +1828,7 @@ function TabActus({ commercantId, commercant, toast }) {
 // ─── Onglet CRÉNEAUX ──────────────────────────────────────────────────────────
 function TabCreneaux({ commercantId, toast }) {
   const JOURS_SEMAINE = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
-  const JOURS_LABELS  = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dim']
+  const JOURS_LABELS  = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
 
   const [creneaux, setCreneaux] = useState([])
   const [horaires, setHoraires] = useState(null)
@@ -1932,7 +1932,7 @@ function TabCreneaux({ commercantId, toast }) {
   async function deleteCreneau(id) {
     if (!confirm('Supprimer ce créneau ?')) return
     const { data: cmdLiees } = await supabase.from('commandes').select('id').eq('creneau_id', id).not('statut', 'in', '(recupere,non_retire)')
-    if (cmdLiees?.length > 0) { toast(`Impossible — ${cmdLiees.length} commande(s) active(s) sur ce créneau`, 'error'); return }
+    if (cmdLiees?.length > 0) { toast(`Impossible : ${cmdLiees.length} commande(s) active(s) sur ce créneau`, 'error'); return }
     const { error } = await supabase.from('creneaux').delete().eq('id', id)
     if (error) { toast('Erreur suppression : ' + error.message, 'error'); return }
     toast('Créneau supprimé'); fetchAll()
@@ -1958,7 +1958,7 @@ function TabCreneaux({ commercantId, toast }) {
     }
 
     if (avecCmd.length > 0 && sansCmd.length === 0) {
-      toast('Impossible — tous ont des commandes actives', 'error'); return
+      toast('Impossible : tous ont des commandes actives', 'error'); return
     }
     if (avecCmd.length > 0) {
       if (!confirm(`${avecCmd.length} créneau(x) ont des commandes actives.\nOK = supprimer uniquement les ${sansCmd.length} créneaux libres`)) return
@@ -2013,7 +2013,7 @@ function TabCreneaux({ commercantId, toast }) {
 
   // ─── Générer auto sur le jour actif ───────────────────────────────────────
   async function genererJour() {
-    if (!jourOuvert(jourActif)) return toast(`${jourActif} est fermé — modifie les horaires dans Profil`, 'error')
+    if (!jourOuvert(jourActif)) return toast(`${jourActif} est fermé, modifie les horaires dans Profil`, 'error')
     const h = horaireJour(jourActif)
     const debut = prompt(`Heure d'ouverture (défaut: ${h.debut}) :`) || h.debut
     const fin   = prompt(`Heure de fermeture (défaut: ${h.fin}) :`) || h.fin
@@ -2024,7 +2024,7 @@ function TabCreneaux({ commercantId, toast }) {
 
     // Vérif hors horaires
     if (debut < h.debut || fin > h.fin) {
-      toast(`Hors horaires d'ouverture (${h.debut}–${h.fin}) — génération annulée`, 'error'); return
+      toast(`Hors horaires d'ouverture (${h.debut}–${h.fin}), génération annulée`, 'error'); return
     }
 
     const slots = []
@@ -2057,7 +2057,7 @@ function TabCreneaux({ commercantId, toast }) {
 
     let total = 0
     for (const cible of joursCibles) {
-      if (!jourOuvert(cible)) { toast(`${cible} est fermé — ignoré`, 'error'); continue }
+      if (!jourOuvert(cible)) { toast(`${cible} est fermé, ignoré`, 'error'); continue }
       // Supprimer existants sur la cible
       const existants = creneaux.filter(c => c.jour_semaine === cible)
       for (const c of existants) await supabase.from('creneaux').delete().eq('id', c.id)
@@ -2160,7 +2160,7 @@ function TabCreneaux({ commercantId, toast }) {
           const nbCren = creneauxDuJour(jour).length
           const actif = jourActif === jour
           return (
-            <button key={jour} onClick={() => { if (!ouvert) { toast(`${jour} est fermé — modifie les horaires dans Profil`, 'error'); return }; setJourActif(jour); setShowForm(false); setShowCopier(false) }}
+            <button key={jour} onClick={() => { if (!ouvert) { toast(`${jour} est fermé, modifie les horaires dans Profil`, 'error'); return }; setJourActif(jour); setShowForm(false); setShowCopier(false) }}
               style={{ flexShrink: 0, padding: '8px 10px', borderRadius: 10, border: `2px solid ${actif ? T.main : ouvert ? T.pale : '#E5E7EB'}`, background: actif ? T.main : ouvert ? '#fff' : '#F9FAFB', cursor: ouvert ? 'pointer' : 'not-allowed', textAlign: 'center', fontFamily: '"DM Sans", sans-serif', opacity: ouvert ? 1 : 0.5, transition: 'all 0.15s', minWidth: 52 }}>
               <p style={{ fontWeight: 800, fontSize: 12, color: actif ? '#fff' : ouvert ? T.ink : T.muted }}>{JOURS_LABELS[idx]}</p>
               {ouvert
@@ -2176,7 +2176,7 @@ function TabCreneaux({ commercantId, toast }) {
       {!jourOuvert(jourActif) ? (
         <div style={{ ...s.card, textAlign: 'center', padding: 32, background: '#FEF2F2', border: '1.5px solid #DC262622' }}>
           <Lock size={22} strokeWidth={1.8} color={T.muted} style={{ marginBottom: 8 }}/>
-          <p style={{ fontWeight: 700, color: '#DC2626' }}>{jourActif} — Commerce fermé</p>
+          <p style={{ fontWeight: 700, color: '#DC2626' }}>{jourActif} · Commerce fermé</p>
           <p style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>Modifie les horaires dans l'onglet Profil pour ouvrir ce jour.</p>
         </div>
       ) : (
@@ -2238,7 +2238,7 @@ function TabCreneaux({ commercantId, toast }) {
           {/* Formulaire ajout créneau */}
           {showForm && (
             <div style={{ ...s.cardActive, marginBottom: 12 }}>
-              <h3 style={{ ...s.h3, marginBottom: 14 }}>+ Nouveau créneau — {jourActif}</h3>
+              <h3 style={{ ...s.h3, marginBottom: 14 }}>+ Nouveau créneau · {jourActif}</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
                 <div><label style={s.label}>Début *</label><Input type="time" value={form.heure_debut} onChange={e => setForm(p => ({ ...p, heure_debut: e.target.value }))} /></div>
                 <div><label style={s.label}>Fin *</label><Input type="time" value={form.heure_fin} onChange={e => setForm(p => ({ ...p, heure_fin: e.target.value }))} /></div>
@@ -2258,7 +2258,7 @@ function TabCreneaux({ commercantId, toast }) {
                 <div style={{ marginBottom: 12 }}>
                   <label style={s.label}>Capacité de préparation (min)</label>
                   <Input type="number" min="1" step="0.5" value={form.capacite_temps} onChange={e => setForm(p => ({ ...p, capacite_temps: e.target.value }))} />
-                  <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Durée × nb de cuisiniers — Ex: 15 min × 2 = 30 min</p>
+                  <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Durée × nb de cuisiniers. Ex : 15 min × 2 = 30 min</p>
                 </div>
               )}
               <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label="Créneau actif" />
@@ -2483,7 +2483,7 @@ function TabProfil({ commercantId, toast }) {
           {[
             { label: 'Nom *', key: 'nom', placeholder: 'Ex: Boulangerie Dupont' },
             { label: 'Type', key: 'type', placeholder: 'Ex: Boulangerie, Coffee shop...' },
-            { label: 'Email', key: 'email', placeholder: '', type: 'email', disabled: true, hint: 'Non modifiable — contact support' },
+            { label: 'Email', key: 'email', placeholder: '', type: 'email', disabled: true, hint: 'Non modifiable, contact support' },
             { label: 'Téléphone', key: 'telephone', placeholder: '+32 470 00 00 00', type: 'tel' },
             { label: 'Adresse', key: 'adresse', placeholder: 'Rue de la Paix 12, 1000 Bruxelles' },
           ].map(f => (
@@ -2858,7 +2858,7 @@ function QRCodeSection({ commercantId, toast }) {
   return (
     <div style={{ ...s.card, marginTop: 12 }}>
       <h2 style={{ ...s.h2, marginBottom: 4 }}>QR Code</h2>
-      <p style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>Vitrine, sacs, flyers — partout !</p>
+      <p style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>Vitrine, sacs, flyers : partout !</p>
 
       {/* ── Preview tribu hype ── */}
       <div style={{ background: 'linear-gradient(160deg, #160636 0%, #2D0F6B 50%, #1A0840 100%)', borderRadius: 18, padding: '22px 20px 20px', textAlign: 'center', marginBottom: 16, position: 'relative', overflow: 'hidden' }}>
@@ -4109,7 +4109,7 @@ function TabSignalements({ commercantId, toast }) {
             {filtre === 'en_attente' ? 'Aucun signalement en attente' : 'Aucun signalement dans ce filtre'}
           </p>
           <p style={{ fontSize: 13, color: T.muted }}>
-            {filtre === 'en_attente' ? 'Bravo — tes infos sont à jour.' : 'Change de filtre pour voir les autres.'}
+            {filtre === 'en_attente' ? 'Bravo, tes infos sont à jour.' : 'Change de filtre pour voir les autres.'}
           </p>
         </div>
       )}

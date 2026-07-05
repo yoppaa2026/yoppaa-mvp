@@ -122,7 +122,7 @@ export default function ModalNouveauRdv({
         return
       }
       if (horaireJour.debut && debutMin < timeToMinutes(horaireJour.debut)) {
-        setError(`Trop tôt — tu ouvres à ${horaireJour.debut.slice(0,5)}.`)
+        setError(`Trop tôt, tu ouvres à ${horaireJour.debut.slice(0,5)}.`)
         setSubmitting(false)
         return
       }

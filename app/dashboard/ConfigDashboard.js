@@ -2642,9 +2642,9 @@ function TabProfil({ commercantId, toast }) {
                     <span style={{ fontSize: 13, fontWeight: 700, color: h.ouvert ? T.ink : T.muted, width: 76, flexShrink: 0 }}>{labels[idx]}</span>
                     {h.ouvert ? (
                       <>
-                        <Input type="time" value={h.debut} onChange={e => setForm(p => ({ ...p, horaires_detail: { ...p.horaires_detail, [jour]: { ...h, debut: e.target.value } } }))} style={{ width: 110, fontSize: 13, padding: '4px 8px' }} />
+                        <Input type="time" value={h.debut} onChange={e => setForm(p => ({ ...p, horaires_detail: { ...p.horaires_detail, [jour]: { ...h, debut: e.target.value } } }))} style={{ flex: 1, minWidth: 0, fontSize: 13, padding: '4px 8px' }} />
                         <span style={{ fontSize: 13, color: T.muted, flexShrink: 0 }}>→</span>
-                        <Input type="time" value={h.fin} onChange={e => setForm(p => ({ ...p, horaires_detail: { ...p.horaires_detail, [jour]: { ...h, fin: e.target.value } } }))} style={{ width: 110, fontSize: 13, padding: '4px 8px' }} />
+                        <Input type="time" value={h.fin} onChange={e => setForm(p => ({ ...p, horaires_detail: { ...p.horaires_detail, [jour]: { ...h, fin: e.target.value } } }))} style={{ flex: 1, minWidth: 0, fontSize: 13, padding: '4px 8px' }} />
                       </>
                     ) : (
                       <span style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF' }}>Fermé</span>

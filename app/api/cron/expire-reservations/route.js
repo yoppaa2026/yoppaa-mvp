@@ -1,18 +1,26 @@
 // GET /api/cron/expire-reservations
 //
-// Cron Vercel toutes les 5 minutes : garbage collection des reservations stock
-// expirees dans la table commande_stock_reservation.
+// Cron Vercel toutes les 5 minutes. Double garbage collection :
 //
-// Contexte : create-commande INSERT une reservation TTL 5 min avant le redirect
-// Stripe Checkout. Si le user paie -> webhook DELETE. Si le user abandonne ou
-// timeout Stripe -> webhook payment_intent.canceled DELETE aussi. Mais en cas
-// de webhook KO ou paiement bloque indefiniment, les reservations s'accumulent.
+//   1. Réservations stock expirées (table commande_stock_reservation).
+//      create-commande INSERT une réservation TTL 5 min avant le redirect Stripe
+//      Checkout. Paiement OK -> webhook DELETE. Abandon/timeout -> webhook
+//      payment_intent.canceled DELETE. Si webhook KO, les réservations
+//      s'accumulent : on les nettoie ici. Pas critique business (le stock check
+//      de create-commande filtre déjà .gt('expires_at', NOW())), juste pour
+//      éviter la croissance illimitée de la table.
 //
-// Ce cron nettoie. Pas critique business car le stock check de create-commande
-// filtre deja .gt('expires_at', NOW()), donc une reservation expiree n'occupe
-// pas le stock. C'est juste pour eviter la croissance illimitee de la table.
+//   2. Commandes bloquées en 'paiement_en_attente' > 15 min. Si le webhook Stripe
+//      n'arrive JAMAIS (endpoint KO durablement, PI jamais finalisé), la commande
+//      reste indéfiniment en attente de paiement. On la bascule sur le statut
+//      terminal 'annulee_paiement_ko' (le même que le webhook payment_intent.
+//      canceled). Le stock a déjà été libéré par le point 1.
+//      Sûr vs webhook tardif : si un paiement réussi arrive après coup, le handler
+//      webhook revive la commande (sa garde d'idempotence ne skippe que si
+//      paye_en_ligne=true, or ici il est resté false). Pas de "argent pris mais
+//      commande annulée".
 //
-// Securite : header Authorization: Bearer <CRON_SECRET>.
+// Sécurité : header Authorization: Bearer <CRON_SECRET>.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -31,18 +39,37 @@ export async function GET(request) {
       { auth: { persistSession: false } }
     )
 
-    const { data, error } = await supabase
+    // 1) Réservations stock expirées
+    const { data: reservations, error: errRes } = await supabase
       .from('commande_stock_reservation')
       .delete()
       .lt('expires_at', new Date().toISOString())
       .select('id')
 
-    if (error) {
-      console.error('[cron/expire-reservations] DELETE KO', error)
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+    if (errRes) {
+      console.error('[cron/expire-reservations] DELETE réservations KO', errRes)
+      return NextResponse.json({ ok: false, error: errRes.message }, { status: 500 })
     }
 
-    return NextResponse.json({ ok: true, deleted: data?.length || 0 })
+    // 2) Commandes bloquées en paiement_en_attente > 15 min
+    const cutoff15 = new Date(Date.now() - 15 * 60 * 1000).toISOString()
+    const { data: commandes, error: errCmd } = await supabase
+      .from('commandes')
+      .update({ statut: 'annulee_paiement_ko' })
+      .eq('statut', 'paiement_en_attente')
+      .lt('created_at', cutoff15)
+      .select('id')
+
+    if (errCmd) {
+      console.error('[cron/expire-reservations] UPDATE commandes paiement_en_attente KO', errCmd)
+      return NextResponse.json({ ok: false, error: errCmd.message }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      ok: true,
+      deleted: reservations?.length || 0,
+      commandes_expirees: commandes?.length || 0,
+    })
   } catch (e) {
     console.error('[cron/expire-reservations] exception', e)
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })

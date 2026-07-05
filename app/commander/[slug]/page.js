@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { canDo, isVitrine } from '@/lib/plans'
+import { calculerCapaciteCreneau } from '@/lib/creneaux'
 import { redirectTop } from '@/lib/redirect-top'
 import PillsStatut from '../PillsStatut'
 import CTAUpgrade from '../CTAUpgrade'
@@ -2340,23 +2341,13 @@ export default function CommanderSlug() {
                       })
                       .map(c => [`${c.heure_debut}-${c.heure_fin}`, c])
                   ).values()].map(c => {
-                    const modeTemps = (c.mode_capacite || commercant?.mode_capacite) === 'temps'
-                    const capacite = modeTemps ? (c.capacite_temps || 30) : c.max_commandes
-                    const utilise = modeTemps ? (c.temps_cumul || 0) : c.count
+                    // Capacité créneau factorisée dans lib/creneaux.js (partagée C&C + livraison)
                     const creneauxTries = joursDispos[jourSelectionne]?.creneaux || creneaux
                     const idxCourant = creneauxTries.findIndex(x => x.id === c.id)
-                    let debordement = 0
-                    if (modeTemps && idxCourant > 0) {
-                      const prec = creneauxTries[idxCourant - 1]
-                      const cap = prec.capacite_temps || 30
-                      const util = prec.temps_cumul || 0
-                      if (util > cap) debordement = util - cap
-                    }
-                    const utiliseEff = utilise + debordement
-                    const complet = utiliseEff >= capacite
-                    const places = capacite - utiliseEff
-                    const bientot = !complet && places <= (modeTemps ? capacite * 0.15 : 1)
-                    const presque = !complet && places <= (modeTemps ? capacite * 0.3 : 2) && !bientot
+                    const { complet, bientot, presque } = calculerCapaciteCreneau(c, {
+                      modeCapaciteDefaut: commercant?.mode_capacite,
+                      creneauPrecedent: idxCourant > 0 ? creneauxTries[idxCourant - 1] : null,
+                    })
                     const choisi = creneauChoisi === c.id
                     return (
                       <div key={c.id} onClick={() => { if (!complet) { setCreneauChoisi(c.id); setErreurCommande(null); setAjustementStock(null) } }}

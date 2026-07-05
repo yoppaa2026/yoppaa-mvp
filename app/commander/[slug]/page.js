@@ -823,7 +823,7 @@ export default function CommanderSlug() {
 
     if (paiement === 'annule') {
       setErreurCommande('Paiement annulé. Tu peux relancer ta commande quand tu veux 🟣')
-      setEtape(3)
+      allerEtape(3)
       return
     }
 
@@ -838,7 +838,7 @@ export default function CommanderSlug() {
           .single()
         if (data) {
           setDerniereCommande({ ...data, numeroSequentiel: data.numero_commande })
-          setEtape(4)
+          allerEtape(4)
           try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
         }
       })()
@@ -1351,6 +1351,13 @@ export default function CommanderSlug() {
   }
   function totalAvecFrais() { return totalPanier() + fraisLivraison() }
 
+  // Change d'étape ET remonte en haut du conteneur scrollable. Centralisé pour une
+  // UX fluide : sans ça, on arrive en bas de la nouvelle étape (scroll conservé).
+  function allerEtape(n) {
+    setEtape(n)
+    setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 50)
+  }
+
   function commanderPourJour(idxJour) {
     // Vient du bouton "Commander [jour] →" sur un article épuisé aujourd'hui.
     // Change le jour (avec confirmation si panier non vide) sans passer
@@ -1831,7 +1838,7 @@ export default function CommanderSlug() {
               // Etape 2 (menu+panier) : sortir vers /commander (etape 1 non utilisee pour C&C)
               // Etape 3 (creneau+coords) : revenir a etape 2 (garde le panier)
               // Etape 4 (confirmation post-paiement) : sortir vers /commander (RDV termine)
-              if (etape === 3) { setEtape(2); setCreneauChoisi(null); setErreurCommande(null); setAjustementStock(null) }
+              if (etape === 3) { allerEtape(2); setCreneauChoisi(null); setErreurCommande(null); setAjustementStock(null) }
               else { router.push('/commander') }
             }}
             aria-label="Retour"
@@ -2252,7 +2259,7 @@ export default function CommanderSlug() {
                     onRetirer={retirerDuPanier}
                     onAjouter={incrementerPanier}
                     total={totalPanier()}
-                    onValider={() => setEtape(3)}
+                    onValider={() => allerEtape(3)}
                     getStockMax={getStockMax}
                   />
                 )}
@@ -2401,7 +2408,7 @@ export default function CommanderSlug() {
                         </p>
                       </div>
                     </div>
-                    <button onClick={() => { setEtape(2); setCreneauChoisi(null); setErreurCommande(null); setAjustementStock(null); setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 100) }}
+                    <button onClick={() => { allerEtape(2); setCreneauChoisi(null); setErreurCommande(null); setAjustementStock(null) }}
                       style={{ background: '#fff', border: `1.5px solid ${T.main}`, color: T.main, fontWeight: 700, fontSize: '0.72rem', padding: '0.4rem 0.875rem', borderRadius: 100, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
                       Changer
                     </button>
@@ -2634,7 +2641,7 @@ export default function CommanderSlug() {
                             Réduire à {ajustementStock.stockDisponible}
                           </button>
                         )}
-                        <button onClick={() => { setEtape(2); setErreurCommande(null); setAjustementStock(null) }}
+                        <button onClick={() => { allerEtape(2); setErreurCommande(null); setAjustementStock(null) }}
                           style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '0.5rem 1rem', borderRadius: 100, border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
                           Modifier mon panier
@@ -2786,7 +2793,7 @@ export default function CommanderSlug() {
                 Retour à l&apos;accueil
               </button>
               {!cancelResult && (
-                <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(true); setErreurCommande(null); setAjustementStock(null); setEtape(2) }}
+                <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(true); setErreurCommande(null); setAjustementStock(null); allerEtape(2) }}
                   style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', marginBottom: 10 }}>
                   Continuer chez {commercant.nom}
                 </button>

@@ -41,11 +41,19 @@ export async function POST(request) {
       commercant_id, creneau_id, date_commande, articles,
       client_email, client_prenom, client_nom, client_telephone,
       rgpd_marketing,
+      mode_retrait, creneau_livraison_id, adresse_livraison, code_postal_livraison,
     } = body
+    const estLivraison = mode_retrait === 'livraison'
 
     // ─── 1) Validations basiques ───────────────────────────────────────────
-    if (!commercant_id || !creneau_id || !date_commande) {
-      return NextResponse.json({ ok: false, error: 'Données commande incomplètes (commerçant, créneau, date).' }, { status: 400 })
+    if (!commercant_id || !date_commande) {
+      return NextResponse.json({ ok: false, error: 'Données commande incomplètes (commerçant, date).' }, { status: 400 })
+    }
+    if (estLivraison ? !creneau_livraison_id : !creneau_id) {
+      return NextResponse.json({ ok: false, error: 'Créneau manquant.' }, { status: 400 })
+    }
+    if (estLivraison && (!adresse_livraison || !code_postal_livraison)) {
+      return NextResponse.json({ ok: false, error: 'Adresse de livraison incomplète.' }, { status: 400 })
     }
     if (!Array.isArray(articles) || articles.length === 0) {
       return NextResponse.json({ ok: false, error: 'Panier vide.' }, { status: 400 })
@@ -80,14 +88,42 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'Le paiement en ligne n\'est pas encore activé chez ce commerçant.' }, { status: 400 })
     }
 
-    // ─── 3) Récup créneau + check actif ────────────────────────────────────
-    const { data: creneau, error: errCre } = await supabase
-      .from('creneaux')
-      .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id')
-      .eq('id', creneau_id)
-      .single()
-    if (errCre || !creneau || creneau.commercant_id !== commercant.id || !creneau.actif) {
-      return NextResponse.json({ ok: false, error: 'Créneau introuvable ou inactif.' }, { status: 400 })
+    // ─── 3) Récup créneau (retrait OU livraison) + check actif ──────────────
+    // En livraison : créneau depuis livraison_creneaux + vérif zone (code postal).
+    // livraisonConfig est stocké ici, les frais sont calculés plus bas (besoin du total).
+    let creneau, livraisonConfig = null
+    if (estLivraison) {
+      const { data: cl, error: errCL } = await supabase
+        .from('livraison_creneaux')
+        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id')
+        .eq('id', creneau_livraison_id)
+        .single()
+      if (errCL || !cl || cl.commercant_id !== commercant.id || !cl.actif) {
+        return NextResponse.json({ ok: false, error: 'Créneau de livraison introuvable ou inactif.' }, { status: 400 })
+      }
+      creneau = cl
+      const { data: cfg } = await supabase
+        .from('livraison_config')
+        .select('codes_postaux, frais_fixe, gratuit_des, actif')
+        .eq('commercant_id', commercant.id)
+        .maybeSingle()
+      if (!cfg || cfg.actif === false) {
+        return NextResponse.json({ ok: false, error: 'La livraison n\'est pas configurée chez ce commerçant.' }, { status: 400 })
+      }
+      if (!(cfg.codes_postaux || []).includes(String(code_postal_livraison).trim())) {
+        return NextResponse.json({ ok: false, error: 'Ce code postal n\'est pas dans la zone de livraison.' }, { status: 400 })
+      }
+      livraisonConfig = cfg
+    } else {
+      const { data: cr, error: errCre } = await supabase
+        .from('creneaux')
+        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id')
+        .eq('id', creneau_id)
+        .single()
+      if (errCre || !cr || cr.commercant_id !== commercant.id || !cr.actif) {
+        return NextResponse.json({ ok: false, error: 'Créneau introuvable ou inactif.' }, { status: 400 })
+      }
+      creneau = cr
     }
 
     // ─── 4) Récup articles + options + calcul total SERVER ─────────────────
@@ -167,6 +203,15 @@ export async function POST(request) {
     }
     const totalEUR = totalCents / 100
 
+    // Frais de livraison (server-side, anti-tampering) : montant fixe, offert si le
+    // panier atteint le seuil gratuit_des. En retrait : toujours 0.
+    let fraisLivraisonCents = 0
+    if (estLivraison && livraisonConfig) {
+      const offert = livraisonConfig.gratuit_des != null && totalEUR >= Number(livraisonConfig.gratuit_des)
+      fraisLivraisonCents = offert ? 0 : Math.round(Number(livraisonConfig.frais_fixe || 0) * 100)
+    }
+    const fraisLivraisonEUR = fraisLivraisonCents / 100
+
     // ─── 5) Vérif stock atomic : commandes payées du jour + réservations actives ──
     // Stock disponible = stock_jour - (qte des commandes du jour non annulées)
     //                              - (qte des réservations non expirées)
@@ -227,7 +272,11 @@ export async function POST(request) {
       .from('commandes')
       .insert({
         commercant_id: commercant.id,
-        creneau_id: creneau.id,
+        creneau_id: estLivraison ? null : creneau.id,
+        creneau_livraison_id: estLivraison ? creneau.id : null,
+        mode_retrait: estLivraison ? 'livraison' : 'retrait',
+        adresse_livraison: estLivraison ? adresse_livraison : null,
+        frais_livraison: fraisLivraisonEUR,
         client_nom: nomComplet,
         client_email,
         client_telephone,
@@ -293,17 +342,27 @@ export async function POST(request) {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card', 'bancontact'],
-      line_items: [{
-        quantity: 1,
-        price_data: {
-          currency: 'eur',
-          unit_amount: totalCents,
-          product_data: {
-            name: `Commande Yoppaa · ${commercant.nom}`,
-            description: `${dateHumain} à ${heureCreneau} · ${nbArticles} article${nbArticles > 1 ? 's' : ''}`,
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: 'eur',
+            unit_amount: totalCents,
+            product_data: {
+              name: `Commande Yoppaa · ${commercant.nom}`,
+              description: `${estLivraison ? 'Livraison' : 'Retrait'} ${dateHumain} à ${heureCreneau} · ${nbArticles} article${nbArticles > 1 ? 's' : ''}`,
+            },
           },
         },
-      }],
+        ...(fraisLivraisonCents > 0 ? [{
+          quantity: 1,
+          price_data: {
+            currency: 'eur',
+            unit_amount: fraisLivraisonCents,
+            product_data: { name: 'Frais de livraison' },
+          },
+        }] : []),
+      ],
       customer_email: client_email,
       success_url: `${STRIPE_CONFIG.appUrl}/commander/${commercant.slug}?paiement=ok&commande_id=${commande.id}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:   `${STRIPE_CONFIG.appUrl}/commander/${commercant.slug}?paiement=annule&commande_id=${commande.id}`,

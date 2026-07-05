@@ -1232,7 +1232,7 @@ export default function CommanderRdvSlug() {
                   <div>
                     <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.9rem', marginBottom: 4 }}>Prise de RDV en ligne pas encore activée</p>
                     <p style={{ fontSize: '0.78rem', color: T.deep, lineHeight: 1.5 }}>
-                      <strong>{commercant.nom}</strong> n'a pas encore activé la prise de RDV en ligne sur Yoppaa. Contacte-le directement par téléphone pour réserver.
+                      <strong>{commercant.nom}</strong> n&apos;a pas encore activé la prise de RDV en ligne sur Yoppaa. Contacte-le directement par téléphone pour réserver.
                     </p>
                   </div>
                 </div>
@@ -1258,7 +1258,7 @@ export default function CommanderRdvSlug() {
                     <div style={{ background: '#fff', border: `1px dashed ${T.pale}`, borderRadius: 14, padding: '2rem 1rem', textAlign: 'center' }}>
                       <p style={{ fontSize: '0.9rem', fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucune prestation disponible pour le moment</p>
                       <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.5 }}>
-                        Le commerçant n'a pas encore renseigné ses prestations. Contacte-le directement pour réserver.
+                        Le commerçant n&apos;a pas encore renseigné ses prestations. Contacte-le directement pour réserver.
                       </p>
                     </div>
                   ) : (
@@ -1507,7 +1507,7 @@ export default function CommanderRdvSlug() {
 
                   {!dateChoisie && (
                     <div style={{ textAlign: 'center', padding: '1.5rem 1rem', color: T.muted, fontSize: '0.85rem' }}>
-                      Choisis d'abord un jour ci-dessus ↑
+                      Choisis d&apos;abord un jour ci-dessus ↑
                     </div>
                   )}
 
@@ -1768,7 +1768,7 @@ export default function CommanderRdvSlug() {
                     </p>
                   )}
                   <p style={{ fontSize: '0.7rem', color: T.muted, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
-                    Tu pourras annuler ou reporter jusqu'à {commercant.rdv_delai_annulation_heures || 24}h avant le RDV.
+                    Tu pourras annuler ou reporter jusqu&apos;à {commercant.rdv_delai_annulation_heures || 24}h avant le RDV.
                   </p>
                 </div>
               )}

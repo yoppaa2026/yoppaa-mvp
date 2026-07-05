@@ -1213,10 +1213,14 @@ export default function Commander() {
     setGmNonVu(!localStorage.getItem(`yoppaa_gm_seen_${today}`))
   }, [])
 
-  const [showSplash, setShowSplash] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return !sessionStorage.getItem('yoppaa_splash_seen')
-  })
+  // showSplash DOIT s'initialiser à false (valeur identique serveur + 1er rendu
+  // client), sinon le SSR rend sans splash et le client rend avec -> mismatch
+  // d'hydration React #418 (mur d'erreurs postMessage constaté 03/07). On lit
+  // sessionStorage seulement APRÈS montage, dans l'effet ci-dessous.
+  const [showSplash, setShowSplash] = useState(false)
+  useEffect(() => {
+    if (!sessionStorage.getItem('yoppaa_splash_seen')) setShowSplash(true)
+  }, [])
   function onSplashDone() { sessionStorage.setItem('yoppaa_splash_seen', '1'); setShowSplash(false) }
 
   const [onglet, setOngletState] = useState('accueil')

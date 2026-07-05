@@ -216,8 +216,10 @@ const ACTIONS_RDV_LABEL = {
 function CarteCommande({ commande, numero, onChangerStatut, modeHistorique = false }) {
   const statut = STATUTS[commande.statut] || STATUTS['en_attente']
   const { couleur } = statut
-  const heure = commande.creneau
-    ? `${commande.creneau.heure_debut.slice(0,5)} – ${commande.creneau.heure_fin.slice(0,5)}`
+  const estLivraison = commande.mode_retrait === 'livraison'
+  const cren = commande.creneau || commande.creneau_livraison
+  const heure = cren
+    ? `${cren.heure_debut.slice(0,5)} – ${cren.heure_fin.slice(0,5)}`
     : null
 
   // Date formatée mer. 29/04
@@ -269,6 +271,12 @@ function CarteCommande({ commande, numero, onChangerStatut, modeHistorique = fal
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8 19.79 19.79 0 01.22 2.18 2 2 0 012.2 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.11 6.11l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   <span style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 600 }}>{commande.client_telephone}</span>
+                </div>
+              )}
+              {estLivraison && commande.adresse_livraison && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4, marginTop: 3 }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" stroke="#4F46E5" strokeWidth="2"/><circle cx="12" cy="10" r="3" stroke="#4F46E5" strokeWidth="2"/></svg>
+                  <span style={{ fontSize: '0.72rem', color: '#4F46E5', fontWeight: 700, lineHeight: 1.3 }}>{commande.adresse_livraison}</span>
                 </div>
               )}
             </div>
@@ -505,6 +513,7 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commercant?.id])
   const [filtreStatut, setFiltreStatut] = useState('actives')
+  const [vueMode, setVueMode] = useState('retrait')  // vue Commandes : 'retrait' | 'livraison'
   const [jourSelectionne, setJourSelectionne] = useState(null) // null = aujourd'hui par défaut
   const [modeHistorique, setModeHistorique] = useState(false)
   const [notificationsActives, setNotificationsActives] = useState(false)
@@ -525,7 +534,7 @@ export default function Dashboard() {
   const chargerCommandes = useCallback(async (id) => {
     const { data } = await supabase
       .from('commandes')
-      .select(`*, creneau:creneaux(*), commande_articles(*, article:articles(*))`)
+      .select(`*, creneau:creneaux(*), creneau_livraison:livraison_creneaux(*), commande_articles(*, article:articles(*))`)
       .eq('commercant_id', id)
       .order('created_at', { ascending: true })
     const triees = trierCommandes(data)
@@ -695,7 +704,7 @@ export default function Dashboard() {
     pollingRef.current = setInterval(async () => {
       const { data } = await supabase
         .from('commandes')
-        .select(`*, creneau:creneaux(*), commande_articles(*, article:articles(*))`)
+        .select(`*, creneau:creneaux(*), creneau_livraison:livraison_creneaux(*), commande_articles(*, article:articles(*))`)
         .eq('commercant_id', commercant.id)
         // Exclut 'paiement_en_attente' : commande créée mais Stripe Checkout pas
         // encore validé. Sinon la notif "Nouvelle commande !" tomberait trop tôt
@@ -849,9 +858,14 @@ export default function Dashboard() {
       return (a.numero_commande || 0) - (b.numero_commande || 0)
     })
 
-  const commandesDuJour = modeHistorique
+  const commandesDuJourTous = modeHistorique
     ? commandesHistorique
     : commandes.filter(c => dateKey(c.date_commande || c.created_at) === jourActif)
+  // Vue séparée Retrait / Livraison si le commerce a la livraison activée.
+  const livraisonActive = !!commercant?.livraison_actif
+  const commandesDuJour = livraisonActive
+    ? commandesDuJourTous.filter(c => vueMode === 'livraison' ? c.mode_retrait === 'livraison' : c.mode_retrait !== 'livraison')
+    : commandesDuJourTous
 
   const stats = {
     nouvelles:  commandesDuJour.filter(c => c.statut === 'en_attente').length,
@@ -1378,6 +1392,21 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+
+              {/* Bascule Retrait / Livraison (si le commerce livre) */}
+              {livraisonActive && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  {[
+                    { v: 'retrait', label: 'Retrait', n: commandesDuJourTous.filter(c => c.mode_retrait !== 'livraison').length },
+                    { v: 'livraison', label: 'Livraison', n: commandesDuJourTous.filter(c => c.mode_retrait === 'livraison').length },
+                  ].map(m => (
+                    <button key={m.v} onClick={() => { setVueMode(m.v); setFiltreStatut('actives') }}
+                      style={{ flex: 1, padding: '9px', borderRadius: 10, border: `2px solid ${vueMode === m.v ? T.main : T.hairline}`, background: vueMode === m.v ? T.main : '#fff', color: vueMode === m.v ? '#fff' : T.ink, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                      {m.label}{m.n > 0 ? ` · ${m.n}` : ''}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Sélecteur jours */}
               {joursDispos.length > 0 && (

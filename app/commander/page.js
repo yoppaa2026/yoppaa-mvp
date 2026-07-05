@@ -1858,25 +1858,20 @@ export default function Commander() {
     calculerDistances(commercants, position)
   }, [position, commercants.length])
 
-  async function calculerDistances(liste, pos) {
-    const avecCoords = liste.filter(c => c.latitude && c.longitude)
-    if (!avecCoords.length) return
-    try {
-      // Appel via route serveur /api/distance (proxy ORS) : évite le CORS/403 du
-      // navigateur et garde la clé API côté serveur. Fallback Haversine ci-dessous.
-      const res = await fetch('/api/distance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ locations: [[pos.lng, pos.lat], ...avecCoords.map(c => [parseFloat(c.longitude), parseFloat(c.latitude)])] }) })
-      if (!res.ok) throw new Error()
-      const data = await res.json()
-      if (!data.ok || !data.distances) throw new Error()
-      const distances = data.distances[0].slice(1)
-      const avecDistance = liste.map(c => { const idx = avecCoords.findIndex(x => x.id===c.id); return { ...c, distance: idx===-1 ? null : distances[idx] } })
-      avecDistance.sort((a,b) => (a.distance??Infinity)-(b.distance??Infinity))
-      setCommercants(avecDistance)
-    } catch {
-      const avecDistance = liste.map(c => ({ ...c, distance: c.latitude && c.longitude ? distanceVolOiseau(pos.lat, pos.lng, parseFloat(c.latitude), parseFloat(c.longitude)) : null }))
-      avecDistance.sort((a,b) => (a.distance??Infinity)-(b.distance??Infinity))
-      setCommercants(avecDistance)
-    }
+  function calculerDistances(liste, pos) {
+    // Distance à vol d'oiseau (Haversine) pour le tri "près de toi". C'est la
+    // norme des apps de découverte (Yelp, résultats Google Maps, store locators)
+    // et c'est suffisant à l'échelle locale. La distance routière (ORS via la
+    // route /api/distance, en réserve) est réservée au module livraison alim, où
+    // elle a un sens opérationnel (frais + zones). Décision Alex 05/07.
+    const avecDistance = liste.map(c => ({
+      ...c,
+      distance: c.latitude && c.longitude
+        ? distanceVolOiseau(pos.lat, pos.lng, parseFloat(c.latitude), parseFloat(c.longitude))
+        : null,
+    }))
+    avecDistance.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
+    setCommercants(avecDistance)
   }
 
   async function geocoderAdresseManuelle(adresse) {

@@ -1341,6 +1341,16 @@ export default function CommanderSlug() {
     }, 0)
   }
 
+  // Frais de livraison côté client (confort d'affichage ; le serveur recalcule et
+  // reste la source de vérité). Fixe, offert si le panier atteint gratuit_des.
+  function fraisLivraison() {
+    if (modeCommande !== 'livraison' || !livraisonConfig) return 0
+    const g = livraisonConfig.gratuit_des
+    if (g != null && totalPanier() >= Number(g)) return 0
+    return Number(livraisonConfig.frais_fixe || 0)
+  }
+  function totalAvecFrais() { return totalPanier() + fraisLivraison() }
+
   function commanderPourJour(idxJour) {
     // Vient du bouton "Commander [jour] →" sur un article épuisé aujourd'hui.
     // Change le jour (avec confirmation si panier non vide) sans passer
@@ -1407,14 +1417,15 @@ export default function CommanderSlug() {
   }
 
   async function passerCommande() {
-    if (!creneauChoisi || !client.prenom || !client.nom || !client.email || !client.telephone || !rgpdCommande || !commercant) return
+    const creneauPret = modeCommande === 'livraison' ? creneauLivraisonChoisi : creneauChoisi
+    if (!creneauPret || !client.prenom || !client.nom || !client.email || !client.telephone || !rgpdCommande || !commercant) return
     setLoadingCommande(true)
     setErreurCommande(null)
     try {
       // Persistance client (localStorage + clients DB) - utile pour favoris/historique
       await getOuCreerClient(client.email, client.prenom, client.nom)
 
-      const jourDate = joursDispos[jourSelectionne]?.date || new Date()
+      const jourDate = (modeCommande === 'livraison' ? creneauLivraisonChoisi?._date : joursDispos[jourSelectionne]?.date) || new Date()
       const d = new Date(jourDate)
       const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 
@@ -1436,7 +1447,6 @@ export default function CommanderSlug() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           commercant_id: commercant.id,
-          creneau_id: creneauChoisi,
           date_commande: dateStr,
           articles: articlesPayload,
           client_email: client.email,
@@ -1444,6 +1454,14 @@ export default function CommanderSlug() {
           client_nom: client.nom,
           client_telephone: client.telephone,
           rgpd_marketing: rgpdMarketing,
+          ...(modeCommande === 'livraison'
+            ? {
+                mode_retrait: 'livraison',
+                creneau_livraison_id: creneauLivraisonChoisi?.id,
+                adresse_livraison: [adresseLivraison.rue, adresseLivraison.complement, `${adresseLivraison.code_postal} ${adresseLivraison.ville}`].filter(s => s && s.trim()).join(', '),
+                code_postal_livraison: adresseLivraison.code_postal.trim(),
+              }
+            : { creneau_id: creneauChoisi }),
         }),
       })
       const data = await res.json()
@@ -1510,7 +1528,14 @@ export default function CommanderSlug() {
     }
   }
 
-  const formValide = creneauChoisi && client.prenom.trim() && client.nom.trim() && client.email.trim() && client.telephone.trim() && rgpdCommande
+  // Livraison : dispo si le commerce l'active + zone configurée. Slots aplatis
+  // (tournées à venir tous jours confondus). Vérif CP dans la zone.
+  const livraisonDispo = !!(commercant?.livraison_actif && livraisonConfig && livraisonConfig.codes_postaux?.length > 0)
+  const slotsLivraison = joursDisposLivraison.flatMap(j => (j.creneaux || []).map(cr => ({ ...cr, _date: j.date, _jourLabel: j.label })))
+  const cpDansZone = !!livraisonConfig?.codes_postaux?.includes((adresseLivraison.code_postal || '').trim())
+  const livraisonFormOk = !!(adresseLivraison.rue.trim() && adresseLivraison.code_postal.trim() && adresseLivraison.ville.trim() && cpDansZone && creneauLivraisonChoisi)
+  const creneauOk = modeCommande === 'livraison' ? livraisonFormOk : !!creneauChoisi
+  const formValide = creneauOk && client.prenom.trim() && client.nom.trim() && client.email.trim() && client.telephone.trim() && rgpdCommande
   const inputSt = { width: '100%', padding: '0.875rem 1rem', border: `1.5px solid ${T.pale}`, borderRadius: 12, marginBottom: 10, fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', outline: 'none', color: T.ink, background: '#fff', display: 'block' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }
 
@@ -2318,12 +2343,47 @@ export default function CommanderSlug() {
                       </div>
                     )
                   })}
+                  {modeCommande === 'livraison' && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginTop: 6, color: T.deep }}>
+                      <span style={{ fontWeight: 600 }}>Frais de livraison</span>
+                      <span style={{ fontWeight: 800 }}>{fraisLivraison() === 0 ? 'Offerts' : `+${fraisLivraison().toFixed(2)}€`}</span>
+                    </div>
+                  )}
                   <div style={{ borderTop: `1px solid ${T.pale}`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.82rem' }}>Total</span>
-                    <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.1rem' }}>{totalPanier().toFixed(2)}€</span>
+                    <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.1rem' }}>{totalAvecFrais().toFixed(2)}€</span>
                   </div>
                 </div>
 
+                {/* Sélecteur retrait / livraison (si le commerce propose la livraison) */}
+                {livraisonDispo && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: '1rem' }}>
+                    {[{ v: 'retrait', label: 'Retrait' }, { v: 'livraison', label: 'Livraison' }].map(m => (
+                      <button key={m.v} onClick={() => { setModeCommande(m.v); setErreurCommande(null) }}
+                        style={{ flex: 1, padding: '0.7rem', borderRadius: 12, border: `2px solid ${modeCommande === m.v ? T.main : T.pale}`, background: modeCommande === m.v ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: modeCommande === m.v ? '#fff' : T.ink, fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Adresse de livraison */}
+                {modeCommande === 'livraison' && (
+                  <div style={{ background: '#fff', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '1.25rem', border: `1.5px solid ${T.pale}` }}>
+                    <p style={{ fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 10px' }}>Adresse de livraison</p>
+                    <input value={adresseLivraison.rue} onChange={e => setAdresseLivraison(p => ({ ...p, rue: e.target.value }))} placeholder="Rue et numéro" style={inputSt} />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input value={adresseLivraison.code_postal} onChange={e => setAdresseLivraison(p => ({ ...p, code_postal: e.target.value.replace(/\D/g, '').slice(0,4) }))} inputMode="numeric" placeholder="Code postal" style={{ ...inputSt, flex: '0 0 40%' }} />
+                      <input value={adresseLivraison.ville} onChange={e => setAdresseLivraison(p => ({ ...p, ville: e.target.value }))} placeholder="Ville" style={{ ...inputSt, flex: 1 }} />
+                    </div>
+                    <input value={adresseLivraison.complement} onChange={e => setAdresseLivraison(p => ({ ...p, complement: e.target.value }))} placeholder="Étage, digicode... (optionnel)" style={inputSt} />
+                    {adresseLivraison.code_postal.trim() && !cpDansZone && (
+                      <p style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 700, margin: '2px 0 0' }}>Ce code postal n&rsquo;est pas dans la zone de livraison.</p>
+                    )}
+                  </div>
+                )}
+
+                {modeCommande === 'retrait' && (<>
                 {/* Jour verrouille - choisi a l'etape 2 (menu) */}
                 {joursDispos[jourSelectionne] && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: '1rem', background: T.pale, border: `1.5px solid ${T.main}33`, borderRadius: 14, padding: '0.625rem 0.875rem' }}>
@@ -2434,6 +2494,34 @@ export default function CommanderSlug() {
                     </div>
                   )}
                 </div>
+                </>)}
+
+                {/* Créneaux de livraison (tournées) — liste à plat des tournées à venir */}
+                {modeCommande === 'livraison' && (
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Créneaux de livraison</span>
+                      <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                    </div>
+                    {slotsLivraison.length === 0
+                      ? <p style={{ textAlign: 'center', padding: '1.5rem', color: T.muted, fontSize: '0.875rem', fontWeight: 600 }}>Aucune tournée disponible pour le moment.</p>
+                      : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {slotsLivraison.map(slot => {
+                            const { complet } = calculerCapaciteCreneau(slot, { modeCapaciteDefaut: commercant?.mode_capacite })
+                            const choisi = creneauLivraisonChoisi?.id === slot.id && creneauLivraisonChoisi?._date?.getTime?.() === slot._date?.getTime?.()
+                            return (
+                              <button key={`${slot.id}-${slot._date?.getTime?.()}`} disabled={complet}
+                                onClick={() => { setCreneauLivraisonChoisi(slot); setErreurCommande(null) }}
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0.75rem 1rem', borderRadius: 12, border: `2px solid ${complet ? '#E5E7EB' : choisi ? T.main : T.pale}`, background: complet ? '#F9FAFB' : choisi ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: complet ? '#9CA3AF' : choisi ? '#fff' : T.ink, cursor: complet ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left', width: '100%' }}>
+                                <span style={{ fontWeight: 800, fontSize: '0.9rem', textTransform: 'capitalize' }}>{slot._jourLabel}</span>
+                                <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>{(slot.heure_debut||'').slice(0,5)}–{(slot.heure_fin||'').slice(0,5)}{complet ? ' · complet' : ''}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                    }
+                  </div>
+                )}
 
                 {/* Encart invite : rassure (pas besoin de compte) + raccourci Yopper existant.
                     Wording cohérent avec /commander/rdv/[slug] étape 3. */}
@@ -2560,7 +2648,7 @@ export default function CommanderSlug() {
                   style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: !formValide ? 0.45 : 1, cursor: !formValide ? 'default' : 'pointer' }}>
                   {loadingCommande ? 'Redirection…' : (
                     <>
-                      Payer &amp; confirmer - {totalPanier().toFixed(2)}€
+                      Payer &amp; confirmer - {totalAvecFrais().toFixed(2)}€
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
                     </>
                   )}

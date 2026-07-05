@@ -90,6 +90,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
   const [swipeX, setSwipeX] = useState(0)
   const [swiping, setSwiping] = useState(false)
   const [phase, setPhase] = useState('idle')
+  const [containerW, setContainerW] = useState(0)
   const startRef = useRef(0)
   const containerRef = useRef(null)
   const THUMB = 52
@@ -108,7 +109,18 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
     }
   }
   const onEnd = () => { if (phase !== 'swiping') return; setSwiping(false); setPhase('idle'); setSwipeX(0) }
-  const p = swipeX / (getMaxX() || 1)
+  // Largeur du conteneur suivie en state (réactif) : on ne lit pas containerRef
+  // pendant le render (interdit). Les handlers, eux, lisent le ref directement.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') { if (el) setContainerW(el.offsetWidth); return }
+    setContainerW(el.offsetWidth)
+    const ro = new ResizeObserver(() => setContainerW(el.offsetWidth))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [phase])
+  const maxXRender = (containerW || 300) - THUMB - 8
+  const p = swipeX / (maxXRender || 1)
   const TRACK_H = THUMB + 8
   if (phase === 'success' || phase === 'done') {
     return (

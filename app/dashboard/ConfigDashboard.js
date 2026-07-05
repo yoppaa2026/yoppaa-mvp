@@ -2514,7 +2514,7 @@ function TabLivraison({ commercantId, toast }) {
   )
 }
 
-function TabProfil({ commercantId, toast }) {
+function TabProfil({ commercantId, toast, onSaved }) {
   const [form, setForm] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -2568,6 +2568,9 @@ function TabProfil({ commercantId, toast }) {
       return
     }
     toast('Profil mis à jour')
+    // Rafraîchit le commerçant parent : les onglets conditionnels (ex. Livraison
+    // via livraison_actif) apparaissent/disparaissent sans reload manuel.
+    onSaved?.()
   }
 
   if (loading || !form) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
@@ -4411,14 +4414,15 @@ export default function ConfigDashboard({ commercantId }) {
     return () => window.removeEventListener('yoppaa-toast', handleToast)
   }, [])
 
-  // Charge le commerçant pour connaître le plan (conditionne les onglets)
-  useEffect(() => {
+  // Charge le commerçant pour connaître le plan (conditionne les onglets).
+  // Exposé comme fonction pour rafraîchir après sauvegarde du Profil : activer la
+  // livraison fait apparaître l'onglet Livraison sans reload manuel.
+  async function rechargerCommercant() {
     if (!commercantId) return
-    let annule = false
-    supabase.from('commercants').select('*').eq('id', commercantId).maybeSingle()
-      .then(({ data }) => { if (!annule) setCommercant(data) })
-    return () => { annule = true }
-  }, [commercantId])
+    const { data } = await supabase.from('commercants').select('*').eq('id', commercantId).maybeSingle()
+    setCommercant(data)
+  }
+  useEffect(() => { rechargerCommercant() }, [commercantId])
 
   // Onglets dynamiques selon le plan + la catégorie
   const peutDeals = canDo(commercant?.plan, 'deals')
@@ -4489,7 +4493,7 @@ export default function ConfigDashboard({ commercantId }) {
       {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} toast={showToast} />}
       {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
-      {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} />}
+      {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
       {tab === 'signalements' && <TabSignalements commercantId={commercantId} toast={showToast} />}
 

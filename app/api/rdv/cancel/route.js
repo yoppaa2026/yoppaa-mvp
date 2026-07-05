@@ -18,6 +18,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe } from '@/lib/stripe'
 import { envoyerAuCommercant, emailRdvAnnule } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
+import { brusselsInstant } from '@/lib/timezone'
 
 export async function POST(request) {
   try {
@@ -81,8 +82,10 @@ export async function POST(request) {
     // ─── 4) Vérif cutoff (date_rdv + heure_debut - delai_annulation_heures) ─
     const commercant = rdv.commercant
     const delaiH = commercant?.rdv_delai_annulation_heures ?? 24
-    const rdvISO = `${rdv.date_rdv}T${rdv.heure_debut}+02:00`  // Europe/Brussels
-    const rdvDate = new Date(rdvISO)
+    // Instant du RDV en heure murale Europe/Brussels, DST-aware (été +02:00 /
+    // hiver +01:00) via brusselsInstant : sinon la deadline tombait 1h trop tôt
+    // en hiver et pénalisait le client.
+    const rdvDate = brusselsInstant(rdv.date_rdv, rdv.heure_debut)
     const cutoffDate = new Date(rdvDate.getTime() - delaiH * 60 * 60 * 1000)
     const now = new Date()
     if (now > cutoffDate) {

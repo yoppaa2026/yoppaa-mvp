@@ -17,6 +17,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe } from '@/lib/stripe'
 import { envoyerAuCommercant, emailCommandeAnnuleeYopper, emailCommandeAnnuleeCommercant } from '@/lib/resend'
+import { brusselsInstant } from '@/lib/timezone'
 
 export async function POST(request) {
   try {
@@ -98,11 +99,10 @@ export async function POST(request) {
     const commercant = cmd.commercants
     const delaiH = commercant?.delai_annulation_heures ?? 2
     const heureDebut = cmd.creneau?.heure_debut || '23:59:59'
-    // Construction du timestamp retrait en heure Europe/Brussels (+02:00 été, +01:00 hiver).
-    // Heuristique simple : on utilise +02:00 toute l'année — décalage ±1h en hiver acceptable
-    // pour V1 (un user qui paye à 2h du matin n'est pas notre cas critique).
-    const retraitISO = `${cmd.date_commande}T${heureDebut}+02:00`
-    const retraitDate = new Date(retraitISO)
+    // Instant du retrait en heure murale Europe/Brussels, DST-aware (été +02:00 /
+    // hiver +01:00) via brusselsInstant : sinon la deadline tombait 1h trop tôt
+    // en hiver et pénalisait le client.
+    const retraitDate = brusselsInstant(cmd.date_commande, heureDebut)
     const cutoffDate = new Date(retraitDate.getTime() - delaiH * 60 * 60 * 1000)
     const now = new Date()
     if (now > cutoffDate) {

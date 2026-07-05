@@ -2385,6 +2385,135 @@ function TabCreneaux({ commercantId, toast }) {
 
 
 // ─── Onglet PROFIL ────────────────────────────────────────────────────────────
+// ─── Onglet LIVRAISON ─────────────────────────────────────────────────────────
+// Config zone (codes postaux) + frais (fixe + gratuit dès X€). Créneaux livraison
+// gérés dans un second temps (calqués sur TabCreneaux via livraison_creneaux).
+function TabLivraison({ commercantId, toast }) {
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [codesPostaux, setCodesPostaux] = useState([])
+  const [inputCP, setInputCP] = useState('')
+  const [fraisFixe, setFraisFixe] = useState('')
+  const [gratuitDes, setGratuitDes] = useState('')
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('livraison_config').select('*').eq('commercant_id', commercantId).maybeSingle()
+      if (data) {
+        setCodesPostaux(data.codes_postaux || [])
+        setFraisFixe(data.frais_fixe != null ? String(data.frais_fixe) : '')
+        setGratuitDes(data.gratuit_des != null ? String(data.gratuit_des) : '')
+      }
+      setLoading(false)
+    })()
+  }, [commercantId])
+
+  function ajouterCP() {
+    const cp = inputCP.trim()
+    if (!/^\d{4}$/.test(cp)) { toast('Code postal invalide (4 chiffres)', 'error'); return }
+    if (codesPostaux.includes(cp)) { toast('Code postal déjà ajouté', 'info'); return }
+    setCodesPostaux(prev => [...prev, cp].sort())
+    setInputCP('')
+  }
+
+  function retirerCP(cp) { setCodesPostaux(prev => prev.filter(x => x !== cp)) }
+
+  async function sauvegarder() {
+    if (codesPostaux.length === 0) { toast('Ajoute au moins un code postal de livraison', 'error'); return }
+    const frais = parseFloat((fraisFixe || '0').replace(',', '.'))
+    if (isNaN(frais) || frais < 0) { toast('Frais de livraison invalide', 'error'); return }
+    let gratuit = null
+    if (gratuitDes.trim()) {
+      gratuit = parseFloat(gratuitDes.replace(',', '.'))
+      if (isNaN(gratuit) || gratuit < 0) { toast('Seuil de gratuité invalide', 'error'); return }
+    }
+    setSaving(true)
+    const { error } = await supabase.from('livraison_config').upsert({
+      commercant_id: commercantId,
+      codes_postaux: codesPostaux,
+      frais_fixe: frais,
+      gratuit_des: gratuit,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'commercant_id' })
+    setSaving(false)
+    if (error) { toast('Erreur : ' + error.message, 'error'); return }
+    toast('Livraison enregistrée', 'success')
+  }
+
+  if (loading) return <div style={{ padding: 20, color: T.muted, fontWeight: 600 }}>Chargement…</div>
+
+  const card = { background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: 16, marginBottom: 16 }
+  const inputStyle = { padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 14, fontFamily: '"DM Sans", sans-serif', width: '100%', boxSizing: 'border-box' }
+
+  return (
+    <div style={{ fontFamily: '"DM Sans", sans-serif' }}>
+      {/* Zone de livraison */}
+      <div style={card}>
+        <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 800, color: T.ink }}>Zone de livraison</h3>
+        <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.muted }}>Les codes postaux que tu livres. Un Yopper hors zone ne verra pas l&rsquo;option livraison.</p>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <input
+            value={inputCP}
+            onChange={e => setInputCP(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            onKeyDown={e => { if (e.key === 'Enter') ajouterCP() }}
+            placeholder="Ex : 5640"
+            inputMode="numeric"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button onClick={ajouterCP} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            Ajouter
+          </button>
+        </div>
+        {codesPostaux.length === 0
+          ? <p style={{ fontSize: 12.5, color: T.muted, fontStyle: 'italic', margin: 0 }}>Aucun code postal pour l&rsquo;instant.</p>
+          : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {codesPostaux.map(cp => (
+                <span key={cp} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 100, background: T.pale, color: T.ink, fontWeight: 700, fontSize: 13 }}>
+                  {cp}
+                  <button onClick={() => retirerCP(cp)} aria-label={`Retirer ${cp}`} style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'inline-flex', padding: 0, color: T.main }}>
+                    <Icon name="x" size={13} color={T.main} />
+                  </button>
+                </span>
+              ))}
+            </div>
+        }
+      </div>
+
+      {/* Frais de livraison */}
+      <div style={card}>
+        <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 800, color: T.ink }}>Frais de livraison</h3>
+        <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.muted }}>Un montant fixe, offert au-dessus d&rsquo;un seuil de panier (optionnel).</p>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <label style={{ flex: 1, minWidth: 140 }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Frais fixe (€)</span>
+            <input value={fraisFixe} onChange={e => setFraisFixe(e.target.value)} placeholder="Ex : 3" inputMode="decimal" style={inputStyle} />
+          </label>
+          <label style={{ flex: 1, minWidth: 140 }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Gratuit dès (€) — optionnel</span>
+            <input value={gratuitDes} onChange={e => setGratuitDes(e.target.value)} placeholder="Ex : 25" inputMode="decimal" style={inputStyle} />
+          </label>
+        </div>
+        <p style={{ margin: '10px 0 0', fontSize: 12, color: T.muted }}>
+          Aperçu Yopper : {(() => {
+            const f = parseFloat((fraisFixe || '0').replace(',', '.')) || 0
+            const g = gratuitDes.trim() ? parseFloat(gratuitDes.replace(',', '.')) : null
+            if (f === 0) return 'Livraison gratuite'
+            return `Livraison ${f.toFixed(2)}€${g ? `, offerte dès ${g.toFixed(2)}€` : ''}`
+          })()}
+        </p>
+      </div>
+
+      <button onClick={sauvegarder} disabled={saving} style={{ width: '100%', padding: 14, borderRadius: 12, border: 'none', background: saving ? T.muted : T.main, color: '#fff', fontWeight: 800, fontSize: 15, cursor: saving ? 'default' : 'pointer' }}>
+        {saving ? 'Enregistrement…' : 'Enregistrer la livraison'}
+      </button>
+
+      <p style={{ margin: '16px 0 0', fontSize: 12, color: T.muted, fontStyle: 'italic', textAlign: 'center' }}>
+        Les créneaux de livraison (tournées) arrivent juste après.
+      </p>
+    </div>
+  )
+}
+
 function TabProfil({ commercantId, toast }) {
   const [form, setForm] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -4319,12 +4448,16 @@ export default function ConfigDashboard({ commercantId }) {
   // Regroupe Prestations + Praticiens + Créneaux RDV en sous-onglets.
   const peutRdv = estVitrine && canDo(commercant?.plan, 'rdv')
 
+  // Onglet Livraison : alim uniquement, quand la livraison est activée (toggle Profil).
+  const peutLivraison = !estVitrine && commercant?.livraison_actif
+
   // Vitrine : on parle de "Vitrine" plutôt que "Menu", et on masque "Créneaux" (pas de C&C)
   const tabs = [
     { id: 'menu',     label: estVitrine ? 'Vitrine' : 'Menu', icon: 'menu' },
     peutDeals && { id: 'deals', label: 'Deals', icon: 'tag' },
     peutActus && { id: 'actus', label: 'Actus', icon: 'sliders' },
     !estVitrine && { id: 'creneaux', label: 'Créneaux', icon: 'clock' },
+    peutLivraison && { id: 'livraison', label: 'Livraison', icon: 'box' },
     peutRdv && { id: 'rdv', label: 'RDV', icon: 'clock' },
     peutPaiements && { id: 'paiements', label: 'Paiements', icon: 'tag' },
     { id: 'profil',   label: 'Profil',   icon: 'shop' },
@@ -4353,6 +4486,7 @@ export default function ConfigDashboard({ commercantId }) {
       {tab === 'deals'    && peutDeals && <TabDeals commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'actus'    && peutActus && <TabActus commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
+      {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} toast={showToast} />}
       {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} />}

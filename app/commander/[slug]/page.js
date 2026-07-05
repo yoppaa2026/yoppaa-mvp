@@ -666,6 +666,13 @@ export default function CommanderSlug() {
   const [clientId, setClientId] = useState(null)
   const [joursDispos, setJoursDispos] = useState([])
   const [jourSelectionne, setJourSelectionne] = useState(0)
+  // ─── Livraison (mode retrait | livraison) ───
+  const [modeCommande, setModeCommande] = useState('retrait')
+  const [livraisonConfig, setLivraisonConfig] = useState(null)
+  const [creneauxLivraison, setCreneauxLivraison] = useState([])
+  const [joursDisposLivraison, setJoursDisposLivraison] = useState([])
+  const [creneauLivraisonChoisi, setCreneauLivraisonChoisi] = useState(null)
+  const [adresseLivraison, setAdresseLivraison] = useState({ rue: '', code_postal: '', ville: '', complement: '' })
   // Confirmation de changement de jour quand le panier n'est pas vide
   const [confirmationJour, setConfirmationJour] = useState(null) // { nouveauIdx }
   const [optionsParArticle, setOptionsParArticle] = useState({})
@@ -900,6 +907,9 @@ export default function CommanderSlug() {
     setDealsParArticle(data.dealsParArticle || {})
     setFermetures(data.fermetures)
     buildJoursDispos(data.commercant, data.creneaux, data.fermetures)
+    setLivraisonConfig(data.livraisonConfig || null)
+    setCreneauxLivraison(data.livraisonCreneaux || [])
+    setJoursDisposLivraison(construireJoursDispos(data.commercant, data.livraisonCreneaux || [], data.fermetures))
     setLoading(false)
   }
 
@@ -928,6 +938,9 @@ export default function CommanderSlug() {
       { data: dealsData },
       { data: fermeturesData },
       { data: actualitesData },
+      { data: livConfig },
+      { data: livCren },
+      { data: livCmd },
     ] = await Promise.all([
       supabase.from('articles').select('*').eq('commercant_id', c.id).eq('actif', true).order('categorie').order('nom'),
       supabase.from('creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
@@ -938,6 +951,9 @@ export default function CommanderSlug() {
       supabase.from('yoppaa_deals').select('*').eq('commercant_id', c.id).eq('actif', true),
       supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', c.id).gte('date_fin', new Date().toISOString()),
       supabase.from('actualites').select('*').eq('commercant_id', c.id).eq('actif', true).order('created_at', { ascending: false }),
+      supabase.from('livraison_config').select('*').eq('commercant_id', c.id).maybeSingle(),
+      supabase.from('livraison_creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
+      supabase.from('commandes').select('creneau_livraison_id').eq('commercant_id', c.id).eq('mode_retrait', 'livraison').not('statut', 'in', '(recupere,non_retire,annulee_client_refund,annulee_paiement_ko)'),
     ])
 
     const notesInfo = avisNotes?.length > 0
@@ -952,6 +968,12 @@ export default function CommanderSlug() {
       tempsParCreneau[cmd.creneau_id] = (tempsParCreneau[cmd.creneau_id] || 0) + tempsCmd
     })
     const creneauxAvecCount = (cren || []).map(cr => ({ ...cr, count: countParCreneau[cr.id] || 0, temps_cumul: tempsParCreneau[cr.id] || 0 }))
+
+    // Enrichissement capacité des créneaux LIVRAISON (count = nb commandes livraison
+    // actives sur ce créneau). Mode 'commandes' -> temps_cumul non utilisé (0).
+    const livCountParCreneau = {}
+    ;(livCmd || []).forEach(cmd => { if (cmd.creneau_livraison_id) livCountParCreneau[cmd.creneau_livraison_id] = (livCountParCreneau[cmd.creneau_livraison_id] || 0) + 1 })
+    const livraisonCreneauxAvecCount = (livCren || []).map(cr => ({ ...cr, count: livCountParCreneau[cr.id] || 0, temps_cumul: 0 }))
 
     const artIds = (arts||[]).map(a => a.id)
     let opts = {}
@@ -1025,6 +1047,8 @@ export default function CommanderSlug() {
       dealsParArticle,
       fermetures: fermeturesData || [],
       actualites: actusActives,
+      livraisonConfig: livConfig || null,
+      livraisonCreneaux: livraisonCreneauxAvecCount,
     }
 
     try {
@@ -1034,7 +1058,7 @@ export default function CommanderSlug() {
     hydrate(cacheData)
   }
 
-  function buildJoursDispos(c, creneauxAvecCount, fermeturesData) {
+  function construireJoursDispos(c, creneauxAvecCount, fermeturesData) {
     const horizon = c.horizon_commande || 1
     const heureOuverture = c.heure_ouverture_resa ? c.heure_ouverture_resa.slice(0,5) : '21:00'
     const now = maintenant()
@@ -1082,7 +1106,12 @@ export default function CommanderSlug() {
       joursDispos.push({ date: new Date(today), label: "Aujourd'hui", creneaux: creneauxPourDate(today, true) })
     }
 
-    setJoursDispos(joursDispos)
+    return joursDispos
+  }
+
+  // Wrapper : construit + pose l'état des jours de RETRAIT (comportement inchangé).
+  function buildJoursDispos(c, creneauxAvecCount, fermeturesData) {
+    setJoursDispos(construireJoursDispos(c, creneauxAvecCount, fermeturesData))
     setJourSelectionne(0)
   }
 

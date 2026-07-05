@@ -37,7 +37,14 @@ function pushOneSignal(cb) {
 // Pose des tags OneSignal côté serveur (via l'API REST), en s'authentifiant par
 // le cookie Yopper. Best-effort : les échecs sont silencieux (le ciblage push
 // n'est pas critique au point de bloquer l'UI).
-export function syncYopperTags(tags) {
+//
+// Retry sur 404/5xx : au tout premier chargement, la synchro initiale part juste
+// après login(), mais le user OneSignal n'est pas encore créé côté serveur -> le
+// PATCH par external_id renvoie 404. On réessaie avec backoff le temps que la
+// création suive (constaté 04/07 : code_postal + favoris initiaux non posés,
+// seul le toggle favori ultérieur passait). Les 4xx définitifs (400/401) ne sont
+// pas retentés.
+export function syncYopperTags(tags, attempt = 0) {
   if (typeof window === 'undefined') return
   if (!tags || Object.keys(tags).length === 0) return
   fetch('/api/yopper/sync-tags', {
@@ -45,7 +52,18 @@ export function syncYopperTags(tags) {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tags }),
-  }).catch(() => {})
+  })
+    .then(res => {
+      const transient = res.status === 404 || res.status >= 500
+      if (transient && attempt < 4) {
+        setTimeout(() => syncYopperTags(tags, attempt + 1), 1500 * (attempt + 1))
+      }
+    })
+    .catch(() => {
+      if (attempt < 4) {
+        setTimeout(() => syncYopperTags(tags, attempt + 1), 1500 * (attempt + 1))
+      }
+    })
 }
 
 // À appeler quand un favori est ajouté : si l'utilisateur n'a pas encore accepté

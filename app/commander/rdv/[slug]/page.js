@@ -366,6 +366,13 @@ export default function CommanderRdvSlug() {
 
   const scrollRef = useRef(null)
 
+  // Change d'étape ET remonte en haut du conteneur scrollable (UX fluide).
+  // Centralisé pour cohérence sur toutes les transitions du tunnel RDV.
+  function allerEtape(n) {
+    setEtape(n)
+    setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 50)
+  }
+
   // ─── Retour Stripe Checkout (paiement acompte en ligne) ────────────────────
   // URL params possibles :
   //   ?paiement=ok&session_id=cs_xxx -> paiement reussi, RDV cree par webhook
@@ -400,7 +407,7 @@ export default function CommanderRdvSlug() {
           statut: 'confirme',
           acompte_montant: snapshot.acompteMontant ?? null,
         })
-        setEtape(4)
+        allerEtape(4)
 
         // Poll pour recuperer le numero_rdv assigne par le webhook (max ~15s).
         // Le webhook arrive async, donc on tente plusieurs fois jusqu'a ce que
@@ -443,7 +450,7 @@ export default function CommanderRdvSlug() {
         if (snapshot.dateChoisie) setDateChoisie(new Date(snapshot.dateChoisie))
         if (snapshot.heureChoisie) setHeureChoisie(snapshot.heureChoisie)
         if (snapshot.client) setClient(p => ({ ...p, ...snapshot.client }))
-        setEtape(3)
+        allerEtape(3)
       }
       setSubmitError('Paiement annulé. Ton RDV n\'a pas été créé. Tu peux réessayer.')
       try { sessionStorage.removeItem(STORAGE_KEY) } catch (_) {}
@@ -804,7 +811,7 @@ export default function CommanderRdvSlug() {
         setSubmitError('Ce créneau chevauche un RDV déjà pris. Choisis-en un autre.')
         setHeureChoisie(null)
         setSubmitting(false)
-        setTimeout(() => setEtape(2), 1200)
+        setTimeout(() => allerEtape(2), 1200)
         return
       }
 
@@ -816,16 +823,16 @@ export default function CommanderRdvSlug() {
       }
       if (horaireJour.ouvert === false) {
         setSubmitError(`${commercant.nom} est fermé ce jour-là. Choisis un autre jour.`)
-        setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
+        setSubmitting(false); setTimeout(() => allerEtape(2), 1200); return
       }
       if (horaireJour.fin && finMin > timeToMinutes(horaireJour.fin)) {
         console.warn('[rdv] depassement fermeture', { finMin, fermeture: timeToMinutes(horaireJour.fin) })
         setSubmitError(`Cette prestation dépasse l'heure de fermeture (${horaireJour.fin.slice(0,5)}). Choisis un créneau plus tôt.`)
-        setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
+        setSubmitting(false); setTimeout(() => allerEtape(2), 1200); return
       }
       if (horaireJour.debut && debutMin < timeToMinutes(horaireJour.debut)) {
         setSubmitError(`Trop tôt - ${commercant.nom} ouvre à ${horaireJour.debut.slice(0,5)}.`)
-        setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
+        setSubmitting(false); setTimeout(() => allerEtape(2), 1200); return
       }
 
       // 3. Chevauchement avec pause d'un des creneaux du jour
@@ -842,7 +849,7 @@ export default function CommanderRdvSlug() {
       })
       if (pauseConflict) {
         setSubmitError('Ce créneau chevauche la pause du commerçant. Choisis-en un autre.')
-        setSubmitting(false); setTimeout(() => setEtape(2), 1200); return
+        setSubmitting(false); setTimeout(() => allerEtape(2), 1200); return
       }
       console.info('[rdv] validation OK, insert')
 
@@ -952,7 +959,7 @@ export default function CommanderRdvSlug() {
           setSubmitError('Ce créneau vient d\'être pris par un autre client. Choisis-en un autre.')
           setHeureChoisie(null)
           setSubmitting(false)
-          setTimeout(() => setEtape(2), 1200)
+          setTimeout(() => allerEtape(2), 1200)
           return
         }
         console.error('[rdv] insert error', error)
@@ -1044,8 +1051,8 @@ export default function CommanderRdvSlug() {
               // Etape 2 : revenir a etape 1 (choix prestation), reset date+heure
               // Etape 3 : revenir a etape 2 (choix creneau), garder les choix
               if (etape === 1) { router.push('/commander') }
-              else if (etape === 2) { setPrestationChoisie(null); setEtape(1); setDateChoisie(null); setHeureChoisie(null) }
-              else if (etape === 3) { setEtape(2) }
+              else if (etape === 2) { setPrestationChoisie(null); allerEtape(1); setDateChoisie(null); setHeureChoisie(null) }
+              else if (etape === 3) { allerEtape(2) }
             }}
             aria-label="Retour"
             style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.45rem 0.7rem 0.45rem 0.6rem', fontWeight: 700, fontSize: '0.82rem', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -1309,7 +1316,7 @@ export default function CommanderRdvSlug() {
                           <span style={{ color: T.main, fontWeight: 800 }}>{formatPrix(prestationChoisie)}</span>
                         </div>
                       </div>
-                      <button onClick={() => { setPrestationChoisie(null); setEtape(1); setDateChoisie(null); setHeureChoisie(null) }}
+                      <button onClick={() => { setPrestationChoisie(null); allerEtape(1); setDateChoisie(null); setHeureChoisie(null) }}
                         style={{ background: '#fff', border: `1.5px solid ${T.main}`, color: T.main, fontWeight: 700, fontSize: '0.72rem', padding: '0.4rem 0.875rem', borderRadius: 100, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
                         Changer
                       </button>
@@ -1580,7 +1587,7 @@ export default function CommanderRdvSlug() {
 
                   {/* Bouton Continuer */}
                   {heureChoisie && (
-                    <button onClick={() => setEtape(3)}
+                    <button onClick={() => allerEtape(3)}
                       style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '1rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 6px 24px ${T.main}55`, animation: 'fadeUp 0.3s ease' }}>
                       Continuer - {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} à {heureChoisie}
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1611,7 +1618,7 @@ export default function CommanderRdvSlug() {
                             </span>
                           </p>
                         </div>
-                        <button onClick={() => setEtape(2)}
+                        <button onClick={() => allerEtape(2)}
                           style={{ background: '#fff', border: `1.5px solid ${T.main}`, color: T.main, fontWeight: 700, fontSize: '0.72rem', padding: '0.4rem 0.875rem', borderRadius: 100, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
                           Modifier
                         </button>
@@ -1896,7 +1903,7 @@ export default function CommanderRdvSlug() {
                     setClient(p => ({ ...p, notes: '' }))
                     setRgpdCommande(false); setRgpdMarketing(true)
                     setRdvCree(null); setSubmitError(null)
-                    setEtape(1)
+                    allerEtape(1)
                   }}
                     style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif' }}>
                     Prendre un autre RDV chez {commercant.nom}

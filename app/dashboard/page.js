@@ -213,10 +213,20 @@ const ACTIONS_RDV_LABEL = {
 }
 
 // ─── Carte commande ───────────────────────────────────────────────────────────
-function CarteCommande({ commande, numero, onChangerStatut, modeHistorique = false }) {
+function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, modeHistorique = false }) {
   const statut = STATUTS[commande.statut] || STATUTS['en_attente']
   const { couleur } = statut
   const estLivraison = commande.mode_retrait === 'livraison'
+  const statutLiv = commande.statut_livraison
+
+  // Pour une livraison, le badge suit le sous-statut de livraison une fois « Prête » atteinte :
+  // Prête → En livraison → Livrée. On surcharge label + couleur uniquement dans ce cas.
+  const badge = (() => {
+    if (!estLivraison) return { label: statut.label, icon: statut.icon, couleur }
+    if (statutLiv === 'en_livraison') return { label: 'En livraison', icon: '●', couleur: T.bleu }
+    if (statutLiv === 'livree' || commande.statut === 'recupere') return { label: 'Livrée', icon: '🔵', couleur: T.bleu }
+    return { label: statut.label, icon: statut.icon, couleur }
+  })()
   const cren = commande.creneau || commande.creneau_livraison
   const heure = cren
     ? `${cren.heure_debut.slice(0,5)} – ${cren.heure_fin.slice(0,5)}`
@@ -283,8 +293,8 @@ function CarteCommande({ commande, numero, onChangerStatut, modeHistorique = fal
           </div>
           <div style={{ textAlign: 'right' }}>
             <p style={{ fontWeight: 900, color: T.ink, margin: '0 0 4px', fontSize: '1.05rem', letterSpacing: '-0.3px' }}>{Number(commande.total).toFixed(2)}€</p>
-            <span style={{ background: couleur.badge, color: '#fff', fontSize: '0.65rem', fontWeight: 800, padding: '3px 9px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.3px', whiteSpace: 'nowrap', display: 'inline-block' }}>
-              {statut.icon} {statut.label}
+            <span style={{ background: badge.couleur.badge, color: '#fff', fontSize: '0.65rem', fontWeight: 800, padding: '3px 9px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.3px', whiteSpace: 'nowrap', display: 'inline-block' }}>
+              {badge.icon} {badge.label}
             </span>
           </div>
         </div>
@@ -325,8 +335,31 @@ function CarteCommande({ commande, numero, onChangerStatut, modeHistorique = fal
             {statut.nextLabel} →
           </button>
         )}
-        {/* Bouton Non retiré — visible dès que le créneau est passé, confirmation obligatoire */}
-        {commande.statut === 'pret' && (() => {
+        {/* Flux livraison : une fois « Prête », le commerçant enchaîne Partir en livraison → Livrée */}
+        {estLivraison && commande.statut === 'pret' && statutLiv !== 'en_livraison' && (
+          <button onClick={() => onLivraisonStatut(commande.id, 'en_livraison')}
+            style={{ width: '100%', padding: '0.625rem', background: `linear-gradient(135deg, ${T.bleu.border}, ${T.bleu.border}cc)`, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: '0.82rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.bleu.border}44`, transition: 'opacity 0.15s, transform 0.1s', letterSpacing: '-0.2px', marginTop: 6 }}
+            onMouseOver={e => { e.currentTarget.style.opacity = '0.88'; e.currentTarget.style.transform = 'scale(0.99)' }}
+            onMouseOut={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'scale(1)' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 6 }}><path d="M14 16V4a1 1 0 00-1-1H2a1 1 0 00-1 1v12a1 1 0 001 1h1" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 8h4l3 3v5a1 1 0 01-1 1h-1" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6.5" cy="17.5" r="1.5" stroke="#fff" strokeWidth="2"/><circle cx="17.5" cy="17.5" r="1.5" stroke="#fff" strokeWidth="2"/></svg>
+            Partir en livraison →
+          </button>
+        )}
+        {estLivraison && commande.statut === 'pret' && statutLiv === 'en_livraison' && (
+          <button onClick={() => {
+            if (window.confirm(`Confirmer la livraison ?\n\nClient : ${commande.client_nom}\n${commande.adresse_livraison || ''}\n\nLa commande sera marquée comme livrée.`)) {
+              onLivraisonStatut(commande.id, 'livree')
+            }
+          }}
+            style={{ width: '100%', padding: '0.625rem', background: `linear-gradient(135deg, ${T.vert.border}, ${T.vert.border}cc)`, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: '0.82rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.vert.border}44`, transition: 'opacity 0.15s, transform 0.1s', letterSpacing: '-0.2px', marginTop: 6 }}
+            onMouseOver={e => { e.currentTarget.style.opacity = '0.88'; e.currentTarget.style.transform = 'scale(0.99)' }}
+            onMouseOut={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'scale(1)' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 6 }}><path d="M20 6L9 17l-5-5" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Marquer livrée
+          </button>
+        )}
+        {/* Bouton Non retiré — retrait uniquement, visible dès que le créneau est passé, confirmation obligatoire */}
+        {!estLivraison && commande.statut === 'pret' && (() => {
           const maintenant = new Date()
           let creneauPasse = false
           if (commande.creneau?.heure_fin) {
@@ -774,6 +807,21 @@ export default function Dashboard() {
     }
   }
 
+  // Flux de statut spécifique livraison : Prête → En livraison → Livrée.
+  // À « livrée » on pose aussi statut='recupere' pour que CA/stats/avis fonctionnent
+  // (comme un retrait récupéré). Le retrait, lui, s'arrête à « pret » (swipe client).
+  async function changerStatutLivraison(commandeId, statutLivraison) {
+    const patch = { statut_livraison: statutLivraison }
+    if (statutLivraison === 'livree') patch.statut = 'recupere'
+    const { error } = await supabase.from('commandes').update(patch).eq('id', commandeId)
+    if (error) {
+      console.error('[dashboard] changerStatutLivraison', error)
+      alert(`Erreur : ${error.message}`)
+      return
+    }
+    setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...patch } : c))
+  }
+
   async function changerStatutRdv(rdvId, statut) {
     const { error } = await supabase.from('rdv_reservations').update({ statut }).eq('id', rdvId)
     if (error) {
@@ -895,8 +943,8 @@ export default function Dashboard() {
     { key: 'en_attente',     label: 'Nouvelles',    count: stats.nouvelles,  color: '#DC2626' },
     { key: 'en_preparation', label: 'En prépa',     count: stats.enPrepa,    color: '#EA580C' },
     { key: 'pret',           label: 'Prêtes',       count: stats.pretes,     color: '#10B981' },
-    { key: 'recupere',       label: 'Récupérées',   count: stats.recuperees, color: '#2563EB' },
-    { key: 'non_retire',     label: 'Non retirés',  count: nonRetires,       color: '#6B7280' },
+    { key: 'recupere',       label: vueMode === 'livraison' ? 'Livrées' : 'Récupérées', count: stats.recuperees, color: '#2563EB' },
+    ...(vueMode === 'livraison' ? [] : [{ key: 'non_retire', label: 'Non retirés', count: nonRetires, color: '#6B7280' }]),
     { key: 'annulees',       label: 'Annulées',     count: stats.annulees,   color: '#DC2626' },
     { key: 'tout',           label: 'Tout',         count: commandesDuJour.length },
   ]
@@ -1482,6 +1530,7 @@ export default function Dashboard() {
                         commande={commande}
                         numero={getNumeroJour(commandes, commande.id, modeHistorique ? jourCommande : jourActif)}
                         onChangerStatut={changerStatut}
+                        onLivraisonStatut={changerStatutLivraison}
                         modeHistorique={modeHistorique}
                       />
                     )

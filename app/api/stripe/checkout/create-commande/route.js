@@ -31,6 +31,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
+import { geocoderAdresse } from '@/lib/geocode'
 
 export async function POST(request) {
   try {
@@ -266,6 +267,12 @@ export async function POST(request) {
       }
     }
 
+    // Géocodage adresse livraison (best-effort, non bloquant, timeout 4s) pour la
+    // tournée optimisée. Retrait ou échec géocodage -> coords null.
+    const coordsLivraison = estLivraison
+      ? await geocoderAdresse(adresse_livraison, code_postal_livraison)
+      : null
+
     // ─── 6) INSERT commande avec statut='paiement_en_attente' ──────────────
     const nomComplet = `${client_prenom} ${client_nom}`.trim()
     const { data: commande, error: errInsert } = await supabase
@@ -276,6 +283,8 @@ export async function POST(request) {
         creneau_livraison_id: estLivraison ? creneau.id : null,
         mode_retrait: estLivraison ? 'livraison' : 'retrait',
         adresse_livraison: estLivraison ? adresse_livraison : null,
+        livraison_lat: coordsLivraison?.lat ?? null,
+        livraison_lng: coordsLivraison?.lng ?? null,
         frais_livraison: fraisLivraisonEUR,
         client_nom: nomComplet,
         client_email,

@@ -944,9 +944,11 @@ export default function CommanderRdvSlug() {
       const { error } = await supabase.from('rdv_reservations').insert(payload)
 
       if (error) {
-        // 23505 = unique_violation : un autre client a pris ce slot entre-temps
-        if (error.code === '23505') {
-          console.warn('[rdv] double-booking caught')
+        // Double-booking rattrapé au niveau DB (atomique, race-proof) :
+        //   23505 = unique_violation   -> rdv_no_double_book (même heure exacte)
+        //   23P01 = exclusion_violation -> rdv_no_overlap_praticien (chevauchement)
+        if (error.code === '23505' || error.code === '23P01') {
+          console.warn('[rdv] double-booking caught', error.code)
           setSubmitError('Ce créneau vient d\'être pris par un autre client. Choisis-en un autre.')
           setHeureChoisie(null)
           setSubmitting(false)

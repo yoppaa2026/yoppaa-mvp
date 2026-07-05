@@ -291,7 +291,7 @@ export async function POST(request) {
         client_telephone,
         rgpd_commande: true,
         rgpd_marketing: !!rgpd_marketing,
-        total: totalEUR,
+        total: totalEUR + fraisLivraisonEUR,
         statut: 'paiement_en_attente',
         date_commande,
         paye_en_ligne: false,

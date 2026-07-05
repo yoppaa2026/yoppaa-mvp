@@ -309,7 +309,7 @@ async function envoyerEmailsCommande(commandeId, supabase) {
     .select(`
       id, numero_commande, total, date_commande,
       client_email, client_nom, client_telephone,
-      annulation_token, mode_retrait, adresse_livraison,
+      annulation_token, mode_retrait, adresse_livraison, frais_livraison,
       commercant:commercants(id, nom, slug, adresse, email, notif_mode, delai_annulation_heures),
       creneau:creneaux(heure_debut, heure_fin),
       creneau_livraison:livraison_creneaux(heure_debut, heure_fin),
@@ -357,6 +357,7 @@ async function envoyerEmailsCommande(commandeId, supabase) {
         heure_fin:               cren?.heure_fin,
         mode_retrait:            cmd.mode_retrait,
         adresse_livraison:       cmd.adresse_livraison,
+        frais_livraison:         cmd.frais_livraison,
         annulation_token:        cmd.annulation_token,
         delai_annulation_heures: cmd.commercant?.delai_annulation_heures ?? 2,
       })

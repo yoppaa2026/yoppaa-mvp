@@ -2507,9 +2507,130 @@ function TabLivraison({ commercantId, toast }) {
         {saving ? 'Enregistrement…' : 'Enregistrer la livraison'}
       </button>
 
-      <p style={{ margin: '16px 0 0', fontSize: 12, color: T.muted, fontStyle: 'italic', textAlign: 'center' }}>
-        Les créneaux de livraison (tournées) arrivent juste après.
-      </p>
+      <div style={{ marginTop: 22 }}>
+        <SectionCreneauxLivraison commercantId={commercantId} toast={toast} />
+      </div>
+    </div>
+  )
+}
+
+// Jours pour les créneaux de livraison (mêmes clés que horaires_detail / creneaux C&C).
+const JOURS_LIV = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+const JOURS_LIV_LABELS = { lundi: 'Lundi', mardi: 'Mardi', mercredi: 'Mercredi', jeudi: 'Jeudi', vendredi: 'Vendredi', samedi: 'Samedi', dimanche: 'Dimanche' }
+
+// Gestion des créneaux de livraison (tournées). Calqué sur le principe du C&C :
+// capacité = nb de commandes par tournée (max_commandes). Table livraison_creneaux.
+function SectionCreneauxLivraison({ commercantId, toast }) {
+  const [creneaux, setCreneaux] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [form, setForm] = useState({ jour_semaine: 'mardi', heure_debut: '18:00', heure_fin: '19:00', max_commandes: 10, cutoff_heures: 2 })
+
+  useEffect(() => { charger() }, [commercantId])
+
+  async function charger() {
+    const { data } = await supabase.from('livraison_creneaux').select('*').eq('commercant_id', commercantId)
+    setCreneaux(data || [])
+    setLoading(false)
+  }
+
+  async function ajouter() {
+    if (!form.heure_debut || !form.heure_fin) { toast('Renseigne les heures de la tournée', 'error'); return }
+    if (form.heure_fin <= form.heure_debut) { toast('L’heure de fin doit être après le début', 'error'); return }
+    const { error } = await supabase.from('livraison_creneaux').insert({
+      commercant_id: commercantId,
+      jour_semaine: form.jour_semaine,
+      heure_debut: form.heure_debut,
+      heure_fin: form.heure_fin,
+      max_commandes: Math.max(1, Number(form.max_commandes) || 1),
+      cutoff_heures: Math.max(0, Number(form.cutoff_heures) || 0),
+      mode_capacite: 'commandes',
+    })
+    if (error) { toast('Erreur : ' + error.message, 'error'); return }
+    toast('Tournée ajoutée')
+    charger()
+  }
+
+  async function supprimer(id) {
+    await supabase.from('livraison_creneaux').delete().eq('id', id)
+    setCreneaux(prev => prev.filter(c => c.id !== id))
+  }
+
+  async function toggleActif(c) {
+    await supabase.from('livraison_creneaux').update({ actif: !c.actif }).eq('id', c.id)
+    setCreneaux(prev => prev.map(x => x.id === c.id ? { ...x, actif: !x.actif } : x))
+  }
+
+  async function majMax(id, val) {
+    const n = Math.max(1, Number(val) || 1)
+    await supabase.from('livraison_creneaux').update({ max_commandes: n }).eq('id', id)
+    setCreneaux(prev => prev.map(c => c.id === id ? { ...c, max_commandes: n } : c))
+  }
+
+  const tries = [...creneaux].sort((a, b) => {
+    const j = JOURS_LIV.indexOf(a.jour_semaine) - JOURS_LIV.indexOf(b.jour_semaine)
+    return j !== 0 ? j : (a.heure_debut || '').localeCompare(b.heure_debut || '')
+  })
+
+  const card = { background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: 16 }
+  const field = { padding: '8px 10px', borderRadius: 9, border: `1.5px solid ${T.hairline}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box' }
+
+  return (
+    <div style={card}>
+      <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 800, color: T.ink }}>Créneaux de livraison (tournées)</h3>
+      <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.muted }}>Tes fenêtres de tournée. La capacité limite le nombre de commandes par tournée.</p>
+
+      {/* Formulaire d'ajout */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 14 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '1 1 120px' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>Jour</span>
+          <select value={form.jour_semaine} onChange={e => setForm(p => ({ ...p, jour_semaine: e.target.value }))} style={field}>
+            {JOURS_LIV.map(j => <option key={j} value={j}>{JOURS_LIV_LABELS[j]}</option>)}
+          </select>
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '1 1 90px' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>Début</span>
+          <input type="time" value={form.heure_debut} onChange={e => setForm(p => ({ ...p, heure_debut: e.target.value }))} style={field} />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '1 1 90px' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>Fin</span>
+          <input type="time" value={form.heure_fin} onChange={e => setForm(p => ({ ...p, heure_fin: e.target.value }))} style={field} />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '1 1 80px' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>Max cmd</span>
+          <input type="number" min="1" value={form.max_commandes} onChange={e => setForm(p => ({ ...p, max_commandes: e.target.value }))} style={field} />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '1 1 90px' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>Limite (h avant)</span>
+          <input type="number" min="0" value={form.cutoff_heures} onChange={e => setForm(p => ({ ...p, cutoff_heures: e.target.value }))} style={field} />
+        </label>
+        <button onClick={ajouter} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>
+          Ajouter
+        </button>
+      </div>
+
+      {/* Liste */}
+      {loading ? <p style={{ fontSize: 12.5, color: T.muted }}>Chargement…</p>
+        : tries.length === 0 ? <p style={{ fontSize: 12.5, color: T.muted, fontStyle: 'italic', margin: 0 }}>Aucune tournée pour l&rsquo;instant.</p>
+        : <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {tries.map(c => (
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: c.actif ? T.pale : '#F9FAFB', border: `1.5px solid ${c.actif ? T.light : '#E5E7EB'}`, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12.5, fontWeight: 800, color: c.actif ? T.ink : T.muted, width: 72, flexShrink: 0 }}>{JOURS_LIV_LABELS[c.jour_semaine] || c.jour_semaine}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: c.actif ? T.deep : T.muted, flexShrink: 0 }}>{(c.heure_debut || '').slice(0,5)}–{(c.heure_fin || '').slice(0,5)}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: T.muted, flexShrink: 0 }}>
+                  max
+                  <input type="number" min="1" value={c.max_commandes ?? 1} onChange={e => majMax(c.id, e.target.value)} style={{ ...field, width: 52, padding: '4px 6px' }} />
+                </span>
+                <div style={{ flex: 1 }} />
+                <button onClick={() => toggleActif(c)} title={c.actif ? 'Désactiver' : 'Activer'} style={{ width: 34, height: 19, borderRadius: 100, background: c.actif ? T.main : '#D1D5DB', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
+                  <span style={{ position: 'absolute', top: 2, left: c.actif ? 17 : 2, width: 15, height: 15, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                </button>
+                <button onClick={() => supprimer(c.id)} aria-label="Supprimer" style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'inline-flex', padding: 4, color: '#DC2626', flexShrink: 0 }}>
+                  <Icon name="trash" size={15} color="#DC2626" />
+                </button>
+              </div>
+            ))}
+          </div>
+      }
     </div>
   )
 }

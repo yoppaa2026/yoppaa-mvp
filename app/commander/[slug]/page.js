@@ -1542,6 +1542,9 @@ export default function CommanderSlug() {
   const cpDansZone = !!livraisonConfig?.codes_postaux?.includes((adresseLivraison.code_postal || '').trim())
   const livraisonFormOk = !!(adresseLivraison.rue.trim() && adresseLivraison.code_postal.trim() && adresseLivraison.ville.trim() && cpDansZone && creneauLivraisonChoisi)
   const creneauOk = modeCommande === 'livraison' ? livraisonFormOk : !!creneauChoisi
+  // Mode de la commande qui vient d'être passée (pour l'écran de confirmation étape 4).
+  // On lit derniereCommande en priorité (source de vérité) avec repli sur l'état courant.
+  const estLivraisonConfirmee = (derniereCommande?.mode_retrait || modeCommande) === 'livraison'
   const formValide = creneauOk && client.prenom.trim() && client.nom.trim() && client.email.trim() && client.telephone.trim() && rgpdCommande
   const inputSt = { width: '100%', padding: '0.875rem 1rem', border: `1.5px solid ${T.pale}`, borderRadius: 12, marginBottom: 10, fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', outline: 'none', color: T.ink, background: '#fff', display: 'block' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }
@@ -2703,7 +2706,11 @@ export default function CommanderSlug() {
                 )}
                 <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>Yoppé ! 🟣</h2>
                 <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>Chez {commercant.nom}</p>
-                <p style={{ color: T.muted, fontSize: '0.875rem' }}>On te prévient quand c&apos;est prêt à retirer.</p>
+                <p style={{ color: T.muted, fontSize: '0.875rem' }}>
+                  {estLivraisonConfirmee
+                    ? 'On te prévient quand ta commande part en livraison.'
+                    : 'On te prévient quand c’est prêt à retirer.'}
+                </p>
               </div>
 
               <div style={{ background: `linear-gradient(135deg, ${T.pale}, #fff)`, borderRadius: 20, overflow: 'hidden', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
@@ -2718,11 +2725,18 @@ export default function CommanderSlug() {
                   </p>
                   {/* 3 etapes concretes - plus parlant pour un newcomer que "confirme depuis l'onglet Commandes" */}
                   <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {[
-                      { n: 1, t: <>On te notifie quand ta commande est <strong>prête à retirer</strong>.</> },
-                      { n: 2, t: <>Tu te rends chez <strong>{commercant.nom}</strong> à ton créneau.</> },
-                      { n: 3, t: <>Tu <strong>glisses pour confirmer</strong> ta récupération sur l&apos;onglet Commandes.</> },
-                    ].map(s => (
+                    {(estLivraisonConfirmee
+                      ? [
+                        { n: 1, t: <>On te notifie quand <strong>{commercant.nom}</strong> part te livrer.</> },
+                        { n: 2, t: <>On te livre à <strong>ton adresse</strong> sur ton créneau.</> },
+                        { n: 3, t: <>Tu reçois ta commande, on te confirme la <strong>livraison</strong>. C&apos;est tout !</> },
+                      ]
+                      : [
+                        { n: 1, t: <>On te notifie quand ta commande est <strong>prête à retirer</strong>.</> },
+                        { n: 2, t: <>Tu te rends chez <strong>{commercant.nom}</strong> à ton créneau.</> },
+                        { n: 3, t: <>Tu <strong>glisses pour confirmer</strong> ta récupération sur l&apos;onglet Commandes.</> },
+                      ]
+                    ).map(s => (
                       <li key={s.n} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '0.85rem', color: T.deep, lineHeight: 1.5 }}>
                         <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 1, boxShadow: `0 2px 6px ${T.main}33` }}>{s.n}</span>
                         <span style={{ paddingTop: 2 }}>{s.t}</span>
@@ -2744,10 +2758,12 @@ export default function CommanderSlug() {
                       <rect x="6" y="2" width="12" height="20" rx="2.5"/>
                       <path d="M11 18h2"/>
                     </svg>
-                    Pour ton retrait sans attendre
+                    {estLivraisonConfirmee ? 'Pour suivre ta livraison' : 'Pour ton retrait sans attendre'}
                   </p>
                   <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5, marginBottom: 12 }}>
-                    Tu as commandé depuis ton PC. Pour utiliser l&apos;écran de retrait prioritaire Yoppaa chez le commerçant, télécharge l&apos;app sur ton téléphone.<br/>
+                    {estLivraisonConfirmee
+                      ? <>Tu as commandé depuis ton PC. Installe l&apos;app sur ton téléphone pour être prévenu quand ta commande part en livraison et arrive.<br/></>
+                      : <>Tu as commandé depuis ton PC. Pour utiliser l&apos;écran de retrait prioritaire Yoppaa chez le commerçant, télécharge l&apos;app sur ton téléphone.<br/></>}
                     <strong style={{ color: T.light }}>Tes identifiants restent les mêmes.</strong>
                   </p>
                   <a href="https://yoppaa.app/download"

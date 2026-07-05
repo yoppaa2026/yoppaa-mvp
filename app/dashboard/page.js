@@ -820,6 +820,13 @@ export default function Dashboard() {
       return
     }
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...patch } : c))
+
+    // Push OneSignal au Yopper (en route / livrée). Non-bloquant : l'UI est déjà à jour.
+    fetch('/api/livraison/statut', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commande_id: commandeId, statut_livraison: statutLivraison }),
+    }).catch(e => console.warn('[dashboard] push livraison KO', e))
   }
 
   async function changerStatutRdv(rdvId, statut) {

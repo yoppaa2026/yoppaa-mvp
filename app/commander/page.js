@@ -868,6 +868,21 @@ function CarteServicePublic({ s, onSelect, actusInfo }) {
   )
 }
 
+// Badge type de commande : Retrait (C&C) vs Livraison. Icône SVG (design system).
+function BadgeTypeCommande({ mode }) {
+  const livraison = mode === 'livraison'
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: 100, background: livraison ? '#EEF2FF' : '#F0FDF4', color: livraison ? '#4F46E5' : '#059669', border: `1px solid ${livraison ? '#4F46E522' : '#05966922'}` }}>
+      {livraison ? (
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h2l2.5 6M6 17.5h7l-2-8H8.5"/></svg>
+      ) : (
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg>
+      )}
+      {livraison ? 'Livraison' : 'Retrait'}
+    </span>
+  )
+}
+
 function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsActifs, actusActives, bonnesAffairesActives, onSelect, onToggleFavori }) {
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
@@ -1823,7 +1838,7 @@ export default function Commander() {
   }
 
   async function chargerCommandesClient(email) {
-    const { data } = await supabase.from('commandes').select('*, commercant:commercants(nom, type), creneau:creneaux(heure_debut, heure_fin)').eq('client_email', email).order('created_at', { ascending: false })
+    const { data } = await supabase.from('commandes').select('*, commercant:commercants(nom, type), creneau:creneaux(heure_debut, heure_fin), creneau_livraison:livraison_creneaux(heure_debut, heure_fin)').eq('client_email', email).order('created_at', { ascending: false })
     if (!data || data.length === 0) { setClientCommandes([]); return }
 
     // FIX NUMÉRO : enrichir chaque commande avec son numéro affiché
@@ -2456,7 +2471,7 @@ export default function Commander() {
                             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.main }}>Prête à retirer{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</span>
                           </span>
                         </div>
-                        <p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} /></div><p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p></div>
                       </div>
                       {ok ? (
                         <button onClick={() => setPickupCommande(c)}
@@ -2499,6 +2514,7 @@ export default function Commander() {
                             <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{c.creneau ? ` · ${c.creneau.heure_debut.slice(0,5)}–${c.creneau.heure_fin.slice(0,5)}` : ''}</p>
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} /></div>
                             <p style={{ fontWeight: 900, color: T.main, marginBottom: 4, fontSize: '0.95rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
                             <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '3px 8px', borderRadius: 100, background: sc.bg, color: sc.color }}>{sc.label}</span>
                           </div>

@@ -146,7 +146,8 @@ export async function POST(request) {
     }
 
     // Optimisation : ORS si clé dispo, sinon plus-proche-voisin.
-    const apiKey = process.env.ORS_API_KEY
+    // Supporte les deux noms (la clé existante s'appelle NEXT_PUBLIC_ORS_API_KEY).
+    const apiKey = process.env.ORS_API_KEY || process.env.NEXT_PUBLIC_ORS_API_KEY
     let ordreArrets = null
     let methode = 'plus_proche_voisin'
     if (apiKey && avecCoords.length > 1) {

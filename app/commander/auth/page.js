@@ -42,15 +42,12 @@ function AuthForm() {
 
   async function sauvegarderClient(user) {
     if (!user) return
-    // Fetch les vrais champs prenom/nom/telephone (SQL migration appliquee)
-    const { data: client } = await supabase
-      .from('clients')
-      .select('id, nom, prenom, email, telephone')
-      .eq('email', user.email)
-      .single()
+    // Get-or-create côté serveur (RLS clients verrouillé : plus d'accès anon direct).
+    const res = await fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-or-create', email: user.email }) })
+    const client = (await res.json().catch(() => ({})))?.client
     if (client) {
       localStorage.setItem('yoppaa_client_id', client.id)
-      localStorage.setItem('yoppaa_email', client.email)
+      localStorage.setItem('yoppaa_email', user.email)
       // Priorite : champ prenom dedie en DB, sinon ce qui est en localStorage
       const prenomDB = (client.prenom || '').trim()
       const prenomLocal = localStorage.getItem('yoppaa_prenom') || ''

@@ -71,7 +71,7 @@ export async function POST(request) {
         if (errIns || !inserted) {
           return NextResponse.json({ ok: false, error: errIns?.message || 'création échouée' }, { status: 500 })
         }
-        return NextResponse.json({ ok: true, client: inserted })
+        return NextResponse.json({ ok: true, created: true, client: inserted })
       }
 
       // Existant : update uniquement si des champs non vides ont changé (comme
@@ -83,7 +83,7 @@ export async function POST(request) {
       if (Object.keys(patch).length > 0) {
         await supabase.from('clients').update(patch).eq('id', ex.id)
       }
-      return NextResponse.json({ ok: true, client: { ...ex, ...patch } })
+      return NextResponse.json({ ok: true, created: false, client: { ...ex, ...patch } })
     }
 
     // ─── opérations "own" : autorisées par le cookie uniquement ────────────

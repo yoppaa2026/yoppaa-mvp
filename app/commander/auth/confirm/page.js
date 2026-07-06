@@ -18,31 +18,15 @@ function ConfirmHandler() {
       if (token_hash && type) {
         const { data, error } = await supabase.auth.verifyOtp({ token_hash, type })
         if (!error && data.session) {
-          // Créer ou récupérer le profil client
+          // Créer ou récupérer le profil client côté serveur (RLS clients verrouillé).
           const email = data.session.user.email
-          const { data: client } = await supabase
-            .from('clients')
-            .select('id, nom')
-            .eq('email', email)
-            .single()
-
+          const resClient = await fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-or-create', email }) })
+          const client = (await resClient.json().catch(() => ({})))?.client
           if (client) {
             localStorage.setItem('yoppaa_client_id', client.id)
             localStorage.setItem('yoppaa_email', email)
-            const parts = (client.nom || '').split(' ')
-            localStorage.setItem('yoppaa_prenom', parts[0] || '')
-            localStorage.setItem('yoppaa_nom', parts.slice(1).join(' ') || '')
-          } else {
-            // Nouveau client via magic link - créer le profil
-            const { data: newClient } = await supabase
-              .from('clients')
-              .insert({ email })
-              .select('id')
-              .single()
-            if (newClient) {
-              localStorage.setItem('yoppaa_client_id', newClient.id)
-              localStorage.setItem('yoppaa_email', email)
-            }
+            if (client.prenom) localStorage.setItem('yoppaa_prenom', client.prenom)
+            if (client.nom) localStorage.setItem('yoppaa_nom', client.nom)
           }
           localStorage.setItem('yoppaa_onboarding_done', '1'); router.replace(next)
         } else {

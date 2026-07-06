@@ -633,12 +633,10 @@ export default function GoodMorningYoppersPage() {
       const clientId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_client_id') : null
       let principale = null
       if (clientId) {
-        const { data } = await supabase
-          .from('clients')
-          .select('commune:communes(id, nom, codes_postaux, province)')
-          .eq('id', clientId)
-          .maybeSingle()
-        if (data?.commune) principale = data.commune
+        // Commune du Yopper côté serveur (RLS clients verrouillé), autorisé par le cookie.
+        const res = await fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-own' }) })
+        const j = await res.json().catch(() => ({}))
+        if (j?.client?.commune) principale = j.client.commune
       }
       if (!principale && allCommunes?.length > 0) {
         principale = allCommunes.find(c => c.nom === 'Mettet') || allCommunes[0]

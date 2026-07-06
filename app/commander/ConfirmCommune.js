@@ -99,14 +99,12 @@ export default function ConfirmCommune({ clientId, currentCommuneId, mode = 'fir
     if (!communeId) return
     setSaving(true)
     setError(null)
-    const { data, error: err } = await supabase
-      .from('clients')
-      .update({ commune_id: communeId })
-      .eq('id', clientId)
-      .select()
+    // Enregistrement commune côté serveur (RLS clients verrouillé), autorisé par le cookie Yopper.
+    const res = await fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-commune', commune_id: communeId }) })
+    const j = await res.json().catch(() => ({}))
     setSaving(false)
-    if (err || !data || data.length === 0) {
-      setError(err?.message || 'Impossible de sauvegarder. Réessaie.')
+    if (!j.ok) {
+      setError(j.error || 'Impossible de sauvegarder. Réessaie.')
       return
     }
     onSet?.(communeId, communes.find(c => c.id === communeId) || detected)

@@ -717,28 +717,12 @@ export default function CommanderRdvSlug() {
     // IMPORTANT : on stocke prenom et nom SEPAREMENT dans clients (pas le nom complet).
     // Sinon a chaque RDV/commande clients.nom devient '${prenom} ${nom}' et ecrase la
     // modif du Profil au reload. Bug rapporte par Alex 2026-06-01.
-    const { data: ex } = await supabase
-      .from('clients')
-      .select('id, prenom, nom, telephone')
-      .eq('email', email)
-      .maybeSingle()
-    let id = ex?.id
-    if (!ex) {
-      const { data: { user } } = await supabase.auth.getUser()
-      const base = { email, prenom, nom, telephone }
-      const payload = user ? { ...base, auth_user_id: user.id } : base
-      const { data: inserted } = await supabase.from('clients').insert(payload).select('id').single()
-      id = inserted?.id
-    } else {
-      const needsUpdate = (
-        (telephone && ex.telephone !== telephone) ||
-        (prenom    && ex.prenom    !== prenom) ||
-        (nom       && ex.nom       !== nom)
-      )
-      if (needsUpdate) {
-        await supabase.from('clients').update({ prenom, nom, telephone }).eq('id', id)
-      }
-    }
+    // Get-or-create côté serveur (RLS clients verrouillé : plus d'accès anon direct).
+    const res = await fetch('/api/yopper/client', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'get-or-create', email, prenom, nom, telephone }),
+    })
+    const id = (await res.json().catch(() => ({})))?.client?.id
     if (!id) return null
     setClientId(id)
     if (typeof window !== 'undefined') {

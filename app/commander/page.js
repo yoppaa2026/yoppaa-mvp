@@ -542,8 +542,8 @@ function EditablePrenom({ client, setClient, clientId, openSignal }) {
     if (telephone) localStorage.setItem('yoppaa_telephone', telephone)
     setClient(p => ({ ...p, prenom, nom, telephone }))
     if (clientId) {
-      // Save dans les vraies colonnes (migration SQL passee : prenom, nom, telephone separes)
-      await supabase.from('clients').update({ prenom, nom, telephone }).eq('id', clientId)
+      // Update profil côté serveur (RLS clients verrouillé), autorisé par le cookie Yopper.
+      await fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update-own', prenom, nom, telephone }) })
     }
     setSaving(false)
     setEditing(false)
@@ -1403,37 +1403,22 @@ export default function Commander() {
       // Si telephone manquant en local (cas Magic Link sans signup complet, ou EditablePrenom save sans reload),
       // recharger depuis la DB pour synchroniser le state + localStorage. Sinon le bandeau "Profil incomplet"
       // reapparait apres chaque reload alors que la valeur est bien en DB.
-      if (!telephone) {
-        supabase.from('clients').select('prenom, nom, telephone').eq('id', id).maybeSingle().then(({ data }) => {
-          if (!data) return
-          if (data.telephone) {
-            localStorage.setItem('yoppaa_telephone', data.telephone)
-            setClient(p => ({ ...p, telephone: data.telephone }))
+      // Profil (prefill si manquant) + commune du Yopper, côté serveur (RLS clients
+      // verrouillé, autorisé par le cookie Yopper). Un seul appel pour les deux.
+      fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-own' }) })
+        .then(r => r.json())
+        .then(j => {
+          const data = j?.client
+          if (!data) return  // pas de session serveur : on ne force pas la modale (évite une boucle sans cookie)
+          if (!telephone) {
+            if (data.telephone) { localStorage.setItem('yoppaa_telephone', data.telephone); setClient(p => ({ ...p, telephone: data.telephone })) }
+            if (data.prenom && !prenom) { localStorage.setItem('yoppaa_prenom', data.prenom); setClient(p => ({ ...p, prenom: data.prenom })) }
+            if (data.nom && !nom) { localStorage.setItem('yoppaa_nom', data.nom); setClient(p => ({ ...p, nom: data.nom })) }
           }
-          if (data.prenom && !prenom) {
-            localStorage.setItem('yoppaa_prenom', data.prenom)
-            setClient(p => ({ ...p, prenom: data.prenom }))
-          }
-          if (data.nom && !nom) {
-            localStorage.setItem('yoppaa_nom', data.nom)
-            setClient(p => ({ ...p, nom: data.nom }))
-          }
+          if (data.commune) setCommune(data.commune)
+          else { setCommune(false); setShowConfirmCommune(true) }
         })
-      }
-      // Charge la commune du Yopper. Si null → modale ConfirmCommune au prochain rendu.
-      supabase
-        .from('clients')
-        .select('commune_id, commune:communes(id, nom, codes_postaux, province)')
-        .eq('id', id)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data?.commune) {
-            setCommune(data.commune)
-          } else {
-            setCommune(false)
-            setShowConfirmCommune(true)
-          }
-        })
+        .catch(() => {})
     })
   }, [])
 
@@ -1935,18 +1920,16 @@ export default function Commander() {
   }
 
   async function getOuCreerClient(email, nom) {
-    const { data: ex } = await supabase.from('clients').select('id').eq('email', email).single()
-    let id = ex?.id
-    if (!ex) {
-      // Si une session Supabase Auth est active : on lie le client par auth_user_id (RLS)
-      const { data: { user } } = await supabase.auth.getUser()
-      const payload = user ? { email, nom, auth_user_id: user.id } : { email, nom }
-      const { data: inserted } = await supabase.from('clients').insert(payload).select('id').single()
-      id = inserted?.id
-    }
+    // Get-or-create côté serveur (RLS clients verrouillé : plus d'accès anon direct).
+    const res = await fetch('/api/yopper/client', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'get-or-create', email, nom }),
+    })
+    const j = await res.json().catch(() => ({}))
+    const id = j?.client?.id
     if (!id) return null
     setClientId(id); localStorage.setItem('yoppaa_client_id', id); localStorage.setItem('yoppaa_email', email); localStorage.setItem('yoppaa_nom', nom)
-    if (ex) { chargerFavoris(id); chargerCommandesClient(email); chargerRdvsClient(email) }
+    if (!j.created) { chargerFavoris(id); chargerCommandesClient(email); chargerRdvsClient(email) }
     return id
   }
 

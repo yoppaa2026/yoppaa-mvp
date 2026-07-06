@@ -796,6 +796,16 @@ export default function Dashboard() {
     await supabase.from('commandes').update({ statut }).eq('id', commandeId)
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, statut } : c))
 
+    // Push OneSignal au Yopper à chaque transition (en préparation, prête),
+    // contenu actionnable + clic vers l'onglet Commandes. Fire-and-forget.
+    if (statut === 'en_preparation' || statut === 'pret') {
+      fetch('/api/commande/push-statut', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commande_id: commandeId, statut }),
+      }).catch(e => console.warn('[dashboard] push-statut KO', e))
+    }
+
     // Si on passe a 'pret' : email au Yopper pour le prevenir
     // (non-bloquant, fire-and-forget — l'UI commercant est deja a jour)
     if (statut === 'pret') {

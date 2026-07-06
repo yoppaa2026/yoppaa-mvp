@@ -285,10 +285,11 @@ function maintenant() {
 
 // ─── Splash Screen ────────────────────────────────────────────────────────────
 // ─── FIX SWIPE : SwipeRetrait - YOP → SWIPE, instructions claires ────────────
-function SwipeRetrait({ onConfirm, clientPrenom }) {
+function SwipeRetrait({ onConfirm, clientPrenom, libelle = 'Glisse pour récupérer', sousTexteSucces = 'Tu skip la file' }) {
   const [swipeX, setSwipeX] = useState(0)
   const [swiping, setSwiping] = useState(false)
   const [phase, setPhase] = useState('idle') // idle | swiping | success | done
+  const [containerW, setContainerW] = useState(0)
   const startRef = useRef(0)
   const containerRef = useRef(null)
   const THUMB = 48
@@ -337,7 +338,17 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
     setSwiping(false); setPhaseSync('idle'); setSwipeX(0)
   }
 
-  const p = swipeX / (getMaxX() || 1)
+  // Largeur suivie en state (réactif) : pas de lecture de containerRef pendant le
+  // render (interdit). Les handlers, eux, lisent le ref directement (autorisé).
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') { if (el) setContainerW(el.offsetWidth); return }
+    setContainerW(el.offsetWidth)
+    const ro = new ResizeObserver(() => setContainerW(el.offsetWidth))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [phase])
+  const p = swipeX / (((containerW || 300) - THUMB - 8) || 1)
   const TRACK_H = THUMB + 16
 
   // ─── Phase succès - animation 3 points + wordmark ─────────────────────────
@@ -369,7 +380,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
           Bien joué {clientPrenom || 'Yopper'} 🟣
         </p>
         <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: 6, animation: 'yopSub 0.5s ease 0.5s both' }}>
-          Tu skip la file
+          {sousTexteSucces}
         </p>
       </div>
     )
@@ -392,7 +403,7 @@ function SwipeRetrait({ onConfirm, clientPrenom }) {
             </svg>
           ))}
         </div>
-        <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#9CA3AF', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Glisse pour récupérer</span>
+        <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#9CA3AF', letterSpacing: '0.5px', textTransform: 'uppercase' }}>{libelle}</span>
       </div>
 
       {/* Track */}
@@ -594,6 +605,7 @@ function EditablePrenom({ client, setClient, clientId, openSignal }) {
 // commandes), on calcule la position du jour côté commerçant - même logique que
 // le dashboard (getNumeroJour) pour que client et commerçant voient le même #.
 function PickupScreen({ commande, clientPrenom, onConfirm }) {
+  const estLivraison = commande.mode_retrait === 'livraison'
   const [numeroCalcule, setNumeroCalcule] = useState(null)
 
   useEffect(() => {
@@ -644,8 +656,9 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
   }, [commande.id, commande.numero_commande, commande.commercant_id, commande.date_commande])
 
   const numero = numeroCalcule ?? '…'
-  const creneau = commande.creneau
-    ? `${commande.creneau.heure_debut.slice(0,5)} – ${commande.creneau.heure_fin.slice(0,5)}`
+  const cren = commande.creneau || commande.creneau_livraison
+  const creneau = cren
+    ? `${cren.heure_debut.slice(0,5)} – ${cren.heure_fin.slice(0,5)}`
     : null
   return (
     // FIX FOOTER : position: fixed + zIndex: 9999 - rendu HORS de page-wrap (voir return principal)
@@ -677,7 +690,7 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
       </div>
       {/* Numéro + infos */}
       <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', animation: 'pu-fadein 0.6s ease 0.1s both' }}>
-        <p style={{ fontSize: '0.75rem', fontWeight: 800, color: '#C4A0F4', textTransform: 'uppercase', letterSpacing: 3, marginBottom: 12, opacity: 0.8 }}>Ta commande est prête</p>
+        <p style={{ fontSize: '0.75rem', fontWeight: 800, color: '#C4A0F4', textTransform: 'uppercase', letterSpacing: 3, marginBottom: 12, opacity: 0.8 }}>{estLivraison ? 'Ta commande est arrivée' : 'Ta commande est prête'}</p>
         <p style={{ fontSize: '7rem', fontWeight: 900, color: '#fff', letterSpacing: '-4px', lineHeight: 1, textShadow: '0 0 60px #9660E088', marginBottom: 8 }}>#{numero}</p>
         <p style={{ fontSize: '1.6rem', fontWeight: 900, color: '#C4A0F4', letterSpacing: '-0.5px', marginBottom: 8 }}>{clientPrenom || 'Yopper'} 🟣</p>
         {creneau && (
@@ -690,12 +703,14 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
           </p>
         )}
         <div style={{ marginTop: 20, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 16, padding: '12px 24px', display: 'inline-block' }}>
-          <p style={{ fontWeight: 900, fontSize: '1rem', color: '#fff', letterSpacing: '-0.3px' }}>PRIORITÉ YOPPERS 🟣</p>
+          <p style={{ fontWeight: 900, fontSize: '1rem', color: '#fff', letterSpacing: '-0.3px' }}>{estLivraison ? 'CONFIRME TA RÉCEPTION 🟣' : 'PRIORITÉ YOPPERS 🟣'}</p>
         </div>
       </div>
       {/* FIX : SwipeRetrait en bas - pas de conflit avec la navbar (rendu hors page-wrap) */}
       <div style={{ position: 'relative', zIndex: 2, width: '100%', animation: 'pu-fadein 0.6s ease 0.3s both' }}>
-        <SwipeRetrait clientPrenom={clientPrenom} onConfirm={onConfirm}/>
+        <SwipeRetrait clientPrenom={clientPrenom} onConfirm={onConfirm}
+          libelle={estLivraison ? 'Glisse pour confirmer la réception' : 'Glisse pour récupérer'}
+          sousTexteSucces={estLivraison ? 'Bon appétit ! 🟣' : 'Tu skip la file'}/>
       </div>
     </div>
   )
@@ -1999,8 +2014,16 @@ export default function Commander() {
     .filter(c => categorieActive === 'Tous' || parseTypes(c.type).some(t => t===categorieActive || t.includes(categorieActive)))
     .filter(c => !searchQuery.trim() || c.nom.toLowerCase().includes(searchQuery.toLowerCase()) || (c.type||'').toLowerCase().includes(searchQuery.toLowerCase()) || (c.adresse||'').toLowerCase().includes(searchQuery.toLowerCase()))
 
-  const commandesASwiper = clientCommandes.filter(c => c.statut === 'pret')
-  const commandesEnCours = clientCommandes.filter(c => ['en_attente','en_preparation'].includes(c.statut))
+  // Retrait « prêt à retirer » : swipe pour confirmer le retrait au comptoir.
+  const commandesASwiper = clientCommandes.filter(c => c.statut === 'pret' && c.mode_retrait !== 'livraison')
+  // Livraison EN COURS de livraison (le commerçant est parti) : swipe pour confirmer
+  // la RÉCEPTION. Tant que statut_livraison n'est pas 'en_livraison', la commande
+  // reste dans « En cours » (pas d'action possible côté Yopper).
+  const commandesEnLivraison = clientCommandes.filter(c => c.mode_retrait === 'livraison' && c.statut === 'pret' && c.statut_livraison === 'en_livraison')
+  const commandesEnCours = clientCommandes.filter(c =>
+    ['en_attente','en_preparation'].includes(c.statut)
+    || (c.mode_retrait === 'livraison' && c.statut === 'pret' && c.statut_livraison !== 'en_livraison')
+  )
   // Historique : commandes recuperees + annulees (par client ou paiement_ko) + non_retire.
   // On garde la commande visible avec son statut final pour que le Yopper ait toujours
   // accès à son historique (signale par Alex : la commande annulee ne doit pas disparaitre).
@@ -2014,8 +2037,8 @@ export default function Commander() {
     .filter(r => !(r.statut === 'confirme' && r.date_rdv && new Date(r.date_rdv) >= _todayMidnight))
     .sort((a, b) => `${b.date_rdv}T${b.heure_debut || ''}`.localeCompare(`${a.date_rdv}T${a.heure_debut || ''}`))
 
-  // Badge footer = commandes en cours/pretes + RDVs a venir (les 2 types se cumulent)
-  const badgeCommandes = commandesASwiper.length + commandesEnCours.length + rdvsAVenir.length
+  // Badge footer = commandes en cours/pretes/en livraison + RDVs a venir (cumul)
+  const badgeCommandes = commandesASwiper.length + commandesEnLivraison.length + commandesEnCours.length + rdvsAVenir.length
 
   const card = { background: '#fff', borderRadius: 14, padding: '1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 6px rgba(107,53,196,0.05)' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }
@@ -2142,7 +2165,12 @@ export default function Commander() {
           commande={pickupCommande}
           clientPrenom={client.prenom || client.nom?.split(' ')[0] || 'Yopper'}
           onConfirm={async () => {
-            await supabase.from('commandes').update({ statut: 'recupere' }).eq('id', pickupCommande.id)
+            // Livraison : le Yopper confirme la RÉCEPTION → statut_livraison='livree'
+            // en plus de statut='recupere' (aligné sur le flux commerçant).
+            const patch = pickupCommande.mode_retrait === 'livraison'
+              ? { statut: 'recupere', statut_livraison: 'livree' }
+              : { statut: 'recupere' }
+            await supabase.from('commandes').update(patch).eq('id', pickupCommande.id)
             setPickupCommande(null)
             chargerCommandesClient(client.email)
           }}
@@ -2408,7 +2436,7 @@ export default function Commander() {
                     // Compteurs = items ACTIFS uniquement (pas l'historique total).
                     // Commandes actives = pretes a retirer + en cours (en_attente/en_preparation/pret).
                     // RDVs actifs = a venir (statut=confirme && date >= aujourd'hui).
-                    { key: 'alimentaires', label: 'Commandes',    count: commandesASwiper.length + commandesEnCours.length },
+                    { key: 'alimentaires', label: 'Commandes',    count: commandesASwiper.length + commandesEnLivraison.length + commandesEnCours.length },
                     { key: 'rdvs',          label: 'Rendez-vous', count: rdvsAVenir.length },
                   ].map(tab => {
                     const actif = sousOngletCmd === tab.key
@@ -2441,9 +2469,44 @@ export default function Commander() {
               </div>
 
               <div style={{ padding: '1rem 1rem 1rem', display: sousOngletCmd === 'alimentaires' ? 'block' : 'none' }}>
-              {commandesASwiper.length > 0 && (
+              {/* EN LIVRAISON : le commerçant est parti livrer. Le Yopper confirme la
+                  réception via le swipe (fallback : le commerçant peut marquer 'Livrée'). */}
+              {commandesEnLivraison.length > 0 && (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>En livraison</span>
+                    <span style={{ background: '#4F46E5', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{commandesEnLivraison.length}</span>
+                  </div>
+                  {commandesEnLivraison.map(c => {
+                    const cren = c.creneau_livraison || c.creneau
+                    return (
+                    <div key={c.id} style={{ background: 'linear-gradient(135deg, #EEF2FF, #fff)', borderRadius: 16, overflow: 'hidden', marginBottom: '0.75rem', border: '2px solid #4F46E544', boxShadow: '0 6px 20px #4F46E526' }}>
+                      <div style={{ height: 3, background: 'linear-gradient(90deg, #312E81 0%, #4F46E5 60%, #A5B4FC 100%)' }}/>
+                      <div style={{ padding: '1rem 1.125rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem' }}>
+                          <div>
+                            <p style={{ fontWeight: 800, color: T.ink, marginBottom: 3, fontSize: '0.95rem' }}>
+                              {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: '#4F46E5', fontWeight: 700 }}> - commande #{c.numeroAffiche}</span>}
+                            </p>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#EEF2FF', borderRadius: 100, padding: '3px 10px', border: '1px solid #4F46E533' }}>
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#4F46E5', border: '1.5px solid #fff', boxShadow: '0 0 0 1.5px #4F46E544, 0 0 8px #4F46E599', animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#4F46E5' }}>En route vers toi{cren ? ` · ${cren.heure_debut.slice(0,5)}–${cren.heure_fin.slice(0,5)}` : ''}</span>
+                            </span>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} /></div><p style={{ fontWeight: 900, color: '#4F46E5', fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p></div>
+                        </div>
+                        <button onClick={() => setPickupCommande(c)}
+                          style={{ width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.95rem', background: 'linear-gradient(135deg, #4F46E5, #6366F1)', color: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 16px #4F46E544', letterSpacing: '-0.3px' }}>
+                          J&apos;ai reçu ma commande →
+                        </button>
+                      </div>
+                    </div>
+                  )})}
+                </>
+              )}
+              {commandesASwiper.length > 0 && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, marginTop: commandesEnLivraison.length > 0 ? '1rem' : 0 }}>
                     <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>Prêtes à retirer</span>
                     <span style={{ background: T.main, color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{commandesASwiper.length}</span>
                   </div>
@@ -2500,8 +2563,15 @@ export default function Commander() {
                     <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>En cours</span>
                   </div>
                   {commandesEnCours.map(c => {
-                    const sc = statutStyle[c.statut]
-                    const sousTexte = statutSousTexte[c.statut]
+                    // Livraison prête mais pas encore partie : libellé/sous-texte dédiés
+                    // (le statut 'pret' générique dirait « Prête à retirer », faux ici).
+                    const estLivPrete = c.mode_retrait === 'livraison' && c.statut === 'pret'
+                    const sc = estLivPrete
+                      ? { bg: '#EEF2FF', color: '#4F46E5', label: 'Prête, bientôt livrée' }
+                      : statutStyle[c.statut]
+                    const sousTexte = estLivPrete
+                      ? 'C’est prêt ! Le commerçant va bientôt partir te livrer 🛵'
+                      : statutSousTexte[c.statut]
                     const cren = c.creneau || c.creneau_livraison
                     return (
                       <div key={c.id} style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', marginBottom: '0.625rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>
@@ -2538,7 +2608,7 @@ export default function Commander() {
                   })}
                 </>
               )}
-              {commandesASwiper.length === 0 && commandesEnCours.length === 0 && (
+              {commandesASwiper.length === 0 && commandesEnLivraison.length === 0 && commandesEnCours.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '3rem 0' }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 80, height: 80, borderRadius: 20, background: T.pale, marginBottom: 16 }}>
                     <IconBag size={40} color={T.main}/>
@@ -2582,10 +2652,10 @@ export default function Commander() {
               )}
 
               {/* Empty state alimentaires si Yopper connecte sans commande */}
-              {client.email && commandesASwiper.length === 0 && commandesEnCours.length === 0 && commandesTerminees.length === 0 && (
+              {client.email && commandesASwiper.length === 0 && commandesEnLivraison.length === 0 && commandesEnCours.length === 0 && commandesTerminees.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: T.muted }}>
-                  <p style={{ fontSize: '0.9rem', fontWeight: 700, color: T.deep, marginBottom: 6 }}>Aucune commande pour l'instant</p>
-                  <p style={{ fontSize: '0.78rem', lineHeight: 1.5 }}>Tape sur l'onglet Accueil pour commander chez un boulanger, pizzaiolo, etc.</p>
+                  <p style={{ fontSize: '0.9rem', fontWeight: 700, color: T.deep, marginBottom: 6 }}>Aucune commande pour l&apos;instant</p>
+                  <p style={{ fontSize: '0.78rem', lineHeight: 1.5 }}>Tape sur l&apos;onglet Accueil pour commander chez un boulanger, pizzaiolo, etc.</p>
                 </div>
               )}
               </div>
@@ -2705,8 +2775,8 @@ export default function Commander() {
                 {/* Empty state */}
                 {rdvsAVenir.length === 0 && rdvsPasses.length === 0 && (
                   <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: T.muted }}>
-                    <p style={{ fontSize: '0.9rem', fontWeight: 700, color: T.deep, marginBottom: 6 }}>Aucun rendez-vous pour l'instant</p>
-                    <p style={{ fontSize: '0.78rem', lineHeight: 1.5 }}>Réserve chez un coiffeur, esthéticien ou autre service depuis l'onglet Accueil.</p>
+                    <p style={{ fontSize: '0.9rem', fontWeight: 700, color: T.deep, marginBottom: 6 }}>Aucun rendez-vous pour l&apos;instant</p>
+                    <p style={{ fontSize: '0.78rem', lineHeight: 1.5 }}>Réserve chez un coiffeur, esthéticien ou autre service depuis l&apos;onglet Accueil.</p>
                   </div>
                 )}
               </div>
@@ -3147,7 +3217,7 @@ export default function Commander() {
             ...(PLAN_PUBLIC_ENABLED ? [{ key: 'services',  label: 'Officiel',  badge: alerteUrgenteActive ? 1 : 0 }] : []),
             // Onglet 'commandes' : pas de label (label vide) + icône plus grande pour compenser,
             // 2 pastilles distinctes (violette = commandes en cours, verte = RDVs a venir).
-            { key: 'commandes', label: '', badgeCmd: commandesASwiper.length + commandesEnCours.length, badgeRdv: rdvsAVenir.length, badge: badgeCommandes },
+            { key: 'commandes', label: '', badgeCmd: commandesASwiper.length + commandesEnLivraison.length + commandesEnCours.length, badgeRdv: rdvsAVenir.length, badge: badgeCommandes },
             { key: 'tribu',     label: 'Tribu',     badge: 0 },
             { key: 'profil',    label: 'Profil',    badge: 0 },
           ].map(item => {

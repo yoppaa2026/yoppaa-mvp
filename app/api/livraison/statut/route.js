@@ -58,12 +58,13 @@ export async function POST(request) {
     }
 
     const nomCommerce = cmd.commercant?.nom || 'ton commerçant'
-    const url = cmd.commercant?.slug ? `/commander/${cmd.commercant.slug}` : '/commander'
+    // Clic → onglet Commandes de l'app (où le Yopper confirme la réception).
+    const url = '/commander?onglet=commandes'
 
     const contenu = statut_livraison === 'en_livraison'
       ? {
-          headings: '🛵 Ta commande est en route',
-          contents: `${nomCommerce} vient de partir pour te livrer ta commande #${cmd.numero_commande || ''}.`,
+          headings: '🛵 Ta commande arrive',
+          contents: `${nomCommerce} est parti te livrer ta commande #${cmd.numero_commande || ''}. Prépare-toi à la réceptionner et confirme la réception dans l’app.`,
           data: { kind: 'livraison_en_route', commande_id: cmd.id },
         }
       : {

@@ -303,6 +303,38 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: `Création commande échouée : ${errInsert?.message || 'erreur inconnue'}` }, { status: 500 })
     }
 
+    // ─── 6.5) Réservation stock ATOMIQUE (anti-survente en concurrence) ─────
+    // Autorité finale sur le stock : verrou + recompte + réservation dans UNE
+    // transaction (voir MIGRATION_STOCK_RACE.sql). Le check JS (étape 5) reste un
+    // pré-filtre rapide ; ici on rattrape la race (dernier article pris entre les
+    // deux). Avant l'insert des lignes → un échec ne laisse qu'une commande à supprimer.
+    {
+      const items = lignes.map(l => ({ article_id: l.article_id, quantite: l.quantite }))
+      const { error: errStock } = await supabase.rpc('reserver_stock_atomique', {
+        p_commande_id: commande.id,
+        p_commercant_id: commercant.id,
+        p_date: date_commande,
+        p_jour_semaine: jourSemaine,
+        p_items: items,
+      })
+      if (errStock) {
+        await supabase.from('commandes').delete().eq('id', commande.id)
+        const msg = errStock.message || ''
+        const mStock = msg.match(/STOCK_INSUFFISANT:([0-9a-fA-F-]+):(\d+)/)
+        const mInactif = msg.match(/ARTICLE_INACTIF:([0-9a-fA-F-]+)/)
+        if (mStock) {
+          const nom = lignes.find(l => l.article_id === mStock[1])?.article_nom || 'un article'
+          return NextResponse.json({ ok: false, error: `Stock insuffisant pour "${nom}" : ${mStock[2]} disponible(s) (quelqu'un vient de commander).`, article_id: mStock[1], stock_disponible: Number(mStock[2]) }, { status: 409 })
+        }
+        if (mInactif) {
+          const nom = lignes.find(l => l.article_id === mInactif[1])?.article_nom || 'un article'
+          return NextResponse.json({ ok: false, error: `Article "${nom}" non disponible ce jour-là.` }, { status: 400 })
+        }
+        console.error('[create-commande] reserver_stock_atomique KO', errStock)
+        return NextResponse.json({ ok: false, error: 'Impossible de réserver le stock, réessaie dans un instant.' }, { status: 500 })
+      }
+    }
+
     // ─── 7) INSERT lignes commande_articles ────────────────────────────────
     const { error: errLignes } = await supabase
       .from('commande_articles')
@@ -320,26 +352,7 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: `Enregistrement articles échoué : ${errLignes.message}` }, { status: 500 })
     }
 
-    // ─── 8) INSERT réservations stock (TTL 5 min) ──────────────────────────
-    // Pour les articles avec stock géré uniquement (ceux où dispo a été calculé)
-    const reservationsToInsert = lignes
-      .filter(l => (stocksJour || []).find(s => s.article_id === l.article_id && s.jour_semaine === jourSemaine))
-      .map(l => ({
-        commande_id: commande.id,
-        commercant_id: commercant.id,
-        article_id: l.article_id,
-        quantite: l.quantite,
-        date_commande,
-        // expires_at par défaut DB : NOW() + 5 min
-      }))
-    if (reservationsToInsert.length > 0) {
-      const { error: errRes } = await supabase.from('commande_stock_reservation').insert(reservationsToInsert)
-      if (errRes) {
-        // Pas bloquant : on log mais on continue. La commande reste, juste sans
-        // protection 5 min stock (race condition possible mais déjà checkée step 5).
-        console.warn('[create-commande] insert réservation stock KO (non bloquant)', errRes)
-      }
-    }
+    // ─── 8) Réservations stock : déjà posées atomiquement à l'étape 6.5 ─────
 
     // ─── 9) Stripe Checkout Session (Direct Charge sur compte connecté) ────
     const heureCreneau = (creneau.heure_debut || '').slice(0, 5)

@@ -547,6 +547,8 @@ export default function Dashboard() {
   }, [commercant?.id])
   const [filtreStatut, setFiltreStatut] = useState('actives')
   const [vueMode, setVueMode] = useState('retrait')  // vue Commandes : 'retrait' | 'livraison'
+  const [tournee, setTournee] = useState(null)       // résultat /api/livraison/tournee-optimisee
+  const [tourneeLoading, setTourneeLoading] = useState(false)
   const [jourSelectionne, setJourSelectionne] = useState(null) // null = aujourd'hui par défaut
   const [modeHistorique, setModeHistorique] = useState(false)
   const [notificationsActives, setNotificationsActives] = useState(false)
@@ -839,6 +841,32 @@ export default function Dashboard() {
     }).catch(e => console.warn('[dashboard] push livraison KO', e))
   }
 
+  // Optimise l'ordre de passage des livraisons actives du jour et récupère un
+  // lien d'itinéraire. commandesALivrer = livraisons non terminées du jour.
+  async function optimiserTournee(commandeIds) {
+    if (!commandeIds || commandeIds.length === 0) return
+    setTourneeLoading(true)
+    setTournee(null)
+    try {
+      const res = await fetch('/api/livraison/tournee-optimisee', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commande_ids: commandeIds }),
+      })
+      const data = await res.json()
+      if (!data.ok) {
+        alert(data.error || 'Optimisation impossible.')
+        return
+      }
+      setTournee(data)
+    } catch (e) {
+      console.error('[dashboard] optimiserTournee', e)
+      alert('Erreur réseau lors de l’optimisation.')
+    } finally {
+      setTourneeLoading(false)
+    }
+  }
+
   async function changerStatutRdv(rdvId, statut) {
     const { error } = await supabase.from('rdv_reservations').update({ statut }).eq('id', rdvId)
     if (error) {
@@ -931,6 +959,9 @@ export default function Dashboard() {
   const commandesDuJour = livraisonActive
     ? commandesDuJourTous.filter(c => vueMode === 'livraison' ? c.mode_retrait === 'livraison' : c.mode_retrait !== 'livraison')
     : commandesDuJourTous
+
+  // Livraisons du jour encore à livrer (pour l'optimisation de tournée).
+  const commandesALivrer = commandesDuJour.filter(c => ['en_attente','en_preparation','pret'].includes(c.statut))
 
   const stats = {
     nouvelles:  commandesDuJour.filter(c => c.statut === 'en_attente').length,
@@ -1520,6 +1551,51 @@ export default function Dashboard() {
           <div className="scroll-zone">
             {ongletPrincipal === 'commandes' && (
               <>
+                {/* Tournée optimisée (vue Livraison, jour courant, livraisons à faire) */}
+                {vueMode === 'livraison' && !modeHistorique && commandesALivrer.length > 0 && (
+                  <div style={{ background: 'linear-gradient(135deg, #EEF2FF, #fff)', border: '1.5px solid #4F46E533', borderRadius: 14, padding: '0.875rem 1rem', margin: '0 0 0.875rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 20l-5.5 2V6l5.5-2m0 16l6-2m-6 2V4m6 14l5.5 2V6l-5.5-2m0 16V4m0 0L9 6" stroke="#4F46E5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        <span style={{ fontWeight: 800, color: T.ink, fontSize: 14 }}>Tournée du jour · {commandesALivrer.length} livraison{commandesALivrer.length > 1 ? 's' : ''}</span>
+                      </div>
+                      <button onClick={() => optimiserTournee(commandesALivrer.map(c => c.id))} disabled={tourneeLoading}
+                        style={{ padding: '8px 14px', borderRadius: 100, border: 'none', background: tourneeLoading ? '#A5B4FC' : 'linear-gradient(135deg, #4F46E5, #6366F1)', color: '#fff', fontWeight: 800, fontSize: 13, cursor: tourneeLoading ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 14px #4F46E544' }}>
+                        {tourneeLoading ? 'Calcul…' : 'Optimiser la tournée'}
+                      </button>
+                    </div>
+
+                    {tournee?.ordre?.length > 0 && (
+                      <div style={{ marginTop: 12 }}>
+                        <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {tournee.ordre.map(o => (
+                            <li key={o.commande_id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                              <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: 'linear-gradient(135deg, #4F46E5, #6366F1)', color: '#fff', fontWeight: 900, fontSize: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{o.position}</span>
+                              <span style={{ fontSize: 13, color: T.deep, lineHeight: 1.35, paddingTop: 2 }}>
+                                <strong style={{ color: '#4F46E5' }}>#{o.numero}</strong> · {o.adresse || 'adresse inconnue'}
+                              </span>
+                            </li>
+                          ))}
+                        </ol>
+
+                        {tournee.sans_coords?.length > 0 && (
+                          <p style={{ fontSize: 11.5, color: '#B45309', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '6px 9px', marginTop: 8 }}>
+                            {tournee.sans_coords.length} commande{tournee.sans_coords.length > 1 ? 's' : ''} sans adresse géolocalisée, non incluse{tournee.sans_coords.length > 1 ? 's' : ''} dans l’itinéraire (#{tournee.sans_coords.map(s => s.numero).join(', #')}).
+                          </p>
+                        )}
+
+                        <a href={tournee.itineraire_url} target="_blank" rel="noopener noreferrer"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '9px 16px', borderRadius: 100, background: T.ink, color: '#fff', fontWeight: 800, fontSize: 13, textDecoration: 'none' }}>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" stroke="#fff" strokeWidth="2"/><circle cx="12" cy="10" r="3" stroke="#fff" strokeWidth="2"/></svg>
+                          Ouvrir l’itinéraire
+                        </a>
+                        {tournee.methode === 'plus_proche_voisin' && (
+                          <span style={{ display: 'block', fontSize: 10.5, color: T.muted, marginTop: 6 }}>Ordre calculé au plus proche. Itinéraire routier optimal via l’app Maps.</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {loading && (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem', gap: 10 }}>
                     {[0,1,2].map(i => (

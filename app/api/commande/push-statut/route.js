@@ -57,7 +57,9 @@ export async function POST(request) {
     const nom = cmd.commercant?.nom || 'le commerçant'
     const num = cmd.numero_commande || ''
     const estLivraison = cmd.mode_retrait === 'livraison'
-    const heure = cmd.creneau?.heure_debut ? cmd.creneau.heure_debut.slice(0, 5) : null
+    const creneauTxt = cmd.creneau?.heure_debut
+      ? `${cmd.creneau.heure_debut.slice(0, 5)}${cmd.creneau.heure_fin ? ` – ${cmd.creneau.heure_fin.slice(0, 5)}` : ''}`
+      : null
 
     let contenu
     if (statut === 'en_preparation') {
@@ -76,7 +78,7 @@ export async function POST(request) {
           }
         : {
             headings: '🎉 Ta commande est prête à retirer',
-            contents: `Va récupérer ta commande #${num} chez ${nom}${heure ? ` (créneau ${heure})` : ''}.`,
+            contents: `Va récupérer ta commande #${num} chez ${nom}${creneauTxt ? ` (créneau ${creneauTxt})` : ''}.`,
             data: { kind: 'commande_prete_retrait', commande_id: cmd.id },
           }
     }

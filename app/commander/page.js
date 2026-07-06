@@ -731,10 +731,13 @@ const SERVICE_TYPE_LABEL = {
 // Liste compacte des avis vérifiés (liés à une commande) postés par le Yopper.
 function SectionMesAvis({ clientId }) {
   const [avis, setAvis] = useState([])
-  const [loading, setLoading] = useState(true)
+  // Loading initialisé selon la présence de clientId : évite un setState synchrone
+  // dans l'effect (règle react-hooks/set-state-in-effect). Sans clientId, rien à
+  // charger → loading part à false ; sinon on passe à false dans le .then (async).
+  const [loading, setLoading] = useState(!!clientId)
 
   useEffect(() => {
-    if (!clientId) { setLoading(false); return }
+    if (!clientId) return
     let annule = false
     supabase
       .from('avis')

@@ -70,10 +70,17 @@ export async function POST(req) {
 
   const result = await setYopperTags(clientId, tags)
   if (!result.ok) {
-    // 404 = user OneSignal pas encore créé (login() pas encore propagé). Non
-    // bloquant : la prochaine synchro (rechargement) repassera.
-    const status = result.status === 404 ? 404 : 502
-    return NextResponse.json(result, { status })
+    // 404 = user OneSignal pas encore créé (login() pas encore propagé). SEUL cas
+    // où l'on renvoie un statut retryable : le client réessaie avec backoff.
+    if (result.status === 404) {
+      return NextResponse.json(result, { status: 404 })
+    }
+    // Autres échecs (auth, rate limit, timeout OneSignal...) : NON retryables et
+    // NON bloquants (la pose de tags est best-effort). On renvoie 200 pour ne pas
+    // polluer la console d'un 502 rouge ni déclencher la tempête de retries. La
+    // cause exacte reste tracée côté serveur (console.error dans setYopperTags,
+    // visible dans les logs Vercel).
+    return NextResponse.json({ ok: false, handled: true, error: result.error }, { status: 200 })
   }
 
   return NextResponse.json({ ok: true })

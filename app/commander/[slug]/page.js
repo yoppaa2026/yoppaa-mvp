@@ -685,6 +685,9 @@ export default function CommanderSlug() {
   const [joursDisposLivraison, setJoursDisposLivraison] = useState([])
   const [creneauLivraisonChoisi, setCreneauLivraisonChoisi] = useState(null)
   const [adresseLivraison, setAdresseLivraison] = useState({ rue: '', code_postal: '', ville: '', complement: '' })
+  // Persistance localStorage : préférence de mode + adresse mémorisées entre commandes.
+  const modePrefRef = useRef(null)      // 'retrait' | 'livraison' | null (préférence sauvegardée)
+  const modeAppliqueRef = useRef(false) // pour n'appliquer la préférence livraison qu'une fois
   // Confirmation de changement de jour quand le panier n'est pas vide
   const [confirmationJour, setConfirmationJour] = useState(null) // { nouveauIdx }
   const [optionsParArticle, setOptionsParArticle] = useState({})
@@ -1550,6 +1553,36 @@ export default function CommanderSlug() {
   // Livraison : dispo si le commerce l'active + zone configurée. Slots aplatis
   // (tournées à venir tous jours confondus). Vérif CP dans la zone.
   const livraisonDispo = !!(commercant?.livraison_actif && livraisonConfig && livraisonConfig.codes_postaux?.length > 0)
+
+  // ─── Persistance localStorage (mode + adresse de livraison) ────────────────
+  // 1) Au montage : pré-remplit l'adresse et charge la préférence de mode.
+  useEffect(() => {
+    try {
+      const a = localStorage.getItem('yoppaa.livraison.adresse')
+      if (a) { const p = JSON.parse(a); if (p && typeof p === 'object') setAdresseLivraison(prev => ({ ...prev, ...p })) }
+      const m = localStorage.getItem('yoppaa.commande.mode')
+      if (m === 'retrait' || m === 'livraison') modePrefRef.current = m
+    } catch { /* localStorage indispo (mode privé) : on ignore */ }
+  }, [])
+  // 2) Applique la préférence "livraison" une seule fois, dès qu'elle est possible
+  //    (sans jamais forcer si le commerce ne livre pas, ni contrer un choix ultérieur).
+  useEffect(() => {
+    if (modeAppliqueRef.current) return
+    if (livraisonDispo && modePrefRef.current === 'livraison') {
+      setModeCommande('livraison')
+      modeAppliqueRef.current = true
+    }
+  }, [livraisonDispo])
+  // 3) Sauvegarde l'adresse dès qu'elle a du contenu (jamais d'écrasement à vide).
+  useEffect(() => {
+    try {
+      const { rue, code_postal, ville, complement } = adresseLivraison
+      if (rue || code_postal || ville || complement) {
+        localStorage.setItem('yoppaa.livraison.adresse', JSON.stringify({ rue, code_postal, ville, complement }))
+      }
+    } catch { /* ignore */ }
+  }, [adresseLivraison])
+
   const slotsLivraison = joursDisposLivraison.flatMap(j => (j.creneaux || []).map(cr => ({ ...cr, _date: j.date, _jourLabel: j.label })))
   const cpDansZone = !!livraisonConfig?.codes_postaux?.includes((adresseLivraison.code_postal || '').trim())
   const livraisonFormOk = !!(adresseLivraison.rue.trim() && adresseLivraison.code_postal.trim() && adresseLivraison.ville.trim() && cpDansZone && creneauLivraisonChoisi)
@@ -2388,7 +2421,7 @@ export default function CommanderSlug() {
                 {livraisonDispo && (
                   <div style={{ display: 'flex', gap: 8, marginBottom: '1rem' }}>
                     {[{ v: 'retrait', label: 'Retrait' }, { v: 'livraison', label: 'Livraison' }].map(m => (
-                      <button key={m.v} onClick={() => { setModeCommande(m.v); setErreurCommande(null) }}
+                      <button key={m.v} onClick={() => { setModeCommande(m.v); modeAppliqueRef.current = true; try { localStorage.setItem('yoppaa.commande.mode', m.v) } catch { /* ignore */ } setErreurCommande(null) }}
                         style={{ flex: 1, padding: '0.7rem', borderRadius: 12, border: `2px solid ${modeCommande === m.v ? T.main : T.pale}`, background: modeCommande === m.v ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: modeCommande === m.v ? '#fff' : T.ink, fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                         {m.label}
                       </button>

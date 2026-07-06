@@ -1607,7 +1607,7 @@ export default function Commander() {
     // Ne lister QUE les fiches publiées (validation admin OK).
     // Les brouillons / en_attente / refusées restent invisibles côté client.
     const { data } = await supabase
-      .from('commercants')
+      .from('commercants_public')  // vue publique (colonnes sûres, publiés) — RLS commercants
       .select('*')
       .eq('statut_publication', 'publie')
       .order('nom')
@@ -1751,7 +1751,7 @@ export default function Commander() {
     setFavoris(ids)
     if (ids.length > 0) {
       const { data: comms } = await supabase
-        .from('commercants')
+        .from('commercants_public')  // vue publique — RLS commercants
         .select('*')
         .in('id', ids)
         .eq('statut_publication', 'publie')

@@ -932,7 +932,7 @@ export default function CommanderSlug() {
     setLoading(true)
 
     const [{ data: c }] = await Promise.all([
-      supabase.from('commercants').select('*').eq('slug', slug).single(),
+      supabase.from('commercants_public').select('*').eq('slug', slug).maybeSingle(),  // vue publique — RLS commercants
     ])
     if (!c) { router.push('/commander'); return }
     // Bloque l'accès aux fiches non publiées (brouillon, en_attente, refusée).

@@ -466,7 +466,7 @@ export default function CommanderRdvSlug() {
       setErreur(null)
       // 1. Fetch le commerçant via son slug (doit être vitrine + publié + rdv_actif)
       const { data: c, error: errC } = await supabase
-        .from('commercants')
+        .from('commercants_public')  // vue publique (colonnes sûres, publiés) — RLS commercants
         .select('*')
         .eq('slug', slug)
         .maybeSingle()

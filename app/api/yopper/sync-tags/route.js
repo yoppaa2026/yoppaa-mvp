@@ -68,6 +68,16 @@ export async function POST(req) {
     return NextResponse.json({ ok: false, error: 'tags requis' }, { status: 400 })
   }
 
+  // Persiste le code postal du Yopper sur sa fiche (ciblage zone GMY DB-driven,
+  // robuste au 409 OneSignal). Best-effort, non bloquant. Un code postal belge
+  // = 4 chiffres ; on ignore les valeurs vides (retrait de tag) ou aberrantes.
+  const cp = typeof tags.code_postal === 'string' ? tags.code_postal.trim() : ''
+  if (/^\d{4}$/.test(cp)) {
+    getSupabaseAdmin()
+      .from('clients').update({ code_postal: cp }).eq('id', clientId)
+      .then(({ error }) => { if (error) console.warn('[sync-tags] update code_postal KO', error.message) })
+  }
+
   const result = await setYopperTags(clientId, tags)
   if (!result.ok) {
     // 404 = user OneSignal pas encore créé (login() pas encore propagé). SEUL cas

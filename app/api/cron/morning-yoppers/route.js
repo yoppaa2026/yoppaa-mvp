@@ -20,7 +20,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { envoyerPushParCodePostal } from '@/lib/onesignal'
+import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo, resolvePlan } from '@/lib/plans'
 
 function getSupabaseAdmin() {
@@ -149,15 +149,30 @@ async function handle(req) {
     if (actuIds.length > 0) parts.push(`${actuIds.length} actu${actuIds.length > 1 ? 's' : ''}`)
     const contents = `${parts.join(' · ')} près de chez toi (${nbCommercants} commerce${nbCommercants > 1 ? 's' : ''})`
 
-    const res = await envoyerPushParCodePostal(cp, {
+    // Ciblage zone DB-driven : Yoppers dont le code postal enregistré = cp, poussés
+    // par external_id (robuste au 409 des tags OneSignal). Le CP se remplit au fil
+    // des passages via /api/yopper/sync-tags (rollout progressif).
+    const { data: clientsZone } = await supabase
+      .from('clients').select('id').eq('code_postal', cp)
+    const clientIds = (clientsZone || []).map(cl => cl.id)
+
+    stats.zones++
+
+    // Aucun Yopper enregistré dans cette zone (CP pas encore rempli) : on NE marque
+    // PAS les deals/actus comme envoyés → ils repartiront (utile pendant le rollout
+    // du code postal, et sans effet pour les deals qui sont limités à date_deal=today).
+    if (clientIds.length === 0) {
+      stats.zones_vides = (stats.zones_vides || 0) + 1
+      continue
+    }
+
+    const res = await envoyerPushParExternalIds(clientIds, {
       headings: 'Good Morning Yoppers',
       contents,
       url: '/commander/morning',
       data: { kind: 'gmy', cp, date: today },
       high_priority: false,
     })
-
-    stats.zones++
 
     if (!res.ok) {
       stats.push_failed++

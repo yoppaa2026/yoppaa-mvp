@@ -24,7 +24,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { envoyerPushAuxFavoris } from '@/lib/onesignal'
+import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo } from '@/lib/plans'
 
 function getSupabaseAdmin() {
@@ -79,7 +79,12 @@ export async function POST(req) {
   const teaser = actu.contenu ? ` — ${actu.contenu}` : ''
   const contents = `${c.nom} : ${actu.titre}${teaser}`
 
-  const res = await envoyerPushAuxFavoris(c.id, {
+  // Ciblage DB-driven (table favoris → external_id), robuste multi-appareils.
+  const { data: favs } = await supabase
+    .from('favoris').select('client_id').eq('commercant_id', c.id)
+  const clientIds = (favs || []).map(f => f.client_id).filter(Boolean)
+
+  const res = await envoyerPushParExternalIds(clientIds, {
     headings,
     contents,
     url: `/commander/${c.slug}`,
@@ -90,7 +95,7 @@ export async function POST(req) {
   return NextResponse.json({
     status: res.ok ? 'ok' : 'push_failed',
     priority: isAlerte ? 'high' : 'normal',
-    onesignal_id: res.id,
+    favoris: clientIds.length,
     recipients: res.recipients,
     error: res.error,
   })

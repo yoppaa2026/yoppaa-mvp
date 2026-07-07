@@ -1389,8 +1389,11 @@ export default function Commander() {
         setClientId(id)
         chargerFavoris(id)
         chargerCommandesClient(email); chargerRdvsClient(email)
-        // Refresh cookie serveur (reset Max-Age 365j) - fire and forget
-        fetch('/api/yopper/session', {
+        // Sync cookie serveur AWAITED (pas fire-and-forget) : le cookie doit
+        // refléter le client courant AVANT l'appel get-own (commune/profil), sinon
+        // get-own lit un cookie périmé -> mauvais client -> la modale commune
+        // réapparaît à chaque connexion (bug 11).
+        await fetch('/api/yopper/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ client_id: id, email, prenom, nom, telephone }),

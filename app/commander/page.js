@@ -619,7 +619,7 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
       // 2) re-fetch la commande pour obtenir un numero_commande à jour
       if (commande.id) {
         const { data: fresh } = await supabase
-          .from('commandes')
+          .from('commandes_stats')
           .select('numero_commande, commercant_id, date_commande, created_at')
           .eq('id', commande.id)
           .maybeSingle()
@@ -635,7 +635,7 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
             ? dateRef
             : new Date(dateRef).toISOString().slice(0, 10)
           const { data: duJour } = await supabase
-            .from('commandes')
+            .from('commandes_stats')
             .select('id, created_at, creneau:creneaux(heure_debut)')
             .eq('commercant_id', cid)
             .eq('date_commande', dateStr)
@@ -1701,7 +1701,7 @@ export default function Commander() {
     const [{ data: avisData }, { data: creneauxData }, { data: commandesData }] = await Promise.all([
       supabase.from('avis').select('commercant_id, note').in('commercant_id', ids),
       supabase.from('creneaux').select('id, commercant_id, heure_debut, heure_fin, max_commandes, actif').in('commercant_id', ids).eq('actif', true),
-      supabase.from('commandes').select('commercant_id, creneau_id').in('commercant_id', ids).neq('statut', 'recupere')
+      supabase.from('commandes_stats').select('commercant_id, creneau_id').in('commercant_id', ids).neq('statut', 'recupere')
     ])
     const notes = {}
     ids.forEach(id => {
@@ -1844,38 +1844,16 @@ export default function Commander() {
   }
 
   async function chargerCommandesClient(email) {
-    const { data } = await supabase.from('commandes').select('*, commercant:commercants(nom, type), creneau:creneaux(heure_debut, heure_fin), creneau_livraison:livraison_creneaux(heure_debut, heure_fin)').eq('client_email', email).order('created_at', { ascending: false })
-    if (!data || data.length === 0) { setClientCommandes([]); return }
-
-    // FIX NUMÉRO : enrichir chaque commande avec son numéro affiché
-    // (numero_commande DB en priorité, sinon position du jour - même logique
-    // que le dashboard et le PickupScreen).
-    function dateKeyOf(c) {
-      const ref = c.date_commande || c.created_at
-      if (typeof ref === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ref)) return ref
-      return new Date(ref).toISOString().slice(0, 10)
-    }
-    const cles = [...new Set(data.map(c => `${c.commercant_id}|${dateKeyOf(c)}`))]
-    const positionsMap = {}
-    await Promise.all(cles.map(async cle => {
-      const [cid, dateStr] = cle.split('|')
-      const { data: duJour } = await supabase
-        .from('commandes')
-        .select('id, created_at, creneau:creneaux(heure_debut)')
-        .eq('commercant_id', cid)
-        .eq('date_commande', dateStr)
-        .order('created_at', { ascending: true })
-      const tri = (duJour || []).sort((a, b) =>
-        (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '') ||
-        new Date(a.created_at) - new Date(b.created_at)
-      )
-      tri.forEach((c, idx) => { positionsMap[c.id] = idx + 1 })
-    }))
-    const enriched = data.map(c => ({
-      ...c,
-      numeroAffiche: c.numero_commande || positionsMap[c.id] || null,
-    }))
-    setClientCommandes(enriched)
+    // « Mes commandes » = PII (email/nom/téléphone/adresse/total) → lecture via
+    // l'API serveur (service_role + cookie yoppaa_yopper). L'email vient du cookie
+    // côté serveur, pas de ce paramètre. L'enrichissement numéro (numero_commande
+    // ou position du jour) est fait côté serveur pour garder la parité d'affichage.
+    const res = await fetch('/api/yopper/commandes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list' }),
+    }).then(r => r.json()).catch(() => null)
+    setClientCommandes(res?.commandes || [])
   }
 
   useEffect(() => {
@@ -2154,12 +2132,14 @@ export default function Commander() {
           commande={pickupCommande}
           clientPrenom={client.prenom || client.nom?.split(' ')[0] || 'Yopper'}
           onConfirm={async () => {
-            // Livraison : le Yopper confirme la RÉCEPTION → statut_livraison='livree'
-            // en plus de statut='recupere' (aligné sur le flux commerçant).
-            const patch = pickupCommande.mode_retrait === 'livraison'
-              ? { statut: 'recupere', statut_livraison: 'livree' }
-              : { statut: 'recupere' }
-            await supabase.from('commandes').update(patch).eq('id', pickupCommande.id)
+            // Confirmation de réception → via l'API serveur (service_role + cookie).
+            // Le serveur applique statut='recupere' (+ statut_livraison='livree' en
+            // livraison) après avoir vérifié que la commande appartient au Yopper.
+            await fetch('/api/yopper/commandes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'confirmer-reception', commande_id: pickupCommande.id }),
+            }).catch(() => {})
             setPickupCommande(null)
             chargerCommandesClient(client.email)
           }}

@@ -846,11 +846,13 @@ export default function CommanderSlug() {
       // Statut peut encore être 'paiement_en_attente' si webhook pas encore arrivé :
       // on affiche quand même l'écran de confirmation (Stripe a confirmé le paiement).
       ;(async () => {
-        const { data } = await supabase
-          .from('commandes')
-          .select('id, numero_commande, total, date_commande, statut, client_nom')
-          .eq('id', commandeId)
-          .single()
+        // Confirmation post-paiement : total + client_nom = PII → API serveur
+        // (get-one par UUID fourni par le retour Stripe du Yopper).
+        const data = await fetch('/api/yopper/commandes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'get-one', commande_id: commandeId }),
+        }).then(r => r.json()).then(j => j?.commande).catch(() => null)
         if (data) {
           setDerniereCommande({ ...data, numeroSequentiel: data.numero_commande })
           allerEtape(4)
@@ -961,14 +963,14 @@ export default function CommanderSlug() {
       supabase.from('creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
       supabase.from('avis').select('*, client:clients(nom)').eq('commercant_id', c.id).order('created_at', { ascending: false }).limit(10),
       supabase.from('avis').select('note').eq('commercant_id', c.id),
-      supabase.from('commandes').select('creneau_id, commande_articles(quantite, article:articles(temps_prepa))').eq('commercant_id', c.id).not('statut', 'in', '(recupere,non_retire)'),
+      supabase.from('commandes_stats').select('creneau_id, commande_articles(quantite, article:articles(temps_prepa))').eq('commercant_id', c.id).not('statut', 'in', '(recupere,non_retire)'),
       supabase.from('commercant_photos').select('*').eq('commercant_id', c.id).order('ordre'),
       supabase.from('yoppaa_deals').select('*').eq('commercant_id', c.id).eq('actif', true),
       supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', c.id).gte('date_fin', new Date().toISOString()),
       supabase.from('actualites').select('*').eq('commercant_id', c.id).eq('actif', true).order('created_at', { ascending: false }),
       supabase.from('livraison_config').select('*').eq('commercant_id', c.id).maybeSingle(),
       supabase.from('livraison_creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
-      supabase.from('commandes').select('creneau_livraison_id').eq('commercant_id', c.id).eq('mode_retrait', 'livraison').not('statut', 'in', '(recupere,non_retire,annulee_client_refund,annulee_paiement_ko)'),
+      supabase.from('commandes_stats').select('creneau_livraison_id').eq('commercant_id', c.id).eq('mode_retrait', 'livraison').not('statut', 'in', '(recupere,non_retire,annulee_client_refund,annulee_paiement_ko)'),
     ])
 
     const notesInfo = avisNotes?.length > 0
@@ -1149,7 +1151,7 @@ export default function CommanderSlug() {
     // Approche en 2 étapes (plus robuste qu'une jointure avec filtres) :
     // 1) commandes du jour pour ce commerçant 2) leurs commande_articles
     const { data: cmds } = await supabase
-      .from('commandes')
+      .from('commandes_stats')
       .select('id')
       .eq('commercant_id', commercant.id)
       .eq('date_commande', dateStr)

@@ -82,7 +82,9 @@ async function processCommercant(commercant, supabase, stats) {
       .maybeSingle()
     if (existingLog) { stats.skippedAlreadySent++; return }
 
-    const tarif = getPrixPlan(commercant.plan)
+    // getPrixPlan renvoie un objet { mensuel, label_mensuel } : on passe le NOMBRE
+    // mensuel au template (sinon Number(objet) = NaN -> « NaN € »).
+    const tarif = getPrixPlan(commercant.plan)?.mensuel ?? null
     const result = await sendBillingRelance({
       commercant,
       type,
@@ -166,7 +168,9 @@ async function processCommercant(commercant, supabase, stats) {
     }
 
     // J+1 ou J+4 : relance email simple
-    const tarif = getPrixPlan(commercant.plan)
+    // getPrixPlan renvoie un objet { mensuel, label_mensuel } : on passe le NOMBRE
+    // mensuel au template (sinon Number(objet) = NaN -> « NaN € »).
+    const tarif = getPrixPlan(commercant.plan)?.mensuel ?? null
     const result = await sendBillingRelance({
       commercant,
       type,

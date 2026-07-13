@@ -566,7 +566,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
         <span style={{ fontSize: 22, flexShrink: 0 }}>🟣</span>
         <div>
           <p style={{ fontWeight: 900, fontSize: 14, margin: 0, letterSpacing: '-0.3px' }}>
-            La formule <span style={{ color: T.light }}>Exister</span> est gratuite à vie. <span style={{ color: T.light }}>Communiquer</span> et <span style={{ color: T.light }}>Vendre</span> incluent 30 jours d'essai gratuit.
+            La formule <span style={{ color: T.light }}>Exister</span> est gratuite à vie. <span style={{ color: T.light }}>Communiquer</span> et <span style={{ color: T.light }}>Vendre</span> incluent 30 jours d&apos;essai gratuit.
           </p>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', margin: '3px 0 0', lineHeight: 1.4 }}>
             Sans engagement. Tu peux changer de formule ou résilier à tout moment depuis ton tableau de bord.
@@ -1323,8 +1323,8 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
               <li>Floue, sombre ou contre-jour</li>
               <li>Filtres lourds, cadres déco, watermark</li>
               <li>Photo de logo en couverture (utilise le champ Logo dédié)</li>
-              <li>Capture d'écran d'un autre site</li>
-              <li>Image basse qualité ou recadrée à l'arrache</li>
+              <li>Capture d&apos;écran d&apos;un autre site</li>
+              <li>Image basse qualité ou recadrée à l&apos;arrache</li>
             </ul>
           </div>
         </div>
@@ -1350,7 +1350,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
         )}
         <BoutonGenererVisuel onClick={genererCoverAuto} disabled={uploadingCover} libelle="Je n'ai pas de photo, genere une couverture branded Yoppaa"/>
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
-          <strong style={{ color: T.bgPanel }}>Idéal :</strong> ta façade telle qu'on la voit depuis la rue — c'est le <strong style={{ color: T.bgPanel }}>premier repère</strong> pour le client qui arrive à pied. Enseigne nette et lisible, couleurs vives, lumière du jour. Format paysage 16:9, qualité maximale. Si pas de façade exploitable (boutique en galerie, food truck mobile), prends un produit phare très photogénique.
+          <strong style={{ color: T.bgPanel }}>Idéal :</strong> ta façade telle qu&apos;on la voit depuis la rue, c&apos;est le <strong style={{ color: T.bgPanel }}>premier repère</strong> pour le client qui arrive à pied. Enseigne nette et lisible, couleurs vives, lumière du jour. Format paysage 16:9, qualité maximale. Si pas de façade exploitable (boutique en galerie, food truck mobile), prends un produit phare très photogénique.
         </div>
       </Card>
 
@@ -1379,7 +1379,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
         />
         <BoutonGenererVisuel onClick={genererLogoAuto} disabled={uploadingLogo} libelle="Je n'ai pas de logo, genere un cercle violet avec mon initiale"/>
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
-          <strong style={{ color: T.bgPanel }}>Idéal :</strong> ton logo seul sur fond uni (blanc ou couleur). Si tu n'en as pas, une photo carrée recadrée sur ton enseigne fait l'affaire.
+          <strong style={{ color: T.bgPanel }}>Idéal :</strong> ton logo seul sur fond uni (blanc ou couleur). Si tu n&apos;en as pas, une photo carrée recadrée sur ton enseigne fait l&apos;affaire.
         </div>
       </Card>
 
@@ -2346,12 +2346,12 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
           </div>
         ) : (
           <p style={{ fontSize: 12, color: T.muted, marginTop: 14, textAlign: 'center', fontStyle: 'italic' }}>
-            Aucun produit sélectionné. Tu peux continuer sans rien ajouter, c'est optionnel.
+            Aucun produit sélectionné. Tu peux continuer sans rien ajouter, c&apos;est optionnel.
           </p>
         )}
 
         <p style={{ fontSize: 10.5, color: T.muted, marginTop: 14, lineHeight: 1.5, textAlign: 'center' }}>
-          Paiement sécurisé Stripe. Tu peux ajouter ou commander d'autres produits à tout moment depuis ton tableau de bord.
+          Paiement sécurisé Stripe. Tu peux ajouter ou commander d&apos;autres produits à tout moment depuis ton tableau de bord.
         </p>
       </Card>
 
@@ -2708,7 +2708,7 @@ function CardPlan({ plan, categorie, actif, onClick }) {
           background: actif ? 'rgba(255,255,255,0.12)' : '#ECFDF5',
           padding: '4px 9px', borderRadius: 100, display: 'inline-block',
           margin: '0 0 10px', letterSpacing: '0.3px',
-        }}>30 jours d'essai gratuit</p>
+        }}>30 jours d&apos;essai gratuit</p>
       )}
 
       <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>

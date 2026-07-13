@@ -15,6 +15,32 @@ const T = {
   muted:   '#6B7280',
 }
 
+// Mini SVG helpers (definis au niveau module : evite de recreer ces composants
+// a chaque render, cf. regle react "no components during render").
+const IconMail = ({ size = 13, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="5" width="18" height="14" rx="2"/>
+    <path d="M3 7l9 6 9-6"/>
+  </svg>
+)
+const IconLock = ({ size = 13, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="11" width="18" height="11" rx="2"/>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+)
+const IconUser = ({ size = 13, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="8" r="4"/>
+    <path d="M3 21Q3 16 12 16 Q21 16 21 21"/>
+  </svg>
+)
+const IconArrowRight = ({ size = 14, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+  </svg>
+)
+
 function AuthForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -164,31 +190,6 @@ function AuthForm() {
     fontFamily: '"DM Sans", sans-serif', transition: 'all 0.2s',
     opacity: loading ? 0.7 : 1,
   }
-
-  // Mini SVG helpers reutilises
-  const IconMail = ({ size = 13, color = 'currentColor' }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="18" height="14" rx="2"/>
-      <path d="M3 7l9 6 9-6"/>
-    </svg>
-  )
-  const IconLock = ({ size = 13, color = 'currentColor' }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2"/>
-      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-    </svg>
-  )
-  const IconUser = ({ size = 13, color = 'currentColor' }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="8" r="4"/>
-      <path d="M3 21Q3 16 12 16 Q21 16 21 21"/>
-    </svg>
-  )
-  const IconArrowRight = ({ size = 14, color = 'currentColor' }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
-    </svg>
-  )
 
   return (
     <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', padding: '0 1.25rem' }}>

@@ -200,7 +200,7 @@ function Login() {
               {/* Description mode magic */}
               {mode === 'magic' && (
                 <p style={{ fontSize: '0.78rem', color: `${T.light}99`, marginBottom: 16, lineHeight: 1.5 }}>
-                  On t'envoie un lien sécurisé par email — aucun mot de passe à retenir.
+                  On t&apos;envoie un lien sécurisé par email — aucun mot de passe à retenir.
                 </p>
               )}
 
@@ -244,7 +244,7 @@ function Login() {
                 Vérifie ta boîte mail !
               </h2>
               <p style={{ fontSize: '0.875rem', color: T.light, lineHeight: 1.6, marginBottom: '1.5rem' }}>
-                On vient d'envoyer un lien de connexion à<br/>
+                On vient d&apos;envoyer un lien de connexion à<br/>
                 <strong style={{ color: '#fff' }}>{email}</strong><br/>
                 Clique sur le lien pour accéder à ton dashboard.
               </p>
@@ -256,7 +256,7 @@ function Login() {
                 onClick={() => { setSent(false); setEmail('') }}
                 style={{ marginTop: '1.5rem', padding: '0.6rem 1.5rem', border: `1px solid rgba(255,255,255,0.2)`, borderRadius: 100, background: 'transparent', color: T.light, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '0.82rem' }}
               >
-                ← Changer d'email
+                ← Changer d&apos;email
               </button>
             </div>
           )}

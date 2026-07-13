@@ -18,6 +18,7 @@ import {
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 // Helpers KYB (validation BCE belge mod 97).
 import { validerBCE, formaterBCECompact } from '@/lib/kyb'
+import TurnstileWidget from '@/app/components/TurnstileWidget'
 
 // Types de commerce séparés par catégorie : la liste affichée à l'étape 2
 // dépend du choix fait à l'étape 1 (alimentaire vs vitrine).
@@ -453,6 +454,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
   const [plan, setPlan] = useState(commercant?.plan || 'exister')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const turnstileRef = useRef(null)
 
   const dejaConnecte = !!session
   const plansDispos = plansDispoPourCategorie(categorie)
@@ -472,12 +474,14 @@ function Etape1Compte({ session, commercant, onCompte }) {
     if (!isPasswordStrong(password)) return setError('Ton mot de passe doit faire au moins 8 caractères et contenir 1 minuscule, 1 majuscule, 1 chiffre et 1 caractère spécial.')
     setLoading(true)
 
-    // 1) Création du compte Supabase Auth
+    // 1) Création du compte Supabase Auth (token Turnstile single-use)
+    const captchaToken = await turnstileRef.current?.getToken()
     const { data: signupData, error: signupErr } = await supabase.auth.signUp({
       email: email.trim(),
       password: password.trim(),
       options: {
         emailRedirectTo: `${window.location.origin}/auth/confirm?next=/signup`,
+        captchaToken,
       },
     })
     if (signupErr) {
@@ -489,9 +493,12 @@ function Etape1Compte({ session, commercant, onCompte }) {
     let userId = signupData.user?.id
     let s = signupData.session
     if (!s) {
-      // Tente auto-connexion si pas de session retournée (cas où email verification désactivée)
+      // Tente auto-connexion si pas de session retournée (cas où email verification
+      // désactivée). Le token Turnstile étant single-use, on en régénère un 2e.
+      const captchaToken2 = await turnstileRef.current?.getToken()
       const { data: signInData } = await supabase.auth.signInWithPassword({
         email: email.trim(), password: password.trim(),
+        options: { captchaToken: captchaToken2 },
       })
       if (signInData?.session) { s = signInData.session; userId = signInData.user?.id }
     }
@@ -636,6 +643,9 @@ function Etape1Compte({ session, commercant, onCompte }) {
         style={{ width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: loading ? `${T.main}88` : `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: '1rem', cursor: loading ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 8px 24px ${T.main}55` }}>
         {loading ? 'En cours…' : (dejaConnecte ? 'Continuer →' : 'Créer mon compte →')}
       </button>
+
+      {/* Anti-bot Cloudflare Turnstile (invisible) */}
+      <TurnstileWidget ref={turnstileRef} />
 
       <p style={{ fontSize: 11, color: T.muted, textAlign: 'center', marginTop: 12 }}>
         Déjà inscrit ? <a href="/login" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>Se connecter</a>

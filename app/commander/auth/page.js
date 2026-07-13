@@ -1,7 +1,8 @@
 'use client'
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import TurnstileWidget from '@/app/components/TurnstileWidget'
 
 const T = {
   bgPanel: '#160636',
@@ -28,6 +29,7 @@ function AuthForm() {
   const [telephone, setTelephone] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
+  const turnstileRef = useRef(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -61,10 +63,12 @@ function AuthForm() {
   async function envoyerMagicLink() {
     if (!email.trim()) return
     setLoading(true); setMessage(null)
+    const captchaToken = await turnstileRef.current?.getToken()
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim().toLowerCase(),
       options: {
         emailRedirectTo: `${window.location.origin}/commander/auth/confirm?next=${encodeURIComponent(redirect)}`,
+        captchaToken,
       }
     })
     if (error) {
@@ -78,9 +82,11 @@ function AuthForm() {
   async function seConnecter() {
     if (!email.trim() || !password.trim()) return
     setLoading(true); setMessage(null)
+    const captchaToken = await turnstileRef.current?.getToken()
     const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password,
+      options: { captchaToken },
     })
     if (error) {
       setMessage({ type: 'error', text: 'Email ou mot de passe incorrect.' })
@@ -96,12 +102,14 @@ function AuthForm() {
     if (!email.trim() || !password.trim() || !prenom.trim() || !nom.trim() || !telephone.trim()) return
     setLoading(true); setMessage(null)
     const nomComplet = `${prenom.trim()} ${nom.trim()}`.trim()
+    const captchaToken = await turnstileRef.current?.getToken()
     const { data, error } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
       password,
       options: {
         data: { nom: nomComplet },
         emailRedirectTo: `${window.location.origin}/commander/auth/confirm?next=${encodeURIComponent(redirect)}`,
+        captchaToken,
       }
     })
     if (error) {
@@ -304,6 +312,9 @@ function AuthForm() {
         style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', marginTop: 20, padding: '0.75rem', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.3)', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
         Continuer sans compte <IconArrowRight size={13} color="rgba(255,255,255,0.3)"/>
       </button>
+
+      {/* Anti-bot Cloudflare Turnstile (invisible) */}
+      <TurnstileWidget ref={turnstileRef} />
 
       <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)' }}>
         <p style={{ fontSize: '0.68rem', fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, opacity: 0.8 }}>Avec un compte Yopper</p>

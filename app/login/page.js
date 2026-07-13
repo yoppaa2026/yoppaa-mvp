@@ -1,8 +1,9 @@
 'use client'
-import { Suspense, useState, useEffect } from 'react'
+import { Suspense, useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react'
+import TurnstileWidget from '@/app/components/TurnstileWidget'
 
 const T = {
   bg:      '#F8F6FF',
@@ -38,6 +39,7 @@ function Login() {
   const searchParams = useSearchParams()
   const nextPath = searchParams?.get('next') || '/dashboard'
   const modeAdmin = nextPath === '/admin'
+  const turnstileRef = useRef(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -54,10 +56,12 @@ function Login() {
   async function envoyerMagicLink() {
     if (!email.trim()) return setError('Email obligatoire')
     setLoading(true); setError('')
+    const captchaToken = await turnstileRef.current?.getToken()
     const { error: err } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: {
         emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(nextPath)}`,
+        captchaToken,
       }
     })
     if (err) {
@@ -71,9 +75,11 @@ function Login() {
     if (!email.trim()) return setError('Email obligatoire')
     if (!password.trim()) return setError('Mot de passe obligatoire')
     setLoading(true); setError('')
+    const captchaToken = await turnstileRef.current?.getToken()
     const { error: err } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password: password.trim(),
+      options: { captchaToken },
     })
     if (err) {
       setError('Email ou mot de passe incorrect')
@@ -210,6 +216,9 @@ function Login() {
                   : (mode === 'magic' ? 'Recevoir mon lien de connexion →' : 'Se connecter →')
                 }
               </button>
+
+              {/* Anti-bot Cloudflare Turnstile (invisible) */}
+              <TurnstileWidget ref={turnstileRef} />
 
               <p style={{ fontSize: '0.72rem', color: `${T.light}66`, textAlign: 'center', marginTop: '1rem', lineHeight: 1.5 }}>
                 {modeAdmin

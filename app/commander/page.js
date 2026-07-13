@@ -3131,9 +3131,12 @@ export default function Commander() {
                   <button onClick={async () => {
                     await supabase.auth.signOut()
                     ;['yoppaa_email','yoppaa_nom','yoppaa_prenom','yoppaa_telephone','yoppaa_client_id','yoppaa_onglet'].forEach(k => localStorage.removeItem(k))
+                    // Efface aussi le cookie serveur (vrai logout : get-own ne doit plus rien renvoyer).
+                    fetch('/api/yopper/session', { method: 'DELETE' }).catch(() => {})
                     setClient({ nom:'', email:'', telephone:'', prenom:'' }); setClientId(null)
                     setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
-                    setOngletState('accueil')
+                    // On reste sur l'onglet Profil (état invité + CTA connexion) et on remonte en haut.
+                    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
                   }} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', padding: '0.875rem', background: 'transparent', color: '#DC2626', border: '1.5px solid #DC262633', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem' }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>

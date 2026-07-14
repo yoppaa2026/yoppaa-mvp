@@ -47,9 +47,11 @@ export async function generateMetadata({ params }) {
   const { slug } = await params
   const c = await getCommercant(slug)
   if (!c) {
+    // Fiche non publiée / introuvable → jamais indexée (même quand le SEO global est ON).
     return {
       title: 'Commerce · Yoppaa',
       description: 'Découvre les commerces de ton quartier sur Yoppaa.',
+      robots: { index: false, follow: false },
     }
   }
   const ville = extractVille(c.adresse)

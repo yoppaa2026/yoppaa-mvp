@@ -20,10 +20,16 @@ const jakarta = Plus_Jakarta_Sans({
   display: "swap",
 });
 
+// Interrupteur global d'indexation Google. Tant que NEXT_PUBLIC_SEO_INDEX != 'true'
+// (défaut = pré-lancement, données de test), TOUTES les pages sont en noindex/nofollow.
+// Le jour du lancement SEO : mettre NEXT_PUBLIC_SEO_INDEX=true dans Vercel + redéployer.
+const SEO_INDEX = process.env.NEXT_PUBLIC_SEO_INDEX === 'true'
+
 export const metadata: Metadata = {
   title: "Yoppaa, ton quartier dans ta poche",
   description: "Ton quartier dans ta poche. Commande avant d'arriver, récupère sans attendre.",
   manifest: "/manifest.json",
+  ...(SEO_INDEX ? {} : { robots: { index: false, follow: false } }),
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

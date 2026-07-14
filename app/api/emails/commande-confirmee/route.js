@@ -50,6 +50,14 @@ export async function POST(request) {
       prix_total:     a.prix_total,
     }))
 
+    // Le CTA "crée un mot de passe" n'est offert qu'aux clients SANS compte Supabase
+    // Auth (clients.auth_user_id NULL = pas de mot de passe possible aujourd'hui).
+    let offrirMdp = false
+    if (cmd.client_email) {
+      const { data: cli } = await supabase.from('clients').select('auth_user_id').eq('email', cmd.client_email).maybeSingle()
+      offrirMdp = !cli?.auth_user_id
+    }
+
     // 1) Email Yopper
     if (cmd.client_email) {
       try {
@@ -66,6 +74,7 @@ export async function POST(request) {
           heure_fin:               cmd.creneau?.heure_fin,
           annulation_token:        cmd.annulation_token,
           delai_annulation_heures: cmd.commercant?.delai_annulation_heures ?? 2,
+          offrir_mdp:              offrirMdp,
         })
 
         await envoyerAuCommercant({

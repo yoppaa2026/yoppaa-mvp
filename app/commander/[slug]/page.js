@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { canDo, isVitrine } from '@/lib/plans'
 import { calculerCapaciteCreneau } from '@/lib/creneaux'
@@ -2778,6 +2779,20 @@ export default function CommanderSlug() {
                   </ol>
                 </div>
               </div>
+
+              {/* Nudge optionnel : créer un mot de passe pour se reconnecter vite.
+                  Non bloquant, le magic link reste toujours dispo (voir definir-mdp). */}
+              <Link href="/commander/auth/definir-mdp" style={{ display: 'block', textDecoration: 'none', background: '#fff', borderRadius: 16, padding: '1rem 1.1rem', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
+                <p style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: T.ink, fontSize: '0.92rem', margin: '0 0 4px' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                  Crée un mot de passe
+                </p>
+                <p style={{ fontSize: '0.8rem', color: T.muted, margin: 0, lineHeight: 1.4 }}>
+                  Pour te reconnecter en un clic et retrouver tes commandes. Optionnel, le lien magique reste toujours disponible.
+                </p>
+              </Link>
 
               {isDesktop && (
                 <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, borderRadius: 20, padding: '1.25rem', marginBottom: '1rem', border: `1px solid ${T.main}44`, textAlign: 'center' }}>

@@ -24,10 +24,29 @@ const getCommercant = cache(async (slug) => {
     )
     const { data } = await supabase
       .from('commercants_public')
-      .select('nom, description, logo_url, adresse, slug, type, categorie, telephone, latitude, longitude')
+      .select('id, nom, description, logo_url, adresse, slug, type, categorie, telephone, latitude, longitude')
       .eq('slug', slug)
       .maybeSingle()
     return data
+  } catch {
+    return null
+  }
+})
+
+// Agrégat des avis (note moyenne + nombre) pour aggregateRating schema.org.
+// Les avis sont affichés sur la fiche → usage légitime des données structurées.
+const getAvisAgg = cache(async (commercantId) => {
+  if (!commercantId) return null
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      { auth: { persistSession: false } }
+    )
+    const { data } = await supabase.from('avis').select('note').eq('commercant_id', commercantId)
+    if (!data || data.length === 0) return null
+    const moyenne = data.reduce((acc, a) => acc + (a.note || 0), 0) / data.length
+    return { moyenne: Math.round(moyenne * 10) / 10, count: data.length }
   } catch {
     return null
   }
@@ -76,6 +95,7 @@ export async function generateMetadata({ params }) {
 export default async function CommercantLayout({ children, params }) {
   const { slug } = await params
   const c = await getCommercant(slug)
+  const avis = c ? await getAvisAgg(c.id) : null
   const jsonLd = c ? {
     '@context': 'https://schema.org',
     '@type': SCHEMA_TYPE[c.categorie] || 'LocalBusiness',
@@ -86,6 +106,7 @@ export default async function CommercantLayout({ children, params }) {
     ...(c.telephone ? { telephone: c.telephone } : {}),
     ...(c.adresse ? { address: { '@type': 'PostalAddress', streetAddress: c.adresse, addressCountry: 'BE' } } : {}),
     ...(c.latitude && c.longitude ? { geo: { '@type': 'GeoCoordinates', latitude: c.latitude, longitude: c.longitude } } : {}),
+    ...(avis ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: avis.moyenne, reviewCount: avis.count, bestRating: 5, worstRating: 1 } } : {}),
   } : null
   return (
     <>

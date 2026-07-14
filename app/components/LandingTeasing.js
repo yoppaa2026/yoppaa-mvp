@@ -53,6 +53,13 @@ const LAUNCH_DATE = new Date(
   || '2026-09-01T10:00:00+02:00'
 )
 
+// Libelle FR de la date d'annonce, DERIVE de REVEAL_DATE (le texte suit toujours la
+// date, plus jamais de derive en dur). Ex : "1er aout" / "1er aout 2026".
+const REVEAL_MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'][REVEAL_DATE.getMonth()]
+const REVEAL_JOUR = REVEAL_DATE.getDate() === 1 ? '1er' : String(REVEAL_DATE.getDate())
+const REVEAL_LABEL = `${REVEAL_JOUR} ${REVEAL_MOIS}`
+const REVEAL_LABEL_ANNEE = `${REVEAL_LABEL} ${REVEAL_DATE.getFullYear()}`
+
 function pad(n) { return String(n).padStart(2, '0') }
 
 // 3 phases de rendu :
@@ -143,7 +150,7 @@ export default function LandingTeasing() {
   // promet la decouverte ; entre dev. et lancement on promet le telechargement)
   const sousTexteForm = temps.phase === 'devoile'
     ? 'Laisse-nous ton email, et le 1er septembre tu seras parmi les premiers à télécharger Yoppaa.'
-    : 'Laisse-nous ton email, et le 21 juillet tu seras parmi les premiers à découvrir Yoppaa.'
+    : `Laisse-nous ton email, et le ${REVEAL_LABEL} tu seras parmi les premiers à découvrir Yoppaa.`
 
   return (
     <div style={{ minHeight: '100dvh', background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`, color: '#fff', fontFamily: '"DM Sans", sans-serif', position: 'relative', overflowX: 'hidden' }}>
@@ -212,7 +219,7 @@ export default function LandingTeasing() {
             )}
           </>
         ) : temps.phase === 'devoile' ? (
-          // MODE DEVOILE (21/07 → 31/08) : Yoppaa annonce + compteur vers 01/09
+          // MODE DEVOILE (1er août → 31/08) : Yoppaa annonce + compteur vers 01/09
           <>
             <h1 style={{ fontSize: 'clamp(2.2rem, 6vw, 3.4rem)', fontWeight: 900, letterSpacing: '-1.8px', lineHeight: 1.1, margin: '0 0 14px', maxWidth: 620 }}>
               Yoppaa, c&rsquo;est <span style={{ color: T.light }}>dévoilé</span>. 🟣
@@ -237,7 +244,7 @@ export default function LandingTeasing() {
             />
           </>
         ) : (
-          // MODE TEASING (< 21/07) : compteur vers le devoilement
+          // MODE TEASING (< 1er août) : compteur vers le devoilement
           <>
             <h1 style={{ fontSize: 'clamp(2.2rem, 6vw, 3.4rem)', fontWeight: 900, letterSpacing: '-1.8px', lineHeight: 1.1, margin: '0 0 14px', maxWidth: 620 }}>
               Quelque chose se<br/>prépare à <span style={{ color: T.light }}>Mettet</span>.
@@ -247,7 +254,7 @@ export default function LandingTeasing() {
             </h1>
             <p style={{ fontSize: '1.05rem', color: T.light, lineHeight: 1.6, maxWidth: 480, margin: '0 0 36px', opacity: 0.92 }}>
               Un projet belge. Un projet pour ton quartier.<br/>
-              Le grand dévoilement le <strong style={{ color: '#fff' }}>21 juillet 2026</strong>, jour de la fête nationale <DrapeauBelge/> 🟣
+              Le grand dévoilement le <strong style={{ color: '#fff' }}>{REVEAL_LABEL_ANNEE}</strong>. 🟣
             </p>
             <CompteurEtForm
               temps={temps}

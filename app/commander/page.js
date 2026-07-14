@@ -3108,6 +3108,17 @@ export default function Commander() {
                 )}
 
                 {client.email && (
+                  <button onClick={() => router.push('/commander/auth/definir-mdp')}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.pale}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', marginBottom: 10, fontFamily: '"DM Sans", sans-serif' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    Créer un mot de passe
+                  </button>
+                )}
+
+                {client.email && (
                   <button onClick={async () => {
                     await supabase.auth.signOut()
                     ;['yoppaa_email','yoppaa_nom','yoppaa_prenom','yoppaa_telephone','yoppaa_client_id','yoppaa_onglet'].forEach(k => localStorage.removeItem(k))

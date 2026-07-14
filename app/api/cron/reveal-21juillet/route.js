@@ -4,7 +4,8 @@
 // 'teasing' qui ne l'ont pas encore reçu, une fois la date de dévoilement passée.
 //
 // Comportement :
-//   - Avant NEXT_PUBLIC_REVEAL_DATE (défaut 2026-07-21T10:00:00+02:00) : no-op
+//   - Avant NEXT_PUBLIC_REVEAL_DATE (défaut 2026-08-01T10:00:00+02:00, annonce
+//     déplacée du 21/07 au 1er août le 14/07) : no-op
 //   - À partir du jour J : envoie aux pré-inscrits teasing avec
 //     notification_reveal_envoyee = false
 //   - Anti-doublon : notification_reveal_envoyee + notification_reveal_envoyee_at
@@ -49,7 +50,7 @@ async function handle(req) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const revealDate = new Date(process.env.NEXT_PUBLIC_REVEAL_DATE || '2026-07-21T10:00:00+02:00')
+  const revealDate = new Date(process.env.NEXT_PUBLIC_REVEAL_DATE || '2026-08-01T10:00:00+02:00')
   const now = new Date()
 
   if (now < revealDate) {

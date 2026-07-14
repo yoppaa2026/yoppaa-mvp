@@ -39,13 +39,14 @@ const T = {
 //
 // Format ISO avec offset CEST belge +02:00 (juillet + septembre).
 // Variables d'env Vercel :
-// - NEXT_PUBLIC_REVEAL_DATE  (defaut 2026-07-21T10:00:00+02:00)
-// - NEXT_PUBLIC_LAUNCH_DATE  (defaut 2026-09-01T10:00:00+02:00)
+// - NEXT_PUBLIC_REVEAL_DATE  (annonce, defaut 2026-08-01T10:00:00+02:00)
+// - NEXT_PUBLIC_LAUNCH_DATE  (lancement app, defaut 2026-09-01T10:00:00+02:00)
 // Retro-compat : NEXT_PUBLIC_LANDING_REVEAL_DATE (ancien nom) -> REVEAL_DATE.
+// NB : annonce deplacee du 21/07 au 1er aout (decision 14/07).
 const REVEAL_DATE = new Date(
   process.env.NEXT_PUBLIC_REVEAL_DATE
   || process.env.NEXT_PUBLIC_LANDING_REVEAL_DATE
-  || '2026-07-21T10:00:00+02:00'
+  || '2026-08-01T10:00:00+02:00'
 )
 const LAUNCH_DATE = new Date(
   process.env.NEXT_PUBLIC_LAUNCH_DATE

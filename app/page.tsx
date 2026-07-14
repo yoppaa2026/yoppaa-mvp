@@ -1,8 +1,8 @@
 import { getLandingMode } from '@/lib/landing-mode'
 import LandingTeasing from './components/LandingTeasing'
 
-// Page d'accueil / : bascule automatique Teasing → Reveal selon LANDING_REVEAL_DATE.
-// Mode Teasing (avant 7/07 09h) → page minimaliste mysterieuse.
+// Page d'accueil / : bascule automatique Teasing → Reveal selon NEXT_PUBLIC_REVEAL_DATE.
+// Mode Teasing (avant le 1er août 10h) → page minimaliste mysterieuse.
 // Mode Reveal (apres) → landing complete 9 sections (sera ajoutee dans Sprint Reveal).
 //
 // L'ancienne home /commander reste accessible directement via /commander.
@@ -11,10 +11,10 @@ export const dynamic = 'force-dynamic'  // sinon Next.js cache la page statique
 
 export const metadata = {
   title: 'Yoppaa — Quelque chose se prépare à Mettet',
-  description: 'Un projet belge. Un projet pour ton quartier. Reveal complet le 7 juillet 2026.',
+  description: 'Un projet belge. Un projet pour ton quartier. Grande annonce le 1er août 2026.',
   openGraph: {
     title: 'Yoppaa — Quelque chose se prépare à Mettet',
-    description: 'Un projet belge. Un projet pour ton quartier. Reveal complet le 7 juillet 2026.',
+    description: 'Un projet belge. Un projet pour ton quartier. Grande annonce le 1er août 2026.',
     type: 'website',
     locale: 'fr_BE',
   },

@@ -32,10 +32,18 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { geocoderAdresse } from '@/lib/geocode'
+import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 
 export async function POST(request) {
   try {
     requireStripe()
+
+    // Anti-spam commandes (#3) : 10 commandes / 60 s par IP. Fail-open si Upstash
+    // absent/injoignable (voir lib/ratelimit.js).
+    const rl = await checkLimit(ordersLimiter, clientIp(request))
+    if (!rl.success) {
+      return NextResponse.json({ ok: false, error: 'Trop de commandes en peu de temps. Réessaie dans un instant.' }, { status: 429 })
+    }
 
     const body = await request.json()
     const {

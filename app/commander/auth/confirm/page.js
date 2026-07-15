@@ -19,14 +19,20 @@ function ConfirmHandler() {
         const { data, error } = await supabase.auth.verifyOtp({ token_hash, type })
         if (!error && data.session) {
           // Créer ou récupérer le profil client côté serveur (RLS clients verrouillé).
-          const email = data.session.user.email
-          const resClient = await fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-or-create', email }) })
+          // On lit prénom/nom/téléphone depuis user_metadata (saisis au signup) : avec la
+          // confirmation email active, il n'y a pas de session au signup, donc l'upsert
+          // client direct échoue et les infos seraient perdues sans ça.
+          const u = data.session.user
+          const md = u.user_metadata || {}
+          const email = u.email
+          const resClient = await fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-or-create', email, prenom: md.prenom || null, nom: md.nom_famille || null, telephone: md.telephone || null }) })
           const client = (await resClient.json().catch(() => ({})))?.client
           if (client) {
             localStorage.setItem('yoppaa_client_id', client.id)
             localStorage.setItem('yoppaa_email', email)
             if (client.prenom) localStorage.setItem('yoppaa_prenom', client.prenom)
             if (client.nom) localStorage.setItem('yoppaa_nom', client.nom)
+            if (client.telephone) localStorage.setItem('yoppaa_telephone', client.telephone)
           }
           localStorage.setItem('yoppaa_onboarding_done', '1'); router.replace(next)
         } else {

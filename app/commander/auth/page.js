@@ -133,7 +133,10 @@ function AuthForm() {
       email: email.trim().toLowerCase(),
       password,
       options: {
-        data: { nom: nomComplet, has_password: true },
+        // prenom/nom_famille/telephone en metadata : indispensables pour recréer le
+        // client complet à la confirmation email (pas de session au signup → l'upsert
+        // client direct échoue sous RLS). has_password : pour "Modifier" vs "Créer".
+        data: { nom: nomComplet, prenom: prenom.trim(), nom_famille: nom.trim(), telephone: telephone.trim(), has_password: true },
         emailRedirectTo: `${window.location.origin}/commander/auth/confirm?next=${encodeURIComponent(redirect)}`,
         captchaToken,
       }

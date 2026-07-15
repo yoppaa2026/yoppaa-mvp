@@ -194,6 +194,33 @@ const ETAPES = [
 ]
 
 // ─── COMPOSANT PRINCIPAL ──────────────────────────────────────────────────────
+// Crée le commerçant + sa ligne d'onboarding (nécessite une session Supabase active,
+// les RLS exigeant auth.uid()). Partagé entre la création directe (confirmation email
+// OFF) et la reprise au retour de confirmation (confirmation email ON).
+async function creerCommercantEtOnboarding(userId, email, categorie, plan) {
+  const { data: c, error: cErr } = await supabase.from('commercants').insert({
+    auth_user_id: userId,
+    email,
+    nom: 'Mon commerce',
+    type: 'À définir',
+    categorie,
+    plan,
+    plan_actif_depuis: new Date().toISOString(),
+    statut: 'en_cours_onboarding',
+    statut_publication: 'brouillon',
+  }).select().single()
+  if (cErr) return { error: `Création commerçant : ${cErr.message}` }
+
+  const { data: ob, error: obErr } = await supabase.from('onboarding_commercants').insert({
+    commercant_id: c.id,
+    etape_actuelle: 2,
+    plan_choisi: plan,
+  }).select().single()
+  if (obErr) return { error: `Initialisation onboarding : ${obErr.message}`, commercant: c }
+
+  return { commercant: c, onboarding: ob }
+}
+
 export default function Signup() {
   const router = useRouter()
   const [checking, setChecking] = useState(true)
@@ -249,8 +276,24 @@ export default function Signup() {
             setOnboarding(newOb)
             setEtape(2)
           }
+        } else {
+          // Session sans commerçant : reprise après confirmation d'email ? Si un choix
+          // plan/catégorie est en attente (creerCompte l'a mémorisé avant la confirmation),
+          // on crée le commerçant maintenant (session présente → RLS OK). Sinon on reste
+          // à l'étape 1 pour création.
+          let pending = null
+          try { pending = JSON.parse(localStorage.getItem('yoppaa_pending_commercant') || 'null') } catch (e) {}
+          if (pending?.categorie && pending?.plan) {
+            const res = await creerCommercantEtOnboarding(s.user.id, s.user.email, pending.categorie, pending.plan)
+            try { localStorage.removeItem('yoppaa_pending_commercant') } catch (e) {}
+            if (annule) return
+            if (res.commercant) {
+              setCommercant(res.commercant)
+              if (res.onboarding) { setOnboarding(res.onboarding); setEtape(res.onboarding.etape_actuelle || 2) }
+              else setEtape(2)
+            }
+          }
         }
-        // Session sans commercant : on reste à l'étape 1 pour création
       }
       setChecking(false)
     }
@@ -508,38 +551,28 @@ function Etape1Compte({ session, commercant, onCompte }) {
       return
     }
 
-    // 2) Création du commerçant (champs minimaux, complétés à l'étape 2)
-    const { data: c, error: cErr } = await supabase.from('commercants').insert({
-      auth_user_id: userId,
-      email: email.trim(),
-      nom: 'Mon commerce',
-      type: 'À définir',
-      categorie,
-      plan,
-      plan_actif_depuis: new Date().toISOString(),
-      statut: 'en_cours_onboarding',
-      statut_publication: 'brouillon',
-    }).select().single()
-    if (cErr) {
-      setError(`Création commerçant : ${cErr.message}`)
+    // Mémorise le choix plan/catégorie pour la reprise après confirmation d'email.
+    try { localStorage.setItem('yoppaa_pending_commercant', JSON.stringify({ categorie, plan })) } catch (e) {}
+
+    // Confirmation d'email ACTIVE : signUp ne renvoie pas de session tant que l'email
+    // n'est pas confirmé. On ne peut pas créer le commerçant (RLS exige auth.uid). On
+    // invite à confirmer ; le commerçant sera créé au retour (init détecte la session).
+    if (!s) {
+      setError('Compte créé ! Vérifie ta boîte mail pour confirmer ton adresse, puis reviens sur cette page pour finaliser ton inscription.')
       setLoading(false)
       return
     }
 
-    // 3) Création de la ligne onboarding_commercants
-    const { data: ob, error: obErr } = await supabase.from('onboarding_commercants').insert({
-      commercant_id: c.id,
-      etape_actuelle: 2,
-      plan_choisi: plan,
-    }).select().single()
-    if (obErr) {
-      setError(`Initialisation onboarding : ${obErr.message}`)
+    // Session active → création immédiate du commerçant + onboarding.
+    const res = await creerCommercantEtOnboarding(userId, email.trim(), categorie, plan)
+    if (res.error) {
+      setError(res.error)
       setLoading(false)
       return
     }
-
+    try { localStorage.removeItem('yoppaa_pending_commercant') } catch (e) {}
     setLoading(false)
-    onCompte(s, c, ob)
+    onCompte(s, res.commercant, res.onboarding)
   }
 
   // Si déjà connecté, juste mettre à jour catégorie + plan choisi

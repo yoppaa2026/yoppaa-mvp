@@ -1427,12 +1427,15 @@ export default function Commander() {
   }, [])
 
   // Détecte si le compte Supabase a déjà un mot de passe (user_metadata.has_password)
-  // pour afficher "Modifier" plutôt que "Créer" dans le Profil.
+  // pour afficher "Modifier" plutôt que "Créer" dans le Profil. On écoute
+  // onAuthStateChange (fiable dès que la session est prête : SIGNED_IN au load,
+  // USER_UPDATED après définition du mdp) + un getUser initial de secours.
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setAMotDePasse(!!data?.user?.user_metadata?.has_password)
-    }).catch(() => {})
-  }, [clientId])
+    const check = (user) => setAMotDePasse(!!user?.user_metadata?.has_password)
+    supabase.auth.getUser().then(({ data }) => check(data?.user)).catch(() => {})
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => check(session?.user))
+    return () => { try { sub?.subscription?.unsubscribe() } catch (e) {} }
+  }, [])
 
   // ─── Polling client 5s ─────────────────────────────────────────────────────
   // IMPORTANT : on relit localStorage à CHAQUE tick (pas seulement au mount).

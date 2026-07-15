@@ -1302,6 +1302,7 @@ export default function Commander() {
   const [commercantsFavoris, setCommercantsFavoris] = useState([])
   const [client, setClient] = useState({ nom: '', email: '', telephone: '', prenom: '' })
   const [clientId, setClientId] = useState(null)
+  const [aMotDePasse, setAMotDePasse] = useState(false)  // le compte Supabase a-t-il déjà un mot de passe ?
   const [clientCommandes, setClientCommandes] = useState([])
   const [clientRdvs, setClientRdvs] = useState([])
   // Commune du Yopper (référentiel `communes` joint via clients.commune_id)
@@ -1424,6 +1425,14 @@ export default function Commander() {
         .catch(() => {})
     })
   }, [])
+
+  // Détecte si le compte Supabase a déjà un mot de passe (user_metadata.has_password)
+  // pour afficher "Modifier" plutôt que "Créer" dans le Profil.
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setAMotDePasse(!!data?.user?.user_metadata?.has_password)
+    }).catch(() => {})
+  }, [clientId])
 
   // ─── Polling client 5s ─────────────────────────────────────────────────────
   // IMPORTANT : on relit localStorage à CHAQUE tick (pas seulement au mount).
@@ -3114,7 +3123,7 @@ export default function Commander() {
                       <rect x="3" y="11" width="18" height="11" rx="2"/>
                       <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                     </svg>
-                    Créer un mot de passe
+                    {aMotDePasse ? 'Modifier mon mot de passe' : 'Créer un mot de passe'}
                   </button>
                 )}
 

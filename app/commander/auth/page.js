@@ -133,7 +133,7 @@ function AuthForm() {
       email: email.trim().toLowerCase(),
       password,
       options: {
-        data: { nom: nomComplet },
+        data: { nom: nomComplet, has_password: true },
         emailRedirectTo: `${window.location.origin}/commander/auth/confirm?next=${encodeURIComponent(redirect)}`,
         captchaToken,
       }
@@ -278,6 +278,10 @@ function AuthForm() {
           <button onClick={seConnecter} disabled={!email.trim() || !password.trim() || loading}
             style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: !email.trim() || !password.trim() || loading ? 0.5 : 1 }}>
             {loading ? 'Connexion…' : (<>Se connecter <IconArrowRight size={16} color="#fff"/></>)}
+          </button>
+          <button onClick={() => router.push('/commander/auth/definir-mdp')}
+            style={{ width: '100%', marginTop: 10, padding: '0.5rem', background: 'transparent', border: 'none', color: T.light, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textDecoration: 'underline' }}>
+            Mot de passe oublié ?
           </button>
           <button onClick={() => setMode('signup')}
             style={{ width: '100%', marginTop: 10, padding: '0.75rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 100, color: 'rgba(255,255,255,0.6)', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>

@@ -91,7 +91,9 @@ export default function DefinirMdpPage() {
       return
     }
     setLoading(true); setMessage(null)
-    const { error } = await supabase.auth.updateUser({ password })
+    // has_password marque le compte comme ayant un mot de passe (permet au Profil
+    // d'afficher "Modifier" plutôt que "Créer").
+    const { error } = await supabase.auth.updateUser({ password, data: { has_password: true } })
     if (error) {
       setMessage({ type: 'error', text: error.message || 'Erreur lors de la création du mot de passe.' })
       setLoading(false); return

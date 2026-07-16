@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import SectionTousCommercants from './SectionTousCommercants'
 import SectionKYBAValider from './SectionKYBAValider'
+import SectionPreinscriptions from './SectionPreinscriptions'
 import { Sparkles, Store, Scissors, Croissant, ShoppingBag, Phone, Eye, Lock } from 'lucide-react'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
@@ -150,7 +151,7 @@ export default function AdminPage() {
   if (session.user.email !== ADMIN_EMAIL) {
     return <CenteredMsg variant="error">
       <strong>Accès refusé.</strong><br/>
-      Cette page est réservée à l'équipe Yoppaa.<br/>
+      Cette page est réservée à l&apos;équipe Yoppaa.<br/>
       <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
         style={{ marginTop: 16, padding: '10px 22px', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
         Se déconnecter
@@ -184,6 +185,9 @@ export default function AdminPage() {
 
       <main style={{ maxWidth: 1080, margin: '0 auto', padding: '24px 16px 80px' }}>
         {loading && <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement…</p>}
+
+        {/* Préinscriptions (suivi de croissance) */}
+        <SectionPreinscriptions />
 
         {/* À valider */}
         <section style={{ marginBottom: 32 }}>
@@ -228,7 +232,7 @@ export default function AdminPage() {
             Historique <span style={{ color: T.muted, fontWeight: 700, fontSize: 14 }}>· 50 dernières actions</span>
           </h2>
           {historique.length === 0 ? (
-            <p style={{ color: T.muted, fontSize: 13, fontStyle: 'italic' }}>Aucune action enregistrée pour l'instant.</p>
+            <p style={{ color: T.muted, fontSize: 13, fontStyle: 'italic' }}>Aucune action enregistrée pour l&apos;instant.</p>
           ) : (
             <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${T.hairline}`, overflow: 'hidden' }}>
               {historique.map((h, i) => (

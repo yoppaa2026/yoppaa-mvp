@@ -12,6 +12,7 @@ import { useState, useEffect, useRef } from 'react'
 import Script from 'next/script'
 import { Lock } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
+import PartageMobilisation from './PartageMobilisation'
 
 const T = {
   ink:     '#1A0840',
@@ -398,10 +399,14 @@ function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, s
 
       {/* Formulaire pre-inscription */}
       {statut.envoi === 'ok' ? (
-        <div style={{ background: 'rgba(16,185,129,0.15)', border: '1.5px solid #10B98166', borderRadius: 18, padding: '24px 22px', maxWidth: 460, width: '100%', backdropFilter: 'blur(12px)' }}>
-          <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#A7F3D0' }}>
-            ✓ {statut.message}
-          </p>
+        <div style={{ maxWidth: 460, width: '100%' }}>
+          <div style={{ background: 'rgba(16,185,129,0.15)', border: '1.5px solid #10B98166', borderRadius: 18, padding: '24px 22px', backdropFilter: 'blur(12px)' }}>
+            <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#A7F3D0' }}>
+              ✓ {statut.message}
+            </p>
+          </div>
+          {/* Pic viral : juste après la préinscription, on invite à faire grandir la tribu. */}
+          <PartageMobilisation/>
         </div>
       ) : (
         <form onSubmit={soumettre} style={{ background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 18, padding: '24px 22px', maxWidth: 460, width: '100%', backdropFilter: 'blur(12px)' }}>

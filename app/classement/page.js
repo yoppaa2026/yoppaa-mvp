@@ -8,7 +8,7 @@
 
 import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
-import PartageMobilisation from './PartageMobilisation'
+import PartageMobilisation from '../components/PartageMobilisation'
 
 export const revalidate = 60
 

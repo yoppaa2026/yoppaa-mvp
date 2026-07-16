@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { canDo, isVitrine } from '@/lib/plans'
 import { calculerCapaciteCreneau } from '@/lib/creneaux'
 import { redirectTop } from '@/lib/redirect-top'
+import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import PillsStatut from '../PillsStatut'
 import CTAUpgrade from '../CTAUpgrade'
 import ModalSignalement from '../ModalSignalement'
@@ -857,6 +858,10 @@ export default function CommanderSlug() {
         if (data) {
           setDerniereCommande({ ...data, numeroSequentiel: data.numero_commande })
           allerEtape(4)
+          // Moment de plus forte intention : le Yopper vient de commander, on l'invite
+          // à activer les push pour suivre le statut (prêt à retirer, en livraison...).
+          // Sans ça, un Yopper qui ne met jamais de favori n'était jamais sollicité.
+          promptPushOneSignal()
           try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
         }
       })()

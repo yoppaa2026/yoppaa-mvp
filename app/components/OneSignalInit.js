@@ -91,6 +91,30 @@ export function taggerFavoriOneSignal(commercantId, ajoute) {
   })
 }
 
+// À appeler après une commande/RDV confirmé : invite le Yopper à activer les push
+// pour suivre le statut de sa commande. Sans ça, un Yopper qui commande sans jamais
+// ajouter de favori n'était JAMAIS sollicité pour les push -> aucune notif de statut
+// (bug remonté 16/07). Le Slidedown OneSignal s'affiche sans user gesture ; le clic
+// « Autoriser » dessus sert de gesture pour le prompt natif du navigateur.
+// No-op si déjà abonné ou permission déjà accordée/refusée définitivement.
+export function promptPushOneSignal() {
+  pushOneSignal(async (OneSignal) => {
+    try {
+      const optedIn = OneSignal.User?.PushSubscription?.optedIn
+      const permission = OneSignal.Notifications?.permission
+      // permission === false = refus explicite du navigateur : on ne re-sollicite pas.
+      if (optedIn || permission === true || permission === false) return
+      if (OneSignal.Slidedown?.promptPush) {
+        OneSignal.Slidedown.promptPush({ force: true })
+      } else if (OneSignal.Notifications?.requestPermission) {
+        await OneSignal.Notifications.requestPermission()
+      }
+    } catch (e) {
+      console.warn('[OneSignal] prompt push post-commande échoué', e?.message)
+    }
+  })
+}
+
 export default function OneSignalInit({ yopperId, codePostal, favoris = [] }) {
   useEffect(() => {
     if (!APP_ID) return

@@ -366,9 +366,21 @@ function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, s
             <span style={{ fontSize: 'clamp(2.4rem, 7vw, 3.6rem)', fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1, color: '#fff', fontVariantNumeric: 'tabular-nums', textShadow: '0 4px 24px #6B35C480' }}>
               {pad(val)}
             </span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#C4A0F4', textTransform: 'uppercase', letterSpacing: 1.2, marginTop: 4, opacity: 0.85 }}>{label}</span>
+            <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: 1.2, marginTop: 4 }}>{label}</span>
           </div>
         ))}
+      </div>
+
+      {/* Message d'accueil : parle aux deux publics (commerçants + curieux).
+          Texte blanc haut contraste (jamais de violet pâle, surtout en petit). */}
+      <div style={{ maxWidth: 460, width: '100%', margin: '0 auto 18px', padding: '14px 16px', borderRadius: 16, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)' }}>
+        <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 800, color: '#fff', lineHeight: 1.4 }}>
+          Sur Yoppaa, tout le monde a sa place.
+        </p>
+        <p style={{ margin: 0, fontSize: 13.5, fontWeight: 500, color: 'rgba(255,255,255,0.92)', lineHeight: 1.55 }}>
+          Commerçant alimentaire, de service ou de détail : tu peux <strong style={{ color: '#fff', fontWeight: 800 }}>exister</strong> et te faire connaître dans ton quartier.<br/>
+          Simplement curieux ? Suis la vie de tes commerces et <strong style={{ color: '#fff', fontWeight: 800 }}>rejoins la tribu Yoppaa</strong>. 🟣
+        </p>
       </div>
 
       {/* Formulaire pre-inscription */}
@@ -381,7 +393,7 @@ function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, s
       ) : (
         <form onSubmit={soumettre} style={{ background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 18, padding: '24px 22px', maxWidth: 460, width: '100%', backdropFilter: 'blur(12px)' }}>
           <p style={{ fontSize: 14, fontWeight: 800, color: '#fff', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.8 }}>Sois prévenu en premier</p>
-          <p style={{ fontSize: 12, color: '#C4A0F4', margin: '0 0 16px', opacity: 0.85, lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.82)', margin: '0 0 16px', lineHeight: 1.5 }}>
             {sousTexteForm}
           </p>
 
@@ -416,7 +428,7 @@ function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, s
                     <div style={{ height: 7, borderRadius: 100, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', margin: '8px 0 6px' }}>
                       <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: 'linear-gradient(90deg, #9660E0, #C4A0F4)', transition: 'width 0.4s' }}/>
                     </div>
-                    <p style={{ margin: 0, fontSize: 11.5, fontWeight: 600, color: '#C4A0F4' }}>
+                    <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.92)' }}>
                       {reste > 0 ? `Plus que ${reste} pour débloquer ta commune` : 'Objectif de mobilisation atteint !'}
                     </p>
                   </>
@@ -478,7 +490,7 @@ function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, s
             </p>
           )}
 
-          <p style={{ margin: '14px 0 0', fontSize: 11, color: '#C4A0F4', opacity: 0.7, textAlign: 'center', lineHeight: 1.5 }}>
+          <p style={{ margin: '14px 0 0', fontSize: 11, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 1.5 }}>
             <Lock size={11} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Aucun spam. Données protégées.
           </p>
         </form>

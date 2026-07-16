@@ -133,12 +133,13 @@ export default async function ClassementPage() {
         </div>
 
         {/* Teaser gratuité (promesse fondatrice, pas de grille tarifaire) */}
-        <div style={{ marginBottom: '1.8rem', padding: '14px 16px', borderRadius: 16, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, boxShadow: `0 8px 26px ${T.main}55` }}>
-          <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 900, color: '#fff', lineHeight: 1.4 }}>
-            Commerçant ? Être présent sur Yoppaa sera toujours gratuit.
+        <div style={{ marginBottom: '1.8rem', padding: '16px 18px', borderRadius: 16, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, boxShadow: `0 8px 26px ${T.main}55` }}>
+          <p style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: '#fff', lineHeight: 1.25, letterSpacing: '-0.3px' }}>
+            0 % de commission. Toujours.
           </p>
-          <p style={{ margin: '4px 0 0', fontSize: '0.82rem', fontWeight: 600, color: 'rgba(255,255,255,0.92)', lineHeight: 1.5 }}>
-            Ta place ne s&rsquo;achète pas. On ne vend jamais le classement. 🟣
+          <p style={{ margin: '6px 0 0', fontSize: '0.85rem', fontWeight: 600, color: 'rgba(255,255,255,0.94)', lineHeight: 1.5 }}>
+            Ta présence sur Yoppaa est gratuite, et on ne prend jamais un centime sur tes ventes.
+            Ta place ne s&rsquo;achète pas. 🟣
           </p>
         </div>
 

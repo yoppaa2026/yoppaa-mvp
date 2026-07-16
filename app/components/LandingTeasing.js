@@ -139,7 +139,8 @@ export default function LandingTeasing() {
       if (!/^\d{4}$/.test(cp)) { if (vivant) setCommuneStats(null); return }
       fetch(`/api/communes/stats?cp=${cp}`)
         .then(r => r.json())
-        .then(j => { if (vivant) setCommuneStats(j?.ok && j?.found ? j : null) })
+        // CP valide mais commune hors zone -> marqueur horsZone (garde-fou), sinon les stats.
+        .then(j => { if (vivant) setCommuneStats(j?.ok ? (j.found ? j : { horsZone: true }) : null) })
         .catch(() => { if (vivant) setCommuneStats(null) })
     }, 400)
     return () => { vivant = false; clearTimeout(t) }
@@ -370,6 +371,78 @@ function DrapeauBelge() {
 // Bloc compteur + formulaire pre-inscription. Partage entre les modes teasing
 // et devoile (le compteur cible REVEAL_DATE en teasing, LAUNCH_DATE en devoile
 // via la valeur de temps.phase qui pilote calculerEtatTemps).
+// Incitant mobilisation, réutilisable (formulaire + écran de succès). Commune ciblée
+// si code postal saisi (found), garde-fou 'hors zone' si CP valide mais non couvert,
+// sinon compteur global. Jauge = commerçants (l'offre), curieux non plafonnés.
+function IncitantMobilisation({ communeStats, globalStats }) {
+  const boxSt = { margin: '0 0 14px', padding: '12px 14px', borderRadius: 12, background: 'rgba(150,96,224,0.14)', border: '1px solid rgba(196,160,244,0.35)' }
+  const ligneSt = { margin: 0, fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.45 }
+  const sousSt = { margin: 0, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.92)' }
+  const barre = (pct) => (
+    <div style={{ height: 7, borderRadius: 100, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', margin: '8px 0 6px' }}>
+      <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: 'linear-gradient(90deg, #9660E0, #C4A0F4)', transition: 'width 0.4s' }}/>
+    </div>
+  )
+
+  if (communeStats?.horsZone) {
+    return (
+      <div style={boxSt}>
+        <p style={ligneSt}>Yoppaa se déploie région par région 🟣</p>
+        <p style={{ ...sousSt, marginTop: 6 }}>Laisse ton email, on prévient ta commune dès qu&rsquo;on arrive chez toi.</p>
+      </div>
+    )
+  }
+
+  if (communeStats) {
+    const com = communeStats.nb_commercants || 0
+    const seuil = Math.max(1, communeStats.seuil_preinscrits || 10)
+    const hab = communeStats.nb_yoppers || 0
+    const pct = Math.min(100, Math.round((com / seuil) * 100))
+    const atteint = com >= seuil
+    if (communeStats.active) {
+      return (
+        <div style={boxSt}>
+          <p style={ligneSt}>Yoppaa est disponible à <strong>{communeStats.nom}</strong> 🟣</p>
+          {barre(100)}
+          <p style={sousSt}>{hab > 0 ? `${hab} habitant${hab > 1 ? 's' : ''} déjà dans la tribu` : 'Rejoins la tribu !'}</p>
+        </div>
+      )
+    }
+    return (
+      <div style={boxSt}>
+        <p style={ligneSt}>
+          {atteint
+            ? <><strong>{communeStats.nom}</strong> a réuni ses {seuil} commerçants, lancement imminent 🟣</>
+            : <><strong>{com}/{seuil}</strong> commerçants pour lancer <strong>{communeStats.nom}</strong> 🟣</>}
+        </p>
+        {barre(pct)}
+        <p style={sousSt}>
+          {hab > 0
+            ? `${hab} habitant${hab > 1 ? 's' : ''} attendent déjà. Fais-en parler autour de toi.`
+            : 'Sois le premier habitant à te mobiliser.'}
+        </p>
+      </div>
+    )
+  }
+
+  if (globalStats) {
+    const com = globalStats.total_commercants || 0
+    const hab = globalStats.total_yoppers || 0
+    const petit = (com + hab) < 5
+    return (
+      <div style={boxSt}>
+        <p style={ligneSt}>
+          {petit
+            ? <>Sois parmi les tout premiers à faire venir Yoppaa dans ta commune 🟣</>
+            : <>Déjà <strong>{com}</strong> commerçant{com > 1 ? 's' : ''} et <strong>{hab}</strong> curieux mobilisés 🟣</>}
+        </p>
+        <p style={{ ...sousSt, marginTop: 6 }}>Entre ton code postal pour voir où en est ta commune.</p>
+      </div>
+    )
+  }
+  return null
+}
+
 function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, siteKey, turnstileRef, sousTexteForm, communeStats, globalStats }) {
   return (
     <>
@@ -410,6 +483,10 @@ function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, s
               ✓ {statut.message}
             </p>
           </div>
+          {/* Après validation : on montre la progression de sa commune (motivant) puis le partage. */}
+          <div style={{ marginTop: 16 }}>
+            <IncitantMobilisation communeStats={communeStats} globalStats={globalStats}/>
+          </div>
           {/* Pic viral : juste après la préinscription, on invite à faire grandir la tribu. */}
           <PartageMobilisation/>
         </div>
@@ -428,68 +505,7 @@ function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, s
             value={form.code_postal} onChange={e => setForm(p => ({ ...p, code_postal: e.target.value.replace(/\D/g, '').slice(0,4) }))}
             style={inputStyle}/>
 
-          {/* Incitant mobilisation. Commune ciblée si code postal saisi, sinon compteur
-              global permanent. Jauge de déblocage = commerçants (l'offre qui rend une
-              commune utile) ; les curieux (habitants) sont comptés sans plafond. */}
-          {(() => {
-            const boxSt = { margin: '-4px 0 14px', padding: '12px 14px', borderRadius: 12, background: 'rgba(150,96,224,0.14)', border: '1px solid rgba(196,160,244,0.35)' }
-            const ligneSt = { margin: 0, fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.45 }
-            const sousSt = { margin: 0, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.92)' }
-            const Barre = ({ pct }) => (
-              <div style={{ height: 7, borderRadius: 100, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', margin: '8px 0 6px' }}>
-                <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: 'linear-gradient(90deg, #9660E0, #C4A0F4)', transition: 'width 0.4s' }}/>
-              </div>
-            )
-
-            if (communeStats) {
-              const com = communeStats.nb_commercants || 0
-              const seuil = Math.max(1, communeStats.seuil_preinscrits || 10)
-              const hab = communeStats.nb_yoppers || 0
-              const pct = Math.min(100, Math.round((com / seuil) * 100))
-              const atteint = com >= seuil
-              if (communeStats.active) {
-                return (
-                  <div style={boxSt}>
-                    <p style={ligneSt}>Yoppaa est disponible à <strong>{communeStats.nom}</strong> 🟣</p>
-                    <Barre pct={100}/>
-                    <p style={sousSt}>{hab > 0 ? `${hab} habitant${hab > 1 ? 's' : ''} déjà dans la tribu` : 'Rejoins la tribu !'}</p>
-                  </div>
-                )
-              }
-              return (
-                <div style={boxSt}>
-                  <p style={ligneSt}>
-                    {atteint
-                      ? <><strong>{communeStats.nom}</strong> a réuni ses {seuil} commerçants, lancement imminent 🟣</>
-                      : <><strong>{com}/{seuil}</strong> commerçants pour lancer <strong>{communeStats.nom}</strong> 🟣</>}
-                  </p>
-                  <Barre pct={pct}/>
-                  <p style={sousSt}>
-                    {hab > 0
-                      ? `${hab} habitant${hab > 1 ? 's' : ''} attendent déjà. Fais-en parler autour de toi.`
-                      : 'Sois le premier habitant à te mobiliser.'}
-                  </p>
-                </div>
-              )
-            }
-
-            if (globalStats) {
-              const com = globalStats.total_commercants || 0
-              const hab = globalStats.total_yoppers || 0
-              const petit = (com + hab) < 5
-              return (
-                <div style={boxSt}>
-                  <p style={ligneSt}>
-                    {petit
-                      ? <>Sois parmi les tout premiers à faire venir Yoppaa dans ta commune 🟣</>
-                      : <>Déjà <strong>{com}</strong> commerçant{com > 1 ? 's' : ''} et <strong>{hab}</strong> curieux mobilisés 🟣</>}
-                  </p>
-                  <p style={{ ...sousSt, marginTop: 6 }}>Entre ton code postal pour voir où en est ta commune.</p>
-                </div>
-              )
-            }
-            return null
-          })()}
+          <IncitantMobilisation communeStats={communeStats} globalStats={globalStats}/>
 
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
             {[

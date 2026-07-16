@@ -204,15 +204,15 @@ export default function LandingTeasing() {
     : `Laisse-nous ton email, et le ${REVEAL_LABEL} tu seras parmi les premiers à découvrir Yoppaa.`
 
   return (
-    <div style={{ minHeight: '100dvh', background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`, color: '#fff', fontFamily: '"DM Sans", sans-serif', position: 'relative', overflowX: 'hidden' }}>
+    <div style={{ minHeight: '100svh', background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`, color: '#fff', fontFamily: '"DM Sans", sans-serif', position: 'relative', overflowX: 'hidden' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
       <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" async defer/>
 
       {/* Halo decoratif */}
-      <div aria-hidden="true" style={{ position: 'absolute', top: '-200px', right: '-200px', width: 600, height: 600, borderRadius: '50%', background: `radial-gradient(circle, ${T.main}33 0%, transparent 60%)`, pointerEvents: 'none' }}/>
-      <div aria-hidden="true" style={{ position: 'absolute', bottom: '-300px', left: '-200px', width: 700, height: 700, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}25 0%, transparent 60%)`, pointerEvents: 'none' }}/>
+      <div aria-hidden="true" style={{ position: 'fixed', top: '-200px', right: '-200px', width: 600, height: 600, borderRadius: '50%', background: `radial-gradient(circle, ${T.main}33 0%, transparent 60%)`, pointerEvents: 'none', zIndex: 0 }}/>
+      <div aria-hidden="true" style={{ position: 'fixed', bottom: '-300px', left: '-200px', width: 700, height: 700, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}25 0%, transparent 60%)`, pointerEvents: 'none', zIndex: 0 }}/>
 
-      <main style={{ maxWidth: 720, margin: '0 auto', padding: '40px 20px 60px', position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', minHeight: '100dvh', justifyContent: 'center' }}>
+      <main style={{ maxWidth: 720, margin: '0 auto', padding: '40px 20px 60px', position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', minHeight: '100svh', justifyContent: 'center' }}>
 
         {/* Logo canonique Yoppaa : wordmark + 5 dots V2-B (proportions strictes
             dotBase = wordmarkSize * 0.254, cf. composant <YoppaaLogo>).

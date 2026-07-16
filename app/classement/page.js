@@ -1,123 +1,167 @@
-// Page publique « Classement des communes » (Ch2 Mobilisation).
+// Page publique « Mobilisation des communes » (Ch2).
 //
-// Server Component : SSR + revalidation périodique (pas de client, c'est de
-// l'affichage). Lit la vue agrégée `commune_stats` (aucun PII, GRANT anon).
-// Mécanique : chaque commune progresse vers son `seuil_preinscrits`. Le seuil ne
-// met PAS la commune live (c'est le flag admin `active`), il alimente la barre
-// de mobilisation. Voir MIGRATION_CH2_MOBILISATION.sql.
+// Server Component : SSR + revalidation périodique. Lit la vue agrégée
+// `commune_stats` (aucun PII, GRANT anon). Objectif : donner envie de mobiliser
+// sa commune. Jauge de déblocage = COMMERÇANTS (l'offre) ; les curieux (habitants)
+// sont comptés sans plafond. Le seuil ne met pas la commune live (flag admin
+// `active`), il alimente la barre. Voir MIGRATION_CH2_MOBILISATION.sql.
 
 import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
 
-export const revalidate = 60  // ISR : la page se régénère au max toutes les 60s
+export const revalidate = 60
 
 export const metadata = {
-  title: 'Classement des communes · Yoppaa',
-  description: 'Mobilise ta commune pour faire venir Yoppaa. Plus vous êtes nombreux à vous préinscrire, plus vite Yoppaa arrive chez toi.',
+  title: 'Mobilise ta commune · Yoppaa',
+  description: "Fais venir Yoppaa dans ta commune. Chaque commerce qui rejoint la tribu rapproche ta commune du lancement. Être présent sur Yoppaa sera toujours gratuit.",
 }
 
 const T = {
   bgTop: '#160636', deep: '#2D0F6B', ink: '#1A0840',
   main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF',
+  gold: '#F5C542', silver: '#C7CDD8', bronze: '#D08A4E', green: '#10B981', greenLight: '#6EE7B7',
 }
 
-async function getClassement() {
+async function getData() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) return []
+  if (!url || !key) return { communes: [], totalCommercants: 0, totalYoppers: 0 }
   const supabase = createClient(url, key, { auth: { persistSession: false } })
   const { data, error } = await supabase
     .from('commune_stats')
     .select('commune_id, nom, province, active, seuil_preinscrits, nb_preinscrits, nb_commercants, nb_yoppers')
-    .order('nb_preinscrits', { ascending: false })
-    .order('nom', { ascending: true })
-    .limit(200)
+    .limit(500)
   if (error) {
     console.error('[classement] lecture commune_stats KO', error.message)
-    return []
+    return { communes: [], totalCommercants: 0, totalYoppers: 0 }
   }
-  // On met en avant les communes avec au moins 1 inscrit, ou déjà disponibles.
-  return (data || []).filter(c => (c.nb_preinscrits || 0) > 0 || c.active)
+  const rows = data || []
+  const totalCommercants = rows.reduce((n, c) => n + (c.nb_commercants || 0), 0)
+  const totalYoppers = rows.reduce((n, c) => n + (c.nb_yoppers || 0), 0)
+  // Classement : commerçants d'abord (la jauge), puis curieux, puis alpha.
+  const communes = rows
+    .filter(c => (c.nb_preinscrits || 0) > 0 || c.active)
+    .sort((a, b) =>
+      (b.nb_commercants || 0) - (a.nb_commercants || 0) ||
+      (b.nb_yoppers || 0) - (a.nb_yoppers || 0) ||
+      a.nom.localeCompare(b.nom))
+  return { communes, totalCommercants, totalYoppers }
 }
 
-// Jauge de déblocage = commerçants (l'offre qui rend une commune utile).
-function BarreProgression({ commercants, seuil }) {
-  const cible = Math.max(1, Number(seuil) || 10)
-  const val = Number(commercants || 0)
-  const pct = Math.min(100, Math.round((val / cible) * 100))
+const medalColor = (i) => (i === 0 ? T.gold : i === 1 ? T.silver : i === 2 ? T.bronze : null)
+
+function CarteCommune({ c, rang }) {
+  const seuil = Math.max(1, Number(c.seuil_preinscrits) || 10)
+  const com = c.nb_commercants || 0
+  const hab = c.nb_yoppers || 0
+  const reste = Math.max(0, seuil - com)
+  const pct = Math.min(100, Math.round((com / seuil) * 100))
+  const prete = com >= seuil
+  const medal = medalColor(rang)
+
   return (
-    <div style={{ marginTop: 8 }}>
-      <div style={{ height: 8, borderRadius: 100, background: 'rgba(255,255,255,0.10)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: `linear-gradient(90deg, ${T.main}, ${T.light})`, transition: 'width 0.4s' }}/>
+    <div style={{ position: 'relative', background: 'rgba(255,255,255,0.06)', border: `1px solid ${prete ? T.green + '66' : medal ? medal + '55' : 'rgba(255,255,255,0.12)'}`, borderRadius: 18, padding: '1rem 1.1rem', backdropFilter: 'blur(12px)', boxShadow: medal ? `0 6px 26px ${medal}22` : 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 12, background: medal ? `linear-gradient(135deg, ${medal}, ${medal}bb)` : 'rgba(255,255,255,0.10)', color: medal ? T.ink : '#fff', fontWeight: 900, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: medal ? `0 3px 12px ${medal}66` : 'none' }}>
+          {rang + 1}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontWeight: 800, fontSize: '1.05rem', color: '#fff' }}>
+            {c.nom}
+            {c.province && <span style={{ fontWeight: 600, fontSize: '0.76rem', color: 'rgba(255,255,255,0.72)', marginLeft: 8 }}>{c.province}</span>}
+          </p>
+          <p style={{ margin: '2px 0 0', fontSize: '0.76rem', color: 'rgba(255,255,255,0.82)', fontWeight: 600 }}>
+            <strong style={{ color: '#fff' }}>{com}</strong> commerçant{com > 1 ? 's' : ''} · <strong style={{ color: '#fff' }}>{hab}</strong> curieux
+          </p>
+        </div>
+        <span style={{ flexShrink: 0, padding: '4px 11px', borderRadius: 100, fontSize: '0.66rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.4px', background: c.active ? T.green + '22' : prete ? T.green + '22' : 'rgba(255,255,255,0.10)', color: c.active || prete ? T.greenLight : 'rgba(255,255,255,0.9)', border: `1px solid ${c.active || prete ? T.green + '55' : 'rgba(255,255,255,0.22)'}` }}>
+          {c.active ? 'Disponible' : prete ? 'Prête' : 'En cours'}
+        </span>
       </div>
-      <p style={{ margin: '5px 0 0', fontSize: '0.72rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
-        {val} / {cible} commerçants {val >= cible ? '· prête à lancer 🟣' : 'pour lancer la commune'}
-      </p>
+
+      {!c.active && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ height: 9, borderRadius: 100, background: 'rgba(255,255,255,0.10)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: prete ? `linear-gradient(90deg, ${T.green}, ${T.greenLight})` : `linear-gradient(90deg, ${T.main}, ${T.light})`, transition: 'width 0.4s' }}/>
+          </div>
+          <p style={{ margin: '6px 0 0', fontSize: '0.74rem', fontWeight: 800, color: prete ? T.greenLight : '#fff' }}>
+            {prete
+              ? `Objectif atteint, ${c.nom} est prête à être lancée !`
+              : reste === seuil
+                ? `Sois le 1er commerçant à lancer ${c.nom}`
+                : `Plus que ${reste} commerçant${reste > 1 ? 's' : ''} pour lancer ${c.nom} !`}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StatBloc({ valeur, label }) {
+  return (
+    <div style={{ flex: 1, textAlign: 'center', padding: '14px 8px', borderRadius: 16, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}>
+      <p style={{ margin: 0, fontSize: '2rem', fontWeight: 900, color: '#fff', letterSpacing: '-1px', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{valeur}</p>
+      <p style={{ margin: '4px 0 0', fontSize: '0.72rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.6px' }}>{label}</p>
     </div>
   )
 }
 
 export default async function ClassementPage() {
-  const communes = await getClassement()
-  const totalInscrits = communes.reduce((n, c) => n + (c.nb_preinscrits || 0), 0)
+  const { communes, totalCommercants, totalYoppers } = await getData()
 
   return (
     <div style={{ minHeight: '100dvh', background: `linear-gradient(160deg, ${T.bgTop} 0%, ${T.deep} 55%, ${T.ink} 100%)`, fontFamily: '"DM Sans", system-ui, sans-serif', padding: '2rem 1rem 3rem' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
       <div style={{ maxWidth: 640, margin: '0 auto' }}>
 
-        {/* En-tête */}
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2rem', letterSpacing: '-0.05em', color: '#fff', lineHeight: 1, marginBottom: 14 }}>yoppaa</p>
-          <h1 style={{ fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.5px', margin: '0 0 10px' }}>Mobilise ta commune</h1>
-          <p style={{ fontSize: '0.92rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.55, margin: 0 }}>
-            Plus vous êtes nombreux à vous préinscrire, plus vite Yoppaa arrive chez toi.
-            Voici où en sont les communes.
+        {/* Hero */}
+        <div style={{ textAlign: 'center', marginBottom: '1.6rem' }}>
+          <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2rem', letterSpacing: '-0.05em', color: '#fff', lineHeight: 1, marginBottom: 16 }}>yoppaa</p>
+          <h1 style={{ fontWeight: 900, fontSize: 'clamp(1.7rem, 5vw, 2.2rem)', color: '#fff', letterSpacing: '-1px', lineHeight: 1.1, margin: '0 0 12px' }}>
+            Fais venir Yoppaa<br/>dans ta commune
+          </h1>
+          <p style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.88)', lineHeight: 1.55, margin: '0 auto', maxWidth: 460 }}>
+            Chaque commerce qui rejoint la tribu rapproche ta commune du lancement.
+            Regarde la mobilisation grimper. 🟣
           </p>
-          {totalInscrits > 0 && (
-            <p style={{ marginTop: 14, display: 'inline-block', padding: '6px 14px', borderRadius: 100, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)', color: '#fff', fontWeight: 800, fontSize: '0.85rem' }}>
-              {totalInscrits} préinscrits au total 🟣
-            </p>
-          )}
+        </div>
+
+        {/* Compteurs globaux */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: '1.2rem' }}>
+          <StatBloc valeur={totalCommercants} label="Commerçants mobilisés"/>
+          <StatBloc valeur={totalYoppers} label="Curieux dans la tribu"/>
+        </div>
+
+        {/* Teaser gratuité (promesse fondatrice, pas de grille tarifaire) */}
+        <div style={{ marginBottom: '1.8rem', padding: '14px 16px', borderRadius: 16, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, boxShadow: `0 8px 26px ${T.main}55` }}>
+          <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 900, color: '#fff', lineHeight: 1.4 }}>
+            Commerçant ? Être présent sur Yoppaa sera toujours gratuit.
+          </p>
+          <p style={{ margin: '4px 0 0', fontSize: '0.82rem', fontWeight: 600, color: 'rgba(255,255,255,0.92)', lineHeight: 1.5 }}>
+            Ta place ne s&rsquo;achète pas. On ne vend jamais le classement. 🟣
+          </p>
         </div>
 
         {/* Liste */}
         {communes.length === 0 ? (
-          <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.85)', fontSize: '0.9rem' }}>
-            Sois le premier à préinscrire ta commune !
-          </p>
+          <div style={{ textAlign: 'center', padding: '1.5rem', borderRadius: 16, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}>
+            <p style={{ color: '#fff', fontSize: '1rem', fontWeight: 800, margin: '0 0 6px' }}>La mobilisation démarre.</p>
+            <p style={{ color: 'rgba(255,255,255,0.82)', fontSize: '0.88rem', margin: 0 }}>Sois le tout premier à lancer ta commune.</p>
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {communes.map((c, i) => (
-              <div key={c.commune_id} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: '1rem 1.1rem', backdropFilter: 'blur(12px)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 10, background: i < 3 ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : 'rgba(255,255,255,0.10)', color: '#fff', fontWeight: 900, fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {i + 1}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, fontWeight: 800, fontSize: '1rem', color: '#fff' }}>
-                      {c.nom}
-                      {c.province && <span style={{ fontWeight: 600, fontSize: '0.78rem', color: 'rgba(255,255,255,0.72)', marginLeft: 8 }}>{c.province}</span>}
-                    </p>
-                    <p style={{ margin: '2px 0 0', fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)' }}>
-                      {c.nb_yoppers || 0} yoppers · {c.nb_commercants || 0} commerçants
-                    </p>
-                  </div>
-                  <span style={{ flexShrink: 0, padding: '4px 10px', borderRadius: 100, fontSize: '0.68rem', fontWeight: 800, background: c.active ? '#10B98122' : 'rgba(255,255,255,0.10)', color: c.active ? '#6EE7B7' : 'rgba(255,255,255,0.9)', border: `1px solid ${c.active ? '#10B98155' : 'rgba(255,255,255,0.22)'}` }}>
-                    {c.active ? 'Disponible' : 'En mobilisation'}
-                  </span>
-                </div>
-                {!c.active && <BarreProgression commercants={c.nb_commercants} seuil={c.seuil_preinscrits}/>}
-              </div>
-            ))}
+            {communes.map((c, i) => <CarteCommune key={c.commune_id} c={c} rang={i}/>)}
           </div>
         )}
 
-        {/* CTA préinscription */}
-        <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
-          <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '0.85rem 1.6rem', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', textDecoration: 'none', boxShadow: `0 8px 24px ${T.main}55` }}>
-            Préinscrire ma commune
+        {/* CTA */}
+        <div style={{ textAlign: 'center', marginTop: '2.2rem', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+          <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '0.9rem 1.8rem', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.98rem', textDecoration: 'none', boxShadow: `0 8px 24px ${T.main}55` }}>
+            Préinscris ton commerce
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+          </Link>
+          <Link href="/" style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 700, fontSize: '0.85rem', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.35)', paddingBottom: 1 }}>
+            Simplement curieux ? Rejoins la tribu
           </Link>
         </div>
       </div>

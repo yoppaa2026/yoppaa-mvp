@@ -44,7 +44,16 @@ export async function POST(request) {
       email, code_postal, type_utilisateur, message,
       turnstile_token, consentement_marketing,
       utm_source, utm_medium, utm_campaign,
+      ref_commercant,
     } = body || {}
+
+    // Slug d'attribution (?ref=) : nettoyé au format slug, borné en longueur.
+    // On ne valide pas l'existence du commerçant ici (le lien peut pointer un
+    // commerçant préinscrit pas encore en base) ; l'attribution est exploitée au
+    // reporting. Nettoyage strict pour éviter tout contenu parasite.
+    const refCommercant = ref_commercant
+      ? String(ref_commercant).trim().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 120) || null
+      : null
 
     // 1) Validations basiques
     if (!email || !RE_EMAIL.test(email.trim().toLowerCase())) {
@@ -80,6 +89,22 @@ export async function POST(request) {
     const codePostalNormalise = String(code_postal).trim()
     const messageNormalise = message ? String(message).trim().slice(0, 1000) : null
 
+    // Résolution commune via le code postal (array codes_postaux sur communes).
+    // Best-effort : si aucune commune ne matche (CP hors périmètre), commune_id
+    // reste null et la préinscription est quand même enregistrée.
+    let communeId = null
+    try {
+      const { data: com } = await supabase
+        .from('communes')
+        .select('id')
+        .contains('codes_postaux', [codePostalNormalise])
+        .limit(1)
+        .maybeSingle()
+      communeId = com?.id || null
+    } catch (e) {
+      console.warn('[pre-inscription] résolution commune KO (non-bloquant)', e?.message)
+    }
+
     // 4) Upsert dans Supabase (UNIQUE email+type → on update si existe deja)
     const { data: rowExistant } = await supabase
       .from('pre_inscriptions')
@@ -96,10 +121,14 @@ export async function POST(request) {
         .from('pre_inscriptions')
         .update({
           code_postal: codePostalNormalise,
+          commune_id: communeId,
           message: messageNormalise,
           mode_landing,
           source: mode_landing === 'teasing' ? 'teasing' : (utm_source || 'direct'),
           utm_source, utm_medium, utm_campaign,
+          // On ne réécrit ref_commercant que s'il est fourni : ne pas effacer une
+          // attribution déjà posée si l'inscrit revient via un lien direct sans ?ref.
+          ...(refCommercant ? { ref_commercant: refCommercant } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq('id', preInscriptionId)
@@ -110,11 +139,13 @@ export async function POST(request) {
         .insert({
           email: emailNormalise,
           code_postal: codePostalNormalise,
+          commune_id: communeId,
           type_utilisateur,
           message: messageNormalise,
           mode_landing,
           source: mode_landing === 'teasing' ? 'teasing' : (utm_source || 'direct'),
           utm_source, utm_medium, utm_campaign,
+          ref_commercant: refCommercant,
           user_agent: userAgent,
           consentement_marketing: true,
         })

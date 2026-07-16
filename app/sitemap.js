@@ -13,6 +13,7 @@ export default async function sitemap() {
   const staticRoutes = [
     { url: BASE_URL, lastModified: now, changeFrequency: 'daily', priority: 1 },
     { url: `${BASE_URL}/commander`, lastModified: now, changeFrequency: 'daily', priority: 0.9 },
+    { url: `${BASE_URL}/classement`, lastModified: now, changeFrequency: 'daily', priority: 0.7 },
   ]
 
   let fiches = []

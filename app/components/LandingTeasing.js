@@ -88,6 +88,9 @@ export default function LandingTeasing() {
   const [statut, setStatut] = useState({ envoi: 'idle', message: null })  // 'idle'|'envoi'|'ok'|'ko'
   const [turnstileToken, setTurnstileToken] = useState(null)
   const turnstileRef = useRef(null)
+  // Attribution : ?ref=<slug commercant> (liens du Kit lancement) + utm bruts.
+  // Capturés une fois au montage pour survivre à un éventuel nettoyage d'URL.
+  const attributionRef = useRef({ ref_commercant: null, utm_source: null, utm_medium: null, utm_campaign: null })
 
   // Compteur en temps reel (tick chaque seconde). Quand on franchit
   // REVEAL_DATE ou LAUNCH_DATE, le rendu bascule automatiquement.
@@ -96,6 +99,18 @@ export default function LandingTeasing() {
     const tick = () => setTemps(calculerEtatTemps())
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
+  }, [])
+
+  // Capture des paramètres d'attribution depuis l'URL (une fois au montage).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const p = new URLSearchParams(window.location.search)
+    attributionRef.current = {
+      ref_commercant: p.get('ref') || null,
+      utm_source: p.get('utm_source') || null,
+      utm_medium: p.get('utm_medium') || null,
+      utm_campaign: p.get('utm_campaign') || null,
+    }
   }, [])
 
   // Turnstile invisible callback : on stocke le token quand recu
@@ -122,6 +137,7 @@ export default function LandingTeasing() {
           message: form.message,
           consentement_marketing: form.consentement_marketing,
           turnstile_token: turnstileToken,
+          ...attributionRef.current,
         }),
       })
       const j = await res.json()

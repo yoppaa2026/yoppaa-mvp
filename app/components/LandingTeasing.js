@@ -391,7 +391,7 @@ function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, s
           Sur Yoppaa, tout le monde a sa place.
         </p>
         <p style={{ margin: 0, fontSize: 13.5, fontWeight: 500, color: 'rgba(255,255,255,0.92)', lineHeight: 1.55 }}>
-          Commerçant alimentaire, de service ou de détail : tu peux <strong style={{ color: '#fff', fontWeight: 800 }}>exister gratuitement</strong> et te faire connaître dans ton quartier.<br/>
+          Commerçant alimentaire, de service ou de détail : tu peux <strong style={{ color: '#fff', fontWeight: 800 }}>exister</strong> et te faire connaître dans ton quartier.<br/>
           Simplement curieux ? Suis la vie de tes commerces et <strong style={{ color: '#fff', fontWeight: 800 }}>rejoins la tribu Yoppaa</strong>. 🟣
         </p>
       </div>

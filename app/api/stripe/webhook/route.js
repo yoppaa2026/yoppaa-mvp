@@ -345,6 +345,23 @@ async function envoyerEmailsCommande(commandeId, supabase) {
   if (cmd.client_email) {
     try {
       const cren = cmd.mode_retrait === 'livraison' ? cmd.creneau_livraison : cmd.creneau
+      // CTA "crée un mot de passe" : offert à tout Yopper qui n'a PAS encore de mot de
+      // passe utilisable. Même critère que le Profil (user_metadata.has_password) pour
+      // rester cohérent. Le webhook est le VRAI émetteur de cet email, il calcule donc
+      // offrir_mdp lui-même (sinon le bloc n'apparaît jamais).
+      //  - invité pur (auth_user_id NULL) : pas de compte -> proposer.
+      //  - compte magic link (auth_user_id présent, has_password absent) : proposer aussi.
+      //  - compte avec mot de passe (has_password true) : ne pas proposer.
+      const { data: cli } = await supabase.from('clients').select('auth_user_id').eq('email', cmd.client_email).maybeSingle()
+      let offrirMdp = !cli?.auth_user_id
+      if (cli?.auth_user_id) {
+        try {
+          const { data: au } = await supabase.auth.admin.getUserById(cli.auth_user_id)
+          offrirMdp = au?.user?.user_metadata?.has_password !== true
+        } catch {
+          offrirMdp = false  // en cas de doute (lookup KO), on ne nag pas un compte existant
+        }
+      }
       const html = emailCommandeConfirmee({
         yopper_prenom:           prenom,
         commercant_nom:          cmd.commercant?.nom || '',
@@ -361,6 +378,7 @@ async function envoyerEmailsCommande(commandeId, supabase) {
         frais_livraison:         cmd.frais_livraison,
         annulation_token:        cmd.annulation_token,
         delai_annulation_heures: cmd.commercant?.delai_annulation_heures ?? 2,
+        offrir_mdp:              offrirMdp,
       })
       await envoyerAuCommercant({
         to: cmd.client_email,

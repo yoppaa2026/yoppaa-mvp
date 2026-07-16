@@ -12,6 +12,7 @@ import { useState, useEffect, useRef } from 'react'
 import Script from 'next/script'
 import { Lock } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
+import Link from 'next/link'
 import PartageMobilisation from './PartageMobilisation'
 
 const T = {
@@ -328,9 +329,13 @@ export default function LandingTeasing() {
         )}
 
         {/* Footer minimal (commun aux 2 modes) */}
-        <footer style={{ marginTop: 60, fontSize: 11, color: T.light, opacity: 0.6, lineHeight: 1.7 }}>
-          <p style={{ margin: 0 }}>📧 hello@yoppaa.app · 📍 Belgique</p>
-          <p style={{ margin: '6px 0 0' }}>Yoppaa est un projet d&rsquo;Avcotech SRL · BCE 0731.637.148</p>
+        <footer style={{ marginTop: 60, fontSize: 11, color: 'rgba(255,255,255,0.62)', lineHeight: 1.7 }}>
+          <p style={{ margin: 0, fontWeight: 700, color: 'rgba(255,255,255,0.78)' }}>Un projet belge indépendant 🟣</p>
+          <p style={{ margin: '6px 0 0' }}>
+            <a href="mailto:hello@yoppaa.app" style={{ color: 'inherit', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.25)' }}>hello@yoppaa.app</a>
+            {' · '}
+            <Link href="/legal" style={{ color: 'inherit', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.25)' }}>Mentions légales</Link>
+          </p>
         </footer>
       </main>
 

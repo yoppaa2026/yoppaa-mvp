@@ -88,6 +88,7 @@ export default function LandingTeasing() {
   const [statut, setStatut] = useState({ envoi: 'idle', message: null })  // 'idle'|'envoi'|'ok'|'ko'
   const [turnstileToken, setTurnstileToken] = useState(null)
   const [communeStats, setCommuneStats] = useState(null)  // incitant : compteur de la commune saisie
+  const [globalStats, setGlobalStats] = useState(null)    // incitant permanent : totaux globaux
   const turnstileRef = useRef(null)
   // Attribution : ?ref=<slug commercant> (liens du Kit lancement) + utm bruts.
   // Capturés une fois au montage pour survivre à un éventuel nettoyage d'URL.
@@ -100,6 +101,16 @@ export default function LandingTeasing() {
     const tick = () => setTemps(calculerEtatTemps())
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
+  }, [])
+
+  // Totaux globaux de mobilisation (affichage permanent, avant saisie du CP).
+  useEffect(() => {
+    let vivant = true
+    fetch('/api/communes/stats')
+      .then(r => r.json())
+      .then(j => { if (vivant && j?.ok && j?.global) setGlobalStats(j) })
+      .catch(() => {})
+    return () => { vivant = false }
   }, [])
 
   // Capture des paramètres d'attribution depuis l'URL (une fois au montage).
@@ -279,6 +290,7 @@ export default function LandingTeasing() {
               turnstileRef={turnstileRef}
               sousTexteForm={sousTexteForm}
               communeStats={communeStats}
+              globalStats={globalStats}
             />
           </>
         ) : (
@@ -309,6 +321,7 @@ export default function LandingTeasing() {
               turnstileRef={turnstileRef}
               sousTexteForm={sousTexteForm}
               communeStats={communeStats}
+              globalStats={globalStats}
             />
           </>
         )}
@@ -351,7 +364,7 @@ function DrapeauBelge() {
 // Bloc compteur + formulaire pre-inscription. Partage entre les modes teasing
 // et devoile (le compteur cible REVEAL_DATE en teasing, LAUNCH_DATE en devoile
 // via la valeur de temps.phase qui pilote calculerEtatTemps).
-function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, siteKey, turnstileRef, sousTexteForm, communeStats }) {
+function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, siteKey, turnstileRef, sousTexteForm, communeStats, globalStats }) {
   return (
     <>
       {/* Compteur */}
@@ -405,36 +418,61 @@ function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, s
             value={form.code_postal} onChange={e => setForm(p => ({ ...p, code_postal: e.target.value.replace(/\D/g, '').slice(0,4) }))}
             style={inputStyle}/>
 
-          {/* Incitant : compteur de la commune saisie (preuve sociale, aucun nom). */}
-          {communeStats && (() => {
-            const nb = communeStats.nb_preinscrits || 0
-            const seuil = Math.max(1, communeStats.seuil_preinscrits || 50)
-            const reste = Math.max(0, seuil - nb)
-            const pct = Math.min(100, Math.round((nb / seuil) * 100))
-            const pionnier = nb < 5
-            return (
-              <div style={{ margin: '-4px 0 14px', padding: '12px 14px', borderRadius: 12, background: 'rgba(150,96,224,0.14)', border: '1px solid rgba(196,160,244,0.35)' }}>
-                {communeStats.active ? (
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.45 }}>
-                    Yoppaa est déjà disponible à <strong>{communeStats.nom}</strong> 🟣
-                  </p>
-                ) : (
-                  <>
-                    <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.45 }}>
-                      {pionnier
-                        ? <>Sois parmi les premiers pionniers de <strong>{communeStats.nom}</strong> 🟣</>
-                        : <><strong>{nb}</strong> personnes attendent déjà Yoppaa à <strong>{communeStats.nom}</strong> 🟣</>}
-                    </p>
-                    <div style={{ height: 7, borderRadius: 100, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', margin: '8px 0 6px' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: 'linear-gradient(90deg, #9660E0, #C4A0F4)', transition: 'width 0.4s' }}/>
-                    </div>
-                    <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.92)' }}>
-                      {reste > 0 ? `Plus que ${reste} pour débloquer ta commune` : 'Objectif de mobilisation atteint !'}
-                    </p>
-                  </>
-                )}
+          {/* Incitant mobilisation. Commune ciblée si code postal saisi, sinon compteur
+              global permanent. Jauge de déblocage = commerçants (l'offre qui rend une
+              commune utile) ; les curieux (habitants) sont comptés sans plafond. */}
+          {(() => {
+            const boxSt = { margin: '-4px 0 14px', padding: '12px 14px', borderRadius: 12, background: 'rgba(150,96,224,0.14)', border: '1px solid rgba(196,160,244,0.35)' }
+            const ligneSt = { margin: 0, fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.45 }
+            const sousSt = { margin: 0, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.92)' }
+            const Barre = ({ pct }) => (
+              <div style={{ height: 7, borderRadius: 100, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', margin: '8px 0 6px' }}>
+                <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: 'linear-gradient(90deg, #9660E0, #C4A0F4)', transition: 'width 0.4s' }}/>
               </div>
             )
+
+            if (communeStats) {
+              const com = communeStats.nb_commercants || 0
+              const seuil = Math.max(1, communeStats.seuil_preinscrits || 10)
+              const hab = communeStats.nb_yoppers || 0
+              const pct = Math.min(100, Math.round((com / seuil) * 100))
+              const atteint = com >= seuil
+              if (communeStats.active) {
+                return <div style={boxSt}><p style={ligneSt}>Yoppaa est déjà disponible à <strong>{communeStats.nom}</strong> 🟣</p></div>
+              }
+              return (
+                <div style={boxSt}>
+                  <p style={ligneSt}>
+                    {atteint
+                      ? <><strong>{communeStats.nom}</strong> a réuni ses {seuil} commerçants, lancement imminent 🟣</>
+                      : <><strong>{com}/{seuil}</strong> commerçants pour lancer <strong>{communeStats.nom}</strong> 🟣</>}
+                  </p>
+                  <Barre pct={pct}/>
+                  <p style={sousSt}>
+                    {hab > 0
+                      ? `${hab} habitant${hab > 1 ? 's' : ''} attendent déjà. Fais-en parler autour de toi.`
+                      : 'Sois le premier habitant à te mobiliser.'}
+                  </p>
+                </div>
+              )
+            }
+
+            if (globalStats) {
+              const com = globalStats.total_commercants || 0
+              const hab = globalStats.total_yoppers || 0
+              const petit = (com + hab) < 5
+              return (
+                <div style={boxSt}>
+                  <p style={ligneSt}>
+                    {petit
+                      ? <>Sois parmi les tout premiers à faire venir Yoppaa dans ta commune 🟣</>
+                      : <>Déjà <strong>{com}</strong> commerçant{com > 1 ? 's' : ''} et <strong>{hab}</strong> curieux mobilisés 🟣</>}
+                  </p>
+                  <p style={{ ...sousSt, marginTop: 6 }}>Entre ton code postal pour voir où en est ta commune.</p>
+                </div>
+              )
+            }
+            return null
           })()}
 
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>

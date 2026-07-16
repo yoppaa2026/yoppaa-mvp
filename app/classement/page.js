@@ -40,16 +40,18 @@ async function getClassement() {
   return (data || []).filter(c => (c.nb_preinscrits || 0) > 0 || c.active)
 }
 
-function BarreProgression({ valeur, seuil }) {
-  const cible = Math.max(1, Number(seuil) || 50)
-  const pct = Math.min(100, Math.round((Number(valeur || 0) / cible) * 100))
+// Jauge de déblocage = commerçants (l'offre qui rend une commune utile).
+function BarreProgression({ commercants, seuil }) {
+  const cible = Math.max(1, Number(seuil) || 10)
+  const val = Number(commercants || 0)
+  const pct = Math.min(100, Math.round((val / cible) * 100))
   return (
     <div style={{ marginTop: 8 }}>
       <div style={{ height: 8, borderRadius: 100, background: 'rgba(255,255,255,0.10)', overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: `linear-gradient(90deg, ${T.main}, ${T.light})`, transition: 'width 0.4s' }}/>
       </div>
       <p style={{ margin: '5px 0 0', fontSize: '0.72rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
-        {valeur || 0} / {cible} préinscrits {pct >= 100 ? '· objectif atteint 🟣' : ''}
+        {val} / {cible} commerçants {val >= cible ? '· prête à lancer 🟣' : 'pour lancer la commune'}
       </p>
     </div>
   )
@@ -105,7 +107,7 @@ export default async function ClassementPage() {
                     {c.active ? 'Disponible' : 'En mobilisation'}
                   </span>
                 </div>
-                {!c.active && <BarreProgression valeur={c.nb_preinscrits} seuil={c.seuil_preinscrits}/>}
+                {!c.active && <BarreProgression commercants={c.nb_commercants} seuil={c.seuil_preinscrits}/>}
               </div>
             ))}
           </div>

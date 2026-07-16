@@ -83,7 +83,7 @@ function calculerEtatTemps() {
 export default function LandingTeasing() {
   const [temps, setTemps] = useState(calculerEtatTemps())
   const [form, setForm] = useState({
-    email: '', code_postal: '', type_utilisateur: 'yopper', message: '', consentement_marketing: true,
+    email: '', code_postal: '', type_utilisateur: 'yopper', commercant_nom: '', message: '', consentement_marketing: true,
   })
   const [statut, setStatut] = useState({ envoi: 'idle', message: null })  // 'idle'|'envoi'|'ok'|'ko'
   const [turnstileToken, setTurnstileToken] = useState(null)
@@ -134,6 +134,7 @@ export default function LandingTeasing() {
           email: form.email,
           code_postal: form.code_postal,
           type_utilisateur: form.type_utilisateur,
+          commercant_nom: form.commercant_nom,
           message: form.message,
           consentement_marketing: form.consentement_marketing,
           turnstile_token: turnstileToken,
@@ -157,6 +158,7 @@ export default function LandingTeasing() {
 
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
   const formValide = form.email.trim() && /^\d{4}$/.test(form.code_postal.trim()) && form.consentement_marketing
+    && (form.type_utilisateur !== 'commercant' || !!form.commercant_nom.trim())
   // URLs stores en env (vides tant que les apps ne sont pas publiees).
   const appstoreUrl  = process.env.NEXT_PUBLIC_APPSTORE_URL || ''
   const playstoreUrl = process.env.NEXT_PUBLIC_PLAYSTORE_URL || ''
@@ -381,6 +383,18 @@ function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, s
               )
             })}
           </div>
+
+          {/* Nom de commerce : requis si commerçant (son enseigne), optionnel si
+              curieux (un commerce qu'il aimerait voir). */}
+          <input type="text"
+            required={form.type_utilisateur === 'commercant'}
+            maxLength={160}
+            placeholder={form.type_utilisateur === 'commercant'
+              ? 'Le nom de ton commerce'
+              : 'Un commerce que tu aimerais sur Yoppaa ? (optionnel)'}
+            value={form.commercant_nom}
+            onChange={e => setForm(p => ({ ...p, commercant_nom: e.target.value }))}
+            style={inputStyle}/>
 
           <textarea placeholder="Un message ? (optionnel)" rows={2}
             value={form.message} onChange={e => setForm(p => ({ ...p, message: e.target.value.slice(0, 500) }))}

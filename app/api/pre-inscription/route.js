@@ -44,8 +44,13 @@ export async function POST(request) {
       email, code_postal, type_utilisateur, message,
       turnstile_token, consentement_marketing,
       utm_source, utm_medium, utm_campaign,
-      ref_commercant,
+      ref_commercant, commercant_nom,
     } = body || {}
+
+    // Nom de commerce saisi par l'inscrit (texte libre) : son enseigne s'il est
+    // commerçant, ou un commerce qu'il aimerait voir s'il est curieux. Distinct de
+    // ref_commercant (slug d'attribution via ?ref).
+    const commercantNom = commercant_nom ? String(commercant_nom).trim().slice(0, 160) : null
 
     // Slug d'attribution (?ref=) : nettoyé au format slug, borné en longueur.
     // On ne valide pas l'existence du commerçant ici (le lien peut pointer un
@@ -67,6 +72,10 @@ export async function POST(request) {
     }
     if (consentement_marketing !== true) {
       return NextResponse.json({ ok: false, error: 'Consentement marketing requis' }, { status: 400 })
+    }
+    // Le nom du commerce est requis pour un commerçant (on veut toujours l'enseigne).
+    if (type_utilisateur === 'commercant' && (!commercant_nom || !String(commercant_nom).trim())) {
+      return NextResponse.json({ ok: false, error: 'Le nom de ton commerce est requis' }, { status: 400 })
     }
 
     // 2) Verification Turnstile
@@ -122,6 +131,7 @@ export async function POST(request) {
         .update({
           code_postal: codePostalNormalise,
           commune_id: communeId,
+          commercant_nom: commercantNom,
           message: messageNormalise,
           mode_landing,
           source: mode_landing === 'teasing' ? 'teasing' : (utm_source || 'direct'),
@@ -140,6 +150,7 @@ export async function POST(request) {
           email: emailNormalise,
           code_postal: codePostalNormalise,
           commune_id: communeId,
+          commercant_nom: commercantNom,
           type_utilisateur,
           message: messageNormalise,
           mode_landing,

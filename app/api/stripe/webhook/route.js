@@ -379,6 +379,7 @@ async function envoyerEmailsCommande(commandeId, supabase) {
         annulation_token:        cmd.annulation_token,
         delai_annulation_heures: cmd.commercant?.delai_annulation_heures ?? 2,
         offrir_mdp:              offrirMdp,
+        offrir_mdp_email:        cmd.client_email,
       })
       await envoyerAuCommercant({
         to: cmd.client_email,

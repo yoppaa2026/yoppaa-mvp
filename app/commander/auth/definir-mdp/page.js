@@ -58,9 +58,20 @@ export default function DefinirMdpPage() {
   const turnstileRef = useRef(null)
 
   useEffect(() => {
+    // L'email cible peut arriver par le lien (?email=...) : c'est le compte de la
+    // commande. On NE fait confiance a une session existante que si elle correspond a
+    // ce meme compte, sinon on force la verification par magic link vers le bon email.
+    // Sans ce garde-fou, une session tierce restee ouverte (ex. un autre compte de test)
+    // capterait la definition du mot de passe (bug cross-compte du 16/07).
+    const linkEmail = (typeof window !== 'undefined'
+      ? (new URLSearchParams(window.location.search).get('email') || '')
+      : '').trim().toLowerCase()
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) { setPhase('form'); return }
-      if (typeof window !== 'undefined') setEmail(localStorage.getItem('yoppaa_email') || '')
+      const sessionEmail = (session?.user?.email || '').toLowerCase()
+      if (session && (!linkEmail || linkEmail === sessionEmail)) { setPhase('form'); return }
+      // Pas de session, OU session d'un AUTRE compte que celui du lien -> verif email.
+      const fallback = typeof window !== 'undefined' ? (localStorage.getItem('yoppaa_email') || '') : ''
+      setEmail(linkEmail || fallback)
       setPhase('envoi')
     })
   }, [])

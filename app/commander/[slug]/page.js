@@ -2782,7 +2782,7 @@ export default function CommanderSlug() {
 
               {/* Nudge optionnel : créer un mot de passe pour se reconnecter vite.
                   Non bloquant, le magic link reste toujours dispo (voir definir-mdp). */}
-              <Link href="/commander/auth/definir-mdp" style={{ display: 'block', textDecoration: 'none', background: '#fff', borderRadius: 16, padding: '1rem 1.1rem', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
+              <Link href={`/commander/auth/definir-mdp${client.email ? `?email=${encodeURIComponent(client.email)}` : ''}`} style={{ display: 'block', textDecoration: 'none', background: '#fff', borderRadius: 16, padding: '1rem 1.1rem', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
                 <p style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: T.ink, fontSize: '0.92rem', margin: '0 0 4px' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>

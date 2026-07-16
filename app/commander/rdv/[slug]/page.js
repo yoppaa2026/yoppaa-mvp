@@ -18,6 +18,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { isVitrine } from '@/lib/plans'
 import { redirectTop } from '@/lib/redirect-top'
+import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import HorairesSection from '../../HorairesSection'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Lock } from 'lucide-react'
@@ -408,6 +409,8 @@ export default function CommanderRdvSlug() {
           acompte_montant: snapshot.acompteMontant ?? null,
         })
         allerEtape(4)
+        // Invite aux push (rappel de RDV) au moment de plus forte intention.
+        promptPushOneSignal()
 
         // Poll pour recuperer le numero_rdv assigne par le webhook (max ~15s).
         // Le webhook arrive async, donc on tente plusieurs fois jusqu'a ce que
@@ -985,6 +988,8 @@ export default function CommanderRdvSlug() {
       setSubmitting(false)
       setEtape(4)
       setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
+      // Invite aux push (rappel de RDV) au moment de plus forte intention.
+      promptPushOneSignal()
       console.info('[rdv] success, etape=4')
 
       // Envoi emails post-confirmation (non-bloquant, fire-and-forget)

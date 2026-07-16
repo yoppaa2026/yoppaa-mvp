@@ -746,6 +746,7 @@ export default function CommanderSlug() {
   const catRefs = useRef({})
   const headerRef = useRef(null)
   const scrollRef = useRef(null)
+  const recapPanierRef = useRef(null)   // cible du bouton panier flottant (scroll vers le récap)
 
   // Lecture de l'état favori au mount (et quand clientId / commercant changent)
   useEffect(() => {
@@ -1381,6 +1382,20 @@ export default function CommanderSlug() {
     setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 50)
   }
 
+  // Scrolle jusqu'au récap panier (bouton flottant). On centre le récap dans le
+  // conteneur scrollable plutôt que scrollIntoView (qui viserait la fenêtre entière).
+  function scrollVersPanier() {
+    const el = recapPanierRef.current
+    const scroll = scrollRef.current
+    if (!el || !scroll) return
+    scroll.scrollTo({ top: el.offsetTop - 80, behavior: 'smooth' })
+  }
+
+  // Nombre total d'articles au panier (somme des quantités) pour le badge flottant.
+  function nbArticlesPanier() {
+    return Object.values(panier).reduce((n, i) => n + (i.quantite || 0), 0)
+  }
+
   function commanderPourJour(idxJour) {
     // Vient du bouton "Commander [jour] →" sur un article épuisé aujourd'hui.
     // Change le jour (avec confirmation si panier non vide) sans passer
@@ -1640,6 +1655,7 @@ export default function CommanderSlug() {
         .action-btn:hover { border-color: ${T.main}; color: ${T.main}; background: ${T.pale}; }
         @keyframes pulse { from { opacity:0.4; transform:scale(0.8); } to { opacity:1; transform:scale(1.2); } }
         @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes panierPop { from { opacity:0; transform:translateX(-50%) translateY(14px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
         @keyframes shimmer { from { background-position: -200% center; } to { background-position: 200% center; } }
         @keyframes swipePulse { from { transform:scale(0.7) translateY(0); opacity:0.5; } to { transform:scale(1.4) translateY(-4px); opacity:1; } }
         @keyframes swipeArrow { 0%,100% { opacity:0.4; transform:translateX(0); } 50% { opacity:1; transform:translateX(4px); } }
@@ -1902,11 +1918,20 @@ export default function CommanderSlug() {
           {etape < 4 && peutCommander && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
               {[{ n: 1, label: 'Menu' }, { n: 2, label: 'Créneau' }].map((s, i) => {
-                const done = etape > s.n + 1
-                const active = etape === s.n + 1
+                const target = s.n + 1          // Menu -> etape 2, Créneau -> etape 3
+                const done = etape > target
+                const active = etape === target
+                // Cliquable pour revenir à une étape déjà atteinte (cohérent avec la
+                // règle « le Retour ramène à l'étape précédente »). On ne saute jamais
+                // vers l'avant : l'avancement reste piloté par le CTA principal.
+                const clickable = target < etape
                 return (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: active ? T.main : done ? '#10B98122' : 'rgba(255,255,255,0.08)', border: `1.5px solid ${active ? T.light : done ? '#10B981' : 'rgba(255,255,255,0.15)'}`, borderRadius: 100, padding: '3px 10px', transition: 'all 0.3s', boxShadow: active ? `0 4px 12px ${T.main}44` : 'none' }}>
+                    <div
+                      onClick={clickable ? () => allerEtape(target) : undefined}
+                      role={clickable ? 'button' : undefined}
+                      aria-label={clickable ? `Revenir à l'étape ${s.label}` : undefined}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, background: active ? T.main : done ? '#10B98122' : 'rgba(255,255,255,0.08)', border: `1.5px solid ${active ? T.light : done ? '#10B981' : 'rgba(255,255,255,0.15)'}`, borderRadius: 100, padding: '3px 10px', transition: 'all 0.3s', boxShadow: active ? `0 4px 12px ${T.main}44` : 'none', cursor: clickable ? 'pointer' : 'default' }}>
                       <span style={{ width: 16, height: 16, borderRadius: '50%', background: active ? '#fff' : done ? '#10B981' : 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 900, color: active ? T.main : '#fff', flexShrink: 0 }}>
                         {done ? <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> : s.n}
                       </span>
@@ -1919,6 +1944,27 @@ export default function CommanderSlug() {
             </div>
           )}
         </div>
+
+        {/* ── PANIER FLOTTANT ──────────────────────────────────────────────
+            Le récap panier est en bas de la page menu, peu découvrable sur mobile
+            (retour utilisateur 16/07). Ce bouton flottant montre le nombre d'articles
+            + le total et scrolle jusqu'au récap pour confirmer. Visible seulement à
+            l'étape Menu quand le panier n'est pas vide. */}
+        {etape === 2 && peutCommander && nbArticlesPanier() > 0 && (
+          <button onClick={scrollVersPanier}
+            aria-label="Voir mon panier"
+            style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 18, zIndex: 60, width: 'calc(100% - 32px)', maxWidth: 420, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', cursor: 'pointer', boxShadow: `0 10px 30px ${T.main}66`, animation: 'panierPop 0.25s ease-out' }}>
+            <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+              </svg>
+              <span style={{ position: 'absolute', top: -8, right: -10, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 100, background: '#fff', color: T.main, fontSize: '0.68rem', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>{nbArticlesPanier()}</span>
+            </span>
+            <span style={{ fontWeight: 800, fontSize: '0.95rem', flex: 1, textAlign: 'left' }}>Voir mon panier</span>
+            <span style={{ fontWeight: 900, fontSize: '1rem', whiteSpace: 'nowrap' }}>{totalPanier().toFixed(2)} €</span>
+          </button>
+        )}
 
         {/* ── SCROLL BODY ── */}
         <div className="scroll-body" ref={scrollRef}>
@@ -2296,14 +2342,16 @@ export default function CommanderSlug() {
 
                 {/* RecapPanier : uniquement si plan permet la commande (BOOST/MAX) */}
                 {peutCommander && (
-                  <RecapPanier
-                    panier={panier}
-                    onRetirer={retirerDuPanier}
-                    onAjouter={incrementerPanier}
-                    total={totalPanier()}
-                    onValider={() => allerEtape(3)}
-                    getStockMax={getStockMax}
-                  />
+                  <div ref={recapPanierRef}>
+                    <RecapPanier
+                      panier={panier}
+                      onRetirer={retirerDuPanier}
+                      onAjouter={incrementerPanier}
+                      total={totalPanier()}
+                      onValider={() => allerEtape(3)}
+                      getStockMax={getStockMax}
+                    />
+                  </div>
                 )}
 
                 {/* CTAs contextuels selon le plan - sections grisées du commerce.

@@ -13,8 +13,12 @@ export async function GET(request) {
     return NextResponse.json({ ok: false, error: 'Code postal invalide' }, { status: 400 })
   }
 
+  // service_role : route serveur qui ne renvoie que des agrégats. Indispensable car
+  // la table `communes` a une RLS qui masque à anon les communes non actives
+  // (active=false) ; sans service_role, la résolution du code postal échouerait pour
+  // toute commune en cours de mobilisation.
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!url || !key) return NextResponse.json({ ok: true, found: false })
 
   const supabase = createClient(url, key, { auth: { persistSession: false } })

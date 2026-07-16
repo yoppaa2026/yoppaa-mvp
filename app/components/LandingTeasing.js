@@ -278,15 +278,20 @@ export default function LandingTeasing() {
               siteKey={siteKey}
               turnstileRef={turnstileRef}
               sousTexteForm={sousTexteForm}
+              communeStats={communeStats}
             />
           </>
         ) : (
           // MODE TEASING (< 1er août) : compteur vers le devoilement
           <>
             <h1 style={{ fontSize: 'clamp(2.2rem, 6vw, 3.4rem)', fontWeight: 900, letterSpacing: '-1.8px', lineHeight: 1.1, margin: '0 0 14px', maxWidth: 620 }}>
-              Quelque chose se<br/>prépare à <span style={{ color: T.light }}>Mettet</span>.
+              {/* Par défaut inclusif (« ton quartier »), personnalisé sur la commune
+                  du visiteur dès qu'on l'a résolue via son code postal. */}
+              Quelque chose se<br/>prépare {communeStats?.nom
+                ? <>à <span style={{ color: T.light }}>{communeStats.nom}</span>.</>
+                : <>dans <span style={{ color: T.light }}>ton quartier</span>.</>}
               <span style={{ display: 'block', marginTop: 14, fontSize: '0.62em', fontWeight: 700, opacity: 0.88, letterSpacing: '-0.8px' }}>
-                Et bientôt près de chez toi.
+                Et bientôt partout en Belgique.
               </span>
             </h1>
             <p style={{ fontSize: '1.05rem', color: T.light, lineHeight: 1.6, maxWidth: 480, margin: '0 0 36px', opacity: 0.92 }}>
@@ -303,13 +308,14 @@ export default function LandingTeasing() {
               siteKey={siteKey}
               turnstileRef={turnstileRef}
               sousTexteForm={sousTexteForm}
+              communeStats={communeStats}
             />
           </>
         )}
 
         {/* Footer minimal (commun aux 2 modes) */}
         <footer style={{ marginTop: 60, fontSize: 11, color: T.light, opacity: 0.6, lineHeight: 1.7 }}>
-          <p style={{ margin: 0 }}>📧 hello@yoppaa.app · 📍 Mettet, Belgique</p>
+          <p style={{ margin: 0 }}>📧 hello@yoppaa.app · 📍 Belgique</p>
           <p style={{ margin: '6px 0 0' }}>Yoppaa est un projet d&rsquo;Avcotech SRL · BCE 0731.637.148</p>
         </footer>
       </main>
@@ -345,7 +351,7 @@ function DrapeauBelge() {
 // Bloc compteur + formulaire pre-inscription. Partage entre les modes teasing
 // et devoile (le compteur cible REVEAL_DATE en teasing, LAUNCH_DATE en devoile
 // via la valeur de temps.phase qui pilote calculerEtatTemps).
-function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, siteKey, turnstileRef, sousTexteForm }) {
+function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, siteKey, turnstileRef, sousTexteForm, communeStats }) {
   return (
     <>
       {/* Compteur */}

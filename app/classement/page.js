@@ -8,6 +8,7 @@
 
 import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
+import PartageMobilisation from './PartageMobilisation'
 
 export const revalidate = 60
 
@@ -79,20 +80,21 @@ function CarteCommune({ c, rang }) {
         </span>
       </div>
 
-      {!c.active && (
-        <div style={{ marginTop: 10 }}>
-          <div style={{ height: 9, borderRadius: 100, background: 'rgba(255,255,255,0.10)', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: prete ? `linear-gradient(90deg, ${T.green}, ${T.greenLight})` : `linear-gradient(90deg, ${T.main}, ${T.light})`, transition: 'width 0.4s' }}/>
-          </div>
-          <p style={{ margin: '6px 0 0', fontSize: '0.74rem', fontWeight: 800, color: prete ? T.greenLight : '#fff' }}>
-            {prete
+      {/* Barre toujours visible : pleine et verte pour une commune disponible/prête. */}
+      <div style={{ marginTop: 10 }}>
+        <div style={{ height: 9, borderRadius: 100, background: 'rgba(255,255,255,0.10)', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${c.active ? 100 : pct}%`, borderRadius: 100, background: (c.active || prete) ? `linear-gradient(90deg, ${T.green}, ${T.greenLight})` : `linear-gradient(90deg, ${T.main}, ${T.light})`, transition: 'width 0.4s' }}/>
+        </div>
+        <p style={{ margin: '6px 0 0', fontSize: '0.74rem', fontWeight: 800, color: (c.active || prete) ? T.greenLight : '#fff' }}>
+          {c.active
+            ? `Yoppaa est disponible à ${c.nom} !`
+            : prete
               ? `Objectif atteint, ${c.nom} est prête à être lancée !`
               : reste === seuil
                 ? `Sois le 1er commerçant à lancer ${c.nom}`
                 : `Plus que ${reste} commerçant${reste > 1 ? 's' : ''} pour lancer ${c.nom} !`}
-          </p>
-        </div>
-      )}
+        </p>
+      </div>
     </div>
   )
 }
@@ -154,6 +156,9 @@ export default async function ClassementPage() {
             {communes.map((c, i) => <CarteCommune key={c.commune_id} c={c} rang={i}/>)}
           </div>
         )}
+
+        {/* Partage / invitation (viralité) */}
+        <PartageMobilisation/>
 
         {/* CTA */}
         <div style={{ textAlign: 'center', marginTop: '2.2rem', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>

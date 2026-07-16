@@ -438,7 +438,13 @@ function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, s
               const pct = Math.min(100, Math.round((com / seuil) * 100))
               const atteint = com >= seuil
               if (communeStats.active) {
-                return <div style={boxSt}><p style={ligneSt}>Yoppaa est déjà disponible à <strong>{communeStats.nom}</strong> 🟣</p></div>
+                return (
+                  <div style={boxSt}>
+                    <p style={ligneSt}>Yoppaa est disponible à <strong>{communeStats.nom}</strong> 🟣</p>
+                    <Barre pct={100}/>
+                    <p style={sousSt}>{hab > 0 ? `${hab} habitant${hab > 1 ? 's' : ''} déjà dans la tribu` : 'Rejoins la tribu !'}</p>
+                  </div>
+                )
               }
               return (
                 <div style={boxSt}>

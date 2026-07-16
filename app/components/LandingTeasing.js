@@ -87,6 +87,7 @@ export default function LandingTeasing() {
   })
   const [statut, setStatut] = useState({ envoi: 'idle', message: null })  // 'idle'|'envoi'|'ok'|'ko'
   const [turnstileToken, setTurnstileToken] = useState(null)
+  const [communeStats, setCommuneStats] = useState(null)  // incitant : compteur de la commune saisie
   const turnstileRef = useRef(null)
   // Attribution : ?ref=<slug commercant> (liens du Kit lancement) + utm bruts.
   // Capturés une fois au montage pour survivre à un éventuel nettoyage d'URL.
@@ -112,6 +113,24 @@ export default function LandingTeasing() {
       utm_campaign: p.get('utm_campaign') || null,
     }
   }, [])
+
+  // Incitant : dès que le code postal est complet (4 chiffres), on va chercher le
+  // compteur de la commune correspondante (agrégats only). Débounce léger pour ne
+  // pas spammer pendant la frappe.
+  useEffect(() => {
+    const cp = form.code_postal.trim()
+    let vivant = true
+    // Tout est fait dans le callback débounced (pas de setState synchrone dans le
+    // corps de l'effet) : CP incomplet -> on efface, sinon on va chercher le compteur.
+    const t = setTimeout(() => {
+      if (!/^\d{4}$/.test(cp)) { if (vivant) setCommuneStats(null); return }
+      fetch(`/api/communes/stats?cp=${cp}`)
+        .then(r => r.json())
+        .then(j => { if (vivant) setCommuneStats(j?.ok && j?.found ? j : null) })
+        .catch(() => { if (vivant) setCommuneStats(null) })
+    }, 400)
+    return () => { vivant = false; clearTimeout(t) }
+  }, [form.code_postal])
 
   // Turnstile invisible callback : on stocke le token quand recu
   useEffect(() => {
@@ -367,6 +386,38 @@ function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, s
           <input type="text" required inputMode="numeric" pattern="\d{4}" maxLength={4} placeholder="Ton code postal (4 chiffres)"
             value={form.code_postal} onChange={e => setForm(p => ({ ...p, code_postal: e.target.value.replace(/\D/g, '').slice(0,4) }))}
             style={inputStyle}/>
+
+          {/* Incitant : compteur de la commune saisie (preuve sociale, aucun nom). */}
+          {communeStats && (() => {
+            const nb = communeStats.nb_preinscrits || 0
+            const seuil = Math.max(1, communeStats.seuil_preinscrits || 50)
+            const reste = Math.max(0, seuil - nb)
+            const pct = Math.min(100, Math.round((nb / seuil) * 100))
+            const pionnier = nb < 5
+            return (
+              <div style={{ margin: '-4px 0 14px', padding: '12px 14px', borderRadius: 12, background: 'rgba(150,96,224,0.14)', border: '1px solid rgba(196,160,244,0.35)' }}>
+                {communeStats.active ? (
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.45 }}>
+                    Yoppaa est déjà disponible à <strong>{communeStats.nom}</strong> 🟣
+                  </p>
+                ) : (
+                  <>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.45 }}>
+                      {pionnier
+                        ? <>Sois parmi les premiers pionniers de <strong>{communeStats.nom}</strong> 🟣</>
+                        : <><strong>{nb}</strong> personnes attendent déjà Yoppaa à <strong>{communeStats.nom}</strong> 🟣</>}
+                    </p>
+                    <div style={{ height: 7, borderRadius: 100, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', margin: '8px 0 6px' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: 'linear-gradient(90deg, #9660E0, #C4A0F4)', transition: 'width 0.4s' }}/>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 11.5, fontWeight: 600, color: '#C4A0F4' }}>
+                      {reste > 0 ? `Plus que ${reste} pour débloquer ta commune` : 'Objectif de mobilisation atteint !'}
+                    </p>
+                  </>
+                )}
+              </div>
+            )
+          })()}
 
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
             {[

@@ -10,10 +10,10 @@ import LandingTeasing from './components/LandingTeasing'
 export const dynamic = 'force-dynamic'  // sinon Next.js cache la page statique
 
 export const metadata = {
-  title: 'Yoppaa — Quelque chose se prépare à Mettet',
+  title: 'Yoppaa — Quelque chose se prépare dans ton quartier',
   description: 'Un projet belge. Un projet pour ton quartier. Grande annonce le 1er août 2026.',
   openGraph: {
-    title: 'Yoppaa — Quelque chose se prépare à Mettet',
+    title: 'Yoppaa — Quelque chose se prépare dans ton quartier',
     description: 'Un projet belge. Un projet pour ton quartier. Grande annonce le 1er août 2026.',
     type: 'website',
     locale: 'fr_BE',

@@ -262,7 +262,7 @@ export default function LandingTeasing() {
               </div>
             ) : (
               // Garde-fou : si les URLs stores ne sont pas encore renseignees en env
-              <div style={{ background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '18px 22px', maxWidth: 460, width: '100%', backdropFilter: 'blur(12px)', marginBottom: 32 }}>
+              <div style={{ background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '18px 22px', maxWidth: 460, width: '100%', marginBottom: 32 }}>
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1.5 }}>
                   Disponible très bientôt sur l&rsquo;App Store et Google Play.
                 </p>
@@ -470,13 +470,30 @@ function Compteur() {
 }
 
 function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey, turnstileRef, sousTexteForm, communeStats, globalStats }) {
-  // Lance le challenge Turnstile (mode execute) au 1er focus du formulaire, une seule
-  // fois. Ainsi le calcul ne gèle plus le scroll au chargement de la page.
-  const tsLance = useRef(false)
+  // Turnstile n'est PAS rendu au chargement (le rendu implicite via la classe
+  // cf-turnstile initialisait un iframe + du travail qui gelait le scroll ~2s). On le
+  // rend EXPLICITEMENT au 1er focus du formulaire, une seule fois.
+  const tsRendered = useRef(false)
   const lancerChallenge = () => {
-    if (tsLance.current || typeof window === 'undefined') return
-    tsLance.current = true
-    try { window.turnstile?.execute?.(turnstileRef.current) } catch (e) { /* silencieux */ }
+    if (tsRendered.current || typeof window === 'undefined' || !siteKey) return
+    let tries = 0
+    const rendre = () => {
+      if (tsRendered.current) return
+      if (window.turnstile && turnstileRef.current) {
+        tsRendered.current = true
+        try {
+          window.turnstile.render(turnstileRef.current, {
+            sitekey: siteKey, size: 'invisible',
+            callback: (t) => window.onTurnstileSuccess?.(t),
+            'expired-callback': () => window.onTurnstileExpired?.(),
+            'error-callback': () => window.onTurnstileError?.(),
+          })
+        } catch (e) { /* ignore */ }
+      } else if (tries++ < 25) {
+        setTimeout(rendre, 150)
+      }
+    }
+    rendre()
   }
   return (
     <>
@@ -497,7 +514,7 @@ function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey,
       {/* Formulaire pre-inscription */}
       {statut.envoi === 'ok' ? (
         <div style={{ maxWidth: 460, width: '100%' }}>
-          <div style={{ background: 'rgba(16,185,129,0.15)', border: '1.5px solid #10B98166', borderRadius: 18, padding: '24px 22px', backdropFilter: 'blur(12px)' }}>
+          <div style={{ background: 'rgba(16,185,129,0.15)', border: '1.5px solid #10B98166', borderRadius: 18, padding: '24px 22px' }}>
             <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#A7F3D0' }}>
               ✓ {statut.message}
             </p>
@@ -510,7 +527,7 @@ function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey,
           <PartageMobilisation/>
         </div>
       ) : (
-        <form onSubmit={soumettre} style={{ background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 18, padding: '24px 22px', maxWidth: 460, width: '100%', backdropFilter: 'blur(12px)' }}>
+        <form onSubmit={soumettre} style={{ background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 18, padding: '24px 22px', maxWidth: 460, width: '100%' }}>
           <p style={{ fontSize: 14, fontWeight: 800, color: '#fff', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.8 }}>Sois prévenu en premier</p>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.82)', margin: '0 0 16px', lineHeight: 1.5 }}>
             {sousTexteForm}
@@ -558,18 +575,10 @@ function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey,
             value={form.message} onChange={e => setForm(p => ({ ...p, message: e.target.value.slice(0, 500) }))}
             style={{ ...inputStyle, resize: 'vertical', minHeight: 50 }}/>
 
-          {/* Cloudflare Turnstile invisible, en mode "execute" : le widget se rend au
-              chargement SANS lancer le challenge (qui gelait le thread ~2s et bloquait
-              le scroll). Le challenge est déclenché au 1er focus du formulaire. */}
-          {siteKey && (
-            <div ref={turnstileRef} className="cf-turnstile"
-              data-sitekey={siteKey}
-              data-callback="onTurnstileSuccess"
-              data-expired-callback="onTurnstileExpired"
-              data-error-callback="onTurnstileError"
-              data-execution="execute"
-              data-size="invisible"/>
-          )}
+          {/* Conteneur Turnstile VIDE au chargement (pas de classe cf-turnstile ->
+              aucun rendu implicite). Rempli par window.turnstile.render() au 1er focus
+              du formulaire (voir lancerChallenge), pour ne rien exécuter pendant le scroll. */}
+          {siteKey && <div ref={turnstileRef} />}
 
           <button type="submit" disabled={statut.envoi === 'envoi' || !formValide}
             style={{ width: '100%', padding: '14px', borderRadius: 100, border: 'none', background: !formValide || statut.envoi === 'envoi' ? 'rgba(255,255,255,0.12)' : 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: !formValide || statut.envoi === 'envoi' ? 'rgba(255,255,255,0.5)' : '#1A0840', fontWeight: 900, fontSize: 14, letterSpacing: 0.5, textTransform: 'uppercase', cursor: !formValide || statut.envoi === 'envoi' ? 'not-allowed' : 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s', marginTop: 4 }}>

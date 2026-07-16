@@ -48,7 +48,7 @@ function BarreProgression({ valeur, seuil }) {
       <div style={{ height: 8, borderRadius: 100, background: 'rgba(255,255,255,0.10)', overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: `linear-gradient(90deg, ${T.main}, ${T.light})`, transition: 'width 0.4s' }}/>
       </div>
-      <p style={{ margin: '5px 0 0', fontSize: '0.72rem', fontWeight: 700, color: T.light }}>
+      <p style={{ margin: '5px 0 0', fontSize: '0.72rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
         {valeur || 0} / {cible} préinscrits {pct >= 100 ? '· objectif atteint 🟣' : ''}
       </p>
     </div>
@@ -68,7 +68,7 @@ export default async function ClassementPage() {
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2rem', letterSpacing: '-0.05em', color: '#fff', lineHeight: 1, marginBottom: 14 }}>yoppaa</p>
           <h1 style={{ fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.5px', margin: '0 0 10px' }}>Mobilise ta commune</h1>
-          <p style={{ fontSize: '0.92rem', color: T.light, lineHeight: 1.55, margin: 0 }}>
+          <p style={{ fontSize: '0.92rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.55, margin: 0 }}>
             Plus vous êtes nombreux à vous préinscrire, plus vite Yoppaa arrive chez toi.
             Voici où en sont les communes.
           </p>
@@ -81,7 +81,7 @@ export default async function ClassementPage() {
 
         {/* Liste */}
         {communes.length === 0 ? (
-          <p style={{ textAlign: 'center', color: T.light, fontSize: '0.9rem' }}>
+          <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.85)', fontSize: '0.9rem' }}>
             Sois le premier à préinscrire ta commune !
           </p>
         ) : (
@@ -95,13 +95,13 @@ export default async function ClassementPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ margin: 0, fontWeight: 800, fontSize: '1rem', color: '#fff' }}>
                       {c.nom}
-                      {c.province && <span style={{ fontWeight: 600, fontSize: '0.78rem', color: T.light, marginLeft: 8 }}>{c.province}</span>}
+                      {c.province && <span style={{ fontWeight: 600, fontSize: '0.78rem', color: 'rgba(255,255,255,0.72)', marginLeft: 8 }}>{c.province}</span>}
                     </p>
                     <p style={{ margin: '2px 0 0', fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)' }}>
                       {c.nb_yoppers || 0} yoppers · {c.nb_commercants || 0} commerçants
                     </p>
                   </div>
-                  <span style={{ flexShrink: 0, padding: '4px 10px', borderRadius: 100, fontSize: '0.68rem', fontWeight: 800, background: c.active ? '#10B98122' : 'rgba(255,255,255,0.08)', color: c.active ? '#6EE7B7' : T.light, border: `1px solid ${c.active ? '#10B98155' : 'rgba(255,255,255,0.15)'}` }}>
+                  <span style={{ flexShrink: 0, padding: '4px 10px', borderRadius: 100, fontSize: '0.68rem', fontWeight: 800, background: c.active ? '#10B98122' : 'rgba(255,255,255,0.10)', color: c.active ? '#6EE7B7' : 'rgba(255,255,255,0.9)', border: `1px solid ${c.active ? '#10B98155' : 'rgba(255,255,255,0.22)'}` }}>
                     {c.active ? 'Disponible' : 'En mobilisation'}
                   </span>
                 </div>

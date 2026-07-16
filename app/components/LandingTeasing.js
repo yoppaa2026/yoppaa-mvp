@@ -83,7 +83,7 @@ function calculerEtatTemps() {
 }
 
 export default function LandingTeasing() {
-  const [temps, setTemps] = useState(calculerEtatTemps())
+  const [phase, setPhase] = useState(() => calculerEtatTemps().phase)
   const [form, setForm] = useState({
     email: '', code_postal: '', type_utilisateur: 'yopper', commercant_nom: '', message: '', consentement_marketing: true,
   })
@@ -96,12 +96,12 @@ export default function LandingTeasing() {
   // Capturés une fois au montage pour survivre à un éventuel nettoyage d'URL.
   const attributionRef = useRef({ ref_commercant: null, utm_source: null, utm_medium: null, utm_campaign: null })
 
-  // Compteur en temps reel (tick chaque seconde). Quand on franchit
-  // REVEAL_DATE ou LAUNCH_DATE, le rendu bascule automatiquement.
+  // Bascule de phase (teasing -> devoile -> lancement) : evenement rare. On verifie a
+  // intervalle lent pour ne PAS re-render toute la page chaque seconde (cause de
+  // saccades au scroll). Le compteur, lui, tick chaque seconde dans son composant isole.
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const tick = () => setTemps(calculerEtatTemps())
-    const id = setInterval(tick, 1000)
+    const id = setInterval(() => setPhase(calculerEtatTemps().phase), 15000)
     return () => clearInterval(id)
   }, [])
 
@@ -199,7 +199,7 @@ export default function LandingTeasing() {
 
   // Texte du sous-bloc formulaire : different selon la phase (avant dev. on
   // promet la decouverte ; entre dev. et lancement on promet le telechargement)
-  const sousTexteForm = temps.phase === 'devoile'
+  const sousTexteForm = phase === 'devoile'
     ? 'Laisse-nous ton email, et le 1er septembre tu seras parmi les premiers à télécharger Yoppaa.'
     : `Laisse-nous ton email, et le ${REVEAL_LABEL} tu seras parmi les premiers à découvrir Yoppaa.`
 
@@ -223,7 +223,7 @@ export default function LandingTeasing() {
         </div>
 
         {/* ─── BASCULE date-conditionnelle 3 modes ─── */}
-        {temps.phase === 'lancement' ? (
+        {phase === 'lancement' ? (
           // MODE LANCEMENT (>= 01/09) : l'app est dispo
           <>
             <h1 style={{ fontSize: 'clamp(2.2rem, 6vw, 3.4rem)', fontWeight: 900, letterSpacing: '-1.8px', lineHeight: 1.1, margin: '0 0 14px', maxWidth: 580 }}>
@@ -269,7 +269,7 @@ export default function LandingTeasing() {
               </div>
             )}
           </>
-        ) : temps.phase === 'devoile' ? (
+        ) : phase === 'devoile' ? (
           // MODE DEVOILE (1er août → 31/08) : Yoppaa annonce + compteur vers 01/09
           <>
             <h1 style={{ fontSize: 'clamp(2.2rem, 6vw, 3.4rem)', fontWeight: 900, letterSpacing: '-1.8px', lineHeight: 1.1, margin: '0 0 14px', maxWidth: 620 }}>
@@ -283,7 +283,6 @@ export default function LandingTeasing() {
               D&rsquo;ici là, regarde ton quartier rejoindre Yoppaa tout l&rsquo;été. <DrapeauBelge/> 🟣
             </p>
             <CompteurEtForm
-              temps={temps}
               statut={statut}
               form={form}
               setForm={setForm}
@@ -314,7 +313,6 @@ export default function LandingTeasing() {
               Le grand dévoilement le <strong style={{ color: '#fff' }}>{REVEAL_LABEL_ANNEE}</strong>. 🟣
             </p>
             <CompteurEtForm
-              temps={temps}
               statut={statut}
               form={form}
               setForm={setForm}
@@ -412,13 +410,13 @@ function IncitantMobilisation({ communeStats, globalStats }) {
       <div style={boxSt}>
         <p style={ligneSt}>
           {atteint
-            ? <><strong>{communeStats.nom}</strong> a réuni ses {seuil} commerçants, lancement imminent 🟣</>
-            : <><strong>{com}/{seuil}</strong> commerçants pour lancer <strong>{communeStats.nom}</strong> 🟣</>}
+            ? <>Ça y est, {communeStats.nom} a ses {seuil} commerçants ! Rejoins la tribu : plus on est nombreux, plus notre quartier revit 🟣</>
+            : <>Déjà <strong>{com}</strong> commerçant{com > 1 ? 's' : ''} sur <strong>{seuil}</strong> pour activer <strong>{communeStats.nom}</strong> 🟣</>}
         </p>
         {barre(pct)}
         <p style={sousSt}>
           {hab > 0
-            ? `${hab} habitant${hab > 1 ? 's' : ''} attendent déjà. Fais-en parler autour de toi.`
+            ? `${hab} habitant${hab > 1 ? 's' : ''} ${hab > 1 ? 'attendent' : 'attend'} déjà. Parles-en autour de toi.`
             : 'Sois le premier habitant à te mobiliser.'}
         </p>
       </div>
@@ -443,25 +441,38 @@ function IncitantMobilisation({ communeStats, globalStats }) {
   return null
 }
 
-function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, siteKey, turnstileRef, sousTexteForm, communeStats, globalStats }) {
+// Compteur isolé : il tick chaque seconde SANS re-render le reste de la landing
+// (évite les saccades au scroll signalées 16/07).
+function Compteur() {
+  const [t, setT] = useState(calculerEtatTemps)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const id = setInterval(() => setT(calculerEtatTemps()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  return (
+    <div style={{ display: 'flex', gap: 'clamp(10px, 3vw, 22px)', marginBottom: 44, justifyContent: 'center', flexWrap: 'wrap' }}>
+      {[
+        { val: t.jours,    label: 'jours' },
+        { val: t.heures,   label: 'heures' },
+        { val: t.minutes,  label: 'minutes' },
+        { val: t.secondes, label: 'secondes' },
+      ].map(({ val, label }) => (
+        <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 64 }}>
+          <span style={{ fontSize: 'clamp(2.4rem, 7vw, 3.6rem)', fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1, color: '#fff', fontVariantNumeric: 'tabular-nums', textShadow: '0 4px 24px #6B35C480' }}>
+            {pad(val)}
+          </span>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: 1.2, marginTop: 4 }}>{label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey, turnstileRef, sousTexteForm, communeStats, globalStats }) {
   return (
     <>
-      {/* Compteur */}
-      <div style={{ display: 'flex', gap: 'clamp(10px, 3vw, 22px)', marginBottom: 44, justifyContent: 'center', flexWrap: 'wrap' }}>
-        {[
-          { val: temps.jours,    label: 'jours' },
-          { val: temps.heures,   label: 'heures' },
-          { val: temps.minutes,  label: 'minutes' },
-          { val: temps.secondes, label: 'secondes' },
-        ].map(({ val, label }) => (
-          <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 64 }}>
-            <span style={{ fontSize: 'clamp(2.4rem, 7vw, 3.6rem)', fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1, color: '#fff', fontVariantNumeric: 'tabular-nums', textShadow: '0 4px 24px #6B35C480' }}>
-              {pad(val)}
-            </span>
-            <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: 1.2, marginTop: 4 }}>{label}</span>
-          </div>
-        ))}
-      </div>
+      <Compteur/>
 
       {/* Message d'accueil : parle aux deux publics (commerçants + curieux).
           Texte blanc haut contraste (jamais de violet pâle, surtout en petit). */}
@@ -530,7 +541,7 @@ function CompteurEtForm({ temps, statut, form, setForm, soumettre, formValide, s
             maxLength={160}
             placeholder={form.type_utilisateur === 'commercant'
               ? 'Le nom de ton commerce'
-              : 'Un commerce que tu aimerais sur Yoppaa ? (optionnel)'}
+              : 'Un commerce que tu aimerais voir ? (optionnel)'}
             value={form.commercant_nom}
             onChange={e => setForm(p => ({ ...p, commercant_nom: e.target.value }))}
             style={inputStyle}/>

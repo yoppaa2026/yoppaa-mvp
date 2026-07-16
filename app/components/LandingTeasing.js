@@ -470,6 +470,14 @@ function Compteur() {
 }
 
 function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey, turnstileRef, sousTexteForm, communeStats, globalStats }) {
+  // Lance le challenge Turnstile (mode execute) au 1er focus du formulaire, une seule
+  // fois. Ainsi le calcul ne gèle plus le scroll au chargement de la page.
+  const tsLance = useRef(false)
+  const lancerChallenge = () => {
+    if (tsLance.current || typeof window === 'undefined') return
+    tsLance.current = true
+    try { window.turnstile?.execute?.(turnstileRef.current) } catch (e) { /* silencieux */ }
+  }
   return (
     <>
       <Compteur/>
@@ -508,11 +516,11 @@ function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey,
             {sousTexteForm}
           </p>
 
-          <input type="email" required placeholder="Ton email"
+          <input type="email" required placeholder="Ton email" onFocus={lancerChallenge}
             value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
             style={inputStyle}/>
 
-          <input type="text" required inputMode="numeric" pattern="\d{4}" maxLength={4} placeholder="Ton code postal (4 chiffres)"
+          <input type="text" required inputMode="numeric" pattern="\d{4}" maxLength={4} placeholder="Ton code postal (4 chiffres)" onFocus={lancerChallenge}
             value={form.code_postal} onChange={e => setForm(p => ({ ...p, code_postal: e.target.value.replace(/\D/g, '').slice(0,4) }))}
             style={inputStyle}/>
 
@@ -550,13 +558,16 @@ function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey,
             value={form.message} onChange={e => setForm(p => ({ ...p, message: e.target.value.slice(0, 500) }))}
             style={{ ...inputStyle, resize: 'vertical', minHeight: 50 }}/>
 
-          {/* Cloudflare Turnstile invisible */}
+          {/* Cloudflare Turnstile invisible, en mode "execute" : le widget se rend au
+              chargement SANS lancer le challenge (qui gelait le thread ~2s et bloquait
+              le scroll). Le challenge est déclenché au 1er focus du formulaire. */}
           {siteKey && (
             <div ref={turnstileRef} className="cf-turnstile"
               data-sitekey={siteKey}
               data-callback="onTurnstileSuccess"
               data-expired-callback="onTurnstileExpired"
               data-error-callback="onTurnstileError"
+              data-execution="execute"
               data-size="invisible"/>
           )}
 

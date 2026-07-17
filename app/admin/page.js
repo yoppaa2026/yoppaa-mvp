@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import SectionTousCommercants from './SectionTousCommercants'
 import SectionKYBAValider from './SectionKYBAValider'
 import SectionPreinscriptions from './SectionPreinscriptions'
+import SectionCommunes from './SectionCommunes'
 import { Sparkles, Store, Scissors, Croissant, ShoppingBag, Phone, Eye, Lock } from 'lucide-react'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
@@ -188,6 +189,9 @@ export default function AdminPage() {
 
         {/* Préinscriptions (suivi de croissance) */}
         <SectionPreinscriptions />
+
+        {/* Communes : activation manuelle + réglage du seuil (remplace les UPDATE SQL) */}
+        <SectionCommunes />
 
         {/* À valider */}
         <section style={{ marginBottom: 32 }}>

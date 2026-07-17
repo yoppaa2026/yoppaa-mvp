@@ -209,8 +209,13 @@ export default function LandingTeasing() {
       <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" async defer/>
 
       {/* Halo decoratif */}
-      <div aria-hidden="true" style={{ position: 'fixed', top: '-200px', right: '-200px', width: 600, height: 600, borderRadius: '50%', background: `radial-gradient(circle, ${T.main}33 0%, transparent 60%)`, pointerEvents: 'none', zIndex: 0 }}/>
-      <div aria-hidden="true" style={{ position: 'fixed', bottom: '-300px', left: '-200px', width: 700, height: 700, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}25 0%, transparent 60%)`, pointerEvents: 'none', zIndex: 0 }}/>
+      {/* Décors : conteneur fixe plein écran + overflow hidden -> les blobs sont
+          clippés au viewport (pas de zone scrollable fantôme en bas sur iOS) et ne se
+          repeignent pas au scroll (perf). */}
+      <div aria-hidden="true" style={{ position: 'fixed', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+        <div style={{ position: 'absolute', top: '-200px', right: '-200px', width: 600, height: 600, borderRadius: '50%', background: `radial-gradient(circle, ${T.main}33 0%, transparent 60%)` }}/>
+        <div style={{ position: 'absolute', bottom: '-300px', left: '-200px', width: 700, height: 700, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}25 0%, transparent 60%)` }}/>
+      </div>
 
       <main style={{ maxWidth: 720, margin: '0 auto', padding: '40px 20px 60px', position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', minHeight: '100svh', justifyContent: 'center' }}>
 
@@ -385,8 +390,8 @@ function IncitantMobilisation({ communeStats, globalStats }) {
   if (communeStats?.horsZone) {
     return (
       <div style={boxSt}>
-        <p style={ligneSt}>Yoppaa se déploie région par région 🟣</p>
-        <p style={{ ...sousSt, marginTop: 6 }}>Laisse ton email, on prévient ta commune dès qu&rsquo;on arrive chez toi.</p>
+        <p style={ligneSt}>Yoppaa arrive région par région 🟣</p>
+        <p style={{ ...sousSt, marginTop: 6 }}>Laisse ton email : on te prévient dès que Yoppaa arrive dans ta commune.</p>
       </div>
     )
   }

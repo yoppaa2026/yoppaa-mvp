@@ -1,40 +1,34 @@
-'use client'
+import type { Metadata, Viewport } from "next";
+import DashboardPwa from "./DashboardPwa";
 
-import { useEffect } from "react";
+// Le dashboard commerçant est une PWA distincte de l'app cliente. On surcharge le
+// manifest + le titre + le theme-color AU NIVEAU SERVEUR (export metadata) : c'est
+// indispensable pour Chrome Android, qui capture le manifest dans le HTML initial.
+// L'ancienne version échangeait le manifest en useEffect -> trop tard sur Android
+// (l'install proposait "Yoppaa" client au lieu de "Yoppaa Pro"). iOS reste géré en
+// plus via DashboardPwa (apple-touch-icon).
+export const metadata: Metadata = {
+  manifest: "/manifest-dashboard.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Yoppaa Pro",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0D0420",
+};
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  useEffect(() => {
-    // Surcharge le manifest et l'icône PWA pour le dashboard Pro
-    const manifest = document.querySelector('link[rel="manifest"]');
-    if (manifest) {
-      manifest.setAttribute('href', '/manifest-dashboard.json');
-    } else {
-      const link = document.createElement('link');
-      link.rel = 'manifest';
-      link.href = '/manifest-dashboard.json';
-      document.head.appendChild(link);
-    }
-
-    const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
-    if (appleIcon) {
-      appleIcon.setAttribute('href', '/icon-pro-192.png');
-    } else {
-      const link = document.createElement('link');
-      link.rel = 'apple-touch-icon';
-      link.href = '/icon-pro-192.png';
-      document.head.appendChild(link);
-    }
-
-    const themeColor = document.querySelector('meta[name="theme-color"]');
-    if (themeColor) themeColor.setAttribute('content', '#0D0420');
-
-    const appTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
-    if (appTitle) appTitle.setAttribute('content', 'Yoppaa Pro');
-  }, []);
-
-  return <>{children}</>;
+  return (
+    <>
+      <DashboardPwa />
+      {children}
+    </>
+  );
 }

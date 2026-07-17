@@ -120,6 +120,12 @@ function AuthForm() {
       return
     }
     await sauvegarderClient(data.user)
+    // Auto-repair du flag has_password : une connexion réussie par mot de passe PROUVE que
+    // le compte en a un. On backfill le flag sur les comptes anciens (créés avant le flag)
+    // pour que l'email de confirmation cesse de proposer "créer un mot de passe" à tort.
+    if (data.user && data.user.user_metadata?.has_password !== true) {
+      supabase.auth.updateUser({ data: { has_password: true } }).catch(() => {})
+    }
     router.replace(redirect)
   }
 

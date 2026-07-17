@@ -345,13 +345,12 @@ async function envoyerEmailsCommande(commandeId, supabase) {
   if (cmd.client_email) {
     try {
       const cren = cmd.mode_retrait === 'livraison' ? cmd.creneau_livraison : cmd.creneau
-      // CTA "crée un mot de passe" : offert à tout Yopper qui n'a PAS encore de mot de
-      // passe utilisable. Même critère que le Profil (user_metadata.has_password) pour
-      // rester cohérent. Le webhook est le VRAI émetteur de cet email, il calcule donc
-      // offrir_mdp lui-même (sinon le bloc n'apparaît jamais).
-      //  - invité pur (auth_user_id NULL) : pas de compte -> proposer.
-      //  - compte magic link (auth_user_id présent, has_password absent) : proposer aussi.
-      //  - compte avec mot de passe (has_password true) : ne pas proposer.
+      // CTA "crée un mot de passe" : offert aux Yoppers sans mot de passe utilisable —
+      // invité pur (auth_user_id NULL) OU compte magic-link (has_password absent). Pas
+      // d'offre si le compte a déjà un mot de passe (has_password === true). Le flag est
+      // fiabilisé par un auto-repair au login par mot de passe (cf. commander/auth +
+      // login) : les comptes anciens (créés avant le flag) cessent d'être sollicités dès
+      // leur prochaine connexion par mot de passe. En cas de doute (lookup KO) on ne nag pas.
       const { data: cli } = await supabase.from('clients').select('auth_user_id').eq('email', cmd.client_email).maybeSingle()
       let offrirMdp = !cli?.auth_user_id
       if (cli?.auth_user_id) {
@@ -359,7 +358,7 @@ async function envoyerEmailsCommande(commandeId, supabase) {
           const { data: au } = await supabase.auth.admin.getUserById(cli.auth_user_id)
           offrirMdp = au?.user?.user_metadata?.has_password !== true
         } catch {
-          offrirMdp = false  // en cas de doute (lookup KO), on ne nag pas un compte existant
+          offrirMdp = false
         }
       }
       const html = emailCommandeConfirmee({

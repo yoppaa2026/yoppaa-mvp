@@ -76,7 +76,7 @@ function Login() {
     if (!password.trim()) return setError('Mot de passe obligatoire')
     setLoading(true); setError('')
     const captchaToken = await turnstileRef.current?.getToken()
-    const { error: err } = await supabase.auth.signInWithPassword({
+    const { data, error: err } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password: password.trim(),
       options: { captchaToken },
@@ -84,6 +84,11 @@ function Login() {
     if (err) {
       setError('Email ou mot de passe incorrect')
       setLoading(false); return
+    }
+    // Auto-repair du flag has_password : la connexion par mot de passe prouve qu'il existe.
+    // Backfill des comptes anciens (créés avant le flag) pour fiabiliser les offres MDP.
+    if (data?.user && data.user.user_metadata?.has_password !== true) {
+      supabase.auth.updateUser({ data: { has_password: true } }).catch(() => {})
     }
     router.push(nextPath)
   }

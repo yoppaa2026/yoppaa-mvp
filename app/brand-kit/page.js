@@ -745,6 +745,28 @@ export default function BrandKit() {
           ))}
         </div>
 
+        {/* SECTION 3bis : CARTE DE PARTAGE (OPEN GRAPH) — image RÉELLE du site */}
+        <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>
+          Carte de partage (Open Graph)
+        </h2>
+        <p style={{ margin: '0 0 18px', fontSize: 13, color: T.muted }}>
+          Image affich&eacute;e automatiquement lors du partage d&apos;un lien Yoppaa (iMessage, WhatsApp, Facebook&hellip;). G&eacute;n&eacute;r&eacute;e c&ocirc;t&eacute; serveur en 1200&times;630. Remplace l&apos;ancien triangle Vercel.
+        </p>
+        <div style={{ background: '#fff', borderRadius: 14, padding: 18, border: `1px solid ${T.pale}`, marginBottom: 40, maxWidth: 660 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/opengraph-image" alt="Carte de partage Yoppaa" style={{ width: '100%', borderRadius: 10, display: 'block', border: `1px solid ${T.pale}` }}/>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <a href="/opengraph-image" target="_blank" rel="noopener noreferrer" download="yoppaa-partage.png"
+              style={{ padding: '8px 16px', borderRadius: 100, background: T.main, color: '#fff', fontWeight: 800, fontSize: 13, textDecoration: 'none' }}>
+              Télécharger (PNG)
+            </a>
+            <a href="/opengraph-image" target="_blank" rel="noopener noreferrer"
+              style={{ padding: '8px 16px', borderRadius: 100, background: '#fff', color: T.main, border: `1.5px solid ${T.pale}`, fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+              Voir en plein écran
+            </a>
+          </div>
+        </div>
+
         {/* SECTION 4 : MARKETING & COM (cover FB Tribu + posts FB) */}
         <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>
           4 · Marketing &amp; com

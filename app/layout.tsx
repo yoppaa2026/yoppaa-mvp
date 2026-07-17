@@ -26,6 +26,8 @@ const jakarta = Plus_Jakarta_Sans({
 const SEO_INDEX = process.env.NEXT_PUBLIC_SEO_INDEX === 'true'
 
 export const metadata: Metadata = {
+  // Base absolue pour que les images OG (partages) et URLs relatives soient résolues.
+  metadataBase: new URL("https://www.yoppaa.app"),
   title: "Yoppaa, ton quartier dans ta poche",
   description: "Ton quartier dans ta poche. Commande avant d'arriver, récupère sans attendre.",
   manifest: "/manifest.json",
@@ -35,7 +37,9 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "Yoppaa",
   },
+  // Favicon + icône : on force l'icône Yoppaa (sinon fallback favicon.ico = triangle Vercel).
   icons: {
+    icon: "/icon-192.png",
     apple: "/icon-192.png",
   },
 };

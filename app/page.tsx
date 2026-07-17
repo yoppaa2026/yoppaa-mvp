@@ -17,6 +17,11 @@ export const metadata = {
     description: 'Un projet belge. Un projet pour ton quartier. Grande annonce le 1er août 2026.',
     type: 'website',
     locale: 'fr_BE',
+    images: [{ url: '/icon-512.png', width: 512, height: 512, alt: 'Yoppaa' }],
+  },
+  twitter: {
+    card: 'summary',
+    images: ['/icon-512.png'],
   },
 }
 

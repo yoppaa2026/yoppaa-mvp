@@ -42,6 +42,19 @@ export const metadata: Metadata = {
     icon: "/icon-192.png",
     apple: "/icon-192.png",
   },
+  // Aperçu de partage (iMessage, WhatsApp, FB...) : icône carrée Yoppaa, pas de
+  // grande vignette. Remplace le triangle Vercel par défaut.
+  openGraph: {
+    title: "Yoppaa, ton quartier dans ta poche",
+    description: "Ton quartier dans ta poche.",
+    type: "website",
+    locale: "fr_BE",
+    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "Yoppaa" }],
+  },
+  twitter: {
+    card: "summary",
+    images: ["/icon-512.png"],
+  },
 };
 
 // Viewport mobile : empêche le zoom auto Safari iOS sur les inputs (cause des

@@ -12,9 +12,9 @@ const T = {
 
 // Textes de partage (3 tons). Le lien ?ref est ajouté à la fin par le partage.
 const TEXTES = [
-  { cle: 'clients', label: 'Pour tes clients', texte: 'Quelque chose se prépare pour nos commerces de quartier, et j’en suis 🟣 Rejoins le mouvement, réserve ta place :' },
-  { cle: 'commercant', label: 'Pour un autre commerçant', texte: 'Commerçant du coin ? On mobilise notre commune pour faire venir Yoppaa. Ajoute-toi, c’est gratuit et c’est maintenant :' },
-  { cle: 'court', label: 'Version courte', texte: 'Yoppaa arrive bientôt dans notre commune 🟣 Réserve ta place :' },
+  { cle: 'clients', label: 'Pour tes clients', texte: 'Bientôt, notre quartier tient dans ta poche. Je fais partie de l’aventure Yoppaa, viens t’inscrire :' },
+  { cle: 'commercant', label: 'Pour un autre commerçant', texte: 'Une app belge pour le commerce de proximité arrive, sans commission. Réserve ta place de commerçant :' },
+  { cle: 'court', label: 'Version courte', texte: 'Notre quartier dans ta poche, ça arrive. Inscris-toi :' },
 ]
 
 function IconShare() {

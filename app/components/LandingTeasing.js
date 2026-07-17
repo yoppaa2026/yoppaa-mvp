@@ -82,12 +82,13 @@ function calculerEtatTemps() {
   return { jours, heures, minutes, secondes, phase }
 }
 
-export default function LandingTeasing() {
+export default function LandingTeasing({ referent = null }) {
   const [phase, setPhase] = useState(() => calculerEtatTemps().phase)
   const [form, setForm] = useState({
     email: '', code_postal: '', type_utilisateur: 'yopper', commercant_nom: '', message: '', consentement_marketing: true,
   })
   const [statut, setStatut] = useState({ envoi: 'idle', message: null })  // 'idle'|'envoi'|'ok'|'ko'
+  const [kitSlug, setKitSlug] = useState(null)  // slug_kit renvoyé après préinscription commerçant
   const [turnstileToken, setTurnstileToken] = useState(null)
   const [communeStats, setCommuneStats] = useState(null)  // incitant : compteur de la commune saisie
   const [globalStats, setGlobalStats] = useState(null)    // incitant permanent : totaux globaux
@@ -180,6 +181,8 @@ export default function LandingTeasing() {
         return
       }
       setStatut({ envoi: 'ok', message: 'Bien reçu 🟣 Tu fais partie des premiers curieux. À très vite !' })
+      // Commerçant : la route renvoie son slug de kit -> on affiche le bouton « Mon kit de partage ».
+      if (j.slug_kit) setKitSlug(j.slug_kit)
       // Reset Turnstile pour permettre une nouvelle soumission si besoin
       if (typeof window !== 'undefined' && window.turnstile && turnstileRef.current) {
         try { window.turnstile.reset(turnstileRef.current) } catch (_) {}
@@ -218,6 +221,15 @@ export default function LandingTeasing() {
       </div>
 
       <main style={{ maxWidth: 720, margin: '0 auto', padding: '40px 20px 60px', position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', minHeight: '100svh', justifyContent: 'center' }}>
+
+        {/* Bandeau référent : le visiteur arrive via le lien Kit d'un commerçant
+            (?ref=<slug>). On le remercie/l'oriente ("<Nom> t'invite"). Simple invite,
+            on ne dévoile rien de plus que la landing (mystère préservé). */}
+        {referent && (
+          <div style={{ marginBottom: 24, padding: '10px 18px', borderRadius: 100, background: 'rgba(196,160,244,0.16)', border: '1px solid rgba(196,160,244,0.4)', fontSize: 13.5, fontWeight: 700, color: '#fff', lineHeight: 1.45, maxWidth: 480 }}>
+            <strong style={{ color: T.light }}>{referent}</strong> t&rsquo;invite à rejoindre Yoppaa 🟣
+          </div>
+        )}
 
         {/* Logo canonique Yoppaa : wordmark + 5 dots V2-B (proportions strictes
             dotBase = wordmarkSize * 0.254, cf. composant <YoppaaLogo>).
@@ -298,6 +310,7 @@ export default function LandingTeasing() {
               sousTexteForm={sousTexteForm}
               communeStats={communeStats}
               globalStats={globalStats}
+              kitSlug={kitSlug}
             />
           </>
         ) : (
@@ -328,6 +341,7 @@ export default function LandingTeasing() {
               sousTexteForm={sousTexteForm}
               communeStats={communeStats}
               globalStats={globalStats}
+              kitSlug={kitSlug}
             />
           </>
         )}
@@ -474,7 +488,7 @@ function Compteur() {
   )
 }
 
-function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey, turnstileRef, sousTexteForm, communeStats, globalStats }) {
+function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey, turnstileRef, sousTexteForm, communeStats, globalStats, kitSlug }) {
   // Turnstile n'est PAS rendu au chargement (le rendu implicite via la classe
   // cf-turnstile initialisait un iframe + du travail qui gelait le scroll ~2s). On le
   // rend EXPLICITEMENT au 1er focus du formulaire, une seule fois.
@@ -524,6 +538,19 @@ function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey,
               ✓ {statut.message}
             </p>
           </div>
+          {/* Commerçant : accès à son kit de partage perso (lien tracké + QR). CTA fort
+              placé en tête (c'est SON levier de mobilisation). */}
+          {kitSlug && (
+            <div style={{ marginTop: 16, padding: '18px 16px', borderRadius: 16, background: 'rgba(150,96,224,0.16)', border: '1px solid rgba(196,160,244,0.4)', textAlign: 'center' }}>
+              <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 800, color: '#fff' }}>Ton kit de partage est prêt 🟣</p>
+              <p style={{ margin: '0 0 14px', fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.9)', lineHeight: 1.5 }}>
+                Un lien perso et un QR code à partager. Chaque inscription via ton lien fait avancer ta commune.
+              </p>
+              <Link href={`/kit/${kitSlug}`} style={{ display: 'inline-block', padding: '12px 26px', borderRadius: 100, background: 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: '#1A0840', fontWeight: 900, fontSize: 13.5, letterSpacing: 0.3, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}>
+                Ouvrir mon kit de partage
+              </Link>
+            </div>
+          )}
           {/* Après validation : on montre la progression de sa commune (motivant) puis le partage. */}
           <div style={{ marginTop: 16 }}>
             <IncitantMobilisation communeStats={communeStats} globalStats={globalStats}/>

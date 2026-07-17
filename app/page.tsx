@@ -1,4 +1,5 @@
 import { getLandingMode } from '@/lib/landing-mode'
+import { resolveReferentNom } from '@/lib/kit-resolve'
 import LandingTeasing from './components/LandingTeasing'
 
 // Page d'accueil / : bascule automatique Teasing → Reveal selon NEXT_PUBLIC_REVEAL_DATE.
@@ -25,9 +26,14 @@ export const metadata = {
   },
 }
 
-export default function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const mode = getLandingMode()
+  // Attribution / bandeau référent : ?ref=<slug commercant> (liens du Kit lancement).
+  // On résout le nom côté serveur (service_role) pour afficher « <Nom> t'invite ».
+  const sp = await searchParams
+  const refBrut = Array.isArray(sp?.ref) ? sp.ref[0] : sp?.ref
+  const referent = refBrut ? await resolveReferentNom(refBrut) : null
   // Pour l'instant on n'a que LandingTeasing. LandingReveal arrivera dans Sprint LR.
   // En attendant, meme en mode 'reveal' on affiche le Teasing (sera remplace).
-  return <LandingTeasing />
+  return <LandingTeasing referent={referent} />
 }

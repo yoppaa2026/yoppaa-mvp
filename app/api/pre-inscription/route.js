@@ -233,6 +233,7 @@ export async function POST(request) {
       const html = emailMerciPreinscription({
         mode_landing,
         type_utilisateur,
+        slug_kit: slugKit,
       })
       await envoyerAuCommercant({
         to: emailNormalise,

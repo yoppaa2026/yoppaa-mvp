@@ -37,6 +37,28 @@ const TYPES_AUTORISES = ['yopper', 'commercant', 'curieux']
 const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const RE_CP_BE = /^\d{4}$/
 
+// Slug de partage perso du commerçant (Kit Ch3). Dérivé du nom du commerce, unique.
+function slugify(str) {
+  return String(str || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+}
+async function genererSlugKit(supabase, nom) {
+  const base = slugify(nom) || 'commerce'
+  let slug = base
+  let i = 1
+  while (i < 60) {
+    const { data } = await supabase.from('pre_inscriptions').select('id').eq('slug_kit', slug).maybeSingle()
+    if (!data) return slug
+    i++
+    slug = `${base}-${i}`
+  }
+  return `${base}-${Date.now().toString(36)}`
+}
+
 export async function POST(request) {
   try {
     const body = await request.json()
@@ -117,12 +139,19 @@ export async function POST(request) {
     // 4) Upsert dans Supabase (UNIQUE email+type → on update si existe deja)
     const { data: rowExistant } = await supabase
       .from('pre_inscriptions')
-      .select('id')
+      .select('id, slug_kit')
       .eq('type_utilisateur', type_utilisateur)
       .ilike('email', emailNormalise)
       .maybeSingle()
 
     let preInscriptionId = rowExistant?.id || null
+
+    // Slug de partage perso : uniquement pour les commerçants. On le génère une fois
+    // (garde celui déjà attribué si l'inscrit revient), pour la page /kit/<slug>.
+    let slugKit = rowExistant?.slug_kit || null
+    if (type_utilisateur === 'commercant' && !slugKit) {
+      slugKit = await genererSlugKit(supabase, commercantNom)
+    }
 
     if (preInscriptionId) {
       // Update : on rafraichit le code postal et le message au cas ou
@@ -139,6 +168,8 @@ export async function POST(request) {
           // On ne réécrit ref_commercant que s'il est fourni : ne pas effacer une
           // attribution déjà posée si l'inscrit revient via un lien direct sans ?ref.
           ...(refCommercant ? { ref_commercant: refCommercant } : {}),
+          // slug_kit : seulement si nouvellement généré (ne pas écraser un slug existant).
+          ...(slugKit && !rowExistant?.slug_kit ? { slug_kit: slugKit } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq('id', preInscriptionId)
@@ -157,6 +188,7 @@ export async function POST(request) {
           source: mode_landing === 'teasing' ? 'teasing' : (utm_source || 'direct'),
           utm_source, utm_medium, utm_campaign,
           ref_commercant: refCommercant,
+          slug_kit: slugKit,
           user_agent: userAgent,
           consentement_marketing: true,
         })
@@ -213,7 +245,7 @@ export async function POST(request) {
       console.error('[pre-inscription] email remerciement KO (non-bloquant)', e?.message)
     }
 
-    return NextResponse.json({ ok: true, mode_landing })
+    return NextResponse.json({ ok: true, mode_landing, slug_kit: slugKit })
 
   } catch (e) {
     console.error('[pre-inscription] exception', e)

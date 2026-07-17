@@ -49,11 +49,11 @@ export const metadata: Metadata = {
     description: "Ton quartier dans ta poche.",
     type: "website",
     locale: "fr_BE",
-    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "Yoppaa" }],
+    images: [{ url: "/og-share.png", width: 640, height: 640, alt: "Yoppaa" }],
   },
   twitter: {
     card: "summary",
-    images: ["/icon-512.png"],
+    images: ["/og-share.png"],
   },
 };
 

@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { canDo } from '@/lib/plans'
+import { canDo, getIaConfig } from '@/lib/plans'
+import TabGenerateur from './TabGenerateur'
 import TabPaiements from './TabPaiements'
 import { compresserImage } from '@/lib/compress-image'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
@@ -155,6 +156,7 @@ function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 2 }) {
     chevD:     <path d="M6 9l6 6 6-6"/>,
     chevU:     <path d="M6 15l6-6 6 6"/>,
     user:      <><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 016-6h4a6 6 0 016 6v1"/></>,
+    sparkles:  <><path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7L12 3z"/><path d="M18.5 14l.85 2.15L21.5 17l-2.15.85L18.5 20l-.85-2.15L15.5 17l2.15-.85L18.5 14z"/></>,
   }
   return <svg {...props} style={{ flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}>{paths[name]}</svg>
 }
@@ -4548,6 +4550,7 @@ export default function ConfigDashboard({ commercantId }) {
   // Onglets dynamiques selon le plan + la catégorie
   const peutDeals = canDo(commercant?.plan, 'deals')
   const peutActus = canDo(commercant?.plan, 'actus_illimitees')
+  const iaActif = getIaConfig(commercant?.plan).actif   // Générateur IA (exister 1 test / communiquer / vendre)
   const estVitrine = commercant?.categorie === 'vitrine'
 
   // Compteur des signalements en attente → badge rouge sur l'onglet Signalements
@@ -4581,6 +4584,7 @@ export default function ConfigDashboard({ commercantId }) {
     { id: 'menu',     label: estVitrine ? 'Vitrine' : 'Menu', icon: 'menu' },
     peutDeals && { id: 'deals', label: 'Deals', icon: 'tag' },
     peutActus && { id: 'actus', label: 'Actus', icon: 'sliders' },
+    iaActif && { id: 'ia', label: 'Générateur', icon: 'sparkles' },
     !estVitrine && { id: 'creneaux', label: 'Créneaux', icon: 'clock' },
     peutLivraison && { id: 'livraison', label: 'Livraison', icon: 'box' },
     peutRdv && { id: 'rdv', label: 'RDV', icon: 'clock' },
@@ -4610,6 +4614,7 @@ export default function ConfigDashboard({ commercantId }) {
       {tab === 'menu'     && <TabMenu     commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'deals'    && peutDeals && <TabDeals commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'actus'    && peutActus && <TabActus commercantId={commercantId} commercant={commercant} toast={showToast} />}
+      {tab === 'ia'       && iaActif && <TabGenerateur commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
       {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} toast={showToast} />}
       {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} />}

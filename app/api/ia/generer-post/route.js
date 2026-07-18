@@ -165,7 +165,8 @@ export async function POST(request) {
       })
     } catch (e) {
       console.error('[ia/generer-post] anthropic KO', e?.message)
-      return NextResponse.json({ ok: false, error: 'La génération a échoué, réessaie.' }, { status: 502 })
+      // detail = message brut Anthropic (diagnostic temporaire, à retirer une fois OK).
+      return NextResponse.json({ ok: false, error: 'La génération a échoué, réessaie.', detail: e?.message || String(e) }, { status: 502 })
     }
 
     const variantes = parserVariantes(out.texte)

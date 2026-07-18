@@ -28,12 +28,15 @@ try {
 
 const csp = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://cdn.onesignal.com https://challenges.cloudflare.com`,
+  // OneSignal : le SDK charge ses scripts depuis cdn.onesignal.com ET appelle le domaine
+  // APEX onesignal.com (config + clé VAPID). Sans l'apex, l'abonnement push ne se crée pas
+  // (worker jamais enregistré, id vide) -> régression introduite par la CSP du sprint sécu.
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://cdn.onesignal.com https://*.onesignal.com https://onesignal.com https://challenges.cloudflare.com`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: blob: https:",
-  `connect-src 'self' ${supabaseOrigin} ${supabaseWss} https://api.onesignal.com https://*.onesignal.com https://*.os.tc https://challenges.cloudflare.com${isDev ? " ws:" : ""}`,
-  "frame-src 'self' https://challenges.cloudflare.com https://*.onesignal.com",
+  `connect-src 'self' ${supabaseOrigin} ${supabaseWss} https://api.onesignal.com https://*.onesignal.com https://onesignal.com https://*.os.tc https://challenges.cloudflare.com${isDev ? " ws:" : ""}`,
+  "frame-src 'self' https://challenges.cloudflare.com https://*.onesignal.com https://onesignal.com",
   "worker-src 'self' blob:",
   "media-src 'self'",
   "object-src 'none'",

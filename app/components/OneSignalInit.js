@@ -120,14 +120,16 @@ export function promptPushOneSignal() {
 export function lireEtatPush() {
   if (typeof window === 'undefined' || !window.OneSignal) return { pret: false }
   const OS = window.OneSignal
+  const NotifAPI = typeof Notification !== 'undefined' ? Notification : null
   try {
     return {
       pret: true,
       supporte: OS.Notifications?.isPushSupported ? OS.Notifications.isPushSupported() : true,
-      permissionNative: OS.Notifications?.permissionNative ?? null, // 'default'|'granted'|'denied'
-      permission: OS.Notifications?.permission ?? null,             // bool
-      optedIn: OS.User?.PushSubscription?.optedIn ?? null,          // bool
-      id: OS.User?.PushSubscription?.id || null,                    // subscription id
+      // Vérité terrain = permission NATIVE du navigateur ('granted'|'denied'|'default').
+      // OneSignal.Notifications.permission (booléen) peut être en retard sur le natif.
+      permission: NotifAPI ? NotifAPI.permission : (OS.Notifications?.permission === true ? 'granted' : 'default'),
+      optedIn: OS.User?.PushSubscription?.optedIn ?? null,
+      id: OS.User?.PushSubscription?.id || null,
     }
   } catch {
     return { pret: false }
@@ -148,26 +150,34 @@ export async function activerNotifications() {
     const NotifAPI = typeof Notification !== 'undefined' ? Notification : null
     if (NotifAPI?.permission === 'denied') return { ok: false, raison: 'refuse_os' }
 
-    // IMPORTANT (iOS PWA) : on appelle le prompt NATIF directement et de façon SYNCHRONE
-    // dans le geste de clic. OneSignal.Notifications.requestPermission ajoute de l'async
-    // AVANT l'appel natif -> iOS perd le geste utilisateur -> aucune fenêtre ne s'affiche
-    // et la promesse ne se résout jamais (bouton figé, constaté 18/07). Le natif préserve
-    // le geste et affiche la fenêtre système. OneSignal détecte ensuite la permission.
+    // IMPORTANT (iOS PWA) : on appelle le prompt NATIF directement dans le geste de clic.
+    // OneSignal.Notifications.requestPermission ajoute de l'async avant l'appel natif ->
+    // iOS perd le geste -> aucune fenêtre + promesse jamais résolue (bouton figé, 18/07).
+    // requestPermission existe en 2 formes (promesse OU callback) : on gère les deux, avec
+    // un filet de temps pour ne JAMAIS bloquer si rien ne résout.
     let perm = NotifAPI?.permission || 'default'
     if (NotifAPI?.requestPermission && perm !== 'granted') {
-      perm = await NotifAPI.requestPermission()
-    } else if (!NotifAPI && OS.Notifications?.requestPermission) {
-      await OS.Notifications.requestPermission()
-      perm = OS.Notifications?.permission ? 'granted' : 'default'
+      perm = await new Promise((resolve) => {
+        let fini = false
+        const finir = (v) => { if (!fini) { fini = true; resolve(v || NotifAPI.permission) } }
+        try {
+          const ret = NotifAPI.requestPermission(finir) // forme callback
+          if (ret && typeof ret.then === 'function') ret.then(finir).catch(() => finir()) // forme promesse
+        } catch { finir() }
+        setTimeout(() => finir(), 8000) // filet : ne jamais rester bloqué
+      })
     }
+    perm = perm || NotifAPI?.permission || 'default'
     if (perm === 'denied') return { ok: false, raison: 'refuse_os' }
     if (perm !== 'granted') return { ok: false, raison: 'incomplet' }
 
-    // Permission accordée : on force l'opt-in pour que OneSignal crée/attache la
-    // subscription au user (login déjà fait au montage). Puis on laisse un court instant
-    // à l'enregistrement auprès du service push (Apple/FCM) avant de relire l'état.
-    try { await OS.User?.PushSubscription?.optIn?.() } catch { /* déjà opted-in */ }
-    await new Promise(r => setTimeout(r, 800))
+    // Permission accordée : opt-in OneSignal pour créer/attacher la subscription.
+    // NON BLOQUANT : optIn() peut ne jamais résoudre sur iOS -> on borne à 3 s. OneSignal
+    // enregistre la subscription de son côté ; l'id apparaîtra à la relecture d'état.
+    try {
+      const p = OS.User?.PushSubscription?.optIn?.()
+      if (p && typeof p.then === 'function') await Promise.race([p, new Promise(r => setTimeout(r, 3000))])
+    } catch { /* déjà opted-in */ }
     return { ok: true }
   } catch (e) {
     return { ok: false, raison: 'erreur', error: e?.message || String(e) }

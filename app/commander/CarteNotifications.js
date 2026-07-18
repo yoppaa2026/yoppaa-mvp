@@ -30,7 +30,7 @@ export default function CarteNotifications() {
     return () => ids.forEach(clearTimeout)
   }, [rafraichir])
 
-  const actif = etat?.pret && etat?.permission === true && etat?.optedIn !== false
+  const actif = etat?.pret && etat?.permission === 'granted' && (etat?.optedIn === true || !!etat?.id)
 
   async function onActiver() {
     setEnCours(true); setMessage(null)
@@ -91,7 +91,7 @@ export default function CarteNotifications() {
       {/* Diagnostic discret (utile pour comprendre l'état réel sur l'appareil). */}
       {etat?.pret && (
         <p style={{ margin: '8px 0 0', fontSize: 10.5, color: T.muted, opacity: 0.75, fontFamily: 'monospace' }}>
-          push: {String(etat.supporte)} · perm: {String(etat.permissionNative ?? etat.permission)} · abo: {String(etat.optedIn)} · id: {etat.id ? etat.id.slice(0, 8) : '—'}
+          push: {String(etat.supporte)} · perm: {String(etat.permission)} · abo: {String(etat.optedIn)} · id: {etat.id ? etat.id.slice(0, 8) : '—'}
         </p>
       )}
     </div>

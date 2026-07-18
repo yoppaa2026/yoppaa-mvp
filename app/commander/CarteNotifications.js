@@ -61,6 +61,11 @@ export default function CarteNotifications() {
     }
   }
 
+  // Une fois les notifications actives, la carte ne sert plus à rien : on la masque
+  // (pas d'encombrement pour un Yopper déjà abonné). Elle ne s'affiche que pour proposer
+  // l'activation à ceux qui ne l'ont pas encore.
+  if (actif) return null
+
   const msgColor = message?.type === 'ok' ? T.green : message?.type === 'error' ? '#DC2626' : T.muted
 
   return (
@@ -92,12 +97,6 @@ export default function CarteNotifications() {
         </p>
       )}
 
-      {/* Diagnostic discret (utile pour comprendre l'état réel sur l'appareil). */}
-      {etat?.pret && (
-        <p style={{ margin: '8px 0 0', fontSize: 10.5, color: T.muted, opacity: 0.75, fontFamily: 'monospace' }}>
-          push: {String(etat.supporte)} · perm: {String(etat.permission)} · abo: {String(etat.optedIn)} · id: {etat.id ? etat.id.slice(0, 8) : '—'} · sw: {etat.sw || '?'}
-        </p>
-      )}
     </div>
   )
 }

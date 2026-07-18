@@ -194,22 +194,35 @@ export async function activerNotifications() {
     // est prêt : sur PWA installée (iOS/Android) l'abonnement échoue si le SW ne contrôle
     // pas encore la page. Puis opt-in (borné, peut ne jamais résoudre) et on POLL l'id
     // d'abonnement quelques secondes (l'enregistrement auprès d'Apple/FCM prend un instant).
+    // Le service worker OneSignal n'est parfois pas enregistré dans la PWA installée
+    // (diagnostic "sw: aucun") -> aucun abonnement possible. On le (ré)enregistre
+    // EXPLICITEMENT et on CAPTURE l'erreur exacte pour la remonter à l'écran.
+    let swErr = null
     try {
       if (navigator.serviceWorker) {
-        await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(r, 5000))])
+        const existing = await navigator.serviceWorker.getRegistration('/')
+        const dejaOS = existing && `${existing.active?.scriptURL || existing.installing?.scriptURL || existing.waiting?.scriptURL || ''}`.includes('OneSignal')
+        if (!dejaOS) {
+          await navigator.serviceWorker.register('/OneSignalSDKWorker.js', { scope: '/' })
+        }
+        await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(r, 6000))])
+      } else {
+        swErr = 'serviceWorker indisponible'
       }
-    } catch { /* pas de SW */ }
+    } catch (e) {
+      swErr = e?.message || String(e)
+    }
     try {
       const p = OS.User?.PushSubscription?.optIn?.()
       if (p && typeof p.then === 'function') await Promise.race([p, new Promise(r => setTimeout(r, 4000))])
     } catch { /* déjà opted-in */ }
     let id = null
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
       id = OS.User?.PushSubscription?.id || null
       if (id) break
       await new Promise(r => setTimeout(r, 700))
     }
-    return { ok: true, id, raison: id ? undefined : 'abonnement_en_cours' }
+    return { ok: true, id, swErr, raison: id ? undefined : 'abonnement_en_cours' }
   } catch (e) {
     return { ok: false, raison: 'erreur', error: e?.message || String(e) }
   }

@@ -36,8 +36,12 @@ export default function CarteNotifications() {
     setEnCours(true); setMessage(null)
     try {
       const res = await activerNotifications()
-      if (res.ok) {
+      if (res.ok && res.id) {
         setMessage({ type: 'ok', texte: 'Notifications activées. Tu seras prévenu du statut de tes commandes.' })
+      } else if (res.ok) {
+        // Permission OK mais l'abonnement (service worker) ne s'est pas créé : on affiche
+        // l'erreur exacte du service worker pour diagnostiquer.
+        setMessage({ type: 'error', texte: `Permission OK, mais l'abonnement ne se crée pas${res.swErr ? ` — SW: ${res.swErr}` : ' (service worker absent)'}.` })
       } else if (res.raison === 'refuse_os') {
         setMessage({ type: 'error', texte: 'Les notifications sont bloquées. Active-les dans les réglages de ton téléphone pour Yoppaa, puis réessaie.' })
       } else if (res.raison === 'non_supporte') {

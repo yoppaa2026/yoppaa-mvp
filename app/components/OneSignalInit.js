@@ -142,23 +142,33 @@ export async function activerNotifications() {
   if (typeof window === 'undefined' || !window.OneSignal) return { ok: false, raison: 'sdk_absent' }
   const OS = window.OneSignal
   try {
-    if (OS.Notifications?.isPushSupported && !OS.Notifications.isPushSupported()) {
-      return { ok: false, raison: 'non_supporte' }
+    const supporte = OS.Notifications?.isPushSupported ? OS.Notifications.isPushSupported() : true
+    if (!supporte) return { ok: false, raison: 'non_supporte' }
+
+    const NotifAPI = typeof Notification !== 'undefined' ? Notification : null
+    if (NotifAPI?.permission === 'denied') return { ok: false, raison: 'refuse_os' }
+
+    // IMPORTANT (iOS PWA) : on appelle le prompt NATIF directement et de façon SYNCHRONE
+    // dans le geste de clic. OneSignal.Notifications.requestPermission ajoute de l'async
+    // AVANT l'appel natif -> iOS perd le geste utilisateur -> aucune fenêtre ne s'affiche
+    // et la promesse ne se résout jamais (bouton figé, constaté 18/07). Le natif préserve
+    // le geste et affiche la fenêtre système. OneSignal détecte ensuite la permission.
+    let perm = NotifAPI?.permission || 'default'
+    if (NotifAPI?.requestPermission && perm !== 'granted') {
+      perm = await NotifAPI.requestPermission()
+    } else if (!NotifAPI && OS.Notifications?.requestPermission) {
+      await OS.Notifications.requestPermission()
+      perm = OS.Notifications?.permission ? 'granted' : 'default'
     }
-    // Déjà refusé au niveau navigateur/OS : requestPermission n'affichera plus rien,
-    // il faut réactiver dans les réglages du téléphone.
-    if (OS.Notifications?.permissionNative === 'denied') {
-      return { ok: false, raison: 'refuse_os' }
-    }
-    await OS.Notifications?.requestPermission?.()
-    if (OS.User?.PushSubscription?.optIn) {
-      try { await OS.User.PushSubscription.optIn() } catch { /* déjà opted-in */ }
-    }
-    const permission = OS.Notifications?.permission
-    const optedIn = OS.User?.PushSubscription?.optedIn
-    if (permission === true && optedIn !== false) return { ok: true }
-    if (permission === false || OS.Notifications?.permissionNative === 'denied') return { ok: false, raison: 'refuse_os' }
-    return { ok: false, raison: 'incomplet' }
+    if (perm === 'denied') return { ok: false, raison: 'refuse_os' }
+    if (perm !== 'granted') return { ok: false, raison: 'incomplet' }
+
+    // Permission accordée : on force l'opt-in pour que OneSignal crée/attache la
+    // subscription au user (login déjà fait au montage). Puis on laisse un court instant
+    // à l'enregistrement auprès du service push (Apple/FCM) avant de relire l'état.
+    try { await OS.User?.PushSubscription?.optIn?.() } catch { /* déjà opted-in */ }
+    await new Promise(r => setTimeout(r, 800))
+    return { ok: true }
   } catch (e) {
     return { ok: false, raison: 'erreur', error: e?.message || String(e) }
   }

@@ -34,20 +34,27 @@ export default function CarteNotifications() {
 
   async function onActiver() {
     setEnCours(true); setMessage(null)
-    const res = await activerNotifications()
-    if (res.ok) {
-      setMessage({ type: 'ok', texte: 'Notifications activées. Tu seras prévenu du statut de tes commandes.' })
-    } else if (res.raison === 'refuse_os') {
-      setMessage({ type: 'error', texte: 'Les notifications sont bloquées. Active-les dans les réglages de ton téléphone pour Yoppaa, puis réessaie.' })
-    } else if (res.raison === 'non_supporte') {
-      setMessage({ type: 'info', texte: "Sur iPhone, ajoute d'abord Yoppaa à ton écran d'accueil, puis ouvre l'app depuis cette icône." })
-    } else if (res.raison === 'sdk_absent') {
-      setMessage({ type: 'info', texte: 'Un instant, le service de notifications se charge. Réessaie dans quelques secondes.' })
-    } else {
-      setMessage({ type: 'error', texte: "L'activation n'a pas abouti. Réessaie, ou active les notifications dans les réglages de ton téléphone." })
+    try {
+      const res = await activerNotifications()
+      if (res.ok) {
+        setMessage({ type: 'ok', texte: 'Notifications activées. Tu seras prévenu du statut de tes commandes.' })
+      } else if (res.raison === 'refuse_os') {
+        setMessage({ type: 'error', texte: 'Les notifications sont bloquées. Active-les dans les réglages de ton téléphone pour Yoppaa, puis réessaie.' })
+      } else if (res.raison === 'non_supporte') {
+        setMessage({ type: 'info', texte: "Sur iPhone, ajoute d'abord Yoppaa à ton écran d'accueil, puis ouvre l'app depuis cette icône." })
+      } else if (res.raison === 'sdk_absent') {
+        setMessage({ type: 'info', texte: 'Un instant, le service de notifications se charge. Réessaie dans quelques secondes.' })
+      } else {
+        setMessage({ type: 'error', texte: "L'activation n'a pas abouti. Réessaie, ou active les notifications dans les réglages de ton téléphone." })
+      }
+    } catch {
+      setMessage({ type: 'error', texte: 'Une erreur est survenue. Réessaie.' })
+    } finally {
+      setEnCours(false)
+      // L'abonnement peut se finaliser un instant après l'acceptation : on relit l'état.
+      rafraichir()
+      ;[600, 1800, 3500].forEach(d => setTimeout(rafraichir, d))
     }
-    setEnCours(false)
-    rafraichir()
   }
 
   const msgColor = message?.type === 'ok' ? T.green : message?.type === 'error' ? '#DC2626' : T.muted

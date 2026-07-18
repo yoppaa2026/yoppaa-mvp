@@ -178,7 +178,7 @@ function TabMenu({ commercantId, commercant, toast }) {
   const [showForm, setShowForm] = useState(false)
   const [showCatForm, setShowCatForm] = useState(false)
   const [editId, setEditId] = useState(null)
-  const [form, setForm] = useState({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: '' })
+  const [form, setForm] = useState({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: '', photo_url: '' })
   const [nouvelleCat, setNouvelleCat] = useState('')
   const [saving, setSaving] = useState(false)
   const [catActive, setCatActive] = useState('Tous')
@@ -186,6 +186,10 @@ function TabMenu({ commercantId, commercant, toast }) {
   const [renamingCat, setRenamingCat] = useState(null) // nom de la cat en cours de renommage
   const [renameValue, setRenameValue] = useState('')
   const [renameSaving, setRenameSaving] = useState(false)
+  // Photos article : couverture (articles.photo_url) + galerie (article_photos)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [galerie, setGalerie] = useState([])
+  const [uploadingGalerie, setUploadingGalerie] = useState(false)
 
   // FIX STOCK : afficher le stock restant côté commerçant
   const [commandesParArticleJour, setCommandesParArticleJour] = useState({})
@@ -286,11 +290,14 @@ function TabMenu({ commercantId, commercant, toast }) {
   }, [commercantId, chargerCommandesAujourdhui])
 
   function openNew() {
-    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '' })
+    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', photo_url: '' })
+    setGalerie([])
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? '') })
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), photo_url: a.photo_url || '' })
+    setGalerie([])
+    fetchGalerie(a.id)
     setEditId(a.id); setShowForm(true)
   }
 
@@ -306,6 +313,7 @@ function TabMenu({ commercantId, commercant, toast }) {
       actif: form.actif,
       categorie: form.categorie.trim() || null,
       temps_prepa: estVitrine ? 0 : (parseFloat(form.temps_prepa) || 0),
+      photo_url: form.photo_url || null,
       est_vitrine: estVitrine,
     }
     const { error } = editId
@@ -377,6 +385,50 @@ function TabMenu({ commercantId, commercant, toast }) {
     toast('Article supprimé'); fetchArticles()
   }
 
+  // ─── Photos article : couverture (articles.photo_url) + galerie (article_photos) ──
+  // Même bucket 'logos' et même compression que deals/actus. La couverture vit dans
+  // le formulaire (form.photo_url) ; la galerie n'est dispo qu'en édition (article existant).
+  async function uploadPhotoArticle(file) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
+    if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
+    setUploadingPhoto(true)
+    const compressed = await compresserImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.85 })
+    const fileName = `article-${commercantId}-${Date.now()}.jpg`
+    const { error } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
+    if (error) { toast('Erreur upload photo', 'error'); setUploadingPhoto(false); return }
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    setForm(f => ({ ...f, photo_url: urlData.publicUrl }))
+    setUploadingPhoto(false)
+  }
+
+  async function fetchGalerie(articleId) {
+    const { data } = await supabase.from('article_photos').select('*').eq('article_id', articleId).order('ordre')
+    setGalerie(data || [])
+  }
+
+  async function uploadGaleriePhoto(file, articleId) {
+    if (!file || !articleId) return
+    if (!file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
+    if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
+    setUploadingGalerie(true)
+    const compressed = await compresserImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.85 })
+    const fileName = `article-gal-${articleId}-${Date.now()}.jpg`
+    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
+    if (upErr) { toast('Erreur upload photo', 'error'); setUploadingGalerie(false); return }
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    const { data, error } = await supabase.from('article_photos').insert({ article_id: articleId, url: urlData.publicUrl, ordre: galerie.length }).select()
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); setUploadingGalerie(false); return }
+    if (data && data[0]) setGalerie(prev => [...prev, data[0]])
+    setUploadingGalerie(false)
+  }
+
+  async function deleteGaleriePhoto(id) {
+    const { error } = await supabase.from('article_photos').delete().eq('id', id)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    setGalerie(prev => prev.filter(p => p.id !== id))
+  }
+
   const articlesFiltres = catActive === 'Tous' ? articles : articles.filter(a => a.categorie === catActive)
   const articlesSansCat = articles.filter(a => !a.categorie)
   const articlesRecherche = searchQuery.trim()
@@ -432,6 +484,52 @@ function TabMenu({ commercantId, commercant, toast }) {
             </>
           )}
           <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label={estVitrine ? 'Produit visible' : 'Article disponible'}/>
+
+          {/* Photo de couverture */}
+          <div>
+            <label style={s.label}>Photo de couverture</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 72, height: 72, borderRadius: 12, overflow: 'hidden', background: T.hairline, flexShrink: 0, position: 'relative', border: `1px solid ${T.hairline}` }}>
+                {form.photo_url ? (
+                  <>
+                    <img src={form.photo_url} alt="Couverture" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                    <button type="button" onClick={() => setForm(f => ({ ...f, photo_url: '' }))}
+                      style={{ position: 'absolute', top: 2, right: 2, width: 20, height: 20, borderRadius: 100, border: 'none', background: 'rgba(0,0,0,0.55)', color: '#fff', cursor: 'pointer', fontSize: 13, lineHeight: '20px', padding: 0 }} title="Retirer">×</button>
+                  </>
+                ) : (
+                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted }}>
+                    <Camera size={20} strokeWidth={1.6}/>
+                  </div>
+                )}
+              </div>
+              <label style={{ ...s.btn, ...s.btnGhost, cursor: uploadingPhoto ? 'wait' : 'pointer' }}>
+                {uploadingPhoto ? 'Chargement…' : (form.photo_url ? 'Remplacer' : 'Ajouter une photo')}
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadPhotoArticle(e.target.files?.[0])} disabled={uploadingPhoto}/>
+              </label>
+            </div>
+            <p style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>Facultatif. Compressée automatiquement. Format idéal carré, minimum 800×800 px.</p>
+          </div>
+
+          {/* Galerie (article existant uniquement) */}
+          {editId && (
+            <div>
+              <label style={s.label}>Galerie ({galerie.length})</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {galerie.map(p => (
+                  <div key={p.id} style={{ width: 60, height: 60, borderRadius: 10, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}` }}>
+                    <img src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                    <button type="button" onClick={() => deleteGaleriePhoto(p.id)}
+                      style={{ position: 'absolute', top: 1, right: 1, width: 18, height: 18, borderRadius: 100, border: 'none', background: 'rgba(0,0,0,0.55)', color: '#fff', cursor: 'pointer', fontSize: 12, lineHeight: '18px', padding: 0 }} title="Supprimer">×</button>
+                  </div>
+                ))}
+                <label style={{ width: 60, height: 60, borderRadius: 10, border: `1.5px dashed ${T.main}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: uploadingGalerie ? 'wait' : 'pointer', color: T.main }}>
+                  {uploadingGalerie ? '…' : <Icon name="plus" size={16} color={T.main}/>}
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadGaleriePhoto(e.target.files?.[0], editId)} disabled={uploadingGalerie}/>
+                </label>
+              </div>
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>Photos supplémentaires montrées sur ta fiche.</p>
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
           <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveArticle} disabled={saving}>
@@ -470,7 +568,7 @@ function TabMenu({ commercantId, commercant, toast }) {
       {/* ─── En-tête (panel violet foncé YOPPAA) ─────────────────────────── */}
       <div className="tabmenu-header" style={{ background: T.bgPanel, borderRadius: 14, padding: '18px 20px', marginBottom: 14, color: '#fff' }}>
         <div>
-          <p style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>{estVitrine ? 'Vitrine' : 'Menu'}</p>
+          <p style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>{commercant?.categorie === 'detail' ? 'Boutique' : estVitrine ? 'Catalogue' : 'Menu'}</p>
           <h2 style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', margin: 0 }}>
             {articles.length} {estVitrine ? 'produit' : 'article'}{articles.length > 1 ? 's' : ''}
             <span style={{ color: T.light, fontWeight: 600, fontSize: 14, marginLeft: 8 }}>· {categories.length} catégorie{categories.length > 1 ? 's' : ''}</span>
@@ -925,6 +1023,11 @@ function ArticleCard({ a, estVitrine = false, onEdit, onToggle, onUpdateStock, o
   return (
     <div style={{ ...s.card, opacity: a.actif ? 1 : 0.6, borderLeft: `4px solid ${a.actif ? T.main : '#E5E7EB'}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        {a.photo_url && (
+          <div style={{ width: 48, height: 48, borderRadius: 10, overflow: 'hidden', flexShrink: 0, border: `1px solid ${T.hairline}` }}>
+            <img src={a.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+          </div>
+        )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <span style={{ fontWeight: 800, color: T.ink, fontSize: 15 }}>{a.nom}</span>
@@ -2669,7 +2772,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
     const { data } = await supabase.from('commercants').select('*').eq('id', commercantId).single()
     if (data) {
       const defaultHoraires = { lundi: { ouvert: true, debut: '07:00', fin: '14:00' }, mardi: { ouvert: true, debut: '07:00', fin: '14:00' }, mercredi: { ouvert: true, debut: '07:00', fin: '14:00' }, jeudi: { ouvert: true, debut: '07:00', fin: '14:00' }, vendredi: { ouvert: true, debut: '07:00', fin: '14:00' }, samedi: { ouvert: true, debut: '07:00', fin: '13:00' }, dimanche: { ouvert: false, debut: '07:00', fin: '12:00' } }
-      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif })
+      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false })
       setLogoPreview(data.logo_url || null)
     }
     setLoading(false)
@@ -2701,7 +2804,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
   async function saveProfil() {
     if (!form.nom.trim()) return toast('Le nom est obligatoire', 'error')
     setSaving(true)
-    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, fidelite_actif: !!form.fidelite_actif, notif_mode: form.notif_mode || 'recap_jour' }).eq('id', commercantId)
+    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, fidelite_actif: !!form.fidelite_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif }).eq('id', commercantId)
     setSaving(false)
     if (error) {
       console.error('[ConfigDashboard.saveProfil]', error)
@@ -2874,6 +2977,20 @@ function TabProfil({ commercantId, toast, onSaved }) {
             </label>
           </div>
         )}
+
+        {/* ─── Affichage (toutes catégories) ─── */}
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
+          <p style={{ ...s.label, marginBottom: 12 }}>Affichage</p>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.photos_catalogue_actif ? T.main : T.pale}`, background: form.photos_catalogue_actif ? T.pale : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
+            <input type="checkbox" checked={!!form.photos_catalogue_actif} onChange={e => setForm(p => ({ ...p, photos_catalogue_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Camera size={15} strokeWidth={1.8}/> Afficher les photos du catalogue</p>
+              <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
+                Montre les photos de tes articles sur ta fiche. Décoche si tu préfères une présentation sans photos.
+              </p>
+            </div>
+          </label>
+        </div>
 
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
           <button style={{ ...s.btn, ...s.btnPrimary, padding: '11px 24px', fontSize: 14 }} onClick={saveProfil} disabled={saving}>
@@ -4599,7 +4716,7 @@ export default function ConfigDashboard({ commercantId }) {
 
   // Vitrine : on parle de "Vitrine" plutôt que "Menu", et on masque "Créneaux" (pas de C&C)
   const tabs = [
-    { id: 'menu',     label: estVitrine ? 'Vitrine' : 'Menu', icon: 'menu' },
+    { id: 'menu',     label: commercant?.categorie === 'detail' ? 'Boutique' : estVitrine ? 'Catalogue' : 'Menu', icon: 'menu' },
     peutDeals && { id: 'deals', label: 'Deals', icon: 'tag' },
     peutActus && { id: 'actus', label: 'Actus', icon: 'sliders' },
     iaActif && { id: 'ia', label: 'Générateur', icon: 'sparkles' },

@@ -115,6 +115,55 @@ export function promptPushOneSignal() {
   })
 }
 
+// Lit l'état courant de l'abonnement push (diagnostic + affichage du bouton).
+// Accède à window.OneSignal directement (chargé par le <Script> ci-dessous).
+export function lireEtatPush() {
+  if (typeof window === 'undefined' || !window.OneSignal) return { pret: false }
+  const OS = window.OneSignal
+  try {
+    return {
+      pret: true,
+      supporte: OS.Notifications?.isPushSupported ? OS.Notifications.isPushSupported() : true,
+      permissionNative: OS.Notifications?.permissionNative ?? null, // 'default'|'granted'|'denied'
+      permission: OS.Notifications?.permission ?? null,             // bool
+      optedIn: OS.User?.PushSubscription?.optedIn ?? null,          // bool
+      id: OS.User?.PushSubscription?.id || null,                    // subscription id
+    }
+  } catch {
+    return { pret: false }
+  }
+}
+
+// Active/répare l'abonnement push. À appeler DANS un handler de clic (le geste
+// utilisateur est requis par le navigateur pour requestPermission, surtout iOS).
+// On accède à window.OneSignal directement pour ne pas casser la chaîne de geste
+// (la file OneSignalDeferred différée perdrait l'activation utilisateur sur Safari).
+export async function activerNotifications() {
+  if (typeof window === 'undefined' || !window.OneSignal) return { ok: false, raison: 'sdk_absent' }
+  const OS = window.OneSignal
+  try {
+    if (OS.Notifications?.isPushSupported && !OS.Notifications.isPushSupported()) {
+      return { ok: false, raison: 'non_supporte' }
+    }
+    // Déjà refusé au niveau navigateur/OS : requestPermission n'affichera plus rien,
+    // il faut réactiver dans les réglages du téléphone.
+    if (OS.Notifications?.permissionNative === 'denied') {
+      return { ok: false, raison: 'refuse_os' }
+    }
+    await OS.Notifications?.requestPermission?.()
+    if (OS.User?.PushSubscription?.optIn) {
+      try { await OS.User.PushSubscription.optIn() } catch { /* déjà opted-in */ }
+    }
+    const permission = OS.Notifications?.permission
+    const optedIn = OS.User?.PushSubscription?.optedIn
+    if (permission === true && optedIn !== false) return { ok: true }
+    if (permission === false || OS.Notifications?.permissionNative === 'denied') return { ok: false, raison: 'refuse_os' }
+    return { ok: false, raison: 'incomplet' }
+  } catch (e) {
+    return { ok: false, raison: 'erreur', error: e?.message || String(e) }
+  }
+}
+
 export default function OneSignalInit({ yopperId, codePostal, favoris = [] }) {
   useEffect(() => {
     if (!APP_ID) return

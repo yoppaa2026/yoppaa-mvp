@@ -7,6 +7,7 @@ import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
 import OneSignalInit, { taggerFavoriOneSignal, syncYopperTags } from '@/app/components/OneSignalInit'
+import CarteNotifications from './CarteNotifications'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 
 const T = {
@@ -3030,6 +3031,10 @@ export default function Commander() {
                     </div>
                   )
                 })()}
+
+                {/* Notifications : bouton explicite d'activation/réparation des push
+                    (le prompt ne se déclenchait qu'au favori/commande, cf. bug 18/07). */}
+                <CarteNotifications />
 
                 {/* Grid 2x2 stats : Commandes / RDV / Total depense / Commerces.
                     4 metriques egales en visuel pour equilibrer la page profil. */}

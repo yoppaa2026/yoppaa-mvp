@@ -136,6 +136,25 @@ export function lireEtatPush() {
   }
 }
 
+// Version async enrichie : ajoute l'état du SERVICE WORKER (indispensable pour
+// diagnostiquer pourquoi l'abonnement ne se crée pas sur PWA installée). Retourne
+// `sw` = 'os@/<scope>' si le worker OneSignal est actif, 'autre(n)', 'aucun' ou 'err'.
+export async function diagnostiquerPush() {
+  const base = lireEtatPush()
+  let sw = 'n/a'
+  try {
+    if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
+      const regs = await navigator.serviceWorker.getRegistrations()
+      const os = regs.find(r => `${r.active?.scriptURL || r.installing?.scriptURL || ''}`.includes('OneSignal'))
+      if (os) sw = `os@${new URL(os.scope).pathname}${os.active ? '' : ':inact'}`
+      else sw = regs.length ? `autre(${regs.length})` : 'aucun'
+    }
+  } catch { sw = 'err' }
+  let onesignalId = null
+  try { onesignalId = window.OneSignal?.User?.onesignalId || null } catch { /* ignore */ }
+  return { ...base, sw, onesignalId }
+}
+
 // Active/répare l'abonnement push. À appeler DANS un handler de clic (le geste
 // utilisateur est requis par le navigateur pour requestPermission, surtout iOS).
 // On accède à window.OneSignal directement pour ne pas casser la chaîne de geste
@@ -171,14 +190,26 @@ export async function activerNotifications() {
     if (perm === 'denied') return { ok: false, raison: 'refuse_os' }
     if (perm !== 'granted') return { ok: false, raison: 'incomplet' }
 
-    // Permission accordée : opt-in OneSignal pour créer/attacher la subscription.
-    // NON BLOQUANT : optIn() peut ne jamais résoudre sur iOS -> on borne à 3 s. OneSignal
-    // enregistre la subscription de son côté ; l'id apparaîtra à la relecture d'état.
+    // Permission accordée. Avant de s'abonner, on s'assure que le SERVICE WORKER OneSignal
+    // est prêt : sur PWA installée (iOS/Android) l'abonnement échoue si le SW ne contrôle
+    // pas encore la page. Puis opt-in (borné, peut ne jamais résoudre) et on POLL l'id
+    // d'abonnement quelques secondes (l'enregistrement auprès d'Apple/FCM prend un instant).
+    try {
+      if (navigator.serviceWorker) {
+        await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(r, 5000))])
+      }
+    } catch { /* pas de SW */ }
     try {
       const p = OS.User?.PushSubscription?.optIn?.()
-      if (p && typeof p.then === 'function') await Promise.race([p, new Promise(r => setTimeout(r, 3000))])
+      if (p && typeof p.then === 'function') await Promise.race([p, new Promise(r => setTimeout(r, 4000))])
     } catch { /* déjà opted-in */ }
-    return { ok: true }
+    let id = null
+    for (let i = 0; i < 6; i++) {
+      id = OS.User?.PushSubscription?.id || null
+      if (id) break
+      await new Promise(r => setTimeout(r, 700))
+    }
+    return { ok: true, id, raison: id ? undefined : 'abonnement_en_cours' }
   } catch (e) {
     return { ok: false, raison: 'erreur', error: e?.message || String(e) }
   }

@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { canDo, getIaConfig } from '@/lib/plans'
 import TabGenerateur from './TabGenerateur'
+import BoutonIaInline from './BoutonIaInline'
 import TabPaiements from './TabPaiements'
 import { compresserImage } from '@/lib/compress-image'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
@@ -1340,7 +1341,16 @@ function TabDeals({ commercantId, commercant, toast }) {
               </div>
             </div>
 
-            <div><label style={s.label}>Accroche courte</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Une ou deux phrases affichées sur la card du deal…"/></div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+                <label style={{ ...s.label, marginBottom: 0 }}>Accroche courte</label>
+                <BoutonIaInline commercantId={commercantId} surface="deal" occasion="Bon plan" brief={form.titre}
+                  infos={[form.prix_deal && `prix ${form.prix_deal}€`, form.prix_original && `au lieu de ${form.prix_original}€`].filter(Boolean).join(', ')}
+                  onResult={v => setForm(p => ({ ...p, description: v.court || p.description, description_longue: v.long || p.description_longue }))}
+                  toast={toast} />
+              </div>
+              <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Une ou deux phrases affichées sur la card du deal…"/>
+            </div>
 
             <div>
               <label style={s.label}>Description enrichie</label>
@@ -1747,7 +1757,15 @@ function TabActus({ commercantId, commercant, toast }) {
               </div>
             </div>
 
-            <div><label style={s.label}>Accroche courte</label><Textarea value={form.contenu} onChange={e => setForm(p => ({ ...p, contenu: e.target.value }))} placeholder="Une phrase visible sur la fiche"/></div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+                <label style={{ ...s.label, marginBottom: 0 }}>Accroche courte</label>
+                <BoutonIaInline commercantId={commercantId} surface="actu" occasion={form.type === 'alerte' ? 'Infos pratiques' : 'Nouveauté'} brief={form.titre}
+                  onResult={v => setForm(p => ({ ...p, contenu: v.court || p.contenu, contenu_long: v.long || p.contenu_long }))}
+                  toast={toast} />
+              </div>
+              <Textarea value={form.contenu} onChange={e => setForm(p => ({ ...p, contenu: e.target.value }))} placeholder="Une phrase visible sur la fiche"/>
+            </div>
 
             <div>
               <label style={s.label}>Contenu enrichi</label>

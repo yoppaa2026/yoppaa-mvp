@@ -56,7 +56,7 @@ export default function TabGenerateur({ commercantId, commercant, toast }) {
         } else if (j.error === 'plan_sans_ia') {
           toast?.(j.message || 'Le générateur est réservé aux paliers Communiquer et Vendre.', 'error')
         } else {
-          toast?.(j.detail ? `IA : ${j.detail}` : (j.error || 'La génération a échoué, réessaie.'), 'error')
+          toast?.(j.error || 'La génération a échoué, réessaie.', 'error')
         }
         setLoading(false); return
       }

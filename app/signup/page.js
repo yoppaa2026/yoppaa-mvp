@@ -1005,7 +1005,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
     clearTimeout(nominatimRef.current)
     nominatimRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&accept-language=fr&countrycodes=be`, {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&accept-language=fr&countrycodes=be&addressdetails=1`, {
           headers: { Accept: 'application/json' },
         })
         const data = await res.json()
@@ -1016,7 +1016,17 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
   }
 
   function choisirSuggestion(s) {
-    const adresse = s.display_name.split(',').slice(0, 3).join(', ')
+    // Compose une adresse propre « Rue X 12, 5640 Localité » depuis les champs
+    // structurés Nominatim. Le display_name brut intercale les hameaux/lieux-dits
+    // (ex. « La Marchauderie ») et la troncature perdait la localité et le CP.
+    const a = s.address || {}
+    const rue = a.road || a.pedestrian || a.square || ''
+    const num = a.house_number || ''
+    const localite = a.village || a.town || a.city || a.municipality || a.hamlet || ''
+    const cp = a.postcode || ''
+    const adresse = rue
+      ? `${rue}${num ? ` ${num}` : ''}${(cp || localite) ? `, ${[cp, localite].filter(Boolean).join(' ')}` : ''}`
+      : s.display_name.split(',').slice(0, 3).join(', ')
     setForm(p => ({
       ...p,
       adresse,

@@ -1167,7 +1167,9 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
   }, [commercant.id])
 
   // Retourne { error, dims }. Erreur bloque l'upload. Dims permet de générer un warning a posteriori.
-  async function validerFichier(file) {
+  // minPx : 800 par défaut (photos de couverture/galerie), abaissé pour le logo
+  // qui est recompressé en 400x400 de toute façon (beaucoup de vrais logos font < 800 px).
+  async function validerFichier(file, { minPx = 800 } = {}) {
     if (!file) return { error: 'Aucun fichier', dims: null }
     const okType = /image\/(jpeg|jpg|png|webp)/.test(file.type)
     if (!okType) return { error: 'Format invalide. Utilise JPG, PNG ou WEBP.', dims: null }
@@ -1179,13 +1181,13 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
       img.src = URL.createObjectURL(file)
     })
     if (!dims) return { error: 'Fichier corrompu ou illisible.', dims: null }
-    if (Math.max(dims.w, dims.h) < 800) return { error: 'Image trop petite. Min 800 px sur le plus grand côté.', dims }
+    if (Math.max(dims.w, dims.h) < minPx) return { error: `Image trop petite. Min ${minPx} px sur le plus grand côté.`, dims }
     return { error: null, dims }
   }
 
   async function uploadLogo(file) {
     setError('')
-    const { error: err } = await validerFichier(file)
+    const { error: err } = await validerFichier(file, { minPx: 256 })
     if (err) { setError(err); return }
     setUploadingLogo(true)
     // Compression client automatique (feedback_zero_friction)

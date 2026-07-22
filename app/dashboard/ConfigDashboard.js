@@ -168,9 +168,12 @@ function TabMenu({ commercantId, commercant, toast }) {
   // Pour catégorie='vitrine' (coiffeur, opticien…), on retire stock/jour, temps prépa,
   // et on force est_vitrine=true sur les articles créés.
   const estVitrine = commercant?.categorie === 'vitrine'
+  // Détail (boutique) : stock PERMANENT simple par article (ou par variante),
+  // pas de stock par jour ni de temps de préparation (concepts C&C alimentaire).
+  const estDetail = commercant?.categorie === 'detail'
   // Variantes (matrice taille/couleur) proposées au détail et au service.
   // L'alimentaire garde son système d'options/suppléments.
-  const variantesCategorie = commercant?.categorie === 'detail' || estVitrine
+  const variantesCategorie = estDetail || estVitrine
   // ─── Sous-onglet actif : Articles | Catégories | Personnalisation ────────
   const [subTab, setSubTab] = useState('articles')
   const [searchQuery, setSearchQuery] = useState('')
@@ -315,7 +318,7 @@ function TabMenu({ commercantId, commercant, toast }) {
       stock_jour: estVitrine ? 0 : (parseInt(form.stock_jour) || 0),
       actif: form.actif,
       categorie: form.categorie.trim() || null,
-      temps_prepa: estVitrine ? 0 : (parseFloat(form.temps_prepa) || 0),
+      temps_prepa: (estVitrine || estDetail) ? 0 : (parseFloat(form.temps_prepa) || 0),
       photo_url: form.photo_url || null,
       est_vitrine: estVitrine,
     }
@@ -473,6 +476,15 @@ function TabMenu({ commercantId, commercant, toast }) {
               <Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="À partir de 290"/>
               <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Affiché en mode "à partir de" sur ta fiche client.</p>
             </div>
+          ) : estDetail ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="49.90"/></div>
+              <div>
+                <label style={s.label}>Stock disponible</label>
+                <Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="12"/>
+                <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Stock permanent. Si l&rsquo;article a des variantes, le stock se gère par variante.</p>
+              </div>
+            </div>
           ) : (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -549,7 +561,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     if (showForm && editId === a.id) {
       return <div key={a.id}>{renderArticleForm()}</div>
     }
-    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
+    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} estDetail={estDetail} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
   }
 
   return (
@@ -1157,7 +1169,7 @@ function VariantesArticle({ article, toast }) {
 const JOURS_KEYS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
-function ArticleCard({ a, estVitrine = false, onEdit, onToggle, onUpdateStock, onDelete, s, dejaCommande = 0, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
+function ArticleCard({ a, estVitrine = false, estDetail = false, onEdit, onToggle, onUpdateStock, onDelete, s, dejaCommande = 0, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -1228,8 +1240,19 @@ function ArticleCard({ a, estVitrine = false, onEdit, onToggle, onUpdateStock, o
             ) : estVitrine ? (
               <span style={{ fontSize: 12, fontWeight: 700, color: T.muted }}>Prix sur demande</span>
             ) : null}
-            {!estVitrine && (a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.bgPanel, background: '#F8F6FF', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="clock" size={11} color={T.bgPanel}/>{a.temps_prepa} min</span>}
-            {!estVitrine && (effAuj.ferme ? (
+            {/* Détail : stock permanent simple, cliquable pour l'ajuster */}
+            {estDetail && (() => {
+              const st = a.stock_jour || 0
+              return (
+                <button type="button" title="Modifier le stock"
+                  onClick={() => { const v = window.prompt('Stock disponible :', String(st)); if (v !== null) onUpdateStock(a.id, v) }}
+                  style={{ fontSize: 11, fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: st === 0 ? '#DC2626' : st <= 2 ? '#EA580C' : '#10B981', background: st === 0 ? '#FEE2E2' : st <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>
+                  {st === 0 ? 'Épuisé' : `Stock : ${st}`}
+                </button>
+              )
+            })()}
+            {!estVitrine && !estDetail && (a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.bgPanel, background: '#F8F6FF', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="clock" size={11} color={T.bgPanel}/>{a.temps_prepa} min</span>}
+            {!estVitrine && !estDetail && (effAuj.ferme ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Fermé aujourd&rsquo;hui</span>
             ) : stockBrutAuj > 0 ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: stockRestant === 0 ? '#DC2626' : stockRestant <= 2 ? '#EA580C' : '#10B981', background: stockRestant === 0 ? '#FEE2E2' : stockRestant <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>
@@ -1245,8 +1268,9 @@ function ArticleCard({ a, estVitrine = false, onEdit, onToggle, onUpdateStock, o
             )}
           </div>
 
-          {/* 7 chips stock par jour — masqué en mode vitrine (pas de stock pertinent) */}
-          {!estVitrine && <div>
+          {/* 7 chips stock par jour — modèle C&C alimentaire uniquement
+              (vitrine : pas de stock ; détail : stock permanent simple) */}
+          {!estVitrine && !estDetail && <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stock par jour</span>
               <button onClick={() => {
@@ -1336,7 +1360,9 @@ function ArticleCard({ a, estVitrine = false, onEdit, onToggle, onUpdateStock, o
           </button>
         </div>
       </div>
-      {showOptions && <OptionsArticle articleId={a.id} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
+      {showOptions && ((estDetail || estVitrine)
+        ? <VariantesArticle article={a} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
+        : <OptionsArticle articleId={a.id} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>)}
     </div>
   )
 }
@@ -5066,7 +5092,9 @@ export default function ConfigDashboard({ commercantId }) {
     peutDeals && { id: 'deals', label: 'Deals', icon: 'tag' },
     peutActus && { id: 'actus', label: 'Actus', icon: 'sliders' },
     iaActif && { id: 'ia', label: 'Générateur', icon: 'sparkles' },
-    !estVitrine && { id: 'creneaux', label: 'Créneaux', icon: 'clock' },
+    // Créneaux de retrait C&C : alimentaire uniquement (le retrait boutique détail
+    // sera cadré au Module 2 étape 5).
+    !estVitrine && commercant?.categorie !== 'detail' && { id: 'creneaux', label: 'Créneaux', icon: 'clock' },
     peutLivraison && { id: 'livraison', label: 'Livraison', icon: 'box' },
     peutRdv && { id: 'rdv', label: 'RDV', icon: 'clock' },
     peutPaiements && { id: 'paiements', label: 'Paiements', icon: 'tag' },

@@ -168,6 +168,9 @@ function TabMenu({ commercantId, commercant, toast }) {
   // Pour catégorie='vitrine' (coiffeur, opticien…), on retire stock/jour, temps prépa,
   // et on force est_vitrine=true sur les articles créés.
   const estVitrine = commercant?.categorie === 'vitrine'
+  // Variantes (matrice taille/couleur) proposées au détail et au service.
+  // L'alimentaire garde son système d'options/suppléments.
+  const variantesCategorie = commercant?.categorie === 'detail' || estVitrine
   // ─── Sous-onglet actif : Articles | Catégories | Personnalisation ────────
   const [subTab, setSubTab] = useState('articles')
   const [searchQuery, setSearchQuery] = useState('')
@@ -772,9 +775,11 @@ function TabMenu({ commercantId, commercant, toast }) {
       {subTab === 'personnalisation' && (
         <>
           <div style={{ background: T.bgPanel, borderRadius: 14, padding: '14px 16px', marginBottom: 14, color: '#fff' }}>
-            <p style={{ fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 4 }}>Personnalisation par article</p>
+            <p style={{ fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 4 }}>{variantesCategorie ? 'Variantes par article' : 'Personnalisation par article'}</p>
             <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, margin: 0 }}>
-              Configure les groupes d&rsquo;options de chaque article (sauces obligatoires, suppléments payants…). Clique pour gérer.
+              {variantesCategorie
+                ? 'Décline chaque produit (taille, couleur…) avec un stock, un prix et une photo par combinaison. Clique pour gérer.'
+                : 'Configure les groupes d’options de chaque article (sauces obligatoires, suppléments payants…). Clique pour gérer.'}
             </p>
           </div>
           {articles.length === 0 ? (
@@ -795,7 +800,9 @@ function TabMenu({ commercantId, commercant, toast }) {
                   <Icon name="chevR" size={16} color={T.muted}/>
                 </summary>
                 <div style={{ padding: '0 16px 14px', borderTop: `1px solid ${T.hairline}` }}>
-                  <OptionsArticle articleId={a.id} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
+                  {variantesCategorie
+                    ? <VariantesArticle article={a} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
+                    : <OptionsArticle articleId={a.id} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
                 </div>
               </details>
             ))
@@ -964,6 +971,184 @@ function OptionsArticle({ articleId, toast }) {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ─── Gestionnaire de variantes pour un article (détail / service) ────────────
+// Axes (Taille, Couleur…) stockés sur l'article + une ligne article_variantes
+// par combinaison (stock/prix/photo). Sauvegarde directe, comme OptionsArticle.
+function VariantesArticle({ article, toast }) {
+  const [gere, setGere] = useState(!!article.gere_variantes)
+  const [axe1Nom, setAxe1Nom] = useState(article.axe1_nom || 'Taille')
+  const [axe2Nom, setAxe2Nom] = useState(article.axe2_nom || '')
+  const [axe1Valeurs, setAxe1Valeurs] = useState(Array.isArray(article.axe1_valeurs) ? article.axe1_valeurs : [])
+  const [axe2Valeurs, setAxe2Valeurs] = useState(Array.isArray(article.axe2_valeurs) ? article.axe2_valeurs : [])
+  const [input1, setInput1] = useState('')
+  const [input2, setInput2] = useState('')
+  const [variantes, setVariantes] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [uploadId, setUploadId] = useState(null)
+
+  useEffect(() => { fetchVariantes() }, [article.id])
+
+  async function fetchVariantes() {
+    setLoading(true)
+    const { data } = await supabase.from('article_variantes').select('*').eq('article_id', article.id).order('ordre')
+    setVariantes(data || [])
+    setLoading(false)
+  }
+
+  async function saveAxes(patch) {
+    const { error } = await supabase.from('articles').update(patch).eq('id', article.id)
+    if (error) toast(`Erreur : ${error.message}`, 'error')
+  }
+
+  async function toggleGere(v) { setGere(v); await saveAxes({ gere_variantes: v }) }
+
+  function addValeur(axe) {
+    const raw = (axe === 1 ? input1 : input2).trim()
+    if (!raw) return
+    const list = axe === 1 ? axe1Valeurs : axe2Valeurs
+    if (list.includes(raw)) { toast('Valeur déjà présente', 'error'); return }
+    const next = [...list, raw]
+    if (axe === 1) { setAxe1Valeurs(next); setInput1(''); saveAxes({ axe1_valeurs: next }) }
+    else { setAxe2Valeurs(next); setInput2(''); saveAxes({ axe2_valeurs: next }) }
+  }
+
+  function removeValeur(axe, val) {
+    const list = axe === 1 ? axe1Valeurs : axe2Valeurs
+    const next = list.filter(x => x !== val)
+    if (axe === 1) { setAxe1Valeurs(next); saveAxes({ axe1_valeurs: next }) }
+    else { setAxe2Valeurs(next); saveAxes({ axe2_valeurs: next }) }
+  }
+
+  async function saveNom(axe) {
+    if (axe === 1) await saveAxes({ axe1_nom: axe1Nom.trim() || null })
+    else await saveAxes({ axe2_nom: axe2Nom.trim() || null })
+  }
+
+  async function genererCombinaisons() {
+    if (!axe1Valeurs.length) { toast('Ajoute au moins une valeur au premier axe', 'error'); return }
+    const a2 = axe2Valeurs.length ? axe2Valeurs : [null]
+    const existing = new Set(variantes.map(v => `${v.axe1_valeur || ''}|${v.axe2_valeur || ''}`))
+    const toInsert = []
+    for (const v1 of axe1Valeurs) for (const v2 of a2) {
+      const key = `${v1 || ''}|${v2 || ''}`
+      if (!existing.has(key)) toInsert.push({ article_id: article.id, axe1_valeur: v1, axe2_valeur: v2, stock: 0, ordre: variantes.length + toInsert.length })
+    }
+    if (!toInsert.length) { toast('Toutes les combinaisons existent déjà'); return }
+    const { error } = await supabase.from('article_variantes').insert(toInsert)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast(`${toInsert.length} combinaison${toInsert.length > 1 ? 's' : ''} ajoutée${toInsert.length > 1 ? 's' : ''}`)
+    fetchVariantes()
+  }
+
+  function setVarLocal(id, patch) { setVariantes(prev => prev.map(v => v.id === id ? { ...v, ...patch } : v)) }
+
+  async function persistVar(id, patch) {
+    const { error } = await supabase.from('article_variantes').update(patch).eq('id', id)
+    if (error) toast(`Erreur : ${error.message}`, 'error')
+  }
+
+  async function deleteVariante(id) {
+    const { data, error } = await supabase.from('article_variantes').delete().eq('id', id).select()
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    if (!data || !data.length) { toast('Suppression refusée (RLS)', 'error'); return }
+    setVariantes(prev => prev.filter(v => v.id !== id))
+  }
+
+  async function uploadVariantePhoto(file, id) {
+    if (!file || !file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
+    if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo)', 'error'); return }
+    setUploadId(id)
+    const compressed = await compresserImage(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.85 })
+    const fileName = `variante-${id}-${Date.now()}.jpg`
+    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
+    if (upErr) { toast('Erreur upload photo', 'error'); setUploadId(null); return }
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    await persistVar(id, { photo_url: urlData.publicUrl })
+    setVarLocal(id, { photo_url: urlData.publicUrl })
+    setUploadId(null)
+  }
+
+  function renderAxe(n, nom, setNom, valeurs, input, setInput) {
+    return (
+      <div style={{ marginBottom: 10, background: '#FAFAFA', borderRadius: 10, padding: 10, border: `1px solid ${T.hairline}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: T.muted, textTransform: 'uppercase' }}>Axe {n}{n === 2 ? ' (optionnel)' : ''}</span>
+          <input value={nom} onChange={e => setNom(e.target.value)} onBlur={() => saveNom(n)} placeholder={n === 1 ? 'Taille' : 'Couleur'} style={{ ...s.input, fontSize: 12, padding: '5px 8px', width: 130 }}/>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+          {valeurs.map(val => (
+            <span key={val} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 100, padding: '3px 6px 3px 10px', fontSize: 12 }}>
+              <span style={{ color: T.ink, fontWeight: 600 }}>{val}</span>
+              <button onClick={() => removeValeur(n, val)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>
+            </span>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input value={input} onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addValeur(n) } }}
+            placeholder={n === 1 ? 'Ex : S, M, L…' : 'Ex : Bleu, Rouge…'} style={{ ...s.input, flex: 1, fontSize: 12, padding: '5px 8px' }}/>
+          <button style={{ ...s.btn, ...s.btnPrimary, padding: '5px 10px', fontSize: 12 }} onClick={() => addValeur(n)}>+</button>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading) return <p style={{ fontSize: 12, color: T.muted, padding: '8px 0' }}>Chargement des variantes...</p>
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.hairline}` }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: gere ? 12 : 0 }}>
+        <input type="checkbox" checked={gere} onChange={e => toggleGere(e.target.checked)} style={{ width: 16, height: 16, accentColor: T.main, cursor: 'pointer' }}/>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: T.ink }}>Cet article se décline en variantes (taille, couleur…)</span>
+      </label>
+
+      {gere && (
+        <>
+          {renderAxe(1, axe1Nom, setAxe1Nom, axe1Valeurs, input1, setInput1)}
+          {renderAxe(2, axe2Nom, setAxe2Nom, axe2Valeurs, input2, setInput2)}
+
+          <button style={{ ...s.btn, ...s.btnPrimary, padding: '7px 12px', fontSize: 12, marginBottom: 12 }} onClick={genererCombinaisons}>
+            <Icon name="plus" size={13}/> Générer les combinaisons
+          </button>
+
+          {variantes.length === 0 ? (
+            <p style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Définis tes axes puis clique sur «&nbsp;Générer les combinaisons&nbsp;».</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {variantes.map(v => (
+                <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: v.actif ? '#fff' : '#F9FAFB', borderRadius: 10, padding: 8, border: `1px solid ${T.hairline}`, opacity: v.actif ? 1 : 0.65 }}>
+                  <label style={{ width: 40, height: 40, borderRadius: 8, overflow: 'hidden', flexShrink: 0, border: `1px solid ${T.hairline}`, cursor: 'pointer', position: 'relative', background: T.hairline, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {v.photo_url ? <img src={v.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : (uploadId === v.id ? <span style={{ fontSize: 10 }}>…</span> : <Camera size={15} strokeWidth={1.6} color={T.muted}/>)}
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadVariantePhoto(e.target.files?.[0], v.id)}/>
+                  </label>
+                  <span style={{ fontWeight: 700, fontSize: 12.5, color: T.ink, minWidth: 80, flex: 1 }}>
+                    {v.axe1_valeur}{v.axe2_valeur ? ` · ${v.axe2_valeur}` : ''}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 10, color: T.muted, fontWeight: 700 }}>Stock</span>
+                    <input type="number" min="0" value={v.stock ?? 0} onChange={e => setVarLocal(v.id, { stock: e.target.value })} onBlur={e => persistVar(v.id, { stock: parseInt(e.target.value) || 0 })} style={{ ...s.input, width: 54, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 10, color: T.muted, fontWeight: 700 }}>Prix</span>
+                    <input type="number" min="0" step="0.10" value={v.prix ?? ''} placeholder={Number(article.prix || 0).toFixed(2)} onChange={e => setVarLocal(v.id, { prix: e.target.value })} onBlur={e => persistVar(v.id, { prix: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...s.input, width: 62, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
+                  </div>
+                  <button onClick={() => { const nv = !v.actif; setVarLocal(v.id, { actif: nv }); persistVar(v.id, { actif: nv }) }} title="Actif / inactif"
+                    style={{ width: 34, height: 20, borderRadius: 100, background: v.actif ? T.main : '#D1D5DB', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
+                    <div style={{ position: 'absolute', top: 2, left: v.actif ? 16 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.15s' }}/>
+                  </button>
+                  <button onClick={() => deleteVariante(v.id)} style={{ ...s.btn, ...s.btnDanger, padding: '4px 7px', fontSize: 11 }} title="Supprimer">
+                    <Icon name="trash" size={12} color="#DC2626"/>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -2772,7 +2957,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
     const { data } = await supabase.from('commercants').select('*').eq('id', commercantId).single()
     if (data) {
       const defaultHoraires = { lundi: { ouvert: true, debut: '07:00', fin: '14:00' }, mardi: { ouvert: true, debut: '07:00', fin: '14:00' }, mercredi: { ouvert: true, debut: '07:00', fin: '14:00' }, jeudi: { ouvert: true, debut: '07:00', fin: '14:00' }, vendredi: { ouvert: true, debut: '07:00', fin: '14:00' }, samedi: { ouvert: true, debut: '07:00', fin: '13:00' }, dimanche: { ouvert: false, debut: '07:00', fin: '12:00' } }
-      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false })
+      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '' })
       setLogoPreview(data.logo_url || null)
     }
     setLoading(false)
@@ -2804,7 +2989,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
   async function saveProfil() {
     if (!form.nom.trim()) return toast('Le nom est obligatoire', 'error')
     setSaving(true)
-    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, fidelite_actif: !!form.fidelite_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif }).eq('id', commercantId)
+    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, fidelite_actif: !!form.fidelite_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des) }).eq('id', commercantId)
     setSaving(false)
     if (error) {
       console.error('[ConfigDashboard.saveProfil]', error)
@@ -2831,7 +3016,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
             : <Croissant size={14} strokeWidth={1.8}/>}
         </span>
         <span style={{ fontSize: 11, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          {form.categorie === 'vitrine' ? 'Vitrine · Présence + RDV' : 'Alimentaire · Click & Collect'}
+          {form.categorie === 'vitrine' ? 'Service · Présence + RDV' : form.categorie === 'detail' ? 'Détail · Boutique' : 'Alimentaire · Click & Collect'}
         </span>
       </div>
 
@@ -2975,6 +3160,59 @@ function TabProfil({ commercantId, toast, onSaved }) {
                 </p>
               </div>
             </label>
+          </div>
+        )}
+
+        {/* ─── Mode de vente boutique (détail) ─── */}
+        {form.categorie === 'detail' && (
+          <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
+            <p style={{ ...s.label, marginBottom: 6 }}>Mode de vente de la boutique</p>
+            <p style={{ fontSize: 11, color: T.muted, marginBottom: 10, lineHeight: 1.5 }}>Comment tes clients récupèrent leurs achats.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+              {[
+                { val: 'retrait', label: 'Retrait en magasin', desc: 'Le client vient chercher sa commande.' },
+                { val: 'expedition', label: 'Expédition', desc: 'Envoi par colis à domicile.' },
+                { val: 'les_deux', label: 'Les deux', desc: 'Le client choisit au moment de payer.' },
+              ].map(opt => {
+                const actif = form.boutique_mode_vente === opt.val
+                return (
+                  <label key={opt.val} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${actif ? T.main : T.pale}`, background: actif ? T.pale : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
+                    <input type="radio" name="boutique_mode_vente" checked={actif} onChange={() => setForm(p => ({ ...p, boutique_mode_vente: opt.val }))} style={{ width: 16, height: 16, accentColor: T.main, marginTop: 2, cursor: 'pointer' }}/>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>{opt.label}</p>
+                      <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>{opt.desc}</p>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+
+            {(form.boutique_mode_vente === 'retrait' || form.boutique_mode_vente === 'les_deux') && (
+              <div style={{ marginBottom: 12 }}>
+                <p style={{ ...s.label, marginBottom: 6 }}>Paiement au retrait</p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[{ val: 'en_ligne', label: 'En ligne (obligatoire)' }, { val: 'magasin', label: 'En magasin' }].map(opt => {
+                    const sel = form.boutique_retrait_paiement === opt.val
+                    return (
+                      <button key={opt.val} type="button" onClick={() => setForm(p => ({ ...p, boutique_retrait_paiement: opt.val }))}
+                        style={{ flex: 1, padding: '9px 10px', borderRadius: 10, border: `1.5px solid ${sel ? T.main : T.hairline}`, background: sel ? T.main : '#fff', color: sel ? '#fff' : T.muted, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                        {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {(form.boutique_mode_vente === 'expedition' || form.boutique_mode_vente === 'les_deux') && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div><label style={s.label}>Frais de port (€)</label><Input type="number" min="0" step="0.10" value={form.boutique_frais_port} onChange={e => setForm(p => ({ ...p, boutique_frais_port: e.target.value }))} placeholder="4.90"/></div>
+                <div><label style={s.label}>Offert dès (€)</label><Input type="number" min="0" step="1" value={form.boutique_gratuit_des} onChange={e => setForm(p => ({ ...p, boutique_gratuit_des: e.target.value }))} placeholder="50 (option)"/></div>
+              </div>
+            )}
+            <p style={{ fontSize: 10, color: T.muted, marginTop: 8, lineHeight: 1.5 }}>
+              Expédition : tu saisiras le numéro de suivi à la main une fois le colis parti. Zone desservie : toute la Belgique pour le lancement.
+            </p>
           </div>
         )}
 

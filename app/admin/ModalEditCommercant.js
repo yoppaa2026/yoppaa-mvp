@@ -174,7 +174,15 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
     }
   }
 
-  const nomOk = confirmName.trim() === (commercant?.nom || '').trim()
+  // Comparaison tolérante : apostrophes typographiques vs droites (’ vs '),
+  // espaces multiples/insécables et casse. Le but est la friction volontaire,
+  // pas de bloquer sur un caractère invisible.
+  const normaliserNom = (str) => (str || '')
+    .replace(/[‘’ʼ´`]/g, "'")
+    .replace(/[\s ]+/g, ' ')
+    .trim()
+    .toLowerCase()
+  const nomOk = normaliserNom(confirmName) === normaliserNom(commercant?.nom)
 
   if (!mounted || typeof document === 'undefined' || !commercant) return null
 

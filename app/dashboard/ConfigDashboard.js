@@ -1654,7 +1654,7 @@ function TabDeals({ commercantId, commercant, toast }) {
                 <option value="">— Deal général (pas lié à un produit) —</option>
                 {articles.map(a => (
                   <option key={a.id} value={a.id}>
-                    {a.nom}{a.categorie ? ` · ${a.categorie}` : ''} — {Number(a.prix).toFixed(2)}€
+                    {a.nom}{a.categorie ? ` · ${a.categorie}` : ''} · {Number(a.prix).toFixed(2)}€
                   </option>
                 ))}
               </select>
@@ -2797,7 +2797,7 @@ function TabLivraison({ commercantId, toast }) {
             <input value={fraisFixe} onChange={e => setFraisFixe(e.target.value)} placeholder="Ex : 3" inputMode="decimal" style={inputStyle} />
           </label>
           <label style={{ flex: 1, minWidth: 140 }}>
-            <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Gratuit dès (€) — optionnel</span>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Gratuit dès (€), optionnel</span>
             <input value={gratuitDes} onChange={e => setGratuitDes(e.target.value)} placeholder="Ex : 25" inputMode="decimal" style={inputStyle} />
           </label>
         </div>
@@ -3219,9 +3219,9 @@ function TabProfil({ commercantId, toast, onSaved }) {
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {[
-                  { val: 'chaque',     Icon: Zap,           label: `À chaque nouvelle ${nounSing.toLowerCase() === 'rdv' ? 'demande' : nounSing}`, desc: `Email instantané à chaque ${nounSing.toLowerCase() === 'rdv' ? 'réservation' : 'commande'}. Idéal si tu n'ouvres pas le dashboard souvent.` },
+                  { val: 'chaque',     Icon: Zap,           label: `À chaque nouvelle ${nounSing.toLowerCase() === 'rdv' ? 'demande' : nounSing}`, desc: `Email instantané à chaque ${nounSing.toLowerCase() === 'rdv' ? 'réservation' : 'commande'}. Idéal si tu n'ouvres pas ton tableau de bord souvent.` },
                   { val: 'recap_jour', Icon: ClipboardList, label: 'Récap quotidien (8h)',           desc: `Un seul email chaque matin avec tous tes ${noun} de la journée. Moins intrusif.` },
-                  { val: 'aucun',      Icon: BellOff,       label: 'Aucun email',                    desc: 'Tu consultes uniquement ton dashboard. Aucun email automatique.' },
+                  { val: 'aucun',      Icon: BellOff,       label: 'Aucun email',                    desc: 'Tu consultes uniquement ton tableau de bord. Aucun email automatique.' },
                 ].map(opt => {
                   const actif = form.notif_mode === opt.val
                   return (
@@ -3536,7 +3536,7 @@ function QRCodeSection({ commercantId, toast }) {
     const ph      = isA4 ? '297mm' : '210mm'
     const imgW    = isA4 ? '194mm' : '136mm'
     return `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>Yoppaa QR — ${nomCommerce}</title>
+<title>Yoppaa QR · ${nomCommerce}</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
   @page{size:${format} portrait;margin:0;}

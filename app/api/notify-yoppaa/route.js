@@ -5,12 +5,23 @@
 // statut 'en_attente_validation' enregistré côté DB.
 
 import { NextResponse } from 'next/server'
-import { envoyerAuAdmin, emailNouveauCommercantAValider } from '@/lib/resend'
+import { envoyerAuAdmin, envoyerAuCommercant, emailNouveauCommercantAValider, emailDemandeRecue } from '@/lib/resend'
 
 export async function POST(request) {
   try {
     const body = await request.json()
-    const { commercant_id, nom, type, plan, score, success_pack } = body || {}
+    const { commercant_id, nom, type, plan, score, success_pack, email } = body || {}
+
+    // Accusé de réception AU COMMERÇANT (rassure pendant l'attente de validation).
+    // Best effort : un échec ici ne bloque pas la notification admin.
+    if (email) {
+      const r = await envoyerAuCommercant({
+        to: email,
+        subject: 'Ta demande Yoppaa est bien reçue 🟣',
+        html: emailDemandeRecue({ nom: nom || 'Commerçant', plan: plan || 'exister' }),
+      }).catch(e => ({ ok: false, error: e?.message }))
+      if (!r.ok) console.error('[notify-yoppaa] accusé réception commerçant échoué', r.error)
+    }
 
     const html = emailNouveauCommercantAValider({
       commercant_id,

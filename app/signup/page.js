@@ -2262,6 +2262,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
           commercant_id: commercant.id,
           nom: commercant.nom,
           type: commercant.type,
+          email: commercant.email,
           plan: commercant.plan,
           score,
           success_pack: shopChoices.has('success_pack') ? 'success_pack' : null,

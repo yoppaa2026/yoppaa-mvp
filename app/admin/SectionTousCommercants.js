@@ -83,6 +83,10 @@ export default function SectionTousCommercants({ toast }) {
     setCommercants(list => list.map(c => c.id === updated.id ? { ...c, ...updated } : c))
   }
 
+  function onDeleted(id) {
+    setCommercants(list => list.filter(c => c.id !== id))
+  }
+
   async function voirDashboard(c) {
     // Demarre une session d'impersonation : POST /api/admin/impersonate-start qui logue
     // dans admin_impersonations (conformite RGPD). Retourne l'impersonation_id qu'on garde
@@ -218,6 +222,7 @@ export default function SectionTousCommercants({ toast }) {
           commercant={edition}
           onClose={() => setEdition(null)}
           onSaved={onSaved}
+          onDeleted={onDeleted}
           toast={toast}
         />
       )}

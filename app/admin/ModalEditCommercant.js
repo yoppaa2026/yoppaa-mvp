@@ -25,7 +25,7 @@ const T = {
 }
 
 const STATUTS_PUB = ['publie', 'en_attente', 'rejete', 'suspendu']
-const CATEGORIES = ['alimentaire', 'vitrine']
+const CATEGORIES = ['alimentaire', 'vitrine', 'detail']
 const TYPES_COMMUNS = [
   'Boulangerie', 'Pâtisserie', 'Boulangerie & Pâtisserie', 'Chocolatier',
   'Sandwicherie', 'Snack', 'Friterie', 'Pizzeria', 'Coffee shop',
@@ -34,7 +34,7 @@ const TYPES_COMMUNS = [
   'Tatoueur', 'Kiné', 'Ostéopathe', 'Spa', 'Massage',
 ]
 
-export default function ModalEditCommercant({ commercant, onClose, onSaved, toast }) {
+export default function ModalEditCommercant({ commercant, onClose, onSaved, onDeleted, toast }) {
   const [form, setForm] = useState({
     nom: '',
     slug: '',
@@ -52,6 +52,11 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, toas
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [mounted, setMounted] = useState(false)
+  // Suppression définitive (commerçants de test)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmName, setConfirmName] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [blockInfo, setBlockInfo] = useState(null)
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -141,6 +146,35 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, toas
       setSaving(false)
     }
   }
+
+  // Suppression définitive (cascade côté serveur). Gardée : le serveur refuse (409)
+  // si le commerçant a des transactions payées, sauf force=true (données de test).
+  async function supprimer(force = false) {
+    if (deleting) return
+    setDeleting(true); setError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/admin/commercants', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ commercant_id: commercant.id, force }),
+      })
+      const j = await res.json()
+      if (res.status === 409 && j.error === 'transactions_payees') {
+        setBlockInfo(j); setDeleting(false); return
+      }
+      if (!res.ok || !j.ok) throw new Error(j.message || j.error || 'Erreur suppression')
+      if (toast) toast(`${commercant.nom} supprimé définitivement`, 'success')
+      if (onDeleted) onDeleted(commercant.id)
+      onClose()
+    } catch (e) {
+      console.error('[ModalEditCommercant] delete error', e)
+      setError(`Erreur : ${e.message || 'inconnue'}`)
+      setDeleting(false)
+    }
+  }
+
+  const nomOk = confirmName.trim() === (commercant?.nom || '').trim()
 
   if (!mounted || typeof document === 'undefined' || !commercant) return null
 
@@ -267,16 +301,48 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, toas
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, padding: '0.75rem 1.125rem 1.125rem', borderTop: `1px solid ${T.hairline}`, background: '#FAFAFA' }}>
-          <button onClick={onClose} disabled={saving}
-            style={{ flex: 1, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.hairline}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: saving ? 'default' : 'pointer', fontSize: 14, fontFamily: '"DM Sans", sans-serif' }}>
-            Annuler
-          </button>
-          <button onClick={sauvegarder} disabled={saving}
-            style={{ flex: 2, padding: '0.75rem', border: 'none', borderRadius: 100, background: saving ? '#D1D5DB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontSize: 14, fontFamily: '"DM Sans", sans-serif', boxShadow: saving ? 'none' : `0 4px 14px ${T.main}55` }}>
-            {saving ? 'Enregistrement…' : 'Enregistrer les modifications ✓'}
-          </button>
-        </div>
+        {confirmDelete ? (
+          <div style={{ padding: '0.875rem 1.125rem 1.125rem', borderTop: '1px solid #FCA5A5', background: '#FEF2F2' }}>
+            <p style={{ fontSize: 13, fontWeight: 800, color: '#991B1B', margin: '0 0 6px' }}>Suppression définitive</p>
+            <p style={{ fontSize: 12, color: '#B91C1C', lineHeight: 1.5, margin: '0 0 10px' }}>
+              «&nbsp;{commercant.nom}&nbsp;» et TOUT son contenu (articles, variantes, commandes, RDV, deals, actus, créneaux…) seront supprimés, ainsi que le compte de connexion lié. <strong>Irréversible.</strong>
+            </p>
+            {blockInfo && (
+              <div style={{ background: '#FFF7ED', border: '1.5px solid #FDBA74', borderRadius: 10, padding: '0.5rem 0.75rem', marginBottom: 10 }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: '#9A3412', lineHeight: 1.5, margin: 0 }}>{blockInfo.message}</p>
+              </div>
+            )}
+            <label style={{ ...labelSt, color: '#991B1B' }}>Retape le nom pour confirmer</label>
+            <input type="text" value={confirmName} onChange={e => setConfirmName(e.target.value)} placeholder={commercant.nom} autoFocus
+              style={{ ...inputSt, borderColor: '#FCA5A5', marginBottom: 10 }}/>
+            {error && <p style={{ fontSize: 12, fontWeight: 700, color: '#DC2626', margin: '0 0 10px' }}>{error}</p>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => { setConfirmDelete(false); setConfirmName(''); setBlockInfo(null); setError(null) }} disabled={deleting}
+                style={{ flex: 1, padding: '0.7rem', background: '#fff', border: `1.5px solid ${T.hairline}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: deleting ? 'default' : 'pointer', fontSize: 13, fontFamily: '"DM Sans", sans-serif' }}>
+                Annuler
+              </button>
+              <button onClick={() => supprimer(!!blockInfo)} disabled={deleting || !nomOk}
+                style={{ flex: 2, padding: '0.7rem', border: 'none', borderRadius: 100, background: (deleting || !nomOk) ? '#FCA5A5' : '#DC2626', color: '#fff', fontWeight: 800, cursor: (deleting || !nomOk) ? 'default' : 'pointer', fontSize: 13, fontFamily: '"DM Sans", sans-serif' }}>
+                {deleting ? 'Suppression…' : (blockInfo ? 'Supprimer quand même (test)' : 'Supprimer définitivement')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, padding: '0.75rem 1.125rem 1.125rem', borderTop: `1px solid ${T.hairline}`, background: '#FAFAFA', alignItems: 'center' }}>
+            <button onClick={() => { setConfirmDelete(true); setError(null) }} disabled={saving} title="Supprimer ce commerçant"
+              style={{ padding: '0.75rem 0.875rem', background: '#fff', border: '1.5px solid #FCA5A5', borderRadius: 100, color: '#DC2626', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontSize: 13, fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
+              Supprimer
+            </button>
+            <button onClick={onClose} disabled={saving}
+              style={{ flex: 1, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.hairline}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: saving ? 'default' : 'pointer', fontSize: 14, fontFamily: '"DM Sans", sans-serif' }}>
+              Annuler
+            </button>
+            <button onClick={sauvegarder} disabled={saving}
+              style={{ flex: 2, padding: '0.75rem', border: 'none', borderRadius: 100, background: saving ? '#D1D5DB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontSize: 14, fontFamily: '"DM Sans", sans-serif', boxShadow: saving ? 'none' : `0 4px 14px ${T.main}55` }}>
+              {saving ? 'Enregistrement…' : 'Enregistrer ✓'}
+            </button>
+          </div>
+        )}
       </div>
     </div>,
     document.body

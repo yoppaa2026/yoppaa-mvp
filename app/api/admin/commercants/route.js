@@ -1,8 +1,8 @@
 // /api/admin/commercants
 //   DELETE -> supprime DEFINITIVEMENT un commerçant de test + tout son contenu.
 //
-// Les tables enfant (articles, variantes, commandes, RDV, deals, actus, créneaux…)
-// sont toutes en ON DELETE CASCADE : supprimer la ligne commercants nettoie tout.
+// Les FK historiques (articles, commandes, RDV…) ne sont PAS en ON DELETE CASCADE,
+// donc on supprime tous les enfants explicitement dans l'ordre avant le commerçant.
 // On supprime aussi le compte auth lié (pour libérer l'email) au best effort.
 //
 // GARDE-FOU LÉGAL : refuse par défaut si le commerçant a des transactions PAYÉES
@@ -76,8 +76,62 @@ export async function DELETE(request) {
       }, { status: 409 })
     }
 
-    // Suppression de la ligne commercants -> cascade sur tout le contenu lié.
-    const { error: delErr } = await admin.from('commercants').delete().eq('id', commercant_id)
+    // Les FK historiques (articles, commandes, RDV…) ne sont PAS en ON DELETE CASCADE :
+    // on supprime les enfants explicitement, dans l'ordre, avant le commerçant.
+    const cid = commercant_id
+
+    const collect = async (table, col, whereCol, whereVals) => {
+      let q = admin.from(table).select(col)
+      q = whereCol === 'commercant_id' ? q.eq('commercant_id', cid) : q.in(whereCol, whereVals || [])
+      const { data } = await q
+      return [...new Set((data || []).map(r => r[col]).filter(Boolean))]
+    }
+    const artIds   = await collect('articles', 'id', 'commercant_id')
+    const cmdIds   = await collect('commandes', 'id', 'commercant_id')
+    const grpIds   = artIds.length ? await collect('article_options_groupes', 'id', 'article_id', artIds) : []
+    const prestIds = await collect('rdv_prestations', 'id', 'commercant_id')
+    const pratIds  = await collect('rdv_praticiens', 'id', 'commercant_id')
+
+    // Erreur ignorable = table/colonne absente (schéma variable selon l'environnement).
+    const ignorable = (m) => !m || /does not exist|could not find|schema cache|relation .* does not exist/i.test(m)
+    const delEq = async (table) => {
+      const { error } = await admin.from(table).delete().eq('commercant_id', cid)
+      if (error && !ignorable(error.message)) console.warn(`[admin/commercants DELETE] ${table}:`, error.message)
+    }
+    const delIn = async (table, col, vals) => {
+      if (!vals || !vals.length) return
+      const { error } = await admin.from(table).delete().in(col, vals)
+      if (error && !ignorable(error.message)) console.warn(`[admin/commercants DELETE] ${table}.${col}:`, error.message)
+    }
+
+    // 1) Sous-enfants (référencés via article / commande / prestation / praticien)
+    await delIn('article_options_valeurs', 'groupe_id', grpIds)
+    await delIn('article_options_groupes', 'article_id', artIds)
+    await delIn('article_photos', 'article_id', artIds)
+    await delIn('article_variantes', 'article_id', artIds)
+    await delIn('commande_articles', 'commande_id', cmdIds)
+    await delIn('rdv_prestation_praticiens', 'prestation_id', prestIds)
+    await delIn('rdv_prestation_praticiens', 'praticien_id', pratIds)
+
+    // 2) Enfants directs (commercant_id). Ordre : sous-tables AVANT articles/commandes/rdv_*.
+    const enfantsDirects = [
+      'article_stock_jour', 'commande_stock_reservation',
+      'rdv_reservations', 'rdv_creneaux', 'rdv_fermetures', 'rdv_fidelite_progression',
+      'rdv_prestations', 'rdv_praticiens',
+      'commandes',
+      'creneaux', 'fermetures_exceptionnelles',
+      'livraison_creneaux', 'livraison_config',
+      'yoppaa_deals', 'actualites', 'avis', 'favoris',
+      'commercant_photos', 'ia_generations', 'signalements',
+      'admin_impersonations', 'admin_validations', 'kyb_documents',
+      'onboarding_commercants', 'suggestions_commercants', 'upgrade_requests',
+      'success_packs', 'billing_relances_log',
+      'articles',
+    ]
+    for (const t of enfantsDirects) await delEq(t)
+
+    // 3) Le commerçant lui-même
+    const { error: delErr } = await admin.from('commercants').delete().eq('id', cid)
     if (delErr) {
       console.error('[admin/commercants DELETE] delete KO', delErr)
       return NextResponse.json({ ok: false, error: `Erreur suppression : ${delErr.message}` }, { status: 500 })

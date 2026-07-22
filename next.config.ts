@@ -36,7 +36,9 @@ const csp = [
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: blob: https:",
   // nominatim.openstreetmap.org = autocomplete adresse du signup (étape 2).
-  `connect-src 'self' ${supabaseOrigin} ${supabaseWss} https://api.onesignal.com https://*.onesignal.com https://onesignal.com https://*.os.tc https://challenges.cloudflare.com https://nominatim.openstreetmap.org${isDev ? " ws:" : ""}`,
+  // cdn.jsdelivr.net = police Plus Jakarta téléchargée par la page interne /brand-kit.
+  // (Audit 22/07 : seuls appels fetch() externes côté navigateur de tout le code.)
+  `connect-src 'self' ${supabaseOrigin} ${supabaseWss} https://api.onesignal.com https://*.onesignal.com https://onesignal.com https://*.os.tc https://challenges.cloudflare.com https://nominatim.openstreetmap.org https://cdn.jsdelivr.net${isDev ? " ws:" : ""}`,
   "frame-src 'self' https://challenges.cloudflare.com https://*.onesignal.com https://onesignal.com",
   "worker-src 'self' blob:",
   "media-src 'self'",

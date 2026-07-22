@@ -1102,7 +1102,11 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
           style={{ ...inputStyle(), minHeight: 90, resize: 'vertical' }}/>
       </Card>
 
-      <NavEtape retour={retourAvecSauvegarde} continuer={continuer} valide={valide} saving={saving} hint={valide ? null : 'Complète tous les champs pour continuer.'}/>
+      <NavEtape retour={retourAvecSauvegarde} continuer={continuer} valide={valide} saving={saving}
+        hint={valide ? null
+          : (form.adresse.trim().length > 0 && (!form.latitude || !form.longitude))
+            ? 'Sélectionne ton adresse dans la liste de suggestions pour la localiser sur la carte.'
+            : 'Complète tous les champs pour continuer.'}/>
     </div>
   )
 }

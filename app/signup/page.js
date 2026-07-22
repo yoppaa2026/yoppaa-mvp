@@ -546,7 +546,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
       if (signInData?.session) { s = signInData.session; userId = signInData.user?.id }
     }
     if (!userId) {
-      setError('Compte créé. Vérifie ta boîte mail pour confirmer, puis reviens sur /signup.')
+      setError('Compte créé ! Vérifie ta boîte mail pour confirmer ton adresse, puis reviens sur cette page pour finaliser ton inscription.')
       setLoading(false)
       return
     }
@@ -575,9 +575,19 @@ function Etape1Compte({ session, commercant, onCompte }) {
     onCompte(s, res.commercant, res.onboarding)
   }
 
-  // Si déjà connecté, juste mettre à jour catégorie + plan choisi
+  // Si déjà connecté, juste mettre à jour catégorie + plan choisi.
+  // Cas limite : session active SANS fiche commerçant (retour de confirmation
+  // d'email sans choix mémorisé, ou compte Yopper) → on crée la fiche ici.
   async function mettreAJourPlan() {
+    setError('')
     setLoading(true)
+    if (!commercant) {
+      const res = await creerCommercantEtOnboarding(session.user.id, session.user.email, categorie, plan)
+      setLoading(false)
+      if (res.error) return setError(res.error)
+      onCompte(session, res.commercant, res.onboarding)
+      return
+    }
     await supabase.from('commercants')
       .update({ categorie, plan, plan_actif_depuis: new Date().toISOString() })
       .eq('id', commercant.id)
@@ -820,7 +830,7 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
   const featuresVitrine = [
     {
       Icon: Calendar, titre: 'Module RDV natif',
-      desc: 'Le Yopper choisit une prestation, une date et un créneau, valide en 3 clics. Tu reçois la notification dans ton tableau de bord. Confirmation "Ton RDV est Yoppé !" côté Yopper, avec fichier iCal joint pour son calendrier. Aucune commission Yoppaa.',
+      desc: 'Le Yopper choisit une prestation, une date et un créneau, valide en 3 clics. Tu reçois la notification dans ton tableau de bord. Confirmation "C\'est noté !" côté Yopper, avec fichier iCal joint pour son calendrier. Aucune commission Yoppaa.',
       plan: 'vendre',
     },
     {
@@ -830,7 +840,7 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
     },
     {
       Icon: Clock, titre: 'Créneaux RDV',
-      desc: 'Tu définis tes plages horaires par jour de la semaine, avec pause déjeuner si tu veux. Pas configurable (15 min, 30 min, 1h). Exceptions ponctuelles supportées.',
+      desc: 'Tu définis tes plages horaires par jour de la semaine, avec pause déjeuner si tu veux. Durée des créneaux configurable (15 min, 30 min, 1 h). Exceptions ponctuelles supportées.',
       plan: 'vendre',
     },
     {
@@ -876,7 +886,7 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
     },
     {
       Icon: Printer, titre: 'Kit Yoppaa hardware',
-      desc: 'Optionnel et disponible à tout moment depuis ton tableau de bord : Kit Yoppaa Pro (tablette + imprimante thermique, 399 € HTVA) ou Kit Yoppaa Light (imprimante seule, 179 € HTVA). Surtout utile en alimentaire (Click & Collect avec gestion comptoir). Les commerces de service ou de détail peuvent gérer leur activité sans hardware spécifique.',
+      desc: 'Optionnel et disponible à tout moment depuis ton tableau de bord : Kit Yoppaa Pro (tablette + imprimante thermique, 399€ HTVA) ou Kit Yoppaa Light (imprimante seule, 179€ HTVA). Surtout utile en alimentaire (Click & Collect avec gestion comptoir). Les commerces de service ou de détail peuvent gérer leur activité sans hardware spécifique.',
       plan: null,
     },
   ]
@@ -1151,7 +1161,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     if (!file) return { error: 'Aucun fichier', dims: null }
     const okType = /image\/(jpeg|jpg|png|webp)/.test(file.type)
     if (!okType) return { error: 'Format invalide. Utilise JPG, PNG ou WEBP.', dims: null }
-    if (file.size > 8 * 1024 * 1024) return { error: 'Fichier trop lourd. Max 8 MB.', dims: null }
+    if (file.size > 8 * 1024 * 1024) return { error: 'Fichier trop lourd. Max 8 Mo.', dims: null }
     const dims = await new Promise(resolve => {
       const img = new Image()
       img.onload = () => resolve({ w: img.width, h: img.height })
@@ -1245,7 +1255,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     // Warning non bloquant : orientation portrait sur la couverture = mauvais rendu
     // sur la fiche client. On accepte mais on prévient.
     if (dims && dims.h > dims.w * 1.1) {
-      setWarningCover('Cette photo est en mode portrait — elle s\'affichera mal sur la couverture (paysage). On la garde quand même, mais on conseille de la remplacer par une photo prise à l\'horizontale.')
+      setWarningCover('Cette photo est en mode portrait : elle s\'affichera mal sur la couverture (paysage). On la garde quand même, mais on conseille de la remplacer par une photo prise à l\'horizontale.')
     } else if (dims && Math.min(dims.w, dims.h) < 500) {
       setWarningCover('La photo est un peu petite pour la couverture. Une image plus large (≥ 1200 px) rendra mieux sur grand écran.')
     }
@@ -1366,11 +1376,11 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
           </div>
         </div>
         <p style={{ fontSize: 10.5, color: T.muted, margin: '10px 0 0', fontWeight: 600, lineHeight: 1.4 }}>
-          Format accepté : JPG, PNG, WEBP · 800 px minimum sur le grand côté · 8 MB max
+          Format accepté : JPG, PNG, WEBP · 800 px minimum sur le grand côté · 8 Mo max
         </p>
       </div>
 
-      <Card titre="Photo de couverture" sous="C'est ta vignette sur Yoppaa — la première chose qu'un client voit en parcourant les commerces. Doit être ultra reconnaissable et qualitative.">
+      <Card titre="Photo de couverture" sous="C'est ta vignette sur Yoppaa : la première chose qu'un client voit en parcourant les commerces. Doit être ultra reconnaissable et qualitative.">
         <UploadZone
           url={couvertureUrl}
           uploading={uploadingCover}
@@ -1385,13 +1395,13 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
             <span>{warningCover}</span>
           </div>
         )}
-        <BoutonGenererVisuel onClick={genererCoverAuto} disabled={uploadingCover} libelle="Je n'ai pas de photo, genere une couverture branded Yoppaa"/>
+        <BoutonGenererVisuel onClick={genererCoverAuto} disabled={uploadingCover} libelle="Je n'ai pas de photo, génère une couverture aux couleurs de Yoppaa"/>
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
           <strong style={{ color: T.bgPanel }}>Idéal :</strong> ta façade telle qu&apos;on la voit depuis la rue, c&apos;est le <strong style={{ color: T.bgPanel }}>premier repère</strong> pour le client qui arrive à pied. Enseigne nette et lisible, couleurs vives, lumière du jour. Format paysage 16:9, qualité maximale. Si pas de façade exploitable (boutique en galerie, food truck mobile), prends un produit phare très photogénique.
         </div>
       </Card>
 
-      <Card titre={`Photos supplementaires (${galerie.length}/${MAX_GALERIE})`} sous="Affichees en carrousel sous la couverture sur ta page client. Optionnel mais conseille : interieur, produits, equipe...">
+      <Card titre={`Photos supplémentaires (${galerie.length}/${MAX_GALERIE})`} sous="Affichées en carrousel sous la couverture sur ta page client. Optionnel mais conseillé : intérieur, produits, équipe…">
         <GalerieMini
           photos={galerie}
           max={MAX_GALERIE}
@@ -1400,7 +1410,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
           onSupprimer={supprimerPhotoGalerie}
         />
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
-          <strong style={{ color: T.bgPanel }}>Conseil :</strong> varie les angles (interieur ambiance + produit signature + equipe en action). Format paysage 16:9 ideal, mais on accepte tous les ratios.
+          <strong style={{ color: T.bgPanel }}>Conseil :</strong> varie les angles (intérieur ambiance + produit signature + équipe en action). Format paysage 16:9 idéal, mais on accepte tous les ratios.
         </div>
       </Card>
 
@@ -1414,7 +1424,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
           onFile={uploadLogo}
           maxWidth={140}
         />
-        <BoutonGenererVisuel onClick={genererLogoAuto} disabled={uploadingLogo} libelle="Je n'ai pas de logo, genere un cercle violet avec mon initiale"/>
+        <BoutonGenererVisuel onClick={genererLogoAuto} disabled={uploadingLogo} libelle="Je n'ai pas de logo, génère un cercle violet avec mon initiale"/>
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
           <strong style={{ color: T.bgPanel }}>Idéal :</strong> ton logo seul sur fond uni (blanc ou couleur). Si tu n&apos;en as pas, une photo carrée recadrée sur ton enseigne fait l&apos;affaire.
         </div>
@@ -1431,7 +1441,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
         continuer={continuer}
         valide={true}
         saving={saving}
-        hint={couvertureUrl || logoUrl ? null : (peutSkipperVisuels(getPlanActif(commercant, onboarding)) ? 'Tu peux passer et ajouter tes visuels plus tard depuis le dashboard.' : 'Recommande pour ta visibilite.')}
+        hint={couvertureUrl || logoUrl ? null : (peutSkipperVisuels(getPlanActif(commercant, onboarding)) ? 'Tu peux passer et ajouter tes visuels plus tard depuis ton tableau de bord.' : 'Recommandé pour ta visibilité.')}
       />
     </div>
   )
@@ -1487,7 +1497,7 @@ function UploadZone({ url, uploading, aspect, minHeight, label, onFile, maxWidth
           <div style={{ textAlign: 'center', padding: 16 }}>
             <Camera size={26} strokeWidth={1.8} color={T.main} style={{ marginBottom: 6 }}/>
             <p style={{ fontSize: 13, color: T.muted, fontWeight: 700 }}>{label}</p>
-            <p style={{ fontSize: 11, color: T.muted, fontWeight: 500, marginTop: 4 }}>JPG, PNG ou WEBP · 8 MB max</p>
+            <p style={{ fontSize: 11, color: T.muted, fontWeight: 500, marginTop: 4 }}>JPG, PNG ou WEBP · 8 Mo max</p>
           </div>
         )}
         {uploading && (
@@ -1559,7 +1569,7 @@ function NavEtape({ retour, continuer, valide, saving, hint, plusTard, plusTardL
         <div style={{ textAlign: 'center', marginTop: 14 }}>
           <button onClick={plusTard} disabled={saving}
             style={{ background: 'transparent', border: 'none', color: T.muted, fontWeight: 600, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: '"DM Sans", sans-serif', textDecoration: 'underline', textUnderlineOffset: 3 }}>
-            {plusTardLabel || 'Je ferai ça plus tard depuis mon dashboard →'}
+            {plusTardLabel || 'Je ferai ça plus tard depuis mon tableau de bord →'}
           </button>
         </div>
       )}
@@ -1668,14 +1678,14 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
         Tes horaires d&rsquo;ouverture
       </h1>
       <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 24px' }}>
-        Configure ton planning hebdomadaire. Tu pourras gérer les fermetures exceptionnelles depuis ton dashboard.
+        Configure ton planning hebdomadaire. Tu pourras gérer les fermetures exceptionnelles depuis ton tableau de bord.
       </p>
 
       <Card titre="Planning hebdomadaire" sous="Astuce : configure lundi puis copie sur tous les jours.">
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
           <button type="button" onClick={copierLundi}
             style={{ padding: '6px 12px', background: T.pale, color: T.bgPanel, border: `1px solid ${T.main}33`, borderRadius: 100, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-            ⤵ Copier Lundi sur tous les jours
+            ⤵ Copier lundi sur tous les jours
           </button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1709,7 +1719,7 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
         continuer={continuer}
         valide={valide}
         saving={saving}
-        hint={valide ? null : (skipAutorise ? 'Tu peux passer cette etape si tu fonctionnes uniquement sur RDV.' : 'Coche au moins un jour d\'ouverture.')}
+        hint={valide ? null : (skipAutorise ? 'Tu peux passer cette étape si tu fonctionnes uniquement sur RDV.' : 'Coche au moins un jour d\'ouverture.')}
         plusTard={skipAutorise ? configurerPlusTard : null}
         plusTardLabel="Je fonctionne sur RDV uniquement, je configurerai plus tard →"
       />
@@ -1798,7 +1808,7 @@ function BandeauRecapPlan({ plan, commercant }) {
         </div>
         <p style={{ fontSize: 12.5, color: '#065F46', margin: 0, lineHeight: 1.5 }}>
           Plan <strong>Exister</strong> : <strong>gratuit à vie</strong>, sans informations de paiement.
-          Ta fiche sera publiée après validation par l&rsquo;équipe Yoppaa, sous 24h.
+          Ta fiche sera publiée après validation par l&rsquo;équipe Yoppaa, sous 24 h.
         </p>
       </div>
     )
@@ -1864,7 +1874,6 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
   saveTexteRef.current = async () => {
     if (!champsTextOk) return
     onSaving?.('saving')
-    console.log('[S5 saveTexte] UPDATE commercants', { id: commercant.id, bce: verifBce.raw, nom: nomRep.trim(), prenom: prenomRep.trim() })
     const { data, error } = await supabase.from('commercants')
       .update({
         bce: verifBce.raw,
@@ -1894,26 +1903,30 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
       onSaving?.('saved')
       return
     }
-    console.log('[S5 saveTexte] OK', { bce: data.bce, nom: data.representant_legal_nom, prenom: data.representant_legal_prenom })
     onUpdate(data)
     onSaving?.('saved')
   }
 
-  // Debounce 600ms pendant la frappe (feedback "saving..." puis "saved"). Au
-  // demontage, on FLUSH (execute immediatement) au lieu d'annuler, pour
-  // garantir la persistence meme si l'utilisateur clique Suivant vite.
+  // Debounce 600ms pendant la frappe (feedback "saving..." puis "saved").
+  // Le cleanup a chaque frappe ANNULE juste le timer (le prochain effect en
+  // repose un) : ne surtout pas flusher ici, sinon un save part a chaque touche.
   useEffect(() => {
     if (!champsTextOk) return
     clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => { saveTexteRef.current?.() }, 600)
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current)
-        // Flush : execute immediatement au lieu de perdre le save
-        saveTexteRef.current?.()
-      }
-    }
+    debounceRef.current = setTimeout(() => { debounceRef.current = null; saveTexteRef.current?.() }, 600)
+    return () => clearTimeout(debounceRef.current)
   }, [bce, nomRep, prenomRep, champsTextOk])
+
+  // Flush au DEMONTAGE uniquement : si un save est encore en attente quand
+  // l'utilisateur quitte la carte (clic Retour/Envoyer rapide), on l'execute
+  // immediatement pour ne rien perdre.
+  useEffect(() => () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+      saveTexteRef.current?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function uploaderIdentite(file, kind) {
     if (!file) return
@@ -1934,7 +1947,7 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
       // Path = ${auth.uid}/${commercant_id}_${kind}.${ext} (matche policy RLS)
       const fileName = `${user.id}/${commercant.id}_${kind}_${Date.now()}.${ext}`
       const { error: upErr } = await supabase.storage.from('kyb_documents').upload(fileName, file, { upsert: true, contentType: file.type })
-      if (upErr) { setErreurLocal(`Upload echoue : ${upErr.message}`); return }
+      if (upErr) { setErreurLocal(`Upload échoué : ${upErr.message}`); return }
       // L'URL n'est PAS publique : on stocke juste le chemin storage pour signature ulterieure
       const cheminStockage = fileName
       const { data } = await supabase.from('commercants').update({ [colonne]: cheminStockage }).eq('id', commercant.id).select().single()
@@ -2270,9 +2283,9 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
             {[...shopChoices].map(type => {
               const p = SHOP_PRODUCTS.find(p => p.type === type)
               if (!p) return null
-              return <li key={type}><strong>{p.label} :</strong> {p.prix.toFixed(2).replace('.', ',')}€ HT</li>
+              return <li key={type}><strong>{p.label} :</strong> {p.prix.toFixed(2).replace('.', ',')}€ HTVA</li>
             })}
-            {shopChoices.size > 0 && <li style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.hairline}` }}><strong>Total boutique :</strong> {totalChoisis.toFixed(2).replace('.', ',')}€ HT</li>}
+            {shopChoices.size > 0 && <li style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.hairline}` }}><strong>Total boutique :</strong> {totalChoisis.toFixed(2).replace('.', ',')}€ HTVA</li>}
           </ul>
         </Card>
         <p style={{ fontSize: 12, color: T.muted, marginTop: 16 }}>
@@ -2328,7 +2341,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
             ))}
           </div>
           <p style={{ fontSize: 11.5, color: '#9A3412', lineHeight: 1.5, margin: 0 }}>
-            Une fois corrigé, re-soumets ci-dessous. On valide en moins de 24h après ta correction.
+            Une fois corrigé, re-soumets ci-dessous. On valide en moins de 24 h après ta correction.
           </p>
         </div>
       )}
@@ -2378,7 +2391,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
               {shopChoices.size} produit{shopChoices.size > 1 ? 's' : ''} sélectionné{shopChoices.size > 1 ? 's' : ''}
             </span>
             <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: '-0.3px' }}>
-              Total : {totalChoisis.toFixed(2).replace('.', ',')}€ HT
+              Total : {totalChoisis.toFixed(2).replace('.', ',')}€ HTVA
             </span>
           </div>
         ) : (
@@ -2406,7 +2419,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
                 Vérification entreprise incomplète. Il manque : {kybManques.join(', ')}.
                 <br/>
                 <span style={{ fontWeight: 500, color: T.muted }}>
-                  Reviens à l&rsquo;étape précédente pour compléter, puis attends quelques secondes que la sauvegarde soit prise en compte.
+                  Complète la carte «&nbsp;Vérification de ton entreprise&nbsp;» ci-dessus, puis attends quelques secondes que la sauvegarde soit prise en compte.
                 </span>
               </>
             ) : (
@@ -2424,7 +2437,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
             {submitting ? 'Envoi…' : (
               getPlanActif(commercant, onboarding) === 'exister' || getPlanActif(commercant, onboarding) === 'public'
                 ? 'Envoyer ma demande d’activation →'
-                : 'Demarrer mon essai 30 jours gratuit →'
+                : 'Démarrer mon essai 30 jours gratuit →'
             )}
           </button>
         </div>
@@ -2472,7 +2485,7 @@ function ProduitCard({ produit, actif, onToggle, secondaire = false }) {
           <span style={{ fontSize: 15, fontWeight: 900, color: actif ? T.light : T.main, whiteSpace: 'nowrap' }}>
             {produit.prix.toFixed(2).replace('.', ',')}€
           </span>
-          <p style={{ fontSize: 10, color: actif ? 'rgba(255,255,255,0.55)' : T.muted, margin: '1px 0 0', fontWeight: 700 }}>HT</p>
+          <p style={{ fontSize: 10, color: actif ? 'rgba(255,255,255,0.55)' : T.muted, margin: '1px 0 0', fontWeight: 700 }}>HTVA</p>
         </div>
       </div>
 
@@ -2524,24 +2537,6 @@ function ScoreItem({ label, ok, pts }) {
       <span style={{ width: 16, height: 16, borderRadius: '50%', background: ok ? '#10B981' : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 10, color: '#fff', fontWeight: 900 }}>{ok ? '✓' : '·'}</span>
       <span style={{ fontWeight: 600, color: ok ? T.ink : T.muted, flex: 1 }}>{label}</span>
       <span style={{ fontSize: 10, fontWeight: 700, color: ok ? '#10B981' : T.muted }}>+{pts}</span>
-    </div>
-  )
-}
-
-// ─── PLACEHOLDER pour les étapes restantes (commit suivant) ───────────────────
-function EtapePlaceholder({ titre, n, avancer, retour }) {
-  return (
-    <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-      <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 12px' }}>
-        Étape {n} — {titre}
-      </h1>
-      <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 24px' }}>
-        En cours de développement — disponible dans le prochain commit.
-      </p>
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-        <button onClick={retour} style={{ padding: '0.75rem 1.5rem', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.muted, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>← Retour</button>
-        <button onClick={avancer} style={{ padding: '0.75rem 1.5rem', borderRadius: 100, border: 'none', background: T.bgPanel, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>Continuer →</button>
-      </div>
     </div>
   )
 }

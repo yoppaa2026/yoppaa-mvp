@@ -35,7 +35,8 @@ const csp = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: blob: https:",
-  `connect-src 'self' ${supabaseOrigin} ${supabaseWss} https://api.onesignal.com https://*.onesignal.com https://onesignal.com https://*.os.tc https://challenges.cloudflare.com${isDev ? " ws:" : ""}`,
+  // nominatim.openstreetmap.org = autocomplete adresse du signup (étape 2).
+  `connect-src 'self' ${supabaseOrigin} ${supabaseWss} https://api.onesignal.com https://*.onesignal.com https://onesignal.com https://*.os.tc https://challenges.cloudflare.com https://nominatim.openstreetmap.org${isDev ? " ws:" : ""}`,
   "frame-src 'self' https://challenges.cloudflare.com https://*.onesignal.com https://onesignal.com",
   "worker-src 'self' blob:",
   "media-src 'self'",

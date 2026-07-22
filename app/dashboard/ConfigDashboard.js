@@ -2949,8 +2949,70 @@ function TabProfil({ commercantId, toast, onSaved }) {
   const [saving, setSaving] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [logoPreview, setLogoPreview] = useState(null)
+  // Photos de la fiche (couverture + galerie max 4), table commercant_photos.
+  // Même mécanique que l'étape Visuels du signup : le commerçant doit pouvoir
+  // enrichir sa fiche APRÈS l'inscription sans repasser par le signup.
+  const [couvertureUrl, setCouvertureUrl] = useState(null)
+  const [galerie, setGalerie] = useState([])
+  const [uploadingCouv, setUploadingCouv] = useState(false)
+  const [uploadingGal, setUploadingGal] = useState(false)
+  const MAX_GALERIE = 4
 
-  useEffect(() => { fetchProfil() }, [commercantId])
+  useEffect(() => { fetchProfil(); fetchPhotos() }, [commercantId])
+
+  async function fetchPhotos() {
+    const { data } = await supabase.from('commercant_photos')
+      .select('id, url, type, ordre').eq('commercant_id', commercantId).order('ordre')
+    const couv = (data || []).find(p => p.type === 'couverture')
+    setCouvertureUrl(couv?.url || null)
+    setGalerie((data || []).filter(p => p.type === 'galerie' && p.url))
+  }
+
+  async function uploadCouverture(file) {
+    if (!file || !file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
+    if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
+    setUploadingCouv(true)
+    const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
+    const fileName = `cover-${commercantId}-${Date.now()}.jpg`
+    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
+    if (upErr) { toast('Erreur upload photo', 'error'); setUploadingCouv(false); return }
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    // Une seule couverture : on remplace l'entrée existante.
+    await supabase.from('commercant_photos').delete().eq('commercant_id', commercantId).eq('type', 'couverture')
+    const { error } = await supabase.from('commercant_photos').insert({ commercant_id: commercantId, type: 'couverture', url: urlData.publicUrl, ordre: 0 })
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); setUploadingCouv(false); return }
+    setCouvertureUrl(urlData.publicUrl)
+    toast('Couverture mise à jour'); setUploadingCouv(false)
+  }
+
+  async function uploadGalerie(file) {
+    if (galerie.length >= MAX_GALERIE) { toast(`Maximum ${MAX_GALERIE} photos`, 'error'); return }
+    if (!file || !file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
+    if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
+    setUploadingGal(true)
+    const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
+    const fileName = `gal-${commercantId}-${Date.now()}.jpg`
+    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
+    if (upErr) { toast('Erreur upload photo', 'error'); setUploadingGal(false); return }
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    const ordreSuivant = galerie.length > 0 ? Math.max(...galerie.map(p => p.ordre || 0)) + 1 : 1
+    const { data: row, error } = await supabase.from('commercant_photos')
+      .insert({ commercant_id: commercantId, type: 'galerie', url: urlData.publicUrl, ordre: ordreSuivant }).select().single()
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); setUploadingGal(false); return }
+    setGalerie(prev => [...prev, row])
+    toast('Photo ajoutée'); setUploadingGal(false)
+  }
+
+  async function supprimerPhotoGalerie(photo) {
+    const { error } = await supabase.from('commercant_photos').delete().eq('id', photo.id)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    try {
+      const objectName = (photo.url || '').split('/').pop()
+      if (objectName) await supabase.storage.from('logos').remove([objectName])
+    } catch { /* nettoyage best effort */ }
+    setGalerie(prev => prev.filter(p => p.id !== photo.id))
+    toast('Photo supprimée')
+  }
 
   async function fetchProfil() {
     setLoading(true)
@@ -3023,7 +3085,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
       {/* Logo */}
       <div style={s.card}>
         <label style={s.label}>Logo</label>
-        <p style={{ fontSize: 12, color: T.muted, marginBottom: 14 }}>Format carré · 512×512px · JPG ou PNG · Max 512KB</p>
+        <p style={{ fontSize: 12, color: T.muted, marginBottom: 14 }}>Format carré conseillé · JPG ou PNG · compressé automatiquement</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ width: 88, height: 88, borderRadius: 14, background: T.pale, border: `2px dashed ${logoPreview ? T.main : T.light}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
             {logoPreview ? <img src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <Store size={28} strokeWidth={1.6} color={T.muted}/>}
@@ -3036,6 +3098,52 @@ function TabProfil({ commercantId, toast, onSaved }) {
             {logoPreview && <button style={{ ...s.btn, ...s.btnDanger, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={supprimerLogo}><Trash2 size={13} strokeWidth={1.8}/> Supprimer</button>}
           </div>
         </div>
+      </div>
+
+      {/* Photos de la fiche : couverture + galerie (comme l'étape Visuels du signup) */}
+      <div style={s.card}>
+        <label style={s.label}>Photos de ta fiche</label>
+        <p style={{ fontSize: 12, color: T.muted, marginBottom: 14 }}>
+          La couverture est ta vignette principale. Les photos supplémentaires s&rsquo;affichent en carrousel sur ta page client.
+        </p>
+
+        {/* Couverture */}
+        <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px' }}>Photo de couverture</p>
+        <label style={{ display: 'block', width: '100%', maxWidth: 420, aspectRatio: '16/9', borderRadius: 14, border: `2px dashed ${couvertureUrl ? T.main : T.light}`, background: T.pale, overflow: 'hidden', cursor: uploadingCouv ? 'wait' : 'pointer', position: 'relative' }}>
+          {couvertureUrl ? (
+            <img src={couvertureUrl} alt="Couverture" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+          ) : (
+            <span style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: T.muted, fontSize: 12, fontWeight: 700 }}>
+              <Camera size={22} strokeWidth={1.8} color={T.main}/>
+              {uploadingCouv ? 'Upload…' : 'Ajouter la couverture'}
+            </span>
+          )}
+          {couvertureUrl && uploadingCouv && (
+            <span style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: T.bgPanel }}>Upload…</span>
+          )}
+          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadCouverture(e.target.files[0]); e.target.value = '' }} disabled={uploadingCouv}/>
+        </label>
+        <p style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>Format paysage 16:9 idéal. Clique pour {couvertureUrl ? 'remplacer' : 'ajouter'}. Compressée automatiquement.</p>
+
+        {/* Galerie */}
+        <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '16px 0 8px' }}>Photos supplémentaires ({galerie.length}/{MAX_GALERIE})</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          {galerie.map(p => (
+            <div key={p.id} style={{ width: 120, aspectRatio: '4/3', borderRadius: 12, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}` }}>
+              <img src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+              <button type="button" onClick={() => supprimerPhotoGalerie(p)} title="Supprimer"
+                style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 100, border: 'none', background: 'rgba(22,6,54,0.85)', color: '#fff', cursor: 'pointer', fontSize: 13, lineHeight: '22px', padding: 0 }}>×</button>
+            </div>
+          ))}
+          {galerie.length < MAX_GALERIE && (
+            <label style={{ width: 120, aspectRatio: '4/3', borderRadius: 12, border: `2px dashed ${T.light}`, background: '#FAFAFA', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: uploadingGal ? 'wait' : 'pointer', color: T.muted, fontSize: 11, fontWeight: 700 }}>
+              <Camera size={18} strokeWidth={1.8} color={T.main}/>
+              {uploadingGal ? 'Upload…' : 'Ajouter'}
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadGalerie(e.target.files[0]); e.target.value = '' }} disabled={uploadingGal}/>
+            </label>
+          )}
+        </div>
+        <p style={{ fontSize: 10, color: T.muted, marginTop: 6 }}>Intérieur, produits, équipe… Tous les ratios acceptés.</p>
       </div>
 
       {/* Infos */}

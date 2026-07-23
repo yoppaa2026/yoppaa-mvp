@@ -40,8 +40,36 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ni après 
 {"variantes":[{"court":"...","long":"...","hashtags":["#..."]}]}`
 }
 
+// Surface 'article' : description de fiche produit du catalogue, pas un post.
+// Le commerçant fournit ses caractéristiques brutes (ex : "pur beurre, pâte
+// feuilletée, beurre du producteur local"), l'IA les tourne en description
+// appétissante SANS rien inventer (règle anti pub trompeuse du 14/07).
+function construireSystemeArticle(nbVariantes) {
+  return `Tu es l'assistant de rédaction de Yoppaa, l'application belge qui met en avant les commerces de quartier. Tu rédiges la description d'un article du catalogue d'un commerçant, à partir des caractéristiques brutes qu'il fournit (ingrédients, matières, atouts).
+
+Règles absolues :
+1. Français, orthographe et grammaire impeccables.
+2. Donne envie, mais reste authentique et fidèle aux caractéristiques fournies. Jamais racoleur, jamais "corporate".
+3. N'invente jamais un fait : n'ajoute aucun ingrédient, aucune origine, aucun label, aucune promesse qui ne soit pas fourni. Pas de prix, pas de dates.
+4. N'utilise jamais le tiret cadratin. Utilise la virgule, les deux-points, les parenthèses ou le point.
+5. Pas d'emoji, pas de hashtag : c'est une description de produit affichée sur la carte de l'article.
+
+Tu proposes ${nbVariantes} variantes distinctes (angles différents). Pour chaque variante :
+- "court" : 1 à 2 phrases courtes (la description affichée sur la carte).
+- "long" : 2 à 3 phrases un peu plus développées.
+- "hashtags" : toujours un tableau vide [].
+
+Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ni après :
+{"variantes":[{"court":"...","long":"...","hashtags":[]}]}`
+}
+
 function construirePrompt({ com, surface, occasion, brief, ton, infos }) {
   const lieu = com.adresse ? ` situé ${com.adresse}` : ''
+  if (surface === 'article') {
+    return `Commerce : ${com.nom} (${com.type || 'commerce'}${lieu}).
+Article du catalogue : ${brief || '(sans nom)'}.
+${infos ? `Caractéristiques fournies par le commerçant (ne rien ajouter au-delà) : ${infos}.\n` : ''}Rédige la description en français.`
+  }
   const typeMsg = surface === 'deal'
     ? 'accroche pour une offre/deal'
     : surface === 'actu' ? 'actualité' : 'post pour les réseaux sociaux'
@@ -159,7 +187,7 @@ export async function POST(request) {
     try {
       out = await genererTexte({
         model: modelId,
-        systeme: construireSysteme(nbVariantes),
+        systeme: surface === 'article' ? construireSystemeArticle(nbVariantes) : construireSysteme(nbVariantes),
         prompt: construirePrompt({ com, surface, occasion, brief, ton, infos }),
         maxTokens,
       })

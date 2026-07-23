@@ -1,8 +1,9 @@
 'use client'
-// Bouton "Rédiger avec l'IA" en ligne, à côté des champs description des deals/actus.
-// Réutilise /api/ia/generer-post (même quota/plan/modèle que l'onglet Générateur) et
-// injecte la 1re variante dans les champs via onResult({court, long, hashtags}).
-// Le titre en cours sert de brief. Pas d'invention (prix/dates passés en `infos`).
+// Bouton "Rédiger avec l'IA" en ligne, à côté des champs description des
+// deals/actus/articles. Réutilise /api/ia/generer-post (même quota/plan/modèle
+// que l'onglet Générateur) et injecte la 1re variante dans les champs via
+// onResult({court, long, hashtags}). Le titre/nom en cours sert de brief.
+// Pas d'invention (prix/dates/caractéristiques passés en `infos`).
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -14,6 +15,7 @@ export default function BoutonIaInline({
   occasion = 'Nouveauté',
   ton = 'Chaleureux',
   infos = '',
+  briefManquantMsg = 'Écris d’abord un titre, l’IA s’en inspire.',
   onResult,
   toast,
 }) {
@@ -21,7 +23,7 @@ export default function BoutonIaInline({
 
   async function go() {
     const b = (brief || '').trim()
-    if (!b) { toast?.('Écris d’abord un titre, l’IA s’en inspire.', 'error'); return }
+    if (!b) { toast?.(briefManquantMsg, 'error'); return }
     setLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()

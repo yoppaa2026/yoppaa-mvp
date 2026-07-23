@@ -98,7 +98,7 @@ export default function TabGenerateur({ commercantId, commercant, toast }) {
       {estExister && (
         <div style={{ background: 'rgba(150,96,224,0.10)', border: `1px solid ${T.light}`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
           <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: T.ink, lineHeight: 1.5 }}>
-            Tu as <strong>1 essai gratuit ce mois-ci</strong> pour découvrir. Passe à <strong>Communiquer</strong> pour 40 posts/mois. 🟣
+            Tu as <strong>1 essai gratuit ce mois-ci</strong> pour découvrir. Passe à <strong>Communiquer</strong> pour 60 générations/mois. 🟣
           </p>
         </div>
       )}

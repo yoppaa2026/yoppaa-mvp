@@ -500,7 +500,18 @@ function TabMenu({ commercantId, commercant, toast }) {
               {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
             </select>
           </div>
-          <div><label style={s.label}>Description</label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder={estVitrine ? 'Ex: Titane japonais, charnières flex, 12 coloris…' : 'Ex: Feuilleté, pur beurre AOP...'}/></div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+              <label style={{ ...s.label, marginBottom: 0 }}>Description</label>
+              <BoutonIaInline commercantId={commercantId} surface="article" brief={form.nom}
+                infos={form.description}
+                briefManquantMsg={'Donne d’abord un nom à l’article, l’IA s’en inspire.'}
+                onResult={v => setForm(p => ({ ...p, description: v.court || v.long || p.description }))}
+                toast={toast} />
+            </div>
+            <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder={estVitrine ? 'Ex: Titane japonais, charnières flex, 12 coloris…' : 'Ex: Feuilleté, pur beurre AOP...'}/>
+            <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Astuce : note tes ingrédients ou atouts en vrac (pur beurre, producteur local…) puis clique sur Rédiger avec l&rsquo;IA.</p>
+          </div>
           {estVitrine ? (
             <div>
               <label style={s.label}>Prix indicatif (€)</label>

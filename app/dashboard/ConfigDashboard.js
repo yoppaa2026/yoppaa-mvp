@@ -517,7 +517,7 @@ function TabMenu({ commercantId, commercant, toast }) {
             : (estVitrine ? 'Nouveau produit phare' : 'Nouvel article')}
         </h3>
         <div style={{ display: 'grid', gap: 12 }}>
-          <div><label style={s.label}>Nom *</label><Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} placeholder={estVitrine ? 'Ex: Monture Lindberg Air Titanium' : 'Ex: Croissant beurre'}/></div>
+          <div><label style={s.label}>Nom *</label><Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} placeholder={estVitrine ? 'Ex: Monture Lindberg Air Titanium' : estDetail ? 'Ex: Jean slim brut' : 'Ex: Croissant beurre'}/></div>
           <div>
             <label style={s.label}>Catégorie</label>
             <select value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))}
@@ -535,13 +535,13 @@ function TabMenu({ commercantId, commercant, toast }) {
                 onVariantes={vs => setPropsIa(vs)}
                 toast={toast} />
             </div>
-            <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder={estVitrine ? 'Ex: Titane japonais, charnières flex, 12 coloris…' : 'Ex: Feuilleté, pur beurre AOP...'}/>
+            <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder={estVitrine ? 'Ex: Titane japonais, charnières flex, 12 coloris…' : estDetail ? 'Ex: Coton bio, coupe droite, fabriqué au Portugal…' : 'Ex: Feuilleté, pur beurre AOP...'}/>
             {propsIa.length > 0 ? (
               <PropositionsIa propositions={propsIa}
                 onChoisir={v => { setForm(p => ({ ...p, description: v.court || v.long })); setPropsIa([]) }}
                 onFermer={() => setPropsIa([])} />
             ) : (
-              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Astuce : note tes ingrédients ou atouts en vrac (pur beurre, producteur local…) puis clique sur Rédiger avec l&rsquo;IA.</p>
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>{estDetail || estVitrine ? 'Astuce : note tes matières ou atouts en vrac (coton bio, fabrication européenne…) puis clique sur Rédiger avec l’IA.' : 'Astuce : note tes ingrédients ou atouts en vrac (pur beurre, producteur local…) puis clique sur Rédiger avec l’IA.'}</p>
             )}
           </div>
           {estVitrine ? (
@@ -775,7 +775,7 @@ function TabMenu({ commercantId, commercant, toast }) {
             <div style={{ ...s.cardActive, padding: 16, marginBottom: 12 }}>
               <label style={s.label}>Nom de la catégorie</label>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                <Input value={nouvelleCat} onChange={e => setNouvelleCat(e.target.value)} placeholder="Ex: Viennoiseries, Sandwichs chauds…" onKeyDown={e => e.key === 'Enter' && ajouterCategorie()} style={{ flex: 1 }}/>
+                <Input value={nouvelleCat} onChange={e => setNouvelleCat(e.target.value)} placeholder={estDetail ? 'Ex: Homme, Femme, Accessoires…' : estVitrine ? 'Ex: Montures, Solaires, Lentilles…' : 'Ex: Viennoiseries, Sandwichs chauds…'} onKeyDown={e => e.key === 'Enter' && ajouterCategorie()} style={{ flex: 1 }}/>
                 <button style={{ ...s.btn, ...s.btnPrimary }} onClick={ajouterCategorie}><Icon name="check" size={14}/></button>
                 <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowCatForm(false)}><Icon name="x" size={14} color={T.main}/></button>
               </div>
@@ -784,7 +784,7 @@ function TabMenu({ commercantId, commercant, toast }) {
           {categories.length === 0 && !showCatForm ? (
             <div style={{ ...s.card, textAlign: 'center', padding: 40 }}>
               <p style={{ color: T.muted, marginBottom: 16 }}>Aucune catégorie pour le moment</p>
-              <p style={{ color: T.muted, fontSize: 12, marginBottom: 16 }}>Les catégories organisent tes articles côté client (ex&nbsp;: Viennoiseries, Boissons…).</p>
+              <p style={{ color: T.muted, fontSize: 12, marginBottom: 16 }}>Les catégories organisent tes articles côté client (ex&nbsp;: {estDetail ? 'Homme, Femme, Accessoires' : estVitrine ? 'Montures, Solaires' : 'Viennoiseries, Boissons'}…).</p>
               <button style={{ ...s.btn, ...s.btnPrimary }} onClick={() => setShowCatForm(true)}>
                 <Icon name="plus" size={14}/> Créer la première catégorie
               </button>
@@ -1748,7 +1748,7 @@ function TabDeals({ commercantId, commercant, toast }) {
             {editId ? 'Modifier le deal' : 'Nouveau deal'}
           </h3>
           <div style={{ display: 'grid', gap: 12 }}>
-            <div><label style={s.label}>Titre *</label><Input value={form.titre} onChange={e => setForm(p => ({ ...p, titre: e.target.value }))} placeholder="Ex: 2 croissants achetés, 1 offert"/></div>
+            <div><label style={s.label}>Titre *</label><Input value={form.titre} onChange={e => setForm(p => ({ ...p, titre: e.target.value }))} placeholder={commercant?.categorie === 'detail' ? 'Ex: -20% sur la nouvelle collection' : commercant?.categorie === 'vitrine' ? 'Ex: -15% cette semaine sur le soin signature' : 'Ex: 2 croissants achetés, 1 offert'}/></div>
 
             {/* Photo du deal (utilisee en hero dans la modale enrichie cote client) */}
             <div>
@@ -2177,7 +2177,7 @@ function TabActus({ commercantId, commercant, toast }) {
                 })}
               </div>
             </div>
-            <div><label style={s.label}>Titre *</label><Input value={form.titre} onChange={e => setForm(p => ({ ...p, titre: e.target.value }))} placeholder={form.type === 'alerte' ? 'Ex: Fermé exceptionnellement vendredi' : 'Ex: Nouveau menu d&rsquo;hiver dès lundi'}/></div>
+            <div><label style={s.label}>Titre *</label><Input value={form.titre} onChange={e => setForm(p => ({ ...p, titre: e.target.value }))} placeholder={form.type === 'alerte' ? 'Ex: Fermé exceptionnellement vendredi' : commercant?.categorie === 'detail' ? 'Ex: La nouvelle collection est arrivée' : commercant?.categorie === 'vitrine' ? 'Ex: Nouveau soin visage dès lundi' : 'Ex: Nouveau menu d&rsquo;hiver dès lundi'}/></div>
 
             {/* Photo (utilisee comme hero dans la modale enrichie cote client) */}
             <div>

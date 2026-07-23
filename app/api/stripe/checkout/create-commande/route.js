@@ -53,6 +53,12 @@ export async function POST(request) {
       paiement_mode,
     } = body
     const estLivraison = mode_retrait === 'livraison'
+    // Boutique détail (Module 2 étape 5) : pas de créneau. Retrait en boutique
+    // (paiement selon boutique_retrait_paiement) ou expédition (toujours en ligne,
+    // frais de port server-side, suivi manuel).
+    const estExpedition = mode_retrait === 'expedition'
+    const estRetraitBoutique = mode_retrait === 'retrait_boutique'
+    const estBoutique = estExpedition || estRetraitBoutique
     // Paiement sur place (cash/carte au comptoir) : la commande est confirmée
     // immédiatement, sans Stripe Checkout. Autorisé uniquement si le commerçant
     // a activé accepte_paiement_cash (vérifié plus bas, server-side).
@@ -63,11 +69,11 @@ export async function POST(request) {
     if (!commercant_id || !date_commande) {
       return NextResponse.json({ ok: false, error: 'Données commande incomplètes (commerçant, date).' }, { status: 400 })
     }
-    if (estLivraison ? !creneau_livraison_id : !creneau_id) {
+    if (!estBoutique && (estLivraison ? !creneau_livraison_id : !creneau_id)) {
       return NextResponse.json({ ok: false, error: 'Créneau manquant.' }, { status: 400 })
     }
-    if (estLivraison && (!adresse_livraison || !code_postal_livraison)) {
-      return NextResponse.json({ ok: false, error: 'Adresse de livraison incomplète.' }, { status: 400 })
+    if ((estLivraison || estExpedition) && (!adresse_livraison || !code_postal_livraison)) {
+      return NextResponse.json({ ok: false, error: estExpedition ? 'Adresse d\'expédition incomplète.' : 'Adresse de livraison incomplète.' }, { status: 400 })
     }
     if (!Array.isArray(articles) || articles.length === 0) {
       return NextResponse.json({ ok: false, error: 'Panier vide.' }, { status: 400 })
@@ -89,7 +95,7 @@ export async function POST(request) {
     // ─── 2) Récup commerçant + Stripe Connect prérequis ────────────────────
     const { data: commercant, error: errC } = await supabase
       .from('commercants')
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash')
+      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp')
       .eq('id', commercant_id)
       .single()
     if (errC || !commercant) {
@@ -98,7 +104,27 @@ export async function POST(request) {
     if (commercant.statut_publication !== 'publie') {
       return NextResponse.json({ ok: false, error: 'Ce commerçant n\'accepte pas encore de commandes.' }, { status: 400 })
     }
-    if (surPlace && !commercant.accepte_paiement_cash) {
+    if (estBoutique) {
+      if (commercant.categorie !== 'detail') {
+        return NextResponse.json({ ok: false, error: 'Commande boutique indisponible chez ce commerçant.' }, { status: 400 })
+      }
+      const mv = commercant.boutique_mode_vente || 'retrait'
+      if (estExpedition && mv === 'retrait') {
+        return NextResponse.json({ ok: false, error: 'L\'expédition n\'est pas proposée chez ce commerçant.' }, { status: 400 })
+      }
+      if (estRetraitBoutique && mv === 'expedition') {
+        return NextResponse.json({ ok: false, error: 'Le retrait en boutique n\'est pas proposé chez ce commerçant.' }, { status: 400 })
+      }
+      if (estExpedition && surPlace) {
+        return NextResponse.json({ ok: false, error: 'Une commande expédiée se paie en ligne.' }, { status: 400 })
+      }
+    }
+    // Sur place : autorisé selon accepte_paiement_cash (alimentaire) ou selon
+    // le choix boutique_retrait_paiement='magasin' (retrait boutique détail).
+    const cashAutorise = estRetraitBoutique
+      ? commercant.boutique_retrait_paiement === 'magasin'
+      : commercant.accepte_paiement_cash
+    if (surPlace && !cashAutorise) {
       return NextResponse.json({ ok: false, error: 'Le paiement sur place n\'est pas proposé chez ce commerçant.' }, { status: 400 })
     }
     if (!surPlace && (!commercant.stripe_account_id || !commercant.stripe_account_charges_enabled)) {
@@ -108,8 +134,10 @@ export async function POST(request) {
     // ─── 3) Récup créneau (retrait OU livraison) + check actif ──────────────
     // En livraison : créneau depuis livraison_creneaux + vérif zone (code postal).
     // livraisonConfig est stocké ici, les frais sont calculés plus bas (besoin du total).
-    let creneau, livraisonConfig = null
-    if (estLivraison) {
+    let creneau = null, livraisonConfig = null
+    if (estBoutique) {
+      // Pas de créneau pour la boutique détail (retrait libre / expédition)
+    } else if (estLivraison) {
       const { data: cl, error: errCL } = await supabase
         .from('livraison_creneaux')
         .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id')
@@ -253,6 +281,16 @@ export async function POST(request) {
       const offert = livraisonConfig.gratuit_des != null && totalEUR >= Number(livraisonConfig.gratuit_des)
       fraisLivraisonCents = offert ? 0 : Math.round(Number(livraisonConfig.frais_fixe || 0) * 100)
     }
+    // Frais d'expédition boutique (server-side) : montant fixe boutique_frais_port,
+    // offert dès boutique_gratuit_des. Zone CP optionnelle (vide = toute la Belgique).
+    if (estExpedition) {
+      const cps = Array.isArray(commercant.boutique_expedition_cp) ? commercant.boutique_expedition_cp : []
+      if (cps.length > 0 && !cps.includes(String(code_postal_livraison).trim())) {
+        return NextResponse.json({ ok: false, error: 'Ce code postal n\'est pas desservi par l\'expédition.' }, { status: 400 })
+      }
+      const offert = commercant.boutique_gratuit_des != null && Number(commercant.boutique_gratuit_des) > 0 && totalEUR >= Number(commercant.boutique_gratuit_des)
+      fraisLivraisonCents = offert ? 0 : Math.round(Number(commercant.boutique_frais_port || 0) * 100)
+    }
     const fraisLivraisonEUR = fraisLivraisonCents / 100
 
     // ─── 5) Vérif stock atomic : commandes payées du jour + réservations actives ──
@@ -321,10 +359,10 @@ export async function POST(request) {
       .from('commandes')
       .insert({
         commercant_id: commercant.id,
-        creneau_id: estLivraison ? null : creneau.id,
+        creneau_id: (estLivraison || estBoutique) ? null : creneau.id,
         creneau_livraison_id: estLivraison ? creneau.id : null,
-        mode_retrait: estLivraison ? 'livraison' : 'retrait',
-        adresse_livraison: estLivraison ? adresse_livraison : null,
+        mode_retrait: estExpedition ? 'expedition' : estLivraison ? 'livraison' : 'retrait',
+        adresse_livraison: (estLivraison || estExpedition) ? adresse_livraison : null,
         livraison_lat: coordsLivraison?.lat ?? null,
         livraison_lng: coordsLivraison?.lng ?? null,
         frais_livraison: fraisLivraisonEUR,
@@ -350,7 +388,7 @@ export async function POST(request) {
     // transaction (voir MIGRATION_STOCK_RACE.sql). Le check JS (étape 5) reste un
     // pré-filtre rapide ; ici on rattrape la race (dernier article pris entre les
     // deux). Avant l'insert des lignes → un échec ne laisse qu'une commande à supprimer.
-    {
+    if (!estBoutique) {
       const items = lignes.map(l => ({ article_id: l.article_id, quantite: l.quantite }))
       const { error: errStock } = await supabase.rpc('reserver_stock_atomique', {
         p_commande_id: commande.id,
@@ -394,6 +432,22 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: `Enregistrement articles échoué : ${errLignes.message}` }, { status: 500 })
     }
 
+    // ─── 7.5) Décrément stock VARIANTES (modèle détail : stock permanent) ───
+    // Décrément immédiat à la commande (cash ET en ligne). Conservateur : un
+    // paiement Stripe abandonné laisse le stock décrémenté jusqu'à l'annulation
+    // (pas de survente possible). Restauration à l'annulation = backlog.
+    for (const item of articles) {
+      if (!item.variante_id) continue
+      const v = varianteParId[item.variante_id]
+      if (!v) continue
+      const q = parseInt(item.quantite, 10) || 0
+      const { error: errVar } = await supabase
+        .from('article_variantes')
+        .update({ stock: Math.max(0, (v.stock || 0) - q) })
+        .eq('id', v.id)
+      if (errVar) console.error('[create-commande] décrément variante KO (non-bloquant)', errVar.message)
+    }
+
     // ─── 8) Réservations stock : déjà posées atomiquement à l'étape 6.5 ─────
 
     // ─── 8.5) PAIEMENT SUR PLACE : confirmation immédiate, pas de Stripe ────
@@ -420,11 +474,14 @@ export async function POST(request) {
     }
 
     // ─── 9) Stripe Checkout Session (Direct Charge sur compte connecté) ────
-    const heureCreneau = (creneau.heure_debut || '').slice(0, 5)
+    const heureCreneau = (creneau?.heure_debut || '').slice(0, 5)
     const dateHumain = new Date(date_commande + 'T12:00:00').toLocaleDateString('fr-BE', {
       weekday: 'long', day: 'numeric', month: 'long',
     })
     const nbArticles = lignes.reduce((s, l) => s + l.quantite, 0)
+    const descCommande = estBoutique
+      ? `${estExpedition ? 'Expédition' : 'Retrait en boutique'} · ${nbArticles} article${nbArticles > 1 ? 's' : ''}`
+      : `${estLivraison ? 'Livraison' : 'Retrait'} ${dateHumain} à ${heureCreneau} · ${nbArticles} article${nbArticles > 1 ? 's' : ''}`
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -437,7 +494,7 @@ export async function POST(request) {
             unit_amount: totalCents,
             product_data: {
               name: `Commande Yoppaa · ${commercant.nom}`,
-              description: `${estLivraison ? 'Livraison' : 'Retrait'} ${dateHumain} à ${heureCreneau} · ${nbArticles} article${nbArticles > 1 ? 's' : ''}`,
+              description: descCommande,
             },
           },
         },
@@ -446,7 +503,7 @@ export async function POST(request) {
           price_data: {
             currency: 'eur',
             unit_amount: fraisLivraisonCents,
-            product_data: { name: 'Frais de livraison' },
+            product_data: { name: estExpedition ? 'Frais de port' : 'Frais de livraison' },
           },
         }] : []),
       ],

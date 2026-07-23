@@ -3294,11 +3294,12 @@ export default function Commander() {
                 style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '0.625rem 0 0.5rem', border: 'none', background: 'transparent', cursor: 'pointer', position: 'relative' }}>
 
                 {item.key === 'accueil' && (
-                  /* Signature Yoppaa : 3 points tricolores horizontaux (wordmark). */
+                  /* Maison (remplace les 3 dots horizontaux, trop proches du
+                     glyphe « plus d'options » ⋯ — décision Alex 23/07). */
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
-                    <circle cx="5"  cy="12" r="2.8" fill="#ffffff" opacity={actif ? 0.55 : 0.3}/>
-                    <circle cx="12" cy="12" r="3.2" fill={T.light}  opacity={actif ? 1 : 0.5}/>
-                    <circle cx="19" cy="12" r="2.8" fill={T.mid}    opacity={actif ? 1 : 0.55}/>
+                    <path d="M3 11 L12 3.5 L21 11" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
+                    <path d="M5.5 9.5 L5.5 20 L18.5 20 L18.5 9.5" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
+                    <path d="M10 20 L10 14.5 L14 14.5 L14 20" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
                   </svg>
                 )}
                 {item.key === 'commandes' && (

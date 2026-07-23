@@ -3117,6 +3117,14 @@ export default function Commander() {
                   )
                 })()}
 
+                {/* Header de section (style aligné sur l'onglet Tribu) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, marginTop: '1.5rem', position: 'relative', zIndex: 1 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+                    Mon activité
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                </div>
+
                 {/* Card stat principale : temps economise - taille reduite pour rééquilibrer avec
                     le grid 2x2 en dessous (avant la hero etait trop dominante). Sous-titre adapte
                     selon si le Yopper a des RDVs ou seulement des commandes. */}
@@ -3145,11 +3153,7 @@ export default function Commander() {
                   )
                 })()}
 
-                {/* Notifications : bouton explicite d'activation/réparation des push
-                    (le prompt ne se déclenchait qu'au favori/commande, cf. bug 18/07). */}
-                <CarteNotifications />
-
-                {/* Grid 2x2 stats : Commandes / RDV / Total depense / Commerces.
+                {/* Grid 2x2 stats : Commandes / RDV / Depense local / Commerces.
                     4 metriques egales en visuel pour equilibrer la page profil. */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.875rem' }}>
                   {[
@@ -3162,7 +3166,7 @@ export default function Commander() {
                       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
                     },
                     {
-                      label: 'Total dépensé', value: `${totalDepense.toFixed(0)}€`, color: T.mid, bg: `${T.mid}18`,
+                      label: 'Dépensé local', value: `${totalDepense.toFixed(0)}€`, color: T.mid, bg: `${T.mid}18`,
                       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.mid} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 9.5c-1-1-2.5-1.5-4-1.5C7 8 5 10 5 12s2 4 5 4c1.5 0 3-.5 4-1.5"/><path d="M3 10h6M3 14h6"/></svg>,
                     },
                     {
@@ -3210,6 +3214,19 @@ export default function Commander() {
                     )}
                   </div>
                 )}
+
+                {/* Header Réglages : regroupe notifs + commune + mot de passe + déconnexion
+                    (avant, la carte notifications était coincée entre deux blocs de stats) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, marginTop: 20 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+                    Réglages
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                </div>
+
+                {/* Notifications : bouton explicite d'activation/réparation des push
+                    (le prompt ne se déclenchait qu'au favori/commande, cf. bug 18/07). */}
+                <CarteNotifications />
 
                 {/* Card "Ma commune" - accessible si Yopper connecté.
                     Clic sur "Changer" ouvre la modale ConfirmCommune en mode 'change'

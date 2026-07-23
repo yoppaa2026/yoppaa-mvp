@@ -787,6 +787,8 @@ export default function CommanderSlug() {
   const [jourSelectionne, setJourSelectionne] = useState(0)
   // ─── Livraison (mode retrait | livraison) ───
   const [modeCommande, setModeCommande] = useState('retrait')
+  // ─── Boutique détail (Module 2 étape 5) : retrait boutique | expédition ───
+  const [modeBoutique, setModeBoutique] = useState('retrait')
   const [livraisonConfig, setLivraisonConfig] = useState(null)
   const [creneauxLivraison, setCreneauxLivraison] = useState([])
   const [joursDisposLivraison, setJoursDisposLivraison] = useState([])
@@ -1506,6 +1508,14 @@ export default function CommanderSlug() {
   // Frais de livraison côté client (confort d'affichage ; le serveur recalcule et
   // reste la source de vérité). Fixe, offert si le panier atteint gratuit_des.
   function fraisLivraison() {
+    // Boutique détail en expédition : frais de port (offerts dès le seuil).
+    // Estimation client ; le serveur recalcule et reste la source de vérité.
+    if (commercant?.categorie === 'detail') {
+      if (modeBoutiqueEff !== 'expedition') return 0
+      const seuil = Number(commercant?.boutique_gratuit_des)
+      if (seuil > 0 && totalPanier() >= seuil) return 0
+      return Number(commercant?.boutique_frais_port || 0)
+    }
     if (modeCommande !== 'livraison' || !livraisonConfig) return 0
     const g = livraisonConfig.gratuit_des
     if (g != null && totalPanier() >= Number(g)) return 0
@@ -1586,15 +1596,16 @@ export default function CommanderSlug() {
   }
 
   async function passerCommande() {
-    const creneauPret = modeCommande === 'livraison' ? creneauLivraisonChoisi : creneauChoisi
-    if (!creneauPret || !client.prenom || !client.nom || !client.email || !client.telephone || !rgpdCommande || !commercant) return
+    // Boutique détail : pas de créneau, la validation vient de creneauOk
+    // (retrait libre, ou formulaire d'expédition complet + CP en zone).
+    if (!creneauOk || !client.prenom || !client.nom || !client.email || !client.telephone || !rgpdCommande || !commercant) return
     setLoadingCommande(true)
     setErreurCommande(null)
     try {
       // Persistance client (localStorage + clients DB) - utile pour favoris/historique
       await getOuCreerClient(client.email, client.prenom, client.nom)
 
-      const jourDate = (modeCommande === 'livraison' ? creneauLivraisonChoisi?._date : joursDispos[jourSelectionne]?.date) || new Date()
+      const jourDate = estDetail ? new Date() : ((modeCommande === 'livraison' ? creneauLivraisonChoisi?._date : joursDispos[jourSelectionne]?.date) || new Date())
       const d = new Date(jourDate)
       const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 
@@ -1614,8 +1625,19 @@ export default function CommanderSlug() {
 
       // Mode de paiement effectif : choix explicite du Yopper, sinon défaut
       // selon ce que le commerçant propose (en ligne prioritaire).
-      const stripeOK = !!commercant.stripe_account_charges_enabled
-      const cashOK = !!commercant.accepte_paiement_cash
+      let stripeOK = !!commercant.stripe_account_charges_enabled
+      let cashOK = !!commercant.accepte_paiement_cash
+      if (estDetail) {
+        // Boutique : expédition = en ligne obligatoire ; retrait = LE choix du
+        // commerçant (boutique_retrait_paiement : en_ligne OU magasin).
+        if (modeBoutiqueEff === 'expedition') {
+          cashOK = false
+        } else {
+          const p = commercant.boutique_retrait_paiement || 'en_ligne'
+          cashOK = p === 'magasin'
+          stripeOK = stripeOK && p === 'en_ligne'
+        }
+      }
       const modeEffectif = modePaiement || (stripeOK ? 'en_ligne' : cashOK ? 'sur_place' : null)
       if (!modeEffectif) {
         setErreurCommande('La commande en ligne n\'est pas encore disponible chez ce commerçant.')
@@ -1636,7 +1658,15 @@ export default function CommanderSlug() {
           client_nom: client.nom,
           client_telephone: client.telephone,
           rgpd_marketing: rgpdMarketing,
-          ...(modeCommande === 'livraison'
+          ...(estDetail
+            ? {
+                mode_retrait: modeBoutiqueEff === 'expedition' ? 'expedition' : 'retrait_boutique',
+                ...(modeBoutiqueEff === 'expedition' ? {
+                  adresse_livraison: [adresseLivraison.rue, adresseLivraison.complement, `${adresseLivraison.code_postal} ${adresseLivraison.ville}`].filter(s => s && s.trim()).join(', '),
+                  code_postal_livraison: adresseLivraison.code_postal.trim(),
+                } : {}),
+              }
+            : modeCommande === 'livraison'
             ? {
                 mode_retrait: 'livraison',
                 creneau_livraison_id: creneauLivraisonChoisi?.id,
@@ -1754,7 +1784,19 @@ export default function CommanderSlug() {
   const slotsLivraison = joursDisposLivraison.flatMap(j => (j.creneaux || []).map(cr => ({ ...cr, _date: j.date, _jourLabel: j.label })))
   const cpDansZone = !!livraisonConfig?.codes_postaux?.includes((adresseLivraison.code_postal || '').trim())
   const livraisonFormOk = !!(adresseLivraison.rue.trim() && adresseLivraison.code_postal.trim() && adresseLivraison.ville.trim() && cpDansZone && creneauLivraisonChoisi)
-  const creneauOk = modeCommande === 'livraison' ? livraisonFormOk : !!creneauChoisi
+  // ─── Boutique détail : modes autorisés + validation du formulaire d'expédition ──
+  const estDetail = commercant?.categorie === 'detail'
+  const boutiqueModes = estDetail
+    ? (commercant?.boutique_mode_vente === 'les_deux' ? ['retrait', 'expedition'] : [commercant?.boutique_mode_vente || 'retrait'])
+    : []
+  const modeBoutiqueEff = estDetail ? (boutiqueModes.includes(modeBoutique) ? modeBoutique : boutiqueModes[0]) : null
+  const cpExpe = (adresseLivraison.code_postal || '').trim()
+  const zoneExpe = Array.isArray(commercant?.boutique_expedition_cp) ? commercant.boutique_expedition_cp : []
+  const cpExpeOk = zoneExpe.length === 0 || zoneExpe.includes(cpExpe)
+  const expeFormOk = !!(adresseLivraison.rue.trim() && cpExpe && adresseLivraison.ville.trim() && cpExpeOk)
+  const creneauOk = estDetail
+    ? (modeBoutiqueEff === 'expedition' ? expeFormOk : true)
+    : (modeCommande === 'livraison' ? livraisonFormOk : !!creneauChoisi)
   // Mode de la commande qui vient d'être passée (pour l'écran de confirmation étape 4).
   // On lit derniereCommande en priorité (source de vérité) avec repli sur l'état courant.
   const estLivraisonConfirmee = (derniereCommande?.mode_retrait || modeCommande) === 'livraison'
@@ -2603,10 +2645,10 @@ export default function CommanderSlug() {
                       </div>
                     )
                   })}
-                  {modeCommande === 'livraison' && (
+                  {(modeCommande === 'livraison' || (estDetail && modeBoutiqueEff === 'expedition')) && (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginTop: 6, color: T.deep }}>
-                        <span style={{ fontWeight: 600 }}>Frais de livraison</span>
+                        <span style={{ fontWeight: 600 }}>{estDetail ? 'Frais de port' : 'Frais de livraison'}</span>
                         <span style={{ fontWeight: 800 }}>{fraisLivraison() === 0 ? 'Offerts' : `+${fraisLivraison().toFixed(2)}€`}</span>
                       </div>
                       {livraisonConfig?.gratuit_des != null && (
@@ -2622,8 +2664,48 @@ export default function CommanderSlug() {
                   </div>
                 </div>
 
+                {/* ─── Boutique détail : retrait libre / expédition, pas de créneau ─── */}
+                {estDetail && (
+                  <>
+                    {boutiqueModes.length > 1 && (
+                      <div style={{ display: 'flex', gap: 8, marginBottom: '1rem' }}>
+                        {[{ v: 'retrait', label: 'Retrait en boutique' }, { v: 'expedition', label: 'Expédition' }].map(m => (
+                          <button key={m.v} onClick={() => { setModeBoutique(m.v); setErreurCommande(null) }}
+                            style={{ flex: 1, padding: '0.7rem', borderRadius: 12, border: `2px solid ${modeBoutiqueEff === m.v ? T.main : T.pale}`, background: modeBoutiqueEff === m.v ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: modeBoutiqueEff === m.v ? '#fff' : T.ink, fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {modeBoutiqueEff === 'retrait' ? (
+                      <div style={{ background: T.pale, border: `1.5px solid ${T.main}33`, borderRadius: 14, padding: '0.75rem 1rem', marginBottom: '1.25rem' }}>
+                        <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 600, lineHeight: 1.5, margin: 0 }}>
+                          Ta commande est mise de côté : passe la récupérer en boutique aux heures d&rsquo;ouverture.
+                          {commercant?.boutique_retrait_paiement === 'magasin' ? ' Tu paies au comptoir, au retrait.' : ''}
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ background: '#fff', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '1.25rem', border: `1.5px solid ${T.pale}` }}>
+                        <p style={{ fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 10px' }}>Adresse d&rsquo;expédition</p>
+                        <input value={adresseLivraison.rue} onChange={e => setAdresseLivraison(p => ({ ...p, rue: e.target.value }))} placeholder="Rue et numéro" style={inputSt} />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <input value={adresseLivraison.code_postal} onChange={e => setAdresseLivraison(p => ({ ...p, code_postal: e.target.value.replace(/\D/g, '').slice(0,4) }))} inputMode="numeric" placeholder="Code postal" style={{ ...inputSt, flex: '0 0 40%' }} />
+                          <input value={adresseLivraison.ville} onChange={e => setAdresseLivraison(p => ({ ...p, ville: e.target.value }))} placeholder="Ville" style={{ ...inputSt, flex: 1 }} />
+                        </div>
+                        <input value={adresseLivraison.complement} onChange={e => setAdresseLivraison(p => ({ ...p, complement: e.target.value }))} placeholder="Boîte, étage... (optionnel)" style={inputSt} />
+                        {cpExpe && !cpExpeOk && (
+                          <p style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 700, margin: '2px 0 0' }}>Ce code postal n&rsquo;est pas desservi par l&rsquo;expédition.</p>
+                        )}
+                        <p style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 600, margin: '8px 0 0' }}>
+                          Envoi préparé par le commerçant, numéro de suivi communiqué dès l&rsquo;expédition.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+
                 {/* Sélecteur retrait / livraison (si le commerce propose la livraison) */}
-                {livraisonDispo && (
+                {!estDetail && livraisonDispo && (
                   <div style={{ display: 'flex', gap: 8, marginBottom: '1rem' }}>
                     {[{ v: 'retrait', label: 'Retrait' }, { v: 'livraison', label: 'Livraison' }].map(m => (
                       <button key={m.v} onClick={() => { setModeCommande(m.v); modeAppliqueRef.current = true; try { localStorage.setItem('yoppaa.commande.mode', m.v) } catch { /* ignore */ } setErreurCommande(null) }}
@@ -2635,7 +2717,7 @@ export default function CommanderSlug() {
                 )}
 
                 {/* Adresse de livraison */}
-                {modeCommande === 'livraison' && (
+                {!estDetail && modeCommande === 'livraison' && (
                   <div style={{ background: '#fff', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '1.25rem', border: `1.5px solid ${T.pale}` }}>
                     <p style={{ fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 10px' }}>Adresse de livraison</p>
                     <input value={adresseLivraison.rue} onChange={e => setAdresseLivraison(p => ({ ...p, rue: e.target.value }))} placeholder="Rue et numéro" style={inputSt} />
@@ -2650,7 +2732,7 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {modeCommande === 'retrait' && (<>
+                {!estDetail && modeCommande === 'retrait' && (<>
                 {/* Jour verrouille - choisi a l'etape 2 (menu) */}
                 {joursDispos[jourSelectionne] && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: '1rem', background: T.pale, border: `1.5px solid ${T.main}33`, borderRadius: 14, padding: '0.625rem 0.875rem' }}>

@@ -20,32 +20,9 @@ import YoppaaLogo from '@/app/components/YoppaaLogo'
 import { validerBCE, formaterBCECompact } from '@/lib/kyb'
 import TurnstileWidget from '@/app/components/TurnstileWidget'
 
-// Types de commerce séparés par catégorie : la liste affichée à l'étape 2
-// dépend du choix fait à l'étape 1 (alimentaire vs vitrine).
-const TYPES_ALIMENTAIRE = [
-  'Boulangerie', 'Pâtisserie', 'Chocolatier', 'Sandwicherie', 'Snack',
-  'Friterie', 'Pizzeria', 'Coffee shop', 'Épicerie', 'Traiteur',
-  'Boucherie', 'Food truck', 'Distributeur automatique', 'Autre alimentaire',
-]
-// Vitrine = commerces de SERVICES (RDV : coiffeur, esthéticienne, garagiste…)
-const TYPES_VITRINE = [
-  'Coiffeur', 'Barbier', 'Esthéticienne', 'Opticien', 'Pharmacie',
-  'Pressing', 'Garagiste', 'Toiletteur', 'Tatoueur', 'Studio photo',
-  'Salle de sport', 'Cours / coaching', 'Autre service',
-]
-
-// Detail = commerces de PRODUITS NON ALIMENTAIRES (réservation produit / retrait)
-const TYPES_DETAIL = [
-  'Vêtements', 'Chaussures', 'Bijouterie', 'Fleuriste', 'Librairie',
-  'Décoration / maison', 'Sport / équipement', 'Loisirs créatifs', 'Jouets',
-  'Électroménager', 'Autre détail',
-]
-
-function typesPourCategorie(categorie) {
-  if (categorie === 'vitrine') return TYPES_VITRINE
-  if (categorie === 'detail')  return TYPES_DETAIL
-  return TYPES_ALIMENTAIRE
-}
+// Types de commerce : source unique lib/types-commerce (listes étendues 23/07,
+// double métier max 2, champ libre « Autre… »). Sélection via SelecteurTypes.
+import SelecteurTypes from '@/app/components/SelecteurTypes'
 
 // ─── SKIP-LOGIC (esprit ODOO : adaptive selon plan + categorie) ────────────────
 // La structure 5 etapes reste constante, mais le CONTENU et les contraintes
@@ -1076,10 +1053,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
           <input type="text" value={form.nom} onChange={e => updateField('nom', e.target.value)} placeholder="Ex: Au Pain Doré" style={inputStyle()}/>
         </Field>
         <Field label="Type *">
-          <select value={form.type} onChange={e => updateField('type', e.target.value)} style={{ ...inputStyle(), cursor: 'pointer' }}>
-            <option value="">— Choisir un type —</option>
-            {typesPourCategorie(commercant.categorie).map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <SelecteurTypes categorie={commercant.categorie} value={form.type} onChange={v => updateField('type', v)}/>
         </Field>
       </Card>
 

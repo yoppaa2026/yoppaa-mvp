@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { PLANS } from '@/lib/plans'
+import { TOUS_TYPES } from '@/lib/types-commerce'
 
 const T = {
   bg:       '#F8F6FF',
@@ -26,13 +27,11 @@ const T = {
 
 const STATUTS_PUB = ['publie', 'en_attente', 'rejete', 'suspendu']
 const CATEGORIES = ['alimentaire', 'vitrine', 'detail']
-const TYPES_COMMUNS = [
-  'Boulangerie', 'Pâtisserie', 'Boulangerie & Pâtisserie', 'Chocolatier',
-  'Sandwicherie', 'Snack', 'Friterie', 'Pizzeria', 'Coffee shop',
-  'Épicerie', 'Traiteur', 'Boucherie', 'Fleuriste', 'Pharmacie', 'Food truck',
-  'Institut de beauté', 'Coiffeur', 'Barbier', 'Esthéticienne', 'Manucure',
-  'Tatoueur', 'Kiné', 'Ostéopathe', 'Spa', 'Massage',
-]
+// Suggestions du champ Type : liste officielle complète (lib/types-commerce).
+// Le champ reste en TEXTE LIBRE : contrôle total admin pour normaliser un type
+// « Autre… » saisi au signup ou corriger une anomalie ("Boulangerie & Pâtisserie"
+// = double métier, séparateur ' & ').
+const TYPES_COMMUNS = TOUS_TYPES
 
 export default function ModalEditCommercant({ commercant, onClose, onSaved, onDeleted, toast }) {
   const [form, setForm] = useState({

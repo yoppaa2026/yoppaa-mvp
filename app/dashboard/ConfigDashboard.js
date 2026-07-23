@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { canDo, getIaConfig } from '@/lib/plans'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
+import SelecteurTypes from '@/app/components/SelecteurTypes'
 import TabPaiements from './TabPaiements'
 import { compresserImage } from '@/lib/compress-image'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
@@ -3318,9 +3319,15 @@ function TabProfil({ commercantId, toast, onSaved }) {
       {/* Infos */}
       <div style={s.card}>
         <div style={{ display: 'grid', gap: 14 }}>
+          <div>
+            <label style={s.label}>Nom *</label>
+            <Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} placeholder="Ex: Boulangerie Dupont"/>
+          </div>
+          <div>
+            <label style={s.label}>Type de commerce</label>
+            <SelecteurTypes categorie={commercant?.categorie} value={form.type} onChange={v => setForm(p => ({ ...p, type: v }))}/>
+          </div>
           {[
-            { label: 'Nom *', key: 'nom', placeholder: 'Ex: Boulangerie Dupont' },
-            { label: 'Type', key: 'type', placeholder: 'Ex: Boulangerie, Coffee shop...' },
             { label: 'Email', key: 'email', placeholder: '', type: 'email', disabled: true, hint: 'Non modifiable, contact support' },
             { label: 'Téléphone', key: 'telephone', placeholder: '+32 470 00 00 00', type: 'tel' },
             { label: 'Adresse', key: 'adresse', placeholder: 'Rue de la Paix 12, 1000 Bruxelles' },

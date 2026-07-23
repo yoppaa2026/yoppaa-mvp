@@ -3325,7 +3325,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
           </div>
           <div>
             <label style={s.label}>Type de commerce</label>
-            <SelecteurTypes categorie={commercant?.categorie} value={form.type} onChange={v => setForm(p => ({ ...p, type: v }))}/>
+            <SelecteurTypes categorie={form.categorie} value={form.type} onChange={v => setForm(p => ({ ...p, type: v }))}/>
           </div>
           {[
             { label: 'Email', key: 'email', placeholder: '', type: 'email', disabled: true, hint: 'Non modifiable, contact support' },
@@ -3349,21 +3349,45 @@ function TabProfil({ commercantId, toast, onSaved }) {
               {['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'].map((jour, idx) => {
                 const labels = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
                 const h = form.horaires_detail?.[jour] || { ouvert: false, debut: '07:00', fin: '14:00' }
+                const setJour = (patch) => setForm(p => ({ ...p, horaires_detail: { ...p.horaires_detail, [jour]: { ...h, ...patch } } }))
+                const aPause = !!(h.debut2 || h.fin2)
                 return (
-                  <div key={jour} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: h.ouvert ? T.pale : '#F9FAFB', border: `1.5px solid ${h.ouvert ? T.light : '#E5E7EB'}` }}>
-                    <button onClick={() => setForm(p => ({ ...p, horaires_detail: { ...p.horaires_detail, [jour]: { ...h, ouvert: !h.ouvert } } }))}
-                      style={{ width: 36, height: 20, borderRadius: 100, background: h.ouvert ? T.main : '#D1D5DB', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
-                      <div style={{ position: 'absolute', top: 2, left: h.ouvert ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}/>
-                    </button>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: h.ouvert ? T.ink : T.muted, width: 76, flexShrink: 0 }}>{labels[idx]}</span>
-                    {h.ouvert ? (
-                      <>
-                        <Input type="time" value={h.debut} onChange={e => setForm(p => ({ ...p, horaires_detail: { ...p.horaires_detail, [jour]: { ...h, debut: e.target.value } } }))} style={{ flex: 1, minWidth: 0, fontSize: 13, padding: '4px 8px' }} />
+                  <div key={jour} style={{ padding: '8px 12px', borderRadius: 10, background: h.ouvert ? T.pale : '#F9FAFB', border: `1.5px solid ${h.ouvert ? T.light : '#E5E7EB'}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <button onClick={() => setJour({ ouvert: !h.ouvert })}
+                        style={{ width: 36, height: 20, borderRadius: 100, background: h.ouvert ? T.main : '#D1D5DB', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
+                        <div style={{ position: 'absolute', top: 2, left: h.ouvert ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}/>
+                      </button>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: h.ouvert ? T.ink : T.muted, width: 76, flexShrink: 0 }}>{labels[idx]}</span>
+                      {h.ouvert ? (
+                        <>
+                          <Input type="time" value={h.debut} onChange={e => setJour({ debut: e.target.value })} style={{ flex: 1, minWidth: 0, fontSize: 13, padding: '4px 8px' }} />
+                          <span style={{ fontSize: 13, color: T.muted, flexShrink: 0 }}>→</span>
+                          <Input type="time" value={h.fin} onChange={e => setJour({ fin: e.target.value })} style={{ flex: 1, minWidth: 0, fontSize: 13, padding: '4px 8px' }} />
+                          {!aPause && (
+                            <button onClick={() => setJour({ debut2: '18:00', fin2: '22:00' })} title="Ajouter une 2e plage (ex : service du soir)"
+                              style={{ ...s.btn, ...s.btnGhost, padding: '3px 8px', fontSize: 10.5, fontWeight: 800, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                              + pause
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <span style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF' }}>Fermé</span>
+                      )}
+                    </div>
+                    {/* 2e plage (horaires à pause : ex. 11:00-14:00 puis 18:00-22:00) */}
+                    {h.ouvert && aPause && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+                        <span style={{ width: 36, flexShrink: 0 }}/>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, width: 76, flexShrink: 0 }}>puis</span>
+                        <Input type="time" value={h.debut2 || ''} onChange={e => setJour({ debut2: e.target.value })} style={{ flex: 1, minWidth: 0, fontSize: 13, padding: '4px 8px' }} />
                         <span style={{ fontSize: 13, color: T.muted, flexShrink: 0 }}>→</span>
-                        <Input type="time" value={h.fin} onChange={e => setForm(p => ({ ...p, horaires_detail: { ...p.horaires_detail, [jour]: { ...h, fin: e.target.value } } }))} style={{ flex: 1, minWidth: 0, fontSize: 13, padding: '4px 8px' }} />
-                      </>
-                    ) : (
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF' }}>Fermé</span>
+                        <Input type="time" value={h.fin2 || ''} onChange={e => setJour({ fin2: e.target.value })} style={{ flex: 1, minWidth: 0, fontSize: 13, padding: '4px 8px' }} />
+                        <button onClick={() => setJour({ debut2: null, fin2: null })} title="Retirer la 2e plage"
+                          style={{ width: 22, height: 22, borderRadius: 100, border: 'none', background: '#FEE2E2', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontWeight: 800, flexShrink: 0, lineHeight: '22px', padding: 0 }}>
+                          ✕
+                        </button>
+                      </div>
                     )}
                   </div>
                 )

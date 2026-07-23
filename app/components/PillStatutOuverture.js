@@ -44,8 +44,11 @@ function parseHHMM(s) {
 export function getCreneauxJour(jourData) {
   if (!jourData || jourData.ouvert === false) return []
   if (Array.isArray(jourData.creneaux)) return jourData.creneaux
-  if (jourData.debut && jourData.fin) return [[jourData.debut, jourData.fin]]
-  return []
+  const out = []
+  if (jourData.debut && jourData.fin) out.push([jourData.debut, jourData.fin])
+  // Horaires à pause (restauration...) : 2e plage optionnelle debut2/fin2
+  if (jourData.debut2 && jourData.fin2) out.push([jourData.debut2, jourData.fin2])
+  return out
 }
 
 export function calculerStatutOuverture(horaires, now) {
@@ -69,7 +72,7 @@ export function calculerStatutOuverture(horaires, now) {
   // 2) Entre 2 créneaux du jour → PAUSE
   for (let i = 0; i < creneauxAuj.length - 1; i++) {
     if (minNow >= parseHHMM(creneauxAuj[i][1]) && minNow < parseHHMM(creneauxAuj[i+1][0])) {
-      return { etat: 'pause', label: 'Pause midi', sousTitre: `Réouvre à ${creneauxAuj[i+1][0]}` }
+      return { etat: 'pause', label: 'En pause', sousTitre: `Réouvre à ${creneauxAuj[i+1][0]}` }
     }
   }
   // 3) Avant l'ouverture du jour

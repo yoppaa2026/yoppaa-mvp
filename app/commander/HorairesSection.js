@@ -71,7 +71,10 @@ export default function HorairesSection({ horaires, variant = 'border' }) {
                   {label}
                 </span>
                 {h.ouvert && h.debut && h.fin
-                  ? <span style={{ fontSize: '0.82rem', fontWeight: estAujourdhui ? 700 : 500, color: estAujourdhui ? T.main : T.ink }}>{h.debut.slice(0,5)} – {h.fin.slice(0,5)}</span>
+                  ? <span style={{ fontSize: '0.82rem', fontWeight: estAujourdhui ? 700 : 500, color: estAujourdhui ? T.main : T.ink, textAlign: 'right' }}>
+                      {h.debut.slice(0,5)} – {h.fin.slice(0,5)}
+                      {h.debut2 && h.fin2 && <> · {h.debut2.slice(0,5)} – {h.fin2.slice(0,5)}</>}
+                    </span>
                   : <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#DC2626' }}>Fermé</span>
                 }
               </div>

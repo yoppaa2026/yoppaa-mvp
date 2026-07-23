@@ -109,6 +109,11 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
       if (h?.ouvert && h?.debut && h?.fin) {
         min = Math.min(min, timeToMinutes(h.debut))
         max = Math.max(max, timeToMinutes(h.fin))
+        // Horaires à pause : la 2e plage étend la fenêtre affichée (ex. soir 18-22)
+        if (h.debut2 && h.fin2) {
+          min = Math.min(min, timeToMinutes(h.debut2))
+          max = Math.max(max, timeToMinutes(h.fin2))
+        }
       }
     })
     if (min === 24 * 60) { min = 9 * 60; max = 18 * 60 }
@@ -129,9 +134,13 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
   function getSlotState(jour, slotMin) {
     const h = horairesDetail?.[jour.keyJour]
     if (!h?.ouvert || !h?.debut || !h?.fin) return 'ferme'
-    const debutShop = timeToMinutes(h.debut)
-    const finShop = timeToMinutes(h.fin)
-    if (slotMin < debutShop || slotMin >= finShop) return 'ferme'
+    // Plages du jour (1 ou 2 avec les horaires à pause debut2/fin2)
+    const plages = [[timeToMinutes(h.debut), timeToMinutes(h.fin)]]
+    if (h.debut2 && h.fin2) plages.push([timeToMinutes(h.debut2), timeToMinutes(h.fin2)])
+    if (!plages.some(([a, b]) => slotMin >= a && slotMin < b)) {
+      // Entre deux plages shop → affiché comme pause (plutôt que fermé)
+      return plages.length > 1 && slotMin >= plages[0][1] && slotMin < plages[1][0] ? 'pause' : 'ferme'
+    }
     const creneauxJour = (creneaux || []).filter(c =>
       c.actif !== false
       && (c.date_specifique === jour.iso || (!c.date_specifique && c.jour_semaine === jour.keyJour))

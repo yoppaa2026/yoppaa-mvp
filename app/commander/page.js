@@ -927,20 +927,31 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
     const j = JOURS_MAP[todayIdx]
     const h = c.horaires_detail?.[j]
 
-    const ouvert = h?.ouvert && h.debut && h.fin
-      ? nowMin >= heureEnMinutes(h.debut) && nowMin < heureEnMinutes(h.fin)
-      : false
-
-    if (ouvert) {
-      const horaire = `${h.debut.slice(0,5)}–${h.fin.slice(0,5)}`
-      return { dot: '#10B981', label: `Ouvert · ${horaire}`, color: '#10B981', bg: '#F0FDF4', pulse: true }
+    // Plages du jour : 1 ou 2 (horaires à pause, ex. restauration 11-14 / 18-22)
+    const plagesJour = (hj) => {
+      if (!hj?.ouvert) return []
+      const out = []
+      if (hj.debut && hj.fin) out.push([hj.debut, hj.fin])
+      if (hj.debut2 && hj.fin2) out.push([hj.debut2, hj.fin2])
+      return out
     }
+    const plages = plagesJour(h)
 
-    if (h?.ouvert && h.debut) {
-      const ouvreLater = heureEnMinutes(h.debut) > nowMin
-      if (ouvreLater) {
-        return { dot: '#9CA3AF', label: `Fermé · ouvre à ${h.debut.slice(0,5)}`, color: '#6B7280', bg: '#F9FAFB', pulse: false }
+    // Dans une plage → OUVERT (affiche la plage en cours)
+    for (const [d, f] of plages) {
+      if (nowMin >= heureEnMinutes(d) && nowMin < heureEnMinutes(f)) {
+        return { dot: '#10B981', label: `Ouvert · ${d.slice(0,5)}–${f.slice(0,5)}`, color: '#10B981', bg: '#F0FDF4', pulse: true }
       }
+    }
+    // Entre deux plages → EN PAUSE
+    for (let i = 0; i < plages.length - 1; i++) {
+      if (nowMin >= heureEnMinutes(plages[i][1]) && nowMin < heureEnMinutes(plages[i+1][0])) {
+        return { dot: '#F59E0B', label: `En pause · réouvre à ${plages[i+1][0].slice(0,5)}`, color: '#B45309', bg: '#FFFBEB', pulse: false }
+      }
+    }
+    // Avant la 1re plage du jour
+    if (plages.length > 0 && nowMin < heureEnMinutes(plages[0][0])) {
+      return { dot: '#9CA3AF', label: `Fermé · ouvre à ${plages[0][0].slice(0,5)}`, color: '#6B7280', bg: '#F9FAFB', pulse: false }
     }
 
     if (c.horaires_detail) {

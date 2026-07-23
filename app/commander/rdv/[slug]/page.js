@@ -159,6 +159,12 @@ function genererSlots({ dateChoisie, dureeMinutes, creneaux, reservations, horai
   }
   const shopOpen  = horaireJour?.debut ? timeToMinutes(horaireJour.debut) : null
   const shopClose = horaireJour?.fin   ? timeToMinutes(horaireJour.fin)   : null
+  // Horaires à pause : le RDV doit tenir ENTIÈREMENT dans une des plages du
+  // shop (ex. 11:00-14:00 puis 18:00-22:00 → pas de RDV 13:30-14:30).
+  const shopRanges = []
+  if (shopOpen !== null && shopClose !== null) shopRanges.push([shopOpen, shopClose])
+  if (horaireJour?.debut2 && horaireJour?.fin2) shopRanges.push([timeToMinutes(horaireJour.debut2), timeToMinutes(horaireJour.fin2)])
+  const shopCloseMax = shopRanges.length > 0 ? Math.max(...shopRanges.map(r => r[1])) : shopClose
 
   // ── Filtre 1 : rdv_creneaux applicables ce jour ────────────────────────────
   const creneauxJour = creneaux.filter(c =>
@@ -184,8 +190,8 @@ function genererSlots({ dateChoisie, dureeMinutes, creneaux, reservations, horai
     // Clip aux bornes du shop : RDV impossible si le shop est ferme a ce moment.
     let debut = timeToMinutes(cr.heure_debut)
     let fin   = timeToMinutes(cr.heure_fin)
-    if (shopOpen  !== null) debut = Math.max(debut, shopOpen)
-    if (shopClose !== null) fin   = Math.min(fin,   shopClose)
+    if (shopOpen     !== null) debut = Math.max(debut, shopOpen)
+    if (shopCloseMax !== null) fin   = Math.min(fin,   shopCloseMax)
     if (fin - debut < dureeMinutes) continue  // creneau trop court apres clip
 
     const pauseDebut = cr.pause_debut ? timeToMinutes(cr.pause_debut) : null
@@ -197,6 +203,8 @@ function genererSlots({ dateChoisie, dureeMinutes, creneaux, reservations, horai
       if (nowMin >= 0 && t <= nowMin) continue  // passe (today)
       // Pause : la prestation chevauche la pause -> skip
       if (pauseDebut != null && pauseFin != null && t < pauseFin && slotEnd > pauseDebut) continue
+      // Pause SHOP (horaires_detail debut2/fin2) : le RDV doit tenir dans une plage
+      if (shopRanges.length > 1 && !shopRanges.some(([a, b]) => t >= a && slotEnd <= b)) continue
       const heure = minutesToTime(t)
       if (slotsMap.has(heure) && !slotsMap.get(heure).pris) continue
       const overlap = plagesReservees.some(p => t < p.end && slotEnd > p.start)
@@ -812,13 +820,15 @@ export default function CommanderRdvSlug() {
         setSubmitError(`${commercant.nom} est fermé ce jour-là. Choisis un autre jour.`)
         setSubmitting(false); setTimeout(() => allerEtape(2), 1200); return
       }
-      if (horaireJour.fin && finMin > timeToMinutes(horaireJour.fin)) {
-        console.warn('[rdv] depassement fermeture', { finMin, fermeture: timeToMinutes(horaireJour.fin) })
-        setSubmitError(`Cette prestation dépasse l'heure de fermeture (${horaireJour.fin.slice(0,5)}). Choisis un créneau plus tôt.`)
-        setSubmitting(false); setTimeout(() => allerEtape(2), 1200); return
-      }
-      if (horaireJour.debut && debutMin < timeToMinutes(horaireJour.debut)) {
-        setSubmitError(`Trop tôt - ${commercant.nom} ouvre à ${horaireJour.debut.slice(0,5)}.`)
+      // Le RDV doit tenir ENTIÈREMENT dans une des plages d'ouverture du jour
+      // (horaires à pause : ex. 11:00-14:00 puis 18:00-22:00).
+      const plagesShop = []
+      if (horaireJour.debut && horaireJour.fin) plagesShop.push([timeToMinutes(horaireJour.debut), timeToMinutes(horaireJour.fin)])
+      if (horaireJour.debut2 && horaireJour.fin2) plagesShop.push([timeToMinutes(horaireJour.debut2), timeToMinutes(horaireJour.fin2)])
+      if (plagesShop.length > 0 && !plagesShop.some(([a, b]) => debutMin >= a && finMin <= b)) {
+        console.warn('[rdv] hors plages shop', { debutMin, finMin, plagesShop })
+        const plagesTxt = plagesShop.map(([a, b]) => `${minutesToTime(a)}-${minutesToTime(b)}`).join(' et ')
+        setSubmitError(`Ce créneau tombe en dehors des heures d'ouverture (${plagesTxt}). Choisis-en un autre.`)
         setSubmitting(false); setTimeout(() => allerEtape(2), 1200); return
       }
 
@@ -1170,7 +1180,7 @@ export default function CommanderRdvSlug() {
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: h.ouvert ? '#F0FDF4' : '#FEF2F2', borderRadius: 100, padding: '3px 9px', border: `1px solid ${h.ouvert ? '#10B98133' : '#DC262633'}`, marginTop: 10 }}>
                       <span style={{ width: h.ouvert ? 9 : 7, height: h.ouvert ? 9 : 7, borderRadius: '50%', background: h.ouvert ? '#10B981' : '#DC2626', flexShrink: 0 }}/>
                       <span style={{ fontSize: '0.7rem', fontWeight: 800, color: h.ouvert ? '#10B981' : '#DC2626' }}>
-                        {h.ouvert ? `Ouvert · ${h.debut.slice(0,5)}–${h.fin.slice(0,5)}` : 'Fermé aujourd\'hui'}
+                        {h.ouvert ? `Ouvert · ${h.debut.slice(0,5)}–${h.fin.slice(0,5)}${h.debut2 && h.fin2 ? ` · ${h.debut2.slice(0,5)}–${h.fin2.slice(0,5)}` : ''}` : 'Fermé aujourd\'hui'}
                       </span>
                     </div>
                   )

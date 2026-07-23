@@ -1583,8 +1583,8 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
     JOURS.forEach(j => {
       const h = initial[j.key]
       out[j.key] = h
-        ? { ouvert: h.ouvert !== false, debut: h.debut || '09:00', fin: h.fin || '18:00' }
-        : { ouvert: true, debut: '09:00', fin: '18:00' }
+        ? { ouvert: h.ouvert !== false, debut: h.debut || '09:00', fin: h.fin || '18:00', debut2: h.debut2 || null, fin2: h.fin2 || null }
+        : { ouvert: true, debut: '09:00', fin: '18:00', debut2: null, fin2: null }
     })
     return out
   })
@@ -1677,22 +1677,47 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {JOURS.map(j => {
             const h = horaires[j.key]
+            const aPause = !!(h.debut2 || h.fin2)
             return (
-              <div key={j.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: h.ouvert ? '#FAFAFA' : '#F3F4F6', border: `1px solid ${T.hairline}` }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: '0 0 110px' }}>
-                  <input type="checkbox" checked={h.ouvert} onChange={e => updateJour(j.key, { ouvert: e.target.checked })} style={{ width: 16, height: 16, cursor: 'pointer' }}/>
-                  <span style={{ fontWeight: 700, fontSize: 13, color: h.ouvert ? T.ink : T.muted }}>{j.label}</span>
-                </label>
-                {h.ouvert ? (
-                  <>
-                    <input type="time" value={h.debut} onChange={e => updateJour(j.key, { debut: e.target.value })}
+              <div key={j.key} style={{ padding: '8px 12px', borderRadius: 10, background: h.ouvert ? '#FAFAFA' : '#F3F4F6', border: `1px solid ${T.hairline}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: '0 0 110px' }}>
+                    <input type="checkbox" checked={h.ouvert} onChange={e => updateJour(j.key, { ouvert: e.target.checked })} style={{ width: 16, height: 16, cursor: 'pointer' }}/>
+                    <span style={{ fontWeight: 700, fontSize: 13, color: h.ouvert ? T.ink : T.muted }}>{j.label}</span>
+                  </label>
+                  {h.ouvert ? (
+                    <>
+                      <input type="time" value={h.debut} onChange={e => updateJour(j.key, { debut: e.target.value })}
+                        style={{ ...inputStyle(), width: 110, padding: '6px 10px', fontSize: 13 }}/>
+                      <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>→</span>
+                      <input type="time" value={h.fin} onChange={e => updateJour(j.key, { fin: e.target.value })}
+                        style={{ ...inputStyle(), width: 110, padding: '6px 10px', fontSize: 13 }}/>
+                      {!aPause && (
+                        <button type="button" onClick={() => updateJour(j.key, { debut2: '18:00', fin2: '22:00' })}
+                          title="Ajouter une 2e plage (ex : service du soir)"
+                          style={{ padding: '4px 9px', background: 'none', border: `1px dashed ${T.main}55`, borderRadius: 100, color: T.main, fontWeight: 800, fontSize: 11, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                          + pause
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <span style={{ fontSize: 12, color: T.muted, fontStyle: 'italic' }}>Fermé</span>
+                  )}
+                </div>
+                {/* 2e plage : horaires à pause (restauration 11:00-14:00 puis 18:00-22:00) */}
+                {h.ouvert && aPause && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+                    <span style={{ flex: '0 0 110px', fontSize: 11, fontWeight: 700, color: T.muted, textAlign: 'right' }}>puis</span>
+                    <input type="time" value={h.debut2 || ''} onChange={e => updateJour(j.key, { debut2: e.target.value })}
                       style={{ ...inputStyle(), width: 110, padding: '6px 10px', fontSize: 13 }}/>
                     <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>→</span>
-                    <input type="time" value={h.fin} onChange={e => updateJour(j.key, { fin: e.target.value })}
+                    <input type="time" value={h.fin2 || ''} onChange={e => updateJour(j.key, { fin2: e.target.value })}
                       style={{ ...inputStyle(), width: 110, padding: '6px 10px', fontSize: 13 }}/>
-                  </>
-                ) : (
-                  <span style={{ fontSize: 12, color: T.muted, fontStyle: 'italic' }}>Fermé</span>
+                    <button type="button" onClick={() => updateJour(j.key, { debut2: null, fin2: null })} title="Retirer la 2e plage"
+                      style={{ width: 22, height: 22, borderRadius: 100, border: 'none', background: '#FEE2E2', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontWeight: 800, flexShrink: 0, lineHeight: '22px', padding: 0 }}>
+                      ✕
+                    </button>
+                  </div>
                 )}
               </div>
             )

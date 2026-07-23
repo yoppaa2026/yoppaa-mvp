@@ -110,19 +110,19 @@ export default function ModalNouveauRdv({
         return
       }
 
-      // 2) Bornes shop ce jour-la
+      // 2) Bornes shop ce jour-la : le RDV doit tenir ENTIÈREMENT dans une des
+      // plages d'ouverture (horaires à pause : debut/fin + debut2/fin2 optionnels)
       if (!horaireJour || horaireJour.ouvert === false) {
         setError(`Ton commerce est fermé ce jour-là.`)
         setSubmitting(false)
         return
       }
-      if (horaireJour.fin && finMin > timeToMinutes(horaireJour.fin)) {
-        setError(`Ce RDV dépasse l'heure de fermeture (${horaireJour.fin.slice(0,5)}).`)
-        setSubmitting(false)
-        return
-      }
-      if (horaireJour.debut && debutMin < timeToMinutes(horaireJour.debut)) {
-        setError(`Trop tôt, tu ouvres à ${horaireJour.debut.slice(0,5)}.`)
+      const plagesShop = []
+      if (horaireJour.debut && horaireJour.fin) plagesShop.push([timeToMinutes(horaireJour.debut), timeToMinutes(horaireJour.fin)])
+      if (horaireJour.debut2 && horaireJour.fin2) plagesShop.push([timeToMinutes(horaireJour.debut2), timeToMinutes(horaireJour.fin2)])
+      if (plagesShop.length > 0 && !plagesShop.some(([a, b]) => debutMin >= a && finMin <= b)) {
+        const plagesTxt = plagesShop.map(([a, b]) => `${minutesToTime(a)}-${minutesToTime(b)}`).join(' et ')
+        setError(`Ce RDV tombe en dehors de tes heures d'ouverture (${plagesTxt}).`)
         setSubmitting(false)
         return
       }

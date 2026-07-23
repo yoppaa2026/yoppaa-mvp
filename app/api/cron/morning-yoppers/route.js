@@ -1,11 +1,14 @@
 // GET / POST /api/cron/morning-yoppers
 //
-// Cron Vercel quotidien à 05:30 UTC = 07:30 Brussels (été) qui envoie 1 push
-// OneSignal par code postal aux Yoppers, référençant :
-//   • les deals du jour (inclus_morning=true, actif, date_deal=today, plan
-//     Communiquer/Vendre) → passe statut_morning à 'envoye'
-//   • les actus GMY (inclus_gmy=true, actif, dans fenêtre date_debut/date_fin) →
-//     marque push_envoye_at
+// Cron Vercel quotidien à 05:30 UTC = 07:30 Brussels (été). Modèle 23/07 :
+//   1. SÉLECTION ÉDITORIALE : retient les deals du jour (inclus_morning=true,
+//      actif, date_deal=today, plan Communiquer/Vendre → statut_morning='envoye')
+//      et les actus GMY (inclus_gmy=true, actif, fenêtre en cours →
+//      push_envoye_at). Ce contenu retenu EST l'édition du jour : l'écran
+//      /commander/morning n'affiche que lui. Deadline de facto : ce qui existe
+//      au passage du cron (règle commerçant : avant 23 h la veille).
+//   2. PUSH AUX FAVORIS : un seul push OneSignal, envoyé uniquement aux Yoppers
+//      qui ont au moins un des commerçants de l'édition en favori.
 //
 // Le push renvoie vers /commander/morning côté client.
 //
@@ -39,13 +42,6 @@ function isAuthorized(req) {
   }
   const authHeader = req.headers.get('authorization') || ''
   return authHeader === `Bearer ${cronSecret}`
-}
-
-// Codes postaux belges : 4 chiffres. Extrait depuis l'adresse libre du commerçant.
-function extraireCodePostal(adresse) {
-  if (!adresse) return null
-  const m = String(adresse).match(/\b(\d{4})\b/)
-  return m ? m[1] : null
 }
 
 async function handle(req) {
@@ -92,17 +88,12 @@ async function handle(req) {
     return NextResponse.json({ error: actusErr.message }, { status: 500 })
   }
 
-  // 3. Filtrage éligibilité + regroupement par code postal
-  const dealsParZone = new Map()  // cp → [dealIds]
-  const actusParZone = new Map()  // cp → [actuIds]
-  const commercantsParZone = new Map()  // cp → Set(commercantId) pour dédupliquer
-
-  function ajouterZone(zoneMap, cp, id, commercantId) {
-    if (!zoneMap.has(cp)) zoneMap.set(cp, [])
-    zoneMap.get(cp).push(id)
-    if (!commercantsParZone.has(cp)) commercantsParZone.set(cp, new Set())
-    commercantsParZone.get(cp).add(commercantId)
-  }
+  // 3. Filtrage éligibilité (modèle 23/07 : le GMY est UNE édition, pas une par
+  //    zone). Le contenu retenu ici EST l'édition du jour ; l'écran client ne
+  //    montre que ce contenu (statut_morning='envoye' / push_envoye_at).
+  const dealIds = []
+  const actuIds = []
+  const commercantIds = new Set()
 
   for (const d of dealsPending || []) {
     const c = d.commercant
@@ -110,9 +101,8 @@ async function handle(req) {
     // Deals réservés à Communiquer + Vendre (gating canDo)
     if (!canDo(c.plan, 'deals')) continue
     if (!canDo(c.plan, 'morning')) continue
-    const cp = extraireCodePostal(c.adresse)
-    if (!cp) continue
-    ajouterZone(dealsParZone, cp, d.id, c.id)
+    dealIds.push(d.id)
+    commercantIds.add(c.id)
   }
 
   for (const a of actusGmy || []) {
@@ -121,93 +111,77 @@ async function handle(req) {
     // Actus GMY autorisées à tous les plans commerçant (Exister limité à
     // 1/semaine mais c'est déjà validé côté saveActu, pas ici)
     if (!canDo(c.plan, 'actu_gmy')) continue
-    const cp = extraireCodePostal(c.adresse)
-    if (!cp) continue
-    ajouterZone(actusParZone, cp, a.id, c.id)
+    actuIds.push(a.id)
+    commercantIds.add(c.id)
   }
 
-  const zones = new Set([...dealsParZone.keys(), ...actusParZone.keys()])
-
-  if (zones.size === 0) {
+  if (dealIds.length === 0 && actuIds.length === 0) {
     return NextResponse.json({
       status: 'ok',
       date: today,
-      stats: { zones: 0, deals: 0, actus: 0, push_sent: 0, push_failed: 0 },
+      stats: { deals: 0, actus: 0, favoris_cibles: 0, push_sent: 0, push_failed: 0 },
       note: 'aucun deal ni actu éligible aujourd\'hui',
     })
   }
 
-  const stats = { zones: 0, deals: 0, actus: 0, push_sent: 0, push_failed: 0, errors: [] }
+  const stats = { deals: 0, actus: 0, favoris_cibles: 0, push_sent: 0, push_failed: 0, errors: [] }
 
-  for (const cp of zones) {
-    const dealIds = dealsParZone.get(cp) || []
-    const actuIds = actusParZone.get(cp) || []
-    const nbCommercants = commercantsParZone.get(cp)?.size || 0
+  // 4. Sélection éditoriale : on marque le contenu comme retenu pour l'édition
+  //    du jour AVANT le push (l'édition doit être correcte même si OneSignal
+  //    est indisponible ou qu'aucun favori n'existe encore).
+  if (dealIds.length > 0) {
+    const { error: upDealsErr } = await supabase
+      .from('yoppaa_deals')
+      .update({ statut_morning: 'envoye' })
+      .in('id', dealIds)
+    if (upDealsErr) {
+      console.error('[cron/morning-yoppers] update deals statut échoué', upDealsErr)
+      stats.errors.push({ step: 'deals_update', error: upDealsErr.message })
+    } else {
+      stats.deals = dealIds.length
+    }
+  }
+  if (actuIds.length > 0) {
+    const { error: upActusErr } = await supabase
+      .from('actualites')
+      .update({ push_envoye_at: new Date().toISOString() })
+      .in('id', actuIds)
+    if (upActusErr) {
+      console.error('[cron/morning-yoppers] update actus push_envoye_at échoué', upActusErr)
+      stats.errors.push({ step: 'actus_update', error: upActusErr.message })
+    } else {
+      stats.actus = actuIds.length
+    }
+  }
 
+  // 5. Push aux FAVORIS (décision Alex 23/07) : le push GMY part uniquement aux
+  //    Yoppers qui ont AU MOINS UN des commerçants de l'édition en favori.
+  //    Un seul push par Yopper (dédupliqué), ciblage par external_id.
+  const { data: favorisRows } = await supabase
+    .from('favoris')
+    .select('client_id')
+    .in('commercant_id', [...commercantIds])
+  const clientIds = [...new Set((favorisRows || []).map(f => f.client_id).filter(Boolean))]
+  stats.favoris_cibles = clientIds.length
+
+  if (clientIds.length > 0) {
     const parts = []
     if (dealIds.length > 0) parts.push(`${dealIds.length} deal${dealIds.length > 1 ? 's' : ''}`)
     if (actuIds.length > 0) parts.push(`${actuIds.length} actu${actuIds.length > 1 ? 's' : ''}`)
-    const contents = `${parts.join(' · ')} près de chez toi (${nbCommercants} commerce${nbCommercants > 1 ? 's' : ''})`
-
-    // Ciblage zone DB-driven : Yoppers dont le code postal enregistré = cp, poussés
-    // par external_id (robuste au 409 des tags OneSignal). Le CP se remplit au fil
-    // des passages via /api/yopper/sync-tags (rollout progressif).
-    const { data: clientsZone } = await supabase
-      .from('clients').select('id').eq('code_postal', cp)
-    const clientIds = (clientsZone || []).map(cl => cl.id)
-
-    stats.zones++
-
-    // Aucun Yopper enregistré dans cette zone (CP pas encore rempli) : on NE marque
-    // PAS les deals/actus comme envoyés → ils repartiront (utile pendant le rollout
-    // du code postal, et sans effet pour les deals qui sont limités à date_deal=today).
-    if (clientIds.length === 0) {
-      stats.zones_vides = (stats.zones_vides || 0) + 1
-      continue
-    }
+    const contents = `${parts.join(' · ')} de tes commerces favoris t'attendent ☀️`
 
     const res = await envoyerPushParExternalIds(clientIds, {
       headings: 'Good Morning Yoppers',
       contents,
       url: '/commander/morning',
-      data: { kind: 'gmy', cp, date: today },
+      data: { kind: 'gmy', date: today },
       high_priority: false,
     })
-
-    if (!res.ok) {
-      stats.push_failed++
-      stats.errors.push({ cp, error: res.error })
-      // On ne marque PAS les deals/actus comme envoyés si le push a échoué :
-      // ils repartiront le lendemain (safety net si OneSignal down).
-      continue
-    }
-
-    stats.push_sent++
-
-    // Marquer les deals comme envoyés
-    if (dealIds.length > 0) {
-      const { error: upDealsErr } = await supabase
-        .from('yoppaa_deals')
-        .update({ statut_morning: 'envoye' })
-        .in('id', dealIds)
-      if (upDealsErr) {
-        console.error('[cron/morning-yoppers] update deals statut échoué', { cp, upDealsErr })
-      } else {
-        stats.deals += dealIds.length
-      }
-    }
-
-    // Marquer les actus avec push_envoye_at
-    if (actuIds.length > 0) {
-      const { error: upActusErr } = await supabase
-        .from('actualites')
-        .update({ push_envoye_at: new Date().toISOString() })
-        .in('id', actuIds)
-      if (upActusErr) {
-        console.error('[cron/morning-yoppers] update actus push_envoye_at échoué', { cp, upActusErr })
-      } else {
-        stats.actus += actuIds.length
-      }
+    if (res.ok) {
+      stats.push_sent = 1
+    } else {
+      stats.push_failed = 1
+      stats.errors.push({ step: 'push', error: res.error })
     }
   }
 

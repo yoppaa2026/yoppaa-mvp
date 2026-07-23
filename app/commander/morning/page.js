@@ -100,9 +100,9 @@ async function fetchMorningData(commune) {
   const cpDeLaCommune = new Set(commune.codes_postaux)
 
   const [{ data: dealsRaw }, { data: actusCommercantRaw }, { data: actusPubliqueRaw }] = await Promise.all([
-    // 1) Deals : fenêtre de validité COMPLÈTE (un deal multi-jours reste visible
-    //    chaque jour entre date_debut et date_fin, comme promis au commerçant),
-    //    avec repli sur date_deal pour les anciens deals sans fenêtre.
+    // 1) Deals de l'ÉDITION du jour : uniquement ceux retenus par le cron de
+    //    7h30 (statut_morning='envoye', deadline 23 h la veille). Un deal publié
+    //    après coup vit sur la fiche (pastille pill DEAL), pas dans le Morning.
     supabase
       .from('yoppaa_deals')
       .select(`
@@ -111,11 +111,11 @@ async function fetchMorningData(commune) {
       `)
       .eq('actif', true)
       .eq('inclus_morning', true)
-      .or(`and(date_debut.lte.${today},date_fin.gte.${today}),date_deal.eq.${today}`),
+      .eq('date_deal', today)
+      .eq('statut_morning', 'envoye'),
 
-    // 2) Actus commerçant : UNIQUEMENT celles marquées « inclure dans le GMY »
-    //    (inclus_gmy, même règle que le cron push : sans ce filtre, toute actu
-    //    active restait collée dans le Morning en permanence).
+    // 2) Actus de l'ÉDITION : marquées « inclure dans le GMY » ET déjà retenues
+    //    par un cron (push_envoye_at non nul), tant que leur fenêtre est en cours.
     supabase
       .from('actualites')
       .select(`
@@ -125,6 +125,7 @@ async function fetchMorningData(commune) {
       .not('commercant_id', 'is', null)
       .eq('actif', true)
       .eq('inclus_gmy', true)
+      .not('push_envoye_at', 'is', null)
       .lte('date_debut', today)
       .gte('date_fin', today),
 

@@ -1687,8 +1687,8 @@ function TabDeals({ commercantId, commercant, toast }) {
 
       {/* Info Good Morning Yoppers */}
       <div style={{ background: '#FFF7ED', borderLeft: `4px solid #EA580C`, borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 12.5, color: '#7C2D12', lineHeight: 1.5 }}>
-        <strong>Good Morning Yoppers</strong> · l&rsquo;édition du matin des Yoppers de ta zone.
-        <br/>Ton deal coché apparaît dans l&rsquo;édition <strong>chaque jour de sa période</strong>. La <strong>notification push de 7h30</strong>, elle, part le matin du premier jour : pour en profiter, enregistre ton deal <strong>avant {heureLimite} la veille</strong>. Un seul deal mis en avant par jour.
+        <strong>Good Morning Yoppers</strong> · l&rsquo;édition du matin + le push de 7h30, envoyés aux Yoppers qui t&rsquo;ont en favori.
+        <br/>Pour y figurer : coche «&nbsp;Inclure dans le Good Morning Yoppers&nbsp;» et enregistre <strong>avant {heureLimite} la veille</strong>. Publié trop tard&nbsp;? Ton deal reste visible sur ta fiche, avec la pastille DEAL qui clignote côté clients. Un seul deal par matin.
       </div>
 
       {/* Formulaire création / édition */}
@@ -1794,7 +1794,7 @@ function TabDeals({ commercantId, commercant, toast }) {
             </div>
             {form.date_debut && form.date_fin && form.date_debut !== form.date_fin && (
               <p style={{ fontSize: 11, color: T.muted, fontStyle: 'italic', margin: 0 }}>
-                Période multi-jours : le deal sera affiché tous les jours entre {form.date_debut} et {form.date_fin}. Pour le Good Morning Yoppers, le push partira le matin du {form.date_debut}.
+                Période multi-jours : le deal sera affiché sur ta fiche tous les jours entre {form.date_debut} et {form.date_fin} (pastille DEAL). Le Good Morning Yoppers ne le met en avant que le matin du {form.date_debut}.
               </p>
             )}
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: form.inclus_morning ? '#FFF7ED' : '#FAFAFA', border: `1.5px solid ${form.inclus_morning ? '#EA580C' : T.hairline}`, borderRadius: 10, cursor: 'pointer' }}>
@@ -1803,7 +1803,7 @@ function TabDeals({ commercantId, commercant, toast }) {
             </label>
             {warningSoumission && (
               <div style={{ background: '#FFF7ED', border: '1px solid #FDBA74', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#9A3412', fontWeight: 600, lineHeight: 1.5 }}>
-                <AlertTriangle size={14} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Trop tard pour la notification push de 7h30 {form.date_debut === today ? 'd\'aujourd\'hui' : `du ${form.date_debut}`} (deadline {heureLimite} la veille). Ton deal apparaîtra quand même dans l&rsquo;édition du Good Morning et sur ta fiche, mais sans push.
+                <AlertTriangle size={14} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Trop tard pour le Good Morning {form.date_debut === today ? 'd\'aujourd\'hui' : `du ${form.date_debut}`} (deadline {heureLimite} la veille). Ton deal reste visible sur ta fiche, avec la pastille DEAL qui clignote. Pour le prochain Morning, date-le à demain et enregistre avant {heureLimite} ce soir.
               </div>
             )}
             {/* CTA Appeler pour réserver : à activer pour les deals qui nécessitent
@@ -2180,8 +2180,8 @@ function TabActus({ commercantId, commercant, toast }) {
                 <span style={{ fontSize: 13, color: T.ink, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Sun size={14} strokeWidth={1.8} color="#EA580C"/> Inclure dans Le Good Morning Yoppers</span>
                 <span style={{ fontSize: 11, color: T.muted, fontWeight: 500 }}>
                   {estExister
-                    ? `Palier Exister : 1 apparition GMY par semaine calendaire (lundi-dimanche). Pour la notification push de 7h30, enregistre avant ${heureLimiteGmy} la veille du premier jour.`
-                    : `Visible dans l'édition du matin pendant toute sa période. Pour la notification push de 7h30 (envoyée le premier jour), enregistre avant ${heureLimiteGmy} la veille.`}
+                    ? `Palier Exister : 1 apparition GMY par semaine calendaire (lundi-dimanche). Enregistre avant ${heureLimiteGmy} la veille : ton actu entre dans le Good Morning du lendemain (édition + push aux favoris) et y reste pendant sa période.`
+                    : `Enregistre avant ${heureLimiteGmy} la veille : ton actu entre dans le Good Morning du lendemain (édition + push aux Yoppers qui t'ont en favori) et y reste pendant sa période. Publiée plus tard, elle vit sur ta fiche (pastille ACTU) et entrera dans le Morning suivant.`}
                 </span>
               </div>
             </label>

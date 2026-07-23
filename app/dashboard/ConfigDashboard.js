@@ -1687,8 +1687,8 @@ function TabDeals({ commercantId, commercant, toast }) {
 
       {/* Info Good Morning Yoppers */}
       <div style={{ background: '#FFF7ED', borderLeft: `4px solid #EA580C`, borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 12.5, color: '#7C2D12', lineHeight: 1.5 }}>
-        <strong>Good Morning Yoppers</strong> · push quotidien à 7h30 aux clients de ta zone.
-        <br/>Cochez «&nbsp;Inclure dans le Good Morning Yoppers&nbsp;» avant <strong>{heureLimite}</strong> la veille pour y apparaître. Un seul deal par jour par commerçant peut être inclus.
+        <strong>Good Morning Yoppers</strong> · l&rsquo;édition du matin des Yoppers de ta zone.
+        <br/>Ton deal coché apparaît dans l&rsquo;édition <strong>chaque jour de sa période</strong>. La <strong>notification push de 7h30</strong>, elle, part le matin du premier jour : pour en profiter, enregistre ton deal <strong>avant {heureLimite} la veille</strong>. Un seul deal mis en avant par jour.
       </div>
 
       {/* Formulaire création / édition */}
@@ -1802,8 +1802,8 @@ function TabDeals({ commercantId, commercant, toast }) {
               <span style={{ fontSize: 13, color: T.ink, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Sun size={14} strokeWidth={1.8} color="#EA580C"/> Inclure dans le Good Morning Yoppers</span>
             </label>
             {warningSoumission && (
-              <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#7F1D1D', fontWeight: 600 }}>
-                <AlertTriangle size={14} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Deadline dépassée, ce deal ne sera pas dans le Good Morning Yoppers de demain.
+              <div style={{ background: '#FFF7ED', border: '1px solid #FDBA74', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#9A3412', fontWeight: 600, lineHeight: 1.5 }}>
+                <AlertTriangle size={14} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Trop tard pour la notification push de 7h30 {form.date_debut === today ? 'd\'aujourd\'hui' : `du ${form.date_debut}`} (deadline {heureLimite} la veille). Ton deal apparaîtra quand même dans l&rsquo;édition du Good Morning et sur ta fiche, mais sans push.
               </div>
             )}
             {/* CTA Appeler pour réserver : à activer pour les deals qui nécessitent
@@ -1933,6 +1933,8 @@ function TabActus({ commercantId, commercant, toast }) {
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const firstLoadRef = useRef(true)
+  // Heure limite pour être dans le push GMY du lendemain (défaut 23:00)
+  const heureLimiteGmy = commercant?.heure_limite_morning?.slice(0, 5) || '23:00'
 
   // Palier Exister limite a 1 apparition GMY par semaine calendaire lundi-dim
   // (decision Alex 01/07 anti-cannibalisation Communiquer). Communiquer + Vendre
@@ -2177,7 +2179,9 @@ function TabActus({ commercantId, commercant, toast }) {
               <div style={{ flex: 1 }}>
                 <span style={{ fontSize: 13, color: T.ink, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Sun size={14} strokeWidth={1.8} color="#EA580C"/> Inclure dans Le Good Morning Yoppers</span>
                 <span style={{ fontSize: 11, color: T.muted, fontWeight: 500 }}>
-                  {estExister ? 'Palier Exister : 1 apparition GMY par semaine calendaire (lundi-dimanche).' : 'Ta publication apparaîtra dans le push du matin 7h30 aux Yoppers de ta zone.'}
+                  {estExister
+                    ? `Palier Exister : 1 apparition GMY par semaine calendaire (lundi-dimanche). Pour la notification push de 7h30, enregistre avant ${heureLimiteGmy} la veille du premier jour.`
+                    : `Visible dans l'édition du matin pendant toute sa période. Pour la notification push de 7h30 (envoyée le premier jour), enregistre avant ${heureLimiteGmy} la veille.`}
                 </span>
               </div>
             </label>

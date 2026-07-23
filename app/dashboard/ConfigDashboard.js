@@ -163,6 +163,29 @@ function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 2 }) {
 }
 
 // ─── Onglet MENU ──────────────────────────────────────────────────────────────
+// Sélecteur des propositions IA (articles, deals, actus) : le commerçant tape
+// celle qu'il préfère, elle remplit le(s) champ(s), modifiable ensuite.
+// avecLong = affiche aussi la version longue sous l'accroche (deals/actus).
+function PropositionsIa({ propositions, onChoisir, onFermer, avecLong = false }) {
+  if (!propositions?.length) return null
+  return (
+    <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+      <p style={{ fontSize: 10.5, fontWeight: 800, color: T.main, margin: 0 }}>Choisis une proposition (tu pourras encore la modifier) :</p>
+      {propositions.map((v, i) => (
+        <button key={i} type="button" onClick={() => onChoisir(v)}
+          style={{ textAlign: 'left', padding: '9px 11px', borderRadius: 10, border: '1.5px solid #EDE0FF', background: '#FAF8FE', fontSize: 12.5, color: T.ink, cursor: 'pointer', lineHeight: 1.45, fontFamily: 'inherit' }}>
+          {v.court || v.long}
+          {avecLong && v.court && v.long ? <span style={{ display: 'block', marginTop: 4, fontSize: 11, color: T.muted }}>{v.long}</span> : null}
+        </button>
+      ))}
+      <button type="button" onClick={onFermer}
+        style={{ justifySelf: 'start', padding: 0, border: 'none', background: 'none', fontSize: 11, fontWeight: 700, color: T.muted, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>
+        Aucune ne me convient
+      </button>
+    </div>
+  )
+}
+
 function TabMenu({ commercantId, commercant, toast }) {
   // ─── Mode vitrine ou menu commandable ────────────────────────────────────
   // Pour catégorie='vitrine' (coiffeur, opticien…), on retire stock/jour, temps prépa,
@@ -513,20 +536,9 @@ function TabMenu({ commercantId, commercant, toast }) {
             </div>
             <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder={estVitrine ? 'Ex: Titane japonais, charnières flex, 12 coloris…' : 'Ex: Feuilleté, pur beurre AOP...'}/>
             {propsIa.length > 0 ? (
-              <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
-                <p style={{ fontSize: 10.5, fontWeight: 800, color: T.main, margin: 0 }}>Choisis une proposition (tu pourras encore la modifier) :</p>
-                {propsIa.map((v, i) => (
-                  <button key={i} type="button"
-                    onClick={() => { setForm(p => ({ ...p, description: v.court || v.long })); setPropsIa([]) }}
-                    style={{ textAlign: 'left', padding: '9px 11px', borderRadius: 10, border: '1.5px solid #EDE0FF', background: '#FAF8FE', fontSize: 12.5, color: T.ink, cursor: 'pointer', lineHeight: 1.45, fontFamily: 'inherit' }}>
-                    {v.court || v.long}
-                  </button>
-                ))}
-                <button type="button" onClick={() => setPropsIa([])}
-                  style={{ alignSelf: 'start', padding: 0, border: 'none', background: 'none', fontSize: 11, fontWeight: 700, color: T.muted, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>
-                  Aucune ne me convient
-                </button>
-              </div>
+              <PropositionsIa propositions={propsIa}
+                onChoisir={v => { setForm(p => ({ ...p, description: v.court || v.long })); setPropsIa([]) }}
+                onFermer={() => setPropsIa([])} />
             ) : (
               <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Astuce : note tes ingrédients ou atouts en vrac (pur beurre, producteur local…) puis clique sur Rédiger avec l&rsquo;IA.</p>
             )}
@@ -1498,6 +1510,8 @@ function TabDeals({ commercantId, commercant, toast }) {
   })
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  // Propositions IA pour l'accroche : le commerçant choisit puis peut modifier
+  const [propsIa, setPropsIa] = useState([])
   const firstLoadRef = useRef(true)
 
   // Heure limite Morning : RÈGLE PRODUIT FIXE 23h00 (la colonne DB
@@ -1534,6 +1548,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       inclus_morning: false, actif: true, article_id: '',
       cta_appeler_reserver: false,
       photo_url: '', est_bonne_affaire: false })
+    setPropsIa([])
     setEditId(null); setShowForm(true)
   }
   function openEdit(d) {
@@ -1559,6 +1574,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       photo_url: d.photo_url || '',
       est_bonne_affaire: !!d.est_bonne_affaire,
     })
+    setPropsIa([])
     setEditId(d.id); setShowForm(true)
   }
 
@@ -1767,10 +1783,13 @@ function TabDeals({ commercantId, commercant, toast }) {
                 <label style={{ ...s.label, marginBottom: 0 }}>Accroche courte</label>
                 <BoutonIaInline commercantId={commercantId} surface="deal" occasion="Bon plan" brief={form.titre}
                   infos={[form.prix_deal && `prix ${form.prix_deal}€`, form.prix_original && `au lieu de ${form.prix_original}€`].filter(Boolean).join(', ')}
-                  onResult={v => setForm(p => ({ ...p, description: v.court || p.description, description_longue: v.long || p.description_longue }))}
+                  onVariantes={vs => setPropsIa(vs)}
                   toast={toast} />
               </div>
               <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Une ou deux phrases affichées sur la card du deal…"/>
+              <PropositionsIa propositions={propsIa} avecLong
+                onChoisir={v => { setForm(p => ({ ...p, description: v.court || p.description, description_longue: v.long || p.description_longue })); setPropsIa([]) }}
+                onFermer={() => setPropsIa([])} />
             </div>
 
             <div>
@@ -1967,6 +1986,8 @@ function TabActus({ commercantId, commercant, toast }) {
   })
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  // Propositions IA pour l'accroche : le commerçant choisit puis peut modifier
+  const [propsIa, setPropsIa] = useState([])
   const firstLoadRef = useRef(true)
   // Heure limite GMY : règle produit fixe 23h00 (même vérité que TabDeals).
   const heureLimiteGmy = '23h00'
@@ -2002,6 +2023,7 @@ function TabActus({ commercantId, commercant, toast }) {
   function openNew() {
     setForm({ titre: '', contenu: '', contenu_long: '', type: 'actu', date_debut: today, date_fin: '', actif: true,
       photo_url: '', inclus_gmy: false })
+    setPropsIa([])
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
@@ -2016,6 +2038,7 @@ function TabActus({ commercantId, commercant, toast }) {
       photo_url: a.photo_url || '',
       inclus_gmy: !!a.inclus_gmy,
     })
+    setPropsIa([])
     setEditId(a.id); setShowForm(true)
   }
 
@@ -2188,10 +2211,13 @@ function TabActus({ commercantId, commercant, toast }) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
                 <label style={{ ...s.label, marginBottom: 0 }}>Accroche courte</label>
                 <BoutonIaInline commercantId={commercantId} surface="actu" occasion={form.type === 'alerte' ? 'Infos pratiques' : 'Nouveauté'} brief={form.titre}
-                  onResult={v => setForm(p => ({ ...p, contenu: v.court || p.contenu, contenu_long: v.long || p.contenu_long }))}
+                  onVariantes={vs => setPropsIa(vs)}
                   toast={toast} />
               </div>
               <Textarea value={form.contenu} onChange={e => setForm(p => ({ ...p, contenu: e.target.value }))} placeholder="Une phrase visible sur la fiche"/>
+              <PropositionsIa propositions={propsIa} avecLong
+                onChoisir={v => { setForm(p => ({ ...p, contenu: v.court || p.contenu, contenu_long: v.long || p.contenu_long })); setPropsIa([]) }}
+                onFermer={() => setPropsIa([])} />
             </div>
 
             <div>

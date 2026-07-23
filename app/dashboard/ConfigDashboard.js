@@ -1470,8 +1470,10 @@ function TabDeals({ commercantId, commercant, toast }) {
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const firstLoadRef = useRef(true)
 
-  // Heure limite Morning (par défaut 23:00, configurable par commerçant)
-  const heureLimite = commercant?.heure_limite_morning?.slice(0, 5) || '23:00'
+  // Heure limite Morning : RÈGLE PRODUIT FIXE 23h00 (la colonne DB
+  // heure_limite_morning contenait des valeurs erronées type 21:00, on ne la
+  // lit plus : une seule vérité annoncée partout).
+  const heureLimite = '23h00'
 
   useEffect(() => { fetchDeals(); fetchArticles() }, [commercantId])
 
@@ -1561,11 +1563,10 @@ function TabDeals({ commercantId, commercant, toast }) {
     if (!inclusMorning) return false
     if (!dateDeal) return false
     // Pour figurer dans Le Morning du jour J, il faut soumettre avant 23h J-1
-    // Donc deadline = "veille du deal à 23h"
+    // Donc deadline = "veille du deal à 23h00" (règle produit fixe)
     const veille = new Date(dateDeal + 'T00:00:00')
     veille.setDate(veille.getDate() - 1)
-    const [h, m] = heureLimite.split(':').map(Number)
-    veille.setHours(h, m, 0, 0)
+    veille.setHours(23, 0, 0, 0)
     return new Date() > veille
   }
 
@@ -1933,8 +1934,8 @@ function TabActus({ commercantId, commercant, toast }) {
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const firstLoadRef = useRef(true)
-  // Heure limite pour être dans le push GMY du lendemain (défaut 23:00)
-  const heureLimiteGmy = commercant?.heure_limite_morning?.slice(0, 5) || '23:00'
+  // Heure limite GMY : règle produit fixe 23h00 (même vérité que TabDeals).
+  const heureLimiteGmy = '23h00'
 
   // Palier Exister limite a 1 apparition GMY par semaine calendaire lundi-dim
   // (decision Alex 01/07 anti-cannibalisation Communiquer). Communiquer + Vendre
@@ -2167,10 +2168,11 @@ function TabActus({ commercantId, commercant, toast }) {
               </p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div><label style={s.label}>Date début</label><Input type="date" value={form.date_debut} onChange={e => setForm(p => ({ ...p, date_debut: e.target.value }))}/></div>
-              <div><label style={s.label}>Date fin (vide = pas d&rsquo;échéance)</label><Input type="date" value={form.date_fin} min={form.date_debut} onChange={e => setForm(p => ({ ...p, date_fin: e.target.value }))}/></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'end' }}>
+              <div><label style={s.label}>Date début</label><Input type="date" value={form.date_debut} onChange={e => setForm(p => ({ ...p, date_debut: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}/></div>
+              <div><label style={s.label}>Date fin</label><Input type="date" value={form.date_fin} min={form.date_debut} onChange={e => setForm(p => ({ ...p, date_fin: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}/></div>
             </div>
+            <p style={{ fontSize: 10, color: T.muted, margin: '4px 0 0' }}>Date fin vide = pas d&rsquo;échéance (l&rsquo;actu reste affichée jusqu&rsquo;à désactivation).</p>
 
             {/* Inclure dans Good Morning Yoppers. Exister limite a 1/semaine
                 calendaire. Communiquer / Vendre : illimite cote UI. */}
@@ -5185,10 +5187,13 @@ export default function ConfigDashboard({ commercantId }) {
 
   return (
     <div style={{ fontFamily: '"DM Sans", sans-serif', paddingBottom: 24 }}>
-      <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 14, marginBottom: 20, boxShadow: '0 2px 12px rgba(22,6,54,0.06)', border: `1px solid ${T.hairline}`, flexWrap: 'wrap' }}>
+      {/* Barre d'onglets : UNE ligne défilable horizontalement (sur mobile les
+          9+ onglets s'empilaient sur 3 lignes, layout ODOO = compact + scroll). */}
+      <style>{`.cfg-tabs::-webkit-scrollbar { display: none }`}</style>
+      <div className="cfg-tabs" style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 14, marginBottom: 20, boxShadow: '0 2px 12px rgba(22,6,54,0.06)', border: `1px solid ${T.hairline}`, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ flex: 1, minWidth: 80, padding: '10px 4px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, transition: 'all 0.2s', background: tab === t.id ? T.bgPanel : 'transparent', color: tab === t.id ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, position: 'relative' }}>
+            style={{ flex: '1 0 auto', padding: '10px 12px', whiteSpace: 'nowrap', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, transition: 'all 0.2s', background: tab === t.id ? T.bgPanel : 'transparent', color: tab === t.id ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, position: 'relative' }}>
             <Icon name={t.icon} size={16} color={tab === t.id ? '#fff' : T.muted}/>
             {t.label}
             {t.badge > 0 && (

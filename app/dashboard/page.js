@@ -213,15 +213,22 @@ const ACTIONS_RDV_LABEL = {
 }
 
 // ─── Carte commande ───────────────────────────────────────────────────────────
-function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, modeHistorique = false }) {
+function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, onExpedier, modeHistorique = false }) {
   const statut = STATUTS[commande.statut] || STATUTS['en_attente']
   const { couleur } = statut
   const estLivraison = commande.mode_retrait === 'livraison'
+  const estExpedition = commande.mode_retrait === 'expedition'
   const statutLiv = commande.statut_livraison
 
   // Pour une livraison, le badge suit le sous-statut de livraison une fois « Prête » atteinte :
   // Prête → En livraison → Livrée. On surcharge label + couleur uniquement dans ce cas.
   const badge = (() => {
+    // Expédition boutique : « Prête » devient « À expédier », état final « Expédiée »
+    if (estExpedition) {
+      if (commande.statut === 'recupere') return { label: 'Expédiée', icon: '●', couleur: T.bleu }
+      if (commande.statut === 'pret') return { label: 'À expédier', icon: statut.icon, couleur }
+      return { label: statut.label, icon: statut.icon, couleur }
+    }
     if (!estLivraison) return { label: statut.label, icon: statut.icon, couleur }
     if (statutLiv === 'en_livraison') return { label: 'En livraison', icon: '●', couleur: T.bleu }
     if (statutLiv === 'livree' || commande.statut === 'recupere') return { label: 'Livrée', icon: '🔵', couleur: T.bleu }
@@ -283,11 +290,14 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, m
                   <span style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 600 }}>{commande.client_telephone}</span>
                 </div>
               )}
-              {estLivraison && commande.adresse_livraison && (
+              {(estLivraison || estExpedition) && commande.adresse_livraison && (
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4, marginTop: 3 }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" stroke="#4F46E5" strokeWidth="2"/><circle cx="12" cy="10" r="3" stroke="#4F46E5" strokeWidth="2"/></svg>
                   <span style={{ fontSize: '0.72rem', color: '#4F46E5', fontWeight: 700, lineHeight: 1.3 }}>{commande.adresse_livraison}</span>
                 </div>
+              )}
+              {estExpedition && commande.expedition_suivi && (
+                <p style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 700, margin: '3px 0 0' }}>Suivi : {commande.expedition_suivi}</p>
               )}
             </div>
           </div>
@@ -327,7 +337,19 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, m
             )
           })}
         </div>
-        {statut.next && (
+        {/* Expédition boutique : à « Prête », remplace le bouton générique par
+            « Marquer expédiée » avec saisie du n° de suivi (manuel, optionnel) */}
+        {estExpedition && commande.statut === 'pret' && (
+          <button onClick={() => {
+            const suivi = window.prompt('N° de suivi du colis (optionnel, laisse vide si aucun) :', commande.expedition_suivi || '')
+            if (suivi === null) return
+            onExpedier(commande.id, suivi.trim())
+          }}
+            style={{ width: '100%', padding: '0.625rem', background: `linear-gradient(135deg, ${T.bleu.border}, ${T.bleu.border}cc)`, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: '0.82rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.bleu.border}44`, letterSpacing: '-0.2px' }}>
+            Marquer expédiée →
+          </button>
+        )}
+        {statut.next && !(estExpedition && commande.statut === 'pret') && (
           <button onClick={() => onChangerStatut(commande.id, statut.next)}
             style={{ width: '100%', padding: '0.625rem', background: `linear-gradient(135deg, ${couleur.border}, ${couleur.border}cc)`, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: '0.82rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${couleur.border}44`, transition: 'opacity 0.15s, transform 0.1s', letterSpacing: '-0.2px' }}
             onMouseOver={e => { e.currentTarget.style.opacity = '0.88'; e.currentTarget.style.transform = 'scale(0.99)' }}
@@ -359,7 +381,7 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, m
           </button>
         )}
         {/* Bouton Non retiré — retrait uniquement, visible dès que le créneau est passé, confirmation obligatoire */}
-        {!estLivraison && commande.statut === 'pret' && (() => {
+        {!estLivraison && !estExpedition && commande.statut === 'pret' && (() => {
           const maintenant = new Date()
           let creneauPasse = false
           if (commande.creneau?.heure_fin) {
@@ -822,6 +844,15 @@ export default function Dashboard() {
   // Flux de statut spécifique livraison : Prête → En livraison → Livrée.
   // À « livrée » on pose aussi statut='recupere' pour que CA/stats/avis fonctionnent
   // (comme un retrait récupéré). Le retrait, lui, s'arrête à « pret » (swipe client).
+  // Boutique détail : marque la commande expédiée (statut final recupere) avec
+  // le n° de suivi saisi à la main (MVP expédition, colonne expedition_suivi).
+  async function expedierCommande(commandeId, suivi) {
+    const patch = { statut: 'recupere', expedition_suivi: suivi || null }
+    const { error } = await supabase.from('commandes').update(patch).eq('id', commandeId)
+    if (error) { alert(`Erreur : ${error.message}`); return }
+    setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...patch } : c))
+  }
+
   async function changerStatutLivraison(commandeId, statutLivraison) {
     const patch = { statut_livraison: statutLivraison }
     if (statutLivraison === 'livree') patch.statut = 'recupere'
@@ -1622,6 +1653,7 @@ export default function Dashboard() {
                         numero={getNumeroJour(commandes, commande.id, modeHistorique ? jourCommande : jourActif)}
                         onChangerStatut={changerStatut}
                         onLivraisonStatut={changerStatutLivraison}
+                        onExpedier={expedierCommande}
                         modeHistorique={modeHistorique}
                       />
                     )

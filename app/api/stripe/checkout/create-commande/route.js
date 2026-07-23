@@ -152,9 +152,12 @@ export async function POST(request) {
     const [
       { data: articlesData },
       { data: optionsValeurs },
+      { data: variantesData },
     ] = await Promise.all([
       supabase.from('articles').select('id, nom, prix, actif, commercant_id, temps_prepa').in('id', articleIds),
       supabase.from('article_options_valeurs').select('id, nom, prix_supplement, groupe_id, article_options_groupes!inner(article_id, nom)'),
+      // Variantes (Module 2 boutique) : revalidation server-side prix + stock
+      supabase.from('article_variantes').select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif').in('article_id', articleIds),
     ])
 
     if (!articlesData || articlesData.length !== articleIds.length) {
@@ -173,6 +176,7 @@ export async function POST(request) {
     // Construction lignes commande avec prix server-side
     const articleParId = Object.fromEntries(articlesData.map(a => [a.id, a]))
     const valeurParId = Object.fromEntries((optionsValeurs || []).map(v => [v.id, v]))
+    const varianteParId = Object.fromEntries((variantesData || []).map(v => [v.id, v]))
 
     const lignes = []
     let totalCents = 0
@@ -202,7 +206,26 @@ export async function POST(request) {
           }
         }
       }
-      const prixUnitaire = Number(article.prix) + supplement
+      // Variante (Module 2 boutique) : prix = override variante (sinon prix
+      // article), stock de LA variante contrôlé, libellé stocké dans options
+      // (jsonb) pour s'afficher partout (dashboard, emails) sans migration.
+      let variante = null
+      if (item.variante_id) {
+        variante = varianteParId[item.variante_id]
+        if (!variante || variante.article_id !== article.id || variante.actif === false) {
+          return NextResponse.json({ ok: false, error: `Version introuvable pour "${article.nom}".` }, { status: 400 })
+        }
+        if ((variante.stock ?? 0) < quantite) {
+          return NextResponse.json({ ok: false, error: `Stock insuffisant pour "${article.nom}" (${[variante.axe1_valeur, variante.axe2_valeur].filter(Boolean).join(' · ')}).` }, { status: 400 })
+        }
+        optionsFlat.unshift({
+          groupe_nom: 'Version',
+          valeur_nom: [variante.axe1_valeur, variante.axe2_valeur].filter(Boolean).join(' · '),
+          prix_supplement: 0,
+        })
+      }
+      const prixBase = variante && variante.prix != null ? Number(variante.prix) : Number(article.prix)
+      const prixUnitaire = prixBase + supplement
       const ligneCents = Math.round(prixUnitaire * 100) * quantite
       totalCents += ligneCents
       lignes.push({

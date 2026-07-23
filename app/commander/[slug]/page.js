@@ -269,6 +269,87 @@ function OptionsSelector({ article, groupes, onAjouter }) {
   )
 }
 
+// ─── VariantesSelector (Module 2 boutique) : choix taille/couleur/pointure ───
+// L'article détail/vitrine gère des variantes (axes axe1/axe2 + combinaisons
+// article_variantes). Le Yopper choisit une valeur par axe → la combinaison
+// donne le prix (override ou prix article) et le stock. Ajout au panier avec
+// la variante attachée (le serveur revalide prix + stock via variante_id).
+function VariantesSelector({ article, variantes, onAjouter }) {
+  const [choix1, setChoix1] = useState(null)
+  const [choix2, setChoix2] = useState(null)
+  const deuxAxes = !!article.axe2_nom
+  const vals1 = [...new Set(variantes.map(v => v.axe1_valeur).filter(Boolean))]
+  const vals2 = deuxAxes ? [...new Set(variantes.map(v => v.axe2_valeur).filter(Boolean))] : []
+  const varianteChoisie = choix1
+    ? variantes.find(v => v.axe1_valeur === choix1 && (!deuxAxes || v.axe2_valeur === choix2)) || null
+    : null
+  // Une valeur est proposable si au moins une combinaison en stock existe
+  const dispo1 = (v1) => variantes.some(v => v.axe1_valeur === v1 && v.stock > 0)
+  const dispo2 = (v2) => variantes.some(v => v.axe1_valeur === choix1 && v.axe2_valeur === v2 && v.stock > 0)
+  const prixAffiche = varianteChoisie
+    ? (varianteChoisie.prix != null ? Number(varianteChoisie.prix) : Number(article.prix))
+    : null
+  const epuise = !!varianteChoisie && (varianteChoisie.stock || 0) <= 0
+  const pret = !!varianteChoisie && !epuise
+
+  const chipSt = (sel, off) => ({
+    padding: '7px 13px', borderRadius: 100, cursor: off ? 'default' : 'pointer',
+    border: `1.5px solid ${sel ? T.main : T.pale}`, background: sel ? T.main : '#fff',
+    color: sel ? '#fff' : off ? '#C7C2D6' : T.ink, fontSize: '0.82rem', fontWeight: 700,
+    fontFamily: '"DM Sans", sans-serif', textDecoration: off ? 'line-through' : 'none', transition: 'all 0.15s',
+  })
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, padding: '1rem', marginTop: 8, border: `1.5px solid ${T.pale}` }}>
+      <p style={{ fontWeight: 800, color: T.deep, marginBottom: 12, fontSize: '0.9rem' }}>Choisis ta version</p>
+      <div style={{ marginBottom: 12 }}>
+        <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.85rem', marginBottom: 6 }}>{article.axe1_nom || 'Version'}</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {vals1.map(v1 => {
+            const off = !dispo1(v1)
+            return (
+              <button key={v1} onClick={() => { setChoix1(v1); setChoix2(null) }} style={chipSt(choix1 === v1, off)}>
+                {v1}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      {deuxAxes && choix1 && (
+        <div style={{ marginBottom: 12 }}>
+          <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.85rem', marginBottom: 6 }}>{article.axe2_nom}</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {vals2.map(v2 => {
+              const off = !dispo2(v2)
+              return (
+                <button key={v2} onClick={() => setChoix2(v2)} style={chipSt(choix2 === v2, off)}>
+                  {v2}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+      {varianteChoisie && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          {prixAffiche != null && Number(prixAffiche) > 0 && (
+            <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px' }}>{Number(prixAffiche).toFixed(2)}€</span>
+          )}
+          {epuise ? (
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#DC2626', background: '#FEE2E2', padding: '3px 10px', borderRadius: 100 }}>Épuisé</span>
+          ) : (varianteChoisie.stock || 0) <= 3 ? (
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#B45309', background: '#FFFBEB', padding: '3px 10px', borderRadius: 100 }}>Plus que {varianteChoisie.stock}</span>
+          ) : null}
+        </div>
+      )}
+      <button onClick={() => pret && onAjouter(article, varianteChoisie)} disabled={!pret}
+        style={{ width: '100%', padding: '0.75rem', border: 'none', borderRadius: 100, background: pret ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#E5E7EB', color: pret ? '#fff' : '#9CA3AF', fontWeight: 800, cursor: pret ? 'pointer' : 'default', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxShadow: pret ? `0 4px 14px ${T.main}44` : 'none', marginTop: 4 }}>
+        {pret ? 'Ajouter au panier' : deuxAxes && choix1 && !choix2 ? `Choisis ${article.axe2_nom}` : `Choisis ${article.axe1_nom || 'ta version'}`}
+      </button>
+    </div>
+  )
+}
+
 // ─── RecapPanier - FIX STOCK : prop getStockMax, bouton + bloqué ──────────────
 function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockMax }) {
   const items = Object.entries(panier)
@@ -293,10 +374,11 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
       </div>
       <div style={{ padding: '0.5rem 1.25rem' }}>
         {items.map(([key, item]) => {
-          const opts = labelOptions(item.options)
+          const opts = item.variante?.label || labelOptions(item.options)
           const prixUnitaire = item.prix + (item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0)
           // FIX STOCK : vérifier la limite par article dans le panier
-          const stockMax = getStockMax ? getStockMax(item.id) : Infinity
+          // (item à variante : le stock de LA variante fait foi)
+          const stockMax = item.variante ? (item.variante.stock ?? Infinity) : (getStockMax ? getStockMax(item.id) : Infinity)
           const stockAtteintPanier = stockMax !== Infinity && item.quantite >= stockMax
           return (
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.625rem 0', borderBottom: `1px solid ${T.pale}` }}>
@@ -348,9 +430,11 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 }
 
 // ─── ArticleRow ───────────────────────────────────────────────────────────────
-function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false, masquerPrix = false, dealArticle = null, onClickDeal = null, photoUrl = null }) {
+function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false, masquerPrix = false, dealArticle = null, onClickDeal = null, photoUrl = null, variantes = [] }) {
   const groupes = optionsParArticle[article.id] || []
-  const hasOptions = groupes.length > 0
+  // Variantes (Module 2 boutique) : priment sur les options si les deux existent
+  const hasVariantes = !!article.gere_variantes && variantes.length > 0
+  const hasOptions = !hasVariantes && groupes.length > 0
   const [showOptions, setShowOptions] = useState(false)
   const qteTotale = qteTotaleArticle(article.id)
   const keySimple = String(article.id)
@@ -466,6 +550,13 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
                 Compose +{groupes.length}
               </button>
             )}
+            {hasVariantes && (
+              <button onClick={e => { e.stopPropagation(); setShowOptions(v => !v) }}
+                aria-label="Choisir une version"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.65rem', fontWeight: 800, color: T.main, background: T.pale, padding: '3px 9px', borderRadius: 100, border: `1px solid ${T.main}22`, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', letterSpacing: '-0.1px' }}>
+                {article.axe1_nom || 'Version'}{article.axe2_nom ? ` · ${article.axe2_nom}` : ''}
+              </button>
+            )}
             {/* Badge DEAL cliquable si article lié à un deal actif */}
             {dealArticle && (
               <button onClick={e => { e.stopPropagation(); if (onClickDeal) onClickDeal(dealArticle) }}
@@ -521,7 +612,7 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
 
         {!modeVitrine && !epuiseComplet && !inactifCeJour && !epuiseAujourdhui && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
-            {hasOptions ? (
+            {(hasOptions || hasVariantes) ? (
               // hasOptions : "+ " ouvre les options (au lieu d'ajouter direct). Compteur visible si qte > 0.
               // Visuel uniforme avec les articles simples : meme bouton "+ " gradient, plus de gros gear violet.
               <>
@@ -577,6 +668,10 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
       </div>
       {showOptions && hasOptions && (
         <OptionsSelector article={article} groupes={groupes} onAjouter={(a, opts) => { ajouterAuPanier(a, opts); setShowOptions(false) }}/>
+      )}
+      {showOptions && hasVariantes && (
+        <VariantesSelector article={article} variantes={variantes}
+          onAjouter={(a, variante) => { ajouterAuPanier(a, null, variante); setShowOptions(false) }}/>
       )}
     </div>
   )
@@ -703,6 +798,7 @@ export default function CommanderSlug() {
   // Confirmation de changement de jour quand le panier n'est pas vide
   const [confirmationJour, setConfirmationJour] = useState(null) // { nouveauIdx }
   const [optionsParArticle, setOptionsParArticle] = useState({})
+  const [variantesParArticle, setVariantesParArticle] = useState({})
   const [stocksJour, setStocksJour] = useState({})
   // FIX STOCK SYNC : quantités déjà commandées par d'autres clients pour le jour sélectionné
   const [commandesParArticleJour, setCommandesParArticleJour] = useState({})
@@ -933,6 +1029,7 @@ export default function CommanderSlug() {
     setAvisCommerce(data.avis)
     setNotesInfo(data.notesInfo)
     setOptionsParArticle(data.options)
+    setVariantesParArticle(data.variantes || {})
     setStocksJour(data.stocksJour)
     setPhotoCouverture(data.photoCouverture)
     setGalerie(data.galerie || [])
@@ -1036,6 +1133,21 @@ export default function CommanderSlug() {
       })
     }
 
+    // Variantes (Module 2 boutique) : combinaisons actives par article
+    let variantesMap = {}
+    if (artIds.length > 0) {
+      const { data: variantesData } = await supabase
+        .from('article_variantes')
+        .select('*')
+        .in('article_id', artIds)
+        .eq('actif', true)
+        .order('ordre')
+      ;(variantesData||[]).forEach(v => {
+        if (!variantesMap[v.article_id]) variantesMap[v.article_id] = []
+        variantesMap[v.article_id].push(v)
+      })
+    }
+
     const couverture = (photosData||[]).find(p => p.type === 'couverture') || null
     const galerieAutres = (photosData||[]).filter(p => p.type !== 'couverture' && p.url)
     // Filtre des deals actifs aujourd'hui : aligne sur la logique home (commander/page.js).
@@ -1074,6 +1186,7 @@ export default function CommanderSlug() {
       avis: avis || [],
       notesInfo,
       options: opts,
+      variantes: variantesMap,
       stocksJour: stocksJourMap,
       photoCouverture: couverture,
       galerie: galerieAutres,
@@ -1308,7 +1421,17 @@ export default function CommanderSlug() {
     setCategorieActive(cat)
   }
 
-  function ajouterAuPanier(article, options = null) {
+  function ajouterAuPanier(article, options = null, variante = null) {
+    if (variante) {
+      // Item à variante : le stock de LA variante fait foi (modèle détail)
+      const key = `${article.id}_v${variante.id}`
+      const dejaPanier = panier[key]?.quantite || 0
+      if ((variante.stock ?? 0) <= dejaPanier) return
+      const prixVar = variante.prix != null ? Number(variante.prix) : Number(article.prix)
+      const label = [variante.axe1_valeur, variante.axe2_valeur].filter(Boolean).join(' · ')
+      setPanier(prev => ({ ...prev, [key]: { ...article, prix: prixVar, options: null, variante: { id: variante.id, label, stock: variante.stock }, quantite: (prev[key]?.quantite || 0) + 1 } }))
+      return
+    }
     // FIX STOCK : vérifier la limite avant d'ajouter
     const stockMax = getStockMax(article.id)
     const qteTotale = qteTotaleArticle(article.id)
@@ -1325,6 +1448,11 @@ export default function CommanderSlug() {
 
   // FIX STOCK : incrementerPanier vérifie aussi le stock
   function incrementerPanier(key, item) {
+    if (item.variante) {
+      if ((item.variante.stock ?? 0) <= (panier[key]?.quantite || 0)) return
+      setPanier(prev => ({ ...prev, [key]: { ...item, quantite: (prev[key]?.quantite || 0) + 1 } }))
+      return
+    }
     const stockMax = getStockMax(item.id)
     const qteTotale = qteTotaleArticle(item.id)
     if (stockMax !== Infinity && qteTotale >= stockMax) return
@@ -1475,6 +1603,7 @@ export default function CommanderSlug() {
       const articlesPayload = Object.values(panier).map(i => ({
         id: i.id,
         quantite: i.quantite,
+        variante_id: i.variante?.id || undefined,
         options: i.options
           ? Object.entries(i.options).map(([groupe_id, valeurs]) => ({
               groupe_id,
@@ -2335,7 +2464,8 @@ export default function CommanderSlug() {
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                             onCommanderDemain={commanderPourJour}
                             getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}
-                            photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}/>
+                            photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
+                            variantes={variantesParArticle[a.id] || []}/>
                         ))}
                       </div>
                     </div>
@@ -2354,7 +2484,8 @@ export default function CommanderSlug() {
                           stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                           onCommanderDemain={commanderPourJour}
                           getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}
-                          photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}/>
+                          photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
+                          variantes={variantesParArticle[a.id] || []}/>
                       ))}
                     </div>
                   </div>

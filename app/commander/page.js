@@ -897,17 +897,27 @@ function CarteServicePublic({ s, onSelect, actusInfo }) {
   )
 }
 
-// Badge type de commande : Retrait (C&C) vs Livraison. Icône SVG (design system).
-function BadgeTypeCommande({ mode }) {
-  const livraison = mode === 'livraison'
+// Badge type de commande : 4 identités (décision Alex 23/07).
+//   Retrait créneau (alimentaire) = VERT · Livraison = INDIGO ·
+//   Boutique détail (retrait libre) = ORANGE · Colis (expédition) = ORANGE.
+// Le violet reste la marque, le vert les RDV : ici seule l'icône + couleur
+// du badge différencie, pas de sections en plus (ODOO).
+function BadgeTypeCommande({ mode, categorie = null }) {
+  const cfg = mode === 'livraison'
+    ? { label: 'Livraison', fg: '#4F46E5', bg: '#EEF2FF',
+        icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h2l2.5 6M6 17.5h7l-2-8H8.5"/></svg> }
+    : mode === 'expedition'
+    ? { label: 'Colis', fg: '#EA580C', bg: '#FFF7ED',
+        icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#EA580C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96 12 12.01l8.73-5.05M12 22.08V12"/></svg> }
+    : categorie === 'detail'
+    ? { label: 'Boutique', fg: '#EA580C', bg: '#FFF7ED',
+        icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#EA580C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg> }
+    : { label: 'Retrait', fg: '#059669', bg: '#F0FDF4',
+        icon: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg> }
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: 100, background: livraison ? '#EEF2FF' : '#F0FDF4', color: livraison ? '#4F46E5' : '#059669', border: `1px solid ${livraison ? '#4F46E522' : '#05966922'}` }}>
-      {livraison ? (
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h2l2.5 6M6 17.5h7l-2-8H8.5"/></svg>
-      ) : (
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg>
-      )}
-      {livraison ? 'Livraison' : 'Retrait'}
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: 100, background: cfg.bg, color: cfg.fg, border: `1px solid ${cfg.fg}22` }}>
+      {cfg.icon}
+      {cfg.label}
     </span>
   )
 }
@@ -2059,7 +2069,9 @@ export default function Commander() {
     .filter(c => !searchQuery.trim() || c.nom.toLowerCase().includes(searchQuery.toLowerCase()) || (c.type||'').toLowerCase().includes(searchQuery.toLowerCase()) || (c.adresse||'').toLowerCase().includes(searchQuery.toLowerCase()))
 
   // Retrait « prêt à retirer » : swipe pour confirmer le retrait au comptoir.
-  const commandesASwiper = clientCommandes.filter(c => c.statut === 'pret' && c.mode_retrait !== 'livraison')
+  // Expédition exclue du swipe retrait : un colis ne se « récupère » pas au
+  // comptoir, il arrive par la poste (suivi affiché sur la carte).
+  const commandesASwiper = clientCommandes.filter(c => c.statut === 'pret' && c.mode_retrait !== 'livraison' && c.mode_retrait !== 'expedition')
   // Livraison EN COURS de livraison (le commerçant est parti) : swipe pour confirmer
   // la RÉCEPTION. Tant que statut_livraison n'est pas 'en_livraison', la commande
   // reste dans « En cours » (pas d'action possible côté Yopper).
@@ -2067,6 +2079,8 @@ export default function Commander() {
   const commandesEnCours = clientCommandes.filter(c =>
     ['en_attente','en_preparation'].includes(c.statut)
     || (c.mode_retrait === 'livraison' && c.statut === 'pret' && c.statut_livraison !== 'en_livraison')
+    // Colis prêt = en attente d'expédition par le commerçant : reste « en cours »
+    || (c.mode_retrait === 'expedition' && c.statut === 'pret')
   )
   // Historique : commandes recuperees + annulees (par client ou paiement_ko) + non_retire.
   // On garde la commande visible avec son statut final pour que le Yopper ait toujours
@@ -2548,7 +2562,7 @@ export default function Commander() {
                               <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#4F46E5' }}>En route vers toi{cren ? ` · ${cren.heure_debut.slice(0,5)}–${cren.heure_fin.slice(0,5)}` : ''}</span>
                             </span>
                           </div>
-                          <div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} /></div><p style={{ fontWeight: 900, color: '#4F46E5', fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p></div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /></div><p style={{ fontWeight: 900, color: '#4F46E5', fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p></div>
                         </div>
                         <button onClick={() => setPickupCommande(c)}
                           style={{ width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.95rem', background: 'linear-gradient(135deg, #4F46E5, #6366F1)', color: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 16px #4F46E544', letterSpacing: '-0.3px' }}>
@@ -2590,7 +2604,7 @@ export default function Commander() {
                             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.main }}>{c.mode_retrait === 'livraison' ? 'Prête' : 'Prête à retirer'}{cren ? ` · ${cren.heure_debut.slice(0,5)}–${cren.heure_fin.slice(0,5)}` : ''}</span>
                           </span>
                         </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} /></div><p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p></div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /></div><p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p></div>
                       </div>
                       {ok ? (
                         <button onClick={() => setPickupCommande(c)}
@@ -2621,11 +2635,17 @@ export default function Commander() {
                     // Livraison prête mais pas encore partie : libellé/sous-texte dédiés
                     // (le statut 'pret' générique dirait « Prête à retirer », faux ici).
                     const estLivPrete = c.mode_retrait === 'livraison' && c.statut === 'pret'
+                    // Colis prêt = emballé, en attente de dépôt par le commerçant
+                    const estColisPret = c.mode_retrait === 'expedition' && c.statut === 'pret'
                     const sc = estLivPrete
                       ? { bg: '#EEF2FF', color: '#4F46E5', label: 'Prête, bientôt livrée' }
+                      : estColisPret
+                      ? { bg: '#FFF7ED', color: '#EA580C', label: 'Emballé, bientôt expédié' }
                       : statutStyle[c.statut]
                     const sousTexte = estLivPrete
                       ? 'C’est prêt ! Le commerçant va bientôt partir te livrer 🛵'
+                      : estColisPret
+                      ? 'Ton colis part bientôt. Tu recevras le numéro de suivi dès l’expédition.'
                       : statutSousTexte[c.statut]
                     const cren = c.creneau || c.creneau_livraison
                     return (
@@ -2641,7 +2661,7 @@ export default function Commander() {
                             <p style={{ fontSize: '0.72rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}{cren ? ` · ${cren.heure_debut.slice(0,5)}–${cren.heure_fin.slice(0,5)}` : ''}</p>
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                            <div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} /></div>
+                            <div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /></div>
                             <p style={{ fontWeight: 900, color: T.main, marginBottom: 4, fontSize: '0.95rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
                             <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '3px 8px', borderRadius: 100, background: sc.bg, color: sc.color }}>{sc.label}</span>
                           </div>
@@ -2687,7 +2707,11 @@ export default function Commander() {
                       annulee_paiement_ko:   { label: 'Paiement échoué',       bg: '#FEF2F2', color: '#DC2626' },
                       non_retire:            { label: 'Non retirée',           bg: '#F9FAFB', color: '#6B7280' },
                     }
-                    const sc = statutMapCmd[c.statut] || { label: c.statut, bg: T.pale, color: T.muted }
+                    // Colis expédié : libellé dédié + numéro de suivi affiché
+                    const estColisExpedie = c.mode_retrait === 'expedition' && c.statut === 'recupere'
+                    const sc = estColisExpedie
+                      ? { label: '✓ Expédiée', bg: '#FFF7ED', color: '#EA580C' }
+                      : statutMapCmd[c.statut] || { label: c.statut, bg: T.pale, color: T.muted }
                     return (
                       <div key={c.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
@@ -2695,6 +2719,9 @@ export default function Commander() {
                             {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.muted, fontWeight: 600 }}> - commande #{c.numeroAffiche}</span>}
                           </p>
                           <p style={{ fontSize: '0.7rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
+                          {estColisExpedie && c.expedition_suivi && (
+                            <p style={{ fontSize: '0.7rem', color: '#EA580C', fontWeight: 700, margin: '2px 0 0' }}>Suivi : {c.expedition_suivi}</p>
+                          )}
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(c.total).toFixed(2)}€</p>

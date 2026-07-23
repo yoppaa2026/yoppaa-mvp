@@ -111,7 +111,7 @@ export async function POST(request) {
     if (action === 'list') {
       const { data } = await supabase
         .from('commandes')
-        .select('*, commercant:commercants(nom, type), creneau:creneaux(heure_debut, heure_fin), creneau_livraison:livraison_creneaux(heure_debut, heure_fin)')
+        .select('*, commercant:commercants(nom, type, categorie), creneau:creneaux(heure_debut, heure_fin), creneau_livraison:livraison_creneaux(heure_debut, heure_fin)')
         .eq('client_email', yopper.email)
         .order('created_at', { ascending: false })
       if (!data || data.length === 0) return NextResponse.json({ ok: true, commandes: [] })

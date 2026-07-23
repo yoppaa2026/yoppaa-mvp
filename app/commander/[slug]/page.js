@@ -517,12 +517,6 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
               <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, background: '#F3F4F6', padding: '4px 10px', borderRadius: 100, border: '1px dashed #D1D5DB' }}>
                 Prix non affichés
               </span>
-            ) : dealArticle && dealArticle.prix_deal != null ? (
-              // Prix barré + prix deal en accent
-              <>
-                <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(dealArticle.prix_deal).toFixed(2)}€</p>
-                <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{Number(article.prix).toFixed(2)}€</p>
-              </>
             ) : article.est_vitrine ? (
               // Article en mode vitrine : "à partir de X €" ou "Prix sur demande"
               Number(article.prix) > 0 ? (
@@ -673,6 +667,47 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
         <VariantesSelector article={article} variantes={variantes}
           onAjouter={(a, variante) => { ajouterAuPanier(a, null, variante); setShowOptions(false) }}/>
       )}
+    </div>
+  )
+}
+
+// ─── Carte OFFRE DEAL : le deal lié à un article est un « article temporaire »
+// ajouté à part (l'unité ne disparaît jamais). Détail visible : titre,
+// description, prix deal vs prix original DU DEAL. Serveur revalide via deal_id.
+function DealOfferCard({ deal, qte = 0, onAjouter, onRetirer }) {
+  return (
+    <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${T.main}55`, boxShadow: `0 4px 16px ${T.main}26` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.6rem', fontWeight: 800, color: '#FB923C', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="#FB923C"><path d="M12 2c1 3 3 4 3 7 0 1.5-1 3-3 3s-3-1.5-3-3c0-2 2-3 3-7zm-5 9c-1 0-3 2-3 6 0 4 3 5 8 5s8-1 8-5c0-4-2-6-3-6 0 3-2 5-5 5s-5-2-5-5z"/></svg>
+            Deal du jour
+          </span>
+          <p style={{ fontWeight: 800, color: '#fff', fontSize: '0.9rem', letterSpacing: '-0.2px', lineHeight: 1.3, margin: '0 0 3px' }}>{deal.titre}</p>
+          {deal.description && <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)', lineHeight: 1.45, margin: '0 0 6px' }}>{deal.description}</p>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{Number(deal.prix_deal).toFixed(2)}€</span>
+            {deal.prix_original != null && (
+              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700, textDecoration: 'line-through' }}>{Number(deal.prix_original).toFixed(2)}€</span>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginTop: 4 }}>
+          {qte > 0 && (
+            <>
+              <button onClick={onRetirer} aria-label="Retirer le deal"
+                style={{ width: 30, height: 30, borderRadius: 9, border: '1.5px solid rgba(255,255,255,0.3)', background: 'transparent', color: '#fff', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round"><path d="M5 12h14"/></svg>
+              </button>
+              <span style={{ fontWeight: 900, fontSize: '0.95rem', color: '#fff', minWidth: 18, textAlign: 'center' }}>{qte}</span>
+            </>
+          )}
+          <button onClick={onAjouter} aria-label="Ajouter le deal"
+            style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 14px ${T.main}66` }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -1439,13 +1474,25 @@ export default function CommanderSlug() {
     const qteTotale = qteTotaleArticle(article.id)
     if (stockMax !== Infinity && qteTotale >= stockMax) return
     const key = options ? `${article.id}_${JSON.stringify(options)}` : String(article.id)
-    // Si un deal est lié à cet article ET fournit un prix_deal, applique-le.
-    // On stocke prix_original séparément pour pouvoir afficher la barré.
-    const deal = dealsParArticle[article.id]
-    const articleAvecPrix = (deal && deal.prix_deal != null)
-      ? { ...article, prix: Number(deal.prix_deal), prix_avant_deal: Number(article.prix), deal_id: deal.id }
-      : article
-    setPanier(prev => ({ ...prev, [key]: { ...articleAvecPrix, options, quantite: (prev[key]?.quantite || 0) + 1 } }))
+    // L'article reste TOUJOURS au prix unitaire : un deal lié (ex. lot 3+1)
+    // est une OFFRE SÉPARÉE ajoutée via sa propre carte (ajouterDealAuPanier).
+    setPanier(prev => ({ ...prev, [key]: { ...article, options, quantite: (prev[key]?.quantite || 0) + 1 } }))
+  }
+
+  // Ajoute le DEAL comme ligne de panier à part entière (décision Alex 23/07 :
+  // le deal = article temporaire, l'unité ne disparaît jamais). Le serveur
+  // revalide le prix via deal_id.
+  function ajouterDealAuPanier(deal, article) {
+    const key = `deal_${deal.id}`
+    setPanier(prev => ({ ...prev, [key]: {
+      id: article.id,
+      nom: deal.titre,
+      prix: Number(deal.prix_deal),
+      prix_avant_deal: deal.prix_original != null ? Number(deal.prix_original) : null,
+      deal_id: deal.id,
+      options: null,
+      quantite: (prev[key]?.quantite || 0) + 1,
+    } }))
   }
 
   // FIX STOCK : incrementerPanier vérifie aussi le stock
@@ -1615,6 +1662,7 @@ export default function CommanderSlug() {
         id: i.id,
         quantite: i.quantite,
         variante_id: i.variante?.id || undefined,
+        deal_id: i.deal_id || undefined,
         options: i.options
           ? Object.entries(i.options).map(([groupe_id, valeurs]) => ({
               groupe_id,
@@ -2501,13 +2549,22 @@ export default function CommanderSlug() {
                       </div>
                       <div className="articles-grid">
                         {artsDecat.map(a => (
-                          <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle}
-                            ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
-                            stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
-                            onCommanderDemain={commanderPourJour}
-                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}
-                            photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
-                            variantes={variantesParArticle[a.id] || []}/>
+                          <div key={a.id}>
+                            <ArticleRow article={a} panier={panier} optionsParArticle={optionsParArticle}
+                              ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
+                              stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
+                              onCommanderDemain={commanderPourJour}
+                              getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}
+                              photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
+                              variantes={variantesParArticle[a.id] || []}/>
+                            {/* Offre deal liée = carte séparée (l'unité reste intacte) */}
+                            {dealsParArticle[a.id] && dealsParArticle[a.id].prix_deal != null && peutCommander && (
+                              <DealOfferCard deal={dealsParArticle[a.id]}
+                                qte={panier[`deal_${dealsParArticle[a.id].id}`]?.quantite || 0}
+                                onAjouter={() => ajouterDealAuPanier(dealsParArticle[a.id], a)}
+                                onRetirer={() => retirerDuPanier(`deal_${dealsParArticle[a.id].id}`)}/>
+                            )}
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -2521,13 +2578,21 @@ export default function CommanderSlug() {
                     </div>
                     <div className="articles-grid">
                       {sansCat.map(a => (
-                        <ArticleRow key={a.id} article={a} panier={panier} optionsParArticle={optionsParArticle}
-                          ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
-                          stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
-                          onCommanderDemain={commanderPourJour}
-                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}
-                          photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
-                          variantes={variantesParArticle[a.id] || []}/>
+                        <div key={a.id}>
+                          <ArticleRow article={a} panier={panier} optionsParArticle={optionsParArticle}
+                            ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
+                            stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
+                            onCommanderDemain={commanderPourJour}
+                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}
+                            photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
+                            variantes={variantesParArticle[a.id] || []}/>
+                          {dealsParArticle[a.id] && dealsParArticle[a.id].prix_deal != null && peutCommander && (
+                            <DealOfferCard deal={dealsParArticle[a.id]}
+                              qte={panier[`deal_${dealsParArticle[a.id].id}`]?.quantite || 0}
+                              onAjouter={() => ajouterDealAuPanier(dealsParArticle[a.id], a)}
+                              onRetirer={() => retirerDuPanier(`deal_${dealsParArticle[a.id].id}`)}/>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>

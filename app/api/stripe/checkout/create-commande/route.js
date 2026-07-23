@@ -181,11 +181,14 @@ export async function POST(request) {
       { data: articlesData },
       { data: optionsValeurs },
       { data: variantesData },
+      { data: dealsData },
     ] = await Promise.all([
       supabase.from('articles').select('id, nom, prix, actif, commercant_id, temps_prepa').in('id', articleIds),
       supabase.from('article_options_valeurs').select('id, nom, prix_supplement, groupe_id, article_options_groupes!inner(article_id, nom)'),
       // Variantes (Module 2 boutique) : revalidation server-side prix + stock
       supabase.from('article_variantes').select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif').in('article_id', articleIds),
+      // Deals lot (« article temporaire ») : revalidation server-side du prix_deal
+      supabase.from('yoppaa_deals').select('id, titre, prix_deal, actif, commercant_id').eq('commercant_id', commercant_id).eq('actif', true),
     ])
 
     if (!articlesData || articlesData.length !== articleIds.length) {
@@ -205,6 +208,7 @@ export async function POST(request) {
     const articleParId = Object.fromEntries(articlesData.map(a => [a.id, a]))
     const valeurParId = Object.fromEntries((optionsValeurs || []).map(v => [v.id, v]))
     const varianteParId = Object.fromEntries((variantesData || []).map(v => [v.id, v]))
+    const dealParId = Object.fromEntries((dealsData || []).map(d => [d.id, d]))
 
     const lignes = []
     let totalCents = 0
@@ -252,13 +256,25 @@ export async function POST(request) {
           prix_supplement: 0,
         })
       }
-      const prixBase = variante && variante.prix != null ? Number(variante.prix) : Number(article.prix)
+      // Deal lot (« article temporaire », décision Alex 23/07) : prix = prix_deal
+      // du deal revalidé server-side, libellé = titre du deal. L'article unitaire
+      // reste commandable à son prix normal en parallèle.
+      let deal = null
+      if (item.deal_id) {
+        deal = dealParId[item.deal_id]
+        if (!deal || deal.prix_deal == null) {
+          return NextResponse.json({ ok: false, error: 'Ce deal n\'est plus disponible.' }, { status: 400 })
+        }
+      }
+      const prixBase = deal ? Number(deal.prix_deal)
+        : variante && variante.prix != null ? Number(variante.prix)
+        : Number(article.prix)
       const prixUnitaire = prixBase + supplement
       const ligneCents = Math.round(prixUnitaire * 100) * quantite
       totalCents += ligneCents
       lignes.push({
         article_id: article.id,
-        article_nom: article.nom,
+        article_nom: deal ? deal.titre : article.nom,
         quantite,
         prix_unitaire: prixUnitaire,
         options: optionsFlat.length > 0 ? optionsFlat : null,

@@ -30,7 +30,17 @@ const TEMPS_PAR_TYPE = {
 }
 function getTemps(type) { return TEMPS_PAR_TYPE[type] || 7 }
 
-const CATEGORIES = ['Tous', 'Boulangerie', 'Pâtisserie', 'Chocolatier', 'Coffee shop', 'Sandwicherie', 'Snack', 'Friterie', 'Pizzeria', 'Épicerie', 'Traiteur', 'Boucherie', 'Fleuriste', 'Pharmacie', 'Food truck']
+// Bandeau de filtres (refonte 23/07) : rangée 1 = les 3 catégories commerçant
+// (+ Tous), rangée 2 = les métiers réellement présents dans la zone du Yopper
+// (générés depuis les commerces chargés, avec compteur : jamais de filtre vide).
+const FAMILLES = [
+  { key: 'tous', label: 'Tous' },
+  { key: 'alimentaire', label: 'Alimentaire' },
+  { key: 'vitrine', label: 'Services' },
+  { key: 'detail', label: 'Boutiques' },
+]
+// Les anciens commerçants d'avant la colonne categorie sont tous alimentaires.
+const familleDe = (c) => c?.categorie || 'alimentaire'
 
 const TYPE_BADGE = {
   'Boulangerie':              { bg: '#FFF3CD', color: '#856404' },
@@ -1096,7 +1106,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
 
 // Barre de categories scrollable horizontalement avec indicateurs gauche/droite cliquables.
 // Sur PC : molette verticale = scroll horizontal (la scrollbar est masquee pour le design).
-function CategoriesScroll({ categorieActive, setCategorieActive }) {
+function CategoriesScroll({ familleActive, setFamilleActive, metierActif, setMetierActif, metiersZone }) {
   const scrollRef = useRef(null)
   const [canScrollLeft, setCanScrollLeft]   = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
@@ -1133,12 +1143,13 @@ function CategoriesScroll({ categorieActive, setCategorieActive }) {
   }
 
   return (
+    <div>
     <div style={{ position: 'relative' }}>
       <div ref={scrollRef} className="cats">
-        {CATEGORIES.map(cat => (
-          <button key={cat} onClick={() => setCategorieActive(cat)}
-            style={{ flexShrink: 0, padding: '0.45rem 1rem', borderRadius: 100, border: categorieActive===cat ? 'none' : `1px solid ${T.light}33`, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', whiteSpace: 'nowrap', background: categorieActive===cat ? '#fff' : 'rgba(255,255,255,0.08)', color: categorieActive===cat ? T.main : '#fff', backdropFilter: 'blur(4px)', transition: 'all 0.15s', boxShadow: categorieActive===cat ? `0 4px 14px rgba(255,255,255,0.25)` : 'none', letterSpacing: '-0.2px' }}>
-            {cat}
+        {FAMILLES.map(f => (
+          <button key={f.key} onClick={() => { setFamilleActive(f.key); setMetierActif(null) }}
+            style={{ flexShrink: 0, padding: '0.45rem 1rem', borderRadius: 100, border: familleActive===f.key ? 'none' : `1px solid ${T.light}33`, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', whiteSpace: 'nowrap', background: familleActive===f.key ? '#fff' : 'rgba(255,255,255,0.08)', color: familleActive===f.key ? T.main : '#fff', backdropFilter: 'blur(4px)', transition: 'all 0.15s', boxShadow: familleActive===f.key ? `0 4px 14px rgba(255,255,255,0.25)` : 'none', letterSpacing: '-0.2px' }}>
+            {f.label}
           </button>
         ))}
       </div>
@@ -1166,6 +1177,22 @@ function CategoriesScroll({ categorieActive, setCategorieActive }) {
           50%      { transform: translateX(3px); opacity: 0.6; }
         }
       `}</style>
+    </div>
+    {/* Rangée 2 : métiers présents dans la zone pour la famille choisie
+        (avec compteur). Toggle : retaper le métier actif revient à la famille. */}
+    {familleActive !== 'tous' && metiersZone.length > 0 && (
+      <div className="cats" style={{ marginTop: '-0.25rem' }}>
+        {metiersZone.map(([metier, n]) => {
+          const actif = metierActif === metier
+          return (
+            <button key={metier} onClick={() => setMetierActif(actif ? null : metier)}
+              style={{ flexShrink: 0, padding: '0.3rem 0.8rem', borderRadius: 100, border: actif ? 'none' : `1px solid ${T.light}26`, cursor: 'pointer', fontWeight: 700, fontSize: '0.72rem', whiteSpace: 'nowrap', background: actif ? T.light : 'rgba(255,255,255,0.06)', color: actif ? T.deep : 'rgba(255,255,255,0.85)', transition: 'all 0.15s', letterSpacing: '-0.2px' }}>
+              {metier}<span style={{ marginLeft: 5, opacity: 0.6, fontWeight: 800 }}>{n}</span>
+            </button>
+          )
+        })}
+      </div>
+    )}
     </div>
   )
 }
@@ -1297,7 +1324,9 @@ export default function Commander() {
   const [rue, setRue] = useState(null)
   const [showLocManuelle, setShowLocManuelle] = useState(false)
   const [locManuelle, setLocManuelle] = useState('')
-  const [categorieActive, setCategorieActive] = useState('Tous')
+  // Filtre accueil : famille (3 catégories commerçant) + métier précis optionnel
+  const [familleActive, setFamilleActive] = useState('tous')
+  const [metierActif, setMetierActif] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [favoris, setFavoris] = useState([])
   const [commercantsFavoris, setCommercantsFavoris] = useState([])
@@ -1990,8 +2019,21 @@ export default function Commander() {
     ...rdvsActifs.map(r => r.commercant_id),
   ].filter(Boolean)).size
 
+  // Métiers présents dans la zone pour la famille choisie (rangée 2 du bandeau),
+  // triés par nombre de commerces puis alphabétique. [[métier, count], ...]
+  const metiersZone = (() => {
+    if (familleActive === 'tous') return []
+    const counts = new Map()
+    for (const c of commercants) {
+      if (familleDe(c) !== familleActive) continue
+      for (const t of parseTypes(c.type)) counts.set(t, (counts.get(t) || 0) + 1)
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  })()
+
   const commercantsFiltres = commercants
-    .filter(c => categorieActive === 'Tous' || parseTypes(c.type).some(t => t===categorieActive || t.includes(categorieActive)))
+    .filter(c => familleActive === 'tous' || familleDe(c) === familleActive)
+    .filter(c => !metierActif || parseTypes(c.type).includes(metierActif))
     .filter(c => !searchQuery.trim() || c.nom.toLowerCase().includes(searchQuery.toLowerCase()) || (c.type||'').toLowerCase().includes(searchQuery.toLowerCase()) || (c.adresse||'').toLowerCase().includes(searchQuery.toLowerCase()))
 
   // Retrait « prêt à retirer » : swipe pour confirmer le retrait au comptoir.
@@ -2342,7 +2384,8 @@ export default function Commander() {
           )}
 
           {onglet === 'accueil' && (
-            <CategoriesScroll categorieActive={categorieActive} setCategorieActive={setCategorieActive}/>
+            <CategoriesScroll familleActive={familleActive} setFamilleActive={setFamilleActive}
+              metierActif={metierActif} setMetierActif={setMetierActif} metiersZone={metiersZone}/>
           )}
 
           {onglet !== 'accueil' && <div style={{ height: 10 }}/>}

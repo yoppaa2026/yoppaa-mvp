@@ -1769,10 +1769,13 @@ function TabDeals({ commercantId, commercant, toast }) {
               <div><label style={s.label}>Prix deal (€)</label><Input type="number" step="0.10" min="0" value={form.prix_deal} onChange={e => setForm(p => ({ ...p, prix_deal: e.target.value }))} placeholder="2.50"/></div>
               <div><label style={s.label}>Prix d&rsquo;origine (€)</label><Input type="number" step="0.10" min="0" value={form.prix_original} onChange={e => setForm(p => ({ ...p, prix_original: e.target.value }))} placeholder="3.50"/></div>
             </div>
+            {/* minWidth: 0 sur les cellules : sans ça, les inputs date/time natifs
+                (largeur intrinsèque, surtout iOS) débordent de la grille à droite. */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <label style={s.label}>Date début *</label>
                 <Input type="date" value={form.date_debut} min={today}
+                  style={{ width: '100%', boxSizing: 'border-box' }}
                   onChange={e => {
                     const v = e.target.value
                     setForm(p => ({
@@ -1783,15 +1786,16 @@ function TabDeals({ commercantId, commercant, toast }) {
                     }))
                   }}/>
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <label style={s.label}>Date fin *</label>
                 <Input type="date" value={form.date_fin} min={form.date_debut || today}
+                  style={{ width: '100%', boxSizing: 'border-box' }}
                   onChange={e => setForm(p => ({ ...p, date_fin: e.target.value }))}/>
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div><label style={s.label}>Heure début</label><Input type="time" value={form.heure_debut} onChange={e => setForm(p => ({ ...p, heure_debut: e.target.value }))}/></div>
-              <div><label style={s.label}>Heure fin</label><Input type="time" value={form.heure_fin} onChange={e => setForm(p => ({ ...p, heure_fin: e.target.value }))}/></div>
+              <div style={{ minWidth: 0 }}><label style={s.label}>Heure début</label><Input type="time" value={form.heure_debut} style={{ width: '100%', boxSizing: 'border-box' }} onChange={e => setForm(p => ({ ...p, heure_debut: e.target.value }))}/></div>
+              <div style={{ minWidth: 0 }}><label style={s.label}>Heure fin</label><Input type="time" value={form.heure_fin} style={{ width: '100%', boxSizing: 'border-box' }} onChange={e => setForm(p => ({ ...p, heure_fin: e.target.value }))}/></div>
             </div>
             {form.date_debut && form.date_fin && form.date_debut !== form.date_fin && (
               <p style={{ fontSize: 11, color: T.muted, fontStyle: 'italic', margin: 0 }}>
@@ -2169,8 +2173,8 @@ function TabActus({ commercantId, commercant, toast }) {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'end' }}>
-              <div><label style={s.label}>Date début</label><Input type="date" value={form.date_debut} onChange={e => setForm(p => ({ ...p, date_debut: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}/></div>
-              <div><label style={s.label}>Date fin</label><Input type="date" value={form.date_fin} min={form.date_debut} onChange={e => setForm(p => ({ ...p, date_fin: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}/></div>
+              <div style={{ minWidth: 0 }}><label style={s.label}>Date début</label><Input type="date" value={form.date_debut} onChange={e => setForm(p => ({ ...p, date_debut: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}/></div>
+              <div style={{ minWidth: 0 }}><label style={s.label}>Date fin</label><Input type="date" value={form.date_fin} min={form.date_debut} onChange={e => setForm(p => ({ ...p, date_fin: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}/></div>
             </div>
             <p style={{ fontSize: 10, color: T.muted, margin: '4px 0 0' }}>Date fin vide = pas d&rsquo;échéance (l&rsquo;actu reste affichée jusqu&rsquo;à désactivation).</p>
 
@@ -2756,8 +2760,8 @@ function TabCreneaux({ commercantId, toast }) {
           <div style={{ ...s.cardActive, marginBottom: 12 }}>
             <h3 style={{ ...s.h3, marginBottom: 14 }}>Nouvelle fermeture</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-              <div><label style={s.label}>Date début *</label><Input type="date" value={fermetureForm.date_debut} onChange={e => setFermetureForm(p => ({ ...p, date_debut: e.target.value }))} /></div>
-              <div><label style={s.label}>Date fin *</label><Input type="date" value={fermetureForm.date_fin} onChange={e => setFermetureForm(p => ({ ...p, date_fin: e.target.value }))} /></div>
+              <div style={{ minWidth: 0 }}><label style={s.label}>Date début *</label><Input type="date" value={fermetureForm.date_debut} style={{ width: '100%', boxSizing: 'border-box' }} onChange={e => setFermetureForm(p => ({ ...p, date_debut: e.target.value }))} /></div>
+              <div style={{ minWidth: 0 }}><label style={s.label}>Date fin *</label><Input type="date" value={fermetureForm.date_fin} style={{ width: '100%', boxSizing: 'border-box' }} onChange={e => setFermetureForm(p => ({ ...p, date_fin: e.target.value }))} /></div>
             </div>
             <div style={{ marginBottom: 12 }}>
               <label style={s.label}>Motif (optionnel)</label>

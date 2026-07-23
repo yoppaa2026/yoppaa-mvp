@@ -1687,7 +1687,7 @@ function TabDeals({ commercantId, commercant, toast }) {
 
       {/* Info Good Morning Yoppers */}
       <div style={{ background: '#FFF7ED', borderLeft: `4px solid #EA580C`, borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 12.5, color: '#7C2D12', lineHeight: 1.5 }}>
-        <strong>Good Morning Yoppers</strong> · l&rsquo;édition du matin + le push de 7h30, envoyés aux Yoppers qui t&rsquo;ont en favori.
+        <strong>Good Morning Yoppers</strong> · l&rsquo;édition du matin + le push de 7h30, envoyés à tous les Yoppers de ta commune.
         <br/>Pour y figurer : coche «&nbsp;Inclure dans le Good Morning Yoppers&nbsp;» et enregistre <strong>avant {heureLimite} la veille</strong>. Publié trop tard&nbsp;? Ton deal reste visible sur ta fiche, avec la pastille DEAL qui clignote côté clients. Un seul deal par matin.
       </div>
 
@@ -2180,8 +2180,8 @@ function TabActus({ commercantId, commercant, toast }) {
                 <span style={{ fontSize: 13, color: T.ink, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Sun size={14} strokeWidth={1.8} color="#EA580C"/> Inclure dans Le Good Morning Yoppers</span>
                 <span style={{ fontSize: 11, color: T.muted, fontWeight: 500 }}>
                   {estExister
-                    ? `Palier Exister : 1 apparition GMY par semaine calendaire (lundi-dimanche). Enregistre avant ${heureLimiteGmy} la veille : ton actu entre dans le Good Morning du lendemain (édition + push aux favoris) et y reste pendant sa période.`
-                    : `Enregistre avant ${heureLimiteGmy} la veille : ton actu entre dans le Good Morning du lendemain (édition + push aux Yoppers qui t'ont en favori) et y reste pendant sa période. Publiée plus tard, elle vit sur ta fiche (pastille ACTU) et entrera dans le Morning suivant.`}
+                    ? `Palier Exister : 1 apparition GMY par semaine calendaire (lundi-dimanche). Enregistre avant ${heureLimiteGmy} la veille : ton actu entre dans le Good Morning du lendemain (édition + push aux Yoppers de ta commune) et y reste pendant sa période.`
+                    : `Enregistre avant ${heureLimiteGmy} la veille : ton actu entre dans le Good Morning du lendemain (édition + push aux Yoppers de ta commune) et y reste pendant sa période. Publiée plus tard, elle vit sur ta fiche (pastille ACTU) et entrera dans le Morning suivant.`}
                 </span>
               </div>
             </label>

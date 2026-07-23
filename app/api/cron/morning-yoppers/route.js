@@ -7,8 +7,9 @@
 //      push_envoye_at). Ce contenu retenu EST l'édition du jour : l'écran
 //      /commander/morning n'affiche que lui. Deadline de facto : ce qui existe
 //      au passage du cron (règle commerçant : avant 23 h la veille).
-//   2. PUSH AUX FAVORIS : un seul push OneSignal, envoyé uniquement aux Yoppers
-//      qui ont au moins un des commerçants de l'édition en favori.
+//   2. PUSH PAR COMMUNE : un push OneSignal par commune ayant du contenu,
+//      envoyé à TOUS les Yoppers de la commune (l'ensemble de ses codes
+//      postaux, ex. Mettet = 5640 Mettet + Biesme + …). Décision Alex 23/07.
 //
 // Le push renvoie vers /commander/morning côté client.
 //
@@ -42,6 +43,13 @@ function isAuthorized(req) {
   }
   const authHeader = req.headers.get('authorization') || ''
   return authHeader === `Bearer ${cronSecret}`
+}
+
+// Codes postaux belges : 4 chiffres. Extrait depuis l'adresse libre du commerçant.
+function extraireCodePostal(adresse) {
+  if (!adresse) return null
+  const m = String(adresse).match(/\b(\d{4})\b/)
+  return m ? m[1] : null
 }
 
 async function handle(req) {
@@ -88,12 +96,30 @@ async function handle(req) {
     return NextResponse.json({ error: actusErr.message }, { status: 500 })
   }
 
-  // 3. Filtrage éligibilité (modèle 23/07 : le GMY est UNE édition, pas une par
-  //    zone). Le contenu retenu ici EST l'édition du jour ; l'écran client ne
-  //    montre que ce contenu (statut_morning='envoye' / push_envoye_at).
-  const dealIds = []
-  const actuIds = []
-  const commercantIds = new Set()
+  // 3. Communes actives = les zones GMY. Une édition/push par commune ayant du
+  //    contenu ; la zone = L'ENSEMBLE des codes postaux de la commune.
+  const { data: communesActives } = await supabase
+    .from('communes')
+    .select('id, nom, codes_postaux')
+    .eq('active', true)
+  const communes = (communesActives || []).filter(c => Array.isArray(c.codes_postaux) && c.codes_postaux.length > 0)
+  const communeDuCp = (cp) => (cp ? communes.find(c => c.codes_postaux.includes(cp)) || null : null)
+
+  // 4. Filtrage éligibilité + regroupement PAR COMMUNE. Le contenu retenu ici
+  //    EST l'édition du jour ; l'écran client ne montre que ce contenu
+  //    (statut_morning='envoye' / push_envoye_at).
+  const parCommune = new Map() // communeId → { commune, dealIds, actuIds, commercantIds }
+  const tousDealIds = []
+  const tousActuIds = []
+
+  function ajouter(commune, type, id, commercantId) {
+    if (!parCommune.has(commune.id)) {
+      parCommune.set(commune.id, { commune, dealIds: [], actuIds: [], commercantIds: new Set() })
+    }
+    const z = parCommune.get(commune.id)
+    z[type].push(id)
+    z.commercantIds.add(commercantId)
+  }
 
   for (const d of dealsPending || []) {
     const c = d.commercant
@@ -101,8 +127,10 @@ async function handle(req) {
     // Deals réservés à Communiquer + Vendre (gating canDo)
     if (!canDo(c.plan, 'deals')) continue
     if (!canDo(c.plan, 'morning')) continue
-    dealIds.push(d.id)
-    commercantIds.add(c.id)
+    const commune = communeDuCp(extraireCodePostal(c.adresse))
+    if (!commune) continue
+    ajouter(commune, 'dealIds', d.id, c.id)
+    tousDealIds.push(d.id)
   }
 
   for (const a of actusGmy || []) {
@@ -111,77 +139,84 @@ async function handle(req) {
     // Actus GMY autorisées à tous les plans commerçant (Exister limité à
     // 1/semaine mais c'est déjà validé côté saveActu, pas ici)
     if (!canDo(c.plan, 'actu_gmy')) continue
-    actuIds.push(a.id)
-    commercantIds.add(c.id)
+    const commune = communeDuCp(extraireCodePostal(c.adresse))
+    if (!commune) continue
+    ajouter(commune, 'actuIds', a.id, c.id)
+    tousActuIds.push(a.id)
   }
 
-  if (dealIds.length === 0 && actuIds.length === 0) {
+  if (tousDealIds.length === 0 && tousActuIds.length === 0) {
     return NextResponse.json({
       status: 'ok',
       date: today,
-      stats: { deals: 0, actus: 0, favoris_cibles: 0, push_sent: 0, push_failed: 0 },
+      stats: { communes: 0, deals: 0, actus: 0, push_sent: 0, push_failed: 0 },
       note: 'aucun deal ni actu éligible aujourd\'hui',
     })
   }
 
-  const stats = { deals: 0, actus: 0, favoris_cibles: 0, push_sent: 0, push_failed: 0, errors: [] }
+  const stats = { communes: 0, deals: 0, actus: 0, push_sent: 0, push_failed: 0, communes_sans_yoppers: 0, errors: [] }
 
-  // 4. Sélection éditoriale : on marque le contenu comme retenu pour l'édition
-  //    du jour AVANT le push (l'édition doit être correcte même si OneSignal
-  //    est indisponible ou qu'aucun favori n'existe encore).
-  if (dealIds.length > 0) {
+  // 5. Sélection éditoriale : on marque le contenu comme retenu pour l'édition
+  //    du jour AVANT les pushs (l'édition doit être correcte même si OneSignal
+  //    est indisponible ou qu'une commune n'a pas encore de Yoppers).
+  if (tousDealIds.length > 0) {
     const { error: upDealsErr } = await supabase
       .from('yoppaa_deals')
       .update({ statut_morning: 'envoye' })
-      .in('id', dealIds)
+      .in('id', tousDealIds)
     if (upDealsErr) {
       console.error('[cron/morning-yoppers] update deals statut échoué', upDealsErr)
       stats.errors.push({ step: 'deals_update', error: upDealsErr.message })
     } else {
-      stats.deals = dealIds.length
+      stats.deals = tousDealIds.length
     }
   }
-  if (actuIds.length > 0) {
+  if (tousActuIds.length > 0) {
     const { error: upActusErr } = await supabase
       .from('actualites')
       .update({ push_envoye_at: new Date().toISOString() })
-      .in('id', actuIds)
+      .in('id', tousActuIds)
     if (upActusErr) {
       console.error('[cron/morning-yoppers] update actus push_envoye_at échoué', upActusErr)
       stats.errors.push({ step: 'actus_update', error: upActusErr.message })
     } else {
-      stats.actus = actuIds.length
+      stats.actus = tousActuIds.length
     }
   }
 
-  // 5. Push aux FAVORIS (décision Alex 23/07) : le push GMY part uniquement aux
-  //    Yoppers qui ont AU MOINS UN des commerçants de l'édition en favori.
-  //    Un seul push par Yopper (dédupliqué), ciblage par external_id.
-  const { data: favorisRows } = await supabase
-    .from('favoris')
-    .select('client_id')
-    .in('commercant_id', [...commercantIds])
-  const clientIds = [...new Set((favorisRows || []).map(f => f.client_id).filter(Boolean))]
-  stats.favoris_cibles = clientIds.length
+  // 6. Un push PAR COMMUNE, envoyé à TOUS les Yoppers de la commune (tous ses
+  //    codes postaux confondus), ciblage par external_id.
+  for (const { commune, dealIds, actuIds, commercantIds } of parCommune.values()) {
+    stats.communes++
 
-  if (clientIds.length > 0) {
+    const { data: clientsZone } = await supabase
+      .from('clients')
+      .select('id')
+      .in('code_postal', commune.codes_postaux)
+    const clientIds = [...new Set((clientsZone || []).map(cl => cl.id).filter(Boolean))]
+
+    if (clientIds.length === 0) {
+      stats.communes_sans_yoppers++
+      continue
+    }
+
     const parts = []
     if (dealIds.length > 0) parts.push(`${dealIds.length} deal${dealIds.length > 1 ? 's' : ''}`)
     if (actuIds.length > 0) parts.push(`${actuIds.length} actu${actuIds.length > 1 ? 's' : ''}`)
-    const contents = `${parts.join(' · ')} de tes commerces favoris t'attendent ☀️`
+    const contents = `${parts.join(' · ')} près de chez toi (${commercantIds.size} commerce${commercantIds.size > 1 ? 's' : ''}) ☀️`
 
     const res = await envoyerPushParExternalIds(clientIds, {
       headings: 'Good Morning Yoppers',
       contents,
       url: '/commander/morning',
-      data: { kind: 'gmy', date: today },
+      data: { kind: 'gmy', commune: commune.nom, date: today },
       high_priority: false,
     })
     if (res.ok) {
-      stats.push_sent = 1
+      stats.push_sent++
     } else {
-      stats.push_failed = 1
-      stats.errors.push({ step: 'push', error: res.error })
+      stats.push_failed++
+      stats.errors.push({ commune: commune.nom, error: res.error })
     }
   }
 

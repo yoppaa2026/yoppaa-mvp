@@ -1397,9 +1397,10 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
                   ? { bg: '#FFF7ED', color: '#EA580C', border: '#FDBA74' }
                   : epuise
                   ? { bg: '#FEE2E2', color: '#DC2626', border: '#FCA5A5' }
-                  : eff.override
-                  ? { bg: '#F0FDF4', color: '#10B981', border: '#86EFAC' }
-                  : { bg: '#fff', color: T.bgPanel, border: T.hairline }
+                  // Vert = il y a du stock ce jour, que la valeur vienne du défaut
+                  // de l'article ou d'une personnalisation du jour (Alex 23/07 :
+                  // la nuance défaut/personnalisé ne porte aucun sens commerçant)
+                  : { bg: '#F0FDF4', color: '#10B981', border: '#86EFAC' }
                 return (
                   <button key={jour} onClick={() => ouvrirEdition(jour)}
                     title={conge ? `Fermeture exceptionnelle${conge.motif ? ` : ${conge.motif}` : ''}` : fermeCommerce ? (derogation ? 'Stock prévu malgré la fermeture (horaires du Profil)' : 'Commerce fermé ce jour (horaires du Profil)') : undefined}

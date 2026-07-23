@@ -2320,7 +2320,10 @@ export default function Commander() {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <BoutonGoodMorning nonVu={gmNonVu} onClick={() => router.push('/commander/morning')}/>
-                <button onClick={() => { if (!showLocManuelle) demanderGeolocalisation(); setShowLocManuelle(false) }}
+                {/* Pill d'adresse tappable : ouvre directement l'édition (le lien
+                    « Saisir manuellement » séparé est supprimé, zéro friction).
+                    Le GPS se relance depuis le panneau (« Utiliser ma position »). */}
+                <button onClick={() => setShowLocManuelle(v => !v)}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(12px)', border: `1px solid ${T.light}33`, borderRadius: 100, padding: '0.45rem 0.875rem 0.45rem 0.75rem', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', transition: 'all 0.2s', letterSpacing: '-0.2px' }}>
                 {geoLoading
                   ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="9" stroke="white" strokeWidth="2.5" strokeDasharray="30 10" strokeLinecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></circle></svg>
@@ -2330,18 +2333,14 @@ export default function Commander() {
                     </svg>
                 }
                 <span style={{ maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {geoLoading ? 'Localisation...' : rue || locManuelle || (position ? 'Près de toi' : 'Activer GPS')}
+                  {geoLoading ? 'Localisation...' : rue || locManuelle || (position ? 'Près de toi' : 'Ma position')}
                 </span>
+                {showLocManuelle
+                  ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M18 6L6 18M6 6l12 12" stroke="rgba(255,255,255,0.7)" strokeWidth="2.5" strokeLinecap="round"/></svg>
+                  : <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="rgba(255,255,255,0.7)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="rgba(255,255,255,0.7)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                }
               </button>
               </div>
-              <button onClick={() => setShowLocManuelle(v => !v)}
-                style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'rgba(196,160,244,0.7)', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}>
-                {showLocManuelle
-                  ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="rgba(196,160,244,0.8)" strokeWidth="2.5" strokeLinecap="round"/></svg>
-                  : <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="rgba(196,160,244,0.8)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="rgba(196,160,244,0.8)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                }
-                {showLocManuelle ? 'Fermer' : 'Saisir manuellement'}
-              </button>
             </div>
           </div>
 
@@ -2369,7 +2368,15 @@ export default function Commander() {
                   </button>
                 )}
               </div>
-              <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.45)', marginTop: 4, paddingLeft: 4 }}>Entrée ou OK pour valider</p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, paddingLeft: 4 }}>
+                <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.45)', margin: 0 }}>Entrée ou OK pour valider</p>
+                {/* Relance du GPS depuis le panneau (la pill n'appelle plus la géoloc) */}
+                <button onClick={() => { demanderGeolocalisation(); setShowLocManuelle(false) }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'rgba(196,160,244,0.9)', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer', padding: 0, fontFamily: '"DM Sans", sans-serif' }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(196,160,244,0.9)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                  Utiliser ma position
+                </button>
+              </div>
             </div>
           )}
 

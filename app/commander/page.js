@@ -1316,6 +1316,17 @@ export default function Commander() {
     toastTimerRef.current = setTimeout(() => setToast(null), 3500)
   }
 
+  // Partage de l'app (onglet Tribu) : Web Share natif, repli copie du lien.
+  async function partagerYoppaa() {
+    const url = 'https://www.yoppaa.app'
+    const texte = 'Découvre Yoppaa, ton quartier dans ta poche : commande et réserve chez tes commerçants locaux.'
+    try {
+      if (navigator.share) { await navigator.share({ title: 'Yoppaa', text: texte, url }); return }
+      await navigator.clipboard.writeText(url)
+      showToast({ type: 'success', msg: 'Lien copié, partage-le autour de toi !' })
+    } catch { /* partage annulé par l'utilisateur : silencieux */ }
+  }
+
   // Modal confirmation custom (remplace window.confirm() qui est bloque/silencieux
   // en PWA installee iPhone). Utilisee pour confirmer annulations RDV et commandes.
   const [confirmModal, setConfirmModal] = useState(null)
@@ -2927,6 +2938,13 @@ export default function Commander() {
                 <p style={{ fontSize: '0.85rem', color: T.light, lineHeight: 1.55, opacity: 0.92, maxWidth: 320, margin: '0 auto' }}>
                   Tu fais vivre Yoppaa. Suggère un commerce qu&rsquo;on devrait ajouter, ou signale un souci sur une fiche.
                 </p>
+                {/* Pastille tribu locale : rend la communauté tangible (données déjà chargées) */}
+                {commercants.length > 0 && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12, padding: '5px 14px', borderRadius: 100, background: 'rgba(255,255,255,0.12)', border: `1px solid ${T.light}33`, backdropFilter: 'blur(8px)', fontSize: '0.72rem', fontWeight: 700, color: '#fff' }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B98199' }}/>
+                    {commercants.length} commerce{commercants.length > 1 ? 's' : ''} près de toi
+                  </span>
+                )}
               </div>
 
               <div style={{ padding: '1.25rem 1rem 1rem' }}>
@@ -2940,7 +2958,40 @@ export default function Commander() {
                 </div>
                 <SuggestionForm clientId={clientId}/>
 
-                {/* Section 2 : Signaler un problème */}
+                {/* Section 2 : Faire grandir la tribu (partage de l'app) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, marginTop: 24 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+                    Faire grandir la tribu
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                </div>
+                <div style={{ background: '#fff', borderRadius: 16, padding: '16px 18px 14px', border: `1px solid ${T.pale}` }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 12, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m3 11 18-8-8 18-2.5-7.5L3 11Z"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 14, fontWeight: 800, color: T.ink, margin: '0 0 4px', letterSpacing: '-0.2px', lineHeight: 1.3 }}>
+                        Plus on est de Yoppers, plus le quartier vit
+                      </p>
+                      <p style={{ fontSize: 12, color: T.muted, margin: 0, lineHeight: 1.5 }}>
+                        Fais découvrir Yoppaa à tes voisins, ta famille, tes collègues : chaque Yopper en plus aide tes commerçants préférés.
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={partagerYoppaa}
+                    style={{ width: '100%', padding: '10px 18px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: `0 4px 14px ${T.main}44` }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                      <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>
+                    </svg>
+                    Partager Yoppaa
+                  </button>
+                </div>
+
+                {/* Section 3 : Signaler un problème */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, marginTop: 24 }}>
                   <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '1.2px' }}>
                     Signaler un problème

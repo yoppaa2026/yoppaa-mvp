@@ -174,6 +174,9 @@ function TabMenu({ commercantId, commercant, toast }) {
   // Variantes (matrice taille/couleur) proposées au détail et au service.
   // L'alimentaire garde son système d'options/suppléments.
   const variantesCategorie = estDetail || estVitrine
+  // Jours où le commerce est FERMÉ selon les horaires du Profil : le stock y est
+  // présenté comme fermé automatiquement (dérogation possible après confirmation).
+  const joursFermes = JOURS_KEYS.filter(j => commercant?.horaires_detail?.[j]?.ouvert === false)
   // ─── Sous-onglet actif : Articles | Catégories | Personnalisation ────────
   const [subTab, setSubTab] = useState('articles')
   const [searchQuery, setSearchQuery] = useState('')
@@ -254,14 +257,16 @@ function TabMenu({ commercantId, commercant, toast }) {
     }))
   }
 
-  // Applique un dispo aux 7 jours. Pour le jour actuel on rajoute déjà_commandé.
+  // Applique un dispo aux jours d'OUVERTURE (les jours fermés au Profil sont
+  // ignorés). Pour le jour actuel on rajoute déjà_commandé.
   async function setStockTousJours(articleId, dispo, dejaCommandeAuj, jourActuelKey) {
     const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
-    await Promise.all(JOURS.map(j => {
+    const ouverts = JOURS.filter(j => !joursFermes.includes(j))
+    await Promise.all(ouverts.map(j => {
       const brut = j === jourActuelKey ? (dispo + (dejaCommandeAuj || 0)) : dispo
       return setStockJour(articleId, j, brut, true)
     }))
-    toast('Stock appliqué aux 7 jours')
+    toast(joursFermes.length > 0 ? 'Stock appliqué aux jours d\'ouverture' : 'Stock appliqué aux 7 jours')
   }
 
   // Charge les quantités commandées aujourd'hui par article (exclut "non_retire")
@@ -561,7 +566,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     if (showForm && editId === a.id) {
       return <div key={a.id}>{renderArticleForm()}</div>
     }
-    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} estDetail={estDetail} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
+    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} estDetail={estDetail} joursFermes={joursFermes} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
   }
 
   return (
@@ -1169,7 +1174,7 @@ function VariantesArticle({ article, toast }) {
 const JOURS_KEYS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
-function ArticleCard({ a, estVitrine = false, estDetail = false, onEdit, onToggle, onUpdateStock, onDelete, s, dejaCommande = 0, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
+function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [], onEdit, onToggle, onUpdateStock, onDelete, s, dejaCommande = 0, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -1198,8 +1203,15 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, onEdit, onToggl
   const effAuj = dispoEffectif(jourActuelKey)
   const stockBrutAuj = effAuj.brut
   const stockRestant = effAuj.dispo
+  // Commerce fermé aujourd'hui (horaires Profil), sans dérogation de stock active
+  const fermeCommerceAuj = joursFermes.includes(jourActuelKey) && !(effAuj.override && !effAuj.ferme && stockBrutAuj > 0)
 
   function ouvrirEdition(jour) {
+    // Jour fermé au Profil : avertit avant d'autoriser une dérogation de stock.
+    if (joursFermes.includes(jour)) {
+      const ok = window.confirm(`Ton commerce est fermé le ${jour} (horaires du Profil). Prévoir du stock ce jour-là quand même ?`)
+      if (!ok) return
+    }
     const eff = dispoEffectif(jour)
     setEditVal(String(eff.dispo))
     setJourEdite(jour)
@@ -1252,7 +1264,9 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, onEdit, onToggl
               )
             })()}
             {!estVitrine && !estDetail && (a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.bgPanel, background: '#F8F6FF', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="clock" size={11} color={T.bgPanel}/>{a.temps_prepa} min</span>}
-            {!estVitrine && !estDetail && (effAuj.ferme ? (
+            {!estVitrine && !estDetail && (fermeCommerceAuj ? (
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Fermé aujourd&rsquo;hui (horaires)</span>
+            ) : effAuj.ferme ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Fermé aujourd&rsquo;hui</span>
             ) : stockBrutAuj > 0 ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: stockRestant === 0 ? '#DC2626' : stockRestant <= 2 ? '#EA580C' : '#10B981', background: stockRestant === 0 ? '#FEE2E2' : stockRestant <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>
@@ -1289,8 +1303,17 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, onEdit, onToggl
                 const ferme = eff.ferme
                 const epuise = !ferme && eff.dispo === 0
                 const aujourdhui = jour === jourActuelKey
-                const couleurs = ferme
+                const fermeCommerce = joursFermes.includes(jour)
+                // Dérogation : stock actif malgré la fermeture du commerce (orange, à surveiller)
+                const derogation = fermeCommerce && eff.override && !ferme && (eff.brut || 0) > 0
+                const afficheFerme = ferme || (fermeCommerce && !derogation)
+                const enEdition = jourEdite === jour
+                const couleurs = enEdition
+                  ? { bg: T.bgPanel, color: '#fff', border: T.bgPanel }
+                  : afficheFerme
                   ? { bg: '#F3F4F6', color: '#9CA3AF', border: '#E5E7EB' }
+                  : derogation
+                  ? { bg: '#FFF7ED', color: '#EA580C', border: '#FDBA74' }
                   : epuise
                   ? { bg: '#FEE2E2', color: '#DC2626', border: '#FCA5A5' }
                   : eff.override
@@ -1298,9 +1321,11 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, onEdit, onToggl
                   : { bg: '#fff', color: T.bgPanel, border: T.hairline }
                 return (
                   <button key={jour} onClick={() => ouvrirEdition(jour)}
-                    style={{ padding: '4px 8px', borderRadius: 8, border: `1.5px solid ${aujourdhui ? T.main : couleurs.border}`, background: couleurs.bg, color: couleurs.color, fontSize: 11, fontWeight: 700, cursor: 'pointer', minWidth: 52, fontFamily: 'inherit', transition: 'all 0.15s', position: 'relative' }}>
+                    title={fermeCommerce ? (derogation ? 'Stock prévu malgré la fermeture (horaires du Profil)' : 'Commerce fermé ce jour (horaires du Profil)') : undefined}
+                    style={{ padding: '4px 8px', borderRadius: 8, border: `1.5px solid ${enEdition ? T.bgPanel : aujourdhui ? T.main : couleurs.border}`, background: couleurs.bg, color: couleurs.color, fontSize: 11, fontWeight: 700, cursor: 'pointer', minWidth: 52, fontFamily: 'inherit', transition: 'all 0.15s', position: 'relative' }}>
+                    {aujourdhui && <span title="Aujourd'hui" style={{ position: 'absolute', top: 3, right: 4, width: 5, height: 5, borderRadius: '50%', background: enEdition ? '#fff' : T.main }}/>}
                     <span style={{ display: 'block', fontSize: 9, opacity: 0.7 }}>{JOURS_LABELS_COURT[idx]}</span>
-                    <span style={{ display: 'block', fontWeight: 900 }}>{ferme ? '✕' : eff.dispo}</span>
+                    <span style={{ display: 'block', fontWeight: 900 }}>{afficheFerme ? '✕' : eff.dispo}</span>
                   </button>
                 )
               })}
@@ -1315,7 +1340,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, onEdit, onToggl
                   {/* Ligne 1 : label + input + bouton primaire (sur petit écran : label en haut, input + bouton sur la ligne) */}
                   <div className="stock-editor-row" style={{ marginBottom: 8 }}>
                     <span className="stock-editor-label" style={{ fontSize: 12, fontWeight: 800, color: T.deep }}>
-                      {JOURS_LABELS_COURT[JOURS_KEYS.indexOf(jourEdite)]} &mdash; Stock disponible
+                      Stock du {jourEdite}
                     </span>
                     <input className="stock-editor-input" type="number" min={0} value={editVal} autoFocus
                       onChange={e => setEditVal(e.target.value)}
@@ -1330,13 +1355,18 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, onEdit, onToggl
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <button onClick={() => sauvegarder(jourEdite, false)}
                       style={{ ...s.btn, padding: '5px 12px', fontSize: 12, background: '#FEE2E2', color: '#DC2626', border: '1px solid #FCA5A5' }}>
-                      Fermer ce jour
+                      Article indisponible ce jour
                     </button>
                     <button onClick={fermerEdition}
                       style={{ ...s.btn, ...s.btnGhost, padding: '5px 12px', fontSize: 12 }}>
                       Annuler
                     </button>
                   </div>
+                  {joursFermes.includes(jourEdite) && (
+                    <p style={{ fontSize: 11, color: '#EA580C', fontWeight: 700, margin: '8px 0 0', lineHeight: 1.5 }}>
+                      Attention : ton commerce est fermé le {jourEdite} selon tes horaires (Profil). Les clients ne pourront pas commander ce jour-là.
+                    </p>
+                  )}
                   {consoEdit > 0 && (
                     <p style={{ fontSize: 11, color: T.muted, fontWeight: 600, margin: '8px 0 0' }}>
                       {consoEdit} déjà commandé{consoEdit > 1 ? 's' : ''} aujourd&rsquo;hui, sera ajouté automatiquement au total brut interne.

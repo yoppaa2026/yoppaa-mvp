@@ -2275,6 +2275,7 @@ export default function Commander() {
         .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         input, textarea, button, select { font-family: "DM Sans", sans-serif; }
         @keyframes tribu-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.7; transform:scale(1.15); } }
+        @keyframes navPillPulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.14); } }
         @keyframes tribu-pulse2 { 0%,100% { opacity:0.85; transform:scale(1); } 50% { opacity:0.5; transform:scale(1.1); } }
         @keyframes tribu-pulse3 { 0%,100% { opacity:0.6; transform:scale(1); } 50% { opacity:0.3; transform:scale(1.05); } }
         @keyframes dot-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.4); opacity:0.7; } }
@@ -3271,7 +3272,10 @@ export default function Commander() {
             ...(PLAN_PUBLIC_ENABLED ? [{ key: 'services',  label: 'Officiel',  badge: alerteUrgenteActive ? 1 : 0 }] : []),
             // Onglet 'commandes' : pas de label (label vide) + icône plus grande pour compenser,
             // 2 pastilles distinctes (violette = commandes en cours, verte = RDVs a venir).
-            { key: 'commandes', label: '', badgeCmd: commandesASwiper.length + commandesEnLivraison.length + commandesEnCours.length, badgeRdv: rdvsAVenir.length, badge: badgeCommandes },
+            // Pills légendées (icône + chiffre) : violette = commandes, verte = RDV.
+            // La violette PULSE quand une action attend le Yopper (commande prête
+            // à retirer, ou livraison en route à réceptionner).
+            { key: 'commandes', label: 'Suivi', badgeCmd: commandesASwiper.length + commandesEnLivraison.length + commandesEnCours.length, badgeRdv: rdvsAVenir.length, badgeCmdUrgent: (commandesASwiper.length + commandesEnLivraison.length) > 0, badge: badgeCommandes },
             { key: 'tribu',     label: 'Tribu',     badge: 0 },
             { key: 'profil',    label: 'Profil',    badge: 0 },
           ].map(item => {
@@ -3294,7 +3298,7 @@ export default function Commander() {
                   /* Icone v4 : agrandie 36px + decalee vers le bas (marginTop 6) pour
                      laisser de la place aux pastilles qui descendent aussi (top 6).
                      Sans ce decalage, pastilles + icone faisaient effet 'oreilles de Mickey'. */
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision" style={{ marginTop: 6 }}>
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision" style={{ marginTop: 2 }}>
                     {/* Cadre calendrier */}
                     <rect x="3" y="5" width="18" height="16" rx="2.5" stroke={stroke} strokeWidth="2" strokeLinejoin="round" opacity={op}/>
                     {/* Barre header */}
@@ -3345,12 +3349,14 @@ export default function Commander() {
                     Ordre coherent avec le toggle interne (Commandes a gauche / RDVs a droite).
                     Si une seule est >0, l'autre n'est pas rendue (pas de "0"). */}
                 {item.key === 'commandes' && item.badgeCmd > 0 && (
-                  <span style={{ position: 'absolute', top: 6, right: 'calc(50% + 10px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: T.main, color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: `0 2px 8px ${T.main}99, 0 0 0 1.5px ${T.main}44`, lineHeight: 1, letterSpacing: '-0.2px' }}>
+                  <span style={{ position: 'absolute', top: 2, right: 'calc(50% + 6px)', height: 20, padding: '0 7px 0 5px', borderRadius: 100, background: T.main, color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 3, border: '2px solid #fff', boxShadow: `0 2px 8px ${T.main}99, 0 0 0 1.5px ${T.main}44`, lineHeight: 1, letterSpacing: '-0.2px', animation: item.badgeCmdUrgent ? 'navPillPulse 1.4s ease-in-out infinite' : 'none' }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg>
                     {item.badgeCmd > 9 ? '9+' : item.badgeCmd}
                   </span>
                 )}
                 {item.key === 'commandes' && item.badgeRdv > 0 && (
-                  <span style={{ position: 'absolute', top: 6, left: 'calc(50% + 10px)', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 100, background: '#10B981', color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: '0 2px 8px rgba(16,185,129,0.55), 0 0 0 1.5px rgba(16,185,129,0.27)', lineHeight: 1, letterSpacing: '-0.2px' }}>
+                  <span style={{ position: 'absolute', top: 2, left: 'calc(50% + 6px)', height: 20, padding: '0 7px 0 5px', borderRadius: 100, background: '#10B981', color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 3, border: '2px solid #fff', boxShadow: '0 2px 8px rgba(16,185,129,0.55), 0 0 0 1.5px rgba(16,185,129,0.27)', lineHeight: 1, letterSpacing: '-0.2px' }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
                     {item.badgeRdv > 9 ? '9+' : item.badgeRdv}
                   </span>
                 )}

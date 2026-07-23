@@ -7,6 +7,11 @@
 -- (lib/plans.js), pas ici.
 -- ============================================================
 
+-- 0. Photo de couverture de l'article (correctif 23/07 : la colonne n'existait
+--    pas en prod contrairement a ce que la doc d'audit indiquait).
+ALTER TABLE articles
+  ADD COLUMN IF NOT EXISTS photo_url text;
+
 -- 1. Toggle affichage des photos du catalogue (tous les commercants n'en veulent pas)
 ALTER TABLE commercants
   ADD COLUMN IF NOT EXISTS photos_catalogue_actif boolean NOT NULL DEFAULT true;

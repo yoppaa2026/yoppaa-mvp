@@ -22,9 +22,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
-import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailCommandeConfirmee, emailNouvelleCommandeCommercant } from '@/lib/resend'
+import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant } from '@/lib/resend'
+import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
-import { programmerRappelCommande, programmerRappelRdv } from '@/lib/rappels'
+import { programmerRappelRdv } from '@/lib/rappels'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -297,130 +298,8 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
   console.info('[webhook/commande] confirmée OK', { commandeId, pi: paymentIntent.id })
 }
 
-// ─── Helper : envoie emailCommandeConfirmee (Yopper) + emailNouvelleCommandeCommercant
-// ─── (commerçant si notif_mode='chaque'). Fire-and-forget : try/catch par email
-// ─── pour qu'une erreur Resend n'interrompe pas l'autre envoi.
-async function envoyerEmailsCommande(commandeId, supabase) {
-  // NB : la table commandes a client_email/client_nom/client_telephone.
-  // commande_articles a quantite/prix_unitaire/options (jsonb). PAS de
-  // prix_total ni option_libelle (calculés ici côté JS pour les templates).
-  // PAS de notes_client non plus (la table commandes ne l'a pas).
-  const { data: cmd, error: errCmd } = await supabase
-    .from('commandes')
-    .select(`
-      id, numero_commande, total, date_commande,
-      client_email, client_nom, client_telephone,
-      annulation_token, mode_retrait, adresse_livraison, frais_livraison,
-      commercant:commercants(id, nom, slug, adresse, email, notif_mode, delai_annulation_heures),
-      creneau:creneaux(heure_debut, heure_fin),
-      creneau_livraison:livraison_creneaux(heure_debut, heure_fin),
-      articles:commande_articles(quantite, prix_unitaire, options, article:articles(nom))
-    `)
-    .eq('id', commandeId)
-    .single()
-  if (errCmd || !cmd) {
-    console.error('[webhook/commande] email helper KO : commande introuvable', { commandeId, errCmd })
-    return
-  }
-
-  // Split client_nom (= "Alexandre Verstappen") → prenom + nom pour l'email
-  const parts = (cmd.client_nom || '').trim().split(/\s+/)
-  const prenom = parts[0] || 'Yopper'
-  const nom = parts.slice(1).join(' ')
-
-  // Format les options jsonb [{groupe_nom, valeur_nom, prix_supplement}] en libellé
-  function formatOptions(opts) {
-    if (!Array.isArray(opts) || opts.length === 0) return null
-    return opts.map(o => `${o.groupe_nom ? o.groupe_nom + ': ' : ''}${o.valeur_nom || ''}`).join(' · ')
-  }
-
-  const articlesFlat = (cmd.articles || []).map(a => ({
-    nom:            a.article?.nom || '—',
-    quantite:       a.quantite,
-    option_libelle: formatOptions(a.options),
-    prix_total:     Number(a.prix_unitaire || 0) * Number(a.quantite || 0),
-  }))
-
-  // 1) Email Yopper
-  if (cmd.client_email) {
-    try {
-      const cren = cmd.mode_retrait === 'livraison' ? cmd.creneau_livraison : cmd.creneau
-      // CTA "crée un mot de passe" : offert aux Yoppers sans mot de passe utilisable —
-      // invité pur (auth_user_id NULL) OU compte magic-link (has_password absent). Pas
-      // d'offre si le compte a déjà un mot de passe (has_password === true). Le flag est
-      // fiabilisé par un auto-repair au login par mot de passe (cf. commander/auth +
-      // login) : les comptes anciens (créés avant le flag) cessent d'être sollicités dès
-      // leur prochaine connexion par mot de passe. En cas de doute (lookup KO) on ne nag pas.
-      const { data: cli } = await supabase.from('clients').select('auth_user_id').eq('email', cmd.client_email).maybeSingle()
-      let offrirMdp = !cli?.auth_user_id
-      if (cli?.auth_user_id) {
-        try {
-          const { data: au } = await supabase.auth.admin.getUserById(cli.auth_user_id)
-          offrirMdp = au?.user?.user_metadata?.has_password !== true
-        } catch {
-          offrirMdp = false
-        }
-      }
-      const html = emailCommandeConfirmee({
-        yopper_prenom:           prenom,
-        commercant_nom:          cmd.commercant?.nom || '',
-        commercant_adresse:      cmd.commercant?.adresse || '',
-        commercant_slug:         cmd.commercant?.slug || '',
-        numero_commande:         cmd.numero_commande,
-        articles:                articlesFlat,
-        total:                   cmd.total,
-        date_retrait:            cmd.date_commande,
-        heure_debut:             cren?.heure_debut,
-        heure_fin:               cren?.heure_fin,
-        mode_retrait:            cmd.mode_retrait,
-        adresse_livraison:       cmd.adresse_livraison,
-        frais_livraison:         cmd.frais_livraison,
-        annulation_token:        cmd.annulation_token,
-        delai_annulation_heures: cmd.commercant?.delai_annulation_heures ?? 2,
-        offrir_mdp:              offrirMdp,
-        offrir_mdp_email:        cmd.client_email,
-      })
-      await envoyerAuCommercant({
-        to: cmd.client_email,
-        subject: `Ta commande chez ${cmd.commercant?.nom || 'le commerçant'} est confirmée`,
-        html,
-      })
-    } catch (e) {
-      console.error('[webhook/commande] envoi email Yopper KO', e?.message)
-    }
-  }
-
-  // 2) Email commerçant (si notif_mode='chaque')
-  if (cmd.commercant?.notif_mode === 'chaque' && cmd.commercant?.email) {
-    try {
-      const html = emailNouvelleCommandeCommercant({
-        nom_commercant:   cmd.commercant.nom,
-        yopper_prenom:    prenom,
-        yopper_nom:       nom,
-        yopper_email:     cmd.client_email,
-        yopper_telephone: cmd.client_telephone,
-        numero_commande:  cmd.numero_commande,
-        articles:         articlesFlat,
-        total:            cmd.total,
-        date_retrait:     cmd.date_commande,
-        heure_debut:      cmd.creneau?.heure_debut,
-        heure_fin:        cmd.creneau?.heure_fin,
-        notes_client:     cmd.notes_client,
-      })
-      await envoyerAuCommercant({
-        to: cmd.commercant.email,
-        subject: `Nouvelle commande #${cmd.numero_commande || ''} — ${prenom}`,
-        html,
-      })
-    } catch (e) {
-      console.error('[webhook/commande] envoi email commerçant KO', e?.message)
-    }
-  }
-
-  // 3) Rappel push programmé 30 min avant le créneau (retrait uniquement).
-  //    Best-effort, non bloquant. Voir lib/rappels.js.
-  await programmerRappelCommande(commandeId, supabase)
-}
+// ─── (envoyerEmailsCommande : déplacé dans lib/commande-notifs.js le 23/07,
+// ─── partagé avec le chemin « paiement sur place » de create-commande.)
 
 // ─── Paiement KO (failed/canceled) : commande -> annulee_paiement_ko ────────
 //

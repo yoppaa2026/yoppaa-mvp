@@ -671,6 +671,9 @@ export default function CommanderSlug() {
   const [loadingCommande, setLoadingCommande] = useState(false)
   const [erreurCommande, setErreurCommande] = useState(null)
   const [ajustementStock, setAjustementStock] = useState(null)
+  // Mode de paiement choisi (en_ligne | sur_place). null = défaut selon ce que
+  // le commerçant propose : en ligne si Stripe actif, sinon sur place si accepté.
+  const [modePaiement, setModePaiement] = useState(null)
   const [loadingCancel, setLoadingCancel] = useState(false)
   const [cancelResult, setCancelResult] = useState(null)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '' })
@@ -1473,10 +1476,22 @@ export default function CommanderSlug() {
           : [],
       }))
 
+      // Mode de paiement effectif : choix explicite du Yopper, sinon défaut
+      // selon ce que le commerçant propose (en ligne prioritaire).
+      const stripeOK = !!commercant.stripe_account_charges_enabled
+      const cashOK = !!commercant.accepte_paiement_cash
+      const modeEffectif = modePaiement || (stripeOK ? 'en_ligne' : cashOK ? 'sur_place' : null)
+      if (!modeEffectif) {
+        setErreurCommande('La commande en ligne n\'est pas encore disponible chez ce commerçant.')
+        setLoadingCommande(false)
+        return
+      }
+
       const res = await fetch('/api/stripe/checkout/create-commande', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          paiement_mode: modeEffectif,
           commercant_id: commercant.id,
           date_commande: dateStr,
           articles: articlesPayload,
@@ -1509,6 +1524,14 @@ export default function CommanderSlug() {
         }
         setErreurCommande(data?.error || 'Erreur lors de la création de la commande.')
         setLoadingCommande(false)
+        return
+      }
+
+      // Paiement sur place : la commande est déjà confirmée côté serveur, pas de
+      // Stripe. On rejoint le flux de confirmation standard (?paiement=ok) qui
+      // affiche l'écran Yoppé + nettoie le panier localStorage.
+      if (data.cash) {
+        window.location.href = `/commander/${commercant.slug}?paiement=ok&commande_id=${data.commande_id}`
         return
       }
 
@@ -2748,15 +2771,54 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                <button onClick={passerCommande} disabled={loadingCommande || !formValide}
-                  style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: !formValide ? 0.45 : 1, cursor: !formValide ? 'default' : 'pointer' }}>
-                  {loadingCommande ? 'Redirection…' : (
+                {(() => {
+                  // Modes de paiement proposés par le commerçant (vue publique) :
+                  // en ligne (Stripe actif) et/ou sur place (accepte_paiement_cash).
+                  const stripeOK = !!commercant?.stripe_account_charges_enabled
+                  const cashOK = !!commercant?.accepte_paiement_cash
+                  const modeEffectif = modePaiement || (stripeOK ? 'en_ligne' : cashOK ? 'sur_place' : null)
+                  const surPlace = modeEffectif === 'sur_place'
+                  return (
                     <>
-                      Payer &amp; confirmer - {totalAvecFrais().toFixed(2)}€
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+                      {stripeOK && cashOK && (
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                          {[
+                            { val: 'en_ligne', label: 'Payer en ligne', sous: 'Carte ou Bancontact' },
+                            { val: 'sur_place', label: 'Payer sur place', sous: `Au ${modeCommande === 'livraison' ? 'livreur' : 'retrait'}, espèces ou carte` },
+                          ].map(opt => {
+                            const sel = modeEffectif === opt.val
+                            return (
+                              <button key={opt.val} type="button" onClick={() => setModePaiement(opt.val)}
+                                style={{ flex: 1, padding: '10px 12px', borderRadius: 14, border: `2px solid ${sel ? T.main : '#EEE9F5'}`, background: sel ? '#F8F6FF' : '#fff', cursor: 'pointer', textAlign: 'left', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s' }}>
+                                <span style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', color: sel ? T.main : '#1A0840' }}>{opt.label}</span>
+                                <span style={{ display: 'block', fontSize: '0.7rem', color: '#6B7280', fontWeight: 600, marginTop: 2 }}>{opt.sous}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                      {!stripeOK && cashOK && (
+                        <p style={{ fontSize: '0.78rem', color: '#1A0840', background: '#F8F6FF', border: '1px solid #EDE0FF', borderRadius: 12, padding: '10px 14px', marginBottom: 10, fontWeight: 600, lineHeight: 1.5 }}>
+                          Tu paies <strong>sur place</strong> ({modeCommande === 'livraison' ? 'au livreur' : 'au retrait'}), en espèces ou par carte. Ta commande est confirmée immédiatement.
+                        </p>
+                      )}
+                      {!stripeOK && !cashOK && (
+                        <p style={{ fontSize: '0.78rem', color: '#DC2626', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 12, padding: '10px 14px', marginBottom: 10, fontWeight: 700, lineHeight: 1.5 }}>
+                          La commande en ligne n&rsquo;est pas encore disponible chez ce commerçant.
+                        </p>
+                      )}
+                      <button onClick={passerCommande} disabled={loadingCommande || !formValide || !modeEffectif}
+                        style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (!formValide || !modeEffectif) ? 0.45 : 1, cursor: (!formValide || !modeEffectif) ? 'default' : 'pointer' }}>
+                        {loadingCommande ? (surPlace ? 'Confirmation…' : 'Redirection…') : (
+                          <>
+                            {surPlace ? 'Confirmer' : 'Payer & confirmer'} - {totalAvecFrais().toFixed(2)}€
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+                          </>
+                        )}
+                      </button>
                     </>
-                  )}
-                </button>
+                  )
+                })()}
                 {!rgpdCommande && (
                   <p style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: '#DC2626', textAlign: 'center', marginTop: 6, fontWeight: 600, justifyContent: 'center', width: '100%' }}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

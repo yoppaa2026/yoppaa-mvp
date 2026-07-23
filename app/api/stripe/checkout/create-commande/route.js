@@ -33,11 +33,10 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { geocoderAdresse } from '@/lib/geocode'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
+import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 
 export async function POST(request) {
   try {
-    requireStripe()
-
     // Anti-spam commandes (#3) : 10 commandes / 60 s par IP. Fail-open si Upstash
     // absent/injoignable (voir lib/ratelimit.js).
     const rl = await checkLimit(ordersLimiter, clientIp(request))
@@ -51,8 +50,14 @@ export async function POST(request) {
       client_email, client_prenom, client_nom, client_telephone,
       rgpd_marketing,
       mode_retrait, creneau_livraison_id, adresse_livraison, code_postal_livraison,
+      paiement_mode,
     } = body
     const estLivraison = mode_retrait === 'livraison'
+    // Paiement sur place (cash/carte au comptoir) : la commande est confirmée
+    // immédiatement, sans Stripe Checkout. Autorisé uniquement si le commerçant
+    // a activé accepte_paiement_cash (vérifié plus bas, server-side).
+    const surPlace = paiement_mode === 'sur_place'
+    if (!surPlace) requireStripe()
 
     // ─── 1) Validations basiques ───────────────────────────────────────────
     if (!commercant_id || !date_commande) {
@@ -84,7 +89,7 @@ export async function POST(request) {
     // ─── 2) Récup commerçant + Stripe Connect prérequis ────────────────────
     const { data: commercant, error: errC } = await supabase
       .from('commercants')
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication')
+      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash')
       .eq('id', commercant_id)
       .single()
     if (errC || !commercant) {
@@ -93,7 +98,10 @@ export async function POST(request) {
     if (commercant.statut_publication !== 'publie') {
       return NextResponse.json({ ok: false, error: 'Ce commerçant n\'accepte pas encore de commandes.' }, { status: 400 })
     }
-    if (!commercant.stripe_account_id || !commercant.stripe_account_charges_enabled) {
+    if (surPlace && !commercant.accepte_paiement_cash) {
+      return NextResponse.json({ ok: false, error: 'Le paiement sur place n\'est pas proposé chez ce commerçant.' }, { status: 400 })
+    }
+    if (!surPlace && (!commercant.stripe_account_id || !commercant.stripe_account_charges_enabled)) {
       return NextResponse.json({ ok: false, error: 'Le paiement en ligne n\'est pas encore activé chez ce commerçant.' }, { status: 400 })
     }
 
@@ -207,7 +215,10 @@ export async function POST(request) {
       })
     }
 
-    if (totalCents < 50) {
+    if (totalCents <= 0) {
+      return NextResponse.json({ ok: false, error: 'Total invalide.' }, { status: 400 })
+    }
+    if (!surPlace && totalCents < 50) {
       return NextResponse.json({ ok: false, error: 'Total trop faible (minimum 0,50 € Stripe).' }, { status: 400 })
     }
     const totalEUR = totalCents / 100
@@ -361,6 +372,29 @@ export async function POST(request) {
     }
 
     // ─── 8) Réservations stock : déjà posées atomiquement à l'étape 6.5 ─────
+
+    // ─── 8.5) PAIEMENT SUR PLACE : confirmation immédiate, pas de Stripe ────
+    // Miroir exact du webhook paiement OK : bascule en_attente (paye_en_ligne
+    // reste false), libération de la réservation TTL (la commande EST le stock
+    // consommé), puis emails + rappel push via lib/commande-notifs.
+    if (surPlace) {
+      const { error: errConfirm } = await supabase
+        .from('commandes')
+        .update({ statut: 'en_attente' })
+        .eq('id', commande.id)
+      if (errConfirm) {
+        await supabase.from('commandes').delete().eq('id', commande.id)
+        console.error('[create-commande] confirmation sur place KO', errConfirm)
+        return NextResponse.json({ ok: false, error: 'Confirmation de la commande échouée, réessaie.' }, { status: 500 })
+      }
+      await supabase.from('commande_stock_reservation').delete().eq('commande_id', commande.id)
+      try {
+        await envoyerEmailsCommande(commande.id, supabase)
+      } catch (e) {
+        console.error('[create-commande] notifs sur place KO (non bloquant)', e?.message)
+      }
+      return NextResponse.json({ ok: true, cash: true, commande_id: commande.id })
+    }
 
     // ─── 9) Stripe Checkout Session (Direct Charge sur compte connecté) ────
     const heureCreneau = (creneau.heure_debut || '').slice(0, 5)

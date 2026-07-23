@@ -1457,7 +1457,10 @@ function TabDeals({ commercantId, commercant, toast }) {
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({
     titre: '', description: '', description_longue: '', prix_deal: '', prix_original: '',
-    date_debut: tomorrow, date_fin: tomorrow,
+    // Défaut AUJOURD'HUI : un deal créé doit être visible immédiatement dans
+    // l'app et le GMY (le défaut "demain" rendait les nouveaux deals invisibles
+    // le jour même, incompréhensible pour le commerçant).
+    date_debut: today, date_fin: today,
     heure_debut: '00:00', heure_fin: '23:59',
     inclus_morning: false, actif: true, article_id: '',
     cta_appeler_reserver: false,
@@ -1494,7 +1497,7 @@ function TabDeals({ commercantId, commercant, toast }) {
 
   function openNew() {
     setForm({ titre: '', description: '', description_longue: '', prix_deal: '', prix_original: '',
-      date_debut: tomorrow, date_fin: tomorrow,
+      date_debut: today, date_fin: today,
       heure_debut: '00:00', heure_fin: '23:59',
       inclus_morning: false, actif: true, article_id: '',
       cta_appeler_reserver: false,

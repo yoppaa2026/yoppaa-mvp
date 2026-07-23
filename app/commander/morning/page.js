@@ -35,6 +35,7 @@ const T = {
   bgPage:   '#F5F3FA',
   bgCard:   '#FFFFFF',
   hairline: '#F0EBF8',
+  muted:    '#6B7280',
   urgentBg: '#FFF2F2',
   urgentFg: '#CC3333',
 }
@@ -99,26 +100,31 @@ async function fetchMorningData(commune) {
   const cpDeLaCommune = new Set(commune.codes_postaux)
 
   const [{ data: dealsRaw }, { data: actusCommercantRaw }, { data: actusPubliqueRaw }] = await Promise.all([
-    // 1) Deals : commerçants alimentaires avec accès morning (plans BOOST/MAX)
+    // 1) Deals : fenêtre de validité COMPLÈTE (un deal multi-jours reste visible
+    //    chaque jour entre date_debut et date_fin, comme promis au commerçant),
+    //    avec repli sur date_deal pour les anciens deals sans fenêtre.
     supabase
       .from('yoppaa_deals')
       .select(`
-        id, titre, description, prix_deal, prix_original, date_deal, article_id, cta_appeler_reserver,
-        commercant:commercants ( id, nom, type, adresse, plan, statut_publication )
+        id, titre, description, prix_deal, prix_original, date_deal, article_id, cta_appeler_reserver, photo_url,
+        commercant:commercants ( id, nom, type, adresse, plan, statut_publication, logo_url, slug )
       `)
       .eq('actif', true)
       .eq('inclus_morning', true)
-      .eq('date_deal', today),
+      .or(`and(date_debut.lte.${today},date_fin.gte.${today}),date_deal.eq.${today}`),
 
-    // 2) Actus commerçant : TOUTES (vitrines + alimentaires) publiées
+    // 2) Actus commerçant : UNIQUEMENT celles marquées « inclure dans le GMY »
+    //    (inclus_gmy, même règle que le cron push : sans ce filtre, toute actu
+    //    active restait collée dans le Morning en permanence).
     supabase
       .from('actualites')
       .select(`
-        id, titre, contenu, type, date_debut, date_fin, urgence,
-        commercant:commercants ( id, nom, type, adresse, plan, statut_publication )
+        id, titre, contenu, type, date_debut, date_fin, urgence, photo_url,
+        commercant:commercants ( id, nom, type, adresse, plan, statut_publication, logo_url, slug )
       `)
       .not('commercant_id', 'is', null)
       .eq('actif', true)
+      .eq('inclus_gmy', true)
       .lte('date_debut', today)
       .gte('date_fin', today),
 
@@ -127,7 +133,7 @@ async function fetchMorningData(commune) {
     supabase
       .from('actualites')
       .select(`
-        id, titre, contenu, type, date_debut, date_fin, urgence,
+        id, titre, contenu, type, date_debut, date_fin, urgence, photo_url,
         service:services_publics ( id, nom, type, codes_postaux, national )
       `)
       .not('service_id', 'is', null)
@@ -136,20 +142,21 @@ async function fetchMorningData(commune) {
       .gte('date_fin', today),
   ])
 
-  // Filtres
+  // Filtres (alignés sur le cron morning-yoppers : mêmes règles de plan)
   function commercantEligibleDeal(c) {
-    // Deals : commerçant publié + accès morning (plan BOOST/MAX) + CP commune
+    // Deals : commerçant publié + plan avec deals ET morning + CP commune
     if (!c) return false
     if (c.statut_publication !== 'publie') return false
-    if (!canDo(c.plan, 'morning')) return false
+    if (!canDo(c.plan, 'deals') || !canDo(c.plan, 'morning')) return false
     const cp = extraireCodePostal(c.adresse)
     return cp && cpDeLaCommune.has(cp)
   }
 
   function commercantEligibleActu(c) {
-    // Actus : commerçant publié + CP commune (pas de restriction de plan, vitrines OK)
+    // Actus : commerçant publié + plan avec actu GMY + CP commune
     if (!c) return false
     if (c.statut_publication !== 'publie') return false
+    if (!canDo(c.plan, 'actu_gmy')) return false
     const cp = extraireCodePostal(c.adresse)
     return cp && cpDeLaCommune.has(cp)
   }
@@ -181,8 +188,12 @@ async function fetchMorningData(commune) {
       id: d.id,
       commerce: d.commercant.nom,
       Icon: iconDuType(d.commercant.type),
+      logo: d.commercant.logo_url || null,
+      slug: d.commercant.slug || null,
       categorie: d.commercant.type || 'Commerce',
       deal: d.titre,
+      description: d.description || null,
+      photo: d.photo_url || null,
       prix: fmtPrix(d.prix_deal),
       prixNormal: fmtPrix(d.prix_original),
       stock: d.article_id ? (stockParArticle[d.article_id] ?? null) : null,
@@ -201,16 +212,24 @@ async function fetchMorningData(commune) {
     autre:             Building2,
   }
 
+  // Priorité de plan dans le flux (morning_prioritaire : Communiquer/Vendre
+  // remontent avant Exister). Les officiels passent juste après les alertes.
+  const PRIO_PLAN = { vendre: 0, full: 0, communiquer: 0, exister: 1, on: 1 }
+
   const actusCommercant = (actusCommercantRaw || [])
     .filter(a => commercantEligibleActu(a.commercant))
     .map(a => ({
       id: 'c-' + a.id,
       commerce: a.commercant.nom,
       Icon: iconDuType(a.commercant.type),
+      logo: a.commercant.logo_url || null,
+      slug: a.commercant.slug || null,
       categorie: a.commercant.type || 'Commerce',
       titre: a.titre || null,
       actu: a.contenu || a.titre,
+      photo: a.photo_url || null,
       alerte: a.type === 'alerte' || a.urgence === true,
+      prio: 2 + (PRIO_PLAN[a.commercant.plan] ?? 1),
     }))
 
   const actusPubliques = (actusPubliqueRaw || [])
@@ -219,17 +238,20 @@ async function fetchMorningData(commune) {
       id: 'p-' + a.id,
       commerce: a.service.nom,
       Icon: SERVICE_ICON[a.service.type] || Building2,
+      logo: null,
+      slug: null,
       categorie: 'Officiel',
       titre: a.titre || null,
       actu: a.contenu || a.titre,
+      photo: a.photo_url || null,
       alerte: a.type === 'alerte' || a.urgence === true,
+      prio: 1,
     }))
 
-  // Tri : alertes en tête, puis actus services publics, puis commerçants
+  // Tri : alertes en tête, puis officiels, puis Communiquer/Vendre, puis Exister
   const actus = [...actusPubliques, ...actusCommercant].sort((a, b) => {
-    if (a.alerte && !b.alerte) return -1
-    if (!a.alerte && b.alerte) return 1
-    return 0
+    if (a.alerte !== b.alerte) return a.alerte ? -1 : 1
+    return a.prio - b.prio
   })
 
   return { deals, actus }
@@ -319,7 +341,7 @@ function IconChevronDown({ size = 10, color = T.main }) {
 
 // ─── Composants ─────────────────────────────────────────────────────
 
-function MorningHeader({ ctx, communeAffichee, communePrincipale, communes, onSwitch }) {
+function MorningHeader({ ctx, communeAffichee, communePrincipale, communes, onSwitch, onClose }) {
   const yoppersRef = useRef(null)
   const gmFontSize = useMatchWidth(yoppersRef, 'Good Morning')
   const [openSwitch, setOpenSwitch] = useState(false)
@@ -343,6 +365,11 @@ function MorningHeader({ ctx, communeAffichee, communePrincipale, communes, onSw
         <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: T.mid, letterSpacing: '0.5px' }}>
           <span style={{ opacity: 0.6, marginRight: 2 }}>N°</span>{ctx.editionNb}
         </span>
+        {/* Bouton quitter : retour à l'app (le Morning est une parenthèse, pas un piège) */}
+        <button onClick={onClose} aria-label="Fermer le Good Morning"
+          style={{ width: 28, height: 28, borderRadius: '50%', border: `1px solid ${T.hairline}`, background: T.bgPage, color: T.deep, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 10, padding: 0 }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
       </div>
 
       {/* Wordmark "Good Morning Yoppers" - tricolore */}
@@ -469,32 +496,65 @@ function Tabs({ tab, setTab, dealsCount, actusCount }) {
   )
 }
 
-function DealCard({ d, shown, delay }) {
+// Avatar « post » : logo du commerce en rond, sinon icône métier sur fond pâle.
+function AvatarPost({ logo, Icon, alerte = false, size = 40 }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: alerte ? '#FEE2E2' : T.bgPage, display: 'flex', alignItems: 'center', justifyContent: 'center', color: alerte ? '#DC2626' : T.main, border: `1px solid ${alerte ? '#FECACA' : T.hairline}` }}>
+      {logo
+        ? <img src={logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+        : (Icon ? <Icon size={Math.round(size / 2)} strokeWidth={1.8}/> : null)}
+    </div>
+  )
+}
+
+function DealCard({ d, shown, delay, onOpen }) {
   const hasStock = typeof d.stock === 'number' && d.stock > 0
   const isUrgent = hasStock && d.stock <= 5
   return (
     <div className="gmy-anim" style={{ opacity: shown ? 1 : 0, transform: shown ? 'translateY(0)' : 'translateY(8px)', transition: 'all 0.4s cubic-bezier(0.16,1,0.3,1)', transitionDelay: `${delay}ms` }}>
-      <div className="gmy-card-hover" style={{ border: `1px solid ${T.hairline}`, borderRadius: 16, padding: '14px 16px', cursor: 'pointer', background: '#fff', transition: 'all 0.2s ease' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: T.bgPage, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.main }}>
-            {d.Icon ? <d.Icon size={20} strokeWidth={1.8}/> : null}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: T.deep, letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 2 }}>
+      <div className="gmy-card-hover" onClick={() => onOpen?.(d.slug)}
+        style={{ border: `1px solid ${T.hairline}`, borderRadius: 16, padding: '14px 16px', cursor: d.slug ? 'pointer' : 'default', background: '#fff', transition: 'all 0.2s ease' }}>
+        {/* En-tête façon post : avatar + nom + catégorie, badge DEAL à droite */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <AvatarPost logo={d.logo} Icon={d.Icon}/>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {d.commerce}
             </div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, lineHeight: 1.3 }}>
-              {d.deal}
-            </div>
+            <div style={{ fontSize: 10, color: T.main, fontWeight: 600 }}>{d.categorie} · aujourd&rsquo;hui</div>
+          </div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 100, background: T.pale, color: T.deep, fontSize: 9, fontWeight: 800, letterSpacing: '0.6px', textTransform: 'uppercase', flexShrink: 0 }}>
+            <IconFire size={10} color={T.main}/> Deal
           </div>
         </div>
+        {/* Visuel du deal (photo M4) si présent */}
+        {d.photo && (
+          <div style={{ borderRadius: 12, overflow: 'hidden', marginBottom: 10, aspectRatio: '16/9', background: T.bgPage }}>
+            <img src={d.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+          </div>
+        )}
+        {/* Titre + description */}
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: T.ink, lineHeight: 1.3, marginBottom: d.description ? 4 : 8 }}>
+          {d.deal}
+        </div>
+        {d.description && (
+          <div style={{ fontSize: 12.5, color: T.deep, lineHeight: 1.5, marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {d.description}
+          </div>
+        )}
+        {/* Prix + stock + CTA */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {d.prix && <div style={{ fontSize: 20, fontWeight: 800, color: T.ink }}>{d.prix}</div>}
           {d.prixNormal && <div style={{ fontSize: 12, color: T.mid, textDecoration: 'line-through' }}>{d.prixNormal}</div>}
           {hasStock && (
-            <div style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: isUrgent ? T.urgentBg : T.pale, color: isUrgent ? T.urgentFg : T.deep, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: isUrgent ? T.urgentBg : T.pale, color: isUrgent ? T.urgentFg : T.deep, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
               {isUrgent && <Zap size={10} strokeWidth={2}/>}{d.stock} restants
             </div>
+          )}
+          {d.slug && (
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: T.main, letterSpacing: '0.5px', textTransform: 'uppercase', flexShrink: 0 }}>
+              J&rsquo;en profite <IconArrow size={11} color={T.main}/>
+            </span>
           )}
         </div>
       </div>
@@ -502,53 +562,63 @@ function DealCard({ d, shown, delay }) {
   )
 }
 
-function ActuCard({ d, shown, delay }) {
+function ActuCard({ d, shown, delay, onOpen }) {
   // Une alerte = bordure + accents rouges + badge ALERTE en tête
   const isAlerte = d.alerte
   return (
     <div className="gmy-anim" style={{ opacity: shown ? 1 : 0, transform: shown ? 'translateY(0)' : 'translateY(8px)', transition: 'all 0.4s cubic-bezier(0.16,1,0.3,1)', transitionDelay: `${delay}ms` }}>
-      <div className="gmy-card-hover" style={{
+      <div className="gmy-card-hover" onClick={() => onOpen?.(d.slug)}
+        style={{
         border: isAlerte ? '1px solid #FECACA' : `1px solid ${T.hairline}`,
         borderLeft: isAlerte ? '4px solid #DC2626' : `1px solid ${T.hairline}`,
-        borderRadius: 16, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.2s ease',
+        borderRadius: 16, padding: '14px 16px', cursor: d.slug ? 'pointer' : 'default', transition: 'all 0.2s ease',
         background: isAlerte ? '#FEF2F2' : '#fff',
         boxShadow: isAlerte ? '0 4px 16px rgba(220,38,38,0.10)' : 'none',
       }}>
-        {/* Badge ALERTE en tête si urgence */}
-        {isAlerte && (
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px 3px 7px', background: '#DC2626', borderRadius: 100, marginBottom: 10 }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', animation: 'gmyAlertPulse 1.4s ease-in-out infinite' }}/>
-            <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', letterSpacing: '0.7px', textTransform: 'uppercase' }}>
-              Alerte
-            </span>
-            <style>{`@keyframes gmyAlertPulse { 0%,100% { opacity: 1 } 50% { opacity: 0.45 } }`}</style>
-          </div>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 10, background: isAlerte ? '#FEE2E2' : T.bgPage, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isAlerte ? '#DC2626' : T.main }}>
-            {d.Icon ? <d.Icon size={16} strokeWidth={1.8}/> : null}
-          </div>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: isAlerte ? '#991B1B' : T.deep, letterSpacing: '0.8px', textTransform: 'uppercase' }}>
+        {/* En-tête façon post : avatar + nom + catégorie, badge à droite */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <AvatarPost logo={d.logo} Icon={d.Icon} alerte={isAlerte} size={36}/>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: isAlerte ? '#7F1D1D' : T.ink, letterSpacing: '-0.2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {d.commerce}
             </div>
-            <div style={{ fontSize: 10, color: isAlerte ? '#DC2626' : T.main, fontWeight: isAlerte ? 700 : 400 }}>{d.categorie}</div>
+            <div style={{ fontSize: 10, color: isAlerte ? '#DC2626' : T.main, fontWeight: 600 }}>{d.categorie} · aujourd&rsquo;hui</div>
           </div>
+          {isAlerte ? (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px 3px 7px', background: '#DC2626', borderRadius: 100, flexShrink: 0 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', animation: 'gmyAlertPulse 1.4s ease-in-out infinite' }}/>
+              <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', letterSpacing: '0.7px', textTransform: 'uppercase' }}>
+                Alerte
+              </span>
+              <style>{`@keyframes gmyAlertPulse { 0%,100% { opacity: 1 } 50% { opacity: 0.45 } }`}</style>
+            </div>
+          ) : (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 100, background: T.pale, color: T.deep, fontSize: 9, fontWeight: 800, letterSpacing: '0.6px', textTransform: 'uppercase', flexShrink: 0 }}>
+              <IconNews size={10} color={T.main}/> Actu
+            </div>
+          )}
         </div>
-        <div style={{ height: 1, background: isAlerte ? '#FECACA' : T.hairline, marginBottom: 10 }}/>
-        {/* Titre en Playfair Display non-italic (signature morning, élégant) */}
+        {/* Visuel de l'actu (photo M4) si présent */}
+        {d.photo && (
+          <div style={{ borderRadius: 12, overflow: 'hidden', marginBottom: 10, aspectRatio: '16/9', background: T.bgPage }}>
+            <img src={d.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+          </div>
+        )}
+        {/* Titre en Playfair Display (signature morning, élégant) */}
         {d.titre && d.titre !== d.actu && (
           <div style={{ fontFamily: '"Playfair Display", serif', fontSize: 15, fontWeight: 700, color: isAlerte ? '#7F1D1D' : T.ink, lineHeight: 1.3, marginBottom: 6, letterSpacing: '-0.2px' }}>
             {d.titre}
           </div>
         )}
         {/* Contenu en DM Sans (lisible, infos pratiques) */}
-        <div style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 13.5, fontWeight: 500, color: isAlerte ? '#991B1B' : T.deep, lineHeight: 1.55, marginBottom: 10 }}>
+        <div style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 13.5, fontWeight: 500, color: isAlerte ? '#991B1B' : T.deep, lineHeight: 1.55, marginBottom: d.slug ? 10 : 0 }}>
           {d.actu}
         </div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: isAlerte ? '#DC2626' : T.main, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-          Lire <IconArrow size={11} color={isAlerte ? '#DC2626' : T.main}/>
-        </div>
+        {d.slug && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: isAlerte ? '#DC2626' : T.main, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+            Voir la fiche <IconArrow size={11} color={isAlerte ? '#DC2626' : T.main}/>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -713,6 +783,11 @@ export default function GoodMorningYoppersPage() {
     router.push('/commander')
   }
 
+  // Tap sur une carte : ouvre la fiche du commerçant (esprit post → profil)
+  function ouvrirFiche(slug) {
+    if (slug) router.push(`/commander/${slug}`)
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: T.bgPage, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', fontFamily: '"DM Sans", sans-serif' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;0,800;1,400&family=Playfair+Display:ital@1&display=swap" rel="stylesheet"/>
@@ -741,6 +816,7 @@ export default function GoodMorningYoppersPage() {
           communePrincipale={communePrincipale}
           communes={communes}
           onSwitch={onSwitchCommune}
+          onClose={onExplore}
         />
         <Tabs tab={tab} setTab={setTab} dealsCount={realDeals.length} actusCount={realActus.length}/>
 
@@ -764,10 +840,10 @@ export default function GoodMorningYoppersPage() {
           )}
 
           {!loadingData && tab === 'deals' && realDeals.map((d, i) => (
-            <DealCard key={d.id} d={d} shown={shown[i]} delay={i * 55}/>
+            <DealCard key={d.id} d={d} shown={shown[i]} delay={i * 55} onOpen={ouvrirFiche}/>
           ))}
           {!loadingData && tab === 'actus' && realActus.map((d, i) => (
-            <ActuCard key={d.id} d={d} shown={shown[i]} delay={i * 55}/>
+            <ActuCard key={d.id} d={d} shown={shown[i]} delay={i * 55} onOpen={ouvrirFiche}/>
           ))}
         </div>
 

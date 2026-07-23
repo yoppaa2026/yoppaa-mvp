@@ -1083,6 +1083,13 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
               ✓ Position GPS confirmée ({form.latitude.toFixed(4)}, {form.longitude.toFixed(4)})
             </p>
           )}
+          {/* Food truck : l'adresse d'onboarding = ancre (commune, zone GMY, KYB),
+              les emplacements de vente arriveront avec le module M5 */}
+          {(form.type || '').includes('Food truck') && (
+            <p style={{ fontSize: 11, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+              Truck mobile ? Indique l&rsquo;adresse de ton dépôt ou de ton siège : elle définit ta commune sur Yoppaa. Tu annonceras ensuite tes emplacements de vente depuis ton tableau de bord.
+            </p>
+          )}
         </Field>
         <Field label="Téléphone *">
           <input type="tel" value={form.telephone} onChange={e => updateField('telephone', e.target.value)} placeholder="+32 71 00 00 00" style={inputStyle()}/>

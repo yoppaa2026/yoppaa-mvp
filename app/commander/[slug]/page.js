@@ -348,7 +348,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 }
 
 // ─── ArticleRow ───────────────────────────────────────────────────────────────
-function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false, masquerPrix = false, dealArticle = null, onClickDeal = null }) {
+function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false, masquerPrix = false, dealArticle = null, onClickDeal = null, photoUrl = null }) {
   const groupes = optionsParArticle[article.id] || []
   const hasOptions = groupes.length > 0
   const [showOptions, setShowOptions] = useState(false)
@@ -417,7 +417,14 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
 
   return (
     <div className="art-card" style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${(epuiseComplet || inactifCeJour) ? '#E5E7EB' : qteTotale > 0 ? T.main+'44' : T.pale}`, boxShadow: qteTotale > 0 ? `0 2px 12px ${T.main}18` : '0 1px 4px rgba(107,53,196,0.04)', opacity: (epuiseComplet || inactifCeJour) ? 0.6 : 1, transition: 'all 0.2s' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        {/* Photo d'article (Module 1/2 boutique) : pas de bloc image si absente
+            (décision placeholders : les listes restent texte-only sans photo) */}
+        {photoUrl && (
+          <div style={{ width: 64, height: 64, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: T.pale, border: `1px solid ${T.pale}` }}>
+            <img src={photoUrl} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+          </div>
+        )}
         <div style={{ flex: 1 }}>
           <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{article.nom}</p>
           {article.description && <p style={{ fontSize: '0.78rem', color: T.muted, marginBottom: 5, lineHeight: 1.4 }}>{article.description}</p>}
@@ -2327,7 +2334,8 @@ export default function CommanderSlug() {
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                             onCommanderDemain={commanderPourJour}
-                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}/>
+                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}
+                            photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}/>
                         ))}
                       </div>
                     </div>
@@ -2345,7 +2353,8 @@ export default function CommanderSlug() {
                           ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                           stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                           onCommanderDemain={commanderPourJour}
-                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}/>
+                          getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}
+                          photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}/>
                       ))}
                     </div>
                   </div>

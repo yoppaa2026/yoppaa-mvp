@@ -225,6 +225,8 @@ function TabMenu({ commercantId, commercant, toast }) {
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [galerie, setGalerie] = useState([])
   const [uploadingGalerie, setUploadingGalerie] = useState(false)
+  // Propositions IA pour la description : le commerçant choisit puis peut modifier
+  const [propsIa, setPropsIa] = useState([])
 
   // FIX STOCK : afficher le stock restant côté commerçant
   const [commandesParArticleJour, setCommandesParArticleJour] = useState({})
@@ -328,12 +330,12 @@ function TabMenu({ commercantId, commercant, toast }) {
 
   function openNew() {
     setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', photo_url: '' })
-    setGalerie([])
+    setGalerie([]); setPropsIa([])
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
     setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), photo_url: a.photo_url || '' })
-    setGalerie([])
+    setGalerie([]); setPropsIa([])
     fetchGalerie(a.id)
     setEditId(a.id); setShowForm(true)
   }
@@ -506,11 +508,28 @@ function TabMenu({ commercantId, commercant, toast }) {
               <BoutonIaInline commercantId={commercantId} surface="article" brief={form.nom}
                 infos={form.description}
                 briefManquantMsg={'Donne d’abord un nom à l’article, l’IA s’en inspire.'}
-                onResult={v => setForm(p => ({ ...p, description: v.court || v.long || p.description }))}
+                onVariantes={vs => setPropsIa(vs)}
                 toast={toast} />
             </div>
             <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder={estVitrine ? 'Ex: Titane japonais, charnières flex, 12 coloris…' : 'Ex: Feuilleté, pur beurre AOP...'}/>
-            <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Astuce : note tes ingrédients ou atouts en vrac (pur beurre, producteur local…) puis clique sur Rédiger avec l&rsquo;IA.</p>
+            {propsIa.length > 0 ? (
+              <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                <p style={{ fontSize: 10.5, fontWeight: 800, color: T.main, margin: 0 }}>Choisis une proposition (tu pourras encore la modifier) :</p>
+                {propsIa.map((v, i) => (
+                  <button key={i} type="button"
+                    onClick={() => { setForm(p => ({ ...p, description: v.court || v.long })); setPropsIa([]) }}
+                    style={{ textAlign: 'left', padding: '9px 11px', borderRadius: 10, border: '1.5px solid #EDE0FF', background: '#FAF8FE', fontSize: 12.5, color: T.ink, cursor: 'pointer', lineHeight: 1.45, fontFamily: 'inherit' }}>
+                    {v.court || v.long}
+                  </button>
+                ))}
+                <button type="button" onClick={() => setPropsIa([])}
+                  style={{ alignSelf: 'start', padding: 0, border: 'none', background: 'none', fontSize: 11, fontWeight: 700, color: T.muted, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>
+                  Aucune ne me convient
+                </button>
+              </div>
+            ) : (
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Astuce : note tes ingrédients ou atouts en vrac (pur beurre, producteur local…) puis clique sur Rédiger avec l&rsquo;IA.</p>
+            )}
           </div>
           {estVitrine ? (
             <div>

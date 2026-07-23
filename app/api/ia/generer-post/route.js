@@ -180,7 +180,9 @@ export async function POST(request) {
     }
 
     // 7) Génération.
-    const nbVariantes = cfg.modele === 'sonnet' ? 3 : 2
+    // Articles : toujours 3 propositions au choix (demande Alex 23/07), les
+    // autres surfaces gardent le barème par modèle (Sonnet 3 / Haiku 2).
+    const nbVariantes = surface === 'article' ? 3 : (cfg.modele === 'sonnet' ? 3 : 2)
     const modelId = IA_MODELES[cfg.modele]
     const maxTokens = cfg.modele === 'sonnet' ? 1500 : 900
     let out

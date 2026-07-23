@@ -17,6 +17,7 @@ export default function BoutonIaInline({
   infos = '',
   briefManquantMsg = 'Écris d’abord un titre, l’IA s’en inspire.',
   onResult,
+  onVariantes,
   toast,
 }) {
   const [loading, setLoading] = useState(false)
@@ -40,9 +41,13 @@ export default function BoutonIaInline({
         else toast?.(j.error || 'La génération a échoué, réessaie.', 'error')
         setLoading(false); return
       }
-      const v = (j.variantes || [])[0]
-      if (v && (v.court || v.long)) {
-        onResult?.(v)
+      const vs = (j.variantes || []).filter(v => v && (v.court || v.long))
+      if (onVariantes && vs.length) {
+        // Mode choix : le parent affiche les propositions, le commerçant sélectionne.
+        onVariantes(vs)
+        toast?.(vs.length > 1 ? `${vs.length} propositions ✨ Choisis celle qui te plaît.` : 'Texte généré ✨ Relis et ajuste avant de publier.', 'success')
+      } else if (vs[0]) {
+        onResult?.(vs[0])
         toast?.('Texte généré ✨ Relis et ajuste avant de publier.', 'success')
       } else {
         toast?.('Aucune proposition, réessaie.', 'error')

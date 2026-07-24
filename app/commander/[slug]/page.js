@@ -430,7 +430,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 }
 
 // ─── ArticleRow ───────────────────────────────────────────────────────────────
-function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false, masquerPrix = false, dealArticle = null, onClickDeal = null, photoUrl = null, variantes = [] }) {
+function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false, masquerPrix = false, dealArticle = null, onClickDeal = null, photoUrl = null, variantes = [], onOpenDetail = null }) {
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
   const hasVariantes = !!article.gere_variantes && variantes.length > 0
@@ -505,11 +505,11 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
         {/* Photo d'article (Module 1/2 boutique) : pas de bloc image si absente
             (décision placeholders : les listes restent texte-only sans photo) */}
         {photoUrl && (
-          <div style={{ width: 64, height: 64, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: T.pale, border: `1px solid ${T.pale}` }}>
+          <div onClick={onOpenDetail || undefined} style={{ width: 64, height: 64, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: T.pale, border: `1px solid ${T.pale}`, cursor: onOpenDetail ? 'pointer' : 'default' }}>
             <img src={photoUrl} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
           </div>
         )}
-        <div style={{ flex: 1 }}>
+        <div onClick={onOpenDetail || undefined} style={{ flex: 1, cursor: onOpenDetail ? 'pointer' : 'default' }}>
           <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{article.nom}</p>
           {article.description && <p style={{ fontSize: '0.78rem', color: T.muted, marginBottom: 5, lineHeight: 1.4 }}>{article.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -712,6 +712,67 @@ function DealOfferCard({ deal, qte = 0, onAjouter, onRetirer }) {
   )
 }
 
+// ─── Modal détail d'article (boutique) : galerie photos + description complète
+// + achat direct (VariantesSelector intégré si l'article gère des variantes).
+// Ouverte au tap sur la card article (demande Alex 24/07).
+function ArticleDetailModal({ article, variantes, photosActives, onClose, onAjouter, onAjouterVariante }) {
+  const [galerie, setGalerie] = useState([])
+  useEffect(() => {
+    if (!photosActives) return
+    let ok = true
+    supabase.from('article_photos').select('id, url, ordre').eq('article_id', article.id).order('ordre')
+      .then(({ data }) => { if (ok) setGalerie((data || []).filter(p => p.url)) })
+    return () => { ok = false }
+  }, [article.id, photosActives])
+
+  const photos = photosActives
+    ? [...(article.photo_url ? [{ id: 'couv', url: article.photo_url }] : []), ...galerie.filter(p => p.url !== article.photo_url)]
+    : []
+  const hasVar = !!article.gere_variantes && (variantes || []).length > 0
+
+  return (
+    <div role="dialog" aria-modal="true"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(22,6,54,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 520, maxHeight: '88dvh', overflowY: 'auto', animation: 'fadeUp 0.25s ease' }}>
+        {/* Galerie scroll-snap horizontale */}
+        {photos.length > 0 && (
+          <div style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', gap: 0, background: T.pale }}>
+            {photos.map(p => (
+              <img key={p.id} src={p.url} alt="" style={{ width: '100%', flexShrink: 0, aspectRatio: '4/3', objectFit: 'cover', scrollSnapAlign: 'center' }}/>
+            ))}
+          </div>
+        )}
+        <div style={{ padding: '1.125rem 1.25rem 1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 6 }}>
+            <h3 style={{ fontWeight: 900, fontSize: '1.15rem', color: T.ink, letterSpacing: '-0.4px', margin: 0, lineHeight: 1.25 }}>{article.nom}</h3>
+            <button onClick={onClose} aria-label="Fermer"
+              style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: T.pale, color: T.deep, cursor: 'pointer', fontSize: 14, fontWeight: 800, flexShrink: 0, lineHeight: '30px', padding: 0 }}>✕</button>
+          </div>
+          {article.description && (
+            <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6, margin: '0 0 10px' }}>{article.description}</p>
+          )}
+          {!hasVar && Number(article.prix) > 0 && (
+            <p style={{ fontSize: '1.2rem', fontWeight: 900, color: T.main, letterSpacing: '-0.4px', margin: '0 0 12px' }}>
+              {article.est_vitrine ? <span style={{ fontSize: '0.75rem', fontWeight: 700, color: T.muted, marginRight: 5 }}>dès</span> : null}
+              {Number(article.prix).toFixed(2)}€
+            </p>
+          )}
+          {hasVar ? (
+            <VariantesSelector article={article} variantes={variantes}
+              onAjouter={(a, v) => { onAjouterVariante(a, v); onClose() }}/>
+          ) : onAjouter ? (
+            <button onClick={() => { onAjouter(article); onClose() }}
+              style={{ width: '100%', padding: '0.8rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.main}44` }}>
+              Ajouter au panier
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── HeroCarousel : photo couverture + galerie scroll-snap horizontal ────────
 // S4 : si une seule photo (ou aucune), comportement identique a l'ancien hero
 // (image fullbleed ou fallback gradient branded). Si 2+ photos, scroll snap
@@ -847,6 +908,8 @@ export default function CommanderSlug() {
   const [dealsParArticle, setDealsParArticle] = useState({})
   // Modale detail deal (titre + description + dates + prix)
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
+  // Fiche détail d'un article (boutique) : photos galerie + description complète
+  const [articleDetail, setArticleDetail] = useState(null)
   // Modale detail actu enrichie (photo + contenu long + date)
   const [actuDetailOuverte, setActuDetailOuverte] = useState(null)
   // Deduplication tracking stats deals : chaque event compte 1x par session client.
@@ -1918,6 +1981,16 @@ export default function CommanderSlug() {
       {/* Modale détail deal enrichie : photo hero + description longue + badge
           Bonne affaire + CTA transactionnel (Vendre uniquement).
           Fallback header violet si pas de photo (compat deals anciens). */}
+      {/* Modal détail article boutique (photos + description + achat) */}
+      {articleDetail && (
+        <ArticleDetailModal article={articleDetail}
+          variantes={variantesParArticle[articleDetail.id] || []}
+          photosActives={commercant?.photos_catalogue_actif !== false}
+          onClose={() => setArticleDetail(null)}
+          onAjouter={peutCommander ? (a) => ajouterAuPanier(a) : null}
+          onAjouterVariante={(a, v) => ajouterAuPanier(a, null, v)}/>
+      )}
+
       {dealDetailOuvert && (
         <div onClick={() => setDealDetailOuvert(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeUp 0.2s ease' }}>
@@ -2556,7 +2629,8 @@ export default function CommanderSlug() {
                               onCommanderDemain={commanderPourJour}
                               getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}
                               photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
-                              variantes={variantesParArticle[a.id] || []}/>
+                              variantes={variantesParArticle[a.id] || []}
+                              onOpenDetail={estDetail ? () => setArticleDetail(a) : null}/>
                             {/* Offre deal liée = carte séparée (l'unité reste intacte) */}
                             {dealsParArticle[a.id] && dealsParArticle[a.id].prix_deal != null && peutCommander && (
                               <DealOfferCard deal={dealsParArticle[a.id]}
@@ -2585,7 +2659,8 @@ export default function CommanderSlug() {
                             onCommanderDemain={commanderPourJour}
                             getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
-                            variantes={variantesParArticle[a.id] || []}/>
+                            variantes={variantesParArticle[a.id] || []}
+                            onOpenDetail={estDetail ? () => setArticleDetail(a) : null}/>
                           {dealsParArticle[a.id] && dealsParArticle[a.id].prix_deal != null && peutCommander && (
                             <DealOfferCard deal={dealsParArticle[a.id]}
                               qte={panier[`deal_${dealsParArticle[a.id].id}`]?.quantite || 0}

@@ -1080,8 +1080,21 @@ function VariantesArticle({ article, toast }) {
 
   async function fetchVariantes() {
     setLoading(true)
-    const { data } = await supabase.from('article_variantes').select('*').eq('article_id', article.id).order('ordre')
+    // Axes relus depuis la BASE (pas la prop article, potentiellement périmée :
+    // la liste parent n'est pas rafraîchie après chaque saveAxes → les valeurs
+    // semblaient « perdues » à la réouverture. Bug signalé Alex 24/07).
+    const [{ data }, { data: art }] = await Promise.all([
+      supabase.from('article_variantes').select('*').eq('article_id', article.id).order('ordre'),
+      supabase.from('articles').select('gere_variantes, axe1_nom, axe1_valeurs, axe2_nom, axe2_valeurs').eq('id', article.id).single(),
+    ])
     setVariantes(data || [])
+    if (art) {
+      setGere(!!art.gere_variantes)
+      setAxe1Nom(art.axe1_nom || 'Taille')
+      setAxe2Nom(art.axe2_nom || '')
+      setAxe1Valeurs(Array.isArray(art.axe1_valeurs) ? art.axe1_valeurs : [])
+      setAxe2Valeurs(Array.isArray(art.axe2_valeurs) ? art.axe2_valeurs : [])
+    }
     setLoading(false)
   }
 

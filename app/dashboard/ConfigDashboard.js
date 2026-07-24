@@ -239,6 +239,7 @@ function TabMenu({ commercantId, commercant, toast }) {
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: '', photo_url: '' })
   const [nouvelleCat, setNouvelleCat] = useState('')
+  const [nouvelleCatParent, setNouvelleCatParent] = useState('')
   const [saving, setSaving] = useState(false)
   const [catActive, setCatActive] = useState('Tous')
   // Renommage catégorie
@@ -390,12 +391,15 @@ function TabMenu({ commercantId, commercant, toast }) {
 
   async function ajouterCategorie() {
     if (!nouvelleCat.trim()) return
-    if (categories.includes(nouvelleCat.trim())) { toast('Catégorie déjà existante', 'error'); return }
-    setCategories(prev => [...prev, nouvelleCat.trim()])
-    setCatActive(nouvelleCat.trim())
+    // Sous-catégorie : stockée « Parent · Enfant » (convention, zéro migration)
+    const nom = nouvelleCatParent ? `${nouvelleCatParent} · ${nouvelleCat.trim()}` : nouvelleCat.trim()
+    if (categories.includes(nom)) { toast('Catégorie déjà existante', 'error'); return }
+    setCategories(prev => [...prev, nom].sort())
+    setCatActive(nom)
     setNouvelleCat('')
+    setNouvelleCatParent('')
     setShowCatForm(false)
-    toast('Catégorie créée')
+    toast(nouvelleCatParent ? 'Sous-catégorie créée' : 'Catégorie créée')
   }
 
   // ─── Renommer une catégorie ────────────────────────────────────────────────
@@ -523,7 +527,24 @@ function TabMenu({ commercantId, commercant, toast }) {
             <select value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))}
               style={{ ...s.input, cursor: 'pointer' }}>
               <option value="">— Sans catégorie —</option>
-              {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              {/* Sous-catégories « Parent · Enfant » groupées en optgroup */}
+              {(() => {
+                const parents = [...new Set(categories.filter(c => c.includes(' · ')).map(c => c.split(' · ')[0]))]
+                const simples = categories.filter(c => !c.includes(' · ') && !parents.includes(c))
+                return (
+                  <>
+                    {simples.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    {parents.map(p => (
+                      <optgroup key={p} label={p}>
+                        {categories.includes(p) && <option value={p}>{p} (général)</option>}
+                        {categories.filter(c => c.startsWith(p + ' · ')).map(c => (
+                          <option key={c} value={c}>{c.slice(p.length + 3)}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </>
+                )
+              })()}
             </select>
           </div>
           <div>
@@ -773,11 +794,26 @@ function TabMenu({ commercantId, commercant, toast }) {
         <>
           {showCatForm && (
             <div style={{ ...s.cardActive, padding: 16, marginBottom: 12 }}>
-              <label style={s.label}>Nom de la catégorie</label>
+              {/* Sous-catégories (demande Alex 24/07) : convention « Parent · Enfant »
+                  dans le champ categorie existant, zéro migration. */}
+              {(() => {
+                const racines = [...new Set(categories.map(c => c.split(' · ')[0]))]
+                return racines.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={s.label}>Sous-catégorie de (optionnel)</label>
+                    <select value={nouvelleCatParent} onChange={e => setNouvelleCatParent(e.target.value)}
+                      style={{ ...s.input, cursor: 'pointer', marginTop: 6 }}>
+                      <option value="">— Aucune (catégorie principale) —</option>
+                      {racines.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                )
+              })()}
+              <label style={s.label}>{nouvelleCatParent ? `Nom de la sous-catégorie de « ${nouvelleCatParent} »` : 'Nom de la catégorie'}</label>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                <Input value={nouvelleCat} onChange={e => setNouvelleCat(e.target.value)} placeholder={estDetail ? 'Ex: Homme, Femme, Accessoires…' : estVitrine ? 'Ex: Montures, Solaires, Lentilles…' : 'Ex: Viennoiseries, Sandwichs chauds…'} onKeyDown={e => e.key === 'Enter' && ajouterCategorie()} style={{ flex: 1 }}/>
+                <Input value={nouvelleCat} onChange={e => setNouvelleCat(e.target.value)} placeholder={nouvelleCatParent ? 'Ex: Pantalons, Chemises…' : estDetail ? 'Ex: Homme, Femme, Accessoires…' : estVitrine ? 'Ex: Montures, Solaires, Lentilles…' : 'Ex: Viennoiseries, Sandwichs chauds…'} onKeyDown={e => e.key === 'Enter' && ajouterCategorie()} style={{ flex: 1 }}/>
                 <button style={{ ...s.btn, ...s.btnPrimary }} onClick={ajouterCategorie}><Icon name="check" size={14}/></button>
-                <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowCatForm(false)}><Icon name="x" size={14} color={T.main}/></button>
+                <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => { setShowCatForm(false); setNouvelleCatParent('') }}><Icon name="x" size={14} color={T.main}/></button>
               </div>
             </div>
           )}

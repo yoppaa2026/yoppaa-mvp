@@ -2611,13 +2611,27 @@ export default function CommanderSlug() {
               )}
 
               <div style={{ padding: '0.875rem 1rem 0' }}>
-                {categories.map(cat => {
+                {categories.map((cat, catIdx) => {
                   const artsDecat = articles.filter(a => a.categorie === cat)
                   if (!artsDecat.length) return null
+                  // Sous-catégorie « Parent · Enfant » : eyebrow parent affiché
+                  // une seule fois par groupe (les cats triées gardent les
+                  // enfants d'un même parent adjacents)
+                  const sepIdx = cat.indexOf(' · ')
+                  const catParent = sepIdx > -1 ? cat.slice(0, sepIdx) : null
+                  const catSub = sepIdx > -1 ? cat.slice(sepIdx + 3) : cat
+                  const prevParent = catIdx > 0 && categories[catIdx - 1].includes(' · ') ? categories[catIdx - 1].split(' · ')[0] : (catIdx > 0 ? categories[catIdx - 1] : null)
+                  const nouveauParent = catParent && catParent !== prevParent
                   return (
                     <div key={cat} ref={el => catRefs.current[cat] = el} style={{ marginBottom: 4 }}>
+                      {nouveauParent && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 16 }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '1.5px' }}>{catParent}</span>
+                          <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                        </div>
+                      )}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 12, paddingBottom: 10 }}>
-                        <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, letterSpacing: '-0.3px' }}>{cat}</span>
+                        <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, letterSpacing: '-0.3px' }}>{catSub}</span>
                         <span style={{ fontSize: '0.7rem', fontWeight: 600, color: T.muted }}>{artsDecat.length} article{artsDecat.length > 1 ? 's' : ''}</span>
                       </div>
                       <div className="articles-grid">

@@ -189,8 +189,9 @@ export async function POST(request) {
       supabase.from('article_options_valeurs').select('id, nom, prix_supplement, groupe_id, article_options_groupes!inner(article_id, nom)'),
       // Variantes (Module 2 boutique) : revalidation server-side prix + stock
       supabase.from('article_variantes').select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif').in('article_id', articleIds),
-      // Deals lot (« article temporaire ») : revalidation server-side du prix_deal
-      supabase.from('yoppaa_deals').select('id, titre, prix_deal, actif, commercant_id').eq('commercant_id', commercant_id).eq('actif', true),
+      // Deals (« article temporaire ») : revalidation server-side du prix selon
+      // le type (lot / remise_pct / prix_fixe / bundle) + fenêtre de dates
+      supabase.from('yoppaa_deals').select('id, titre, prix_deal, actif, commercant_id, deal_type, remise_pct, unites_par_deal, article2_id, date_deal, date_debut, date_fin').eq('commercant_id', commercant_id).eq('actif', true),
     ])
 
     if (!articlesData || articlesData.length !== articleIds.length) {
@@ -264,11 +265,28 @@ export async function POST(request) {
       let deal = null
       if (item.deal_id) {
         deal = dealParId[item.deal_id]
-        if (!deal || deal.prix_deal == null) {
+        if (!deal) {
+          return NextResponse.json({ ok: false, error: 'Ce deal n\'est plus disponible.' }, { status: 400 })
+        }
+        // Fenêtre de dates ENFIN vérifiée server-side (audit deals n°3) : le
+        // deal doit couvrir la date de la commande (date_deal ponctuelle OU plage)
+        const dd = deal.date_deal ? String(deal.date_deal).slice(0, 10) : null
+        const ds = deal.date_debut ? String(deal.date_debut).slice(0, 10) : null
+        const df = deal.date_fin ? String(deal.date_fin).slice(0, 10) : null
+        const dansFenetre = (dd && dd === date_commande) || (ds && df && ds <= date_commande && date_commande <= df)
+        if (!dansFenetre) {
+          return NextResponse.json({ ok: false, error: `Le deal « ${deal.titre} » n'est plus valable pour cette date.` }, { status: 400 })
+        }
+        if (deal.deal_type === 'remise_pct' ? !deal.remise_pct : deal.prix_deal == null) {
           return NextResponse.json({ ok: false, error: 'Ce deal n\'est plus disponible.' }, { status: 400 })
         }
       }
-      const prixBase = deal ? Number(deal.prix_deal)
+      // Prix par type de deal : remise % calculée en direct sur le prix article
+      // (jamais figée), sinon prix_deal (lot / prix fixe / bundle)
+      const prixBase = deal
+        ? (deal.deal_type === 'remise_pct'
+            ? Math.round(Number(article.prix) * (100 - deal.remise_pct)) / 100
+            : Number(deal.prix_deal))
         : variante && variante.prix != null ? Number(variante.prix)
         : Number(article.prix)
       const prixUnitaire = prixBase + supplement
@@ -278,6 +296,9 @@ export async function POST(request) {
         article_id: article.id,
         article_nom: deal ? deal.titre : article.nom,
         quantite,
+        // Consommation stock RÉELLE : un lot « 3+1 » consomme unites_par_deal
+        // unités physiques par lot commandé (audit deals n°1)
+        quantite_stock: quantite * (deal?.unites_par_deal || 1),
         prix_unitaire: prixUnitaire,
         options: optionsFlat.length > 0 ? optionsFlat : null,
         temps_prepa: article.temps_prepa || 1,
@@ -355,7 +376,7 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: `Article "${ligne.article_nom}" non disponible ce jour-là.` }, { status: 400 })
       }
       const dispo = (stockEntry.stock || 0) - (qteDejaParArticle[ligne.article_id] || 0) - (qteReserveeParArticle[ligne.article_id] || 0)
-      if (ligne.quantite > dispo) {
+      if ((ligne.quantite_stock || ligne.quantite) > dispo) {
         return NextResponse.json({
           ok: false,
           error: `Stock insuffisant pour "${ligne.article_nom}" : ${Math.max(0, dispo)} disponible(s) (quelqu'un vient de commander).`,
@@ -407,7 +428,7 @@ export async function POST(request) {
     // pré-filtre rapide ; ici on rattrape la race (dernier article pris entre les
     // deux). Avant l'insert des lignes → un échec ne laisse qu'une commande à supprimer.
     if (!estBoutique) {
-      const items = lignes.map(l => ({ article_id: l.article_id, quantite: l.quantite }))
+      const items = lignes.map(l => ({ article_id: l.article_id, quantite: l.quantite_stock || l.quantite }))
       const { error: errStock } = await supabase.rpc('reserver_stock_atomique', {
         p_commande_id: commande.id,
         p_commercant_id: commercant.id,

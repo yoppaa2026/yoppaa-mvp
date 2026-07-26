@@ -666,7 +666,15 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
 // ─── Carte OFFRE DEAL : le deal lié à un article est un « article temporaire »
 // ajouté à part (l'unité ne disparaît jamais). Détail visible : titre,
 // description, prix deal vs prix original DU DEAL. Serveur revalide via deal_id.
-function DealOfferCard({ deal, qte = 0, onAjouter, onRetirer }) {
+function DealOfferCard({ deal, article = null, qte = 0, onAjouter, onRetirer }) {
+  // Prix affiché par type : remise % → calcul en direct sur le prix article
+  const estRemise = deal.deal_type === 'remise_pct' && deal.remise_pct
+  const prixAffiche = estRemise && article
+    ? Math.round(Number(article.prix) * (100 - deal.remise_pct)) / 100
+    : (deal.prix_deal != null ? Number(deal.prix_deal) : null)
+  const prixBarre = estRemise && article
+    ? Number(article.prix)
+    : (deal.prix_original != null ? Number(deal.prix_original) : null)
   return (
     <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${T.main}55`, boxShadow: `0 4px 16px ${T.main}26` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
@@ -678,9 +686,14 @@ function DealOfferCard({ deal, qte = 0, onAjouter, onRetirer }) {
           <p style={{ fontWeight: 800, color: '#fff', fontSize: '0.9rem', letterSpacing: '-0.2px', lineHeight: 1.3, margin: '0 0 3px' }}>{deal.titre}</p>
           {deal.description && <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)', lineHeight: 1.45, margin: '0 0 6px' }}>{deal.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{Number(deal.prix_deal).toFixed(2)}€</span>
-            {deal.prix_original != null && (
-              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700, textDecoration: 'line-through' }}>{Number(deal.prix_original).toFixed(2)}€</span>
+            {estRemise && (
+              <span style={{ fontSize: '0.68rem', fontWeight: 900, color: '#1A0840', background: T.light, padding: '2px 8px', borderRadius: 100 }}>-{deal.remise_pct}%</span>
+            )}
+            {prixAffiche != null && (
+              <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{prixAffiche.toFixed(2)}€</span>
+            )}
+            {prixBarre != null && (
+              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700, textDecoration: 'line-through' }}>{prixBarre.toFixed(2)}€</span>
             )}
           </div>
         </div>
@@ -1539,11 +1552,19 @@ export default function CommanderSlug() {
   // revalide le prix via deal_id.
   function ajouterDealAuPanier(deal, article) {
     const key = `deal_${deal.id}`
+    // Prix par type : remise % calculée en direct sur le prix article (jamais
+    // figée), sinon prix_deal (lot / prix fixe / duo). Le serveur revalide.
+    const prixDeal = deal.deal_type === 'remise_pct' && deal.remise_pct
+      ? Math.round(Number(article.prix) * (100 - deal.remise_pct)) / 100
+      : Number(deal.prix_deal)
+    const prixAvant = deal.deal_type === 'remise_pct'
+      ? Number(article.prix)
+      : (deal.prix_original != null ? Number(deal.prix_original) : null)
     setPanier(prev => ({ ...prev, [key]: {
       id: article.id,
       nom: deal.titre,
-      prix: Number(deal.prix_deal),
-      prix_avant_deal: deal.prix_original != null ? Number(deal.prix_original) : null,
+      prix: prixDeal,
+      prix_avant_deal: prixAvant,
       deal_id: deal.id,
       options: null,
       quantite: (prev[key]?.quantite || 0) + 1,
@@ -2638,8 +2659,8 @@ export default function CommanderSlug() {
                               variantes={variantesParArticle[a.id] || []}
                               onOpenDetail={estDetail ? () => setArticleDetail(a) : null}/>
                             {/* Offre deal liée = carte séparée (l'unité reste intacte) */}
-                            {dealsParArticle[a.id] && dealsParArticle[a.id].prix_deal != null && peutCommander && (
-                              <DealOfferCard deal={dealsParArticle[a.id]}
+                            {dealsParArticle[a.id] && (dealsParArticle[a.id].prix_deal != null || dealsParArticle[a.id].remise_pct) && peutCommander && (
+                              <DealOfferCard deal={dealsParArticle[a.id]} article={a}
                                 qte={panier[`deal_${dealsParArticle[a.id].id}`]?.quantite || 0}
                                 onAjouter={() => ajouterDealAuPanier(dealsParArticle[a.id], a)}
                                 onRetirer={() => retirerDuPanier(`deal_${dealsParArticle[a.id].id}`)}/>
@@ -2667,8 +2688,8 @@ export default function CommanderSlug() {
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                             variantes={variantesParArticle[a.id] || []}
                             onOpenDetail={estDetail ? () => setArticleDetail(a) : null}/>
-                          {dealsParArticle[a.id] && dealsParArticle[a.id].prix_deal != null && peutCommander && (
-                            <DealOfferCard deal={dealsParArticle[a.id]}
+                          {dealsParArticle[a.id] && (dealsParArticle[a.id].prix_deal != null || dealsParArticle[a.id].remise_pct) && peutCommander && (
+                            <DealOfferCard deal={dealsParArticle[a.id]} article={a}
                               qte={panier[`deal_${dealsParArticle[a.id].id}`]?.quantite || 0}
                               onAjouter={() => ajouterDealAuPanier(dealsParArticle[a.id], a)}
                               onRetirer={() => retirerDuPanier(`deal_${dealsParArticle[a.id].id}`)}/>

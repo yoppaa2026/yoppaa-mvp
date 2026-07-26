@@ -1550,6 +1550,7 @@ function TabDeals({ commercantId, commercant, toast }) {
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({
     titre: '', description: '', description_longue: '', prix_deal: '', prix_original: '',
+    deal_type: 'lot', remise_pct: '', unites_par_deal: '', article2_id: '',
     // Défaut AUJOURD'HUI : un deal créé doit être visible immédiatement dans
     // l'app et le GMY (le défaut "demain" rendait les nouveaux deals invisibles
     // le jour même, incompréhensible pour le commerçant).
@@ -1585,7 +1586,7 @@ function TabDeals({ commercantId, commercant, toast }) {
 
   async function fetchArticles() {
     const { data } = await supabase.from('articles')
-      .select('id, nom, prix, categorie, actif')
+      .select('id, nom, prix, categorie, actif, gere_variantes')
       .eq('commercant_id', commercantId)
       .eq('actif', true)
       .order('categorie').order('nom')
@@ -1594,6 +1595,7 @@ function TabDeals({ commercantId, commercant, toast }) {
 
   function openNew() {
     setForm({ titre: '', description: '', description_longue: '', prix_deal: '', prix_original: '',
+      deal_type: 'lot', remise_pct: '', unites_par_deal: '', article2_id: '',
       date_debut: today, date_fin: today,
       heure_debut: '00:00', heure_fin: '23:59',
       inclus_morning: false, actif: true, article_id: '',
@@ -1614,6 +1616,10 @@ function TabDeals({ commercantId, commercant, toast }) {
       description_longue: d.description_longue || '',
       prix_deal: String(d.prix_deal ?? ''),
       prix_original: String(d.prix_original ?? ''),
+      deal_type: d.deal_type || 'lot',
+      remise_pct: String(d.remise_pct ?? ''),
+      unites_par_deal: String(d.unites_par_deal ?? ''),
+      article2_id: d.article2_id || '',
       date_debut: dDebut,
       date_fin: dFin,
       heure_debut: hDebut,
@@ -1676,8 +1682,17 @@ function TabDeals({ commercantId, commercant, toast }) {
     setSaving(true)
     const dateDebut = `${dDebut}T${form.heure_debut || '00:00'}:00`
     const dateFin   = `${dFin}T${form.heure_fin || '23:59'}:59`
+    // Validation par type de deal
+    if (form.deal_type === 'remise_pct') {
+      const pct = parseInt(form.remise_pct, 10)
+      if (!pct || pct < 1 || pct > 90) { setSaving(false); return toast('Indique une remise entre 1 et 90 %', 'error') }
+      if (!form.article_id) { setSaving(false); return toast('Une remise % doit être liée à un article', 'error') }
+    }
+    if (form.deal_type === 'bundle' && !form.article2_id) {
+      setSaving(false); return toast('Choisis le second article du duo', 'error')
+    }
     // Validation prix : prix_deal doit etre inferieur au prix_original (audit M4.2 bug)
-    if (form.prix_deal && form.prix_original) {
+    if (form.deal_type !== 'remise_pct' && form.prix_deal && form.prix_original) {
       const pd = parseFloat(form.prix_deal)
       const po = parseFloat(form.prix_original)
       if (pd >= po) {
@@ -1692,6 +1707,10 @@ function TabDeals({ commercantId, commercant, toast }) {
       description_longue: form.description_longue.trim() || null,
       prix_deal: form.prix_deal ? parseFloat(form.prix_deal) : null,
       prix_original: form.prix_original ? parseFloat(form.prix_original) : null,
+      deal_type: form.deal_type || 'lot',
+      remise_pct: form.deal_type === 'remise_pct' && form.remise_pct ? parseInt(form.remise_pct, 10) : null,
+      unites_par_deal: form.deal_type === 'lot' && form.unites_par_deal ? Math.max(1, parseInt(form.unites_par_deal, 10)) : 1,
+      article2_id: form.deal_type === 'bundle' && form.article2_id ? form.article2_id : null,
       // date_deal = 1er jour de la période (utilisé pour la sélection Good Morning Yoppers)
       date_deal: dDebut,
       date_debut: dateDebut,
@@ -1850,25 +1869,80 @@ function TabDeals({ commercantId, commercant, toast }) {
                 Visible dans la fiche complète du deal côté Yopper. Idéal pour raconter l&rsquo;histoire du produit ou détailler les conditions.
               </p>
             </div>
+            {/* Type de deal (sprint deals 26/07) : lot / remise % / prix fixe / duo */}
             <div>
-              <label style={s.label}>Article concerné (optionnel)</label>
+              <label style={s.label}>Type de deal</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                {[
+                  { v: 'lot', label: 'Lot (ex: 3+1)' },
+                  { v: 'remise_pct', label: 'Remise %' },
+                  { v: 'prix_fixe', label: 'Prix promo' },
+                  { v: 'bundle', label: 'Duo (2 articles)' },
+                ].map(t => (
+                  <button key={t.v} type="button" onClick={() => setForm(p => ({ ...p, deal_type: t.v }))}
+                    style={{ padding: '7px 13px', borderRadius: 100, border: `1.5px solid ${form.deal_type === t.v ? T.main : T.hairline}`, background: form.deal_type === t.v ? T.main : '#fff', color: form.deal_type === t.v ? '#fff' : T.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label style={s.label}>{form.deal_type === 'remise_pct' ? 'Article concerné *' : form.deal_type === 'bundle' ? 'Premier article du duo' : 'Article concerné (optionnel)'}</label>
               <select value={form.article_id} onChange={e => onArticleChange(e.target.value)}
                 style={{ ...s.input, cursor: 'pointer' }}>
                 <option value="">— Deal général (pas lié à un produit) —</option>
-                {articles.map(a => (
+                {/* Articles à variantes exclus (décision 26/07 : pas de deal sur
+                    variantes en V1, stock/choix ingérables) */}
+                {articles.filter(a => !a.gere_variantes).map(a => (
                   <option key={a.id} value={a.id}>
                     {a.nom}{a.categorie ? ` · ${a.categorie}` : ''} · {Number(a.prix).toFixed(2)}€
                   </option>
                 ))}
               </select>
               <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
-                Si tu lies un produit, le badge DEAL s&rsquo;affiche dessus dans le menu et la réduction est appliquée automatiquement au panier (plan Vendre alimentaire).
+                L&rsquo;offre s&rsquo;affiche comme une carte à part sous l&rsquo;article : le produit reste toujours achetable à l&rsquo;unité au prix normal.
               </p>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div><label style={s.label}>Prix deal (€)</label><Input type="number" step="0.10" min="0" value={form.prix_deal} onChange={e => setForm(p => ({ ...p, prix_deal: e.target.value }))} placeholder="2.50"/></div>
-              <div><label style={s.label}>Prix d&rsquo;origine (€)</label><Input type="number" step="0.10" min="0" value={form.prix_original} onChange={e => setForm(p => ({ ...p, prix_original: e.target.value }))} placeholder="3.50"/></div>
-            </div>
+            {form.deal_type === 'bundle' && (
+              <div>
+                <label style={s.label}>Second article du duo *</label>
+                <select value={form.article2_id} onChange={e => setForm(p => ({ ...p, article2_id: e.target.value }))}
+                  style={{ ...s.input, cursor: 'pointer' }}>
+                  <option value="">— Choisir —</option>
+                  {articles.filter(a => !a.gere_variantes && a.id !== form.article_id).map(a => (
+                    <option key={a.id} value={a.id}>{a.nom} · {Number(a.prix).toFixed(2)}€</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {form.deal_type === 'remise_pct' ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={s.label}>Remise (%) *</label>
+                  <Input type="number" step="1" min="1" max="90" value={form.remise_pct} onChange={e => setForm(p => ({ ...p, remise_pct: e.target.value }))} placeholder="20"/>
+                </div>
+                <div style={{ alignSelf: 'end', paddingBottom: 8 }}>
+                  {(() => {
+                    const art = articles.find(a => a.id === form.article_id)
+                    const pct = parseInt(form.remise_pct, 10)
+                    if (!art || !pct) return <p style={{ fontSize: 11, color: T.muted, margin: 0 }}>Prix calculé automatiquement</p>
+                    return <p style={{ fontSize: 12.5, fontWeight: 800, color: T.main, margin: 0 }}>{(Number(art.prix) * (100 - pct) / 100).toFixed(2)}€ <span style={{ color: T.muted, fontWeight: 600, textDecoration: 'line-through' }}>{Number(art.prix).toFixed(2)}€</span></p>
+                  })()}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: form.deal_type === 'lot' ? '1fr 1fr 1fr' : '1fr 1fr', gap: 10 }}>
+                <div style={{ minWidth: 0 }}><label style={s.label}>{form.deal_type === 'lot' ? 'Prix du lot (€)' : form.deal_type === 'bundle' ? 'Prix du duo (€)' : 'Prix promo (€)'}</label><Input type="number" step="0.10" min="0" value={form.prix_deal} onChange={e => setForm(p => ({ ...p, prix_deal: e.target.value }))} placeholder="2.50" style={{ width: '100%', boxSizing: 'border-box' }}/></div>
+                <div style={{ minWidth: 0 }}><label style={s.label}>Prix d&rsquo;origine (€)</label><Input type="number" step="0.10" min="0" value={form.prix_original} onChange={e => setForm(p => ({ ...p, prix_original: e.target.value }))} placeholder="3.50" style={{ width: '100%', boxSizing: 'border-box' }}/></div>
+                {form.deal_type === 'lot' && (
+                  <div style={{ minWidth: 0 }}>
+                    <label style={s.label}>Unités / lot</label>
+                    <Input type="number" step="1" min="1" value={form.unites_par_deal} onChange={e => setForm(p => ({ ...p, unites_par_deal: e.target.value }))} placeholder="4" style={{ width: '100%', boxSizing: 'border-box' }}/>
+                    <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Ex : « 3+1 » = 4. Sert au décompte du stock.</p>
+                  </div>
+                )}
+              </div>
+            )}
             {/* minWidth: 0 sur les cellules : sans ça, les inputs date/time natifs
                 (largeur intrinsèque, surtout iOS) débordent de la grille à droite. */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

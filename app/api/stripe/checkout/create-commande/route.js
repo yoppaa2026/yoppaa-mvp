@@ -172,7 +172,9 @@ export async function POST(request) {
     }
 
     // ─── 4) Récup articles + options + calcul total SERVER ─────────────────
-    const articleIds = articles.map(a => a.id).filter(Boolean)
+    // Dédupliqué : le panier peut contenir 2 lignes du MÊME article (unité +
+    // deal lot) → sans Set, le check length échouait en « articles introuvables »
+    const articleIds = [...new Set(articles.map(a => a.id).filter(Boolean))]
     if (articleIds.length === 0) {
       return NextResponse.json({ ok: false, error: 'Articles invalides.' }, { status: 400 })
     }

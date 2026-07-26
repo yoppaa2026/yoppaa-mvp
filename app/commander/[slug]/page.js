@@ -551,16 +551,8 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
                 {article.axe1_nom || 'Version'}{article.axe2_nom ? ` · ${article.axe2_nom}` : ''}
               </button>
             )}
-            {/* Badge DEAL cliquable si article lié à un deal actif */}
-            {dealArticle && (
-              <button onClick={e => { e.stopPropagation(); if (onClickDeal) onClickDeal(dealArticle) }}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.62rem', fontWeight: 800, color: '#fff', background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, padding: '3px 10px 3px 8px', borderRadius: 100, border: 'none', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: `0 2px 8px rgba(22,6,54,0.3)`, animation: 'dealGlow 1.8s ease-in-out infinite', fontFamily: '"DM Sans", sans-serif' }}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="#FB923C" stroke="#FB923C" strokeWidth="0.5" strokeLinejoin="round">
-                  <path d="M12 2c1 3 3 4 3 7 0 1.5-1 3-3 3s-3-1.5-3-3c0-2 2-3 3-7zm-5 9c-1 0-3 2-3 6 0 4 3 5 8 5s8-1 8-5c0-4-2-6-3-6 0 3-2 5-5 5s-5-2-5-5z"/>
-                </svg>
-                Deal
-              </button>
-            )}
+            {/* Badge DEAL retiré de la card unité (24/07) : l'offre vit sur sa
+                propre DealOfferCard juste en dessous, plus de confusion. */}
           </div>
 
           {/* Indicateur stock 3 niveaux - clair et pro */}

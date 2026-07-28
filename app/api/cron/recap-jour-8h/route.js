@@ -47,7 +47,8 @@ export async function GET(request) {
 
     for (const c of (commercants || [])) {
       const estVitrine = c.categorie === 'vitrine'
-      const estAlim    = c.categorie === 'alimentaire' && resolvePlan(c.plan) === 'vendre'
+      // Alimentaire ET détail (boutique, Module 2) reçoivent le récap commandes
+      const estAlim    = (c.categorie === 'alimentaire' || c.categorie === 'detail') && resolvePlan(c.plan) === 'vendre'
 
       if (estVitrine && !c.rdv_actif) {
         continue  // pas concerne
@@ -63,7 +64,7 @@ export async function GET(request) {
 
         if (estVitrine) {
           // RDV du jour confirmes pour ce commercant
-          const { data: rdvs } = await supabase
+          const { data: rdvs, error: errRdvs } = await supabase
             .from('rdv_reservations')
             .select(`
               id, heure_debut, heure_fin, duree_minutes, numero_rdv,
@@ -75,6 +76,10 @@ export async function GET(request) {
             .eq('statut', 'confirme')
             .is('deleted_at', null)
             .order('heure_debut', { ascending: true })
+          if (errRdvs) {
+            console.error('[cron/recap-jour-8h] fetch rdvs KO', { commercant: c.nom, error: errRdvs.message })
+            throw new Error(errRdvs.message)
+          }
 
           const rdvsFlat = (rdvs || []).map(r => ({
             heure_debut:    r.heure_debut,
@@ -97,27 +102,38 @@ export async function GET(request) {
             ? `Aucun RDV aujourd'hui`
             : `${total} RDV${total > 1 ? 's' : ''} aujourd'hui — Yoppaa`
         } else {
-          // Commandes du jour pour ce commercant
-          const { data: cmds } = await supabase
+          // Commandes du jour pour ce commercant.
+          // ⚠️ La table commandes n'a PAS de colonne client_prenom (nom complet
+          // dans client_nom) : l'ancien select la demandait → PostgREST 400
+          // silencieux → data null → « 0 commandes » à tort (bug Alex 28/07).
+          const { data: cmds, error: errCmds } = await supabase
             .from('commandes')
             .select(`
-              id, numero_commande, total, client_prenom, client_nom,
+              id, numero_commande, total, client_nom,
               creneau:creneaux(heure_debut),
+              creneau_livraison:livraison_creneaux(heure_debut),
               commande_articles(quantite)
             `)
             .eq('commercant_id', c.id)
             .eq('date_commande', dateJour)
             .in('statut', ['en_attente', 'en_preparation', 'pret'])
             .order('id', { ascending: true })
+          if (errCmds) {
+            console.error('[cron/recap-jour-8h] fetch commandes KO', { commercant: c.nom, error: errCmds.message })
+            throw new Error(errCmds.message)
+          }
 
-          const cmdsFlat = (cmds || []).map(cmd => ({
-            heure_debut:     cmd.creneau?.heure_debut,
-            numero_commande: cmd.numero_commande,
-            yopper_prenom:   cmd.client_prenom,
-            yopper_nom:      cmd.client_nom,
-            nb_articles:     (cmd.commande_articles || []).reduce((s, a) => s + (a.quantite || 0), 0),
-            total:           cmd.total,
-          }))
+          const cmdsFlat = (cmds || []).map(cmd => {
+            const [prenom, ...reste] = String(cmd.client_nom || '').split(' ')
+            return {
+              heure_debut:     cmd.creneau?.heure_debut || cmd.creneau_livraison?.heure_debut,
+              numero_commande: cmd.numero_commande,
+              yopper_prenom:   prenom || cmd.client_nom,
+              yopper_nom:      reste.join(' '),
+              nb_articles:     (cmd.commande_articles || []).reduce((s, a) => s + (a.quantite || 0), 0),
+              total:           cmd.total,
+            }
+          })
 
           total = cmdsFlat.length
           html = emailRecapCommandesJour({

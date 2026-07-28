@@ -2559,7 +2559,7 @@ export default function Commander() {
                             </p>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#EEF2FF', borderRadius: 100, padding: '3px 10px', border: '1px solid #4F46E533' }}>
                               <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#4F46E5', border: '1.5px solid #fff', boxShadow: '0 0 0 1.5px #4F46E544, 0 0 8px #4F46E599', animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
-                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#4F46E5' }}>En route vers toi{cren ? ` · ${cren.heure_debut.slice(0,5)}–${cren.heure_fin.slice(0,5)}` : ''}</span>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#4F46E5' }}>En route vers toi{c.date_commande ? ` · ${new Date(c.date_commande + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'short', day: 'numeric', month: 'short' })}` : ''}{cren ? ` · ${cren.heure_debut.slice(0,5)}–${cren.heure_fin.slice(0,5)}` : ''}</span>
                             </span>
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /></div><p style={{ fontWeight: 900, color: '#4F46E5', fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p></div>
@@ -2601,7 +2601,7 @@ export default function Commander() {
                           </p>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: T.pale, borderRadius: 100, padding: '3px 10px', border: `1px solid ${T.main}33` }}>
                             <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.main, border: '1.5px solid #fff', boxShadow: `0 0 0 1.5px ${T.main}44, 0 0 8px ${T.main}99`, animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.main }}>{c.mode_retrait === 'livraison' ? 'Prête' : 'Prête à retirer'}{cren ? ` · ${cren.heure_debut.slice(0,5)}–${cren.heure_fin.slice(0,5)}` : ''}</span>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.main }}>{c.mode_retrait === 'livraison' ? 'Prête' : 'Prête à retirer'}{c.date_commande ? ` · ${new Date(c.date_commande + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'short', day: 'numeric', month: 'short' })}` : ''}{cren ? ` · ${cren.heure_debut.slice(0,5)}–${cren.heure_fin.slice(0,5)}` : ''}</span>
                           </span>
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /></div><p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p></div>

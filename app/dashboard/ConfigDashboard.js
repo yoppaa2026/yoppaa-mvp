@@ -312,36 +312,50 @@ function TabMenu({ commercantId, commercant, toast }) {
 
   // Applique un dispo aux jours d'OUVERTURE (les jours fermés au Profil sont
   // ignorés). Pour le jour actuel on rajoute déjà_commandé.
-  async function setStockTousJours(articleId, dispo, dejaCommandeAuj, jourActuelKey) {
+  async function setStockTousJours(articleId, dispo, consoParJour = {}) {
     const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
     const ouverts = JOURS.filter(j => !joursFermes.includes(j))
     await Promise.all(ouverts.map(j => {
-      const brut = j === jourActuelKey ? (dispo + (dejaCommandeAuj || 0)) : dispo
+      // Brut = dispo saisi + déjà commandé POUR CE JOUR de retrait (bug 14)
+      const brut = dispo + (consoParJour[j] || 0)
       return setStockJour(articleId, j, brut, true)
     }))
     toast(joursFermes.length > 0 ? 'Stock appliqué aux jours d\'ouverture' : 'Stock appliqué aux 7 jours')
   }
 
-  // Charge les quantités commandées aujourd'hui par article (exclut "non_retire")
+  // Charge les quantités commandées par article ET PAR JOUR DE RETRAIT sur les
+  // 7 prochains jours (bug 14 : une commande passée dimanche POUR lundi doit
+  // consommer le stock de LUNDI et apparaître sur la chip lundi, pas dimanche).
+  // Map résultat : { articleId: { lundi: qte, mardi: qte, ... } }
   const chargerCommandesAujourdhui = useCallback(async () => {
     if (!commercantId) return
-    const d = new Date()
-    const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    const jours = []
+    const jourKeyParDate = {}
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(); d.setDate(d.getDate() + i)
+      const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+      const jsIdx = d.getDay()
+      jourKeyParDate[iso] = JOURS_KEYS[jsIdx === 0 ? 6 : jsIdx - 1]
+      jours.push(iso)
+    }
     const { data: cmds } = await supabase
       .from('commandes')
-      .select('id')
+      .select('id, date_commande')
       .eq('commercant_id', commercantId)
-      .eq('date_commande', dateStr)
+      .in('date_commande', jours)
       .neq('statut', 'non_retire')
     if (!cmds || cmds.length === 0) { setCommandesParArticleJour({}); return }
-    const cmdIds = cmds.map(c => c.id)
+    const jourParCmd = Object.fromEntries(cmds.map(c => [c.id, jourKeyParDate[String(c.date_commande).slice(0, 10)]]))
     const { data: lignes } = await supabase
       .from('commande_articles')
-      .select('article_id, quantite')
-      .in('commande_id', cmdIds)
+      .select('article_id, quantite, commande_id')
+      .in('commande_id', cmds.map(c => c.id))
     const map = {}
     ;(lignes || []).forEach(r => {
-      map[r.article_id] = (map[r.article_id] || 0) + r.quantite
+      const jk = jourParCmd[r.commande_id]
+      if (!jk) return
+      if (!map[r.article_id]) map[r.article_id] = {}
+      map[r.article_id][jk] = (map[r.article_id][jk] || 0) + r.quantite
     })
     setCommandesParArticleJour(map)
   }, [commercantId])
@@ -656,7 +670,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     if (showForm && editId === a.id) {
       return <div key={a.id}>{renderArticleForm()}</div>
     }
-    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} estDetail={estDetail} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} dejaCommande={commandesParArticleJour[a.id] || 0} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
+    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} estDetail={estDetail} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
   }
 
   return (
@@ -1292,7 +1306,7 @@ function VariantesArticle({ article, toast }) {
 const JOURS_KEYS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
-function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, s, dejaCommande = 0, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
+function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -1305,10 +1319,13 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
   // que le stock du jour où elles sont passées).
   const jourActuelIdx = (() => { const i = new Date().getDay(); return i === 0 ? 6 : i - 1 })()
   const jourActuelKey = JOURS_KEYS[jourActuelIdx]
+  // Conso par jour de RETRAIT (bug 14) : dejaCommande = celle d'aujourd'hui
+  const dejaCommande = consoParJour[jourActuelKey] || 0
 
   const dispoEffectif = (jour) => {
     const entry = stockParJour[jour]
-    const conso = jour === jourActuelKey ? dejaCommande : 0
+    // Conso du jour de RETRAIT (plus seulement aujourd'hui, bug 14)
+    const conso = consoParJour[jour] || 0
     if (entry) {
       if (entry.actif === false) return { dispo: 0, ferme: true, override: true, brut: entry.stock }
       const dispo = Math.max(0, (entry.stock || 0) - conso)
@@ -1347,9 +1364,9 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
 
   function sauvegarder(jour, actif) {
     // L'utilisateur saisit le DISPO. On stocke le brut = dispo + déjà commandé
-    // (uniquement pour le jour actuel — pour les autres jours, dispo = brut).
+    // POUR CE JOUR DE RETRAIT (bug 14 : plus seulement le jour actuel).
     const dispoSaisi = Math.max(0, parseInt(editVal) || 0)
-    const conso = jour === jourActuelKey ? dejaCommande : 0
+    const conso = consoParJour[jour] || 0
     const brut = actif ? dispoSaisi + conso : 0
     onSetStockJour(a.id, jour, brut, actif)
     fermerEdition()
@@ -1419,7 +1436,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
                 const v = window.prompt('Stock disponible à appliquer aux 7 jours :', String(stockRestant))
                 if (v !== null) {
                   const dispo = Math.max(0, parseInt(v) || 0)
-                  onSetStockTousJours(a.id, dispo, dejaCommande, jourActuelKey)
+                  onSetStockTousJours(a.id, dispo, consoParJour)
                 }
               }} style={{ ...s.btn, ...s.btnGhost, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>
                 Appliquer à tous
@@ -1465,8 +1482,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
 
             {/* Éditeur inline — saisie en "stock dispo" (intuitif) */}
             {jourEdite && (() => {
-              const isAuj = jourEdite === jourActuelKey
-              const consoEdit = isAuj ? dejaCommande : 0
+              const consoEdit = consoParJour[jourEdite] || 0
               return (
                 <div style={{ marginTop: 8, padding: 12, background: '#FAFAFA', borderRadius: 10, border: `1px solid ${T.hairline}` }}>
                   {/* Ligne 1 : label + input + bouton primaire (sur petit écran : label en haut, input + bouton sur la ligne) */}
@@ -1505,7 +1521,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
                   )}
                   {consoEdit > 0 && (
                     <p style={{ fontSize: 11, color: T.muted, fontWeight: 600, margin: '8px 0 0' }}>
-                      {consoEdit} déjà commandé{consoEdit > 1 ? 's' : ''} aujourd&rsquo;hui, sera ajouté automatiquement au total brut interne.
+                      {consoEdit} déjà commandé{consoEdit > 1 ? 's' : ''} pour ce jour, sera ajouté automatiquement au total brut interne.
                     </p>
                   )}
                 </div>

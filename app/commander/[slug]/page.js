@@ -432,7 +432,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 }
 
 // ─── ArticleRow ───────────────────────────────────────────────────────────────
-function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false, masquerPrix = false, dealArticle = null, onClickDeal = null, photoUrl = null, variantes = [], onOpenDetail = null }) {
+function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null }) {
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
   const hasVariantes = !!article.gere_variantes && variantes.length > 0
@@ -1271,9 +1271,14 @@ export default function CommanderSlug() {
     // Deal "vedette" affiche en bandeau : 1er deal SANS article_id (générique),
     // sinon le 1er deal (avec article_id) pour ne pas avoir un bandeau vide
     const deal = dealsActifs.find(d => !d.article_id) || dealsActifs[0] || null
-    // Map article_id → deal (pour appliquer la réduction sur les articles concernés)
+    // Map article_id → LISTE de deals (un commerçant peut cumuler plusieurs
+    // offres sur le même article, ex. lot 3+1 ET remise fin de journée)
     const dealsParArticle = {}
-    dealsActifs.forEach(d => { if (d.article_id) dealsParArticle[d.article_id] = d })
+    dealsActifs.forEach(d => {
+      if (!d.article_id) return
+      if (!dealsParArticle[d.article_id]) dealsParArticle[d.article_id] = []
+      dealsParArticle[d.article_id].push(d)
+    })
 
     // Filtrer les actus actives aujourd'hui (sur la fenêtre date_debut/date_fin)
     const aujourdhui = new Date().toISOString().slice(0, 10)
@@ -2670,17 +2675,17 @@ export default function CommanderSlug() {
                               ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                               stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                               onCommanderDemain={commanderPourJour}
-                              getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}
+                              getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')}
                               photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                               variantes={variantesParArticle[a.id] || []}
                               onOpenDetail={estDetail ? () => setArticleDetail(a) : null}/>
-                            {/* Offre deal liée = carte séparée (l'unité reste intacte) */}
-                            {dealsParArticle[a.id] && (dealsParArticle[a.id].prix_deal != null || dealsParArticle[a.id].remise_pct) && peutCommander && (
-                              <DealOfferCard deal={dealsParArticle[a.id]} article={a}
-                                qte={panier[`deal_${dealsParArticle[a.id].id}`]?.quantite || 0}
-                                onAjouter={() => ajouterDealAuPanier(dealsParArticle[a.id], a)}
-                                onRetirer={() => retirerDuPanier(`deal_${dealsParArticle[a.id].id}`)}/>
-                            )}
+                            {/* Offres deal liées = cartes séparées (l'unité reste intacte) */}
+                            {peutCommander && (dealsParArticle[a.id] || []).filter(dl => dl.prix_deal != null || dl.remise_pct).map(dl => (
+                              <DealOfferCard key={dl.id} deal={dl} article={a}
+                                qte={panier[`deal_${dl.id}`]?.quantite || 0}
+                                onAjouter={() => ajouterDealAuPanier(dl, a)}
+                                onRetirer={() => retirerDuPanier(`deal_${dl.id}`)}/>
+                            ))}
                           </div>
                         ))}
                       </div>
@@ -2700,16 +2705,16 @@ export default function CommanderSlug() {
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
                             onCommanderDemain={commanderPourJour}
-                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')} dealArticle={dealsParArticle[a.id] || null} onClickDeal={d => setDealDetailOuvert(d)}
+                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')}
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                             variantes={variantesParArticle[a.id] || []}
                             onOpenDetail={estDetail ? () => setArticleDetail(a) : null}/>
-                          {dealsParArticle[a.id] && (dealsParArticle[a.id].prix_deal != null || dealsParArticle[a.id].remise_pct) && peutCommander && (
-                            <DealOfferCard deal={dealsParArticle[a.id]} article={a}
-                              qte={panier[`deal_${dealsParArticle[a.id].id}`]?.quantite || 0}
-                              onAjouter={() => ajouterDealAuPanier(dealsParArticle[a.id], a)}
-                              onRetirer={() => retirerDuPanier(`deal_${dealsParArticle[a.id].id}`)}/>
-                          )}
+                          {peutCommander && (dealsParArticle[a.id] || []).filter(dl => dl.prix_deal != null || dl.remise_pct).map(dl => (
+                            <DealOfferCard key={dl.id} deal={dl} article={a}
+                              qte={panier[`deal_${dl.id}`]?.quantite || 0}
+                              onAjouter={() => ajouterDealAuPanier(dl, a)}
+                              onRetirer={() => retirerDuPanier(`deal_${dl.id}`)}/>
+                          ))}
                         </div>
                       ))}
                     </div>

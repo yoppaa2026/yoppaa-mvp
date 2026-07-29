@@ -299,6 +299,8 @@ export async function POST(request) {
         // Consommation stock RÉELLE : un lot « 3+1 » consomme unites_par_deal
         // unités physiques par lot commandé (audit deals n°1)
         quantite_stock: quantite * (deal?.unites_par_deal || 1),
+        // Duo : le second article du deal consomme aussi son stock (1 par duo)
+        deal_article2_id: (deal?.deal_type === 'bundle' && deal.article2_id) ? deal.article2_id : null,
         prix_unitaire: prixUnitaire,
         options: optionsFlat.length > 0 ? optionsFlat : null,
         temps_prepa: article.temps_prepa || 1,
@@ -335,15 +337,17 @@ export async function POST(request) {
     // ─── 5) Vérif stock atomic : commandes payées du jour + réservations actives ──
     // Stock disponible = stock_jour - (qte des commandes du jour non annulées)
     //                              - (qte des réservations non expirées)
+    // Les seconds articles des duos consomment aussi leur stock : on les inclut
+    const stockArticleIds = [...new Set([...articleIds, ...lignes.map(l => l.deal_article2_id).filter(Boolean)])]
     const { data: stocksJour } = await supabase
       .from('article_stock_jour')
       .select('article_id, jour_semaine, stock, actif')
-      .in('article_id', articleIds)
+      .in('article_id', stockArticleIds)
 
     const { data: commandesDejaJour } = await supabase
       .from('commande_articles')
       .select('article_id, quantite, commande:commandes!inner(date_commande, statut, commercant_id)')
-      .in('article_id', articleIds)
+      .in('article_id', stockArticleIds)
       .eq('commande.date_commande', date_commande)
       .eq('commande.commercant_id', commercant.id)
       .not('commande.statut', 'in', '("non_retire","annulee_paiement_ko","annulee_client_refund")')
@@ -351,7 +355,7 @@ export async function POST(request) {
     const { data: reservationsActives } = await supabase
       .from('commande_stock_reservation')
       .select('article_id, quantite')
-      .in('article_id', articleIds)
+      .in('article_id', stockArticleIds)
       .eq('date_commande', date_commande)
       .gt('expires_at', new Date().toISOString())
 
@@ -369,18 +373,31 @@ export async function POST(request) {
       qteReserveeParArticle[r.article_id] = (qteReserveeParArticle[r.article_id] || 0) + r.quantite
     })
 
+    // Consommation AGRÉGÉE par article : une même commande peut cumuler l'unité,
+    // un ou plusieurs deals du même article, et le second article d'un duo
+    const consoParArticle = {}
+    const nomParArticle = {}
     for (const ligne of lignes) {
-      const stockEntry = (stocksJour || []).find(s => s.article_id === ligne.article_id && s.jour_semaine === jourSemaine)
+      consoParArticle[ligne.article_id] = (consoParArticle[ligne.article_id] || 0) + (ligne.quantite_stock || ligne.quantite)
+      if (!nomParArticle[ligne.article_id]) nomParArticle[ligne.article_id] = ligne.article_nom
+      if (ligne.deal_article2_id) {
+        consoParArticle[ligne.deal_article2_id] = (consoParArticle[ligne.deal_article2_id] || 0) + ligne.quantite
+        if (!nomParArticle[ligne.deal_article2_id]) nomParArticle[ligne.deal_article2_id] = ligne.article_nom
+      }
+    }
+
+    for (const [artId, conso] of Object.entries(consoParArticle)) {
+      const stockEntry = (stocksJour || []).find(s => s.article_id === artId && s.jour_semaine === jourSemaine)
       if (!stockEntry) continue // article sans stock géré : pas de limite
       if (stockEntry.actif === false) {
-        return NextResponse.json({ ok: false, error: `Article "${ligne.article_nom}" non disponible ce jour-là.` }, { status: 400 })
+        return NextResponse.json({ ok: false, error: `Article "${nomParArticle[artId]}" non disponible ce jour-là.` }, { status: 400 })
       }
-      const dispo = (stockEntry.stock || 0) - (qteDejaParArticle[ligne.article_id] || 0) - (qteReserveeParArticle[ligne.article_id] || 0)
-      if ((ligne.quantite_stock || ligne.quantite) > dispo) {
+      const dispo = (stockEntry.stock || 0) - (qteDejaParArticle[artId] || 0) - (qteReserveeParArticle[artId] || 0)
+      if (conso > dispo) {
         return NextResponse.json({
           ok: false,
-          error: `Stock insuffisant pour "${ligne.article_nom}" : ${Math.max(0, dispo)} disponible(s) (quelqu'un vient de commander).`,
-          article_id: ligne.article_id,
+          error: `Stock insuffisant pour "${nomParArticle[artId]}" : ${Math.max(0, dispo)} disponible(s) (quelqu'un vient de commander).`,
+          article_id: artId,
           stock_disponible: Math.max(0, dispo),
         }, { status: 409 })
       }
@@ -428,7 +445,9 @@ export async function POST(request) {
     // pré-filtre rapide ; ici on rattrape la race (dernier article pris entre les
     // deux). Avant l'insert des lignes → un échec ne laisse qu'une commande à supprimer.
     if (!estBoutique) {
-      const items = lignes.map(l => ({ article_id: l.article_id, quantite: l.quantite_stock || l.quantite }))
+      // Items AGRÉGÉS par article (cf. consoParArticle étape 5) : inclut les
+      // seconds articles des duos et évite les doublons article_id à la RPC
+      const items = Object.entries(consoParArticle).map(([article_id, quantite]) => ({ article_id, quantite }))
       const { error: errStock } = await supabase.rpc('reserver_stock_atomique', {
         p_commande_id: commande.id,
         p_commercant_id: commercant.id,
@@ -442,11 +461,11 @@ export async function POST(request) {
         const mStock = msg.match(/STOCK_INSUFFISANT:([0-9a-fA-F-]+):(\d+)/)
         const mInactif = msg.match(/ARTICLE_INACTIF:([0-9a-fA-F-]+)/)
         if (mStock) {
-          const nom = lignes.find(l => l.article_id === mStock[1])?.article_nom || 'un article'
+          const nom = nomParArticle[mStock[1]] || 'un article'
           return NextResponse.json({ ok: false, error: `Stock insuffisant pour "${nom}" : ${mStock[2]} disponible(s) (quelqu'un vient de commander).`, article_id: mStock[1], stock_disponible: Number(mStock[2]) }, { status: 409 })
         }
         if (mInactif) {
-          const nom = lignes.find(l => l.article_id === mInactif[1])?.article_nom || 'un article'
+          const nom = nomParArticle[mInactif[1]] || 'un article'
           return NextResponse.json({ ok: false, error: `Article "${nom}" non disponible ce jour-là.` }, { status: 400 })
         }
         console.error('[create-commande] reserver_stock_atomique KO', errStock)

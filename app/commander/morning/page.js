@@ -20,7 +20,7 @@ import { supabase } from '@/lib/supabase'
 import {
   Croissant, Cookie, Cake, Sandwich, Pizza, Coffee, ShoppingCart, Utensils, Beef,
   Flower, Pill, Truck, Scissors, Glasses, Shirt, School, Stethoscope,
-  AlertTriangle, Building2, Store, Zap,
+  AlertTriangle, Building2, Store, Zap, Phone,
 } from 'lucide-react'
 import { canDo } from '@/lib/plans'
 
@@ -107,7 +107,8 @@ async function fetchMorningData(commune) {
       .from('yoppaa_deals')
       .select(`
         id, titre, description, prix_deal, prix_original, date_deal, article_id, cta_appeler_reserver, photo_url,
-        commercant:commercants ( id, nom, type, adresse, plan, statut_publication, logo_url, slug )
+        deal_type, remise_pct,
+        commercant:commercants ( id, nom, type, adresse, plan, statut_publication, logo_url, slug, telephone )
       `)
       .eq('actif', true)
       .eq('inclus_morning', true)
@@ -175,30 +176,46 @@ async function fetchMorningData(commune) {
     .filter(d => commercantEligibleDeal(d.commercant) && d.article_id)
     .map(d => d.article_id)
   let stockParArticle = {}
+  let prixParArticle = {}
   if (articleIds.length > 0) {
     const { data: articles } = await supabase
       .from('articles')
-      .select('id, stock_jour')
+      .select('id, stock_jour, prix')
       .in('id', articleIds)
     stockParArticle = Object.fromEntries((articles || []).map(a => [a.id, a.stock_jour ?? 0]))
+    prixParArticle  = Object.fromEntries((articles || []).map(a => [a.id, a.prix]))
   }
 
   const deals = (dealsRaw || [])
     .filter(d => commercantEligibleDeal(d.commercant))
-    .map(d => ({
-      id: d.id,
-      commerce: d.commercant.nom,
-      Icon: iconDuType(d.commercant.type),
-      logo: d.commercant.logo_url || null,
-      slug: d.commercant.slug || null,
-      categorie: d.commercant.type || 'Commerce',
-      deal: d.titre,
-      description: d.description || null,
-      photo: d.photo_url || null,
-      prix: fmtPrix(d.prix_deal),
-      prixNormal: fmtPrix(d.prix_original),
-      stock: d.article_id ? (stockParArticle[d.article_id] ?? null) : null,
-    }))
+    .map(d => {
+      // Remise % : calculée en direct sur le prix article du jour (jamais figée)
+      const estRemise = d.deal_type === 'remise_pct' && d.remise_pct
+      const prixArticle = d.article_id != null ? prixParArticle[d.article_id] : null
+      const prix = estRemise
+        ? (prixArticle != null ? fmtPrix(Math.round(Number(prixArticle) * (100 - d.remise_pct)) / 100) : null)
+        : fmtPrix(d.prix_deal)
+      const prixNormal = estRemise
+        ? (prixArticle != null ? fmtPrix(prixArticle) : null)
+        : fmtPrix(d.prix_original)
+      return {
+        id: d.id,
+        commerce: d.commercant.nom,
+        Icon: iconDuType(d.commercant.type),
+        logo: d.commercant.logo_url || null,
+        slug: d.commercant.slug || null,
+        categorie: d.commercant.type || 'Commerce',
+        deal: d.titre,
+        description: d.description || null,
+        photo: d.photo_url || null,
+        remisePct: estRemise ? d.remise_pct : null,
+        prix,
+        prixNormal,
+        stock: d.article_id ? (stockParArticle[d.article_id] ?? null) : null,
+        // CTA « Appeler pour réserver » : promesse du TabDeals enfin tenue ici
+        telephone: d.cta_appeler_reserver ? (d.commercant.telephone || null) : null,
+      }
+    })
 
   // Icône par type de service public (Lucide React components)
   const SERVICE_ICON = {
@@ -543,8 +560,11 @@ function DealCard({ d, shown, delay, onOpen }) {
             {d.description}
           </div>
         )}
-        {/* Prix + stock + CTA */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Prix + remise % + stock + CTA */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {d.remisePct && (
+            <div style={{ fontSize: 12, fontWeight: 900, padding: '3px 9px', borderRadius: 100, background: T.pale, color: T.deep }}>-{d.remisePct}%</div>
+          )}
           {d.prix && <div style={{ fontSize: 20, fontWeight: 800, color: T.ink }}>{d.prix}</div>}
           {d.prixNormal && <div style={{ fontSize: 12, color: T.mid, textDecoration: 'line-through' }}>{d.prixNormal}</div>}
           {hasStock && (
@@ -552,7 +572,14 @@ function DealCard({ d, shown, delay, onOpen }) {
               {isUrgent && <Zap size={10} strokeWidth={2}/>}{d.stock} restants
             </div>
           )}
-          {d.slug && (
+          {d.telephone ? (
+            /* CTA « Appeler » prioritaire quand le commerçant l'a activé
+               (stopPropagation : ne pas ouvrir la fiche en même temps) */
+            <a href={`tel:${d.telephone}`} onClick={e => e.stopPropagation()}
+              style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 100, background: T.main, color: '#fff', fontSize: 10, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none', flexShrink: 0 }}>
+              <Phone size={11} strokeWidth={2.4}/> Appeler
+            </a>
+          ) : d.slug && (
             <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: T.main, letterSpacing: '0.5px', textTransform: 'uppercase', flexShrink: 0 }}>
               J&rsquo;en profite <IconArrow size={11} color={T.main}/>
             </span>

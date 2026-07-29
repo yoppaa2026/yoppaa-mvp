@@ -16,12 +16,12 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { isVitrine } from '@/lib/plans'
+import { isVitrine, canDo } from '@/lib/plans'
 import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import HorairesSection from '../../HorairesSection'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
-import { Lock } from 'lucide-react'
+import { Lock, Flame, Star, Phone, Calendar } from 'lucide-react'
 
 const T = {
   bg:       '#F8F6FF',
@@ -349,6 +349,8 @@ export default function CommanderRdvSlug() {
   const [praticiens, setPraticiens] = useState([])          // rdv_praticiens actifs
   const [junctionMap, setJunctionMap] = useState({})        // { prestation_id: [praticien_id, ...] }
   const [fermetures, setFermetures] = useState([])          // Sess 6 : rdv_fermetures futures (date_fin >= today)
+  const [deals, setDeals] = useState([])                    // deals actifs du jour (même fenêtre que la fiche commerce)
+  const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   const [loading, setLoading] = useState(true)
   const [erreur, setErreur] = useState(null)
 
@@ -374,6 +376,30 @@ export default function CommanderRdvSlug() {
   const [rdvCree, setRdvCree] = useState(null)  // contient la ligne rdv_reservations créée + meta affichage
 
   const scrollRef = useRef(null)
+
+  // Tracking stats deals (même mécanique best-effort que la fiche commerce) :
+  // chaque event compte 1x par session client, fire-and-forget non bloquant.
+  const dealsVuesRef = useRef(new Set())
+  const dealsCtaCliquesRef = useRef(new Set())
+  async function trackDeal(dealId, event) {
+    if (!dealId) return
+    const seen = event === 'view' ? dealsVuesRef.current : dealsCtaCliquesRef.current
+    if (seen.has(dealId)) return
+    seen.add(dealId)
+    try {
+      await fetch('/api/deals/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deal_id: dealId, event }),
+      })
+    } catch (e) {
+      console.warn('[trackDeal] envoi echoue', e?.message)
+      seen.delete(dealId)  // retry autorise la prochaine fois
+    }
+  }
+  useEffect(() => {
+    if (dealDetailOuvert?.id) trackDeal(dealDetailOuvert.id, 'view')
+  }, [dealDetailOuvert?.id])
 
   // Change d'étape ET remonte en haut du conteneur scrollable (UX fluide).
   // Centralisé pour cohérence sur toutes les transitions du tunnel RDV.
@@ -499,6 +525,28 @@ export default function CommanderRdvSlug() {
         setLoading(false)
         return
       }
+
+      // Deals actifs du jour : chargés AVANT le early-return module RDV désactivé,
+      // pour que les vitrines Communiquer sans RDV affichent quand même leurs deals
+      // (CTA « Appeler pour réserver »). Fenêtre identique à la fiche commerce :
+      // date_deal ponctuelle = aujourd'hui OU intervalle date_debut/date_fin.
+      if (canDo(c.plan, 'deals')) {
+        const { data: dealsData, error: errDeals } = await supabase
+          .from('yoppaa_deals')
+          .select('*')
+          .eq('commercant_id', c.id)
+          .eq('actif', true)
+        if (errDeals) console.warn('[rdv fiche] fetch deals KO', errDeals.message)
+        const auj = new Date().toISOString().slice(0, 10)
+        if (annule) return
+        setDeals((dealsData || []).filter(d => {
+          if (d.date_deal === auj) return true
+          const dStart = d.date_debut ? d.date_debut.slice(0, 10) : null
+          const dEnd   = d.date_fin   ? d.date_fin.slice(0, 10)   : null
+          return !!(dStart && dEnd && dStart <= auj && auj <= dEnd)
+        }))
+      }
+
       if (!c.rdv_actif) {
         // Vitrine publiée mais module RDV pas activé : on affiche quand même la fiche en mode lecture
         setCommercant({ ...c, _rdvDesactive: true })
@@ -1040,6 +1088,10 @@ export default function CommanderRdvSlug() {
         .prest-card { transition: all 0.15s; }
         .prest-card:hover { border-color: ${T.main}; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(107,53,196,0.12); }
         @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes dealGlow {
+          0%, 100% { box-shadow: 0 4px 16px rgba(22,6,54,0.2),  0 0 0 0  rgba(196,160,244,0); }
+          50%      { box-shadow: 0 6px 28px rgba(22,6,54,0.35), 0 0 0 10px rgba(196,160,244,0.45); }
+        }
         .fiche-hero { height: 220px; }
         @media (min-width: 600px) { .fiche-hero { height: 280px; } }
         .day-scroll::-webkit-scrollbar { display: none; }
@@ -1214,6 +1266,32 @@ export default function CommanderRdvSlug() {
                     </a>
                   )}
                 </div>
+
+                {/* Deals du jour : bandeau cliquable → modale détail + CTA appeler.
+                    Affiché uniquement à l'étape 1 (fiche), pas pendant le tunnel RDV. */}
+                {etape === 1 && deals.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                    {deals.map(d => (
+                      <button key={d.id} onClick={() => setDealDetailOuvert(d)}
+                        style={{ width: '100%', background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, animation: 'dealGlow 1.8s ease-in-out infinite', border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
+                        <Flame size={20} strokeWidth={2} color={T.light} style={{ flexShrink: 0 }}/>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>Deal du jour</p>
+                          <p style={{ fontSize: '0.9rem', fontWeight: 800, color: '#fff', marginTop: 2, lineHeight: 1.3 }}>{d.titre}</p>
+                        </div>
+                        {d.remise_pct ? (
+                          <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px', flexShrink: 0 }}>-{d.remise_pct}%</span>
+                        ) : d.prix_deal ? (
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            {d.prix_original && <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', textDecoration: 'line-through' }}>{Number(d.prix_original).toFixed(2)}€</p>}
+                            <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{Number(d.prix_deal).toFixed(2)}€</p>
+                          </div>
+                        ) : null}
+                        <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', flexShrink: 0, marginLeft: 4 }}>›</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Horaires complets (collapsible) - meme widget que la fiche alimentaire */}
                 <div style={{ marginTop: 12 }}>
@@ -1923,6 +2001,118 @@ export default function CommanderRdvSlug() {
           )}
         </div>
       </div>
+
+      {/* ─── MODALE DÉTAIL DEAL (même pattern que la fiche commerce) ─── */}
+      {dealDetailOuvert && (
+        <div onClick={() => setDealDetailOuvert(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeUp 0.2s ease' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 22, maxWidth: 440, width: '100%', boxShadow: '0 24px 48px rgba(0,0,0,0.35)', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+
+            {/* Photo hero enrichie si dispo, sinon en-tête violet fallback */}
+            {dealDetailOuvert.photo_url ? (
+              <div style={{ position: 'relative', width: '100%', paddingTop: '62%', background: T.pale, flexShrink: 0 }}>
+                <img src={dealDetailOuvert.photo_url} alt={dealDetailOuvert.titre}
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}/>
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(22,6,54,0.35) 0%, transparent 30%, transparent 65%, rgba(22,6,54,0.55) 100%)' }}/>
+                <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '1.2px', background: 'rgba(22,6,54,0.65)', padding: '4px 10px', borderRadius: 100, backdropFilter: 'blur(8px)', display: 'inline-flex', alignItems: 'center', gap: 4, width: 'fit-content' }}>
+                    <Flame size={11} strokeWidth={2.2}/> Deal
+                  </span>
+                  {dealDetailOuvert.est_bonne_affaire && (
+                    <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#7C2D12', textTransform: 'uppercase', letterSpacing: '1.2px', background: 'rgba(252,211,77,0.95)', padding: '4px 10px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4, width: 'fit-content', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
+                      <Star size={11} strokeWidth={2.5}/> Bonne affaire
+                    </span>
+                  )}
+                </div>
+                <button onClick={() => setDealDetailOuvert(null)} aria-label="Fermer"
+                  style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(22,6,54,0.65)', backdropFilter: 'blur(8px)', border: 'none', borderRadius: '50%', width: 34, height: 34, color: '#fff', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '16px 20px', color: '#fff' }}>
+                  <h2 style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.2, margin: 0, textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>
+                    {dealDetailOuvert.titre}
+                  </h2>
+                  {dealDetailOuvert.remise_pct ? (
+                    <span style={{ display: 'inline-block', fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.5px', textShadow: '0 2px 8px rgba(0,0,0,0.5)', marginTop: 8 }}>-{dealDetailOuvert.remise_pct}%</span>
+                  ) : dealDetailOuvert.prix_deal ? (
+                    <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
+                      <span style={{ fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.5px', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{Number(dealDetailOuvert.prix_deal).toFixed(2)}€</span>
+                      {dealDetailOuvert.prix_original && (
+                        <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.75)', textDecoration: 'line-through', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{Number(dealDetailOuvert.prix_original).toFixed(2)}€</span>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, padding: '20px 22px 24px', color: '#fff', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px', background: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: 100, border: '1px solid rgba(255,255,255,0.2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Flame size={11} strokeWidth={2}/> Deal</span>
+                    {dealDetailOuvert.est_bonne_affaire && (
+                      <span style={{ fontSize: '0.62rem', fontWeight: 800, color: '#7C2D12', textTransform: 'uppercase', letterSpacing: '1.2px', background: '#FCD34D', padding: '4px 10px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Star size={11} strokeWidth={2.2}/> Bonne affaire</span>
+                    )}
+                  </div>
+                  <button onClick={() => setDealDetailOuvert(null)} aria-label="Fermer"
+                    style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 30, height: 30, color: '#fff', cursor: 'pointer', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                </div>
+                <h2 style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.2, margin: 0 }}>
+                  {dealDetailOuvert.titre}
+                </h2>
+                {dealDetailOuvert.remise_pct ? (
+                  <span style={{ display: 'inline-block', fontWeight: 900, fontSize: '1.6rem', color: T.light, letterSpacing: '-0.5px', marginTop: 12, background: 'rgba(255,255,255,0.1)', padding: '8px 14px', borderRadius: 12 }}>-{dealDetailOuvert.remise_pct}%</span>
+                ) : dealDetailOuvert.prix_deal ? (
+                  <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, marginTop: 12, background: 'rgba(255,255,255,0.1)', padding: '8px 14px', borderRadius: 12 }}>
+                    <span style={{ fontWeight: 900, fontSize: '1.6rem', color: T.light, letterSpacing: '-0.5px' }}>{Number(dealDetailOuvert.prix_deal).toFixed(2)}€</span>
+                    {dealDetailOuvert.prix_original && (
+                      <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.5)', textDecoration: 'line-through' }}>{Number(dealDetailOuvert.prix_original).toFixed(2)}€</span>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {/* Corps blanc scrollable */}
+            <div style={{ padding: '18px 22px 22px', overflowY: 'auto', flex: 1 }}>
+              {dealDetailOuvert.description && (
+                <p style={{ fontSize: '0.9rem', color: T.ink, lineHeight: 1.55, margin: '0 0 14px', fontWeight: 600 }}>
+                  {dealDetailOuvert.description}
+                </p>
+              )}
+              {dealDetailOuvert.description_longue && (
+                <div style={{ fontSize: '0.88rem', color: T.deep, lineHeight: 1.65, margin: '0 0 16px', whiteSpace: 'pre-wrap' }}>
+                  {dealDetailOuvert.description_longue}
+                </div>
+              )}
+              {dealDetailOuvert.date_deal && (
+                <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 600, margin: '0 0 6px' }}>
+                  <Calendar size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Valable le {new Date(dealDetailOuvert.date_deal + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </p>
+              )}
+
+              {/* CTA « Appeler pour réserver » si activé par le commerçant */}
+              {dealDetailOuvert.cta_appeler_reserver && commercant?.telephone ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+                  <a href={`tel:${commercant.telephone}`}
+                    onClick={() => trackDeal(dealDetailOuvert.id, 'cta_click')}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0.95rem', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 6px 20px ${T.main}55`, textDecoration: 'none' }}>
+                    <Phone size={16} strokeWidth={2.4}/>
+                    Appeler pour réserver
+                  </a>
+                  <button onClick={() => setDealDetailOuvert(null)}
+                    style={{ width: '100%', padding: '0.7rem', border: `1.5px solid ${T.pale}`, borderRadius: 100, background: '#fff', color: T.muted, fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                    Fermer
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setDealDetailOuvert(null)}
+                  style={{ width: '100%', marginTop: 14, padding: '0.875rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 16px ${T.main}55` }}>
+                  Compris
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

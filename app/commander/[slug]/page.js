@@ -379,7 +379,9 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
           // FIX STOCK : vérifier la limite par article dans le panier
           // (item à variante : le stock de LA variante fait foi)
           const stockMax = item.variante ? (item.variante.stock ?? Infinity) : (getStockMax ? getStockMax(item.id) : Infinity)
-          const stockAtteintPanier = stockMax !== Infinity && item.quantite >= stockMax
+          // Une ligne deal consomme unites_par_deal unités de stock par +
+          const unitesLigne = item.deal_id ? (item.unites_par_deal || 1) : 1
+          const stockAtteintPanier = stockMax !== Infinity && (item.quantite + 1) * unitesLigne > stockMax
           return (
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.625rem 0', borderBottom: `1px solid ${T.pale}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -1552,6 +1554,11 @@ export default function CommanderSlug() {
   // revalide le prix via deal_id.
   function ajouterDealAuPanier(deal, article) {
     const key = `deal_${deal.id}`
+    // Plafond stock : un deal consomme unites_par_deal unités de l'article
+    // (lot 3+1 = 4). Même garde silencieuse que les ajouts unitaires.
+    const stockMax = getStockMax(article.id)
+    const unites = deal.unites_par_deal || 1
+    if (stockMax !== Infinity && qteTotaleArticle(article.id) + unites > stockMax) return
     // Prix par type : remise % calculée en direct sur le prix article (jamais
     // figée), sinon prix_deal (lot / prix fixe / duo). Le serveur revalide.
     const prixDeal = deal.deal_type === 'remise_pct' && deal.remise_pct
@@ -1566,6 +1573,7 @@ export default function CommanderSlug() {
       prix: prixDeal,
       prix_avant_deal: prixAvant,
       deal_id: deal.id,
+      unites_par_deal: unites,
       options: null,
       quantite: (prev[key]?.quantite || 0) + 1,
     } }))
@@ -1579,8 +1587,10 @@ export default function CommanderSlug() {
       return
     }
     const stockMax = getStockMax(item.id)
-    const qteTotale = qteTotaleArticle(item.id)
-    if (stockMax !== Infinity && qteTotale >= stockMax) return
+    // Une ligne deal ajoute unites_par_deal unités d'un coup, une ligne
+    // classique en ajoute une seule
+    const ajout = item.deal_id ? (item.unites_par_deal || 1) : 1
+    if (stockMax !== Infinity && qteTotaleArticle(item.id) + ajout > stockMax) return
     setPanier(prev => ({ ...prev, [key]: { ...item, quantite: (prev[key]?.quantite || 0) + 1 } }))
   }
 
@@ -1594,7 +1604,13 @@ export default function CommanderSlug() {
   }
 
   function qteTotaleArticle(articleId) {
-    return Object.entries(panier).filter(([key]) => key === String(articleId) || key.startsWith(`${articleId}_`)).reduce((acc, [, item]) => acc + item.quantite, 0)
+    return Object.entries(panier).reduce((acc, [key, item]) => {
+      if (key === String(articleId) || key.startsWith(`${articleId}_`)) return acc + item.quantite
+      // Lignes deal (clé deal_<id>) rattachées à cet article : chaque deal
+      // consomme unites_par_deal unités de stock (ex. lot 3+1 = 4 unités)
+      if (key.startsWith('deal_') && String(item.id) === String(articleId)) return acc + item.quantite * (item.unites_par_deal || 1)
+      return acc
+    }, 0)
   }
 
   // Stock disponible d'un article pour le jour sélectionné. Priorité :

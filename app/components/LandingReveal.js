@@ -728,14 +728,27 @@ export default function LandingReveal({ referent = null }) {
       <section style={{ maxWidth: 760, margin: '0 auto', padding: '64px 20px 8px', textAlign: 'center' }}>
         <SectionEyebrow>Pourquoi Yoppaa</SectionEyebrow>
         <h2 style={{ fontSize: 'clamp(1.6rem, 4.5vw, 2.3rem)', fontWeight: 900, letterSpacing: '-1.2px', lineHeight: 1.15, margin: '0 0 16px', color: T.ink }}>
-          Les grandes plateformes prennent jusqu&rsquo;à 30% aux commerçants.<br/>
+          Les grandes plateformes prélèvent une commission sur chaque vente.<br/>
           <span style={{ color: T.main }}>Nous avons choisi le camp du quartier.</span>
         </h2>
-        <p style={{ fontSize: '1.02rem', color: T.muted, lineHeight: 1.7, maxWidth: 620, margin: '0 auto', fontWeight: 500 }}>
-          Yoppaa réunit dans une seule app les boulangers, les coiffeurs, les boutiques et les food trucks
-          de ta commune. Tu commandes et tu réserves chez eux en quelques secondes, ils gardent tout ce
-          qu&rsquo;ils gagnent, et ton quartier reste vivant. C&rsquo;est aussi simple que ça.
+        <p style={{ fontSize: '1.02rem', color: T.muted, lineHeight: 1.7, maxWidth: 620, margin: '0 auto 28px', fontWeight: 500 }}>
+          Yoppaa réunit les commerces de ta commune dans une seule app. Tu commandes et tu réserves
+          chez eux en quelques secondes, ils gardent tout ce qu&rsquo;ils gagnent, et ton quartier
+          reste vivant. C&rsquo;est aussi simple que ça.
         </p>
+        {/* Les 3 familles de commerçants (taxonomie produit : alimentaire / services / détail) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, textAlign: 'left' }}>
+          {[
+            { titre: 'Alimentaire', exemples: 'Boulangeries, boucheries, snacks, friteries, sandwicheries, restaurants, food trucks et plein d’autres.' },
+            { titre: 'Services', exemples: 'Coiffeurs, barbiers, instituts de beauté, bien-être, garages et tous les métiers sur rendez-vous.' },
+            { titre: 'Détail', exemples: 'Boutiques de mode, fleuristes, librairies, décoration et tout le commerce de proximité.' },
+          ].map(s => (
+            <div key={s.titre} style={{ background: '#fff', borderRadius: 16, padding: '16px 18px', border: `1px solid ${T.pale}`, boxShadow: '0 4px 14px rgba(22,6,54,0.05)' }}>
+              <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 900, color: T.main, textTransform: 'uppercase', letterSpacing: '0.8px' }}>{s.titre}</p>
+              <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: T.deep, lineHeight: 1.55 }}>{s.exemples}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* ═══ 3. CÔTÉ YOPPERS : mockups ═══ */}

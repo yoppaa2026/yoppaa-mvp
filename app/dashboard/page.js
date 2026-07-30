@@ -816,9 +816,22 @@ export default function Dashboard() {
     return () => { if (pollingRef.current) clearInterval(pollingRef.current) }
   }, [commercant?.id, notificationsActives])
 
+  // Crédit fidélité automatique (Vendre) au statut final. Fire-and-forget,
+  // idempotent côté serveur (index unique par commande).
+  function crediterFideliteCommande(commandeId) {
+    fetch('/api/fidelite/crediter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commande_id: commandeId }),
+    }).catch(e => console.warn('[dashboard] credit fidelite KO', e))
+  }
+
   async function changerStatut(commandeId, statut) {
     await supabase.from('commandes').update({ statut }).eq('id', commandeId)
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, statut } : c))
+
+    // Statut final : la commande récupérée remplit la carte de fidélité
+    if (statut === 'recupere') crediterFideliteCommande(commandeId)
 
     // Push OneSignal au Yopper à chaque transition (en préparation, prête),
     // contenu actionnable + clic vers l'onglet Commandes. Fire-and-forget.
@@ -851,6 +864,7 @@ export default function Dashboard() {
     const { error } = await supabase.from('commandes').update(patch).eq('id', commandeId)
     if (error) { alert(`Erreur : ${error.message}`); return }
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...patch } : c))
+    crediterFideliteCommande(commandeId)
   }
 
   async function changerStatutLivraison(commandeId, statutLivraison) {
@@ -863,6 +877,7 @@ export default function Dashboard() {
       return
     }
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...patch } : c))
+    if (statutLivraison === 'livree') crediterFideliteCommande(commandeId)
 
     // Push OneSignal au Yopper (en route / livrée). Non-bloquant : l'UI est déjà à jour.
     fetch('/api/livraison/statut', {

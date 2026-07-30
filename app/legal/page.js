@@ -172,7 +172,7 @@ export default function LegalPage() {
             <Ul items={[
               'Exister : gratuit, pour toujours — page professionnelle (horaires, photos, itinéraire, contact), visibilité dans l’app et référencement, présence hebdomadaire dans le Good Morning Yoppers, signaux des habitants.',
               'Communiquer : 19,90€ HTVA/mois — tout Exister, plus deals du jour et actualités, place quotidienne dans le Good Morning Yoppers, notifications push vers les habitants de la commune, assistant IA de rédaction.',
-              'Vendre : 49,90€ HTVA/mois — tout Communiquer, plus Click & Collect avec paiement en ligne, rendez-vous en ligne, boutique en ligne avec expédition, livraison locale, assistant IA complet. Zéro commission sur les ventes.',
+              'Vendre : 49,90€ HTVA/mois — tout Communiquer, plus Click & Collect avec paiement en ligne, rendez-vous en ligne, boutique en ligne avec expédition, livraison locale, programme de fidélité, assistant IA complet. Zéro commission sur les ventes.',
             ]}/>
             <P>Les formules sont mensuelles, sans engagement de durée. Les formules payantes bénéficient d'un essai gratuit de 30 jours, sans carte de paiement. Pour les comptes créés avant le 1er septembre 2026 (lancement public de l'application), l'essai démarre le 1er septembre 2026.</P>
             <P>Les Commerçants bénéficiant de conditions préférentielles individuelles (offres de lancement) se réfèrent aux conditions définies dans leur contrat, sans engagement de durée au-delà de ce qui y est précisé.</P>

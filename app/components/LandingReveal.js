@@ -540,6 +540,7 @@ const FORMULES = [
       'Click & Collect avec paiement en ligne',
       'Rendez-vous en ligne, réservables 24h/24',
       'Boutique en ligne et livraison locale',
+      'Programme de fidélité pour tes clients réguliers',
       'Assistant IA complet : rédaction avancée pour tes articles, tes deals et tes actus, avec un usage étendu',
       '0% de commission sur tes ventes',
     ],

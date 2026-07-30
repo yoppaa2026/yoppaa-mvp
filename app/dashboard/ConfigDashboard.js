@@ -7,6 +7,7 @@ import BoutonIaInline from './BoutonIaInline'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
+import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '@/lib/fidelite'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
 import {
@@ -159,6 +160,7 @@ function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 2 }) {
     chevU:     <path d="M6 15l6-6 6 6"/>,
     user:      <><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 016-6h4a6 6 0 016 6v1"/></>,
     sparkles:  <><path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7L12 3z"/><path d="M18.5 14l.85 2.15L21.5 17l-2.15.85L18.5 20l-.85-2.15L15.5 17l2.15-.85L18.5 14z"/></>,
+    heart:     <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/>,
   }
   return <svg {...props} style={{ flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}>{paths[name]}</svg>
 }
@@ -3264,6 +3266,350 @@ function SectionCreneauxLivraison({ commercantId, toast }) {
   )
 }
 
+// ─── B.6 Fidélité : configuration + pointage comptoir (brief 31/07) ──────────
+// LE GSM = LA CARTE : le commerçant tape le numéro du client, la carte se crée
+// à la volée. Communiquer = ce pointage comptoir ; Vendre = + crédit AUTO sur
+// les transactions Yoppaa (branché étape 4). SMS Brevo branchés à l'étape 6.
+function TabFidelite({ commercantId, commercant, toast, onSaved }) {
+  const actif = commercant?.fidelite_actif === true
+  const peutAuto = canDo(commercant?.plan, 'fidelite_auto')
+  const [saving, setSaving] = useState(false)
+  const [showConfig, setShowConfig] = useState(!actif)
+  const [cfg, setCfg] = useState({
+    fidelite_mecanique: commercant?.fidelite_mecanique || presetFidelite(commercant?.categorie).fidelite_mecanique,
+    fidelite_seuil_passages: commercant?.fidelite_seuil_passages || 10,
+    fidelite_taux_cagnotte: commercant?.fidelite_taux_cagnotte || 5,
+    fidelite_seuil_cagnotte: commercant?.fidelite_seuil_cagnotte || 10,
+    fidelite_recompense_type: commercant?.fidelite_recompense_type || presetFidelite(commercant?.categorie).fidelite_recompense_type,
+    fidelite_recompense_valeur: commercant?.fidelite_recompense_valeur ?? presetFidelite(commercant?.categorie).fidelite_recompense_valeur,
+    fidelite_recompense_libelle: commercant?.fidelite_recompense_libelle || presetFidelite(commercant?.categorie).fidelite_recompense_libelle,
+    fidelite_sms_actif: commercant?.fidelite_sms_actif !== false,
+  })
+
+  // Pointage comptoir
+  const [telInput, setTelInput] = useState('')
+  const [carte, setCarte] = useState(null)          // carte affichée
+  const [telIntrouvable, setTelIntrouvable] = useState(null)  // numéro normalisé sans carte
+  const [montantInput, setMontantInput] = useState('')
+  const [dernieres, setDernieres] = useState([])
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!actif) return
+    let annule = false
+    supabase.from('fidelite_cartes').select('*').eq('commercant_id', commercantId)
+      .order('updated_at', { ascending: false }).limit(8)
+      .then(({ data }) => { if (!annule) setDernieres(data || []) })
+    return () => { annule = true }
+  }, [commercantId, actif, carte?.updated_at])
+
+  async function sauverConfig(activer = false) {
+    const patch = {
+      ...cfg,
+      fidelite_seuil_passages: Math.min(50, Math.max(2, parseInt(cfg.fidelite_seuil_passages) || 10)),
+      fidelite_taux_cagnotte: Math.min(30, Math.max(1, parseFloat(cfg.fidelite_taux_cagnotte) || 5)),
+      fidelite_seuil_cagnotte: Math.max(1, parseFloat(cfg.fidelite_seuil_cagnotte) || 10),
+      fidelite_recompense_valeur: parseFloat(cfg.fidelite_recompense_valeur) || null,
+    }
+    if (activer) {
+      patch.fidelite_actif = true
+      // 25 SMS offerts à la première activation (une seule fois)
+      if ((commercant?.fidelite_sms_credits || 0) === 0) patch.fidelite_sms_credits = 25
+    }
+    setSaving(true)
+    const { error } = await supabase.from('commercants').update(patch).eq('id', commercantId)
+    setSaving(false)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast(activer ? 'Fidélité activée, 25 SMS offerts 🟣' : 'Programme mis à jour')
+    setShowConfig(false)
+    onSaved?.()
+  }
+
+  async function desactiver() {
+    if (!confirm('Désactiver la fidélité ? Les cartes de tes clients sont conservées.')) return
+    const { error } = await supabase.from('commercants').update({ fidelite_actif: false }).eq('id', commercantId)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast('Fidélité désactivée (cartes conservées)')
+    onSaved?.()
+  }
+
+  async function chercher() {
+    const tel = normaliserTelephone(telInput)
+    if (!tel) { toast('Numéro invalide (ex : 0470 12 34 56)', 'error'); return }
+    setBusy(true)
+    const { data, error } = await supabase.from('fidelite_cartes').select('*')
+      .eq('commercant_id', commercantId).eq('telephone', tel).maybeSingle()
+    setBusy(false)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    if (data) { setCarte(data); setTelIntrouvable(null) }
+    else { setCarte(null); setTelIntrouvable(tel) }
+  }
+
+  async function creerCarte() {
+    if (!telIntrouvable) return
+    setBusy(true)
+    const { data, error } = await supabase.from('fidelite_cartes')
+      .insert({ commercant_id: commercantId, telephone: telIntrouvable })
+      .select().single()
+    setBusy(false)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    setCarte(data); setTelIntrouvable(null)
+    toast('Carte créée 🟣')
+    // SMS de bienvenue : branché à l'étape 6 (Brevo)
+  }
+
+  async function crediter() {
+    if (!carte) return
+    const credit = commercant.fidelite_mecanique === 'cagnotte'
+      ? { montant: parseFloat(String(montantInput).replace(',', '.')) || 0 }
+      : { passages: 1 }
+    if (commercant.fidelite_mecanique === 'cagnotte' && credit.montant <= 0) {
+      toast('Indique le montant de l’achat', 'error'); return
+    }
+    setBusy(true)
+    const { patch, debloquees } = appliquerCredit(commercant, carte, credit)
+    const { data, error } = await supabase.from('fidelite_cartes').update(patch).eq('id', carte.id).select().single()
+    if (error) { setBusy(false); toast(`Erreur : ${error.message}`, 'error'); return }
+    const mvts = [{ carte_id: carte.id, type: commercant.fidelite_mecanique === 'cagnotte' ? 'cagnotte' : 'passage', valeur: commercant.fidelite_mecanique === 'cagnotte' ? credit.montant : 1, source: 'comptoir' }]
+    for (let i = 0; i < debloquees; i++) mvts.push({ carte_id: carte.id, type: 'recompense_debloquee', valeur: null, source: 'comptoir' })
+    const { error: errMvt } = await supabase.from('fidelite_mouvements').insert(mvts)
+    if (errMvt) console.warn('[fidelite] mouvement KO', errMvt.message)
+    setBusy(false)
+    setCarte(data)
+    setMontantInput('')
+    toast(debloquees > 0 ? `Carte pleine ! ${libelleRecompense(commercant)} 🟣` : 'C’est noté')
+    // SMS carte pleine : branché à l'étape 6 (Brevo)
+  }
+
+  async function utiliserRecompense() {
+    if (!carte || (carte.recompenses_disponibles || 0) < 1) return
+    if (!confirm(`Utiliser la récompense maintenant ?\n${libelleRecompense(commercant)}`)) return
+    setBusy(true)
+    const { data, error } = await supabase.from('fidelite_cartes')
+      .update({ recompenses_disponibles: carte.recompenses_disponibles - 1, updated_at: new Date().toISOString() })
+      .eq('id', carte.id).select().single()
+    if (!error) await supabase.from('fidelite_mouvements').insert({ carte_id: carte.id, type: 'recompense_utilisee', source: 'comptoir' })
+    setBusy(false)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    setCarte(data)
+    toast('Récompense utilisée, bien joué 🟣')
+  }
+
+  async function supprimerCarte() {
+    if (!carte) return
+    if (!confirm(`Supprimer la carte ${afficherTelephone(carte.telephone)} ? (numéro mal tapé, demande du client...)`)) return
+    const { error } = await supabase.from('fidelite_cartes').delete().eq('id', carte.id)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    setCarte(null)
+    toast('Carte supprimée')
+  }
+
+  const card = { background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: 16 }
+  const field = { padding: '9px 11px', borderRadius: 9, border: `1.5px solid ${T.hairline}`, fontSize: 14, fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box' }
+  const btnPlein = { padding: '10px 16px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }
+  const btnGhost = { padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }
+  const chip = (sel) => ({ padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${sel ? T.main : T.hairline}`, background: sel ? T.pale : '#fff', color: sel ? T.main : T.muted, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' })
+  const estCagnotte = (showConfig ? cfg.fidelite_mecanique : commercant?.fidelite_mecanique) === 'cagnotte'
+
+  // Jauge de la carte affichée
+  function JaugeCarte({ c }) {
+    if (commercant.fidelite_mecanique === 'cagnotte') {
+      const seuil = Number(commercant.fidelite_seuil_cagnotte || 10)
+      const pct = Math.min(100, Math.round((Number(c.cagnotte) / seuil) * 100))
+      return (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: T.deep }}>Cagnotte : {Number(c.cagnotte).toFixed(2).replace('.', ',')}€</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: T.muted }}>objectif {seuil.toFixed(2).replace('.', ',')}€</span>
+          </div>
+          <div style={{ height: 8, borderRadius: 100, background: T.pale, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: `linear-gradient(90deg, ${T.main}, ${T.mid})`, transition: 'width 0.3s' }}/>
+          </div>
+        </div>
+      )
+    }
+    const seuil = commercant.fidelite_seuil_passages || 10
+    return (
+      <div>
+        <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 800, color: T.deep }}>Passages : {c.passages}/{seuil}</p>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {Array.from({ length: seuil }, (_, i) => (
+            <span key={i} style={{ width: 16, height: 16, borderRadius: '50%', background: i < c.passages ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : T.pale, border: `1.5px solid ${i < c.passages ? T.main : T.hairline}` }}/>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* ─── Activation / configuration ─── */}
+      <div style={card}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Programme de fidélité</p>
+          {actif && (
+            <span style={{ fontSize: 11, fontWeight: 800, color: '#10B981', background: '#F0FDF4', padding: '3px 10px', borderRadius: 100, border: '1px solid #10B98133' }}>Actif</span>
+          )}
+        </div>
+        <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.muted, lineHeight: 1.55 }}>
+          La carte de fidélité digitale de tes clients : leur numéro de GSM suffit, la carte se crée toute seule au comptoir.
+          {peutAuto ? ' Et avec Vendre, chaque commande ou rendez-vous Yoppaa la remplit automatiquement.' : ''}
+          {' '}SMS restants : <strong style={{ color: T.deep }}>{commercant?.fidelite_sms_credits || 0}</strong>
+        </p>
+
+        {(showConfig || !actif) ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 800, color: T.deep }}>Mécanique</p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button style={chip(!estCagnotte)} onClick={() => setCfg(p => ({ ...p, fidelite_mecanique: 'passages' }))}>Carte à passages</button>
+                <button style={chip(estCagnotte)} onClick={() => setCfg(p => ({ ...p, fidelite_mecanique: 'cagnotte' }))}>Cagnotte par montant</button>
+              </div>
+            </div>
+            {!estCagnotte ? (
+              <div>
+                <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 800, color: T.deep }}>Passages pour débloquer la récompense</p>
+                <input type="number" min={2} max={50} style={{ ...field, width: 110 }} value={cfg.fidelite_seuil_passages}
+                  onChange={e => setCfg(p => ({ ...p, fidelite_seuil_passages: e.target.value }))}/>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 800, color: T.deep }}>% du montant en cagnotte</p>
+                  <input type="number" min={1} max={30} step="0.5" style={{ ...field, width: 110 }} value={cfg.fidelite_taux_cagnotte}
+                    onChange={e => setCfg(p => ({ ...p, fidelite_taux_cagnotte: e.target.value }))}/>
+                </div>
+                <div>
+                  <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 800, color: T.deep }}>Cagnotte à atteindre (€)</p>
+                  <input type="number" min={1} step="0.5" style={{ ...field, width: 110 }} value={cfg.fidelite_seuil_cagnotte}
+                    onChange={e => setCfg(p => ({ ...p, fidelite_seuil_cagnotte: e.target.value }))}/>
+                </div>
+              </div>
+            )}
+            <div>
+              <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 800, color: T.deep }}>Récompense</p>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <button style={chip(cfg.fidelite_recompense_type === 'remise_montant')} onClick={() => setCfg(p => ({ ...p, fidelite_recompense_type: 'remise_montant' }))}>Montant (€)</button>
+                <button style={chip(cfg.fidelite_recompense_type === 'remise_pct')} onClick={() => setCfg(p => ({ ...p, fidelite_recompense_type: 'remise_pct' }))}>Pourcentage (%)</button>
+                <input type="number" min={1} step="0.5" style={{ ...field, width: 100 }} value={cfg.fidelite_recompense_valeur}
+                  onChange={e => setCfg(p => ({ ...p, fidelite_recompense_valeur: e.target.value }))}
+                  placeholder={cfg.fidelite_recompense_type === 'remise_pct' ? '%' : '€'}/>
+              </div>
+              <input style={{ ...field, width: '100%' }} maxLength={90} value={cfg.fidelite_recompense_libelle}
+                onChange={e => setCfg(p => ({ ...p, fidelite_recompense_libelle: e.target.value }))}
+                placeholder="Libellé montré au client (ex : Le 11e pain est offert)"/>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input type="checkbox" checked={cfg.fidelite_sms_actif}
+                onChange={e => setCfg(p => ({ ...p, fidelite_sms_actif: e.target.checked }))}
+                style={{ width: 15, height: 15, accentColor: T.mid }}/>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: T.deep }}>Prévenir mes clients par SMS (création de carte + récompense débloquée)</span>
+            </label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={btnPlein} disabled={saving} onClick={() => sauverConfig(!actif)}>
+                {saving ? 'Enregistrement…' : actif ? 'Enregistrer' : 'Activer la fidélité (25 SMS offerts)'}
+              </button>
+              {actif && <button style={btnGhost} onClick={() => setShowConfig(false)}>Annuler</button>}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: T.deep }}>
+              {commercant.fidelite_mecanique === 'cagnotte'
+                ? `${Number(commercant.fidelite_taux_cagnotte)}% en cagnotte, récompense dès ${Number(commercant.fidelite_seuil_cagnotte).toFixed(2).replace('.', ',')}€`
+                : `${commercant.fidelite_seuil_passages} passages → récompense`}
+              {' · '}{libelleRecompense(commercant)}
+            </span>
+            <button style={btnGhost} onClick={() => setShowConfig(true)}>Modifier</button>
+            <button style={{ ...btnGhost, color: '#DC2626', borderColor: '#FEE2E2' }} onClick={desactiver}>Désactiver</button>
+          </div>
+        )}
+      </div>
+
+      {/* ─── Pointage comptoir ─── */}
+      {actif && (
+        <div style={card}>
+          <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Pointage comptoir</p>
+          <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.muted, lineHeight: 1.55 }}>
+            Le client donne son numéro de GSM, tu le tapes, c&rsquo;est tout. Pas encore de carte ? Elle se crée en un clic.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="tel" inputMode="tel" style={{ ...field, flex: 1, fontSize: 16 }} placeholder="0470 12 34 56"
+              value={telInput} onChange={e => setTelInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') chercher() }}/>
+            <button style={btnPlein} disabled={busy} onClick={chercher}>Chercher</button>
+          </div>
+
+          {telIntrouvable && (
+            <div style={{ marginTop: 12, background: T.pale, borderRadius: 12, padding: '12px 14px' }}>
+              <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: T.deep }}>
+                Aucune carte pour {afficherTelephone(telIntrouvable)}.
+              </p>
+              <button style={btnPlein} disabled={busy} onClick={creerCarte}>Créer sa carte 🟣</button>
+            </div>
+          )}
+
+          {carte && (
+            <div style={{ marginTop: 12, border: `1.5px solid ${T.pale}`, borderRadius: 12, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 900, color: T.ink }}>{afficherTelephone(carte.telephone)}</p>
+                <button onClick={supprimerCarte} aria-label="Supprimer la carte"
+                  style={{ width: 26, height: 26, borderRadius: 100, border: 'none', background: '#FEE2E2', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontWeight: 800, padding: 0 }}>✕</button>
+              </div>
+              <JaugeCarte c={carte}/>
+
+              {(carte.recompenses_disponibles || 0) > 0 && (
+                <div style={{ marginTop: 12, background: '#F0FDF4', border: '1.5px solid #10B98144', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#059669', flex: 1 }}>
+                    {carte.recompenses_disponibles > 1 ? `${carte.recompenses_disponibles} récompenses disponibles` : 'Récompense disponible'} : {libelleRecompense(commercant)}
+                  </span>
+                  <button style={{ ...btnPlein, background: '#10B981' }} disabled={busy} onClick={utiliserRecompense}>Utiliser maintenant</button>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+                {commercant.fidelite_mecanique === 'cagnotte' ? (
+                  <>
+                    <input type="number" min="0" step="0.01" inputMode="decimal" style={{ ...field, width: 130 }} placeholder="Montant (€)"
+                      value={montantInput} onChange={e => setMontantInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') crediter() }}/>
+                    <button style={btnPlein} disabled={busy} onClick={crediter}>Créditer la cagnotte</button>
+                  </>
+                ) : (
+                  <button style={{ ...btnPlein, fontSize: 15, padding: '12px 22px' }} disabled={busy} onClick={crediter}>+1 passage</button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {dernieres.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <p style={{ margin: '0 0 8px', fontSize: 11.5, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Dernières cartes</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {dernieres.map(c => (
+                  <button key={c.id} onClick={() => { setCarte(c); setTelIntrouvable(null); setTelInput(afficherTelephone(c.telephone)) }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, border: `1px solid ${carte?.id === c.id ? T.main : T.hairline}`, background: carte?.id === c.id ? T.pale : '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: T.ink, flex: 1 }}>{afficherTelephone(c.telephone)}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: T.muted }}>
+                      {commercant.fidelite_mecanique === 'cagnotte'
+                        ? `${Number(c.cagnotte).toFixed(2).replace('.', ',')}€`
+                        : `${c.passages}/${commercant.fidelite_seuil_passages || 10}`}
+                    </span>
+                    {(c.recompenses_disponibles || 0) > 0 && (
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#059669', background: '#F0FDF4', padding: '2px 8px', borderRadius: 100, border: '1px solid #10B98133' }}>Récompense</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── M5 Food truck : « emplacement du jour » + tournée hebdomadaire ──────────
 // Un PONCTUEL (date précise) prime sur la tournée hebdo du même jour. La fiche
 // client remplace l'adresse affichée par l'emplacement résolu du jour, avec
@@ -5641,6 +5987,8 @@ export default function ConfigDashboard({ commercantId }) {
     !estVitrine && commercant?.categorie !== 'detail' && { id: 'creneaux', label: 'Créneaux', icon: 'clock' },
     peutLivraison && { id: 'livraison', label: 'Livraison', icon: 'box' },
     peutRdv && { id: 'rdv', label: 'RDV', icon: 'clock' },
+    // Fidélité : Communiquer (comptoir) et Vendre (comptoir + crédit auto)
+    canDo(commercant?.plan, 'fidelite') && { id: 'fidelite', label: 'Fidélité', icon: 'heart' },
     peutPaiements && { id: 'paiements', label: 'Paiements', icon: 'tag' },
     { id: 'profil',   label: 'Profil',   icon: 'shop' },
     { id: 'avis',     label: 'Avis',     icon: 'star' },
@@ -5674,6 +6022,7 @@ export default function ConfigDashboard({ commercantId }) {
       {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
       {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} toast={showToast} />}
       {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} />}
+      {tab === 'fidelite' && canDo(commercant?.plan, 'fidelite') && <TabFidelite commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}

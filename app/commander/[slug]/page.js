@@ -12,7 +12,7 @@ import CTAUpgrade from '../CTAUpgrade'
 import ModalSignalement from '../ModalSignalement'
 import HorairesSection from '../HorairesSection'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
-import { Star, Flame, Calendar, Store, Check, Phone } from 'lucide-react'
+import { Star, Flame, Calendar, Store, Check, Phone, Heart, Share2 } from 'lucide-react'
 
 const T = {
   bg:      '#F8F6FF',
@@ -719,11 +719,29 @@ function DealOfferCard({ deal, article = null, qte = 0, onAjouter, onRetirer }) 
   )
 }
 
-// ─── Modal détail d'article (boutique) : galerie photos + description complète
-// + achat direct (VariantesSelector intégré si l'article gère des variantes).
-// Ouverte au tap sur la card article (demande Alex 24/07).
-function ArticleDetailModal({ article, variantes, photosActives, onClose, onAjouter, onAjouterVariante }) {
+// ─── Identifiant anonyme d'appareil pour les cœurs (un cœur par appareil et
+// par article, aucun compte requis). Généré une fois, persisté en localStorage.
+function getDeviceId() {
+  if (typeof window === 'undefined') return 'ssr'
+  try {
+    let id = localStorage.getItem('yoppaa_device_id')
+    if (!id) {
+      id = (crypto?.randomUUID ? crypto.randomUUID() : `dev-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`)
+      localStorage.setItem('yoppaa_device_id', id)
+    }
+    return id
+  } catch (e) {
+    return 'no-storage'
+  }
+}
+
+// ─── Fiche article « façon post » (refonte 30/07, demande Alex) : header
+// commerçant, mosaïque photos façon réseau social (tap = plein écran),
+// description riche (les emojis et sauts de ligne du commerçant respectés),
+// cœur + partage, puis achat (VariantesSelector si variantes). Tous catalogues.
+function ArticleDetailModal({ article, variantes, photosActives, commercant, social, onToggleLike, onPartager, partageEtat, onClose, onAjouter, onAjouterVariante }) {
   const [galerie, setGalerie] = useState([])
+  const [photoPlein, setPhotoPlein] = useState(null)  // url ouverte en plein écran
   useEffect(() => {
     if (!photosActives) return
     let ok = true
@@ -736,35 +754,100 @@ function ArticleDetailModal({ article, variantes, photosActives, onClose, onAjou
     ? [...(article.photo_url ? [{ id: 'couv', url: article.photo_url }] : []), ...galerie.filter(p => p.url !== article.photo_url)]
     : []
   const hasVar = !!article.gere_variantes && (variantes || []).length > 0
+  const imgBase = { width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'pointer', background: T.pale }
+
+  // Mosaïque façon post : 1 photo = grande 4:5 ; 2 = deux colonnes ;
+  // 3+ = grande à gauche (2/3) + colonne de 2 vignettes, badge +N si plus.
+  // Simple fonction de rendu (pas un composant : créée à chaque render).
+  function renderMosaique() {
+    if (photos.length === 0) return null
+    if (photos.length === 1) {
+      return <img src={photos[0].url} alt={article.nom} onClick={() => setPhotoPlein(photos[0].url)}
+        style={{ ...imgBase, aspectRatio: '4/5', height: 'auto' }}/>
+    }
+    if (photos.length === 2) {
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+          {photos.map(p => (
+            <img key={p.id} src={p.url} alt={article.nom} onClick={() => setPhotoPlein(p.url)}
+              style={{ ...imgBase, aspectRatio: '4/5', height: 'auto' }}/>
+          ))}
+        </div>
+      )
+    }
+    const reste = photos.length - 3
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 2 }}>
+        <img src={photos[0].url} alt={article.nom} onClick={() => setPhotoPlein(photos[0].url)}
+          style={{ ...imgBase, aspectRatio: '4/5', height: 'auto' }}/>
+        <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: 2, minHeight: 0 }}>
+          <img src={photos[1].url} alt={article.nom} onClick={() => setPhotoPlein(photos[1].url)} style={imgBase}/>
+          <div style={{ position: 'relative', minHeight: 0 }}>
+            <img src={photos[2].url} alt={article.nom} onClick={() => setPhotoPlein(photos[2].url)} style={imgBase}/>
+            {reste > 0 && (
+              <button onClick={() => setPhotoPlein(photos[2].url)}
+                style={{ position: 'absolute', inset: 0, border: 'none', background: 'rgba(22,6,54,0.55)', color: '#fff', fontWeight: 900, fontSize: '1.1rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                +{reste}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const pillSocial = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.deep, fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s' }
 
   return (
     <div role="dialog" aria-modal="true"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
       style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(22,6,54,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 520, maxHeight: '88dvh', overflowY: 'auto', animation: 'fadeUp 0.25s ease' }}>
-        {/* Galerie scroll-snap horizontale */}
-        {photos.length > 0 && (
-          <div style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', gap: 0, background: T.pale }}>
-            {photos.map(p => (
-              <img key={p.id} src={p.url} alt="" style={{ width: '100%', flexShrink: 0, aspectRatio: '4/3', objectFit: 'cover', scrollSnapAlign: 'center' }}/>
-            ))}
+      <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 520, maxHeight: '90dvh', overflowY: 'auto', animation: 'fadeUp 0.25s ease' }}>
+
+        {/* Header façon post : avatar + nom du commerçant + fermer */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.8rem 1rem' }}>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {commercant?.logo_url
+              ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+              : <span style={{ color: '#fff', fontWeight: 900, fontSize: '1rem' }}>{(commercant?.nom || 'Y').charAt(0).toUpperCase()}</span>}
           </div>
-        )}
-        <div style={{ padding: '1.125rem 1.25rem 1.5rem' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: 0, fontWeight: 900, fontSize: '0.92rem', color: T.ink, letterSpacing: '-0.2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{commercant?.nom}</p>
+            {commercant?.type && <p style={{ margin: 0, fontSize: '0.7rem', color: T.main, fontWeight: 700 }}>{commercant.type}</p>}
+          </div>
+          <button onClick={onClose} aria-label="Fermer"
+            style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: T.pale, color: T.deep, cursor: 'pointer', fontSize: 14, fontWeight: 800, flexShrink: 0, lineHeight: '30px', padding: 0 }}>✕</button>
+        </div>
+
+        {renderMosaique()}
+
+        <div style={{ padding: '1rem 1.25rem 1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 6 }}>
             <h3 style={{ fontWeight: 900, fontSize: '1.15rem', color: T.ink, letterSpacing: '-0.4px', margin: 0, lineHeight: 1.25 }}>{article.nom}</h3>
-            <button onClick={onClose} aria-label="Fermer"
-              style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: T.pale, color: T.deep, cursor: 'pointer', fontSize: 14, fontWeight: 800, flexShrink: 0, lineHeight: '30px', padding: 0 }}>✕</button>
+            {!hasVar && Number(article.prix) > 0 && (
+              <p style={{ fontSize: '1.15rem', fontWeight: 900, color: T.main, letterSpacing: '-0.4px', margin: 0, flexShrink: 0 }}>
+                {article.est_vitrine ? <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, marginRight: 5 }}>dès</span> : null}
+                {Number(article.prix).toFixed(2)}€
+              </p>
+            )}
           </div>
           {article.description && (
-            <p style={{ fontSize: '0.875rem', color: T.deep, lineHeight: 1.6, margin: '0 0 10px' }}>{article.description}</p>
+            <p style={{ fontSize: '0.9rem', color: T.deep, lineHeight: 1.6, margin: '0 0 12px', whiteSpace: 'pre-wrap' }}>{article.description}</p>
           )}
-          {!hasVar && Number(article.prix) > 0 && (
-            <p style={{ fontSize: '1.2rem', fontWeight: 900, color: T.main, letterSpacing: '-0.4px', margin: '0 0 12px' }}>
-              {article.est_vitrine ? <span style={{ fontSize: '0.75rem', fontWeight: 700, color: T.muted, marginRight: 5 }}>dès</span> : null}
-              {Number(article.prix).toFixed(2)}€
-            </p>
-          )}
+
+          {/* Rangée sociale : cœur (compteur) + partage */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 14px' }}>
+            <button onClick={onToggleLike} aria-label="J'aime cet article"
+              style={{ ...pillSocial, ...(social?.liked ? { borderColor: T.main, background: T.pale, color: T.main } : {}) }}>
+              <Heart size={15} strokeWidth={2.4} fill={social?.liked ? T.main : 'none'} color={social?.liked ? T.main : T.deep}/>
+              {social?.count > 0 ? social.count : 'J’aime'}
+            </button>
+            <button onClick={onPartager} aria-label="Partager cet article" style={pillSocial}>
+              <Share2 size={15} strokeWidth={2.4}/>
+              {partageEtat === 'copie' ? 'Lien copié !' : 'Partager'}
+            </button>
+          </div>
+
           {hasVar ? (
             <VariantesSelector article={article} variantes={variantes}
               onAjouter={(a, v) => { onAjouterVariante(a, v); onClose() }}/>
@@ -776,6 +859,16 @@ function ArticleDetailModal({ article, variantes, photosActives, onClose, onAjou
           ) : null}
         </div>
       </div>
+
+      {/* Viewer photo plein écran (tap sur la mosaïque) */}
+      {photoPlein && (
+        <div onClick={e => { e.stopPropagation(); setPhotoPlein(null) }}
+          style={{ position: 'fixed', inset: 0, zIndex: 1300, background: 'rgba(10,3,24,0.94)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
+          <img src={photoPlein} alt={article.nom} style={{ maxWidth: '100%', maxHeight: '92dvh', objectFit: 'contain', borderRadius: 10 }}/>
+          <button onClick={e => { e.stopPropagation(); setPhotoPlein(null) }} aria-label="Fermer la photo"
+            style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.16)', color: '#fff', cursor: 'pointer', fontSize: 16, fontWeight: 800 }}>✕</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -917,6 +1010,10 @@ export default function CommanderSlug() {
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   // Fiche détail d'un article (boutique) : photos galerie + description complète
   const [articleDetail, setArticleDetail] = useState(null)
+  // Fiche « façon post » (30/07) : cœurs + partage. Les cœurs sont anonymes
+  // par appareil (device_id localStorage), tout passe par /api/articles/like.
+  const [articleSocial, setArticleSocial] = useState(null)  // { count, liked } de l'article ouvert
+  const [partageEtat, setPartageEtat] = useState(null)      // 'copie' pendant 2s après copie du lien
   // Modale detail actu enrichie (photo + contenu long + date)
   const [actuDetailOuverte, setActuDetailOuverte] = useState(null)
   // Deduplication tracking stats deals : chaque event compte 1x par session client.
@@ -945,6 +1042,56 @@ export default function CommanderSlug() {
   useEffect(() => {
     if (dealDetailOuvert?.id) trackDeal(dealDetailOuvert.id, 'view')
   }, [dealDetailOuvert?.id])
+
+  // Cœurs : charge le compteur + mon état à l'ouverture d'une fiche article
+  useEffect(() => {
+    const id = articleDetail?.id
+    setArticleSocial(null)
+    setPartageEtat(null)
+    if (!id) return
+    let vivant = true
+    fetch(`/api/articles/like?article_id=${id}&device_id=${getDeviceId()}`)
+      .then(r => r.json())
+      .then(j => { if (vivant && j?.ok) setArticleSocial({ count: j.count, liked: j.liked }) })
+      .catch(() => {})
+    return () => { vivant = false }
+  }, [articleDetail?.id])
+
+  async function toggleLikeArticle() {
+    const id = articleDetail?.id
+    if (!id) return
+    // Optimiste : on inverse tout de suite, le serveur confirme (ou on revert)
+    const avant = articleSocial
+    setArticleSocial(s => s ? { count: Math.max(0, s.count + (s.liked ? -1 : 1)), liked: !s.liked } : { count: 1, liked: true })
+    try {
+      const res = await fetch('/api/articles/like', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ article_id: id, device_id: getDeviceId() }),
+      })
+      const j = await res.json()
+      if (j?.ok) setArticleSocial({ count: j.count, liked: j.liked })
+      else setArticleSocial(avant)
+    } catch (e) {
+      setArticleSocial(avant)
+    }
+  }
+
+  async function partagerArticle() {
+    const a = articleDetail
+    if (!a || typeof window === 'undefined') return
+    const url = `${window.location.origin}/commander/${commercant?.slug || slug}?article=${a.id}`
+    const texte = `${a.nom} chez ${commercant?.nom || 'un commerçant Yoppaa'} 🟣`
+    if (navigator.share) {
+      try { await navigator.share({ title: a.nom, text: texte, url }) } catch (e) { /* partage annulé */ }
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(url)
+      setPartageEtat('copie')
+      setTimeout(() => setPartageEtat(null), 2000)
+    } catch (e) { /* clipboard indisponible */ }
+  }
   const [fermetures, setFermetures] = useState([])
   const [derniereCommande, setDerniereCommande] = useState(null)
   const [isDesktop, setIsDesktop] = useState(false)
@@ -1149,6 +1296,15 @@ export default function CommanderSlug() {
     setCreneauxLivraison(data.livraisonCreneaux || [])
     setJoursDisposLivraison(construireJoursDispos(data.commercant, data.livraisonCreneaux || [], data.fermetures))
     setLoading(false)
+    // Deep link partage : ?article=<id> ouvre directement la fiche de l'article
+    // (liens « regarde cet article » partagés depuis la fiche façon post)
+    if (typeof window !== 'undefined') {
+      const artId = new URLSearchParams(window.location.search).get('article')
+      if (artId) {
+        const cible = (data.articles || []).find(a => String(a.id) === artId)
+        if (cible) setArticleDetail(cible)
+      }
+    }
   }
 
   async function chargerCommercant(slug) {
@@ -2020,6 +2176,11 @@ export default function CommanderSlug() {
         <ArticleDetailModal article={articleDetail}
           variantes={variantesParArticle[articleDetail.id] || []}
           photosActives={commercant?.photos_catalogue_actif !== false}
+          commercant={commercant}
+          social={articleSocial}
+          onToggleLike={toggleLikeArticle}
+          onPartager={partagerArticle}
+          partageEtat={partageEtat}
           onClose={() => setArticleDetail(null)}
           onAjouter={peutCommander ? (a) => ajouterAuPanier(a) : null}
           onAjouterVariante={(a, v) => ajouterAuPanier(a, null, v)}/>
@@ -2678,7 +2839,7 @@ export default function CommanderSlug() {
                               getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')}
                               photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                               variantes={variantesParArticle[a.id] || []}
-                              onOpenDetail={estDetail ? () => setArticleDetail(a) : null}/>
+                              onOpenDetail={() => setArticleDetail(a)}/>
                             {/* Offres deal liées = cartes séparées (l'unité reste intacte) */}
                             {peutCommander && (dealsParArticle[a.id] || []).filter(dl => dl.prix_deal != null || dl.remise_pct).map(dl => (
                               <DealOfferCard key={dl.id} deal={dl} article={a}
@@ -2708,7 +2869,7 @@ export default function CommanderSlug() {
                             getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')}
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                             variantes={variantesParArticle[a.id] || []}
-                            onOpenDetail={estDetail ? () => setArticleDetail(a) : null}/>
+                            onOpenDetail={() => setArticleDetail(a)}/>
                           {peutCommander && (dealsParArticle[a.id] || []).filter(dl => dl.prix_deal != null || dl.remise_pct).map(dl => (
                             <DealOfferCard key={dl.id} deal={dl} article={a}
                               qte={panier[`deal_${dl.id}`]?.quantite || 0}

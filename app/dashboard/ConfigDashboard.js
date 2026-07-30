@@ -6,7 +6,7 @@ import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import TabPaiements from './TabPaiements'
-import { compresserImage } from '@/lib/compress-image'
+import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
 import {
@@ -474,7 +474,8 @@ function TabMenu({ commercantId, commercant, toast }) {
     if (!file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
     if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
     setUploadingPhoto(true)
-    const compressed = await compresserImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.85 })
+    // Fiche « façon post » : recadrage 4:5 + filigrane yoppaa (décision 30/07)
+    const compressed = await preparerPhotoArticle(file)
     const fileName = `article-${commercantId}-${Date.now()}.jpg`
     const { error } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (error) { toast('Erreur upload photo', 'error'); setUploadingPhoto(false); return }
@@ -493,7 +494,8 @@ function TabMenu({ commercantId, commercant, toast }) {
     if (!file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
     if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
     setUploadingGalerie(true)
-    const compressed = await compresserImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.85 })
+    // Même pipeline 4:5 + filigrane que la photo de couverture
+    const compressed = await preparerPhotoArticle(file)
     const fileName = `article-gal-${articleId}-${Date.now()}.jpg`
     const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { toast('Erreur upload photo', 'error'); setUploadingGalerie(false); return }

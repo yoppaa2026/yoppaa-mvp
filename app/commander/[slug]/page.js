@@ -995,6 +995,8 @@ export default function CommanderSlug() {
   const [livraisonConfig, setLivraisonConfig] = useState(null)
   const [creneauxLivraison, setCreneauxLivraison] = useState([])
   const [joursDisposLivraison, setJoursDisposLivraison] = useState([])
+  // M5 food truck : emplacements actifs (ponctuels + tournée hebdo)
+  const [foodtruckEmps, setFoodtruckEmps] = useState([])
   const [creneauLivraisonChoisi, setCreneauLivraisonChoisi] = useState(null)
   const [adresseLivraison, setAdresseLivraison] = useState({ rue: '', code_postal: '', ville: '', complement: '' })
   // Persistance localStorage : préférence de mode + adresse mémorisées entre commandes.
@@ -1302,6 +1304,7 @@ export default function CommanderSlug() {
     setLivraisonConfig(data.livraisonConfig || null)
     setCreneauxLivraison(data.livraisonCreneaux || [])
     setJoursDisposLivraison(construireJoursDispos(data.commercant, data.livraisonCreneaux || [], data.fermetures))
+    setFoodtruckEmps(data.foodtruckEmps || [])
     setLoading(false)
     // Deep link partage : ?article=<id> ouvre directement la fiche de l'article
     // (liens « regarde cet article » partagés depuis la fiche façon post)
@@ -1342,6 +1345,7 @@ export default function CommanderSlug() {
       { data: livConfig },
       { data: livCren },
       { data: livCmd },
+      { data: ftEmps },
     ] = await Promise.all([
       supabase.from('articles').select('*').eq('commercant_id', c.id).eq('actif', true).order('categorie').order('nom'),
       supabase.from('creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
@@ -1355,6 +1359,9 @@ export default function CommanderSlug() {
       supabase.from('livraison_config').select('*').eq('commercant_id', c.id).maybeSingle(),
       supabase.from('livraison_creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
       supabase.from('commandes_stats').select('creneau_livraison_id').eq('commercant_id', c.id).eq('mode_retrait', 'livraison').not('statut', 'in', '(recupere,non_retire,annulee_client_refund,annulee_paiement_ko)'),
+      // M5 food truck : emplacements (ponctuels + tournée hebdo) pour remplacer
+      // l'adresse affichée par l'emplacement du jour
+      supabase.from('foodtruck_emplacements').select('*').eq('commercant_id', c.id).eq('actif', true),
     ])
 
     const notesInfo = avisNotes?.length > 0
@@ -1471,6 +1478,7 @@ export default function CommanderSlug() {
       actualites: actusActives,
       livraisonConfig: livConfig || null,
       livraisonCreneaux: livraisonCreneauxAvecCount,
+      foodtruckEmps: ftEmps || [],
     }
 
     try {
@@ -2116,9 +2124,24 @@ export default function CommanderSlug() {
   const sansCat = articles.filter(a => !a.categorie)
   const toutesLesCats = [...categories, ...(sansCat.length > 0 ? ['__autres__'] : [])]
 
+  // M5 food truck : l'emplacement du JOUR remplace l'adresse du dépôt sur la
+  // fiche. Un ponctuel (date précise) prime sur la tournée hebdo. Fallback :
+  // « Prochain emplacement annoncé bientôt » si rien n'est déclaré.
+  const estFoodTruck = (commercant?.type || '').toLowerCase().includes('food truck')
+  const emplacementDuJour = (() => {
+    if (!estFoodTruck || foodtruckEmps.length === 0) return null
+    const todayISO = new Date().toISOString().slice(0, 10)
+    const jourKey = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'][new Date().getDay()]
+    return foodtruckEmps.find(e => e.type === 'ponctuel' && e.date_jour === todayISO)
+      || foodtruckEmps.find(e => e.type === 'hebdo' && e.jour_semaine === jourKey)
+      || null
+  })()
+  // Adresse effective affichée + envoyée à Maps
+  const adresseAffichee = emplacementDuJour ? emplacementDuJour.adresse : commercant?.adresse
+
   function ouvrirMaps() {
-    if (!commercant?.adresse) return
-    const q = encodeURIComponent(commercant.adresse)
+    if (!adresseAffichee) return
+    const q = encodeURIComponent(adresseAffichee)
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
     window.open(isIOS ? `maps://maps.apple.com/?q=${q}` : `https://maps.google.com/?q=${q}`, '_blank')
   }
@@ -2634,16 +2657,47 @@ export default function CommanderSlug() {
                     <p style={{ fontSize: '0.85rem', color: T.deep, lineHeight: 1.55, margin: '12px 0 0' }}>{commercant.description}</p>
                   )}
 
+                  {/* Food truck : bandeau emplacement du jour au-dessus des actions */}
+                  {estFoodTruck && (
+                    emplacementDuJour ? (
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, background: T.pale, border: `1.5px solid ${T.main}33`, borderRadius: 12, padding: '9px 12px' }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 2 }}>
+                          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+                          <circle cx="12" cy="10" r="3"/>
+                        </svg>
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: 900, color: T.deep }}>
+                            Aujourd&rsquo;hui : {emplacementDuJour.libelle}
+                            {emplacementDuJour.heure_debut && emplacementDuJour.heure_fin
+                              ? ` · ${emplacementDuJour.heure_debut.slice(0, 5)}–${emplacementDuJour.heure_fin.slice(0, 5)}`
+                              : ''}
+                          </p>
+                          <p style={{ margin: '2px 0 0', fontSize: '0.72rem', fontWeight: 600, color: T.deep, opacity: 0.85 }}>{emplacementDuJour.adresse}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, background: T.pale, border: `1.5px dashed ${T.main}44`, borderRadius: 12, padding: '9px 12px' }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+                          <circle cx="12" cy="10" r="3"/>
+                        </svg>
+                        <p style={{ margin: 0, fontSize: '0.76rem', fontWeight: 800, color: T.deep }}>Prochain emplacement annoncé bientôt 🟣</p>
+                      </div>
+                    )
+                  )}
+
                   <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', flexWrap: 'nowrap' }}>
-                    {commercant.adresse && (
+                    {/* Food truck sans emplacement du jour : on masque l'adresse du
+                        dépôt (le camion n'y est pas), le bandeau ci-dessus informe */}
+                    {adresseAffichee && !(estFoodTruck && !emplacementDuJour) && (
                       <button className="action-btn" onClick={ouvrirMaps}
                         style={{ flex: 1, minWidth: 0, justifyContent: 'flex-start' }}
-                        aria-label={`Ouvrir ${commercant.adresse} dans Maps`}>
+                        aria-label={`Ouvrir ${adresseAffichee} dans Maps`}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                           <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
                           <circle cx="12" cy="10" r="3"/>
                         </svg>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{commercant.adresse}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{estFoodTruck ? 'Itinéraire' : adresseAffichee}</span>
                       </button>
                     )}
                     {commercant.telephone && (

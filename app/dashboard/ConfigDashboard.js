@@ -3264,6 +3264,220 @@ function SectionCreneauxLivraison({ commercantId, toast }) {
   )
 }
 
+// ─── M5 Food truck : « emplacement du jour » + tournée hebdomadaire ──────────
+// Un PONCTUEL (date précise) prime sur la tournée hebdo du même jour. La fiche
+// client remplace l'adresse affichée par l'emplacement résolu du jour, avec
+// fallback « Prochain emplacement annoncé bientôt » si rien n'est déclaré.
+const JOURS_FT = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+function SectionEmplacementsFoodtruck({ commercantId, toast }) {
+  const [emps, setEmps] = useState([])
+  const [loading, setLoading] = useState(true)
+  // « Aujourd'hui je suis à… » : zéro friction, 2 champs obligatoires + 1 bouton
+  const [auj, setAuj] = useState({ libelle: '', adresse: '', heure_debut: '', heure_fin: '' })
+  // Ponctuel futur (événement, marché…)
+  const [futur, setFutur] = useState({ date_jour: '', libelle: '', adresse: '', heure_debut: '', heure_fin: '' })
+  const [showFutur, setShowFutur] = useState(false)
+  // Édition d'une ligne de tournée hebdo (un seul formulaire ouvert à la fois)
+  const [formHebdo, setFormHebdo] = useState(null)  // { jour, libelle, adresse, heure_debut, heure_fin }
+
+  const todayISO = new Date().toISOString().slice(0, 10)
+  const jourKey = JOURS_FT[(new Date().getDay() + 6) % 7]
+
+  useEffect(() => { charger() }, [commercantId])
+  async function charger() {
+    const { data, error } = await supabase.from('foodtruck_emplacements').select('*').eq('commercant_id', commercantId)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); setLoading(false); return }
+    setEmps(data || [])
+    setLoading(false)
+  }
+
+  const ponctuelAuj = emps.find(e => e.type === 'ponctuel' && e.date_jour === todayISO)
+  const hebdoParJour = Object.fromEntries(emps.filter(e => e.type === 'hebdo').map(e => [e.jour_semaine, e]))
+  const effectifAuj = (ponctuelAuj?.actif ? ponctuelAuj : null) || (hebdoParJour[jourKey]?.actif ? hebdoParJour[jourKey] : null)
+  const futurs = emps
+    .filter(e => e.type === 'ponctuel' && e.date_jour >= todayISO)
+    .sort((a, b) => a.date_jour.localeCompare(b.date_jour))
+
+  function fmtHeures(e) {
+    if (!e.heure_debut || !e.heure_fin) return null
+    return `${e.heure_debut.slice(0, 5)}–${e.heure_fin.slice(0, 5)}`
+  }
+
+  async function declarerAujourdhui() {
+    if (!auj.libelle.trim() || !auj.adresse.trim()) { toast('Nom du lieu et adresse obligatoires', 'error'); return }
+    // Un seul ponctuel par date : on remplace celui du jour s'il existe
+    if (ponctuelAuj) await supabase.from('foodtruck_emplacements').delete().eq('id', ponctuelAuj.id)
+    const { error } = await supabase.from('foodtruck_emplacements').insert({
+      commercant_id: commercantId, type: 'ponctuel', date_jour: todayISO,
+      libelle: auj.libelle.trim(), adresse: auj.adresse.trim(),
+      heure_debut: auj.heure_debut || null, heure_fin: auj.heure_fin || null,
+    })
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast('C’est noté, ta fiche affiche ton emplacement du jour')
+    setAuj({ libelle: '', adresse: '', heure_debut: '', heure_fin: '' })
+    charger()
+  }
+
+  async function ajouterFutur() {
+    if (!futur.date_jour || !futur.libelle.trim() || !futur.adresse.trim()) { toast('Date, nom du lieu et adresse obligatoires', 'error'); return }
+    if (futur.date_jour < todayISO) { toast('La date est déjà passée', 'error'); return }
+    const existant = emps.find(e => e.type === 'ponctuel' && e.date_jour === futur.date_jour)
+    if (existant) await supabase.from('foodtruck_emplacements').delete().eq('id', existant.id)
+    const { error } = await supabase.from('foodtruck_emplacements').insert({
+      commercant_id: commercantId, type: 'ponctuel', date_jour: futur.date_jour,
+      libelle: futur.libelle.trim(), adresse: futur.adresse.trim(),
+      heure_debut: futur.heure_debut || null, heure_fin: futur.heure_fin || null,
+    })
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast('Emplacement planifié')
+    setFutur({ date_jour: '', libelle: '', adresse: '', heure_debut: '', heure_fin: '' })
+    setShowFutur(false)
+    charger()
+  }
+
+  async function saveHebdo() {
+    if (!formHebdo || !formHebdo.libelle.trim() || !formHebdo.adresse.trim()) { toast('Nom du lieu et adresse obligatoires', 'error'); return }
+    const existant = hebdoParJour[formHebdo.jour]
+    if (existant) await supabase.from('foodtruck_emplacements').delete().eq('id', existant.id)
+    const { error } = await supabase.from('foodtruck_emplacements').insert({
+      commercant_id: commercantId, type: 'hebdo', jour_semaine: formHebdo.jour,
+      libelle: formHebdo.libelle.trim(), adresse: formHebdo.adresse.trim(),
+      heure_debut: formHebdo.heure_debut || null, heure_fin: formHebdo.heure_fin || null,
+    })
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast('Tournée mise à jour')
+    setFormHebdo(null)
+    charger()
+  }
+
+  async function supprimer(id) {
+    const { error } = await supabase.from('foodtruck_emplacements').delete().eq('id', id)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    setEmps(prev => prev.filter(e => e.id !== id))
+  }
+
+  const field = { padding: '8px 10px', borderRadius: 9, border: `1.5px solid ${T.hairline}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box' }
+  const btnMini = { padding: '5px 12px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 800, fontSize: 11.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }
+
+  if (loading) return null
+
+  return (
+    <div style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: 16, marginTop: 16 }}>
+      <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Mes emplacements</p>
+      <p style={{ margin: '0 0 14px', fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
+        Ta fiche affiche l’emplacement du jour à la place de l’adresse du dépôt. Un emplacement ponctuel remplace ta tournée habituelle ce jour-là.
+      </p>
+
+      {/* Aujourd'hui : état + déclaration rapide */}
+      <div style={{ background: T.pale, borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
+        <p style={{ margin: '0 0 8px', fontSize: 12.5, fontWeight: 800, color: T.deep }}>
+          {effectifAuj
+            ? <>Aujourd’hui : {effectifAuj.libelle}{fmtHeures(effectifAuj) ? ` · ${fmtHeures(effectifAuj)}` : ''}{effectifAuj.type === 'hebdo' ? ' (tournée habituelle)' : ''}</>
+            : 'Aucun emplacement annoncé aujourd’hui : ta fiche affiche « Prochain emplacement annoncé bientôt ».'}
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <input style={field} placeholder="Nom du lieu (ex : Place du Marché)" value={auj.libelle}
+            onChange={e => setAuj(p => ({ ...p, libelle: e.target.value }))}/>
+          <input style={field} placeholder="Adresse complète (pour l’itinéraire)" value={auj.adresse}
+            onChange={e => setAuj(p => ({ ...p, adresse: e.target.value }))}/>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="time" style={{ ...field, flex: 1 }} value={auj.heure_debut} onChange={e => setAuj(p => ({ ...p, heure_debut: e.target.value }))}/>
+            <span style={{ fontSize: 12, color: T.muted }}>→</span>
+            <input type="time" style={{ ...field, flex: 1 }} value={auj.heure_fin} onChange={e => setAuj(p => ({ ...p, heure_fin: e.target.value }))}/>
+          </div>
+          <button onClick={declarerAujourdhui}
+            style={{ padding: '10px 14px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+            {ponctuelAuj ? 'Remplacer l’emplacement du jour' : 'Je suis ici aujourd’hui'}
+          </button>
+        </div>
+      </div>
+
+      {/* Tournée hebdo type */}
+      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ma tournée habituelle</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+        {JOURS_FT.map((jour, idx) => {
+          const e = hebdoParJour[jour]
+          const enEdition = formHebdo?.jour === jour
+          const labels = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+          return (
+            <div key={jour} style={{ borderRadius: 10, border: `1px solid ${T.hairline}`, padding: '8px 12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 800, color: T.ink, width: 74, flexShrink: 0 }}>{labels[idx]}</span>
+                {e && !enEdition ? (
+                  <>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: T.deep, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {e.libelle}{fmtHeures(e) ? ` · ${fmtHeures(e)}` : ''}
+                    </span>
+                    <button style={btnMini} onClick={() => setFormHebdo({ jour, libelle: e.libelle, adresse: e.adresse, heure_debut: (e.heure_debut || '').slice(0, 5), heure_fin: (e.heure_fin || '').slice(0, 5) })}>Modifier</button>
+                    <button onClick={() => supprimer(e.id)} aria-label={`Retirer ${labels[idx]}`}
+                      style={{ width: 24, height: 24, borderRadius: 100, border: 'none', background: '#FEE2E2', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontWeight: 800, flexShrink: 0, padding: 0 }}>✕</button>
+                  </>
+                ) : !enEdition ? (
+                  <button style={{ ...btnMini, marginLeft: 'auto' }}
+                    onClick={() => setFormHebdo({ jour, libelle: '', adresse: '', heure_debut: '', heure_fin: '' })}>+ Ajouter</button>
+                ) : null}
+              </div>
+              {enEdition && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                  <input style={field} placeholder="Nom du lieu" value={formHebdo.libelle} onChange={ev => setFormHebdo(p => ({ ...p, libelle: ev.target.value }))}/>
+                  <input style={field} placeholder="Adresse complète" value={formHebdo.adresse} onChange={ev => setFormHebdo(p => ({ ...p, adresse: ev.target.value }))}/>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input type="time" style={{ ...field, flex: 1 }} value={formHebdo.heure_debut} onChange={ev => setFormHebdo(p => ({ ...p, heure_debut: ev.target.value }))}/>
+                    <span style={{ fontSize: 12, color: T.muted }}>→</span>
+                    <input type="time" style={{ ...field, flex: 1 }} value={formHebdo.heure_fin} onChange={ev => setFormHebdo(p => ({ ...p, heure_fin: ev.target.value }))}/>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={saveHebdo} style={{ flex: 1, padding: '8px 12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>Enregistrer</button>
+                    <button onClick={() => setFormHebdo(null)} style={{ ...btnMini, flex: 1 }}>Annuler</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Ponctuels à venir (marchés, événements) */}
+      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Emplacements ponctuels à venir</p>
+      {futurs.length === 0 && !showFutur && (
+        <p style={{ margin: '0 0 8px', fontSize: 12, color: T.muted }}>Aucun. Planifie un marché ou un événement à l’avance.</p>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+        {futurs.map(e => (
+          <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 10, border: `1px solid ${T.hairline}`, padding: '8px 12px' }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: T.main, flexShrink: 0 }}>
+              {new Date(e.date_jour + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'short', day: 'numeric', month: 'short' })}
+            </span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: T.deep, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {e.libelle}{fmtHeures(e) ? ` · ${fmtHeures(e)}` : ''}
+            </span>
+            <button onClick={() => supprimer(e.id)} aria-label="Supprimer cet emplacement"
+              style={{ width: 24, height: 24, borderRadius: 100, border: 'none', background: '#FEE2E2', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontWeight: 800, flexShrink: 0, padding: 0 }}>✕</button>
+          </div>
+        ))}
+      </div>
+      {showFutur ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <input type="date" min={todayISO} style={field} value={futur.date_jour} onChange={e => setFutur(p => ({ ...p, date_jour: e.target.value }))}/>
+          <input style={field} placeholder="Nom du lieu (ex : Marché de Mettet)" value={futur.libelle} onChange={e => setFutur(p => ({ ...p, libelle: e.target.value }))}/>
+          <input style={field} placeholder="Adresse complète" value={futur.adresse} onChange={e => setFutur(p => ({ ...p, adresse: e.target.value }))}/>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="time" style={{ ...field, flex: 1 }} value={futur.heure_debut} onChange={e => setFutur(p => ({ ...p, heure_debut: e.target.value }))}/>
+            <span style={{ fontSize: 12, color: T.muted }}>→</span>
+            <input type="time" style={{ ...field, flex: 1 }} value={futur.heure_fin} onChange={e => setFutur(p => ({ ...p, heure_fin: e.target.value }))}/>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={ajouterFutur} style={{ flex: 1, padding: '8px 12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>Planifier</button>
+            <button onClick={() => setShowFutur(false)} style={{ ...btnMini, flex: 1 }}>Annuler</button>
+          </div>
+        </div>
+      ) : (
+        <button style={btnMini} onClick={() => setShowFutur(true)}>+ Planifier un emplacement</button>
+      )}
+    </div>
+  )
+}
+
 function TabProfil({ commercantId, toast, onSaved }) {
   const [form, setForm] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -3553,6 +3767,11 @@ function TabProfil({ commercantId, toast, onSaved }) {
             <Input type="time" value={form.heure_ouverture_resa} onChange={e => setForm(p => ({ ...p, heure_ouverture_resa: e.target.value }))} style={{ width: 140 }} />
           </div>
         </div>
+
+        {/* ─── Emplacements food truck (M5) : uniquement pour ce métier ─── */}
+        {(form.type || '').toLowerCase().includes('food truck') && (
+          <SectionEmplacementsFoodtruck commercantId={commercantId} toast={toast}/>
+        )}
 
         {/* ─── Notifications RDV ou Commandes ─── */}
         {/* Toggle unique notif_mode (chaque/recap_jour/aucun) qui s'applique aux RDV

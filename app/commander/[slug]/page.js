@@ -8,6 +8,7 @@ import { calculerCapaciteCreneau } from '@/lib/creneaux'
 import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import PillsStatut from '../PillsStatut'
+import CarteFideliteFiche from '../CarteFideliteFiche'
 import CTAUpgrade from '../CTAUpgrade'
 import ModalSignalement from '../ModalSignalement'
 import HorairesSection from '../HorairesSection'
@@ -1065,6 +1066,8 @@ export default function CommanderSlug() {
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   // Fiche détail d'un article (boutique) : photos galerie + description complète
   const [articleDetail, setArticleDetail] = useState(null)
+  // B.6 fidélité : MA carte chez ce commerçant (null si pas connecté / pas de carte)
+  const [maCarteFid, setMaCarteFid] = useState(null)
   // Fiche « façon post » (30/07) : cœurs + partage. Les cœurs sont anonymes
   // par appareil (device_id localStorage), tout passe par /api/articles/like.
   const [articleSocial, setArticleSocial] = useState(null)  // { count, liked } de l'article ouvert
@@ -1097,6 +1100,22 @@ export default function CommanderSlug() {
   useEffect(() => {
     if (dealDetailOuvert?.id) trackDeal(dealDetailOuvert.id, 'view')
   }, [dealDetailOuvert?.id])
+
+  // Ma carte de fidélité chez ce commerçant (si son programme est actif)
+  useEffect(() => {
+    const id = commercant?.id
+    if (!id || !commercant?.fidelite_actif) { setMaCarteFid(null); return }
+    let vivant = true
+    fetch('/api/fidelite/mes-cartes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'une', commercant_id: id }),
+    })
+      .then(r => r.json())
+      .then(j => { if (vivant && j?.ok) setMaCarteFid(j.carte || null) })
+      .catch(() => {})
+    return () => { vivant = false }
+  }, [commercant?.id, commercant?.fidelite_actif])
 
   // Cœurs : charge le compteur + mon état à l'ouverture d'une fiche article
   useEffect(() => {
@@ -2710,6 +2729,9 @@ export default function CommanderSlug() {
                       <p style={{ margin: 0, fontSize: '0.78rem', color: T.deep, lineHeight: 1.55, whiteSpace: 'pre-line' }}>{commercant.infos_pratiques}</p>
                     </div>
                   )}
+
+                  {/* Carte de fidélité : ma jauge ou le teaser du programme */}
+                  <CarteFideliteFiche commercant={commercant} carte={maCarteFid}/>
 
                   {/* Food truck : bandeau emplacement du jour au-dessus des actions */}
                   {estFoodTruck && (

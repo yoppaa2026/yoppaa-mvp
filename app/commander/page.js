@@ -1306,6 +1306,22 @@ export default function Commander() {
   function onSplashDone() { sessionStorage.setItem('yoppaa_splash_seen', '1'); setShowSplash(false) }
 
   const [onglet, setOngletState] = useState('accueil')
+
+  // Cartes de fidélité du Yopper : chargées à l'ouverture du Profil (cookie
+  // yoppaa_yopper côté serveur ; 401 silencieux si pas connecté)
+  useEffect(() => {
+    if (onglet !== 'profil') return
+    let vivant = true
+    fetch('/api/fidelite/mes-cartes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list' }),
+    })
+      .then(r => r.json())
+      .then(j => { if (vivant && j?.ok) setMesCartesFid(j.cartes || []) })
+      .catch(() => {})
+    return () => { vivant = false }
+  }, [onglet])
   function setOnglet(val) { setOngletState(val); localStorage.setItem('yoppaa_onglet', val) }
 
   // Sous-onglet de l'onglet Commandes : 'alimentaires' (C&C) ou 'rdvs' (vitrines).
@@ -1366,6 +1382,8 @@ export default function Commander() {
   const [clientId, setClientId] = useState(null)
   const [aMotDePasse, setAMotDePasse] = useState(false)  // le compte Supabase a-t-il déjà un mot de passe ?
   const [clientCommandes, setClientCommandes] = useState([])
+  // B.6 fidélité : mes cartes (rattachées par les téléphones de mes commandes)
+  const [mesCartesFid, setMesCartesFid] = useState([])
   const [clientRdvs, setClientRdvs] = useState([])
   // Commune du Yopper (référentiel `communes` joint via clients.commune_id)
   // commune = null  : pas encore chargé ou client pas connecté
@@ -3213,6 +3231,59 @@ export default function Commander() {
                     </div>
                   ))}
                 </div>
+
+                {/* Mes cartes de fidélité (B.6) : une carte par commerçant, jauge
+                    tampons ou cagnotte, badge quand une récompense est débloquée */}
+                {mesCartesFid.length > 0 && (
+                  <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px 12px', marginBottom: '0.875rem', border: `1px solid ${T.pale}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                        Mes cartes de fidélité
+                      </span>
+                      <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>{mesCartesFid.length}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {mesCartesFid.map(carte => {
+                        const com = carte.commercant || {}
+                        const estCagnotte = com.fidelite_mecanique === 'cagnotte'
+                        const seuilP = com.fidelite_seuil_passages || 10
+                        const seuilC = Number(com.fidelite_seuil_cagnotte || 10)
+                        const pct = estCagnotte ? Math.min(100, Math.round((Number(carte.cagnotte) / seuilC) * 100)) : Math.min(100, Math.round((carte.passages / seuilP) * 100))
+                        const recompense = (carte.recompenses_disponibles || 0) > 0
+                        const lien = com.categorie === 'vitrine' ? `/commander/rdv/${com.slug}` : `/commander/${com.slug}`
+                        const libelle = com.fidelite_recompense_libelle
+                          || (com.fidelite_recompense_type === 'remise_pct' && com.fidelite_recompense_valeur ? `-${Number(com.fidelite_recompense_valeur)}%` : com.fidelite_recompense_valeur ? `${Number(com.fidelite_recompense_valeur).toFixed(2)}€ offerts` : 'Récompense fidélité')
+                        return (
+                          <button key={carte.id} onClick={() => com.slug && router.push(lien)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${recompense ? '#10B98155' : T.pale}`, background: recompense ? '#F0FDF4' : '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left', width: '100%' }}>
+                            <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {com.logo_url
+                                ? <img src={com.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                                : <span style={{ color: '#fff', fontWeight: 900, fontSize: '0.95rem' }}>{(com.nom || 'Y').charAt(0).toUpperCase()}</span>}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{com.nom}</p>
+                              <div style={{ height: 6, borderRadius: 100, background: T.pale, overflow: 'hidden', margin: '5px 0 3px' }}>
+                                <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: recompense ? '#10B981' : `linear-gradient(90deg, ${T.main}, ${T.mid})`, transition: 'width 0.3s' }}/>
+                              </div>
+                              <p style={{ margin: 0, fontSize: '0.68rem', fontWeight: 700, color: recompense ? '#059669' : T.muted }}>
+                                {recompense
+                                  ? `Récompense débloquée : ${libelle}`
+                                  : estCagnotte
+                                    ? `${Number(carte.cagnotte).toFixed(2).replace('.', ',')}€ / ${seuilC.toFixed(2).replace('.', ',')}€ → ${libelle}`
+                                    : `${carte.passages}/${seuilP} passages → ${libelle}`}
+                              </p>
+                            </div>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={recompense ? '#10B981' : T.muted} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                              <path d="M9 6l6 6-6 6"/>
+                            </svg>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Mes avis - derniers avis vérifiés laissés par le Yopper */}
                 {client.email && (

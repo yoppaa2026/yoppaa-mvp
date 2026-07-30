@@ -20,6 +20,7 @@ import { isVitrine, canDo } from '@/lib/plans'
 import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import HorairesSection from '../../HorairesSection'
+import CarteFideliteFiche from '../../CarteFideliteFiche'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Lock, Flame, Star, Phone, Calendar } from 'lucide-react'
 
@@ -351,6 +352,7 @@ export default function CommanderRdvSlug() {
   const [fermetures, setFermetures] = useState([])          // Sess 6 : rdv_fermetures futures (date_fin >= today)
   const [deals, setDeals] = useState([])                    // deals actifs du jour (même fenêtre que la fiche commerce)
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
+  const [maCarteFid, setMaCarteFid] = useState(null)        // ma carte de fidélité chez ce commerçant
   const [loading, setLoading] = useState(true)
   const [erreur, setErreur] = useState(null)
 
@@ -400,6 +402,22 @@ export default function CommanderRdvSlug() {
   useEffect(() => {
     if (dealDetailOuvert?.id) trackDeal(dealDetailOuvert.id, 'view')
   }, [dealDetailOuvert?.id])
+
+  // Ma carte de fidélité chez ce commerçant (si son programme est actif)
+  useEffect(() => {
+    const id = commercant?.id
+    if (!id || !commercant?.fidelite_actif) { setMaCarteFid(null); return }
+    let vivant = true
+    fetch('/api/fidelite/mes-cartes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'une', commercant_id: id }),
+    })
+      .then(r => r.json())
+      .then(j => { if (vivant && j?.ok) setMaCarteFid(j.carte || null) })
+      .catch(() => {})
+    return () => { vivant = false }
+  }, [commercant?.id, commercant?.fidelite_actif])
 
   // Change d'étape ET remonte en haut du conteneur scrollable (UX fluide).
   // Centralisé pour cohérence sur toutes les transitions du tunnel RDV.
@@ -1250,6 +1268,9 @@ export default function CommanderRdvSlug() {
                     <p style={{ margin: 0, fontSize: '0.78rem', color: T.deep, lineHeight: 1.55, whiteSpace: 'pre-line' }}>{commercant.infos_pratiques}</p>
                   </div>
                 )}
+
+                {/* Carte de fidélité : ma jauge ou le teaser du programme */}
+                {etape === 1 && <CarteFideliteFiche commercant={commercant} carte={maCarteFid}/>}
 
                 {/* Actions (adresse + appeler, alignées sur le pattern fiche commerce) */}
                 <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', flexWrap: 'nowrap' }}>

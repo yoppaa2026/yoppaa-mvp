@@ -758,7 +758,9 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
 
   // Mosaïque façon post : 1 photo = grande 4:5 ; 2 = deux colonnes ;
   // 3+ = grande à gauche (2/3) + colonne de 2 vignettes, badge +N si plus.
-  // Simple fonction de rendu (pas un composant : créée à chaque render).
+  // La hauteur est verrouillée par l'aspectRatio du CONTENEUR (pas des images) :
+  // les anciennes photos au ratio libre ne cassent plus l'alignement, object-fit
+  // cover absorbe la différence. Simple fonction de rendu (pas un composant).
   function renderMosaique() {
     if (photos.length === 0) return null
     if (photos.length === 1) {
@@ -766,24 +768,25 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
         style={{ ...imgBase, aspectRatio: '4/5', height: 'auto' }}/>
     }
     if (photos.length === 2) {
+      // 2 colonnes 4:5 → conteneur 8:5
       return (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, aspectRatio: '8/5' }}>
           {photos.map(p => (
-            <img key={p.id} src={p.url} alt={article.nom} onClick={() => setPhotoPlein(p.url)}
-              style={{ ...imgBase, aspectRatio: '4/5', height: 'auto' }}/>
+            <img key={p.id} src={p.url} alt={article.nom} onClick={() => setPhotoPlein(p.url)} style={imgBase}/>
           ))}
         </div>
       )
     }
+    // Grande 2/3 en 4:5 → conteneur 6:5, colonne droite alignée sur sa hauteur
     const reste = photos.length - 3
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 2 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 2, aspectRatio: '6/5' }}>
         <img src={photos[0].url} alt={article.nom} onClick={() => setPhotoPlein(photos[0].url)}
-          style={{ ...imgBase, aspectRatio: '4/5', height: 'auto' }}/>
+          style={{ ...imgBase, minHeight: 0 }}/>
         <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: 2, minHeight: 0 }}>
-          <img src={photos[1].url} alt={article.nom} onClick={() => setPhotoPlein(photos[1].url)} style={imgBase}/>
+          <img src={photos[1].url} alt={article.nom} onClick={() => setPhotoPlein(photos[1].url)} style={{ ...imgBase, minHeight: 0 }}/>
           <div style={{ position: 'relative', minHeight: 0 }}>
-            <img src={photos[2].url} alt={article.nom} onClick={() => setPhotoPlein(photos[2].url)} style={imgBase}/>
+            <img src={photos[2].url} alt={article.nom} onClick={() => setPhotoPlein(photos[2].url)} style={{ ...imgBase, height: '100%' }}/>
             {reste > 0 && (
               <button onClick={() => setPhotoPlein(photos[2].url)}
                 style={{ position: 'absolute', inset: 0, border: 'none', background: 'rgba(22,6,54,0.55)', color: '#fff', fontWeight: 900, fontSize: '1.1rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
@@ -820,6 +823,10 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
         </div>
 
         {renderMosaique()}
+        {/* Séparation signature : la bande tricolore Yoppaa sous les photos */}
+        {photos.length > 0 && (
+          <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
+        )}
 
         <div style={{ padding: '1rem 1.25rem 1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 6 }}>
@@ -835,8 +842,8 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
             <p style={{ fontSize: '0.9rem', color: T.deep, lineHeight: 1.6, margin: '0 0 12px', whiteSpace: 'pre-wrap' }}>{article.description}</p>
           )}
 
-          {/* Rangée sociale : cœur (compteur) + partage */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 14px' }}>
+          {/* Rangée sociale : cœur (compteur) + partage, filet sous la rangée */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 14px', paddingBottom: 14, borderBottom: `1px solid ${T.pale}` }}>
             <button onClick={onToggleLike} aria-label="J'aime cet article"
               style={{ ...pillSocial, ...(social?.liked ? { borderColor: T.main, background: T.pale, color: T.main } : {}) }}>
               <Heart size={15} strokeWidth={2.4} fill={social?.liked ? T.main : 'none'} color={social?.liked ? T.main : T.deep}/>

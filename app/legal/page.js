@@ -128,32 +128,38 @@ export default function LegalPage() {
           {/* 2. CGU CLIENT */}
           <Section id="cgu-client" title="2. Conditions Générales d'Utilisation — Clients (Yoppers)">
             <H3>Préambule</H3>
-            <P>Les présentes CGU régissent l'utilisation de la plateforme Yoppaa par les clients (ci-après « Yoppers »). En accédant à la plateforme et en passant une commande, le Client accepte sans réserve les présentes CGU.</P>
-            <P>Yoppaa est une plateforme de commande en ligne de type click & collect permettant aux clients de commander auprès de commerçants partenaires et de retirer leur commande en magasin selon un créneau horaire choisi, sans attente.</P>
+            <P>Les présentes CGU régissent l'utilisation de la plateforme Yoppaa par les clients (ci-après « Yoppers »). En accédant à la plateforme, en passant une commande ou en réservant un rendez-vous, le Client accepte sans réserve les présentes CGU.</P>
+            <P>Yoppaa est une plateforme belge qui met en relation les habitants et les commerces de leur quartier : commande en ligne avec retrait en magasin (Click &amp; Collect), livraison locale, expédition pour les boutiques, prise de rendez-vous chez les commerçants de services, deals et actualités des commerces.</P>
 
             <H3>1. Accès à la plateforme</H3>
-            <P>L'accès à la plateforme Yoppaa est gratuit pour les clients. Yoppaa se réserve le droit de suspendre ou supprimer tout compte en cas d'utilisation frauduleuse ou contraire aux présentes CGU.</P>
+            <P>L'accès à la plateforme Yoppaa est gratuit pour les clients. La commande est possible sans créer de compte ; la création d'un compte (facultative) permet de suivre ses commandes et rendez-vous. Yoppaa se réserve le droit de suspendre ou supprimer tout compte en cas d'utilisation frauduleuse ou contraire aux présentes CGU.</P>
 
             <H3>2. Processus de commande</H3>
             <Ul items={[
               'Le Client sélectionne un commerçant partenaire sur la plateforme.',
-              'Il compose sa commande parmi les articles disponibles.',
-              'Il choisit un créneau horaire de retrait.',
-              'Il renseigne ses coordonnées et procède au paiement en ligne sécurisé.',
-              'La commande est confirmée par email dès validation du paiement.',
-              'Le Client se présente en magasin au créneau choisi et retire sa commande.',
+              'Il compose sa commande parmi les articles disponibles (avec, le cas échéant, les variantes proposées : taille, couleur, etc.).',
+              'Il choisit le mode de réception proposé par le commerçant : retrait en magasin sur créneau horaire, livraison locale ou expédition (boutiques).',
+              'Il renseigne ses coordonnées et procède au paiement en ligne sécurisé ou, si le commerçant l’autorise, opte pour le paiement sur place au retrait.',
+              'La commande est confirmée par email, puis le Client est prévenu lorsqu’elle est prête, en livraison ou expédiée.',
             ]}/>
 
-            <H3>3. Prix et paiement</H3>
-            <P>Les prix affichés sont fixés par les commerçants partenaires, exprimés en euros TTC. Le paiement est effectué via Stripe, prestataire de paiement sécurisé. Les données bancaires du Client ne sont jamais accessibles à Yoppaa ni aux commerçants.</P>
+            <H3>3. Rendez-vous en ligne</H3>
+            <P>Pour les commerçants de services, le Client peut réserver une prestation en ligne (choix de la prestation, du praticien le cas échéant, de la date et de l'heure). Certains commerçants demandent un acompte payé en ligne au moment de la réservation : son montant et les conditions d'annulation sont affichés avant la confirmation. Des rappels automatiques peuvent être envoyés avant le rendez-vous.</P>
 
-            <H3>4. Droit de rétractation</H3>
-            <P>Conformément à l'article VI.53, 4° du Code de droit économique belge, les commandes de produits alimentaires ne peuvent pas faire l'objet d'un remboursement après validation. En cas de non-disponibilité d'un article, le remboursement est effectué dans un délai de 5 à 10 jours ouvrables.</P>
+            <H3>4. Prix et paiement</H3>
+            <P>Les prix affichés sont fixés par les commerçants partenaires, exprimés en euros TTC. Le paiement en ligne est effectué via Stripe, prestataire de paiement sécurisé (cartes de paiement, Bancontact). Les données bancaires du Client ne sont jamais accessibles à Yoppaa ni aux commerçants.</P>
 
-            <H3>5. Responsabilité</H3>
-            <P>Yoppaa agit en qualité d'intermédiaire technique. Les commerçants partenaires sont seuls responsables de la qualité et de la disponibilité des produits proposés.</P>
+            <H3>5. Droit de rétractation</H3>
+            <P><strong>Produits alimentaires et périssables :</strong> conformément à l'article VI.53 du Code de droit économique belge, les commandes de denrées périssables ne peuvent pas faire l'objet d'une rétractation après validation. En cas d'indisponibilité d'un article, le remboursement est effectué dans un délai de 5 à 10 jours ouvrables.</P>
+            <P><strong>Produits non alimentaires commandés à distance (boutiques, expédition) :</strong> le Client dispose d'un droit de rétractation de 14 jours à compter de la réception, sauf exceptions légales (biens confectionnés sur mesure ou personnalisés, biens scellés descellés après livraison, etc.). Les frais de renvoi sont à charge du Client. Pour l'exercer : contacter le commerçant ou support@yoppaa.app.</P>
 
-            <H3>6. Modification des CGU</H3>
+            <H3>6. Avis</H3>
+            <P>Seuls les clients ayant effectivement retiré ou reçu une commande, ou honoré un rendez-vous, peuvent déposer un avis sur le commerçant concerné. Yoppaa se réserve le droit de retirer tout avis contraire à la loi ou manifestement abusif.</P>
+
+            <H3>7. Responsabilité</H3>
+            <P>Yoppaa agit en qualité d'intermédiaire technique. Les commerçants partenaires sont seuls responsables de la qualité, de la conformité et de la disponibilité des produits et prestations proposés.</P>
+
+            <H3>8. Modification des CGU</H3>
             <P>Avcotech SRL se réserve le droit de modifier les présentes CGU à tout moment. L'utilisation de la plateforme après modification vaut acceptation des nouvelles CGU.</P>
           </Section>
 
@@ -162,35 +168,35 @@ export default function LegalPage() {
             <H3>Préambule</H3>
             <P>Les présentes CGU régissent l'utilisation de la plateforme Yoppaa par les commerçants partenaires. En créant un compte et en activant leur page sur Yoppaa, les Commerçants acceptent sans réserve les présentes CGU.</P>
 
-            <H3>1. Abonnement et tarification</H3>
+            <H3>1. Formules et tarification</H3>
             <Ul items={[
-              'Plan ON : gratuit à vie, présence basique (page Yoppaa + horaires + avis), sans engagement',
-              'Plan FULL alimentaire : 59,90€ HTVA/mois (ou 599€ HTVA/an, soit 49,92€/mois) — Click & Collect, livraison, fidélité, deals, Good Morning Yoppers, dashboard commandes, kit hardware optionnel',
-              'Plan FULL vitrine : 39,90€ HTVA/mois (ou 399€ HTVA/an, soit 33,25€/mois) — Module RDV natif (prestations, créneaux, agenda, multi-praticiens), fidélité automatique, deals, Good Morning Yoppers. Zéro commission sur les acomptes RDV.',
-              'Plan PUBLIC (services & administrations) : gratuit à vie — actus + alertes officielles uniquement',
+              'Exister : gratuit, pour toujours — page professionnelle (horaires, photos, itinéraire, contact), visibilité dans l’app et référencement, présence hebdomadaire dans le Good Morning Yoppers, signaux des habitants.',
+              'Communiquer : 19,90€ HTVA/mois — tout Exister, plus deals du jour et actualités, place quotidienne dans le Good Morning Yoppers, notifications push vers les habitants de la commune, assistant IA de rédaction.',
+              'Vendre : 49,90€ HTVA/mois — tout Communiquer, plus Click & Collect avec paiement en ligne, rendez-vous en ligne, boutique en ligne avec expédition, livraison locale, assistant IA complet. Zéro commission sur les ventes.',
             ]}/>
-            <P>Les Commerçants Ambassadeurs Fondateurs bénéficient de conditions préférentielles définies dans leur contrat individuel d&rsquo;ambassadeur, sans engagement de durée au-delà de ce qui y est précisé.</P>
+            <P>Les formules sont mensuelles, sans engagement de durée. Les formules payantes bénéficient d'un essai gratuit de 30 jours, sans carte de paiement. Pour les comptes créés avant le 1er septembre 2026 (lancement public de l'application), l'essai démarre le 1er septembre 2026.</P>
+            <P>Les Commerçants bénéficiant de conditions préférentielles individuelles (offres de lancement) se réfèrent aux conditions définies dans leur contrat, sans engagement de durée au-delà de ce qui y est précisé.</P>
 
             <H3>2. Facturation et paiement</H3>
-            <P>La facturation est effectuée automatiquement via Stripe Billing pour les plans FULL. Le Commerçant renseigne son moyen de paiement (carte ou IBAN) lors de l&rsquo;activation. En cas d&rsquo;échec de paiement, Stripe effectue 3 tentatives automatiques avant suspension du compte (downgrade vers ON, données conservées).</P>
+            <P>La facturation est effectuée automatiquement via Stripe Billing pour les formules payantes. Le Commerçant renseigne son moyen de paiement (carte de paiement ou domiciliation) à la fin de l&rsquo;essai. En cas d&rsquo;échec de paiement, Stripe effectue 3 tentatives automatiques avant suspension des fonctionnalités payantes (retour à la formule Exister, données conservées).</P>
 
-            <H3>2bis. Indexation tarifaire</H3>
-            <P>Les tarifs sont révisables annuellement au 1er janvier, sur base de l&rsquo;IPC du mois d&rsquo;octobre publié par Statbel. Le Commerçant est notifié au plus tard le 1er décembre précédant la révision. Les tarifs préférentiels Ambassadeurs Fondateurs ne sont pas soumis à indexation pendant leur durée garantie.</P>
+            <H3>3. Indexation tarifaire</H3>
+            <P>Les tarifs sont révisables annuellement au 1er janvier, sur base de l&rsquo;IPC du mois d&rsquo;octobre publié par Statbel. Le Commerçant est notifié au plus tard le 1er décembre précédant la révision. Les tarifs préférentiels individuels ne sont pas soumis à indexation pendant leur durée garantie.</P>
 
-            <H3>2ter. Paiements en ligne et frais Stripe (plan FULL uniquement)</H3>
+            <H3>4. Paiements en ligne et frais Stripe (formule Vendre)</H3>
             <P>Les paiements en ligne (acomptes RDV pour les vitrines, commandes Click &amp; Collect pour l&rsquo;alimentaire) sont traités via Stripe Connect Express en Direct Charge. L&rsquo;argent est versé directement sur le compte bancaire du Commerçant (sous 7 jours ouvrés). Les frais Stripe (environ 1,4% + 0,25€ par transaction pour les cartes européennes) sont supportés par le Commerçant et prélevés à la source par Stripe. Yoppaa ne prélève aucune commission sur les transactions.</P>
             <P>Le Commerçant garantit Yoppaa contre tout chargeback, remboursement, contestation de paiement ou solde négatif lié à son activité sur la plateforme. En cas de solde négatif persistant sur son compte Stripe Connect, le Commerçant s&rsquo;engage à régler Yoppaa du montant correspondant sous 30 jours à compter de la notification écrite.</P>
 
-            <H3>4. Obligations du Commerçant</H3>
+            <H3>5. Obligations du Commerçant</H3>
             <Ul items={[
-              'Proposer des produits conformes aux descriptions publiées.',
-              'Assurer la disponibilité des produits commandés dans les créneaux définis.',
-              'Respecter la législation relative à la vente de produits alimentaires.',
+              'Proposer des produits et prestations conformes aux descriptions publiées.',
+              'Assurer la disponibilité des produits commandés dans les créneaux définis et honorer les rendez-vous réservés.',
+              'Respecter la législation applicable à son activité (notamment la vente de produits alimentaires).',
               'Ne pas utiliser les données des Clients à des fins non autorisées.',
             ]}/>
 
-            <H3>5. Résiliation</H3>
-            <P>Le Commerçant peut résilier son abonnement FULL ou effectuer un downgrade vers le plan ON gratuit moyennant un préavis d&rsquo;un mois calendrier, prenant effet le 1er jour du mois suivant. Pour que le préavis prenne effet le 1er du mois M+1, il doit être notifié au plus tard le 17e jour du mois M (14 jours avant). En cas de downgrade vers ON, les données du Commerçant sont conservées mais les fonctionnalités FULL (paiement en ligne, RDV ou Click &amp; Collect, livraison, fidélité, etc.) sont désactivées.</P>
+            <H3>6. Résiliation</H3>
+            <P>Le Commerçant peut résilier sa formule payante ou revenir à la formule gratuite Exister moyennant un préavis d&rsquo;un mois calendrier, prenant effet le 1er jour du mois suivant. Pour que le préavis prenne effet le 1er du mois M+1, il doit être notifié au plus tard le 17e jour du mois M (14 jours avant). En cas de retour à Exister, les données du Commerçant sont conservées mais les fonctionnalités payantes (paiement en ligne, rendez-vous ou Click &amp; Collect, boutique, livraison, deals, etc.) sont désactivées.</P>
             <P>Le préavis doit être notifié par courrier recommandé à Avcotech SRL (Rue de Prée 9G, 5640 Mettet) ou par email à facturation@yoppaa.app.</P>
             <InfoBox>
               Exemple : préavis notifié le 10 mars → effet le 1er avril ✓{'\n'}
@@ -204,15 +210,20 @@ export default function LegalPage() {
             <P>Avcotech SRL · BCE 0731.637.148 · dpo@yoppaa.app</P>
 
             <H3>Données collectées</H3>
-            <P><strong>Clients :</strong> prénom, nom, email, téléphone, historique des commandes, consentements RGPD, données de localisation (si autorisées).</P>
+            <P><strong>Clients :</strong> prénom, nom, email, téléphone, adresse de livraison (si livraison ou expédition), historique des commandes et rendez-vous, consentements RGPD, identifiant de notifications push (si activées), données de localisation (si autorisées).</P>
             <P><strong>Commerçants :</strong> données d'identification, coordonnées, BCE, données de facturation, données d'activité.</P>
+            <P><strong>Préinscrits (site de lancement) :</strong> email, code postal, type d'utilisateur (curieux ou commerçant), nom de commerce éventuel, message facultatif, consentement marketing (opt-in facultatif, jamais pré-coché).</P>
 
             <H3>Finalités du traitement</H3>
             <Ul items={[
-              'Exécution des commandes et gestion des créneaux',
+              'Exécution des commandes, rendez-vous et gestion des créneaux',
               'Authentification et gestion des comptes',
               'Facturation et traitement des paiements (via Stripe)',
-              'Communications relatives aux commandes',
+              'Communications relatives aux commandes et rendez-vous (confirmations, rappels)',
+              'Notification du lancement et de l’ouverture de la commune (préinscription : exécution de la demande)',
+              'Envoi d’actualités Yoppaa (uniquement avec consentement explicite, retirable à tout moment via le lien de désinscription)',
+              'Notifications push (uniquement si activées par l’utilisateur, désactivables à tout moment)',
+              'Prévention des abus sur les formulaires (Cloudflare Turnstile)',
               'Amélioration de la plateforme et statistiques',
               'Communications marketing du commerçant (uniquement avec consentement explicite du Client)',
             ]}/>
@@ -230,10 +241,10 @@ export default function LegalPage() {
             <P>En cas de litige non résolu, vous pouvez saisir l'Autorité de Protection des Données (APD) belge : www.autoriteprotectiondonnees.be</P>
 
             <H3>Cookies</H3>
-            <P>Yoppaa utilise uniquement des cookies techniques indispensables au fonctionnement (session, authentification). Aucun cookie publicitaire ou de suivi tiers n'est utilisé.</P>
+            <P>Yoppaa utilise uniquement des cookies et stockages techniques indispensables au fonctionnement (session, authentification, préférences locales), ainsi que la protection anti-abus Cloudflare Turnstile sur les formulaires. Aucun cookie publicitaire ou de suivi tiers n'est utilisé. Les notifications push (OneSignal) ne sont activées qu'à votre demande explicite et sont désactivables à tout moment.</P>
 
             <H3>Partage des données</H3>
-            <P>Yoppaa ne vend jamais les données personnelles. Les données peuvent être partagées avec les commerçants partenaires (exécution de commande uniquement), Stripe (paiements), Supabase (hébergement Europe) et Vercel (infrastructure).</P>
+            <P>Yoppaa ne vend jamais les données personnelles. Les données peuvent être partagées avec : les commerçants partenaires (exécution de commande ou rendez-vous uniquement), Stripe (paiements), Supabase (hébergement, Europe), Vercel (infrastructure), Resend (emails transactionnels), Brevo (emails d'actualités, uniquement avec consentement marketing), OneSignal (notifications push, si activées), Cloudflare (protection anti-abus) et Anthropic (assistant de rédaction IA des commerçants : seuls les textes fournis par le commerçant lui sont transmis, jamais les données des Clients).</P>
           </Section>
 
           {/* 5. DPA */}
@@ -262,8 +273,13 @@ export default function LegalPage() {
               'Supabase Inc. — base de données (serveurs Europe)',
               'Vercel Inc. — hébergement application',
               'Stripe Inc. — traitement des paiements',
+              'Resend Inc. — envoi des emails transactionnels',
+              'Brevo (Sendinblue SAS, France) — envoi des emails d’actualités (avec consentement)',
+              'OneSignal Inc. — notifications push (si activées par l’utilisateur)',
+              'Cloudflare Inc. — protection anti-abus des formulaires (Turnstile)',
+              'Anthropic PBC — assistant de rédaction IA des commerçants (textes du commerçant uniquement)',
             ]}/>
-            <P>Les transferts vers Vercel et Stripe sont encadrés par les Clauses Contractuelles Types (CCT) de la Commission Européenne.</P>
+            <P>Les transferts vers les sous-traitants établis hors de l'Union Européenne sont encadrés par les Clauses Contractuelles Types (CCT) de la Commission Européenne.</P>
           </Section>
 
           {/* 6. MÉDIATION */}
@@ -288,7 +304,7 @@ export default function LegalPage() {
             {/* Footer */}
             <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: `1px solid ${T.pale}`, textAlign: 'center' }}>
               <p style={{ fontSize: '0.75rem', color: T.muted, marginBottom: 4 }}>
-                Document établi le {new Date().toLocaleDateString('fr-BE', { day: 'numeric', month: 'long', year: 'numeric' })}
+                Dernière mise à jour : 30 juillet 2026
               </p>
               <p style={{ fontSize: '0.75rem', color: T.muted }}>
                 Avcotech SRL · BCE 0731.637.148 · TVA BE0731.637.148 · Rue de Prée 9G, 5640 Mettet

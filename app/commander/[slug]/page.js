@@ -2703,6 +2703,14 @@ export default function CommanderSlug() {
                     <p style={{ fontSize: '0.85rem', color: T.deep, lineHeight: 1.55, margin: '12px 0 0' }}>{commercant.description}</p>
                   )}
 
+                  {/* Infos pratiques du commerçant (annulation, paiement, consignes) */}
+                  {commercant.infos_pratiques && (
+                    <div style={{ marginTop: 12, background: T.pale, borderRadius: 12, padding: '10px 12px' }}>
+                      <p style={{ margin: '0 0 4px', fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Infos pratiques</p>
+                      <p style={{ margin: 0, fontSize: '0.78rem', color: T.deep, lineHeight: 1.55, whiteSpace: 'pre-line' }}>{commercant.infos_pratiques}</p>
+                    </div>
+                  )}
+
                   {/* Food truck : bandeau emplacement du jour au-dessus des actions */}
                   {estFoodTruck && (
                     emplacementDuJour ? (

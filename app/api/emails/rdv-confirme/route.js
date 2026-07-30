@@ -40,7 +40,7 @@ export async function POST(request) {
         prix_estime, acompte_paye, acompte_paye_en_ligne, acompte_montant,
         client_email, client_prenom, client_nom, client_telephone, notes_client,
         annulation_token,
-        commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode),
+        commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode, infos_pratiques),
         prestation:rdv_prestations(nom, duree_minutes),
         praticien:rdv_praticiens(prenom, nom, couleur_hex)
       `)
@@ -91,6 +91,7 @@ export async function POST(request) {
           praticien_prenom:        rdv.praticien?.prenom || null,
           praticien_nom:           rdv.praticien?.nom || null,
           praticien_couleur:       rdv.praticien?.couleur_hex || null,
+          infos_pratiques:         rdv.commercant?.infos_pratiques || null,
         })
 
         await envoyerAuCommercant({   // helper reutilise, accepte n'importe quel 'to'

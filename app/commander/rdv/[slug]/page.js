@@ -1242,6 +1242,15 @@ export default function CommanderRdvSlug() {
                   <p style={{ fontSize: '0.85rem', color: T.deep, lineHeight: 1.55, margin: '12px 0 0' }}>{commercant.description}</p>
                 )}
 
+                {/* Infos pratiques du commerçant (annulation, paiement, consignes) :
+                    affichées AVANT la réservation, pas de pop-up bloquante */}
+                {commercant.infos_pratiques && (
+                  <div style={{ marginTop: 12, background: T.pale, borderRadius: 12, padding: '10px 12px' }}>
+                    <p style={{ margin: '0 0 4px', fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Infos pratiques</p>
+                    <p style={{ margin: 0, fontSize: '0.78rem', color: T.deep, lineHeight: 1.55, whiteSpace: 'pre-line' }}>{commercant.infos_pratiques}</p>
+                  </div>
+                )}
+
                 {/* Actions (adresse + appeler, alignées sur le pattern fiche commerce) */}
                 <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', flexWrap: 'nowrap' }}>
                   {commercant.adresse && (

@@ -3936,7 +3936,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
   async function saveProfil() {
     if (!form.nom.trim()) return toast('Le nom est obligatoire', 'error')
     setSaving(true)
-    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, fidelite_actif: !!form.fidelite_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des) }).eq('id', commercantId)
+    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, description: form.description.trim() || null, infos_pratiques: (form.infos_pratiques || '').trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des) }).eq('id', commercantId)
     setSaving(false)
     if (error) {
       console.error('[ConfigDashboard.saveProfil]', error)
@@ -4056,6 +4056,14 @@ function TabProfil({ commercantId, toast, onSaved }) {
           <div>
             <label style={s.label}>Description (visible clients)</label>
             <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Décrivez votre commerce..." />
+          </div>
+          <div>
+            <label style={s.label}>Infos pratiques (visible clients)</label>
+            <p style={{ fontSize: 11, color: T.muted, marginBottom: 6, lineHeight: 1.5 }}>
+              Politique d&rsquo;annulation, modes de paiement acceptés, consignes... Affichées sur ta fiche et dans l&rsquo;email de confirmation de RDV.
+            </p>
+            <Textarea value={form.infos_pratiques || ''} onChange={e => setForm(p => ({ ...p, infos_pratiques: e.target.value }))}
+              placeholder={'Ex : Paiement en liquide ou QR code.\nToute annulation moins de 24h avant le RDV sera facturée.'} />
           </div>
 
           <div>
@@ -4228,15 +4236,9 @@ function TabProfil({ commercantId, toast, onSaved }) {
               </div>
             </label>
 
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.fidelite_actif ? T.main : T.pale}`, background: form.fidelite_actif ? T.pale : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
-              <input type="checkbox" checked={!!form.fidelite_actif} onChange={e => setForm(p => ({ ...p, fidelite_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Star size={15} strokeWidth={1.8}/> Activer le programme fidélité</p>
-                <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
-                  Programme tampon : la 10ème commande offerte. Module fidélité complet à venir.
-                </p>
-              </div>
-            </label>
+            {/* L'ancien toggle « fidélité » vivait ici : la fidélité se pilote
+                désormais UNIQUEMENT depuis l'onglet Fidélité (B.6, 31/07),
+                double commande retirée pour éviter les écrasements. */}
           </div>
         )}
 

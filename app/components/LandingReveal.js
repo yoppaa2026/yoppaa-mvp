@@ -438,7 +438,7 @@ function IncitantMobilisation({ communeStats, globalStats }) {
         <div style={boxSt}>
           <p style={ligneSt}>Yoppaa est disponible à <strong>{communeStats.nom}</strong> 🟣</p>
           {barre(100)}
-          <p style={sousSt}>{hab > 0 ? `${hab} habitant${hab > 1 ? 's' : ''} déjà dans la tribu` : 'Rejoins la tribu !'}</p>
+          <p style={sousSt}>{hab > 0 ? `${hab} habitant${hab > 1 ? 's' : ''} sont déjà Yoppers` : 'Deviens Yopper !'}</p>
         </div>
       )
     }
@@ -446,7 +446,7 @@ function IncitantMobilisation({ communeStats, globalStats }) {
       <div style={boxSt}>
         <p style={ligneSt}>
           {atteint
-            ? <>Ça y est, {communeStats.nom} a ses {seuil} commerçants ! Rejoins la tribu : plus on est nombreux, plus notre quartier revit 🟣</>
+            ? <>Ça y est, {communeStats.nom} a ses {seuil} commerçants ! Rejoins les Yoppers : plus on est nombreux, plus notre quartier revit 🟣</>
             : <>Déjà <strong>{com}</strong> commerçant{com > 1 ? 's' : ''} sur <strong>{seuil}</strong> pour activer <strong>{communeStats.nom}</strong> 🟣</>}
         </p>
         {barre(pct)}
@@ -525,7 +525,7 @@ const FORMULES = [
       'Deals du jour et actualités illimités',
       'Ta place quotidienne dans le Good Morning Yoppers',
       'Notifications push envoyées aux habitants de ta commune',
-      'Assistant IA qui rédige tes textes en quelques secondes',
+      'Assistant IA qui rédige tes deals et tes actus en quelques secondes',
     ],
   },
   {
@@ -540,6 +540,7 @@ const FORMULES = [
       'Click & Collect avec paiement en ligne',
       'Rendez-vous en ligne, réservables 24h/24',
       'Boutique en ligne et livraison locale',
+      'Assistant IA complet : rédaction avancée pour tes articles, tes deals et tes actus, avec un usage étendu',
       '0% de commission sur tes ventes',
     ],
   },
@@ -548,7 +549,9 @@ const FORMULES = [
 // ─── Composant principal ────────────────────────────────────────────────────
 export default function LandingReveal({ referent = null }) {
   const [form, setForm] = useState({
-    email: '', code_postal: '', type_utilisateur: 'yopper', commercant_nom: '', message: '', consentement_marketing: true,
+    // RGPD : opt-in marketing RÉEL, jamais pré-coché. L'inscription (être
+    // prévenu du lancement = la finalité demandée) n'en dépend pas.
+    email: '', code_postal: '', type_utilisateur: 'yopper', commercant_nom: '', message: '', consentement_marketing: false,
   })
   const [statut, setStatut] = useState({ envoi: 'idle', message: null })
   const [kitSlug, setKitSlug] = useState(null)
@@ -637,7 +640,8 @@ export default function LandingReveal({ referent = null }) {
   }
 
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
-  const formValide = form.email.trim() && /^\d{4}$/.test(form.code_postal.trim()) && form.consentement_marketing
+  // Le consentement marketing est FACULTATIF : il ne bloque jamais l'inscription
+  const formValide = form.email.trim() && /^\d{4}$/.test(form.code_postal.trim())
     && (form.type_utilisateur !== 'commercant' || !!form.commercant_nom.trim())
 
   // Rendu Turnstile explicite au 1er focus (perf, cf. LandingTeasing)
@@ -707,7 +711,7 @@ export default function LandingReveal({ referent = null }) {
             <strong style={{ color: '#fff' }}> 0% de commission</strong>.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 44 }}>
-            <button onClick={() => allerAuForm('yopper')} style={btnPrimaire}>Rejoindre la tribu</button>
+            <button onClick={() => allerAuForm('yopper')} style={btnPrimaire}>Devenir Yopper</button>
             <button onClick={() => allerAuForm('commercant')}
               style={{ ...btnPrimaire, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,0.4)', boxShadow: 'none' }}>
               Je suis commerçant
@@ -889,7 +893,7 @@ export default function LandingReveal({ referent = null }) {
           ))}
         </div>
         <p style={{ margin: '22px auto 0', fontSize: 13, fontWeight: 700, color: T.muted, textAlign: 'center', maxWidth: 560, lineHeight: 1.6 }}>
-          30 jours d&rsquo;essai gratuit sur toutes les formules, sans carte de paiement.
+          30 jours d&rsquo;essai gratuit sur les formules payantes, sans carte de paiement.
           Ensuite, paiement mensuel par Bancontact ou carte, et tu restes libre de partir quand tu veux.
         </p>
       </section>
@@ -1005,6 +1009,16 @@ export default function LandingReveal({ referent = null }) {
                 value={form.message} onChange={e => setForm(p => ({ ...p, message: e.target.value.slice(0, 500) }))}
                 style={{ ...inputStyle, resize: 'vertical', minHeight: 50 }}/>
 
+              {/* Opt-in marketing RGPD : case visible, jamais pré-cochée, facultative */}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginBottom: 14, cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.consentement_marketing}
+                  onChange={e => setForm(p => ({ ...p, consentement_marketing: e.target.checked }))}
+                  style={{ marginTop: 2, width: 15, height: 15, accentColor: '#9660E0', flexShrink: 0, cursor: 'pointer' }}/>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, fontWeight: 600 }}>
+                  Je souhaite recevoir les actualités de Yoppaa et être prévenu de l&rsquo;ouverture de ma commune.
+                </span>
+              </label>
+
               {siteKey && <div ref={turnstileRef} />}
 
               <button type="submit" disabled={statut.envoi === 'envoi' || !formValide}
@@ -1019,7 +1033,8 @@ export default function LandingReveal({ referent = null }) {
               )}
 
               <p style={{ margin: '14px 0 0', fontSize: 11, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 1.5 }}>
-                <Lock size={11} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Aucun spam. Données protégées.
+                <Lock size={11} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Aucun spam.{' '}
+                <Link href="/legal" style={{ color: 'inherit', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.35)' }}>Données protégées</Link>.
               </p>
             </form>
           )}

@@ -92,9 +92,10 @@ export async function POST(request) {
     if (!TYPES_AUTORISES.includes(type_utilisateur)) {
       return NextResponse.json({ ok: false, error: 'Type utilisateur invalide' }, { status: 400 })
     }
-    if (consentement_marketing !== true) {
-      return NextResponse.json({ ok: false, error: 'Consentement marketing requis' }, { status: 400 })
-    }
+    // RGPD (30/07) : le consentement marketing est FACULTATIF. La finalité de
+    // l'inscription (être prévenu du lancement) n'exige pas d'opt-in marketing :
+    // on stocke la valeur réelle et on ne synchronise Brevo que si true.
+    const consentOk = consentement_marketing === true
     // Le nom du commerce est requis pour un commerçant (on veut toujours l'enseigne).
     if (type_utilisateur === 'commercant' && (!commercant_nom || !String(commercant_nom).trim())) {
       return NextResponse.json({ ok: false, error: 'Le nom de ton commerce est requis' }, { status: 400 })
@@ -170,6 +171,10 @@ export async function POST(request) {
           ...(refCommercant ? { ref_commercant: refCommercant } : {}),
           // slug_kit : seulement si nouvellement généré (ne pas écraser un slug existant).
           ...(slugKit && !rowExistant?.slug_kit ? { slug_kit: slugKit } : {}),
+          // Consentement : on ne peut que le MONTER (une resoumission sans case
+          // cochée ne retire pas un consentement déjà donné ; le retrait passe
+          // par la désinscription email).
+          ...(consentOk ? { consentement_marketing: true } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq('id', preInscriptionId)
@@ -190,7 +195,7 @@ export async function POST(request) {
           ref_commercant: refCommercant,
           slug_kit: slugKit,
           user_agent: userAgent,
-          consentement_marketing: true,
+          consentement_marketing: consentOk,
         })
         .select('id')
         .single()
@@ -201,9 +206,11 @@ export async function POST(request) {
       preInscriptionId = nouvelle.id
     }
 
-    // 5) Sync Brevo (non-bloquant : si Brevo down, on garde la pre-inscription)
+    // 5) Sync Brevo (non-bloquant : si Brevo down, on garde la pre-inscription).
+    // Uniquement avec consentement marketing : les listes Brevo servent aux
+    // campagnes, pas à la notification de lancement (gérée via Resend).
     try {
-      const listId = pickBrevoListId({ mode_landing, type_utilisateur })
+      const listId = consentOk ? pickBrevoListId({ mode_landing, type_utilisateur }) : null
       if (listId) {
         const brevoRes = await syncContactToBrevo({
           email: emailNormalise,

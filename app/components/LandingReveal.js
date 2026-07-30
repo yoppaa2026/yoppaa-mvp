@@ -518,7 +518,7 @@ const FORMULES = [
     nom: 'Communiquer',
     prix: '19,90€',
     sousPrix: 'HTVA par mois',
-    badge: 'Le préféré du quartier',
+    badge: 'Pour être vu chaque jour',
     accroche: 'Ta commune entend parler de toi chaque matin.',
     points: [
       'Tout Exister, plus :',

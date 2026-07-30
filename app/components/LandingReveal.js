@@ -517,7 +517,7 @@ const FORMULES = [
   {
     nom: 'Communiquer',
     prix: '19,90€',
-    sousPrix: 'par mois',
+    sousPrix: 'HTVA par mois',
     badge: 'Le préféré du quartier',
     accroche: 'Ta commune entend parler de toi chaque matin.',
     points: [
@@ -531,7 +531,7 @@ const FORMULES = [
   {
     nom: 'Vendre',
     prix: '49,90€',
-    sousPrix: 'par mois',
+    sousPrix: 'HTVA par mois',
     badge: 'La totale · recommandée',
     accroche: 'Tu vends en ligne et tu gardes chaque euro de tes ventes.',
     vedette: true,

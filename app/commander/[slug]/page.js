@@ -557,8 +557,25 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
                 propre DealOfferCard juste en dessous, plus de confusion. */}
           </div>
 
-          {/* Indicateur stock 3 niveaux - clair et pro */}
-          {stockGere && (() => {
+          {/* Article à VARIANTES : le stock vit PAR variante (taille/couleur),
+              la card n'affiche que dispo/épuisé, le détail vit dans la fiche */}
+          {hasVariantes ? (() => {
+            const dispoVar = (variantes || []).some(v => v.actif !== false && (v.stock ?? 0) > 0)
+            return dispoVar ? (
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F0FDF4', color: '#10B981', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#10B981', flexShrink: 0 }}/>
+                En stock
+              </span>
+            ) : (
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#FEE2E2', color: '#DC2626', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#DC2626', flexShrink: 0 }}/>
+                Épuisé
+              </span>
+            )
+          })() : null}
+
+          {/* Indicateur stock 3 niveaux - clair et pro (articles SANS variantes) */}
+          {!hasVariantes && stockGere && (() => {
             // Pastilles status : dot taille 9 statique pour harmonisation YOPPAA (status indicator, pas live event)
             if (inactifCeJour) {
               return prochain ? (
@@ -741,7 +758,8 @@ function getDeviceId() {
 // cœur + partage, puis achat (VariantesSelector si variantes). Tous catalogues.
 function ArticleDetailModal({ article, variantes, photosActives, commercant, social, onToggleLike, onPartager, partageEtat, onClose, onAjouter, onAjouterVariante }) {
   const [galerie, setGalerie] = useState([])
-  const [photoPlein, setPhotoPlein] = useState(null)  // url ouverte en plein écran
+  const [photoIdx, setPhotoIdx] = useState(null)   // index de la photo ouverte en plein écran
+  const touchXRef = useRef(null)                   // swipe gauche/droite dans le viewer
   useEffect(() => {
     if (!photosActives) return
     let ok = true
@@ -764,7 +782,7 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
   function renderMosaique() {
     if (photos.length === 0) return null
     if (photos.length === 1) {
-      return <img src={photos[0].url} alt={article.nom} onClick={() => setPhotoPlein(photos[0].url)}
+      return <img src={photos[0].url} alt={article.nom} onClick={() => setPhotoIdx(0)}
         style={{ ...imgBase, aspectRatio: '4/5', height: 'auto' }}/>
     }
     if (photos.length === 2) {
@@ -772,7 +790,7 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
       return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, aspectRatio: '8/5' }}>
           {photos.map(p => (
-            <img key={p.id} src={p.url} alt={article.nom} onClick={() => setPhotoPlein(p.url)} style={imgBase}/>
+            <img key={p.id} src={p.url} alt={article.nom} onClick={() => setPhotoIdx(photos.indexOf(p))} style={imgBase}/>
           ))}
         </div>
       )
@@ -781,14 +799,14 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
     const reste = photos.length - 3
     return (
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 2, aspectRatio: '6/5' }}>
-        <img src={photos[0].url} alt={article.nom} onClick={() => setPhotoPlein(photos[0].url)}
+        <img src={photos[0].url} alt={article.nom} onClick={() => setPhotoIdx(0)}
           style={{ ...imgBase, minHeight: 0 }}/>
         <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: 2, minHeight: 0 }}>
-          <img src={photos[1].url} alt={article.nom} onClick={() => setPhotoPlein(photos[1].url)} style={{ ...imgBase, minHeight: 0 }}/>
+          <img src={photos[1].url} alt={article.nom} onClick={() => setPhotoIdx(1)} style={{ ...imgBase, minHeight: 0 }}/>
           <div style={{ position: 'relative', minHeight: 0 }}>
-            <img src={photos[2].url} alt={article.nom} onClick={() => setPhotoPlein(photos[2].url)} style={{ ...imgBase, height: '100%' }}/>
+            <img src={photos[2].url} alt={article.nom} onClick={() => setPhotoIdx(2)} style={{ ...imgBase, height: '100%' }}/>
             {reste > 0 && (
-              <button onClick={() => setPhotoPlein(photos[2].url)}
+              <button onClick={() => setPhotoIdx(2)}
                 style={{ position: 'absolute', inset: 0, border: 'none', background: 'rgba(22,6,54,0.55)', color: '#fff', fontWeight: 900, fontSize: '1.1rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                 +{reste}
               </button>
@@ -867,15 +885,43 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
         </div>
       </div>
 
-      {/* Viewer photo plein écran (tap sur la mosaïque) */}
-      {photoPlein && (
-        <div onClick={e => { e.stopPropagation(); setPhotoPlein(null) }}
-          style={{ position: 'fixed', inset: 0, zIndex: 1300, background: 'rgba(10,3,24,0.94)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
-          <img src={photoPlein} alt={article.nom} style={{ maxWidth: '100%', maxHeight: '92dvh', objectFit: 'contain', borderRadius: 10 }}/>
-          <button onClick={e => { e.stopPropagation(); setPhotoPlein(null) }} aria-label="Fermer la photo"
-            style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.16)', color: '#fff', cursor: 'pointer', fontSize: 16, fontWeight: 800 }}>✕</button>
-        </div>
-      )}
+      {/* Viewer photo plein écran (tap sur la mosaïque) : navigation par
+          flèches ET par swipe gauche/droite entre toutes les photos */}
+      {photoIdx !== null && photos[photoIdx] && (() => {
+        const precedente = () => setPhotoIdx(i => (i - 1 + photos.length) % photos.length)
+        const suivante   = () => setPhotoIdx(i => (i + 1) % photos.length)
+        const btnNav = { position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: 42, height: 42, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.16)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }
+        return (
+          <div onClick={e => { e.stopPropagation(); setPhotoIdx(null) }}
+            onTouchStart={e => { touchXRef.current = e.touches[0]?.clientX ?? null }}
+            onTouchEnd={e => {
+              const debut = touchXRef.current
+              touchXRef.current = null
+              if (debut == null || photos.length < 2) return
+              const delta = (e.changedTouches[0]?.clientX ?? debut) - debut
+              if (delta > 45) precedente()
+              else if (delta < -45) suivante()
+            }}
+            style={{ position: 'fixed', inset: 0, zIndex: 1300, background: 'rgba(10,3,24,0.94)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
+            <img src={photos[photoIdx].url} alt={article.nom} style={{ maxWidth: '100%', maxHeight: '92dvh', objectFit: 'contain', borderRadius: 10 }}/>
+            <button onClick={e => { e.stopPropagation(); setPhotoIdx(null) }} aria-label="Fermer la photo"
+              style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.16)', color: '#fff', cursor: 'pointer', fontSize: 16, fontWeight: 800, zIndex: 2 }}>✕</button>
+            {photos.length > 1 && (
+              <>
+                <button onClick={e => { e.stopPropagation(); precedente() }} aria-label="Photo précédente" style={{ ...btnNav, left: 10 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+                </button>
+                <button onClick={e => { e.stopPropagation(); suivante() }} aria-label="Photo suivante" style={{ ...btnNav, right: 10 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+                <span style={{ position: 'absolute', bottom: 18, left: '50%', transform: 'translateX(-50%)', fontSize: 12.5, fontWeight: 800, color: '#fff', background: 'rgba(255,255,255,0.14)', padding: '4px 12px', borderRadius: 100 }}>
+                  {photoIdx + 1}/{photos.length}
+                </span>
+              </>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }

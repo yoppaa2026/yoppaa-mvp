@@ -3411,8 +3411,9 @@ function TabFidelite({ commercantId, commercant, toast, onSaved }) {
   const chip = (sel) => ({ padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${sel ? T.main : T.hairline}`, background: sel ? T.pale : '#fff', color: sel ? T.main : T.muted, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' })
   const estCagnotte = (showConfig ? cfg.fidelite_mecanique : commercant?.fidelite_mecanique) === 'cagnotte'
 
-  // Jauge de la carte affichée
-  function JaugeCarte({ c }) {
+  // Jauge de la carte affichée (fonction de rendu, pas un composant : elle est
+  // recréée à chaque render de l'onglet)
+  function renderJauge(c) {
     if (commercant.fidelite_mecanique === 'cagnotte') {
       const seuil = Number(commercant.fidelite_seuil_cagnotte || 10)
       const pct = Math.min(100, Math.round((Number(c.cagnotte) / seuil) * 100))
@@ -3557,7 +3558,7 @@ function TabFidelite({ commercantId, commercant, toast, onSaved }) {
                 <button onClick={supprimerCarte} aria-label="Supprimer la carte"
                   style={{ width: 26, height: 26, borderRadius: 100, border: 'none', background: '#FEE2E2', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontWeight: 800, padding: 0 }}>✕</button>
               </div>
-              <JaugeCarte c={carte}/>
+              {renderJauge(carte)}
 
               {(carte.recompenses_disponibles || 0) > 0 && (
                 <div style={{ marginTop: 12, background: '#F0FDF4', border: '1.5px solid #10B98144', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -3828,6 +3829,9 @@ function TabProfil({ commercantId, toast, onSaved }) {
   const [form, setForm] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  // Duplication d'horaires : jour source ouvert + jours cibles cochés
+  const [copieSource, setCopieSource] = useState(null)
+  const [copieCibles, setCopieCibles] = useState([])
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [logoPreview, setLogoPreview] = useState(null)
   // Photos de la fiche (couverture + galerie max 4), table commercant_photos.
@@ -4100,18 +4104,67 @@ function TabProfil({ commercantId, toast, onSaved }) {
                         </button>
                       </div>
                     )}
+                    {/* Dupliquer ces horaires (plages 1 ET 2) vers d'autres jours */}
+                    {h.ouvert && (
+                      copieSource === jour ? (
+                        <div style={{ marginTop: 8, background: '#fff', borderRadius: 10, padding: '8px 10px' }}>
+                          <p style={{ fontSize: 11, fontWeight: 800, color: T.deep, margin: '0 0 6px' }}>Copier les horaires de {labels[idx]} vers :</p>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                            {['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'].filter(j => j !== jour).map(j => {
+                              const coche = copieCibles.includes(j)
+                              const lbl = j.charAt(0).toUpperCase() + j.slice(1)
+                              return (
+                                <button key={j} onClick={() => setCopieCibles(prev => coche ? prev.filter(x => x !== j) : [...prev, j])}
+                                  style={{ padding: '4px 10px', borderRadius: 100, border: `1.5px solid ${coche ? T.main : T.hairline}`, background: coche ? T.main : '#fff', color: coche ? '#fff' : T.muted, fontWeight: 800, fontSize: 11, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                                  {lbl}
+                                </button>
+                              )
+                            })}
+                          </div>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button onClick={() => {
+                              if (copieCibles.length === 0) { toast('Choisis au moins un jour', 'error'); return }
+                              setForm(p => {
+                                const hd = { ...p.horaires_detail }
+                                copieCibles.forEach(j => { hd[j] = { ...h, ouvert: true } })
+                                return { ...p, horaires_detail: hd }
+                              })
+                              toast(`Horaires copiés sur ${copieCibles.length} jour${copieCibles.length > 1 ? 's' : ''} (pense à Enregistrer)`)
+                              setCopieSource(null); setCopieCibles([])
+                            }}
+                              style={{ flex: 1, padding: '6px 10px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 11.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                              Appliquer
+                            </button>
+                            <button onClick={() => { setCopieSource(null); setCopieCibles([]) }}
+                              style={{ flex: 1, padding: '6px 10px', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.muted, fontWeight: 800, fontSize: 11.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                              Annuler
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setCopieSource(jour); setCopieCibles([]) }}
+                          style={{ marginTop: 6, padding: '3px 10px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 800, fontSize: 10.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                          ⧉ Dupliquer sur d&rsquo;autres jours
+                        </button>
+                      )
+                    )}
                   </div>
                 )
               })}
             </div>
           </div>
-          <div>
-            <label style={s.label}>Ouverture des réservations</label>
-            <p style={{ fontSize: 11, color: T.muted, marginBottom: 6 }}>
-              Heure à partir de laquelle les clients peuvent réserver pour le lendemain (défaut : 21h00)
-            </p>
-            <Input type="time" value={form.heure_ouverture_resa} onChange={e => setForm(p => ({ ...p, heure_ouverture_resa: e.target.value }))} style={{ width: 140 }} />
-          </div>
+          {/* Réglage utile UNIQUEMENT en horizon 1 jour (le lendemain s'ouvre à
+              cette heure). Avec un horizon plus long, il ne pilote que le
+              dernier jour de l'horizon : bruit de config, on le masque. */}
+          {(form.horizon_commande || 1) === 1 && (
+            <div>
+              <label style={s.label}>Ouverture des réservations</label>
+              <p style={{ fontSize: 11, color: T.muted, marginBottom: 6 }}>
+                Heure à partir de laquelle les clients peuvent réserver pour le lendemain (défaut : 21h00)
+              </p>
+              <Input type="time" value={form.heure_ouverture_resa} onChange={e => setForm(p => ({ ...p, heure_ouverture_resa: e.target.value }))} style={{ width: 140 }} />
+            </div>
+          )}
         </div>
 
         {/* ─── Emplacements food truck (M5) : uniquement pour ce métier ─── */}
@@ -4213,9 +4266,13 @@ function TabProfil({ commercantId, toast, onSaved }) {
 
             {(form.boutique_mode_vente === 'retrait' || form.boutique_mode_vente === 'les_deux') && (
               <div style={{ marginBottom: 12 }}>
-                <p style={{ ...s.label, marginBottom: 6 }}>Paiement au retrait</p>
+                <p style={{ ...s.label, marginBottom: 4 }}>Paiement du retrait en magasin</p>
+                <p style={{ fontSize: 11, color: T.muted, marginBottom: 8, lineHeight: 1.5 }}>
+                  Comment tes clients paient quand ils viennent chercher leur commande.
+                  {form.boutique_mode_vente === 'les_deux' ? " L'expédition, elle, est toujours payée en ligne à la commande." : ''}
+                </p>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {[{ val: 'en_ligne', label: 'En ligne (obligatoire)' }, { val: 'magasin', label: 'En magasin' }].map(opt => {
+                  {[{ val: 'en_ligne', label: 'En ligne, à la commande' }, { val: 'magasin', label: 'Au comptoir, au retrait' }].map(opt => {
                     const sel = form.boutique_retrait_paiement === opt.val
                     return (
                       <button key={opt.val} type="button" onClick={() => setForm(p => ({ ...p, boutique_retrait_paiement: opt.val }))}
@@ -4225,6 +4282,14 @@ function TabProfil({ commercantId, toast, onSaved }) {
                     )
                   })}
                 </div>
+              </div>
+            )}
+
+            {form.boutique_mode_vente === 'expedition' && (
+              <div style={{ marginBottom: 12, background: T.pale, borderRadius: 10, padding: '9px 12px' }}>
+                <p style={{ fontSize: 11.5, fontWeight: 700, color: T.deep, margin: 0, lineHeight: 1.5 }}>
+                  Paiement : toujours en ligne à la commande (on n&rsquo;expédie jamais sans paiement).
+                </p>
               </div>
             )}
 

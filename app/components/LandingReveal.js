@@ -519,7 +519,7 @@ const FORMULES = [
     prix: '19,90€',
     sousPrix: 'HTVA par mois',
     badge: 'Pour être vu chaque jour',
-    accroche: 'Ta commune entend parler de toi chaque matin.',
+    accroche: 'Communique de façon ciblée : ta commune entend parler de toi chaque matin.',
     points: [
       'Tout Exister, plus :',
       'Deals du jour et actualités illimités',

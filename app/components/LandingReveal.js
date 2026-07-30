@@ -113,7 +113,9 @@ const ECRAN_H = 460
 function PhoneFrame({ children, label }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-      <div style={{ width: 264, borderRadius: 32, background: '#0B0318', padding: 9, boxShadow: '0 24px 60px rgba(22,6,54,0.45), 0 4px 16px rgba(22,6,54,0.3)', border: '1px solid rgba(255,255,255,0.08)' }}>
+      {/* Ombre volontairement modérée : les gros blurs (60px) coûtent cher à
+          re-rastériser après une pause de scroll (jank PC constaté) */}
+      <div style={{ width: 264, borderRadius: 32, background: '#0B0318', padding: 9, boxShadow: '0 10px 24px rgba(22,6,54,0.35)', border: '1px solid rgba(255,255,255,0.08)' }}>
         <div style={{ borderRadius: 24, overflow: 'hidden', background: T.bg, position: 'relative', height: ECRAN_H }}>
           {/* Encoche */}
           <div style={{ position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)', width: 74, height: 16, borderRadius: 100, background: '#0B0318', zIndex: 5 }}/>
@@ -374,15 +376,21 @@ function MockDashboard() {
 }
 
 // ─── Compteur vers le 1er septembre (isolé : tick sans re-render la page) ────
+// Perf scroll : le repaint du tick chaque seconde est CONFINÉ à sa propre boîte
+// (contain layout/paint) pour que la reprise du scroll ne le paie jamais, le
+// tick est suspendu quand l'onglet est caché, et pas de text-shadow (coûteux à
+// re-rastériser après une pause).
 function CompteurLancement() {
   const [t, setT] = useState(calculerTemps)
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const id = setInterval(() => setT(calculerTemps()), 1000)
+    const id = setInterval(() => {
+      if (!document.hidden) setT(calculerTemps())
+    }, 1000)
     return () => clearInterval(id)
   }, [])
   return (
-    <div style={{ display: 'flex', gap: 'clamp(10px, 3vw, 22px)', justifyContent: 'center', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: 'clamp(10px, 3vw, 22px)', justifyContent: 'center', flexWrap: 'wrap', contain: 'layout paint', willChange: 'contents' }}>
       {[
         { val: t.jours, label: 'jours' },
         { val: t.heures, label: 'heures' },
@@ -390,7 +398,7 @@ function CompteurLancement() {
         { val: t.secondes, label: 'secondes' },
       ].map(({ val, label }) => (
         <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 58 }}>
-          <span style={{ fontSize: 'clamp(2rem, 6vw, 3.2rem)', fontWeight: 900, letterSpacing: '-2px', lineHeight: 1, color: '#fff', fontVariantNumeric: 'tabular-nums', textShadow: '0 4px 24px #6B35C480' }}>
+          <span style={{ fontSize: 'clamp(2rem, 6vw, 3.2rem)', fontWeight: 900, letterSpacing: '-2px', lineHeight: 1, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
             {pad(val)}
           </span>
           <span style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: 1.2, marginTop: 4 }}>{label}</span>
@@ -837,7 +845,7 @@ export default function LandingReveal({ referent = null }) {
               background: '#fff', borderRadius: 22, overflow: 'hidden', display: 'flex', flexDirection: 'column',
               /* Vendre = la vedette : bordure violette, ombre plus marquée */
               border: f.vedette ? `2px solid ${T.main}` : `1px solid ${T.pale}`,
-              boxShadow: f.vedette ? `0 18px 48px ${T.main}30` : '0 12px 36px rgba(22,6,54,0.08)',
+              boxShadow: f.vedette ? `0 10px 26px ${T.main}2E` : '0 6px 18px rgba(22,6,54,0.08)',
             }}>
               <Bande3px/>
               <div style={{ padding: '22px 22px 24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
@@ -904,7 +912,7 @@ export default function LandingReveal({ referent = null }) {
 
       {/* ═══ 7. L'HISTOIRE ═══ */}
       <section style={{ maxWidth: 680, margin: '0 auto', padding: '56px 20px 8px' }}>
-        <div style={{ background: '#fff', borderRadius: 22, overflow: 'hidden', border: `1px solid ${T.pale}`, boxShadow: '0 12px 36px rgba(22,6,54,0.08)' }}>
+        <div style={{ background: '#fff', borderRadius: 22, overflow: 'hidden', border: `1px solid ${T.pale}`, boxShadow: '0 6px 18px rgba(22,6,54,0.08)' }}>
           <Bande3px/>
           <div style={{ padding: 'clamp(22px, 5vw, 34px)' }}>
             <SectionEyebrow>Un projet belge indépendant</SectionEyebrow>

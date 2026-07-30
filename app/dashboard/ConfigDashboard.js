@@ -3153,6 +3153,16 @@ function SectionCreneauxLivraison({ commercantId, toast }) {
   async function ajouter() {
     if (!form.heure_debut || !form.heure_fin) { toast('Renseigne les heures de la tournée', 'error'); return }
     if (form.heure_fin <= form.heure_debut) { toast('L’heure de fin doit être après le début', 'error'); return }
+    // Anti-doublon / anti-chevauchement sur le même jour (même garde que les
+    // créneaux C&C) : deux tournées identiques ou qui se recouvrent = refus
+    for (const c of creneaux.filter(c => c.jour_semaine === form.jour_semaine)) {
+      const debut = (c.heure_debut || '').slice(0, 5)
+      const fin = (c.heure_fin || '').slice(0, 5)
+      if (form.heure_debut < fin && form.heure_fin > debut) {
+        toast(`Cette tournée chevauche la tournée ${debut}–${fin} déjà créée ce jour-là`, 'error')
+        return
+      }
+    }
     const { error } = await supabase.from('livraison_creneaux').insert({
       commercant_id: commercantId,
       jour_semaine: form.jour_semaine,

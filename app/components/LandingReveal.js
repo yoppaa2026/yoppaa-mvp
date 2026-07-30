@@ -3,13 +3,15 @@
 // 'reveal' de lib/landing-mode.js). Le grand dévoilement : ce qu'est Yoppaa,
 // pour les Yoppers et pour les commerçants, avec mockups fidèles à l'app.
 //
+// V2 (retours Alex 30/07) : mockups à hauteur identique (écran 460px),
+// textes réécrits (français fluide), décors absolute retirés (jank scroll
+// iOS, cf. reference_scroll_jank_ios), section formules détaillée avec
+// Exister et Communiquer mis en avant (signaux des Yoppers, push ciblés)
+// + bloc transparence.
+//
 // Duplication ASSUMÉE de la logique formulaire de LandingTeasing (Turnstile,
 // stats communes, soumission) : le Teasing disparaît au 1er août, on ne
 // refactore pas une page en prod à J-3. Source : LandingTeasing.js.
-//
-// Sections : hero reveal + compteur 01/09 · manifesto · côté Yoppers (mockups
-// fiche C&C + GMY + RDV) · côté commerçants (0% commission, 3 formules,
-// mockup dashboard) · mobilisation par commune · histoire · formulaire · footer.
 
 import { useState, useEffect, useRef } from 'react'
 import Script from 'next/script'
@@ -97,19 +99,28 @@ function IconSparkles({ size = 12, color = T.light }) {
     </svg>
   )
 }
+function IconHeart({ size = 12, color = T.main }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+    </svg>
+  )
+}
 
-// Cadre téléphone : écran de l'app reproduit en CSS (fidèle au vrai design)
+// Cadre téléphone : écran de l'app reproduit en CSS, HAUTEUR FIXE commune
+// (les 4 mockups font exactement la même taille, demande Alex 30/07)
+const ECRAN_H = 460
 function PhoneFrame({ children, label }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
       <div style={{ width: 264, borderRadius: 32, background: '#0B0318', padding: 9, boxShadow: '0 24px 60px rgba(22,6,54,0.45), 0 4px 16px rgba(22,6,54,0.3)', border: '1px solid rgba(255,255,255,0.08)' }}>
-        <div style={{ borderRadius: 24, overflow: 'hidden', background: T.bg, position: 'relative' }}>
+        <div style={{ borderRadius: 24, overflow: 'hidden', background: T.bg, position: 'relative', height: ECRAN_H }}>
           {/* Encoche */}
           <div style={{ position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)', width: 74, height: 16, borderRadius: 100, background: '#0B0318', zIndex: 5 }}/>
           {children}
         </div>
       </div>
-      {label && <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: 'inherit', opacity: 0.85, textAlign: 'center' }}>{label}</p>}
+      {label && <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: 'inherit', opacity: 0.85, textAlign: 'center', maxWidth: 250, lineHeight: 1.4 }}>{label}</p>}
     </div>
   )
 }
@@ -117,12 +128,12 @@ function PhoneFrame({ children, label }) {
 // ─── Mockup 1 : fiche commerçant Click & Collect (côté Yopper) ───────────────
 function MockFiche() {
   return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif' }}>
+    <div style={{ fontFamily: '"DM Sans", sans-serif', height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Hero fiche violet + card infos qui chevauche */}
-      <div style={{ height: 76, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 40%, ${T.main} 100%)`, position: 'relative' }}>
+      <div style={{ height: 74, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 40%, ${T.main} 100%)`, position: 'relative', flexShrink: 0 }}>
         <Bande3px/>
       </div>
-      <div style={{ background: '#fff', margin: '-30px 10px 0', borderRadius: 14, padding: '10px 12px', boxShadow: '0 8px 24px rgba(22,6,54,0.16)', position: 'relative' }}>
+      <div style={{ background: '#fff', margin: '-30px 10px 0', borderRadius: 14, padding: '10px 12px', boxShadow: '0 8px 24px rgba(22,6,54,0.16)', position: 'relative', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ width: 34, height: 34, borderRadius: 10, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, border: '2px solid #fff', marginTop: -22, boxShadow: '0 4px 12px rgba(22,6,54,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2l2 4h8l2-4"/><path d="M6 22l-2-9h16l-2 9"/><path d="M9 12v4M15 12v4M12 12v4"/></svg>
@@ -138,13 +149,13 @@ function MockFiche() {
         </div>
       </div>
       {/* Jours de retrait */}
-      <div style={{ display: 'flex', gap: 5, padding: '10px 10px 0' }}>
+      <div style={{ display: 'flex', gap: 5, padding: '10px 10px 0', flexShrink: 0 }}>
         {['Auj.', 'Demain', 'Jeudi'].map((j, i) => (
           <span key={j} style={{ padding: '4px 10px', borderRadius: 100, fontSize: 8.5, fontWeight: 800, background: i === 0 ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: i === 0 ? '#fff' : T.deep, border: i === 0 ? 'none' : `1px solid ${T.pale}` }}>{j}</span>
         ))}
       </div>
       {/* Deal du jour (vraie DealOfferCard) */}
-      <div style={{ margin: '9px 10px 0', background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, borderRadius: 11, padding: '8px 10px', border: `1px solid ${T.main}55` }}>
+      <div style={{ margin: '9px 10px 0', background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, borderRadius: 11, padding: '8px 10px', border: `1px solid ${T.main}55`, flexShrink: 0 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 6.5, fontWeight: 800, color: '#FB923C', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
           <IconFlame size={8}/> Deal du jour
         </span>
@@ -162,7 +173,7 @@ function MockFiche() {
         { nom: 'Croissant au beurre', prix: '1,80€', stock: '12 dispo', qte: 2 },
         { nom: 'Pain complet', prix: '3,20€', stock: '6 dispo', qte: 0 },
       ].map(a => (
-        <div key={a.nom} style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, padding: '8px 10px', border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div key={a.nom} style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, padding: '8px 10px', border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexShrink: 0 }}>
           <div style={{ minWidth: 0 }}>
             <p style={{ margin: 0, fontWeight: 800, fontSize: 10.5, color: T.ink }}>{a.nom}</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
@@ -181,8 +192,8 @@ function MockFiche() {
           </div>
         </div>
       ))}
-      {/* CTA panier */}
-      <div style={{ padding: 10 }}>
+      {/* CTA panier collé en bas */}
+      <div style={{ padding: 10, marginTop: 'auto' }}>
         <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 9.5, fontWeight: 800, color: '#fff' }}>Commander · retrait 16:30</span>
           <span style={{ fontSize: 10.5, fontWeight: 900, color: '#fff' }}>9,00€</span>
@@ -195,14 +206,14 @@ function MockFiche() {
 // ─── Mockup 2 : Good Morning Yoppers (l'édition de 7h30) ────────────────────
 function MockMorning() {
   return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, paddingBottom: 10 }}>
-      <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '26px 12px 12px' }}>
+    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '26px 12px 12px', flexShrink: 0 }}>
         <p style={{ margin: 0, fontSize: 7.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px' }}>Chaque matin · 7h30</p>
         <p style={{ margin: '3px 0 0', fontWeight: 900, fontSize: 14, color: '#fff', letterSpacing: '-0.3px' }}>Good Morning Yoppers</p>
         <p style={{ margin: '2px 0 0', fontSize: 8.5, color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>Les deals et actus de ta commune</p>
       </div>
       {/* Carte deal façon post */}
-      <div style={{ margin: '10px 10px 0', background: '#fff', borderRadius: 12, padding: '9px 11px', border: `1px solid ${T.pale}` }}>
+      <div style={{ margin: '10px 10px 0', background: '#fff', borderRadius: 12, padding: '9px 11px', border: `1px solid ${T.pale}`, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
           <span style={{ width: 24, height: 24, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 10, flexShrink: 0 }}>B</span>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -221,8 +232,8 @@ function MockMorning() {
           <span style={{ marginLeft: 'auto', fontSize: 7, fontWeight: 700, color: T.main, textTransform: 'uppercase', letterSpacing: '0.4px' }}>J&rsquo;en profite ›</span>
         </div>
       </div>
-      {/* Carte actu */}
-      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 12, padding: '9px 11px', border: `1px solid ${T.pale}` }}>
+      {/* Carte actu commerçant */}
+      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 12, padding: '9px 11px', border: `1px solid ${T.pale}`, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
           <span style={{ width: 24, height: 24, borderRadius: '50%', background: `linear-gradient(135deg, ${T.deep}, ${T.main})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 10, flexShrink: 0 }}>T</span>
           <div style={{ minWidth: 0 }}>
@@ -232,10 +243,21 @@ function MockMorning() {
         </div>
         <p style={{ margin: 0, fontSize: 9.5, fontWeight: 700, color: T.ink }}>Nouvel arrivage d&rsquo;Éthiopie ce samedi</p>
       </div>
-      {/* Push notification */}
-      <div style={{ margin: '8px 10px 0', background: 'rgba(107,53,196,0.08)', borderRadius: 10, padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 6, border: `1px dashed ${T.main}44` }}>
+      {/* Carte actu boutique */}
+      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 12, padding: '9px 11px', border: `1px solid ${T.pale}`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
+          <span style={{ width: 24, height: 24, borderRadius: '50%', background: `linear-gradient(135deg, ${T.mid}, ${T.light})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 10, flexShrink: 0 }}>M</span>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: 9.5, fontWeight: 800, color: T.ink }}>Maison Léa</p>
+            <p style={{ margin: 0, fontSize: 7, color: T.main, fontWeight: 600 }}>Boutique · actu</p>
+          </div>
+        </div>
+        <p style={{ margin: 0, fontSize: 9.5, fontWeight: 700, color: T.ink }}>La nouvelle collection est arrivée</p>
+      </div>
+      {/* Push notification collée en bas */}
+      <div style={{ margin: 'auto 10px 10px', background: 'rgba(107,53,196,0.08)', borderRadius: 10, padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 6, border: `1px dashed ${T.main}44` }}>
         <IconBell size={11}/>
-        <p style={{ margin: 0, fontSize: 8, fontWeight: 700, color: T.deep, lineHeight: 1.4 }}>Notification chaque matin, pour ta commune uniquement</p>
+        <p style={{ margin: 0, fontSize: 8, fontWeight: 700, color: T.deep, lineHeight: 1.4 }}>Une notification chaque matin, pour ta commune uniquement</p>
       </div>
     </div>
   )
@@ -244,12 +266,12 @@ function MockMorning() {
 // ─── Mockup 3 : prise de RDV (services) ──────────────────────────────────────
 function MockRdv() {
   return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, paddingBottom: 10 }}>
-      <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '26px 12px 12px' }}>
+    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '26px 12px 12px', flexShrink: 0 }}>
         <p style={{ margin: 0, fontWeight: 900, fontSize: 13, color: '#fff', letterSpacing: '-0.3px' }}>Barbier Léon</p>
         <p style={{ margin: '2px 0 0', fontSize: 8.5, color: T.light, fontWeight: 700 }}>Prendre rendez-vous</p>
       </div>
-      <div style={{ padding: '10px 10px 0' }}>
+      <div style={{ padding: '10px 10px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
         <p style={{ margin: '0 0 6px', fontSize: 7.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Choisis ta prestation</p>
         <div style={{ background: '#fff', borderRadius: 11, padding: '8px 10px', border: `1.5px solid ${T.main}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: `0 4px 14px ${T.main}22` }}>
           <div>
@@ -257,6 +279,12 @@ function MockRdv() {
             <p style={{ margin: '2px 0 0', fontSize: 8, color: T.muted, fontWeight: 600 }}>45 min</p>
           </div>
           <span style={{ fontSize: 11, fontWeight: 900, color: T.main }}>28,00€</span>
+        </div>
+        <p style={{ margin: '10px 0 6px', fontSize: 7.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Avec qui ?</p>
+        <div style={{ display: 'flex', gap: 5 }}>
+          {[{ n: 'Léon', actif: true }, { n: 'Sami', actif: false }, { n: 'Sans préférence', actif: false }].map(p => (
+            <span key={p.n} style={{ padding: '4px 9px', borderRadius: 100, fontSize: 8, fontWeight: 800, background: p.actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: p.actif ? '#fff' : T.deep, border: p.actif ? 'none' : `1px solid ${T.pale}` }}>{p.n}</span>
+          ))}
         </div>
         <p style={{ margin: '10px 0 6px', fontSize: 7.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Jeudi 3 septembre</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
@@ -271,12 +299,14 @@ function MockRdv() {
             <span key={s.h} style={{ padding: '5px 9px', borderRadius: 8, fontSize: 8.5, fontWeight: 800, background: s.actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: s.actif ? '#fff' : s.pris ? '#C7C9D1' : T.deep, border: s.actif ? 'none' : `1px solid ${T.pale}`, textDecoration: s.pris ? 'line-through' : 'none' }}>{s.h}</span>
           ))}
         </div>
-        <div style={{ marginTop: 10, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '8px 14px', textAlign: 'center' }}>
-          <span style={{ fontSize: 9.5, fontWeight: 800, color: '#fff' }}>Confirmer mon RDV</span>
-        </div>
-        <div style={{ marginTop: 8, background: '#F0FDF4', border: '1px solid #10B98144', borderRadius: 10, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <IconCheck size={11}/>
-          <span style={{ fontSize: 8.5, fontWeight: 800, color: '#10B981' }}>C&rsquo;est noté ! Rappel 1h avant 🟣</span>
+        <div style={{ marginTop: 'auto', paddingBottom: 10 }}>
+          <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '8px 14px', textAlign: 'center' }}>
+            <span style={{ fontSize: 9.5, fontWeight: 800, color: '#fff' }}>Confirmer mon RDV</span>
+          </div>
+          <div style={{ marginTop: 8, background: '#F0FDF4', border: '1px solid #10B98144', borderRadius: 10, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <IconCheck size={11}/>
+            <span style={{ fontSize: 8.5, fontWeight: 800, color: '#10B981' }}>C&rsquo;est noté ! Rappel 1h avant 🟣</span>
+          </div>
         </div>
       </div>
     </div>
@@ -286,13 +316,13 @@ function MockRdv() {
 // ─── Mockup 4 : dashboard commerçant ────────────────────────────────────────
 function MockDashboard() {
   return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, paddingBottom: 10 }}>
-      <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '26px 12px 12px' }}>
+    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '26px 12px 12px', flexShrink: 0 }}>
         <p style={{ margin: 0, fontSize: 7.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px' }}>Espace commerçant</p>
         <p style={{ margin: '3px 0 0', fontWeight: 900, fontSize: 13, color: '#fff', letterSpacing: '-0.3px' }}>Aujourd&rsquo;hui</p>
       </div>
       {/* Stats du jour */}
-      <div style={{ display: 'flex', gap: 6, padding: '10px 10px 0' }}>
+      <div style={{ display: 'flex', gap: 6, padding: '10px 10px 0', flexShrink: 0 }}>
         {[
           { val: '12', label: 'commandes' },
           { val: '8', label: 'RDV' },
@@ -305,7 +335,7 @@ function MockDashboard() {
         ))}
       </div>
       {/* Commande à préparer */}
-      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, border: `1px solid ${T.pale}`, overflow: 'hidden' }}>
+      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, border: `1px solid ${T.pale}`, overflow: 'hidden', flexShrink: 0 }}>
         <Bande3px/>
         <div style={{ padding: '8px 10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -318,16 +348,24 @@ function MockDashboard() {
           </div>
         </div>
       </div>
+      {/* Signal Yopper : l'envie du quartier */}
+      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, padding: '8px 10px', border: `1px solid ${T.pale}`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+          <IconHeart size={10}/>
+          <span style={{ fontSize: 7, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Ton quartier te parle</span>
+        </div>
+        <p style={{ margin: 0, fontSize: 8.5, color: T.ink, fontWeight: 600, lineHeight: 1.45 }}>« Des sandwiches le midi, ce serait top ! » · 14 habitants sont d&rsquo;accord</p>
+      </div>
       {/* Assistant IA */}
-      <div style={{ margin: '8px 10px 0', background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, borderRadius: 11, padding: '8px 10px' }}>
+      <div style={{ margin: '8px 10px 0', background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, borderRadius: 11, padding: '8px 10px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
           <IconSparkles size={10}/>
           <span style={{ fontSize: 7, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Rédiger avec l&rsquo;IA</span>
         </div>
-        <p style={{ margin: 0, fontSize: 8.5, color: '#fff', fontWeight: 600, lineHeight: 1.45 }}>« Trois propositions de texte pour ton deal, prêtes en 5 secondes. »</p>
+        <p style={{ margin: 0, fontSize: 8.5, color: '#fff', fontWeight: 600, lineHeight: 1.45 }}>Trois propositions de texte pour ton deal, prêtes en cinq secondes.</p>
       </div>
-      {/* Stock du jour */}
-      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, padding: '8px 10px', border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* Stock du jour collé en bas */}
+      <div style={{ margin: 'auto 10px 10px', background: '#fff', borderRadius: 11, padding: '8px 10px', border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <p style={{ margin: 0, fontSize: 9, fontWeight: 800, color: T.ink }}>Croissant au beurre</p>
         <span style={{ fontSize: 7.5, fontWeight: 800, color: '#10B981', background: '#F0FDF4', padding: '2px 8px', borderRadius: 100, border: '1px solid #10B98133' }}>Stock jeudi : 24</span>
       </div>
@@ -452,6 +490,52 @@ function SectionEyebrow({ children, dark = false }) {
     </p>
   )
 }
+
+// ─── Données des 3 formules (section tarifs) ────────────────────────────────
+const FORMULES = [
+  {
+    nom: 'Exister',
+    prix: 'Gratuit',
+    sousPrix: 'pour toujours',
+    badge: 'Gratuit à vie',
+    accroche: 'Ton commerce existe en ligne, sans rien débourser.',
+    points: [
+      'Ta page professionnelle : horaires, photos, itinéraire, contact',
+      'Visible dans l’app et référencée sur Google',
+      'Une place chaque semaine dans le Good Morning Yoppers',
+      'Les envies du quartier : les habitants te disent ce qu’ils aimeraient trouver chez toi',
+    ],
+  },
+  {
+    nom: 'Communiquer',
+    prix: '19,90€',
+    sousPrix: 'par mois',
+    badge: 'Le préféré du quartier',
+    accroche: 'Ta commune entend parler de toi chaque matin.',
+    points: [
+      'Tout Exister, plus :',
+      'Deals du jour et actualités illimités',
+      'Ta place quotidienne dans le Good Morning Yoppers',
+      'Notifications push envoyées aux habitants de ta commune',
+      'Assistant IA qui rédige tes textes en quelques secondes',
+    ],
+  },
+  {
+    nom: 'Vendre',
+    prix: '49,90€',
+    sousPrix: 'par mois',
+    badge: 'La totale · recommandée',
+    accroche: 'Tu vends en ligne et tu gardes chaque euro de tes ventes.',
+    vedette: true,
+    points: [
+      'Tout Communiquer, plus :',
+      'Click & Collect avec paiement en ligne',
+      'Rendez-vous en ligne, réservables 24h/24',
+      'Boutique en ligne et livraison locale',
+      '0% de commission sur tes ventes',
+    ],
+  },
+]
 
 // ─── Composant principal ────────────────────────────────────────────────────
 export default function LandingReveal({ referent = null }) {
@@ -587,17 +671,16 @@ export default function LandingReveal({ referent = null }) {
   }
 
   return (
-    <div style={{ background: T.bg, color: T.ink, fontFamily: '"DM Sans", sans-serif', overflowX: 'hidden' }}>
+    // Pas d'overflowX hidden ici : avec overflow-y visible, il transformait ce
+    // div en zone de scroll imbriquée (scroll qui « accroche » sur PC). Plus
+    // rien ne déborde horizontalement depuis le retrait des décors absolute.
+    <div style={{ background: T.bg, color: T.ink, fontFamily: '"DM Sans", sans-serif' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
       <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" async defer/>
 
       {/* ═══ 1. HERO REVEAL (fond sombre) ═══ */}
-      <section style={{ background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`, color: '#fff', position: 'relative', overflow: 'hidden' }}>
-        <div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-          <div style={{ position: 'absolute', top: '-200px', right: '-200px', width: 600, height: 600, borderRadius: '50%', background: `radial-gradient(circle, ${T.main}33 0%, transparent 60%)` }}/>
-          <div style={{ position: 'absolute', bottom: '-300px', left: '-200px', width: 700, height: 700, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}25 0%, transparent 60%)` }}/>
-        </div>
-        <div style={{ maxWidth: 860, margin: '0 auto', padding: '56px 20px 64px', position: 'relative', textAlign: 'center' }}>
+      <section style={{ background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`, color: '#fff' }}>
+        <div style={{ maxWidth: 860, margin: '0 auto', padding: '56px 20px 64px', textAlign: 'center' }}>
           {referent && (
             <div style={{ display: 'inline-block', marginBottom: 24, padding: '10px 18px', borderRadius: 100, background: 'rgba(196,160,244,0.16)', border: '1px solid rgba(196,160,244,0.4)', fontSize: 13.5, fontWeight: 700, color: '#fff', lineHeight: 1.45 }}>
               <strong style={{ color: T.light }}>{referent}</strong> t&rsquo;invite à rejoindre Yoppaa 🟣
@@ -609,9 +692,11 @@ export default function LandingReveal({ referent = null }) {
           <h1 style={{ fontSize: 'clamp(2.3rem, 6.5vw, 3.8rem)', fontWeight: 900, letterSpacing: '-2px', lineHeight: 1.06, margin: '0 auto 18px', maxWidth: 700, color: '#fff' }}>
             Ton quartier<br/>dans ta poche.
           </h1>
-          <p style={{ fontSize: 'clamp(1.02rem, 2.6vw, 1.2rem)', color: 'rgba(255,255,255,0.92)', lineHeight: 1.6, maxWidth: 560, margin: '0 auto 26px', fontWeight: 500 }}>
-            Yoppaa, c&rsquo;est dévoilé : l&rsquo;app <strong style={{ color: '#fff' }}>belge</strong> <DrapeauBelge/> qui fait revivre les commerces de quartier.
-            Commander, réserver, suivre tes commerçants. Et pour eux : <strong style={{ color: '#fff' }}>0% de commission</strong>.
+          <p style={{ fontSize: 'clamp(1.02rem, 2.6vw, 1.2rem)', color: 'rgba(255,255,255,0.92)', lineHeight: 1.65, maxWidth: 580, margin: '0 auto 26px', fontWeight: 500 }}>
+            Voici Yoppaa, l&rsquo;app belge <DrapeauBelge/> qui rapproche les habitants de leurs commerçants.
+            Tu commandes chez ton boulanger, tu réserves chez ton coiffeur et tu suis la vie de ta commune,
+            le tout dans une seule app. Et les commerçants gardent l&rsquo;intégralité de leurs ventes :
+            <strong style={{ color: '#fff' }}> 0% de commission</strong>.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 44 }}>
             <button onClick={() => allerAuForm('yopper')} style={btnPrimaire}>Rejoindre la tribu</button>
@@ -632,11 +717,12 @@ export default function LandingReveal({ referent = null }) {
         <SectionEyebrow>Pourquoi Yoppaa</SectionEyebrow>
         <h2 style={{ fontSize: 'clamp(1.6rem, 4.5vw, 2.3rem)', fontWeight: 900, letterSpacing: '-1.2px', lineHeight: 1.15, margin: '0 0 16px', color: T.ink }}>
           Les grandes plateformes prennent jusqu&rsquo;à 30% aux commerçants.<br/>
-          <span style={{ color: T.main }}>Nous, on a choisi ton quartier.</span>
+          <span style={{ color: T.main }}>Nous avons choisi le camp du quartier.</span>
         </h2>
-        <p style={{ fontSize: '1.02rem', color: T.muted, lineHeight: 1.65, maxWidth: 600, margin: '0 auto', fontWeight: 500 }}>
-          Yoppaa réunit les boulangers, coiffeurs, boutiques et food trucks de ta commune dans une seule app.
-          Tu commandes chez eux, tu réserves chez eux, et chaque euro reste dans ton quartier.
+        <p style={{ fontSize: '1.02rem', color: T.muted, lineHeight: 1.7, maxWidth: 620, margin: '0 auto', fontWeight: 500 }}>
+          Yoppaa réunit dans une seule app les boulangers, les coiffeurs, les boutiques et les food trucks
+          de ta commune. Tu commandes et tu réserves chez eux en quelques secondes, ils gardent tout ce
+          qu&rsquo;ils gagnent, et ton quartier reste vivant. C&rsquo;est aussi simple que ça.
         </p>
       </section>
 
@@ -644,18 +730,23 @@ export default function LandingReveal({ referent = null }) {
       <section style={{ maxWidth: 1080, margin: '0 auto', padding: '56px 20px 24px' }}>
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <SectionEyebrow>Pour toi, Yopper</SectionEyebrow>
-          <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.1rem)', fontWeight: 900, letterSpacing: '-1px', margin: 0, color: T.ink }}>
-            Tes commerces préférés, en 3 clics.
+          <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.1rem)', fontWeight: 900, letterSpacing: '-1px', margin: '0 0 12px', color: T.ink }}>
+            Tes commerces préférés, à portée de main.
           </h2>
+          <p style={{ fontSize: '1rem', color: T.muted, maxWidth: 560, margin: '0 auto', lineHeight: 1.65, fontWeight: 500 }}>
+            Fini la file du samedi matin et le répondeur du coiffeur. Tu commandes à l&rsquo;avance,
+            tu réserves quand ça t&rsquo;arrange, et chaque matin l&rsquo;app te souffle les bons plans
+            du jour près de chez toi.
+          </p>
         </div>
         <div style={{ display: 'flex', gap: 'clamp(18px, 4vw, 40px)', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'flex-start', color: T.deep }}>
-          <PhoneFrame label="Commande et retire, sans file d'attente">
+          <PhoneFrame label="Commande à l'avance et passe la prendre sans faire la file">
             <MockFiche/>
           </PhoneFrame>
-          <PhoneFrame label="Chaque matin à 7h30, les deals de ta commune">
+          <PhoneFrame label="Chaque matin à 7h30, les bons plans de ta commune arrivent tout seuls">
             <MockMorning/>
           </PhoneFrame>
-          <PhoneFrame label="Ton coiffeur, ton barbier : RDV en ligne 24h/24">
+          <PhoneFrame label="Prends rendez-vous chez ton coiffeur ou ton barbier, même à minuit">
             <MockRdv/>
           </PhoneFrame>
         </div>
@@ -673,27 +764,27 @@ export default function LandingReveal({ referent = null }) {
       </section>
 
       {/* ═══ 4. CÔTÉ COMMERÇANTS (sombre, punch) ═══ */}
-      <section style={{ background: `linear-gradient(135deg, ${T.panel} 0%, ${T.ink} 100%)`, color: '#fff', marginTop: 48, position: 'relative', overflow: 'hidden' }}>
+      <section style={{ background: `linear-gradient(135deg, ${T.panel} 0%, ${T.ink} 100%)`, color: '#fff', marginTop: 48 }}>
         <Bande3px/>
-        <div aria-hidden="true" style={{ position: 'absolute', top: '-180px', left: '-180px', width: 520, height: 520, borderRadius: '50%', background: `radial-gradient(circle, ${T.main}2E 0%, transparent 60%)`, pointerEvents: 'none' }}/>
-        <div style={{ maxWidth: 1080, margin: '0 auto', padding: '64px 20px 72px', position: 'relative' }}>
+        <div style={{ maxWidth: 1080, margin: '0 auto', padding: '64px 20px 72px' }}>
           <div style={{ textAlign: 'center', marginBottom: 44 }}>
             <SectionEyebrow dark>Pour les commerçants</SectionEyebrow>
             <h2 style={{ fontSize: 'clamp(1.6rem, 4.5vw, 2.3rem)', fontWeight: 900, letterSpacing: '-1.2px', lineHeight: 1.12, margin: '0 0 14px', color: '#fff' }}>
-              Ta machine de guerre digitale.<br/>Sans commission.
+              Les outils des grandes enseignes.<br/>Sans toucher à tes marges.
             </h2>
-            <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.88)', maxWidth: 560, margin: '0 auto', lineHeight: 1.6, fontWeight: 500 }}>
-              Page pro, commandes, rendez-vous, deals, actus, assistant IA : tout ce qu&rsquo;il faut pour vendre,
-              sans reverser un centime sur tes ventes.
+            <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.88)', maxWidth: 600, margin: '0 auto', lineHeight: 1.65, fontWeight: 500 }}>
+              Une page professionnelle, des commandes, des rendez-vous, des promotions qui arrivent
+              directement sur le téléphone de tes clients, et même un assistant IA pour rédiger tes textes.
+              Tout est pensé pour te faire gagner du temps, et Yoppaa ne prélève jamais rien sur tes ventes.
             </p>
           </div>
 
           {/* Chiffres punch */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14, maxWidth: 760, margin: '0 auto 48px' }}>
             {[
-              { chiffre: '0%', label: 'commission sur tes ventes' },
-              { chiffre: '30 jours', label: "d'essai gratuit, sans carte" },
-              { chiffre: '10 min', label: 'pour créer ta page pro' },
+              { chiffre: '0%', label: 'de commission sur tes ventes' },
+              { chiffre: '30 jours', label: "d'essai gratuit, sans carte de paiement" },
+              { chiffre: '10 min', label: 'pour mettre ta page en ligne' },
               { chiffre: '0€', label: 'la formule Exister, pour toujours' },
             ].map(s => (
               <div key={s.label} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 18, padding: '20px 14px', textAlign: 'center' }}>
@@ -703,84 +794,143 @@ export default function LandingReveal({ referent = null }) {
             ))}
           </div>
 
-          {/* Dashboard mockup + les 3 formules */}
+          {/* Dashboard mockup + arguments */}
           <div style={{ display: 'flex', gap: 'clamp(24px, 5vw, 56px)', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
-            <PhoneFrame label="Ton espace commerçant, pensé simple">
+            <PhoneFrame label="Ton espace commerçant : simple, rapide, pensé pour le comptoir">
               <MockDashboard/>
             </PhoneFrame>
-            <div style={{ flex: '1 1 340px', maxWidth: 460, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ flex: '1 1 340px', maxWidth: 460, display: 'flex', flexDirection: 'column', gap: 14 }}>
               {[
-                { nom: 'Exister', prix: 'Gratuit', desc: 'Ta page pro dans l’app et sur Google : horaires, photos, infos. Ton commerce existe en ligne.', accent: false },
-                { nom: 'Communiquer', prix: '19,90€/mois', desc: 'Deals, actus, place dans le Good Morning Yoppers, assistant IA. Ton quartier entend parler de toi chaque matin.', accent: false },
-                { nom: 'Vendre', prix: '49,90€/mois', desc: 'Click & Collect, RDV en ligne, boutique, livraison locale, paiement en ligne. La totale, 0% de commission.', accent: true },
-              ].map(p => (
-                <div key={p.nom} style={{ background: p.accent ? 'linear-gradient(135deg, rgba(196,160,244,0.22), rgba(150,96,224,0.14))' : 'rgba(255,255,255,0.05)', border: p.accent ? `1.5px solid ${T.light}` : '1px solid rgba(255,255,255,0.14)', borderRadius: 18, padding: '16px 18px', textAlign: 'left', position: 'relative' }}>
-                  {p.accent && (
-                    <span style={{ position: 'absolute', top: -9, right: 16, fontSize: 9.5, fontWeight: 900, color: T.ink, background: `linear-gradient(135deg, ${T.light}, ${T.mid})`, padding: '3px 10px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Recommandée</span>
-                  )}
-                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 5 }}>
-                    <p style={{ margin: 0, fontWeight: 900, fontSize: 16.5, color: '#fff', letterSpacing: '-0.3px' }}>{p.nom}</p>
-                    <p style={{ margin: 0, fontWeight: 900, fontSize: 14.5, color: T.light }}>{p.prix}</p>
-                  </div>
-                  <p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.88)', lineHeight: 1.55, fontWeight: 500 }}>{p.desc}</p>
+                { titre: 'Ton quartier te parle', texte: 'Les habitants te disent ce qu’ils aimeraient trouver chez toi : de nouvelles envies, de nouveaux produits, de nouveaux clients. Tu sais ce que ton quartier attend avant même d’ouvrir le rideau.' },
+                { titre: 'Des notifications qui touchent leur cible', texte: 'Ton deal du matin part en notification push vers les habitants de ta commune, pas dans le vide. Le bon message, aux bonnes personnes, au bon moment.' },
+                { titre: 'Une gestion sans prise de tête', texte: 'Stock du jour, commandes, rendez-vous, tout se pilote en quelques clics depuis ton téléphone. Et quand une commande est prête, le client est prévenu automatiquement.' },
+              ].map(a => (
+                <div key={a.titre} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 18, padding: '16px 18px', textAlign: 'left' }}>
+                  <p style={{ margin: '0 0 6px', fontWeight: 900, fontSize: 15.5, color: '#fff', letterSpacing: '-0.3px' }}>{a.titre}</p>
+                  <p style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.88)', lineHeight: 1.6, fontWeight: 500 }}>{a.texte}</p>
                 </div>
               ))}
-              <button onClick={() => allerAuForm('commercant')} style={{ ...btnPrimaire, marginTop: 8, width: '100%' }}>
+              <button onClick={() => allerAuForm('commercant')} style={{ ...btnPrimaire, marginTop: 6, width: '100%' }}>
                 Préinscrire mon commerce
               </button>
-              <p style={{ margin: 0, fontSize: 11.5, color: 'rgba(255,255,255,0.7)', textAlign: 'center', fontWeight: 600 }}>
-                Sans engagement · paiement Bancontact ou carte · résiliable en 2 clics
-              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ═══ 5. LA ZONE : commune par commune ═══ */}
+      {/* ═══ 5. LES FORMULES (clair, détaillé, transparence) ═══ */}
+      <section style={{ maxWidth: 1080, margin: '0 auto', padding: '64px 20px 8px' }}>
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+          <SectionEyebrow>Les formules</SectionEyebrow>
+          <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.1rem)', fontWeight: 900, letterSpacing: '-1px', margin: '0 0 12px', color: T.ink }}>
+            Simples, transparentes, sans engagement.
+          </h2>
+          <p style={{ fontSize: '1rem', color: T.muted, maxWidth: 600, margin: '0 auto', lineHeight: 1.65, fontWeight: 500 }}>
+            Chez Yoppaa, pas d&rsquo;abonnement contraignant ni de frais cachés : tu viens parce que
+            c&rsquo;est sympa, tu restes parce que c&rsquo;est utile. Chaque formule est mensuelle,
+            sans engagement, et résiliable en deux clics.
+          </p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: 18, alignItems: 'stretch' }}>
+          {FORMULES.map(f => (
+            <div key={f.nom} style={{
+              background: '#fff', borderRadius: 22, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+              /* Vendre = la vedette : bordure violette, ombre plus marquée */
+              border: f.vedette ? `2px solid ${T.main}` : `1px solid ${T.pale}`,
+              boxShadow: f.vedette ? `0 18px 48px ${T.main}30` : '0 12px 36px rgba(22,6,54,0.08)',
+            }}>
+              <Bande3px/>
+              <div style={{ padding: '22px 22px 24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                <span style={{
+                  alignSelf: 'flex-start', fontSize: 10.5, fontWeight: 900, padding: '4px 12px', borderRadius: 100,
+                  textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12,
+                  color: f.vedette ? '#fff' : T.deep,
+                  background: f.vedette ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : T.pale,
+                }}>
+                  {f.badge}
+                </span>
+                <p style={{ margin: 0, fontWeight: 900, fontSize: 22, color: T.ink, letterSpacing: '-0.5px' }}>{f.nom}</p>
+                <p style={{ margin: '6px 0 2px', fontWeight: 900, fontSize: 30, color: T.main, letterSpacing: '-1px' }}>
+                  {f.prix}
+                  <span style={{ fontSize: 13, fontWeight: 700, color: T.muted, letterSpacing: 0, marginLeft: 6 }}>{f.sousPrix}</span>
+                </p>
+                <p style={{ margin: '10px 0 16px', fontSize: 14, fontWeight: 700, color: T.deep, lineHeight: 1.5 }}>{f.accroche}</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 20 }}>
+                  {f.points.map(pt => (
+                    <div key={pt} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <span style={{ marginTop: 2, flexShrink: 0 }}><IconCheck size={13}/></span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: pt.startsWith('Tout ') ? T.main : T.ink, lineHeight: 1.5 }}>{pt}</span>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => allerAuForm('commercant')}
+                  style={{
+                    marginTop: 'auto', width: '100%', padding: '13px', borderRadius: 100,
+                    fontWeight: 900, fontSize: 13.5, letterSpacing: 0.4, textTransform: 'uppercase',
+                    cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                    /* CTA plein pour la vedette, contour pour les accroches */
+                    border: f.vedette ? 'none' : `1.5px solid ${T.main}`,
+                    background: f.vedette ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
+                    color: f.vedette ? '#fff' : T.main,
+                    boxShadow: f.vedette ? `0 6px 20px ${T.main}55` : 'none',
+                  }}>
+                  Je me préinscris
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p style={{ margin: '22px auto 0', fontSize: 13, fontWeight: 700, color: T.muted, textAlign: 'center', maxWidth: 560, lineHeight: 1.6 }}>
+          30 jours d&rsquo;essai gratuit sur toutes les formules, sans carte de paiement.
+          Ensuite, paiement mensuel par Bancontact ou carte, et tu restes libre de partir quand tu veux.
+        </p>
+      </section>
+
+      {/* ═══ 6. LA ZONE : commune par commune ═══ */}
       <section style={{ maxWidth: 760, margin: '0 auto', padding: '64px 20px 8px', textAlign: 'center' }}>
         <SectionEyebrow>Où ça se passe</SectionEyebrow>
         <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.1rem)', fontWeight: 900, letterSpacing: '-1px', margin: '0 0 14px', color: T.ink }}>
           On démarre en Wallonie, commune par commune.
         </h2>
-        <p style={{ fontSize: '1rem', color: T.muted, lineHeight: 1.65, maxWidth: 580, margin: '0 auto 18px', fontWeight: 500 }}>
-          Yoppaa ne s&rsquo;ouvre pas partout à moitié : chaque commune s&rsquo;active quand assez de commerçants
-          la rejoignent. C&rsquo;est toi qui fais venir Yoppaa chez toi, en te préinscrivant et en en parlant autour de toi.
+        <p style={{ fontSize: '1rem', color: T.muted, lineHeight: 1.7, maxWidth: 600, margin: '0 auto 18px', fontWeight: 500 }}>
+          Yoppaa ne s&rsquo;ouvre pas partout à moitié : chaque commune s&rsquo;active quand suffisamment
+          de commerçants l&rsquo;ont rejointe. C&rsquo;est donc toi qui fais venir Yoppaa chez toi,
+          en te préinscrivant et en en parlant autour de toi.
         </p>
         <p style={{ fontSize: '0.95rem', fontWeight: 800, color: T.main, margin: 0 }}>
           Entre ton code postal dans le formulaire : tu verras où en est ta commune.
         </p>
       </section>
 
-      {/* ═══ 6. L'HISTOIRE ═══ */}
+      {/* ═══ 7. L'HISTOIRE ═══ */}
       <section style={{ maxWidth: 680, margin: '0 auto', padding: '56px 20px 8px' }}>
         <div style={{ background: '#fff', borderRadius: 22, overflow: 'hidden', border: `1px solid ${T.pale}`, boxShadow: '0 12px 36px rgba(22,6,54,0.08)' }}>
           <Bande3px/>
           <div style={{ padding: 'clamp(22px, 5vw, 34px)' }}>
             <SectionEyebrow>Un projet belge indépendant</SectionEyebrow>
-            <p style={{ margin: '0 0 12px', fontSize: '1.02rem', color: T.ink, lineHeight: 1.65, fontWeight: 600 }}>
-              Yoppaa n&rsquo;appartient à aucun grand groupe. C&rsquo;est un projet wallon <DrapeauBelge/>, construit
-              sans levée de fonds, avec une conviction simple : le digital doit servir les commerces de quartier,
-              pas se servir sur leur dos.
+            <p style={{ margin: '0 0 12px', fontSize: '1.02rem', color: T.ink, lineHeight: 1.7, fontWeight: 600 }}>
+              Yoppaa n&rsquo;appartient à aucun grand groupe. C&rsquo;est un projet wallon <DrapeauBelge/>,
+              construit sans levée de fonds, avec une conviction simple : le digital doit servir les
+              commerces de quartier, pas se servir sur leur dos.
             </p>
-            <p style={{ margin: 0, fontSize: '0.95rem', color: T.muted, lineHeight: 1.65, fontWeight: 500 }}>
-              Pas de commission sur les ventes, pas de revente de données, pas d&rsquo;algorithme qui cache tes
-              commerçants derrière des sponsorisés. Une app, ton quartier, et c&rsquo;est tout. 🟣
+            <p style={{ margin: 0, fontSize: '0.95rem', color: T.muted, lineHeight: 1.7, fontWeight: 500 }}>
+              Ici, pas de commission sur les ventes, pas de revente de données, pas d&rsquo;algorithme qui
+              cache tes commerçants derrière des annonces sponsorisées. Une app, ton quartier, et c&rsquo;est tout. 🟣
             </p>
           </div>
         </div>
       </section>
 
-      {/* ═══ 7. PRÉINSCRIPTION (sombre) ═══ */}
-      <section id="preinscription" style={{ background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`, color: '#fff', marginTop: 64, position: 'relative', overflow: 'hidden' }}>
+      {/* ═══ 8. PRÉINSCRIPTION (sombre) ═══ */}
+      <section id="preinscription" style={{ background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`, color: '#fff', marginTop: 64 }}>
         <Bande3px/>
-        <div aria-hidden="true" style={{ position: 'absolute', bottom: '-260px', right: '-200px', width: 640, height: 640, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}28 0%, transparent 60%)`, pointerEvents: 'none' }}/>
-        <div style={{ maxWidth: 560, margin: '0 auto', padding: '60px 20px 64px', position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+        <div style={{ maxWidth: 560, margin: '0 auto', padding: '60px 20px 64px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
           <h2 style={{ fontSize: 'clamp(1.6rem, 4.5vw, 2.2rem)', fontWeight: 900, letterSpacing: '-1.2px', margin: '0 0 10px', color: '#fff' }}>
             Rendez-vous le 1<sup>er</sup> septembre.
           </h2>
-          <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)', margin: '0 0 32px', lineHeight: 1.6, fontWeight: 500, maxWidth: 440 }}>
-            Laisse ton email : tu seras parmi les premiers à télécharger l&rsquo;app.
-            Commerçant ? Ta préinscription fait avancer ta commune.
+          <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)', margin: '0 0 32px', lineHeight: 1.65, fontWeight: 500, maxWidth: 440 }}>
+            Laisse ton email et tu seras parmi les premiers à télécharger l&rsquo;app.
+            Commerçant ? Ta préinscription fait avancer ta commune vers son activation.
           </p>
 
           {statut.envoi === 'ok' ? (

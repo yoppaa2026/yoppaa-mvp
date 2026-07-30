@@ -729,7 +729,7 @@ export default function LandingReveal({ referent = null }) {
         <SectionEyebrow>Pourquoi Yoppaa</SectionEyebrow>
         <h2 style={{ fontSize: 'clamp(1.6rem, 4.5vw, 2.3rem)', fontWeight: 900, letterSpacing: '-1.2px', lineHeight: 1.15, margin: '0 0 16px', color: T.ink }}>
           Les grandes plateformes prélèvent une commission sur chaque vente.<br/>
-          <span style={{ color: T.main }}>Nous avons choisi le camp du quartier.</span>
+          <span style={{ color: T.main }}>Nous, on a choisi le camp du quartier.<br/>Celui du boulanger qui te connaît par ton prénom.</span>
         </h2>
         <p style={{ fontSize: '1.02rem', color: T.muted, lineHeight: 1.7, maxWidth: 620, margin: '0 auto 28px', fontWeight: 500 }}>
           Yoppaa réunit les commerces de ta commune dans une seule app. Tu commandes et tu réserves

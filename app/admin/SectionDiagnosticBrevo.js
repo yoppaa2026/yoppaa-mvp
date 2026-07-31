@@ -112,20 +112,38 @@ export default function SectionDiagnosticBrevo() {
                 </button>
               </div>
 
-              {res.test_sms && (
-                <div style={{ marginTop: 12, background: res.test_sms.envoye ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${res.test_sms.envoye ? '#86EFAC' : '#FCA5A5'}`, borderRadius: 10, padding: '10px 12px' }}>
-                  <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: res.test_sms.envoye ? '#065F46' : '#991B1B' }}>
-                    {res.test_sms.envoye
-                      ? `SMS parti vers ${res.test_sms.vers} (expéditeur ${res.test_sms.expediteur})`
-                      : 'Envoi refusé par Brevo'}
-                  </p>
-                  {res.test_sms.erreur && (
-                    <p style={{ margin: '6px 0 0', fontSize: 11, color: '#7F1D1D', fontFamily: 'monospace', wordBreak: 'break-all', lineHeight: 1.5 }}>
-                      {res.test_sms.erreur}
+              {res.test_sms && (() => {
+                // Cas connu : Brevo bride l'envoi SMS tant qu'un humain de chez
+                // eux n'a pas activé le compte, même avec des crédits achetés.
+                // Rien à corriger côté Yoppaa, d'où l'explication en clair.
+                const err = res.test_sms.erreur || ''
+                const pasActive = /not yet activated|sending status/i.test(err)
+                return (
+                  <div style={{ marginTop: 12, background: res.test_sms.envoye ? '#F0FDF4' : pasActive ? '#FFFBEB' : '#FEF2F2', border: `1px solid ${res.test_sms.envoye ? '#86EFAC' : pasActive ? '#FCD34D' : '#FCA5A5'}`, borderRadius: 10, padding: '10px 12px' }}>
+                    <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: res.test_sms.envoye ? '#065F46' : pasActive ? '#78350F' : '#991B1B' }}>
+                      {res.test_sms.envoye
+                        ? `SMS parti vers ${res.test_sms.vers} (expéditeur ${res.test_sms.expediteur})`
+                        : pasActive
+                          ? 'Brevo n’a pas encore activé l’envoi de SMS sur ton compte'
+                          : 'Envoi refusé par Brevo'}
                     </p>
-                  )}
-                </div>
-              )}
+                    {pasActive && (
+                      <p style={{ margin: '6px 0 0', fontSize: 12, color: '#7C2D12', lineHeight: 1.6 }}>
+                        Ce n&rsquo;est pas un problème Yoppaa : tes crédits sont bien là et la clé fonctionne.
+                        Brevo valide manuellement l&rsquo;autorisation d&rsquo;envoyer des SMS. Écris à leur support
+                        (contact@brevo.com ou le chat de ton compte) en précisant : SMS <strong>transactionnels</strong>,
+                        destination <strong>Belgique</strong>, expéditeur <strong>Yoppaa</strong>, et l&rsquo;objet des messages
+                        (carte de fidélité d&rsquo;un commerce de quartier). L&rsquo;activation prend en général quelques heures.
+                      </p>
+                    )}
+                    {res.test_sms.erreur && (
+                      <p style={{ margin: '6px 0 0', fontSize: 11, color: pasActive ? '#92400E' : '#7F1D1D', fontFamily: 'monospace', wordBreak: 'break-all', lineHeight: 1.5 }}>
+                        {res.test_sms.erreur}
+                      </p>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           </>
         )}

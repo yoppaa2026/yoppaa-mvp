@@ -119,6 +119,13 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: 'Une commande expédiée se paie en ligne.' }, { status: 400 })
       }
     }
+    // Chemins C&C / livraison (créneaux) : réservés à la catégorie alimentaire.
+    // Sans ce verrou, un commerçant vitrine/détail gardant des lignes creneaux
+    // résiduelles (changement de catégorie) pourrait recevoir une commande
+    // payée mais invisible dans son dashboard (onglet Commandes masqué).
+    if (!estBoutique && commercant.categorie !== 'alimentaire') {
+      return NextResponse.json({ ok: false, error: 'La commande en ligne n\'est pas disponible chez ce commerçant.' }, { status: 400 })
+    }
     // Sur place : autorisé selon accepte_paiement_cash (alimentaire) ou selon
     // le choix boutique_retrait_paiement='magasin' (retrait boutique détail).
     const cashAutorise = estRetraitBoutique

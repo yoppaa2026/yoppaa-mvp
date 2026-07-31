@@ -1295,6 +1295,10 @@ export default function Commander() {
   // Modal d'avis post-commande : commande pour laquelle on propose un avis
   // (déclenché auto quand statut='recupere' et pas encore d'avis pour cette commande)
   const [avisCommande, setAvisCommande] = useState(null)
+  // Anti-rafale (bug Alex 31/07) : UNE seule sollicitation d'avis par visite.
+  // Sans ce verrou, fermer une modale déclenchait aussitôt la suivante
+  // (le refresh des commandes relançait l'effet sur la commande d'après).
+  const avisSessionRef = useRef(false)
   const [pickupCommande, setPickupCommande] = useState(null)
   // Tick minute pour rafraichir le compteur "Plus que X min avant ton créneau"
   const [, setNowTick] = useState(0)
@@ -1463,17 +1467,25 @@ export default function Commander() {
   //     lieu de localStorage, pour ne plus reproposer sur les autres devices.
   useEffect(() => {
     if (!clientId || avisCommande) return
+    if (avisSessionRef.current) return  // une seule sollicitation par visite (anti-rafale)
     if (!clientCommandes.length) return
 
     const nowMs = Date.now()
-    const DELAI_MIN_MS = 60 * 60 * 1000  // 60 minutes
+    const DELAI_MIN_MS = 60 * 60 * 1000              // 60 minutes après le retrait
+    const FENETRE_MAX_MS = 7 * 24 * 60 * 60 * 1000   // pertinence : 7 jours max
+
+    // Dismiss LOCAL en secours : si l'API ignore-avis a échoué (cookie yopper
+    // absent sur ce device, réseau), la commande ne re-sollicite plus ici.
+    let ignoresLocaux = new Set()
+    try { ignoresLocaux = new Set(JSON.parse(localStorage.getItem('yoppaa_avis_ignores') || '[]')) } catch { /* ignore */ }
 
     const candidates = clientCommandes.filter(c => {
       if (c.statut !== 'recupere' || !c.commercant_id) return false
-      if (c.avis_ignore_at) return false  // dismiss serveur
-      if (!c.recupere_at) return false    // pas encore setté = trop tôt
-      const recupereMs = new Date(c.recupere_at).getTime()
-      return (nowMs - recupereMs) >= DELAI_MIN_MS
+      if (c.avis_ignore_at) return false     // dismiss serveur
+      if (ignoresLocaux.has(c.id)) return false  // dismiss local (fallback)
+      if (!c.recupere_at) return false       // pas encore setté = trop tôt
+      const age = nowMs - new Date(c.recupere_at).getTime()
+      return age >= DELAI_MIN_MS && age <= FENETRE_MAX_MS
     })
     if (candidates.length === 0) return
 
@@ -1484,7 +1496,7 @@ export default function Commander() {
         const dejaAvis = new Set((avisExistants || []).map(a => a.commande_id).filter(Boolean))
         // Prend la commande la plus récente (clientCommandes est ordonné par created_at desc côté chargerCommandesClient)
         const prochaine = candidates.find(c => !dejaAvis.has(c.id))
-        if (prochaine) setAvisCommande(prochaine)
+        if (prochaine) { avisSessionRef.current = true; setAvisCommande(prochaine) }
       })
     return () => { annule = true }
   }, [clientCommandes, clientId, avisCommande])
@@ -2110,6 +2122,15 @@ export default function Commander() {
           clientId={clientId}
           commandeId={avisCommande.id}
           onClose={async () => {
+            // Dismiss LOCAL d'abord (ceinture + bretelles) : même si l'API
+            // échoue (401 cookie absent, réseau), ce device ne re-sollicite
+            // plus cette commande. Le serveur reste la source cross-devices.
+            try {
+              const key = 'yoppaa_avis_ignores'
+              const ids = new Set(JSON.parse(localStorage.getItem(key) || '[]'))
+              ids.add(avisCommande.id)
+              localStorage.setItem(key, JSON.stringify([...ids].slice(-100)))
+            } catch { /* ignore */ }
             try {
               await fetch('/api/commande/ignore-avis', {
                 method: 'POST',

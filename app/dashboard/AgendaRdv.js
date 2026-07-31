@@ -78,8 +78,14 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // Nombre de jours visibles (7 desktop, 1 mobile)
-  const nbJours = isDesktop ? 7 : 1
+  // Vue Jour / Semaine : par défaut on suit la taille d'écran (semaine sur
+  // desktop, jour sur mobile), mais le commerçant peut forcer l'autre vue
+  // (demande Alex 01/08). En semaine sur petit écran, la grille défile
+  // horizontalement avec des colonnes de largeur minimale.
+  const [vueForcee, setVueForcee] = useState(null)   // null = auto | 'jour' | 'semaine'
+  const vueSemaine = vueForcee ? vueForcee === 'semaine' : isDesktop
+  const nbJours = vueSemaine ? 7 : 1
+  const scrollH = vueSemaine && !isDesktop           // besoin d'un défilement horizontal ?
 
   // Construction des jours affichés (refDate + n)
   const joursAffiches = useMemo(() => {
@@ -184,7 +190,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
   function allerAujourdhui() { setRefDate(today) }
 
   // Label du header navigation
-  const headerLabel = isDesktop
+  const headerLabel = vueSemaine
     ? (() => {
         const last = joursAffiches[joursAffiches.length - 1]
         const sameM = refDate.getMonth() === last.date.getMonth()
@@ -218,6 +224,19 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
           style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${T.pale}`, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.main }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6"/></svg>
         </button>
+
+        {/* Bascule Jour / Semaine */}
+        <div style={{ display: 'flex', gap: 2, background: T.bg, borderRadius: 100, padding: 2, flexShrink: 0 }}>
+          {[{ v: 'jour', label: 'Jour' }, { v: 'semaine', label: 'Semaine' }].map(opt => {
+            const sel = (opt.v === 'semaine') === vueSemaine
+            return (
+              <button key={opt.v} onClick={() => setVueForcee(opt.v)}
+                style={{ padding: '5px 10px', borderRadius: 100, border: 'none', background: sel ? T.main : 'transparent', color: sel ? '#fff' : T.muted, fontWeight: 800, fontSize: 11, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Filtre praticien — affiché uniquement si ≥2 praticiens sur ce commerce */}
@@ -243,9 +262,10 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
         </div>
       )}
 
-      {/* Grille agenda — scroll vertical interne */}
-      <div style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: `${LARGEUR_HEURES}px repeat(${nbJours}, 1fr)`, position: 'relative' }}>
+      {/* Grille agenda — scroll vertical interne (+ horizontal en vue semaine
+          sur petit écran : 7 colonnes ne tiennent pas dans 375 px) */}
+      <div style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: scrollH ? 'auto' : 'hidden', WebkitOverflowScrolling: 'touch' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `${LARGEUR_HEURES}px repeat(${nbJours}, ${scrollH ? 'minmax(96px, 1fr)' : '1fr'})`, position: 'relative', minWidth: scrollH ? LARGEUR_HEURES + 7 * 96 : undefined }}>
 
           {/* Header jours (sticky top dans le scroll) */}
           <div style={{ position: 'sticky', top: 0, zIndex: 3, background: '#fff', borderBottom: `1.5px solid ${T.pale}` }}/>

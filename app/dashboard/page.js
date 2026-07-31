@@ -554,6 +554,10 @@ export default function Dashboard() {
   // Affiche un banner sticky en haut + bouton Quitter qui revient sur /admin.
   const [impersonating, setImpersonating] = useState(false)
   const [_impersonationId, setImpersonationId] = useState(null)
+  const [activationRdv, setActivationRdv] = useState(false)
+  // Onglet de configuration ouvert par les raccourcis « Actions rapides »
+  const [configTab, setConfigTab] = useState('menu')
+  function ouvrirConfig(tab) { setConfigTab(tab); setOngletPrincipal('config') }
   const [commercant, setCommercant] = useState(null)
   const [loading, setLoading] = useState(true)
   const [listeCommercants, setListeCommercants] = useState([])
@@ -702,6 +706,19 @@ export default function Dashboard() {
     init()
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [chargerCommandes, router])
+
+  // Active la prise de RDV en ligne depuis l'agenda (zéro friction : le
+  // commerçant a déjà saisi prestations, praticiens et créneaux, il ne devrait
+  // pas avoir à chercher un toggle dans les Paramètres).
+  async function activerPriseRdv() {
+    if (!commercant?.id || activationRdv) return
+    setActivationRdv(true)
+    const { error } = await supabase.from('commercants').update({ rdv_actif: true }).eq('id', commercant.id)
+    setActivationRdv(false)
+    if (error) { alert(`Activation impossible : ${error.message}`); return }
+    setCommercant(c => ({ ...c, rdv_actif: true }))
+    chargerRdvs(commercant.id)
+  }
 
   // Refresh commandes + RDVs commercant au focus/visibilitychange + polling 60s.
   // Sans ça, les nouveaux RDVs crees par les Yoppers (notamment via webhook Stripe
@@ -1490,6 +1507,47 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* ─── Actions rapides (esprit ODOO : les gestes de comptoir sont à
+              portée de clic depuis l'écran d'accueil, sans fouiller les
+              Paramètres). Demande Alex 01/08. ─── */}
+          {ongletPrincipal !== 'config' && commercant && (() => {
+            const actions = [
+              canDo(commercant.plan, 'fidelite') && {
+                key: 'fidelite',
+                label: commercant.fidelite_actif ? 'Carte de fidélité' : 'Activer la fidélité',
+                aide: commercant.fidelite_actif ? 'Pointer un client au comptoir' : 'Programme en 2 minutes',
+                icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/></svg>,
+              },
+              canDo(commercant.plan, 'bons_cadeaux') && commercant.bons_cadeaux_actif && {
+                key: 'bons',
+                label: 'Bon cadeau',
+                aide: 'Encaisser un code',
+                icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>,
+              },
+              canDo(commercant.plan, 'deals') && {
+                key: 'deals',
+                label: 'Deal du jour',
+                aide: 'Créer une offre',
+                icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12l-8.5 8.5a2 2 0 01-2.83 0L2 13.83V4h9.83L20 12z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>,
+              },
+            ].filter(Boolean)
+            if (actions.length === 0) return null
+            return (
+              <div style={{ display: 'flex', gap: 8, padding: '0 1rem', marginBottom: 10, overflowX: 'auto', scrollbarWidth: 'none' }}>
+                {actions.map(a => (
+                  <button key={a.key} onClick={() => ouvrirConfig(a.key)}
+                    style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 9, padding: '9px 14px', borderRadius: 12, border: `1.5px solid ${T.pale}`, background: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left', boxShadow: '0 1px 6px rgba(22,6,54,0.05)' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 9, background: T.pale, flexShrink: 0 }}>{a.icone}</span>
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, color: T.ink, whiteSpace: 'nowrap' }}>{a.label}</span>
+                      <span style={{ display: 'block', fontSize: '0.66rem', color: T.muted, fontWeight: 600, whiteSpace: 'nowrap' }}>{a.aide}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )
+          })()}
+
           {/* Sticky header — RDV : stats compactes uniquement (la grille AgendaRdv a sa propre nav) */}
           {ongletPrincipal === 'rdv' && (
             <div className="sticky-header">
@@ -1670,18 +1728,19 @@ export default function Dashboard() {
             {ongletPrincipal === 'rdv' && (
               <>
                 {/* Module RDV pas encore activé : l'agenda serait vide et muet.
-                    On explique où l'activer (Paramètres → Profil). */}
+                    Zéro friction : on l'active ICI en un clic, pas d'aller-retour
+                    vers les Paramètres (demande Alex 01/08). */}
                 {!commercant?.rdv_actif && (
                   <div style={{ background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 16, padding: '1rem 1.125rem', marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                     <IconRdv size={22} color={T.main}/>
                     <div style={{ minWidth: 0 }}>
                       <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.92rem', marginBottom: 4 }}>La prise de rendez-vous n&rsquo;est pas encore activée</p>
                       <p style={{ fontSize: '0.8rem', color: T.muted, lineHeight: 1.55, marginBottom: 10 }}>
-                        Active-la pour que tes clients réservent en ligne : tes rendez-vous s&rsquo;afficheront ici, dans cet agenda.
+                        Tes prestations, praticiens et créneaux sont prêts. Active la réservation en ligne : ta fiche affichera aussitôt tes créneaux libres, et les rendez-vous atterriront dans cet agenda.
                       </p>
-                      <button onClick={() => setOngletPrincipal('config')}
-                        style={{ padding: '8px 16px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                        Aller aux Paramètres
+                      <button onClick={activerPriseRdv} disabled={activationRdv}
+                        style={{ padding: '9px 18px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: activationRdv ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.main}55` }}>
+                        {activationRdv ? 'Activation…' : 'Activer la prise de rendez-vous'}
                       </button>
                     </div>
                   </div>
@@ -1733,7 +1792,7 @@ export default function Dashboard() {
             )}
 
             {ongletPrincipal === 'config' && commercant && (
-              <ConfigDashboard commercantId={commercant.id}/>
+              <ConfigDashboard key={configTab} commercantId={commercant.id} tabInitial={configTab}/>
             )}
           </div>
         </div>

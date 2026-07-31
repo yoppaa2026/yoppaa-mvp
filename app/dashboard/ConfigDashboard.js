@@ -1635,8 +1635,11 @@ function TabDeals({ commercantId, commercant, toast }) {
     if (firstLoadRef.current) setLoading(true)
     // On récupère error : une lecture qui échoue en silence affichait une liste
     // vide, donc « mon deal ne s'est pas enregistré » alors qu'il existait.
+    // Embed DÉSAMBIGUÏSÉ : yoppaa_deals pointe DEUX fois vers articles
+    // (article_id et article2_id du duo), PostgREST refusait donc la jointure
+    // (PGRST201) et la liste restait vide. Le hint !article_id lève le doute.
     const { data, error } = await supabase.from('yoppaa_deals')
-      .select('*, article:articles(id, nom, prix, categorie)')
+      .select('*, article:articles!article_id(id, nom, prix, categorie)')
       .eq('commercant_id', commercantId)
       .order('date_deal', { ascending: false, nullsLast: true })
       .order('created_at', { ascending: false })
@@ -3351,6 +3354,7 @@ function TabFidelite({ commercantId, commercant, toast, onSaved }) {
   const [telInput, setTelInput] = useState('')
   const [carte, setCarte] = useState(null)          // carte affichée
   const [telIntrouvable, setTelIntrouvable] = useState(null)  // numéro normalisé sans carte
+  const [clientTrouve, setClientTrouve] = useState(null)      // compte Yoppaa portant ce numéro
   const [montantInput, setMontantInput] = useState('')
   const [dernieres, setDernieres] = useState([])
   const [busy, setBusy] = useState(false)
@@ -3394,28 +3398,44 @@ function TabFidelite({ commercantId, commercant, toast, onSaved }) {
     onSaved?.()
   }
 
+  // Appel de l'API comptoir : elle seule peut identifier un client Yoppaa
+  // déjà inscrit avec ce numéro (RLS clients fermée côté commerçant).
+  async function appelComptoir(action, telephone) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { toast('Session expirée, reconnecte-toi.', 'error'); return null }
+    const res = await fetch('/api/fidelite/comptoir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ action, commercant_id: commercantId, telephone }),
+    })
+    const j = await res.json()
+    if (!res.ok || !j.ok) { toast(j.error || 'Erreur, réessaie.', 'error'); return null }
+    return j
+  }
+
   async function chercher() {
     const tel = normaliserTelephone(telInput)
     if (!tel) { toast('Numéro invalide (ex : 0470 12 34 56)', 'error'); return }
     setBusy(true)
-    const { data, error } = await supabase.from('fidelite_cartes').select('*')
-      .eq('commercant_id', commercantId).eq('telephone', tel).maybeSingle()
+    const j = await appelComptoir('chercher', tel)
     setBusy(false)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
-    if (data) { setCarte(data); setTelIntrouvable(null) }
-    else { setCarte(null); setTelIntrouvable(tel) }
+    if (!j) return
+    setClientTrouve(j.client || null)
+    if (j.carte) { setCarte(j.carte); setTelIntrouvable(null) }
+    else { setCarte(null); setTelIntrouvable(j.telephone || tel) }
   }
 
   async function creerCarte() {
     if (!telIntrouvable) return
     setBusy(true)
-    const { data, error } = await supabase.from('fidelite_cartes')
-      .insert({ commercant_id: commercantId, telephone: telIntrouvable })
-      .select().single()
+    const j = await appelComptoir('creer', telIntrouvable)
     setBusy(false)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
-    setCarte(data); setTelIntrouvable(null)
-    toast('Carte créée 🟣')
+    if (!j?.carte) return
+    setCarte(j.carte); setTelIntrouvable(null)
+    setClientTrouve(j.client || null)
+    toast(j.client
+      ? `Carte créée pour ${j.client.prenom || 'ce client'} 🟣`
+      : 'Carte créée 🟣')
     // SMS de bienvenue : branché à l'étape 6 (Brevo)
   }
 
@@ -3605,8 +3625,15 @@ function TabFidelite({ commercantId, commercant, toast, onSaved }) {
 
           {telIntrouvable && (
             <div style={{ marginTop: 12, background: T.pale, borderRadius: 12, padding: '12px 14px' }}>
-              <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: T.deep }}>
+              <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: T.deep }}>
                 Aucune carte pour {afficherTelephone(telIntrouvable)}.
+              </p>
+              {/* Client Yoppaa déjà inscrit avec ce numéro : la carte sera
+                  rattachée à son compte, il la verra dans son appli. */}
+              <p style={{ margin: '0 0 10px', fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+                {clientTrouve
+                  ? <>C&rsquo;est le numéro de <strong style={{ color: T.main }}>{[clientTrouve.prenom, clientTrouve.nom].filter(Boolean).join(' ')}</strong>, déjà inscrit sur Yoppaa : sa carte sera reliée à son compte.</>
+                  : 'Ce numéro n’a pas encore de compte Yoppaa : la carte fonctionnera quand même, il la retrouvera dès son inscription.'}
               </p>
               <button style={btnPlein} disabled={busy} onClick={creerCarte}>Créer sa carte 🟣</button>
             </div>
@@ -3615,7 +3642,10 @@ function TabFidelite({ commercantId, commercant, toast, onSaved }) {
           {carte && (
             <div style={{ marginTop: 12, border: `1.5px solid ${T.pale}`, borderRadius: 12, padding: '14px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
-                <p style={{ margin: 0, fontSize: 14, fontWeight: 900, color: T.ink }}>{afficherTelephone(carte.telephone)}</p>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 900, color: T.ink }}>
+                  {clientTrouve ? [clientTrouve.prenom, clientTrouve.nom].filter(Boolean).join(' ') : afficherTelephone(carte.telephone)}
+                  {clientTrouve && <span style={{ fontSize: 11.5, fontWeight: 600, color: T.muted, marginLeft: 8 }}>{afficherTelephone(carte.telephone)}</span>}
+                </p>
                 <button onClick={supprimerCarte} aria-label="Supprimer la carte"
                   style={{ width: 26, height: 26, borderRadius: 100, border: 'none', background: '#FEE2E2', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontWeight: 800, padding: 0 }}>✕</button>
               </div>
@@ -4944,7 +4974,7 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved }) {
 // Sess 5a : Prestations CRUD. Sess 5b : Praticiens. Sess 5c : Créneaux.
 // ═════════════════════════════════════════════════════════════════════════
 
-function TabRdv({ commercantId, toast }) {
+function TabRdv({ commercantId, commercant, toast }) {
   const [subTab, setSubTab] = useState('prestations')
   const subTabs = [
     { id: 'prestations', label: 'Prestations' },
@@ -4965,7 +4995,7 @@ function TabRdv({ commercantId, toast }) {
       </div>
       {subTab === 'prestations' && <TabRdvPrestations commercantId={commercantId} toast={toast} />}
       {subTab === 'praticiens'  && <TabRdvPraticiens commercantId={commercantId} toast={toast} />}
-      {subTab === 'creneaux'    && <TabRdvCreneaux commercantId={commercantId} toast={toast} />}
+      {subTab === 'creneaux'    && <TabRdvCreneaux commercantId={commercantId} commercant={commercant} toast={toast} />}
       {subTab === 'fermetures'  && <TabRdvFermetures commercantId={commercantId} toast={toast} />}
     </div>
   )
@@ -5523,7 +5553,7 @@ function TabRdvPraticiens({ commercantId, toast }) {
 // pause optionnelle (déjeuner par exemple). Pas de capacite_temps ni max_commandes.
 // V1 : créneaux récurrents par jour_semaine. Fermetures exceptionnelles = Sess fermetures
 // reportée Sprint 3 (avec multi-prat fermetures par praticien).
-function TabRdvCreneaux({ commercantId, toast }) {
+function TabRdvCreneaux({ commercantId, commercant, toast }) {
   const JOURS_SEMAINE = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
   const JOURS_LABELS  = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dim.']
   const PAS_OPTIONS = [5, 10, 15, 30, 60]
@@ -5538,6 +5568,10 @@ function TabRdvCreneaux({ commercantId, toast }) {
   // cibles, sinon les copies successives s'empilent en doublons.
   const [copieCibles, setCopieCibles] = useState(new Set())
   const [copieLoading, setCopieLoading] = useState(false)
+  // Jours où le commerce est déclaré FERMÉ dans les horaires du Profil : on
+  // avertit avant d'y ouvrir des créneaux RDV (demande Alex 01/08), car un
+  // créneau sur un jour fermé ne s'affiche jamais côté client.
+  const joursFermesProfil = JOURS_SEMAINE.filter(j => commercant?.horaires_detail?.[j]?.ouvert === false)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -5624,6 +5658,10 @@ function TabRdvCreneaux({ commercantId, toast }) {
   async function save() {
     if (form.heure_fin <= form.heure_debut) return toast('Heure de fin doit être après l\'heure de début', 'error')
     if (form.avec_pause && form.pause_fin <= form.pause_debut) return toast('La pause est mal définie', 'error')
+    // Jour fermé au Profil : le créneau ne servira à rien tant que les horaires
+    // ne sont pas ouverts (le moteur de slots croise les deux). On prévient.
+    if (joursFermesProfil.includes(form.jour_semaine) &&
+        !window.confirm(`Ton commerce est déclaré FERMÉ le ${form.jour_semaine} dans tes horaires (Profil).\n\nTant que tu ne l'ouvres pas, ce créneau ne s'affichera pas côté client. Le créer quand même ?`)) return
     const payload = {
       commercant_id: commercantId,
       praticien_id: form.praticien_id === 'tous' ? null : form.praticien_id,
@@ -5738,10 +5776,12 @@ function TabRdvCreneaux({ commercantId, toast }) {
       <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 14, border: `1px solid ${T.hairline}`, overflowX: 'auto' }}>
         {JOURS_SEMAINE.map((j, i) => {
           const nbCreneaux = creneaux.filter(c => c.jour_semaine === j).length
+          const ferme = joursFermesProfil.includes(j)
           return (
             <button key={j} onClick={() => setJourActif(j)}
-              style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 12, background: jourActif === j ? T.bgPanel : 'transparent', color: jourActif === j ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              {JOURS_LABELS[i]}
+              title={ferme ? 'Commerce fermé ce jour selon tes horaires (Profil)' : undefined}
+              style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 12, background: jourActif === j ? T.bgPanel : 'transparent', color: jourActif === j ? '#fff' : ferme ? '#9CA3AF' : T.muted, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: ferme && jourActif !== j ? 0.65 : 1 }}>
+              {JOURS_LABELS[i]}{ferme ? ' ·' : ''}
               {nbCreneaux > 0 && (
                 <span style={{ background: jourActif === j ? T.main : T.pale, color: jourActif === j ? '#fff' : T.main, fontSize: 10, fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>
                   {nbCreneaux}
@@ -5751,6 +5791,16 @@ function TabRdvCreneaux({ commercantId, toast }) {
           )
         })}
       </div>
+
+      {/* Jour fermé au Profil : un créneau y serait invisible côté client */}
+      {joursFermesProfil.includes(jourActif) && (
+        <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
+          <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#78350F', lineHeight: 1.5 }}>
+            Ton commerce est déclaré <strong>fermé le {jourActif}</strong> dans tes horaires (Paramètres → Profil).
+            Les créneaux créés ici resteront invisibles pour tes clients tant que ce jour n&rsquo;est pas ouvert.
+          </p>
+        </div>
+      )}
 
       {/* Copier le jour affiché vers d'autres jours (gain de temps : une
           semaine se configure en un geste au lieu de 7 saisies) */}
@@ -6344,8 +6394,10 @@ function TabAvis({ commercantId, toast }) {
 }
 
 // ─── Composant principal ──────────────────────────────────────────────────────
-export default function ConfigDashboard({ commercantId }) {
-  const [tab, setTab] = useState('menu')
+// tabInitial : permet aux raccourcis de la vue principale (Actions rapides)
+// d'ouvrir directement le bon onglet, sans faire chercher le commerçant.
+export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
+  const [tab, setTab] = useState(tabInitial)
   const [toastMsg, setToastMsg] = useState('')
   const [toastType, setToastType] = useState('success')
   const [commercant, setCommercant] = useState(null)

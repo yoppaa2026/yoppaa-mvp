@@ -22,7 +22,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
-import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant } from '@/lib/resend'
+import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant } from '@/lib/resend'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { programmerRappelRdv } from '@/lib/rappels'
@@ -218,7 +218,96 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
     return
   }
 
+  if (kind === PAYMENT_KIND.BON_CADEAU) {
+    await handleBonCadeauSucceeded(paymentIntent, supabase)
+    return
+  }
+
   console.warn('[stripe/webhook] kind non reconnu dans payment_intent.succeeded', { kind, meta })
+}
+
+// ─── Bon cadeau : paiement OK → activation + emails ─────────────────────────
+//
+// Le bon EXISTE déjà (créé par /api/bons-cadeaux/checkout en
+// statut='paiement_en_attente'). Idempotent : si déjà actif, on ne renvoie
+// pas les emails (webhook rejoué).
+async function handleBonCadeauSucceeded(paymentIntent, supabase) {
+  const bonId = paymentIntent.metadata?.yoppaa_bon_id
+  if (!bonId) {
+    console.warn('[stripe/webhook] bon_cadeau sans yoppaa_bon_id', paymentIntent.id)
+    return
+  }
+  const { data: bon } = await supabase
+    .from('bons_cadeaux')
+    .select('*, commercant:commercants(id, nom, slug, categorie, email, notif_mode)')
+    .eq('id', bonId)
+    .maybeSingle()
+  if (!bon) {
+    console.error('[stripe/webhook] bon cadeau introuvable', bonId)
+    return
+  }
+  if (bon.statut === 'actif') return  // rejeu : déjà activé, emails déjà partis
+
+  const { error: errUp } = await supabase
+    .from('bons_cadeaux')
+    .update({ statut: 'actif', updated_at: new Date().toISOString() })
+    .eq('id', bonId)
+    .eq('statut', 'paiement_en_attente')
+  if (errUp) throw errUp
+  console.info('[stripe/webhook] bon cadeau activé', { bonId, montant: bon.montant_initial })
+
+  // Emails (non-bloquants) : bénéficiaire OU acheteur selon le mode, + reçu
+  // acheteur, + notification commerçant (mode 'chaque').
+  const pourMoi = bon.destinataire_mode !== 'offrir'
+  try {
+    if (!pourMoi) {
+      await envoyerAuCommercant({
+        to: bon.beneficiaire_email,
+        subject: `${bon.acheteur_prenom ? bon.acheteur_prenom + ' t\'offre' : 'On t\'offre'} un bon cadeau chez ${bon.commercant?.nom || 'un commerçant'}`,
+        html: emailBonCadeauBeneficiaire({
+          beneficiaire_prenom: bon.beneficiaire_prenom,
+          acheteur_prenom: bon.acheteur_prenom,
+          commercant_nom: bon.commercant?.nom || '',
+          montant: bon.montant_initial,
+          code: bon.code,
+          token: bon.token,
+          message: bon.message,
+          expires_at: bon.expires_at,
+        }),
+      })
+    }
+    await envoyerAuCommercant({
+      to: bon.acheteur_email,
+      subject: pourMoi
+        ? `Ton bon cadeau chez ${bon.commercant?.nom || 'le commerçant'} est prêt`
+        : `Ton cadeau chez ${bon.commercant?.nom || 'le commerçant'} est envoyé`,
+      html: emailBonCadeauAcheteur({
+        acheteur_prenom: bon.acheteur_prenom,
+        commercant_nom: bon.commercant?.nom || '',
+        montant: bon.montant_initial,
+        code: pourMoi ? bon.code : null,
+        token: pourMoi ? bon.token : null,
+        beneficiaire_email: bon.beneficiaire_email,
+        beneficiaire_prenom: bon.beneficiaire_prenom,
+        expires_at: bon.expires_at,
+        pour_moi: pourMoi,
+      }),
+    })
+    if (bon.commercant?.notif_mode === 'chaque' && bon.commercant?.email) {
+      await envoyerAuCommercant({
+        to: bon.commercant.email,
+        subject: `Bon cadeau vendu · ${Number(bon.montant_initial).toFixed(2)} €`,
+        html: emailBonCadeauVenduCommercant({
+          nom_commercant: bon.commercant.nom,
+          montant: bon.montant_initial,
+          acheteur_email: bon.acheteur_email,
+          pour_moi: pourMoi,
+        }),
+      })
+    }
+  } catch (e) {
+    console.error('[stripe/webhook] emails bon cadeau KO (non-bloquant)', e?.message)
+  }
 }
 
 // ─── Commande C&C : paiement OK → bascule paiement_en_attente -> en_attente ─

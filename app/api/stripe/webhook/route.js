@@ -450,7 +450,7 @@ async function handleCheckoutSessionCompleted(session, supabase) {
 // Helper : envoie emailRdvConfirme (Yopper + iCal) + emailNouveauRdvCommercant
 // (si notif_mode='chaque'). Appelé depuis handlePaymentIntentSucceeded apres
 // insert RDV. Non-bloquant : erreurs loguees mais ne font pas planter le webhook.
-async function envoyerEmailsRdvConfirme(supabase, rdvId, fallbackPayload) {
+async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
   // Fetch les jointures fraiches pour avoir nom commercant + presta + email
   const { data: rdv } = await supabase
     .from('rdv_reservations')

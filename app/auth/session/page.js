@@ -4,14 +4,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { CheckCircle, Lightbulb } from 'lucide-react'
 
-const T = {
-  bgPanel: '#160636',
-  deep:    '#2D0F6B',
-  main:    '#6B35C4',
-  mid:     '#9660E0',
-  light:   '#C4A0F4',
-}
-
 function SessionHandler({ setPhase, setNextUrl }) {
   const router = useRouter()
   const searchParams = useSearchParams()

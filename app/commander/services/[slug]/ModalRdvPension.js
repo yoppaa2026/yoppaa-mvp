@@ -63,7 +63,7 @@ function formatDateLong(date) {
   })
 }
 
-export default function ModalRdvPension({ service, onClose }) {
+export default function ModalRdvPension({ onClose }) {
   const [creneauChoisi, setCreneauChoisi] = useState(null)  // { date, heure }
   const [confirme, setConfirme] = useState(false)
   const [nom, setNom] = useState('')

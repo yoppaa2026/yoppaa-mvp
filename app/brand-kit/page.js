@@ -119,9 +119,7 @@ function generateSocialSvg(width, height, palette, options = {}) {
     : `<rect width="${width}" height="${height}" fill="${palette.bg}"/>`
 
   // Logo dimensions (sans slogan : 360 × 220 · avec slogan : 360 × 295)
-  const logoWidth = 360 * logoScale
   const logoHeight = (withSlogan ? 280 : 220) * logoScale
-  const logoX = (width - logoWidth) / 2
   const logoY = (height - logoHeight) / 2
   const fontSize = 110 * logoScale
   const wordmarkX = width / 2
@@ -183,7 +181,6 @@ function generateMarketingSvg(width, height, options = {}) {
     titre = '',
     sousTitre = '',
     showFooter = true,
-    showWordmarkBig = false,
     fontDataUrls = {},
     avatarSafe = false,
     bigDotsSignature = false,

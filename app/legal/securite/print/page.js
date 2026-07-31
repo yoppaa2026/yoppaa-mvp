@@ -32,9 +32,6 @@ const A4 = {
   printColorAdjust: 'exact',
 }
 
-function H1({ children }) {
-  return <h1 style={{ fontSize: 18, fontWeight: 900, color: T.deep, letterSpacing: '-0.5px', margin: '0 0 4px' }}>{children}</h1>
-}
 function H2({ children }) {
   return <h2 style={{ fontSize: 13, fontWeight: 900, color: T.deep, letterSpacing: '-0.3px', margin: '14px 0 6px', paddingBottom: 3, borderBottom: `2px solid ${T.pale}` }}>{children}</h2>
 }

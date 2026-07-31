@@ -32,10 +32,6 @@ const T = {
 const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LONGS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
 
-function jourActuel() {
-  const idx = new Date().getDay()
-  return idx === 0 ? 'dimanche' : JOURS[idx - 1]
-}
 function jourIdx(date) {
   const idx = date.getDay()
   return idx === 0 ? 6 : idx - 1
@@ -89,76 +85,8 @@ function SkeletonArticle() {
   )
 }
 
-// ─── Swipe retrait ────────────────────────────────────────────────────────────
-function SwipeRetrait({ onConfirm, clientPrenom }) {
-  const [swipeX, setSwipeX] = useState(0)
-  const [swiping, setSwiping] = useState(false)
-  const [phase, setPhase] = useState('idle')
-  const [containerW, setContainerW] = useState(0)
-  const startRef = useRef(0)
-  const containerRef = useRef(null)
-  const THUMB = 52
-  const C = { main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF', ink: '#1A0840' }
-  function getMaxX() { return (containerRef.current?.offsetWidth || 300) - THUMB - 8 }
-  function getX(e) { return e.touches ? e.touches[0].clientX : e.clientX }
-  const onStart = e => { if (phase !== 'idle') return; setPhase('swiping'); setSwiping(true); startRef.current = getX(e) - swipeX }
-  const onMove = e => {
-    if (phase !== 'swiping') return
-    const x = Math.max(0, Math.min(getMaxX(), getX(e) - startRef.current))
-    setSwipeX(x)
-    if (x >= getMaxX()) {
-      setSwiping(false); setPhase('success')
-      try { const a = new Audio('/sounds/yop.mp3'); a.volume = 0.8; const p = a.play(); if (p) p.catch(()=>{}) } catch(e) {}
-      setTimeout(() => { setPhase('done'); onConfirm() }, 2200)
-    }
-  }
-  const onEnd = () => { if (phase !== 'swiping') return; setSwiping(false); setPhase('idle'); setSwipeX(0) }
-  // Largeur du conteneur suivie en state (réactif) : on ne lit pas containerRef
-  // pendant le render (interdit). Les handlers, eux, lisent le ref directement.
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el || typeof ResizeObserver === 'undefined') { if (el) setContainerW(el.offsetWidth); return }
-    setContainerW(el.offsetWidth)
-    const ro = new ResizeObserver(() => setContainerW(el.offsetWidth))
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [phase])
-  const maxXRender = (containerW || 300) - THUMB - 8
-  const p = swipeX / (maxXRender || 1)
-  const TRACK_H = THUMB + 8
-  if (phase === 'success' || phase === 'done') {
-    return (
-      <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
-          {[{c:C.main,d:'0s',s:10},{c:C.light,d:'0.15s',s:14},{c:C.mid,d:'0.3s',s:10}].map((d,i) => (
-            <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, animation: `swipePulse 0.6s ease-in-out ${d.d} infinite alternate`, boxShadow: `0 0 12px ${d.c}88` }}/>
-          ))}
-        </div>
-        <p style={{ fontWeight: 900, fontSize: '1.1rem', color: C.ink, letterSpacing: '-0.3px', marginBottom: 4 }}>Récupéré !</p>
-        <p style={{ fontSize: '0.82rem', color: '#6B7280', fontWeight: 600 }}>Profite bien {clientPrenom} !</p>
-      </div>
-    )
-  }
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: '0.72rem', color: '#9CA3AF', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', animation: 'swipeArrow 1.2s ease-in-out infinite' }}>Glisse pour récupérer →→→</span>
-      </div>
-      <div ref={containerRef}
-        style={{ width: '100%', height: TRACK_H, borderRadius: 100, background: `linear-gradient(to right, ${C.pale} ${p*100}%, #F3F4F6 ${p*100}%)`, position: 'relative', border: `2px solid ${p > 0.5 ? C.main : C.light}`, userSelect: 'none', cursor: 'grab', touchAction: 'none', transition: 'border-color 0.2s' }}
-        onMouseDown={onStart} onMouseMove={onMove} onMouseUp={onEnd} onMouseLeave={onEnd}
-        onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}>
-        <div style={{ position: 'absolute', top: 0, bottom: 0, left: THUMB + 12, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-          <span style={{ fontSize: '0.78rem', fontWeight: 800, color: p > 0.3 ? C.main : '#9CA3AF', letterSpacing: '1px', textTransform: 'uppercase', transition: 'color 0.2s' }}>{p > 0.7 ? 'Lâche !' : ''}</span>
-        </div>
-        <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: `linear-gradient(135deg, ${C.main}, ${C.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 16px ${C.main}66`, transition: swiping ? 'none' : 'left 0.3s', userSelect: 'none' }}>
-          <span style={{ fontWeight: 800, fontSize: '0.62rem', color: '#fff', letterSpacing: '1px', textTransform: 'uppercase' }}>SWIPE</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
+// ─── Swipe retrait : version morte supprimée le 31/07 (la version vivante,
+// côté Yopper, vit dans app/commander/page.js) ────────────────────────────────
 function CarteAvis({ a }) {
   const [ouvert, setOuvert] = useState(false)
   const verifie = !!a.commande_id
@@ -439,7 +367,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 }
 
 // ─── ArticleRow ───────────────────────────────────────────────────────────────
-function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, onCommanderDemain, getStockMax, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null }) {
+function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null }) {
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
   const hasVariantes = !!article.gere_variantes && variantes.length > 0
@@ -484,25 +412,7 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
     return null
   }
 
-  function labelsDispos() {
-    const labels = []
-    const today = new Date()
-    for (let i = 0; i < 4; i++) {
-      const d = new Date(today); d.setDate(d.getDate() + i)
-      const nom = JOURS[jourIdx(d)]
-      const s = stocksArticle[nom]
-      if (!hasStockJour) continue
-      const stock = s?.stock ?? article.stock_jour
-      const actif = s?.actif !== false
-      const label = i === 0 ? "Auj." : i === 1 ? "Dem." : JOURS_LONGS[jourIdx(d)].slice(0,3) + '.'
-      if (actif && stock > 0) labels.push({ label, stock, epuise: false })
-      else if (!actif || stock === 0) labels.push({ label, stock: 0, epuise: true })
-    }
-    return labels
-  }
-
   const prochain = epuiseAujourdhui ? prochainJourDispo() : null
-  const dispos = hasStockJour ? labelsDispos() : []
   const epuiseComplet = epuiseAujourdhui && !prochain
   const inactifCeJour = !actifCeJour
   // Stock limit : bloquer le + quand panier atteint le stock dispo
@@ -1048,7 +958,6 @@ export default function CommanderSlug() {
   // ─── Boutique détail (Module 2 étape 5) : retrait boutique | expédition ───
   const [modeBoutique, setModeBoutique] = useState('retrait')
   const [livraisonConfig, setLivraisonConfig] = useState(null)
-  const [creneauxLivraison, setCreneauxLivraison] = useState([])
   const [joursDisposLivraison, setJoursDisposLivraison] = useState([])
   // M5 food truck : emplacements actifs (ponctuels + tournée hebdo)
   const [foodtruckEmps, setFoodtruckEmps] = useState([])
@@ -1350,6 +1259,7 @@ export default function CommanderSlug() {
       } catch(e) {}
     }
     chargerCommercant(slug)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [slug])
 
   function hydrate(data) {
@@ -1377,7 +1287,6 @@ export default function CommanderSlug() {
     setFermetures(data.fermetures)
     buildJoursDispos(data.commercant, data.creneaux, data.fermetures)
     setLivraisonConfig(data.livraisonConfig || null)
-    setCreneauxLivraison(data.livraisonCreneaux || [])
     setJoursDisposLivraison(construireJoursDispos(data.commercant, data.livraisonCreneaux || [], data.fermetures))
     setFoodtruckEmps(data.foodtruckEmps || [])
     setLoading(false)
@@ -1624,6 +1533,7 @@ export default function CommanderSlug() {
     if (commercant && creneaux.length > 0) {
       buildJoursDispos(commercant, creneaux, fermetures)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [commercant, creneaux, fermetures])
 
   // ─── FIX STOCK SYNC : charger les commandes du jour sélectionné ─────────────

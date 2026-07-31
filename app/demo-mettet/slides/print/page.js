@@ -47,7 +47,6 @@ const A4 = {
 
 // ────────── UTILITAIRES ──────────
 
-import YoppaaLogo from '../../../components/YoppaaLogo'
 
 // Wordmark seul (pour usages sans dots)
 function Wordmark({ size = 56, white = false }) {
@@ -72,30 +71,6 @@ function Footer({ n, total = 12 }) {
     <div style={{ position: 'absolute', bottom: 18, left: 0, right: 0, display: 'flex', justifyContent: 'space-between', padding: '0 28px', fontSize: 9, color: T.muted, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' }}>
       <span>Yoppaa · Collège communal Mettet · 15 juin 2026</span>
       <span>{String(n).padStart(2, '0')} · {total}</span>
-    </div>
-  )
-}
-
-// ────────── PAGE DE GARDE ──────────
-
-function PageGarde() {
-  return (
-    <div className="a4-page" style={{ ...A4, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 50%, ${T.ink} 100%)`, color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40mm' }}>
-      <div style={{ position: 'absolute', top: '20%', right: '15%', width: 300, height: 300, borderRadius: '50%', background: `radial-gradient(circle, ${T.mid}55 0%, transparent 70%)`, filter: 'blur(50px)' }}/>
-
-      <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22 }}>
-        <YoppaaLogo size={130} mode="dark"/>
-        <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: T.light, lineHeight: 1.35 }}>
-          Pour la commune de Mettet,<br/>ses commerçants et ses habitants
-        </p>
-        <div style={{ height: 1, width: 240, background: 'rgba(255,255,255,0.3)', margin: '4px 0' }}/>
-        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.7)', letterSpacing: '3px', textTransform: 'uppercase' }}>
-          Collège communal · 15 juin 2026 · 14 h
-        </p>
-        <p style={{ margin: '40px 0 0', fontSize: 11, color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
-          Document de travail · Avcotech SRL
-        </p>
-      </div>
     </div>
   )
 }
@@ -491,7 +466,7 @@ function PageRecap() {
       {/* Colonne droite : QR code */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
         <div style={{ padding: 12, background: '#fff', borderRadius: 18, boxShadow: '0 8px 28px rgba(26,8,64,0.18)', border: `2px solid ${T.main}` }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+          { }
           <img src={QR_URL} alt="QR code vers la présentation en ligne" style={{ display: 'block', width: 220, height: 220 }}/>
         </div>
         <p style={{ margin: 0, fontSize: 10, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>

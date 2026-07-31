@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { canDo, isVitrine, PLAN_PUBLIC_ENABLED, bandeauCategorie } from '@/lib/plans'
+import { canDo, PLAN_PUBLIC_ENABLED, bandeauCategorie } from '@/lib/plans'
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
@@ -42,64 +42,11 @@ const FAMILLES = [
 // Les anciens commerçants d'avant la colonne categorie sont tous alimentaires.
 const familleDe = (c) => c?.categorie || 'alimentaire'
 
-const TYPE_BADGE = {
-  'Boulangerie':              { bg: '#FFF3CD', color: '#856404' },
-  'Pâtisserie':               { bg: '#FEF3C7', color: '#92400E' },
-  'Boulangerie & Pâtisserie': { bg: '#FEF3C7', color: '#92400E' },
-  'Chocolatier':              { bg: '#F3E8DC', color: '#5C2E0E' },
-  'Sandwicherie':             { bg: '#CCE5FF', color: '#004085' },
-  'Snack':                    { bg: '#D4EDDA', color: '#155724' },
-  'Friterie':                 { bg: '#FEF9C3', color: '#854D0E' },
-  'Pizzeria':                 { bg: '#FEE2E2', color: '#991B1B' },
-  'Coffee shop':              { bg: '#EDE0FF', color: '#2D0F6B' },
-  'Épicerie':                 { bg: '#E0E7FF', color: '#3730A3' },
-  'Traiteur':                 { bg: '#FCE7F3', color: '#9D174D' },
-  'Boucherie':                { bg: '#FEE4E2', color: '#7F1D1D' },
-  'Fleuriste':                { bg: '#FCE7F3', color: '#831843' },
-  'Pharmacie':                { bg: '#D1FAE5', color: '#065F46' },
-  'Food truck':               { bg: '#FFEDD5', color: '#7C2D12' },
-}
-function getBadge(type) { return TYPE_BADGE[type] || { bg: T.pale, color: T.deep } }
 function parseTypes(type) {
   if (!type) return ['Commerce']
   const parts = type.split(/\s*[&\/,]\s*/).map(t => t.trim()).filter(Boolean)
   return parts.length >= 2 ? parts.slice(0, 2) : [type]
 }
-function Badges({ type }) {
-  const types = parseTypes(type)
-  return (
-    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-      {types.map((t, i) => {
-        const badge = getBadge(t)
-        return <span key={i} style={{ background: badge.bg, color: badge.color, fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap' }}>{t}</span>
-      })}
-    </div>
-  )
-}
-
-const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
-const JOURS_COURTS = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
-
-function resumeHoraires(h) {
-  if (!h) return null
-  const groupes = []
-  let i = 0
-  while (i < JOURS.length) {
-    const jour = JOURS[i]; const info = h[jour]
-    if (!info) { i++; continue }
-    let j = i + 1
-    while (j < JOURS.length) {
-      const next = h[JOURS[j]]
-      if (!next || next.ouvert !== info.ouvert || next.debut !== info.debut || next.fin !== info.fin) break
-      j++
-    }
-    const label = j - i > 1 ? `${JOURS_COURTS[i]}–${JOURS_COURTS[j-1]}` : JOURS_COURTS[i]
-    groupes.push(`${label} ${info.ouvert ? `${info.debut.slice(0,5)}–${info.fin.slice(0,5)}` : 'Fermé'}`)
-    i = j
-  }
-  return groupes.join(' · ')
-}
-
 function distanceVolOiseau(lat1, lon1, lat2, lon2) {
   const R = 6371000
   const dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180
@@ -125,22 +72,6 @@ function IconBag({ size = 28, color = T.muted }) {
     </svg>
   )
 }
-function IconBox({ size = 20, color = T.main }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
-      <path d="m3.27 6.96 8.73 5.05 8.73-5.05M12 22.08V12"/>
-    </svg>
-  )
-}
-function IconEuro({ size = 20, color = T.mid }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-      <path d="M4 10h12M4 14h9"/>
-      <path d="M19 5.6A8 8 0 0 0 13 3a9 9 0 0 0 0 18 8 8 0 0 0 6-2.6"/>
-    </svg>
-  )
-}
 function IconClock({ size = 16, color = T.muted }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -149,33 +80,11 @@ function IconClock({ size = 16, color = T.muted }) {
     </svg>
   )
 }
-function IconHeart({ size = 36, color = T.muted, filled = false }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? color : 'none'} stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z"/>
-    </svg>
-  )
-}
 function IconSearch({ size = 36, color = T.muted }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
       <circle cx="11" cy="11" r="8"/>
       <path d="m21 21-4.35-4.35"/>
-    </svg>
-  )
-}
-function IconCheck({ size = 14, color = '#fff' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-      <path d="M5 12l5 5L20 7"/>
-    </svg>
-  )
-}
-function IconGlobe({ size = 14, color = '#fff' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-      <circle cx="12" cy="12" r="10"/>
-      <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
     </svg>
   )
 }
@@ -275,23 +184,9 @@ function IconService({ type, size = 22, color = '#2D0F6B' }) {
   }
 }
 
-// Mini signature Yoppaa : 3 points tricolores inline (remplace les 🟣 décoratifs)
-function PointsYoppaa({ size = 5, gap = 3 }) {
-  const couleurs = ['#ffffff', T.light, T.mid]
-  return (
-    <span style={{ display: 'inline-flex', gap, alignItems: 'center', verticalAlign: 'middle', marginLeft: 4 }}>
-      {couleurs.map((c, i) => (
-        <span key={i} style={{ width: size, height: size, borderRadius: '50%', background: c, opacity: i === 0 ? 0.55 : 1, boxShadow: `0 0 4px ${c}55` }}/>
-      ))}
-    </span>
-  )
-}
 function heureEnMinutes(heure) {
   const [h, m] = heure.slice(0, 5).split(':').map(Number)
   return h * 60 + m
-}
-function maintenant() {
-  const d = new Date(); return d.getHours() * 60 + d.getMinutes()
 }
 
 // ─── Splash Screen ────────────────────────────────────────────────────────────
@@ -454,6 +349,7 @@ function SplashScreen({ onDone }) {
     const t4 = setTimeout(() => setPhase(4), 3800) // debut fadeOut
     const t5 = setTimeout(() => onDone(),    4600) // fin
     return () => [t1,t2,t3,t4,t5].forEach(clearTimeout)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [])
   // Dimensions des 5 dots V2-B (spec : grand 18, mini 10, gap 10, offset 7.2)
   const dotBase = 18, dotMini = 10, dotOffset = 7.2
@@ -1482,7 +1378,7 @@ export default function Commander() {
       }
       return { email, id, telephone, prenom, nom }
     }
-    hydrateYopper().then(({ email, id, telephone, prenom, nom }) => {
+    hydrateYopper().then(({ id, telephone, prenom, nom }) => {
       if (!id) return
       // Si telephone manquant en local (cas Magic Link sans signup complet, ou EditablePrenom save sans reload),
       // recharger depuis la DB pour synchroniser le state + localStorage. Sinon le bandeau "Profil incomplet"
@@ -1504,6 +1400,7 @@ export default function Commander() {
         })
         .catch(() => {})
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [])
 
   // Détecte si le compte Supabase a déjà un mot de passe (user_metadata.has_password)
@@ -1551,6 +1448,7 @@ export default function Commander() {
     }
     q.then(({ data }) => { if (!annule) setServicesPublics(data || []) })
     return () => { annule = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [commune?.id])
 
   // ─── Détection commandes récupérées → propose modale d'avis ─────────────
@@ -1742,7 +1640,7 @@ export default function Commander() {
       document.removeEventListener('visibilitychange', onVisChange)
       clearInterval(interval)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [client?.email])
 
   // Charge les deals et actus actifs aujourd'hui pour piloter le dot LIVE des pills
@@ -1935,7 +1833,7 @@ export default function Commander() {
     })
   }
 
-  async function chargerCommandesClient(email) {
+  async function chargerCommandesClient(_email) {
     // « Mes commandes » = PII (email/nom/téléphone/adresse/total) → lecture via
     // l'API serveur (service_role + cookie yoppaa_yopper). L'email vient du cookie
     // côté serveur, pas de ce paramètre. L'enrichissement numéro (numero_commande
@@ -1951,6 +1849,7 @@ export default function Commander() {
   useEffect(() => {
     if (!position || !commercants.length) return
     calculerDistances(commercants, position)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [position, commercants.length])
 
   function calculerDistances(liste, pos) {
@@ -2116,7 +2015,6 @@ export default function Commander() {
   // Badge footer = commandes en cours/pretes/en livraison + RDVs a venir (cumul)
   const badgeCommandes = commandesASwiper.length + commandesEnLivraison.length + commandesEnCours.length + rdvsAVenir.length
 
-  const card = { background: '#fff', borderRadius: 14, padding: '1rem', marginBottom: '0.75rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 6px rgba(107,53,196,0.05)' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }
   const statutStyle = {
     // 'recupere' (historique) -> neutre gris pour eviter de confondre avec les RDVs (vert).

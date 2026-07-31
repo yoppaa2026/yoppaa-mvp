@@ -11,9 +11,9 @@ import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompe
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
 import {
-  Check, X, AlertTriangle, Calendar, Clock, Lock, Trash2, Copy, Zap, Save, Phone,
+  Check, AlertTriangle, Calendar, Clock, Lock, Trash2, Copy, Zap, Phone,
   Sun, Star, Settings, Package, Lightbulb, Camera, Store, Scissors, Croissant,
-  Bell, BellOff, ClipboardList, Bike, MapPin, FileText, Printer, Download,
+  BellOff, ClipboardList, Bike, MapPin, FileText, Printer, Download,
   Eye, Globe, Users, MessageCircle, Sparkles, Reply,
 } from 'lucide-react'
 
@@ -266,6 +266,7 @@ function TabMenu({ commercantId, commercant, toast }) {
   // ne toggle pas loading pour ne pas demonter la liste et perdre le scroll.
   const firstLoadRef = useRef(true)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchArticles() }, [commercantId])
 
   async function fetchArticles() {
@@ -988,6 +989,7 @@ function OptionsArticle({ articleId, toast }) {
   const [valeursForms, setValeursForms] = useState({})
   const [saving, setSaving] = useState(false)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchGroupes() }, [articleId])
 
   async function fetchGroupes() {
@@ -1156,6 +1158,7 @@ function VariantesArticle({ article, toast }) {
   const [loading, setLoading] = useState(true)
   const [uploadId, setUploadId] = useState(null)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchVariantes() }, [article.id])
 
   async function fetchVariantes() {
@@ -1588,7 +1591,6 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
 //     du même commerçant pour la même date_deal
 function TabDeals({ commercantId, commercant, toast }) {
   const today = new Date().toISOString().slice(0, 10)
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
   const [deals, setDeals] = useState([])
   const [articles, setArticles] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1617,6 +1619,7 @@ function TabDeals({ commercantId, commercant, toast }) {
   // lit plus : une seule vérité annoncée partout).
   const heureLimite = '23h00'
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchDeals(); fetchArticles() }, [commercantId])
 
   async function fetchDeals() {
@@ -2179,6 +2182,7 @@ function TabActus({ commercantId, commercant, toast }) {
     return dt
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchActus() }, [commercantId])
 
   async function fetchActus() {
@@ -2496,6 +2500,7 @@ function TabCreneaux({ commercantId, toast }) {
   const [modeGlobal, setModeGlobal] = useState('commandes')
   const [savingMode, setSavingMode] = useState(false)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchAll() }, [commercantId])
 
   async function fetchAll() {
@@ -3172,6 +3177,7 @@ function SectionCreneauxLivraison({ commercantId, toast }) {
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({ jour_semaine: 'mardi', heure_debut: '18:00', heure_fin: '19:00', max_commandes: 10, cutoff_heures: 2 })
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { charger() }, [commercantId])
 
   async function charger() {
@@ -3656,6 +3662,7 @@ function SectionEmplacementsFoodtruck({ commercantId, toast }) {
   const todayISO = new Date().toISOString().slice(0, 10)
   const jourKey = JOURS_FT[(new Date().getDay() + 6) % 7]
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { charger() }, [commercantId])
   async function charger() {
     const { data, error } = await supabase.from('foodtruck_emplacements').select('*').eq('commercant_id', commercantId)
@@ -3869,6 +3876,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
   const [uploadingGal, setUploadingGal] = useState(false)
   const MAX_GALERIE = 4
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchProfil(); fetchPhotos() }, [commercantId])
 
   async function fetchPhotos() {
@@ -4397,6 +4405,7 @@ function QRCodeSection({ commercantId, toast }) {
       } catch (e) { toast('Erreur génération QR', 'error') }
     }
     gen()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [url])
 
   // ─── Canvas composé — style tribu hype ───────────────────────────────────
@@ -4707,7 +4716,7 @@ const SIGN_TYPE_ICON = {
 // Sess 5a : Prestations CRUD. Sess 5b : Praticiens. Sess 5c : Créneaux.
 // ═════════════════════════════════════════════════════════════════════════
 
-function TabRdv({ commercantId, commercant, toast }) {
+function TabRdv({ commercantId, toast }) {
   const [subTab, setSubTab] = useState('prestations')
   const subTabs = [
     { id: 'prestations', label: 'Prestations' },
@@ -4734,15 +4743,6 @@ function TabRdv({ commercantId, commercant, toast }) {
   )
 }
 
-function TabRdvPlaceholder({ label, detail }) {
-  return (
-    <div style={{ background: '#fff', borderRadius: 14, padding: 24, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
-      <p style={{ fontSize: 14, fontWeight: 800, color: T.ink, marginBottom: 6 }}>{label}</p>
-      <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>{detail}</p>
-    </div>
-  )
-}
-
 // Sess 5a : CRUD Prestations RDV. nom, description, durée_minutes, prix
 // (fixe ou fourchette prix_min/max), acompte_pourcent, ordre, actif.
 // Soft delete via deleted_at (conformité 7 ans Belgique).
@@ -4761,6 +4761,7 @@ function TabRdvPrestations({ commercantId, toast }) {
   const [form, setForm] = useState(initialForm)
   const firstLoadRef = useRef(true)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchAll() }, [commercantId])
 
   async function fetchAll() {
@@ -5055,6 +5056,7 @@ function TabRdvPraticiens({ commercantId, toast }) {
   const firstLoadRef = useRef(true)
   const fileInputRef = useRef(null)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchPraticiens() }, [commercantId])
 
   async function fetchPraticiens() {
@@ -5300,6 +5302,7 @@ function TabRdvCreneaux({ commercantId, toast }) {
   }
   const [form, setForm] = useState(initialForm)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchAll() }, [commercantId])
 
   async function fetchAll() {
@@ -5611,6 +5614,7 @@ function TabRdvFermetures({ commercantId, toast }) {
   const initialForm = { praticien_id: 'tous', date_debut: today, date_fin: today, motif: '' }
   const [form, setForm] = useState(initialForm)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchAll() }, [commercantId])
 
   async function fetchAll() {
@@ -5787,6 +5791,7 @@ function TabSignalements({ commercantId, toast }) {
   const [loading, setLoading] = useState(true)
   const [filtre, setFiltre] = useState('en_attente')
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchSignalements() }, [commercantId])
 
   async function fetchSignalements() {
@@ -5928,6 +5933,7 @@ function TabAvis({ commercantId, toast }) {
   const [reponses, setReponses] = useState({})
   const [saving, setSaving] = useState(null)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchAvis() }, [commercantId])
 
   async function fetchAvis() {
@@ -6036,6 +6042,7 @@ export default function ConfigDashboard({ commercantId }) {
     const { data } = await supabase.from('commercants').select('*').eq('id', commercantId).maybeSingle()
     setCommercant(data)
   }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { rechargerCommercant() }, [commercantId])
 
   // Onglets dynamiques selon le plan + la catégorie

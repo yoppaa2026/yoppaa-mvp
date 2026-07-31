@@ -34,7 +34,7 @@ function IconLocation({ size = 18, color = T.main }) {
   )
 }
 
-export default function ConfirmCommune({ clientId, currentCommuneId, mode = 'first', onClose, onSet }) {
+export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClose, onSet }) {
   // mode = 'first' (première détection, non fermable) | 'change' (changement, fermable)
   const [step, setStep] = useState('detecting') // 'detecting' | 'confirm' | 'choose'
   const [detected, setDetected] = useState(null)

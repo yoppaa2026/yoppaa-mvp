@@ -40,7 +40,6 @@ const T = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const JOURS = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
-function jourActuel() { return JOURS[new Date().getDay()] }
 function formatDuree(min) {
   if (!min) return ''
   if (min < 60) return `${min} min`
@@ -701,6 +700,7 @@ export default function CommanderRdvSlug() {
       setSlotsLoading(false)
     })()
     return () => { annule = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [etape, dateChoisie, prestationChoisie, praticienChoisi, commercant, creneauxConfig])
 
   function choisirPrestation(p) {
@@ -731,6 +731,7 @@ export default function CommanderRdvSlug() {
     if (praticiensEligibles.length === 1 && !praticienChoisi) {
       setPraticienChoisi(praticiensEligibles[0])
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [prestationChoisie, praticiens])
 
   // Filtre les créneaux config selon le praticien choisi :
@@ -757,6 +758,7 @@ export default function CommanderRdvSlug() {
   // est plus longue que pour de l'alimentaire C&C). Les 14 premiers sont affichés en scroll
   // horizontal, les 46 suivants sont accessibles via le mini-calendrier deroulant.
   // Sess 6 : filtre les fermetures exceptionnelles (marque ouvert:false pour ces jours).
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   const joursDispos = commercant && creneauxFiltres.length > 0
     ? genererJoursDispos({ nbJours: 60, horairesDetail: commercant.horaires_detail, creneaux: creneauxFiltres })
         .map(j => estFerme(j.iso) ? { ...j, ouvert: false, motifFerme: 'Fermeture' } : j)

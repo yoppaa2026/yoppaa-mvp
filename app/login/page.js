@@ -169,7 +169,8 @@ function Login() {
                 onChange={e => { setEmail(e.target.value); setError('') }}
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
-                    mode === 'magic' ? envoyerMagicLink() : connexionMotDePasse()
+                    if (mode === 'magic') envoyerMagicLink()
+                    else connexionMotDePasse()
                   }
                 }}
                 placeholder="ton@email.com"

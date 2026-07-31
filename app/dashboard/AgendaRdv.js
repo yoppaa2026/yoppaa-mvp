@@ -316,7 +316,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                       const heureF = r.heure_fin?.slice(0,5)
                       return (
                         <div key={r.id}
-                          onClick={(e) => { e.stopPropagation(); onSelectRdv && onSelectRdv(r) }}
+                          onClick={(e) => { e.stopPropagation(); if (onSelectRdv) onSelectRdv(r) }}
                           style={{
                             position: 'absolute',
                             top: 1, left: 2, right: 2,

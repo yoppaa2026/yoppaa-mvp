@@ -25,7 +25,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
-import { canDo, resolvePlan } from '@/lib/plans'
+import { canDo } from '@/lib/plans'
 
 function getSupabaseAdmin() {
   return createClient(

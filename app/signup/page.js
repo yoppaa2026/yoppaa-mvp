@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { PLAN_LABEL, PLANS, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
+import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
 import { compresserImage } from '@/lib/compress-image'
 // Icônes Lucide React : SVG inline alignés sur la charte canonique Yoppaa.
 // Convention : stroke-width 1.8, currentColor pour hériter de la palette parent.
@@ -11,7 +11,7 @@ import {
   Croissant, Scissors, ShoppingBag,
   User, Heart, Radio, Sun, Megaphone, Flame, AlertTriangle, Bell, Mail, Sparkles, BarChart3,
   ShoppingCart, Bike, Utensils, Calendar, Briefcase, Clock, Users, Package, CreditCard, Star, Download,
-  Smartphone, Printer, Camera, FileText, Pencil, CheckCircle, Check, Circle, Shield, Upload, IdCard,
+  Smartphone, Printer, Camera, FileText, Pencil, CheckCircle, Check, Circle, Shield, IdCard,
 } from 'lucide-react'
 // Logo canonique Yoppaa : wordmark + 5 dots V2-B (spec validee 12/06).
 // Ne JAMAIS redessiner les dots ailleurs : importer YoppaaLogo ou YoppaaDots.
@@ -1813,7 +1813,7 @@ function classerProduitsParCategorie(categorie) {
 
 // Bandeau recap adapte au plan choisi affiche en tete de l'etape 5.
 // Resume ce qui se passe a la soumission : essai 30j si paye, gratuit si Exister.
-function BandeauRecapPlan({ plan, commercant }) {
+function BandeauRecapPlan({ plan }) {
   const tarif = getPrixPlan(plan)
   if (plan === 'exister') {
     return (
@@ -1870,7 +1870,7 @@ function BandeauRecapPlan({ plan, commercant }) {
 // verso. Stockage dans bucket Supabase 'kyb_documents' (prive, RLS strict).
 // La fiche du commercant ne sera PUBLIEE qu'apres validation manuelle par
 // Yoppaa (kyb_statut='valide').
-function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
+function CardKYB({ commercant, onUpdate, onSaving }) {
   const [bce, setBce] = useState(commercant.bce ? formaterBCECompact(commercant.bce.replace(/\D/g, '')) : '')
   const [nomRep, setNomRep] = useState(commercant.representant_legal_nom || '')
   const [prenomRep, setPrenomRep] = useState(commercant.representant_legal_prenom || '')
@@ -1943,7 +1943,7 @@ function CardKYB({ commercant, onUpdate, onSaving, onErreur }) {
       clearTimeout(debounceRef.current)
       saveTexteRef.current?.()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   async function uploaderIdentite(file, kind) {

@@ -441,7 +441,6 @@ function CarteRdv({ rdv, onChangerStatut }) {
     ? (dureeMin >= 60 ? `${Math.floor(dureeMin/60)}h${dureeMin%60>0?(dureeMin%60)+'min':''}` : `${dureeMin}min`)
     : null
 
-  const prenom = rdv.client_prenom || rdv.client_nom?.split(' ')[0] || 'Client'
   const nomComplet = [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' ') || rdv.client_nom
 
   return (
@@ -554,7 +553,7 @@ export default function Dashboard() {
   // Detecte via localStorage yoppaa_admin_impersonating (set depuis /admin "Voir Dashboard").
   // Affiche un banner sticky en haut + bouton Quitter qui revient sur /admin.
   const [impersonating, setImpersonating] = useState(false)
-  const [impersonationId, setImpersonationId] = useState(null)
+  const [_impersonationId, setImpersonationId] = useState(null)
   const [commercant, setCommercant] = useState(null)
   const [loading, setLoading] = useState(true)
   const [listeCommercants, setListeCommercants] = useState([])
@@ -701,6 +700,7 @@ export default function Dashboard() {
       }
     }
     init()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [chargerCommandes, router])
 
   // Refresh commandes + RDVs commercant au focus/visibilitychange + polling 60s.
@@ -816,6 +816,7 @@ export default function Dashboard() {
     }, 5000)
 
     return () => { if (pollingRef.current) clearInterval(pollingRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [commercant?.id, notificationsActives])
 
   // Crédit fidélité automatique (Vendre) au statut final. Fire-and-forget,
@@ -1066,22 +1067,6 @@ export default function Dashboard() {
     noShow:     rdvsDuJour.filter(r => r.statut === 'no_show').length,
     caEstime:   rdvsDuJour.filter(r => r.statut === 'honore').reduce((acc, r) => acc + Number(r.prix_estime || 0), 0),
   }
-  // Filtre statut RDV
-  const rdvsFiltres = rdvsDuJour.filter(r => {
-    if (filtreStatut === 'actives')  return r.statut === 'confirme'
-    if (filtreStatut === 'confirme') return r.statut === 'confirme'
-    if (filtreStatut === 'honore')   return r.statut === 'honore'
-    if (filtreStatut === 'no_show')  return r.statut === 'no_show'
-    if (filtreStatut === 'annule')   return r.statut === 'annule'
-    return true
-  })
-  const filtresStatutRdv = [
-    { key: 'actives',  label: 'À venir',    count: statsRdv.confirmes,           color: T.main },
-    { key: 'honore',   label: 'Honorés',    count: statsRdv.honores,             color: '#10B981' },
-    { key: 'no_show',  label: 'No-show',    count: statsRdv.noShow,              color: '#6B7280' },
-    { key: 'annule',   label: 'Annulés',    count: statsRdv.annules,             color: '#DC2626' },
-    { key: 'tout',     label: 'Tout',       count: rdvsDuJour.length },
-  ]
   const statsCardsRdv = [
     { label: 'À venir',     value: statsRdv.confirmes,                    color: T.main,    bg: T.pale,   border: `${T.main}18`,   pulse: statsRdv.confirmes > 0 },
     { label: 'Honorés',     value: statsRdv.honores,                       color: '#10B981', bg: '#F0FDF4', border: '#10B98118',     pulse: false },

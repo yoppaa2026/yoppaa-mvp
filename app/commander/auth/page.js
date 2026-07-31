@@ -66,6 +66,7 @@ function AuthForm() {
         router.replace(redirect)
       }
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [])
 
   async function sauvegarderClient(user) {

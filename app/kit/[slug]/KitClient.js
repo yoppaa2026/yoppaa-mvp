@@ -101,7 +101,7 @@ export default function KitClient({ slug, kit, lien, qr }) {
         {qr && (
           <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: 16, marginBottom: 16, textAlign: 'center' }}>
             <p style={{ margin: '0 0 12px', fontSize: '0.8rem', fontWeight: 800, color: '#fff' }}>Ton QR code (à mettre en vitrine)</p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img src={qr} alt="QR code Yoppaa" style={{ width: 200, height: 200, borderRadius: 12, background: '#fff', padding: 8 }}/>
             <div style={{ marginTop: 12 }}>
               <a href={qr} download={`yoppaa-qr-${slug}.png`} style={{ ...btnBase, background: 'rgba(255,255,255,0.12)', color: '#fff', textDecoration: 'none' }}>

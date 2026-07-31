@@ -780,6 +780,7 @@ export default function GoodMorningYoppersPage() {
       setLoadingData(false)
     })
     return () => { annule = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [communeAffichee?.id])
 
   // Items affichés selon l'onglet (deals ou actus) - source de la cascade animation
@@ -798,6 +799,7 @@ export default function GoodMorningYoppersPage() {
       setTimeout(() => setShown(p => { const n = [...p]; n[i] = true; return n }), 60 + i * 120)
     )
     return () => timers.forEach(clearTimeout)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [tab, itemsAffiches.length])
 
   // Marque le morning comme vu aujourd'hui (logique "1 fois/jour")

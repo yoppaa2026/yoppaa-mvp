@@ -48,24 +48,6 @@ const slideBase = {
 
 import YoppaaLogo from '../../components/YoppaaLogo'
 
-// Wordmark canonique seul (pour les MiniWordmark et autres usages sans dots)
-function Wordmark({ size = 80, white = false }) {
-  return (
-    <p style={{
-      margin: 0,
-      fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif',
-      fontSize: size,
-      fontWeight: 800,
-      letterSpacing: '-0.05em',
-      lineHeight: 1,
-    }}>
-      <span style={{ color: white ? '#FFFFFF' : T.ink }}>yo</span>
-      <span style={{ color: white ? T.light : T.main }}>pp</span>
-      <span style={{ color: T.mid }}>aa</span>
-    </p>
-  )
-}
-
 function SlideNumber({ n, total }) {
   return (
     <div style={{ position: 'absolute', bottom: 24, right: 32, fontSize: 13, color: T.muted, fontWeight: 700, letterSpacing: '1px' }}>

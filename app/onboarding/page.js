@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Bell, MapPin, Croissant, Sandwich, Pizza, Flame, Package, Star, History, Gift,
@@ -252,7 +252,6 @@ export default function OnboardingPage() {
   const [sortie, setSortie] = useState(false)
 
   const ecran = ECRANS[ecranIdx]
-  const estDernier = ecranIdx === ECRANS.length - 1
 
   function allerEcranSuivant() {
     if (ecranIdx < ECRANS.length - 1) {

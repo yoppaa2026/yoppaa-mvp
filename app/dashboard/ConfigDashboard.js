@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { canDo, getIaConfig } from '@/lib/plans'
 import { normaliserCodeBon } from '@/lib/bons-cadeaux'
+import { PACKS_SMS } from '@/lib/packs-sms'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
@@ -3355,6 +3356,34 @@ function TabFidelite({ commercantId, commercant, toast, onSaved }) {
   const [carte, setCarte] = useState(null)          // carte affichée
   const [telIntrouvable, setTelIntrouvable] = useState(null)  // numéro normalisé sans carte
   const [clientTrouve, setClientTrouve] = useState(null)      // compte Yoppaa portant ce numéro
+  const [achatSms, setAchatSms] = useState(false)
+  const soldeSms = commercant?.fidelite_sms_credits || 0
+
+  // Achat d'un pack de SMS : Stripe Checkout sur le compte plateforme (c'est
+  // Yoppaa qui vend les SMS). Le crédit est appliqué par le webhook billing.
+  async function acheterPack(pack) {
+    if (achatSms) return
+    setAchatSms(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { toast('Session expirée, reconnecte-toi.', 'error'); setAchatSms(false); return }
+      const r = await fetch('/api/fidelite/sms-packs/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ commercant_id: commercantId, pack }),
+      })
+      const j = await r.json()
+      if (!r.ok || !j.ok || !j.url) {
+        toast(j.error || 'Impossible de lancer le paiement.', 'error')
+        setAchatSms(false)
+        return
+      }
+      window.location.href = j.url
+    } catch {
+      toast('Erreur réseau, réessaie.', 'error')
+      setAchatSms(false)
+    }
+  }
   const [montantInput, setMontantInput] = useState('')
   const [dernieres, setDernieres] = useState([])
   const [busy, setBusy] = useState(false)
@@ -3537,8 +3566,38 @@ function TabFidelite({ commercantId, commercant, toast, onSaved }) {
         <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.muted, lineHeight: 1.55 }}>
           La carte de fidélité digitale de tes clients : leur numéro de GSM suffit, la carte se crée toute seule au comptoir.
           {peutAuto ? ' Et avec Vendre, chaque commande ou rendez-vous Yoppaa la remplit automatiquement.' : ''}
-          {' '}SMS restants : <strong style={{ color: T.deep }}>{commercant?.fidelite_sms_credits || 0}</strong>
         </p>
+
+        {/* Crédits SMS : le carburant du programme. Deux SMS seulement (carte
+            ouverte, récompense débloquée), mais sans eux le client ne sait pas
+            que sa carte existe. D'où le solde bien visible + la recharge ici. */}
+        {actif && (
+          <div style={{ background: soldeSms > 0 ? T.pale : '#FFFBEB', border: `1.5px solid ${soldeSms > 0 ? T.light : '#FCD34D'}`, borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: soldeSms > 0 ? T.deep : '#78350F' }}>
+                  {soldeSms} SMS restant{soldeSms > 1 ? 's' : ''}
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: 11, color: soldeSms > 0 ? T.muted : '#92400E', lineHeight: 1.5 }}>
+                  {soldeSms === 0
+                    ? 'Sans SMS, tes clients ne reçoivent plus le lien de leur carte ni l’annonce de leur récompense.'
+                    : soldeSms <= 10
+                      ? 'Il te reste peu de SMS, pense à recharger.'
+                      : 'Utilisés pour l’ouverture d’une carte et l’annonce d’une récompense.'}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+                {Object.entries(PACKS_SMS).map(([cle, p]) => (
+                  <button key={cle} onClick={() => acheterPack(cle)} disabled={achatSms}
+                    style={{ padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${T.main}`, background: cle === '500' ? T.main : '#fff', color: cle === '500' ? '#fff' : T.main, fontWeight: 800, fontSize: 12, cursor: achatSms ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                    {achatSms ? '…' : `${p.nb} SMS · ${p.prix_htva.toFixed(2)}€`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p style={{ margin: '8px 0 0', fontSize: 10, color: T.muted }}>Prix HTVA. Les crédits n&rsquo;expirent pas.</p>
+          </div>
+        )}
 
         {(showConfig || !actif) ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

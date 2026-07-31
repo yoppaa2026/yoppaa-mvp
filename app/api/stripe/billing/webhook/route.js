@@ -126,6 +126,13 @@ export async function POST(request) {
         await handleInvoicePaymentSucceeded(event.data.object, supabase)
         break
 
+      // Achat ponctuel sur le compte plateforme : packs de SMS de fidélité
+      case 'checkout.session.completed':
+        if (event.data.object?.metadata?.yoppaa_kind === 'sms_pack') {
+          await handleSmsPackPaye(event.data.object, supabase)
+        }
+        break
+
       default:
         console.info('[billing/webhook] event non géré', event.type)
     }
@@ -144,6 +151,44 @@ export async function POST(request) {
 
 
 // ─── Handlers ─────────────────────────────────────────────────────────────
+
+// checkout.session.completed (kind = sms_pack) : le commerçant a payé son
+// pack de SMS de fidélité → on crédite son compteur.
+// Idempotent à deux niveaux : la table stripe_webhook_events filtre déjà les
+// rejeux d'events, et on ne crédite que si l'achat est encore en attente.
+async function handleSmsPackPaye(session, supabase) {
+  const achatId = session.metadata?.yoppaa_achat_id
+  if (!achatId) {
+    console.warn('[billing/webhook] sms_pack sans yoppaa_achat_id', session.id)
+    return
+  }
+
+  const { data: achat } = await supabase
+    .from('fidelite_sms_achats')
+    .select('id, commercant_id, nb_sms, statut')
+    .eq('id', achatId)
+    .maybeSingle()
+  if (!achat) {
+    console.error('[billing/webhook] achat SMS introuvable', achatId)
+    return
+  }
+  if (achat.statut === 'paye') return   // déjà crédité
+
+  const { error: errUp } = await supabase
+    .from('fidelite_sms_achats')
+    .update({ statut: 'paye', updated_at: new Date().toISOString() })
+    .eq('id', achat.id)
+    .eq('statut', 'paiement_en_attente')
+  if (errUp) throw errUp
+
+  const { data: solde, error: errRpc } = await supabase
+    .rpc('crediter_sms_pack', { p_commercant_id: achat.commercant_id, p_nb: achat.nb_sms })
+  if (errRpc) throw errRpc
+
+  console.info('[billing/webhook] pack SMS crédité', {
+    achat: achat.id, nb: achat.nb_sms, nouveau_solde: solde,
+  })
+}
 
 // customer.subscription.created + customer.subscription.updated
 // On stocke les infos et on bascule le plan si la sub est active ou en trial.

@@ -40,19 +40,20 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ni après 
 {"variantes":[{"court":"...","long":"...","hashtags":["#..."]}]}`
 }
 
-// Surface 'article' : description de fiche produit du catalogue, pas un post.
-// Le commerçant fournit ses caractéristiques brutes (ex : "pur beurre, pâte
-// feuilletée, beurre du producteur local"), l'IA les tourne en description
-// appétissante SANS rien inventer (règle anti pub trompeuse du 14/07).
-function construireSystemeArticle(nbVariantes) {
-  return `Tu es l'assistant de rédaction de Yoppaa, l'application belge qui met en avant les commerces de quartier. Tu rédiges la description d'un article du catalogue d'un commerçant, à partir des caractéristiques brutes qu'il fournit (ingrédients, matières, atouts).
+// Surfaces 'article' et 'prestation' : description de fiche (catalogue produit
+// ou prestation de service), pas un post. Le commerçant fournit ses
+// caractéristiques brutes (ex : "pur beurre, pâte feuilletée" ou "shampoing,
+// coupe, brushing"), l'IA les tourne en description engageante SANS rien
+// inventer (règle anti pub trompeuse du 14/07).
+function construireSystemeArticle(nbVariantes, objet = 'd\'un article du catalogue d\'un commerçant') {
+  return `Tu es l'assistant de rédaction de Yoppaa, l'application belge qui met en avant les commerces de quartier. Tu rédiges la description ${objet}, à partir des caractéristiques brutes qu'il fournit (ingrédients, matières, atouts).
 
 Règles absolues :
 1. Français, orthographe et grammaire impeccables.
 2. Donne envie, mais reste authentique et fidèle aux caractéristiques fournies. Jamais racoleur, jamais "corporate".
 3. N'invente jamais un fait : n'ajoute aucun ingrédient, aucune origine, aucun label, aucune promesse qui ne soit pas fourni. Pas de prix, pas de dates.
 4. N'utilise jamais le tiret cadratin. Utilise la virgule, les deux-points, les parenthèses ou le point.
-5. Pas d'emoji, pas de hashtag : c'est une description de produit affichée sur la carte de l'article.
+5. Pas d'emoji, pas de hashtag : c'est une description affichée sur une fiche, pas un post.
 
 Tu proposes ${nbVariantes} variantes distinctes (angles différents). Pour chaque variante :
 - "court" : 1 à 2 phrases courtes (la description affichée sur la carte).
@@ -69,6 +70,14 @@ function construirePrompt({ com, surface, occasion, brief, ton, infos }) {
     return `Commerce : ${com.nom} (${com.type || 'commerce'}${lieu}).
 Article du catalogue : ${brief || '(sans nom)'}.
 ${infos ? `Caractéristiques fournies par le commerçant (ne rien ajouter au-delà) : ${infos}.\n` : ''}Rédige la description en français.`
+  }
+  // Prestation (commerces de services : salon, institut, cabinet) : ce que le
+  // client reçoit pendant le rendez-vous. Jamais de durée ni de prix inventés,
+  // ils vivent déjà dans les champs dédiés de la prestation.
+  if (surface === 'prestation') {
+    return `Commerce de services : ${com.nom} (${com.type || 'commerce de services'}${lieu}).
+Prestation proposée : ${brief || '(sans nom)'}.
+${infos ? `Ce que le commerçant précise (ne rien ajouter au-delà) : ${infos}.\n` : ''}Rédige la description de cette prestation en français, du point de vue du client qui va la réserver. N'invente ni durée, ni prix, ni marque de produit.`
   }
   const typeMsg = surface === 'deal'
     ? 'accroche pour une offre/deal'
@@ -182,14 +191,19 @@ export async function POST(request) {
     // 7) Génération.
     // Articles : toujours 3 propositions au choix (demande Alex 23/07), les
     // autres surfaces gardent le barème par modèle (Sonnet 3 / Haiku 2).
-    const nbVariantes = surface === 'article' ? 3 : (cfg.modele === 'sonnet' ? 3 : 2)
+    const estFiche = surface === 'article' || surface === 'prestation'
+    const nbVariantes = estFiche ? 3 : (cfg.modele === 'sonnet' ? 3 : 2)
     const modelId = IA_MODELES[cfg.modele]
     const maxTokens = cfg.modele === 'sonnet' ? 1500 : 900
     let out
     try {
       out = await genererTexte({
         model: modelId,
-        systeme: surface === 'article' ? construireSystemeArticle(nbVariantes) : construireSysteme(nbVariantes),
+        systeme: estFiche
+          ? construireSystemeArticle(nbVariantes, surface === 'prestation'
+              ? 'd\'une prestation proposée par un commerce de services (salon, institut, cabinet)'
+              : 'd\'un article du catalogue d\'un commerçant')
+          : construireSysteme(nbVariantes),
         prompt: construirePrompt({ com, surface, occasion, brief, ton, infos }),
         maxTokens,
       })

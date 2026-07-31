@@ -2515,8 +2515,14 @@ export default function CommanderSlug() {
 
           {etape < 4 && peutCommander && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-              {[{ n: 1, label: 'Menu' }, { n: 2, label: 'Créneau' }].map((s, i) => {
-                const target = s.n + 1          // Menu -> etape 2, Créneau -> etape 3
+              {/* Libellés par monde : « Menu » n'a de sens qu'en alimentaire.
+                  Détail et services parlent de Catalogue, et leur 2e étape est
+                  le retrait/l'expédition, pas un créneau (décision Alex 01/08). */}
+              {[
+                { n: 1, label: estDetail ? 'Catalogue' : 'Menu' },
+                { n: 2, label: estDetail ? (modeBoutiqueEff === 'expedition' ? 'Expédition' : 'Retrait') : 'Créneau' },
+              ].map((s, i) => {
+                const target = s.n + 1          // étape 1 -> etape 2, étape 2 -> etape 3
                 const done = etape > target
                 const active = etape === target
                 // Cliquable pour revenir à une étape déjà atteinte (cohérent avec la

@@ -1385,7 +1385,10 @@ export default function Dashboard() {
           <nav style={{ flex: 1 }}>
             {[
               { key: 'commandes', label: 'Commandes',   Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(commercant?.plan, 'commande') },
-              { key: 'rdv',       label: 'Rendez-vous', Icon: IconRdv,       visible: !!commercant?.rdv_actif },
+              // Services : l'onglet Rendez-vous reste visible même module non
+              // activé (l'agenda explique alors comment l'activer), sinon un
+              // salon qui vend aussi des produits ne voyait que Commandes.
+              { key: 'rdv',       label: 'Rendez-vous', Icon: IconRdv,       visible: !!commercant?.rdv_actif || (commercant?.categorie === 'vitrine' && canDo(commercant?.plan, 'rdv')) },
               { key: 'config',    label: 'Paramètres',  Icon: IconConfig,    visible: true },
             ].filter(t => t.visible).map(({ key, label, Icon }) => {
               const actif = ongletPrincipal === key
@@ -1456,7 +1459,7 @@ export default function Dashboard() {
               <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 3, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}>
                 {[
                   { key: 'commandes', label: 'Cmd',    Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(commercant?.plan, 'commande') },
-                  { key: 'rdv',       label: 'RDV',    Icon: IconRdv,       visible: !!commercant?.rdv_actif },
+                  { key: 'rdv',       label: 'RDV',    Icon: IconRdv,       visible: !!commercant?.rdv_actif || (commercant?.categorie === 'vitrine' && canDo(commercant?.plan, 'rdv')) },
                   { key: 'config',    label: 'Config', Icon: IconConfig,    visible: true },
                 ].filter(t => t.visible).map(({ key, label, Icon }) => {
                   const actif = ongletPrincipal === key
@@ -1666,6 +1669,23 @@ export default function Dashboard() {
 
             {ongletPrincipal === 'rdv' && (
               <>
+                {/* Module RDV pas encore activé : l'agenda serait vide et muet.
+                    On explique où l'activer (Paramètres → Profil). */}
+                {!commercant?.rdv_actif && (
+                  <div style={{ background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 16, padding: '1rem 1.125rem', marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                    <IconRdv size={22} color={T.main}/>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.92rem', marginBottom: 4 }}>La prise de rendez-vous n&rsquo;est pas encore activée</p>
+                      <p style={{ fontSize: '0.8rem', color: T.muted, lineHeight: 1.55, marginBottom: 10 }}>
+                        Active-la pour que tes clients réservent en ligne : tes rendez-vous s&rsquo;afficheront ici, dans cet agenda.
+                      </p>
+                      <button onClick={() => setOngletPrincipal('config')}
+                        style={{ padding: '8px 16px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                        Aller aux Paramètres
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {loading && (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem', gap: 10 }}>
                     {[0,1,2].map(i => (

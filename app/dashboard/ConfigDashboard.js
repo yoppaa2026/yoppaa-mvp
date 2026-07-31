@@ -1621,26 +1621,40 @@ function TabDeals({ commercantId, commercant, toast }) {
   // lit plus : une seule vérité annoncée partout).
   const heureLimite = '23h00'
 
+  // Articles réellement liables à un deal (les articles à variantes sont exclus
+  // depuis le 26/07). Un commerce de SERVICES n'a pas de catalogue commandable :
+  // ses prestations vivent dans rdv_prestations, donc lier un article ne peut
+  // jamais être obligatoire chez lui, sa remise est une annonce.
+  const articlesLiables = articles.filter(a => !a.gere_variantes)
+  const articleRequis = articlesLiables.length > 0 && commercant?.categorie !== 'vitrine'
+
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchDeals(); fetchArticles() }, [commercantId])
 
   async function fetchDeals() {
     if (firstLoadRef.current) setLoading(true)
-    const { data } = await supabase.from('yoppaa_deals')
+    // On récupère error : une lecture qui échoue en silence affichait une liste
+    // vide, donc « mon deal ne s'est pas enregistré » alors qu'il existait.
+    const { data, error } = await supabase.from('yoppaa_deals')
       .select('*, article:articles(id, nom, prix, categorie)')
       .eq('commercant_id', commercantId)
       .order('date_deal', { ascending: false, nullsLast: true })
       .order('created_at', { ascending: false })
+    if (error) {
+      console.error('[TabDeals.fetchDeals]', error)
+      toast(`Lecture des deals impossible : ${error.message}`, 'error')
+    }
     setDeals(data || [])
     if (firstLoadRef.current) { setLoading(false); firstLoadRef.current = false }
   }
 
   async function fetchArticles() {
-    const { data } = await supabase.from('articles')
+    const { data, error } = await supabase.from('articles')
       .select('id, nom, prix, categorie, actif, gere_variantes')
       .eq('commercant_id', commercantId)
       .eq('actif', true)
       .order('categorie').order('nom')
+    if (error) console.error('[TabDeals.fetchArticles]', error)
     setArticles(data || [])
   }
 
@@ -1737,7 +1751,12 @@ function TabDeals({ commercantId, commercant, toast }) {
     if (form.deal_type === 'remise_pct') {
       const pct = parseInt(form.remise_pct, 10)
       if (!pct || pct < 1 || pct > 90) { setSaving(false); return toast('Indique une remise entre 1 et 90 %', 'error') }
-      if (!form.article_id) { setSaving(false); return toast('Une remise % doit être liée à un article', 'error') }
+      // L'article n'est exigé que s'il y en a à lier. Un commerce de services
+      // n'a pas de catalogue commandable (ses prestations vivent dans
+      // rdv_prestations) : sa remise est une ANNONCE, pas un article en promo.
+      // Sans ce garde-fou, aucun deal n'était jamais enregistré côté vitrine
+      // (bug signalé par Alex 01/08).
+      if (articleRequis && !form.article_id) { setSaving(false); return toast('Une remise % doit être liée à un article', 'error') }
     }
     if (form.deal_type === 'bundle' && !form.article2_id) {
       setSaving(false); return toast('Choisis le second article du duo', 'error')
@@ -1928,7 +1947,9 @@ function TabDeals({ commercantId, commercant, toast }) {
                   { v: 'lot', label: 'Lot (ex: 3+1)' },
                   { v: 'remise_pct', label: 'Remise %' },
                   { v: 'prix_fixe', label: 'Prix promo' },
-                  { v: 'bundle', label: 'Duo (2 articles)' },
+                  // Le duo exige DEUX articles au catalogue : inutile de le
+                  // proposer à qui n'en a pas (salon, institut...).
+                  ...(articlesLiables.length >= 2 ? [{ v: 'bundle', label: 'Duo (2 articles)' }] : []),
                 ].map(t => (
                   <button key={t.v} type="button" onClick={() => setForm(p => ({ ...p, deal_type: t.v }))}
                     style={{ padding: '7px 13px', borderRadius: 100, border: `1.5px solid ${form.deal_type === t.v ? T.main : T.hairline}`, background: form.deal_type === t.v ? T.main : '#fff', color: form.deal_type === t.v ? '#fff' : T.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -1938,20 +1959,26 @@ function TabDeals({ commercantId, commercant, toast }) {
               </div>
             </div>
             <div>
-              <label style={s.label}>{form.deal_type === 'remise_pct' ? 'Article concerné *' : form.deal_type === 'bundle' ? 'Premier article du duo' : 'Article concerné (optionnel)'}</label>
+              <label style={s.label}>
+                {form.deal_type === 'remise_pct'
+                  ? (articleRequis ? 'Article concerné *' : 'Article concerné (optionnel)')
+                  : form.deal_type === 'bundle' ? 'Premier article du duo' : 'Article concerné (optionnel)'}
+              </label>
               <select value={form.article_id} onChange={e => onArticleChange(e.target.value)}
                 style={{ ...s.input, cursor: 'pointer' }}>
                 <option value="">— Deal général (pas lié à un produit) —</option>
                 {/* Articles à variantes exclus (décision 26/07 : pas de deal sur
                     variantes en V1, stock/choix ingérables) */}
-                {articles.filter(a => !a.gere_variantes).map(a => (
+                {articlesLiables.map(a => (
                   <option key={a.id} value={a.id}>
                     {a.nom}{a.categorie ? ` · ${a.categorie}` : ''} · {Number(a.prix).toFixed(2)}€
                   </option>
                 ))}
               </select>
               <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
-                L&rsquo;offre s&rsquo;affiche comme une carte à part sous l&rsquo;article : le produit reste toujours achetable à l&rsquo;unité au prix normal.
+                {articlesLiables.length === 0
+                  ? 'Tu n’as pas encore de produit à lier : ton offre s’affichera comme une annonce sur ta fiche (le client te contacte ou passe te voir).'
+                  : 'L’offre s’affiche comme une carte à part sous l’article : le produit reste toujours achetable à l’unité au prix normal.'}
               </p>
             </div>
             {form.deal_type === 'bundle' && (
@@ -4960,6 +4987,8 @@ function TabRdvPrestations({ commercantId, toast }) {
   const [saving, setSaving] = useState(false)
   const initialForm = { nom: '', description: '', duree_minutes: '30', prix_mode: 'fixe', prix: '', prix_min: '', prix_max: '', acompte_pourcent: '0', actif: true }
   const [form, setForm] = useState(initialForm)
+  // Propositions IA pour la description de la prestation (surface 'prestation')
+  const [propsIa, setPropsIa] = useState([])
   const firstLoadRef = useRef(true)
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
@@ -4999,9 +5028,10 @@ function TabRdvPrestations({ commercantId, toast }) {
   }
 
   function openNew() {
-    setForm(initialForm); setEditId(null); setSelectedPraticiens(new Set()); setShowForm(true)
+    setForm(initialForm); setEditId(null); setSelectedPraticiens(new Set()); setPropsIa([]); setShowForm(true)
   }
   function openEdit(p) {
+    setPropsIa([])
     const isFourchette = p.prix == null && (p.prix_min != null || p.prix_max != null)
     setForm({
       nom: p.nom || '',
@@ -5152,8 +5182,24 @@ function TabRdvPrestations({ commercantId, toast }) {
             <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? 'Modifier la prestation' : 'Nouvelle prestation'}</p>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Nom *</label>
             <Input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder="Coupe femme" style={{ marginBottom: 10 }}/>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Description (optionnel)</label>
-            <Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Shampoing, coupe, brushing" rows={2} style={{ marginBottom: 10 }}/>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted }}>Description (optionnel)</label>
+              <BoutonIaInline commercantId={commercantId} surface="prestation" brief={form.nom}
+                infos={form.description}
+                briefManquantMsg={'Donne d’abord un nom à la prestation, l’IA s’en inspire.'}
+                onVariantes={vs => setPropsIa(vs)}
+                toast={toast} />
+            </div>
+            <Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Shampoing, coupe, brushing" rows={2} style={{ marginBottom: propsIa.length > 0 ? 4 : 10 }}/>
+            {propsIa.length > 0 ? (
+              <div style={{ marginBottom: 10 }}>
+                <PropositionsIa propositions={propsIa}
+                  onChoisir={v => { setForm(p => ({ ...p, description: v.court || v.long })); setPropsIa([]) }}
+                  onFermer={() => setPropsIa([])} />
+              </div>
+            ) : (
+              <p style={{ fontSize: 10, color: T.muted, margin: '0 0 10px' }}>Astuce : note ce que comprend la prestation en vrac (shampoing, massage du cuir chevelu…) puis clique sur Rédiger avec l’IA.</p>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Durée (min) *</label>
@@ -5487,6 +5533,11 @@ function TabRdvCreneaux({ commercantId, toast }) {
   const [loading, setLoading] = useState(true)
   const [jourActif, setJourActif] = useState('lundi')
   const [praticienFiltre, setPraticienFiltre] = useState('all')  // 'all' | 'tous' | praticienId
+  // Copie d'un jour vers d'autres jours (demande Alex 01/08, même geste que la
+  // duplication des horaires du Profil) : on REMPLACE les créneaux des jours
+  // cibles, sinon les copies successives s'empilent en doublons.
+  const [copieCibles, setCopieCibles] = useState(new Set())
+  const [copieLoading, setCopieLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -5601,6 +5652,43 @@ function TabRdvCreneaux({ commercantId, toast }) {
     fetchAll()
   }
 
+  // Copie TOUS les créneaux du jour affiché vers les jours cochés (praticiens
+  // compris). Les jours cibles sont d'abord vidés : une copie remplace, elle
+  // n'empile pas.
+  async function copierVersJours() {
+    const source = creneaux.filter(c => c.jour_semaine === jourActif)
+    const cibles = [...copieCibles]
+    if (cibles.length === 0) return
+    if (source.length === 0) return toast('Aucun créneau à copier sur ce jour', 'error')
+    const dejaRemplis = cibles.filter(j => creneaux.some(c => c.jour_semaine === j))
+    if (dejaRemplis.length > 0 &&
+        !window.confirm(`Les créneaux déjà présents le ${dejaRemplis.join(', ')} seront remplacés par ceux du ${jourActif}. Continuer ?`)) return
+    setCopieLoading(true)
+    const idsARemplacer = creneaux.filter(c => cibles.includes(c.jour_semaine)).map(c => c.id)
+    if (idsARemplacer.length > 0) {
+      const { error: errDel } = await supabase.from('rdv_creneaux')
+        .update({ deleted_at: new Date().toISOString() }).in('id', idsARemplacer)
+      if (errDel) { setCopieLoading(false); return toast(`Erreur : ${errDel.message}`, 'error') }
+    }
+    const lignes = cibles.flatMap(j => source.map(c => ({
+      commercant_id: commercantId,
+      praticien_id: c.praticien_id,
+      jour_semaine: j,
+      heure_debut: c.heure_debut,
+      heure_fin: c.heure_fin,
+      pas_minutes: c.pas_minutes,
+      pause_debut: c.pause_debut,
+      pause_fin: c.pause_fin,
+      actif: c.actif,
+    })))
+    const { error } = await supabase.from('rdv_creneaux').insert(lignes)
+    setCopieLoading(false)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    setCopieCibles(new Set())
+    toast(`Créneaux copiés sur ${cibles.length} jour${cibles.length > 1 ? 's' : ''} 🟣`)
+    fetchAll()
+  }
+
   async function softDelete(c) {
     if (!window.confirm(`Supprimer ce créneau (${c.jour_semaine} ${c.heure_debut?.slice(0,5)} – ${c.heure_fin?.slice(0,5)}) ?`)) return
     const { error } = await supabase.from('rdv_creneaux').update({ deleted_at: new Date().toISOString() }).eq('id', c.id)
@@ -5663,6 +5751,44 @@ function TabRdvCreneaux({ commercantId, toast }) {
           )
         })}
       </div>
+
+      {/* Copier le jour affiché vers d'autres jours (gain de temps : une
+          semaine se configure en un geste au lieu de 7 saisies) */}
+      {creneaux.filter(c => c.jour_semaine === jourActif).length > 0 && (
+        <div style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
+          <p style={{ fontSize: 11.5, fontWeight: 800, color: T.ink, margin: '0 0 8px' }}>
+            Copier les créneaux du <span style={{ color: T.main }}>{jourActif}</span> vers :
+          </p>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: copieCibles.size > 0 ? 10 : 0 }}>
+            {JOURS_SEMAINE.filter(j => j !== jourActif).map(j => {
+              const sel = copieCibles.has(j)
+              const label = JOURS_LABELS[JOURS_SEMAINE.indexOf(j)] || j
+              return (
+                <button key={j} type="button"
+                  onClick={() => setCopieCibles(prev => {
+                    const next = new Set(prev)
+                    if (next.has(j)) next.delete(j); else next.add(j)
+                    return next
+                  })}
+                  style={{ padding: '5px 11px', borderRadius: 100, border: `1.5px solid ${sel ? T.main : T.hairline}`, background: sel ? T.main : '#fff', color: sel ? '#fff' : T.muted, fontWeight: 700, fontSize: 11.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+          {copieCibles.size > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button type="button" onClick={copierVersJours} disabled={copieLoading}
+                style={{ padding: '7px 14px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 12, cursor: copieLoading ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                {copieLoading ? 'Copie…' : `Appliquer à ${copieCibles.size} jour${copieCibles.size > 1 ? 's' : ''}`}
+              </button>
+              <span style={{ fontSize: 10.5, color: T.muted, lineHeight: 1.4 }}>
+                Les créneaux déjà présents ces jours-là seront remplacés.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Liste des créneaux du jour actif */}
       {creneauxAffiches.length === 0 ? (
@@ -6288,7 +6414,9 @@ export default function ConfigDashboard({ commercantId }) {
     // sera cadré au Module 2 étape 5).
     !estVitrine && commercant?.categorie !== 'detail' && { id: 'creneaux', label: 'Créneaux', icon: 'clock' },
     peutLivraison && { id: 'livraison', label: 'Livraison', icon: 'box' },
-    peutRdv && { id: 'rdv', label: 'RDV', icon: 'clock' },
+    // « RDV » ne disait pas ce qu'on y règle (prestations, praticiens, horaires
+    // de réservation) : renommé « Prise de RDV » (demande Alex 01/08).
+    peutRdv && { id: 'rdv', label: 'Prise de RDV', icon: 'calendar' },
     // Fidélité : Communiquer (comptoir) et Vendre (comptoir + crédit auto)
     canDo(commercant?.plan, 'fidelite') && { id: 'fidelite', label: 'Fidélité', icon: 'heart' },
     // Bons cadeaux : Vendre uniquement (l'achat passe par Stripe)

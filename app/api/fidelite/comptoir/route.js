@@ -17,6 +17,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { normaliserTelephone } from '@/lib/fidelite'
+import { smsCarteCreee } from '@/lib/fidelite-sms'
 
 export async function POST(request) {
   try {
@@ -47,7 +48,7 @@ export async function POST(request) {
     // Yoppaa en impersonation passe par son propre compte, donc même règle)
     const { data: com } = await admin
       .from('commercants')
-      .select('id, auth_user_id, fidelite_actif')
+      .select('id, nom, auth_user_id, fidelite_actif, fidelite_sms_actif, fidelite_sms_credits')
       .eq('id', commercant_id)
       .maybeSingle()
     if (!com) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
@@ -95,7 +96,11 @@ export async function POST(request) {
         console.error('[fidelite/comptoir] insert carte KO', error)
         return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
       }
-      return NextResponse.json({ ok: true, telephone: tel, carte: nouvelle, client })
+      // SMS de bienvenue avec le lien de sa carte : sans lui, le client
+      // repart du comptoir sans trace de sa carte. Best-effort.
+      let sms = null
+      try { sms = await smsCarteCreee(admin, com, nouvelle) } catch { /* non bloquant */ }
+      return NextResponse.json({ ok: true, telephone: tel, carte: nouvelle, client, sms })
     }
 
     return NextResponse.json({ ok: false, error: 'action inconnue' }, { status: 400 })

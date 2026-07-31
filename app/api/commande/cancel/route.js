@@ -19,6 +19,7 @@ import { stripe, requireStripe } from '@/lib/stripe'
 import { envoyerAuCommercant, emailCommandeAnnuleeYopper, emailCommandeAnnuleeCommercant } from '@/lib/resend'
 import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
+import { recrediterBon } from '@/lib/bons-cadeaux-server'
 
 export async function POST(request) {
   try {
@@ -45,6 +46,7 @@ export async function POST(request) {
       id, statut, paye_en_ligne, total, stripe_payment_intent_id,
       client_email, client_nom, annulation_token, created_at, commercant_id,
       numero_commande, date_commande, creneau_id, rappel_push_id,
+      bon_cadeau_id, bon_cadeau_montant,
       commercants:commercant_id (id, nom, slug, stripe_account_id, delai_annulation_heures),
       creneau:creneaux!creneau_id (heure_debut)
     `
@@ -162,6 +164,15 @@ export async function POST(request) {
     if (errUpd) {
       console.error('[commande/cancel] UPDATE statut KO', errUpd)
       return NextResponse.json({ ok: false, error: 'Erreur mise à jour commande.' }, { status: 500 })
+    }
+
+    // Bon cadeau utilisé sur la commande : la part payée par le bon revient
+    // SUR le bon (le refund Stripe ne couvre que la part carte). Idempotent
+    // via l'index unique source='annulation' — le webhook charge.refunded
+    // fait le même appel en backup, un seul des deux passe.
+    if (cmd.bon_cadeau_id && Number(cmd.bon_cadeau_montant) > 0) {
+      const rec = await recrediterBon(supabase, cmd.bon_cadeau_id, cmd.bon_cadeau_montant, cmd.id)
+      if (!rec.ok) console.error('[commande/cancel] re-crédit bon cadeau KO', rec.error, { commande_id: cmd.id })
     }
 
     // Annule le rappel push programmé (30 min avant retrait) s'il existe :

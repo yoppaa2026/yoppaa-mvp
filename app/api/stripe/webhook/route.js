@@ -24,6 +24,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant } from '@/lib/resend'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
+import { debiterBon, recrediterBon } from '@/lib/bons-cadeaux-server'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { programmerRappelRdv } from '@/lib/rappels'
 
@@ -327,7 +328,7 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
   // ET paye_en_ligne déjà true), on skip.
   const { data: existing } = await supabase
     .from('commandes')
-    .select('id, statut, paye_en_ligne, commercant_id')
+    .select('id, statut, paye_en_ligne, commercant_id, bon_cadeau_id, bon_cadeau_montant')
     .eq('id', commandeId)
     .maybeSingle()
   if (!existing) {
@@ -369,6 +370,17 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
     }
   } catch (e) {
     console.error('[webhook/commande] list session_id KO (non-bloquant)', e?.message)
+  }
+
+  // Bon cadeau utilisé sur la commande : débit du solde MAINTENANT (le
+  // paiement du reste est confirmé). Idempotent via l'index unique
+  // (bon_id, commande_id) : un webhook rejoué ne débite pas deux fois.
+  if (existing.bon_cadeau_id && Number(existing.bon_cadeau_montant) > 0) {
+    const deb = await debiterBon(supabase, existing.bon_cadeau_id, existing.bon_cadeau_montant, {
+      source: 'commande',
+      commande_id: commandeId,
+    })
+    if (!deb.ok) console.error('[webhook/commande] débit bon cadeau KO', deb.error, { commandeId })
   }
 
   // Libération des réservations stock : la commande EST désormais le stock
@@ -464,7 +476,7 @@ async function handleChargeRefunded(charge, supabase) {
   // Sinon update commande si trouvée + transition statut → 'annulee_client_refund'
   const { data: cmd } = await supabase
     .from('commandes')
-    .select('id, statut')
+    .select('id, statut, bon_cadeau_id, bon_cadeau_montant')
     .eq('stripe_payment_intent_id', paymentIntentId)
     .maybeSingle()
   if (cmd) {
@@ -476,6 +488,14 @@ async function handleChargeRefunded(charge, supabase) {
       updates.statut = 'annulee_client_refund'
     }
     await supabase.from('commandes').update(updates).eq('id', cmd.id)
+    // Refund total d'une commande partiellement payée par bon cadeau : le
+    // Stripe ne rembourse que la part carte, la part bon revient SUR le bon.
+    // Idempotent (index unique source='annulation'), déjà fait si la route
+    // /api/commande/cancel est passée avant ce webhook.
+    if (isRefundTotal && cmd.bon_cadeau_id && Number(cmd.bon_cadeau_montant) > 0) {
+      const rec = await recrediterBon(supabase, cmd.bon_cadeau_id, cmd.bon_cadeau_montant, cmd.id)
+      if (!rec.ok) console.error('[webhook/refund] re-crédit bon cadeau KO', rec.error, { cmdId: cmd.id })
+    }
     console.info('[stripe/webhook] refund enregistré sur commande', {
       cmdId: cmd.id, refund: refund.id, isRefundTotal, newStatut: updates.statut || cmd.statut,
     })

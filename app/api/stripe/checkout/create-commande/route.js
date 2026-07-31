@@ -34,6 +34,8 @@ import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadat
 import { geocoderAdresse } from '@/lib/geocode'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
+import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
+import { chargerBonValide, debiterBon } from '@/lib/bons-cadeaux-server'
 
 export async function POST(request) {
   try {
@@ -50,7 +52,7 @@ export async function POST(request) {
       client_email, client_prenom, client_nom, client_telephone,
       rgpd_marketing,
       mode_retrait, creneau_livraison_id, adresse_livraison, code_postal_livraison,
-      paiement_mode,
+      paiement_mode, bon_cadeau_code,
     } = body
     const estLivraison = mode_retrait === 'livraison'
     // Boutique détail (Module 2 étape 5) : pas de créneau. Retrait en boutique
@@ -347,6 +349,30 @@ export async function POST(request) {
     }
     const fraisLivraisonEUR = fraisLivraisonCents / 100
 
+    // ─── 4.5) Bon cadeau (module 3) : revalidation server-side du code ─────
+    // La remise couvre articles + frais, plafonnée au solde du bon ET pour
+    // laisser un reste à payer de 0 ou >= 0,50 € (minimum Stripe). Le DÉBIT
+    // du bon n'a lieu qu'à la confirmation (sur place / dû 0 : tout de suite,
+    // en ligne : au webhook paiement OK) — un checkout abandonné ne brûle rien.
+    let bonCadeau = null
+    let remiseBonEUR = 0
+    if (bon_cadeau_code) {
+      const codeBon = normaliserCodeBon(bon_cadeau_code)
+      if (!codeBon) {
+        return NextResponse.json({ ok: false, error: 'Code de bon cadeau invalide.' }, { status: 400 })
+      }
+      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id })
+      if (!resBon.ok) {
+        return NextResponse.json({ ok: false, error: resBon.error }, { status: 400 })
+      }
+      bonCadeau = resBon.bon
+      remiseBonEUR = calculerRemiseBon(bonCadeau.solde, totalEUR + fraisLivraisonEUR)
+    }
+    const duEUR = Math.round((totalEUR + fraisLivraisonEUR - remiseBonEUR) * 100) / 100
+    const duCents = Math.round(duEUR * 100)
+    // Dû entièrement couvert par le bon : confirmation directe, pas de Stripe.
+    const couvertParBon = !!bonCadeau && duCents === 0
+
     // ─── 5) Vérif stock atomic : commandes payées du jour + réservations actives ──
     // Stock disponible = stock_jour - (qte des commandes du jour non annulées)
     //                              - (qte des réservations non expirées)
@@ -441,6 +467,8 @@ export async function POST(request) {
         rgpd_commande: true,
         rgpd_marketing: !!rgpd_marketing,
         total: totalEUR + fraisLivraisonEUR,
+        bon_cadeau_id: bonCadeau?.id || null,
+        bon_cadeau_montant: remiseBonEUR,
         statut: 'paiement_en_attente',
         date_commande,
         paye_en_ligne: false,
@@ -521,14 +549,31 @@ export async function POST(request) {
 
     // ─── 8) Réservations stock : déjà posées atomiquement à l'étape 6.5 ─────
 
-    // ─── 8.5) PAIEMENT SUR PLACE : confirmation immédiate, pas de Stripe ────
-    // Miroir exact du webhook paiement OK : bascule en_attente (paye_en_ligne
-    // reste false), libération de la réservation TTL (la commande EST le stock
+    // ─── 8.4) BON CADEAU : débit immédiat quand la commande se confirme SANS
+    // Stripe (paiement sur place ou dû entièrement couvert par le bon). Le
+    // chemin Stripe, lui, débite au webhook paiement OK. Une course (bon vidé
+    // entre la vérification et ici) annule proprement la commande.
+    if (bonCadeau && remiseBonEUR > 0 && (surPlace || couvertParBon)) {
+      const deb = await debiterBon(supabase, bonCadeau.id, remiseBonEUR, { source: 'commande', commande_id: commande.id })
+      if (!deb.ok) {
+        await supabase.from('commandes').update({ statut: 'annulee_paiement_ko' }).eq('id', commande.id)
+        await supabase.from('commande_stock_reservation').delete().eq('commande_id', commande.id)
+        console.error('[create-commande] débit bon cadeau KO', deb.error)
+        return NextResponse.json({ ok: false, error: 'Ce bon cadeau vient d\'être utilisé, vérifie son solde et réessaie.' }, { status: 409 })
+      }
+    }
+
+    // ─── 8.5) PAIEMENT SUR PLACE ou DÛ 0 (bon cadeau) : confirmation
+    // immédiate, pas de Stripe. Miroir exact du webhook paiement OK : bascule
+    // en_attente, libération de la réservation TTL (la commande EST le stock
     // consommé), puis emails + rappel push via lib/commande-notifs.
-    if (surPlace) {
+    if (surPlace || couvertParBon) {
       const { error: errConfirm } = await supabase
         .from('commandes')
-        .update({ statut: 'en_attente' })
+        .update(couvertParBon && !surPlace
+          // Payé intégralement par le bon : équivalent d'un paiement en ligne
+          ? { statut: 'en_attente', paye_en_ligne: true, paye_en_ligne_date: new Date().toISOString() }
+          : { statut: 'en_attente' })
         .eq('id', commande.id)
       if (errConfirm) {
         await supabase.from('commandes').delete().eq('id', commande.id)
@@ -541,7 +586,7 @@ export async function POST(request) {
       } catch (e) {
         console.error('[create-commande] notifs sur place KO (non bloquant)', e?.message)
       }
-      return NextResponse.json({ ok: true, cash: true, commande_id: commande.id })
+      return NextResponse.json({ ok: true, cash: surPlace, bon_total: couvertParBon && !surPlace, commande_id: commande.id })
     }
 
     // ─── 9) Stripe Checkout Session (Direct Charge sur compte connecté) ────
@@ -557,7 +602,22 @@ export async function POST(request) {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card', 'bancontact'],
-      line_items: [
+      // Avec bon cadeau : une seule ligne au montant restant dû (Stripe ne
+      // gère pas de ligne négative en Checkout), la déduction est explicitée
+      // dans le descriptif. Sans bon : lignes commande + frais classiques.
+      line_items: remiseBonEUR > 0 ? [
+        {
+          quantity: 1,
+          price_data: {
+            currency: 'eur',
+            unit_amount: duCents,
+            product_data: {
+              name: `Commande Yoppaa · ${commercant.nom}`,
+              description: `${descCommande} · bon cadeau déduit (−${remiseBonEUR.toFixed(2)} €)`,
+            },
+          },
+        },
+      ] : [
         {
           quantity: 1,
           price_data: {

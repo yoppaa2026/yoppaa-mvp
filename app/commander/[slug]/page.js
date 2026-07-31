@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { canDo, isVitrine } from '@/lib/plans'
+import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau } from '@/lib/creneaux'
 import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
@@ -944,6 +945,14 @@ export default function CommanderSlug() {
   // Mode de paiement choisi (en_ligne | sur_place). null = défaut selon ce que
   // le commerçant propose : en ligne si Stripe actif, sinon sur place si accepté.
   const [modePaiement, setModePaiement] = useState(null)
+  // Bon cadeau (module 3) : config du commerçant + code appliqué au panier.
+  // La remise effective est recalculée à chaque rendu (le panier peut bouger),
+  // le serveur revalide tout (solde, plafond, minimum Stripe 0,50 €).
+  const [bonsCfg, setBonsCfg] = useState(null)
+  const [bonInput, setBonInput] = useState('')
+  const [bonApplique, setBonApplique] = useState(null)   // { code, solde }
+  const [bonErreur, setBonErreur] = useState(null)
+  const [bonLoading, setBonLoading] = useState(false)
   const [loadingCancel, setLoadingCancel] = useState(false)
   const [cancelResult, setCancelResult] = useState(null)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '' })
@@ -1822,6 +1831,36 @@ export default function CommanderSlug() {
     return Number(livraisonConfig.frais_fixe || 0)
   }
   function totalAvecFrais() { return totalPanier() + fraisLivraison() }
+  // Bon cadeau : config du commerçant (bouton Offrir + champ code du tunnel)
+  useEffect(() => {
+    if (!commercant?.id) return
+    fetch(`/api/bons-cadeaux/config?commercant_id=${commercant.id}`)
+      .then(r => r.json())
+      .then(j => { if (j?.ok) setBonsCfg(j) })
+      .catch(() => {})
+   
+  }, [commercant?.id])
+  // Bon cadeau appliqué : remise plafonnée (solde, total, minimum Stripe 0,50 €)
+  function remiseBonEffective() { return bonApplique ? calculerRemiseBon(bonApplique.solde, totalAvecFrais()) : 0 }
+  function totalDuApresBon() { return Math.max(0, Math.round((totalAvecFrais() - remiseBonEffective()) * 100) / 100) }
+
+  async function appliquerBon() {
+    const code = normaliserCodeBon(bonInput)
+    if (!code) { setBonErreur('Format attendu : BC-XXXX-XXXX'); return }
+    setBonLoading(true); setBonErreur(null)
+    try {
+      const r = await fetch('/api/bons-cadeaux/verifier', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commercant_id: commercant.id, code }),
+      })
+      const j = await r.json()
+      if (!r.ok || !j.ok) { setBonErreur(j.error || 'Vérification impossible.'); setBonApplique(null) }
+      else { setBonApplique({ code: j.code, solde: j.solde }); setBonInput('') }
+    } catch {
+      setBonErreur('Vérification impossible, réessaie.')
+    }
+    setBonLoading(false)
+  }
 
   // Change d'étape ET remonte en haut du conteneur scrollable. Centralisé pour une
   // UX fluide : sans ça, on arrive en bas de la nouvelle étape (scroll conservé).
@@ -1939,7 +1978,10 @@ export default function CommanderSlug() {
           stripeOK = stripeOK && p === 'en_ligne'
         }
       }
-      const modeEffectif = modePaiement || (stripeOK ? 'en_ligne' : cashOK ? 'sur_place' : null)
+      // Bon cadeau couvrant tout le dû : pas de choix de paiement à faire, le
+      // serveur confirme sans Stripe (chemin couvertParBon de create-commande).
+      const couvertParBon = !!bonApplique && totalDuApresBon() === 0
+      const modeEffectif = couvertParBon ? 'en_ligne' : (modePaiement || (stripeOK ? 'en_ligne' : cashOK ? 'sur_place' : null))
       if (!modeEffectif) {
         setErreurCommande('La commande en ligne n\'est pas encore disponible chez ce commerçant.')
         setLoadingCommande(false)
@@ -1959,6 +2001,7 @@ export default function CommanderSlug() {
           client_nom: client.nom,
           client_telephone: client.telephone,
           rgpd_marketing: rgpdMarketing,
+          ...(bonApplique ? { bon_cadeau_code: bonApplique.code } : {}),
           ...(estDetail
             ? {
                 mode_retrait: modeBoutiqueEff === 'expedition' ? 'expedition' : 'retrait_boutique',
@@ -1997,7 +2040,7 @@ export default function CommanderSlug() {
       // Paiement sur place : la commande est déjà confirmée côté serveur, pas de
       // Stripe. On rejoint le flux de confirmation standard (?paiement=ok) qui
       // affiche l'écran Yoppé + nettoie le panier localStorage.
-      if (data.cash) {
+      if (data.cash || data.bon_total) {
         window.location.href = `/commander/${commercant.slug}?paiement=ok&commande_id=${data.commande_id}`
         return
       }
@@ -3077,6 +3120,18 @@ export default function CommanderSlug() {
                     <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.82rem' }}>Total</span>
                     <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.1rem' }}>{totalAvecFrais().toFixed(2)}€</span>
                   </div>
+                  {bonApplique && remiseBonEffective() > 0 && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+                        <span style={{ fontWeight: 700, color: '#10B981', fontSize: '0.82rem' }}>Bon cadeau ({bonApplique.code})</span>
+                        <span style={{ fontWeight: 800, color: '#10B981', fontSize: '0.9rem' }}>−{remiseBonEffective().toFixed(2)}€</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                        <span style={{ fontWeight: 800, color: T.ink, fontSize: '0.82rem' }}>Reste à payer</span>
+                        <span style={{ fontWeight: 900, color: T.main, fontSize: '1.1rem' }}>{totalDuApresBon().toFixed(2)}€</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* ─── Boutique détail : retrait libre / expédition, pas de créneau ─── */}
@@ -3419,16 +3474,53 @@ export default function CommanderSlug() {
                     ? (!estExpe && commercant?.boutique_retrait_paiement === 'magasin')
                     : !!commercant?.accepte_paiement_cash
                   const surPlaceOu = modeCommande === 'livraison' ? 'au livreur' : estDetail ? 'au comptoir, au retrait' : 'au retrait'
-                  const modeEffectif = modePaiement || (stripeOK ? 'en_ligne' : cashOK ? 'sur_place' : null)
-                  const surPlace = modeEffectif === 'sur_place'
+                  // Bon cadeau couvrant tout : plus rien à payer, pas de choix de mode
+                  const couvert = !!bonApplique && totalDuApresBon() === 0
+                  const modeEffectif = couvert ? 'en_ligne' : (modePaiement || (stripeOK ? 'en_ligne' : cashOK ? 'sur_place' : null))
+                  const surPlace = !couvert && modeEffectif === 'sur_place'
                   return (
                     <>
-                      {estExpe && stripeOK && (
+                      {/* Bon cadeau : champ code (si le commerçant a activé le module) */}
+                      {bonsCfg?.actif && !bonApplique && (
+                        <div style={{ background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 10 }}>
+                          <p style={{ fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px' }}>J&rsquo;ai un bon cadeau</p>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <input value={bonInput} onChange={e => { setBonInput(e.target.value); setBonErreur(null) }}
+                              placeholder="BC-XXXX-XXXX" autoCapitalize="characters" spellCheck={false}
+                              style={{ ...inputSt, marginBottom: 0, flex: 1, fontFamily: 'monospace', letterSpacing: '1px' }}/>
+                            <button type="button" onClick={appliquerBon} disabled={bonLoading || !bonInput.trim()}
+                              style={{ flexShrink: 0, padding: '0 16px', borderRadius: 12, border: 'none', background: bonInput.trim() ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#E5E7EB', color: bonInput.trim() ? '#fff' : '#9CA3AF', fontWeight: 800, fontSize: '0.82rem', cursor: bonInput.trim() ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif' }}>
+                              {bonLoading ? '…' : 'Appliquer'}
+                            </button>
+                          </div>
+                          {bonErreur && <p style={{ fontSize: '0.74rem', color: '#DC2626', fontWeight: 700, margin: '6px 0 0' }}>{bonErreur}</p>}
+                        </div>
+                      )}
+                      {bonApplique && (
+                        <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 14, padding: '10px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                          <div style={{ minWidth: 0 }}>
+                            <p style={{ fontSize: '0.82rem', fontWeight: 800, color: '#065F46', margin: 0 }}>
+                              Bon cadeau appliqué : −{remiseBonEffective().toFixed(2)}€
+                            </p>
+                            <p style={{ fontSize: '0.72rem', color: '#047857', fontWeight: 600, margin: '2px 0 0' }}>
+                              {couvert
+                                ? 'Ta commande est entièrement couverte 🟣'
+                                : `Reste à payer : ${totalDuApresBon().toFixed(2)}€`}
+                              {remiseBonEffective() < Number(bonApplique.solde) && ` · il restera ${(Number(bonApplique.solde) - remiseBonEffective()).toFixed(2)}€ sur ton bon`}
+                            </p>
+                          </div>
+                          <button type="button" onClick={() => { setBonApplique(null); setBonErreur(null) }}
+                            style={{ flexShrink: 0, border: 'none', background: 'transparent', color: '#047857', fontWeight: 800, fontSize: '0.74rem', cursor: 'pointer', textDecoration: 'underline', fontFamily: '"DM Sans", sans-serif' }}>
+                            Retirer
+                          </button>
+                        </div>
+                      )}
+                      {!couvert && estExpe && stripeOK && (
                         <p style={{ fontSize: '0.78rem', color: '#1A0840', background: '#F8F6FF', border: '1px solid #EDE0FF', borderRadius: 12, padding: '10px 14px', marginBottom: 10, fontWeight: 600, lineHeight: 1.5 }}>
                           Paiement <strong>en ligne</strong> (carte ou Bancontact) : ton colis part une fois la commande payée.
                         </p>
                       )}
-                      {stripeOK && cashOK && (
+                      {!couvert && stripeOK && cashOK && (
                         <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                           {[
                             { val: 'en_ligne', label: 'Payer en ligne', sous: 'Carte ou Bancontact' },
@@ -3445,21 +3537,21 @@ export default function CommanderSlug() {
                           })}
                         </div>
                       )}
-                      {!stripeOK && cashOK && (
+                      {!couvert && !stripeOK && cashOK && (
                         <p style={{ fontSize: '0.78rem', color: '#1A0840', background: '#F8F6FF', border: '1px solid #EDE0FF', borderRadius: 12, padding: '10px 14px', marginBottom: 10, fontWeight: 600, lineHeight: 1.5 }}>
                           Tu paies <strong>sur place</strong> ({surPlaceOu}), en espèces ou par carte. Ta commande est confirmée immédiatement.
                         </p>
                       )}
-                      {!stripeOK && !cashOK && (
+                      {!couvert && !stripeOK && !cashOK && (
                         <p style={{ fontSize: '0.78rem', color: '#DC2626', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 12, padding: '10px 14px', marginBottom: 10, fontWeight: 700, lineHeight: 1.5 }}>
                           La commande en ligne n&rsquo;est pas encore disponible chez ce commerçant.
                         </p>
                       )}
                       <button onClick={passerCommande} disabled={loadingCommande || !formValide || !modeEffectif}
                         style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (!formValide || !modeEffectif) ? 0.45 : 1, cursor: (!formValide || !modeEffectif) ? 'default' : 'pointer' }}>
-                        {loadingCommande ? (surPlace ? 'Confirmation…' : 'Redirection…') : (
+                        {loadingCommande ? ((surPlace || couvert) ? 'Confirmation…' : 'Redirection…') : (
                           <>
-                            {surPlace ? 'Confirmer' : 'Payer & confirmer'} - {totalAvecFrais().toFixed(2)}€
+                            {(surPlace || couvert) ? 'Confirmer' : 'Payer & confirmer'} - {totalDuApresBon().toFixed(2)}€
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
                           </>
                         )}

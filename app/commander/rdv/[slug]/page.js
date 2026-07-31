@@ -21,6 +21,7 @@ import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import HorairesSection from '../../HorairesSection'
 import CarteFideliteFiche from '../../CarteFideliteFiche'
+import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Lock, Flame, Star, Phone, Calendar } from 'lucide-react'
 
@@ -1241,20 +1242,13 @@ export default function CommanderRdvSlug() {
                   </div>
                 </div>
 
-                {/* Horaire today (dot vert si ouvert, gris si fermé) */}
-                {commercant.horaires_detail && (() => {
-                  const j = jourActuel()
-                  const h = commercant.horaires_detail[j]
-                  if (!h) return null
-                  return (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: h.ouvert ? '#F0FDF4' : '#FEF2F2', borderRadius: 100, padding: '3px 9px', border: `1px solid ${h.ouvert ? '#10B98133' : '#DC262633'}`, marginTop: 10 }}>
-                      <span style={{ width: h.ouvert ? 9 : 7, height: h.ouvert ? 9 : 7, borderRadius: '50%', background: h.ouvert ? '#10B981' : '#DC2626', flexShrink: 0 }}/>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 800, color: h.ouvert ? '#10B981' : '#DC2626' }}>
-                        {h.ouvert ? `Ouvert · ${h.debut.slice(0,5)}–${h.fin.slice(0,5)}${h.debut2 && h.fin2 ? ` · ${h.debut2.slice(0,5)}–${h.fin2.slice(0,5)}` : ''}` : 'Fermé aujourd\'hui'}
-                      </span>
-                    </div>
-                  )
-                })()}
+                {/* Statut d'ouverture en TEMPS RÉEL (même logique que les cards
+                    d'accueil) : Ouvert/Ferme à X, Ouvre/Ferme bientôt, pauses */}
+                {commercant.horaires_detail && (
+                  <div style={{ marginTop: 10 }}>
+                    <PillStatutOuverture horaires={commercant.horaires_detail}/>
+                  </div>
+                )}
 
                 {commercant.description && (
                   <p style={{ fontSize: '0.85rem', color: T.deep, lineHeight: 1.55, margin: '12px 0 0' }}>{commercant.description}</p>

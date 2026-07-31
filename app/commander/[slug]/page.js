@@ -9,6 +9,7 @@ import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import PillsStatut from '../PillsStatut'
 import CarteFideliteFiche from '../CarteFideliteFiche'
+import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 import CTAUpgrade from '../CTAUpgrade'
 import ModalSignalement from '../ModalSignalement'
 import HorairesSection from '../HorairesSection'
@@ -340,7 +341,9 @@ function VariantesSelector({ article, variantes, onAjouter }) {
             <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#DC2626', background: '#FEE2E2', padding: '3px 10px', borderRadius: 100 }}>Épuisé</span>
           ) : (varianteChoisie.stock || 0) <= 3 ? (
             <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#B45309', background: '#FFFBEB', padding: '3px 10px', borderRadius: 100 }}>Plus que {varianteChoisie.stock}</span>
-          ) : null}
+          ) : (
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#10B981', background: '#F0FDF4', padding: '3px 10px', borderRadius: 100 }}>En stock</span>
+          )}
         </div>
       )}
       <button onClick={() => pret && onAjouter(article, varianteChoisie)} disabled={!pret}
@@ -352,7 +355,7 @@ function VariantesSelector({ article, variantes, onAjouter }) {
 }
 
 // ─── RecapPanier - FIX STOCK : prop getStockMax, bouton + bloqué ──────────────
-function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockMax }) {
+function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockMax, labelValider = 'Choisir mon créneau', noteSousTotal = null }) {
   const items = Object.entries(panier)
   if (items.length === 0) return null
   function labelOptions(options) {
@@ -415,13 +418,16 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
         })}
       </div>
       <div style={{ padding: '1rem 1.25rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: noteSousTotal ? 4 : 12 }}>
           <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.875rem' }}>Total commande</span>
           <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.25rem', letterSpacing: '-0.5px' }}>{total.toFixed(2)}€</span>
         </div>
+        {noteSousTotal && (
+          <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, margin: '0 0 12px' }}>{noteSousTotal}</p>
+        )}
         <button onClick={onValider}
           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }}>
-          Choisir mon créneau
+          {labelValider}
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14"/>
             <path d="M12 5l7 7-7 7"/>
@@ -2703,19 +2709,11 @@ export default function CommanderSlug() {
                         {notesInfo.count > 0 ? `· ${notesInfo.count} avis` : '· Pas encore d\'avis'}
                       </span>
                     </div>
-                    {commercant.horaires_detail && (() => {
-                      const j = jourActuel()
-                      const h = commercant.horaires_detail[j]
-                      if (!h) return null
-                      return (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: h.ouvert ? '#F0FDF4' : '#FEF2F2', borderRadius: 100, padding: '3px 9px', border: `1px solid ${h.ouvert ? '#10B98133' : '#DC262633'}` }}>
-                          <span style={{ width: h.ouvert ? 9 : 7, height: h.ouvert ? 9 : 7, borderRadius: '50%', background: h.ouvert ? '#10B981' : '#DC2626', flexShrink: 0 }}/>
-                          <span style={{ fontSize: '0.7rem', fontWeight: 800, color: h.ouvert ? '#10B981' : '#DC2626' }}>
-                            {h.ouvert ? `Ouvert · ${h.debut.slice(0,5)}–${h.fin.slice(0,5)}${h.debut2 && h.fin2 ? ` · ${h.debut2.slice(0,5)}–${h.fin2.slice(0,5)}` : ''}` : 'Fermé'}
-                          </span>
-                        </div>
-                      )
-                    })()}
+                    {/* Statut d'ouverture en TEMPS RÉEL (même logique que les cards
+                        d'accueil) : Ouvert/Ferme à X, Ouvre/Ferme bientôt, pauses */}
+                    {commercant.horaires_detail && (
+                      <PillStatutOuverture horaires={commercant.horaires_detail}/>
+                    )}
                   </div>
 
                   {commercant.description && (
@@ -3041,6 +3039,20 @@ export default function CommanderSlug() {
                       total={totalPanier()}
                       onValider={() => allerEtape(3)}
                       getStockMax={getStockMax}
+                      labelValider={estDetail
+                        ? (boutiqueModes.length > 1
+                            ? 'Continuer : retrait ou expédition'
+                            : boutiqueModes[0] === 'expedition' ? 'Continuer vers l’expédition' : 'Continuer vers le retrait')
+                        : 'Choisir mon créneau'}
+                      noteSousTotal={(() => {
+                        // Upsell port offert (boutique expédition) : montant restant
+                        if (!estDetail || !boutiqueModes.includes('expedition')) return null
+                        const seuil = Number(commercant?.boutique_gratuit_des || 0)
+                        if (!seuil) return null
+                        const restant = seuil - totalPanier()
+                        if (restant <= 0) return 'Frais de port offerts sur l’expédition 🟣'
+                        return `Plus que ${restant.toFixed(2)}€ pour l’expédition offerte`
+                      })()}
                     />
                   </div>
                 )}
@@ -3480,19 +3492,30 @@ export default function CommanderSlug() {
                 )}
 
                 {(() => {
-                  // Modes de paiement proposés par le commerçant (vue publique) :
-                  // en ligne (Stripe actif) et/ou sur place (accepte_paiement_cash).
+                  // Modes de paiement proposés. Deux mondes :
+                  //  • alimentaire : en ligne (Stripe) et/ou sur place (accepte_paiement_cash)
+                  //  • boutique détail : expédition = TOUJOURS en ligne ; retrait =
+                  //    selon boutique_retrait_paiement (en_ligne obligatoire OU comptoir)
                   const stripeOK = !!commercant?.stripe_account_charges_enabled
-                  const cashOK = !!commercant?.accepte_paiement_cash
+                  const estExpe = estDetail && modeBoutiqueEff === 'expedition'
+                  const cashOK = estDetail
+                    ? (!estExpe && commercant?.boutique_retrait_paiement === 'magasin')
+                    : !!commercant?.accepte_paiement_cash
+                  const surPlaceOu = modeCommande === 'livraison' ? 'au livreur' : estDetail ? 'au comptoir, au retrait' : 'au retrait'
                   const modeEffectif = modePaiement || (stripeOK ? 'en_ligne' : cashOK ? 'sur_place' : null)
                   const surPlace = modeEffectif === 'sur_place'
                   return (
                     <>
+                      {estExpe && stripeOK && (
+                        <p style={{ fontSize: '0.78rem', color: '#1A0840', background: '#F8F6FF', border: '1px solid #EDE0FF', borderRadius: 12, padding: '10px 14px', marginBottom: 10, fontWeight: 600, lineHeight: 1.5 }}>
+                          Paiement <strong>en ligne</strong> (carte ou Bancontact) : ton colis part une fois la commande payée.
+                        </p>
+                      )}
                       {stripeOK && cashOK && (
                         <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                           {[
                             { val: 'en_ligne', label: 'Payer en ligne', sous: 'Carte ou Bancontact' },
-                            { val: 'sur_place', label: 'Payer sur place', sous: `Au ${modeCommande === 'livraison' ? 'livreur' : 'retrait'}, espèces ou carte` },
+                            { val: 'sur_place', label: 'Payer sur place', sous: `${surPlaceOu.charAt(0).toUpperCase()}${surPlaceOu.slice(1)}, espèces ou carte` },
                           ].map(opt => {
                             const sel = modeEffectif === opt.val
                             return (
@@ -3507,7 +3530,7 @@ export default function CommanderSlug() {
                       )}
                       {!stripeOK && cashOK && (
                         <p style={{ fontSize: '0.78rem', color: '#1A0840', background: '#F8F6FF', border: '1px solid #EDE0FF', borderRadius: 12, padding: '10px 14px', marginBottom: 10, fontWeight: 600, lineHeight: 1.5 }}>
-                          Tu paies <strong>sur place</strong> ({modeCommande === 'livraison' ? 'au livreur' : 'au retrait'}), en espèces ou par carte. Ta commande est confirmée immédiatement.
+                          Tu paies <strong>sur place</strong> ({surPlaceOu}), en espèces ou par carte. Ta commande est confirmée immédiatement.
                         </p>
                       )}
                       {!stripeOK && !cashOK && (

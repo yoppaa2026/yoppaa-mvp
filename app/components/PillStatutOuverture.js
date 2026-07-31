@@ -63,9 +63,12 @@ export function calculerStatutOuverture(horaires, now) {
   const minNow = getMinutesBrussels(now)
   const creneauxAuj = getCreneauxJour(horaires[jour])
 
-  // 1) Dans un créneau → OUVERT
+  // 1) Dans un créneau → OUVERT (ou « Ferme bientôt » à moins de 30 min)
   for (const [d, f] of creneauxAuj) {
     if (minNow >= parseHHMM(d) && minNow < parseHHMM(f)) {
+      if (parseHHMM(f) - minNow <= 30) {
+        return { etat: 'pause', label: 'Ferme bientôt', sousTitre: `à ${f}` }
+      }
       return { etat: 'ouvert', label: 'Ouvert', sousTitre: `Ferme à ${f}` }
     }
   }
@@ -75,8 +78,11 @@ export function calculerStatutOuverture(horaires, now) {
       return { etat: 'pause', label: 'En pause', sousTitre: `Réouvre à ${creneauxAuj[i+1][0]}` }
     }
   }
-  // 3) Avant l'ouverture du jour
+  // 3) Avant l'ouverture du jour (« Ouvre bientôt » à moins de 30 min)
   if (creneauxAuj.length > 0 && minNow < parseHHMM(creneauxAuj[0][0])) {
+    if (parseHHMM(creneauxAuj[0][0]) - minNow <= 30) {
+      return { etat: 'pause', label: 'Ouvre bientôt', sousTitre: `à ${creneauxAuj[0][0]}` }
+    }
     return { etat: 'ferme', label: 'Fermé', sousTitre: `Ouvre aujourd'hui à ${creneauxAuj[0][0]}` }
   }
   // 4) Fermé maintenant : on cherche le prochain jour ouvert

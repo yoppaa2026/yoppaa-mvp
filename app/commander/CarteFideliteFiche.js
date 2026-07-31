@@ -51,17 +51,20 @@ export default function CarteFideliteFiche({ commercant, carte }) {
               <div style={{ height: '100%', width: `${Math.min(100, Math.round((Number(carte.cagnotte) / seuilC) * 100))}%`, borderRadius: 100, background: recompense ? '#10B981' : `linear-gradient(90deg, ${T.main}, ${T.mid})` }}/>
             </div>
           )}
-          <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: recompense ? '#059669' : T.deep }}>
+          <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: recompense ? '#059669' : T.deep, lineHeight: 1.5 }}>
             {recompense
-              ? `Récompense débloquée : ${libelle} 🟣`
+              ? `Bravo, ta récompense est débloquée : ${libelle} 🟣`
               : estCagnotte
-                ? `Ta cagnotte : ${Number(carte.cagnotte).toFixed(2).replace('.', ',')}€ sur ${seuilC.toFixed(2).replace('.', ',')}€ → ${libelle}`
-                : `${carte.passages}/${seuilP} passages → ${libelle}`}
+                ? `Ta cagnotte : ${Number(carte.cagnotte).toFixed(2).replace('.', ',')}€. Encore ${Math.max(0, seuilC - Number(carte.cagnotte)).toFixed(2).replace('.', ',')}€ de cagnotte et tu débloques : ${libelle}`
+                : `${carte.passages} passage${carte.passages > 1 ? 's' : ''} sur ${seuilP}. Encore ${Math.max(0, seuilP - carte.passages)} et tu débloques : ${libelle}`}
           </p>
         </>
       ) : (
         <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: T.deep, lineHeight: 1.5 }}>
-          Ta fidélité est récompensée ici : {estCagnotte ? `${Number(commercant.fidelite_taux_cagnotte || 5)}% de tes achats en cagnotte, puis ` : `${seuilP} passages et `}{libelle}. Ta carte se remplit toute seule à chaque commande 🟣
+          {estCagnotte
+            ? `Gagne ${Number(commercant.fidelite_taux_cagnotte || 5)}% de chaque achat dans ta cagnotte. Dès qu'elle atteint ${seuilC.toFixed(2).replace('.', ',')}€, tu reçois : ${libelle}.`
+            : `Après ${seuilP} passages, tu reçois : ${libelle}.`}
+          {' '}Ta carte se remplit toute seule à chaque commande 🟣
         </p>
       )}
     </div>

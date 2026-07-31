@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { canDo, getIaConfig } from '@/lib/plans'
+import { normaliserCodeBon } from '@/lib/bons-cadeaux'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
@@ -161,6 +162,7 @@ function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 2 }) {
     user:      <><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 016-6h4a6 6 0 016 6v1"/></>,
     sparkles:  <><path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7L12 3z"/><path d="M18.5 14l.85 2.15L21.5 17l-2.15.85L18.5 20l-.85-2.15L15.5 17l2.15-.85L18.5 14z"/></>,
     heart:     <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/>,
+    gift:      <><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></>,
   }
   return <svg {...props} style={{ flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}>{paths[name]}</svg>
 }
@@ -4709,6 +4711,205 @@ const SIGN_TYPE_ICON = {
   autre:     MessageCircle,
 }
 
+// ─── Onglet BONS CADEAUX (module 3, 31/07) ──────────────────────────────────
+// Config (toggle + validité réglable) + pointage COMPTOIR (code → solde →
+// débit d'un montant) + derniers bons vendus. Le commerçant ne voit que SES
+// bons (RLS ownership) ; l'achat et l'activation passent par les API
+// service_role (Stripe Checkout + webhook).
+function TabBonsCadeaux({ commercantId, commercant, toast, onSaved }) {
+  const [actif, setActif] = useState(!!commercant?.bons_cadeaux_actif)
+  const [validite, setValidite] = useState(String(commercant?.bons_cadeaux_validite_mois || 12))
+  const [savingCfg, setSavingCfg] = useState(false)
+  // Pointage comptoir
+  const [codeInput, setCodeInput] = useState('')
+  const [bon, setBon] = useState(null)
+  const [chercheErr, setChercheErr] = useState(null)
+  const [chercheLoading, setChercheLoading] = useState(false)
+  const [montantDebit, setMontantDebit] = useState('')
+  const [debitLoading, setDebitLoading] = useState(false)
+  // Derniers bons vendus
+  const [bons, setBons] = useState([])
+
+  const fetchBons = useCallback(async () => {
+    const { data } = await supabase
+      .from('bons_cadeaux')
+      .select('id, code, montant_initial, solde, statut, expires_at, created_at, destinataire_mode')
+      .eq('commercant_id', commercantId)
+      .eq('statut', 'actif')
+      .order('created_at', { ascending: false })
+      .limit(12)
+    setBons(data || [])
+  }, [commercantId])
+  useEffect(() => { fetchBons() }, [fetchBons])
+
+  async function saveCfg() {
+    const mois = Math.min(60, Math.max(3, parseInt(validite) || 12))
+    setSavingCfg(true)
+    const { error } = await supabase
+      .from('commercants')
+      .update({ bons_cadeaux_actif: actif, bons_cadeaux_validite_mois: mois })
+      .eq('id', commercantId)
+    setSavingCfg(false)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    setValidite(String(mois))
+    toast(actif ? 'Bons cadeaux activés 🟣' : 'Bons cadeaux désactivés')
+    onSaved?.()
+  }
+
+  async function chercherBon() {
+    const code = normaliserCodeBon(codeInput)
+    if (!code) { setChercheErr('Format attendu : BC-XXXX-XXXX'); return }
+    setChercheLoading(true); setChercheErr(null); setBon(null)
+    const { data, error } = await supabase
+      .from('bons_cadeaux')
+      .select('id, code, montant_initial, solde, statut, expires_at, beneficiaire_prenom, acheteur_prenom, created_at')
+      .eq('commercant_id', commercantId)
+      .eq('code', code)
+      .maybeSingle()
+    setChercheLoading(false)
+    if (error) { setChercheErr('Recherche impossible, réessaie.'); return }
+    if (!data || data.statut !== 'actif') { setChercheErr('Aucun bon actif avec ce code chez toi.'); return }
+    if (data.expires_at && new Date(data.expires_at) < new Date()) { setChercheErr(`Ce bon a expiré le ${new Date(data.expires_at).toLocaleDateString('fr-BE')}.`); return }
+    setBon(data)
+    setMontantDebit('')
+  }
+
+  async function debiterComptoir() {
+    if (!bon) return
+    const m = Math.round((parseFloat(String(montantDebit).replace(',', '.')) || 0) * 100) / 100
+    if (!(m > 0)) { toast('Indique le montant de l\'achat à déduire', 'error'); return }
+    if (m > Number(bon.solde)) { toast(`Le solde du bon est de ${Number(bon.solde).toFixed(2)} €`, 'error'); return }
+    setDebitLoading(true)
+    // Mouvement d'abord (historique), puis solde — même pattern que la fidélité
+    const { error: errMvt } = await supabase
+      .from('bons_cadeaux_mouvements')
+      .insert({ bon_id: bon.id, montant: -m, source: 'comptoir' })
+    if (errMvt) { setDebitLoading(false); toast(`Erreur : ${errMvt.message}`, 'error'); return }
+    const nouveauSolde = Math.max(0, Math.round((Number(bon.solde) - m) * 100) / 100)
+    const { error: errUp } = await supabase
+      .from('bons_cadeaux')
+      .update({ solde: nouveauSolde, updated_at: new Date().toISOString() })
+      .eq('id', bon.id)
+    setDebitLoading(false)
+    if (errUp) { toast(`Erreur : ${errUp.message}`, 'error'); return }
+    setBon(p => ({ ...p, solde: nouveauSolde }))
+    setMontantDebit('')
+    fetchBons()
+    toast(nouveauSolde > 0 ? `−${m.toFixed(2)} € · reste ${nouveauSolde.toFixed(2)} € sur le bon 🟣` : 'Bon entièrement utilisé 🟣')
+  }
+
+  const soldeBadge = (b) => {
+    const expire = b.expires_at && new Date(b.expires_at) < new Date()
+    if (expire) return { txt: 'Expiré', bg: '#F3F4F6', color: '#9CA3AF' }
+    if (Number(b.solde) <= 0) return { txt: 'Utilisé', bg: '#F3F4F6', color: '#6B7280' }
+    if (Number(b.solde) < Number(b.montant_initial)) return { txt: `Reste ${Number(b.solde).toFixed(2)} €`, bg: '#FFF7ED', color: '#EA580C' }
+    return { txt: `${Number(b.solde).toFixed(2)} €`, bg: '#F0FDF4', color: '#10B981' }
+  }
+
+  return (
+    <div>
+      {/* En-tête panel violet (pattern des autres onglets) */}
+      <div style={{ background: T.bgPanel, borderRadius: 14, padding: '18px 20px', marginBottom: 14, color: '#fff' }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>Bons cadeaux</p>
+        <h2 style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', margin: 0 }}>
+          Tes clients offrent ton commerce
+        </h2>
+        <p style={{ fontSize: 12, color: T.light, margin: '6px 0 0', lineHeight: 1.5, opacity: 0.9 }}>
+          Montant libre, payé en ligne, l&rsquo;argent arrive directement sur ton compte. Le bon s&rsquo;utilise en une ou plusieurs fois, en ligne ou au comptoir.
+        </p>
+      </div>
+
+      {/* Configuration */}
+      <div style={{ ...s.card, marginBottom: 14 }}>
+        <Toggle value={actif} onChange={setActif} label="Proposer les bons cadeaux sur ma fiche"/>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 12 }}>
+          <div style={{ flex: '0 0 140px' }}>
+            <label style={s.label}>Validité (mois)</label>
+            <Input type="number" min="3" max="60" value={validite} onChange={e => setValidite(e.target.value)}/>
+          </div>
+          <p style={{ fontSize: 10.5, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>12 mois par défaut. S&rsquo;applique aux bons vendus après l&rsquo;enregistrement.</p>
+        </div>
+        <button style={{ ...s.btn, ...s.btnPrimary, marginTop: 8 }} onClick={saveCfg} disabled={savingCfg}>
+          <Icon name="check" size={14}/> {savingCfg ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+      </div>
+
+      {/* Pointage comptoir */}
+      <div style={{ ...s.card, marginBottom: 14 }}>
+        <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 4px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Icon name="gift" size={15} color={T.main}/> Encaisser un bon au comptoir
+        </p>
+        <p style={{ fontSize: 11, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
+          Le client te montre son code (email ou page Yoppaa) : cherche-le, puis déduis le montant de son achat.
+        </p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Input value={codeInput} onChange={e => { setCodeInput(e.target.value); setChercheErr(null) }} placeholder="BC-XXXX-XXXX"
+            style={{ fontFamily: 'monospace', letterSpacing: '1px' }}/>
+          <button style={{ ...s.btn, ...s.btnPrimary, flexShrink: 0 }} onClick={chercherBon} disabled={chercheLoading || !codeInput.trim()}>
+            <Icon name="search" size={14}/> {chercheLoading ? '…' : 'Chercher'}
+          </button>
+        </div>
+        {chercheErr && <p style={{ fontSize: 11.5, color: '#DC2626', fontWeight: 700, margin: '8px 0 0' }}>{chercheErr}</p>}
+
+        {bon && (
+          <div style={{ marginTop: 12, background: '#FAF8FE', border: `1.5px solid ${T.pale}`, borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 900, color: T.ink, margin: 0, fontFamily: 'monospace', letterSpacing: '1px' }}>{bon.code}</p>
+                <p style={{ fontSize: 11, color: T.muted, margin: '2px 0 0' }}>
+                  {bon.beneficiaire_prenom || bon.acheteur_prenom ? `Pour ${bon.beneficiaire_prenom || bon.acheteur_prenom} · ` : ''}
+                  {bon.expires_at ? `valable jusqu'au ${new Date(bon.expires_at).toLocaleDateString('fr-BE')}` : ''}
+                </p>
+              </div>
+              <p style={{ fontSize: 18, fontWeight: 900, color: Number(bon.solde) > 0 ? '#10B981' : '#DC2626', margin: 0 }}>
+                {Number(bon.solde).toFixed(2)} €
+              </p>
+            </div>
+            {Number(bon.solde) > 0 && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+                <div style={{ flex: '0 0 130px' }}>
+                  <Input type="number" min="0.01" step="0.01" value={montantDebit} onChange={e => setMontantDebit(e.target.value)} placeholder="Montant (€)"/>
+                </div>
+                <button style={{ ...s.btn, ...s.btnPrimary, flexShrink: 0 }} onClick={debiterComptoir} disabled={debitLoading}>
+                  <Icon name="check" size={14}/> {debitLoading ? '…' : 'Déduire du bon'}
+                </button>
+                <button type="button" onClick={() => setMontantDebit(String(Number(bon.solde)))}
+                  style={{ border: 'none', background: 'none', color: T.main, fontWeight: 700, fontSize: 11, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit', flexShrink: 0 }}>
+                  Tout le solde
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Derniers bons vendus */}
+      <div style={s.card}>
+        <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 10px' }}>Derniers bons vendus</p>
+        {bons.length === 0 ? (
+          <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>
+            Aucun bon vendu pour le moment. Active le module ci-dessus : le bouton « Offrir un bon cadeau » apparaîtra sur ta fiche.
+          </p>
+        ) : bons.map(b => {
+          const badge = soldeBadge(b)
+          return (
+            <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${T.hairline}` }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: 12.5, fontWeight: 800, color: T.ink, margin: 0, fontFamily: 'monospace', letterSpacing: '0.5px' }}>{b.code}</p>
+                <p style={{ fontSize: 10.5, color: T.muted, margin: '1px 0 0' }}>
+                  {Number(b.montant_initial).toFixed(2)} € · {new Date(b.created_at).toLocaleDateString('fr-BE')}
+                  {b.destinataire_mode === 'offrir' ? ' · offert' : ''}
+                </p>
+              </div>
+              <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, color: badge.color, background: badge.bg, padding: '3px 9px', borderRadius: 100 }}>{badge.txt}</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ═════════════════════════════════════════════════════════════════════════
 // TAB RDV — Configuration vitrine (Prestations / Praticiens / Créneaux)
 // Visible uniquement pour les commerçants vitrine au plan "vendre" (rdv_actif).
@@ -6090,6 +6291,8 @@ export default function ConfigDashboard({ commercantId }) {
     peutRdv && { id: 'rdv', label: 'RDV', icon: 'clock' },
     // Fidélité : Communiquer (comptoir) et Vendre (comptoir + crédit auto)
     canDo(commercant?.plan, 'fidelite') && { id: 'fidelite', label: 'Fidélité', icon: 'heart' },
+    // Bons cadeaux : Vendre uniquement (l'achat passe par Stripe)
+    canDo(commercant?.plan, 'bons_cadeaux') && { id: 'bons', label: 'Bons cadeaux', icon: 'gift' },
     peutPaiements && { id: 'paiements', label: 'Paiements', icon: 'tag' },
     { id: 'profil',   label: 'Profil',   icon: 'shop' },
     { id: 'avis',     label: 'Avis',     icon: 'star' },
@@ -6124,6 +6327,7 @@ export default function ConfigDashboard({ commercantId }) {
       {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} toast={showToast} />}
       {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'fidelite' && canDo(commercant?.plan, 'fidelite') && <TabFidelite commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}
+      {tab === 'bons' && canDo(commercant?.plan, 'bons_cadeaux') && <TabBonsCadeaux commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}

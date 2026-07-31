@@ -21,6 +21,7 @@ import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import HorairesSection from '../../HorairesSection'
 import CarteFideliteFiche from '../../CarteFideliteFiche'
+import BonCadeauModal from '../../BonCadeauModal'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Lock, Flame, Star, Phone, Calendar } from 'lucide-react'
@@ -354,6 +355,9 @@ export default function CommanderRdvSlug() {
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   const [maCarteFid, setMaCarteFid] = useState(null)        // ma carte de fidélité chez ce commerçant
   const [produits, setProduits] = useState([])              // catalogue produits (aperçu → page boutique /commander/[slug])
+  const [bonsCfg, setBonsCfg] = useState(null)              // config bons cadeaux (bouton Offrir)
+  const [bonModalOuvert, setBonModalOuvert] = useState(false)
+  const [bonRetour, setBonRetour] = useState(null)          // 'ok' | 'annule' après retour Stripe achat de bon
   const [loading, setLoading] = useState(true)
   const [erreur, setErreur] = useState(null)
 
@@ -419,6 +423,29 @@ export default function CommanderRdvSlug() {
       .catch(() => {})
     return () => { vivant = false }
   }, [commercant?.id, commercant?.fidelite_actif])
+
+  // Bon cadeau : config du commerçant (bouton « Offrir un bon cadeau »)
+  useEffect(() => {
+    if (!commercant?.id) return
+    fetch(`/api/bons-cadeaux/config?commercant_id=${commercant.id}`)
+      .then(r => r.json())
+      .then(j => { if (j?.ok) setBonsCfg(j) })
+      .catch(() => {})
+   
+  }, [commercant?.id])
+
+  // Retour Stripe après achat d'un bon cadeau : ?bon=ok|annule → bandeau + URL nettoyée
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search).get('bon')
+      if (p === 'ok' || p === 'annule') {
+        setBonRetour(p)
+        const url = new URL(window.location.href)
+        url.searchParams.delete('bon')
+        window.history.replaceState({}, '', url.toString())
+      }
+    } catch { /* ignore */ }
+  }, [])
 
   // Change d'étape ET remonte en haut du conteneur scrollable (UX fluide).
   // Centralisé pour cohérence sur toutes les transitions du tunnel RDV.
@@ -1285,6 +1312,34 @@ export default function CommanderRdvSlug() {
                 {/* Carte de fidélité : ma jauge ou le teaser du programme */}
                 {etape === 1 && <CarteFideliteFiche commercant={commercant} carte={maCarteFid}/>}
 
+                {/* Retour d'achat d'un bon cadeau (Stripe success/cancel) */}
+                {etape === 1 && bonRetour && (
+                  <div style={{ marginTop: 12, background: bonRetour === 'ok' ? '#F0FDF4' : '#FFFBEB', border: `1.5px solid ${bonRetour === 'ok' ? '#86EFAC' : '#FCD34D'}`, borderRadius: 12, padding: '10px 14px' }}>
+                    <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: bonRetour === 'ok' ? '#065F46' : '#78350F', lineHeight: 1.5 }}>
+                      {bonRetour === 'ok'
+                        ? 'Ton bon cadeau est payé 🟣 Il arrive par email dans quelques instants (pense à vérifier les indésirables).'
+                        : 'Paiement annulé : aucun bon cadeau n\'a été débité.'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Offrir un bon cadeau (module actif chez ce commerçant) */}
+                {etape === 1 && bonsCfg?.actif && (
+                  <button onClick={() => setBonModalOuvert(true)}
+                    style={{ width: '100%', marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 16px', borderRadius: 14, border: `1.5px solid ${T.main}33`, background: `linear-gradient(135deg, ${T.pale}, #fff)`, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
+                      </svg>
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', color: T.ink }}>Offrir un bon cadeau</span>
+                        <span style={{ display: 'block', fontSize: '0.7rem', color: T.muted, fontWeight: 600, marginTop: 1 }}>Montant libre, envoyé par email, valable {bonsCfg.validite_mois} mois</span>
+                      </span>
+                    </span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 6l6 6-6 6"/></svg>
+                  </button>
+                )}
+
                 {/* Actions (adresse + appeler, alignées sur le pattern fiche commerce) */}
                 <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', flexWrap: 'nowrap' }}>
                   {commercant.adresse && (
@@ -2093,6 +2148,11 @@ export default function CommanderRdvSlug() {
           )}
         </div>
       </div>
+
+      {/* ─── MODALE ACHAT BON CADEAU ─── */}
+      {bonModalOuvert && (
+        <BonCadeauModal commercant={commercant} validiteMois={bonsCfg?.validite_mois || 12} onClose={() => setBonModalOuvert(false)}/>
+      )}
 
       {/* ─── MODALE DÉTAIL DEAL (même pattern que la fiche commerce) ─── */}
       {dealDetailOuvert && (

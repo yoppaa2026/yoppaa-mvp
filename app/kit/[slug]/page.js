@@ -6,6 +6,7 @@
 import QRCode from 'qrcode'
 import { createClient } from '@supabase/supabase-js'
 import KitClient from './KitClient'
+import { avantLancement } from '@/lib/lancement'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,7 +57,12 @@ async function getKit(slug) {
 export default async function KitPage({ params }) {
   const { slug } = await params
   const kit = await getKit(slug)
-  const lien = `${BASE}/?ref=${encodeURIComponent(slug)}`
+  // Avant l'ouverture publique : lien de préinscription tracké (?ref=), qui
+  // attribue chaque inscrit au commerçant. À partir du 1er septembre : sa
+  // fiche, où l'on commande. Le QR suit automatiquement.
+  const lien = avantLancement()
+    ? `${BASE}/?ref=${encodeURIComponent(slug)}`
+    : `${BASE}/commander/${encodeURIComponent(slug)}`
 
   let qr = null
   try {

@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { canDo, getIaConfig } from '@/lib/plans'
 import { normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { PACKS_SMS } from '@/lib/packs-sms'
+import { avantLancement } from '@/lib/lancement'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
@@ -3599,6 +3600,19 @@ function TabFidelite({ commercantId, commercant, toast, onSaved }) {
           </div>
         )}
 
+        {/* Affichette comptoir : le programme ne décolle que si le client sait
+            qu'il existe. Une feuille A5 près de la caisse fait ce travail. */}
+        {actif && commercant?.slug && (
+          <a href={`/affichette/${commercant.slug}`} target="_blank" rel="noopener noreferrer"
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${T.pale}`, background: '#fff', textDecoration: 'none', marginBottom: 14 }}>
+            <Printer size={17} color={T.main} style={{ flexShrink: 0 }}/>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: T.ink }}>Affichette pour ton comptoir</span>
+              <span style={{ display: 'block', fontSize: 11, color: T.muted, marginTop: 1 }}>À imprimer en A5 : « Donne ton numéro de GSM », ta règle et ton QR code</span>
+            </span>
+          </a>
+        )}
+
         {(showConfig || !actif) ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
@@ -4496,8 +4510,39 @@ function QRCodeSection({ commercantId, toast }) {
   const [nomCommerce, setNomCommerce] = useState('')
   const [loading, setLoading]     = useState(true)
   const [qrDataUrl, setQrDataUrl] = useState(null)
+  const [envoiKit, setEnvoiKit]   = useState(false)
 
-  const url = slug ? `https://yoppaa.app/commander/${slug}` : null
+  async function envoyerKit() {
+    if (envoiKit) return
+    setEnvoiKit(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { toast('Session expirée, reconnecte-toi.', 'error'); setEnvoiKit(false); return }
+      const r = await fetch('/api/kit/envoyer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ commercant_id: commercantId }),
+      })
+      const j = await r.json()
+      toast(j?.ok ? `Kit envoyé à ${j.envoye_a} 🟣` : (j?.error || 'Envoi impossible'), j?.ok ? 'success' : 'error')
+    } catch {
+      toast('Erreur réseau, réessaie.', 'error')
+    }
+    setEnvoiKit(false)
+  }
+
+  // AVANT l'ouverture publique (1er août → 31 août), le QR ne doit pas envoyer
+  // vers une fiche qui n'accepte pas encore de clients : il inscrit, et chaque
+  // inscription est attribuée au commerçant (?ref=). À partir du 1er septembre
+  // il pointe sur la fiche. Le commerçant ne réimprime rien : même affiche,
+  // c'est la destination et le discours qui changent avant/après.
+  const preLancement = avantLancement()
+  const url = slug
+    ? (preLancement ? `https://www.yoppaa.app/?ref=${slug}` : `https://www.yoppaa.app/commander/${slug}`)
+    : null
+  const TXT_QR = preLancement
+    ? { tagline: 'Scanne : tu sauras dès qu’on ouvre', accroche: 'ON ARRIVE LE 1ER SEPTEMBRE', pied: 'Inscris-toi sur yoppaa.app' }
+    : { tagline: 'Commande en avance, passe en priorité', accroche: 'ICI ON EST YOPPERS', pied: 'Rejoins la tribu sur yoppaa.app' }
 
   useEffect(() => {
     async function fetchSlug() {
@@ -4639,7 +4684,7 @@ function QRCodeSection({ commercantId, toast }) {
     const midY = PAD + TOP_H + QR_H
     ctx.font = '600 30px "DM Sans", Arial, sans-serif'
     ctx.fillStyle = 'rgba(196,160,244,0.85)'
-    ctx.fillText('Commande en avance, passe en priorité', W / 2, midY + 46)
+    ctx.fillText(TXT_QR.tagline, W / 2, midY + 46)
 
     // ── "ICI ON EST YOPPERS" — grande accroche ──
     const botY = PAD + TOP_H + QR_H + MIDDLE_H
@@ -4650,7 +4695,7 @@ function QRCodeSection({ commercantId, toast }) {
     txtGrad.addColorStop(0.5, '#EDE0FF')
     txtGrad.addColorStop(1, '#C4A0F4')
     ctx.fillStyle = txtGrad
-    ctx.fillText('ICI ON EST YOPPERS', W / 2, botY + 50)
+    ctx.fillText(TXT_QR.accroche, W / 2, botY + 50)
 
     // ── Ligne déco bottom ──
     ctx.strokeStyle = sep; ctx.lineWidth = 1
@@ -4659,7 +4704,7 @@ function QRCodeSection({ commercantId, toast }) {
     // ── "Rejoins la tribu — yoppaa.app" ──
     ctx.font = '500 24px "DM Sans", Arial, sans-serif'
     ctx.fillStyle = 'rgba(196,160,244,0.6)'
-    ctx.fillText('Rejoins la tribu sur yoppaa.app', W / 2, botY + 96)
+    ctx.fillText(TXT_QR.pied, W / 2, botY + 96)
 
     return canvas
   }
@@ -4761,14 +4806,25 @@ function QRCodeSection({ commercantId, toast }) {
         }
 
         {/* Tagline */}
-        <p style={{ fontSize: 11, color: 'rgba(196,160,244,0.7)', marginTop: 10, marginBottom: 6 }}>Commande en avance, passe en priorité</p>
+        <p style={{ fontSize: 11, color: 'rgba(196,160,244,0.7)', marginTop: 10, marginBottom: 6 }}>{TXT_QR.tagline}</p>
 
         {/* Accroche tribu */}
-        <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '1.05rem', color: '#fff', letterSpacing: '-0.3px', marginBottom: 4 }}>ICI ON EST YOPPERS 🟣</p>
+        <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '1.05rem', color: '#fff', letterSpacing: '-0.3px', marginBottom: 4 }}>{TXT_QR.accroche} 🟣</p>
 
         {/* URL */}
-        <p style={{ fontSize: 9, color: 'rgba(196,160,244,0.5)', marginTop: 2 }}>Rejoins la tribu sur yoppaa.app</p>
+        <p style={{ fontSize: 9, color: 'rgba(196,160,244,0.5)', marginTop: 2 }}>{TXT_QR.pied}</p>
       </div>
+
+      {/* Rappel de phase : le commerçant doit comprendre POURQUOI son QR
+          n'envoie pas encore sur sa fiche, sinon il croit à une erreur. */}
+      {preLancement && (
+        <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
+          <p style={{ margin: 0, fontSize: 11.5, color: '#78350F', fontWeight: 600, lineHeight: 1.55 }}>
+            <strong>Avant le 1er septembre</strong>, ton QR inscrit tes clients et chaque inscription t&rsquo;est attribuée.
+            Le jour du lancement, il ouvrira ta page : tu n&rsquo;as rien à réimprimer.
+          </p>
+        </div>
+      )}
 
       {/* URL copiable */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.pale, borderRadius: 10, padding: '8px 12px', marginBottom: 16 }}>
@@ -4791,9 +4847,28 @@ function QRCodeSection({ commercantId, toast }) {
 
       {/* Impression */}
       <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Impression</p>
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => printQR('A5')} disabled={!qrDataUrl}><Printer size={13} strokeWidth={1.8}/> A5</button>
         <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => printQR('A4')} disabled={!qrDataUrl}><Printer size={13} strokeWidth={1.8}/> A4</button>
+      </div>
+
+      {/* Kit complet : lien, messages prêts à coller, affichette. Le même
+          contenu que l'email de bienvenue, consultable et renvoyable. */}
+      <div style={{ borderTop: `1px solid ${T.hairline}`, paddingTop: 14 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mon kit de démarrage</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <a href={`/kit/${slug}`} target="_blank" rel="noopener noreferrer"
+            style={{ ...s.btn, ...s.btnGhost, flex: '1 1 150px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5, textDecoration: 'none' }}>
+            <Eye size={13} strokeWidth={1.8}/> Ouvrir mon kit
+          </a>
+          <button style={{ ...s.btn, ...s.btnGhost, flex: '1 1 150px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+            onClick={envoyerKit} disabled={envoiKit}>
+            <MessageCircle size={13} strokeWidth={1.8}/> {envoiKit ? 'Envoi…' : 'Me l’envoyer par email'}
+          </button>
+        </div>
+        <p style={{ fontSize: 10, color: T.muted, marginTop: 6, lineHeight: 1.5 }}>
+          Ton lien, tes messages prêts à coller et ton affichette de comptoir. Tu l&rsquo;as déjà reçu à ton inscription.
+        </p>
       </div>
     </div>
   )

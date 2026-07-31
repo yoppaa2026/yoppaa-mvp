@@ -4,17 +4,25 @@
 // inscription au commerçant (widget d'impact).
 
 import { useState } from 'react'
+import { avantLancement } from '@/lib/lancement'
 
 const T = {
   bgTop: '#160636', deep: '#2D0F6B', ink: '#1A0840',
   main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', green: '#10B981', greenLight: '#6EE7B7',
 }
 
-// Textes de partage (3 tons). Le lien ?ref est ajouté à la fin par le partage.
-const TEXTES = [
+// Textes de partage (3 tons), déclinés par phase. AVANT l'ouverture publique
+// (1er août → 31 août) on recrute des préinscrits ; À PARTIR du 1er septembre
+// la fiche accepte les commandes, le discours devient transactionnel.
+const TEXTES_AVANT = [
   { cle: 'clients', label: 'Pour tes clients', texte: 'Bientôt, notre quartier tient dans ta poche. Je fais partie de l’aventure Yoppaa, viens t’inscrire :' },
   { cle: 'commercant', label: 'Pour un autre commerçant', texte: 'Une app belge pour le commerce de proximité arrive, sans commission. Réserve ta place de commerçant :' },
   { cle: 'court', label: 'Version courte', texte: 'Notre quartier dans ta poche, ça arrive. Inscris-toi :' },
+]
+const TEXTES_APRES = [
+  { cle: 'clients', label: 'Pour tes clients', texte: 'On est sur Yoppaa 🟣 Commandez chez nous en ligne, c’est prêt quand vous arrivez :' },
+  { cle: 'commercant', label: 'Pour un autre commerçant', texte: 'On vend sur Yoppaa, l’app de notre commune : zéro commission sur nos ventes. Jette un œil :' },
+  { cle: 'court', label: 'Version courte', texte: 'Retrouve-nous sur Yoppaa, l’app de notre commune :' },
 ]
 
 function IconShare() {
@@ -63,6 +71,8 @@ export default function KitClient({ slug, kit, lien, qr }) {
   }
 
   const btnBase = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 14px', borderRadius: 100, fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', border: 'none' }
+  const preLancement = avantLancement()
+  const TEXTES = preLancement ? TEXTES_AVANT : TEXTES_APRES
 
   return (
     <div style={wrap}>
@@ -77,13 +87,16 @@ export default function KitClient({ slug, kit, lien, qr }) {
           {kit.commune && <p style={{ margin: '4px 0 0', fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)' }}>{kit.commune}</p>}
         </div>
 
-        {/* Impact */}
-        <div style={{ textAlign: 'center', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 18, padding: '18px', marginBottom: 16, boxShadow: `0 8px 26px ${T.main}55` }}>
-          <p style={{ margin: 0, fontSize: '2.6rem', fontWeight: 900, color: '#fff', letterSpacing: '-1.5px', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{kit.impact}</p>
-          <p style={{ margin: '6px 0 0', fontSize: '0.88rem', fontWeight: 700, color: 'rgba(255,255,255,0.95)' }}>
-            {kit.impact <= 1 ? 'personne inscrite grâce à toi 🟣' : 'personnes inscrites grâce à toi 🟣'}
-          </p>
-        </div>
+        {/* Impact : le compteur d'inscrits n'a de sens que pendant la phase de
+            recrutement. Après le lancement, il devient un chiffre orphelin. */}
+        {preLancement && (
+          <div style={{ textAlign: 'center', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 18, padding: '18px', marginBottom: 16, boxShadow: `0 8px 26px ${T.main}55` }}>
+            <p style={{ margin: 0, fontSize: '2.6rem', fontWeight: 900, color: '#fff', letterSpacing: '-1.5px', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{kit.impact}</p>
+            <p style={{ margin: '6px 0 0', fontSize: '0.88rem', fontWeight: 700, color: 'rgba(255,255,255,0.95)' }}>
+              {kit.impact <= 1 ? 'personne inscrite grâce à toi 🟣' : 'personnes inscrites grâce à toi 🟣'}
+            </p>
+          </div>
+        )}
 
         {/* Lien tracké */}
         <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: 16, marginBottom: 16 }}>

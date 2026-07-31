@@ -10,7 +10,8 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { envoyerAuCommercant, emailValidationCommercant } from '@/lib/resend'
+import { envoyerAuCommercant, emailValidationCommercant, emailKitBienvenue } from '@/lib/resend'
+import { avantLancement } from '@/lib/lancement'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
@@ -117,6 +118,23 @@ export async function POST(request) {
         subject: `Ta page Yoppaa est en ligne, ${commercant.nom} 🎉`,
         html: emailValidationCommercant({ nom: commercant.nom, slug: commercant.slug }),
       })
+
+      // 5) Kit de bienvenue dans la foulée : c'est le moment où le commerçant
+      // est le plus motivé. Contenu adapté à la phase (recrutement de
+      // préinscrits avant le 1er septembre, commande après). Non bloquant.
+      try {
+        await envoyerAuCommercant({
+          to: commercant.email,
+          subject: 'Ton kit Yoppaa 🟣',
+          html: emailKitBienvenue({
+            nom_commercant: commercant.nom,
+            slug: commercant.slug,
+            avant_lancement: avantLancement(),
+          }),
+        })
+      } catch (e) {
+        console.error('[admin/valider] envoi kit KO (non bloquant)', e?.message)
+      }
     }
 
     return NextResponse.json({

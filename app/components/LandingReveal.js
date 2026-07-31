@@ -525,6 +525,7 @@ const FORMULES = [
       'Deals du jour et actualités illimités',
       'Ta place quotidienne dans le Good Morning Yoppers',
       'Notifications push envoyées aux habitants de ta commune',
+      'Carte de fidélité digitale : le numéro de GSM de ton client suffit, plus aucune carte perdue',
       'Assistant IA qui rédige tes deals et tes actus en quelques secondes',
     ],
   },
@@ -540,7 +541,8 @@ const FORMULES = [
       'Click & Collect avec paiement en ligne',
       'Rendez-vous en ligne, réservables 24h/24',
       'Boutique en ligne et livraison locale',
-      'Programme de fidélité pour tes clients réguliers',
+      'Fidélité automatique : chaque commande et chaque rendez-vous remplit la carte, sans rien faire',
+      'Bons cadeaux à offrir : tes clients font découvrir ton commerce à leurs proches',
       'Assistant IA complet : rédaction avancée pour tes articles, tes deals et tes actus, avec un usage étendu',
       '0% de commission sur tes ventes',
     ],
@@ -731,14 +733,19 @@ export default function LandingReveal({ referent = null }) {
       {/* ═══ 2. MANIFESTO (clair, court) ═══ */}
       <section style={{ maxWidth: 760, margin: '0 auto', padding: '64px 20px 8px', textAlign: 'center' }}>
         <SectionEyebrow>Pourquoi Yoppaa</SectionEyebrow>
+        {/* Le titre affirme d'abord ce que personne d'autre ne peut dire (tous
+            les secteurs réunis) : le « 0% de commission » est devenu un ticket
+            d'entrée dans le secteur, il rassure mais ne positionne plus.
+            Les trois métiers cités annoncent exactement les trois familles de
+            la grille ci-dessous (alimentaire, services, détail). */}
         <h2 style={{ fontSize: 'clamp(1.6rem, 4.5vw, 2.3rem)', fontWeight: 900, letterSpacing: '-1.2px', lineHeight: 1.15, margin: '0 0 16px', color: T.ink }}>
-          Les grandes plateformes prélèvent une commission sur chaque vente.<br/>
-          <span style={{ color: T.main }}>Nous, on a choisi le camp du quartier.<br/>Celui du boulanger qui te connaît par ton prénom.</span>
+          Tous les commerces de ta commune, dans une seule app.<br/>
+          <span style={{ color: T.main }}>Nous, on a choisi le camp du quartier.<br/>Celui du boulanger, de la coiffeuse et de la boutique de vêtements qui te connaissent par ton prénom.</span>
         </h2>
         <p style={{ fontSize: '1.02rem', color: T.muted, lineHeight: 1.7, maxWidth: 620, margin: '0 auto 28px', fontWeight: 500 }}>
-          Yoppaa réunit les commerces de ta commune dans une seule app. Tu commandes et tu réserves
-          chez eux en quelques secondes, ils gardent tout ce qu&rsquo;ils gagnent, et ton quartier
-          reste vivant. C&rsquo;est aussi simple que ça.
+          Pas une app par commerce, pas une app par secteur : une seule, pour tout ton quartier.
+          Tu commandes et tu réserves en quelques secondes, nous ne prenons aucune commission sur
+          leurs ventes, et ta commune reste vivante. C&rsquo;est aussi simple que ça.
         </p>
         {/* Les 3 familles de commerçants (taxonomie produit : alimentaire / services / détail) */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, textAlign: 'left' }}>

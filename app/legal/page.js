@@ -153,13 +153,21 @@ export default function LegalPage() {
             <P><strong>Produits alimentaires et périssables :</strong> conformément à l'article VI.53 du Code de droit économique belge, les commandes de denrées périssables ne peuvent pas faire l'objet d'une rétractation après validation. En cas d'indisponibilité d'un article, le remboursement est effectué dans un délai de 5 à 10 jours ouvrables.</P>
             <P><strong>Produits non alimentaires commandés à distance (boutiques, expédition) :</strong> le Client dispose d'un droit de rétractation de 14 jours à compter de la réception, sauf exceptions légales (biens confectionnés sur mesure ou personnalisés, biens scellés descellés après livraison, etc.). Les frais de renvoi sont à charge du Client. Pour l'exercer : contacter le commerçant ou support@yoppaa.app.</P>
 
-            <H3>6. Avis</H3>
+            <H3>6. Cartes de fidélité</H3>
+            <P>Certains commerçants proposent un programme de fidélité. La carte est identifiée par le numéro de téléphone que le Client communique au commerçant, ou qu&rsquo;il a renseigné lors d&rsquo;une commande ou d&rsquo;un rendez-vous : aucune inscription n&rsquo;est nécessaire. Elle se remplit à chaque passage, selon les règles affichées par le commerçant (nombre de passages ou cagnotte).</P>
+            <P>Le Client peut recevoir deux SMS de service : l&rsquo;ouverture de sa carte, avec le lien permettant de la consulter, et le déblocage d&rsquo;une récompense. La récompense est due par le commerçant, jamais par Yoppaa, et s&rsquo;obtient chez lui. Les points n&rsquo;ont aucune valeur monétaire, ne sont ni échangeables contre de l&rsquo;argent ni transférables d&rsquo;un commerce à un autre. Pour faire supprimer une carte, il suffit d&rsquo;en faire la demande au commerçant ou à support@yoppaa.app.</P>
+
+            <H3>7. Bons cadeaux</H3>
+            <P>Les bons cadeaux sont émis par le commerçant chez qui ils sont achetés : le paiement lui est directement versé, et c&rsquo;est lui qui doit la contrepartie. Le montant est libre et la durée de validité, fixée par le commerçant, est indiquée au moment de l&rsquo;achat ainsi que sur le bon.</P>
+            <P>Un bon s&rsquo;utilise chez ce commerçant uniquement, en une ou plusieurs fois, en ligne ou sur place, jusqu&rsquo;à épuisement de son solde. Conformément au droit belge, il n&rsquo;est pas remboursable en espèces. Passée la date de validité, le solde restant est perdu. En cas de difficulté pour utiliser un bon, contacter le commerçant ou support@yoppaa.app.</P>
+
+            <H3>8. Avis</H3>
             <P>Seuls les clients ayant effectivement retiré ou reçu une commande, ou honoré un rendez-vous, peuvent déposer un avis sur le commerçant concerné. Yoppaa se réserve le droit de retirer tout avis contraire à la loi ou manifestement abusif.</P>
 
-            <H3>7. Responsabilité</H3>
-            <P>Yoppaa agit en qualité d'intermédiaire technique. Les commerçants partenaires sont seuls responsables de la qualité, de la conformité et de la disponibilité des produits et prestations proposés.</P>
+            <H3>9. Responsabilité</H3>
+            <P>Yoppaa agit en qualité d'intermédiaire technique. Les commerçants partenaires sont seuls responsables de la qualité, de la conformité et de la disponibilité des produits et prestations proposés, ainsi que des récompenses de fidélité et des bons cadeaux qu&rsquo;ils émettent.</P>
 
-            <H3>8. Modification des CGU</H3>
+            <H3>10. Modification des CGU</H3>
             <P>Avcotech SRL se réserve le droit de modifier les présentes CGU à tout moment. L'utilisation de la plateforme après modification vaut acceptation des nouvelles CGU.</P>
           </Section>
 
@@ -187,15 +195,25 @@ export default function LegalPage() {
             <P>Les paiements en ligne (acomptes RDV pour les vitrines, commandes Click &amp; Collect pour l&rsquo;alimentaire) sont traités via Stripe Connect Express en Direct Charge. L&rsquo;argent est versé directement sur le compte bancaire du Commerçant (sous 7 jours ouvrés). Les frais Stripe (environ 1,4% + 0,25€ par transaction pour les cartes européennes) sont supportés par le Commerçant et prélevés à la source par Stripe. Yoppaa ne prélève aucune commission sur les transactions.</P>
             <P>Le Commerçant garantit Yoppaa contre tout chargeback, remboursement, contestation de paiement ou solde négatif lié à son activité sur la plateforme. En cas de solde négatif persistant sur son compte Stripe Connect, le Commerçant s&rsquo;engage à régler Yoppaa du montant correspondant sous 30 jours à compter de la notification écrite.</P>
 
-            <H3>5. Obligations du Commerçant</H3>
+            <H3>5. Programme de fidélité et SMS</H3>
+            <P>Le programme de fidélité est disponible à partir de la formule Communiquer (pointage au comptoir) et de façon automatique avec la formule Vendre (chaque commande ou rendez-vous abouti crédite la carte). Le Commerçant définit librement la mécanique (nombre de passages ou cagnotte), le seuil et la récompense. Il est seul responsable de l&rsquo;honorer auprès de ses clients, y compris s&rsquo;il désactive ensuite son programme : les cartes et les points acquis sont conservés.</P>
+            <P>La carte est identifiée par le numéro de téléphone du Client. Le Commerçant s&rsquo;engage à ne créer une carte qu&rsquo;avec l&rsquo;accord de la personne concernée et à ne pas utiliser ces numéros à d&rsquo;autres fins.</P>
+            <P>Deux SMS de service peuvent être envoyés au Client : l&rsquo;ouverture de sa carte (avec le lien pour la consulter) et le déblocage d&rsquo;une récompense. Ces SMS sont décomptés d&rsquo;un solde de crédits prépayés, vendus par packs (100 SMS : 12,90€ HTVA ; 500 SMS : 59,90€ HTVA). Les crédits n&rsquo;expirent pas, ne sont ni remboursables ni transférables entre commerces, et 25 SMS sont offerts à la première activation du programme. Lorsque le solde est épuisé, le programme continue de fonctionner sans envoi de SMS.</P>
+
+            <H3>6. Bons cadeaux (formule Vendre)</H3>
+            <P>Le Commerçant peut proposer des bons cadeaux digitaux d&rsquo;un montant libre. Le paiement est encaissé directement sur son compte Stripe : le bon constitue donc une créance du porteur envers le Commerçant, et non envers Yoppaa. Le Commerçant s&rsquo;engage à honorer tout bon valide présenté, en ligne comme au comptoir.</P>
+            <P>La durée de validité est fixée par le Commerçant (12 mois par défaut, minimum 3 mois) et affichée au moment de l&rsquo;achat ainsi que sur le bon. Le solde est utilisable en plusieurs fois. Conformément au droit belge, un bon cadeau n&rsquo;est pas remboursable en espèces. En cas de cessation d&rsquo;activité, le Commerçant reste tenu d&rsquo;honorer ou de rembourser les bons en circulation.</P>
+
+            <H3>7. Obligations du Commerçant</H3>
             <Ul items={[
               'Proposer des produits et prestations conformes aux descriptions publiées.',
               'Assurer la disponibilité des produits commandés dans les créneaux définis et honorer les rendez-vous réservés.',
               'Respecter la législation applicable à son activité (notamment la vente de produits alimentaires).',
+              'Honorer les récompenses de fidélité et les bons cadeaux qu’il a émis.',
               'Ne pas utiliser les données des Clients à des fins non autorisées.',
             ]}/>
 
-            <H3>6. Résiliation</H3>
+            <H3>8. Résiliation</H3>
             <P>Le Commerçant peut résilier sa formule payante ou revenir à la formule gratuite Exister moyennant un préavis d&rsquo;un mois calendrier, prenant effet le 1er jour du mois suivant. Pour que le préavis prenne effet le 1er du mois M+1, il doit être notifié au plus tard le 17e jour du mois M (14 jours avant). En cas de retour à Exister, les données du Commerçant sont conservées mais les fonctionnalités payantes (paiement en ligne, rendez-vous ou Click &amp; Collect, boutique, livraison, deals, etc.) sont désactivées.</P>
             <P>Le préavis doit être notifié par courrier recommandé à Avcotech SRL (Rue de Prée 9G, 5640 Mettet) ou par email à facturation@yoppaa.app.</P>
             <InfoBox>
@@ -220,6 +238,8 @@ export default function LegalPage() {
               'Authentification et gestion des comptes',
               'Facturation et traitement des paiements (via Stripe)',
               'Communications relatives aux commandes et rendez-vous (confirmations, rappels)',
+              'Gestion des cartes de fidélité des commerçants (identifiées par le numéro de téléphone) et SMS de service associés (ouverture de la carte, récompense débloquée)',
+              'Émission et suivi des bons cadeaux (email de l’acheteur et du bénéficiaire)',
               'Notification du lancement et de l’ouverture de la commune (préinscription : exécution de la demande)',
               'Envoi d’actualités Yoppaa (uniquement avec consentement explicite, retirable à tout moment via le lien de désinscription)',
               'Notifications push (uniquement si activées par l’utilisateur, désactivables à tout moment)',
@@ -274,7 +294,7 @@ export default function LegalPage() {
               'Vercel Inc. — hébergement application',
               'Stripe Inc. — traitement des paiements',
               'Resend Inc. — envoi des emails transactionnels',
-              'Brevo (Sendinblue SAS, France) — envoi des emails d’actualités (avec consentement)',
+              'Brevo (Sendinblue SAS, France) — envoi des emails d’actualités (avec consentement) et des SMS de fidélité',
               'OneSignal Inc. — notifications push (si activées par l’utilisateur)',
               'Cloudflare Inc. — protection anti-abus des formulaires (Turnstile)',
               'Anthropic PBC — assistant de rédaction IA des commerçants (textes du commerçant uniquement)',

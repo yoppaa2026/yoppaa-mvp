@@ -92,10 +92,13 @@ export async function POST(request) {
     if (!TYPES_AUTORISES.includes(type_utilisateur)) {
       return NextResponse.json({ ok: false, error: 'Type utilisateur invalide' }, { status: 400 })
     }
-    // RGPD (30/07) : le consentement marketing est FACULTATIF. La finalité de
-    // l'inscription (être prévenu du lancement) n'exige pas d'opt-in marketing :
-    // on stocke la valeur réelle et on ne synchronise Brevo que si true.
+    // RGPD (décision Alex 31/07 soir) : le consentement est OBLIGATOIRE. La
+    // case décrit la finalité même du formulaire (être prévenu du lancement +
+    // actualités) : sans elle, pas d'inscription. Jamais pré-cochée côté reveal.
     const consentOk = consentement_marketing === true
+    if (!consentOk) {
+      return NextResponse.json({ ok: false, error: 'Coche la case de consentement pour qu\'on puisse te prévenir.' }, { status: 400 })
+    }
     // Le nom du commerce est requis pour un commerçant (on veut toujours l'enseigne).
     if (type_utilisateur === 'commercant' && (!commercant_nom || !String(commercant_nom).trim())) {
       return NextResponse.json({ ok: false, error: 'Le nom de ton commerce est requis' }, { status: 400 })

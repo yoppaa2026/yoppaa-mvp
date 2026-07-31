@@ -641,9 +641,12 @@ export default function LandingReveal({ referent = null }) {
   }
 
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
-  // Le consentement marketing est FACULTATIF : il ne bloque jamais l'inscription
+  // Consentement OBLIGATOIRE (décision Alex 31/07 soir) : la case décrit la
+  // finalité même du formulaire (être prévenu du lancement + actualités),
+  // jamais pré-cochée, mais requise pour s'inscrire.
   const formValide = form.email.trim() && /^\d{4}$/.test(form.code_postal.trim())
     && (form.type_utilisateur !== 'commercant' || !!form.commercant_nom.trim())
+    && form.consentement_marketing
 
   // Rendu Turnstile explicite au 1er focus (perf, cf. LandingTeasing)
   const tsRendered = useRef(false)
@@ -1023,13 +1026,14 @@ export default function LandingReveal({ referent = null }) {
                 value={form.message} onChange={e => setForm(p => ({ ...p, message: e.target.value.slice(0, 500) }))}
                 style={{ ...inputStyle, resize: 'vertical', minHeight: 50 }}/>
 
-              {/* Opt-in marketing RGPD : case visible, jamais pré-cochée, facultative */}
+              {/* Consentement RGPD : case visible, jamais pré-cochée, OBLIGATOIRE
+                  (elle décrit la finalité même de l'inscription) */}
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginBottom: 14, cursor: 'pointer' }}>
                 <input type="checkbox" checked={form.consentement_marketing}
                   onChange={e => setForm(p => ({ ...p, consentement_marketing: e.target.checked }))}
                   style={{ marginTop: 2, width: 15, height: 15, accentColor: '#9660E0', flexShrink: 0, cursor: 'pointer' }}/>
                 <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, fontWeight: 600 }}>
-                  Je souhaite recevoir les actualités de Yoppaa et être prévenu de l&rsquo;ouverture de ma commune.
+                  J&rsquo;accepte d&rsquo;être prévenu du lancement et de recevoir les actualités de Yoppaa. <span style={{ color: '#C4A0F4' }}>*</span>
                 </span>
               </label>
 

@@ -25,6 +25,8 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
+import { crediterFidelite } from '@/lib/fidelite-server'
+import { canDo } from '@/lib/plans'
 
 const COOKIE_NAME = 'yoppaa_yopper'
 
@@ -135,6 +137,28 @@ export async function POST(request) {
         : { statut: 'recupere' }
       const { error } = await supabase.from('commandes').update(patch).eq('id', id)
       if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+
+      // Crédit fidélité automatique (Vendre) : le SWIPE CLIENT est le chemin
+      // normal du retrait vers 'recupere' (le dashboard ne couvre que
+      // expédition/livraison/bouton commerçant). Best-effort, idempotent.
+      try {
+        const { data: full } = await supabase
+          .from('commandes').select('id, commercant_id, client_telephone, total').eq('id', id).maybeSingle()
+        if (full) {
+          const { data: commercant } = await supabase
+            .from('commercants').select('*').eq('id', full.commercant_id).maybeSingle()
+          if (commercant?.fidelite_actif && canDo(commercant.plan, 'fidelite_auto')) {
+            const credit = commercant.fidelite_mecanique === 'cagnotte'
+              ? { montant: Number(full.total || 0) }
+              : { passages: 1 }
+            await crediterFidelite(supabase, commercant, full.client_telephone, credit, {
+              source: 'commande', commande_id: full.id,
+            })
+          }
+        }
+      } catch (e) {
+        console.error('[yopper/commandes] credit fidelite KO (non-bloquant)', e?.message)
+      }
       return NextResponse.json({ ok: true })
     }
 

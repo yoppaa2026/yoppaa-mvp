@@ -2494,7 +2494,11 @@ export default function CommanderSlug() {
               // Etape 2 (menu+panier) : sortir vers /commander (etape 1 non utilisee pour C&C)
               // Etape 3 (creneau+coords) : revenir a etape 2 (garde le panier)
               // Etape 4 (confirmation post-paiement) : sortir vers /commander (RDV termine)
+              // SERVICES (01/08) : le catalogue d'un salon est une ANNEXE de sa
+              // fiche RDV. Sortir vers l'accueil donnait l'impression que « la
+              // page s'affiche différemment » : on revient sur sa fiche.
               if (etape === 3) { allerEtape(2); setCreneauChoisi(null); setErreurCommande(null); setAjustementStock(null) }
+              else if (vitrine && commercant?.slug) { router.push(`/commander/rdv/${commercant.slug}`) }
               else { router.push('/commander') }
             }}
             aria-label="Retour"

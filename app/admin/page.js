@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import SectionTousCommercants from './SectionTousCommercants'
 import SectionKYBAValider from './SectionKYBAValider'
 import SectionPreinscriptions from './SectionPreinscriptions'
+import SectionDiagnosticBrevo from './SectionDiagnosticBrevo'
 import SectionCommunes from './SectionCommunes'
 import { Sparkles, Store, Scissors, Croissant, ShoppingBag, Phone, Eye, Lock } from 'lucide-react'
 
@@ -186,6 +187,9 @@ export default function AdminPage() {
 
       <main style={{ maxWidth: 1080, margin: '0 auto', padding: '24px 16px 80px' }}>
         {loading && <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement…</p>}
+
+        {/* Diagnostic Brevo : la connexion email/SMS répond-elle ? */}
+        <SectionDiagnosticBrevo />
 
         {/* Préinscriptions (suivi de croissance) */}
         <SectionPreinscriptions />

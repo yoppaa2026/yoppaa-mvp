@@ -191,8 +191,10 @@ function PropositionsIa({ propositions, onChoisir, onFermer, avecLong = false })
 
 function TabMenu({ commercantId, commercant, toast }) {
   // ─── Mode vitrine ou menu commandable ────────────────────────────────────
-  // Pour catégorie='vitrine' (coiffeur, opticien…), on retire stock/jour, temps prépa,
-  // et on force est_vitrine=true sur les articles créés.
+  // Catégorie='vitrine' (coiffeur, opticien…) : depuis le 31/07, chaque produit
+  // choisit son mode via un toggle « Vendable à la commande » : vendable =
+  // prix ferme + stock permanent (modèle détail, est_vitrine=false), sinon
+  // prix indicatif « à partir de » non commandable (est_vitrine=true).
   const estVitrine = commercant?.categorie === 'vitrine'
   // Détail (boutique) : stock PERMANENT simple par article (ou par variante),
   // pas de stock par jour ni de temps de préparation (concepts C&C alimentaire).
@@ -239,7 +241,7 @@ function TabMenu({ commercantId, commercant, toast }) {
   const [showForm, setShowForm] = useState(false)
   const [showCatForm, setShowCatForm] = useState(false)
   const [editId, setEditId] = useState(null)
-  const [form, setForm] = useState({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: '', photo_url: '' })
+  const [form, setForm] = useState({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: '', photo_url: '', vendable: true })
   const [nouvelleCat, setNouvelleCat] = useState('')
   const [nouvelleCatParent, setNouvelleCatParent] = useState('')
   const [saving, setSaving] = useState(false)
@@ -370,12 +372,12 @@ function TabMenu({ commercantId, commercant, toast }) {
   }, [commercantId, chargerCommandesAujourdhui])
 
   function openNew() {
-    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', photo_url: '' })
+    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', photo_url: '', vendable: true })
     setGalerie([]); setPropsIa([])
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), photo_url: a.photo_url || '' })
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), photo_url: a.photo_url || '', vendable: !a.est_vitrine })
     setGalerie([]); setPropsIa([])
     fetchGalerie(a.id)
     setEditId(a.id); setShowForm(true)
@@ -389,12 +391,14 @@ function TabMenu({ commercantId, commercant, toast }) {
       nom: form.nom.trim(),
       description: form.description.trim() || null,
       prix: parseFloat(form.prix),
-      stock_jour: estVitrine ? 0 : (parseInt(form.stock_jour) || 0),
+      stock_jour: (estVitrine && !form.vendable) ? 0 : (parseInt(form.stock_jour) || 0),
       actif: form.actif,
       categorie: form.categorie.trim() || null,
       temps_prepa: (estVitrine || estDetail) ? 0 : (parseFloat(form.temps_prepa) || 0),
       photo_url: form.photo_url || null,
-      est_vitrine: estVitrine,
+      // Vitrine : est_vitrine = prix indicatif non commandable (par produit).
+      // Détail/alimentaire : toujours false (prix ferme).
+      est_vitrine: estVitrine ? !form.vendable : false,
     }
     const { error } = editId
       ? await supabase.from('articles').update(payload).eq('id', editId)
@@ -584,11 +588,30 @@ function TabMenu({ commercantId, commercant, toast }) {
             )}
           </div>
           {estVitrine ? (
-            <div>
-              <label style={s.label}>Prix indicatif (€)</label>
-              <Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="À partir de 290"/>
-              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Affiché en mode "à partir de" sur ta fiche client.</p>
-            </div>
+            <>
+              <Toggle value={!!form.vendable} onChange={v => setForm(p => ({ ...p, vendable: v }))} label="Vendable à la commande"/>
+              {form.vendable ? (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="18.90"/></div>
+                    <div>
+                      <label style={s.label}>Stock disponible</label>
+                      <Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="12"/>
+                      <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Stock permanent. Si le produit a des variantes, le stock se gère par variante.</p>
+                    </div>
+                  </div>
+                  {!canDo(commercant?.plan, 'commande') && (
+                    <p style={{ fontSize: 10, color: T.muted, marginTop: -4 }}>La commande en ligne s&rsquo;active avec la formule Vendre. En attendant, le produit s&rsquo;affiche avec son prix.</p>
+                  )}
+                </>
+              ) : (
+                <div>
+                  <label style={s.label}>Prix indicatif (€)</label>
+                  <Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="À partir de 290"/>
+                  <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Affiché en mode "à partir de" sur ta fiche client, sans achat en ligne.</p>
+                </div>
+              )}
+            </>
           ) : estDetail ? (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="49.90"/></div>
@@ -674,7 +697,10 @@ function TabMenu({ commercantId, commercant, toast }) {
     if (showForm && editId === a.id) {
       return <div key={a.id}>{renderArticleForm()}</div>
     }
-    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} estDetail={estDetail} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
+    // Vitrine : la card dépend du produit (indicatif = pastille « à partir
+    // de », vendable = stock permanent façon détail)
+    const indicatif = estVitrine && a.est_vitrine
+    return <ArticleCard key={a.id} a={a} estVitrine={indicatif} estDetail={estDetail || (estVitrine && !indicatif)} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
   }
 
   return (
@@ -1426,7 +1452,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
             ))}
             {estVitrine && (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.main, background: T.pale, padding: '3px 8px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                Vitrine · non commandable
+                Prix indicatif · non commandable
               </span>
             )}
           </div>
@@ -4242,14 +4268,15 @@ function TabProfil({ commercantId, toast, onSaved }) {
           </div>
         )}
 
-        {/* ─── Mode de vente boutique (détail) ─── */}
-        {form.categorie === 'detail' && (
+        {/* ─── Mode de vente boutique (détail + vitrine depuis le 31/07 : les
+            services vendent leurs produits au salon avec la même machine) ─── */}
+        {(form.categorie === 'detail' || form.categorie === 'vitrine') && (
           <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
-            <p style={{ ...s.label, marginBottom: 6 }}>Mode de vente de la boutique</p>
+            <p style={{ ...s.label, marginBottom: 6 }}>{form.categorie === 'vitrine' ? 'Mode de vente de tes produits' : 'Mode de vente de la boutique'}</p>
             <p style={{ fontSize: 11, color: T.muted, marginBottom: 10, lineHeight: 1.5 }}>Comment tes clients récupèrent leurs achats.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
               {[
-                { val: 'retrait', label: 'Retrait en magasin', desc: 'Le client vient chercher sa commande.' },
+                { val: 'retrait', label: form.categorie === 'vitrine' ? 'Retrait sur place' : 'Retrait en magasin', desc: 'Le client vient chercher sa commande.' },
                 { val: 'expedition', label: 'Expédition', desc: 'Envoi par colis à domicile.' },
                 { val: 'les_deux', label: 'Les deux', desc: 'Le client choisit au moment de payer.' },
               ].map(opt => {
@@ -4268,7 +4295,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
 
             {(form.boutique_mode_vente === 'retrait' || form.boutique_mode_vente === 'les_deux') && (
               <div style={{ marginBottom: 12 }}>
-                <p style={{ ...s.label, marginBottom: 4 }}>Paiement du retrait en magasin</p>
+                <p style={{ ...s.label, marginBottom: 4 }}>{form.categorie === 'vitrine' ? 'Paiement du retrait sur place' : 'Paiement du retrait en magasin'}</p>
                 <p style={{ fontSize: 11, color: T.muted, marginBottom: 8, lineHeight: 1.5 }}>
                   Comment tes clients paient quand ils viennent chercher leur commande.
                   {form.boutique_mode_vente === 'les_deux' ? " L'expédition, elle, est toujours payée en ligne à la commande." : ''}

@@ -354,6 +354,7 @@ export default function CommanderRdvSlug() {
   const [deals, setDeals] = useState([])                    // deals actifs du jour (même fenêtre que la fiche commerce)
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   const [maCarteFid, setMaCarteFid] = useState(null)        // ma carte de fidélité chez ce commerçant
+  const [produits, setProduits] = useState([])              // catalogue produits (aperçu → page boutique /commander/[slug])
   const [loading, setLoading] = useState(true)
   const [erreur, setErreur] = useState(null)
 
@@ -564,6 +565,22 @@ export default function CommanderRdvSlug() {
           const dEnd   = d.date_fin   ? d.date_fin.slice(0, 10)   : null
           return !!(dStart && dEnd && dStart <= auj && auj <= dEnd)
         }))
+      }
+
+      // Catalogue produits (31/07) : chargé AVANT le early-return module RDV
+      // désactivé (une vitrine sans RDV montre quand même ses produits).
+      // Aperçu sur la fiche, l'achat vit sur la boutique /commander/[slug].
+      {
+        const { data: arts, error: errArts } = await supabase
+          .from('articles')
+          .select('id, nom, prix, est_vitrine, photo_url')
+          .eq('commercant_id', c.id)
+          .eq('actif', true)
+          .order('categorie')
+          .order('nom')
+        if (errArts) console.warn('[rdv fiche] fetch produits KO', errArts.message)
+        if (annule) return
+        setProduits(arts || [])
       }
 
       if (!c.rdv_actif) {
@@ -1335,6 +1352,55 @@ export default function CommanderRdvSlug() {
                     <p style={{ fontSize: '0.78rem', color: T.deep, lineHeight: 1.5 }}>
                       <strong>{commercant.nom}</strong> n&apos;a pas encore activé la prise de RDV en ligne sur Yoppaa. Contacte-le directement par téléphone pour réserver.
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {/* ─── SES PRODUITS (31/07) : aperçu du catalogue, l'achat vit sur
+                  la page boutique /commander/[slug]. Affiché aussi quand le
+                  module RDV n'est pas activé. ─── */}
+              {etape === 1 && produits.length > 0 && (
+                <div style={{ margin: '18px 12px 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
+                      </svg>
+                      Ses produits
+                    </span>
+                    <a href={`/commander/${commercant.slug}`}
+                      style={{ fontSize: '0.72rem', fontWeight: 800, color: T.main, textDecoration: 'none', flexShrink: 0 }}>
+                      Voir tout ({produits.length}) ›
+                    </a>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+                    {produits.slice(0, 8).map(p => (
+                      <a key={p.id} href={`/commander/${commercant.slug}?article=${p.id}`}
+                        style={{ flexShrink: 0, width: 118, background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 14, overflow: 'hidden', textDecoration: 'none' }}>
+                        {commercant.photos_catalogue_actif !== false && p.photo_url ? (
+                          <div style={{ width: '100%', aspectRatio: '1', background: T.pale }}>
+                            <img src={p.photo_url} alt={p.nom} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
+                          </div>
+                        ) : (
+                          <div style={{ width: '100%', aspectRatio: '1', background: `linear-gradient(135deg, ${T.pale}, #fff)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={T.light} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
+                            </svg>
+                          </div>
+                        )}
+                        <div style={{ padding: '8px 10px 10px' }}>
+                          <p style={{ margin: 0, fontSize: '0.74rem', fontWeight: 700, color: T.ink, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.nom}</p>
+                          {Number(p.prix) > 0 ? (
+                            <p style={{ margin: '3px 0 0', fontSize: '0.8rem', fontWeight: 900, color: T.main }}>
+                              {p.est_vitrine && <span style={{ fontSize: '0.62rem', fontWeight: 700, color: T.muted, marginRight: 3 }}>dès</span>}
+                              {Number(p.prix).toFixed(2)}€
+                            </p>
+                          ) : (
+                            <p style={{ margin: '3px 0 0', fontSize: '0.66rem', fontWeight: 700, color: T.muted }}>Prix sur demande</p>
+                          )}
+                        </div>
+                      </a>
+                    ))}
                   </div>
                 </div>
               )}

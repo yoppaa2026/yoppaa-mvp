@@ -622,7 +622,7 @@ function ArticleRow({ article, panier, optionsParArticle, ajouterAuPanier, retir
           })()}
         </div>
 
-        {!modeVitrine && !epuiseComplet && !inactifCeJour && !epuiseAujourdhui && (
+        {!modeVitrine && !article.est_vitrine && !epuiseComplet && !inactifCeJour && !epuiseAujourdhui && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
             {(hasOptions || hasVariantes) ? (
               // hasOptions : "+ " ouvre les options (au lieu d'ajouter direct). Compteur visible si qte > 0.
@@ -880,10 +880,12 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
             </button>
           </div>
 
-          {hasVar ? (
+          {/* Achat gaté par le plan (onAjouter/onAjouterVariante null si lecture
+              seule) ET par article (est_vitrine = prix indicatif, non commandable) */}
+          {hasVar && onAjouterVariante && !article.est_vitrine ? (
             <VariantesSelector article={article} variantes={variantes}
               onAjouter={(a, v) => { onAjouterVariante(a, v); onClose() }}/>
-          ) : onAjouter ? (
+          ) : (!hasVar && onAjouter && !article.est_vitrine) ? (
             <button onClick={() => { onAjouter(article); onClose() }}
               style={{ width: '100%', padding: '0.8rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.main}44` }}>
               Ajouter au panier
@@ -1351,9 +1353,11 @@ export default function CommanderSlug() {
   }, [slug])
 
   function hydrate(data) {
-    // Garde-fou : si on tape /commander/[slug] pour un commercant VITRINE (coiffeur, esthe, etc.),
-    // on redirige vers la fiche RDV native (cette page est pour l'alimentaire C&C uniquement).
-    if (data.commercant?.categorie === 'vitrine' && data.commercant?.slug) {
+    // Vitrine (services) : la fiche principale reste la fiche RDV. Cette page
+    // sert de BOUTIQUE (vente de produits au salon, décision Alex 31/07) : on ne
+    // redirige vers la fiche RDV que si le commerçant n'a aucun produit actif.
+    if (data.commercant?.categorie === 'vitrine' && data.commercant?.slug
+        && (data.articles || []).length === 0) {
       router.replace(`/commander/rdv/${data.commercant.slug}`)
       return
     }
@@ -2171,8 +2175,10 @@ export default function CommanderSlug() {
   const slotsLivraison = joursDisposLivraison.flatMap(j => (j.creneaux || []).map(cr => ({ ...cr, _date: j.date, _jourLabel: j.label })))
   const cpDansZone = !!livraisonConfig?.codes_postaux?.includes((adresseLivraison.code_postal || '').trim())
   const livraisonFormOk = !!(adresseLivraison.rue.trim() && adresseLivraison.code_postal.trim() && adresseLivraison.ville.trim() && cpDansZone && creneauLivraisonChoisi)
-  // ─── Boutique détail : modes autorisés + validation du formulaire d'expédition ──
-  const estDetail = commercant?.categorie === 'detail'
+  // ─── Monde BOUTIQUE (retrait libre / expédition, sans créneau) : catégorie
+  // détail ET, depuis le 31/07, les services (vitrine) qui vendent leurs
+  // produits au salon. Même machine, mêmes colonnes boutique_* en base.
+  const estDetail = commercant?.categorie === 'detail' || commercant?.categorie === 'vitrine'
   const boutiqueModes = estDetail
     ? (commercant?.boutique_mode_vente === 'les_deux' ? ['retrait', 'expedition'] : [commercant?.boutique_mode_vente || 'retrait'])
     : []
@@ -2222,10 +2228,11 @@ export default function CommanderSlug() {
   }
 
   // Plans YOPPAA : single source of truth via lib/plans.js
-  // peutCommander = BOOST/MAX uniquement (active panier + creneaux)
-  // Bloque aussi catégorie vitrine (coiffeur/opticien : pas de C&C, module RDV natif Yoppaa à la place)
+  // peutCommander = plan Vendre uniquement (active panier + tunnel), toutes
+  // catégories : C&C alimentaire, boutique détail ET produits vitrine (31/07).
+  // Les plans Exister/Communiquer gardent le catalogue en lecture seule.
   const vitrine = isVitrine(commercant)
-  const peutCommander = !vitrine && canDo(commercant?.plan, 'commande')
+  const peutCommander = canDo(commercant?.plan, 'commande')
   // Module RDV natif : si vitrine FULL avec rdv_actif=true, on propose le bouton "Prendre RDV"
   const peutPrendreRdv = vitrine && canDo(commercant?.plan, 'rdv') && commercant?.rdv_actif === true
 
@@ -2284,7 +2291,7 @@ export default function CommanderSlug() {
           partageEtat={partageEtat}
           onClose={() => setArticleDetail(null)}
           onAjouter={peutCommander ? (a) => ajouterAuPanier(a) : null}
-          onAjouterVariante={(a, v) => ajouterAuPanier(a, null, v)}/>
+          onAjouterVariante={peutCommander ? (a, v) => ajouterAuPanier(a, null, v) : null}/>
       )}
 
       {dealDetailOuvert && (
@@ -2895,7 +2902,7 @@ export default function CommanderSlug() {
                     Envie de commander à l&rsquo;avance&nbsp;? Demandez à <strong style={{ color: T.bgPanel, fontWeight: 800 }}>{commercant.nom}</strong> d&rsquo;activer Yoppaa Click &amp; Collect.
                   </div>
                 )}
-                {vitrine && !peutPrendreRdv && (
+                {vitrine && !peutPrendreRdv && !peutCommander && (
                   <div style={{ background: T.pale, borderTop: `1px solid ${T.main}22`, borderBottom: `1px solid ${T.main}22`, padding: '10px 16px', fontSize: 12, color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
                     Passe directement à la boutique ou appelle <strong style={{ color: T.bgPanel, fontWeight: 800 }}>{commercant.nom}</strong> pour plus d&rsquo;infos. Tu peux aussi signaler que tu aimerais prendre RDV en ligne.
                   </div>
@@ -3167,7 +3174,7 @@ export default function CommanderSlug() {
                   <>
                     {boutiqueModes.length > 1 && (
                       <div style={{ display: 'flex', gap: 8, marginBottom: '1rem' }}>
-                        {[{ v: 'retrait', label: 'Retrait en boutique' }, { v: 'expedition', label: 'Expédition' }].map(m => (
+                        {[{ v: 'retrait', label: vitrine ? 'Retrait sur place' : 'Retrait en boutique' }, { v: 'expedition', label: 'Expédition' }].map(m => (
                           <button key={m.v} onClick={() => { setModeBoutique(m.v); setErreurCommande(null) }}
                             style={{ flex: 1, padding: '0.7rem', borderRadius: 12, border: `2px solid ${modeBoutiqueEff === m.v ? T.main : T.pale}`, background: modeBoutiqueEff === m.v ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: modeBoutiqueEff === m.v ? '#fff' : T.ink, fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                             {m.label}
@@ -3178,7 +3185,7 @@ export default function CommanderSlug() {
                     {modeBoutiqueEff === 'retrait' ? (
                       <div style={{ background: T.pale, border: `1.5px solid ${T.main}33`, borderRadius: 14, padding: '0.75rem 1rem', marginBottom: '1.25rem' }}>
                         <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 600, lineHeight: 1.5, margin: 0 }}>
-                          Ta commande est mise de côté : passe la récupérer en boutique aux heures d&rsquo;ouverture.
+                          Ta commande est mise de côté : passe la récupérer {vitrine ? 'sur place' : 'en boutique'} aux heures d&rsquo;ouverture.
                           {commercant?.boutique_retrait_paiement === 'magasin' ? ' Tu paies au comptoir, au retrait.' : ''}
                         </p>
                       </div>

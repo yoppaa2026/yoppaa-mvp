@@ -6,6 +6,7 @@ import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
 import ModalNouveauRdv from './ModalNouveauRdv'
 import { Reply, ClipboardList } from 'lucide-react'
+import { canDo } from '@/lib/plans'
 
 const T = {
   bg:      '#F8F6FF',
@@ -559,10 +560,11 @@ export default function Dashboard() {
   const [listeCommercants, setListeCommercants] = useState([])
   const [ongletPrincipal, setOngletPrincipal] = useState('commandes')
 
-  // Pour les commerces vitrine purs (Dermae, coiffeur, etc.), on bascule auto sur l'onglet
-  // RDV des que commercant est charge - l'onglet Commandes n'a pas de sens pour eux.
+  // Pour les commerces vitrine SANS vente en ligne (plan < Vendre), on bascule
+  // auto sur l'onglet RDV. Une vitrine Vendre vend ses produits au salon (31/07)
+  // et garde donc l'onglet Commandes.
   useEffect(() => {
-    if (commercant?.categorie === 'vitrine' && ongletPrincipal === 'commandes') {
+    if (commercant?.categorie === 'vitrine' && !canDo(commercant?.plan, 'commande') && ongletPrincipal === 'commandes') {
       setOngletPrincipal('rdv')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1397,7 +1399,7 @@ export default function Dashboard() {
 
           <nav style={{ flex: 1 }}>
             {[
-              { key: 'commandes', label: 'Commandes',   Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' },
+              { key: 'commandes', label: 'Commandes',   Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(commercant?.plan, 'commande') },
               { key: 'rdv',       label: 'Rendez-vous', Icon: IconRdv,       visible: !!commercant?.rdv_actif },
               { key: 'config',    label: 'Paramètres',  Icon: IconConfig,    visible: true },
             ].filter(t => t.visible).map(({ key, label, Icon }) => {
@@ -1468,7 +1470,7 @@ export default function Dashboard() {
 
               <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 3, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}>
                 {[
-                  { key: 'commandes', label: 'Cmd',    Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' },
+                  { key: 'commandes', label: 'Cmd',    Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(commercant?.plan, 'commande') },
                   { key: 'rdv',       label: 'RDV',    Icon: IconRdv,       visible: !!commercant?.rdv_actif },
                   { key: 'config',    label: 'Config', Icon: IconConfig,    visible: true },
                 ].filter(t => t.visible).map(({ key, label, Icon }) => {

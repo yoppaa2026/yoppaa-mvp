@@ -105,7 +105,8 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'Ce commerçant n\'accepte pas encore de commandes.' }, { status: 400 })
     }
     if (estBoutique) {
-      if (commercant.categorie !== 'detail') {
+      // Monde boutique : détail ET vitrine (vente de produits au salon, 31/07)
+      if (!['detail', 'vitrine'].includes(commercant.categorie)) {
         return NextResponse.json({ ok: false, error: 'Commande boutique indisponible chez ce commerçant.' }, { status: 400 })
       }
       const mv = commercant.boutique_mode_vente || 'retrait'
@@ -192,7 +193,7 @@ export async function POST(request) {
       { data: variantesData },
       { data: dealsData },
     ] = await Promise.all([
-      supabase.from('articles').select('id, nom, prix, actif, commercant_id, temps_prepa').in('id', articleIds),
+      supabase.from('articles').select('id, nom, prix, actif, commercant_id, temps_prepa, est_vitrine').in('id', articleIds),
       supabase.from('article_options_valeurs').select('id, nom, prix_supplement, groupe_id, article_options_groupes!inner(article_id, nom)'),
       // Variantes (Module 2 boutique) : revalidation server-side prix + stock
       supabase.from('article_variantes').select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif').in('article_id', articleIds),
@@ -211,6 +212,11 @@ export async function POST(request) {
       }
       if (!a.actif) {
         return NextResponse.json({ ok: false, error: `Article "${a.nom}" n'est plus disponible.` }, { status: 400 })
+      }
+      // Article en mode « prix indicatif » (vitrine) : affiché sur la fiche
+      // mais jamais commandable, le prix n'est pas un prix ferme.
+      if (a.est_vitrine) {
+        return NextResponse.json({ ok: false, error: `"${a.nom}" n'est pas commandable en ligne.` }, { status: 400 })
       }
     }
 
@@ -545,7 +551,7 @@ export async function POST(request) {
     })
     const nbArticles = lignes.reduce((s, l) => s + l.quantite, 0)
     const descCommande = estBoutique
-      ? `${estExpedition ? 'Expédition' : 'Retrait en boutique'} · ${nbArticles} article${nbArticles > 1 ? 's' : ''}`
+      ? `${estExpedition ? 'Expédition' : commercant.categorie === 'vitrine' ? 'Retrait sur place' : 'Retrait en boutique'} · ${nbArticles} article${nbArticles > 1 ? 's' : ''}`
       : `${estLivraison ? 'Livraison' : 'Retrait'} ${dateHumain} à ${heureCreneau} · ${nbArticles} article${nbArticles > 1 ? 's' : ''}`
 
     const session = await stripe.checkout.sessions.create({

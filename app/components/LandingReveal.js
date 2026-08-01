@@ -897,7 +897,7 @@ export default function LandingReveal({ referent = null }) {
               {
                 icone: <IconLifebuoy/>,
                 titre: 'En ligne en dix minutes',
-                texte: 'L’inscription se fait seul, tranquillement, et l’assistant IA écrit tes textes si la page blanche te bloque. Tu préfères qu’on passe ? On se déplace dans ton commerce pour tout mettre en place avec toi, sur simple demande.',
+                texte: 'L’inscription se fait seul, tranquillement, en quelques étapes guidées. Tu préfères qu’on passe ? L’accompagnement sur place est disponible : tu le choisis au moment de ton inscription, et tu peux aussi le demander plus tard. On vient chez toi installer ton catalogue et te former.',
               },
               {
                 icone: <IconHeadset/>,

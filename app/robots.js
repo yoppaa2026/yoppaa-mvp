@@ -16,9 +16,19 @@ export default function robots() {
   // les sous-chemins. Sur une collision, Google applique la règle la plus
   // longue, donc `Allow: /$` (2 caractères) l'emporte sur `Disallow: /` pour
   // l'accueil, et `Allow: /legal` pour les CGU, sans rien ouvrir d'autre.
+  //
+  // `/sitemap.xml` et les images de marque DOIVENT figurer dans les Allow :
+  // le Disallow général s'applique aussi à eux, et un sitemap que Googlebot
+  // n'a pas le droit de télécharger remonte en « Impossible de récupérer le
+  // sitemap » dans la Search Console. Même chose pour le logo référencé par
+  // le JSON-LD et l'image de partage.
   if (!SEO_INDEX) {
     return {
-      rules: { userAgent: '*', allow: ['/$', '/legal'], disallow: '/' },
+      rules: {
+        userAgent: '*',
+        allow: ['/$', '/legal', '/sitemap.xml', '/og-share.png', '/icon-192.png', '/icon-512.png'],
+        disallow: '/',
+      },
       sitemap: `${BASE_URL}/sitemap.xml`,
       host: BASE_URL,
     }

@@ -5,15 +5,29 @@
 import { createClient } from '@supabase/supabase-js'
 
 const BASE_URL = 'https://www.yoppaa.app'
+const SEO_INDEX = process.env.NEXT_PUBLIC_SEO_INDEX === 'true'
 
 export const revalidate = 3600
 
 export default async function sitemap() {
   const now = new Date()
+
+  // Pré-lancement : seules la landing et les pages légales sont ouvertes au
+  // crawl (cf. app/robots.js). Annoncer les fiches ici reviendrait à proposer
+  // à Google des URL que le robots.txt lui interdit, ce que la Search Console
+  // signale comme une erreur.
+  if (!SEO_INDEX) {
+    return [
+      { url: BASE_URL, lastModified: now, changeFrequency: 'daily', priority: 1 },
+      { url: `${BASE_URL}/legal`, lastModified: now, changeFrequency: 'monthly', priority: 0.3 },
+    ]
+  }
+
   const staticRoutes = [
     { url: BASE_URL, lastModified: now, changeFrequency: 'daily', priority: 1 },
     { url: `${BASE_URL}/commander`, lastModified: now, changeFrequency: 'daily', priority: 0.9 },
     { url: `${BASE_URL}/classement`, lastModified: now, changeFrequency: 'daily', priority: 0.7 },
+    { url: `${BASE_URL}/legal`, lastModified: now, changeFrequency: 'monthly', priority: 0.3 },
   ]
 
   let fiches = []

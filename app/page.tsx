@@ -18,6 +18,13 @@ export async function generateMetadata() {
     return {
       title: 'Yoppaa — Ton quartier dans ta poche',
       description: "L'app belge des commerces de quartier : Click & Collect, rendez-vous en ligne, deals du jour. 0% de commission pour les commerçants. Lancement le 1er septembre 2026.",
+      // Le layout racine met tout le site en noindex tant que
+      // NEXT_PUBLIC_SEO_INDEX n'est pas 'true', parce que les fiches
+      // contiennent encore des commerçants de test. La landing dévoilée, elle,
+      // n'expose aucune donnée de test et doit être trouvable dès maintenant :
+      // on écrase donc la règle héritée, uniquement ici.
+      robots: { index: true, follow: true },
+      alternates: { canonical: 'https://www.yoppaa.app' },
       openGraph: {
         title: 'Yoppaa — Ton quartier dans ta poche',
         description: "L'app belge des commerces de quartier. 0% de commission pour les commerçants. Lancement le 1er septembre 2026.",

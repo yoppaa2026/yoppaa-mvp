@@ -107,6 +107,15 @@ function IconHeart({ size = 12, color = T.main }) {
   )
 }
 
+function IconGift({ size = 12, color = T.main }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/>
+      <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+    </svg>
+  )
+}
+
 // Trio « rassurance » de la section commerçant (matériel, accompagnement, support)
 function IconDevices({ size = 20, color = T.light }) {
   return (
@@ -137,6 +146,32 @@ function IconHeadset({ size = 20, color = T.light }) {
 // Cadre téléphone : écran de l'app reproduit en CSS, HAUTEUR FIXE commune
 // (les 4 mockups font exactement la même taille, demande Alex 30/07)
 const ECRAN_H = 460
+
+// Barre d'état du téléphone : heure, réseau, wifi, batterie. Tous les écrans
+// démarrent par un bandeau sombre, l'encre est donc toujours blanche.
+function StatusBar() {
+  const c = '#fff'
+  return (
+    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 13px', zIndex: 6, pointerEvents: 'none' }}>
+      <span style={{ fontSize: 8.5, fontWeight: 800, color: c, letterSpacing: '0.2px' }}>7:30</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 3.5 }}>
+        <svg width="11" height="8" viewBox="0 0 12 8" fill={c} aria-hidden="true">
+          <rect y="5.5" width="2" height="2.5" rx="0.6" opacity="0.9"/><rect x="3.2" y="3.8" width="2" height="4.2" rx="0.6" opacity="0.9"/>
+          <rect x="6.4" y="2" width="2" height="6" rx="0.6" opacity="0.9"/><rect x="9.6" y="0" width="2" height="8" rx="0.6" opacity="0.5"/>
+        </svg>
+        <svg width="10" height="8" viewBox="0 0 12 9" fill="none" stroke={c} strokeWidth="1.3" strokeLinecap="round" aria-hidden="true">
+          <path d="M1.2 3.1a7 7 0 0 1 9.6 0"/><path d="M3.2 5.3a4 4 0 0 1 5.6 0"/><circle cx="6" cy="7.5" r="0.85" fill={c} stroke="none"/>
+        </svg>
+        <svg width="16" height="8" viewBox="0 0 18 9" fill="none" aria-hidden="true">
+          <rect x="0.5" y="0.5" width="14" height="8" rx="2.2" stroke={c} strokeOpacity="0.55"/>
+          <rect x="2" y="2" width="9" height="5" rx="1.2" fill={c}/>
+          <path d="M16.2 3.1v2.8a1.6 1.6 0 0 0 0-2.8z" fill={c} fillOpacity="0.55"/>
+        </svg>
+      </span>
+    </div>
+  )
+}
+
 function PhoneFrame({ children, label }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
@@ -146,6 +181,7 @@ function PhoneFrame({ children, label }) {
         <div style={{ borderRadius: 24, overflow: 'hidden', background: T.bg, position: 'relative', height: ECRAN_H }}>
           {/* Encoche */}
           <div style={{ position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)', width: 74, height: 16, borderRadius: 100, background: '#0B0318', zIndex: 5 }}/>
+          <StatusBar/>
           {children}
         </div>
       </div>
@@ -343,60 +379,243 @@ function MockRdv() {
 }
 
 // ─── Mockup 4 : dashboard commerçant ────────────────────────────────────────
+// Reproduit l'écran d'accueil réel : en-tête sombre avec le nom du commerce,
+// onglets Commandes / RDV / Paramètres, actions rapides (esprit ODOO), stats
+// du jour, sélecteur de jours, puis les commandes à préparer.
 function MockDashboard() {
   return (
     <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '26px 12px 12px', flexShrink: 0 }}>
-        <p style={{ margin: 0, fontSize: 7.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px' }}>Espace commerçant</p>
-        <p style={{ margin: '3px 0 0', fontWeight: 900, fontSize: 13, color: '#fff', letterSpacing: '-0.3px' }}>Aujourd&rsquo;hui</p>
+      {/* En-tête */}
+      <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '25px 11px 10px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ width: 26, height: 26, borderRadius: 8, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2l2 4h8l2-4"/><path d="M6 22l-2-9h16l-2 9"/></svg>
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: 0, fontWeight: 900, fontSize: 11, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Boulangerie du Centre</p>
+            <p style={{ margin: '1px 0 0', fontSize: 6.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>Formule Vendre</p>
+          </div>
+          <span style={{ width: 20, height: 20, borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <IconBell size={10} color={T.light}/>
+          </span>
+        </div>
+        {/* Onglets principaux */}
+        <div style={{ display: 'flex', gap: 5, marginTop: 9 }}>
+          {[{ l: 'Commandes', a: true }, { l: 'RDV', a: false }, { l: 'Paramètres', a: false }].map(o => (
+            <span key={o.l} style={{ padding: '4px 10px', borderRadius: 100, fontSize: 8, fontWeight: 800, background: o.a ? '#fff' : 'rgba(255,255,255,0.10)', color: o.a ? T.deep : 'rgba(255,255,255,0.75)' }}>{o.l}</span>
+          ))}
+        </div>
       </div>
-      {/* Stats du jour */}
-      <div style={{ display: 'flex', gap: 6, padding: '10px 10px 0', flexShrink: 0 }}>
+
+      {/* Actions rapides (les gestes de comptoir, sans fouiller les réglages) */}
+      <div style={{ display: 'flex', gap: 5, padding: '9px 10px 0', flexShrink: 0 }}>
         {[
-          { val: '12', label: 'commandes' },
-          { val: '8', label: 'RDV' },
-          { val: '184,60€', label: 'du jour' },
-        ].map(s => (
-          <div key={s.label} style={{ flex: 1, background: '#fff', borderRadius: 10, padding: '7px 6px', border: `1px solid ${T.pale}`, textAlign: 'center' }}>
-            <p style={{ margin: 0, fontWeight: 900, fontSize: 11, color: T.main }}>{s.val}</p>
-            <p style={{ margin: '1px 0 0', fontSize: 6.5, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.3px' }}>{s.label}</p>
+          { l: 'Carte de fidélité', a: 'Pointer un client', i: <IconHeart size={9} color={T.main}/> },
+          { l: 'Bon cadeau', a: 'Encaisser un code', i: <IconGift size={9} color={T.main}/> },
+        ].map(x => (
+          <div key={x.l} style={{ flex: 1, minWidth: 0, background: '#fff', borderRadius: 9, border: `1px solid ${T.pale}`, padding: '5px 7px', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 17, height: 17, borderRadius: 5, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{x.i}</span>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 7.5, fontWeight: 800, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.l}</span>
+              <span style={{ display: 'block', fontSize: 6, fontWeight: 700, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.a}</span>
+            </span>
           </div>
         ))}
       </div>
+
+      {/* Stats du jour */}
+      <div style={{ display: 'flex', gap: 5, padding: '7px 10px 0', flexShrink: 0 }}>
+        {[
+          { val: '4', label: 'à préparer', color: '#DC2626', bg: '#FEF2F2', bd: '#FECACA', pulse: true },
+          { val: '2', label: 'prêtes', color: '#059669', bg: '#F0FDF4', bd: '#A7F3D0', pulse: false },
+          { val: '184,60€', label: 'CA du jour', color: T.main, bg: '#fff', bd: T.pale, pulse: false },
+        ].map(s => (
+          <div key={s.label} style={{ flex: 1, background: s.bg, borderRadius: 9, padding: '5px 6px', border: `1px solid ${s.bd}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              {s.pulse && <span style={{ width: 4, height: 4, borderRadius: '50%', background: s.color, flexShrink: 0 }}/>}
+              <p style={{ margin: 0, fontSize: 5.8, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{s.label}</p>
+            </div>
+            <p style={{ margin: '1px 0 0', fontWeight: 900, fontSize: 13, color: s.color, letterSpacing: '-0.6px', lineHeight: 1.1 }}>{s.val}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Sélecteur de jours */}
+      <div style={{ display: 'flex', gap: 4, padding: '7px 10px 0', flexShrink: 0 }}>
+        {[{ l: 'Aujourd’hui', n: 4, a: true }, { l: 'Demain', n: 3, a: false }, { l: 'Historique', n: 0, a: false }].map(j => (
+          <span key={j.l} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 8px', borderRadius: 100, fontSize: 7.5, fontWeight: 800, background: j.a ? T.main : '#fff', color: j.a ? '#fff' : T.ink, border: j.a ? 'none' : `1px solid ${T.main}28` }}>
+            {j.l}
+            {j.n > 0 && <span style={{ background: j.a ? 'rgba(255,255,255,0.3)' : '#DC2626', color: '#fff', fontSize: 5.8, fontWeight: 800, padding: '0.5px 4px', borderRadius: 100 }}>{j.n}</span>}
+          </span>
+        ))}
+      </div>
+
       {/* Commande à préparer */}
       <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, border: `1px solid ${T.pale}`, overflow: 'hidden', flexShrink: 0 }}>
         <Bande3px/>
         <div style={{ padding: '8px 10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <p style={{ margin: 0, fontWeight: 800, fontSize: 10, color: T.ink }}>#1042 · Marie D.</p>
-            <span style={{ fontSize: 7, fontWeight: 800, color: '#B45309', background: '#FEF3C7', padding: '2px 7px', borderRadius: 100 }}>En préparation</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+            <p style={{ margin: 0, fontWeight: 800, fontSize: 9.5, color: T.ink }}>#1042 · Marie D.</p>
+            <span style={{ fontSize: 6.5, fontWeight: 800, color: '#B45309', background: '#FEF3C7', padding: '2px 7px', borderRadius: 100 }}>En préparation</span>
           </div>
-          <p style={{ margin: '0 0 6px', fontSize: 8.5, color: T.muted, fontWeight: 600 }}>4 croissants · 1 pain complet · retrait 16:30</p>
+          <p style={{ margin: '0 0 3px', fontSize: 8, color: T.muted, fontWeight: 600 }}>4 croissants · 1 pain complet</p>
+          <p style={{ margin: '0 0 6px', fontSize: 7.5, color: T.main, fontWeight: 800 }}>Retrait 16:30 · payé en ligne · 9,00€</p>
           <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '5px 10px', textAlign: 'center' }}>
-            <span style={{ fontSize: 8.5, fontWeight: 800, color: '#fff' }}>Marquer prête · le client est prévenu</span>
+            <span style={{ fontSize: 8, fontWeight: 800, color: '#fff' }}>Marquer prête · le client est prévenu</span>
           </div>
         </div>
       </div>
-      {/* Signal Yopper : l'envie du quartier */}
-      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, padding: '8px 10px', border: `1px solid ${T.pale}`, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
-          <IconHeart size={10}/>
-          <span style={{ fontSize: 7, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Ton quartier te parle</span>
+
+      {/* Commande déjà prête */}
+      <div style={{ margin: '7px 10px 0', background: '#fff', borderRadius: 11, border: '1px solid #A7F3D0', padding: '7px 10px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+          <p style={{ margin: 0, fontWeight: 800, fontSize: 9.5, color: T.ink }}>#1041 · Yasmine B.</p>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 6.5, fontWeight: 800, color: '#059669', background: '#F0FDF4', padding: '2px 7px', borderRadius: 100 }}>
+            <IconCheck size={7}/> Prête
+          </span>
         </div>
-        <p style={{ margin: 0, fontSize: 8.5, color: T.ink, fontWeight: 600, lineHeight: 1.45 }}>« Des sandwiches le midi, ce serait top ! » · 14 habitants sont d&rsquo;accord</p>
+        <p style={{ margin: 0, fontSize: 7.5, color: T.muted, fontWeight: 600 }}>Notification envoyée à 15:52 · retrait 16:00</p>
       </div>
-      {/* Assistant IA */}
-      <div style={{ margin: '8px 10px 0', background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, borderRadius: 11, padding: '8px 10px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
-          <IconSparkles size={10}/>
-          <span style={{ fontSize: 7, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Rédiger avec l&rsquo;IA</span>
+
+      {/* Assistant IA, collé en bas */}
+      <div style={{ margin: 'auto 10px 10px', background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, borderRadius: 11, padding: '8px 10px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+          <IconSparkles size={9}/>
+          <span style={{ fontSize: 6.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Rédiger avec l&rsquo;IA</span>
         </div>
-        <p style={{ margin: 0, fontSize: 8.5, color: '#fff', fontWeight: 600, lineHeight: 1.45 }}>Trois propositions de texte pour ton deal, prêtes en cinq secondes.</p>
+        <p style={{ margin: 0, fontSize: 8, color: '#fff', fontWeight: 600, lineHeight: 1.4 }}>Trois propositions de texte pour ton deal, prêtes en cinq secondes.</p>
       </div>
-      {/* Stock du jour collé en bas */}
-      <div style={{ margin: 'auto 10px 10px', background: '#fff', borderRadius: 11, padding: '8px 10px', border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <p style={{ margin: 0, fontSize: 9, fontWeight: 800, color: T.ink }}>Croissant au beurre</p>
-        <span style={{ fontSize: 7.5, fontWeight: 800, color: '#10B981', background: '#F0FDF4', padding: '2px 8px', borderRadius: 100, border: '1px solid #10B98133' }}>Stock jeudi : 24</span>
+    </div>
+  )
+}
+
+// ─── Mockup 5 : la carte de fidélité du Yopper (page reçue par SMS) ─────────
+function MockFidelite() {
+  return (
+    <div style={{ fontFamily: '"DM Sans", sans-serif', height: '100%', display: 'flex', flexDirection: 'column', background: `linear-gradient(180deg, ${T.panel} 0%, ${T.deep} 58%, ${T.main} 130%)`, padding: '26px 10px 10px' }}>
+      {/* Le SMS qui amène le client sur sa carte */}
+      <div style={{ background: 'rgba(255,255,255,0.94)', borderRadius: 11, padding: '6px 9px', flexShrink: 0, boxShadow: '0 6px 16px rgba(0,0,0,0.28)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+          <span style={{ width: 12, height: 12, borderRadius: 3.5, background: '#22C55E', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.6 9.6 0 0 1-2.9-.4L3 21l1.6-4.8A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg>
+          </span>
+          <span style={{ fontSize: 6, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Messages · Yoppaa</span>
+          <span style={{ marginLeft: 'auto', fontSize: 6, fontWeight: 700, color: T.muted }}>maintenant</span>
+        </div>
+        <p style={{ margin: 0, fontSize: 7.5, color: T.ink, fontWeight: 600, lineHeight: 1.4 }}>Ta carte de fidélité chez Boulangerie du Centre est ouverte 🟣 Suis-la ici : yoppaa.app/carte/…</p>
+      </div>
+
+      {/* Wordmark tricolore fond foncé */}
+      <div style={{ textAlign: 'center', margin: '12px 0 10px', flexShrink: 0 }}>
+        <p style={{ margin: 0, fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 19, letterSpacing: '-0.05em', lineHeight: 1 }}>
+          <span style={{ color: '#fff' }}>yo</span><span style={{ color: T.light }}>pp</span><span style={{ color: T.mid }}>aa</span>
+        </p>
+        <div style={{ display: 'flex', gap: 3, justifyContent: 'center', marginTop: 4 }}>
+          {['#fff', T.light, T.mid].map((c, i) => (
+            <span key={i} style={{ width: 4.5, height: 4.5, borderRadius: '50%', background: c, opacity: i === 0 ? 0.55 : 1 }}/>
+          ))}
+        </div>
+      </div>
+
+      {/* La carte */}
+      <div style={{ background: '#fff', borderRadius: 15, overflow: 'hidden', boxShadow: '0 12px 30px rgba(0,0,0,0.32)', flexShrink: 0 }}>
+        <Bande3px/>
+        <div style={{ padding: '12px 12px 13px', textAlign: 'center' }}>
+          <p style={{ margin: '0 0 1px', fontSize: 6.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.9px' }}>Ma carte de fidélité</p>
+          <p style={{ margin: '0 0 10px', fontWeight: 900, fontSize: 12, color: T.ink, letterSpacing: '-0.3px' }}>Boulangerie du Centre</p>
+
+          <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, borderRadius: 11, padding: '11px 11px 12px' }}>
+            <p style={{ margin: '0 0 5px', fontSize: 6, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '0.9px' }}>Mes passages</p>
+            <p style={{ margin: '0 0 8px', fontSize: 21, fontWeight: 900, color: '#fff', letterSpacing: '-1px', lineHeight: 1 }}>
+              7<span style={{ fontSize: 10, fontWeight: 700, color: T.light, marginLeft: 4 }}>/ 10</span>
+            </p>
+            <div style={{ height: 6, borderRadius: 100, background: 'rgba(255,255,255,0.15)', overflow: 'hidden' }}>
+              <div style={{ width: '70%', height: '100%', borderRadius: 100, background: `linear-gradient(90deg, ${T.light}, #fff)` }}/>
+            </div>
+            <p style={{ margin: '8px 0 0', fontSize: 7.5, color: T.light, lineHeight: 1.45 }}>
+              Encore <strong style={{ color: '#fff' }}>3 passages</strong> et tu débloques : 1 café offert
+            </p>
+          </div>
+
+          <div style={{ marginTop: 10, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '7px 12px' }}>
+            <span style={{ fontSize: 8.5, fontWeight: 800, color: '#fff' }}>Voir Boulangerie du Centre</span>
+          </div>
+          <p style={{ margin: '8px 0 0', fontSize: 6.5, color: T.muted, lineHeight: 1.45 }}>Garde ce lien : c&rsquo;est ta carte, elle se met à jour toute seule 🟣</p>
+        </div>
+      </div>
+
+      <p style={{ margin: 'auto 0 0', textAlign: 'center', fontSize: 6.5, color: 'rgba(255,255,255,0.55)', paddingTop: 8 }}>Ton quartier dans ta poche 🟣</p>
+    </div>
+  )
+}
+
+// ─── Mockup 6 : inscription commerçant (étape 5, score de complétude) ───────
+function MockOnboarding() {
+  return (
+    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '25px 11px 11px', flexShrink: 0 }}>
+        <p style={{ margin: 0, fontSize: 6.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px' }}>Créer mon commerce</p>
+        <p style={{ margin: '2px 0 0', fontWeight: 900, fontSize: 12, color: '#fff', letterSpacing: '-0.3px' }}>Étape 5 sur 5 · Validation</p>
+        {/* Fil des étapes */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 9 }}>
+          {['Compte', 'Infos', 'Visuels', 'Horaires', 'Validation'].map((e, i) => (
+            <div key={e} style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ height: 3, borderRadius: 100, background: i <= 4 ? T.light : 'rgba(255,255,255,0.18)' }}/>
+              <p style={{ margin: '3px 0 0', fontSize: 5.5, fontWeight: 800, color: i === 4 ? '#fff' : 'rgba(255,255,255,0.6)', letterSpacing: '0.2px' }}>{e}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Score de complétude */}
+      <div style={{ margin: '9px 10px 0', background: '#fff', borderRadius: 11, border: `1px solid ${T.pale}`, padding: '9px 10px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 5 }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 8.5, fontWeight: 900, color: T.ink }}>Ton score de complétude</p>
+            <p style={{ margin: '1px 0 0', fontSize: 6.5, color: T.muted, fontWeight: 600 }}>Minimum 60 / 100 pour soumettre.</p>
+          </div>
+          <p style={{ margin: 0, fontWeight: 900, fontSize: 15, color: '#10B981', letterSpacing: '-0.5px', lineHeight: 1 }}>
+            82<span style={{ fontSize: 7.5, color: T.muted, fontWeight: 700 }}> / 100</span>
+          </p>
+        </div>
+        <div style={{ height: 7, borderRadius: 100, background: T.pale, overflow: 'hidden' }}>
+          <div style={{ width: '82%', height: '100%', background: 'linear-gradient(90deg, #10B981, #10B981cc)' }}/>
+        </div>
+      </div>
+
+      {/* Ce qui est déjà rempli */}
+      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, border: `1px solid ${T.pale}`, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
+        {[
+          'Infos du commerce et adresse',
+          'Logo et photo de couverture',
+          'Horaires d’ouverture',
+          'Catalogue : 6 articles publiés',
+        ].map(l => (
+          <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IconCheck size={9}/>
+            <span style={{ fontSize: 8, fontWeight: 700, color: T.ink }}>{l}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Boutique Yoppaa : l'accompagnement se choisit ici */}
+      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, border: `1.5px solid ${T.main}`, padding: '8px 10px', flexShrink: 0, boxShadow: `0 4px 14px ${T.main}1F` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+          <span style={{ width: 13, height: 13, borderRadius: 4, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <IconCheck size={8} color="#fff" sw={3.4}/>
+          </span>
+          <p style={{ margin: 0, fontSize: 8.5, fontWeight: 900, color: T.ink }}>Success Pack on-site</p>
+          <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 900, color: T.main }}>199€</span>
+        </div>
+        <p style={{ margin: 0, fontSize: 7, color: T.muted, fontWeight: 600, lineHeight: 1.45 }}>On vient chez toi : photos, installation complète de ton catalogue, formation, suivi à J+30. Optionnel.</p>
+      </div>
+
+      {/* Soumission */}
+      <div style={{ margin: 'auto 10px 10px' }}>
+        <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '8px 12px', textAlign: 'center' }}>
+          <span style={{ fontSize: 9, fontWeight: 800, color: '#fff' }}>Envoyer mon dossier</span>
+        </div>
+        <p style={{ margin: '6px 0 0', textAlign: 'center', fontSize: 6.5, color: T.muted, fontWeight: 600, lineHeight: 1.4 }}>Réponse sous 48 h ouvrables. Ta page part en ligne dès la validation.</p>
       </div>
     </div>
   )
@@ -780,6 +999,7 @@ export default function LandingReveal({ referent = null }) {
             { titre: 'Alimentaire', exemples: 'Boulangeries, boucheries, snacks, friteries, sandwicheries, restaurants, food trucks et plein d’autres.' },
             { titre: 'Services', exemples: 'Coiffeurs, barbiers, instituts de beauté, bien-être, garages et tous les métiers sur rendez-vous.' },
             { titre: 'Détail', exemples: 'Boutiques de mode, fleuristes, librairies, décoration et tout le commerce de proximité.' },
+            { titre: 'Et tous les autres', exemples: 'Un distributeur automatique à la ferme, un apiculteur, un maraîcher, un artisan qui n’ouvre que le samedi. Savoir ce qui est disponible aujourd’hui, annoncer une nouveauté : ça compte tout autant.' },
           ].map(s => (
             <div key={s.titre} style={{ background: '#fff', borderRadius: 16, padding: '16px 18px', border: `1px solid ${T.pale}`, boxShadow: '0 4px 14px rgba(22,6,54,0.05)' }}>
               <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 900, color: T.main, textTransform: 'uppercase', letterSpacing: '0.8px' }}>{s.titre}</p>
@@ -787,10 +1007,20 @@ export default function LandingReveal({ referent = null }) {
             </div>
           ))}
         </div>
+        {/* Le corollaire du 0 % de commission : un modèle sans commission n'a
+            aucune raison d'exclure les tout petits, contrairement aux places de
+            marché qui doivent rentabiliser chaque vendeur. */}
+        <p style={{ fontSize: '0.98rem', color: T.deep, lineHeight: 1.7, maxWidth: 640, margin: '22px auto 0', fontWeight: 600 }}>
+          Personne n&rsquo;est trop petit pour Yoppaa. La formule Exister est gratuite, pour toujours :
+          si tu produis, tu répares ou tu vends quelque chose dans ta commune, tu as le droit
+          d&rsquo;exister ici. 🟣
+        </p>
       </section>
 
       {/* ═══ 3. CÔTÉ YOPPERS : mockups ═══ */}
-      <section style={{ maxWidth: 1080, margin: '0 auto', padding: '56px 20px 24px' }}>
+      {/* Section volontairement plus large que les autres : quatre téléphones
+          côte à côte sur grand écran, sinon le 4e retombe seul à la ligne. */}
+      <section style={{ maxWidth: 1220, margin: '0 auto', padding: '56px 20px 24px' }}>
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <SectionEyebrow>Pour toi, Yopper</SectionEyebrow>
           <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.1rem)', fontWeight: 900, letterSpacing: '-1px', margin: '0 0 12px', color: T.ink }}>
@@ -803,7 +1033,7 @@ export default function LandingReveal({ referent = null }) {
             plans du jour près de chez toi.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 'clamp(18px, 4vw, 40px)', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'flex-start', color: T.deep }}>
+        <div style={{ display: 'flex', gap: 'clamp(16px, 2.6vw, 28px)', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'flex-start', color: T.deep, maxWidth: 1180, margin: '0 auto' }}>
           <PhoneFrame label="Commande à l'avance et passe la prendre sans faire la file">
             <MockFiche/>
           </PhoneFrame>
@@ -812,6 +1042,9 @@ export default function LandingReveal({ referent = null }) {
           </PhoneFrame>
           <PhoneFrame label="Prends rendez-vous chez ton coiffeur ou ton barbier, même à minuit">
             <MockRdv/>
+          </PhoneFrame>
+          <PhoneFrame label="Ta carte de fidélité se remplit toute seule, sans carton à perdre">
+            <MockFidelite/>
           </PhoneFrame>
         </div>
         {/* Bénéfices en pastilles */}
@@ -883,6 +1116,26 @@ export default function LandingReveal({ referent = null }) {
                 Préinscrire mon commerce
               </button>
             </div>
+          </div>
+
+          {/* L'inscription, montrée telle qu'elle est : cinq étapes guidées et
+              un score de complétude, pour désamorcer la peur du dossier. */}
+          <div style={{ display: 'flex', gap: 'clamp(24px, 5vw, 56px)', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', marginTop: 52 }}>
+            <div style={{ flex: '1 1 320px', maxWidth: 440, textAlign: 'left' }}>
+              <SectionEyebrow dark>Ton inscription</SectionEyebrow>
+              <h3 style={{ fontSize: 'clamp(1.25rem, 3vw, 1.6rem)', fontWeight: 900, letterSpacing: '-0.8px', lineHeight: 1.15, margin: '0 0 12px', color: '#fff' }}>
+                Cinq étapes, et ta page part en ligne.
+              </h3>
+              <p style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.88)', lineHeight: 1.65, fontWeight: 500, margin: 0 }}>
+                Ton compte, tes infos, tes visuels, tes horaires, et c&rsquo;est envoyé. Un score de
+                complétude te dit en direct où tu en es, donc tu ne devines jamais ce qu&rsquo;il te
+                manque. Nous validons ton dossier, puis ta page est publiée et ton kit de bienvenue
+                arrive dans ta boîte mail.
+              </p>
+            </div>
+            <PhoneFrame label="Un score de complétude en direct : tu sais toujours ce qu'il te reste à faire">
+              <MockOnboarding/>
+            </PhoneFrame>
           </div>
 
           {/* Trio « rassurance » : les 3 objections qu'on entend au comptoir

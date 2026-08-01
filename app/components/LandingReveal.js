@@ -1022,8 +1022,8 @@ export default function LandingReveal({ referent = null }) {
             marché qui doivent rentabiliser chaque vendeur. */}
         <p style={{ fontSize: '0.98rem', color: T.deep, lineHeight: 1.7, maxWidth: 640, margin: '22px auto 0', fontWeight: 600 }}>
           Personne n&rsquo;est trop petit pour Yoppaa. La formule Exister est gratuite, pour toujours :
-          que tu tiennes une boutique, un atelier, un cabinet ou un simple distributeur au bout de
-          ton champ, tu as ta place ici. 🟣
+          que tu sois seul ou toute une équipe, ouvert tous les jours ou juste le samedi, tu as ta
+          place ici. 🟣
         </p>
       </section>
 

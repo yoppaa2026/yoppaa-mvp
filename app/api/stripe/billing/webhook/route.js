@@ -18,6 +18,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe } from '@/lib/stripe'
 import { isStripeTestMode } from '@/lib/stripe-billing'
+import { produitParType } from '@/lib/produits-boutique'
+import { envoyerAuAdmin, envoyerAuCommercant, emailAccompagnementPayeAdmin, emailAccompagnementPayeCommercant } from '@/lib/resend'
 
 // Récupère les 2 secrets webhook Billing (Test + Live) avec priorité sur celui
 // du mode détecté dans STRIPE_SECRET_KEY. On tente quand même l'autre en
@@ -126,10 +128,13 @@ export async function POST(request) {
         await handleInvoicePaymentSucceeded(event.data.object, supabase)
         break
 
-      // Achat ponctuel sur le compte plateforme : packs de SMS de fidélité
+      // Achats ponctuels sur le compte plateforme : packs de SMS de fidélité,
+      // accompagnement sur place et matériel de comptoir.
       case 'checkout.session.completed':
         if (event.data.object?.metadata?.yoppaa_kind === 'sms_pack') {
           await handleSmsPackPaye(event.data.object, supabase)
+        } else if (event.data.object?.metadata?.yoppaa_kind === 'accompagnement') {
+          await handleAccompagnementPaye(event.data.object, supabase)
         }
         break
 
@@ -188,6 +193,66 @@ async function handleSmsPackPaye(session, supabase) {
   console.info('[billing/webhook] pack SMS crédité', {
     achat: achat.id, nb: achat.nb_sms, nouveau_solde: solde,
   })
+}
+
+// checkout.session.completed (kind = accompagnement) : le commerçant a payé son
+// Success Pack on-site et/ou son matériel de comptoir → on bascule les lignes
+// success_packs en 'paye' et on prévient Yoppaa (à planifier) et le commerçant.
+// Idempotent : la table stripe_webhook_events filtre les rejeux, et le passage
+// en 'paye' est conditionné au statut 'paiement_en_attente'.
+async function handleAccompagnementPaye(session, supabase) {
+  const ids = String(session.metadata?.yoppaa_lignes || '').split(',').map(s => s.trim()).filter(Boolean)
+  if (ids.length === 0) {
+    console.warn('[billing/webhook] accompagnement sans yoppaa_lignes', session.id)
+    return
+  }
+
+  const { data: lignesMaj, error: errUp } = await supabase
+    .from('success_packs')
+    .update({ statut: 'paye' })
+    .in('id', ids)
+    .eq('statut', 'paiement_en_attente')
+    .select('id, type, montant_ht, notes, commercant_id')
+  if (errUp) throw errUp
+  if (!lignesMaj?.length) return   // déjà traité
+
+  const { data: com } = await supabase
+    .from('commercants')
+    .select('id, nom, email, telephone, adresse, categorie, plan')
+    .eq('id', lignesMaj[0].commercant_id)
+    .maybeSingle()
+
+  const lignes = lignesMaj.map(l => ({
+    label: produitParType(l.type)?.label || l.type,
+    prix: Number(l.montant_ht || 0),
+  }))
+  const total = Math.round(lignes.reduce((t, l) => t + l.prix, 0) * 100) / 100
+  // La note du commerçant est identique sur toutes les lignes d'une commande.
+  const note = String(lignesMaj[0].notes || '').split('—').slice(1).join('—').trim()
+
+  await envoyerAuAdmin({
+    subject: `Accompagnement payé — ${com?.nom || 'Commerçant'}`,
+    html: emailAccompagnementPayeAdmin({
+      commercant_id: com?.id,
+      nom: com?.nom || 'Commerçant',
+      email: com?.email,
+      telephone: com?.telephone,
+      adresse: com?.adresse,
+      categorie: com?.categorie,
+      plan: com?.plan,
+      lignes, total, message: note,
+    }),
+  }).catch(e => console.error('[billing/webhook] email admin accompagnement KO', e?.message))
+
+  if (com?.email) {
+    await envoyerAuCommercant({
+      to: com.email,
+      subject: 'Ta commande Yoppaa est confirmée 🟣',
+      html: emailAccompagnementPayeCommercant({ nom: com.nom, lignes, total }),
+    }).catch(e => console.error('[billing/webhook] accusé accompagnement KO', e?.message))
+  }
+
+  console.info('[billing/webhook] accompagnement payé', { lignes: lignesMaj.length, total })
 }
 
 // customer.subscription.created + customer.subscription.updated

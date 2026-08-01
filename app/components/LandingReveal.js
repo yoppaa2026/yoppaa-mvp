@@ -1150,7 +1150,7 @@ export default function LandingReveal({ referent = null }) {
               {
                 icone: <IconLifebuoy/>,
                 titre: 'En ligne en dix minutes',
-                texte: 'L’inscription se fait seul, tranquillement, en quelques étapes guidées. Tu préfères qu’on passe ? L’accompagnement sur place est disponible : tu le choisis au moment de ton inscription, et tu peux aussi le demander plus tard. On vient chez toi installer ton catalogue et te former.',
+                texte: 'L’inscription se fait seul, tranquillement, en quelques étapes guidées. Tu préfères qu’on passe ? L’accompagnement sur place se choisit au moment de ton inscription, ou plus tard depuis ton tableau de bord : on vient chez toi installer ton catalogue et te former.',
               },
               {
                 icone: <IconHeadset/>,

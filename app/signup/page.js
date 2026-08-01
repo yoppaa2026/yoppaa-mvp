@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
 import { compresserImage } from '@/lib/compress-image'
+import { SHOP_PRODUCTS, classerProduitsParCategorie } from '@/lib/produits-boutique'
 // Icônes Lucide React : SVG inline alignés sur la charte canonique Yoppaa.
 // Convention : stroke-width 1.8, currentColor pour hériter de la palette parent.
 // Aucun emoji dans l'UI (règle Master), sauf exceptions soleil GMY + 🟣 signature.
@@ -1753,63 +1754,11 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
 //
 // Refactor 17/06 (S2a) : passage de 2 packs uniques (Starter 49 + Premium 249)
 // à une vraie boutique Yoppaa avec 4 produits cumulables.
-// 1 service humain : Success Pack on-site 199€
-// 2 kits hardware optionnels (surtout utiles en alimentaire) : Pro 399 + Light 179
-// 1 consommable : Rouleau d'étiquettes 44,90€
 //
-// CATEGORIES_RECOMMANDEES indique pour quelles catégories chaque produit est
-// considéré comme principal (affiché en haut sans mention spéciale). Les
-// autres catégories le voient en bas avec une mention "principalement utile
-// en alimentaire" pour éviter qu'un opticien achète une imprimante par erreur.
-const SHOP_PRODUCTS = [
-  {
-    type: 'success_pack',
-    label: 'Success Pack on-site',
-    prix: 199,
-    desc: 'On vient chez toi : photos pro de ton commerce, setup complet de ton menu ou de tes prestations, formation rapide, suivi à J+30. Idéal pour démarrer sereinement.',
-    badge: 'Service humain',
-    badgeColor: '#10B981',
-    categories: ['alimentaire', 'vitrine', 'detail'],
-    mention: null,
-  },
-  {
-    type: 'kit_pro',
-    label: 'Kit Yoppaa Pro',
-    prix: 399,
-    desc: 'Tablette tactile + imprimante thermique. Tu gères tes commandes ou tes RDV au comptoir, sans téléphone à la main. Configuration plug-and-play livrée prête à l\'emploi.',
-    badge: 'Hardware',
-    badgeColor: '#6B35C4',
-    categories: ['alimentaire'],
-    mention: 'Surtout utile en alimentaire (gestion comptoir Click & Collect). Tu peux aussi gérer ton activité depuis n\'importe quel téléphone, tablette ou PC sans hardware.',
-  },
-  {
-    type: 'kit_light',
-    label: 'Kit Yoppaa Light',
-    prix: 179,
-    desc: 'Imprimante thermique seule. Idéale pour imprimer les tickets de commande, les bons de retrait ou les étiquettes produits. Connecte-la à ton téléphone ou ta tablette existante.',
-    badge: 'Hardware',
-    badgeColor: '#6B35C4',
-    categories: ['alimentaire'],
-    mention: 'Surtout utile en alimentaire. Pour service ou détail, ton smartphone ou ton PC suffisent largement.',
-  },
-  {
-    type: 'rouleau_etiquettes',
-    label: 'Rouleau d\'étiquettes',
-    prix: 44.90,
-    desc: 'Recharge papier thermique compatible Kit Pro et Kit Light. Tu peux en commander à tout moment quand tu seras à court, depuis ton tableau de bord.',
-    badge: 'Consommable',
-    badgeColor: '#F59E0B',
-    categories: ['alimentaire'],
-    mention: 'Nécessite un Kit Pro ou Kit Light.',
-  },
-]
-
-// Helper : retourne les produits "recommandés" pour la catégorie + ceux affichés en "options secondaires"
-function classerProduitsParCategorie(categorie) {
-  const principaux = SHOP_PRODUCTS.filter(p => p.categories.includes(categorie))
-  const secondaires = SHOP_PRODUCTS.filter(p => !p.categories.includes(categorie))
-  return { principaux, secondaires }
-}
+// Le catalogue vit désormais dans lib/produits-boutique.js : il est partagé
+// avec l'onglet Accompagnement du tableau de bord (où le commerçant peut
+// commander à tout moment) et avec la route Stripe, pour que les libellés et
+// les prix ne divergent jamais entre les surfaces.
 
 // Bandeau recap adapte au plan choisi affiche en tete de l'etape 5.
 // Resume ce qui se passe a la soumission : essai 30j si paye, gratuit si Exister.

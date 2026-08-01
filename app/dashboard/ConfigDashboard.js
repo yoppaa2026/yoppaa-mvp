@@ -5,6 +5,7 @@ import { canDo, getIaConfig } from '@/lib/plans'
 import { normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement } from '@/lib/lancement'
+import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
@@ -4504,6 +4505,184 @@ function TabProfil({ commercantId, toast, onSaved }) {
   )
 }
 
+// ─── Onglet Accompagnement et matériel ───────────────────────────────────────
+// L'accompagnement sur place et le matériel ne se choisissaient qu'à l'étape 5
+// de l'inscription. Celui qui passait à côté n'avait plus aucun moyen de le
+// demander, alors que la page d'inscription promettait déjà « tu pourras
+// commander à tout moment depuis ton tableau de bord ». C'est cet écran.
+// Rien n'est débité : la demande crée une ligne success_packs en attente et
+// nous rappelons le commerçant.
+function TabAccompagnement({ commercantId, commercant, toast }) {
+  const [choix, setChoix] = useState(() => new Set())
+  const [message, setMessage] = useState('')
+  const [envoi, setEnvoi] = useState(false)
+  const [demandes, setDemandes] = useState([])
+
+  const fetchDemandes = useCallback(async () => {
+    const { data } = await supabase
+      .from('success_packs')
+      .select('id, type, statut, montant_ht, created_at')
+      .eq('commercant_id', commercantId)
+      .order('created_at', { ascending: false })
+      .limit(10)
+    setDemandes(data || [])
+  }, [commercantId])
+  useEffect(() => { fetchDemandes() }, [fetchDemandes])
+
+  const { principaux, secondaires } = classerProduitsParCategorie(commercant?.categorie || 'detail')
+  const total = Math.round([...choix].reduce((t, type) => t + (produitParType(type)?.prix || 0), 0) * 100) / 100
+
+  function basculer(type) {
+    setChoix(prev => {
+      const n = new Set(prev)
+      if (n.has(type)) n.delete(type); else n.add(type)
+      return n
+    })
+  }
+
+  // Paiement immédiat à la commande, sur le compte plateforme Yoppaa (comme les
+  // packs SMS et les abonnements) : on redirige vers Stripe Checkout.
+  async function commander() {
+    if (envoi || choix.size === 0) return
+    setEnvoi(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { toast('Session expirée, reconnecte-toi.', 'error'); setEnvoi(false); return }
+      const r = await fetch('/api/accompagnement/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ commercant_id: commercantId, produits: [...choix], message }),
+      })
+      const j = await r.json()
+      if (j?.ok && j.url) { window.location.href = j.url; return }
+      toast(j?.error || 'Paiement indisponible pour le moment.', 'error')
+    } catch {
+      toast('Erreur réseau, réessaie.', 'error')
+    }
+    setEnvoi(false)
+  }
+
+  const statutBadge = (st) => ({
+    paiement_en_attente: { txt: 'Paiement non finalisé', bg: '#F3F4F6', color: '#9CA3AF' },
+    paye:       { txt: 'Payé, on te contacte',  bg: '#F0FDF4', color: '#10B981' },
+    en_attente: { txt: 'En attente',             bg: '#FFF7ED', color: '#EA580C' },
+    planifie:   { txt: 'Planifié',               bg: '#EEF2FF', color: '#4F46E5' },
+    termine:    { txt: 'Terminé',                bg: '#F0FDF4', color: '#10B981' },
+    annule:     { txt: 'Annulé',                 bg: '#F3F4F6', color: '#9CA3AF' },
+  }[st] || { txt: st, bg: '#F3F4F6', color: '#6B7280' })
+
+  const carteProduit = (p, secondaire = false) => {
+    const actif = choix.has(p.type)
+    return (
+      <button key={p.type} type="button" onClick={() => basculer(p.type)}
+        style={{
+          width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: 10,
+          background: actif ? '#FAF8FE' : '#fff',
+          border: `1.5px solid ${actif ? T.main : T.hairline}`,
+          borderRadius: 14, padding: '14px 16px', fontFamily: '"DM Sans", sans-serif',
+          boxShadow: actif ? `0 4px 14px ${T.main}1F` : 'none',
+        }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <span style={{
+            flexShrink: 0, width: 20, height: 20, borderRadius: 6, marginTop: 1,
+            border: `2px solid ${actif ? T.main : T.hairline}`,
+            background: actif ? T.main : '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {actif && <Icon name="check" size={12} color="#fff"/>}
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 14, fontWeight: 900, color: T.ink }}>{p.label}</span>
+              <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: p.badgeColor, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{p.badge}</span>
+              <span style={{ marginLeft: 'auto', fontSize: 15, fontWeight: 900, color: T.main, whiteSpace: 'nowrap' }}>
+                {p.prix.toFixed(2).replace('.', ',')} €
+                <span style={{ fontSize: 10, fontWeight: 700, color: T.muted, marginLeft: 3 }}>HTVA</span>
+              </span>
+            </div>
+            <p style={{ fontSize: 12, color: T.muted, margin: '6px 0 0', lineHeight: 1.55 }}>{p.desc}</p>
+            {secondaire && p.mention && (
+              <p style={{ fontSize: 11, color: '#B45309', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '6px 10px', margin: '8px 0 0', lineHeight: 1.5 }}>{p.mention}</p>
+            )}
+          </div>
+        </div>
+      </button>
+    )
+  }
+
+  return (
+    <div>
+      <div style={{ background: T.bgPanel, borderRadius: 14, padding: '18px 20px', marginBottom: 14, color: '#fff' }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>Accompagnement et matériel</p>
+        <h2 style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', margin: 0 }}>
+          On peut venir t&rsquo;installer ça
+        </h2>
+        <p style={{ fontSize: 12, color: T.light, margin: '6px 0 0', lineHeight: 1.5, opacity: 0.9 }}>
+          Yoppaa fonctionne sur ton téléphone, ta tablette ou ton ordinateur, sans rien acheter.
+          Si tu veux un coup de main sur place ou du matériel de comptoir, c&rsquo;est ici.
+        </p>
+      </div>
+
+      <div style={{ ...s.card, marginBottom: 14 }}>
+        <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 4px' }}>Ce dont tu as besoin</p>
+        <p style={{ fontSize: 11, color: T.muted, margin: '0 0 12px', lineHeight: 1.5 }}>
+          Coche ce qui t&rsquo;intéresse, le paiement se fait en ligne à la commande. On te contacte
+          ensuite sous 2 jours ouvrables : rendez-vous sur place pour l&rsquo;accompagnement, confirmation
+          d&rsquo;expédition pour le matériel.
+        </p>
+
+        {principaux.map(p => carteProduit(p, false))}
+
+        {secondaires.length > 0 && (
+          <>
+            <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.6px', margin: '16px 0 8px' }}>Autres options</p>
+            {secondaires.map(p => carteProduit(p, true))}
+          </>
+        )}
+
+        <label style={{ ...s.label, marginTop: 6 }}>Une précision à nous donner ? (facultatif)</label>
+        <Textarea value={message} onChange={e => setMessage(e.target.value)} maxLength={400}
+          placeholder="Tes disponibilités, une question, un besoin particulier…"
+          style={{ minHeight: 70, fontSize: 13 }}/>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+          <button style={{ ...s.btn, ...s.btnPrimary }} onClick={commander} disabled={envoi || choix.size === 0}>
+            <Icon name="check" size={14}/> {envoi ? 'Redirection…' : 'Commander et payer'}
+          </button>
+          {choix.size > 0 && (
+            <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>
+              Total : <strong style={{ color: T.ink }}>{total.toFixed(2).replace('.', ',')} € HTVA</strong>
+              <span style={{ marginLeft: 6 }}>· TVA ajoutée au paiement</span>
+            </p>
+          )}
+        </div>
+      </div>
+
+      {demandes.length > 0 && (
+        <div style={s.card}>
+          <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 10px' }}>Tes commandes</p>
+          {demandes.map(d => {
+            const b = statutBadge(d.statut)
+            const p = produitParType(d.type)
+            return (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderTop: `1px solid ${T.hairline}`, flexWrap: 'wrap' }}>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: 0 }}>{p?.label || d.type}</p>
+                  <p style={{ fontSize: 11, color: T.muted, margin: '2px 0 0' }}>
+                    Demandé le {new Date(d.created_at).toLocaleDateString('fr-BE')}
+                    {d.montant_ht ? ` · ${Number(d.montant_ht).toFixed(2).replace('.', ',')} € HTVA` : ''}
+                  </p>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 800, color: b.color, background: b.bg, padding: '4px 10px', borderRadius: 100, whiteSpace: 'nowrap' }}>{b.txt}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Composant QR Code imprimable ─────────────────────────────────────────────
 function QRCodeSection({ commercantId, toast }) {
   const [slug, setSlug]           = useState(null)
@@ -6609,6 +6788,9 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
     canDo(commercant?.plan, 'bons_cadeaux') && { id: 'bons', label: 'Bons cadeaux', icon: 'gift' },
     peutPaiements && { id: 'paiements', label: 'Paiements', icon: 'tag' },
     { id: 'profil',   label: 'Profil',   icon: 'shop' },
+    // Accompagnement sur place et matériel : accessible à tout moment, plus
+    // seulement à l'inscription (l'étape 5 le promettait déjà).
+    { id: 'accompagnement', label: 'Accompagnement', icon: 'box' },
     { id: 'avis',     label: 'Avis',     icon: 'star' },
     { id: 'signalements', label: 'Signalements', icon: 'sliders', badge: signalementsEnAttente },
   ].filter(Boolean)
@@ -6644,6 +6826,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
       {tab === 'bons' && canDo(commercant?.plan, 'bons_cadeaux') && <TabBonsCadeaux commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} />}
+      {tab === 'accompagnement' && <TabAccompagnement commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
       {tab === 'signalements' && <TabSignalements commercantId={commercantId} toast={showToast} />}
 

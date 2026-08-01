@@ -25,6 +25,12 @@ const jakarta = Plus_Jakarta_Sans({
 // Le jour du lancement SEO : mettre NEXT_PUBLIC_SEO_INDEX=true dans Vercel + redéployer.
 const SEO_INDEX = process.env.NEXT_PUBLIC_SEO_INDEX === 'true'
 
+// Jeton de validation Google Search Console (méthode « balise HTML »). Il se
+// renseigne dans Vercel, sans commit : NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION =
+// la valeur du champ content fourni par Search Console. Absent, aucune balise
+// n'est émise.
+const GOOGLE_VERIF = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+
 export const metadata: Metadata = {
   // Base absolue pour que les images OG (partages) et URLs relatives soient résolues.
   metadataBase: new URL("https://www.yoppaa.app"),
@@ -32,6 +38,7 @@ export const metadata: Metadata = {
   description: "Ton quartier dans ta poche. Commande avant d'arriver, récupère sans attendre.",
   manifest: "/manifest.json",
   ...(SEO_INDEX ? {} : { robots: { index: false, follow: false } }),
+  ...(GOOGLE_VERIF ? { verification: { google: GOOGLE_VERIF } } : {}),
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

@@ -107,6 +107,33 @@ function IconHeart({ size = 12, color = T.main }) {
   )
 }
 
+// Trio « rassurance » de la section commerçant (matériel, accompagnement, support)
+function IconDevices({ size = 20, color = T.light }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2" y="4" width="13" height="9" rx="1.5"/><path d="M5.5 17h6"/><path d="M8.5 13v4"/>
+      <rect x="16.5" y="9" width="5.5" height="11" rx="1.5"/>
+    </svg>
+  )
+}
+function IconLifebuoy({ size = 20, color = T.light }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6"/>
+      <path d="M5.6 5.6l3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9"/>
+    </svg>
+  )
+}
+function IconHeadset({ size = 20, color = T.light }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 13v-1a8 8 0 0 1 16 0v1"/>
+      <path d="M4 13h2.5a1 1 0 0 1 1 1v3.5a1 1 0 0 1-1 1H5.5A1.5 1.5 0 0 1 4 17z"/>
+      <path d="M20 13h-2.5a1 1 0 0 0-1 1v3.5a1 1 0 0 0 1 1H18a2 2 0 0 1-2 2h-2.5"/>
+    </svg>
+  )
+}
+
 // Cadre téléphone : écran de l'app reproduit en CSS, HAUTEUR FIXE commune
 // (les 4 mockups font exactement la même taille, demande Alex 30/07)
 const ECRAN_H = 460
@@ -771,8 +798,9 @@ export default function LandingReveal({ referent = null }) {
           </h2>
           <p style={{ fontSize: '1rem', color: T.muted, maxWidth: 560, margin: '0 auto', lineHeight: 1.65, fontWeight: 500 }}>
             Fini la file du samedi matin et le répondeur du coiffeur. Tu commandes à l&rsquo;avance,
-            tu réserves quand ça t&rsquo;arrange, et chaque matin l&rsquo;app te souffle les bons plans
-            du jour près de chez toi.
+            tu réserves quand ça t&rsquo;arrange, tes cartes de fidélité se remplissent toutes seules
+            au lieu de traîner au fond du portefeuille, et chaque matin l&rsquo;app te souffle les bons
+            plans du jour près de chez toi.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 'clamp(18px, 4vw, 40px)', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'flex-start', color: T.deep }}>
@@ -790,7 +818,8 @@ export default function LandingReveal({ referent = null }) {
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginTop: 40 }}>
           {[
             'Click & Collect', 'Rendez-vous en ligne', 'Good Morning Yoppers', 'Deals du jour',
-            'Livraison locale', 'Suivi de commande', 'Boutiques de détail',
+            'Cartes de fidélité', 'Bons cadeaux', 'Livraison locale', 'Suivi de commande',
+            'Boutiques de détail',
           ].map(b => (
             <span key={b} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 100, background: '#fff', border: `1.5px solid ${T.pale}`, fontSize: 13, fontWeight: 800, color: T.deep, boxShadow: '0 2px 10px rgba(22,6,54,0.05)' }}>
               <IconCheck size={12}/> {b}
@@ -808,9 +837,11 @@ export default function LandingReveal({ referent = null }) {
             <h2 style={{ fontSize: 'clamp(1.6rem, 4.5vw, 2.3rem)', fontWeight: 900, letterSpacing: '-1.2px', lineHeight: 1.12, margin: '0 0 14px', color: '#fff' }}>
               Les outils des grandes enseignes.<br/>Sans toucher à tes marges.
             </h2>
-            <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.88)', maxWidth: 600, margin: '0 auto', lineHeight: 1.65, fontWeight: 500 }}>
-              Une page professionnelle, des commandes, des rendez-vous, des promotions qui arrivent
-              directement sur le téléphone de tes clients, et même un assistant IA pour rédiger tes textes.
+            <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.88)', maxWidth: 620, margin: '0 auto', lineHeight: 1.65, fontWeight: 500 }}>
+              La première place de marché du commerce local qui va de la visibilité au marketing,
+              et du marketing à la vente. Une page professionnelle, des commandes, des rendez-vous,
+              une carte de fidélité, des bons cadeaux, des promotions qui arrivent directement sur le
+              téléphone de tes clients, et même un assistant IA pour rédiger tes textes.
               Tout est pensé pour te faire gagner du temps, et Yoppaa ne prélève jamais rien sur tes ventes.
             </p>
           </div>
@@ -837,8 +868,9 @@ export default function LandingReveal({ referent = null }) {
             </PhoneFrame>
             <div style={{ flex: '1 1 340px', maxWidth: 460, display: 'flex', flexDirection: 'column', gap: 14 }}>
               {[
-                { titre: 'Ton quartier te parle', texte: 'Les habitants te disent ce qu’ils aimeraient trouver chez toi : de nouvelles envies, de nouveaux produits, de nouveaux clients. Tu sais ce que ton quartier attend avant même d’ouvrir le rideau.' },
+                { titre: 'Ton quartier te parle', texte: 'Les habitants te disent ce qu’ils attendent de toi : du Click & Collect, de la livraison, des bonnes affaires, un produit que tu ne proposes pas encore. Et ton tableau de bord traduit tout ça en chiffres : ce qui part, à quelle heure, ce qui revient le plus souvent dans les demandes.' },
                 { titre: 'Des notifications qui touchent leur cible', texte: 'Ton deal du matin part en notification push vers les habitants de ta commune, pas dans le vide. Le bon message, aux bonnes personnes, au bon moment.' },
+                { titre: 'Tes clients reviennent, sans que tu y penses', texte: 'La carte de fidélité se remplit toute seule, au comptoir comme en ligne, et le client reçoit un SMS quand sa récompense tombe. Tes bons cadeaux se vendent en ligne et se dépensent chez toi.' },
                 { titre: 'Une gestion sans prise de tête', texte: 'Stock du jour, commandes, rendez-vous, tout se pilote en quelques clics depuis ton téléphone. Et quand une commande est prête, le client est prévenu automatiquement.' },
               ].map(a => (
                 <div key={a.titre} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 18, padding: '16px 18px', textAlign: 'left' }}>
@@ -850,6 +882,34 @@ export default function LandingReveal({ referent = null }) {
                 Préinscrire mon commerce
               </button>
             </div>
+          </div>
+
+          {/* Trio « rassurance » : les 3 objections qu'on entend au comptoir
+              (matériel à acheter, peur de l'installation, personne au bout du fil) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, maxWidth: 900, margin: '48px auto 0' }}>
+            {[
+              {
+                icone: <IconDevices/>,
+                titre: 'Aucun matériel à acheter',
+                texte: 'Yoppaa tourne sur ce que tu as déjà : ton téléphone, ta tablette ou ton ordinateur. Pas de caisse imposée, pas de terminal à louer. Et si tu veux un écran dédié au comptoir, on peut t’équiper à prix raisonnable, jamais en obligation.',
+              },
+              {
+                icone: <IconLifebuoy/>,
+                titre: 'En ligne en dix minutes',
+                texte: 'L’inscription se fait seul, tranquillement, et l’assistant IA écrit tes textes si la page blanche te bloque. Tu préfères qu’on passe ? On se déplace dans ton commerce pour tout mettre en place avec toi, sur simple demande.',
+              },
+              {
+                icone: <IconHeadset/>,
+                titre: 'Un humain au bout du fil',
+                texte: 'Par email, en visio ou au téléphone, une vraie personne te répond et connaît ton dossier. Pas de robot, pas de ticket qui traîne trois jours.',
+              },
+            ].map(r => (
+              <div key={r.titre} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 18, padding: '20px 18px', textAlign: 'left' }}>
+                <div style={{ marginBottom: 10 }}>{r.icone}</div>
+                <p style={{ margin: '0 0 6px', fontWeight: 900, fontSize: 15.5, color: '#fff', letterSpacing: '-0.3px' }}>{r.titre}</p>
+                <p style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.88)', lineHeight: 1.6, fontWeight: 500 }}>{r.texte}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>

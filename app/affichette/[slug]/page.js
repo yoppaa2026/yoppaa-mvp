@@ -9,6 +9,8 @@
 import QRCode from 'qrcode'
 import { createClient } from '@supabase/supabase-js'
 import { libelleRecompense } from '@/lib/fidelite'
+import YoppaaLogo from '@/app/components/YoppaaLogo'
+import { avantLancement, libelleLancement } from '@/lib/lancement'
 
 export const dynamic = 'force-dynamic'
 
@@ -112,29 +114,42 @@ export default async function AffichettePage({ params }) {
         </div>
 
         <p style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 800, color: T.deep, lineHeight: 1.5 }}>{regle}</p>
-        <p style={{ margin: '0 0 24px', fontSize: 15, fontWeight: 700, color: T.main, lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 22px', fontSize: 15, fontWeight: 700, color: T.main, lineHeight: 1.5 }}>
           {libelleRecompense(com)}
         </p>
 
+        {/* Le client lit cette affichette au comptoir sans forcément savoir ce
+            qu'est Yoppaa : sans ces trois lignes, « donne ton numéro » n'a
+            aucun cadre et le geste paraît intrusif. */}
+        <div style={{ background: T.bg, border: `1px solid ${T.pale}`, borderRadius: 16, padding: '16px 18px', marginBottom: 22, textAlign: 'left' }}>
+          <p style={{ margin: '0 0 6px', fontSize: 11.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+            C&rsquo;est quoi Yoppaa ?
+          </p>
+          <p style={{ margin: 0, fontSize: 13.5, color: T.deep, fontWeight: 600, lineHeight: 1.6 }}>
+            L&rsquo;app belge qui réunit les commerces de ta commune. Tu commandes, tu réserves et tu
+            cumules tes points de fidélité, gratuitement.{' '}
+            {avantLancement()
+              ? `Ouverture le ${libelleLancement()} : ton compteur, lui, démarre dès aujourd’hui.`
+              : 'Tes points sont conservés et te suivent d’un passage à l’autre.'}
+          </p>
+        </div>
+
         {qr && (
           <div style={{ borderTop: `1px solid ${T.pale}`, paddingTop: 20 }}>
-            <img src={qr} alt="QR code" style={{ width: 128, height: 128 }}/>
-            <p style={{ margin: '6px 0 0', fontSize: 12, color: T.muted, fontWeight: 600 }}>
+            {/* display block + marges auto : un reset global qui passe les
+                images en block les collerait sinon à gauche malgré le
+                text-align du parent. */}
+            <img src={qr} alt="QR code" style={{ width: 136, height: 136, display: 'block', margin: '0 auto' }}/>
+            <p style={{ margin: '8px 0 0', fontSize: 12.5, color: T.deep, fontWeight: 700 }}>
               Scanne pour découvrir {com.nom} sur Yoppaa
             </p>
           </div>
         )}
 
-        {/* Wordmark tricolore fond clair : ink + main + mid */}
-        <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-          <p style={{ margin: 0, fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 22, letterSpacing: '-0.05em', lineHeight: 1 }}>
-            <span style={{ color: T.ink }}>yo</span><span style={{ color: T.main }}>pp</span><span style={{ color: T.mid }}>aa</span>
-          </p>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[T.ink, T.main, T.mid].map((c, i) => (
-              <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: c }}/>
-            ))}
-          </div>
+        {/* Logo canonique : wordmark + 5 dots V2-B + slogan, proportions gérées
+            par le composant (dotBase = 0,254 x taille du wordmark). */}
+        <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}>
+          <YoppaaLogo size={26} mode="light" withSlogan/>
         </div>
       </div>
     </div>

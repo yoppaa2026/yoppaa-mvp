@@ -5,6 +5,7 @@
 
 import { useState } from 'react'
 import { avantLancement } from '@/lib/lancement'
+import YoppaaLogo from '@/app/components/YoppaaLogo'
 
 const T = {
   bgTop: '#160636', deep: '#2D0F6B', ink: '#1A0840',
@@ -79,9 +80,11 @@ export default function KitClient({ slug, kit, lien, qr }) {
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
 
-        {/* En-tête */}
+        {/* En-tête : logo canonique (wordmark + 5 dots V2-B + slogan) */}
         <div style={{ textAlign: 'center', marginBottom: '1.4rem' }}>
-          <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.7rem', letterSpacing: '-0.05em', color: '#fff', lineHeight: 1, marginBottom: 12 }}>yoppaa</p>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
+            <YoppaaLogo size={30} mode="dark" withSlogan/>
+          </div>
           <p style={{ fontSize: '0.72rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', margin: '0 0 6px' }}>Ton kit de partage</p>
           <h1 style={{ fontWeight: 900, fontSize: '1.5rem', color: '#fff', letterSpacing: '-0.5px', margin: 0 }}>{kit.nom}</h1>
           {kit.commune && <p style={{ margin: '4px 0 0', fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)' }}>{kit.commune}</p>}
@@ -115,7 +118,14 @@ export default function KitClient({ slug, kit, lien, qr }) {
           <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: 16, marginBottom: 16, textAlign: 'center' }}>
             <p style={{ margin: '0 0 12px', fontSize: '0.8rem', fontWeight: 800, color: '#fff' }}>Ton QR code (à mettre en vitrine)</p>
             { }
-            <img src={qr} alt="QR code Yoppaa" style={{ width: 200, height: 200, borderRadius: 12, background: '#fff', padding: 8 }}/>
+            {/* display block + marges auto : un reset global qui passe les
+                images en block les collerait à gauche malgré le text-align. */}
+            <img src={qr} alt="QR code Yoppaa" style={{ width: 200, height: 200, borderRadius: 12, background: '#fff', padding: 8, display: 'block', margin: '0 auto' }}/>
+            <p style={{ margin: '10px 0 0', fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
+              {preLancement
+                ? 'Affiche-le en vitrine : chaque scan inscrit un habitant et te l’attribue.'
+                : 'Affiche-le en vitrine : un scan et le client arrive sur ta fiche.'}
+            </p>
             <div style={{ marginTop: 12 }}>
               <a href={qr} download={`yoppaa-qr-${slug}.png`} style={{ ...btnBase, background: 'rgba(255,255,255,0.12)', color: '#fff', textDecoration: 'none' }}>
                 Télécharger le QR

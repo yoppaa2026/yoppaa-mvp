@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { canDo, getIaConfig } from '@/lib/plans'
 import { normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { PACKS_SMS } from '@/lib/packs-sms'
-import { avantLancement } from '@/lib/lancement'
+import { avantLancement, libelleLancement } from '@/lib/lancement'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
@@ -4719,9 +4719,22 @@ function QRCodeSection({ commercantId, toast }) {
   const url = slug
     ? (preLancement ? `https://www.yoppaa.app/?ref=${slug}` : `https://www.yoppaa.app/commander/${slug}`)
     : null
+  // L'affiche est lue par des gens qui ne connaissent pas encore Yoppaa :
+  // `explication` dit en une ligne ce qu'ils gagnent à scanner. La date
+  // d'ouverture est dérivée, jamais écrite en dur.
   const TXT_QR = preLancement
-    ? { tagline: 'Scanne : tu sauras dès qu’on ouvre', accroche: 'ON ARRIVE LE 1ER SEPTEMBRE', pied: 'Inscris-toi sur yoppaa.app' }
-    : { tagline: 'Commande en avance, passe en priorité', accroche: 'ICI ON EST YOPPERS', pied: 'Rejoins la tribu sur yoppaa.app' }
+    ? {
+        tagline: 'Scanne : tu sauras dès qu’on ouvre',
+        accroche: `ON ARRIVE LE ${libelleLancement().toUpperCase()}`,
+        explication: 'Commande, réserve et cumule tes points chez tes commerçants',
+        pied: 'Inscris-toi sur yoppaa.app',
+      }
+    : {
+        tagline: 'Commande en avance, passe en priorité',
+        accroche: 'ICI ON EST YOPPERS',
+        explication: 'Commande, réserve et cumule tes points chez tes commerçants',
+        pied: 'Rejoins la tribu sur yoppaa.app',
+      }
 
   useEffect(() => {
     async function fetchSlug() {
@@ -4757,10 +4770,10 @@ function QRCodeSection({ commercantId, toast }) {
     const W    = QR + PAD * 2
 
     // Zones verticales
-    const TOP_H    = 200  // 3 points + yoppaa + nom commerce
+    const TOP_H    = 250  // wordmark tricolore + 5 dots V2-B + slogan + nom
     const QR_H     = QR + 32
     const MIDDLE_H = 80   // tagline sous QR
-    const BOT_H    = 120  // "Rejoins la tribu..."
+    const BOT_H    = 150  // accroche + ce que c'est + pied
     const H = TOP_H + QR_H + MIDDLE_H + BOT_H + PAD * 2
 
     const canvas = document.createElement('canvas')
@@ -4790,36 +4803,52 @@ function QRCodeSection({ commercantId, toast }) {
     ctx.strokeStyle = lineGrad; ctx.lineWidth = 1
     ctx.beginPath(); ctx.moveTo(PAD, PAD + 2); ctx.lineTo(W - PAD, PAD + 2); ctx.stroke()
 
-    // ── 3 points yo·pp·aa ──
-    const dots = [
-      { r: 7,  c: 'rgba(255,255,255,0.5)' },
-      { r: 10, c: '#C4A0F4' },
-      { r: 7,  c: '#9660E0' },
-    ]
-    const gapDots = 22
-    const totalDW = dots.reduce((a, d) => a + d.r * 2, 0) + gapDots * 2
-    let dx = W / 2 - totalDW / 2
-    const dotsY = PAD + 38
-    dots.forEach((d, i) => {
-      dx += d.r
-      ctx.beginPath(); ctx.arc(dx, dotsY, d.r, 0, Math.PI * 2)
-      ctx.fillStyle = d.c; ctx.fill()
-      // Glow sur le point du milieu
-      if (i === 1) {
-        ctx.beginPath(); ctx.arc(dx, dotsY, d.r + 6, 0, Math.PI * 2)
-        const glow = ctx.createRadialGradient(dx, dotsY, d.r, dx, dotsY, d.r + 10)
-        glow.addColorStop(0, 'rgba(196,160,244,0.35)')
-        glow.addColorStop(1, 'rgba(196,160,244,0)')
-        ctx.fillStyle = glow; ctx.fill()
-      }
-      dx += d.r + (i < 2 ? gapDots : 0)
-    })
+    // ── Wordmark tricolore « yoppaa » (fond foncé : blanc + light + mid) ──
+    // fillText ne gère pas la couleur par segment : on dessine les trois
+    // paires l'une après l'autre en mesurant, pour garder le tracking -0,05em.
+    const WM = 80
+    const wmFont = `800 ${WM}px "Plus Jakarta Sans", system-ui, Arial, sans-serif`
+    ctx.textAlign = 'left'
+    try { ctx.letterSpacing = `${-0.05 * WM}px` } catch { /* Safari < 17 */ }
+    ctx.font = wmFont
+    const segments = [['yo', '#FFFFFF'], ['pp', '#C4A0F4'], ['aa', '#9660E0']]
+    const largeurWm = segments.reduce((w, [t]) => w + ctx.measureText(t).width, 0)
+    let wx = W / 2 - largeurWm / 2
+    const wmBaseline = PAD + 96
+    for (const [txt, couleur] of segments) {
+      ctx.fillStyle = couleur
+      ctx.fillText(txt, wx, wmBaseline)
+      wx += ctx.measureText(txt).width
+    }
+    try { ctx.letterSpacing = '0px' } catch { /* idem */ }
 
-    // ── "yoppaa" wordmark ──
+    // ── 5 dots V2-B (spec canonique : mini 0,55 · gap 0,55 · décalage 0,4) ──
+    const dotBase = WM * 0.254
+    const dotMini = dotBase * 0.55
+    const dotGap  = dotBase * 0.55
+    const dotOff  = dotBase * 0.4
+    const dotsTop = PAD + 116
+    const dots = [
+      { d: dotBase, c: '#FFFFFF', o: 0 },
+      { d: dotMini, c: '#C4A0F4', o: dotOff },
+      { d: dotBase, c: '#C4A0F4', o: dotOff },
+      { d: dotMini, c: '#9660E0', o: dotOff },
+      { d: dotBase, c: '#9660E0', o: 0 },
+    ]
+    const largeurDots = dots.reduce((a, x) => a + x.d, 0) + dotGap * 4
+    let dx = W / 2 - largeurDots / 2
+    for (const p of dots) {
+      const r = p.d / 2
+      ctx.beginPath(); ctx.arc(dx + r, dotsTop + p.o + r, r, 0, Math.PI * 2)
+      ctx.fillStyle = p.c; ctx.fill()
+      dx += p.d + dotGap
+    }
+
+    // ── Slogan ──
     ctx.textAlign = 'center'
-    ctx.fillStyle = '#FFFFFF'
-    ctx.font = '800 80px "Plus Jakarta Sans", system-ui, Arial, sans-serif'
-    ctx.fillText('yoppaa', W / 2, PAD + 108)
+    ctx.font = `600 ${Math.round(WM * 0.236)}px "Plus Jakarta Sans", system-ui, Arial, sans-serif`
+    ctx.fillStyle = '#C4A0F4'
+    ctx.fillText('Ton quartier dans ta poche', W / 2, PAD + 176)
 
     // ── Séparateur subtil ──
     const sep = ctx.createLinearGradient(PAD * 2, 0, W - PAD * 2, 0)
@@ -4827,12 +4856,12 @@ function QRCodeSection({ commercantId, toast }) {
     sep.addColorStop(0.5, 'rgba(196,160,244,0.3)')
     sep.addColorStop(1,   'rgba(196,160,244,0)')
     ctx.strokeStyle = sep; ctx.lineWidth = 0.8
-    ctx.beginPath(); ctx.moveTo(PAD * 2, PAD + 122); ctx.lineTo(W - PAD * 2, PAD + 122); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(PAD * 2, PAD + 196); ctx.lineTo(W - PAD * 2, PAD + 196); ctx.stroke()
 
     // ── Nom du commerce — bien visible ──
     ctx.font = '700 38px "DM Sans", Arial, sans-serif'
-    ctx.fillStyle = '#C4A0F4'
-    ctx.fillText(nomCommerce, W / 2, PAD + 168)
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillText(nomCommerce, W / 2, PAD + 236)
 
     // ── Fond blanc arrondi pour QR ──
     const qrX = PAD; const qrY = PAD + TOP_H
@@ -4878,12 +4907,17 @@ function QRCodeSection({ commercantId, toast }) {
 
     // ── Ligne déco bottom ──
     ctx.strokeStyle = sep; ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(PAD, botY + 66); ctx.lineTo(W - PAD, botY + 66); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(PAD, botY + 68); ctx.lineTo(W - PAD, botY + 68); ctx.stroke()
+
+    // ── Ce que c'est, pour celui qui découvre l'affiche en vitrine ──
+    ctx.font = '600 26px "DM Sans", Arial, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'
+    ctx.fillText(TXT_QR.explication, W / 2, botY + 104)
 
     // ── "Rejoins la tribu — yoppaa.app" ──
     ctx.font = '500 24px "DM Sans", Arial, sans-serif'
     ctx.fillStyle = 'rgba(196,160,244,0.6)'
-    ctx.fillText(TXT_QR.pied, W / 2, botY + 96)
+    ctx.fillText(TXT_QR.pied, W / 2, botY + 138)
 
     return canvas
   }

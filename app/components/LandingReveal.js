@@ -990,11 +990,21 @@ export default function LandingReveal({ referent = null }) {
         </h2>
         <p style={{ fontSize: '1.02rem', color: T.muted, lineHeight: 1.7, maxWidth: 620, margin: '0 auto 28px', fontWeight: 500 }}>
           Pas une app par commerce, pas une app par secteur : une seule, pour tout ton quartier.
-          Tu commandes et tu réserves en quelques secondes, nous ne prenons aucune commission sur
-          leurs ventes, et ta commune reste vivante. C&rsquo;est aussi simple que ça.
+          Tu commandes, tu réserves et tu cumules tes points en quelques secondes. Tes commerçants,
+          eux, ne nous reversent aucune commission sur ce que tu leur achètes, et ta commune reste
+          vivante.
         </p>
-        {/* Les 3 familles de commerçants (taxonomie produit : alimentaire / services / détail) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, textAlign: 'left' }}>
+        {/* Les familles de commerçants (taxonomie produit : alimentaire /
+            services / détail, plus tous ceux qui n'entrent dans aucune case).
+            La grille déborde volontairement de la colonne de texte (760px) pour
+            tenir les 4 cartes sur une seule ligne : `marginLeft: 50%` +
+            `translateX(-50%)` recentre un enfant plus large que son parent. */}
+        <style>{`
+          .familles-grid { display: grid; gap: 14px; grid-template-columns: 1fr; text-align: left; }
+          @media (min-width: 560px) { .familles-grid { grid-template-columns: repeat(2, 1fr); } }
+          @media (min-width: 920px) { .familles-grid { grid-template-columns: repeat(4, 1fr); } }
+        `}</style>
+        <div className="familles-grid" style={{ width: 'min(1040px, calc(100vw - 40px))', marginLeft: '50%', transform: 'translateX(-50%)' }}>
           {[
             { titre: 'Alimentaire', exemples: 'Boulangeries, boucheries, snacks, friteries, sandwicheries, restaurants, food trucks et plein d’autres.' },
             { titre: 'Services', exemples: 'Coiffeurs, barbiers, instituts de beauté, bien-être, garages et tous les métiers sur rendez-vous.' },

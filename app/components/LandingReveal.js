@@ -938,9 +938,49 @@ export default function LandingReveal({ referent = null }) {
     // Pas d'overflowX hidden ici : avec overflow-y visible, il transformait ce
     // div en zone de scroll imbriquée (scroll qui « accroche » sur PC). Plus
     // rien ne déborde horizontalement depuis le retrait des décors absolute.
-    <div style={{ background: T.bg, color: T.ink, fontFamily: '"DM Sans", sans-serif' }}>
+    <main style={{ background: T.bg, color: T.ink, fontFamily: '"DM Sans", sans-serif' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
       <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" async defer/>
+
+      {/* Données structurées : sans elles Google n'a aucun moyen de relier le
+          nom « Yoppaa » à une organisation, ce qui laisse les homonymes
+          occuper la requête de marque. Rendu en JSON-LD dans le corps, ce que
+          Google lit aussi bien que dans le head. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          '@context': 'https://schema.org',
+          '@graph': [
+            {
+              '@type': 'Organization',
+              '@id': 'https://www.yoppaa.app/#organization',
+              name: 'Yoppaa',
+              legalName: 'AVCOTECH SRL',
+              url: 'https://www.yoppaa.app',
+              logo: 'https://www.yoppaa.app/icon-192.png',
+              slogan: 'Ton quartier dans ta poche',
+              vatID: 'BE0731.637.148',
+              address: {
+                '@type': 'PostalAddress',
+                streetAddress: 'Rue de Prée 9G',
+                postalCode: '5640',
+                addressLocality: 'Mettet',
+                addressCountry: 'BE',
+              },
+              areaServed: { '@type': 'AdministrativeArea', name: 'Wallonie, Belgique' },
+            },
+            {
+              '@type': 'WebSite',
+              '@id': 'https://www.yoppaa.app/#website',
+              url: 'https://www.yoppaa.app',
+              name: 'Yoppaa',
+              inLanguage: 'fr-BE',
+              publisher: { '@id': 'https://www.yoppaa.app/#organization' },
+              description: "L'app belge qui réunit les commerces de quartier : commande à l'avance, rendez-vous en ligne, fidélité et bons cadeaux, sans commission pour les commerçants.",
+            },
+          ],
+        }) }}
+      />
 
       {/* ═══ 1. HERO REVEAL (fond sombre) ═══ */}
       <section style={{ background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`, color: '#fff' }}>
@@ -959,8 +999,8 @@ export default function LandingReveal({ referent = null }) {
           <p style={{ fontSize: 'clamp(1.02rem, 2.6vw, 1.2rem)', color: 'rgba(255,255,255,0.92)', lineHeight: 1.65, maxWidth: 580, margin: '0 auto 26px', fontWeight: 500 }}>
             Voici Yoppaa, l&rsquo;app belge <DrapeauBelge/> qui rapproche les habitants de leurs commerçants.
             Tu commandes chez ton boulanger, tu réserves chez ton coiffeur et tu suis la vie de ta commune,
-            le tout dans une seule app. Et les commerçants gardent l&rsquo;intégralité de leurs ventes :
-            <strong style={{ color: '#fff' }}> 0% de commission</strong>.
+            le tout dans une seule app. Et sur leurs ventes, nous ne prenons
+            <strong style={{ color: '#fff' }}> aucune commission</strong>.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 44 }}>
             <button onClick={() => allerAuForm('yopper')} style={btnPrimaire}>Devenir Yopper</button>
@@ -1408,6 +1448,6 @@ export default function LandingReveal({ referent = null }) {
           * { animation-duration: 0.01ms !important; }
         }
       `}</style>
-    </div>
+    </main>
   )
 }

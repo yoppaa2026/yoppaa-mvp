@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/cron/reveal-21juillet",
-      "schedule": "0 7 * * *"
+      "schedule": "30 8 * * *"
     },
     {
       "path": "/api/cron/morning-yoppers",

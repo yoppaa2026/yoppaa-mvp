@@ -11,9 +11,14 @@
 //   - Anti-doublon : notification_reveal_envoyee + notification_reveal_envoyee_at
 //     (colonnes déjà présentes dans MIGRATION_PRE_INSCRIPTIONS.sql)
 //
-// Le cron tourne 1×/jour à 07:00 UTC (= 09:00 Brussels été). S'il y a plus de
-// pré-inscrits que BATCH_SIZE, un batch de plus est envoyé le lendemain (ou
-// on peut trigger manuellement via curl).
+// Le cron tourne 1×/jour à 08:30 UTC (= 10:30 Brussels été), soit 30 minutes
+// APRÈS l'heure du dévoilement. C'est volontaire : à 07:00 UTC il passait avant
+// la bascule de 08:00 UTC (10:00 Brussels) et repartait en no-op, l'annonce
+// n'aurait donc été envoyée que le lendemain. La marge de 30 minutes absorbe
+// aussi le décalage de déclenchement des crons Vercel.
+//
+// S'il y a plus de pré-inscrits que BATCH_SIZE, un batch de plus est envoyé le
+// lendemain (ou on peut trigger manuellement via curl).
 //
 // Sécurité : Bearer CRON_SECRET (même pattern que billing-relances).
 

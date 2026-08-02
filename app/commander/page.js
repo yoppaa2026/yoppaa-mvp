@@ -8,6 +8,7 @@ import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
 import OneSignalInit, { taggerFavoriOneSignal, syncYopperTags } from '@/app/components/OneSignalInit'
 import CarteNotifications from './CarteNotifications'
+import SupprimerCompte from './SupprimerCompte'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 
 const T = {
@@ -3300,6 +3301,19 @@ export default function Commander() {
                     </svg>
                     Se déconnecter
                   </button>
+                )}
+
+                {/* Suppression de compte. Obligatoire à deux titres : droit à
+                    l'effacement du RGPD, et règle commune à Apple et Google qui
+                    refusent toute app permettant de créer un compte sans
+                    permettre de le supprimer depuis l'app. */}
+                {client.email && (
+                  <SupprimerCompte email={client.email} onSupprime={() => {
+                    ;['yoppaa_email','yoppaa_nom','yoppaa_prenom','yoppaa_telephone','yoppaa_client_id','yoppaa_onglet'].forEach(k => localStorage.removeItem(k))
+                    setClient({ nom:'', email:'', telephone:'', prenom:'' }); setClientId(null)
+                    setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
+                    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+                  }}/>
                 )}
               </div>
             </div>

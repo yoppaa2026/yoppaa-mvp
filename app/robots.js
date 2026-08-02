@@ -26,7 +26,14 @@ export default function robots() {
     return {
       rules: {
         userAgent: '*',
-        allow: ['/$', '/legal', '/sitemap.xml', '/og-share.png', '/icon-192.png', '/icon-512.png'],
+        allow: [
+          '/$', '/legal', '/sitemap.xml',
+          // Le favicon des résultats de recherche est récupéré par un crawl
+          // SÉPARÉ, qui respecte lui aussi le robots.txt : sans ces trois
+          // lignes, Google affiche son globe générique à la place du logo.
+          '/favicon.ico', '/icon-192.png', '/icon-512.png',
+          '/og-share.png', '/manifest.json',
+        ],
         disallow: '/',
       },
       sitemap: `${BASE_URL}/sitemap.xml`,

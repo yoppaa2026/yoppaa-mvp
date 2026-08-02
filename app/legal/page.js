@@ -133,6 +133,7 @@ export default function LegalPage() {
 
             <H3>1. Accès à la plateforme</H3>
             <P>L'accès à la plateforme Yoppaa est gratuit pour les clients. La commande est possible sans créer de compte ; la création d'un compte (facultative) permet de suivre ses commandes et rendez-vous. Yoppaa se réserve le droit de suspendre ou supprimer tout compte en cas d'utilisation frauduleuse ou contraire aux présentes CGU.</P>
+            <P>Le Client peut <strong>supprimer son compte à tout moment et par lui-même</strong>, depuis l'onglet Profil de l'application. Les modalités et les conséquences de cette suppression sont détaillées à l'article 4, Confidentialité. La suppression est refusée tant qu'une commande, un rendez-vous ou un bon cadeau en cours implique un commerçant tiers.</P>
 
             <H3>2. Processus de commande</H3>
             <Ul items={[
@@ -250,15 +251,21 @@ export default function LegalPage() {
 
             <H3>Durée de conservation</H3>
             <Ul items={[
-              'Données de commande : 5 ans (obligations fiscales)',
-              'Données de compte : durée de vie du compte + 1 an',
+              'Données de commande et de rendez-vous : 7 ans (obligations comptables et fiscales belges), sous forme anonymisée après suppression du compte',
+              'Données de compte : durée de vie du compte, puis effacement immédiat à la suppression',
               'Données de consentement : 3 ans',
               'Logs techniques : 12 mois maximum',
             ]}/>
 
             <H3>Droits des utilisateurs</H3>
-            <P>Conformément au RGPD, vous disposez des droits d'accès, rectification, effacement, limitation, portabilité et opposition. Pour exercer ces droits : support@yoppaa.app</P>
+            <P>Conformément au RGPD, vous disposez des droits d'accès, rectification, effacement, limitation, portabilité et opposition. Pour exercer ces droits : support@yoppaa.app ou dpo@yoppaa.app</P>
             <P>En cas de litige non résolu, vous pouvez saisir l'Autorité de Protection des Données (APD) belge : www.autoriteprotectiondonnees.be</P>
+
+            <H3>Suppression de votre compte</H3>
+            <P>Vous pouvez supprimer votre compte à tout moment, vous-même et sans démarche préalable, depuis l'application : onglet <strong>Profil</strong>, puis <strong>Supprimer mon compte</strong>. Aucune demande écrite n'est nécessaire.</P>
+            <P><strong>Sont effacés définitivement :</strong> votre compte et votre adresse email, vos favoris et préférences, vos cartes de fidélité et les points qu'elles contiennent, vos avis et vos suggestions de commerces, ainsi que toute préinscription associée à votre adresse.</P>
+            <P><strong>Sont conservés sous forme anonymisée :</strong> vos commandes et rendez-vous passés, que les commerçants sont légalement tenus de conserver comme pièces comptables. Votre nom, votre email et votre téléphone y sont remplacés par une mention neutre : plus aucune donnée ne permet de vous identifier.</P>
+            <P>La suppression est <strong>irréversible</strong> et met fin à votre accès. Elle est temporairement refusée, avec indication du motif, tant qu'un engagement est en cours : commande non retirée, rendez-vous à venir, ou bon cadeau disposant encore d'un solde. Ces situations impliquent un tiers commerçant et doivent être dénouées d'abord. Vous pouvez alors nous écrire à dpo@yoppaa.app.</P>
 
             <H3>Cookies</H3>
             <P>Yoppaa utilise uniquement des cookies et stockages techniques indispensables au fonctionnement (session, authentification, préférences locales), ainsi que la protection anti-abus Cloudflare Turnstile sur les formulaires. Aucun cookie publicitaire ou de suivi tiers n'est utilisé. Les notifications push (OneSignal) ne sont activées qu'à votre demande explicite et sont désactivables à tout moment.</P>

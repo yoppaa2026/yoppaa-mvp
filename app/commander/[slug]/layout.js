@@ -43,7 +43,7 @@ const getAvisAgg = cache(async (commercantId) => {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       { auth: { persistSession: false } }
     )
-    const { data } = await supabase.from('avis').select('note').eq('commercant_id', commercantId)
+    const { data } = await supabase.from('avis_public').select('note').eq('commercant_id', commercantId)
     if (!data || data.length === 0) return null
     const moyenne = data.reduce((acc, a) => acc + (a.note || 0), 0) / data.length
     return { moyenne: Math.round(moyenne * 10) / 10, count: data.length }

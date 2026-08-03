@@ -652,17 +652,16 @@ function SectionMesAvis({ clientId }) {
   useEffect(() => {
     if (!clientId) return
     let annule = false
-    supabase
-      .from('avis')
-      .select('id, note, commentaire, created_at, commande_id, commercant:commercants(nom, slug)')
-      .eq('client_id', clientId)
-      .order('created_at', { ascending: false })
-      .limit(20)
-      .then(({ data }) => {
+    // Route serveur : la table avis n'est plus lisible publiquement, elle
+    // exposait l'identifiant du client et celui de sa commande.
+    fetch('/api/yopper/avis')
+      .then(r => r.json())
+      .then(j => {
         if (annule) return
-        setAvis(data || [])
+        setAvis(j?.avis || [])
         setLoading(false)
       })
+      .catch(() => { if (!annule) setLoading(false) })
     return () => { annule = true }
   }, [clientId])
 
@@ -1507,10 +1506,13 @@ export default function Commander() {
     if (candidates.length === 0) return
 
     let annule = false
-    supabase.from('avis').select('commande_id').eq('client_id', clientId)
-      .then(({ data: avisExistants }) => {
+    // Même route serveur : on a besoin de savoir quelles commandes ont déjà
+    // reçu un avis, sans exposer la table.
+    fetch('/api/yopper/avis')
+      .then(r => r.json())
+      .then(j => {
         if (annule) return
-        const dejaAvis = new Set((avisExistants || []).map(a => a.commande_id).filter(Boolean))
+        const dejaAvis = new Set((j?.avis || []).map(a => a.commande_id).filter(Boolean))
         // Prend la commande la plus récente (clientCommandes est ordonné par created_at desc côté chargerCommandesClient)
         const prochaine = candidates.find(c => !dejaAvis.has(c.id))
         if (prochaine) { avisSessionRef.current = true; setAvisCommande(prochaine) }
@@ -1718,7 +1720,7 @@ export default function Commander() {
 
   async function chargerNotes(ids, commercantsData = []) {
     const [{ data: avisData }, { data: creneauxData }, { data: commandesData }] = await Promise.all([
-      supabase.from('avis').select('commercant_id, note').in('commercant_id', ids),
+      supabase.from('avis_public').select('commercant_id, note').in('commercant_id', ids),
       supabase.from('creneaux').select('id, commercant_id, heure_debut, heure_fin, max_commandes, actif').in('commercant_id', ids).eq('actif', true),
       supabase.from('commandes_stats').select('commercant_id, creneau_id').in('commercant_id', ids).neq('statut', 'recupere')
     ])

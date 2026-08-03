@@ -1349,9 +1349,13 @@ export default function CommanderSlug() {
     ] = await Promise.all([
       supabase.from('articles').select('*').eq('commercant_id', c.id).eq('actif', true).order('categorie').order('nom'),
       supabase.from('creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
-      supabase.from('avis').select('*, client:clients(nom)').eq('commercant_id', c.id).order('created_at', { ascending: false }).limit(10),
-      supabase.from('avis').select('note').eq('commercant_id', c.id),
-      supabase.from('commandes_stats').select('creneau_id, commande_articles(quantite, article:articles(temps_prepa))').eq('commercant_id', c.id).not('statut', 'in', '(recupere,non_retire)'),
+      // Vue publique : la note, le commentaire et la réponse du commerçant,
+      // sans l'identifiant du client ni celui de sa commande.
+      supabase.from('avis_public').select('*').eq('commercant_id', c.id).order('created_at', { ascending: false }).limit(10),
+      supabase.from('avis_public').select('note').eq('commercant_id', c.id),
+      // Charge de préparation agrégée par créneau : les lignes de commande ne
+      // sont plus lisibles publiquement, une fonction serveur fait la somme.
+      supabase.rpc('charge_preparation_par_creneau', { p_commercant_id: c.id }),
       supabase.from('commercant_photos').select('*').eq('commercant_id', c.id).order('ordre'),
       supabase.from('yoppaa_deals').select('*').eq('commercant_id', c.id).eq('actif', true),
       supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', c.id).gte('date_fin', new Date().toISOString()),
@@ -1368,12 +1372,14 @@ export default function CommanderSlug() {
       ? { moyenne: avisNotes.reduce((a, x) => a + x.note, 0) / avisNotes.length, count: avisNotes.length }
       : { moyenne: 0, count: 0 }
 
+    // La fonction serveur renvoie déjà les totaux par créneau : nombre de
+    // commandes et temps de préparation cumulé. Aucune ligne de commande ne
+    // transite plus par le navigateur.
     const countParCreneau = {}
     const tempsParCreneau = {}
-    ;(commandesActives || []).forEach(cmd => {
-      countParCreneau[cmd.creneau_id] = (countParCreneau[cmd.creneau_id] || 0) + 1
-      const tempsCmd = (cmd.commande_articles || []).reduce((acc, l) => acc + (l.quantite * (l.article?.temps_prepa || 1)), 0)
-      tempsParCreneau[cmd.creneau_id] = (tempsParCreneau[cmd.creneau_id] || 0) + tempsCmd
+    ;(commandesActives || []).forEach(r => {
+      countParCreneau[r.creneau_id] = Number(r.nb_commandes) || 0
+      tempsParCreneau[r.creneau_id] = Number(r.temps_total) || 0
     })
     const creneauxAvecCount = (cren || []).map(cr => ({ ...cr, count: countParCreneau[cr.id] || 0, temps_cumul: tempsParCreneau[cr.id] || 0 }))
 
@@ -1562,23 +1568,17 @@ export default function CommanderSlug() {
     const d = new Date(jourDate)
     const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 
-    // Approche en 2 étapes (plus robuste qu'une jointure avec filtres) :
-    // 1) commandes du jour pour ce commerçant 2) leurs commande_articles
-    const { data: cmds } = await supabase
-      .from('commandes_stats')
-      .select('id')
-      .eq('commercant_id', commercant.id)
-      .eq('date_commande', dateStr)
-      .neq('statut', 'non_retire')
-    if (!cmds || cmds.length === 0) { setCommandesParArticleJour({}); return }
-    const cmdIds = cmds.map(c => c.id)
-    const { data: lignes } = await supabase
-      .from('commande_articles')
-      .select('article_id, quantite')
-      .in('commande_id', cmdIds)
+    // Une seule fonction serveur remplace l'ancienne approche en deux temps,
+    // qui lisait les commandes puis leurs lignes. Elle renvoie directement les
+    // quantités déjà commandées par article, sans exposer aucune commande.
+    const { data: lignes, error } = await supabase.rpc('stock_commande_par_article', {
+      p_commercant_id: commercant.id,
+      p_date: dateStr,
+    })
+    if (error) { console.warn('[stock jour] rpc KO', error.message); return }
     const map = {}
     ;(lignes || []).forEach(r => {
-      map[r.article_id] = (map[r.article_id] || 0) + r.quantite
+      map[r.article_id] = Number(r.quantite) || 0
     })
     setCommandesParArticleJour(map)
   }, [commercant, joursDispos, jourSelectionne])

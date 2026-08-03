@@ -17,6 +17,28 @@ import { createClient } from '@supabase/supabase-js'
 import { lireIdentiteYopper } from '@/lib/yopper-session'
 import { globalLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 
+// GET → les avis du Yopper courant. La table n'est plus lisible publiquement
+// (elle exposait client_id et commande_id), et un Yopper sans compte Auth ne
+// peut pas passer par une policy : c'est donc le serveur qui les lui rend.
+export async function GET() {
+  const identite = await lireIdentiteYopper()
+  if (!identite?.client_id) return NextResponse.json({ ok: true, avis: [] })
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false } }
+  )
+  const { data } = await supabase
+    .from('avis')
+    .select('id, note, commentaire, created_at, commande_id, commercant:commercants(nom, slug)')
+    .eq('client_id', identite.client_id)
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  return NextResponse.json({ ok: true, avis: data || [] })
+}
+
 export async function POST(request) {
   try {
     const limite = await checkLimit(globalLimiter, clientIp(request))

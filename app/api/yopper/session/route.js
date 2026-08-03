@@ -16,21 +16,18 @@
 
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { encoderIdentite, lireIdentiteYopper } from '@/lib/yopper-session'
 
 const COOKIE_NAME = 'yoppaa_yopper'
 const MAX_AGE_SEC = 365 * 24 * 3600  // 365 jours
 
 export async function GET() {
   try {
-    const jar = await cookies()
-    const raw = jar.get(COOKIE_NAME)?.value
-    if (!raw) return NextResponse.json({ ok: true, identity: null })
-    try {
-      const identity = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'))
-      return NextResponse.json({ ok: true, identity })
-    } catch {
-      return NextResponse.json({ ok: true, identity: null })
-    }
+    // La vérification de signature vit dans lib/yopper-session : un cookie
+    // altéré, ou posé avant la mise en place de la signature, est traité comme
+    // absent. L'application en repose alors un valide depuis le localStorage.
+    const identity = await lireIdentiteYopper()
+    return NextResponse.json({ ok: true, identity: identity || null })
   } catch (e) {
     console.error('[yopper/session GET]', e)
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })
@@ -45,7 +42,9 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'email requis' }, { status: 400 })
     }
     const identity = { client_id, email, prenom, nom, telephone }
-    const encoded = Buffer.from(JSON.stringify(identity), 'utf8').toString('base64')
+    // Cookie SIGNÉ : sans signature, il suffisait de réencoder le sien avec
+    // l'identifiant d'un autre pour agir en son nom. Voir lib/yopper-session.
+    const encoded = encoderIdentite(identity)
     const jar = await cookies()
     jar.set(COOKIE_NAME, encoded, {
       httpOnly: true,

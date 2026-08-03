@@ -66,7 +66,7 @@ export async function GET(request) {
 
     const { data: commandes } = await admin
       .from('commandes')
-      .select('id, numero_commande, statut, total, frais_livraison, mode_retrait, regime_tva, paye_en_ligne, bon_cadeau_montant, stripe_frais, stripe_net, date_commande, created_at, commande_articles(article_id, quantite, prix_unitaire, tva_taux)')
+      .select('id, numero_commande, statut, total, frais_livraison, tva_taux_livraison, mode_retrait, regime_tva, paye_en_ligne, bon_cadeau_montant, stripe_frais, stripe_net, date_commande, created_at, commande_articles(article_id, quantite, prix_unitaire, tva_taux)')
       .eq('commercant_id', commercantId)
       .gte('created_at', `${du}T00:00:00.000Z`)
       .lte('created_at', auFin)

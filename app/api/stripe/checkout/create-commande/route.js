@@ -36,7 +36,7 @@ import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
 import { chargerBonValide, debiterBon } from '@/lib/bons-cadeaux-server'
-import { tauxPourArticle, REGIME_EMPORTER } from '@/lib/tva'
+import { tauxPourArticle, tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
 
 export async function POST(request) {
   try {
@@ -476,6 +476,12 @@ export async function POST(request) {
         creneau_livraison_id: estLivraison ? creneau.id : null,
         mode_retrait: estExpedition ? 'expedition' : estLivraison ? 'livraison' : 'retrait',
         regime_tva: regimeTva,
+        // Frais de livraison : accessoires à la vente, donc au taux le plus bas
+        // de la commande (tolérance admise sur les taux mixtes). Figé ici, pour
+        // qu'un changement de taux ne réécrive jamais une commande passée.
+        tva_taux_livraison: fraisLivraisonEUR > 0
+          ? tauxFraisLivraison(lignes.map(l => l.tva_taux), commercant.tva_taux_defaut)
+          : null,
         adresse_livraison: (estLivraison || estExpedition) ? adresse_livraison : null,
         livraison_lat: coordsLivraison?.lat ?? null,
         livraison_lng: coordsLivraison?.lng ?? null,

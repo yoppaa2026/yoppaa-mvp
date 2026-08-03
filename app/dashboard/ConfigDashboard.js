@@ -204,6 +204,10 @@ function TabMenu({ commercantId, commercant, toast }) {
   // Détail (boutique) : stock PERMANENT simple par article (ou par variante),
   // pas de stock par jour ni de temps de préparation (concepts C&C alimentaire).
   const estDetail = commercant?.categorie === 'detail'
+  // Alimentaire : seul segment concerné par le double taux de TVA, la même
+  // denrée relevant de la livraison de biens à emporter et de la restauration
+  // quand elle est consommée en salle.
+  const estAlimentaire = !estVitrine && !estDetail
   // Variantes (matrice taille/couleur) proposées au détail et au service.
   // L'alimentaire garde son système d'options/suppléments.
   const variantesCategorie = estDetail || estVitrine
@@ -377,13 +381,24 @@ function TabMenu({ commercantId, commercant, toast }) {
     return () => clearInterval(id)
   }, [commercantId, chargerCommandesAujourdhui])
 
+  // Taux de TVA proposés au commerçant. Ils sont LUS EN BASE et jamais écrits
+  // dans le code : la TVA est une matière fédérale et mouvante, un changement
+  // doit se régler par une ligne dans tva_taux_reference, pas par un déploiement.
+  const [tvaRefs, setTvaRefs] = useState([])
+  useEffect(() => {
+    let annule = false
+    supabase.from('tva_taux_reference').select('taux, libelle, aide').eq('actif', true).order('ordre')
+      .then(({ data }) => { if (!annule) setTvaRefs(data || []) })
+    return () => { annule = true }
+  }, [])
+
   function openNew() {
-    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', photo_url: '', vendable: true })
+    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '' })
     setGalerie([]); setPropsIa([])
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), photo_url: a.photo_url || '', vendable: !a.est_vitrine })
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '' })
     setGalerie([]); setPropsIa([])
     fetchGalerie(a.id)
     setEditId(a.id); setShowForm(true)
@@ -405,6 +420,10 @@ function TabMenu({ commercantId, commercant, toast }) {
       // Vitrine : est_vitrine = prix indicatif non commandable (par produit).
       // Détail/alimentaire : toujours false (prix ferme).
       est_vitrine: estVitrine ? !form.vendable : false,
+      // Chaîne vide = « pas renseigné » : on écrit null plutôt que 0, sans quoi
+      // l'article passerait pour exonéré alors qu'il n'a simplement pas été réglé.
+      tva_taux: form.tva_taux === '' || form.tva_taux == null ? null : Number(form.tva_taux),
+      tva_taux_sur_place: form.tva_taux_sur_place === '' || form.tva_taux_sur_place == null ? null : Number(form.tva_taux_sur_place),
     }
     const { error } = editId
       ? await supabase.from('articles').update(payload).eq('id', editId)
@@ -640,6 +659,38 @@ function TabMenu({ commercantId, commercant, toast }) {
               </div>
             </>
           )}
+          {/* TVA. Le prix saisi est TTC : le taux ne change pas ce que paie le
+              client, il détermine la part de TVA à l'intérieur. Deux taux pour
+              l'alimentaire, parce qu'en Belgique la même denrée relève de la
+              livraison de biens à emporter et de la restauration servie en
+              salle, ce qui n'est pas le même régime. */}
+          <div>
+            <label style={s.label}>TVA{estAlimentaire ? ' à emporter' : ''}</label>
+            <select value={form.tva_taux ?? ''} onChange={e => setForm(p => ({ ...p, tva_taux: e.target.value }))}
+              style={{ ...s.input, cursor: 'pointer' }}>
+              <option value="">— À définir —</option>
+              {tvaRefs.map(t => (
+                <option key={t.taux} value={t.taux}>{t.libelle}{t.aide ? ` · ${t.aide}` : ''}</option>
+              ))}
+            </select>
+            {estAlimentaire && (
+              <div style={{ marginTop: 10 }}>
+                <label style={s.label}>TVA sur place (si consommation en salle)</label>
+                <select value={form.tva_taux_sur_place ?? ''} onChange={e => setForm(p => ({ ...p, tva_taux_sur_place: e.target.value }))}
+                  style={{ ...s.input, cursor: 'pointer' }}>
+                  <option value="">— Même taux qu&rsquo;à emporter —</option>
+                  {tvaRefs.map(t => (
+                    <option key={t.taux} value={t.taux}>{t.libelle}{t.aide ? ` · ${t.aide}` : ''}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.5 }}>
+              Le prix que tu saisis est le prix payé par le client, TVA comprise. En cas de doute
+              sur le taux applicable, consulte ton comptable ou le SPF Finances.
+            </p>
+          </div>
+
           <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label={estVitrine ? 'Produit visible' : 'Article disponible'}/>
 
           {/* Photo de couverture */}
@@ -5362,11 +5413,20 @@ function TabRdvPrestations({ commercantId, toast }) {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
-  const initialForm = { nom: '', description: '', duree_minutes: '30', prix_mode: 'fixe', prix: '', prix_min: '', prix_max: '', acompte_pourcent: '0', actif: true }
+  const initialForm = { nom: '', description: '', duree_minutes: '30', prix_mode: 'fixe', prix: '', prix_min: '', prix_max: '', acompte_pourcent: '0', actif: true, tva_taux: '' }
   const [form, setForm] = useState(initialForm)
   // Propositions IA pour la description de la prestation (surface 'prestation')
   const [propsIa, setPropsIa] = useState([])
   const firstLoadRef = useRef(true)
+
+  // Taux de TVA proposés, lus en base (jamais écrits dans le code).
+  const [tvaRefs, setTvaRefs] = useState([])
+  useEffect(() => {
+    let annule = false
+    supabase.from('tva_taux_reference').select('taux, libelle, aide').eq('actif', true).order('ordre')
+      .then(({ data }) => { if (!annule) setTvaRefs(data || []) })
+    return () => { annule = true }
+  }, [])
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchAll() }, [commercantId])
@@ -5420,6 +5480,7 @@ function TabRdvPrestations({ commercantId, toast }) {
       prix_max: p.prix_max != null ? String(p.prix_max) : '',
       acompte_pourcent: String(p.acompte_pourcent ?? 0),
       actif: p.actif !== false,
+      tva_taux: p.tva_taux ?? '',
     })
     setEditId(p.id)
     // Précharge les praticiens autorisés depuis la junction existante
@@ -5450,6 +5511,9 @@ function TabRdvPrestations({ commercantId, toast }) {
       prix_max: form.prix_mode === 'fourchette' ? (form.prix_max ? Number(form.prix_max) : null) : null,
       acompte_pourcent: Math.max(0, Math.min(100, parseInt(form.acompte_pourcent, 10) || 0)),
       actif: !!form.actif,
+      // Vide = pas renseigné : null, jamais 0, sinon la prestation passerait
+      // pour exonérée alors qu'elle n'a simplement pas été réglée.
+      tva_taux: form.tva_taux === '' || form.tva_taux == null ? null : Number(form.tva_taux),
     }
     setSaving(true)
     // INSERT/UPDATE prestation
@@ -5587,6 +5651,22 @@ function TabRdvPrestations({ commercantId, toast }) {
                 <Input type="number" min="0" max="100" value={form.acompte_pourcent} onChange={e => setForm({ ...form, acompte_pourcent: e.target.value })}/>
               </div>
             </div>
+            {/* TVA de la prestation. Le prix affiché reste celui que paie le
+                client : le taux détermine seulement la part de TVA à l'intérieur. */}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>TVA</label>
+              <select value={form.tva_taux ?? ''} onChange={e => setForm({ ...form, tva_taux: e.target.value })}
+                style={{ ...s.input, cursor: 'pointer' }}>
+                <option value="">— À définir —</option>
+                {tvaRefs.map(t => (
+                  <option key={t.taux} value={t.taux}>{t.libelle}{t.aide ? ` · ${t.aide}` : ''}</option>
+                ))}
+              </select>
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.5 }}>
+                Prix TVA comprise. En cas de doute, consulte ton comptable ou le SPF Finances.
+              </p>
+            </div>
+
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 6 }}>Tarification</label>
             <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
               <button onClick={() => setForm({ ...form, prix_mode: 'fixe' })} style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${form.prix_mode === 'fixe' ? T.main : T.hairline}`, background: form.prix_mode === 'fixe' ? T.pale : '#fff', color: form.prix_mode === 'fixe' ? T.main : T.muted, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>Prix fixe</button>

@@ -6820,6 +6820,247 @@ function TabAvis({ commercantId, toast }) {
   )
 }
 
+// ─── Onglet Comptabilité ──────────────────────────────────────────────────────
+// Journal des transactions Yoppaa : aperçu à l'écran et export CSV.
+//
+// Le téléchargement passe par un fetch authentifié plutôt que par un simple
+// lien : la route exige le jeton du commerçant, et on ne met jamais un jeton
+// dans une URL (il finirait dans l'historique et dans les logs).
+function TabComptabilite({ commercantId, toast }) {
+  const aujourdHui = new Date()
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const debutMois = new Date(aujourdHui.getFullYear(), aujourdHui.getMonth(), 1)
+
+  const [du, setDu] = useState(iso(debutMois))
+  const [au, setAu] = useState(iso(aujourdHui))
+  const [apercu, setApercu] = useState(null)
+  const [chargement, setChargement] = useState(false)
+  const [telechargement, setTelechargement] = useState(null)
+
+  function periode(cle) {
+    const a = aujourdHui.getFullYear()
+    const m = aujourdHui.getMonth()
+    if (cle === 'mois')     { setDu(iso(new Date(a, m, 1)));      setAu(iso(new Date(a, m + 1, 0))) }
+    if (cle === 'precedent'){ setDu(iso(new Date(a, m - 1, 1)));  setAu(iso(new Date(a, m, 0))) }
+    if (cle === 'trimestre'){ const t = Math.floor(m / 3) * 3; setDu(iso(new Date(a, t, 1))); setAu(iso(new Date(a, t + 3, 0))) }
+    if (cle === 'annee')    { setDu(`${a}-01-01`);               setAu(`${a}-12-31`) }
+    setApercu(null)
+  }
+
+  async function jeton() {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token || null
+  }
+
+  async function charger() {
+    setChargement(true); setApercu(null)
+    try {
+      const token = await jeton()
+      if (!token) { toast('Session expirée, reconnecte-toi.', 'error'); setChargement(false); return }
+      const r = await fetch(`/api/dashboard/export-comptable?commercant_id=${commercantId}&du=${du}&au=${au}&format=json`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const j = await r.json()
+      if (!j?.ok) { toast(j?.error || 'Chargement impossible', 'error'); setChargement(false); return }
+      setApercu(j)
+    } catch {
+      toast('Erreur réseau', 'error')
+    }
+    setChargement(false)
+  }
+
+  async function telecharger(vue) {
+    setTelechargement(vue)
+    try {
+      const token = await jeton()
+      if (!token) { toast('Session expirée, reconnecte-toi.', 'error'); setTelechargement(null); return }
+      const r = await fetch(`/api/dashboard/export-comptable?commercant_id=${commercantId}&du=${du}&au=${au}&vue=${vue}&format=csv`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        toast(j?.error || 'Export impossible', 'error'); setTelechargement(null); return
+      }
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `yoppaa-${vue}-${du}-au-${au}.csv`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+      toast('Export téléchargé')
+    } catch {
+      toast('Erreur réseau', 'error')
+    }
+    setTelechargement(null)
+  }
+
+  const eur = (n) => `${(Number(n) || 0).toFixed(2).replace('.', ',')} €`
+  const totaux = (apercu?.journal || []).reduce((acc, j) => ({
+    nb: acc.nb + j.nb,
+    total: acc.total + j.total,
+    enLigne: acc.enLigne + j.enLigne,
+    comptoir: acc.comptoir + j.comptoir,
+    bonCadeau: acc.bonCadeau + j.bonCadeau,
+  }), { nb: 0, total: 0, enLigne: 0, comptoir: 0, bonCadeau: 0 })
+
+  // Ventilation cumulée par taux, pour l'aperçu à l'écran.
+  const parTaux = {}
+  for (const j of (apercu?.journal || [])) {
+    for (const [cle, ttc] of Object.entries(j.parTaux || {})) {
+      parTaux[cle] = (parTaux[cle] || 0) + ttc
+    }
+  }
+
+  const btn = { padding: '10px 16px', borderRadius: 100, border: 'none', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={s.card}>
+        <h3 style={s.cardTitle}>Journal des transactions Yoppaa</h3>
+        <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.6, marginBottom: 14 }}>
+          Tes ventes passées par Yoppaa, jour par jour, ventilées par taux de TVA. À remettre à ton
+          comptable ou à rapprocher de tes virements.
+        </p>
+
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+          {[
+            { cle: 'mois', label: 'Ce mois' },
+            { cle: 'precedent', label: 'Mois dernier' },
+            { cle: 'trimestre', label: 'Ce trimestre' },
+            { cle: 'annee', label: 'Cette année' },
+          ].map(p => (
+            <button key={p.cle} onClick={() => periode(p.cle)}
+              style={{ ...btn, padding: '7px 13px', fontSize: 12, background: T.pale, color: T.main }}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+          <div>
+            <label style={s.label}>Du</label>
+            <Input type="date" value={du} onChange={e => { setDu(e.target.value); setApercu(null) }}/>
+          </div>
+          <div>
+            <label style={s.label}>Au</label>
+            <Input type="date" value={au} onChange={e => { setAu(e.target.value); setApercu(null) }}/>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={charger} disabled={chargement} style={{ ...btn, background: T.bgPanel, color: '#fff' }}>
+            {chargement ? 'Calcul…' : 'Voir le récapitulatif'}
+          </button>
+          <button onClick={() => telecharger('journal')} disabled={!!telechargement}
+            style={{ ...btn, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff' }}>
+            {telechargement === 'journal' ? 'Préparation…' : 'Télécharger le journal'}
+          </button>
+          <button onClick={() => telecharger('detail')} disabled={!!telechargement}
+            style={{ ...btn, background: '#fff', color: T.deep, border: `1.5px solid ${T.hairline}` }}>
+            {telechargement === 'detail' ? 'Préparation…' : 'Télécharger le détail'}
+          </button>
+        </div>
+      </div>
+
+      {apercu && (
+        <div style={s.card}>
+          <h3 style={s.cardTitle}>Du {du} au {au}</h3>
+
+          {apercu.assujetti === false && (
+            <p style={{ fontSize: 12, color: '#B45309', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10, padding: '9px 12px', marginBottom: 12, lineHeight: 1.5 }}>
+              Ton commerce est enregistré comme non assujetti à la TVA : aucune ventilation n&rsquo;est calculée.
+            </p>
+          )}
+          {apercu.avertissement_taux && (
+            <p style={{ fontSize: 12, color: '#B45309', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10, padding: '9px 12px', marginBottom: 12, lineHeight: 1.5 }}>
+              Certaines transactions sont antérieures à la mise en place des taux : elles reprennent le taux actuel de l&rsquo;article.
+            </p>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginBottom: 14 }}>
+            {[
+              { l: 'Transactions', v: totaux.nb },
+              { l: 'Chiffre TTC', v: eur(totaux.total) },
+              { l: 'En ligne', v: eur(totaux.enLigne) },
+              { l: 'Au comptoir', v: eur(totaux.comptoir) },
+              { l: 'Bons cadeaux', v: eur(totaux.bonCadeau) },
+            ].map(c => (
+              <div key={c.l} style={{ background: T.bg, borderRadius: 10, padding: '10px 12px' }}>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 900, color: T.ink }}>{c.v}</p>
+                <p style={{ margin: '2px 0 0', fontSize: 10.5, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{c.l}</p>
+              </div>
+            ))}
+          </div>
+
+          {Object.keys(parTaux).length > 0 && (
+            <>
+              <p style={{ fontSize: 12, fontWeight: 800, color: T.deep, marginBottom: 6 }}>Ventilation par taux</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 12 }}>
+                {Object.entries(parTaux).map(([cle, ttc]) => {
+                  const taux = cle === 'NR' ? null : Number(cle)
+                  const base = taux ? Math.round((ttc / (1 + taux / 100)) * 100) / 100 : ttc
+                  return (
+                    <div key={cle} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12.5, padding: '7px 10px', background: cle === 'NR' ? '#FFFBEB' : T.bg, borderRadius: 8 }}>
+                      <span style={{ fontWeight: 700, color: cle === 'NR' ? '#B45309' : T.deep }}>
+                        {cle === 'NR' ? 'Taux non renseigné' : `${taux} %`}
+                      </span>
+                      <span style={{ color: T.muted }}>
+                        base {eur(base)} · TVA {eur(ttc - base)} · TTC {eur(ttc)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              {parTaux.NR != null && (
+                <p style={{ fontSize: 11.5, color: '#B45309', lineHeight: 1.5, marginBottom: 12 }}>
+                  Des articles n&rsquo;ont aucun taux renseigné. Complète-les dans ton catalogue, sinon ces
+                  montants ne pourront pas être ventilés.
+                </p>
+              )}
+            </>
+          )}
+
+          {apercu.journal?.length > 0 ? (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: T.muted }}>
+                    <th style={{ padding: '6px 8px', fontWeight: 700 }}>Jour</th>
+                    <th style={{ padding: '6px 8px', fontWeight: 700 }}>Nb</th>
+                    <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>TTC</th>
+                    <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>En ligne</th>
+                    <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>Comptoir</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {apercu.journal.map(j => (
+                    <tr key={j.date} style={{ borderTop: `1px solid ${T.hairline}` }}>
+                      <td style={{ padding: '6px 8px', fontWeight: 700, color: T.ink }}>{j.date}</td>
+                      <td style={{ padding: '6px 8px', color: T.muted }}>{j.nb}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 800, color: T.ink }}>{eur(j.total)}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', color: T.muted }}>{eur(j.enLigne)}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', color: T.muted }}>{eur(j.comptoir)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p style={{ fontSize: 12.5, color: T.muted }}>Aucune transaction sur cette période.</p>
+          )}
+        </div>
+      )}
+
+      <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.6, padding: '0 4px' }}>
+        Document d&rsquo;aide à la comptabilité. Yoppaa n&rsquo;est pas un système de caisse enregistrée
+        certifié : ce journal ne remplace pas une caisse certifiée pour les établissements qui y sont
+        soumis. En cas de doute, consulte ton comptable ou le SPF Finances.
+      </p>
+    </div>
+  )
+}
+
 // ─── Composant principal ──────────────────────────────────────────────────────
 // tabInitial : permet aux raccourcis de la vue principale (Actions rapides)
 // d'ouvrir directement le bon onglet, sans faire chercher le commerçant.
@@ -6901,6 +7142,8 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
     // Bons cadeaux : Vendre uniquement (l'achat passe par Stripe)
     canDo(commercant?.plan, 'bons_cadeaux') && { id: 'bons', label: 'Bons cadeaux', icon: 'gift' },
     peutPaiements && { id: 'paiements', label: 'Paiements', icon: 'tag' },
+    // Journal des transactions et export : promis par la formule Vendre.
+    canDo(commercant?.plan, 'export_comptable') && { id: 'comptabilite', label: 'Comptabilité', icon: 'tag' },
     { id: 'profil',   label: 'Profil',   icon: 'shop' },
     // Accompagnement sur place et matériel : accessible à tout moment, plus
     // seulement à l'inscription (l'étape 5 le promettait déjà).
@@ -6939,6 +7182,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
       {tab === 'fidelite' && canDo(commercant?.plan, 'fidelite') && <TabFidelite commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}
       {tab === 'bons' && canDo(commercant?.plan, 'bons_cadeaux') && <TabBonsCadeaux commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
+      {tab === 'comptabilite' && canDo(commercant?.plan, 'export_comptable') && <TabComptabilite commercantId={commercantId} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} />}
       {tab === 'accompagnement' && <TabAccompagnement commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}

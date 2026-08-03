@@ -13,6 +13,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { canDo } from '@/lib/plans'
 import { construireLignes, csvJournal, csvDetail, journalParJour } from '@/lib/export-comptable'
+import { normaliser } from '@/lib/tva'
 
 export async function GET(request) {
   try {
@@ -65,7 +66,7 @@ export async function GET(request) {
 
     const { data: commandes } = await admin
       .from('commandes')
-      .select('id, numero_commande, statut, total, frais_livraison, mode_retrait, paye_en_ligne, bon_cadeau_montant, stripe_frais, stripe_net, date_commande, created_at, commande_articles(article_id, quantite, prix_unitaire, tva_taux)')
+      .select('id, numero_commande, statut, total, frais_livraison, mode_retrait, regime_tva, paye_en_ligne, bon_cadeau_montant, stripe_frais, stripe_net, date_commande, created_at, commande_articles(article_id, quantite, prix_unitaire, tva_taux)')
       .eq('commercant_id', commercantId)
       .gte('created_at', `${du}T00:00:00.000Z`)
       .lte('created_at', auFin)
@@ -82,18 +83,21 @@ export async function GET(request) {
     // migration, dont les lignes n'ont pas de taux figé.
     const { data: articles } = await admin
       .from('articles')
-      .select('id, tva_taux')
+      .select('id, tva_taux, tva_taux_sur_place')
       .eq('commercant_id', commercantId)
-    const tauxParArticle = Object.fromEntries((articles || []).map(a => [a.id, a.tva_taux]))
+    const articlesParId = Object.fromEntries((articles || []).map(a => [a.id, a]))
 
     const assujetti = commercant.tva_assujetti !== false
-    const tauxDefaut = Number(commercant.tva_taux_defaut) || 21
+    // Pas de repli codé en dur : si le commerce n'a pas de taux par défaut, les
+    // montants concernés apparaissent en « taux non renseigné » plutôt que
+    // d'être ventilés sur une valeur inventée qui passerait inaperçue.
+    const tauxDefaut = normaliser(commercant.tva_taux_defaut)
 
     const lignes = construireLignes({
       commandes: commandes || [],
       rdvs: rdvs || [],
       tauxDefaut,
-      tauxParArticle,
+      articlesParId,
     })
 
     // Signale honnêtement que certaines lignes reposent sur le taux actuel.

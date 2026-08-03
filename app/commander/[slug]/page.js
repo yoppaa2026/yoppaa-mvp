@@ -8,6 +8,7 @@ import { canDo, isVitrine } from '@/lib/plans'
 import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau } from '@/lib/creneaux'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
+import { deposerPanierPourRdv } from '@/lib/panier-vers-rdv'
 import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import PillsStatut from '../PillsStatut'
@@ -2946,23 +2947,39 @@ export default function CommanderSlug() {
                 )}
 
                 {/* Bouton Prendre RDV - module natif Yoppaa pour vitrine FULL avec rdv_actif */}
-                {peutPrendreRdv && (
+                {peutPrendreRdv && (() => {
+                  // Le panier PART AVEC le client vers le tunnel de rendez-vous.
+                  // Avant, ce bouton était un simple lien : le client mettait
+                  // son shampoing, cliquait pour réserver sa coupe, et son
+                  // panier disparaissait. Les deux tunnels ne se rejoignaient
+                  // jamais, alors que c'est le geste le plus naturel qui soit.
+                  const nbPanier = Object.values(panier).reduce((s, i) => s + i.quantite, 0)
+                  return (
                   <div style={{ margin: '0 12px 12px' }}>
                     <a href={`/commander/rdv/${commercant.slug}`}
+                      onClick={() => deposerPanierPourRdv(commercant.slug, panier)}
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 18px', borderRadius: 14, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', textDecoration: 'none', boxShadow: `0 6px 22px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                           <rect x="3" y="5" width="18" height="16" rx="2"/>
                           <path d="M3 9h18M8 3v4M16 3v4"/>
                         </svg>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Prendre rendez-vous</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {nbPanier > 0 ? 'Prendre RDV et garder mon panier' : 'Prendre rendez-vous'}
+                        </span>
                       </span>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                         <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
                       </svg>
                     </a>
+                    {nbPanier > 0 && (
+                      <p style={{ margin: '6px 2px 0', fontSize: '0.72rem', color: T.muted, lineHeight: 1.45 }}>
+                        Tes {nbPanier} article{nbPanier > 1 ? 's' : ''} te suivent : tu paieras tout en une fois et tu repartiras avec le jour de ton rendez-vous.
+                      </p>
+                    )}
                   </div>
-                )}
+                  )
+                })()}
 
                 {commercant.horaires_detail && <HorairesSection horaires={commercant.horaires_detail}/>}
 

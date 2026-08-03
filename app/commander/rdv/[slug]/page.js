@@ -18,6 +18,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { isVitrine, canDo } from '@/lib/plans'
 import { dealActifCeJour, remiseSurArticle } from '@/lib/deals'
+import { reprendrePanierPourRdv } from '@/lib/panier-vers-rdv'
 import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import HorairesSection from '../../HorairesSection'
@@ -429,6 +430,33 @@ export default function CommanderRdvSlug() {
   const produitsAchetables = canDo(commercant?.plan, 'commande')
     && commercant?.stripe_account_charges_enabled === true
     && !commercant?._rdvDesactive
+
+  // Le client arrive de la boutique avec un panier : on le reprend ici, pour
+  // qu'il ne recommence pas ses ajouts. On attend que le catalogue soit chargé,
+  // les prix venant des articles réels et jamais du dépôt, qui ne transporte
+  // que des identifiants et des quantités.
+  const [panierRepris, setPanierRepris] = useState(null)
+  const panierReprisRef = useRef(false)
+  useEffect(() => {
+    if (panierReprisRef.current) return
+    if (!slug || produits.length === 0 || !produitsAchetables) return
+    const depot = reprendrePanierPourRdv(slug)
+    panierReprisRef.current = true
+    if (!depot) return
+    const ajouts = {}
+    for (const l of depot.articles) {
+      const article = produits.find(p => p.id === l.id)
+      if (!article || article.est_vitrine || !(Number(article.prix) > 0)) continue
+      ajouts[article.id] = { article, prix: prixProduit(article), quantite: l.quantite }
+    }
+    if (Object.keys(ajouts).length > 0) setPanierProduits(prev => ({ ...prev, ...ajouts }))
+    // Les lignes composées (options, versions, lots) ne voyagent pas : on le
+    // DIT, au lieu de les laisser disparaître sans un mot.
+    if (depot.ignores.length > 0 || Object.keys(ajouts).length > 0) {
+      setPanierRepris({ repris: Object.keys(ajouts).length, ignores: depot.ignores })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ne doit tourner qu'une fois, au premier catalogue chargé
+  }, [slug, produits.length, produitsAchetables])
 
   // Tracking stats deals (même mécanique best-effort que la fiche commerce) :
   // chaque event compte 1x par session client, fire-and-forget non bloquant.
@@ -1587,8 +1615,13 @@ export default function CommanderRdvSlug() {
                   PLACÉ SOUS LES PRESTATIONS (03/08) : chez un commerce de
                   services, le rendez-vous est le cœur de métier. Le voir passer
                   après une rangée de shampoings inversait la promesse de la
-                  fiche. ─── */}
-              {etape === 1 && produits.length > 0 && (
+                  fiche.
+                  VISIBLE AUSSI À L'ÉTAPE 3 (04/08) : les produits
+                  disparaissaient dès qu'on choisissait une prestation. Le
+                  client se décide souvent en fin de parcours, au moment de
+                  payer, et il n'avait plus aucun moyen d'ajouter quoi que ce
+                  soit sans tout recommencer. ─── */}
+              {(etape === 1 || etape === 3) && produits.length > 0 && (
                 <div style={{ margin: '14px 12px 24px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -1607,8 +1640,28 @@ export default function CommanderRdvSlug() {
                       Ajoute ce que tu veux emporter : tu paies tout d&rsquo;un coup avec ton rendez-vous, et tu repars avec le jour J.
                     </p>
                   )}
+                  {/* Panier rapporté de la boutique : le dire, sinon le client
+                      ne sait pas si ses articles l'ont suivi. */}
+                  {panierRepris && (
+                    <div style={{ background: panierRepris.ignores.length > 0 ? '#FFFBEB' : '#ECFDF5', border: `1px solid ${panierRepris.ignores.length > 0 ? '#FDE68A' : '#A7F3D0'}`, borderRadius: 10, padding: '8px 11px', marginBottom: 10 }}>
+                      {panierRepris.repris > 0 && (
+                        <p style={{ margin: 0, fontSize: '0.74rem', fontWeight: 700, color: '#065F46', lineHeight: 1.45 }}>
+                          Tes {panierRepris.repris} article{panierRepris.repris > 1 ? 's' : ''} de la boutique t&rsquo;ont suivi.
+                        </p>
+                      )}
+                      {panierRepris.ignores.length > 0 && (
+                        <p style={{ margin: panierRepris.repris > 0 ? '4px 0 0' : 0, fontSize: '0.72rem', color: '#78350F', lineHeight: 1.45 }}>
+                          {panierRepris.ignores.join(', ')} se compose{panierRepris.ignores.length > 1 ? 'nt' : ''} en boutique et n&rsquo;a{panierRepris.ignores.length > 1 ? 'ont' : ''} pas pu suivre. Tu peux le{panierRepris.ignores.length > 1 ? 's' : ''} commander depuis la boutique.
+                        </p>
+                      )}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-                    {produits.slice(0, 8).map(p => {
+                    {/* Plus de troncature à 8 (04/08) : le client ne devait pas
+                        avoir à quitter le tunnel pour voir le neuvième produit,
+                        c'est justement en le quittant qu'il perdait son panier.
+                        Un salon a un catalogue court, la bande défile bien. */}
+                    {produits.map(p => {
                       // Un produit remisé affiche son prix promo ici aussi :
                       // sinon l'aperçu du salon et sa boutique annoncent deux
                       // prix différents pour le même article.

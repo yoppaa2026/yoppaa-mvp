@@ -3108,7 +3108,7 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {/* RecapPanier : uniquement si plan permet la commande (BOOST/MAX) */}
+                {/* RecapPanier : uniquement si la formule ouvre la commande */}
                 {peutCommander && (
                   <div ref={recapPanierRef}>
                     <RecapPanier
@@ -3155,7 +3155,7 @@ export default function CommanderSlug() {
                     )}
                   </div>
                 )}
-                {/* CTA livraison pour BOOST (n'a pas la livraison) - affichage discret en banner */}
+                {/* CTA livraison pour une formule qui ne la comprend pas, en bandeau discret */}
                 {peutCommander && !canDo(commercant.plan, 'livraison') && (
                   <div style={{ marginTop: 24 }}>
                     <CTAUpgrade type="livraison" commercant={commercant} variant="banner"/>

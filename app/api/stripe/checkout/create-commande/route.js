@@ -310,6 +310,8 @@ export async function POST(request) {
       }, { status: verifStock.status })
     }
     const nomParArticle = verifStock.nomParArticle || {}
+    const consoParArticle = verifStock.consoParArticle || {}
+    const jourSemaine = verifStock.jourSemaine
 
     // Géocodage adresse livraison (best-effort, non bloquant, timeout 4s) pour la
     // tournée optimisée. Retrait ou échec géocodage -> coords null.
@@ -412,6 +414,7 @@ export async function POST(request) {
     // Décrément immédiat à la commande (cash ET en ligne). Conservateur : un
     // paiement Stripe abandonné laisse le stock décrémenté jusqu'à l'annulation
     // (pas de survente possible). Restauration à l'annulation = backlog.
+    const varianteParId = Object.fromEntries((variantesData || []).map(v => [v.id, v]))
     for (const item of articles) {
       if (!item.variante_id) continue
       const v = varianteParId[item.variante_id]

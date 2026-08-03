@@ -138,7 +138,13 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
   const meta = paymentIntent.metadata || {}
   const kind = meta.yoppaa_kind
 
-  if (kind === PAYMENT_KIND.RDV_ACOMPTE) {
+  // Le tunnel unique (rendez-vous + produits) suit exactement le même chemin
+  // que l'acompte seul : le rendez-vous naît du paiement, jamais avant, sinon
+  // un abandon de paiement bloquerait un créneau réel dans l'agenda du salon.
+  // Seule différence : une commande existe déjà, il faut la confirmer et la
+  // lier au rendez-vous.
+  if (kind === PAYMENT_KIND.RDV_ACOMPTE || kind === PAYMENT_KIND.RDV_COMMANDE) {
+    const avecProduits = kind === PAYMENT_KIND.RDV_COMMANDE
     // Vérif anti-double-création (au cas où l'idempotency aurait failli)
     if (meta.yoppaa_rdv_id) {
       const { data: existing } = await supabase
@@ -166,14 +172,17 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       duree_minutes: Number(meta.duree_minutes) || null,
       prix_estime: Number(meta.prix_estime) || null,
       acompte_montant: Number(meta.acompte_montant) || null,
-      acompte_paye: true,
+      // Une prestation sans acompte reste confirmée : le client a payé ses
+      // produits, le salon a une réservation ferme (décision Alex 04/08).
+      acompte_paye: Number(meta.acompte_montant) > 0,
+      commande_id: meta.yoppaa_commande_id || null,
       statut: 'confirme',
       notes_client: meta.notes_client || null,
       rgpd_marketing: meta.rgpd_marketing === '1',
       source: 'yopper',
       stripe_payment_intent_id: paymentIntent.id,
-      acompte_paye_en_ligne: true,
-      acompte_paye_date: new Date().toISOString(),
+      acompte_paye_en_ligne: Number(meta.acompte_montant) > 0,
+      acompte_paye_date: Number(meta.acompte_montant) > 0 ? new Date().toISOString() : null,
     }
     // TVA figée à la réservation. Le taux est lu maintenant, sur la prestation
     // telle qu'elle existe au moment de la vente, et ne sera plus jamais
@@ -198,6 +207,25 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
     const { error } = await supabase.from('rdv_reservations').insert(payload)
     if (error) throw error
     console.info('[stripe/webhook] RDV créé via paiement Stripe', { rdvId, pi: paymentIntent.id })
+
+    // Tunnel unique : la commande de produits existe déjà en
+    // 'paiement_en_attente'. On la confirme SANS ses propres emails, et on
+    // écrit le lien des deux côtés. Sans ce lien, une annulation ne saurait
+    // pas quelle part du paiement rembourser.
+    if (avecProduits && meta.yoppaa_commande_id) {
+      try {
+        await handleCommandeSucceeded(paymentIntent, supabase, eventAccount, { sansEmails: true })
+        await supabase
+          .from('commandes')
+          .update({ rdv_reservation_id: rdvId || meta.yoppaa_rdv_id })
+          .eq('id', meta.yoppaa_commande_id)
+      } catch (e) {
+        // Le rendez-vous est créé et le client a payé : on ne relance pas
+        // l'erreur, sinon Stripe rejouerait tout le webhook et créerait un
+        // second rendez-vous. On alerte, la commande se rattrape à la main.
+        console.error('[stripe/webhook] confirmation de la commande liée KO', { commandeId: meta.yoppaa_commande_id, rdvId, err: e?.message })
+      }
+    }
 
     // Tentative de stockage du session_id via Stripe API.
     // En mode test Direct Charge ca peut echouer (bug Stripe sandbox).
@@ -337,7 +365,10 @@ async function handleBonCadeauSucceeded(paymentIntent, supabase) {
 // La commande EXISTE déjà en DB (créée par /api/stripe/checkout/create-commande
 // avec statut='paiement_en_attente'). Le webhook fait juste la transition
 // d'état + envoie les emails de confirmation.
-async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = null) {
+// `sansEmails` : la commande est celle d'un tunnel unique, ses produits sont
+// déjà annoncés dans l'email du rendez-vous. Deux confirmations pour un seul
+// paiement font douter le client d'avoir payé deux fois.
+async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = null, { sansEmails = false } = {}) {
   const meta = paymentIntent.metadata || {}
   const commandeId = meta.yoppaa_commande_id
   if (!commandeId) {
@@ -430,9 +461,9 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
   // NB : appel DIRECT des helpers (pas de fetch HTTP interne vers /api/emails/...)
   // Évite le 307 yoppaa.app → www.yoppaa.app qui peut casser le POST côté Node fetch.
   // Pattern aligné sur les RDV qui marchent déjà comme ça.
-  await envoyerEmailsCommande(commandeId, supabase)
+  if (!sansEmails) await envoyerEmailsCommande(commandeId, supabase)
 
-  console.info('[webhook/commande] confirmée OK', { commandeId, pi: paymentIntent.id })
+  console.info('[webhook/commande] confirmée OK', { commandeId, pi: paymentIntent.id, sansEmails })
 }
 
 // ─── (envoyerEmailsCommande : déplacé dans lib/commande-notifs.js le 23/07,
@@ -449,8 +480,12 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
 // clients (au lieu d'attendre l'expiration TTL 5 min).
 async function handlePaymentIntentFailed(paymentIntent, supabase) {
   const meta = paymentIntent.metadata || {}
-  if (meta.yoppaa_kind !== PAYMENT_KIND.COMMANDE_TOTAL) {
-    return  // RDV failed = pas de RDV créé, rien à faire
+  // Un acompte seul qui échoue ne laisse rien derrière lui : le rendez-vous
+  // n'était pas encore créé. Le tunnel unique, lui, a déjà posé une commande
+  // et réservé du stock : sans ce passage, la marchandise resterait bloquée
+  // jusqu'à l'expiration, pour un paiement qu'on sait déjà perdu.
+  if (meta.yoppaa_kind !== PAYMENT_KIND.COMMANDE_TOTAL && meta.yoppaa_kind !== PAYMENT_KIND.RDV_COMMANDE) {
+    return
   }
   const commandeId = meta.yoppaa_commande_id
   if (!commandeId) return
@@ -603,13 +638,34 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       id, date_rdv, heure_debut, heure_fin, duree_minutes, prix_estime,
       acompte_paye_en_ligne, acompte_montant,
       client_email, client_prenom, client_nom, client_telephone, notes_client,
-      annulation_token,
+      annulation_token, commande_id,
       commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode, infos_pratiques),
       prestation:rdv_prestations(nom),
       praticien:rdv_praticiens(prenom, nom, couleur_hex)
     `)
     .eq('id', rdvId)
     .maybeSingle()
+
+  // Tunnel unique : les produits achetés avec le rendez-vous vivent dans CET
+  // email. Le client ne reçoit pas de confirmation de commande séparée, et le
+  // commerçant lit dans le même message ce qu'il doit préparer.
+  let produits = null
+  if (rdv?.commande_id) {
+    const { data: lignes } = await supabase
+      .from('commande_articles')
+      .select('quantite, prix_unitaire, article:articles(nom)')
+      .eq('commande_id', rdv.commande_id)
+    if (lignes && lignes.length > 0) {
+      produits = {
+        lignes: lignes.map(l => ({
+          nom: l.article?.nom || 'Article',
+          quantite: l.quantite,
+          total: Number(l.prix_unitaire) * l.quantite,
+        })),
+        total: lignes.reduce((s, l) => s + Number(l.prix_unitaire) * l.quantite, 0),
+      }
+    }
+  }
 
   // Fallback : si le RDV n'est pas (encore) findable, on construit depuis le payload.
   // Mais sans nom commercant ni presta, on ne peut pas envoyer un email decent → skip.
@@ -657,6 +713,7 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       praticien_nom:           rdv.praticien?.nom || null,
       praticien_couleur:       rdv.praticien?.couleur_hex || null,
       infos_pratiques:         rdv.commercant?.infos_pratiques || null,
+      produits,
     })
 
     await envoyerAuCommercant({
@@ -684,6 +741,7 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       acompte_paye:    !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),
       acompte_montant: rdv.acompte_montant,
       notes_client:    rdv.notes_client,
+      produits,
     })
 
     await envoyerAuCommercant({

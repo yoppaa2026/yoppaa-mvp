@@ -90,7 +90,7 @@ const LAUNCH_DATE = new Date(2026, 0, 1) // 1er janvier 2026
 
 // ─── Fetch des deals + actus de la commune affichée ──────────────
 // 3 sources pour les actus :
-//   - Commerçants alimentaires (plans BOOST/MAX, canDo morning required)
+//   - Commerçants alimentaires dont la formule ouvre le Morning (canDo)
 //   - Vitrines / commerçants services (plans ON et + : retire restriction morning sur les actus)
 //   - Services publics locaux de la commune (commune, CPAS, police, écoles...)
 // Les deals restent réservés aux commerçants ayant accès au morning.

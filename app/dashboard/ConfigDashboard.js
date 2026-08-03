@@ -800,6 +800,31 @@ function TabMenu({ commercantId, commercant, toast }) {
         </div>
       </div>
 
+      {/* ─── Catalogue en ligne mais rien ne peut être encaissé ───────────────
+          Une formule qui ouvre la vente, des produits publiés, et un compte
+          Stripe inactif : le catalogue s'affiche mais aucun bouton d'achat
+          n'apparaît côté client. Le commerçant n'avait AUCUN moyen de le
+          savoir, l'état du compte ne vivant que dans l'onglet Paiements. Il
+          aurait attendu des commandes qui ne pouvaient pas arriver. */}
+      {canDo(commercant?.plan, 'commande') && commercant?.stripe_account_charges_enabled !== true && (
+        <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '12px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <path d="M12 9v4M12 17h.01"/>
+          </svg>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: '#991B1B' }}>
+              Tes clients ne peuvent pas encore acheter
+            </p>
+            <p style={{ margin: '3px 0 0', fontSize: 12, color: '#7F1D1D', lineHeight: 1.5 }}>
+              Ton catalogue est bien visible, mais les boutons d&rsquo;achat n&rsquo;apparaissent pas tant que
+              ton compte de paiement n&rsquo;est pas activé. Ça se règle en quelques minutes dans
+              l&rsquo;onglet <strong>Paiements</strong>.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ─── Barre sous-onglets ───────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 16, border: `1px solid ${T.hairline}`, boxShadow: '0 1px 4px rgba(22,6,54,0.04)' }}>
         {SUB_TABS.map(t => (

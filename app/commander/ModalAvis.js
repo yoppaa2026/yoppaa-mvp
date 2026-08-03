@@ -9,6 +9,7 @@
 //  - onSent : callback succès
 
 import { useState } from 'react'
+import { fetchYopper } from '@/lib/fetch-yopper'
 
 const T = {
   ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', mid: '#9660E0',
@@ -44,7 +45,7 @@ export default function ModalAvis({ commercant, clientId, commandeId = null, onC
     // pas faire faute d'identité Supabase Auth pour un Yopper.
     let err = null
     try {
-      const r = await fetch('/api/yopper/avis', {
+      const r = await fetchYopper('/api/yopper/avis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

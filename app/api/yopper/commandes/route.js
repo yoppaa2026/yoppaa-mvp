@@ -23,12 +23,10 @@
 //   - 'get-one'             : { commande_id } → { commande }
 
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { identiteProuvee } from '@/lib/yopper-auth'
 import { createClient } from '@supabase/supabase-js'
 import { crediterFidelite } from '@/lib/fidelite-server'
 import { canDo } from '@/lib/plans'
-
-const COOKIE_NAME = 'yoppaa_yopper'
 
 function admin() {
   return createClient(
@@ -38,17 +36,17 @@ function admin() {
   )
 }
 
-// Identité Yopper depuis le cookie HTTP-only (jamais depuis le body pour les
-// opérations "own", afin d'éviter l'énumération par email).
-async function cookieYopper() {
-  const raw = (await cookies()).get(COOKIE_NAME)?.value
-  if (!raw) return null
-  try {
-    const identity = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'))
-    return identity?.email ? { email: String(identity.email).toLowerCase(), client_id: identity.client_id || null } : null
-  } catch {
-    return null
-  }
+// Identité Yopper PROUVÉE (décision Alex du 03/08).
+//
+// Le cookie ne suffit plus ici. Il était posé en saisissant simplement son
+// email dans le tunnel : saisir celui d'un tiers donnait donc accès à SON
+// historique de commandes, avec ses adresses de livraison et son téléphone.
+// L'historique exige désormais le jeton d'authentification Supabase, délivré
+// après vérification de l'adresse email. Le lien contenu dans l'email de
+// confirmation de commande, que seul le vrai destinataire reçoit, permet de
+// l'obtenir en un clic, sans imposer d'inscription avant de commander.
+async function yopperAuthentifie(request) {
+  return identiteProuvee(request)
 }
 
 // Clé de date d'une commande (date_commande YYYY-MM-DD sinon created_at).
@@ -107,7 +105,7 @@ export async function POST(request) {
     }
 
     // ─── opérations "own" : autorisées par le cookie uniquement ────────────
-    const yopper = await cookieYopper()
+    const yopper = await yopperAuthentifie(request)
     if (!yopper) return NextResponse.json({ ok: false, error: 'session_yopper_manquante' }, { status: 401 })
 
     if (action === 'list') {

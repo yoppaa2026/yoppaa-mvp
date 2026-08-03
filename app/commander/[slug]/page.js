@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { fetchYopper } from '@/lib/fetch-yopper'
 import { canDo, isVitrine } from '@/lib/plans'
 import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau } from '@/lib/creneaux'
@@ -1119,7 +1120,7 @@ export default function CommanderSlug() {
       // Route serveur : la table favoris n'est plus lisible depuis le
       // navigateur, elle l'était par tout le monde.
       try {
-        const r = await fetch('/api/yopper/favoris')
+        const r = await fetchYopper('/api/yopper/favoris')
         const j = await r.json()
         if (!annule) setEstFavori((j?.favoris || []).includes(commercant.id))
       } catch { if (!annule) setEstFavori(false) }
@@ -1137,7 +1138,7 @@ export default function CommanderSlug() {
     }
     setFavoriLoading(true)
     try {
-      const majFavori = (action) => fetch('/api/yopper/favoris', {
+      const majFavori = (action) => fetchYopper('/api/yopper/favoris', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ commercant_id: commercant.id, action }),
       })
@@ -1218,7 +1219,7 @@ export default function CommanderSlug() {
       ;(async () => {
         // Confirmation post-paiement : total + client_nom = PII → API serveur
         // (get-one par UUID fourni par le retour Stripe du Yopper).
-        const data = await fetch('/api/yopper/commandes', {
+        const data = await fetchYopper('/api/yopper/commandes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'get-one', commande_id: commandeId }),

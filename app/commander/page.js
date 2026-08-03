@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { fetchYopper } from '@/lib/fetch-yopper'
 import { canDo, PLAN_PUBLIC_ENABLED, bandeauCategorie } from '@/lib/plans'
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
@@ -654,7 +655,7 @@ function SectionMesAvis({ clientId }) {
     let annule = false
     // Route serveur : la table avis n'est plus lisible publiquement, elle
     // exposait l'identifiant du client et celui de sa commande.
-    fetch('/api/yopper/avis')
+    fetchYopper('/api/yopper/avis')
       .then(r => r.json())
       .then(j => {
         if (annule) return
@@ -1508,7 +1509,7 @@ export default function Commander() {
     let annule = false
     // Même route serveur : on a besoin de savoir quelles commandes ont déjà
     // reçu un avis, sans exposer la table.
-    fetch('/api/yopper/avis')
+    fetchYopper('/api/yopper/avis')
       .then(r => r.json())
       .then(j => {
         if (annule) return
@@ -1760,7 +1761,7 @@ export default function Commander() {
   async function chargerFavoris() {
     let ids = []
     try {
-      const r = await fetch('/api/yopper/favoris')
+      const r = await fetchYopper('/api/yopper/favoris')
       const j = await r.json()
       ids = j?.favoris || []
     } catch { ids = [] }
@@ -1876,7 +1877,7 @@ export default function Commander() {
     // l'API serveur (service_role + cookie yoppaa_yopper). L'email vient du cookie
     // côté serveur, pas de ce paramètre. L'enrichissement numéro (numero_commande
     // ou position du jour) est fait côté serveur pour garder la parité d'affichage.
-    const res = await fetch('/api/yopper/commandes', {
+    const res = await fetchYopper('/api/yopper/commandes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'list' }),
@@ -1952,14 +1953,14 @@ export default function Commander() {
     let cid = clientId || await getOuCreerClient(client.email, client.nom)
     if (!cid) return
     if (favoris.includes(commercantId)) {
-      await fetch('/api/yopper/favoris', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ commercant_id: commercantId, action: 'retirer' }) })
+      await fetchYopper('/api/yopper/favoris', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ commercant_id: commercantId, action: 'retirer' }) })
       setFavoris(prev => prev.filter(id => id!==commercantId))
       setCommercantsFavoris(prev => prev.filter(c => c.id!==commercantId))
       // Retrait du tag OneSignal côté serveur (valeur vide = suppression du tag).
       syncYopperTags({ [`favori:${commercantId}`]: '' })
       showToast({ type: 'info', msg: 'Retiré de tes favoris' })
     } else {
-      await fetch('/api/yopper/favoris', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ commercant_id: commercantId, action: 'ajouter' }) })
+      await fetchYopper('/api/yopper/favoris', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ commercant_id: commercantId, action: 'ajouter' }) })
       setFavoris(prev => [...prev, commercantId])
       const c = commercants.find(x => x.id===commercantId)
       if (c) setCommercantsFavoris(prev => [...prev, c])
@@ -2189,7 +2190,7 @@ export default function Commander() {
             // Confirmation de réception → via l'API serveur (service_role + cookie).
             // Le serveur applique statut='recupere' (+ statut_livraison='livree' en
             // livraison) après avoir vérifié que la commande appartient au Yopper.
-            await fetch('/api/yopper/commandes', {
+            await fetchYopper('/api/yopper/commandes', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ action: 'confirmer-reception', commande_id: pickupCommande.id }),

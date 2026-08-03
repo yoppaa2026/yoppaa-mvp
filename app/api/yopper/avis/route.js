@@ -14,14 +14,14 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { lireIdentiteYopper } from '@/lib/yopper-session'
+import { identiteProuvee } from '@/lib/yopper-auth'
 import { globalLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 
 // GET → les avis du Yopper courant. La table n'est plus lisible publiquement
 // (elle exposait client_id et commande_id), et un Yopper sans compte Auth ne
 // peut pas passer par une policy : c'est donc le serveur qui les lui rend.
-export async function GET() {
-  const identite = await lireIdentiteYopper()
+export async function GET(request) {
+  const identite = await identiteProuvee(request)
   if (!identite?.client_id) return NextResponse.json({ ok: true, avis: [] })
 
   const supabase = createClient(
@@ -46,7 +46,7 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'Trop de requêtes, réessaie dans un instant.' }, { status: 429 })
     }
 
-    const identite = await lireIdentiteYopper()
+    const identite = await identiteProuvee(request)
     if (!identite?.client_id) {
       return NextResponse.json({ ok: false, error: 'Connecte-toi pour laisser un avis.' }, { status: 401 })
     }

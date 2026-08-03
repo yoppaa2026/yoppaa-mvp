@@ -14,7 +14,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { lireIdentiteYopper } from '@/lib/yopper-session'
+import { identiteProuvee } from '@/lib/yopper-auth'
 import { globalLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 
 function admin() {
@@ -25,8 +25,8 @@ function admin() {
   )
 }
 
-export async function GET() {
-  const identite = await lireIdentiteYopper()
+export async function GET(request) {
+  const identite = await identiteProuvee(request)
   if (!identite?.client_id) return NextResponse.json({ ok: true, favoris: [] })
   const { data } = await admin()
     .from('favoris')
@@ -42,7 +42,7 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'Trop de requêtes, réessaie dans un instant.' }, { status: 429 })
     }
 
-    const identite = await lireIdentiteYopper()
+    const identite = await identiteProuvee(request)
     if (!identite?.client_id) {
       return NextResponse.json({ ok: false, error: 'Connecte-toi pour garder tes favoris.' }, { status: 401 })
     }

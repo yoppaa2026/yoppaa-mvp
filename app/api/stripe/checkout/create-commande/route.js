@@ -36,6 +36,7 @@ import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
 import { chargerBonValide, debiterBon } from '@/lib/bons-cadeaux-server'
+import { tauxPourArticle, REGIME_EMPORTER } from '@/lib/tva'
 
 export async function POST(request) {
   try {
@@ -97,7 +98,7 @@ export async function POST(request) {
     // ─── 2) Récup commerçant + Stripe Connect prérequis ────────────────────
     const { data: commercant, error: errC } = await supabase
       .from('commercants')
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp')
+      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut')
       .eq('id', commercant_id)
       .single()
     if (errC || !commercant) {
@@ -195,7 +196,7 @@ export async function POST(request) {
       { data: variantesData },
       { data: dealsData },
     ] = await Promise.all([
-      supabase.from('articles').select('id, nom, prix, actif, commercant_id, temps_prepa, est_vitrine').in('id', articleIds),
+      supabase.from('articles').select('id, nom, prix, actif, commercant_id, temps_prepa, est_vitrine, tva_taux, tva_taux_sur_place').in('id', articleIds),
       supabase.from('article_options_valeurs').select('id, nom, prix_supplement, groupe_id, article_options_groupes!inner(article_id, nom)'),
       // Variantes (Module 2 boutique) : revalidation server-side prix + stock
       supabase.from('article_variantes').select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif').in('article_id', articleIds),
@@ -227,6 +228,13 @@ export async function POST(request) {
     const valeurParId = Object.fromEntries((optionsValeurs || []).map(v => [v.id, v]))
     const varianteParId = Object.fromEntries((variantesData || []).map(v => [v.id, v]))
     const dealParId = Object.fromEntries((dealsData || []).map(d => [d.id, d]))
+
+    // Régime de TVA de l'opération. Tous les modes servis par cette route sont
+    // des livraisons de biens : retrait, livraison et expédition sont de la
+    // vente à emporter. La consommation sur place, qui bascule la nourriture à
+    // 12 % et toutes les boissons à 21 %, arrivera avec la réservation de table
+    // et la commande à table, et passera ce régime à REGIME_SUR_PLACE.
+    const regimeTva = REGIME_EMPORTER
 
     const lignes = []
     let totalCents = 0
@@ -311,6 +319,16 @@ export async function POST(request) {
         article_id: article.id,
         article_nom: deal ? deal.titre : article.nom,
         quantite,
+        // TVA FIGÉE À LA VENTE. Le taux est recopié ici et ne sera plus jamais
+        // recalculé : sans cela, changer le taux d'un article réécrirait
+        // rétroactivement toutes les commandes passées, et les exports comme
+        // les déclarations deviendraient incohérents. Un deal suit le taux de
+        // son article sous-jacent, c'est la même marchandise.
+        tva_taux: tauxPourArticle({
+          article,
+          regime: regimeTva,
+          tauxDefautCommerce: commercant.tva_taux_defaut,
+        }),
         // Consommation stock RÉELLE : un lot « 3+1 » consomme unites_par_deal
         // unités physiques par lot commandé (audit deals n°1)
         quantite_stock: quantite * (deal?.unites_par_deal || 1),
@@ -457,6 +475,7 @@ export async function POST(request) {
         creneau_id: (estLivraison || estBoutique) ? null : creneau.id,
         creneau_livraison_id: estLivraison ? creneau.id : null,
         mode_retrait: estExpedition ? 'expedition' : estLivraison ? 'livraison' : 'retrait',
+        regime_tva: regimeTva,
         adresse_livraison: (estLivraison || estExpedition) ? adresse_livraison : null,
         livraison_lat: coordsLivraison?.lat ?? null,
         livraison_lng: coordsLivraison?.lng ?? null,
@@ -523,6 +542,7 @@ export async function POST(request) {
         quantite: l.quantite,
         prix_unitaire: l.prix_unitaire,
         options: l.options,
+        tva_taux: l.tva_taux,
       })))
     if (errLignes) {
       // Rollback commande pour ne pas laisser de fantôme

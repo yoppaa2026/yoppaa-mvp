@@ -495,6 +495,26 @@ function CarteRdv({ rdv, onChangerStatut }) {
           )}
         </div>
 
+        {/* Produits achetés dans le même paiement que le rendez-vous. À
+            préparer AVANT que le client arrive : c'est toute la promesse du
+            tunnel unique, il repart avec en sortant du fauteuil. Une commande
+            annulée ne s'affiche plus, le client ayant été remboursé. */}
+        {rdv.commande && !['annulee_client_refund', 'annulee_paiement_ko'].includes(rdv.commande.statut) && (rdv.commande.commande_articles || []).length > 0 && (
+          <div style={{ background: '#ECFDF5', borderRadius: 8, padding: '0.5rem 0.75rem', marginBottom: 8, border: '1px solid #A7F3D0' }}>
+            <p style={{ fontSize: '0.62rem', fontWeight: 800, color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>
+              Produits à préparer · déjà payés
+            </p>
+            {rdv.commande.commande_articles.map((l, i) => (
+              <p key={i} style={{ fontSize: '0.78rem', color: '#065F46', lineHeight: 1.4, margin: 0, fontWeight: 700 }}>
+                {l.quantite} × {l.article?.nom || 'Article'}
+              </p>
+            ))}
+            <p style={{ fontSize: '0.7rem', color: '#047857', margin: '4px 0 0', fontWeight: 800 }}>
+              {Number(rdv.commande.total).toFixed(2)}€ encaissés
+            </p>
+          </div>
+        )}
+
         {/* Notes client si presentes */}
         {rdv.notes_client && (
           <div style={{ background: '#FFFBEB', borderRadius: 8, padding: '0.5rem 0.75rem', marginBottom: 8, border: '1px solid #FDE68A' }}>
@@ -615,7 +635,12 @@ export default function Dashboard() {
     const [{ data: rdvData }, { data: crData }, { data: pData }, { data: praData }] = await Promise.all([
       supabase
         .from('rdv_reservations')
-        .select('*, prestation:rdv_prestations(nom, duree_minutes, prix), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url)')
+        // La commande liée vient avec : un rendez-vous du tunnel unique porte
+        // des produits déjà payés que le commerçant doit préparer AVANT que le
+        // client arrive. Sans elle, il les découvrirait dans un autre onglet
+        // sans faire le lien avec le créneau. Le hint !..._commande_id_fkey
+        // lève l'ambiguïté, les deux tables se pointant désormais l'une l'autre.
+        .select('*, prestation:rdv_prestations(nom, duree_minutes, prix), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, total, statut, commande_articles(quantite, prix_unitaire, article:articles(nom)))')
         .eq('commercant_id', id)
         .is('deleted_at', null)
         .order('date_rdv', { ascending: true })
@@ -824,7 +849,12 @@ export default function Dashboard() {
       // Pas de notif son speciale ici (ajoutee dans RDV-10).
       const { data: rdvsData } = await supabase
         .from('rdv_reservations')
-        .select('*, prestation:rdv_prestations(nom, duree_minutes, prix), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url)')
+        // La commande liée vient avec : un rendez-vous du tunnel unique porte
+        // des produits déjà payés que le commerçant doit préparer AVANT que le
+        // client arrive. Sans elle, il les découvrirait dans un autre onglet
+        // sans faire le lien avec le créneau. Le hint !..._commande_id_fkey
+        // lève l'ambiguïté, les deux tables se pointant désormais l'une l'autre.
+        .select('*, prestation:rdv_prestations(nom, duree_minutes, prix), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, total, statut, commande_articles(quantite, prix_unitaire, article:articles(nom)))')
         .eq('commercant_id', commercant.id)
         .is('deleted_at', null)
         .order('date_rdv', { ascending: true })

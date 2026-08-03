@@ -356,11 +356,21 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                             flexDirection: 'column',
                             gap: 1,
                           }}
-                          title={`${heureD}–${heureF} · ${r.client_prenom || ''} ${r.client_nom || ''} · ${r.prestation?.nom || ''}${r.praticien ? ' · avec ' + r.praticien.prenom : ''}`}>
+                          title={`${heureD}–${heureF} · ${r.client_prenom || ''} ${r.client_nom || ''} · ${r.prestation?.nom || ''}${r.praticien ? ' · avec ' + r.praticien.prenom : ''}${(r.commande?.commande_articles || []).length > 0 ? ' · produits à préparer' : ''}`}>
                           {/* Badge praticien en haut à droite (couleur_hex ou initiale) */}
                           {r.praticien && (
                             <div style={{ position: 'absolute', top: 2, right: 2, width: 12, height: 12, borderRadius: '50%', background: r.praticien.couleur_hex || '#6B35C4', border: '1.5px solid #fff', boxShadow: '0 0 0 1px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 7, fontWeight: 900 }}>
                               {(r.praticien.prenom?.[0] || '').toUpperCase()}
+                            </div>
+                          )}
+                          {/* Pastille « produits à préparer ». En haut à gauche
+                              pour ne pas heurter la pastille praticien, à
+                              droite. Le détail se lit en ouvrant le RDV. */}
+                          {(r.commande?.commande_articles || []).length > 0 && (
+                            <div style={{ position: 'absolute', top: 2, left: 2, width: 12, height: 12, borderRadius: '50%', background: '#10B981', border: '1.5px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M16 10a4 4 0 0 1-8 0"/>
+                              </svg>
                             </div>
                           )}
                           <div style={{ fontSize: 9, opacity: 0.9, fontWeight: 600, lineHeight: 1 }}>{heureD}</div>

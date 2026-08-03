@@ -36,8 +36,8 @@ import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
 import { chargerBonValide, debiterBon } from '@/lib/bons-cadeaux-server'
-import { tauxPourArticle, tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
-import { estOffreSeparee, dealActifCeJour, prixEffectif, prixEffectifVariante } from '@/lib/deals'
+import { tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
+import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 
 export async function POST(request) {
   try {
@@ -197,7 +197,7 @@ export async function POST(request) {
       { data: variantesData },
       { data: dealsData },
     ] = await Promise.all([
-      supabase.from('articles').select('id, nom, prix, categorie, actif, commercant_id, temps_prepa, est_vitrine, tva_taux, tva_taux_sur_place').in('id', articleIds),
+      supabase.from('articles').select(SELECT_ARTICLES).in('id', articleIds),
       supabase.from('article_options_valeurs').select('id, nom, prix_supplement, groupe_id, article_options_groupes!inner(article_id, nom)'),
       // Variantes (Module 2 boutique) : revalidation server-side prix + stock
       supabase.from('article_variantes').select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif').in('article_id', articleIds),
@@ -205,7 +205,7 @@ export async function POST(request) {
       // duos sont des offres séparées vendues telles quelles ; les remises, en
       // pourcentage ou en prix promo, s'appliquent au prix de l'article et sont
       // recalculées ici même quand le navigateur ne les a pas vues.
-      supabase.from('yoppaa_deals').select('id, titre, prix_deal, actif, commercant_id, deal_type, remise_pct, unites_par_deal, article2_id, article_id, categorie_cible, date_deal, date_debut, date_fin').eq('commercant_id', commercant_id).eq('actif', true),
+      supabase.from('yoppaa_deals').select(SELECT_DEALS).eq('commercant_id', commercant_id).eq('actif', true),
     ])
 
     if (!articlesData || articlesData.length !== articleIds.length) {
@@ -226,18 +226,6 @@ export async function POST(request) {
       }
     }
 
-    // Construction lignes commande avec prix server-side
-    const articleParId = Object.fromEntries(articlesData.map(a => [a.id, a]))
-    const valeurParId = Object.fromEntries((optionsValeurs || []).map(v => [v.id, v]))
-    const varianteParId = Object.fromEntries((variantesData || []).map(v => [v.id, v]))
-    const dealParId = Object.fromEntries((dealsData || []).map(d => [d.id, d]))
-    // Deals dont la fenêtre couvre la date de la commande. Les remises sont
-    // appliquées à partir de cette liste, ligne par ligne, sans rien attendre
-    // du navigateur : une promo qui n'existe que dans l'affichage n'est pas
-    // une promo, et une promo expirée ne doit pas survivre dans un panier resté
-    // ouvert depuis la veille.
-    const dealsDuJour = (dealsData || []).filter(d => dealActifCeJour(d, date_commande))
-
     // Régime de TVA de l'opération. Tous les modes servis par cette route sont
     // des livraisons de biens : retrait, livraison et expédition sont de la
     // vente à emporter. La consommation sur place, qui bascule la nourriture à
@@ -245,116 +233,19 @@ export async function POST(request) {
     // et la commande à table, et passera ce régime à REGIME_SUR_PLACE.
     const regimeTva = REGIME_EMPORTER
 
-    const lignes = []
-    let totalCents = 0
-    for (const item of articles) {
-      const article = articleParId[item.id]
-      const quantite = parseInt(item.quantite, 10)
-      if (!quantite || quantite < 1 || quantite > 50) {
-        return NextResponse.json({ ok: false, error: `Quantité invalide pour "${article.nom}".` }, { status: 400 })
-      }
-      // Calcul suppléments options (recalcul server pour empêcher tampering)
-      const optionsFlat = []
-      let supplement = 0
-      if (Array.isArray(item.options)) {
-        for (const opt of item.options) {
-          const ids = Array.isArray(opt.valeur_ids) ? opt.valeur_ids : []
-          for (const vid of ids) {
-            const v = valeurParId[vid]
-            if (!v) continue
-            const grp = v.article_options_groupes
-            if (!grp || grp.article_id !== article.id) continue
-            optionsFlat.push({
-              groupe_nom: grp.nom || '',
-              valeur_nom: v.nom,
-              prix_supplement: Number(v.prix_supplement || 0),
-            })
-            supplement += Number(v.prix_supplement || 0)
-          }
-        }
-      }
-      // Variante (Module 2 boutique) : prix = override variante (sinon prix
-      // article), stock de LA variante contrôlé, libellé stocké dans options
-      // (jsonb) pour s'afficher partout (dashboard, emails) sans migration.
-      let variante = null
-      if (item.variante_id) {
-        variante = varianteParId[item.variante_id]
-        if (!variante || variante.article_id !== article.id || variante.actif === false) {
-          return NextResponse.json({ ok: false, error: `Version introuvable pour "${article.nom}".` }, { status: 400 })
-        }
-        if ((variante.stock ?? 0) < quantite) {
-          return NextResponse.json({ ok: false, error: `Stock insuffisant pour "${article.nom}" (${[variante.axe1_valeur, variante.axe2_valeur].filter(Boolean).join(' · ')}).` }, { status: 400 })
-        }
-        optionsFlat.unshift({
-          groupe_nom: 'Version',
-          valeur_nom: [variante.axe1_valeur, variante.axe2_valeur].filter(Boolean).join(' · '),
-          prix_supplement: 0,
-        })
-      }
-      // ─── Deals : deux régimes qui ne se mélangent jamais ───────────────────
-      //
-      // Un LOT ou un DUO est une offre séparée : le navigateur l'envoie avec
-      // son deal_id, elle a son prix et son libellé propres, et l'unité reste
-      // commandable à côté. Une REMISE, elle, modifie le prix de l'article :
-      // elle est recalculée ici pour CHAQUE ligne, qu'elle soit annoncée ou non
-      // par le navigateur.
-      //
-      // Un deal_id de type remise, envoyé par un onglet resté ouvert sur
-      // l'ancien modèle, n'est donc plus traité comme une offre : la ligne
-      // redevient un article normal, remisé une seule fois. Sans cette
-      // précaution la remise s'appliquerait deux fois, ou pas du tout.
-      let deal = null
-      if (item.deal_id) {
-        const candidat = dealParId[item.deal_id]
-        if (!candidat) {
-          return NextResponse.json({ ok: false, error: 'Ce deal n\'est plus disponible.' }, { status: 400 })
-        }
-        if (estOffreSeparee(candidat)) {
-          // Fenêtre de dates vérifiée server-side (audit deals n°3) : l'offre
-          // doit couvrir la date de la commande.
-          if (!dealActifCeJour(candidat, date_commande)) {
-            return NextResponse.json({ ok: false, error: `Le deal « ${candidat.titre} » n'est plus valable pour cette date.` }, { status: 400 })
-          }
-          if (candidat.prix_deal == null) {
-            return NextResponse.json({ ok: false, error: 'Ce deal n\'est plus disponible.' }, { status: 400 })
-          }
-          deal = candidat
-        }
-      }
-      // Prix retenu : celui de l'offre séparée, sinon le prix de l'article ou
-      // de sa version, remise du jour comprise.
-      const prixBase = deal
-        ? Number(deal.prix_deal)
-        : variante && variante.prix != null
-          ? prixEffectifVariante(variante.prix, article, dealsDuJour, date_commande)
-          : prixEffectif(article, dealsDuJour, date_commande)
-      const prixUnitaire = prixBase + supplement
-      const ligneCents = Math.round(prixUnitaire * 100) * quantite
-      totalCents += ligneCents
-      lignes.push({
-        article_id: article.id,
-        article_nom: deal ? deal.titre : article.nom,
-        quantite,
-        // TVA FIGÉE À LA VENTE. Le taux est recopié ici et ne sera plus jamais
-        // recalculé : sans cela, changer le taux d'un article réécrirait
-        // rétroactivement toutes les commandes passées, et les exports comme
-        // les déclarations deviendraient incohérents. Un deal suit le taux de
-        // son article sous-jacent, c'est la même marchandise.
-        tva_taux: tauxPourArticle({
-          article,
-          regime: regimeTva,
-          tauxDefautCommerce: commercant.tva_taux_defaut,
-        }),
-        // Consommation stock RÉELLE : un lot « 3+1 » consomme unites_par_deal
-        // unités physiques par lot commandé (audit deals n°1)
-        quantite_stock: quantite * (deal?.unites_par_deal || 1),
-        // Duo : le second article du deal consomme aussi son stock (1 par duo)
-        deal_article2_id: (deal?.deal_type === 'bundle' && deal.article2_id) ? deal.article2_id : null,
-        prix_unitaire: prixUnitaire,
-        options: optionsFlat.length > 0 ? optionsFlat : null,
-        temps_prepa: article.temps_prepa || 1,
-      })
+    // Prix, remises et TVA : calcul SERVEUR, partagé avec le tunnel RDV pour
+    // que les deux parcours ne puissent jamais annoncer deux prix différents.
+    const calcul = construireLignesCommande({
+      panier: articles,
+      articlesData, optionsValeurs, variantesData, dealsData,
+      commercant,
+      regime: regimeTva,
+      dateCommande: date_commande,
+    })
+    if (!calcul.ok) {
+      return NextResponse.json({ ok: false, error: calcul.error }, { status: calcul.status })
     }
+    const { lignes, totalCents } = calcul
 
     if (totalCents <= 0) {
       return NextResponse.json({ ok: false, error: 'Total invalide.' }, { status: 400 })
@@ -407,74 +298,18 @@ export async function POST(request) {
     // Dû entièrement couvert par le bon : confirmation directe, pas de Stripe.
     const couvertParBon = !!bonCadeau && duCents === 0
 
-    // ─── 5) Vérif stock atomic : commandes payées du jour + réservations actives ──
-    // Stock disponible = stock_jour - (qte des commandes du jour non annulées)
-    //                              - (qte des réservations non expirées)
-    // Les seconds articles des duos consomment aussi leur stock : on les inclut
-    const stockArticleIds = [...new Set([...articleIds, ...lignes.map(l => l.deal_article2_id).filter(Boolean)])]
-    const { data: stocksJour } = await supabase
-      .from('article_stock_jour')
-      .select('article_id, jour_semaine, stock, actif')
-      .in('article_id', stockArticleIds)
-
-    const { data: commandesDejaJour } = await supabase
-      .from('commande_articles')
-      .select('article_id, quantite, commande:commandes!inner(date_commande, statut, commercant_id)')
-      .in('article_id', stockArticleIds)
-      .eq('commande.date_commande', date_commande)
-      .eq('commande.commercant_id', commercant.id)
-      .not('commande.statut', 'in', '("non_retire","annulee_paiement_ko","annulee_client_refund")')
-
-    const { data: reservationsActives } = await supabase
-      .from('commande_stock_reservation')
-      .select('article_id, quantite')
-      .in('article_id', stockArticleIds)
-      .eq('date_commande', date_commande)
-      .gt('expires_at', new Date().toISOString())
-
-    // Calcul jour de semaine en lower (lundi/mardi/...) pour article_stock_jour
-    const JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
-    const jourDateObj = new Date(date_commande + 'T12:00:00')
-    const jourSemaine = JOURS[jourDateObj.getDay()]
-
-    const qteDejaParArticle = {}
-    ;(commandesDejaJour || []).forEach(r => {
-      qteDejaParArticle[r.article_id] = (qteDejaParArticle[r.article_id] || 0) + r.quantite
+    // ─── 5) Vérif stock : commandes du jour + réservations en cours ────────
+    const verifStock = await verifierStockDisponible({
+      supabase, lignes, commercantId: commercant.id, dateCommande: date_commande,
     })
-    const qteReserveeParArticle = {}
-    ;(reservationsActives || []).forEach(r => {
-      qteReserveeParArticle[r.article_id] = (qteReserveeParArticle[r.article_id] || 0) + r.quantite
-    })
-
-    // Consommation AGRÉGÉE par article : une même commande peut cumuler l'unité,
-    // un ou plusieurs deals du même article, et le second article d'un duo
-    const consoParArticle = {}
-    const nomParArticle = {}
-    for (const ligne of lignes) {
-      consoParArticle[ligne.article_id] = (consoParArticle[ligne.article_id] || 0) + (ligne.quantite_stock || ligne.quantite)
-      if (!nomParArticle[ligne.article_id]) nomParArticle[ligne.article_id] = ligne.article_nom
-      if (ligne.deal_article2_id) {
-        consoParArticle[ligne.deal_article2_id] = (consoParArticle[ligne.deal_article2_id] || 0) + ligne.quantite
-        if (!nomParArticle[ligne.deal_article2_id]) nomParArticle[ligne.deal_article2_id] = ligne.article_nom
-      }
+    if (!verifStock.ok) {
+      return NextResponse.json({
+        ok: false,
+        error: verifStock.error,
+        ...(verifStock.article_id ? { article_id: verifStock.article_id, stock_disponible: verifStock.stock_disponible } : {}),
+      }, { status: verifStock.status })
     }
-
-    for (const [artId, conso] of Object.entries(consoParArticle)) {
-      const stockEntry = (stocksJour || []).find(s => s.article_id === artId && s.jour_semaine === jourSemaine)
-      if (!stockEntry) continue // article sans stock géré : pas de limite
-      if (stockEntry.actif === false) {
-        return NextResponse.json({ ok: false, error: `Article "${nomParArticle[artId]}" non disponible ce jour-là.` }, { status: 400 })
-      }
-      const dispo = (stockEntry.stock || 0) - (qteDejaParArticle[artId] || 0) - (qteReserveeParArticle[artId] || 0)
-      if (conso > dispo) {
-        return NextResponse.json({
-          ok: false,
-          error: `Stock insuffisant pour "${nomParArticle[artId]}" : ${Math.max(0, dispo)} disponible(s) (quelqu'un vient de commander).`,
-          article_id: artId,
-          stock_disponible: Math.max(0, dispo),
-        }, { status: 409 })
-      }
-    }
+    const nomParArticle = verifStock.nomParArticle || {}
 
     // Géocodage adresse livraison (best-effort, non bloquant, timeout 4s) pour la
     // tournée optimisée. Retrait ou échec géocodage -> coords null.

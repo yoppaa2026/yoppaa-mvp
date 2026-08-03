@@ -193,6 +193,9 @@ export default function ModalNouveauRdv({
         acompte_montant: acompteMontant,
         acompte_paye: false,
         statut: 'confirme',
+        // TVA figée à la réservation : recalculer plus tard depuis la
+        // prestation réécrirait l'historique au moindre changement de taux.
+        tva_taux: presta.tva_taux ?? null,
         notes_client: notes.trim() || null,
         rgpd_marketing: false,
         source: 'commercant',               // distingue des RDVs pris en ligne par un Yopper

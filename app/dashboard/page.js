@@ -628,7 +628,7 @@ export default function Dashboard() {
         .is('deleted_at', null),
       supabase
         .from('rdv_prestations')
-        .select('id, nom, duree_minutes, prix, prix_min, prix_max, acompte_pourcent, ordre')
+        .select('id, nom, duree_minutes, prix, prix_min, prix_max, acompte_pourcent, ordre, tva_taux')
         .eq('commercant_id', id)
         .eq('actif', true)
         .is('deleted_at', null)

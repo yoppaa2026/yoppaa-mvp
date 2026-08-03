@@ -174,6 +174,18 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       acompte_paye_en_ligne: true,
       acompte_paye_date: new Date().toISOString(),
     }
+    // TVA figée à la réservation. Le taux est lu maintenant, sur la prestation
+    // telle qu'elle existe au moment de la vente, et ne sera plus jamais
+    // recalculé : un changement de taux ne doit pas réécrire l'historique.
+    if (meta.prestation_id) {
+      const { data: presta } = await supabase
+        .from('rdv_prestations')
+        .select('tva_taux')
+        .eq('id', meta.prestation_id)
+        .maybeSingle()
+      payload.tva_taux = presta?.tva_taux ?? null
+    }
+
     const { error } = await supabase.from('rdv_reservations').insert(payload)
     if (error) throw error
     console.info('[stripe/webhook] RDV créé via paiement Stripe', { rdvId, pi: paymentIntent.id })

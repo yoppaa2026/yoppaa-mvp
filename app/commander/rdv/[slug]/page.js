@@ -1053,6 +1053,9 @@ export default function CommanderRdvSlug() {
         acompte_montant: acompteMontant,
         acompte_paye: false,
         statut: 'confirme',
+        // TVA figée à la réservation : le taux de la prestation peut changer,
+        // le rendez-vous déjà pris ne doit pas bouger dans les exports.
+        tva_taux: prestationChoisie.tva_taux ?? null,
         notes_client: client.notes.trim() || null,
         rgpd_marketing: rgpdMarketing,
       }

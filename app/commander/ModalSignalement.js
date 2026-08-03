@@ -8,7 +8,6 @@
 //  - onSent  : callback succès
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
 
 const T = {
   ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', mid: '#9660E0',
@@ -28,7 +27,7 @@ const TYPES = [
   { key: 'autre',     label: 'Autre',               icon: '💬' },
 ]
 
-export default function ModalSignalement({ target, yopperId, onClose, onSent }) {
+export default function ModalSignalement({ target, onClose, onSent }) {
   const [type, setType] = useState(null)
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -39,14 +38,26 @@ export default function ModalSignalement({ target, yopperId, onClose, onSent }) 
     if (!type) return
     setSubmitting(true)
     setError(null)
-    const payload = {
-      type,
-      description: description.trim() || null,
-      yopper_id: yopperId || null,
-      commercant_id: target.kind === 'commerce' ? target.id : null,
-      service_id:    target.kind === 'service'  ? target.id : null,
+    // Route serveur : la table était insérable par n'importe qui, donc par
+    // n'importe quel robot. L'auteur est repris du cookie côté serveur.
+    let err = null
+    try {
+      const r = await fetch('/api/signaux', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'signalement',
+          motif: type,
+          description: description.trim() || null,
+          commercant_id: target.kind === 'commerce' ? target.id : null,
+          service_id:    target.kind === 'service'  ? target.id : null,
+        }),
+      })
+      const j = await r.json()
+      if (!j?.ok) err = { message: j?.error || 'Envoi impossible.' }
+    } catch {
+      err = { message: 'Erreur réseau, réessaie.' }
     }
-    const { error: err } = await supabase.from('signalements').insert(payload)
     setSubmitting(false)
     if (err) {
       setError(err.message)

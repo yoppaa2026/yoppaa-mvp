@@ -385,14 +385,19 @@ function SplashScreen({ onDone }) {
 }
 
 // ─── Suggestion commerce ──────────────────────────────────────────────────────
-function SuggestionForm({ clientId }) {
+function SuggestionForm() {
   const [form, setForm] = useState({ nom: '', adresse: '', type: '', commentaire: '' })
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const inputSt = { width: '100%', padding: '0.875rem 1rem', border: `1.5px solid ${T.pale}`, borderRadius: 12, marginBottom: 10, fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', outline: 'none', color: T.ink, background: '#fff', display: 'block' }
   async function envoyer() {
     if (!form.nom.trim()) return; setSending(true)
-    await supabase.from('suggestions_commercants').insert({ client_id: clientId || null, nom_commerce: form.nom.trim(), adresse: form.adresse.trim() || null, type_commerce: form.type.trim() || null, commentaire: form.commentaire.trim() || null })
+    // Route serveur : la table n'accepte plus d'insertion directe, elle était
+    // ouverte à tous et donc à n'importe quel robot.
+    await fetch('/api/signaux', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'suggestion', nom_commerce: form.nom.trim(), adresse: form.adresse.trim() || null, type_commerce: form.type.trim() || null, commentaire: form.commentaire.trim() || null }),
+    }).catch(() => {})
     setSent(true); setSending(false)
   }
   if (sent) return (
@@ -1747,9 +1752,16 @@ export default function Commander() {
     setStatutsCommerce(statuts)
   }
 
-  async function chargerFavoris(cid) {
-    const { data } = await supabase.from('favoris').select('commercant_id').eq('client_id', cid)
-    const ids = (data||[]).map(f => f.commercant_id)
+  // Les favoris passent par une route serveur : la table n'est plus lisible ni
+  // modifiable depuis le navigateur. Elle l'était par tout le monde, ce qui
+  // permettait de lire les favoris d'autrui et surtout d'effacer les siens.
+  async function chargerFavoris() {
+    let ids = []
+    try {
+      const r = await fetch('/api/yopper/favoris')
+      const j = await r.json()
+      ids = j?.favoris || []
+    } catch { ids = [] }
     setFavoris(ids)
     if (ids.length > 0) {
       const { data: comms } = await supabase
@@ -1938,14 +1950,14 @@ export default function Commander() {
     let cid = clientId || await getOuCreerClient(client.email, client.nom)
     if (!cid) return
     if (favoris.includes(commercantId)) {
-      await supabase.from('favoris').delete().eq('client_id', cid).eq('commercant_id', commercantId)
+      await fetch('/api/yopper/favoris', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ commercant_id: commercantId, action: 'retirer' }) })
       setFavoris(prev => prev.filter(id => id!==commercantId))
       setCommercantsFavoris(prev => prev.filter(c => c.id!==commercantId))
       // Retrait du tag OneSignal côté serveur (valeur vide = suppression du tag).
       syncYopperTags({ [`favori:${commercantId}`]: '' })
       showToast({ type: 'info', msg: 'Retiré de tes favoris' })
     } else {
-      await supabase.from('favoris').insert({ client_id: cid, commercant_id: commercantId })
+      await fetch('/api/yopper/favoris', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ commercant_id: commercantId, action: 'ajouter' }) })
       setFavoris(prev => [...prev, commercantId])
       const c = commercants.find(x => x.id===commercantId)
       if (c) setCommercantsFavoris(prev => [...prev, c])

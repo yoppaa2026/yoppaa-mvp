@@ -9,7 +9,6 @@
 // comptoir. Même layout pour tous les types, alimentaire comme vitrine.
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
 
 // Un message par fonctionnalité : titre court, phrase à hauteur d'habitant, et
 // libellé de bouton. `nom` est le nom du commerce.
@@ -64,27 +63,15 @@ export default function CTAUpgrade({ type, commercant, variant = 'inline' }) {
     if (sent || loading) return
     setLoading(true)
     try {
-      const clientId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_client_id') : null
-      if (clientId) {
-        const ilYa7Jours = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
-        const { data: dejaDemande } = await supabase
-          .from('upgrade_requests')
-          .select('id')
-          .eq('client_id', clientId)
-          .eq('commercant_id', commercant.id)
-          .eq('type', type)
-          .gte('created_at', ilYa7Jours)
-          .limit(1)
-          .maybeSingle()
-        if (!dejaDemande) {
-          await supabase.from('upgrade_requests').insert({
-            client_id: clientId,
-            commercant_id: commercant.id,
-            type,
-          })
-        }
-      }
-    } catch (e) { /* anti-spam ou erreur : toast quand meme */ }
+      // Route serveur. L'anti-spam d'une envie par semaine était appliqué ici,
+      // dans le navigateur, donc contournable ; il est désormais vérifié côté
+      // serveur, où la table n'est plus insérable directement.
+      await fetch('/api/signaux', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'envie', feature: type, commercant_id: commercant.id }),
+      })
+    } catch (e) { /* le remerciement s'affiche quand même */ }
     setLoading(false)
     setSent(true)
     setTimeout(() => setSent(false), 4000)

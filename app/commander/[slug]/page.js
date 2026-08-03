@@ -1116,13 +1116,13 @@ export default function CommanderSlug() {
     if (!clientId || !commercant?.id) return
     let annule = false
     ;(async () => {
-      const { data } = await supabase
-        .from('favoris')
-        .select('client_id')
-        .eq('client_id', clientId)
-        .eq('commercant_id', commercant.id)
-        .maybeSingle()
-      if (!annule) setEstFavori(!!data)
+      // Route serveur : la table favoris n'est plus lisible depuis le
+      // navigateur, elle l'était par tout le monde.
+      try {
+        const r = await fetch('/api/yopper/favoris')
+        const j = await r.json()
+        if (!annule) setEstFavori((j?.favoris || []).includes(commercant.id))
+      } catch { if (!annule) setEstFavori(false) }
     })()
     return () => { annule = true }
   }, [clientId, commercant?.id])
@@ -1137,12 +1137,16 @@ export default function CommanderSlug() {
     }
     setFavoriLoading(true)
     try {
+      const majFavori = (action) => fetch('/api/yopper/favoris', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commercant_id: commercant.id, action }),
+      })
       if (estFavori) {
-        await supabase.from('favoris').delete().eq('client_id', clientId).eq('commercant_id', commercant.id)
+        await majFavori('retirer')
         setEstFavori(false)
         setToastMessage('Retiré de tes favoris')
       } else {
-        await supabase.from('favoris').insert({ client_id: clientId, commercant_id: commercant.id })
+        await majFavori('ajouter')
         setEstFavori(true)
         setToastMessage(`${commercant.nom} ajouté à tes favoris 🟣`)
       }

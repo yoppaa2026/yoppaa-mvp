@@ -9,7 +9,6 @@
 //  - onSent : callback succès
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
 
 const T = {
   ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', mid: '#9660E0',
@@ -39,14 +38,27 @@ export default function ModalAvis({ commercant, clientId, commandeId = null, onC
     if (!clientId) { setError('Connecte-toi pour laisser un avis.'); return }
     setSubmitting(true)
     setError(null)
-    const payload = {
-      commercant_id: commercant.id,
-      client_id: clientId,
-      note,
-      commentaire: commentaire.trim() || null,
-      commande_id: commandeId || null,
+    // L'avis part par une route serveur : la table n'accepte plus d'écriture
+    // directe. Le serveur reprend l'auteur du cookie et vérifie qu'il a bien
+    // une commande récupérée chez ce commerce, ce qu'une policy SQL ne pouvait
+    // pas faire faute d'identité Supabase Auth pour un Yopper.
+    let err = null
+    try {
+      const r = await fetch('/api/yopper/avis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commercant_id: commercant.id,
+          note,
+          commentaire: commentaire.trim() || null,
+          commande_id: commandeId || null,
+        }),
+      })
+      const j = await r.json()
+      if (!j?.ok) err = { message: j?.error || 'Enregistrement impossible.' }
+    } catch {
+      err = { message: 'Erreur réseau, réessaie.' }
     }
-    const { error: err } = await supabase.from('avis').insert(payload)
     setSubmitting(false)
     if (err) {
       setError(err.message)

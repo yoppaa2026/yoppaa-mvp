@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { canDo, getIaConfig } from '@/lib/plans'
 import { normaliserCodeBon } from '@/lib/bons-cadeaux'
+import { estRemiseSurProduit } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement } from '@/lib/lancement'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
@@ -1681,6 +1682,9 @@ function TabDeals({ commercantId, commercant, toast }) {
   // jamais être obligatoire chez lui, sa remise est une annonce.
   const articlesLiables = articles.filter(a => !a.gere_variantes)
   const articleRequis = articlesLiables.length > 0 && commercant?.categorie !== 'vitrine'
+  // Catégories réellement utilisées par le catalogue : viser une catégorie vide
+  // créerait une promo qui ne s'applique à rien.
+  const categoriesLiables = [...new Set(articlesLiables.map(a => a.categorie).filter(Boolean))].sort()
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchDeals(); fetchArticles() }, [commercantId])
@@ -1720,7 +1724,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       deal_type: 'lot', remise_pct: '', unites_par_deal: '', article2_id: '',
       date_debut: today, date_fin: today,
       heure_debut: '00:00', heure_fin: '23:59',
-      inclus_morning: false, actif: true, article_id: '',
+      inclus_morning: false, actif: true, article_id: '', categorie_cible: '',
       cta_appeler_reserver: false,
       photo_url: '', est_bonne_affaire: false })
     setPropsIa([])
@@ -1749,6 +1753,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       inclus_morning: !!d.inclus_morning,
       actif: d.actif !== false,
       article_id: d.article_id || '',
+      categorie_cible: d.categorie_cible || '',
       cta_appeler_reserver: !!d.cta_appeler_reserver,
       photo_url: d.photo_url || '',
       est_bonne_affaire: !!d.est_bonne_affaire,
@@ -1773,12 +1778,20 @@ function TabDeals({ commercantId, commercant, toast }) {
     setUploadingPhoto(false)
   }
 
-  // Quand on choisit un article, on pré-remplit prix_original
-  function onArticleChange(articleId) {
-    const art = articles.find(a => a.id === articleId)
+  // Une remise vise UN article ou TOUTE une catégorie, jamais les deux : le
+  // même menu déroulant propose donc les deux, les catégories étant préfixées
+  // « cat: » pour les distinguer d'un identifiant d'article.
+  // Choisir un article pré-remplit le prix d'origine.
+  function onArticleChange(valeur) {
+    if (String(valeur).startsWith('cat:')) {
+      setForm(p => ({ ...p, article_id: '', categorie_cible: String(valeur).slice(4) }))
+      return
+    }
+    const art = articles.find(a => a.id === valeur)
     setForm(p => ({
       ...p,
-      article_id: articleId,
+      article_id: valeur,
+      categorie_cible: '',
       prix_original: art && !p.prix_original ? String(art.prix) : p.prix_original,
     }))
   }
@@ -1813,7 +1826,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       // rdv_prestations) : sa remise est une ANNONCE, pas un article en promo.
       // Sans ce garde-fou, aucun deal n'était jamais enregistré côté vitrine
       // (bug signalé par Alex 01/08).
-      if (articleRequis && !form.article_id) { setSaving(false); return toast('Une remise % doit être liée à un article', 'error') }
+      if (articleRequis && !form.article_id && !form.categorie_cible) { setSaving(false); return toast('Une remise % doit viser un article ou une catégorie', 'error') }
     }
     if (form.deal_type === 'bundle' && !form.article2_id) {
       setSaving(false); return toast('Choisis le second article du duo', 'error')
@@ -1845,6 +1858,10 @@ function TabDeals({ commercantId, commercant, toast }) {
       inclus_morning: !!form.inclus_morning,
       actif: !!form.actif,
       article_id: form.article_id || null,
+      // Une catégorie entière ne se remise que par un pourcentage ou un prix
+      // promo : un lot « 3 + 1 » sur une catégorie n'aurait aucun sens, on ne
+      // saurait pas ce qui est offert.
+      categorie_cible: (estRemiseSurProduit({ deal_type: form.deal_type }) && form.categorie_cible) ? form.categorie_cible : null,
       cta_appeler_reserver: !!form.cta_appeler_reserver,
       photo_url: form.photo_url || null,
       est_bonne_affaire: !!form.est_bonne_affaire,
@@ -2018,10 +2035,11 @@ function TabDeals({ commercantId, commercant, toast }) {
             <div>
               <label style={s.label}>
                 {form.deal_type === 'remise_pct'
-                  ? (articleRequis ? 'Article concerné *' : 'Article concerné (optionnel)')
+                  ? (articleRequis ? 'Ce que la remise vise *' : 'Ce que la remise vise (optionnel)')
                   : form.deal_type === 'bundle' ? 'Premier article du duo' : 'Article concerné (optionnel)'}
               </label>
-              <select value={form.article_id} onChange={e => onArticleChange(e.target.value)}
+              <select value={form.categorie_cible ? `cat:${form.categorie_cible}` : form.article_id}
+                onChange={e => onArticleChange(e.target.value)}
                 style={{ ...s.input, cursor: 'pointer' }}>
                 <option value="">— Deal général (pas lié à un produit) —</option>
                 {/* Articles à variantes exclus (décision 26/07 : pas de deal sur
@@ -2031,11 +2049,22 @@ function TabDeals({ commercantId, commercant, toast }) {
                     {a.nom}{a.categorie ? ` · ${a.categorie}` : ''} · {Number(a.prix).toFixed(2)}€
                   </option>
                 ))}
+                {/* Toute une catégorie d'un coup, réservé aux remises : « -20 %
+                    sur les shampoings » évite de créer un deal par produit. */}
+                {estRemiseSurProduit({ deal_type: form.deal_type }) && categoriesLiables.length > 0 && (
+                  <optgroup label="Toute une catégorie">
+                    {categoriesLiables.map(cat => (
+                      <option key={cat} value={`cat:${cat}`}>Tous les articles · {cat}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
               <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
                 {articlesLiables.length === 0
                   ? 'Tu n’as pas encore de produit à lier : ton offre s’affichera comme une annonce sur ta fiche (le client te contacte ou passe te voir).'
-                  : 'L’offre s’affiche comme une carte à part sous l’article : le produit reste toujours achetable à l’unité au prix normal.'}
+                  : estRemiseSurProduit({ deal_type: form.deal_type })
+                    ? 'La remise s’applique directement au produit : ton client voit le prix barré et le prix promo, et paie le prix promo. Pas de doublon dans ton catalogue.'
+                    : 'Le lot s’affiche comme une carte à part sous l’article : le produit reste achetable à l’unité au prix normal, parce qu’une unité n’est pas un lot.'}
               </p>
             </div>
             {form.deal_type === 'bundle' && (

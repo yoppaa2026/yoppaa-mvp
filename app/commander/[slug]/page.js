@@ -7,6 +7,7 @@ import { fetchYopper } from '@/lib/fetch-yopper'
 import { canDo, isVitrine } from '@/lib/plans'
 import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau } from '@/lib/creneaux'
+import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import PillsStatut from '../PillsStatut'
@@ -370,7 +371,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 }
 
 // ─── ArticleRow ───────────────────────────────────────────────────────────────
-function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null }) {
+function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null }) {
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
   const hasVariantes = !!article.gere_variantes && variantes.length > 0
@@ -451,6 +452,16 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
                   Prix sur demande
                 </span>
               )
+            ) : remise ? (
+              // Article remisé : le prix promo REMPLACE le prix normal, l'ancien
+              // reste barré à côté. Un seul article, un seul prix affiché.
+              <>
+                <p style={{ fontSize: '1rem', color: '#DC2626', fontWeight: 900, letterSpacing: '-0.3px' }}>{remise.prix.toFixed(2)}€</p>
+                <span style={{ fontSize: '0.8rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{remise.prixBarre.toFixed(2)}€</span>
+                <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#fff', background: '#DC2626', padding: '2px 7px', borderRadius: 100, letterSpacing: '0.2px' }}>
+                  {remise.deal.remise_pct ? `-${remise.deal.remise_pct}%` : 'PROMO'}
+                </span>
+              </>
             ) : (
               <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(article.prix).toFixed(2)}€</p>
             )}
@@ -602,18 +613,15 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
   )
 }
 
-// ─── Carte OFFRE DEAL : le deal lié à un article est un « article temporaire »
-// ajouté à part (l'unité ne disparaît jamais). Détail visible : titre,
-// description, prix deal vs prix original DU DEAL. Serveur revalide via deal_id.
-function DealOfferCard({ deal, article = null, qte = 0, onAjouter, onRetirer }) {
-  // Prix affiché par type : remise % → calcul en direct sur le prix article
-  const estRemise = deal.deal_type === 'remise_pct' && deal.remise_pct
-  const prixAffiche = estRemise && article
-    ? Math.round(Number(article.prix) * (100 - deal.remise_pct)) / 100
-    : (deal.prix_deal != null ? Number(deal.prix_deal) : null)
-  const prixBarre = estRemise && article
-    ? Number(article.prix)
-    : (deal.prix_original != null ? Number(deal.prix_original) : null)
+// ─── Carte OFFRE SÉPARÉE : un lot ou un duo est un autre objet que l'unité
+// (« 3 croissants + 1 offert » n'est pas un croissant), il a donc sa propre
+// carte et son propre prix, et l'unité reste commandable à côté.
+//
+// Les remises, elles, ne passent JAMAIS par ici : elles modifient le prix de
+// l'article sur sa propre carte. Voir lib/deals.js.
+function DealOfferCard({ deal, qte = 0, onAjouter, onRetirer }) {
+  const prixAffiche = deal.prix_deal != null ? Number(deal.prix_deal) : null
+  const prixBarre = deal.prix_original != null ? Number(deal.prix_original) : null
   return (
     <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${T.main}55`, boxShadow: `0 4px 16px ${T.main}26` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
@@ -625,9 +633,6 @@ function DealOfferCard({ deal, article = null, qte = 0, onAjouter, onRetirer }) 
           <p style={{ fontWeight: 800, color: '#fff', fontSize: '0.9rem', letterSpacing: '-0.2px', lineHeight: 1.3, margin: '0 0 3px' }}>{deal.titre}</p>
           {deal.description && <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)', lineHeight: 1.45, margin: '0 0 6px' }}>{deal.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {estRemise && (
-              <span style={{ fontSize: '0.68rem', fontWeight: 900, color: '#1A0840', background: T.light, padding: '2px 8px', borderRadius: 100 }}>-{deal.remise_pct}%</span>
-            )}
             {prixAffiche != null && (
               <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{prixAffiche.toFixed(2)}€</span>
             )}
@@ -676,7 +681,7 @@ function getDeviceId() {
 // commerçant, mosaïque photos façon réseau social (tap = plein écran),
 // description riche (les emojis et sauts de ligne du commerçant respectés),
 // cœur + partage, puis achat (VariantesSelector si variantes). Tous catalogues.
-function ArticleDetailModal({ article, variantes, photosActives, commercant, social, onToggleLike, onPartager, partageEtat, onClose, onAjouter, onAjouterVariante }) {
+function ArticleDetailModal({ article, variantes, photosActives, commercant, social, onToggleLike, onPartager, partageEtat, onClose, onAjouter, onAjouterVariante, remise = null }) {
   const [galerie, setGalerie] = useState([])
   const [photoIdx, setPhotoIdx] = useState(null)   // index de la photo ouverte en plein écran
   const touchXRef = useRef(null)                   // swipe gauche/droite dans le viewer
@@ -770,9 +775,12 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 6 }}>
             <h3 style={{ fontWeight: 900, fontSize: '1.15rem', color: T.ink, letterSpacing: '-0.4px', margin: 0, lineHeight: 1.25 }}>{article.nom}</h3>
             {!hasVar && Number(article.prix) > 0 && (
-              <p style={{ fontSize: '1.15rem', fontWeight: 900, color: T.main, letterSpacing: '-0.4px', margin: 0, flexShrink: 0 }}>
+              <p style={{ fontSize: '1.15rem', fontWeight: 900, color: remise ? '#DC2626' : T.main, letterSpacing: '-0.4px', margin: 0, flexShrink: 0, display: 'flex', alignItems: 'baseline', gap: 6 }}>
                 {article.est_vitrine ? <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, marginRight: 5 }}>dès</span> : null}
-                {Number(article.prix).toFixed(2)}€
+                {remise ? remise.prix.toFixed(2) : Number(article.prix).toFixed(2)}€
+                {remise && (
+                  <span style={{ fontSize: '0.85rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{remise.prixBarre.toFixed(2)}€</span>
+                )}
               </p>
             )}
           </div>
@@ -990,8 +998,10 @@ export default function CommanderSlug() {
   const [galerie, setGalerie] = useState([])
   const [actualites, setActualites] = useState([])
   const [dealActif, setDealActif] = useState(null)
-  // Map article_id → deal pour appliquer la reduction sur articles concernes
-  const [dealsParArticle, setDealsParArticle] = useState({})
+  // Tous les deals dont la fenêtre couvre aujourd'hui. Une seule liste, lue via
+  // lib/deals.js : les lots et duos deviennent des cartes séparées, les remises
+  // modifient le prix de l'article, y compris quand elles visent sa catégorie.
+  const [dealsActifs, setDealsActifs] = useState([])
   // Modale detail deal (titre + description + dates + prix)
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   // Fiche détail d'un article (boutique) : photos galerie + description complète
@@ -1300,7 +1310,7 @@ export default function CommanderSlug() {
     setGalerie(data.galerie || [])
     setActualites(data.actualites || [])
     setDealActif(data.dealActif)
-    setDealsParArticle(data.dealsParArticle || {})
+    setDealsActifs(data.dealsActifs || [])
     setFermetures(data.fermetures)
     buildJoursDispos(data.commercant, data.creneaux, data.fermetures)
     setLivraisonConfig(data.livraisonConfig || null)
@@ -1434,28 +1444,13 @@ export default function CommanderSlug() {
 
     const couverture = (photosData||[]).find(p => p.type === 'couverture') || null
     const galerieAutres = (photosData||[]).filter(p => p.type !== 'couverture' && p.url)
-    // Filtre des deals actifs aujourd'hui : aligne sur la logique home (commander/page.js).
-    // Accepte les 2 formats : date_deal ponctuelle = aujourd'hui OU intervalle date_debut/date_fin.
+    // Deals dont la fenêtre couvre aujourd'hui (date ponctuelle ou intervalle).
+    // La règle vit dans lib/deals.js, partagée avec le calcul serveur.
     const aujourdhuiDate = new Date().toISOString().slice(0, 10)
-    const dealsActifs = (dealsData || []).filter(d => {
-      const dateDeal = d.date_deal || null
-      const dStart = d.date_debut ? d.date_debut.slice(0,10) : null
-      const dEnd   = d.date_fin   ? d.date_fin.slice(0,10)   : null
-      if (dateDeal === aujourdhuiDate) return true
-      if (dStart && dEnd && dStart <= aujourdhuiDate && aujourdhuiDate <= dEnd) return true
-      return false
-    })
-    // Deal "vedette" affiche en bandeau : 1er deal SANS article_id (générique),
-    // sinon le 1er deal (avec article_id) pour ne pas avoir un bandeau vide
-    const deal = dealsActifs.find(d => !d.article_id) || dealsActifs[0] || null
-    // Map article_id → LISTE de deals (un commerçant peut cumuler plusieurs
-    // offres sur le même article, ex. lot 3+1 ET remise fin de journée)
-    const dealsParArticle = {}
-    dealsActifs.forEach(d => {
-      if (!d.article_id) return
-      if (!dealsParArticle[d.article_id]) dealsParArticle[d.article_id] = []
-      dealsParArticle[d.article_id].push(d)
-    })
+    const dealsActifs = (dealsData || []).filter(d => dealActifCeJour(d, aujourdhuiDate))
+    // Deal « vedette » affiché en bandeau : le premier deal générique, sinon le
+    // premier deal tout court pour ne pas laisser le bandeau vide.
+    const deal = dealsActifs.find(d => !d.article_id && !d.categorie_cible) || dealsActifs[0] || null
 
     // Filtrer les actus actives aujourd'hui (sur la fenêtre date_debut/date_fin)
     const aujourdhui = new Date().toISOString().slice(0, 10)
@@ -1480,7 +1475,7 @@ export default function CommanderSlug() {
       photoCouverture: couverture,
       galerie: galerieAutres,
       dealActif: deal,
-      dealsParArticle,
+      dealsActifs,
       fermetures: fermeturesData || [],
       actualites: actusActives,
       livraisonConfig: livConfig || null,
@@ -1712,7 +1707,9 @@ export default function CommanderSlug() {
       const key = `${article.id}_v${variante.id}`
       const dejaPanier = panier[key]?.quantite || 0
       if ((variante.stock ?? 0) <= dejaPanier) return
-      const prixVar = variante.prix != null ? Number(variante.prix) : Number(article.prix)
+      const prixVar = variante.prix != null
+        ? prixEffectifVariante(variante.prix, article, dealsActifs)
+        : prixEffectif(article, dealsActifs)
       const label = [variante.axe1_valeur, variante.axe2_valeur].filter(Boolean).join(' · ')
       setPanier(prev => ({ ...prev, [key]: { ...article, prix: prixVar, options: null, variante: { id: variante.id, label, stock: variante.stock }, quantite: (prev[key]?.quantite || 0) + 1 } }))
       return
@@ -1722,29 +1719,31 @@ export default function CommanderSlug() {
     const qteTotale = qteTotaleArticle(article.id)
     if (stockMax !== Infinity && qteTotale >= stockMax) return
     const key = options ? `${article.id}_${JSON.stringify(options)}` : String(article.id)
-    // L'article reste TOUJOURS au prix unitaire : un deal lié (ex. lot 3+1)
-    // est une OFFRE SÉPARÉE ajoutée via sa propre carte (ajouterDealAuPanier).
-    setPanier(prev => ({ ...prev, [key]: { ...article, options, quantite: (prev[key]?.quantite || 0) + 1 } }))
+    // Le prix de la ligne est le prix remisé quand une remise du jour vise cet
+    // article ou sa catégorie. Un lot ou un duo, lui, reste une offre séparée
+    // ajoutée par sa propre carte (ajouterDealAuPanier) : l'unité ne disparaît
+    // jamais. Le serveur recalcule tout, cet affichage n'engage rien.
+    const remise = remiseSurArticle(article, dealsActifs)
+    setPanier(prev => ({ ...prev, [key]: {
+      ...article,
+      prix: remise ? remise.prix : Number(article.prix),
+      prix_avant_deal: remise ? remise.prixBarre : null,
+      options,
+      quantite: (prev[key]?.quantite || 0) + 1,
+    } }))
   }
 
-  // Ajoute le DEAL comme ligne de panier à part entière (décision Alex 23/07 :
-  // le deal = article temporaire, l'unité ne disparaît jamais). Le serveur
-  // revalide le prix via deal_id.
+  // Ajoute une OFFRE SÉPARÉE (lot, duo) comme ligne de panier à part entière :
+  // l'unité reste commandable à côté. Le serveur revalide le prix via deal_id.
   function ajouterDealAuPanier(deal, article) {
     const key = `deal_${deal.id}`
-    // Plafond stock : un deal consomme unites_par_deal unités de l'article
+    // Plafond stock : un lot consomme unites_par_deal unités de l'article
     // (lot 3+1 = 4). Même garde silencieuse que les ajouts unitaires.
     const stockMax = getStockMax(article.id)
     const unites = deal.unites_par_deal || 1
     if (stockMax !== Infinity && qteTotaleArticle(article.id) + unites > stockMax) return
-    // Prix par type : remise % calculée en direct sur le prix article (jamais
-    // figée), sinon prix_deal (lot / prix fixe / duo). Le serveur revalide.
-    const prixDeal = deal.deal_type === 'remise_pct' && deal.remise_pct
-      ? Math.round(Number(article.prix) * (100 - deal.remise_pct)) / 100
-      : Number(deal.prix_deal)
-    const prixAvant = deal.deal_type === 'remise_pct'
-      ? Number(article.prix)
-      : (deal.prix_original != null ? Number(deal.prix_original) : null)
+    const prixDeal = Number(deal.prix_deal)
+    const prixAvant = deal.prix_original != null ? Number(deal.prix_original) : null
     setPanier(prev => ({ ...prev, [key]: {
       id: article.id,
       nom: deal.titre,
@@ -1755,6 +1754,39 @@ export default function CommanderSlug() {
       options: null,
       quantite: (prev[key]?.quantite || 0) + 1,
     } }))
+  }
+
+  // ─── Une bonne affaire doit se VENDRE, pas seulement s'annoncer ────────────
+  // La bannière et la modale annonçaient l'offre sans donner le moindre moyen
+  // de l'acheter : le Yopper devait retrouver l'article à la main dans le
+  // catalogue. Selon ce que le deal vise, le bouton met l'offre au panier ou
+  // emmène directement là où elle s'applique.
+  function articleDuDeal(deal) {
+    if (!deal?.article_id) return null
+    return articles.find(a => a.id === deal.article_id) || null
+  }
+
+  function acheterDeal(deal) {
+    const article = articleDuDeal(deal)
+    trackDeal(deal.id, 'cta_click')
+    setDealDetailOuvert(null)
+    if (article) {
+      // Lot ou duo : c'est l'offre elle-même qui entre au panier. Remise : c'est
+      // l'article, à son prix remisé, calculé par ajouterAuPanier.
+      if (estOffreSeparee(deal)) ajouterDealAuPanier(deal, article)
+      else ajouterAuPanier(article)
+      return
+    }
+    // Remise sur toute une catégorie : rien à ajouter, on y emmène le Yopper.
+    if (deal.categorie_cible) scrollToCategorie(deal.categorie_cible)
+  }
+
+  // Le bouton n'a de sens que si le deal mène quelque part et que la fiche
+  // accepte les commandes.
+  function dealAchetable(deal) {
+    if (!deal || !peutCommander) return false
+    if (deal.article_id) return !!articleDuDeal(deal)
+    return !!deal.categorie_cible
   }
 
   // FIX STOCK : incrementerPanier vérifie aussi le stock
@@ -2263,6 +2295,7 @@ export default function CommanderSlug() {
           onPartager={partagerArticle}
           partageEtat={partageEtat}
           onClose={() => setArticleDetail(null)}
+          remise={remiseSurArticle(articleDetail, dealsActifs)}
           onAjouter={peutCommander ? (a) => ajouterAuPanier(a) : null}
           onAjouterVariante={peutCommander ? (a, v) => ajouterAuPanier(a, null, v) : null}/>
       )}
@@ -2363,6 +2396,15 @@ export default function CommanderSlug() {
                 </p>
               )}
 
+              {/* Acheter l'offre, sans avoir à la retrouver dans le catalogue */}
+              {dealAchetable(dealDetailOuvert) && (
+                <button onClick={() => acheterDeal(dealDetailOuvert)}
+                  style={{ width: '100%', marginTop: 14, padding: '0.95rem', border: 'none', borderRadius: 100, background: 'linear-gradient(135deg, #DC2626, #F97316)', color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 6px 20px rgba(220,38,38,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <Flame size={16} strokeWidth={2.4}/>
+                  {dealDetailOuvert.article_id ? 'J’en profite, au panier' : 'Voir les articles en promo'}
+                </button>
+              )}
+
               {/* Bouton "Appeler pour réserver" (héritage Communiquer/Vendre) */}
               {dealDetailOuvert.cta_appeler_reserver && commercant.telephone ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
@@ -2377,6 +2419,12 @@ export default function CommanderSlug() {
                     Fermer
                   </button>
                 </div>
+              ) : dealAchetable(dealDetailOuvert) ? (
+                // Le bouton d'achat porte déjà l'action : celui-ci s'efface.
+                <button onClick={() => setDealDetailOuvert(null)}
+                  style={{ width: '100%', marginTop: 8, padding: '0.7rem', border: `1.5px solid ${T.pale}`, borderRadius: 100, background: '#fff', color: T.muted, fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                  Fermer
+                </button>
               ) : (
                 <button onClick={() => setDealDetailOuvert(null)}
                   style={{ width: '100%', marginTop: 14, padding: '0.875rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 16px ${T.main}55` }}>
@@ -2880,12 +2928,18 @@ export default function CommanderSlug() {
                         <p style={{ fontSize: '0.65rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>Deal du jour</p>
                         <p style={{ fontSize: '0.9rem', fontWeight: 800, color: '#fff', marginTop: 2, lineHeight: 1.3 }}>{dealActif.titre}</p>
                       </div>
-                      {dealActif.prix_deal && (
+                      {/* Une remise % n'a pas de prix propre : c'est le taux qui
+                          accroche l'œil, sinon le bandeau reste muet. */}
+                      {dealActif.remise_pct ? (
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>-{dealActif.remise_pct}%</p>
+                        </div>
+                      ) : dealActif.prix_deal ? (
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
                           {dealActif.prix_original && <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', textDecoration: 'line-through' }}>{Number(dealActif.prix_original).toFixed(2)}€</p>}
                           <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{Number(dealActif.prix_deal).toFixed(2)}€</p>
                         </div>
-                      )}
+                      ) : null}
                       <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', flexShrink: 0, marginLeft: 4 }}>›</span>
                     </button>
                   </div>
@@ -2997,10 +3051,11 @@ export default function CommanderSlug() {
                               getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')}
                               photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                               variantes={variantesParArticle[a.id] || []}
+                              remise={remiseSurArticle(a, dealsActifs)}
                               onOpenDetail={() => setArticleDetail(a)}/>
-                            {/* Offres deal liées = cartes séparées (l'unité reste intacte) */}
-                            {peutCommander && (dealsParArticle[a.id] || []).filter(dl => dl.prix_deal != null || dl.remise_pct).map(dl => (
-                              <DealOfferCard key={dl.id} deal={dl} article={a}
+                            {/* Lots et duos seulement : une remise vit sur la carte de l'article */}
+                            {peutCommander && offresSepareesPourArticle(a, dealsActifs).filter(dl => dl.prix_deal != null).map(dl => (
+                              <DealOfferCard key={dl.id} deal={dl}
                                 qte={panier[`deal_${dl.id}`]?.quantite || 0}
                                 onAjouter={() => ajouterDealAuPanier(dl, a)}
                                 onRetirer={() => retirerDuPanier(`deal_${dl.id}`)}/>
@@ -3027,9 +3082,10 @@ export default function CommanderSlug() {
                             getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')}
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                             variantes={variantesParArticle[a.id] || []}
+                            remise={remiseSurArticle(a, dealsActifs)}
                             onOpenDetail={() => setArticleDetail(a)}/>
-                          {peutCommander && (dealsParArticle[a.id] || []).filter(dl => dl.prix_deal != null || dl.remise_pct).map(dl => (
-                            <DealOfferCard key={dl.id} deal={dl} article={a}
+                          {peutCommander && offresSepareesPourArticle(a, dealsActifs).filter(dl => dl.prix_deal != null).map(dl => (
+                            <DealOfferCard key={dl.id} deal={dl}
                               qte={panier[`deal_${dl.id}`]?.quantite || 0}
                               onAjouter={() => ajouterDealAuPanier(dl, a)}
                               onRetirer={() => retirerDuPanier(`deal_${dl.id}`)}/>

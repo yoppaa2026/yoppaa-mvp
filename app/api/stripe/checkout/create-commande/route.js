@@ -37,6 +37,7 @@ import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
 import { chargerBonValide, debiterBon } from '@/lib/bons-cadeaux-server'
 import { tauxPourArticle, tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
+import { estOffreSeparee, dealActifCeJour, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 
 export async function POST(request) {
   try {
@@ -196,13 +197,15 @@ export async function POST(request) {
       { data: variantesData },
       { data: dealsData },
     ] = await Promise.all([
-      supabase.from('articles').select('id, nom, prix, actif, commercant_id, temps_prepa, est_vitrine, tva_taux, tva_taux_sur_place').in('id', articleIds),
+      supabase.from('articles').select('id, nom, prix, categorie, actif, commercant_id, temps_prepa, est_vitrine, tva_taux, tva_taux_sur_place').in('id', articleIds),
       supabase.from('article_options_valeurs').select('id, nom, prix_supplement, groupe_id, article_options_groupes!inner(article_id, nom)'),
       // Variantes (Module 2 boutique) : revalidation server-side prix + stock
       supabase.from('article_variantes').select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif').in('article_id', articleIds),
-      // Deals (« article temporaire ») : revalidation server-side du prix selon
-      // le type (lot / remise_pct / prix_fixe / bundle) + fenêtre de dates
-      supabase.from('yoppaa_deals').select('id, titre, prix_deal, actif, commercant_id, deal_type, remise_pct, unites_par_deal, article2_id, date_deal, date_debut, date_fin').eq('commercant_id', commercant_id).eq('actif', true),
+      // Deals : revalidation server-side du prix selon le type. Les lots et les
+      // duos sont des offres séparées vendues telles quelles ; les remises, en
+      // pourcentage ou en prix promo, s'appliquent au prix de l'article et sont
+      // recalculées ici même quand le navigateur ne les a pas vues.
+      supabase.from('yoppaa_deals').select('id, titre, prix_deal, actif, commercant_id, deal_type, remise_pct, unites_par_deal, article2_id, article_id, categorie_cible, date_deal, date_debut, date_fin').eq('commercant_id', commercant_id).eq('actif', true),
     ])
 
     if (!articlesData || articlesData.length !== articleIds.length) {
@@ -228,6 +231,12 @@ export async function POST(request) {
     const valeurParId = Object.fromEntries((optionsValeurs || []).map(v => [v.id, v]))
     const varianteParId = Object.fromEntries((variantesData || []).map(v => [v.id, v]))
     const dealParId = Object.fromEntries((dealsData || []).map(d => [d.id, d]))
+    // Deals dont la fenêtre couvre la date de la commande. Les remises sont
+    // appliquées à partir de cette liste, ligne par ligne, sans rien attendre
+    // du navigateur : une promo qui n'existe que dans l'affichage n'est pas
+    // une promo, et une promo expirée ne doit pas survivre dans un panier resté
+    // ouvert depuis la veille.
+    const dealsDuJour = (dealsData || []).filter(d => dealActifCeJour(d, date_commande))
 
     // Régime de TVA de l'opération. Tous les modes servis par cette route sont
     // des livraisons de biens : retrait, livraison et expédition sont de la
@@ -282,36 +291,43 @@ export async function POST(request) {
           prix_supplement: 0,
         })
       }
-      // Deal lot (« article temporaire », décision Alex 23/07) : prix = prix_deal
-      // du deal revalidé server-side, libellé = titre du deal. L'article unitaire
-      // reste commandable à son prix normal en parallèle.
+      // ─── Deals : deux régimes qui ne se mélangent jamais ───────────────────
+      //
+      // Un LOT ou un DUO est une offre séparée : le navigateur l'envoie avec
+      // son deal_id, elle a son prix et son libellé propres, et l'unité reste
+      // commandable à côté. Une REMISE, elle, modifie le prix de l'article :
+      // elle est recalculée ici pour CHAQUE ligne, qu'elle soit annoncée ou non
+      // par le navigateur.
+      //
+      // Un deal_id de type remise, envoyé par un onglet resté ouvert sur
+      // l'ancien modèle, n'est donc plus traité comme une offre : la ligne
+      // redevient un article normal, remisé une seule fois. Sans cette
+      // précaution la remise s'appliquerait deux fois, ou pas du tout.
       let deal = null
       if (item.deal_id) {
-        deal = dealParId[item.deal_id]
-        if (!deal) {
+        const candidat = dealParId[item.deal_id]
+        if (!candidat) {
           return NextResponse.json({ ok: false, error: 'Ce deal n\'est plus disponible.' }, { status: 400 })
         }
-        // Fenêtre de dates ENFIN vérifiée server-side (audit deals n°3) : le
-        // deal doit couvrir la date de la commande (date_deal ponctuelle OU plage)
-        const dd = deal.date_deal ? String(deal.date_deal).slice(0, 10) : null
-        const ds = deal.date_debut ? String(deal.date_debut).slice(0, 10) : null
-        const df = deal.date_fin ? String(deal.date_fin).slice(0, 10) : null
-        const dansFenetre = (dd && dd === date_commande) || (ds && df && ds <= date_commande && date_commande <= df)
-        if (!dansFenetre) {
-          return NextResponse.json({ ok: false, error: `Le deal « ${deal.titre} » n'est plus valable pour cette date.` }, { status: 400 })
-        }
-        if (deal.deal_type === 'remise_pct' ? !deal.remise_pct : deal.prix_deal == null) {
-          return NextResponse.json({ ok: false, error: 'Ce deal n\'est plus disponible.' }, { status: 400 })
+        if (estOffreSeparee(candidat)) {
+          // Fenêtre de dates vérifiée server-side (audit deals n°3) : l'offre
+          // doit couvrir la date de la commande.
+          if (!dealActifCeJour(candidat, date_commande)) {
+            return NextResponse.json({ ok: false, error: `Le deal « ${candidat.titre} » n'est plus valable pour cette date.` }, { status: 400 })
+          }
+          if (candidat.prix_deal == null) {
+            return NextResponse.json({ ok: false, error: 'Ce deal n\'est plus disponible.' }, { status: 400 })
+          }
+          deal = candidat
         }
       }
-      // Prix par type de deal : remise % calculée en direct sur le prix article
-      // (jamais figée), sinon prix_deal (lot / prix fixe / bundle)
+      // Prix retenu : celui de l'offre séparée, sinon le prix de l'article ou
+      // de sa version, remise du jour comprise.
       const prixBase = deal
-        ? (deal.deal_type === 'remise_pct'
-            ? Math.round(Number(article.prix) * (100 - deal.remise_pct)) / 100
-            : Number(deal.prix_deal))
-        : variante && variante.prix != null ? Number(variante.prix)
-        : Number(article.prix)
+        ? Number(deal.prix_deal)
+        : variante && variante.prix != null
+          ? prixEffectifVariante(variante.prix, article, dealsDuJour, date_commande)
+          : prixEffectif(article, dealsDuJour, date_commande)
       const prixUnitaire = prixBase + supplement
       const ligneCents = Math.round(prixUnitaire * 100) * quantite
       totalCents += ligneCents

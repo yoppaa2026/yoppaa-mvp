@@ -17,6 +17,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { isVitrine, canDo } from '@/lib/plans'
+import { dealActifCeJour, remiseSurArticle } from '@/lib/deals'
 import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import HorairesSection from '../../HorairesSection'
@@ -585,12 +586,8 @@ export default function CommanderRdvSlug() {
         if (errDeals) console.warn('[rdv fiche] fetch deals KO', errDeals.message)
         const auj = new Date().toISOString().slice(0, 10)
         if (annule) return
-        setDeals((dealsData || []).filter(d => {
-          if (d.date_deal === auj) return true
-          const dStart = d.date_debut ? d.date_debut.slice(0, 10) : null
-          const dEnd   = d.date_fin   ? d.date_fin.slice(0, 10)   : null
-          return !!(dStart && dEnd && dStart <= auj && auj <= dEnd)
-        }))
+        // Même règle de fenêtre que partout ailleurs, tenue dans lib/deals.js
+        setDeals((dealsData || []).filter(d => dealActifCeJour(d, auj)))
       }
 
       // Catalogue produits (31/07) : chargé AVANT le early-return module RDV
@@ -599,7 +596,7 @@ export default function CommanderRdvSlug() {
       {
         const { data: arts, error: errArts } = await supabase
           .from('articles')
-          .select('id, nom, prix, est_vitrine, photo_url')
+          .select('id, nom, prix, categorie, est_vitrine, photo_url')
           .eq('commercant_id', c.id)
           .eq('actif', true)
           .order('categorie')
@@ -1416,55 +1413,6 @@ export default function CommanderRdvSlug() {
                 </div>
               )}
 
-              {/* ─── SES PRODUITS (31/07) : aperçu du catalogue, l'achat vit sur
-                  la page boutique /commander/[slug]. Affiché aussi quand le
-                  module RDV n'est pas activé. ─── */}
-              {etape === 1 && produits.length > 0 && (
-                <div style={{ margin: '18px 12px 0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
-                      </svg>
-                      Ses produits
-                    </span>
-                    <a href={`/commander/${commercant.slug}`}
-                      style={{ fontSize: '0.72rem', fontWeight: 800, color: T.main, textDecoration: 'none', flexShrink: 0 }}>
-                      Voir tout ({produits.length}) ›
-                    </a>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-                    {produits.slice(0, 8).map(p => (
-                      <a key={p.id} href={`/commander/${commercant.slug}?article=${p.id}`}
-                        style={{ flexShrink: 0, width: 118, background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 14, overflow: 'hidden', textDecoration: 'none' }}>
-                        {commercant.photos_catalogue_actif !== false && p.photo_url ? (
-                          <div style={{ width: '100%', aspectRatio: '1', background: T.pale }}>
-                            <img src={p.photo_url} alt={p.nom} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
-                          </div>
-                        ) : (
-                          <div style={{ width: '100%', aspectRatio: '1', background: `linear-gradient(135deg, ${T.pale}, #fff)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={T.light} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
-                            </svg>
-                          </div>
-                        )}
-                        <div style={{ padding: '8px 10px 10px' }}>
-                          <p style={{ margin: 0, fontSize: '0.74rem', fontWeight: 700, color: T.ink, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.nom}</p>
-                          {Number(p.prix) > 0 ? (
-                            <p style={{ margin: '3px 0 0', fontSize: '0.8rem', fontWeight: 900, color: T.main }}>
-                              {p.est_vitrine && <span style={{ fontSize: '0.62rem', fontWeight: 700, color: T.muted, marginRight: 3 }}>dès</span>}
-                              {Number(p.prix).toFixed(2)}€
-                            </p>
-                          ) : (
-                            <p style={{ margin: '3px 0 0', fontSize: '0.66rem', fontWeight: 700, color: T.muted }}>Prix sur demande</p>
-                          )}
-                        </div>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* ─── ÉTAPE 1 - LISTE PRESTATIONS ─── */}
               {!commercant._rdvDesactive && etape === 1 && (
                 <div style={{ padding: '1.5rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
@@ -1534,6 +1482,66 @@ export default function CommanderRdvSlug() {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* ─── SES PRODUITS (31/07) : aperçu du catalogue, l'achat vit sur
+                  la page boutique /commander/[slug]. Affiché aussi quand le
+                  module RDV n'est pas activé.
+                  PLACÉ SOUS LES PRESTATIONS (03/08) : chez un commerce de
+                  services, le rendez-vous est le cœur de métier. Le voir passer
+                  après une rangée de shampoings inversait la promesse de la
+                  fiche. ─── */}
+              {etape === 1 && produits.length > 0 && (
+                <div style={{ margin: '14px 12px 24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
+                      </svg>
+                      Ses produits
+                    </span>
+                    <a href={`/commander/${commercant.slug}`}
+                      style={{ fontSize: '0.72rem', fontWeight: 800, color: T.main, textDecoration: 'none', flexShrink: 0 }}>
+                      Voir tout ({produits.length}) ›
+                    </a>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+                    {produits.slice(0, 8).map(p => {
+                      // Un produit remisé affiche son prix promo ici aussi :
+                      // sinon l'aperçu du salon et sa boutique annoncent deux
+                      // prix différents pour le même article.
+                      const remise = remiseSurArticle(p, deals)
+                      return (
+                      <a key={p.id} href={`/commander/${commercant.slug}?article=${p.id}`}
+                        style={{ flexShrink: 0, width: 118, background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 14, overflow: 'hidden', textDecoration: 'none' }}>
+                        {commercant.photos_catalogue_actif !== false && p.photo_url ? (
+                          <div style={{ width: '100%', aspectRatio: '1', background: T.pale }}>
+                            <img src={p.photo_url} alt={p.nom} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
+                          </div>
+                        ) : (
+                          <div style={{ width: '100%', aspectRatio: '1', background: `linear-gradient(135deg, ${T.pale}, #fff)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={T.light} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
+                            </svg>
+                          </div>
+                        )}
+                        <div style={{ padding: '8px 10px 10px' }}>
+                          <p style={{ margin: 0, fontSize: '0.74rem', fontWeight: 700, color: T.ink, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.nom}</p>
+                          {Number(p.prix) > 0 ? (
+                            <p style={{ margin: '3px 0 0', fontSize: '0.8rem', fontWeight: 900, color: remise ? '#DC2626' : T.main, display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                              {p.est_vitrine && <span style={{ fontSize: '0.62rem', fontWeight: 700, color: T.muted, marginRight: 3 }}>dès</span>}
+                              {remise ? remise.prix.toFixed(2) : Number(p.prix).toFixed(2)}€
+                              {remise && <span style={{ fontSize: '0.66rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{remise.prixBarre.toFixed(2)}€</span>}
+                            </p>
+                          ) : (
+                            <p style={{ margin: '3px 0 0', fontSize: '0.66rem', fontWeight: 700, color: T.muted }}>Prix sur demande</p>
+                          )}
+                        </div>
+                      </a>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -2242,6 +2250,19 @@ export default function CommanderRdvSlug() {
                 <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 600, margin: '0 0 6px' }}>
                   <Calendar size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Valable le {new Date(dealDetailOuvert.date_deal + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })}
                 </p>
+              )}
+
+              {/* Une bonne affaire doit se vendre, pas seulement s'annoncer.
+                  Les produits d'un salon vivent sur sa boutique : quand le deal
+                  vise un article ou une catégorie, on y emmène le Yopper au
+                  lieu de le laisser chercher. */}
+              {(dealDetailOuvert.article_id || dealDetailOuvert.categorie_cible) && commercant?.slug && canDo(commercant?.plan, 'commande') && (
+                <a href={`/commander/${commercant.slug}`}
+                  onClick={() => trackDeal(dealDetailOuvert.id, 'cta_click')}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', marginTop: 14, padding: '0.95rem', borderRadius: 100, background: 'linear-gradient(135deg, #DC2626, #F97316)', color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 6px 20px rgba(220,38,38,0.4)', textDecoration: 'none' }}>
+                  <Flame size={16} strokeWidth={2.4}/>
+                  J&rsquo;en profite, voir la boutique
+                </a>
               )}
 
               {/* CTA « Appeler pour réserver » si activé par le commerçant */}

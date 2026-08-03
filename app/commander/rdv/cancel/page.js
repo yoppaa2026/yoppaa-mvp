@@ -46,7 +46,12 @@ export default function RdvCancelPage() {
     setToken(t)
   }, [])
 
-  async function confirmer() {
+  // Le rendez-vous porte des produits déjà payés : le serveur refuse d'annuler
+  // tant que le client n'a pas dit ce qu'il en fait. On ne décide pas à sa
+  // place, et ce choix commande le montant remboursé.
+  const [produits, setProduits] = useState(null)
+
+  async function confirmer(produitsChoix = null) {
     if (!token) return
     setLoading(true)
     setErreur(null)
@@ -54,9 +59,14 @@ export default function RdvCancelPage() {
       const res = await fetch('/api/rdv/cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token, ...(produitsChoix ? { produits_choix: produitsChoix } : {}) }),
       })
       const data = await res.json()
+      if (data?.choix_produits_requis) {
+        setProduits(data.produits)
+        setStep('produits')
+        return
+      }
       if (!res.ok || !data.ok) {
         setErreur(data?.error || 'Annulation impossible.')
         setStep('erreur')
@@ -122,12 +132,58 @@ export default function RdvCancelPage() {
               </p>
             </div>
 
-            <button onClick={confirmer} disabled={loading || !token} style={{ ...btnPrimary, opacity: !token ? 0.45 : 1 }}>
+            <button onClick={() => confirmer()} disabled={loading || !token} style={{ ...btnPrimary, opacity: !token ? 0.45 : 1 }}>
               {loading ? 'Annulation en cours…' : 'Confirmer l\'annulation'}
             </button>
             <button onClick={() => router.push('/commander')} style={btnSecondary}>
               Garder mon RDV
             </button>
+          </>
+        )}
+
+        {/* Le rendez-vous portait des produits payés en même temps. Ils n'ont
+            rien à voir avec le créneau annulé : le client décide s'il les garde.
+            Lui rembourser d'office serait lui reprendre une marchandise qu'il
+            voulait, les lui imposer serait une vente forcée. */}
+        {step === 'produits' && produits && (
+          <>
+            <div style={{ textAlign: 'center', marginBottom: 20 }}>
+              <h1 style={{ fontWeight: 900, fontSize: '1.4rem', color: T.ink, marginBottom: 8, letterSpacing: '-0.5px' }}>
+                Tu gardes tes produits ?
+              </h1>
+              <p style={{ color: T.muted, fontSize: '0.92rem', lineHeight: 1.55 }}>
+                Tu avais acheté des produits avec ce rendez-vous. Ils sont déjà payés et mis de côté.
+              </p>
+            </div>
+
+            <div style={{ background: '#F9FAFB', border: `1px solid ${T.pale}`, borderRadius: 14, overflow: 'hidden', marginBottom: 20 }}>
+              {produits.lignes.map((l, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: `1px solid ${T.pale}` }}>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 700, color: T.ink }}>{l.quantite} × {l.nom}</span>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 800, color: T.ink }}>{Number(l.total).toFixed(2)}€</span>
+                </div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 14px' }}>
+                <span style={{ fontSize: '0.88rem', fontWeight: 800, color: T.deep }}>Total produits</span>
+                <span style={{ fontSize: '0.95rem', fontWeight: 900, color: T.main }}>{Number(produits.total).toFixed(2)}€</span>
+              </div>
+            </div>
+
+            <button onClick={() => confirmer('garde')} disabled={loading} style={btnPrimary}>
+              {loading ? 'En cours…' : 'Je garde mes produits'}
+            </button>
+            <p style={{ fontSize: '0.78rem', color: T.muted, textAlign: 'center', margin: '8px 0 16px', lineHeight: 1.45 }}>
+              {produits.acompte > 0
+                ? `Seul ton acompte de ${Number(produits.acompte).toFixed(2)}€ te sera remboursé. Tes produits t'attendent en boutique.`
+                : 'Tes produits t\'attendent en boutique, rien n\'est remboursé.'}
+            </p>
+
+            <button onClick={() => confirmer('rend')} disabled={loading} style={btnSecondary}>
+              {loading ? 'En cours…' : 'Je rends tout et je me fais rembourser'}
+            </button>
+            <p style={{ fontSize: '0.78rem', color: T.muted, textAlign: 'center', margin: '8px 0 0', lineHeight: 1.45 }}>
+              {(Number(produits.total) + Number(produits.acompte)).toFixed(2)}€ reviennent sur ton moyen de paiement dans 5 à 10 jours.
+            </p>
           </>
         )}
 

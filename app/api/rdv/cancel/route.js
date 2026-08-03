@@ -26,7 +26,11 @@ export async function POST(request) {
     requireStripe()
 
     const body = await request.json()
-    const { rdv_id, token, client_email } = body
+    // `produits_choix` : 'garde' ou 'rend'. Demandé au client quand le
+    // rendez-vous porte des produits payés dans le même paiement. Ce n'est pas
+    // un détail de confort : c'est lui qui décide du montant remboursé, et la
+    // trace de sa décision si la banque conteste plus tard.
+    const { rdv_id, token, client_email, produits_choix } = body
 
     if (!rdv_id && !token) {
       return NextResponse.json({ ok: false, error: 'rdv_id (+ client_email) ou token requis.' }, { status: 400 })
@@ -43,7 +47,7 @@ export async function POST(request) {
       id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id,
       stripe_refund_id, client_email, client_prenom, client_nom, annulation_token,
       date_rdv, heure_debut, heure_fin, duree_minutes, motif_annulation,
-      commercant_id, rappel_push_id,
+      commercant_id, rappel_push_id, commande_id,
       commercant:commercants(id, nom, slug, adresse, stripe_account_id, rdv_delai_annulation_heures),
       prestation:rdv_prestations(nom)
     `
@@ -99,11 +103,69 @@ export async function POST(request) {
       }, { status: 403 })
     }
 
+    // ─── 4.5) Le rendez-vous porte-t-il des produits déjà payés ? ───────────
+    //
+    // Si oui, le client tranche : il garde sa marchandise, ou il rend tout.
+    // On ne décide pas à sa place. Garder les produits est souvent ce qu'il
+    // veut (le shampoing est bon quel que soit le jour de la coupe), mais lui
+    // imposer une commande dont il ne veut plus serait une vente forcée.
+    let commandeLiee = null
+    if (rdv.commande_id) {
+      const { data: cmd } = await supabase
+        .from('commandes')
+        .select('id, statut, total, paye_en_ligne')
+        .eq('id', rdv.commande_id)
+        .maybeSingle()
+      // Une commande déjà annulée ne pose plus de question.
+      if (cmd && !['annulee_client_refund', 'annulee_paiement_ko'].includes(cmd.statut)) {
+        commandeLiee = cmd
+      }
+    }
+
+    if (commandeLiee && produits_choix !== 'garde' && produits_choix !== 'rend') {
+      const { data: lignes } = await supabase
+        .from('commande_articles')
+        .select('quantite, prix_unitaire, article:articles(nom)')
+        .eq('commande_id', commandeLiee.id)
+      return NextResponse.json({
+        ok: false,
+        choix_produits_requis: true,
+        rdv_id: rdv.id,
+        produits: {
+          total: Number(commandeLiee.total),
+          acompte: Number(rdv.acompte_montant || 0),
+          lignes: (lignes || []).map(l => ({
+            nom: l.article?.nom || 'Article',
+            quantite: l.quantite,
+            total: Number(l.prix_unitaire) * l.quantite,
+          })),
+        },
+      }, { status: 409 })
+    }
+
+    const gardeSesProduits = !!commandeLiee && produits_choix === 'garde'
+
     // ─── 5) Refund Stripe (Direct Charge sur compte connecté) ──────────────
+    //
+    // Montant remboursé :
+    //   • rendez-vous seul                  → l'acompte, c'est tout ce qui a
+    //     été encaissé ;
+    //   • rendez-vous + produits rendus     → la totalité du paiement ;
+    //   • rendez-vous + produits gardés     → l'acompte SEUL, remboursement
+    //     partiel : la marchandise reste vendue et attend le client en
+    //     boutique.
     let refundId = null
     let refundStatus = null
     let refundError = null
-    if (rdv.acompte_paye && rdv.stripe_payment_intent_id && !rdv.stripe_refund_id) {
+    let refundMontant = null
+
+    const acompteMontant = Number(rdv.acompte_montant || 0)
+    const aRembourser = gardeSesProduits
+      ? acompteMontant
+      : acompteMontant + Number(commandeLiee?.total || 0)
+    const aDejaPaye = (rdv.acompte_paye || !!commandeLiee) && rdv.stripe_payment_intent_id
+
+    if (aDejaPaye && !rdv.stripe_refund_id && aRembourser > 0) {
       if (!commercant?.stripe_account_id) {
         return NextResponse.json({
           ok: false,
@@ -114,19 +176,37 @@ export async function POST(request) {
         const refund = await stripe.refunds.create({
           payment_intent: rdv.stripe_payment_intent_id,
           reason: 'requested_by_customer',
+          // Remboursement partiel quand le client garde ses produits. Sans
+          // `amount`, Stripe rembourse la totalité, produits compris.
+          ...(gardeSesProduits ? { amount: Math.round(aRembourser * 100) } : {}),
           metadata: {
             yoppaa_rdv_id: rdv.id,
             yoppaa_motif: 'client',
+            ...(commandeLiee ? { yoppaa_produits: produits_choix } : {}),
           },
         }, {
           stripeAccount: commercant.stripe_account_id,
         })
         refundId = refund.id
         refundStatus = refund.status
+        refundMontant = aRembourser
       } catch (e) {
         console.error('[rdv/cancel] refund Stripe KO', e?.message, { rdv_id: rdv.id, pi: rdv.stripe_payment_intent_id })
         refundError = e?.message || 'Refund Stripe échoué'
       }
+    }
+
+    // ─── 5.5) Sort de la commande liée ─────────────────────────────────────
+    // Le client rend ses produits : la commande est annulée et le stock
+    // redevient disponible, le statut 'annulee_client_refund' étant justement
+    // celui que le comptage de stock ignore. S'il les garde, la commande vit
+    // sa vie : elle sera retirée en boutique.
+    if (commandeLiee && !gardeSesProduits) {
+      const { error: errCmd } = await supabase
+        .from('commandes')
+        .update({ statut: 'annulee_client_refund' })
+        .eq('id', commandeLiee.id)
+      if (errCmd) console.error('[rdv/cancel] annulation commande liée KO', errCmd.message, { commandeId: commandeLiee.id })
     }
 
     // ─── 6) UPDATE RDV (statut + motif + refund cols) ──────────────────────
@@ -136,9 +216,12 @@ export async function POST(request) {
     }
     if (refundId) {
       updateData.stripe_refund_id = refundId
-      updateData.stripe_refund_amount = rdv.acompte_montant
+      // Le montant réellement remboursé, pas l'acompte : quand le client rend
+      // ses produits, il récupère aussi leur prix.
+      updateData.stripe_refund_amount = refundMontant
       updateData.stripe_refund_date = new Date().toISOString()
     }
+    if (commandeLiee) updateData.produits_annulation = produits_choix
     const { error: errUpd } = await supabase
       .from('rdv_reservations')
       .update(updateData)
@@ -193,17 +276,31 @@ export async function POST(request) {
       }
     }
 
+    // Message : dire exactement ce qui revient et ce qui reste à récupérer.
+    // Un client qui garde ses produits doit lire noir sur blanc qu'ils
+    // l'attendent, sinon il croit avoir perdu son argent.
+    let message
+    if (refundError) {
+      message = 'Ton RDV est annulé. Le remboursement sera traité manuellement par le commerçant sous quelques jours.'
+    } else if (gardeSesProduits) {
+      message = refundMontant > 0
+        ? `Ton RDV est annulé. Tes ${refundMontant.toFixed(2)}€ d'acompte reviennent sur ton moyen de paiement dans 5 à 10 jours, et tes produits t'attendent en boutique.`
+        : 'Ton RDV est annulé. Tes produits t\'attendent en boutique.'
+    } else if (refundMontant > 0) {
+      message = `Ton RDV est annulé. ${refundMontant.toFixed(2)}€ reviennent sur ton moyen de paiement dans 5 à 10 jours.`
+    } else {
+      message = 'Ton RDV est annulé.'
+    }
+
     return NextResponse.json({
       ok: true,
       rdv_id: rdv.id,
       refund_id: refundId,
       refund_status: refundStatus,
       refund_error: refundError,
-      message: rdv.acompte_paye
-        ? (refundError
-          ? 'Ton RDV est annulé. Le remboursement de l\'acompte sera traité manuellement par le commerçant sous quelques jours.'
-          : 'Ton RDV est annulé. L\'acompte sera recrédité sur ton moyen de paiement dans 5 à 10 jours.')
-        : 'Ton RDV est annulé.',
+      refund_montant: refundMontant,
+      produits_choix: commandeLiee ? produits_choix : null,
+      message,
     })
   } catch (e) {
     console.error('[rdv/cancel]', e)

@@ -1269,8 +1269,11 @@ export default function Commander() {
   // Modal confirmation custom (remplace window.confirm() qui est bloque/silencieux
   // en PWA installee iPhone). Utilisee pour confirmer annulations RDV et commandes.
   const [confirmModal, setConfirmModal] = useState(null)
-  function askConfirm({ title, message, confirmLabel = 'Confirmer', danger = false, onConfirm }) {
-    setConfirmModal({ title, message, confirmLabel, danger, onConfirm })
+  // `cancelLabel` et `onCancel` servent aux choix à deux issues, où le second
+  // bouton n'est pas « je renonce » mais une vraie décision : garder ses
+  // produits ou les rendre, par exemple.
+  function askConfirm({ title, message, confirmLabel = 'Confirmer', cancelLabel = null, danger = false, onConfirm, onCancel = null }) {
+    setConfirmModal({ title, message, confirmLabel, cancelLabel, danger, onConfirm, onCancel })
   }
 
   const [commercants, setCommercants] = useState([])
@@ -1806,33 +1809,51 @@ export default function Commander() {
   // Refund Stripe automatique côté serveur si acompte payé en ligne + avant cutoff.
   async function annulerRdv(rdv) {
     if (!rdv?.id || !rdv?.client_email) return
+
+    // `produitsChoix` n'est renseigné qu'au second passage, quand le
+    // rendez-vous portait des produits payés et que le client a dit ce qu'il
+    // en fait. Ce second passage ne redemande PAS de confirmer l'annulation :
+    // elle est déjà confirmée, seul le sort des produits restait à trancher.
+    async function executer(produitsChoix = null) {
+      try {
+        const res = await fetch('/api/rdv/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rdv_id: rdv.id, client_email: rdv.client_email, ...(produitsChoix ? { produits_choix: produitsChoix } : {}) }),
+        })
+        const data = await res.json()
+        // Le serveur refuse tant que le client n'a pas tranché : on lui pose
+        // la question, avec le montant en jeu, plutôt que de décider pour lui.
+        if (data?.choix_produits_requis) {
+          const p = data.produits
+          askConfirm({
+            title: 'Tu gardes tes produits ?',
+            message: `Tu avais acheté ${p.lignes.map(l => `${l.quantite} × ${l.nom}`).join(', ')} pour ${Number(p.total).toFixed(2)}€, déjà payés et mis de côté.\n\nSi tu les gardes, ils t'attendent en boutique${p.acompte > 0 ? ` et seul ton acompte de ${Number(p.acompte).toFixed(2)}€ te revient` : ''}. Sinon, ${(Number(p.total) + Number(p.acompte)).toFixed(2)}€ te sont remboursés.`,
+            confirmLabel: 'Je garde mes produits',
+            cancelLabel: 'Je rends tout',
+            onConfirm: () => executer('garde'),
+            onCancel: () => executer('rend'),
+          })
+          return
+        }
+        if (!res.ok || !data.ok) {
+          alert(`Annulation impossible : ${data?.error || 'erreur inconnue'}`)
+          return
+        }
+        await chargerRdvsClient(rdv.client_email)
+        showToast({ msg: `C'est noté ! ${data.message || 'Ton RDV est annulé'} 🟣`, type: 'success' })
+      } catch (e) {
+        console.error('[annulerRdv] erreur', e)
+        alert(`Erreur : ${e?.message || 'inconnue'}`)
+      }
+    }
+
     askConfirm({
       title: 'Annuler ce RDV ?',
       message: 'L\'acompte sera remboursé automatiquement si tu en as payé un.',
       confirmLabel: 'Annuler le RDV',
       danger: true,
-      onConfirm: async () => {
-        try {
-          const res = await fetch('/api/rdv/cancel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rdv_id: rdv.id, client_email: rdv.client_email }),
-          })
-          const data = await res.json()
-          if (!res.ok || !data.ok) {
-            alert(`Annulation impossible : ${data?.error || 'erreur inconnue'}`)
-            return
-          }
-          await chargerRdvsClient(rdv.client_email)
-          const message = rdv.acompte_paye_en_ligne
-            ? 'C\'est noté ! RDV annulé, remboursement de l\'acompte en cours 🟣'
-            : 'C\'est noté ! Ton RDV est annulé 🟣'
-          showToast({ msg: message, type: 'success' })
-        } catch (e) {
-          console.error('[annulerRdv] erreur', e)
-          alert(`Erreur : ${e?.message || 'inconnue'}`)
-        }
-      },
+      onConfirm: () => executer(),
     })
   }
 
@@ -3372,9 +3393,13 @@ export default function Commander() {
                   {confirmModal.confirmLabel || 'Confirmer'}
                 </button>
                 <button
-                  onClick={() => setConfirmModal(null)}
+                  onClick={async () => {
+                    const cb = confirmModal.onCancel
+                    setConfirmModal(null)
+                    if (cb) await cb()
+                  }}
                   style={{ width: '100%', padding: '0.75rem', background: 'transparent', color: T.deep, border: `1.5px solid ${T.pale}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif' }}>
-                  Annuler
+                  {confirmModal.cancelLabel || 'Annuler'}
                 </button>
               </div>
             </div>

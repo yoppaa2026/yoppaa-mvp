@@ -27,6 +27,7 @@ import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { debiterBon, recrediterBon } from '@/lib/bons-cadeaux-server'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { programmerRappelRdv } from '@/lib/rappels'
+import { recupererFraisStripe } from '@/lib/stripe-frais'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -184,6 +185,14 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
         .eq('id', meta.prestation_id)
         .maybeSingle()
       payload.tva_taux = presta?.tva_taux ?? null
+    }
+
+    // Frais Stripe de l'acompte, mêmes règles que pour une commande.
+    try {
+      const frais = await recupererFraisStripe(paymentIntent.id, eventAccount || paymentIntent.on_behalf_of || null)
+      if (frais) { payload.stripe_frais = frais.frais; payload.stripe_net = frais.net }
+    } catch (e) {
+      console.warn('[webhook] frais Stripe RDV non enregistrés (non bloquant)', e?.message)
     }
 
     const { error } = await supabase.from('rdv_reservations').insert(payload)
@@ -363,6 +372,21 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
     })
     .eq('id', commandeId)
   if (errUpd) throw errUpd
+
+  // Frais Stripe réels et net versé au commerçant. Non bloquant : si la
+  // transaction de solde n'est pas encore constituée, on ne touche à rien et
+  // le cron nocturne complétera. Écrire un zéro serait pire que ne rien écrire.
+  try {
+    const compte = eventAccount || paymentIntent.on_behalf_of || null
+    const frais = await recupererFraisStripe(paymentIntent.id, compte)
+    if (frais) {
+      await supabase.from('commandes')
+        .update({ stripe_frais: frais.frais, stripe_net: frais.net })
+        .eq('id', commandeId)
+    }
+  } catch (e) {
+    console.warn('[webhook] frais Stripe non enregistrés (non bloquant)', e?.message)
+  }
 
   // Tentative stockage session_id (peut échouer en sandbox Stripe → backup
   // par handleCheckoutSessionCompleted)

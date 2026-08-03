@@ -18,6 +18,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe } from '@/lib/stripe'
+import { netApresRemboursement } from '@/lib/stripe-frais'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
@@ -48,7 +49,10 @@ export async function POST(request) {
     // Récupère le RDV + commercant (jointure pour ownership commerçant + délai)
     const { data: rdv, error: errRdv } = await supabase
       .from('rdv_reservations')
-      .select('*, commercant:commercants(id, nom, auth_user_id, rdv_delai_annulation_heures)')
+      // stripe_account_id est INDISPENSABLE : en Direct Charge le paiement vit
+      // sur le compte du commerçant, et un remboursement demandé sans se placer
+      // sur ce compte cherche un paiement qui n'existe pas côté plateforme.
+      .select('*, commercant:commercants(id, nom, auth_user_id, stripe_account_id, rdv_delai_annulation_heures)')
       .eq('id', rdv_id)
       .single()
 
@@ -102,13 +106,26 @@ export async function POST(request) {
     })
 
     // Met à jour le RDV. Le statut='annule' est mis ailleurs (par l'API qui appelle ce refund).
+    const majRdv = {
+      stripe_refund_id: refund.id,
+      stripe_refund_amount: refund.amount / 100,
+      stripe_refund_date: new Date().toISOString(),
+    }
+
+    // Stripe ne restitue PAS la totalité des frais lors d'un remboursement :
+    // sans recalcul, le net resterait celui d'avant et deviendrait faux dans
+    // le journal comptable. Non bloquant : le remboursement lui-même a réussi,
+    // et le cron nocturne rattrapera si Stripe n'a pas encore la donnée.
+    try {
+      const net = await netApresRemboursement(refund.id, rdv.commercant?.stripe_account_id, rdv.stripe_net)
+      if (net != null) majRdv.stripe_net = net
+    } catch (e) {
+      console.warn('[refund] net après remboursement non recalculé', e?.message)
+    }
+
     await supabase
       .from('rdv_reservations')
-      .update({
-        stripe_refund_id: refund.id,
-        stripe_refund_amount: refund.amount / 100,
-        stripe_refund_date: new Date().toISOString(),
-      })
+      .update(majRdv)
       .eq('id', rdv_id)
 
     return NextResponse.json({ ok: true, refunded: true, refund_id: refund.id, amount: refund.amount / 100 })

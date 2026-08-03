@@ -3080,7 +3080,13 @@ export default function CommanderSlug() {
                     pour coiffeur/opticien) et on garde uniquement le CTA "prix" si plan ON. */}
                 {!peutCommander && (
                   <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {!canDo(commercant.plan, 'prix') && (
+                    {/* La clé était 'prix', qui n'existe pas dans la table des
+                        fonctionnalités : canDo renvoyait donc toujours false et
+                        la bannière « demander l'affichage des prix » s'affichait
+                        chez TOUS les commerçants non transactionnels, y compris
+                        Communiquer dont les prix sont bel et bien affichés. La
+                        vraie clé est 'prix_affiches'. */}
+                    {!canDo(commercant.plan, 'prix_affiches') && (
                       <CTAUpgrade type="prix" commercant={commercant} variant="banner"/>
                     )}
                     {!vitrine && (

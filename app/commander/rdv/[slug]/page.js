@@ -352,6 +352,10 @@ export default function CommanderRdvSlug() {
   const [praticiens, setPraticiens] = useState([])          // rdv_praticiens actifs
   const [junctionMap, setJunctionMap] = useState({})        // { prestation_id: [praticien_id, ...] }
   const [fermetures, setFermetures] = useState([])          // Sess 6 : rdv_fermetures futures (date_fin >= today)
+  // TUNNEL UNIQUE (04/08) : les produits du salon s'ajoutent ici même, et
+  // partent dans LE MÊME paiement que l'acompte du rendez-vous. Avant, il
+  // fallait deux parcours et deux paiements pour repartir avec son shampoing.
+  const [panierProduits, setPanierProduits] = useState({})
   const [deals, setDeals] = useState([])                    // deals actifs du jour (même fenêtre que la fiche commerce)
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   const [maCarteFid, setMaCarteFid] = useState(null)        // ma carte de fidélité chez ce commerçant
@@ -384,6 +388,47 @@ export default function CommanderRdvSlug() {
   const [rdvCree, setRdvCree] = useState(null)  // contient la ligne rdv_reservations créée + meta affichage
 
   const scrollRef = useRef(null)
+
+  // Le prix retenu est le prix remisé du jour. Il n'engage rien : le serveur
+  // recalcule tout dans create-rdv-commande, cet affichage sert à ce que le
+  // client sache ce qu'il va payer avant d'arriver sur Stripe.
+  function prixProduit(article) {
+    const remise = remiseSurArticle(article, deals)
+    return remise ? remise.prix : Number(article.prix)
+  }
+
+  function ajouterProduit(article) {
+    setPanierProduits(prev => ({
+      ...prev,
+      [article.id]: {
+        article,
+        prix: prixProduit(article),
+        quantite: (prev[article.id]?.quantite || 0) + 1,
+      },
+    }))
+  }
+
+  function retirerProduit(article) {
+    setPanierProduits(prev => {
+      const next = { ...prev }
+      const q = next[article.id]?.quantite || 0
+      if (q > 1) next[article.id] = { ...next[article.id], quantite: q - 1 }
+      else delete next[article.id]
+      return next
+    })
+  }
+
+  const lignesPanier = Object.values(panierProduits)
+  const totalProduits = lignesPanier.reduce((s, l) => s + l.prix * l.quantite, 0)
+  // Vendre ici demande trois choses : une formule qui ouvre la commande, un
+  // compte Stripe réellement opérationnel, et un module de rendez-vous actif.
+  // Sans le compte Stripe, le client remplirait un panier pour se heurter à
+  // une erreur au paiement. Sans le module de rendez-vous, il n'y a pas de
+  // tunnel où le déposer : le panier n'irait nulle part, et les produits se
+  // vendent alors depuis la boutique.
+  const produitsAchetables = canDo(commercant?.plan, 'commande')
+    && commercant?.stripe_account_charges_enabled === true
+    && !commercant?._rdvDesactive
 
   // Tracking stats deals (même mécanique best-effort que la fiche commerce) :
   // chaque event compte 1x par session client, fire-and-forget non bloquant.
@@ -981,6 +1026,57 @@ export default function CommanderRdvSlug() {
         && acompteMontant && acompteMontant >= 0.5
       )
 
+      // TUNNEL UNIQUE (04/08) : des produits dans le panier changent la route.
+      // Acompte et produits partent dans UN SEUL paiement, et la prestation
+      // peut très bien ne demander aucun acompte : on encaisse alors les seuls
+      // produits, et le rendez-vous est confirmé quand même.
+      if (lignesPanier.length > 0 && produitsAchetables) {
+        console.info('[rdv] tunnel unique RDV + produits', { produits: lignesPanier.length, total: totalProduits })
+        try {
+          sessionStorage.setItem(`yoppaa.rdv.stripe.${slug}`, JSON.stringify({
+            prestationChoisie,
+            dateChoisie: dateChoisie?.toISOString(),
+            heureChoisie,
+            client: { email, prenom, nom, telephone, notes: client.notes },
+            acompteMontant,
+          }))
+        } catch (e) { console.warn('[rdv] sessionStorage save fail', e) }
+
+        try {
+          const res = await fetch('/api/stripe/checkout/create-rdv-commande', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              commercant_id: commercant.id,
+              prestation_id: prestationChoisie.id,
+              praticien_id: praticienChoisi?.id || null,
+              date_rdv: dateStr,
+              heure_debut: heureChoisie,
+              heure_fin: heureFin,
+              duree_minutes: prestationChoisie.duree_minutes,
+              client_email: email,
+              client_prenom: prenom,
+              client_nom: nom,
+              client_telephone: telephone,
+              notes_client: client.notes.trim() || null,
+              rgpd_marketing: rgpdMarketing,
+              // Le serveur ne reçoit que des identifiants et des quantités :
+              // c'est lui qui décide des prix.
+              articles: lignesPanier.map(l => ({ id: l.article.id, quantite: l.quantite })),
+            }),
+          })
+          const j = await res.json()
+          if (!j.ok || !j.url) throw new Error(j.error || 'Erreur création du paiement')
+          redirectTop(j.url)
+          return
+        } catch (e) {
+          console.error('[rdv] erreur Stripe Checkout tunnel unique', e)
+          setSubmitError(`Erreur paiement : ${e.message}. Réessaie ou contacte ${commercant.nom}.`)
+          setSubmitting(false)
+          return
+        }
+      }
+
       if (acompteEnLigneRequis) {
         console.info('[rdv] paiement acompte en ligne requis', { montant: acompteMontant })
         // Sauve l'etat avant redirection Stripe - sera restaure au retour ?paiement=ok|annule
@@ -1506,26 +1602,37 @@ export default function CommanderRdvSlug() {
                       Voir tout ({produits.length}) ›
                     </a>
                   </div>
+                  {produitsAchetables && (
+                    <p style={{ margin: '0 0 10px', fontSize: '0.74rem', color: T.deep, lineHeight: 1.45 }}>
+                      Ajoute ce que tu veux emporter : tu paies tout d&rsquo;un coup avec ton rendez-vous, et tu repars avec le jour J.
+                    </p>
+                  )}
                   <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
                     {produits.slice(0, 8).map(p => {
                       // Un produit remisé affiche son prix promo ici aussi :
                       // sinon l'aperçu du salon et sa boutique annoncent deux
                       // prix différents pour le même article.
                       const remise = remiseSurArticle(p, deals)
+                      const qte = panierProduits[p.id]?.quantite || 0
+                      // Un produit en mode vitrine affiche un prix indicatif :
+                      // il ne s'achète pas en ligne, son prix n'est pas ferme.
+                      const achetable = produitsAchetables && !p.est_vitrine && Number(p.prix) > 0
                       return (
-                      <a key={p.id} href={`/commander/${commercant.slug}?article=${p.id}`}
-                        style={{ flexShrink: 0, width: 118, background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 14, overflow: 'hidden', textDecoration: 'none' }}>
-                        {commercant.photos_catalogue_actif !== false && p.photo_url ? (
-                          <div style={{ width: '100%', aspectRatio: '1', background: T.pale }}>
-                            <img src={p.photo_url} alt={p.nom} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
-                          </div>
-                        ) : (
-                          <div style={{ width: '100%', aspectRatio: '1', background: `linear-gradient(135deg, ${T.pale}, #fff)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={T.light} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
-                            </svg>
-                          </div>
-                        )}
+                      <div key={p.id}
+                        style={{ flexShrink: 0, width: 118, background: '#fff', border: `1px solid ${qte > 0 ? T.main + '55' : T.pale}`, borderRadius: 14, overflow: 'hidden', boxShadow: qte > 0 ? `0 2px 10px ${T.main}22` : 'none' }}>
+                        <a href={`/commander/${commercant.slug}?article=${p.id}`} style={{ display: 'block', textDecoration: 'none' }}>
+                          {commercant.photos_catalogue_actif !== false && p.photo_url ? (
+                            <div style={{ width: '100%', aspectRatio: '1', background: T.pale }}>
+                              <img src={p.photo_url} alt={p.nom} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
+                            </div>
+                          ) : (
+                            <div style={{ width: '100%', aspectRatio: '1', background: `linear-gradient(135deg, ${T.pale}, #fff)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={T.light} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
+                              </svg>
+                            </div>
+                          )}
+                        </a>
                         <div style={{ padding: '8px 10px 10px' }}>
                           <p style={{ margin: 0, fontSize: '0.74rem', fontWeight: 700, color: T.ink, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.nom}</p>
                           {Number(p.prix) > 0 ? (
@@ -1537,8 +1644,26 @@ export default function CommanderRdvSlug() {
                           ) : (
                             <p style={{ margin: '3px 0 0', fontSize: '0.66rem', fontWeight: 700, color: T.muted }}>Prix sur demande</p>
                           )}
+                          {achetable && (qte > 0 ? (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 7 }}>
+                              <button onClick={() => retirerProduit(p)} aria-label={`Retirer ${p.nom}`}
+                                style={{ width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M5 12h14"/></svg>
+                              </button>
+                              <span style={{ fontWeight: 900, fontSize: '0.85rem', color: T.ink }}>{qte}</span>
+                              <button onClick={() => ajouterProduit(p)} aria-label={`Ajouter ${p.nom}`}
+                                style={{ width: 26, height: 26, borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                              </button>
+                            </div>
+                          ) : (
+                            <button onClick={() => ajouterProduit(p)}
+                              style={{ width: '100%', marginTop: 7, padding: '5px 0', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontSize: '0.68rem', fontWeight: 800, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                              J&rsquo;ajoute
+                            </button>
+                          ))}
                         </div>
-                      </a>
+                      </div>
                       )
                     })}
                   </div>
@@ -1971,14 +2096,49 @@ export default function CommanderRdvSlug() {
                     const acompteMnt = (prixBase != null && prestationChoisie?.acompte_pourcent > 0)
                       ? Math.round(prixBase * prestationChoisie.acompte_pourcent) / 100
                       : null
+                    // Tunnel unique : ce qui est encaissé, c'est l'acompte plus
+                    // le prix complet des produits. Le client doit voir les deux
+                    // séparément avant d'arriver sur Stripe, sinon le total le
+                    // surprend et il abandonne.
+                    const aPayerMaintenant = (acompteEnLigne && acompteMnt ? acompteMnt : 0) + totalProduits
                     return (
                       <>
+                        {lignesPanier.length > 0 && (
+                          <div style={{ background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 14, overflow: 'hidden', marginBottom: 12 }}>
+                            <p style={{ margin: 0, padding: '9px 14px', background: T.pale, fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+                              Tes produits, à emporter le jour J
+                            </p>
+                            {lignesPanier.map(l => (
+                              <div key={l.article.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: T.ink }}>{l.article.nom}</p>
+                                  <p style={{ margin: 0, fontSize: '0.7rem', color: T.muted, fontWeight: 600 }}>{l.quantite} × {l.prix.toFixed(2)}€</p>
+                                </div>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.ink }}>{(l.prix * l.quantite).toFixed(2)}€</span>
+                                <button onClick={() => retirerProduit(l.article)} aria-label={`Retirer ${l.article.nom}`}
+                                  style={{ width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M5 12h14"/></svg>
+                                </button>
+                              </div>
+                            ))}
+                            {acompteEnLigne && acompteMnt ? (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
+                                <span style={{ fontSize: '0.8rem', color: T.muted, fontWeight: 600 }}>Acompte du rendez-vous</span>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.ink }}>{acompteMnt.toFixed(2)}€</span>
+                              </div>
+                            ) : null}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 14px' }}>
+                              <span style={{ fontSize: '0.85rem', color: T.deep, fontWeight: 800 }}>Tu paies maintenant</span>
+                              <span style={{ fontSize: '1rem', fontWeight: 900, color: T.main }}>{aPayerMaintenant.toFixed(2)}€</span>
+                            </div>
+                          </div>
+                        )}
                         <button disabled={!formValide || submitting}
                           onClick={passerRdv}
                           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: (!formValide || submitting) ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: (!formValide || submitting) ? '#9CA3AF' : '#fff', fontWeight: 800, fontSize: '1rem', cursor: (!formValide || submitting) ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: (!formValide || submitting) ? 'none' : `0 6px 24px ${T.main}55`, opacity: (!formValide || submitting) ? 0.6 : 1, transition: 'all 0.2s' }}>
                           {submitting ? 'Réservation en cours…' : (
                             <>
-                              {acompteEnLigne && acompteMnt ? `Payer ${acompteMnt.toFixed(2)}€ et confirmer` : 'Confirmer mon RDV'}
+                              {aPayerMaintenant > 0 ? `Payer ${aPayerMaintenant.toFixed(2)}€ et confirmer` : 'Confirmer mon RDV'}
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
                               </svg>

@@ -867,9 +867,12 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
         const nextJour = JOURS_MAP[nextIdx]
         const nextH = c.horaires_detail[nextJour]
         if (nextH?.ouvert && nextH.debut) {
-          const label = i === 1 ? `Fermé · ouvre demain à ${nextH.debut.slice(0,5)}`
-            : `Fermé · ouvre ${JOURS_LABELS[nextIdx]} à ${nextH.debut.slice(0,5)}`
-          return { dot: '#9CA3AF', label, color: '#6B7280', bg: '#F9FAFB', pulse: false }
+          const quand = i === 1 ? 'demain' : JOURS_LABELS[nextIdx]
+          const label = `Fermé · ouvre ${quand} à ${nextH.debut.slice(0,5)}`
+          // `ferme` et `quand` servent à la pastille de créneaux juste en dessous :
+          // annoncer « Créneaux disponibles » en vert sous un « Fermé » gris se
+          // lit comme une contradiction, même si les deux sont exacts.
+          return { dot: '#9CA3AF', label, color: '#6B7280', bg: '#F9FAFB', pulse: false, ferme: true, quand }
         }
       }
     }
@@ -877,11 +880,19 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
     return { dot: '#9CA3AF', label: 'Fermé', color: '#6B7280', bg: '#F9FAFB', pulse: false }
   }
 
-  function getStatutResa() {
+  function getStatutResa(physiqueEtat) {
     const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
     const heureOuv = c.heure_ouverture_resa ? c.heure_ouverture_resa.slice(0,5) : '21:00'
     const resaDemainOuverte = nowMin >= heureEnMinutes(heureOuv)
-    if (statut === 'ouvert')  return { dot: '#10B981', label: 'Créneaux disponibles', color: '#10B981', bg: '#F0FDF4' }
+    if (statut === 'ouvert') {
+      // Commerce fermé aujourd'hui : les créneaux existent bien, mais pas pour
+      // maintenant. On le dit, plutôt que d'afficher un vert qui contredit le
+      // « Fermé » affiché juste au-dessus.
+      if (physiqueEtat?.ferme) {
+        return { dot: T.main, label: `Créneaux dès ${physiqueEtat.quand}`, color: T.main, bg: T.pale }
+      }
+      return { dot: '#10B981', label: 'Créneaux disponibles', color: '#10B981', bg: '#F0FDF4' }
+    }
     if (statut === 'urgent')  return { dot: '#EA580C', label: 'Réserve vite !', color: '#EA580C', bg: '#FFF7ED' }
     if (statut === 'complet' || statut === 'ferme') {
       if (resaDemainOuverte) return { dot: T.main, label: 'Réserver pour demain', color: T.main, bg: T.pale }
@@ -893,7 +904,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
   const physique = getStatutPhysique()
   // Pas de reservation si le plan ne permet pas la commande (palier Exister)
   const peutCommander = canDo(c.plan, 'commande')
-  const resa = peutCommander ? getStatutResa() : null
+  const resa = peutCommander ? getStatutResa(physique) : null
 
   return (
     <div onClick={() => onSelect(c)}

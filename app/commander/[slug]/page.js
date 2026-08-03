@@ -195,7 +195,7 @@ function OptionsSelector({ article, groupes, onAjouter }) {
       })}
       <button onClick={valider}
         style={{ width: '100%', padding: '0.75rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.main}44`, marginTop: 4 }}>
-        Ajouter au panier{supplement > 0 ? ` (+${supplement.toFixed(2)}€)` : ''}
+        Ajouter à ma commande{supplement > 0 ? ` (+${supplement.toFixed(2)}€)` : ''}
       </button>
     </div>
   )
@@ -278,14 +278,14 @@ function VariantesSelector({ article, variantes, onAjouter }) {
       )}
       <button onClick={() => pret && onAjouter(article, varianteChoisie)} disabled={!pret}
         style={{ width: '100%', padding: '0.75rem', border: 'none', borderRadius: 100, background: pret ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#E5E7EB', color: pret ? '#fff' : '#9CA3AF', fontWeight: 800, cursor: pret ? 'pointer' : 'default', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxShadow: pret ? `0 4px 14px ${T.main}44` : 'none', marginTop: 4 }}>
-        {pret ? 'Ajouter au panier' : deuxAxes && choix1 && !choix2 ? `Choisis ${article.axe2_nom}` : `Choisis ${article.axe1_nom || 'ta version'}`}
+        {pret ? 'Ajouter à ma commande' : deuxAxes && choix1 && !choix2 ? `Choisis ${article.axe2_nom}` : `Choisis ${article.axe1_nom || 'ta version'}`}
       </button>
     </div>
   )
 }
 
 // ─── RecapPanier - FIX STOCK : prop getStockMax, bouton + bloqué ──────────────
-function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockMax, labelValider = 'Choisir mon créneau', noteSousTotal = null }) {
+function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockMax, labelValider = 'Choisir mon heure de retrait', noteSousTotal = null }) {
   const items = Object.entries(panier)
   if (items.length === 0) return null
   function labelOptions(options) {
@@ -500,7 +500,7 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
               return prochain ? (
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F9FAFB', color: T.muted, padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
                   <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#9CA3AF', flexShrink: 0 }}/>
-                  Fermé - dispo {prochain.nom}
+                  Disponible {prochain.nom}
                 </span>
               ) : (
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F9FAFB', color: T.muted, padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
@@ -800,7 +800,7 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
           ) : (!hasVar && onAjouter && !article.est_vitrine) ? (
             <button onClick={() => { onAjouter(article); onClose() }}
               style={{ width: '100%', padding: '0.8rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.main}44` }}>
-              Ajouter au panier
+              Ajouter à ma commande
             </button>
           ) : null}
         </div>
@@ -2560,7 +2560,7 @@ export default function CommanderSlug() {
             l'étape Menu quand le panier n'est pas vide. */}
         {etape === 2 && peutCommander && nbArticlesPanier() > 0 && (
           <button onClick={scrollVersPanier}
-            aria-label="Voir mon panier"
+            aria-label="Voir ma commande"
             style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 18, zIndex: 60, width: 'calc(100% - 32px)', maxWidth: 420, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', cursor: 'pointer', boxShadow: `0 10px 30px ${T.main}66`, animation: 'panierPop 0.25s ease-out' }}>
             <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -2569,7 +2569,7 @@ export default function CommanderSlug() {
               </svg>
               <span style={{ position: 'absolute', top: -8, right: -10, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 100, background: '#fff', color: T.main, fontSize: '0.68rem', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>{nbArticlesPanier()}</span>
             </span>
-            <span style={{ fontWeight: 800, fontSize: '0.95rem', flex: 1, textAlign: 'left' }}>Voir mon panier</span>
+            <span style={{ fontWeight: 800, fontSize: '0.95rem', flex: 1, textAlign: 'left' }}>Voir ma commande</span>
             <span style={{ fontWeight: 900, fontSize: '1rem', whiteSpace: 'nowrap' }}>{totalPanier().toFixed(2)} €</span>
           </button>
         )}
@@ -3061,7 +3061,7 @@ export default function CommanderSlug() {
                         ? (boutiqueModes.length > 1
                             ? 'Continuer : retrait ou expédition'
                             : boutiqueModes[0] === 'expedition' ? 'Continuer vers l’expédition' : 'Continuer vers le retrait')
-                        : 'Choisir mon créneau'}
+                        : 'Choisir mon heure de retrait'}
                       noteSousTotal={(() => {
                         // Upsell port offert (boutique expédition) : montant restant
                         if (!estDetail || !boutiqueModes.includes('expedition')) return null

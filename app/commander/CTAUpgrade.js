@@ -2,19 +2,43 @@
 // Cliquer envoie un signal d'intérêt au commerçant (table upgrade_requests).
 // Anti-spam : 1 demande max / client / commerce / semaine / type.
 //
-// Wording unifie : "Je demande à {nom} d'activer {feature} dans l'app Yoppaa".
-// Meme layout pour tous les types, alimentaire ET vitrine.
+// Wording revu le 03/08 : l'ancien « Je demande à X d'activer les commandes en
+// ligne dans l'app Yoppaa » plaçait l'habitant en pétitionnaire et parlait le
+// vocabulaire interne du produit. On part maintenant de son envie à lui, et le
+// commerçant reçoit un signal qui ressemble à ce qu'un client lui dirait au
+// comptoir. Même layout pour tous les types, alimentaire comme vitrine.
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-// Libelle de la fonctionnalite demandee (apparaitra apres "d'activer ___ dans l'app Yoppaa")
-const FEATURE = {
-  prix:      'l’affichage de ses prix',
-  deals:     'la publication de ses offres',
-  commande:  'les commandes en ligne',
-  livraison: 'la livraison',
-  rdv:       'la réservation de RDV en ligne',
+// Un message par fonctionnalité : titre court, phrase à hauteur d'habitant, et
+// libellé de bouton. `nom` est le nom du commerce.
+const MESSAGES = {
+  prix: {
+    titre: 'Dis-lui ce que tu voudrais',
+    phrase: nom => `Tu aimerais voir les prix de ${nom} avant de te déplacer ? Dis-le-lui.`,
+    bouton: 'Envoyer mon envie',
+  },
+  deals: {
+    titre: 'Dis-lui ce que tu voudrais',
+    phrase: nom => `Tu aimerais connaître les bons plans de ${nom} avant tout le monde ? Dis-le-lui.`,
+    bouton: 'Envoyer mon envie',
+  },
+  commande: {
+    titre: 'Dis-lui ce que tu voudrais',
+    phrase: nom => `Tu aimerais commander chez ${nom} sans faire la file ? Dis-le-lui.`,
+    bouton: 'Envoyer mon envie',
+  },
+  livraison: {
+    titre: 'Dis-lui ce que tu voudrais',
+    phrase: nom => `Tu aimerais te faire livrer par ${nom} ? Dis-le-lui.`,
+    bouton: 'Envoyer mon envie',
+  },
+  rdv: {
+    titre: 'Dis-lui ce que tu voudrais',
+    phrase: nom => `Tu aimerais prendre rendez-vous chez ${nom} en ligne, même à minuit ? Dis-le-lui.`,
+    bouton: 'Envoyer mon envie',
+  },
 }
 
 const T = {
@@ -33,8 +57,8 @@ export default function CTAUpgrade({ type, commercant, variant = 'inline' }) {
   const [loading, setLoading] = useState(false)
 
   if (!type || !commercant) return null
-  const feature = FEATURE[type] || type
-  const phrase = `Je demande à ${commercant.nom} d’activer ${feature} dans l’app Yoppaa.`
+  const message = MESSAGES[type] || MESSAGES.commande
+  const phrase = message.phrase(commercant.nom)
 
   async function envoyerDemande() {
     if (sent || loading) return
@@ -75,7 +99,7 @@ export default function CTAUpgrade({ type, commercant, variant = 'inline' }) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
           </div>
           <p style={{ fontSize: 13, fontWeight: 700, color: '#065F46', lineHeight: 1.4, margin: 0 }}>
-            Merci ! Ta demande a été transmise à <strong>{commercant.nom}</strong>.
+            Merci ! <strong>{commercant.nom}</strong> saura que tu l&rsquo;attends 🟣
           </p>
         </div>
       )
@@ -85,14 +109,14 @@ export default function CTAUpgrade({ type, commercant, variant = 'inline' }) {
         <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 30%, ${T.main}44 0%, transparent 55%)`, pointerEvents: 'none' }}/>
         <div style={{ position: 'relative' }}>
           <p style={{ fontSize: '0.6rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px', margin: 0, marginBottom: 6, opacity: 0.85 }}>
-            Envoie un signal 🟣
+            {message.titre}
           </p>
           <p style={{ fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1.45, margin: 0, marginBottom: 12, letterSpacing: '-0.2px' }}>
-            « {phrase} »
+            {phrase}
           </p>
           <button onClick={envoyerDemande} disabled={loading}
             style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 16px', background: '#fff', color: T.main, border: 'none', borderRadius: 100, fontWeight: 800, fontSize: 13, cursor: loading ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 14px rgba(0,0,0,0.18)', opacity: loading ? 0.6 : 1 }}>
-            {loading ? 'Envoi…' : (<>Envoyer ma demande
+            {loading ? 'Envoi…' : (<>{message.bouton}
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
             </>)}
           </button>
@@ -105,7 +129,7 @@ export default function CTAUpgrade({ type, commercant, variant = 'inline' }) {
   return (
     <button onClick={envoyerDemande} disabled={loading || sent}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: sent ? '#F0FDF4' : '#fff', color: sent ? '#10B981' : T.bgPanel, border: `1.5px solid ${sent ? '#10B981' : T.bgPanel}`, borderRadius: 100, padding: '6px 12px', cursor: sent ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 12, fontWeight: 800, transition: 'all 0.15s' }}>
-      {sent ? '✓ Demande transmise' : `Demander à activer ${feature}`}
+      {sent ? '✓ Envie transmise' : message.bouton}
     </button>
   )
 }

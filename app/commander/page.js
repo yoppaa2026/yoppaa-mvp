@@ -1789,7 +1789,10 @@ export default function Commander() {
     // Le param email est conserve pour compat (deja passe partout), la route
     // ignore et utilise le cookie serveur pour identifier le Yopper.
     try {
-      const res = await fetch('/api/rdv/mes-rdvs', { credentials: 'include' })
+      // fetchYopper, pas fetch : la route exige une identité prouvée, donc le
+      // jeton Supabase doit accompagner l'appel. Avec un fetch nu, la réponse
+      // était un 401 et l'onglet restait vide.
+      const res = await fetchYopper('/api/rdv/mes-rdvs')
       const body = await res.json().catch(() => ({}))
       if (!body?.ok) {
         console.warn('[chargerRdvsClient] route KO', body)

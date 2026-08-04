@@ -13,11 +13,20 @@
 // Solution : route serveur qui bypass RLS via service_role. Auth Yopper
 // via cookie HTTP-only Same-Site déjà en place.
 
-import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createClient } from '@supabase/supabase-js'
+// ⚠️ RÉGRESSION CORRIGÉE LE 05/08. Cette route décodait encore le cookie à
+// l'ancien format, un simple base64 de JSON. Le durcissement du 03/08 a rendu
+// le cookie SIGNÉ (`payload.signature`) : le décodage échouait donc à tous les
+// coups, la route renvoyait 401, et l'onglet « Commandes et RDV » n'affichait
+// plus AUCUN rendez-vous. La route des commandes avait été migrée, celle-ci
+// avait été oubliée.
+//
+// Elle passe désormais par l'identité PROUVÉE, comme les commandes, les favoris
+// et les avis : un rendez-vous porte le nom, l'email et le téléphone du client,
+// un cookie déclaratif ne suffit pas à y donner accès.
 
-const COOKIE_NAME = 'yoppaa_yopper'
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { identiteProuvee } from '@/lib/yopper-auth'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -27,23 +36,12 @@ function getSupabaseAdmin() {
   )
 }
 
-async function getYopperEmail() {
-  const jar = await cookies()
-  const raw = jar.get(COOKIE_NAME)?.value
-  if (!raw) return null
-  try {
-    const identity = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'))
-    return identity?.email || null
-  } catch {
-    return null
+export async function GET(request) {
+  const identite = await identiteProuvee(request)
+  if (!identite?.email) {
+    return NextResponse.json({ ok: false, error: 'identite_non_prouvee', rdvs: [] }, { status: 401 })
   }
-}
-
-export async function GET() {
-  const email = await getYopperEmail()
-  if (!email) {
-    return NextResponse.json({ ok: false, error: 'session_yopper_manquante', rdvs: [] }, { status: 401 })
-  }
+  const email = identite.email
 
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase

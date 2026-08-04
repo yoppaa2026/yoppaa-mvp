@@ -1022,20 +1022,35 @@ export default function CommanderRdvSlug() {
         setSubmitting(false); setTimeout(() => allerEtape(2), 1200); return
       }
 
-      // 3. Chevauchement avec pause d'un des creneaux du jour
-      const creneauxJourCheck = (creneauxConfig || []).filter(c =>
+      // 3. Chevauchement avec la pause DU PRATICIEN CONCERNÉ.
+      //
+      // ⚠️ BUG CORRIGÉ LE 05/08. Cette vérification balayait TOUS les créneaux
+      // du jour, sans regarder à quel praticien ils appartenaient : la pause de
+      // Carole de 12h à 13h faisait refuser un rendez-vous chez sa collègue.
+      // Pire, elle refusait aussi des créneaux que le générateur de la page
+      // avait pourtant proposés, puisque LUI filtre bien par praticien
+      // (creneauxFiltres). Le client se voyait donc refuser un horaire qu'on
+      // venait de lui montrer comme libre.
+      //
+      // On réutilise exactement la même liste que le générateur : un créneau
+      // du praticien choisi, ou un créneau commun à tout le salon.
+      const creneauxJourCheck = (creneauxFiltres || []).filter(c =>
         c.actif !== false
         && (c.date_specifique === dateStr || (!c.date_specifique && c.jour_semaine === jourSem))
       )
       const pauseConflict = creneauxJourCheck.some(c => {
         if (!c.pause_debut || !c.pause_fin) return false
         const pStart = timeToMinutes(c.pause_debut), pEnd = timeToMinutes(c.pause_fin)
+        // Bornes exclusives des deux côtés : une pause qui finit à 13h00 laisse
+        // le rendez-vous de 13h00 parfaitement libre.
         const ov = debutMin < pEnd && finMin > pStart
-        if (ov) console.warn('[rdv] pause overlap', { debutMin, finMin, pause: `${pStart}-${pEnd}` })
+        if (ov) console.warn('[rdv] pause overlap', { debutMin, finMin, pause: `${pStart}-${pEnd}`, praticien: c.praticien_id })
         return ov
       })
       if (pauseConflict) {
-        setSubmitError('Ce créneau chevauche la pause du commerçant. Choisis-en un autre.')
+        setSubmitError(praticienChoisi
+          ? `Ce créneau tombe pendant la pause de ${praticienChoisi.prenom}. Choisis-en un autre.`
+          : 'Ce créneau tombe pendant une pause. Choisis-en un autre.')
         setSubmitting(false); setTimeout(() => allerEtape(2), 1200); return
       }
       console.info('[rdv] validation OK, insert')

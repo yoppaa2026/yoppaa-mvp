@@ -110,9 +110,10 @@ const affiche = onglet
   .split('\n')
   .filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l))
   .join('\n')
-for (const interdit of ['formule', 'abonnement', 'Vendre', 'Communiquer', 'passe à', 'débloquer', 'upgrade']) {
+for (const interdit of ['formule', 'abonnement', 'passe à', 'débloquer', 'upgrade']) {
   verifier(`l'onglet ne vend pas : « ${interdit} » absent`, !new RegExp(interdit, 'i').test(affiche))
 }
+verifier('l\'onglet ne nomme aucun palier', !/\b(Vendre|Communiquer|Exister)\b/.test(affiche))
 // Le commerçant ne doit jamais pouvoir remonter à une personne : aucun champ
 // nominatif ne doit apparaître dans l'écran.
 for (const perso of ['client_id', 'yopper_id', 'prenom', 'telephone']) {
@@ -128,6 +129,43 @@ verifier('la pause est présente', /pause_mois/.test(affiche))
 // L'onglet principal a bien été renommé, sinon les envies resteraient cachées
 // derrière un mot qui ne les annonce pas.
 verifier('l\'onglet s\'appelle Signaux', /id: 'signaux', label: 'Signaux'/.test(dashboard))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. L'EMAIL — le seul de Yoppaa qui ne demande rien
+// ═══════════════════════════════════════════════════════════════════════════
+const { emailSignauxHebdo } = await import('../lib/signaux-email.js')
+
+egal('aucun type retenu, aucun email', emailSignauxHebdo({ nom: 'Chez Carole', types: [] }), null)
+
+const mail = emailSignauxHebdo({
+  nom: 'Chez Carole',
+  types: [
+    { type: 'rdv', trente_jours: 12, soir_30j: 4, weekend_30j: 3 },
+    { type: 'commande', trente_jours: 6, soir_30j: 0, weekend_30j: 0 },
+  ],
+})
+// L'objet porte le fait en entier : un objet vague ne se lit pas depuis la
+// liste des mails, et c'est le nombre qui fait ouvrir.
+egal('l\'objet porte le fait', mail.subject, '12 habitants ont voulu prendre rendez-vous chez toi')
+verifier('le corps cite les deux types', /rendez-vous/.test(mail.html) && /commander/.test(mail.html))
+verifier('le soir et le week-end sont dans le corps', /19h/.test(mail.html) && /week-end/.test(mail.html))
+verifier('la porte de sortie est écrite', /pause|ne plus rien recevoir/i.test(mail.html))
+verifier('le raccourci ouvre l\'onglet', /dashboard\?config=signaux/.test(mail.html))
+for (const interdit of ['formule', 'abonnement', 'passe à', 'débloqu', 'upgrade', '€']) {
+  verifier(`l'email ne vend pas : « ${interdit} » absent`, !new RegExp(interdit, 'i').test(mail.html))
+}
+// Les noms de paliers se testent avec la casse et une limite de mot : « vendre »
+// en minuscule vit dans « vendredi », un test aveugle casserait au premier email
+// qui daterait quelque chose.
+verifier('l\'email ne nomme aucun palier', !/\b(Vendre|Communiquer|Exister)\b/.test(mail.html))
+// RGPD : la promesse de la page d'accueil est que le commerçant ne saura
+// jamais QUI a demandé. L'email doit la tenir, et le dire.
+verifier('l\'email ne nomme personne', /on ne te dit pas qui/i.test(mail.html))
+
+// Un seul type retenu : la phrase reste au singulier là où il faut.
+const seul = emailSignauxHebdo({ nom: 'Chez Carole', types: [{ type: 'livraison', trente_jours: 5, soir_30j: 0, weekend_30j: 0 }] })
+egal('objet au bon type', seul.subject, '5 habitants ont voulu se faire livrer par toi')
+verifier('sans soir ni week-end, pas de phrase inventée', !/19h|week-end/.test(seul.html))
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

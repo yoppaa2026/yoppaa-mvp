@@ -583,6 +583,14 @@ export default function Dashboard() {
   const [listeCommercants, setListeCommercants] = useState([])
   const [ongletPrincipal, setOngletPrincipal] = useState('commandes')
 
+  // Raccourci d'email : /dashboard?config=signaux ouvre directement le bon
+  // onglet de configuration. Sans lui, un email devrait ÉCRIRE le chemin à
+  // suivre au lieu de l'ouvrir.
+  useEffect(() => {
+    const cible = new URLSearchParams(window.location.search).get('config')
+    if (cible) ouvrirConfig(cible)
+  }, [])
+
   // Pour les commerces vitrine SANS vente en ligne (plan < Vendre), on bascule
   // auto sur l'onglet RDV. Une vitrine Vendre vend ses produits au salon (31/07)
   // et garde donc l'onglet Commandes.

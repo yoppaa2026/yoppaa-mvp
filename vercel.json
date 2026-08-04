@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/stripe-frais",
       "schedule": "30 2 * * *"
+    },
+    {
+      "path": "/api/cron/signaux-hebdo",
+      "schedule": "30 7 * * 2"
     }
   ]
 }

@@ -10,6 +10,7 @@ import SectionKYBAValider from './SectionKYBAValider'
 import SectionPreinscriptions from './SectionPreinscriptions'
 import SectionDiagnosticBrevo from './SectionDiagnosticBrevo'
 import SectionCommunes from './SectionCommunes'
+import SectionSuggestions from './SectionSuggestions'
 import { Sparkles, Store, Scissors, Croissant, ShoppingBag, Phone, Eye, Lock } from 'lucide-react'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
@@ -196,6 +197,10 @@ export default function AdminPage() {
 
         {/* Communes : activation manuelle + réglage du seuil (remplace les UPDATE SQL) */}
         <SectionCommunes />
+
+        {/* Commerces réclamés par les habitants et encore absents : la liste de
+            prospection, classée par nombre de demandes. */}
+        <SectionSuggestions />
 
         {/* À valider */}
         <section style={{ marginBottom: 32 }}>

@@ -168,6 +168,53 @@ egal('objet au bon type', seul.subject, '5 habitants ont voulu se faire livrer p
 verifier('sans soir ni week-end, pas de phrase inventée', !/19h|week-end/.test(seul.html))
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 7. LES COMMERCES RÉCLAMÉS — la carte de prospection
+// ═══════════════════════════════════════════════════════════════════════════
+const { cleCommerce, codePostalDe, regrouperSuggestions, parCodePostal } = await import('../lib/suggestions.js')
+
+// Un même commerce est écrit de dix façons. S'il ne se regroupe pas, l'écran
+// affiche dix lignes à 1 demande au lieu d'une ligne à 10, et le classement
+// par urgence ne veut plus rien dire.
+egal('la casse ne compte pas', cleCommerce('Boulangerie DUPONT'), cleCommerce('boulangerie dupont'))
+egal('les accents ne comptent pas', cleCommerce('Épicerie Léa'), cleCommerce('Epicerie Lea'))
+egal('la ponctuation ne compte pas', cleCommerce('Chez Jean-Marc !'), cleCommerce('Chez Jean Marc'))
+
+// Le code postal belge est en fin d'adresse ; le premier nombre est un numéro
+// de rue, et le prendre enverrait prospecter dans la mauvaise commune.
+egal('code postal en fin d\'adresse', codePostalDe('Rue du Moulin 12, 5640 Mettet'), '5640')
+egal('code postal seul', codePostalDe('1000 Bruxelles'), '1000')
+egal('adresse sans code postal', codePostalDe('Rue du Moulin'), null)
+egal('adresse vide', codePostalDe(null), null)
+egal('un numéro à 4 chiffres seul n\'est pas pris pour un code postal',
+  codePostalDe('Chaussée de Namur 1200'), '1200')  // ambigu par nature : documenté, pas corrigé
+
+const brutes = [
+  { nom_commerce: 'Boulangerie Dupont', adresse: 'Rue du Moulin 12, 5640 Mettet', created_at: '2026-08-01T10:00:00Z', commentaire: 'Le meilleur pain' },
+  { nom_commerce: 'boulangerie dupont', adresse: '5640 Mettet', created_at: '2026-08-03T10:00:00Z' },
+  { nom_commerce: 'Boulangerie Dupont', adresse: 'Rue de la Gare, 5000 Namur', created_at: '2026-08-02T10:00:00Z' },
+  { nom_commerce: 'Fleuriste Léa', adresse: '5640 Mettet', created_at: '2026-07-01T10:00:00Z' },
+  { nom_commerce: '   ', adresse: '5640 Mettet', created_at: '2026-08-04T10:00:00Z' },
+]
+const groupes = regrouperSuggestions(brutes)
+egal('un nom vide est ignoré', groupes.length, 3)
+egal('le plus réclamé en premier', groupes[0].nom, 'Boulangerie Dupont')
+egal('les doublons sont additionnés', groupes[0].demandes, 2)
+egal('la commune sépare deux enseignes de même nom',
+  groupes.filter(g => cleCommerce(g.nom) === 'boulangerie dupont').length, 2)
+egal('la dernière demande est la plus récente', groupes[0].derniere.toISOString(), '2026-08-03T10:00:00.000Z')
+egal('l\'adresse la plus complète est gardée', groupes[0].adresse, 'Rue du Moulin 12, 5640 Mettet')
+
+// RGPD : rien dans le résultat ne doit permettre de remonter à une personne.
+verifier('aucun auteur dans le regroupement',
+  groupes.every(g => !('client_id' in g) && !('yopper_id' in g)))
+
+const communes = parCodePostal(groupes)
+egal('la commune la plus demandée en tête', communes[0].code_postal, '5640')
+egal('les demandes de la commune sont additionnées', communes[0].demandes, 3)
+egal('un commerce sans code postal ne crée pas de fausse commune',
+  parCodePostal([{ code_postal: null, demandes: 5 }]).length, 0)
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

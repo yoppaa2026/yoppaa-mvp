@@ -998,6 +998,18 @@ export default function CommanderSlug() {
   const [photoCouverture, setPhotoCouverture] = useState(null)
   const [galerie, setGalerie] = useState([])
   const [actualites, setActualites] = useState([])
+  // Le compte Supabase a-t-il déjà un mot de passe ? L'écran de confirmation
+  // proposait d'en créer un À TOUT LE MONDE, y compris aux Yoppers qui en ont
+  // déjà un : on leur demandait de refaire une chose déjà faite, ce qui fait
+  // douter que le compte existe. Même détection que le Profil.
+  const [aMotDePasse, setAMotDePasse] = useState(true)
+  useEffect(() => {
+    const check = (user) => setAMotDePasse(!!user?.user_metadata?.has_password)
+    supabase.auth.getUser().then(({ data }) => check(data?.user)).catch(() => {})
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => check(session?.user))
+    return () => { try { sub?.subscription?.unsubscribe() } catch (e) {} }
+  }, [])
+
   const [dealActif, setDealActif] = useState(null)
   // Tous les deals dont la fenêtre couvre aujourd'hui. Une seule liste, lue via
   // lib/deals.js : les lots et duos deviennent des cartes séparées, les remises
@@ -3778,7 +3790,10 @@ export default function CommanderSlug() {
               </div>
 
               {/* Nudge optionnel : créer un mot de passe pour se reconnecter vite.
-                  Non bloquant, le magic link reste toujours dispo (voir definir-mdp). */}
+                  Non bloquant, le magic link reste toujours dispo (voir definir-mdp).
+                  Masqué si le compte en a DÉJÀ un : proposer de créer ce qui
+                  existe déjà fait douter que le compte ait été créé. */}
+              {!aMotDePasse && (
               <Link href={`/commander/auth/definir-mdp${client.email ? `?email=${encodeURIComponent(client.email)}` : ''}`} style={{ display: 'block', textDecoration: 'none', background: '#fff', borderRadius: 16, padding: '1rem 1.1rem', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
                 <p style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: T.ink, fontSize: '0.92rem', margin: '0 0 4px' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -3790,6 +3805,7 @@ export default function CommanderSlug() {
                   Pour te reconnecter en un clic et retrouver tes commandes. Optionnel, le lien magique reste toujours disponible.
                 </p>
               </Link>
+              )}
 
               {isDesktop && (
                 <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, borderRadius: 20, padding: '1.25rem', marginBottom: '1rem', border: `1px solid ${T.main}44`, textAlign: 'center' }}>

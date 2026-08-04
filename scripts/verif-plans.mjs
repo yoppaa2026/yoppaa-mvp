@@ -13,7 +13,7 @@
 
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, extname } from 'node:path'
-import { PLAN_FEATURES, PLANS, canDo, canDoAvecCategorie, resolvePlan } from '../lib/plans.js'
+import { PLAN_FEATURES, canDo, canDoAvecCategorie, resolvePlan } from '../lib/plans.js'
 
 const racine = process.cwd()
 const DOSSIERS = ['app', 'lib']

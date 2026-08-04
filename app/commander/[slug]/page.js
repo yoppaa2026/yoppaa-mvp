@@ -861,13 +861,19 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
 // S4 : si une seule photo (ou aucune), comportement identique a l'ancien hero
 // (image fullbleed ou fallback gradient branded). Si 2+ photos, scroll snap
 // horizontal avec dots pagination en bas du hero.
-function HeroCarousel({ couverture, galerie, nomCommerce }) {
+function HeroCarousel({ couverture, galerie, nomCommerce, couvertureFallback = null }) {
   const scrollRef = useRef(null)
   const [active, setActive] = useState(0)
 
-  // Liste des photos a afficher : couverture en premier, puis galerie par ordre
+  // Liste des photos a afficher : couverture en premier, puis galerie par ordre.
+  //
+  // ⚠️ CORRIGÉ LE 05/08. Cette page ne lisait QUE la table commercant_photos,
+  // là où la fiche de rendez-vous lit commercants.photo_couverture_url. Un
+  // commerçant ayant l'une sans l'autre avait donc sa photo sur une page et un
+  // aplat mauve sur l'autre. On retombe sur la seconde source.
   const photos = []
   if (couverture?.url) photos.push({ id: 'couverture', url: couverture.url })
+  else if (couvertureFallback) photos.push({ id: 'couverture-fallback', url: couvertureFallback })
   ;(galerie || []).forEach(p => { if (p?.url) photos.push({ id: p.id, url: p.url }) })
 
   function onScroll() {
@@ -882,11 +888,17 @@ function HeroCarousel({ couverture, galerie, nomCommerce }) {
     el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' })
   }
 
-  // Aucune photo : fallback gradient branded (comportement initial)
+  // Aucune photo : aplat de marque, mais JAMAIS anonyme. Un bandeau mauve
+  // sans un mot ne dit pas chez qui on est, et c'est ce que voyait Alex.
   if (photos.length === 0) {
     return (
-      <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)` }}>
+      <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px' }}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}55 0%, transparent 60%), radial-gradient(circle at 20% 80%, ${T.light}22 0%, transparent 50%)` }}/>
+        {nomCommerce && (
+          <p style={{ position: 'relative', margin: 0, fontWeight: 900, fontSize: '1.5rem', color: '#fff', letterSpacing: '-0.5px', textAlign: 'center', lineHeight: 1.2, textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}>
+            {nomCommerce}
+          </p>
+        )}
       </div>
     )
   }
@@ -2681,6 +2693,7 @@ export default function CommanderSlug() {
                   <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 3 }}/>
                   <HeroCarousel
                     couverture={photoCouverture}
+                    couvertureFallback={commercant.photo_couverture_url || null}
                     galerie={galerie}
                     nomCommerce={commercant.nom}
                   />

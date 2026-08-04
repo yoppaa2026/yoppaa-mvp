@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase'
 import { isVitrine, canDo } from '@/lib/plans'
 import { dealActifCeJour, remiseSurArticle } from '@/lib/deals'
 import { reprendrePanierPourRdv } from '@/lib/panier-vers-rdv'
+import { fetchYopper } from '@/lib/fetch-yopper'
 import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import HorairesSection from '../../HorairesSection'
@@ -357,6 +358,64 @@ export default function CommanderRdvSlug() {
   // partent dans LE MÊME paiement que l'acompte du rendez-vous. Avant, il
   // fallait deux parcours et deux paiements pour repartir avec son shampoing.
   const [panierProduits, setPanierProduits] = useState({})
+
+  // Partage et favori : la fiche de rendez-vous est la fiche PRINCIPALE d'un
+  // commerce de services, et elle était la seule à ne pas les proposer. Le
+  // partage est le moteur de viralité, le cœur celui du réengagement : les
+  // retirer de la fiche la plus visitée d'un salon n'avait aucun sens.
+  const [estFavori, setEstFavori] = useState(false)
+  const [favoriLoading, setFavoriLoading] = useState(false)
+  const [toastPartage, setToastPartage] = useState(null)
+
+  useEffect(() => {
+    if (!commercant?.id) return
+    let annule = false
+    ;(async () => {
+      try {
+        const r = await fetchYopper('/api/yopper/favoris')
+        const j = await r.json()
+        if (!annule) setEstFavori((j?.favoris || []).includes(commercant.id))
+      } catch { if (!annule) setEstFavori(false) }
+    })()
+    return () => { annule = true }
+  }, [commercant?.id])
+
+  async function toggleFavori() {
+    if (!commercant?.id || favoriLoading) return
+    setFavoriLoading(true)
+    try {
+      const r = await fetchYopper('/api/yopper/favoris', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commercant_id: commercant.id, action: estFavori ? 'retirer' : 'ajouter' }),
+      })
+      // 401 : identité non prouvée, on emmène se connecter plutôt que d'échouer
+      // en silence sur un cœur qui ne se remplit jamais.
+      if (r.status === 401) { router.push(`/commander/auth?redirect=/commander/rdv/${slug}`); return }
+      const suivant = !estFavori
+      setEstFavori(suivant)
+      setToastPartage(suivant ? `${commercant.nom} ajouté à tes favoris 🟣` : 'Retiré de tes favoris')
+      setTimeout(() => setToastPartage(null), 2500)
+    } finally {
+      setFavoriLoading(false)
+    }
+  }
+
+  async function partagerFiche() {
+    const url = `https://www.yoppaa.app/commander/rdv/${slug}`
+    const texte = `${commercant?.nom} sur Yoppaa`
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: texte, text: texte, url })
+        return
+      }
+      await navigator.clipboard.writeText(url)
+      setToastPartage('Lien copié 🟣')
+      setTimeout(() => setToastPartage(null), 2500)
+    } catch (e) {
+      // Partage annulé par l'utilisateur : rien à signaler.
+      if (e?.name !== 'AbortError') console.warn('[rdv] partage KO', e?.message)
+    }
+  }
   const [deals, setDeals] = useState([])                    // deals actifs du jour (même fenêtre que la fiche commerce)
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   const [maCarteFid, setMaCarteFid] = useState(null)        // ma carte de fidélité chez ce commerçant
@@ -1521,12 +1580,39 @@ export default function CommanderRdvSlug() {
                 {commercant.photo_couverture_url
                   ? <img src={commercant.photo_couverture_url} alt={commercant.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                   : (
-                    <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)` }}>
+                    // Aplat de marque, mais jamais anonyme : sans photo, le nom
+                    // porte le bandeau, sinon on ne sait pas chez qui on est.
+                    <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px' }}>
                       <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}55 0%, transparent 60%), radial-gradient(circle at 20% 80%, ${T.light}22 0%, transparent 50%)` }}/>
+                      <p style={{ position: 'relative', margin: 0, fontWeight: 900, fontSize: '1.5rem', color: '#fff', letterSpacing: '-0.5px', textAlign: 'center', lineHeight: 1.2, textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}>
+                        {commercant.nom}
+                      </p>
                     </div>
                   )
                 }
                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, background: 'linear-gradient(to top, rgba(22,6,54,0.5), transparent)' }}/>
+
+                {/* Partager + Favori, même pattern que la fiche boutique */}
+                <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 5, display: 'flex', gap: 8 }}>
+                  <button onClick={partagerFiche} aria-label="Partager la fiche"
+                    style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.22)', fontFamily: 'inherit' }}>
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/>
+                      <polyline points="16 6 12 2 8 6"/>
+                      <line x1="12" y1="2" x2="12" y2="15"/>
+                    </svg>
+                  </button>
+                  <button onClick={toggleFavori} disabled={favoriLoading}
+                    aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                    style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', border: 'none', cursor: favoriLoading ? 'wait' : 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.22)', fontFamily: 'inherit' }}>
+                    <svg width="19" height="19" viewBox="0 0 24 24"
+                      fill={estFavori ? '#DC2626' : 'none'}
+                      stroke={estFavori ? '#DC2626' : T.deep}
+                      strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               {/* ─── CARD INFOS COMMERÇANT (chevauche le hero photo) ─── */}
@@ -2588,6 +2674,13 @@ export default function CommanderRdvSlug() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Retour visuel du partage et du favori */}
+      {toastPartage && (
+        <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', zIndex: 10001, background: T.ink, color: '#fff', padding: '0.75rem 1.25rem', borderRadius: 100, fontSize: '0.85rem', fontWeight: 700, boxShadow: '0 8px 28px rgba(0,0,0,0.35)', maxWidth: '90vw', textAlign: 'center' }}>
+          {toastPartage}
         </div>
       )}
     </>

@@ -2258,7 +2258,11 @@ export default function CommanderRdvSlug() {
                         </span>
                       </div>
                     )}
-                    <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>Ton RDV est Yoppé ! 🟣</h2>
+                    {/* Le titre vient du module partagé : écrit en dur ici, il
+                        finirait par diverger de celui de la commande. */}
+                    <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>
+                      {textesConfirmation(RETRAIT_RDV, { avecProduits: lignesPanier.length > 0 }).titre}
+                    </h2>
                     <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>Chez {commercant.nom}</p>
                     <p style={{ color: T.muted, fontSize: '0.875rem' }}>
                       {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} à {heureChoisie}

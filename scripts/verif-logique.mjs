@@ -332,10 +332,28 @@ verifier('les produits sont annoncés', rdvAvec.some(e => /produits/i.test(e)), 
 verifier('et annoncés comme déjà payés', rdvAvec.some(e => /payés/i.test(e)))
 verifier('sans produits, on n’en parle pas', !rdvSans.some(e => /produits/i.test(e)), rdvSans.join(' | '))
 
-// Le titre de marque ne bouge dans aucun cas : c'est la signature.
-verifier('« Yoppé ! » partout',
-  ['alimentaire', 'boutique', 'livraison', 'expedition', 'rdv']
-    .every(c => textesConfirmation(c).titre === 'Yoppé ! 🟣'))
+// LE VERBE SE CONJUGUE, et il ne reste JAMAIS seul. « Yoppé ! » tout nu ne dit
+// pas ce qui vient de se passer, au moment précis où le client s'inquiète de
+// savoir si son paiement est passé. Attaché à son objet, il s'explique de
+// lui-même : le mot occupe la place de « confirmée ».
+const CONTEXTES = ['alimentaire', 'boutique', 'livraison', 'expedition', 'rdv']
+// Pas de limite de mot après « é » : en JavaScript, les lettres accentuées ne
+// sont pas des caractères de mot, \b ne s'y applique donc jamais.
+verifier('le verbe est présent partout',
+  CONTEXTES.every(c => /Yoppée?( |!)/.test(textesConfirmation(c).titre + ' ')),
+  CONTEXTES.map(c => textesConfirmation(c).titre).join(' | '))
+verifier('le verbe n’est JAMAIS seul',
+  CONTEXTES.every(c => textesConfirmation(c).titre !== 'Yoppé ! 🟣'),
+  CONTEXTES.map(c => textesConfirmation(c).titre).join(' | '))
+// Accord : commande est FÉMININ, rendez-vous est MASCULIN. C'est la promesse
+// faite aux commerçants sur la page d'inscription, elle se tient à la lettre.
+egal('accord féminin pour une commande', textesConfirmation('alimentaire').titre, 'Ta commande est Yoppée ! 🟣')
+egal('accord féminin en boutique', textesConfirmation('boutique').titre, 'Ta commande est Yoppée ! 🟣')
+egal('accord féminin en livraison', textesConfirmation('livraison').titre, 'Ta commande est Yoppée ! 🟣')
+egal('accord féminin en expédition', textesConfirmation('expedition').titre, 'Ta commande est Yoppée ! 🟣')
+egal('accord masculin pour un rendez-vous', textesConfirmation('rdv').titre, 'Ton RDV est Yoppé ! 🟣')
+// Le 🟣 signe chaque confirmation.
+verifier('le point violet partout', CONTEXTES.every(c => textesConfirmation(c).titre.includes('🟣')))
 // Le nom du commerce doit vraiment être injecté, pas rester un gabarit.
 verifier('le nom du commerce est injecté',
   textesConfirmation('boutique', { commercantNom: 'La Boutique' }).etapes.some(e => e.includes('La Boutique')))

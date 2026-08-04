@@ -1997,9 +1997,12 @@ export default function Commander() {
             return
           }
           await chargerCommandesClient(email)
+          // « Yoppé » célèbre une commande qui aboutit, pas une qui s'arrête :
+          // l'employer ici sonnerait faux, comme féliciter quelqu'un qui
+          // renonce. Le verbe reste réservé au moment où ça marche.
           const message = c.paye_en_ligne
-            ? 'Yoppé ! Commande annulée, remboursement en cours 🟣'
-            : 'Yoppé ! Ta commande est annulée 🟣'
+            ? 'C\'est annulé. Ton remboursement est en route 🟣'
+            : 'C\'est annulé 🟣'
           showToast({ msg: message, type: 'success' })
         } catch (e) {
           console.error('[annulerCommandeFromList] erreur', e)

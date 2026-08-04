@@ -12,7 +12,7 @@
 //   3. Confirmation : récap + email yopper (pré-rempli si connecté) +
 //      bouton envoyer. POST vers /api/signalements/create.
 //
-// Écran de succès "Yoppé ! La commune a été notifiée 🟣" après envoi.
+// Écran de succès "Ton signalement est Yoppé 🟣" après envoi.
 // ════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect } from 'react'
@@ -204,7 +204,7 @@ export default function ModalSignalerProbleme({
               </svg>
             </div>
             <h2 style={{ fontSize: 22, fontWeight: 900, color: T.ink, margin: '0 0 8px', letterSpacing: '-0.5px' }}>
-              Signalé 🟣
+              Ton signalement est Yoppé ! 🟣
             </h2>
             <p style={{ fontSize: 14, color: T.muted, margin: '0 0 6px', lineHeight: 1.5 }}>
               La commune de Mettet a été notifiée par email.

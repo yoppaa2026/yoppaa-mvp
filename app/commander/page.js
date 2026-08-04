@@ -1172,25 +1172,41 @@ function BoutonGoodMorning({ onClick, nonVu }) {
       style={{
         position: 'relative',
         width: 46, height: 46, borderRadius: '50%',
-        background: nonVu ? 'rgba(196,160,244,0.28)' : 'rgba(255,255,255,0.12)',
+        // Un point violet sur un fond violet ne se voit pas et ne donne envie
+        // de rien (Alex, 05/08). Quand le Good Morning n'a pas été lu, c'est le
+        // BOUTON ENTIER qui s'allume comme un lever de soleil : chaud, vivant,
+        // impossible à confondre avec le reste du bandeau. Une fois lu, il
+        // redevient discret et ne réclame plus l'attention.
+        background: nonVu
+          ? 'linear-gradient(135deg, #FDBA74 0%, #FB923C 45%, #C4A0F4 100%)'
+          : 'rgba(255,255,255,0.12)',
         backdropFilter: 'blur(12px)',
-        border: `1px solid ${nonVu ? 'rgba(196,160,244,0.6)' : 'rgba(255,255,255,0.18)'}`,
+        border: `1px solid ${nonVu ? 'rgba(253,186,116,0.9)' : 'rgba(255,255,255,0.18)'}`,
+        boxShadow: nonVu ? '0 0 0 3px rgba(251,146,60,0.22), 0 6px 20px rgba(251,146,60,0.45)' : 'none',
         color: '#fff', cursor: 'pointer', flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontFamily: 'inherit',
         transition: 'all 0.2s',
+        animation: nonVu ? 'gmLeverSoleil 2.6s ease-in-out infinite' : 'none',
       }}>
       <IconCourrierMatin size={30} color="#fff"/>
       {nonVu && (
         <>
+          {/* Le mot fait le travail que le point ne faisait pas : il annonce
+              qu'il y a quelque chose à lire, aujourd'hui. */}
           <span aria-hidden="true" style={{
-            position: 'absolute', top: 3, right: 3,
-            width: 9, height: 9, borderRadius: '50%',
-            background: '#C4A0F4',
-            boxShadow: '0 0 0 2px rgba(22,6,54,0.9), 0 0 8px rgba(196,160,244,0.7)',
-            animation: 'gmDotPulse 1.6s ease-in-out infinite',
-          }}/>
-          <style>{`@keyframes gmDotPulse { 0%,100% { transform: scale(1); opacity: 1 } 50% { transform: scale(1.35); opacity: 0.55 } }`}</style>
+            position: 'absolute', bottom: -7, left: '50%', transform: 'translateX(-50%)',
+            background: '#1A0840', color: '#FDBA74',
+            fontSize: 8.5, fontWeight: 900, letterSpacing: '0.5px',
+            padding: '2px 7px', borderRadius: 100, whiteSpace: 'nowrap',
+            border: '1px solid rgba(253,186,116,0.5)', textTransform: 'uppercase',
+          }}>
+            Nouveau
+          </span>
+          <style>{`@keyframes gmLeverSoleil {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50%      { transform: translateY(-2.5px) scale(1.05); }
+          }`}</style>
         </>
       )}
     </button>
@@ -2096,11 +2112,35 @@ export default function Commander() {
     // 'en_attente' (Validee) -> violet (signature commande alimentaire, pas vert).
     en_attente:     { bg: T.pale,    color: T.main,    label: 'Validée' },
   }
-  // Sous-texte chaleureux par statut (affiche sous la pastille pour donner du contexte)
-  const statutSousTexte = {
-    en_attente:     'Ton commerçant préféré va bientôt s’y mettre 🟣',
-    en_preparation: 'Préparation lancée, c’est entre de bonnes mains',
-    pret:           'Présente-toi à l’heure de ton créneau',
+  // Sous-texte sous la pastille de statut.
+  //
+  // ⚠️ RÉÉCRIT LE 05/08. Les anciens textes étaient figés et parfois faux :
+  // « ton commerçant préféré va bientôt s'y mettre » présumait une relation que
+  // le Yopper n'a pas forcément, et « présente-toi à l'heure de ton créneau »
+  // s'affichait aussi pour une commande de boutique, qui n'a AUCUN créneau.
+  // Le texte suit maintenant le mode de retrait, et parle de ce que le Yopper
+  // doit faire ou attendre, pas de sentiments.
+  function statutSousTexte(c) {
+    const enBoutique = c?.mode_retrait === 'retrait_boutique'
+    if (c?.statut === 'en_attente') {
+      return enBoutique
+        ? 'Bien reçue. On te prévient dès qu’elle t’attend.'
+        : 'Bien reçue. La préparation démarre bientôt.'
+    }
+    if (c?.statut === 'en_preparation') {
+      return enBoutique
+        ? 'En préparation. Tu reçois un message dès qu’elle est prête.'
+        : 'En préparation, ça avance.'
+    }
+    if (c?.statut === 'pret') {
+      if (c?.mode_retrait === 'livraison') return 'Prête, elle part vers toi.'
+      if (enBoutique) return 'Elle t’attend, pendant les heures d’ouverture.'
+      const cren = c?.creneau
+      return cren?.heure_debut
+        ? `Elle t’attend, viens entre ${cren.heure_debut.slice(0, 5)} et ${cren.heure_fin?.slice(0, 5) || ''}.`
+        : 'Elle t’attend.'
+    }
+    return null
   }
 
   // Vérifie si le créneau de retrait a commencé (peut SWIPER)
@@ -2657,7 +2697,7 @@ export default function Commander() {
                       ? 'C’est prêt ! Le commerçant va bientôt partir te livrer 🛵'
                       : estColisPret
                       ? 'Ton colis part bientôt. Tu recevras le numéro de suivi dès l’expédition.'
-                      : statutSousTexte[c.statut]
+                      : statutSousTexte(c)
                     const cren = c.creneau || c.creneau_livraison
                     return (
                       <div key={c.id} style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', marginBottom: '0.625rem', border: `1.5px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(107,53,196,0.06)' }}>

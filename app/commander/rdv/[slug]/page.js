@@ -431,6 +431,13 @@ export default function CommanderRdvSlug() {
     && commercant?.stripe_account_charges_enabled === true
     && !commercant?._rdvDesactive
 
+  // L'acompte n'est réellement prélevé que si le commerçant l'a activé ET que
+  // son compte Stripe fonctionne. Partout où un acompte est annoncé, c'est
+  // cette valeur qui décide du mot employé : « en ligne » ou « sur place ».
+  // Sans elle, la fiche promettait un prélèvement qui n'arrivait jamais.
+  const acompteEnLigneDispo = commercant?.rdv_acompte_en_ligne_actif === true
+    && commercant?.stripe_account_charges_enabled === true
+
   // Le client arrive de la boutique avec un panier : on le reprend ici, pour
   // qu'il ne recommence pas ses ajouts. On attend que le catalogue soit chargé,
   // les prix venant des articles réels et jamais du dépôt, qui ne transporte
@@ -1257,6 +1264,122 @@ export default function CommanderRdvSlug() {
   }
 
   // ─── Rendu ────────────────────────────────────────────────────────────────
+  {/* ─── SES PRODUITS (31/07) : aperçu du catalogue, l'achat vit sur
+      la page boutique /commander/[slug]. Affiché aussi quand le
+      module RDV n'est pas activé.
+      PLACÉ SOUS LES PRESTATIONS (03/08) : chez un commerce de
+      services, le rendez-vous est le cœur de métier. Le voir passer
+      après une rangée de shampoings inversait la promesse de la
+      fiche.
+      VISIBLE AUSSI À L'ÉTAPE 3 (04/08) : les produits
+      disparaissaient dès qu'on choisissait une prestation. Le
+      client se décide souvent en fin de parcours, au moment de
+      payer, et il n'avait plus aucun moyen d'ajouter quoi que ce
+      soit sans tout recommencer. ─── */}
+  function renderProduits() {
+    return (
+      <div style={{ margin: '14px 12px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
+            </svg>
+            Ses produits
+          </span>
+          <a href={`/commander/${commercant.slug}`}
+            style={{ fontSize: '0.72rem', fontWeight: 800, color: T.main, textDecoration: 'none', flexShrink: 0 }}>
+            Voir tout ({produits.length}) ›
+          </a>
+        </div>
+        {produitsAchetables && (
+          <p style={{ margin: '0 0 10px', fontSize: '0.74rem', color: T.deep, lineHeight: 1.45 }}>
+            Ajoute ce que tu veux emporter : tu paies tout d&rsquo;un coup avec ton rendez-vous, et tu repars avec le jour J.
+          </p>
+        )}
+        {/* Panier rapporté de la boutique : le dire, sinon le client
+            ne sait pas si ses articles l'ont suivi. */}
+        {panierRepris && (
+          <div style={{ background: panierRepris.ignores.length > 0 ? '#FFFBEB' : '#ECFDF5', border: `1px solid ${panierRepris.ignores.length > 0 ? '#FDE68A' : '#A7F3D0'}`, borderRadius: 10, padding: '8px 11px', marginBottom: 10 }}>
+            {panierRepris.repris > 0 && (
+              <p style={{ margin: 0, fontSize: '0.74rem', fontWeight: 700, color: '#065F46', lineHeight: 1.45 }}>
+                Tes {panierRepris.repris} article{panierRepris.repris > 1 ? 's' : ''} de la boutique t&rsquo;ont suivi.
+              </p>
+            )}
+            {panierRepris.ignores.length > 0 && (
+              <p style={{ margin: panierRepris.repris > 0 ? '4px 0 0' : 0, fontSize: '0.72rem', color: '#78350F', lineHeight: 1.45 }}>
+                {panierRepris.ignores.join(', ')} se compose{panierRepris.ignores.length > 1 ? 'nt' : ''} en boutique et n&rsquo;a{panierRepris.ignores.length > 1 ? 'ont' : ''} pas pu suivre. Tu peux le{panierRepris.ignores.length > 1 ? 's' : ''} commander depuis la boutique.
+              </p>
+            )}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+          {/* Plus de troncature à 8 (04/08) : le client ne devait pas
+              avoir à quitter le tunnel pour voir le neuvième produit,
+              c'est justement en le quittant qu'il perdait son panier.
+              Un salon a un catalogue court, la bande défile bien. */}
+          {produits.map(p => {
+            // Un produit remisé affiche son prix promo ici aussi :
+            // sinon l'aperçu du salon et sa boutique annoncent deux
+            // prix différents pour le même article.
+            const remise = remiseSurArticle(p, deals)
+            const qte = panierProduits[p.id]?.quantite || 0
+            // Un produit en mode vitrine affiche un prix indicatif :
+            // il ne s'achète pas en ligne, son prix n'est pas ferme.
+            const achetable = produitsAchetables && !p.est_vitrine && Number(p.prix) > 0
+            return (
+            <div key={p.id}
+              style={{ flexShrink: 0, width: 118, background: '#fff', border: `1px solid ${qte > 0 ? T.main + '55' : T.pale}`, borderRadius: 14, overflow: 'hidden', boxShadow: qte > 0 ? `0 2px 10px ${T.main}22` : 'none' }}>
+              <a href={`/commander/${commercant.slug}?article=${p.id}`} style={{ display: 'block', textDecoration: 'none' }}>
+                {commercant.photos_catalogue_actif !== false && p.photo_url ? (
+                  <div style={{ width: '100%', aspectRatio: '1', background: T.pale }}>
+                    <img src={p.photo_url} alt={p.nom} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
+                  </div>
+                ) : (
+                  <div style={{ width: '100%', aspectRatio: '1', background: `linear-gradient(135deg, ${T.pale}, #fff)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={T.light} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
+                    </svg>
+                  </div>
+                )}
+              </a>
+              <div style={{ padding: '8px 10px 10px' }}>
+                <p style={{ margin: 0, fontSize: '0.74rem', fontWeight: 700, color: T.ink, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.nom}</p>
+                {Number(p.prix) > 0 ? (
+                  <p style={{ margin: '3px 0 0', fontSize: '0.8rem', fontWeight: 900, color: remise ? '#DC2626' : T.main, display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                    {p.est_vitrine && <span style={{ fontSize: '0.62rem', fontWeight: 700, color: T.muted, marginRight: 3 }}>dès</span>}
+                    {remise ? remise.prix.toFixed(2) : Number(p.prix).toFixed(2)}€
+                    {remise && <span style={{ fontSize: '0.66rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{remise.prixBarre.toFixed(2)}€</span>}
+                  </p>
+                ) : (
+                  <p style={{ margin: '3px 0 0', fontSize: '0.66rem', fontWeight: 700, color: T.muted }}>Prix sur demande</p>
+                )}
+                {achetable && (qte > 0 ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 7 }}>
+                    <button onClick={() => retirerProduit(p)} aria-label={`Retirer ${p.nom}`}
+                      style={{ width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M5 12h14"/></svg>
+                    </button>
+                    <span style={{ fontWeight: 900, fontSize: '0.85rem', color: T.ink }}>{qte}</span>
+                    <button onClick={() => ajouterProduit(p)} aria-label={`Ajouter ${p.nom}`}
+                      style={{ width: 26, height: 26, borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => ajouterProduit(p)}
+                    style={{ width: '100%', marginTop: 7, padding: '5px 0', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontSize: '0.68rem', fontWeight: 800, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                    J&rsquo;ajoute
+                  </button>
+                ))}
+              </div>
+            </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       <style>{`
@@ -1588,9 +1711,16 @@ export default function CommanderRdvSlug() {
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 6 }}>
                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                 <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px' }}>{formatPrix(p)}</span>
+                                {/* La pastille doit dire ce qui se passe VRAIMENT.
+                                    Elle annonçait « Acompte 25 % » même quand le
+                                    commerçant n'encaisse pas en ligne : le client
+                                    croyait payer un acompte qui n'était jamais
+                                    prélevé, et Alex l'a signalé comme un bug de
+                                    paiement alors que rien n'avait été promis à
+                                    Stripe. On distingue les deux cas. */}
                                 {p.acompte_pourcent > 0 && (
                                   <span style={{ fontSize: '0.62rem', fontWeight: 800, color: T.deep, background: T.pale, padding: '2px 7px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                                    Acompte {p.acompte_pourcent}%
+                                    Acompte {p.acompte_pourcent}% {acompteEnLigneDispo ? 'en ligne' : 'sur place'}
                                   </span>
                                 )}
                               </div>
@@ -1609,119 +1739,7 @@ export default function CommanderRdvSlug() {
                 </div>
               )}
 
-              {/* ─── SES PRODUITS (31/07) : aperçu du catalogue, l'achat vit sur
-                  la page boutique /commander/[slug]. Affiché aussi quand le
-                  module RDV n'est pas activé.
-                  PLACÉ SOUS LES PRESTATIONS (03/08) : chez un commerce de
-                  services, le rendez-vous est le cœur de métier. Le voir passer
-                  après une rangée de shampoings inversait la promesse de la
-                  fiche.
-                  VISIBLE AUSSI À L'ÉTAPE 3 (04/08) : les produits
-                  disparaissaient dès qu'on choisissait une prestation. Le
-                  client se décide souvent en fin de parcours, au moment de
-                  payer, et il n'avait plus aucun moyen d'ajouter quoi que ce
-                  soit sans tout recommencer. ─── */}
-              {(etape === 1 || etape === 3) && produits.length > 0 && (
-                <div style={{ margin: '14px 12px 24px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
-                      </svg>
-                      Ses produits
-                    </span>
-                    <a href={`/commander/${commercant.slug}`}
-                      style={{ fontSize: '0.72rem', fontWeight: 800, color: T.main, textDecoration: 'none', flexShrink: 0 }}>
-                      Voir tout ({produits.length}) ›
-                    </a>
-                  </div>
-                  {produitsAchetables && (
-                    <p style={{ margin: '0 0 10px', fontSize: '0.74rem', color: T.deep, lineHeight: 1.45 }}>
-                      Ajoute ce que tu veux emporter : tu paies tout d&rsquo;un coup avec ton rendez-vous, et tu repars avec le jour J.
-                    </p>
-                  )}
-                  {/* Panier rapporté de la boutique : le dire, sinon le client
-                      ne sait pas si ses articles l'ont suivi. */}
-                  {panierRepris && (
-                    <div style={{ background: panierRepris.ignores.length > 0 ? '#FFFBEB' : '#ECFDF5', border: `1px solid ${panierRepris.ignores.length > 0 ? '#FDE68A' : '#A7F3D0'}`, borderRadius: 10, padding: '8px 11px', marginBottom: 10 }}>
-                      {panierRepris.repris > 0 && (
-                        <p style={{ margin: 0, fontSize: '0.74rem', fontWeight: 700, color: '#065F46', lineHeight: 1.45 }}>
-                          Tes {panierRepris.repris} article{panierRepris.repris > 1 ? 's' : ''} de la boutique t&rsquo;ont suivi.
-                        </p>
-                      )}
-                      {panierRepris.ignores.length > 0 && (
-                        <p style={{ margin: panierRepris.repris > 0 ? '4px 0 0' : 0, fontSize: '0.72rem', color: '#78350F', lineHeight: 1.45 }}>
-                          {panierRepris.ignores.join(', ')} se compose{panierRepris.ignores.length > 1 ? 'nt' : ''} en boutique et n&rsquo;a{panierRepris.ignores.length > 1 ? 'ont' : ''} pas pu suivre. Tu peux le{panierRepris.ignores.length > 1 ? 's' : ''} commander depuis la boutique.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-                    {/* Plus de troncature à 8 (04/08) : le client ne devait pas
-                        avoir à quitter le tunnel pour voir le neuvième produit,
-                        c'est justement en le quittant qu'il perdait son panier.
-                        Un salon a un catalogue court, la bande défile bien. */}
-                    {produits.map(p => {
-                      // Un produit remisé affiche son prix promo ici aussi :
-                      // sinon l'aperçu du salon et sa boutique annoncent deux
-                      // prix différents pour le même article.
-                      const remise = remiseSurArticle(p, deals)
-                      const qte = panierProduits[p.id]?.quantite || 0
-                      // Un produit en mode vitrine affiche un prix indicatif :
-                      // il ne s'achète pas en ligne, son prix n'est pas ferme.
-                      const achetable = produitsAchetables && !p.est_vitrine && Number(p.prix) > 0
-                      return (
-                      <div key={p.id}
-                        style={{ flexShrink: 0, width: 118, background: '#fff', border: `1px solid ${qte > 0 ? T.main + '55' : T.pale}`, borderRadius: 14, overflow: 'hidden', boxShadow: qte > 0 ? `0 2px 10px ${T.main}22` : 'none' }}>
-                        <a href={`/commander/${commercant.slug}?article=${p.id}`} style={{ display: 'block', textDecoration: 'none' }}>
-                          {commercant.photos_catalogue_actif !== false && p.photo_url ? (
-                            <div style={{ width: '100%', aspectRatio: '1', background: T.pale }}>
-                              <img src={p.photo_url} alt={p.nom} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
-                            </div>
-                          ) : (
-                            <div style={{ width: '100%', aspectRatio: '1', background: `linear-gradient(135deg, ${T.pale}, #fff)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={T.light} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
-                              </svg>
-                            </div>
-                          )}
-                        </a>
-                        <div style={{ padding: '8px 10px 10px' }}>
-                          <p style={{ margin: 0, fontSize: '0.74rem', fontWeight: 700, color: T.ink, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.nom}</p>
-                          {Number(p.prix) > 0 ? (
-                            <p style={{ margin: '3px 0 0', fontSize: '0.8rem', fontWeight: 900, color: remise ? '#DC2626' : T.main, display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                              {p.est_vitrine && <span style={{ fontSize: '0.62rem', fontWeight: 700, color: T.muted, marginRight: 3 }}>dès</span>}
-                              {remise ? remise.prix.toFixed(2) : Number(p.prix).toFixed(2)}€
-                              {remise && <span style={{ fontSize: '0.66rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{remise.prixBarre.toFixed(2)}€</span>}
-                            </p>
-                          ) : (
-                            <p style={{ margin: '3px 0 0', fontSize: '0.66rem', fontWeight: 700, color: T.muted }}>Prix sur demande</p>
-                          )}
-                          {achetable && (qte > 0 ? (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 7 }}>
-                              <button onClick={() => retirerProduit(p)} aria-label={`Retirer ${p.nom}`}
-                                style={{ width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M5 12h14"/></svg>
-                              </button>
-                              <span style={{ fontWeight: 900, fontSize: '0.85rem', color: T.ink }}>{qte}</span>
-                              <button onClick={() => ajouterProduit(p)} aria-label={`Ajouter ${p.nom}`}
-                                style={{ width: 26, height: 26, borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                              </button>
-                            </div>
-                          ) : (
-                            <button onClick={() => ajouterProduit(p)}
-                              style={{ width: '100%', marginTop: 7, padding: '5px 0', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontSize: '0.68rem', fontWeight: 800, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                              J&rsquo;ajoute
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
+              {etape === 1 && produits.length > 0 && renderProduits()}
 
               {/* ─── ÉTAPE 2 - CALENDRIER + SLOTS CRÉNEAUX ─── */}
               {etape === 2 && prestationChoisie && (
@@ -2046,8 +2064,25 @@ export default function CommanderRdvSlug() {
                           Modifier
                         </button>
                       </div>
+                      {/* L'acompte se lit DÈS ICI, pas seulement au moment de
+                          payer. Alex : « il faut que les infos soient affichées
+                          partout pendant la procédure de vente ». */}
+                      {prestationChoisie.acompte_pourcent > 0 && (
+                        <p style={{ margin: 0, fontSize: '0.74rem', color: T.deep, fontWeight: 700, background: T.pale, borderRadius: 8, padding: '6px 10px' }}>
+                          Acompte {prestationChoisie.acompte_pourcent}% {acompteEnLigneDispo ? 'à payer en ligne maintenant' : 'à régler sur place'}
+                          {(() => {
+                            const base = prestationChoisie.prix != null ? Number(prestationChoisie.prix) : (prestationChoisie.prix_min != null ? Number(prestationChoisie.prix_min) : null)
+                            return base != null ? ` · ${(Math.round(base * prestationChoisie.acompte_pourcent) / 100).toFixed(2)}€` : ''
+                          })()}
+                        </p>
+                      )}
                     </div>
                   </div>
+
+                  {/* Les produits restent atteignables jusqu'au bout : le client
+                      se décide souvent en voyant le total. Placés SOUS le
+                      rendez-vous, qui reste le cœur de la page. */}
+                  {produits.length > 0 && renderProduits()}
 
                   {/* Encart Yopper connecté vs invité.
                       Wording : on rassure d'abord (PAS besoin de compte) puis on offre
@@ -2110,7 +2145,10 @@ export default function CommanderRdvSlug() {
                       </p>
                     </div>
                     {[
-                      { key: 'rgpdCommande', val: rgpdCommande, set: setRgpdCommande, label: 'Traitement de mon RDV', badge: 'Obligatoire', badgeColor: '#DC2626', badgeBg: '#FEE2E2', desc: `J'accepte que mes coordonnées soient transmises à ${commercant.nom} pour le traitement de mon rendez-vous.` },
+                      // Le libellé suit ce que contient réellement la réservation :
+                      // parler de « mon rendez-vous » à quelqu'un qui achète aussi
+                      // un shampoing lui fait douter que son produit soit inclus.
+                      { key: 'rgpdCommande', val: rgpdCommande, set: setRgpdCommande, label: lignesPanier.length > 0 ? 'Traitement de ma réservation' : 'Traitement de mon RDV', badge: 'Obligatoire', badgeColor: '#DC2626', badgeBg: '#FEE2E2', desc: `J'accepte que mes coordonnées soient transmises à ${commercant.nom} pour le traitement de ${lignesPanier.length > 0 ? 'mon rendez-vous et de ma commande' : 'mon rendez-vous'}.` },
                       { key: 'rgpdMarketing', val: rgpdMarketing, set: setRgpdMarketing, label: 'Offres et actualités', badge: 'Optionnel', badgeColor: T.main, badgeBg: T.pale, desc: `J'accepte que ${commercant.nom} utilise mes coordonnées pour m'envoyer des offres et actualités.` },
                     ].map((item, i) => (
                       <label key={item.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', cursor: 'pointer', borderBottom: i === 0 ? `1px solid ${T.pale}` : 'none', background: item.val ? '#F0FDF4' : '#fff' }}>
@@ -2154,38 +2192,71 @@ export default function CommanderRdvSlug() {
                     // séparément avant d'arriver sur Stripe, sinon le total le
                     // surprend et il abandonne.
                     const aPayerMaintenant = (acompteEnLigne && acompteMnt ? acompteMnt : 0) + totalProduits
+                    // Reste à régler sur place : le solde de la prestation, plus
+                    // rien pour les produits, qui sont payés en entier.
+                    const surPlace = prixBase != null
+                      ? prixBase - (acompteEnLigne && acompteMnt ? acompteMnt : 0)
+                      : null
                     return (
                       <>
-                        {lignesPanier.length > 0 && (
-                          <div style={{ background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 14, overflow: 'hidden', marginBottom: 12 }}>
-                            <p style={{ margin: 0, padding: '9px 14px', background: T.pale, fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.7px' }}>
-                              Tes produits, à emporter le jour J
-                            </p>
-                            {lignesPanier.map(l => (
-                              <div key={l.article.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: T.ink }}>{l.article.nom}</p>
-                                  <p style={{ margin: 0, fontSize: '0.7rem', color: T.muted, fontWeight: 600 }}>{l.quantite} × {l.prix.toFixed(2)}€</p>
-                                </div>
-                                <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.ink }}>{(l.prix * l.quantite).toFixed(2)}€</span>
-                                <button onClick={() => retirerProduit(l.article)} aria-label={`Retirer ${l.article.nom}`}
-                                  style={{ width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M5 12h14"/></svg>
-                                </button>
+                        {/* LE PANIER COMPLET, prestation comprise.
+                            Il ne listait QUE les produits : ajouter un shampoing
+                            donnait l'impression que le rendez-vous avait disparu
+                            du panier. Signalé par Alex le 05/08. La prestation est
+                            la première ligne, toujours, même sans aucun produit. */}
+                        <div style={{ background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 14, overflow: 'hidden', marginBottom: 12 }}>
+                          <p style={{ margin: 0, padding: '9px 14px', background: T.pale, fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+                            Ton récapitulatif
+                          </p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: T.ink }}>{prestationChoisie?.nom}</p>
+                              <p style={{ margin: 0, fontSize: '0.7rem', color: T.muted, fontWeight: 600 }}>
+                                {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} · {heureChoisie}
+                              </p>
+                            </div>
+                            <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.ink }}>{formatPrix(prestationChoisie)}</span>
+                          </div>
+                          {lignesPanier.map(l => (
+                            <div key={l.article.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: T.ink }}>{l.article.nom}</p>
+                                <p style={{ margin: 0, fontSize: '0.7rem', color: T.muted, fontWeight: 600 }}>{l.quantite} × {l.prix.toFixed(2)}€ · à emporter le jour J</p>
                               </div>
-                            ))}
-                            {acompteEnLigne && acompteMnt ? (
-                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
-                                <span style={{ fontSize: '0.8rem', color: T.muted, fontWeight: 600 }}>Acompte du rendez-vous</span>
-                                <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.ink }}>{acompteMnt.toFixed(2)}€</span>
-                              </div>
-                            ) : null}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 14px' }}>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.ink }}>{(l.prix * l.quantite).toFixed(2)}€</span>
+                              <button onClick={() => retirerProduit(l.article)} aria-label={`Retirer ${l.article.nom}`}
+                                style={{ width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M5 12h14"/></svg>
+                              </button>
+                            </div>
+                          ))}
+                          {/* Ce qui part maintenant, et ce qui reste pour plus
+                              tard. Les deux sont dits, y compris quand rien
+                              n'est prélevé : « tu paies 0 € » n'apprend rien,
+                              « tu règles tout sur place » rassure. */}
+                          {acompteEnLigne && acompteMnt ? (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
+                              <span style={{ fontSize: '0.8rem', color: T.muted, fontWeight: 600 }}>Acompte du rendez-vous ({prestationChoisie?.acompte_pourcent}%)</span>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.ink }}>{acompteMnt.toFixed(2)}€</span>
+                            </div>
+                          ) : null}
+                          {aPayerMaintenant > 0 ? (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 14px', background: T.pale }}>
                               <span style={{ fontSize: '0.85rem', color: T.deep, fontWeight: 800 }}>Tu paies maintenant</span>
                               <span style={{ fontSize: '1rem', fontWeight: 900, color: T.main }}>{aPayerMaintenant.toFixed(2)}€</span>
                             </div>
-                          </div>
-                        )}
+                          ) : (
+                            <div style={{ padding: '11px 14px', background: T.pale }}>
+                              <span style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 700 }}>Rien à payer maintenant, tu règles sur place.</span>
+                            </div>
+                          )}
+                          {surPlace != null && surPlace > 0 && aPayerMaintenant > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px' }}>
+                              <span style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 600 }}>Solde à régler sur place</span>
+                              <span style={{ fontSize: '0.82rem', fontWeight: 800, color: T.deep }}>{surPlace.toFixed(2)}€</span>
+                            </div>
+                          )}
+                        </div>
                         <button disabled={!formValide || submitting}
                           onClick={passerRdv}
                           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: (!formValide || submitting) ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: (!formValide || submitting) ? '#9CA3AF' : '#fff', fontWeight: 800, fontSize: '1rem', cursor: (!formValide || submitting) ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: (!formValide || submitting) ? 'none' : `0 6px 24px ${T.main}55`, opacity: (!formValide || submitting) ? 0.6 : 1, transition: 'all 0.2s' }}>
@@ -2198,9 +2269,11 @@ export default function CommanderRdvSlug() {
                             </>
                           )}
                         </button>
-                        {acompteEnLigne && acompteMnt && !submitting && (
-                          <p style={{ fontSize: '0.72rem', color: T.muted, textAlign: 'center', marginTop: 6, lineHeight: 1.4, display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
-                            <Lock size={11} strokeWidth={2}/> Paiement sécurisé Stripe · Solde de {prixBase ? (prixBase - acompteMnt).toFixed(2) : '?'}€ à régler sur place
+                        {/* Le solde est déjà chiffré dans le récapitulatif : ici
+                            on ne garde que la réassurance sur le paiement. */}
+                        {aPayerMaintenant > 0 && !submitting && (
+                          <p style={{ fontSize: '0.72rem', color: T.muted, textAlign: 'center', marginTop: 6, lineHeight: 1.4, display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'center', width: '100%' }}>
+                            <Lock size={11} strokeWidth={2}/> Paiement sécurisé Stripe
                           </p>
                         )}
                       </>
@@ -2212,7 +2285,7 @@ export default function CommanderRdvSlug() {
                         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                         <path d="M12 9v4M12 17h.01"/>
                       </svg>
-                      Accepte le traitement de ton RDV pour continuer
+                      Accepte le traitement de ta réservation pour continuer
                     </p>
                   )}
                   <p style={{ fontSize: '0.7rem', color: T.muted, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>

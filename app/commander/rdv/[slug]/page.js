@@ -19,6 +19,18 @@ import { supabase } from '@/lib/supabase'
 import { isVitrine, canDo } from '@/lib/plans'
 import { dealActifCeJour, remiseSurArticle } from '@/lib/deals'
 import { reprendrePanierPourRdv } from '@/lib/panier-vers-rdv'
+import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
+import IconeRetrait from '@/app/components/IconeRetrait'
+
+// Rend en gras ce que les textes encadrent de `**`. La formulation vit dans
+// lib/ecran-retrait.js, testable ; seule la mise en forme reste ici.
+function enGras(texte) {
+  return String(texte).split(/(\*\*[^*]+\*\*)/g).map((bout, i) =>
+    bout.startsWith('**') && bout.endsWith('**')
+      ? <strong key={i}>{bout.slice(2, -2)}</strong>
+      : <span key={i}>{bout}</span>
+  )
+}
 import { fetchYopper } from '@/lib/fetch-yopper'
 import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
@@ -2214,11 +2226,23 @@ export default function CommanderRdvSlug() {
               {etape === 4 && rdvCree && (
                 <div style={{ padding: '1.5rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
                   <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                    {/* Cercle vert avec check (signature succès Yoppaa, identique confirmation commande) */}
-                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg, #10B981, #6EE7B7)', marginBottom: '0.875rem', boxShadow: '0 8px 28px rgba(16,185,129,0.45), 0 0 0 6px #10B98122' }}>
-                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M5 12l5 5L20 7"/>
-                      </svg>
+                    {/* Même grammaire visuelle que l'écran de retrait : l'icône
+                        du moment flotte dans sa pastille, le check reste en
+                        médaillon. Les deux écrans racontent la même histoire à
+                        deux moments, ils doivent se ressembler. */}
+                    <style>{`
+                      @keyframes cf-flotte { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+                      @keyframes cf-numero { 0%{opacity:0;transform:scale(0.7)} 60%{opacity:1;transform:scale(1.06)} 100%{opacity:1;transform:scale(1)} }
+                      @keyframes cf-halo { 0%,100%{transform:scale(1);opacity:0.28} 50%{transform:scale(1.14);opacity:0.5} }
+                      @keyframes cf-check { 0%{transform:scale(0.4);opacity:0} 60%{transform:scale(1.12);opacity:1} 100%{transform:scale(1);opacity:1} }
+                    `}</style>
+                    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 76, height: 76, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, marginBottom: '0.875rem', boxShadow: `0 8px 28px ${T.main}55, 0 0 0 6px ${T.main}18`, animation: 'cf-flotte 3.2s ease-in-out infinite' }}>
+                      <IconeRetrait contexte={RETRAIT_RDV} taille={36}/>
+                      <span style={{ position: 'absolute', right: -2, bottom: -2, width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #10B981, #6EE7B7)', border: '2.5px solid #fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', animation: 'cf-check 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.2s both' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M5 12l5 5L20 7"/>
+                        </svg>
+                      </span>
                     </div>
                     {/* Wordmark tricolore canonique fond clair */}
                     <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1rem', marginBottom: 4, letterSpacing: '-0.05em', lineHeight: 1 }}>
@@ -2227,8 +2251,11 @@ export default function CommanderRdvSlug() {
                       <span style={{ color: T.mid }}>aa</span>
                     </p>
                     {rdvCree.numero_rdv && (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '6px 20px', marginBottom: 12, boxShadow: `0 4px 16px ${T.main}44` }}>
-                        <span style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px' }}>#{rdvCree.numero_rdv}</span>
+                      <div style={{ position: 'relative', display: 'inline-block', marginBottom: 12 }}>
+                        <span aria-hidden="true" style={{ position: 'absolute', inset: '-30% -18%', borderRadius: '50%', background: `radial-gradient(circle, ${T.mid} 0%, transparent 68%)`, animation: 'cf-halo 2.8s ease-in-out infinite', pointerEvents: 'none' }}/>
+                        <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '7px 24px', boxShadow: `0 4px 16px ${T.main}44`, animation: 'cf-numero 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.1s both' }}>
+                          <span style={{ fontWeight: 900, fontSize: '1.5rem', color: '#fff', letterSpacing: '-0.5px' }}>#{rdvCree.numero_rdv}</span>
+                        </span>
                       </div>
                     )}
                     <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>Ton RDV est Yoppé ! 🟣</h2>
@@ -2268,14 +2295,20 @@ export default function CommanderRdvSlug() {
                         Et après&nbsp;?
                       </p>
                       <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {/* Les étapes changent selon qu'on a acheté des produits
+                            avec le rendez-vous : il faut alors dire qu'ils sont
+                            déjà payés et qu'on les remet le jour même, sinon le
+                            client se demande où ils sont passés. */}
                         {[
-                          { n: 1, t: <>Tu reçois un email de confirmation avec ton RDV ajoutable à ton calendrier (iCal).</> },
-                          { n: 2, t: <>Tu te rends chez <strong>{commercant.nom}</strong> à ton créneau ({heureChoisie}).</> },
-                          { n: 3, t: <>Tu peux annuler ou reporter depuis ton espace Yoppaa jusqu&apos;à {commercant.rdv_delai_annulation_heures || 24}h avant.</> },
-                        ].map(s => (
-                          <li key={s.n} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '0.85rem', color: T.deep, lineHeight: 1.5 }}>
-                            <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 1, boxShadow: `0 2px 6px ${T.main}33` }}>{s.n}</span>
-                            <span style={{ paddingTop: 2 }}>{s.t}</span>
+                          ...textesConfirmation(RETRAIT_RDV, {
+                            commercantNom: commercant.nom,
+                            avecProduits: lignesPanier.length > 0,
+                          }).etapes,
+                          `Tu peux annuler ou reporter depuis ton espace Yoppaa jusqu'à **${commercant.rdv_delai_annulation_heures || 24}h avant**.`,
+                        ].map((texte, i) => (
+                          <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '0.85rem', color: T.deep, lineHeight: 1.5 }}>
+                            <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 1, boxShadow: `0 2px 6px ${T.main}33` }}>{i + 1}</span>
+                            <span style={{ paddingTop: 2 }}>{enGras(texte)}</span>
                           </li>
                         ))}
                       </ol>

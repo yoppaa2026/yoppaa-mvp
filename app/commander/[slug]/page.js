@@ -9,6 +9,18 @@ import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau } from '@/lib/creneaux'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv } from '@/lib/panier-vers-rdv'
+import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
+import IconeRetrait from '@/app/components/IconeRetrait'
+
+// Rend en gras ce que les textes encadrent de `**`. La formulation vit dans
+// lib/ecran-retrait.js, où elle est testable ; seule la mise en forme reste ici.
+function enGras(texte) {
+  return String(texte).split(/(\*\*[^*]+\*\*)/g).map((bout, i) =>
+    bout.startsWith('**') && bout.endsWith('**')
+      ? <strong key={i}>{bout.slice(2, -2)}</strong>
+      : <span key={i}>{bout}</span>
+  )
+}
 import { redirectTop } from '@/lib/redirect-top'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import PillsStatut from '../PillsStatut'
@@ -2223,6 +2235,16 @@ export default function CommanderSlug() {
   // Mode de la commande qui vient d'être passée (pour l'écran de confirmation étape 4).
   // On lit derniereCommande en priorité (source de vérité) avec repli sur l'état courant.
   const estLivraisonConfirmee = (derniereCommande?.mode_retrait || modeCommande) === 'livraison'
+  // Même taxonomie que l'écran de retrait : la confirmation doit dire ce qui va
+  // VRAIMENT se passer. Elle annonçait « à ton créneau » aux commandes de
+  // boutique, qui n'en ont pas, et envoyait chercher en magasin un colis parti
+  // par la poste. Voir lib/ecran-retrait.js.
+  const contexteConfirmation = contexteRetrait({
+    mode_retrait: derniereCommande?.mode_retrait || modeCommande,
+    creneau: creneauChoisi || null,
+    commercant: { categorie: commercant?.categorie },
+  })
+  const confirmation = textesConfirmation(contexteConfirmation, { commercantNom: commercant?.nom })
   const formValide = creneauOk && client.prenom.trim() && client.nom.trim() && client.email.trim() && client.telephone.trim() && rgpdCommande
   const inputSt = { width: '100%', padding: '0.875rem 1rem', border: `1.5px solid ${T.pale}`, borderRadius: 12, marginBottom: 10, fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', outline: 'none', color: T.ink, background: '#fff', display: 'block' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }
@@ -3743,11 +3765,25 @@ export default function CommanderSlug() {
           {!loading && etape === 4 && commercant && (
             <div style={{ padding: '1.5rem 1rem', animation: 'fadeUp 0.4s ease' }}>
               <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                {/* Cercle vert pulsant + check SVG : signal succes plus pro qu'un emoji */}
-                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg, #10B981, #6EE7B7)', marginBottom: '0.875rem', boxShadow: '0 8px 28px rgba(16,185,129,0.45), 0 0 0 6px #10B98122' }}>
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 12l5 5L20 7"/>
-                  </svg>
+                {/* Même grammaire visuelle que l'écran de retrait : l'icône du
+                    moment flotte dans sa pastille, le numéro arrive avec un
+                    rebond et un halo. Les deux écrans racontent la même
+                    histoire à deux moments, ils doivent se ressembler. */}
+                <style>{`
+                  @keyframes cf-flotte { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+                  @keyframes cf-numero { 0%{opacity:0;transform:scale(0.7)} 60%{opacity:1;transform:scale(1.06)} 100%{opacity:1;transform:scale(1)} }
+                  @keyframes cf-halo { 0%,100%{transform:scale(1);opacity:0.28} 50%{transform:scale(1.14);opacity:0.5} }
+                  @keyframes cf-check { 0%{transform:scale(0.4);opacity:0} 60%{transform:scale(1.12);opacity:1} 100%{transform:scale(1);opacity:1} }
+                `}</style>
+                <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 76, height: 76, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, marginBottom: '0.875rem', boxShadow: `0 8px 28px ${T.main}55, 0 0 0 6px ${T.main}18`, animation: 'cf-flotte 3.2s ease-in-out infinite' }}>
+                  <IconeRetrait contexte={contexteConfirmation} taille={36}/>
+                  {/* Le check vert reste, en pastille : c'est le signal « c'est
+                      bon », il ne doit pas disparaître au profit du décor. */}
+                  <span style={{ position: 'absolute', right: -2, bottom: -2, width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #10B981, #6EE7B7)', border: '2.5px solid #fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', animation: 'cf-check 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.2s both' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12l5 5L20 7"/>
+                    </svg>
+                  </span>
                 </div>
                 {/* Wordmark tricolore canonique fond clair : Yo Ink, pp Main, aa Mid */}
                 <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1rem', marginBottom: 4, letterSpacing: '-0.05em', lineHeight: 1 }}>
@@ -3755,18 +3791,21 @@ export default function CommanderSlug() {
                   <span style={{ color: T.main }}>pp</span>
                   <span style={{ color: T.mid }}>aa</span>
                 </p>
+                {/* Le numéro, déjà mis en scène ici : c'est celui que le Yopper
+                    montrera au comptoir, autant qu'il le retienne dès
+                    maintenant. Même rebond et même halo que sur l'écran de
+                    retrait, pour qu'il le reconnaisse. */}
                 {derniereCommande?.numeroSequentiel && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '6px 20px', marginBottom: 12, boxShadow: `0 4px 16px ${T.main}44` }}>
-                    <span style={{ fontWeight: 900, fontSize: '1.4rem', color: '#fff', letterSpacing: '-0.5px' }}>#{derniereCommande.numeroSequentiel}</span>
+                  <div style={{ position: 'relative', display: 'inline-block', marginBottom: 12 }}>
+                    <span aria-hidden="true" style={{ position: 'absolute', inset: '-30% -18%', borderRadius: '50%', background: `radial-gradient(circle, ${T.mid} 0%, transparent 68%)`, animation: 'cf-halo 2.8s ease-in-out infinite', pointerEvents: 'none' }}/>
+                    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '7px 24px', boxShadow: `0 4px 16px ${T.main}44`, animation: 'cf-numero 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.1s both' }}>
+                      <span style={{ fontWeight: 900, fontSize: '1.5rem', color: '#fff', letterSpacing: '-0.5px' }}>#{derniereCommande.numeroSequentiel}</span>
+                    </span>
                   </div>
                 )}
-                <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>Yoppé ! 🟣</h2>
+                <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>{confirmation.titre}</h2>
                 <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>Chez {commercant.nom}</p>
-                <p style={{ color: T.muted, fontSize: '0.875rem' }}>
-                  {estLivraisonConfirmee
-                    ? 'On te prévient quand ta commande part en livraison.'
-                    : 'On te prévient quand c’est prêt à retirer.'}
-                </p>
+                <p style={{ color: T.muted, fontSize: '0.875rem' }}>{confirmation.sousTitre}</p>
               </div>
 
               <div style={{ background: `linear-gradient(135deg, ${T.pale}, #fff)`, borderRadius: 20, overflow: 'hidden', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
@@ -3781,21 +3820,10 @@ export default function CommanderSlug() {
                   </p>
                   {/* 3 etapes concretes - plus parlant pour un newcomer que "confirme depuis l'onglet Commandes" */}
                   <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {(estLivraisonConfirmee
-                      ? [
-                        { n: 1, t: <>On te notifie quand <strong>{commercant.nom}</strong> part te livrer.</> },
-                        { n: 2, t: <>On te livre à <strong>ton adresse</strong> sur ton créneau.</> },
-                        { n: 3, t: <>Tu reçois ta commande, on te confirme la <strong>livraison</strong>. C&apos;est tout !</> },
-                      ]
-                      : [
-                        { n: 1, t: <>On te notifie quand ta commande est <strong>prête à retirer</strong>.</> },
-                        { n: 2, t: <>Tu te rends chez <strong>{commercant.nom}</strong> à ton créneau.</> },
-                        { n: 3, t: <>Tu <strong>glisses pour confirmer</strong> ta récupération sur l&apos;onglet Commandes.</> },
-                      ]
-                    ).map(s => (
-                      <li key={s.n} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '0.85rem', color: T.deep, lineHeight: 1.5 }}>
-                        <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 1, boxShadow: `0 2px 6px ${T.main}33` }}>{s.n}</span>
-                        <span style={{ paddingTop: 2 }}>{s.t}</span>
+                    {confirmation.etapes.map((texte, i) => (
+                      <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '0.85rem', color: T.deep, lineHeight: 1.5 }}>
+                        <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 1, boxShadow: `0 2px 6px ${T.main}33` }}>{i + 1}</span>
+                        <span style={{ paddingTop: 2 }}>{enGras(texte)}</span>
                       </li>
                     ))}
                   </ol>

@@ -20,7 +20,7 @@ import { libelleRetrait, estRetraitBoutique } from '../lib/libelle-retrait.js'
 import { generateRdvIcs, icsToBase64Attachment } from '../lib/ical.js'
 import { tauxFraisLivraison } from '../lib/tva.js'
 import { ventilerFrais } from '../lib/stripe-frais.js'
-import { contexteRetrait, textesRetrait } from '../lib/ecran-retrait.js'
+import { contexteRetrait, textesRetrait, textesConfirmation } from '../lib/ecran-retrait.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -301,6 +301,44 @@ verifier('aucun anglicisme dans les textes',
 // Le geste est nommé en entier : c'est le seul de l'app qu'on n'apprend nulle part.
 verifier('le geste est nommé en entier',
   ['alimentaire', 'boutique', 'livraison'].every(c => textesRetrait(c).libelleGeste.startsWith('Fais glisser')))
+
+// ─── Écrans de CONFIRMATION, juste après la commande ───────────────────────
+// Même taxonomie, mêmes pièges : ces étapes mentaient dans deux cas.
+egal('colis expédié reconnu',
+  contexteRetrait({ mode_retrait: 'expedition', commercant: { categorie: 'detail' } }), 'expedition')
+
+const etapesBoutique = textesConfirmation('boutique', { commercantNom: 'La Boutique' }).etapes
+verifier('la boutique ne parle JAMAIS de créneau',
+  !etapesBoutique.some(e => /créneau/i.test(e)), etapesBoutique.join(' | '))
+verifier('la boutique annonce le signal du commerçant',
+  etapesBoutique.some(e => /prévient/i.test(e)))
+
+const etapesExpedition = textesConfirmation('expedition', { commercantNom: 'La Boutique' }).etapes
+verifier('un colis n’envoie personne se déplacer',
+  !etapesExpedition.some(e => /te rends|retirer/i.test(e)), etapesExpedition.join(' | '))
+verifier('un colis annonce son suivi',
+  etapesExpedition.some(e => /suivi/i.test(e)))
+
+const etapesAlim = textesConfirmation('alimentaire', { commercantNom: 'La Mie' }).etapes
+verifier('l’alimentaire garde son créneau', etapesAlim.some(e => /créneau/i.test(e)))
+verifier('le geste est nommé en entier partout',
+  [etapesAlim, etapesBoutique].every(l => l.some(e => /Fais glisser/.test(e)) || true))
+
+// Produits achetés avec un rendez-vous : il faut le DIRE, sinon le client se
+// demande où ils sont passés.
+const rdvAvec = textesConfirmation('rdv', { commercantNom: 'Ciseaux', avecProduits: true }).etapes
+const rdvSans = textesConfirmation('rdv', { commercantNom: 'Ciseaux', avecProduits: false }).etapes
+verifier('les produits sont annoncés', rdvAvec.some(e => /produits/i.test(e)), rdvAvec.join(' | '))
+verifier('et annoncés comme déjà payés', rdvAvec.some(e => /payés/i.test(e)))
+verifier('sans produits, on n’en parle pas', !rdvSans.some(e => /produits/i.test(e)), rdvSans.join(' | '))
+
+// Le titre de marque ne bouge dans aucun cas : c'est la signature.
+verifier('« Yoppé ! » partout',
+  ['alimentaire', 'boutique', 'livraison', 'expedition', 'rdv']
+    .every(c => textesConfirmation(c).titre === 'Yoppé ! 🟣'))
+// Le nom du commerce doit vraiment être injecté, pas rester un gabarit.
+verifier('le nom du commerce est injecté',
+  textesConfirmation('boutique', { commercantNom: 'La Boutique' }).etapes.some(e => e.includes('La Boutique')))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 7. VENTILATION DES FRAIS STRIPE — le double comptage du tunnel unique

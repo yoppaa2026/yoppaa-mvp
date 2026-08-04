@@ -7,12 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "verif": "npm run verif:logique && npm run verif:plans && npm run verif:slots && npm run verif:comptable && npm run verif:fidelite",
+    "verif": "npm run verif:logique && npm run verif:plans && npm run verif:slots && npm run verif:comptable && npm run verif:fidelite && npm run verif:signaux",
     "verif:logique": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-logique.mjs",
     "verif:plans": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-plans.mjs",
     "verif:slots": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-slots.mjs",
     "verif:comptable": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-comptable.mjs",
-    "verif:fidelite": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-fidelite-creneaux.mjs"
+    "verif:fidelite": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-fidelite-creneaux.mjs",
+    "verif:signaux": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-signaux.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.3",

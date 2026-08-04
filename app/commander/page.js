@@ -1278,6 +1278,12 @@ export default function Commander() {
   }
 
   const [commercants, setCommercants] = useState([])
+  // Le chargement de la liste devait se DIRE. Tant qu'il n'existait pas, une
+  // liste encore vide déclenchait « Aucun résultat », et au retour sur l'app,
+  // quand la requête est la plus lente, le Yopper croyait qu'il n'y avait
+  // aucun commerce chez lui. Vrai vide et pas-encore-chargé sont deux choses
+  // différentes, elles doivent se lire différemment.
+  const [commercesEnChargement, setCommercesEnChargement] = useState(true)
   const [notesParCommerce, setNotesParCommerce] = useState({})
   const [statutsCommerce, setStatutsCommerce] = useState({})
   // Set des commerçants qui ont un deal/actu actif aujourd'hui (pour dot LIVE sur pills)
@@ -1626,6 +1632,7 @@ export default function Commander() {
       .eq('statut_publication', 'publie')
       .order('nom')
     setCommercants(data || [])
+    setCommercesEnChargement(false)
     if (data?.length > 0) {
       chargerNotes(data.map(c => c.id), data)
       chargerActiviteAujourdhui(data.map(c => c.id))
@@ -2295,6 +2302,7 @@ export default function Commander() {
         @keyframes dot-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.4); opacity:0.7; } }
         @keyframes dot-wave { 0%,60%,100% { transform: translateY(0); opacity:1; } 30% { transform: translateY(-3px); opacity:1; } }
         @keyframes yoppa-live-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.45); opacity:0.7; } }
+        @keyframes yoppa-dot-bounce { 0%,80%,100% { transform:translateY(0); opacity:0.45; } 40% { transform:translateY(-7px); opacity:1; } }
         @keyframes toast-in { 0% { opacity:0; transform:translate(-50%, 12px) scale(0.95); } 100% { opacity:1; transform:translate(-50%, 0) scale(1); } }
         @keyframes modal-in { 0% { opacity:0; transform:translateY(12px) scale(0.96); } 100% { opacity:1; transform:translateY(0) scale(1); } }
         @keyframes dot-pop { 0% { opacity:0; transform:scale(0) translateY(8px); } 70% { transform:scale(1.3) translateY(-4px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
@@ -2441,7 +2449,21 @@ export default function Commander() {
                   </span>
                 </div>
               )}
-              {commercantsFiltres.length === 0 ? (
+              {commercesEnChargement && commercants.length === 0 ? (
+                /* Chargement : les trois dots de la marque, jamais « Aucun
+                   résultat ». Au retour sur l'app, c'est le moment le plus
+                   lent, et c'est justement là que le Yopper croyait qu'il n'y
+                   avait rien chez lui. */
+                <div style={{ textAlign: 'center', padding: '3rem 0' }}>
+                  <div style={{ display: 'inline-flex', gap: 7, marginBottom: 14 }}>
+                    {[0, 1, 2].map(i => (
+                      <span key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: T.main, opacity: 0.85, animation: `yoppa-dot-bounce 1s ease-in-out ${i * 0.15}s infinite` }}/>
+                    ))}
+                  </div>
+                  <p style={{ fontWeight: 800, color: T.ink, marginBottom: 4, letterSpacing: '-0.2px' }}>On réveille ton quartier</p>
+                  <p style={{ fontSize: '0.875rem', color: T.muted }}>Les commerces arrivent…</p>
+                </div>
+              ) : commercantsFiltres.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem 0' }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 72, height: 72, borderRadius: 18, background: T.pale, marginBottom: 14 }}>
                     <IconSearch size={36} color={T.main}/>

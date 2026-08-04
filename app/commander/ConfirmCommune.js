@@ -223,6 +223,30 @@ export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClo
                   : 'Choisis la commune que tu veux suivre dans ton Good Morning Yoppers.'}
               </p>
 
+              {/* Aucune commune ouverte : le déroulant était VIDE, sans un mot.
+                  Le Yopper croyait à une panne alors qu'une commune s'ouvre
+                  quand assez de commerçants s'y inscrivent. On le dit, et on
+                  lui donne le moyen d'agir plutôt que de le laisser devant une
+                  liste morte. */}
+              {communes.length === 0 ? (
+                <div style={{ background: '#F5F0FF', border: `1.5px solid ${T.main}33`, borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+                  <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 800, color: T.ink }}>
+                    Ta commune n&rsquo;est pas encore ouverte
+                  </p>
+                  <p style={{ margin: '0 0 10px', fontSize: 12.5, color: T.deep, lineHeight: 1.55 }}>
+                    Yoppaa ouvre une commune quand assez de commerçants s&rsquo;y sont inscrits. Laisse ton code postal :
+                    on te prévient dès que la tienne est prête, et chaque inscription fait avancer la jauge.
+                  </p>
+                  <a href="https://www.yoppaa.app" target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 12.5, textDecoration: 'none' }}>
+                    J&rsquo;aide ma commune à ouvrir
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                    </svg>
+                  </a>
+                </div>
+              ) : (
+              <>
               <label style={{ fontSize: 11, fontWeight: 700, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: 6 }}>
                 Commune
               </label>
@@ -237,6 +261,8 @@ export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClo
                   </option>
                 ))}
               </select>
+              </>
+              )}
 
               {error && (
                 <p style={{ fontSize: 12, color: '#DC2626', fontWeight: 600, margin: '0 0 12px' }}>

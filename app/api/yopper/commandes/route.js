@@ -111,7 +111,11 @@ export async function POST(request) {
     if (action === 'list') {
       const { data } = await supabase
         .from('commandes')
-        .select('*, commercant:commercants(nom, type, categorie), creneau:creneaux(heure_debut, heure_fin), creneau_livraison:livraison_creneaux(heure_debut, heure_fin)')
+        // Les LIGNES sont chargées avec la commande : l'écran de retrait en
+        // boutique affiche ce qu'il y a à sortir, le vendeur devant retrouver le
+        // bon paquet. Sans elles, la liste resterait vide sans que rien ne le
+        // signale, exactement comme une branche morte.
+        .select('*, commercant:commercants(nom, type, categorie), creneau:creneaux(heure_debut, heure_fin), creneau_livraison:livraison_creneaux(heure_debut, heure_fin), commande_articles(quantite, article:articles(nom))')
         .eq('client_email', yopper.email)
         .order('created_at', { ascending: false })
       if (!data || data.length === 0) return NextResponse.json({ ok: true, commandes: [] })

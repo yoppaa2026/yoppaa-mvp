@@ -20,6 +20,7 @@ import { libelleRetrait, estRetraitBoutique } from '../lib/libelle-retrait.js'
 import { generateRdvIcs, icsToBase64Attachment } from '../lib/ical.js'
 import { tauxFraisLivraison } from '../lib/tva.js'
 import { ventilerFrais } from '../lib/stripe-frais.js'
+import { contexteRetrait, textesRetrait } from '../lib/ecran-retrait.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -258,6 +259,48 @@ egal('type MIME REQUEST sur une confirmation',
 // ═══════════════════════════════════════════════════════════════════════════
 egal('frais au taux le plus bas', tauxFraisLivraison([21, 6, 12], 21), 6)
 egal('repli sur le taux du commerce', tauxFraisLivraison([], 21), 21)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6 bis. ÉCRAN DE RETRAIT — le bon écran pour le bon commerce
+// ═══════════════════════════════════════════════════════════════════════════
+// Ces variantes sont exactement le genre de code qui meurt en silence : une
+// condition sur une valeur qui n'existe pas, et l'écran par défaut s'affiche
+// partout sans que personne ne s'en aperçoive.
+egal('alimentaire à créneau',
+  contexteRetrait({ mode_retrait: 'retrait', creneau: { heure_debut: '11:15' }, commercant: { categorie: 'alimentaire' } }),
+  'alimentaire')
+egal('boutique de détail',
+  contexteRetrait({ mode_retrait: 'retrait', commercant: { categorie: 'detail' } }), 'boutique')
+egal('salon sans rendez-vous',
+  contexteRetrait({ mode_retrait: 'retrait', commercant: { categorie: 'vitrine' } }), 'boutique')
+egal('produits liés à un rendez-vous',
+  contexteRetrait({ mode_retrait: 'retrait', rdv_reservation_id: 'r1', commercant: { categorie: 'vitrine' } }), 'rdv')
+egal('livraison',
+  contexteRetrait({ mode_retrait: 'livraison', commercant: { categorie: 'alimentaire' } }), 'livraison')
+// Retrait sans créneau chez un alimentaire : ce n'est pas du click and collect.
+egal('retrait alimentaire sans créneau traité en boutique',
+  contexteRetrait({ mode_retrait: 'retrait', commercant: { categorie: 'alimentaire' } }), 'boutique')
+
+// Les textes validés par Alex le 05/08, mot pour mot.
+egal('badge alimentaire', textesRetrait('alimentaire').badge, 'PAS BESOIN DE FAIRE LA FILE')
+egal('succès alimentaire', textesRetrait('alimentaire').sousTexteSucces, 'Pas besoin d\'attendre 🟣')
+egal('badge boutique', textesRetrait('boutique').badge, 'MONTRE CE NUMÉRO')
+egal('titre boutique', textesRetrait('boutique').surtitre, 'Ta commande t\'attend')
+egal('badge livraison', textesRetrait('livraison').badge, 'C\'EST BIEN ARRIVÉ ?')
+egal('titre rendez-vous', textesRetrait('rdv').surtitre, 'Tes produits t\'attendent')
+// Les produits d'un rendez-vous sont remis par le commerçant : aucun geste
+// demandé au client, qui a les mains prises.
+verifier('pas de geste pour les produits d’un rendez-vous', textesRetrait('rdv').avecGeste === false)
+verifier('geste demandé partout ailleurs',
+  ['alimentaire', 'boutique', 'livraison'].every(c => textesRetrait(c).avecGeste === true))
+// Plus un mot d'anglais, c'est la règle de vocabulaire d'Alex.
+verifier('aucun anglicisme dans les textes',
+  !['alimentaire', 'boutique', 'livraison', 'rdv']
+    .flatMap(c => Object.values(textesRetrait(c)).filter(v => typeof v === 'string'))
+    .some(t => /\bskip\b/i.test(t)))
+// Le geste est nommé en entier : c'est le seul de l'app qu'on n'apprend nulle part.
+verifier('le geste est nommé en entier',
+  ['alimentaire', 'boutique', 'livraison'].every(c => textesRetrait(c).libelleGeste.startsWith('Fais glisser')))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 7. VENTILATION DES FRAIS STRIPE — le double comptage du tunnel unique

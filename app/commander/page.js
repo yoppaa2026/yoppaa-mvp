@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper } from '@/lib/fetch-yopper'
 import { libelleRetrait } from '@/lib/libelle-retrait'
+import { contexteRetrait, textesRetrait, RETRAIT_LIVRAISON, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
 import { canDo, PLAN_PUBLIC_ENABLED, bandeauCategorie } from '@/lib/plans'
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
@@ -519,8 +520,58 @@ function EditablePrenom({ client, setClient, clientId, openSignal }) {
 // FIX NUMÉRO : numero_commande de la DB en priorité ; si manquant (anciennes
 // commandes), on calcule la position du jour côté commerçant - même logique que
 // le dashboard (getNumeroJour) pour que client et commerçant voient le même #.
-function PickupScreen({ commande, clientPrenom, onConfirm }) {
-  const estLivraison = commande.mode_retrait === 'livraison'
+// ─── Icône du moment : ce qu'on vient chercher, dit d'un coup d'œil ─────────
+// Quatre gestes différents, quatre dessins. Un pictogramme se lit avant le
+// texte, et c'est ce qui donne son ton à l'écran avant même qu'on lise.
+function IconeRetrait({ contexte, taille = 34 }) {
+  const c = { width: taille, height: taille, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 1.9, strokeLinecap: 'round', strokeLinejoin: 'round' }
+  if (contexte === RETRAIT_LIVRAISON) {
+    return (
+      <svg {...c}>
+        <circle cx="6" cy="17.5" r="2.5"/><circle cx="17" cy="17.5" r="2.5"/>
+        <path d="M8.5 17.5h6M4 17.5V9a2 2 0 0 1 2-2h5l3 5h2.5a2.5 2.5 0 0 1 2.5 2.5v3"/>
+      </svg>
+    )
+  }
+  if (contexte === RETRAIT_RDV) {
+    return (
+      <svg {...c}>
+        <rect x="3" y="5" width="18" height="16" rx="2"/>
+        <path d="M3 10h18M8 3v4M16 3v4"/>
+        <path d="M9 15l2 2 4-4"/>
+      </svg>
+    )
+  }
+  if (contexte === RETRAIT_BOUTIQUE) {
+    return (
+      <svg {...c}>
+        <path d="M4 8h16l-1.2 12.2a2 2 0 0 1-2 1.8H7.2a2 2 0 0 1-2-1.8L4 8z"/>
+        <path d="M9 8V6a3 3 0 0 1 6 0v2"/>
+        <path d="M9.5 13.5c.8.9 1.7 1.3 2.5 1.3s1.7-.4 2.5-1.3"/>
+      </svg>
+    )
+  }
+  return (
+    <svg {...c}>
+      <path d="M5 9h14l-1 11a2 2 0 0 1-2 1.8H8A2 2 0 0 1 6 20L5 9z"/>
+      <path d="M8 9V7a4 4 0 0 1 8 0v2"/>
+      <path d="M5 9l1.5-3.5A2 2 0 0 1 8.3 4h7.4a2 2 0 0 1 1.8 1.5L19 9"/>
+    </svg>
+  )
+}
+
+// ─── Écran plein de retrait ────────────────────────────────────────────────
+// Le moment où le Yopper arrive au comptoir. Il doit être lisible en une
+// seconde, par-dessus une épaule, et donner envie : c'est l'aboutissement de
+// la commande, pas un accusé de réception.
+//
+// Ce qui NE change jamais : le numéro, clé de la commande côté commerçant, et
+// le prénom qui l'humanise. Ce qui change : tout ce qui l'entoure, selon qu'on
+// vient chercher un pain, un colis mis de côté, ou des produits qu'on nous
+// remettra pendant un rendez-vous. Voir lib/ecran-retrait.js.
+function PickupScreen({ commande, clientPrenom, onConfirm, onFermer }) {
+  const contexte = contexteRetrait(commande)
+  const textes = textesRetrait(contexte)
   const [numeroCalcule, setNumeroCalcule] = useState(null)
 
   useEffect(() => {
@@ -572,60 +623,116 @@ function PickupScreen({ commande, clientPrenom, onConfirm }) {
 
   const numero = numeroCalcule ?? '…'
   const cren = commande.creneau || commande.creneau_livraison
-  const creneau = cren
-    ? `${cren.heure_debut.slice(0,5)} – ${cren.heure_fin.slice(0,5)}`
-    : null
+  // La ligne sous le prénom dit CE QU'IL RESTE À SAVOIR, et elle diffère
+  // complètement d'un commerce à l'autre. Un horaire chez le boulanger, la
+  // liste des articles en boutique (le vendeur doit sortir le bon paquet), le
+  // rappel du rendez-vous chez un salon.
+  const lignes = commande.commande_articles || []
   return (
     // FIX FOOTER : position: fixed + zIndex: 9999 - rendu HORS de page-wrap (voir return principal)
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'linear-gradient(160deg, #1A0840 0%, #2D0F6B 40%, #6B35C4 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '3rem 2rem calc(2.5rem + env(safe-area-inset-bottom, 0px))', overflow: 'hidden' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'linear-gradient(160deg, #1A0840 0%, #2D0F6B 40%, #6B35C4 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '2.5rem 1.75rem calc(2.5rem + env(safe-area-inset-bottom, 0px))', overflow: 'hidden' }}>
       {/* Bande 3px canonique YOPPAA */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #1A0840 0%, #6B35C4 60%, #C4A0F4 100%)', zIndex: 3 }}/>
       <style>{`
         @keyframes pu-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.7} }
         @keyframes pu-fadein { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
         @keyframes pu-glow { 0%,100%{text-shadow:0 0 40px #9660E088} 50%{text-shadow:0 0 80px #C4A0F4cc} }
+        /* Le numéro ARRIVE : petit rebond à l'apparition, comme un ticket qu'on
+           sort. C'est ce qui transforme un affichage en petit événement. */
+        @keyframes pu-numero { 0%{opacity:0;transform:scale(0.7)} 60%{opacity:1;transform:scale(1.06)} 100%{opacity:1;transform:scale(1)} }
+        /* Halo qui respire derrière le numéro : le regard y revient tout seul. */
+        @keyframes pu-halo { 0%,100%{transform:scale(1);opacity:0.35} 50%{transform:scale(1.12);opacity:0.6} }
+        /* L'icône flotte doucement : de la vie, jamais de l'agitation. */
+        @keyframes pu-flotte { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
       `}</style>
       {/* Déco fond */}
       <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle at 80% 20%, #9660E033 0%, transparent 50%), radial-gradient(circle at 20% 80%, #6B35C422 0%, transparent 50%)', pointerEvents: 'none' }}/>
-      {/* Logo : 3 points tricolores + wordmark canonique (yo blanc, pp Light, aa Mid) */}
+
+      {/* Identité : wordmark tricolore + dots V2-B canoniques */}
       <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', animation: 'pu-fadein 0.5s ease' }}>
-        <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2.2rem', letterSpacing: '-0.05em', lineHeight: 1, animation: 'pu-glow 2s ease-in-out infinite', marginBottom: 10 }}>
+        <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.7rem', letterSpacing: '-0.05em', lineHeight: 1, animation: 'pu-glow 2s ease-in-out infinite', marginBottom: 8 }}>
           <span style={{ color: '#fff' }}>yo</span>
           <span style={{ color: '#C4A0F4' }}>pp</span>
           <span style={{ color: '#9660E0' }}>aa</span>
         </p>
-        {/* Dots V2-B sous le wordmark */}
-        <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 5, height: 14 }}>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#fff', animation: 'pu-pulse 2s ease-in-out 0s infinite' }}/>
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#C4A0F4', marginTop: 3.6, animation: 'pu-pulse 2s ease-in-out 0.15s infinite' }}/>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#C4A0F4', marginTop: 3.6, animation: 'pu-pulse 2s ease-in-out 0.3s infinite' }}/>
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#9660E0', marginTop: 3.6, animation: 'pu-pulse 2s ease-in-out 0.45s infinite' }}/>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#9660E0', animation: 'pu-pulse 2s ease-in-out 0.6s infinite' }}/>
+        <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 4, height: 11 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff', animation: 'pu-pulse 2s ease-in-out 0s infinite' }}/>
+          <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#C4A0F4', marginTop: 2.8, animation: 'pu-pulse 2s ease-in-out 0.15s infinite' }}/>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#C4A0F4', marginTop: 2.8, animation: 'pu-pulse 2s ease-in-out 0.3s infinite' }}/>
+          <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#9660E0', marginTop: 2.8, animation: 'pu-pulse 2s ease-in-out 0.45s infinite' }}/>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#9660E0', animation: 'pu-pulse 2s ease-in-out 0.6s infinite' }}/>
         </div>
       </div>
-      {/* Numéro + infos */}
-      <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', animation: 'pu-fadein 0.6s ease 0.1s both' }}>
-        <p style={{ fontSize: '0.75rem', fontWeight: 800, color: '#C4A0F4', textTransform: 'uppercase', letterSpacing: 3, marginBottom: 12, opacity: 0.8 }}>{estLivraison ? 'Ta commande est arrivée' : 'Ta commande est prête'}</p>
-        <p style={{ fontSize: '7rem', fontWeight: 900, color: '#fff', letterSpacing: '-4px', lineHeight: 1, textShadow: '0 0 60px #9660E088', marginBottom: 8 }}>#{numero}</p>
-        <p style={{ fontSize: '1.6rem', fontWeight: 900, color: '#C4A0F4', letterSpacing: '-0.5px', marginBottom: 8 }}>{clientPrenom || 'Yopper'} 🟣</p>
-        {creneau && (
-          <p style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '1rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M12 6v6l4 2"/>
+
+      {/* Le cœur de l'écran */}
+      <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', animation: 'pu-fadein 0.6s ease 0.1s both', width: '100%' }}>
+        {/* Icône du moment, dans une pastille douce */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 62, height: 62, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.22)', marginBottom: 14, animation: 'pu-flotte 3.2s ease-in-out infinite' }}>
+          <IconeRetrait contexte={contexte}/>
+        </div>
+        <p style={{ fontSize: '0.72rem', fontWeight: 800, color: '#C4A0F4', textTransform: 'uppercase', letterSpacing: 2.5, marginBottom: 10, opacity: 0.85 }}>{textes.surtitre}</p>
+
+        {/* Le numéro, avec son halo. Il ne bouge dans AUCUN segment : c'est la
+            clé par laquelle le commerçant retrouve la commande. */}
+        <div style={{ position: 'relative', display: 'inline-block', marginBottom: 4 }}>
+          <span aria-hidden="true" style={{ position: 'absolute', inset: '-18% -12%', borderRadius: '50%', background: 'radial-gradient(circle, #9660E0 0%, transparent 68%)', animation: 'pu-halo 2.8s ease-in-out infinite', pointerEvents: 'none' }}/>
+          <p style={{ position: 'relative', fontSize: '6.2rem', fontWeight: 900, color: '#fff', letterSpacing: '-4px', lineHeight: 1, animation: 'pu-numero 0.55s cubic-bezier(0.34,1.56,0.64,1) both' }}>#{numero}</p>
+        </div>
+        <p style={{ fontSize: '1.35rem', fontWeight: 900, color: '#C4A0F4', letterSpacing: '-0.5px', marginBottom: 10 }}>{clientPrenom || 'Yopper'} 🟣</p>
+
+        {/* Horaire : uniquement là où un créneau existe vraiment. */}
+        {contexte !== RETRAIT_RDV && cren && (
+          <p style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: '0.95rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
             </svg>
-            {creneau}
+            {cren.heure_debut.slice(0, 5)} – {cren.heure_fin.slice(0, 5)}
           </p>
         )}
-        <div style={{ marginTop: 20, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 16, padding: '12px 24px', display: 'inline-block' }}>
-          <p style={{ fontWeight: 900, fontSize: '1rem', color: '#fff', letterSpacing: '-0.3px' }}>{estLivraison ? 'CONFIRME TA RÉCEPTION 🟣' : 'PRIORITÉ YOPPERS 🟣'}</p>
+
+        {/* Rappel du rendez-vous : c'est LÀ qu'on remettra les produits. */}
+        {contexte === RETRAIT_RDV && commande.date_commande && (
+          <p style={{ fontSize: '0.92rem', fontWeight: 700, color: 'rgba(255,255,255,0.72)', lineHeight: 1.5 }}>
+            On te les remet à ton rendez-vous,<br/>
+            {new Date(commande.date_commande + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+        )}
+
+        {/* Liste des articles : en boutique, le vendeur doit sortir le bon
+            paquet, et le client doit pouvoir vérifier. Inutile chez le
+            boulanger, où l'écran doit se lire en une seconde. */}
+        {(contexte === RETRAIT_BOUTIQUE || contexte === RETRAIT_RDV) && lignes.length > 0 && (
+          <div style={{ marginTop: 14, display: 'inline-block', textAlign: 'left', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 14, padding: '10px 16px', maxWidth: '100%' }}>
+            {lignes.slice(0, 4).map((l, i) => (
+              <p key={i} style={{ fontSize: '0.86rem', fontWeight: 700, color: 'rgba(255,255,255,0.92)', lineHeight: 1.6 }}>
+                {l.quantite} × {l.article?.nom || l.article_nom || 'Article'}
+              </p>
+            ))}
+            {lignes.length > 4 && (
+              <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>et {lignes.length - 4} autre{lignes.length - 4 > 1 ? 's' : ''}…</p>
+            )}
+          </div>
+        )}
+
+        <div style={{ marginTop: 18, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 16, padding: '11px 22px', display: 'inline-block' }}>
+          <p style={{ fontWeight: 900, fontSize: '0.92rem', color: '#fff', letterSpacing: '-0.2px' }}>{textes.badge} 🟣</p>
         </div>
       </div>
-      {/* FIX : SwipeRetrait en bas - pas de conflit avec la navbar (rendu hors page-wrap) */}
+
+      {/* Le geste, quand il y en a un. Les produits d'un rendez-vous sont remis
+          par le commerçant en fin de prestation : le client a les mains prises,
+          on ne lui demande rien. */}
       <div style={{ position: 'relative', zIndex: 2, width: '100%', animation: 'pu-fadein 0.6s ease 0.3s both' }}>
-        <SwipeRetrait clientPrenom={clientPrenom} onConfirm={onConfirm}
-          libelle={estLivraison ? 'Glisse pour confirmer la réception' : 'Glisse pour récupérer'}
-          sousTexteSucces={estLivraison ? 'Bon appétit ! 🟣' : 'Tu skip la file'}/>
+        {textes.avecGeste ? (
+          <SwipeRetrait clientPrenom={clientPrenom} onConfirm={onConfirm}
+            libelle={textes.libelleGeste}
+            sousTexteSucces={textes.sousTexteSucces}/>
+        ) : (
+          <button onClick={onFermer}
+            style={{ width: '100%', padding: '1rem', borderRadius: 100, border: '1.5px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+            J&rsquo;ai compris
+          </button>
+        )}
       </div>
     </div>
   )
@@ -2291,6 +2398,7 @@ export default function Commander() {
             setPickupCommande(null)
             chargerCommandesClient(client.email)
           }}
+          onFermer={() => setPickupCommande(null)}
         />
       )}
 

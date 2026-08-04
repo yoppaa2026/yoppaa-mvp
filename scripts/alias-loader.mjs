@@ -5,12 +5,19 @@ import { resolve as resoudreChemin } from 'node:path'
 
 const racine = process.cwd()
 
+// Next autorise deux choses que Node refuse : l'alias `@/` et l'import sans
+// extension, y compris relatif (`./tva`). On rétablit les deux, sinon la moitié
+// de lib/ reste intestable.
+const sansExtension = (chemin) => !/\.[a-z]+$/i.test(chemin)
+
 export function resolve(specifier, context, nextResolve) {
   if (specifier.startsWith('@/')) {
-    // Next autorise l'import sans extension, pas Node : on l'ajoute.
     let chemin = resoudreChemin(racine, specifier.slice(2))
-    if (!/\.[a-z]+$/i.test(chemin)) chemin += '.js'
+    if (sansExtension(chemin)) chemin += '.js'
     return nextResolve(pathToFileURL(chemin).href, context)
+  }
+  if ((specifier.startsWith('./') || specifier.startsWith('../')) && sansExtension(specifier)) {
+    return nextResolve(specifier + '.js', context)
   }
   return nextResolve(specifier, context)
 }

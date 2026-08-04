@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "verif": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-logique.mjs"
+    "verif": "npm run verif:logique && npm run verif:plans && npm run verif:slots",
+    "verif:logique": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-logique.mjs",
+    "verif:plans": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-plans.mjs",
+    "verif:slots": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-slots.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.3",

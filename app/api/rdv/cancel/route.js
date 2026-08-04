@@ -252,15 +252,24 @@ export async function POST(request) {
           raison_annulation: 'yopper',
         })
         // iCal CANCEL (SEQUENCE+1 par rapport au confirme initial)
+        // ⚠️ CORRIGÉ LE 05/08 : cet appel passait `rdv_id` alors que la
+        // fonction attend `id`, et `prestation_nom` pouvait être vide. Le
+        // générateur levait donc une exception à tous les coups, avalée par le
+        // try qui entoure tout le bloc : le client n'a JAMAIS reçu son email
+        // d'annulation. Le champ obligatoire porte maintenant le bon nom.
         const ics = generateRdvIcs({
-          rdv_id:       rdv.id,
+          id:           rdv.id,
           date_rdv:     rdv.date_rdv,
           heure_debut:  rdv.heure_debut,
           heure_fin:    rdv.heure_fin,
           duree_minutes:rdv.duree_minutes,
-          commercant_nom:commercant?.nom || '',
+          commercant_nom:commercant?.nom || 'Yoppaa',
           commercant_adresse: commercant?.adresse || '',
-          prestation_nom: rdv.prestation?.nom || '',
+          prestation_nom: rdv.prestation?.nom || 'Rendez-vous',
+          client_email: rdv.client_email,
+          client_nom:   [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' '),
+          rappel_24h:   false,
+          status:       'CANCELLED',
           method: 'CANCEL',
           sequence: 1,
         })

@@ -686,6 +686,9 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       commercant_adresse: rdv.commercant.adresse || '',
       commercant_telephone: rdv.commercant.telephone,
       commercant_email: rdv.commercant.email,
+      // ATTENDEE : sans lui, iOS ne propose pas le calendrier.
+      client_email: rdv.client_email,
+      client_nom: [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' '),
       prix_estime: rdv.prix_estime,
       rappel_24h: true,
       status: 'CONFIRMED',

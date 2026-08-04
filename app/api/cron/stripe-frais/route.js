@@ -17,7 +17,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { recupererFraisStripe } from '@/lib/stripe-frais'
+import { recupererFraisStripe, ventilerFrais } from '@/lib/stripe-frais'
 
 // Chaque ligne coûte un appel API à Stripe : on borne pour ne pas dépasser la
 // durée d'exécution, le reliquat passe la nuit suivante.
@@ -55,9 +55,13 @@ async function handle(req) {
     (commercants || []).map(c => [c.id, c.stripe_account_id])
   )
 
+  // ⚠️ TUNNEL UNIQUE. Un rendez-vous et une commande peuvent partager UN SEUL
+  // paiement. Écrire les frais complets sur les deux ferait apparaître deux
+  // fois la même dépense dans l'export comptable. Quand la ligne est liée à
+  // l'autre objet, on ventile au prorata, exactement comme le fait le webhook.
   const { data: commandes } = await supabase
     .from('commandes')
-    .select('id, commercant_id, stripe_payment_intent_id')
+    .select('id, commercant_id, stripe_payment_intent_id, total, rdv_reservation_id')
     .eq('paye_en_ligne', true)
     .is('stripe_frais', null)
     .not('stripe_payment_intent_id', 'is', null)
@@ -69,15 +73,22 @@ async function handle(req) {
     if (!compte) { stats.sans_compte++; continue }
     const frais = await recupererFraisStripe(c.stripe_payment_intent_id, compte)
     if (!frais) { stats.indisponibles++; continue }
+    let part = { frais: frais.frais, net: frais.net }
+    if (c.rdv_reservation_id) {
+      const { data: rdvLie } = await supabase
+        .from('rdv_reservations').select('acompte_montant').eq('id', c.rdv_reservation_id).maybeSingle()
+      const parts = ventilerFrais(frais.frais, rdvLie?.acompte_montant, c.total)
+      if (parts) part = parts.commande
+    }
     await supabase.from('commandes')
-      .update({ stripe_frais: frais.frais, stripe_net: frais.net })
+      .update({ stripe_frais: part.frais, stripe_net: part.net })
       .eq('id', c.id)
     stats.commandes++
   }
 
   const { data: rdvs } = await supabase
     .from('rdv_reservations')
-    .select('id, commercant_id, stripe_payment_intent_id')
+    .select('id, commercant_id, stripe_payment_intent_id, acompte_montant, commande_id')
     .eq('acompte_paye_en_ligne', true)
     .is('stripe_frais', null)
     .not('stripe_payment_intent_id', 'is', null)
@@ -89,8 +100,15 @@ async function handle(req) {
     if (!compte) { stats.sans_compte++; continue }
     const frais = await recupererFraisStripe(r.stripe_payment_intent_id, compte)
     if (!frais) { stats.indisponibles++; continue }
+    let part = { frais: frais.frais, net: frais.net }
+    if (r.commande_id) {
+      const { data: cmdLiee } = await supabase
+        .from('commandes').select('total').eq('id', r.commande_id).maybeSingle()
+      const parts = ventilerFrais(frais.frais, r.acompte_montant, cmdLiee?.total)
+      if (parts) part = parts.rdv
+    }
     await supabase.from('rdv_reservations')
-      .update({ stripe_frais: frais.frais, stripe_net: frais.net })
+      .update({ stripe_frais: part.frais, stripe_net: part.net })
       .eq('id', r.id)
     stats.rdvs++
   }

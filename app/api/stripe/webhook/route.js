@@ -27,7 +27,7 @@ import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { debiterBon, recrediterBon } from '@/lib/bons-cadeaux-server'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { programmerRappelRdv } from '@/lib/rappels'
-import { recupererFraisStripe } from '@/lib/stripe-frais'
+import { recupererFraisStripe, ventilerFrais } from '@/lib/stripe-frais'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -196,10 +196,33 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       payload.tva_taux = presta?.tva_taux ?? null
     }
 
-    // Frais Stripe de l'acompte, mêmes règles que pour une commande.
+    // ─── Frais Stripe ──────────────────────────────────────────────────────
+    //
+    // ⚠️ DOUBLE COMPTAGE CORRIGÉ LE 05/08. L'export comptable additionne
+    // `stripe_frais` des commandes ET des rendez-vous. Dans le tunnel unique,
+    // un SEUL paiement porte l'acompte et les produits : écrire les frais
+    // complets des deux côtés faisait apparaître deux fois la même dépense
+    // dans la comptabilité du commerçant.
+    //
+    // Les frais sont donc VENTILÉS au prorata de ce que chaque objet
+    // représente dans le paiement. C'est le traitement comptable juste :
+    // chaque vente porte sa part du coût d'encaissement.
+    const montantAcompte = Number(meta.acompte_montant) || 0
+    const montantProduits = avecProduits ? (Number(meta.produits_montant) || 0) : 0
+    let fraisPourCommande = null
     try {
       const frais = await recupererFraisStripe(paymentIntent.id, eventAccount || paymentIntent.on_behalf_of || null)
-      if (frais) { payload.stripe_frais = frais.frais; payload.stripe_net = frais.net }
+      if (frais) {
+        const parts = avecProduits ? ventilerFrais(frais.frais, montantAcompte, montantProduits) : null
+        if (parts) {
+          payload.stripe_frais = parts.rdv.frais
+          payload.stripe_net = parts.rdv.net
+          fraisPourCommande = parts.commande
+        } else {
+          payload.stripe_frais = frais.frais
+          payload.stripe_net = frais.net
+        }
+      }
     } catch (e) {
       console.warn('[webhook] frais Stripe RDV non enregistrés (non bloquant)', e?.message)
     }
@@ -214,7 +237,13 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
     // pas quelle part du paiement rembourser.
     if (avecProduits && meta.yoppaa_commande_id) {
       try {
-        await handleCommandeSucceeded(paymentIntent, supabase, eventAccount, { sansEmails: true })
+        // `fraisVentiles` : la part des frais qui revient aux produits, déjà
+        // calculée ci-dessus. Sans elle, la commande réécrirait les frais
+        // COMPLETS du paiement et l'export les compterait deux fois.
+        await handleCommandeSucceeded(paymentIntent, supabase, eventAccount, {
+          sansEmails: true,
+          fraisVentiles: fraisPourCommande,
+        })
         await supabase
           .from('commandes')
           .update({ rdv_reservation_id: rdvId || meta.yoppaa_rdv_id })
@@ -368,7 +397,7 @@ async function handleBonCadeauSucceeded(paymentIntent, supabase) {
 // `sansEmails` : la commande est celle d'un tunnel unique, ses produits sont
 // déjà annoncés dans l'email du rendez-vous. Deux confirmations pour un seul
 // paiement font douter le client d'avoir payé deux fois.
-async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = null, { sansEmails = false } = {}) {
+async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = null, { sansEmails = false, fraisVentiles = null } = {}) {
   const meta = paymentIntent.metadata || {}
   const commandeId = meta.yoppaa_commande_id
   if (!commandeId) {
@@ -407,9 +436,13 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
   // Frais Stripe réels et net versé au commerçant. Non bloquant : si la
   // transaction de solde n'est pas encore constituée, on ne touche à rien et
   // le cron nocturne complétera. Écrire un zéro serait pire que ne rien écrire.
+  //
+  // `fraisVentiles` : dans le tunnel unique, le rendez-vous a déjà pris sa part
+  // des frais du paiement commun. On écrit ici le complément, jamais le total,
+  // sinon l'export comptable compterait deux fois la même dépense.
   try {
     const compte = eventAccount || paymentIntent.on_behalf_of || null
-    const frais = await recupererFraisStripe(paymentIntent.id, compte)
+    const frais = fraisVentiles || await recupererFraisStripe(paymentIntent.id, compte)
     if (frais) {
       await supabase.from('commandes')
         .update({ stripe_frais: frais.frais, stripe_net: frais.net })

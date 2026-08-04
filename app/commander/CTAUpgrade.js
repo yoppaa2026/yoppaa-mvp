@@ -4,9 +4,14 @@
 //
 // Wording revu le 03/08 : l'ancien « Je demande à X d'activer les commandes en
 // ligne dans l'app Yoppaa » plaçait l'habitant en pétitionnaire et parlait le
-// vocabulaire interne du produit. On part maintenant de son envie à lui, et le
-// commerçant reçoit un signal qui ressemble à ce qu'un client lui dirait au
-// comptoir. Même layout pour tous les types, alimentaire comme vitrine.
+// vocabulaire interne du produit. On part de son envie à lui, et le commerçant
+// reçoit un signal qui ressemble à ce qu'un client lui dirait au comptoir.
+//
+// Boutons repris le 05/08 : les cinq envies partageaient « Envoyer mon envie ».
+// « Envie » ne veut pas dire grand-chose isolé, et surtout le même bouton pour
+// cinq demandes différentes ratait l'occasion d'être concret. Un habitant ne
+// pense pas « j'envoie une envie », il pense « je veux pouvoir commander ici ».
+// Chaque bouton dit donc CE QUE LA PERSONNE VEUT, à la première personne.
 
 import { useState } from 'react'
 
@@ -16,27 +21,32 @@ const MESSAGES = {
   prix: {
     titre: 'Dis-lui ce que tu voudrais',
     phrase: nom => `Tu aimerais voir les prix de ${nom} avant de te déplacer ? Dis-le-lui.`,
-    bouton: 'Envoyer mon envie',
+    bouton: 'Je veux voir les prix',
+    confirme: 'Il saura que tu veux voir ses prix',
   },
   deals: {
     titre: 'Dis-lui ce que tu voudrais',
     phrase: nom => `Tu aimerais connaître les bons plans de ${nom} avant tout le monde ? Dis-le-lui.`,
-    bouton: 'Envoyer mon envie',
+    bouton: 'Je veux ses bons plans',
+    confirme: 'Il saura que tu veux ses bons plans',
   },
   commande: {
     titre: 'Dis-lui ce que tu voudrais',
     phrase: nom => `Tu aimerais commander chez ${nom} sans faire la file ? Dis-le-lui.`,
-    bouton: 'Envoyer mon envie',
+    bouton: 'Je veux commander ici',
+    confirme: 'Il saura que tu veux commander chez lui',
   },
   livraison: {
     titre: 'Dis-lui ce que tu voudrais',
     phrase: nom => `Tu aimerais te faire livrer par ${nom} ? Dis-le-lui.`,
-    bouton: 'Envoyer mon envie',
+    bouton: 'Je veux être livré',
+    confirme: 'Il saura que tu veux être livré',
   },
   rdv: {
     titre: 'Dis-lui ce que tu voudrais',
     phrase: nom => `Tu aimerais prendre rendez-vous chez ${nom} en ligne, même à minuit ? Dis-le-lui.`,
-    bouton: 'Envoyer mon envie',
+    bouton: 'Je veux prendre RDV en ligne',
+    confirme: 'Il saura que tu veux réserver en ligne',
   },
 }
 
@@ -85,8 +95,10 @@ export default function CTAUpgrade({ type, commercant, variant = 'inline' }) {
           <div style={{ width: 32, height: 32, borderRadius: 10, background: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
           </div>
+          {/* La confirmation dit CE QUI a été transmis, pas juste « merci » :
+              le Yopper doit savoir quel message est parti en son nom. */}
           <p style={{ fontSize: 13, fontWeight: 700, color: '#065F46', lineHeight: 1.4, margin: 0 }}>
-            Merci ! <strong>{commercant.nom}</strong> saura que tu l&rsquo;attends 🟣
+            C&rsquo;est transmis à <strong>{commercant.nom}</strong>. {message.confirme} 🟣
           </p>
         </div>
       )
@@ -116,7 +128,7 @@ export default function CTAUpgrade({ type, commercant, variant = 'inline' }) {
   return (
     <button onClick={envoyerDemande} disabled={loading || sent}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: sent ? '#F0FDF4' : '#fff', color: sent ? '#10B981' : T.bgPanel, border: `1.5px solid ${sent ? '#10B981' : T.bgPanel}`, borderRadius: 100, padding: '6px 12px', cursor: sent ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 12, fontWeight: 800, transition: 'all 0.15s' }}>
-      {sent ? '✓ Envie transmise' : message.bouton}
+      {sent ? '✓ C\'est transmis' : message.bouton}
     </button>
   )
 }

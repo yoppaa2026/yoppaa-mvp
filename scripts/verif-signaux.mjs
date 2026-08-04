@@ -5,6 +5,7 @@
 // email envoyé trop souvent devient du bruit qui abîme la confiance. Ces
 // règles-là méritent d'être verrouillées.
 
+import { readFileSync } from 'node:fs'
 import { libelleEnvie, phraseHorsOuverture, enviesAAlerter, peutEnvoyerEmail, LIBELLE_ENVIE } from '../lib/signaux.js'
 
 let ok = 0, ko = 0
@@ -89,6 +90,44 @@ const hier = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
 verifier('pas deux jours de suite', !peutEnvoyerEmail({ signaux_email_le: hier }))
 const ilYaHuitJours = new Date(Date.now() - 8 * 24 * 3600 * 1000).toISOString()
 verifier('après une semaine, on peut reparler', peutEnvoyerEmail({ signaux_email_le: ilYaHuitJours }))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 5. L'ÉCRAN — le tableau de bord tient la même ligne que les libellés
+// ═══════════════════════════════════════════════════════════════════════════
+// Les libellés de lib/signaux.js sont propres, mais rien n'empêchait quelqu'un
+// d'écrire « passe à la formule Vendre » directement dans le JSX de l'onglet.
+// On lit donc la source du composant, la seule chose qui compte à l'écran.
+const dashboard = readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8')
+const onglet = dashboard.slice(
+  dashboard.indexOf('function TabEnvies'),
+  dashboard.indexOf('function TabSignalements'),
+)
+verifier('l\'onglet Envies existe dans le tableau de bord', onglet.length > 500)
+
+// Les commentaires du fichier EXPLIQUENT la règle en citant ce qu'il ne faut
+// pas écrire : on ne teste donc que les chaînes affichées.
+const affiche = onglet
+  .split('\n')
+  .filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l))
+  .join('\n')
+for (const interdit of ['formule', 'abonnement', 'Vendre', 'Communiquer', 'passe à', 'débloquer', 'upgrade']) {
+  verifier(`l'onglet ne vend pas : « ${interdit} » absent`, !new RegExp(interdit, 'i').test(affiche))
+}
+// Le commerçant ne doit jamais pouvoir remonter à une personne : aucun champ
+// nominatif ne doit apparaître dans l'écran.
+for (const perso of ['client_id', 'yopper_id', 'prenom', 'telephone']) {
+  verifier(`RGPD : l'onglet ne lit pas ${perso}`, !new RegExp(`\\b${perso}\\b`).test(affiche))
+}
+// « email » seul est légitime (le réglage d'envoi s'appelle ainsi) ; ce qu'on
+// interdit, c'est de LIRE une adresse dans les données affichées.
+verifier('RGPD : aucune adresse lue', !/\.email\b|email_client|client\.email/.test(affiche))
+// Le droit de dire non doit rester atteignable depuis l'écran.
+verifier('le réglage du seuil est présent', /seuil/.test(affiche))
+verifier('l\'interrupteur email est présent', /email_actif/.test(affiche))
+verifier('la pause est présente', /pause_mois/.test(affiche))
+// L'onglet principal a bien été renommé, sinon les envies resteraient cachées
+// derrière un mot qui ne les annonce pas.
+verifier('l\'onglet s\'appelle Signaux', /id: 'signaux', label: 'Signaux'/.test(dashboard))
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

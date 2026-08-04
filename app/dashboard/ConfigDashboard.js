@@ -13,6 +13,7 @@ import SelecteurTypes from '@/app/components/SelecteurTypes'
 import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
 import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '@/lib/fidelite'
+import { libelleEnvie, phraseHorsOuverture } from '@/lib/signaux'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
 import {
@@ -167,6 +168,8 @@ function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 2 }) {
     sparkles:  <><path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7L12 3z"/><path d="M18.5 14l.85 2.15L21.5 17l-2.15.85L18.5 20l-.85-2.15L15.5 17l2.15-.85L18.5 14z"/></>,
     heart:     <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/>,
     gift:      <><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></>,
+    // Ondes : ce que les habitants envoient vers le commerce.
+    signal:    <><path d="M12 20v-8"/><path d="M8.5 15.5a5 5 0 017 0"/><path d="M5.5 12.5a9 9 0 0113 0"/><path d="M2.5 9.5a13 13 0 0119 0"/></>,
   }
   return <svg {...props} style={{ flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}>{paths[name]}</svg>
 }
@@ -6644,6 +6647,240 @@ function TabRdvFermetures({ commercantId, toast }) {
   )
 }
 
+// ─── Onglet SIGNAUX ──────────────────────────────────────────────────────────
+// Deux natures de messages arrivent au commerçant, on ne les mélange pas :
+//   • ENVIES        : ce que des habitants ont voulu faire chez lui et qu'ils
+//                     n'ont pas pu. Uniquement des NOMBRES (RGPD : il ne saura
+//                     jamais QUI a demandé, c'est la promesse de la page
+//                     d'accueil).
+//   • SIGNALEMENTS  : les erreurs de sa fiche, qu'il corrige lui-même.
+//
+// Pourquoi cet écran existe (décision d'Alex du 05/08). Un commerçant qui a
+// déjà un logiciel de rendez-vous peut rester chez Yoppaa gratuitement : ce
+// sont ces chiffres qui font le travail. On énonce un FAIT, jamais une offre.
+// « 12 habitants ont voulu prendre rendez-vous chez toi, dont 4 après 19h » est
+// une information sur SON commerce ; il en tire lui-même la conclusion. Écrire
+// « passe à la formule supérieure » le braquerait.
+function TabEnvies({ commercantId, toast }) {
+  const [envies, setEnvies] = useState([])
+  const [reglages, setReglages] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [ouvrirReglages, setOuvrirReglages] = useState(false)
+  const [enregistre, setEnregistre] = useState(false)
+  const dejaMarque = useRef(false)
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
+  useEffect(() => { charger() }, [commercantId])
+
+  async function appel(options) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { toast('Session expirée, reconnecte-toi.', 'error'); return null }
+    const r = await fetch(`/api/dashboard/signaux${options?.method ? '' : `?commercant_id=${commercantId}`}`, {
+      method: options?.method || 'GET',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: options?.body ? JSON.stringify({ commercant_id: commercantId, ...options.body }) : undefined,
+    })
+    return r.json().catch(() => null)
+  }
+
+  async function charger() {
+    setLoading(true)
+    const j = await appel()
+    if (j?.ok) {
+      setEnvies(j.envies || [])
+      setReglages(j.reglages || null)
+      // Marquage « vu » automatique : le commerçant n'a pas à cliquer pour
+      // dire qu'il a regardé (zéro friction). Une seule fois par ouverture.
+      if (!dejaMarque.current && j.nouvelles > 0) {
+        dejaMarque.current = true
+        appel({ method: 'POST', body: { action: 'marquer-vu' } })
+      }
+    }
+    setLoading(false)
+  }
+
+  async function sauverReglages(patch) {
+    const suivant = { ...reglages, ...patch }
+    setReglages(suivant)
+    const j = await appel({ method: 'POST', body: { action: 'reglages', ...patch } })
+    if (!j?.ok) { toast(j?.error || 'Enregistrement impossible.', 'error'); charger(); return }
+    setEnregistre(true)
+    setTimeout(() => setEnregistre(false), 2000)
+  }
+
+  const total30 = envies.reduce((n, e) => n + Number(e.trente_jours || 0), 0)
+  const soir30 = envies.reduce((n, e) => n + Number(e.soir_30j || 0), 0)
+  const weekend30 = envies.reduce((n, e) => n + Number(e.weekend_30j || 0), 0)
+  const horsOuverture = phraseHorsOuverture({ soir: soir30, weekend: weekend30 })
+
+  if (loading) {
+    return (
+      <div>
+        <h2 style={s.h2}>Ce que les habitants te demandent</h2>
+        <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement…</p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <h2 style={s.h2}>Ce que les habitants te demandent</h2>
+      <p style={{ fontSize: 13, color: T.muted, marginBottom: 16, lineHeight: 1.55 }}>
+        Quand quelqu&rsquo;un cherche quelque chose chez toi qu&rsquo;il ne trouve pas encore ici,
+        il le fait savoir. Tu vois les nombres, jamais les personnes.
+      </p>
+
+      {total30 > 0 && (
+        <div style={{ background: T.bgPanel, borderRadius: 16, padding: '20px 18px', marginBottom: 14, color: '#fff' }}>
+          <p style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-1px', lineHeight: 1 }}>
+            {total30}
+          </p>
+          <p style={{ margin: '6px 0 0', fontSize: 14, fontWeight: 700, lineHeight: 1.5 }}>
+            {total30 > 1 ? 'demandes reçues ces 30 derniers jours' : 'demande reçue ces 30 derniers jours'}
+          </p>
+          {horsOuverture && (
+            <p style={{ margin: '10px 0 0', fontSize: 13, color: T.light, lineHeight: 1.55 }}>
+              {horsOuverture.charAt(0).toUpperCase() + horsOuverture.slice(1)}.
+            </p>
+          )}
+        </div>
+      )}
+
+      {envies.length === 0 && (
+        <div style={{ ...s.card, textAlign: 'center', padding: '2rem 1rem' }}>
+          <Icon name="signal" size={30} color={T.main} strokeWidth={1.6}/>
+          <p style={{ fontWeight: 800, color: T.ink, margin: '10px 0 4px' }}>
+            Personne n&rsquo;a encore levé la main
+          </p>
+          <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.55 }}>
+            Dès qu&rsquo;un habitant voudra commander, réserver ou se faire livrer chez toi,
+            le compteur monte ici. Même la nuit, même le dimanche.
+          </p>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {envies.map(e => {
+          const libelle = libelleEnvie(e.type)
+          const n30 = Number(e.trente_jours || 0)
+          const n7 = Number(e.sept_jours || 0)
+          const hors = phraseHorsOuverture({ soir: Number(e.soir_30j || 0), weekend: Number(e.weekend_30j || 0) })
+          return (
+            <div key={e.type} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: `1px solid ${T.hairline}`, borderLeft: `4px solid ${T.main}` }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 24, fontWeight: 800, color: T.main, lineHeight: 1 }}>{n30}</span>
+                <span style={{ fontWeight: 800, fontSize: 14, color: T.ink, flex: 1, minWidth: 0 }}>
+                  {libelle.court}
+                </span>
+                {n7 > 0 && (
+                  <span style={{ fontSize: 11, fontWeight: 800, color: T.main, background: T.pale, padding: '2px 8px', borderRadius: 100 }}>
+                    {n7} cette semaine
+                  </span>
+                )}
+              </div>
+              <p style={{ fontSize: 13, color: T.deep, lineHeight: 1.5, margin: '8px 0 0' }}>
+                {libelle.phrase(n30)} ces 30 derniers jours{hors ? `, ${hors}` : ''}.
+              </p>
+              {Number(e.total || 0) > n30 && (
+                <p style={{ fontSize: 11, color: T.muted, fontWeight: 600, margin: '6px 0 0' }}>
+                  {e.total} depuis le début
+                </p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ─── Réglages : le droit de dire non ─────────────────────────────────
+          Un signal qui ne l'intéresse pas devient du bruit et abîme la
+          confiance dans les suivants. Il doit pouvoir couper, sans avoir à le
+          redemander chaque semaine. */}
+      {reglages && (
+        <div style={{ ...s.card, marginTop: 16 }}>
+          <button onClick={() => setOuvrirReglages(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+            <Icon name="sliders" size={16} color={T.muted}/>
+            <span style={{ fontWeight: 800, fontSize: 14, color: T.ink, flex: 1 }}>Quand veux-tu être prévenu ?</span>
+            {enregistre && <span style={{ fontSize: 11, fontWeight: 800, color: '#10B981' }}>Enregistré</span>}
+            <Icon name={ouvrirReglages ? 'chevU' : 'chevD'} size={16} color={T.muted}/>
+          </button>
+
+          {ouvrirReglages && (
+            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={s.label}>À partir de combien de demandes</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Input type="number" min={0} max={100} value={reglages.seuil ?? 5}
+                    onChange={ev => setReglages({ ...reglages, seuil: ev.target.value })}
+                    onBlur={ev => sauverReglages({ seuil: ev.target.value })}
+                    style={{ width: 90 }} />
+                  <span style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>
+                    En dessous, on te laisse tranquille. Mets 0 pour ne jamais recevoir d&rsquo;email.
+                  </span>
+                </div>
+              </div>
+
+              <Toggle value={reglages.email_actif !== false}
+                onChange={v => sauverReglages({ email_actif: v })}
+                label="M'envoyer un récapitulatif par email" />
+
+              <div>
+                <label style={s.label}>Faire une pause</label>
+                <select value={reglages.pause_jusqu ? 'active' : '0'}
+                  onChange={ev => sauverReglages({ pause_mois: ev.target.value === 'active' ? 0 : Number(ev.target.value) })}
+                  style={{ ...s.input, width: 'auto', minWidth: 200 }}>
+                  <option value="0">Pas de pause</option>
+                  <option value="1">1 mois de silence</option>
+                  <option value="3">3 mois de silence</option>
+                  <option value="6">6 mois de silence</option>
+                  {reglages.pause_jusqu && <option value="active">En pause jusqu&rsquo;au {new Date(reglages.pause_jusqu).toLocaleDateString('fr-BE', { day: 'numeric', month: 'long', year: 'numeric' })}</option>}
+                </select>
+                {reglages.pause_jusqu && (
+                  <p style={{ fontSize: 12, color: T.muted, margin: '8px 0 0', lineHeight: 1.5 }}>
+                    Les compteurs continuent de monter ici, on ne t&rsquo;écrit simplement plus.
+                    Choisis &laquo;&nbsp;Pas de pause&nbsp;&raquo; pour reprendre.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Enveloppe des deux natures de signaux. Les signalements gardent leur écran
+// tel quel, ils n'ont pas la même urgence : une fiche fausse se corrige tout
+// de suite, une envie se regarde tranquillement.
+function TabSignaux({ commercantId, toast, signalementsEnAttente = 0 }) {
+  const [sub, setSub] = useState('envies')
+  const SOUS_ONGLETS = [
+    { id: 'envies', label: 'Envies', icon: 'signal' },
+    { id: 'signalements', label: 'Signalements', icon: 'sliders', badge: signalementsEnAttente },
+  ]
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 16, border: `1px solid ${T.hairline}`, boxShadow: '0 1px 4px rgba(22,6,54,0.04)' }}>
+        {SOUS_ONGLETS.map(t => (
+          <button key={t.id} onClick={() => setSub(t.id)}
+            style={{ flex: 1, minWidth: 80, padding: '10px 6px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 12.5, transition: 'all 0.2s', background: sub === t.id ? T.bgPanel : 'transparent', color: sub === t.id ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Icon name={t.icon} size={14} color={sub === t.id ? '#fff' : T.muted}/>
+            {t.label}
+            {t.badge > 0 && (
+              <span style={{ background: '#DC2626', color: '#fff', fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 100, minWidth: 16, textAlign: 'center' }}>
+                {t.badge}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+      {sub === 'envies' && <TabEnvies commercantId={commercantId} toast={toast} />}
+      {sub === 'signalements' && <TabSignalements commercantId={commercantId} toast={toast} />}
+    </div>
+  )
+}
+
 function TabSignalements({ commercantId, toast }) {
   const [signalements, setSignalements] = useState([])
   const [loading, setLoading] = useState(true)
@@ -7152,7 +7389,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
   const iaActif = getIaConfig(commercant?.plan).actif   // Générateur IA (exister 1 test / communiquer / vendre)
   const estVitrine = commercant?.categorie === 'vitrine'
 
-  // Compteur des signalements en attente → badge rouge sur l'onglet Signalements
+  // Compteur des signalements en attente → badge rouge sur l'onglet Signaux
   const [signalementsEnAttente, setSignalementsEnAttente] = useState(0)
   useEffect(() => {
     if (!commercantId) return
@@ -7163,6 +7400,26 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
       .eq('commercant_id', commercantId)
       .eq('statut', 'en_attente')
       .then(({ count }) => { if (!annule) setSignalementsEnAttente(count || 0) })
+    return () => { annule = true }
+  }, [commercantId, tab])
+
+  // Nouvelles envies depuis la dernière visite → point violet sur l'onglet.
+  // Volontairement PAS le badge rouge : le rouge appelle une correction, une
+  // envie se regarde. Mais il faut qu'elle se voie, sinon un commerçant qui n'a
+  // rien à gérer n'ouvrira jamais cet écran.
+  const [enviesNouvelles, setEnviesNouvelles] = useState(0)
+  useEffect(() => {
+    if (!commercantId) return
+    let annule = false
+    supabase.auth.getSession().then(({ data: { session } = {} }) => {
+      if (!session || annule) return
+      fetch(`/api/dashboard/signaux?commercant_id=${commercantId}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+        .then(r => r.json())
+        .then(j => { if (!annule && j?.ok) setEnviesNouvelles(j.nouvelles || 0) })
+        .catch(() => {})
+    })
     return () => { annule = true }
   }, [commercantId, tab])
 
@@ -7203,7 +7460,10 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
     // seulement à l'inscription (l'étape 5 le promettait déjà).
     { id: 'accompagnement', label: 'Accompagnement', icon: 'box' },
     { id: 'avis',     label: 'Avis',     icon: 'star' },
-    { id: 'signalements', label: 'Signalements', icon: 'sliders', badge: signalementsEnAttente },
+    // « Signalements » ne disait que la moitié de ce qu'on y trouve désormais :
+    // les envies des habitants y vivent aussi, et ce sont elles qui portent
+    // l'argument. Renommé « Signaux » (05/08).
+    { id: 'signaux', label: 'Signaux', icon: 'signal', badge: signalementsEnAttente, dot: enviesNouvelles > 0 },
   ].filter(Boolean)
 
   return (
@@ -7221,6 +7481,9 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
               <span style={{ background: '#DC2626', color: '#fff', fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 100, minWidth: 16, textAlign: 'center', boxShadow: '0 0 0 2px #fff' }}>
                 {t.badge}
               </span>
+            )}
+            {t.dot && !(t.badge > 0) && (
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: tab === t.id ? '#fff' : T.main, boxShadow: '0 0 0 2px #fff' }} />
             )}
           </button>
         ))}
@@ -7240,7 +7503,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} />}
       {tab === 'accompagnement' && <TabAccompagnement commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
-      {tab === 'signalements' && <TabSignalements commercantId={commercantId} toast={showToast} />}
+      {tab === 'signaux' && <TabSignaux commercantId={commercantId} toast={showToast} signalementsEnAttente={signalementsEnAttente} />}
 
       <Toast message={toastMsg} type={toastType} />
     </div>

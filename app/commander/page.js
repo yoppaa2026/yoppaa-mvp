@@ -1300,6 +1300,9 @@ export default function Commander() {
   // aucun commerce chez lui. Vrai vide et pas-encore-chargé sont deux choses
   // différentes, elles doivent se lire différemment.
   const [commercesEnChargement, setCommercesEnChargement] = useState(true)
+  // Le dernier chargement a-t-il échoué ? Une panne de réseau doit se dire, et
+  // se réessayer, pas se déguiser en « aucun commerce chez toi ».
+  const [erreurChargement, setErreurChargement] = useState(false)
   const [notesParCommerce, setNotesParCommerce] = useState({})
   const [statutsCommerce, setStatutsCommerce] = useState({})
   // Set des commerçants qui ont un deal/actu actif aujourd'hui (pour dot LIVE sur pills)
@@ -1642,16 +1645,34 @@ export default function Commander() {
   async function chargerCommercants() {
     // Ne lister QUE les fiches publiées (validation admin OK).
     // Les brouillons / en_attente / refusées restent invisibles côté client.
-    const { data } = await supabase
-      .from('commercants_public')  // vue publique (colonnes sûres, publiés) — RLS commercants
-      .select('*')
-      .eq('statut_publication', 'publie')
-      .order('nom')
-    setCommercants(data || [])
-    setCommercesEnChargement(false)
-    if (data?.length > 0) {
-      chargerNotes(data.map(c => c.id), data)
-      chargerActiviteAujourdhui(data.map(c => c.id))
+    //
+    // ⚠️ L'ERREUR NE DOIT PAS RESSEMBLER À UN VIDE. Cette fonction faisait
+    // `setCommercants(data || [])` : quand la requête échouait, ce qui arrive
+    // au réveil du téléphone avec un réseau lent ou coupé, Supabase renvoie
+    // data: null SANS lever d'exception. La liste était donc effacée et le
+    // Yopper lisait « Aucun résultat » pour une simple panne de réseau, en
+    // concluant qu'il n'y avait aucun commerce chez lui.
+    setErreurChargement(false)
+    try {
+      const { data, error } = await supabase
+        .from('commercants_public')  // vue publique (colonnes sûres, publiés) — RLS commercants
+        .select('*')
+        .eq('statut_publication', 'publie')
+        .order('nom')
+      if (error) throw error
+      setCommercants(data || [])
+      if (data?.length > 0) {
+        chargerNotes(data.map(c => c.id), data)
+        chargerActiviteAujourdhui(data.map(c => c.id))
+      }
+    } catch (e) {
+      // On GARDE la liste précédente : mieux vaut des commerces d'il y a une
+      // minute qu'un écran vide. On signale seulement que le rafraîchissement
+      // a échoué, avec de quoi réessayer.
+      console.warn('[commander] chargement des commerces KO', e?.message)
+      setErreurChargement(true)
+    } finally {
+      setCommercesEnChargement(false)
     }
   }
 
@@ -2502,6 +2523,26 @@ export default function Commander() {
                   </div>
                   <p style={{ fontWeight: 800, color: T.ink, marginBottom: 4, letterSpacing: '-0.2px' }}>On réveille ton quartier</p>
                   <p style={{ fontSize: '0.875rem', color: T.muted }}>Les commerces arrivent…</p>
+                </div>
+              ) : erreurChargement && commercants.length === 0 ? (
+                /* Échec du chargement : on le DIT et on propose de réessayer.
+                   Afficher « Aucun résultat » pour une panne de réseau faisait
+                   croire au Yopper qu'aucun commerce n'existait chez lui. */
+                <div style={{ textAlign: 'center', padding: '3rem 1.25rem' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 72, height: 72, borderRadius: 18, background: '#FEF2F2', marginBottom: 14 }}>
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 1l22 22"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+                      <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/>
+                      <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                      <line x1="12" y1="20" x2="12.01" y2="20"/>
+                    </svg>
+                  </div>
+                  <p style={{ fontWeight: 800, color: T.ink, marginBottom: 4, letterSpacing: '-0.2px' }}>Connexion perdue</p>
+                  <p style={{ fontSize: '0.875rem', color: T.muted, marginBottom: 16 }}>On n&rsquo;a pas pu charger les commerces. Vérifie ta connexion.</p>
+                  <button onClick={chargerCommercants}
+                    style={{ padding: '0.7rem 1.5rem', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 16px ${T.main}44` }}>
+                    Réessayer
+                  </button>
                 </div>
               ) : commercantsFiltres.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem 0' }}>

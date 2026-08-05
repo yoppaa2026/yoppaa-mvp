@@ -31,6 +31,10 @@ function empreinte(nom) {
   return h
 }
 
+// ⚠️ Le nom se place dans le TIERS HAUT, jamais au centre. La carte blanche
+// d'identité flotte par-dessus le bas du bandeau : centré, le nom disparaissait
+// derrière elle et la bannière n'était plus qu'un aplat violet vide (constaté
+// par Alex le 05/08, capture à l'appui).
 export default function BanniereCommerce({ nom, hauteur = '100%', taillePolice = '1.5rem' }) {
   const h = empreinte(nom)
   const x1 = 60 + (h % 30)          // 60 → 89 %
@@ -39,7 +43,7 @@ export default function BanniereCommerce({ nom, hauteur = '100%', taillePolice =
   const y2 = 65 + (Math.floor(h / 11000) % 25)
 
   return (
-    <div style={{ position: 'absolute', inset: 0, height: hauteur, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px', overflow: 'hidden' }}>
+    <div style={{ position: 'absolute', inset: 0, height: hauteur, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', paddingTop: '18%', padding: '18% 24px 0', overflow: 'hidden' }}>
       <div aria-hidden="true" style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at ${x1}% ${y1}%, ${T.mid}55 0%, transparent 60%), radial-gradient(circle at ${x2}% ${y2}%, ${T.light}22 0%, transparent 50%)` }}/>
 
       <p style={{ position: 'relative', margin: 0, fontWeight: 900, fontSize: taillePolice, color: '#fff', letterSpacing: '-0.5px', textAlign: 'center', lineHeight: 1.2, textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}>

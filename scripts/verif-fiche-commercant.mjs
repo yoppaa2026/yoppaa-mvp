@@ -56,6 +56,50 @@ for (const chemin of ['app/components/GalerieCommerce.js', 'app/commander/[slug]
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 1 bis. L'ORDRE DES BLOCS — les deux fiches doivent se répondre
+// ═══════════════════════════════════════════════════════════════════════════
+// Un commerce peut avoir DEUX fiches : celle des rendez-vous et celle des
+// produits. Elles avaient dérivé chacune de leur côté (bandeau différent,
+// photos sur une seule des deux, avantages avant les coordonnées). Alex, 05/08 :
+// « il faut absolument que les deux soient identiques en structure ».
+//
+// L'ordre canonique, et le pourquoi de chaque place :
+//   1. l'identité, les coordonnées   → à qui ai-je affaire, comment j'y vais
+//   2. la fidélité                   → MA relation avec ce commerce, elle donne
+//                                      une raison d'acheter AVANT le catalogue
+//   3. les photos                    → l'envie
+//   4. actus et deals                → ce qui se passe aujourd'hui
+//   5. le catalogue                  → le cœur, ce pour quoi on est venu
+//   6. le bon cadeau                 → une action de sortie, jamais avant
+const ORDRE_CANONIQUE = [
+  ['coordonnées', /aria-label="Appeler"/],
+  ['fidélité', /<CarteFideliteFiche/],
+  ['photos', /<GalerieCommerce/],
+  ['bon cadeau', /Offrir un bon cadeau<\/span>/],
+]
+for (const chemin of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
+  const src = lire(chemin)
+  const positions = ORDRE_CANONIQUE.map(([nom, motif]) => {
+    const m = motif.exec(src)
+    return { nom, index: m ? m.index : -1 }
+  })
+  for (const p of positions) {
+    verifier(`${chemin} : le bloc « ${p.nom} » existe`, p.index > 0)
+  }
+  for (let i = 1; i < positions.length; i++) {
+    verifier(`${chemin} : « ${positions[i].nom} » vient après « ${positions[i - 1].nom} »`,
+      positions[i].index > positions[i - 1].index,
+      `${positions[i - 1].nom}=${positions[i - 1].index}, ${positions[i].nom}=${positions[i].index}`)
+  }
+  // Le message de retour de paiement, lui, reste EN HAUT : celui qui revient de
+  // sa banque doit le voir sans faire défiler la page.
+  const retour = src.indexOf('Ton bon cadeau est payé')
+  const bouton = /Offrir un bon cadeau<\/span>/.exec(src)?.index ?? -1
+  verifier(`${chemin} : le retour de paiement reste au-dessus du bouton`,
+    retour > 0 && bouton > 0 && retour < bouton)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 2. LE GUIDE PHOTOS — dix places, dix conseils
 // ═══════════════════════════════════════════════════════════════════════════
 egal('dix conseils', CONSEILS_PHOTOS.length, MAX_PHOTOS)

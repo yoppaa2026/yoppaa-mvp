@@ -2752,36 +2752,12 @@ export default function CommanderSlug() {
                     </div>
                   )}
 
-                  {/* Carte de fidélité : ma jauge ou le teaser du programme */}
-                  <CarteFideliteFiche commercant={commercant} carte={maCarteFid} connecte={fidConnecte}/>
-
-                  {/* Retour d'achat d'un bon cadeau (Stripe success/cancel) */}
-                  {bonRetour && (
-                    <div style={{ marginTop: 12, background: bonRetour === 'ok' ? '#F0FDF4' : '#FFFBEB', border: `1.5px solid ${bonRetour === 'ok' ? '#86EFAC' : '#FCD34D'}`, borderRadius: 12, padding: '10px 14px' }}>
-                      <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: bonRetour === 'ok' ? '#065F46' : '#78350F', lineHeight: 1.5 }}>
-                        {bonRetour === 'ok'
-                          ? 'Ton bon cadeau est payé 🟣 Il arrive par email dans quelques instants (pense à vérifier les indésirables).'
-                          : 'Paiement annulé : aucun bon cadeau n\'a été débité.'}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Offrir un bon cadeau (module actif chez ce commerçant) */}
-                  {bonsCfg?.actif && (
-                    <button onClick={() => setBonModalOuvert(true)}
-                      style={{ width: '100%', marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 16px', borderRadius: 14, border: `1.5px solid ${T.main}33`, background: `linear-gradient(135deg, ${T.pale}, #fff)`, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                          <path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
-                        </svg>
-                        <span style={{ minWidth: 0 }}>
-                          <span style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', color: T.ink }}>Offrir un bon cadeau</span>
-                          <span style={{ display: 'block', fontSize: '0.7rem', color: T.muted, fontWeight: 600, marginTop: 1 }}>Montant libre, envoyé par email, valable {bonsCfg.validite_mois} mois</span>
-                        </span>
-                      </span>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 6l6 6-6 6"/></svg>
-                    </button>
-                  )}
+                  {/* Le BOUTON « Offrir un bon cadeau » a migré tout en bas, après
+                      le catalogue (Alex, 05/08) : c'est une action de sortie, et
+                      proposée ici elle faisait payer pour quelqu'un d'autre avant
+                      même qu'on sache ce que vend ce commerce. Le message de
+                      retour de paiement, lui, RESTE ici : celui qui revient de sa
+                      banque doit le voir sans avoir à faire défiler la page. */}
 
                   {/* Food truck : bandeau emplacement du jour au-dessus des actions */}
                   {estFoodTruck && (
@@ -2836,6 +2812,30 @@ export default function CommanderSlug() {
                       </button>
                     )}
                   </div>
+                </div>
+
+                {/* ─── Carte de fidélité ────────────────────────────────────
+                    Juste sous les informations et les coordonnées du commerce
+                    (Alex, 05/08) : elle parle de MA relation avec lui et donne
+                    une raison d'acheter AVANT que je voie le catalogue. Plus
+                    bas, elle arriverait trop tard. Même position exacte sur la
+                    fiche de rendez-vous. */}
+                <div style={{ padding: '0 12px' }}>
+                  <CarteFideliteFiche commercant={commercant} carte={maCarteFid} connecte={fidConnecte}/>
+
+                  {/* Retour d'achat d'un bon cadeau (Stripe success/cancel).
+                      Reste EN HAUT alors que le bouton est descendu : celui qui
+                      revient de sa banque doit voir l'accusé de réception sans
+                      avoir à faire défiler toute la fiche. */}
+                  {bonRetour && (
+                    <div style={{ marginTop: 12, background: bonRetour === 'ok' ? '#F0FDF4' : '#FFFBEB', border: `1.5px solid ${bonRetour === 'ok' ? '#86EFAC' : '#FCD34D'}`, borderRadius: 12, padding: '10px 14px' }}>
+                      <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: bonRetour === 'ok' ? '#065F46' : '#78350F', lineHeight: 1.5 }}>
+                        {bonRetour === 'ok'
+                          ? 'Ton bon cadeau est payé 🟣 Il arrive par email dans quelques instants (pense à vérifier les indésirables).'
+                          : 'Paiement annulé : aucun bon cadeau n\'a été débité.'}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Toutes les photos, couverture comprise : elle ne sert plus
@@ -3139,6 +3139,28 @@ export default function CommanderSlug() {
                 {peutCommander && !canDo(commercant.plan, 'livraison') && (
                   <div style={{ marginTop: 24 }}>
                     <CTAUpgrade type="livraison" commercant={commercant} variant="banner"/>
+                  </div>
+                )}
+
+                {/* ─── Offrir un bon cadeau ─────────────────────────────────
+                    APRÈS le catalogue (Alex, 05/08). On offre un bon quand on a
+                    compris ce que fait ce commerce, pas avant. Même place sur la
+                    fiche de rendez-vous : les deux fiches se répondent. */}
+                {bonsCfg?.actif && (
+                  <div style={{ padding: '0 12px', marginTop: 20 }}>
+                    <button onClick={() => setBonModalOuvert(true)}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 16px', borderRadius: 14, border: `1.5px solid ${T.main}33`, background: `linear-gradient(135deg, ${T.pale}, #fff)`, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                          <path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
+                        </svg>
+                        <span style={{ minWidth: 0 }}>
+                          <span style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', color: T.ink }}>Offrir un bon cadeau</span>
+                          <span style={{ display: 'block', fontSize: '0.7rem', color: T.muted, fontWeight: 600, marginTop: 1 }}>Montant libre, envoyé par email, valable {bonsCfg.validite_mois} mois</span>
+                        </span>
+                      </span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 6l6 6-6 6"/></svg>
+                    </button>
                   </div>
                 )}
 

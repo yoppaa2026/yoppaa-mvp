@@ -21,7 +21,7 @@ function libelleRecompense(com) {
   return 'Récompense fidélité'
 }
 
-export default function CarteFideliteFiche({ commercant, carte }) {
+export default function CarteFideliteFiche({ commercant, carte, connecte = true }) {
   if (!commercant?.fidelite_actif) return null
   const estCagnotte = commercant.fidelite_mecanique === 'cagnotte'
   const seuilP = commercant.fidelite_seuil_passages || 10
@@ -64,7 +64,14 @@ export default function CarteFideliteFiche({ commercant, carte }) {
           {estCagnotte
             ? `Gagne ${Number(commercant.fidelite_taux_cagnotte || 5)}% de chaque achat dans ta cagnotte. Dès qu'elle atteint ${seuilC.toFixed(2).replace('.', ',')}€, tu reçois : ${libelle}.`
             : `Après ${seuilP} passages, tu reçois : ${libelle}.`}
-          {' '}Ta carte se remplit toute seule à chaque commande 🟣
+          {' '}
+          {/* Sans cette phrase, un Yopper qui a déjà des passages voit le même
+              texte que quelqu'un qui n'a jamais rien acheté, et en conclut que
+              rien n'est compté. Le programme se raconte quand même : c'est ce
+              qui donne envie de se connecter. */}
+          {connecte
+            ? 'Ta carte se remplit toute seule à chaque commande 🟣'
+            : 'Connecte-toi pour voir où en est ta carte 🟣'}
         </p>
       )}
     </div>

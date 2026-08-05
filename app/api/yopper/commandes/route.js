@@ -145,7 +145,7 @@ export async function POST(request) {
       // expédition/livraison/bouton commerçant). Best-effort, idempotent.
       try {
         const { data: full } = await supabase
-          .from('commandes').select('id, commercant_id, client_telephone, total').eq('id', id).maybeSingle()
+          .from('commandes').select('id, commercant_id, client_telephone, client_email, total').eq('id', id).maybeSingle()
         if (full) {
           const { data: commercant } = await supabase
             .from('commercants').select('*').eq('id', full.commercant_id).maybeSingle()
@@ -154,7 +154,7 @@ export async function POST(request) {
               ? { montant: Number(full.total || 0) }
               : { passages: 1 }
             await crediterFidelite(supabase, commercant, full.client_telephone, credit, {
-              source: 'commande', commande_id: full.id,
+              source: 'commande', commande_id: full.id, client_email: full.client_email || null,
             })
           }
         }

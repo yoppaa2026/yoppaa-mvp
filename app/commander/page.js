@@ -7,6 +7,7 @@ import { libelleRetrait } from '@/lib/libelle-retrait'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import { canDo, PLAN_PUBLIC_ENABLED, bandeauCategorie } from '@/lib/plans'
+import { morningADuContenu } from '@/lib/morning-contenu'
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
@@ -1285,12 +1286,17 @@ function BoutonGoodMorning({ onClick, nonVu }) {
 export default function Commander() {
   const router = useRouter()
 
-  // Good Morning Yoppers : badge pulse violet si le yopper n'a pas encore vu
-  // sa page morning aujourd'hui. Flag set quand il visite /commander/morning.
-  const [gmNonVu, setGmNonVu] = useState(false)
+  // Good Morning Yoppers : le bouton s'allume si le Yopper n'a pas encore
+  // ouvert sa page du jour. Ça ne suffisait pas (Alex, 05/08) : le badge
+  // s'allumait aussi les jours où l'édition était VIDE, et promettait donc du
+  // contenu inexistant. Un badge qui ment deux fois ne se regarde plus jamais.
+  // On vérifie donc qu'il y a réellement quelque chose dans SA commune.
+  const [gmPasOuvert, setGmPasOuvert] = useState(false)
+  const [gmADuContenu, setGmADuContenu] = useState(false)
+  const gmNonVu = gmPasOuvert && gmADuContenu
   useEffect(() => {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Brussels' })  // YYYY-MM-DD
-    setGmNonVu(!localStorage.getItem(`yoppaa_gm_seen_${today}`))
+    setGmPasOuvert(!localStorage.getItem(`yoppaa_gm_seen_${today}`))
   }, [])
 
   // showSplash DOIT s'initialiser à false (valeur identique serveur + 1er rendu
@@ -1305,18 +1311,22 @@ export default function Commander() {
 
   const [onglet, setOngletState] = useState('accueil')
 
-  // Cartes de fidélité du Yopper : chargées à l'ouverture du Profil (cookie
-  // yoppaa_yopper côté serveur ; 401 silencieux si pas connecté)
+  // Cartes de fidélité du Yopper : chargées à l'ouverture du Profil.
+  // fetchYopper obligatoire : la route exige une identité prouvée depuis le
+  // 03/08. Avec un fetch nu, le profil restait vide en silence.
   useEffect(() => {
     if (onglet !== 'profil') return
     let vivant = true
-    fetch('/api/fidelite/mes-cartes', {
+    fetchYopper('/api/fidelite/mes-cartes', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'list' }),
     })
       .then(r => r.json())
-      .then(j => { if (vivant && j?.ok) setMesCartesFid(j.cartes || []) })
+      .then(j => {
+        if (!vivant || !j?.ok) return
+        setMesCartesFid(j.cartes || [])
+        setFidConnecte(j.connecte !== false)
+      })
       .catch(() => {})
     return () => { vivant = false }
   }, [onglet])
@@ -1394,12 +1404,33 @@ export default function Commander() {
   const [clientCommandes, setClientCommandes] = useState([])
   // B.6 fidélité : mes cartes (rattachées par les téléphones de mes commandes)
   const [mesCartesFid, setMesCartesFid] = useState([])
+  const [fidConnecte, setFidConnecte] = useState(true)
   const [clientRdvs, setClientRdvs] = useState([])
   // Commune du Yopper (référentiel `communes` joint via clients.commune_id)
   // commune = null  : pas encore chargé ou client pas connecté
   // commune = false : client connecté mais aucune commune setée → modale ConfirmCommune
   const [commune, setCommune] = useState(null)
   const [showConfirmCommune, setShowConfirmCommune] = useState(false)
+
+  // L'édition du jour a-t-elle du contenu dans CETTE commune ? Mis en cache
+  // pour la journée : la réponse ne change qu'au cron de 7h30, il est inutile
+  // de la redemander à chaque ouverture de l'application.
+  useEffect(() => {
+    if (!commune?.codes_postaux?.length) return
+    const jour = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Brussels' })
+    const cle = `yoppaa_gm_contenu_${jour}_${commune.codes_postaux[0]}`
+    const memo = sessionStorage.getItem(cle)
+    if (memo !== null) { setGmADuContenu(memo === '1'); return }
+    let vivant = true
+    morningADuContenu(supabase, commune)
+      .then(oui => {
+        if (!vivant) return
+        sessionStorage.setItem(cle, oui ? '1' : '0')
+        setGmADuContenu(oui)
+      })
+      .catch(() => {})
+    return () => { vivant = false }
+  }, [commune])
   // Services publics (commune, CPAS, police, urgences) visibles dans la zone
   const [servicesPublics, setServicesPublics] = useState([])
   // Badge rouge sur l'onglet Services s'il y a au moins une alerte urgente active
@@ -3377,6 +3408,20 @@ export default function Commander() {
                     </div>
                   ))}
                 </div>
+
+                {/* Pas connecté : le profil ne peut pas montrer les cartes, il
+                    doit le DIRE. Silencieux, il laissait croire qu'aucun achat
+                    n'avait été compté (Alex, 05/08). */}
+                {!fidConnecte && (
+                  <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: '0.875rem', border: `1px solid ${T.pale}` }}>
+                    <p style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.8px', margin: '0 0 6px' }}>
+                      Mes cartes de fidélité
+                    </p>
+                    <p style={{ fontSize: '0.8rem', color: T.muted, lineHeight: 1.55, margin: 0 }}>
+                      Connecte-toi pour retrouver tes cartes et voir où en sont tes points 🟣
+                    </p>
+                  </div>
+                )}
 
                 {/* Mes cartes de fidélité (B.6) : une carte par commerçant, jauge
                     tampons ou cagnotte, badge quand une récompense est débloquée */}

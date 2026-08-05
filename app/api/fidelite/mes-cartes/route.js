@@ -15,11 +15,10 @@
 //              (jauge de la fiche commerçant)
 
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
 import { normaliserTelephone } from '@/lib/fidelite'
+import { identiteProuvee } from '@/lib/yopper-auth'
 
-const COOKIE_NAME = 'yoppaa_yopper'
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function admin() {
@@ -30,15 +29,20 @@ function admin() {
   )
 }
 
-async function cookieYopper() {
-  const raw = (await cookies()).get(COOKIE_NAME)?.value
-  if (!raw) return null
-  try {
-    const identity = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'))
-    return identity?.email ? { email: String(identity.email).toLowerCase(), client_id: identity.client_id || null } : null
-  } catch {
-    return null
-  }
+// ⚠️ CETTE ROUTE A ÉTÉ MUETTE PENDANT DEUX JOURS. Elle décodait encore le
+// cookie de l'ANCIEN format, non signé, resté en place après le durcissement du
+// 03/08 : le décodage échouait, l'identité valait null, et la fiche affichait
+// éternellement le teaser du programme au lieu de la jauge du Yopper. Le même
+// oubli avait touché /api/rdv/mes-rdvs. Toute lecture de cookie Yopper passe
+// désormais par lib/yopper-auth, sans exception.
+//
+// Preuve EXIGÉE : la carte se rattache aux téléphones tirés des commandes de
+// l'email. Avec une identité seulement déclarée, saisir l'adresse d'un tiers au
+// checkout suffirait à lire ses passages et sa cagnotte.
+async function yopperCourant(request) {
+  const id = await identiteProuvee(request)
+  if (!id?.email) return null
+  return { email: String(id.email).toLowerCase(), client_id: id.client_id || null }
 }
 
 // Numéros de téléphone prouvés du Yopper : ceux de ses commandes + sa fiche client
@@ -77,15 +81,18 @@ const CHAMPS_COMMERCANT = 'id, nom, slug, logo_url, categorie, type, fidelite_ac
 
 export async function POST(request) {
   try {
-    const yopper = await cookieYopper()
-    if (!yopper) return NextResponse.json({ ok: false, error: 'Non connecté' }, { status: 401 })
+    const yopper = await yopperCourant(request)
+    // 200 plutôt que 401 : ne pas être connecté n'est pas une erreur, c'est un
+    // état que la fiche doit pouvoir raconter (« connecte-toi pour voir où en
+    // est ta carte »). Un 401 se serait perdu dans un catch silencieux.
+    if (!yopper) return NextResponse.json({ ok: true, connecte: false, cartes: [], carte: null })
 
     const body = await request.json().catch(() => ({}))
     const action = body?.action || 'list'
     const supabase = admin()
 
     const tels = await telephonesDuYopper(supabase, yopper)
-    if (tels.length === 0) return NextResponse.json({ ok: true, cartes: [], carte: null })
+    if (tels.length === 0) return NextResponse.json({ ok: true, connecte: true, cartes: [], carte: null })
 
     if (action === 'une') {
       const commercantId = body?.commercant_id
@@ -101,7 +108,7 @@ export async function POST(request) {
         .limit(1)
         .maybeSingle()
       if (error) throw new Error(error.message)
-      return NextResponse.json({ ok: true, carte: carte || null })
+      return NextResponse.json({ ok: true, connecte: true, carte: carte || null })
     }
 
     // list : toutes les cartes, chez des commerçants à la fidélité active
@@ -113,7 +120,7 @@ export async function POST(request) {
       .limit(50)
     if (error) throw new Error(error.message)
     const actives = (cartes || []).filter(c => c.commercant?.fidelite_actif)
-    return NextResponse.json({ ok: true, cartes: actives })
+    return NextResponse.json({ ok: true, connecte: true, cartes: actives })
   } catch (e) {
     console.error('[fidelite/mes-cartes] KO', e?.message)
     return NextResponse.json({ ok: false, error: 'Erreur serveur' }, { status: 500 })

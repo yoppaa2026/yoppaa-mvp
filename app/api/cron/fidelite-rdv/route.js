@@ -1,6 +1,6 @@
 // GET /api/cron/fidelite-rdv
 //
-// Cron Vercel quotidien (01:00 UTC = nuit belge) : crédite la fidélité pour
+// Cron Vercel quotidien (07:00 UTC = 9h belge) : crédite la fidélité pour
 // les RDV HONORÉS de la veille (statut 'confirme', non annulés, non
 // supprimés) des commerçants Vendre avec fidélité active.
 //
@@ -11,6 +11,10 @@
 //
 // Mécanique cagnotte : montant = prix de la prestation (si renseigné).
 // Sécurité : Authorization: Bearer <CRON_SECRET> (même pattern que les autres).
+//
+// ⚠️ Tournait à 01:00 UTC, soit 3h du matin en Belgique : ce cron a réveillé
+// Alex avec un SMS de fidélité (05/08). Le crédit peut attendre le matin, et
+// lib/fidelite-sms refuse désormais d'écrire hors de la plage 8h-21h.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -50,7 +54,7 @@ export async function GET(request) {
     for (const commercant of eligibles) {
       const { data: rdvs, error: errRdvs } = await supabase
         .from('rdv_reservations')
-        .select('id, client_telephone, prestation:rdv_prestations(prix)')
+        .select('id, client_telephone, client_email, prestation:rdv_prestations(prix)')
         .eq('commercant_id', commercant.id)
         .eq('date_rdv', dateHier)
         .eq('statut', 'confirme')
@@ -68,7 +72,7 @@ export async function GET(request) {
           // Cagnotte sans prix de prestation : rien à créditer
           if (commercant.fidelite_mecanique === 'cagnotte' && !credit.montant) { ignores++; continue }
           const res = await crediterFidelite(supabase, commercant, rdv.client_telephone, credit, {
-            source: 'rdv', rdv_id: rdv.id,
+            source: 'rdv', rdv_id: rdv.id, client_email: rdv.client_email || null,
           })
           if (res.deja_credite) deja++
           else if (res.ok) credites++

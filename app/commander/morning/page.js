@@ -22,7 +22,11 @@ import {
   Flower, Pill, Truck, Scissors, Glasses, Shirt, School, Stethoscope,
   AlertTriangle, Building2, Store, Zap, Phone,
 } from 'lucide-react'
-import { canDo } from '@/lib/plans'
+import {
+  commercantEligibleDeal as eligibleDeal,
+  commercantEligibleActu as eligibleActu,
+  servicePublicEligible as eligibleService,
+} from '@/lib/morning-eligibilite'
 
 // ─── Tokens design system (canoniques) ─────────────────────────────
 const T = {
@@ -70,12 +74,6 @@ function iconDuType(type) {
   return ICON_TYPE[first] || ICON_TYPE[type] || Store
 }
 
-// Codes postaux belges = 4 chiffres. Extrait depuis l'adresse libre.
-function extraireCodePostal(adresse) {
-  if (!adresse) return null
-  const m = adresse.match(/\b(\d{4})\b/)
-  return m ? m[1] : null
-}
 
 // Formate un prix en string "1,20€" (français)
 function fmtPrix(n) {
@@ -144,32 +142,13 @@ async function fetchMorningData(commune) {
       .gte('date_fin', today),
   ])
 
-  // Filtres (alignés sur le cron morning-yoppers : mêmes règles de plan)
-  function commercantEligibleDeal(c) {
-    // Deals : commerçant publié + plan avec deals ET morning + CP commune
-    if (!c) return false
-    if (c.statut_publication !== 'publie') return false
-    if (!canDo(c.plan, 'deals') || !canDo(c.plan, 'morning')) return false
-    const cp = extraireCodePostal(c.adresse)
-    return cp && cpDeLaCommune.has(cp)
-  }
-
-  function commercantEligibleActu(c) {
-    // Actus : commerçant publié + plan avec actu GMY + CP commune
-    if (!c) return false
-    if (c.statut_publication !== 'publie') return false
-    if (!canDo(c.plan, 'actu_gmy')) return false
-    const cp = extraireCodePostal(c.adresse)
-    return cp && cpDeLaCommune.has(cp)
-  }
-
-  function servicePublicEligible(s) {
-    // Service public publié + non national + CP overlap avec la commune
-    if (!s) return false
-    if (s.national === true) return false
-    if (!Array.isArray(s.codes_postaux) || s.codes_postaux.length === 0) return false
-    return s.codes_postaux.some(cp => cpDeLaCommune.has(cp))
-  }
+  // Filtres : définis une seule fois dans lib/morning-eligibilite, partagés
+  // avec le calcul du badge « Nouveau » du bandeau. Recopiés, ils auraient
+  // divergé au premier changement de formule, et le badge aurait fini par
+  // promettre un contenu que cette page n'affiche pas.
+  const commercantEligibleDeal = (c) => eligibleDeal(c, cpDeLaCommune)
+  const commercantEligibleActu = (c) => eligibleActu(c, cpDeLaCommune)
+  const servicePublicEligible  = (s) => eligibleService(s, cpDeLaCommune)
 
   // Stocks articles pour les deals
   const articleIds = (dealsRaw || [])

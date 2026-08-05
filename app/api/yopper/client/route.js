@@ -20,10 +20,9 @@
 //   - 'set-commune'   : { commune_id } (cookie) → { ok }
 
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
+import { identiteProuvee } from '@/lib/yopper-auth'
 
-const COOKIE_NAME = 'yoppaa_yopper'
 
 function admin() {
   return createClient(
@@ -35,15 +34,14 @@ function admin() {
 
 // client_id du Yopper depuis le cookie HTTP-only (jamais depuis le body pour les
 // opérations "own", afin d'éviter l'énumération par id).
-async function cookieClientId() {
-  const raw = (await cookies()).get(COOKIE_NAME)?.value
-  if (!raw) return null
-  try {
-    const identity = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'))
-    return identity?.client_id || null
-  } catch {
-    return null
-  }
+// ⚠️ Lisait encore l'ANCIEN cookie non signé, resté en place après le
+// durcissement du 03/08 : le profil du Yopper revenait donc toujours vide.
+// Toute lecture d'identité passe par lib/yopper-auth.
+//
+// Preuve exigée : c'est la fiche d'identité (nom, téléphone, adresse).
+async function cookieClientId(request) {
+  const id = await identiteProuvee(request)
+  return id?.client_id || null
 }
 
 export async function POST(request) {
@@ -86,8 +84,8 @@ export async function POST(request) {
       return NextResponse.json({ ok: true, created: false, client: { ...ex, ...patch } })
     }
 
-    // ─── opérations "own" : autorisées par le cookie uniquement ────────────
-    const clientId = await cookieClientId()
+    // ─── opérations "own" : identité prouvée uniquement ────────────────────
+    const clientId = await cookieClientId(request)
     if (!clientId) return NextResponse.json({ ok: false, error: 'session_yopper_manquante' }, { status: 401 })
 
     if (action === 'get-own') {

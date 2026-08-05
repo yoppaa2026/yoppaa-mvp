@@ -13,11 +13,9 @@
 //   - valeur "1" pour poser un tag, "" (chaîne vide) pour le retirer.
 
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
 import { setYopperTags } from '@/lib/onesignal'
-
-const COOKIE_NAME = 'yoppaa_yopper'
+import { identiteYopper } from '@/lib/yopper-auth'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -30,16 +28,13 @@ function getSupabaseAdmin() {
 // external_id OneSignal = clients.id. Le cookie contient client_id la plupart du
 // temps, mais on retombe sur une résolution par email si absent (le cookie a pu
 // être posé avant que le client_id soit connu).
-async function getYopperClientId() {
-  const jar = await cookies()
-  const raw = jar.get(COOKIE_NAME)?.value
-  if (!raw) return null
-  let identity
-  try {
-    identity = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'))
-  } catch {
-    return null
-  }
+// ⚠️ Lisait encore l'ANCIEN cookie non signé (durcissement du 03/08) : les tags
+// OneSignal ne se posaient donc plus, et les notifications ciblées avec.
+// L'identité déclarée suffit ici : on ne fait que poser des étiquettes de
+// préférence, il n'y a rien à lire.
+async function getYopperClientId(request) {
+  const identity = await identiteYopper(request)
+  if (!identity) return null
   if (identity?.client_id) return identity.client_id
   if (!identity?.email) return null
   const { data } = await getSupabaseAdmin()
@@ -51,7 +46,7 @@ async function getYopperClientId() {
 }
 
 export async function POST(req) {
-  const clientId = await getYopperClientId()
+  const clientId = await getYopperClientId(req)
   if (!clientId) {
     return NextResponse.json({ ok: false, error: 'session_yopper_manquante' }, { status: 401 })
   }

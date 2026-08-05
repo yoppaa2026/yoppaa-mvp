@@ -33,6 +33,12 @@ async function getCarte(token) {
   return data
 }
 
+// Les euros s'écrivent avec une virgule en français : « 0.55 € » sur la carte
+// d'Alex faisait tache sur l'écran le plus regardé du programme (05/08).
+function euros(n) {
+  return `${Number(n || 0).toFixed(2).replace('.', ',')} €`
+}
+
 export default async function CartePage({ params }) {
   const { token } = await params
   const carte = await getCarte(token)
@@ -96,9 +102,9 @@ export default async function CartePage({ params }) {
                   {cagnotte ? 'Ma cagnotte' : 'Mes passages'}
                 </p>
                 <p style={{ margin: '0 0 14px', fontSize: 34, fontWeight: 900, color: '#fff', letterSpacing: '-1.5px' }}>
-                  {cagnotte ? `${valeur.toFixed(2)} €` : valeur}
+                  {cagnotte ? euros(valeur) : valeur}
                   <span style={{ fontSize: 15, fontWeight: 700, color: T.light, marginLeft: 6 }}>
-                    / {cagnotte ? `${seuil.toFixed(2)} €` : seuil}
+                    / {cagnotte ? euros(seuil) : seuil}
                   </span>
                 </p>
                 {/* Jauge */}
@@ -107,7 +113,7 @@ export default async function CartePage({ params }) {
                 </div>
                 <p style={{ margin: '12px 0 0', fontSize: 12.5, color: T.light, lineHeight: 1.5 }}>
                   {seuil > 0
-                    ? <>Encore <strong style={{ color: '#fff' }}>{cagnotte ? `${restant.toFixed(2)} €` : `${restant} passage${restant > 1 ? 's' : ''}`}</strong> et tu débloques : {libelleRecompense(com)}</>
+                    ? <>Encore <strong style={{ color: '#fff' }}>{cagnotte ? euros(restant) : `${restant} passage${restant > 1 ? 's' : ''}`}</strong> et tu débloques : {libelleRecompense(com)}</>
                     : 'Ta carte se remplit à chaque passage.'}
                 </p>
               </div>

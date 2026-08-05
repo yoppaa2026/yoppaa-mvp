@@ -30,7 +30,7 @@
     },
     {
       "path": "/api/cron/fidelite-rdv",
-      "schedule": "0 1 * * *"
+      "schedule": "0 7 * * *"
     },
     {
       "path": "/api/cron/stripe-frais",

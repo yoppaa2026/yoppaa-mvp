@@ -26,10 +26,27 @@ egal('minuit', minutesToTime(0), '00:00')
 egal('vide = 0', timeToMinutes(null), 0)
 egal('aller-retour stable', minutesToTime(timeToMinutes('13:45')), '13:45')
 
-// 2026-08-05 est un mercredi. Le tableau JOURS commence à dimanche.
-const mercredi = new Date('2026-08-05T12:00:00')
+// ⚠️ CE BANC A POURRI TOUT SEUL. Il travaillait sur le 05/08/2026 en dur, un
+// mercredi : le jour venu, le moteur a masqué les créneaux du matin (déjà
+// passés) et sept vérifications sont tombées en rouge sans qu'une seule ligne
+// de code ait bougé. Un banc qui dépend du calendrier finit toujours par
+// mentir, et un rouge qu'on sait faux est pire qu'un test manquant.
+//
+// On travaille donc sur un mercredi TOUJOURS futur. Les dates fixes restent
+// réservées aux conversions pures, qui elles ne vieillissent pas.
+function mercrediFutur() {
+  const d = new Date()
+  d.setHours(12, 0, 0, 0)
+  d.setDate(d.getDate() + 7)
+  while (d.getDay() !== 3) d.setDate(d.getDate() + 1)   // 3 = mercredi
+  return d
+}
+const mercredi = mercrediFutur()
 egal('jour de semaine', jourSemaineDate(mercredi), 'mercredi')
-egal('date ISO locale', isoDate(mercredi), '2026-08-05')
+verifier('le mercredi de test est bien dans le futur', mercredi > new Date())
+// Conversion pure : une date fixe est ici sans danger, elle ne dépend d'aucun
+// « aujourd'hui ».
+egal('date ISO locale', isoDate(new Date('2026-08-05T12:00:00')), '2026-08-05')
 
 // ─── Le bug d'Alex : une pause ne doit bloquer QUE son praticien ───────────
 // Carole est en pause de 12h à 13h. Un rendez-vous de 13h00 à 13h30 ne

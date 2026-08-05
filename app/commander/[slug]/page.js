@@ -1045,6 +1045,9 @@ export default function CommanderSlug() {
   const [articleDetail, setArticleDetail] = useState(null)
   // B.6 fidélité : MA carte chez ce commerçant (null si pas connecté / pas de carte)
   const [maCarteFid, setMaCarteFid] = useState(null)
+  // Distingue « pas de carte » de « pas connecté » : sans ça, un Yopper qui a
+  // des passages voit le teaser du programme et croit que rien n'est compté.
+  const [fidConnecte, setFidConnecte] = useState(true)
   // Fiche « façon post » (30/07) : cœurs + partage. Les cœurs sont anonymes
   // par appareil (device_id localStorage), tout passe par /api/articles/like.
   const [articleSocial, setArticleSocial] = useState(null)  // { count, liked } de l'article ouvert
@@ -1078,18 +1081,23 @@ export default function CommanderSlug() {
     if (dealDetailOuvert?.id) trackDeal(dealDetailOuvert.id, 'view')
   }, [dealDetailOuvert?.id])
 
-  // Ma carte de fidélité chez ce commerçant (si son programme est actif)
+  // Ma carte de fidélité chez ce commerçant (si son programme est actif).
+  // fetchYopper, pas fetch : la route exige une identité PROUVÉE depuis le
+  // 03/08, et un fetch nu n'emporte pas le jeton. C'est ce qui manquait.
   useEffect(() => {
     const id = commercant?.id
-    if (!id || !commercant?.fidelite_actif) { setMaCarteFid(null); return }
+    if (!id || !commercant?.fidelite_actif) { setMaCarteFid(null); setFidConnecte(true); return }
     let vivant = true
-    fetch('/api/fidelite/mes-cartes', {
+    fetchYopper('/api/fidelite/mes-cartes', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'une', commercant_id: id }),
     })
       .then(r => r.json())
-      .then(j => { if (vivant && j?.ok) setMaCarteFid(j.carte || null) })
+      .then(j => {
+        if (!vivant || !j?.ok) return
+        setMaCarteFid(j.carte || null)
+        setFidConnecte(j.connecte !== false)
+      })
       .catch(() => {})
     return () => { vivant = false }
   }, [commercant?.id, commercant?.fidelite_actif])
@@ -2820,7 +2828,7 @@ export default function CommanderSlug() {
                   )}
 
                   {/* Carte de fidélité : ma jauge ou le teaser du programme */}
-                  <CarteFideliteFiche commercant={commercant} carte={maCarteFid}/>
+                  <CarteFideliteFiche commercant={commercant} carte={maCarteFid} connecte={fidConnecte}/>
 
                   {/* Retour d'achat d'un bon cadeau (Stripe success/cancel) */}
                   {bonRetour && (

@@ -246,6 +246,7 @@ export default function CommanderRdvSlug() {
   const [deals, setDeals] = useState([])                    // deals actifs du jour (même fenêtre que la fiche commerce)
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   const [maCarteFid, setMaCarteFid] = useState(null)        // ma carte de fidélité chez ce commerçant
+  const [fidConnecte, setFidConnecte] = useState(true)      // distingue « pas de carte » de « pas connecté »
   const [produits, setProduits] = useState([])              // catalogue produits (aperçu → page boutique /commander/[slug])
   const [bonsCfg, setBonsCfg] = useState(null)              // config bons cadeaux (bouton Offrir)
   const [bonModalOuvert, setBonModalOuvert] = useState(false)
@@ -375,18 +376,22 @@ export default function CommanderRdvSlug() {
     if (dealDetailOuvert?.id) trackDeal(dealDetailOuvert.id, 'view')
   }, [dealDetailOuvert?.id])
 
-  // Ma carte de fidélité chez ce commerçant (si son programme est actif)
+  // Ma carte de fidélité chez ce commerçant (si son programme est actif).
+  // fetchYopper, pas fetch : la route exige une identité prouvée (03/08).
   useEffect(() => {
     const id = commercant?.id
-    if (!id || !commercant?.fidelite_actif) { setMaCarteFid(null); return }
+    if (!id || !commercant?.fidelite_actif) { setMaCarteFid(null); setFidConnecte(true); return }
     let vivant = true
-    fetch('/api/fidelite/mes-cartes', {
+    fetchYopper('/api/fidelite/mes-cartes', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'une', commercant_id: id }),
     })
       .then(r => r.json())
-      .then(j => { if (vivant && j?.ok) setMaCarteFid(j.carte || null) })
+      .then(j => {
+        if (!vivant || !j?.ok) return
+        setMaCarteFid(j.carte || null)
+        setFidConnecte(j.connecte !== false)
+      })
       .catch(() => {})
     return () => { vivant = false }
   }, [commercant?.id, commercant?.fidelite_actif])
@@ -1485,7 +1490,7 @@ export default function CommanderRdvSlug() {
                 )}
 
                 {/* Carte de fidélité : ma jauge ou le teaser du programme */}
-                {etape === 1 && <CarteFideliteFiche commercant={commercant} carte={maCarteFid}/>}
+                {etape === 1 && <CarteFideliteFiche commercant={commercant} carte={maCarteFid} connecte={fidConnecte}/>}
 
                 {/* Retour d'achat d'un bon cadeau (Stripe success/cancel) */}
                 {etape === 1 && bonRetour && (

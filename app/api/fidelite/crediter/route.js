@@ -32,7 +32,7 @@ export async function POST(request) {
 
     const { data: cmd, error: errCmd } = await supabase
       .from('commandes')
-      .select('id, commercant_id, client_telephone, total, statut')
+      .select('id, commercant_id, client_telephone, client_email, total, statut')
       .eq('id', commandeId).maybeSingle()
     if (errCmd) throw new Error(errCmd.message)
     if (!cmd) return NextResponse.json({ ok: false, error: 'Commande introuvable' }, { status: 404 })
@@ -51,7 +51,7 @@ export async function POST(request) {
       ? { montant: Number(cmd.total || 0) }
       : { passages: 1 }
     const res = await crediterFidelite(supabase, commercant, cmd.client_telephone, credit, {
-      source: 'commande', commande_id: cmd.id,
+      source: 'commande', commande_id: cmd.id, client_email: cmd.client_email || null,
     })
     return NextResponse.json(res)
   } catch (e) {

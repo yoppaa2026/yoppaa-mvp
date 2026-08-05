@@ -11,6 +11,8 @@ import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurA
 import { deposerPanierPourRdv } from '@/lib/panier-vers-rdv'
 import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
 import IconeRetrait from '@/app/components/IconeRetrait'
+import BanniereCommerce from '@/app/components/BanniereCommerce'
+import GalerieCommerce from '@/app/components/GalerieCommerce'
 
 // Rend en gras ce que les textes encadrent de `**`. La formulation vit dans
 // lib/ecran-retrait.js, où elle est testable ; seule la mise en forme reste ici.
@@ -869,95 +871,6 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
   )
 }
 
-// ─── HeroCarousel : photo couverture + galerie scroll-snap horizontal ────────
-// S4 : si une seule photo (ou aucune), comportement identique a l'ancien hero
-// (image fullbleed ou fallback gradient branded). Si 2+ photos, scroll snap
-// horizontal avec dots pagination en bas du hero.
-function HeroCarousel({ couverture, galerie, nomCommerce, couvertureFallback = null }) {
-  const scrollRef = useRef(null)
-  const [active, setActive] = useState(0)
-
-  // Liste des photos a afficher : couverture en premier, puis galerie par ordre.
-  //
-  // ⚠️ CORRIGÉ LE 05/08. Cette page ne lisait QUE la table commercant_photos,
-  // là où la fiche de rendez-vous lit commercants.photo_couverture_url. Un
-  // commerçant ayant l'une sans l'autre avait donc sa photo sur une page et un
-  // aplat mauve sur l'autre. On retombe sur la seconde source.
-  const photos = []
-  if (couverture?.url) photos.push({ id: 'couverture', url: couverture.url })
-  else if (couvertureFallback) photos.push({ id: 'couverture-fallback', url: couvertureFallback })
-  ;(galerie || []).forEach(p => { if (p?.url) photos.push({ id: p.id, url: p.url }) })
-
-  function onScroll() {
-    const el = scrollRef.current
-    if (!el) return
-    const idx = Math.round(el.scrollLeft / el.clientWidth)
-    if (idx !== active) setActive(idx)
-  }
-  function goTo(i) {
-    const el = scrollRef.current
-    if (!el) return
-    el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' })
-  }
-
-  // Aucune photo : aplat de marque, mais JAMAIS anonyme. Un bandeau mauve
-  // sans un mot ne dit pas chez qui on est, et c'est ce que voyait Alex.
-  if (photos.length === 0) {
-    return (
-      <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px' }}>
-        <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}55 0%, transparent 60%), radial-gradient(circle at 20% 80%, ${T.light}22 0%, transparent 50%)` }}/>
-        {nomCommerce && (
-          <p style={{ position: 'relative', margin: 0, fontWeight: 900, fontSize: '1.5rem', color: '#fff', letterSpacing: '-0.5px', textAlign: 'center', lineHeight: 1.2, textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}>
-            {nomCommerce}
-          </p>
-        )}
-      </div>
-    )
-  }
-  // Une seule photo : pas de carousel, image fullbleed
-  if (photos.length === 1) {
-    return <img src={photos[0].url} alt={nomCommerce} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-  }
-  // 2+ photos : scroll snap horizontal natif + dots pagination
-  return (
-    <>
-      <div
-        ref={scrollRef}
-        onScroll={onScroll}
-        style={{
-          width: '100%', height: '100%', overflowX: 'auto', overflowY: 'hidden',
-          display: 'flex', scrollSnapType: 'x mandatory', scrollBehavior: 'auto',
-          WebkitOverflowScrolling: 'touch',
-        }}
-        className="hero-carousel-track"
-      >
-        {photos.map(p => (
-          <div key={p.id} style={{ flex: '0 0 100%', height: '100%', scrollSnapAlign: 'start' }}>
-            <img src={p.url} alt={nomCommerce} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
-          </div>
-        ))}
-      </div>
-      {/* Pagination dots */}
-      <div style={{ position: 'absolute', bottom: 14, left: 0, right: 0, zIndex: 4, display: 'flex', justifyContent: 'center', gap: 6, pointerEvents: 'none' }}>
-        {photos.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => goTo(i)}
-            aria-label={`Photo ${i + 1}`}
-            style={{
-              width: active === i ? 22 : 8, height: 8, borderRadius: 100,
-              background: active === i ? '#fff' : 'rgba(255,255,255,0.5)',
-              border: 'none', cursor: 'pointer', transition: 'all 0.2s',
-              pointerEvents: 'auto', padding: 0,
-            }}
-          />
-        ))}
-      </div>
-      <style dangerouslySetInnerHTML={{ __html: `.hero-carousel-track::-webkit-scrollbar { display: none; } .hero-carousel-track { scrollbar-width: none; }` }}/>
-    </>
-  )
-}
-
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function CommanderSlug() {
   const { slug } = useParams()
@@ -1021,6 +934,20 @@ export default function CommanderSlug() {
   const [commandesParArticleJour, setCommandesParArticleJour] = useState({})
   const [photoCouverture, setPhotoCouverture] = useState(null)
   const [galerie, setGalerie] = useState([])
+  // Toutes les photos de la fiche, dans l'ordre d'affichage. Depuis le 05/08 le
+  // haut de fiche est une bannière au nom du commerce : l'ancienne photo de
+  // couverture serait purement et simplement perdue si elle ne rouvrait pas la
+  // série ici. Deux sources, comme partout (table des photos, puis colonne de
+  // repli), sans quoi un commerçant qui n'a que l'une des deux se retrouve
+  // avec une fiche sans aucune image.
+  const photosFiche = [
+    photoCouverture?.url
+      ? { id: 'couverture', url: photoCouverture.url, legende: photoCouverture.legende || null }
+      : (commercant?.photo_couverture_url
+          ? { id: 'couverture-repli', url: commercant.photo_couverture_url, legende: null }
+          : null),
+    ...(galerie || []),
+  ].filter(Boolean)
   const [actualites, setActualites] = useState([])
   // Le compte Supabase a-t-il déjà un mot de passe ? L'écran de confirmation
   // proposait d'en créer un À TOUT LE MONDE, y compris aux Yoppers qui en ont
@@ -2721,12 +2648,10 @@ export default function CommanderSlug() {
                 <div className="fiche-hero" style={{ position: 'relative', overflow: 'hidden' }}>
                   {/* Bande 3px canonique YOPPAA en haut du hero (Ink → Main → Light) */}
                   <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 3 }}/>
-                  <HeroCarousel
-                    couverture={photoCouverture}
-                    couvertureFallback={commercant.photo_couverture_url || null}
-                    galerie={galerie}
-                    nomCommerce={commercant.nom}
-                  />
+                  {/* Toujours la bannière au nom du commerce, jamais sa photo :
+                      décision d'Alex du 05/08. Ses photos vivent plus bas, dans
+                      « Mon commerce en images ». */}
+                  <BanniereCommerce nom={commercant.nom} />
                   {/* Voile dégradé bas pour finition visuelle */}
                   <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, background: 'linear-gradient(to top, rgba(22,6,54,0.5), transparent)' }}/>
 
@@ -2913,26 +2838,9 @@ export default function CommanderSlug() {
                   </div>
                 </div>
 
-                {/* Galerie photos (si présentes) - carrousel horizontal */}
-                {galerie.length > 0 && (
-                  <div style={{ marginTop: 18, paddingLeft: 12 }}>
-                    <p style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.7rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8, paddingRight: 12 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="5" width="18" height="14" rx="2"/>
-                        <circle cx="12" cy="12" r="3.5"/>
-                        <path d="M8 5l1.5-2h5L16 5"/>
-                      </svg>
-                      La maison en images
-                    </p>
-                    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, paddingRight: 12, scrollbarWidth: 'none' }}>
-                      {galerie.map(p => (
-                        <div key={p.id} style={{ flexShrink: 0, width: 200, height: 140, borderRadius: 14, overflow: 'hidden', boxShadow: '0 4px 16px rgba(22,6,54,0.12)', border: `1px solid ${T.pale}` }}>
-                          <img src={p.url} alt={p.legende || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* Toutes les photos, couverture comprise : elle ne sert plus
+                    de bandeau, elle ouvre la série. */}
+                <GalerieCommerce photos={photosFiche} nomCommerce={commercant.nom} />
 
                 <div style={{ height: 12, background: T.bg }}/>
 

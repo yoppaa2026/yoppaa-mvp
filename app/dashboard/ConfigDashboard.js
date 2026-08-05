@@ -14,6 +14,7 @@ import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
 import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '@/lib/fidelite'
 import { libelleEnvie, phraseHorsOuverture } from '@/lib/signaux'
+import { MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto } from '@/lib/guide-photos'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
 import {
@@ -4115,7 +4116,10 @@ function TabProfil({ commercantId, toast, onSaved }) {
   const [galerie, setGalerie] = useState([])
   const [uploadingCouv, setUploadingCouv] = useState(false)
   const [uploadingGal, setUploadingGal] = useState(false)
-  const MAX_GALERIE = 4
+  // Dix photos en tout : la principale (couverture) plus neuf. Le carrousel
+  // « Mon commerce en images » est devenu le seul endroit où les photos vivent,
+  // le haut de fiche portant désormais une bannière au nom du commerce.
+  const MAX_GALERIE = MAX_PHOTOS - 1
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchProfil(); fetchPhotos() }, [commercantId])
@@ -4161,6 +4165,20 @@ function TabProfil({ commercantId, toast, onSaved }) {
     if (error) { toast(`Erreur : ${error.message}`, 'error'); setUploadingGal(false); return }
     setGalerie(prev => [...prev, row])
     toast('Photo ajoutée'); setUploadingGal(false)
+  }
+
+  // Change une photo de place. On réécrit TOUTES les positions plutôt que
+  // d'échanger deux valeurs : deux photos ayant hérité du même `ordre` par le
+  // passé rendraient l'affichage imprévisible, et cette renumérotation les
+  // répare au premier déplacement.
+  async function reordonnerGalerie(index, direction) {
+    const suivant = deplacerPhoto(galerie, index, direction)
+    if (suivant === galerie) return
+    setGalerie(suivant)
+    // L'ordre 0 est réservé à la couverture : la galerie commence à 1.
+    await Promise.all(suivant.map((p, i) =>
+      supabase.from('commercant_photos').update({ ordre: i + 1 }).eq('id', p.id)
+    ))
   }
 
   async function supprimerPhotoGalerie(photo) {
@@ -4260,15 +4278,30 @@ function TabProfil({ commercantId, toast, onSaved }) {
         </div>
       </div>
 
-      {/* Photos de la fiche : couverture + galerie (comme l'étape Visuels du signup) */}
+      {/* Photos de la fiche : la principale + neuf autres, ordonnées.
+          Le haut de fiche ne montre plus de photo depuis le 05/08 : celles-ci
+          sont donc les SEULES images de la fiche, d'où le guide. */}
       <div style={s.card}>
-        <label style={s.label}>Photos de ta fiche</label>
-        <p style={{ fontSize: 12, color: T.muted, marginBottom: 14 }}>
-          La couverture est ta vignette principale. Les photos supplémentaires s&rsquo;affichent en carrousel sur ta page client.
+        <label style={s.label}>Mon commerce en images</label>
+        <p style={{ fontSize: 12, color: T.muted, marginBottom: 6 }}>
+          Jusqu&rsquo;à {MAX_PHOTOS} photos, qui défilent dans l&rsquo;ordre sur ta page.
+          L&rsquo;ordre compte : on regarde rarement plus loin que la troisième.
         </p>
+        {(() => {
+          const etat = etatGalerie((couvertureUrl ? 1 : 0) + galerie.length)
+          return (
+            <p style={{ fontSize: 12, fontWeight: 700, color: etat.ton === 'vide' ? '#B45309' : T.main, marginBottom: 14, lineHeight: 1.5 }}>
+              {etat.message}
+            </p>
+          )
+        })()}
 
-        {/* Couverture */}
-        <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px' }}>Photo de couverture</p>
+        {/* Photo principale = position 1 du guide. Elle reste la vignette qui
+            représente le commerce dans les listes, d'où son statut à part. */}
+        <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 2px' }}>
+          Photo 1 · {conseilPhoto(1).titre}
+        </p>
+        <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 8px', lineHeight: 1.5 }}>{conseilPhoto(1).aide}</p>
         <label style={{ display: 'block', width: '100%', maxWidth: 420, aspectRatio: '16/9', borderRadius: 14, border: `2px dashed ${couvertureUrl ? T.main : T.light}`, background: T.pale, overflow: 'hidden', cursor: uploadingCouv ? 'wait' : 'pointer', position: 'relative' }}>
           {couvertureUrl ? (
             <img src={couvertureUrl} alt="Couverture" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
@@ -4285,25 +4318,61 @@ function TabProfil({ commercantId, toast, onSaved }) {
         </label>
         <p style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>Format paysage 16:9 idéal. Clique pour {couvertureUrl ? 'remplacer' : 'ajouter'}. Compressée automatiquement.</p>
 
-        {/* Galerie */}
-        <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '16px 0 8px' }}>Photos supplémentaires ({galerie.length}/{MAX_GALERIE})</p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-          {galerie.map(p => (
-            <div key={p.id} style={{ width: 120, aspectRatio: '4/3', borderRadius: 12, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}` }}>
-              <img src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-              <button type="button" onClick={() => supprimerPhotoGalerie(p)} title="Supprimer"
-                style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 100, border: 'none', background: 'rgba(22,6,54,0.85)', color: '#fff', cursor: 'pointer', fontSize: 13, lineHeight: '22px', padding: 0 }}>×</button>
-            </div>
-          ))}
+        {/* Les suivantes, dans l'ordre où elles défileront. Chacune porte le
+            conseil de SA place : « ajoute des photos » ne dit rien, « celle-ci
+            c'est ton intérieur » se comprend et se fait. */}
+        <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '18px 0 8px' }}>
+          Les suivantes ({galerie.length + (couvertureUrl ? 1 : 0)}/{MAX_PHOTOS})
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {galerie.map((p, i) => {
+            const conseil = conseilPhoto(i + 2)
+            return (
+              <div key={p.id} style={{ display: 'flex', gap: 12, alignItems: 'center', background: T.bg, borderRadius: 12, padding: 8 }}>
+                <div style={{ width: 96, aspectRatio: '4/3', borderRadius: 10, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}`, flexShrink: 0 }}>
+                  <img src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>
+                    Photo {i + 2} · {conseil.titre}
+                  </p>
+                  <p style={{ fontSize: 11, color: T.muted, margin: 0, lineHeight: 1.45 }}>{conseil.aide}</p>
+                </div>
+                {/* Flèches plutôt que glisser-déposer : sur un téléphone, au
+                    comptoir, une flèche se vise et ne rate pas. */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                  <button type="button" onClick={() => reordonnerGalerie(i, 'avant')} disabled={i === 0} title="Monter"
+                    style={{ width: 28, height: 24, borderRadius: 7, border: `1px solid ${T.hairline}`, background: '#fff', color: i === 0 ? T.hairline : T.deep, cursor: i === 0 ? 'default' : 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="chevU" size={13} color={i === 0 ? T.hairline : T.deep}/>
+                  </button>
+                  <button type="button" onClick={() => reordonnerGalerie(i, 'apres')} disabled={i === galerie.length - 1} title="Descendre"
+                    style={{ width: 28, height: 24, borderRadius: 7, border: `1px solid ${T.hairline}`, background: '#fff', color: i === galerie.length - 1 ? T.hairline : T.deep, cursor: i === galerie.length - 1 ? 'default' : 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="chevD" size={13} color={i === galerie.length - 1 ? T.hairline : T.deep}/>
+                  </button>
+                </div>
+                <button type="button" onClick={() => supprimerPhotoGalerie(p)} title="Supprimer"
+                  style={{ width: 28, height: 28, borderRadius: 100, border: `1px solid #FCA5A5`, background: '#fff', color: '#DC2626', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
+              </div>
+            )
+          })}
           {galerie.length < MAX_GALERIE && (
-            <label style={{ width: 120, aspectRatio: '4/3', borderRadius: 12, border: `2px dashed ${T.light}`, background: '#FAFAFA', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: uploadingGal ? 'wait' : 'pointer', color: T.muted, fontSize: 11, fontWeight: 700 }}>
-              <Camera size={18} strokeWidth={1.8} color={T.main}/>
-              {uploadingGal ? 'Upload…' : 'Ajouter'}
+            <label style={{ display: 'flex', gap: 12, alignItems: 'center', borderRadius: 12, border: `2px dashed ${T.light}`, background: '#FAFAFA', padding: 10, cursor: uploadingGal ? 'wait' : 'pointer' }}>
+              <span style={{ width: 96, aspectRatio: '4/3', borderRadius: 10, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Camera size={18} strokeWidth={1.8} color={T.main}/>
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: T.ink, marginBottom: 2 }}>
+                  {uploadingGal ? 'Envoi en cours…' : `Ajouter la photo ${galerie.length + 2} · ${conseilPhoto(galerie.length + 2).titre}`}
+                </span>
+                <span style={{ display: 'block', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>
+                  {conseilPhoto(galerie.length + 2).aide}
+                </span>
+              </span>
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadGalerie(e.target.files[0]); e.target.value = '' }} disabled={uploadingGal}/>
             </label>
           )}
         </div>
-        <p style={{ fontSize: 10, color: T.muted, marginTop: 6 }}>Intérieur, produits, équipe… Tous les ratios acceptés.</p>
+        <p style={{ fontSize: 10, color: T.muted, marginTop: 8 }}>Tous les ratios acceptés, compression automatique. Les conseils sont là pour aider, pas pour contraindre.</p>
       </div>
 
       {/* Infos */}

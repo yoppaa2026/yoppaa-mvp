@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
 import { compresserImage } from '@/lib/compress-image'
+import { CONSEILS_PHOTOS, MAX_PHOTOS } from '@/lib/guide-photos'
 import { SHOP_PRODUCTS, classerProduitsParCategorie } from '@/lib/produits-boutique'
 // Icônes Lucide React : SVG inline alignés sur la charte canonique Yoppaa.
 // Convention : stroke-width 1.8, currentColor pour hériter de la palette parent.
@@ -935,9 +936,16 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
     adresse: commercant.adresse || '',
     telephone: commercant.telephone || '',
     description: commercant.description || '',
+    site_web: commercant.site_web || '',
     latitude: commercant.latitude,
     longitude: commercant.longitude,
   })
+  // Rédaction assistée de la présentation : quelques mots du commerçant, plus
+  // son site s'il en a un, contre trois propositions modifiables.
+  const [motsCles, setMotsCles] = useState('')
+  const [propositions, setPropositions] = useState([])
+  const [iaEnCours, setIaEnCours] = useState(false)
+  const [iaMessage, setIaMessage] = useState(null)
   const [suggestions, setSuggestions] = useState([])
   const [searchingAdresse, setSearchingAdresse] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -968,12 +976,46 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
       adresse: values.adresse.trim() || null,
       telephone: values.telephone.trim() || null,
       description: values.description.trim() || null,
+      site_web: values.site_web?.trim() || null,
       latitude: values.latitude || null,
       longitude: values.longitude || null,
     }
     const { data } = await supabase.from('commercants').update(payload).eq('id', commercant.id).select().single()
     if (data) onUpdate(data)
     setSaving(false); onSaving?.('saved')
+  }
+
+  // Trois propositions de présentation, à partir des mots du commerçant et de
+  // son site s'il en a déclaré un. Le nombre de demandes est plafonné côté
+  // serveur : on affiche le décompte plutôt que de couper sans prévenir.
+  async function genererPresentation() {
+    if (iaEnCours) return
+    if (!form.nom.trim()) { setIaMessage({ type: 'error', texte: 'Renseigne d\'abord le nom de ton commerce.' }); return }
+    setIaEnCours(true); setIaMessage(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setIaMessage({ type: 'error', texte: 'Session expirée, reconnecte-toi.' }); setIaEnCours(false); return }
+      const r = await fetch('/api/ia/presentation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ commercant_id: commercant.id, mots: motsCles, site_web: form.site_web }),
+      })
+      const j = await r.json()
+      if (!j?.ok) {
+        setIaMessage({ type: 'error', texte: j?.message || j?.error || 'La rédaction a échoué, réessaie.' })
+        setIaEnCours(false)
+        return
+      }
+      setPropositions(j.variantes || [])
+      setIaMessage({
+        type: 'ok',
+        texte: `${j.site_lu ? 'On a lu ton site pour t\'aider. ' : ''}Choisis le texte le plus juste, tu pourras le modifier.${
+          j.restant > 0 ? ` Il te reste ${j.restant} demande${j.restant > 1 ? 's' : ''}.` : ' C\'était ta dernière demande.'}`,
+      })
+    } catch {
+      setIaMessage({ type: 'error', texte: 'La rédaction a échoué, réessaie dans un instant.' })
+    }
+    setIaEnCours(false)
   }
 
   // Autocomplete Nominatim (Belgique en priorité)
@@ -1097,7 +1139,52 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
         </Field>
       </Card>
 
-      <Card titre="Description" sous={`Minimum 20 caractères. ${form.description.length} / 20.`}>
+      <Card titre="Site web" sous="Facultatif. Si tu en as un, l'assistant s'en servira pour rédiger ta présentation.">
+        <input type="url" inputMode="url" value={form.site_web}
+          onChange={e => updateField('site_web', e.target.value)}
+          placeholder="www.mon-commerce.be" style={inputStyle()}/>
+        <p style={{ fontSize: 11, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+          Une page Facebook fait aussi l&rsquo;affaire. Rien du tout, c&rsquo;est très bien aussi.
+        </p>
+      </Card>
+
+      <Card titre="Ta présentation" sous={`Minimum 20 caractères. ${form.description.length} / 20.`}>
+        {/* Écrire sur soi est l'étape où l'on abandonne une inscription. Trois
+            textes à choisir et à retoucher lèvent ce blocage, et le commerçant
+            découvre au passage l'assistant de rédaction. */}
+        <div style={{ background: T.pale, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+          <p style={{ margin: '0 0 8px', fontSize: 12.5, fontWeight: 800, color: T.deep }}>
+            Tu ne sais pas par où commencer ? Donne trois éléments, on te propose des textes.
+          </p>
+          <p style={{ margin: '0 0 8px', fontSize: 11.5, color: T.muted, lineHeight: 1.55 }}>
+            Ce que tu vends ou proposes, depuis quand tu es là, et ce qui te distingue du voisin.
+            Par exemple : <em>« pains au levain, cuisson maison, ouvert depuis 1998, on connaît nos clients par leur prénom »</em>.
+          </p>
+          <textarea value={motsCles} onChange={e => setMotsCles(e.target.value)}
+            placeholder="Tes mots à toi, en vrac. Pas besoin de faire des phrases."
+            rows={2}
+            style={{ ...inputStyle(), minHeight: 56, resize: 'vertical', marginBottom: 8 }}/>
+          <button type="button" onClick={genererPresentation} disabled={iaEnCours}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 100, border: 'none', background: iaEnCours ? T.muted : T.bgPanel, color: '#fff', fontWeight: 800, fontSize: 12.5, cursor: iaEnCours ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+            {iaEnCours ? 'Rédaction en cours…' : 'Proposer des textes'}
+          </button>
+          {iaMessage && (
+            <p style={{ margin: '8px 0 0', fontSize: 11.5, color: iaMessage.type === 'error' ? '#B45309' : T.muted, lineHeight: 1.5 }}>
+              {iaMessage.texte}
+            </p>
+          )}
+          {propositions.length > 0 && (
+            <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+              {propositions.map((p, i) => (
+                <button key={i} type="button" onClick={() => { updateField('description', p); setIaMessage({ type: 'ok', texte: 'Texte repris. Modifie-le autant que tu veux, c\'est le tien.' }) }}
+                  style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${form.description === p ? T.main : '#EDE0FF'}`, background: form.description === p ? '#FAF8FE' : '#fff', fontSize: 12.5, color: T.ink, cursor: 'pointer', lineHeight: 1.5, fontFamily: 'inherit' }}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <textarea value={form.description} onChange={e => updateField('description', e.target.value)}
           placeholder="Quelques mots qui décrivent ton commerce, ce qui te rend unique…"
           rows={4}
@@ -1130,7 +1217,8 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
   const [warningCover, setWarningCover] = useState(null) // avertissement non bloquant (orientation, qualité…)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const MAX_GALERIE = 4
+  // La couverture compte pour une : neuf de plus font dix photos en tout.
+  const MAX_GALERIE = MAX_PHOTOS - 1
 
   // Charge couverture + galerie au mount
   useEffect(() => {
@@ -1395,7 +1483,21 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
         </div>
       </Card>
 
-      <Card titre={`Photos supplémentaires (${galerie.length}/${MAX_GALERIE})`} sous="Affichées en carrousel sous la couverture sur ta page client. Optionnel mais conseillé : intérieur, produits, équipe…">
+      <Card titre={`Mon commerce en images (${galerie.length + 1}/${MAX_PHOTOS})`} sous="Elles défilent dans cet ordre sur ta page. Rien n'est obligatoire, mais trois photos valent mieux qu'une.">
+        {/* « Ajoute des photos » ne dit rien à personne. Une consigne par place,
+            en revanche, se comprend et se fait : c'est la demande d'Alex du
+            05/08, et c'est ce qui fait la différence entre une fiche vide et
+            une fiche qui donne envie. */}
+        <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
+          {CONSEILS_PHOTOS.slice(1, 4).map(c => (
+            <p key={c.position} style={{ margin: 0, fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+              <strong style={{ color: T.bgPanel }}>Photo {c.position} · {c.titre}</strong> {c.aide}
+            </p>
+          ))}
+          <p style={{ margin: 0, fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+            Au-delà, tu peux aller jusqu&rsquo;à {MAX_PHOTOS} photos et changer leur ordre depuis ton tableau de bord.
+          </p>
+        </div>
         <GalerieMini
           photos={galerie}
           max={MAX_GALERIE}
@@ -1404,7 +1506,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
           onSupprimer={supprimerPhotoGalerie}
         />
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
-          <strong style={{ color: T.bgPanel }}>Conseil :</strong> varie les angles (intérieur ambiance + produit signature + équipe en action). Format paysage 16:9 idéal, mais on accepte tous les ratios.
+          Format paysage idéal, mais tous les ratios passent. Compression automatique.
         </div>
       </Card>
 

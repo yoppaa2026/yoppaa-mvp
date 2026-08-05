@@ -21,6 +21,8 @@ import { dealActifCeJour, remiseSurArticle } from '@/lib/deals'
 import { reprendrePanierPourRdv } from '@/lib/panier-vers-rdv'
 import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 import IconeRetrait from '@/app/components/IconeRetrait'
+import BanniereCommerce from '@/app/components/BanniereCommerce'
+import GalerieCommerce from '@/app/components/GalerieCommerce'
 
 // Rend en gras ce que les textes encadrent de `**`. La formulation vit dans
 // lib/ecran-retrait.js, testable ; seule la mise en forme reste ici.
@@ -247,6 +249,19 @@ export default function CommanderRdvSlug() {
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   const [maCarteFid, setMaCarteFid] = useState(null)        // ma carte de fidélité chez ce commerçant
   const [fidConnecte, setFidConnecte] = useState(true)      // distingue « pas de carte » de « pas connecté »
+  const [photos, setPhotos] = useState([])                  // « Mon commerce en images »
+  // La couverture ouvre la série, comme sur la fiche boutique. Deux sources,
+  // parce qu'un commerçant peut n'avoir renseigné que l'une des deux.
+  const photosFiche = (() => {
+    const couv = photos.find(p => p.type === 'couverture')
+    const autres = photos.filter(p => p.type !== 'couverture' && p.url)
+    const tete = couv?.url
+      ? [{ id: couv.id, url: couv.url, legende: couv.legende || null }]
+      : (commercant?.photo_couverture_url
+          ? [{ id: 'couverture-repli', url: commercant.photo_couverture_url, legende: null }]
+          : [])
+    return [...tete, ...autres]
+  })()
   const [produits, setProduits] = useState([])              // catalogue produits (aperçu → page boutique /commander/[slug])
   const [bonsCfg, setBonsCfg] = useState(null)              // config bons cadeaux (bouton Offrir)
   const [bonModalOuvert, setBonModalOuvert] = useState(false)
@@ -588,7 +603,7 @@ export default function CommanderRdvSlug() {
 
       // 2. Fetch prestations + créneaux config + praticiens + junction + fermetures en parallèle
       const todayISO = new Date().toISOString().slice(0, 10)
-      const [{ data: prest }, { data: cren }, { data: prat }, { data: junction }, { data: ferm }] = await Promise.all([
+      const [{ data: prest }, { data: cren }, { data: prat }, { data: junction }, { data: ferm }, { data: photosData }] = await Promise.all([
         supabase
           .from('rdv_prestations')
           .select('*')
@@ -623,9 +638,18 @@ export default function CommanderRdvSlug() {
           .eq('commercant_id', c.id)
           .is('deleted_at', null)
           .gte('date_fin', todayISO),
+        // Photos de la fiche : cette page ne les chargeait pas du tout, elle
+        // n'affichait que la couverture en bandeau. Depuis que le haut de fiche
+        // est une bannière, sans ça un salon n'aurait plus une seule image.
+        supabase
+          .from('commercant_photos')
+          .select('id, url, type, ordre, legende')
+          .eq('commercant_id', c.id)
+          .order('ordre'),
       ])
 
       if (annule) return
+      setPhotos(photosData || [])
       setPrestations(prest || [])
       setCreneauxConfig(cren || [])
       setPraticiens(prat || [])
@@ -1409,19 +1433,10 @@ export default function CommanderRdvSlug() {
               {/* ─── HERO PHOTO ─── */}
               <div className="fiche-hero" style={{ position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 3 }}/>
-                {commercant.photo_couverture_url
-                  ? <img src={commercant.photo_couverture_url} alt={commercant.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                  : (
-                    // Aplat de marque, mais jamais anonyme : sans photo, le nom
-                    // porte le bandeau, sinon on ne sait pas chez qui on est.
-                    <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px' }}>
-                      <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}55 0%, transparent 60%), radial-gradient(circle at 20% 80%, ${T.light}22 0%, transparent 50%)` }}/>
-                      <p style={{ position: 'relative', margin: 0, fontWeight: 900, fontSize: '1.5rem', color: '#fff', letterSpacing: '-0.5px', textAlign: 'center', lineHeight: 1.2, textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}>
-                        {commercant.nom}
-                      </p>
-                    </div>
-                  )
-                }
+                {/* Même bannière que sur une fiche boutique : deux fiches
+                    Yoppaa se ressemblent en haut, quel que soit le métier. Les
+                    photos du salon vivent dans « Mon commerce en images ». */}
+                <BanniereCommerce nom={commercant.nom} />
                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, background: 'linear-gradient(to top, rgba(22,6,54,0.5), transparent)' }}/>
 
                 {/* Partager + Favori, même pattern que la fiche boutique */}
@@ -1488,6 +1503,11 @@ export default function CommanderRdvSlug() {
                     <p style={{ margin: 0, fontSize: '0.78rem', color: T.deep, lineHeight: 1.55, whiteSpace: 'pre-line' }}>{commercant.infos_pratiques}</p>
                   </div>
                 )}
+
+                {/* Les photos du salon : cette page n'en montrait AUCUNE, elle
+                    se contentait de la couverture en bandeau. Pour un salon,
+                    c'est pourtant ce qui donne envie de pousser la porte. */}
+                {etape === 1 && <GalerieCommerce photos={photosFiche} nomCommerce={commercant.nom} />}
 
                 {/* Carte de fidélité : ma jauge ou le teaser du programme */}
                 {etape === 1 && <CarteFideliteFiche commercant={commercant} carte={maCarteFid} connecte={fidConnecte}/>}

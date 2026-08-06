@@ -11,6 +11,7 @@ import SectionPreinscriptions from './SectionPreinscriptions'
 import SectionDiagnosticBrevo from './SectionDiagnosticBrevo'
 import SectionCommunes from './SectionCommunes'
 import SectionSuggestions from './SectionSuggestions'
+import SectionDiagnosticRatelimit from './SectionDiagnosticRatelimit'
 import { Sparkles, Store, Scissors, Croissant, ShoppingBag, Phone, Eye, Lock } from 'lucide-react'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
@@ -191,6 +192,9 @@ export default function AdminPage() {
 
         {/* Diagnostic Brevo : la connexion email/SMS répond-elle ? */}
         <SectionDiagnosticBrevo />
+
+        {/* Le compteur d'essais bloque-t-il vraiment ? Invérifiable à la main. */}
+        <SectionDiagnosticRatelimit />
 
         {/* Préinscriptions (suivi de croissance) */}
         <SectionPreinscriptions />

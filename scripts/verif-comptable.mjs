@@ -12,6 +12,7 @@
 // pas le chiffre d'affaires est un journal faux, quelle que soit sa jolie mise
 // en forme.
 
+import { readFileSync } from 'node:fs'
 import { ventiler, tauxFraisLivraison, cleTaux, libelleTaux, tauxPourArticle, TAUX_NON_RENSEIGNE, REGIME_EMPORTER } from '../lib/tva.js'
 import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal } from '../lib/export-comptable.js'
 import { calculerRemiseBon, normaliserCodeBon, genererCodeBon, bonExpire, BON_MONTANT_MIN, BON_MONTANT_MAX } from '../lib/bons-cadeaux.js'
@@ -167,6 +168,51 @@ egal('saisie vide refusée', normaliserCodeBon(''), null)
 verifier('code généré au bon format', /^BC-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(genererCodeBon()))
 verifier('code généré sans caractère ambigu', !/[01OIL]/.test(genererCodeBon().replace('BC-', '')))
 verifier('un code généré se renormalise en lui-même', (() => { const c = genererCodeBon(); return normaliserCodeBon(c) === c })())
+
+// ─── Le TIRAGE du code, pas seulement sa forme ────────────────────────────
+// Un bon cadeau est un instrument au porteur : deviner un code, c'est
+// encaisser l'argent d'un autre. Le format était vérifié, jamais le hasard.
+const CODES = Array.from({ length: 3000 }, () => genererCodeBon())
+
+// Aucun doublon sur trois mille tirages. Une collision ici trahirait un
+// générateur qui tourne en rond (graine figée, séquence courte).
+egal('aucune collision sur 3000 codes', new Set(CODES).size, 3000)
+verifier('tous au bon format', CODES.every(c => /^BC-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$/.test(c)))
+verifier('aucun caractère ambigu, jamais', CODES.every(c => !/[01OIL]/.test(c.slice(3))))
+
+// Distribution : les 31 caractères doivent tous sortir. Un alphabet dont une
+// partie ne tombe jamais, c'est un espace de recherche plus petit qu'annoncé.
+const tousCaracteres = CODES.map(c => c.replace(/BC-|-/g, '')).join('')
+const vus = new Set(tousCaracteres)
+egal('les 31 caractères sortent tous', vus.size, 31)
+
+// Et sans biais. 256 n'est pas un multiple de 31 : un tirage naïf (octet
+// modulo 31) fait sortir les HUIT PREMIERS caractères de l'alphabet une fois
+// sur neuf de plus que les autres.
+//
+// ⚠️ Ce test a d'abord été écrit en regardant l'écart maximum par caractère,
+// avec une tolérance de 35 %. Mesure faite sur un tirage volontairement
+// biaisé : l'écart n'y monte qu'à 14 %, noyé dans le bruit statistique. Le
+// test passait donc au vert sur exactement ce qu'il prétendait interdire.
+//
+// Ce qui trahit le biais, c'est la comparaison des DEUX GROUPES : les huit
+// premiers caractères contre les vingt-trois autres. Le bruit s'y annule, et
+// le rapport saute à 1,13 là où un tirage sain reste à 1,00.
+const compte = (c) => tousCaracteres.split(c).length - 1
+const moyenne = (liste) => liste.reduce((a, b) => a + b, 0) / liste.length
+const debutAlphabet = moyenne([...'23456789'].map(compte))
+const finAlphabet = moyenne([...'ABCDEFGHJKMNPQRSTUVWXYZ'].map(compte))
+const rapport = debutAlphabet / finAlphabet
+verifier('les huit premiers caractères ne sortent pas plus que les autres',
+  rapport > 0.96 && rapport < 1.04, `rapport ${rapport.toFixed(4)} (biaisé = 1,13)`)
+
+// Le tirage doit venir d'une source cryptographique. C'est LA règle : le
+// nombre de combinaisons ne protège de rien si la suite est prévisible.
+const sourceBons = readFileSync(new URL('../lib/bons-cadeaux.js', import.meta.url), 'utf8')
+const codeSeul = sourceBons.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+verifier('le code n\'est pas tiré avec Math.random', !/Math\.random/.test(codeSeul))
+verifier('le tirage passe par getRandomValues', /getRandomValues/.test(codeSeul))
+verifier('aucun repli silencieux sur un tirage faible', /throw new Error/.test(codeSeul))
 
 verifier('bon expiré détecté', bonExpire({ expires_at: '2026-01-01' }, new Date('2026-08-05')))
 verifier('bon valide non expiré', !bonExpire({ expires_at: '2027-01-01' }, new Date('2026-08-05')))

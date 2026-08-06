@@ -15,7 +15,11 @@ import { bonsLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 
 export async function POST(request) {
   try {
-    const rl = await checkLimit(bonsLimiter, clientIp(request))
+    // Repli local si le compteur partagé manque : sans lui, une instance sans
+    // Upstash laisserait essayer les codes à volonté, et un code de bon cadeau
+    // vaut de l'argent. Un client qui tape le sien passe très large.
+    const rl = await checkLimit(bonsLimiter, clientIp(request),
+      { cle: 'bon', max: 10, fenetreMs: 60_000 })
     if (!rl.success) {
       return NextResponse.json({ ok: false, error: 'Trop de tentatives, réessaie dans une minute.' }, { status: 429 })
     }

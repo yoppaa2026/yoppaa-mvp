@@ -214,6 +214,28 @@ verifier('le code n\'est pas tiré avec Math.random', !/Math\.random/.test(codeS
 verifier('le tirage passe par getRandomValues', /getRandomValues/.test(codeSeul))
 verifier('aucun repli silencieux sur un tirage faible', /throw new Error/.test(codeSeul))
 
+// ─── Ce qui protège le code une fois émis ──────────────────────────────────
+// L'entropie ne suffit pas : sans limite sur les essais, 850 milliards de
+// combinaisons se grignotent. Et le compteur partagé est fail-open, donc une
+// instance sans Upstash n'en aurait AUCUNE.
+const { checkLocal } = await import('../lib/ratelimit.js')
+const t0 = 1_000_000
+for (let i = 0; i < 10; i++) {
+  verifier(`essai ${i + 1} sur 10 autorisé`, checkLocal('test:ip', 10, 60_000, t0 + i).success)
+}
+verifier('le onzième essai est refusé', !checkLocal('test:ip', 10, 60_000, t0 + 10).success)
+// Une minute plus tard, la fenêtre a glissé : le client honnête n'est pas puni.
+verifier('après la fenêtre, on peut réessayer', checkLocal('test:ip', 10, 60_000, t0 + 61_000).success)
+// Deux adresses différentes ne se pénalisent pas l'une l'autre.
+verifier('les compteurs sont par identifiant', checkLocal('test:autre-ip', 10, 60_000, t0 + 10).success)
+
+const routeVerif = readFileSync(new URL('../app/api/bons-cadeaux/verifier/route.js', import.meta.url), 'utf8')
+verifier('la vérification de code a un repli local', /cle: 'bon', max: \d+/.test(routeVerif))
+// Ne jamais confirmer qu'un code existe ailleurs : ce serait un oracle.
+const serveurBons = readFileSync(new URL('../lib/bons-cadeaux-server.js', import.meta.url), 'utf8')
+verifier('code inconnu et code d\'un autre commerce : même message',
+  /Même message que le code inconnu/.test(serveurBons))
+
 verifier('bon expiré détecté', bonExpire({ expires_at: '2026-01-01' }, new Date('2026-08-05')))
 verifier('bon valide non expiré', !bonExpire({ expires_at: '2027-01-01' }, new Date('2026-08-05')))
 verifier('bon sans échéance jamais expiré', !bonExpire({ expires_at: null }, new Date('2026-08-05')))

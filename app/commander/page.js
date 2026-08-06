@@ -8,6 +8,7 @@ import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@
 import IconeRetrait from '@/app/components/IconeRetrait'
 import { canDo, PLAN_PUBLIC_ENABLED, bandeauCategorie } from '@/lib/plans'
 import { morningADuContenu } from '@/lib/morning-contenu'
+import { lirePositionMemorisee, memoriserPosition, marquerDemandee, dejaDemandee, decisionGeoloc, etatAutorisation } from '@/lib/geoloc'
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
@@ -1474,7 +1475,9 @@ export default function Commander() {
       setSousOngletCmd(tabFromUrl)
     }
     chargerCommercants()
-    demanderGeolocalisation()
+    // PAS demanderGeolocalisation() directement : appelée à chaque montage,
+    // elle rouvrait la fenêtre d'autorisation encore et encore (Alex, 07/08).
+    geolocaliserAuDemarrage()
 
     // Sess 7 : Safari iOS ITP purge le localStorage apres 7j sans visite,
     // ce qui fait "disparaitre" les RDV/commandes cote client iPhone. Fallback :
@@ -1704,6 +1707,27 @@ export default function Commander() {
         || null
   }
 
+  // Au démarrage : on n'ouvre la fenêtre du navigateur que si c'est justifié.
+  // Appelée sans argument depuis le bouton « Utiliser ma position », elle
+  // demande toujours : là, c'est le Yopper qui l'a voulu.
+  async function geolocaliserAuDemarrage() {
+    if (!navigator.geolocation) return
+
+    // La dernière position connue s'affiche tout de suite : la commune apparaît
+    // sans attendre le satellite, et même hors ligne.
+    const memo = lirePositionMemorisee()
+    if (memo) {
+      setPosition({ lat: memo.lat, lng: memo.lng })
+      if (memo.rue) setRue(memo.rue)
+    }
+
+    const decision = decisionGeoloc({ etat: await etatAutorisation(), dejaDemande: dejaDemandee() })
+    if (decision === 'jamais') return
+    if (decision === 'lire' && memo?.fraiche) return  // rien de neuf à demander
+    if (decision === 'demander') marquerDemandee()
+    demanderGeolocalisation()
+  }
+
   function demanderGeolocalisation() {
     if (!navigator.geolocation) return
     setGeoLoading(true); setRue(null)
@@ -1717,6 +1741,7 @@ export default function Commander() {
           const cached = typeof window !== 'undefined' ? localStorage.getItem(cacheKey) : null
           if (cached) {
             setRue(cached)
+            memoriserPosition({ lat, lng, rue: cached })
             setGeoLoading(false)
             return
           }
@@ -1727,12 +1752,15 @@ export default function Commander() {
             const data = await res.json()
             const lib = libelleAdresse(data.address) || 'Près de toi'
             setRue(lib)
+            memoriserPosition({ lat, lng, rue: lib })
             try { localStorage.setItem(cacheKey, lib) } catch {}
           } else {
             setRue('Près de toi')
+            memoriserPosition({ lat, lng })
           }
         } catch {
           setRue('Près de toi')
+          memoriserPosition({ lat, lng })
         }
         setGeoLoading(false)
       },

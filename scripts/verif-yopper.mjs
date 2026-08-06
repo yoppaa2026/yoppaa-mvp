@@ -160,6 +160,75 @@ verifier('la carte formate les euros à la française', /replace\('\.', ','\)/.t
 verifier('plus de toFixed nu suivi d\'un euro', !/toFixed\(2\)\} €/.test(carte))
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 5. BONS CADEAUX ET FIDÉLITÉ — chaque euro compte UNE fois
+// ═══════════════════════════════════════════════════════════════════════════
+const { montantFidelisable } = await import('../lib/fidelite.js')
+
+// Une commande ordinaire : tout compte.
+egal('commande sans bon', montantFidelisable({ total: 24.50 }), 24.50)
+// Une commande partiellement réglée par un bon : seule la part sortie de la
+// poche compte. Le reste a déjà rempli la carte de celui qui a acheté le bon.
+egal('bon partiel', montantFidelisable({ total: 50, bon_cadeau_montant: 20 }), 30)
+// Entièrement payée par un bon : rien de plus n'est dépensé ce jour-là. Sans
+// cette règle, s'offrir un bon à soi-même doublait la cagnotte.
+egal('bon total', montantFidelisable({ total: 50, bon_cadeau_montant: 50 }), 0)
+egal('bon plus grand que la commande', montantFidelisable({ total: 30, bon_cadeau_montant: 50 }), 0)
+egal('montant absent', montantFidelisable({}), 0)
+egal('commande absente', montantFidelisable(), 0)
+egal('centimes justes', montantFidelisable({ total: 10.05, bon_cadeau_montant: 3.33 }), 6.72)
+egal('bon négatif ignoré', montantFidelisable({ total: 10, bon_cadeau_montant: -5 }), 10)
+
+// Les trois chemins de crédit doivent tous passer par cette règle, sinon le
+// double comptage revient par celui qu'on a oublié.
+for (const chemin of ['app/api/fidelite/crediter/route.js', 'app/api/yopper/commandes/route.js']) {
+  const src = lire(chemin)
+  verifier(`${chemin} déduit la part payée en bon`, /montantFidelisable\(/.test(src))
+  verifier(`${chemin} ne crédite plus le total brut`, !/montant: Number\((cmd|full)\.total \|\| 0\)/.test(src))
+  verifier(`${chemin} lit bien le montant du bon`, /bon_cadeau_montant/.test(src))
+}
+
+// L'achat d'un bon cadeau doit remplir la carte de l'ACHETEUR.
+const webhook = lire('app/api/stripe/webhook/route.js')
+const bloc = webhook.slice(webhook.indexOf('async function handleBonCadeauSucceeded'))
+verifier('l\'achat d\'un bon crédite la fidélité', /crediterFidelite\(/.test(bloc))
+verifier('c\'est l\'acheteur qui est crédité', /acheteur_email/.test(bloc))
+verifier('le crédit porte la référence du bon', /bon_cadeau_id: bon\.id/.test(bloc))
+// Un bon s'achète en ligne : aucune visite, donc aucun tampon.
+verifier('mécanique passages : pas de tampon pour un bon',
+  /fidelite_mecanique === 'cagnotte'/.test(bloc))
+// Le rejeu d'un webhook Stripe ne doit jamais créditer deux fois.
+const mouvements = lire('lib/fidelite-server.js')
+verifier('le mouvement porte bon_cadeau_id', /bon_cadeau_id: refs\.bon_cadeau_id/.test(mouvements))
+const migration = lire('migrations/MIGRATION_FIDELITE_BON_CADEAU.sql')
+verifier('l\'index unique protège du rejeu', /CREATE UNIQUE INDEX.*uidx_fid_mvts_bon/s.test(migration))
+verifier('la source bon_cadeau est autorisée', /'bon_cadeau'/.test(migration))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. LA LOCALISATION — on ne demande qu'une fois
+// ═══════════════════════════════════════════════════════════════════════════
+const { decisionGeoloc, DUREE_FRAICHE } = await import('../lib/geoloc.js')
+
+egal('autorisation accordée : on lit sans déranger', decisionGeoloc({ etat: 'granted' }), 'lire')
+egal('autorisation refusée : on se tait', decisionGeoloc({ etat: 'denied' }), 'jamais')
+// Même refusée il y a longtemps, on ne relance pas : il l'a dit une fois.
+egal('refus + déjà demandé : toujours silence', decisionGeoloc({ etat: 'denied', dejaDemande: true }), 'jamais')
+egal('jamais demandé : on demande', decisionGeoloc({ etat: 'prompt' }), 'demander')
+// C'EST LE BUG D'ALEX : sans ce cas, la fenêtre revenait à chaque ouverture.
+egal('déjà demandé sans réponse : on ne relance pas', decisionGeoloc({ etat: 'prompt', dejaDemande: true }), 'jamais')
+// Safari a longtemps ignoré l'API Permissions : sans état, même règle.
+egal('sans API Permissions, première fois', decisionGeoloc({ etat: null }), 'demander')
+egal('sans API Permissions, deuxième fois', decisionGeoloc({ etat: null, dejaDemande: true }), 'jamais')
+egal('appel sans argument', decisionGeoloc(), 'demander')
+verifier('une position se garde une demi-journée', DUREE_FRAICHE >= 6 * 3600 * 1000)
+
+const accueil2 = lire('app/commander/page.js')
+verifier('le démarrage passe par la décision', /geolocaliserAuDemarrage\(\)/.test(accueil2))
+verifier('la position est mémorisée', /memoriserPosition\(/.test(accueil2))
+// Le bouton « Utiliser ma position » doit rester un chemin direct : c'est le
+// geste volontaire, il ne passe pas par la décision.
+verifier('le bouton demande toujours', /demanderGeolocalisation\(\); setShowLocManuelle\(false\)/.test(accueil2))
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

@@ -13,6 +13,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { crediterFidelite } from '@/lib/fidelite-server'
 import { canDo } from '@/lib/plans'
+import { montantFidelisable } from '@/lib/fidelite'
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -32,7 +33,7 @@ export async function POST(request) {
 
     const { data: cmd, error: errCmd } = await supabase
       .from('commandes')
-      .select('id, commercant_id, client_telephone, client_email, total, statut')
+      .select('id, commercant_id, client_telephone, client_email, total, bon_cadeau_montant, statut')
       .eq('id', commandeId).maybeSingle()
     if (errCmd) throw new Error(errCmd.message)
     if (!cmd) return NextResponse.json({ ok: false, error: 'Commande introuvable' }, { status: 404 })
@@ -47,8 +48,10 @@ export async function POST(request) {
       return NextResponse.json({ ok: true, skipped: 'fidelite_inactive' })
     }
 
+    // La part réglée par un bon cadeau est retirée : elle a déjà rempli la
+    // carte de celui qui a acheté le bon (voir lib/fidelite).
     const credit = commercant.fidelite_mecanique === 'cagnotte'
-      ? { montant: Number(cmd.total || 0) }
+      ? { montant: montantFidelisable(cmd) }
       : { passages: 1 }
     const res = await crediterFidelite(supabase, commercant, cmd.client_telephone, credit, {
       source: 'commande', commande_id: cmd.id, client_email: cmd.client_email || null,

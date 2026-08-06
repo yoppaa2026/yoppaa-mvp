@@ -26,6 +26,7 @@ import { NextResponse } from 'next/server'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { createClient } from '@supabase/supabase-js'
 import { crediterFidelite } from '@/lib/fidelite-server'
+import { montantFidelisable } from '@/lib/fidelite'
 import { canDo } from '@/lib/plans'
 
 function admin() {
@@ -145,13 +146,15 @@ export async function POST(request) {
       // expédition/livraison/bouton commerçant). Best-effort, idempotent.
       try {
         const { data: full } = await supabase
-          .from('commandes').select('id, commercant_id, client_telephone, client_email, total').eq('id', id).maybeSingle()
+          .from('commandes').select('id, commercant_id, client_telephone, client_email, total, bon_cadeau_montant').eq('id', id).maybeSingle()
         if (full) {
           const { data: commercant } = await supabase
             .from('commercants').select('*').eq('id', full.commercant_id).maybeSingle()
           if (commercant?.fidelite_actif && canDo(commercant.plan, 'fidelite_auto')) {
+            // Hors part payée par bon cadeau : elle a déjà rempli la carte de
+            // celui qui a acheté le bon (lib/fidelite).
             const credit = commercant.fidelite_mecanique === 'cagnotte'
-              ? { montant: Number(full.total || 0) }
+              ? { montant: montantFidelisable(full) }
               : { passages: 1 }
             await crediterFidelite(supabase, commercant, full.client_telephone, credit, {
               source: 'commande', commande_id: full.id, client_email: full.client_email || null,

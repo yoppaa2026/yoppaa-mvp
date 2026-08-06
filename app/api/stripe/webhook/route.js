@@ -28,6 +28,8 @@ import { debiterBon, recrediterBon } from '@/lib/bons-cadeaux-server'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { programmerRappelRdv } from '@/lib/rappels'
 import { recupererFraisStripe, ventilerFrais } from '@/lib/stripe-frais'
+import { crediterFidelite } from '@/lib/fidelite-server'
+import { canDo } from '@/lib/plans'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -334,6 +336,47 @@ async function handleBonCadeauSucceeded(paymentIntent, supabase) {
     .eq('statut', 'paiement_en_attente')
   if (errUp) throw errUp
   console.info('[stripe/webhook] bon cadeau activé', { bonId, montant: bon.montant_initial })
+
+  // ─── Fidélité de l'ACHETEUR ───────────────────────────────────────────────
+  // Acheter un bon cadeau ne remplissait pas la carte (signalé par Alex le
+  // 07/08). C'est pourtant de l'argent réellement dépensé chez ce commerçant,
+  // et l'achat le plus engageant qui soit.
+  //
+  // C'est bien l'ACHETEUR qui est crédité, pas le bénéficiaire : c'est lui qui
+  // a payé. Le bénéficiaire, lui, sera crédité de ce qu'il ajoutera de sa
+  // poche le jour où il utilisera le bon (la part couverte par le bon est
+  // déduite dans lib/lignes-commande, sans quoi la même dépense compterait
+  // deux fois).
+  //
+  // Mécanique « passages » : on ne compte RIEN. Un bon s'achète en ligne, il
+  // n'y a pas eu de visite, et un tampon sans passage fausse le programme.
+  //
+  // Le téléphone vient de la fiche client rattachée à l'email d'achat : le
+  // formulaire de bon cadeau ne le demande pas, et l'ajouter alourdirait un
+  // tunnel de paiement pour un cas qui se résout tout seul. Sans fiche, pas de
+  // crédit, et c'est sans gravité.
+  try {
+    const com = bon.commercant
+    if (com?.id && bon.acheteur_email) {
+      const { data: complet } = await supabase
+        .from('commercants').select('*').eq('id', com.id).maybeSingle()
+      if (complet?.fidelite_actif
+          && canDo(complet.plan, 'fidelite_auto')
+          && complet.fidelite_mecanique === 'cagnotte') {
+        const { data: client } = await supabase
+          .from('clients').select('telephone')
+          .eq('email', String(bon.acheteur_email).toLowerCase())
+          .maybeSingle()
+        if (client?.telephone) {
+          await crediterFidelite(supabase, complet, client.telephone,
+            { montant: Number(bon.montant_initial || 0) },
+            { source: 'bon_cadeau', bon_cadeau_id: bon.id, client_email: bon.acheteur_email })
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[stripe/webhook] fidelite bon cadeau KO (non bloquant)', e?.message)
+  }
 
   // Emails (non-bloquants) : bénéficiaire OU acheteur selon le mode, + reçu
   // acheteur, + notification commerçant (mode 'chaque').

@@ -14,7 +14,7 @@ import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
 import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '@/lib/fidelite'
 import { libelleEnvie, phraseHorsOuverture } from '@/lib/signaux'
-import { MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto } from '@/lib/guide-photos'
+import { MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '@/lib/guide-photos'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
 import {
@@ -4120,6 +4120,10 @@ function TabProfil({ commercantId, toast, onSaved }) {
   // « Mon commerce en images » est devenu le seul endroit où les photos vivent,
   // le haut de fiche portant désormais une bannière au nom du commerce.
   const MAX_GALERIE = MAX_PHOTOS - 1
+  // Les conseils de prise de vue changent selon le métier : « recule-toi, prends
+  // l'enseigne » ne veut rien dire pour un camion, et « ton produit phare »
+  // sonne creux chez un coiffeur.
+  const metierFiche = metierPhotos({ categorie: form.categorie, type: form.type })
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchProfil(); fetchPhotos() }, [commercantId])
@@ -4299,9 +4303,9 @@ function TabProfil({ commercantId, toast, onSaved }) {
         {/* Photo principale = position 1 du guide. Elle reste la vignette qui
             représente le commerce dans les listes, d'où son statut à part. */}
         <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 2px' }}>
-          Photo 1 · {conseilPhoto(1).titre}
+          Photo 1 · {conseilPhoto(1, metierFiche).titre}
         </p>
-        <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 8px', lineHeight: 1.5 }}>{conseilPhoto(1).aide}</p>
+        <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 8px', lineHeight: 1.5 }}>{conseilPhoto(1, metierFiche).aide}</p>
         <label style={{ display: 'block', width: '100%', maxWidth: 420, aspectRatio: '16/9', borderRadius: 14, border: `2px dashed ${couvertureUrl ? T.main : T.light}`, background: T.pale, overflow: 'hidden', cursor: uploadingCouv ? 'wait' : 'pointer', position: 'relative' }}>
           {couvertureUrl ? (
             <img src={couvertureUrl} alt="Couverture" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
@@ -4326,7 +4330,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {galerie.map((p, i) => {
-            const conseil = conseilPhoto(i + 2)
+            const conseil = conseilPhoto(i + 2, metierFiche)
             return (
               <div key={p.id} style={{ display: 'flex', gap: 12, alignItems: 'center', background: T.bg, borderRadius: 12, padding: 8 }}>
                 <div style={{ width: 96, aspectRatio: '4/3', borderRadius: 10, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}`, flexShrink: 0 }}>
@@ -4362,10 +4366,10 @@ function TabProfil({ commercantId, toast, onSaved }) {
               </span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: T.ink, marginBottom: 2 }}>
-                  {uploadingGal ? 'Envoi en cours…' : `Ajouter la photo ${galerie.length + 2} · ${conseilPhoto(galerie.length + 2).titre}`}
+                  {uploadingGal ? 'Envoi en cours…' : `Ajouter la photo ${galerie.length + 2} · ${conseilPhoto(galerie.length + 2, metierFiche).titre}`}
                 </span>
                 <span style={{ display: 'block', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>
-                  {conseilPhoto(galerie.length + 2).aide}
+                  {conseilPhoto(galerie.length + 2, metierFiche).aide}
                 </span>
               </span>
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadGalerie(e.target.files[0]); e.target.value = '' }} disabled={uploadingGal}/>

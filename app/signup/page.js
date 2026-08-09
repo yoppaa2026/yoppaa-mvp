@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
 import { compresserImage } from '@/lib/compress-image'
-import { CONSEILS_PHOTOS, MAX_PHOTOS } from '@/lib/guide-photos'
+import { conseilPhoto, MAX_PHOTOS } from '@/lib/guide-photos'
 import { SHOP_PRODUCTS, classerProduitsParCategorie } from '@/lib/produits-boutique'
 // Icônes Lucide React : SVG inline alignés sur la charte canonique Yoppaa.
 // Convention : stroke-width 1.8, currentColor pour hériter de la palette parent.
@@ -1489,11 +1489,16 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
             05/08, et c'est ce qui fait la différence entre une fiche vide et
             une fiche qui donne envie. */}
         <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-          {CONSEILS_PHOTOS.slice(1, 4).map(c => (
-            <p key={c.position} style={{ margin: 0, fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
-              <strong style={{ color: T.bgPanel }}>Photo {c.position} · {c.titre}</strong> {c.aide}
-            </p>
-          ))}
+          {[2, 3, 4].map(position => {
+            // Conseils adaptés au métier : un food truck n'a pas de devanture,
+            // un salon ne vend pas des rayons.
+            const c = conseilPhoto(position, { categorie: commercant.categorie, type: commercant.type })
+            return (
+              <p key={position} style={{ margin: 0, fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+                <strong style={{ color: T.bgPanel }}>Photo {position} · {c.titre}</strong> {c.aide}
+              </p>
+            )
+          })}
           <p style={{ margin: 0, fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
             Au-delà, tu peux aller jusqu&rsquo;à {MAX_PHOTOS} photos et changer leur ordre depuis ton tableau de bord.
           </p>

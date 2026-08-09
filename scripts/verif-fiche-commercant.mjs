@@ -11,7 +11,7 @@
 // qu'une erreur y coûte bien plus qu'un affichage de travers.
 
 import { readFileSync } from 'node:fs'
-import { CONSEILS_PHOTOS, MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto } from '../lib/guide-photos.js'
+import { CONSEILS_PHOTOS, MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '../lib/guide-photos.js'
 import { normaliserUrl, estIpPrivee, texteUtile } from '../lib/site-web.js'
 
 let ok = 0, ko = 0
@@ -112,6 +112,42 @@ verifier('la deuxième est l\'intérieur', /intérieur/i.test(conseilPhoto(2).ti
 // Au-delà de dix, on ne doit pas renvoyer « undefined » dans l'écran.
 verifier('une place hors barème reste utilisable', typeof conseilPhoto(99)?.titre === 'string')
 verifier('une place absurde reste utilisable', typeof conseilPhoto(0)?.titre === 'string')
+
+// ─── Les conseils s'adaptent au métier (Alex, 09/08) ──────────────────────
+// « Recule-toi, prends l'enseigne et la porte » ne veut rien dire pour un
+// camion, et « ton produit phare » sonne creux chez un coiffeur.
+egal('un food truck se reconnaît à son type',
+  metierPhotos({ categorie: 'alimentaire', type: 'Food truck' }), 'foodtruck')
+egal('même écrit autrement',
+  metierPhotos({ categorie: 'alimentaire', type: 'Snack & Food-Truck' }), 'foodtruck')
+egal('une boulangerie reste alimentaire',
+  metierPhotos({ categorie: 'alimentaire', type: 'Boulangerie' }), 'alimentaire')
+egal('un salon est une vitrine', metierPhotos({ categorie: 'vitrine', type: 'Coiffeur' }), 'vitrine')
+egal('sans catégorie, le socle', metierPhotos({}), 'generique')
+egal('sans rien du tout, le socle', metierPhotos(), 'generique')
+
+// Le camion n'a ni enseigne ni porte : la première photo doit le dire.
+const truck1 = conseilPhoto(1, { categorie: 'alimentaire', type: 'Food truck' })
+verifier('la photo 1 d\'un food truck parle du camion', /camion/i.test(truck1.titre + truck1.aide))
+verifier('elle ne parle plus de porte ni d\'enseigne fixe', !/prends l'enseigne et la porte/.test(truck1.aide))
+// Un salon montre un résultat, pas un rayon.
+const salon3 = conseilPhoto(3, { categorie: 'vitrine', type: 'Coiffeur' })
+verifier('la photo 3 d\'un salon montre un résultat', /coupe|soin|résultat/i.test(salon3.titre + salon3.aide))
+// Et il faut demander l'accord avant de publier le visage de quelqu'un.
+verifier('le salon rappelle de demander l\'accord', /accord/i.test(salon3.aide))
+// Une boutique montre un rayon.
+const detail3 = conseilPhoto(3, { categorie: 'detail', type: 'Librairie' })
+verifier('la photo 3 d\'une boutique montre un rayon', /rayon/i.test(detail3.titre + detail3.aide))
+// Ce qui n'est pas réécrit doit hériter du socle, sans trou.
+for (const metier of ['foodtruck', 'vitrine', 'detail', 'alimentaire', 'generique']) {
+  for (let i = 1; i <= MAX_PHOTOS; i++) {
+    const c = conseilPhoto(i, metier)
+    verifier(`${metier}, photo ${i} : titre et aide présents`, c.titre?.length > 3 && c.aide?.length > 15)
+  }
+}
+// La position ne doit jamais être perdue par une variante.
+verifier('la position survit à l\'adaptation',
+  [1, 3, 6].every(i => conseilPhoto(i, 'foodtruck').position === i))
 
 // Le ton de l'encouragement : jamais culpabilisant à zéro photo, jamais
 // faussement enthousiaste à une seule.

@@ -91,6 +91,33 @@ verifier('pas de dérive sur dix crédits', Math.abs(cumul.cagnotte - 1.7) < 0.0
 r = appliquerCredit(cfgCagnotte, { cagnotte: 2 }, { montant: 0 })
 egal('montant nul = pas de gain', r.patch.cagnotte, 2)
 
+// ─── Le cas exact d'Alex (09/08) : bon cadeau de 75 € à 1 % ───────────────
+// Il attendait 0,75 € et a vu davantage. Le calcul lui-même est juste : si
+// l'écart persiste, il vient d'ailleurs (taux réel en base, ou cumul avec les
+// crédits précédents), pas de cette formule.
+const cfg1pct = { fidelite_mecanique: 'cagnotte', fidelite_taux_cagnotte: 1, fidelite_seuil_cagnotte: 10 }
+r = appliquerCredit(cfg1pct, { cagnotte: 0, recompenses_disponibles: 0 }, { montant: 75 })
+egal('1 % de 75 € = 0,75 €', r.patch.cagnotte, 0.75)
+egal('aucune récompense à 0,75 €', r.debloquees, 0)
+// Le cumul avec un solde antérieur ne doit pas surprendre : c'est une addition.
+r = appliquerCredit(cfg1pct, { cagnotte: 0.55, recompenses_disponibles: 0 }, { montant: 75 })
+egal('0,55 € + 1 % de 75 € = 1,30 €', r.patch.cagnotte, 1.30)
+
+// Le taux par défaut est 5 % : un commerçant qui n'a jamais réglé le sien
+// crédite donc cinq fois plus. C'est la première chose à vérifier quand un
+// montant paraît trop élevé.
+r = appliquerCredit({ fidelite_mecanique: 'cagnotte', fidelite_seuil_cagnotte: 10 }, { cagnotte: 0 }, { montant: 75 })
+egal('sans taux réglé, le défaut de 5 % s\'applique', r.patch.cagnotte, 3.75)
+// Un taux à zéro est un vrai réglage, pas une absence : il ne doit PAS
+// basculer sur 5 %.
+r = appliquerCredit({ fidelite_mecanique: 'cagnotte', fidelite_taux_cagnotte: 0, fidelite_seuil_cagnotte: 10 }, { cagnotte: 0 }, { montant: 75 })
+egal('taux à zéro = aucun gain', r.patch.cagnotte, 0)
+
+// Quelques taux courants, pour que la formule reste juste hors des cas ronds.
+egal('2 % de 75 €', appliquerCredit({ ...cfg1pct, fidelite_taux_cagnotte: 2 }, { cagnotte: 0 }, { montant: 75 }).patch.cagnotte, 1.5)
+egal('1 % de 24,90 €', appliquerCredit(cfg1pct, { cagnotte: 0 }, { montant: 24.90 }).patch.cagnotte, 0.25)
+egal('3 % de 19,99 €', appliquerCredit({ ...cfg1pct, fidelite_taux_cagnotte: 3 }, { cagnotte: 0 }, { montant: 19.99 }).patch.cagnotte, 0.6)
+
 // Libellés de récompense
 egal('libellé personnalisé prioritaire', libelleRecompense({ fidelite_recompense_libelle: 'Un café offert' }), 'Un café offert')
 verifier('libellé déduit du pourcentage', libelleRecompense({ fidelite_recompense_type: 'remise_pct', fidelite_recompense_valeur: 50 }).includes('50'))

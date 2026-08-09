@@ -59,14 +59,96 @@ input, textarea, select {
   overscroll-behavior-x: contain;
 }
 
-/* Box-sizing global cohérent (évite les débordements liés aux paddings) */
-*, *::before, *::after {
-  box-sizing: border-box;
+/* ═══════════════════════════════════════════════════════════════════════════
+   SOCLE BUREAU — phase 1 (09/08)
+   ═══════════════════════════════════════════════════════════════════════════
+   L'application est née mobile, et elle le reste : tout ce qui suit s'AJOUTE
+   par-dessus, rien ne réécrit le rendu du téléphone. C'est la règle qui tient
+   tout le chantier, parce que la branche mobile est celle qui partira dans les
+   stores et celle qui sera portée en natif : si le PC la modifiait, chaque
+   fonctionnalité future devrait être écrite deux fois.
+
+   Le seuil est 1024 px, et il vit aussi dans lib/responsive.js pour que le
+   banc puisse vérifier qu'on ne le contredit nulle part.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Le focus clavier ───────────────────────────────────────────────────
+   Il n'existait NULLE PART : zéro `:focus-visible` dans toute l'application.
+   Sur un téléphone ça ne se voit pas ; sur un PC, naviguer au clavier revenait
+   à avancer les yeux fermés, et c'est aussi un manquement d'accessibilité.
+
+   `:focus-visible` et non `:focus` : le navigateur ne montre l'anneau que
+   lorsque la navigation est réellement au clavier, jamais après un clic. */
+:where(a, button, input, textarea, select, summary, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid #6B35C4;
+  outline-offset: 2px;
+  border-radius: inherit;
 }
 
-/* font-size minimum 16px sur les inputs : empêche Safari iOS de zoomer
-   automatiquement au tap, ce qui décentrait/agrandissait l'affichage.
-   max() garde la possibilité d'avoir des inputs plus grands si voulu. */
-input, textarea, select {
-  font-size: max(16px, 1rem);
+/* ── 2. Le survol ──────────────────────────────────────────────────────────
+   141 éléments cliquables côté client, 8 règles de survol. À la souris,
+   presque rien ne réagissait, et rien ne distinguait le décor du cliquable.
+
+   ⚠️ SOUS `(hover: hover) and (pointer: fine)` OBLIGATOIREMENT. Sans cette
+   garde, un téléphone applique l'état de survol au premier effleurement et le
+   garde collé jusqu'au tap suivant : le bouton reste assombri sans raison.
+
+   ⚠️ `filter` et non `transform` : `transform` ferait des boutons un bloc
+   conteneur pour leurs descendants en `position: fixed`. Aucun n'en contient
+   aujourd'hui, mais la règle est globale et doit le rester demain. */
+@media (hover: hover) and (pointer: fine) {
+  :where(a, button:not(:disabled), [role="button"]) {
+    transition: filter 0.15s ease;
+  }
+  :where(a, button:not(:disabled), [role="button"]):hover {
+    filter: brightness(0.96);
+  }
+}
+
+/* ── 3. Les défilements horizontaux ────────────────────────────────────────
+   Sept carrousels côté client (catégories, photos, produits, jours de
+   retrait, prestations), et les sept masquaient leur barre de défilement.
+   Au doigt c'est juste. À la souris, il n'y avait NI barre, NI flèche, NI
+   indice : rien ne disait qu'il restait des photos ou des produits à droite.
+   Ce n'était pas un défaut d'apparence, c'était du contenu inatteignable.
+
+   On rend donc la barre à partir de 1024 px, fine et discrète. Sur téléphone
+   elle reste masquée, exactement comme avant.
+
+   `!important` est nécessaire : `scrollbarWidth: 'none'` est écrit en style
+   en ligne dans cinq de ces sept endroits, et rien d'autre ne peut le battre.
+   La phase 2 transformera ceux qui s'y prêtent en vraies grilles, et alors
+   plus rien ne sera caché du tout. */
+@media (min-width: 1024px) {
+  .cat-bar, .jours-wrap, .filtres-wrap, .cats, .day-scroll, [data-scroll-x] {
+    scrollbar-width: thin !important;
+    scrollbar-color: #C4A0F4 transparent;
+    padding-bottom: 10px;
+  }
+  .cat-bar::-webkit-scrollbar,
+  .jours-wrap::-webkit-scrollbar,
+  .filtres-wrap::-webkit-scrollbar,
+  .cats::-webkit-scrollbar,
+  .day-scroll::-webkit-scrollbar,
+  [data-scroll-x]::-webkit-scrollbar {
+    display: block !important;
+    height: 8px;
+  }
+  .cat-bar::-webkit-scrollbar-thumb,
+  .jours-wrap::-webkit-scrollbar-thumb,
+  .filtres-wrap::-webkit-scrollbar-thumb,
+  .cats::-webkit-scrollbar-thumb,
+  .day-scroll::-webkit-scrollbar-thumb,
+  [data-scroll-x]::-webkit-scrollbar-thumb {
+    background: #C4A0F4;
+    border-radius: 100px;
+  }
+  .cat-bar::-webkit-scrollbar-track,
+  .jours-wrap::-webkit-scrollbar-track,
+  .filtres-wrap::-webkit-scrollbar-track,
+  .cats::-webkit-scrollbar-track,
+  .day-scroll::-webkit-scrollbar-track,
+  [data-scroll-x]::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }

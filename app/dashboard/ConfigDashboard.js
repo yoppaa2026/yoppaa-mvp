@@ -15,6 +15,7 @@ import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
 import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '@/lib/fidelite'
 import { libelleEnvie, phraseHorsOuverture } from '@/lib/signaux'
 import { MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '@/lib/guide-photos'
+import { LARGEUR_CHAMP, LARGEUR_TEXTE_LONG } from '@/lib/responsive'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
 import {
@@ -66,6 +67,13 @@ const s = {
   },
   input: {
     width: '100%',
+    // ⚠️ PLAFOND DE LARGEUR (09/08). `width: 100%` sans plafond, dans une carte
+    // sans plafond non plus : sur un écran de 1920 avec la barre latérale,
+    // chaque champ faisait 1 600 px de large. Vingt caractères à saisir dans un
+    // champ d'un mètre de pixels donne l'impression d'un formulaire cassé, et
+    // l'œil perd le début de la ligne en arrivant à la fin.
+    // Sans effet sur mobile : l'écran y est plus étroit que le plafond.
+    maxWidth: LARGEUR_CHAMP,
     padding: '10px 14px',
     borderRadius: 10,
     border: `1px solid ${T.hairline}`,
@@ -114,7 +122,9 @@ function Textarea({ style, ...props }) {
   const [focused, setFocused] = useState(false)
   return (
     <textarea {...props}
-      style={{ ...s.input, resize: 'vertical', minHeight: 80, ...(focused ? s.inputFocus : {}), ...style }}
+      // Un texte long a droit à plus de largeur qu'un champ d'une ligne, mais
+      // pas à toute la largeur de l'écran pour autant.
+      style={{ ...s.input, maxWidth: LARGEUR_TEXTE_LONG, resize: 'vertical', minHeight: 80, ...(focused ? s.inputFocus : {}), ...style }}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
     />

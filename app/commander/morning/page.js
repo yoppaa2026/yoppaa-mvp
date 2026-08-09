@@ -757,7 +757,7 @@ export default function GoodMorningYoppersPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: T.bgPage, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', fontFamily: '"DM Sans", sans-serif' }}>
+    <div style={{ minHeight: '100dvh', background: T.bgPage, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', fontFamily: '"DM Sans", sans-serif' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;0,800;1,400&family=Playfair+Display:ital@1&display=swap" rel="stylesheet"/>
 
       {/* CSS local : hover des cards (pseudo-classes nécessitent du CSS, pas du inline) */}

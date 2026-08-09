@@ -94,13 +94,13 @@ function Login() {
   }
 
   if (checkingSession) return (
-    <div style={{ minHeight: '100vh', background: T.bgPanel, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ minHeight: '100dvh', background: T.bgPanel, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{ color: T.light, fontFamily: '"DM Sans", sans-serif' }}>Chargement...</p>
     </div>
   )
 
   return (
-    <div style={{ minHeight: '100vh', background: `linear-gradient(160deg, ${T.bgPanel} 0%, #2D0F6B 50%, ${T.ink} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: '"DM Sans", sans-serif' }}>
+    <div style={{ minHeight: '100dvh', background: `linear-gradient(160deg, ${T.bgPanel} 0%, #2D0F6B 50%, ${T.ink} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: '"DM Sans", sans-serif' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 
       <div style={{ width: '100%', maxWidth: 400 }}>

@@ -1311,7 +1311,7 @@ export default function CommanderRdvSlug() {
             )}
           </div>
         )}
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+        <div data-scroll-x style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
           {/* Plus de troncature à 8 (04/08) : le client ne devait pas
               avoir à quitter le tunnel pour voir le neuvième produit,
               c'est justement en le quittant qu'il perdait son panier.
@@ -1863,7 +1863,7 @@ export default function CommanderRdvSlug() {
                         </span>
                         <div style={{ flex: 1, height: 1, background: T.pale }}/>
                       </div>
-                      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, marginBottom: 14, scrollbarWidth: 'none' }}>
+                      <div data-scroll-x style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, marginBottom: 14, scrollbarWidth: 'none' }}>
                         {/* Card "Sans préférence" - premier dispo. On garde la date deja choisie
                             (sinon le useEffect etape 2 la reset a aujourd'hui, bug UX signale par Alex),
                             on reset juste l'heure car les slots changent selon le praticien. */}

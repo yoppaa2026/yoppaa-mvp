@@ -106,7 +106,7 @@ export default function RdvCancelPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: T.bg, padding: '2rem 1rem', fontFamily: '"DM Sans", sans-serif' }}>
+    <div style={{ minHeight: '100dvh', background: T.bg, padding: '2rem 1rem', fontFamily: '"DM Sans", sans-serif' }}>
       <div style={cardSt}>
         {/* Wordmark Yoppaa */}
         <p style={{ textAlign: 'center', fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.4rem', marginBottom: 24, letterSpacing: '-0.05em', lineHeight: 1 }}>

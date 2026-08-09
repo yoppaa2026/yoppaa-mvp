@@ -3039,7 +3039,7 @@ export default function CommanderSlug() {
                     </svg>
                     Je récupère le
                   </p>
-                  <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+                  <div data-scroll-x style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
                     {joursDispos.map((jour, idx) => {
                       const actif = jourSelectionne === idx
                       const dateStr = jour.date.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })

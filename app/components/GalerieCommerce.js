@@ -29,7 +29,10 @@ export default function GalerieCommerce({ photos = [], nomCommerce = '', titre =
         </svg>
         {titre}
       </p>
-      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, paddingRight: 12, scrollbarWidth: 'none' }}>
+      {/* `data-scroll-x` : sur PC, globals.css rend la barre de défilement à
+          partir de 1024 px. Sans elle, rien n'indiquait à la souris qu'il y
+          avait d'autres photos à droite. */}
+      <div data-scroll-x style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, paddingRight: 12, scrollbarWidth: 'none' }}>
         {liste.map((p, i) => (
           <figure key={p.id || i} style={{ flexShrink: 0, width: 200, margin: 0 }}>
             <div style={{ width: 200, height: 140, borderRadius: 14, overflow: 'hidden', boxShadow: '0 4px 16px rgba(22,6,54,0.12)', border: `1px solid ${T.pale}` }}>

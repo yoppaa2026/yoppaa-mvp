@@ -14,7 +14,7 @@
 // fois et chaque correctif à appliquer deux fois. C'est exactement le genre de
 // divergence qui a fait perdre ses photos à une des deux fiches commerçant.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import {
   SEUIL_BUREAU, SEUIL_LARGE, LARGEUR_CONTENU, LARGEUR_CONTENU_BUREAU,
   LARGEUR_CHAMP, LARGEUR_TEXTE_LONG,
@@ -219,6 +219,46 @@ verifier('les carrousels s\'étalent au lieu de défiler',
 const reglesQuiEtalent = /\.cats, \.day-scroll, \[data-scroll-x\]/.exec(phase2)
 verifier('la barre de catégories collante n\'est pas étalée',
   !!reglesQuiEtalent && !/\.cat-bar[^{]*\{[^}]*flex-wrap/.test(phase2))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. AUCUN CADRE NE DOIT REMPLACER L'APPLICATION SUR PC
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LA DÉCOUVERTE DU 09/08, ET LE PIÈGE LE PLUS SOURNOIS DE CE CHANTIER.
+//
+// Tout `/commander` était enveloppé, dès 1024 px, dans un `MobileFrame` : une
+// IFRAME DE 393 PX à l'intérieur d'un faux iPhone dessiné en CSS. Un visiteur
+// sur ordinateur ne voyait donc jamais l'application, il voyait la maquette
+// d'un téléphone.
+//
+// Conséquence directe : à l'intérieur de l'iframe, la fenêtre fait 393 px, donc
+// **TOUTE règle `min-width: 1024px` est inerte**. Les phases 1 et 2 étaient
+// écrites, testées, vertes au banc… et parfaitement invisibles. Un cadre
+// remis un jour par mégarde annulerait tout le chantier SANS FAIRE ROUGIR UNE
+// SEULE VÉRIFICATION, puisque le CSS, lui, serait toujours là.
+//
+// D'où ce test, qui ne regarde pas le CSS mais l'ARBRE DES PAGES.
+verifier('le cadre téléphone n\'existe plus',
+  !existsSync(new URL('../app/components/MobileFrame.js', import.meta.url)))
+
+function fichiersJs(dossier) {
+  const base = new URL(`../${dossier}/`, import.meta.url)
+  let entrees
+  try { entrees = readdirSync(base) } catch { return [] }
+  const sortie = []
+  for (const e of entrees) {
+    const chemin = `${dossier}/${e}`
+    const abs = new URL(`../${chemin}`, import.meta.url)
+    if (statSync(abs).isDirectory()) sortie.push(...fichiersJs(chemin))
+    else if (/\.(js|jsx|tsx)$/.test(e)) sortie.push(chemin)
+  }
+  return sortie
+}
+
+for (const chemin of fichiersJs('app/commander')) {
+  const src = lire(chemin)
+  verifier(`${chemin} n'enferme pas l'application dans une iframe`, !/<iframe/.test(src), chemin)
+  verifier(`${chemin} n'importe aucun cadre d'appareil`, !/MobileFrame|DeviceFrame|PhoneFrame/.test(src.replace(/\/\/.*$/gm, '')))
+}
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

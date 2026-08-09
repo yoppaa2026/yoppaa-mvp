@@ -1146,7 +1146,9 @@ export default function CommanderRdvSlug() {
             throw new Error(j.error || 'Erreur création Checkout')
           }
           // Redirect Stripe Checkout. Au retour ?paiement=ok le webhook aura cree le RDV.
-          // redirectTop : sort de l'iframe MobileFrame sur PC desktop via <a target="_top">.
+          // redirectTop : sort d'une éventuelle iframe via <a target="_top">.
+          // Le cadre téléphone du PC est retiré, mais les slides de
+          // démonstration embarquent toujours l'application.
           redirectTop(j.url)
           return
         } catch (e) {

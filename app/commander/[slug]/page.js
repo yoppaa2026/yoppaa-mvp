@@ -2125,11 +2125,11 @@ export default function CommanderSlug() {
       // le user retrouve son panier (hydraté depuis localStorage) pour réessayer.
       // Le clear se fait uniquement au retour ?paiement=ok (useEffect dédié).
       //
-      // redirectTop : sur PC desktop la PWA tourne dans un iframe MobileFrame.
-      // window.location.href redirigerait l'iframe vers Stripe Checkout, mais
-      // Stripe refuse l'iframe (X-Frame-Options) → écran blanc. Le helper utilise
-      // <a target="_top"> qui navigue la fenêtre parent (sandbox autorise via
-      // allow-top-navigation-by-user-activation). Sur mobile, fallback direct.
+      // redirectTop : quand l'application tourne dans une iframe (les slides de
+      // démonstration), window.location.href redirigerait l'iframe vers Stripe
+      // Checkout, que Stripe refuse (X-Frame-Options) → écran blanc. Le helper
+      // utilise <a target="_top"> qui navigue la fenêtre parent. Hors iframe,
+      // affectation directe. Le cadre téléphone du PC, lui, est retiré.
       redirectTop(data.url)
     } catch (e) {
       // Garde-fou anti-freeze : sans ce catch, toute exception (network, RLS)

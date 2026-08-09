@@ -351,15 +351,6 @@ export default function CommanderRdvSlug() {
     router.push(`/commander/${slug}`)
   }
 
-  // Réserver n'est proposé que si c'est réellement possible : module de
-  // rendez-vous actif ET au moins une prestation. Sinon la barre n'affiche que
-  // la sortie boutique, plutôt qu'un bouton qui ne mène nulle part.
-  const peutReserverIci = !commercant?._rdvDesactive && prestations.length > 0
-
-  // La barre est en position fixe : sans réserve en bas de page, elle
-  // recouvrirait le dernier produit et le bouton « Offrir un bon cadeau ».
-  const barrePanierVisible = etape === 1 && produitsAchetables && lignesPanier.length > 0
-
   // Le panier est en bas de l'écran, les prestations sont plus haut : on
   // remonte le client jusqu'à elles au lieu de lui demander de chercher.
   function allerAuxPrestations() {
@@ -368,6 +359,7 @@ export default function CommanderRdvSlug() {
       scrollRef.current.scrollTo({ top: Math.max(0, cible.offsetTop - 12), behavior: 'smooth' })
     }
   }
+
   // Vendre ici demande trois choses : une formule qui ouvre la commande, un
   // compte Stripe réellement opérationnel, et un module de rendez-vous actif.
   // Sans le compte Stripe, le client remplirait un panier pour se heurter à
@@ -377,6 +369,21 @@ export default function CommanderRdvSlug() {
   const produitsAchetables = canDo(commercant?.plan, 'commande')
     && commercant?.stripe_account_charges_enabled === true
     && !commercant?._rdvDesactive
+
+  // Réserver n'est proposé que si c'est réellement possible : module de
+  // rendez-vous actif ET au moins une prestation. Sinon la barre n'affiche que
+  // la sortie boutique, plutôt qu'un bouton qui ne mène nulle part.
+  const peutReserverIci = !commercant?._rdvDesactive && prestations.length > 0
+
+  // La barre est en position fixe : sans réserve en bas de page, elle
+  // recouvrirait le dernier produit et le bouton « Offrir un bon cadeau ».
+  //
+  // ⚠️ CES DEUX CONSTANTES DOIVENT RESTER SOUS `produitsAchetables`.
+  // Placées au-dessus (09/08), elles le lisaient avant son initialisation :
+  // `const` est en zone morte temporelle, la fiche plantait au rendu avec
+  // « This page couldn't load ». Ni le build ni le lint ne le voient, et un
+  // banc qui lit le texte du fichier ne le verra jamais non plus.
+  const barrePanierVisible = etape === 1 && produitsAchetables && lignesPanier.length > 0
 
   // L'acompte n'est réellement prélevé que si le commerçant l'a activé ET que
   // son compte Stripe fonctionne. Partout où un acompte est annoncé, c'est

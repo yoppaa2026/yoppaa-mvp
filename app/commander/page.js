@@ -1482,14 +1482,31 @@ export default function Commander() {
 
     const decision = decisionGeoloc({ etat: await etatAutorisation(), dejaDemande: dejaDemandee() })
     if (decision === 'jamais') return
-    if (decision === 'lire' && memo?.fraiche) return  // rien de neuf à demander
     if (decision === 'demander') marquerDemandee()
-    demanderGeolocalisation()
+
+    // ⚠️ ON LIT TOUJOURS QUAND C'EST POSSIBLE (Alex, 09/08 : « la localisation
+    // ne s'actualise plus »). Le raccourci « position fraîche = rien à
+    // demander », ajouté le 07/08 pour ne plus déranger, GELAIT la commune
+    // pendant douze heures : le Yopper se déplaçait et l'application
+    // continuait d'afficher la rue de la veille.
+    //
+    // C'était une prudence inutile. Quand l'autorisation est accordée, lire la
+    // position n'ouvre AUCUNE fenêtre : il n'y avait rien à économiser. Le
+    // seul cas qu'il fallait protéger, c'est la DEMANDE d'autorisation, et
+    // c'est `decisionGeoloc` qui s'en charge, pas la fraîcheur du cache.
+    //
+    // La position mémorisée garde son rôle : afficher quelque chose tout de
+    // suite, pendant que la vraie arrive.
+    demanderGeolocalisation({ silencieux: !!memo })
   }
 
-  function demanderGeolocalisation() {
+  // `silencieux` : rafraîchissement en arrière-plan. On garde la rue déjà
+  // affichée le temps que la nouvelle arrive, au lieu de faire clignoter un
+  // vide à chaque ouverture de l'application.
+  function demanderGeolocalisation({ silencieux = false } = {}) {
     if (!navigator.geolocation) return
-    setGeoLoading(true); setRue(null)
+    setGeoLoading(true)
+    if (!silencieux) setRue(null)
     navigator.geolocation.getCurrentPosition(
       async pos => {
         const { latitude: lat, longitude: lng } = pos.coords

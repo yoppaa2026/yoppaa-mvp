@@ -284,6 +284,20 @@ const fBoutique = lire('app/commander/[slug]/page.js')
 
 verifier('la fiche rendez-vous montre une barre dès qu\'un produit est ajouté',
   /barrePanierVisible/.test(fRdv))
+
+// ⚠️ ZONE MORTE TEMPORELLE — la fiche a planté en production le 09/08.
+// `barrePanierVisible` avait été déclaré AU-DESSUS de `produitsAchetables`
+// qu'il lit. Un `const` n'existe pas avant sa ligne : React levait une
+// ReferenceError au rendu et le Yopper voyait « This page couldn't load ».
+//
+// Ni le build ni le lint ne l'attrapent, et aucun banc qui lit du TEXTE ne
+// peut détecter une erreur d'exécution. Ce qu'on peut vérifier, en revanche,
+// c'est l'ORDRE des deux déclarations : c'est exactement la régression.
+verifier('la barre est déclarée APRÈS ce qu\'elle lit',
+  fRdv.indexOf('const barrePanierVisible') > fRdv.indexOf('const produitsAchetables'),
+  `barre=${fRdv.indexOf('const barrePanierVisible')}, produitsAchetables=${fRdv.indexOf('const produitsAchetables')}`)
+verifier('peutReserverIci aussi',
+  fRdv.indexOf('const peutReserverIci') > fRdv.indexOf('const [prestations'))
 verifier('la barre affiche le total du panier', /totalProduits\.toFixed\(2\)/.test(fRdv))
 verifier('la barre propose de prendre rendez-vous', /Je prends rendez-vous/.test(fRdv))
 // LA SORTIE QUI MANQUAIT : celui qui veut juste un shampoing n'a aucune raison

@@ -231,6 +231,22 @@ verifier('la position est mémorisée', /memoriserPosition\(/.test(accueil2))
 // geste volontaire, il ne passe pas par la décision.
 verifier('le bouton demande toujours', /demanderGeolocalisation\(\); setShowLocManuelle\(false\)/.test(accueil2))
 
+// ⚠️ LA POSITION MÉMORISÉE NE DOIT JAMAIS EMPÊCHER DE RELIRE (Alex, 09/08 :
+// « la localisation ne s'actualise plus »). Le correctif du 07/08, qui coupait
+// la lecture quand le cache était frais, gelait la commune douze heures : le
+// Yopper se déplaçait, l'application affichait la rue de la veille.
+//
+// C'était une prudence inutile : autorisation accordée = lecture SANS fenêtre.
+// Seule la DEMANDE d'autorisation devait être protégée, et c'est le travail de
+// `decisionGeoloc`, pas celui de la fraîcheur du cache.
+verifier('une position fraîche ne bloque plus la relecture',
+  !/decision === 'lire' && memo\?\.fraiche/.test(accueil2))
+verifier('le rafraîchissement ne fait pas clignoter la rue affichée',
+  /demanderGeolocalisation\(\{ silencieux: !!memo \}\)/.test(accueil2))
+// Le mémorisé garde son rôle : afficher tout de suite, même hors ligne.
+verifier('la dernière position s\'affiche sans attendre le satellite',
+  /const memo = lirePositionMemorisee\(\)/.test(accueil2))
+
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

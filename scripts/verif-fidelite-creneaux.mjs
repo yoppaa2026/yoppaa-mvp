@@ -6,7 +6,8 @@
 // pouvait servir, soit en accepter plus qu'on ne peut préparer.
 
 import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '../lib/fidelite.js'
-import { calculerCapaciteCreneau, STATUTS_OCCUPENT_CRENEAU } from '../lib/creneaux.js'
+import { calculerCapaciteCreneau, creneauCommandable, jourSemaineDe, STATUTS_OCCUPENT_CRENEAU } from '../lib/creneaux.js'
+import { brusselsInstant } from '../lib/timezone.js'
 import { readFileSync } from 'node:fs'
 
 const lireBrut = (chemin) => readFileSync(new URL('../' + chemin, import.meta.url), 'utf8')
@@ -179,6 +180,74 @@ verifier('repli sur le réglage commerçant', c.modeTemps)
 c = calculerCapaciteCreneau({ max_commandes: 5 })
 egal('sans consommation connue', c.utilise, 0)
 verifier('créneau vide non complet', !c.complet)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UN CRÉNEAU EST-IL ENCORE COMMANDABLE ? (09/08)
+// ═══════════════════════════════════════════════════════════════════════════
+// Deux contrôles qui n'existaient nulle part.
+
+// ⚠️ LE JOUR. Un créneau porte « mardi 18h-19h ». Rien ne vérifiait que la date
+// commandée était bien un mardi : un onglet resté ouvert depuis la veille
+// réservait un créneau du mardi pour une livraison du jeudi.
+// Le 11/08/2026 est un MARDI — vérifié contre le calendrier, pas de tête.
+egal('le 11/08/2026 est un mardi', jourSemaineDe('2026-08-11'), 'mardi')
+egal('le 13/08/2026 est un jeudi', jourSemaineDe('2026-08-13'), 'jeudi')
+egal('une date invalide ne rend aucun jour', jourSemaineDe('pas une date'), null)
+
+const creneauMardi = { jour_semaine: 'mardi', heure_debut: '18:00', cutoff_heures: 2 }
+verifier('un créneau du mardi accepte un mardi',
+  creneauCommandable(creneauMardi, {
+    dateStr: '2026-08-11', maintenant: new Date('2026-08-11T08:00:00Z'), instantDebut: brusselsInstant,
+  }).ok)
+egal('un créneau du mardi refuse un jeudi',
+  creneauCommandable(creneauMardi, {
+    dateStr: '2026-08-13', maintenant: new Date('2026-08-11T08:00:00Z'), instantDebut: brusselsInstant,
+  }).raison, 'jour')
+// Un créneau sans jour déclaré ne bloque rien : tous les commerçants n'en
+// mettent pas, et un contrôle trop zélé refuserait des commandes légitimes.
+verifier('un créneau sans jour ne bloque pas',
+  creneauCommandable({ heure_debut: '18:00' }, { dateStr: '2026-08-13' }).ok)
+
+// ⚠️ LE DÉLAI LIMITE. `cutoff_heures` est réglé par le commerçant et n'était
+// lu NULLE PART : le réglage était parfaitement inerte, on pouvait commander
+// une livraison pour un créneau démarrant dans dix minutes.
+//
+// Le créneau démarre à 18h00 heure belge, soit 16h00 UTC en août (heure d'été).
+// Avec 2 h de délai, la limite tombe à 14h00 UTC.
+verifier('trois heures avant : on peut encore commander',
+  creneauCommandable(creneauMardi, {
+    dateStr: '2026-08-11', maintenant: new Date('2026-08-11T13:00:00Z'), instantDebut: brusselsInstant,
+  }).ok)
+egal('une heure avant : trop tard',
+  creneauCommandable(creneauMardi, {
+    dateStr: '2026-08-11', maintenant: new Date('2026-08-11T15:00:00Z'), instantDebut: brusselsInstant,
+  }).raison, 'cutoff')
+// Pile sur la limite : on laisse passer. Refuser à la seconde près donnerait
+// un « trop tard » incompréhensible à qui voit encore le créneau affiché.
+verifier('pile à la limite, ça passe',
+  creneauCommandable(creneauMardi, {
+    dateStr: '2026-08-11', maintenant: new Date('2026-08-11T14:00:00Z'), instantDebut: brusselsInstant,
+  }).ok)
+// ⚠️ HIVER : 18h belge = 17h UTC, la limite tombe à 15h UTC et non 14h. Sans
+// `brusselsInstant`, le délai serait faux d'une heure la moitié de l'année.
+verifier('en hiver, le délai suit l\'heure belge',
+  creneauCommandable({ ...creneauMardi, jour_semaine: null }, {
+    dateStr: '2026-01-13', maintenant: new Date('2026-01-13T14:30:00Z'), instantDebut: brusselsInstant,
+  }).ok)
+egal('en hiver aussi, trop tard reste trop tard',
+  creneauCommandable({ ...creneauMardi, jour_semaine: null }, {
+    dateStr: '2026-01-13', maintenant: new Date('2026-01-13T16:00:00Z'), instantDebut: brusselsInstant,
+  }).raison, 'cutoff')
+// Sans délai réglé (les créneaux C&C n'ont pas la colonne), on ne bloque rien.
+verifier('sans délai réglé, aucun blocage',
+  creneauCommandable({ jour_semaine: 'mardi', heure_debut: '18:00' }, {
+    dateStr: '2026-08-11', maintenant: new Date('2026-08-11T17:59:00Z'), instantDebut: brusselsInstant,
+  }).ok)
+
+// La route doit appeler ce contrôle.
+const routeCreneau = lireBrut('app/api/stripe/checkout/create-commande/route.js')
+verifier('la route vérifie que le créneau est commandable', /creneauCommandable\(/.test(routeCreneau))
+verifier('elle passe l\'heure belge au calcul', /instantDebut: brusselsInstant/.test(routeCreneau))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CAPACITÉ EST-ELLE VRAIMENT TENUE ? (09/08)

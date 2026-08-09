@@ -37,7 +37,8 @@ import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
 import { chargerBonValide, debiterBon } from '@/lib/bons-cadeaux-server'
 import { tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
-import { calculerCapaciteCreneau, STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
+import { calculerCapaciteCreneau, creneauCommandable, STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
+import { brusselsInstant } from '@/lib/timezone'
 import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 
 export async function POST(request) {
@@ -303,6 +304,32 @@ export async function POST(request) {
     const duCents = Math.round(duEUR * 100)
     // Dû entièrement couvert par le bon : confirmation directe, pas de Stripe.
     const couvertParBon = !!bonCadeau && duCents === 0
+
+    // ─── 4.6) Le créneau est-il encore commandable ? ───────────────────────
+    //
+    // Deux contrôles qui n'existaient nulle part (09/08).
+    //
+    // ⚠️ LE JOUR. Un créneau porte « mardi 18h-19h ». Rien ne vérifiait que la
+    // date commandée était bien un mardi : un onglet resté ouvert depuis la
+    // veille réservait un créneau du mardi pour une livraison du jeudi, et le
+    // commerçant voyait une tournée un jour où il ne livre pas.
+    //
+    // ⚠️ LE DÉLAI LIMITE. `cutoff_heures` est réglé par le commerçant dans son
+    // tableau de bord (« commande jusqu'à 2h avant ») et AUCUNE ligne de code
+    // ne le lisait. On pouvait commander une livraison pour un créneau
+    // démarrant dans dix minutes.
+    if (creneau && !estBoutique) {
+      const etatCreneau = creneauCommandable(creneau, {
+        dateStr: date_commande,
+        instantDebut: brusselsInstant,
+      })
+      if (!etatCreneau.ok) {
+        const message = etatCreneau.raison === 'jour'
+          ? 'Ce créneau n\'est pas proposé ce jour-là. Choisis-en un autre.'
+          : `Il est trop tard pour ce créneau : ${commercant.nom} demande de commander au moins ${etatCreneau.heures} h à l'avance. Choisis un créneau plus tardif.`
+        return NextResponse.json({ ok: false, error: message, creneau_indisponible: true }, { status: 409 })
+      }
+    }
 
     // ─── 4.7) Vérif CAPACITÉ du créneau, côté SERVEUR ──────────────────────
     //

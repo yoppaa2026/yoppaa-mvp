@@ -141,7 +141,7 @@ export default function NoteSecuritePrint() {
           </div>
 
           <p style={{ fontSize: 8.5, color: T.muted, margin: '0 0 10px', textAlign: 'center' }}>
-            Avcotech SRL · BCE 0731.637.148 · TVA BE0731.637.148 · Rue de Prée 9G, 5640 Mettet, Belgique
+            Avcotech SRL · BCE 0731.637.148 · TVA BE0731.637.148 · Rue de Prée 9 G, 5640 Mettet, Belgique
           </p>
 
           <H2>1 · Préambule</H2>
@@ -263,7 +263,7 @@ export default function NoteSecuritePrint() {
           <H2>6 · Gouvernance & contact</H2>
 
           <H3>6.1 · Responsable du traitement</H3>
-          <P><strong>Avcotech SRL</strong> · BCE 0731.637.148 · TVA BE0731.637.148 · Rue de Prée 9G, 5640 Mettet, Belgique</P>
+          <P><strong>Avcotech SRL</strong> · BCE 0731.637.148 · TVA BE0731.637.148 · Rue de Prée 9 G, 5640 Mettet, Belgique</P>
 
           <H3>6.2 · Délégué à la Protection des Données (DPO)</H3>
           <P><strong>Alexandre Verstappen</strong>, gérant d&rsquo;Avcotech SRL · Contact : <strong>legal@yoppaa.app</strong></P>

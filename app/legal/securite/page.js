@@ -118,7 +118,7 @@ export default function NoteSecurite() {
           Sécurité & Hébergement
         </p>
         <p style={{ fontSize: '0.78rem', color: 'rgba(196,160,244,0.7)', margin: '4px 0 8px' }}>
-          Avcotech SRL · BCE 0731.637.148 · TVA BE0731637148 · Rue de Prée 9G, 5640 Mettet
+          Avcotech SRL · BCE 0731.637.148 · TVA BE0731637148 · Rue de Prée 9 G, 5640 Mettet
         </p>
         <p style={{ fontSize: '0.72rem', color: 'rgba(196,160,244,0.55)', margin: 0, letterSpacing: '0.3px' }}>
           Document public · Version du 15 juin 2026
@@ -299,7 +299,7 @@ export default function NoteSecurite() {
             <H3>6.1. Responsable du traitement</H3>
             <P><strong>Avcotech SRL</strong><br/>
             BCE 0731.637.148 · TVA BE0731.637.148<br/>
-            Rue de Prée 9G, 5640 Mettet, Belgique</P>
+            Rue de Prée 9 G, 5640 Mettet, Belgique</P>
 
             <H3>6.2. Délégué à la Protection des Données (DPO)</H3>
             <P>La fonction de DPO est assumée par <strong>Alexandre Verstappen</strong>, gérant d&rsquo;Avcotech SRL.<br/>
@@ -351,7 +351,7 @@ export default function NoteSecurite() {
 
       {/* FOOTER */}
       <div style={{ background: T.ink, color: 'rgba(255,255,255,0.65)', padding: '1.5rem', textAlign: 'center', fontSize: '0.75rem' }}>
-        Yoppaa · Avcotech SRL · BCE 0731.637.148 · Rue de Prée 9G, 5640 Mettet · <a href="mailto:legal@yoppaa.app" style={{ color: T.light, textDecoration: 'none', fontWeight: 600 }}>legal@yoppaa.app</a>
+        Yoppaa · Avcotech SRL · BCE 0731.637.148 · Rue de Prée 9 G, 5640 Mettet · <a href="mailto:legal@yoppaa.app" style={{ color: T.light, textDecoration: 'none', fontWeight: 600 }}>legal@yoppaa.app</a>
       </div>
     </div>
   )

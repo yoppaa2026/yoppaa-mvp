@@ -72,7 +72,7 @@ export default function LegalPage() {
         </div>
         <h1 style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2rem', color: '#fff', letterSpacing: '-0.05em', marginBottom: 6, lineHeight: 1 }}>yoppaa</h1>
         <p style={{ fontSize: '0.85rem', color: T.light, fontWeight: 600 }}>Mentions légales & Conditions d'utilisation</p>
-        <p style={{ fontSize: '0.75rem', color: 'rgba(196,160,244,0.6)', marginTop: 6 }}>Avcotech SRL · BCE 0731.637.148 · Rue de Prée 9G, 5640 Mettet</p>
+        <p style={{ fontSize: '0.75rem', color: 'rgba(196,160,244,0.6)', marginTop: 6 }}>Avcotech SRL · BCE 0731.637.148 · Rue de Prée 9 G, 5640 Mettet</p>
       </div>
 
       <style>{`
@@ -106,7 +106,8 @@ export default function LegalPage() {
             <InfoBox>
               Avcotech SRL · Forme juridique : Société à Responsabilité Limitée (SRL) de droit belge{'\n'}
               Numéro d'entreprise (BCE) : 0731.637.148 · Numéro de TVA : BE0731.637.148{'\n'}
-              Siège social : Rue de Prée 9G, 5640 Mettet, Belgique{'\n'}
+              Siège social : Rue de Prée 9 G, 5640 Mettet, Belgique{'\n'}
+              Téléphone : +32 492 73 08 69{'\n'}
               Email : hello@yoppaa.app · Support : support@yoppaa.app
             </InfoBox>
             <P>Yoppaa est un produit et une marque commerciale d'Avcotech SRL.</P>
@@ -216,7 +217,7 @@ export default function LegalPage() {
 
             <H3>8. Résiliation</H3>
             <P>Le Commerçant peut résilier sa formule payante ou revenir à la formule gratuite Exister moyennant un préavis d&rsquo;un mois calendrier, prenant effet le 1er jour du mois suivant. Pour que le préavis prenne effet le 1er du mois M+1, il doit être notifié au plus tard le 17e jour du mois M (14 jours avant). En cas de retour à Exister, les données du Commerçant sont conservées mais les fonctionnalités payantes (paiement en ligne, rendez-vous ou Click &amp; Collect, boutique, livraison, deals, etc.) sont désactivées.</P>
-            <P>Le préavis doit être notifié par courrier recommandé à Avcotech SRL (Rue de Prée 9G, 5640 Mettet) ou par email à facturation@yoppaa.app.</P>
+            <P>Le préavis doit être notifié par courrier recommandé à Avcotech SRL (Rue de Prée 9 G, 5640 Mettet) ou par email à facturation@yoppaa.app.</P>
             <InfoBox>
               Exemple : préavis notifié le 10 mars → effet le 1er avril ✓{'\n'}
               Préavis notifié le 20 mars → effet le 1er mai (hors délai)
@@ -334,7 +335,7 @@ export default function LegalPage() {
                 Dernière mise à jour : 30 juillet 2026
               </p>
               <p style={{ fontSize: '0.75rem', color: T.muted }}>
-                Avcotech SRL · BCE 0731.637.148 · TVA BE0731.637.148 · Rue de Prée 9G, 5640 Mettet
+                Avcotech SRL · BCE 0731.637.148 · TVA BE0731.637.148 · Rue de Prée 9 G, 5640 Mettet
               </p>
               <p style={{ fontSize: '0.72rem', color: '#9CA3AF', marginTop: 8, fontStyle: 'italic' }}>
                 Ces textes constituent une base légale sérieuse mais ne remplacent pas l'avis d'un juriste qualifié.

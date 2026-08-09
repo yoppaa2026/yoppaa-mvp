@@ -962,7 +962,7 @@ export default function LandingReveal({ referent = null }) {
               vatID: 'BE0731.637.148',
               address: {
                 '@type': 'PostalAddress',
-                streetAddress: 'Rue de Prée 9G',
+                streetAddress: 'Rue de Prée 9 G',
                 postalCode: '5640',
                 addressLocality: 'Mettet',
                 addressCountry: 'BE',

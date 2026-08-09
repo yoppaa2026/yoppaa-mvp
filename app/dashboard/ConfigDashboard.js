@@ -171,6 +171,7 @@ function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 2 }) {
     gift:      <><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></>,
     // Ondes : ce que les habitants envoient vers le commerce.
     signal:    <><path d="M12 20v-8"/><path d="M8.5 15.5a5 5 0 017 0"/><path d="M5.5 12.5a9 9 0 0113 0"/><path d="M2.5 9.5a13 13 0 0119 0"/></>,
+    chart:     <><path d="M3 3v18h18"/><path d="M7 15l3-4 3 3 5-7"/></>,
   }
   return <svg {...props} style={{ flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}>{paths[name]}</svg>
 }
@@ -6724,6 +6725,221 @@ function TabRdvFermetures({ commercantId, toast }) {
   )
 }
 
+// ─── Onglet CHIFFRES ─────────────────────────────────────────────────────────
+// Le tableau de bord promis par la page d'accueil depuis le premier jour, et
+// qui n'existait pas.
+//
+// La règle de composition : un commerçant regarde ses chiffres debout, entre
+// deux clients. S'il lui faut plus de dix secondes pour savoir si sa semaine
+// est bonne, il ne revient pas. Donc trois blocs, dans l'ordre de ce qui
+// l'intéresse : ce qu'il a gagné, ce qui cloche, ce qui se vend.
+//
+// ⚠️ UN COMMERCE QUI DÉMARRE EST À ZÉRO PARTOUT, et c'est normal. L'écran ne
+// doit pas ressembler à un bulletin de notes : quand il n'y a rien, il le dit
+// avec le geste suivant, il n'affiche pas une rangée de zéros.
+function TabStatistiques({ commercantId, toast }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [jours, setJours] = useState(30)
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
+  useEffect(() => { charger() }, [commercantId, jours])
+
+  async function charger() {
+    setLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { toast('Session expirée, reconnecte-toi.', 'error'); setLoading(false); return }
+      const r = await fetch(`/api/dashboard/statistiques?commercant_id=${commercantId}&jours=${jours}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const j = await r.json()
+      if (j?.ok) setData(j)
+    } catch { /* l'écran garde ses valeurs précédentes */ }
+    setLoading(false)
+  }
+
+  const euros = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
+
+  // Une flèche colorée ne dit rien à qui la regarde vite. Le sens s'écrit.
+  function Evolution({ e }) {
+    if (!e) return null
+    const monte = e.sens === 'hausse'
+    const stable = e.sens === 'stable'
+    const couleur = stable ? T.muted : monte ? '#059669' : '#DC2626'
+    return (
+      <span style={{ fontSize: 11.5, fontWeight: 800, color: couleur, marginLeft: 8 }}>
+        {stable ? '=' : monte ? '↑' : '↓'} {Math.abs(e.pct)} % {stable ? '' : monte ? 'de plus' : 'de moins'}
+        <span style={{ color: T.muted, fontWeight: 600 }}> qu&rsquo;avant</span>
+      </span>
+    )
+  }
+
+  function Bloc({ titre, enfants }) {
+    return (
+      <div style={{ ...s.card }}>
+        <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.6px', margin: '0 0 12px' }}>{titre}</p>
+        {enfants}
+      </div>
+    )
+  }
+
+  if (loading && !data) {
+    return (
+      <div>
+        <h2 style={s.h2}>Tes chiffres</h2>
+        <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement…</p>
+      </div>
+    )
+  }
+
+  const a = data?.argent
+  const att = data?.attention
+  const aud = data?.audience
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+        <h2 style={{ ...s.h2, margin: 0 }}>Tes chiffres</h2>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[7, 30, 90].map(n => (
+            <button key={n} onClick={() => setJours(n)}
+              style={{ padding: '5px 11px', borderRadius: 100, border: `1.5px solid ${jours === n ? T.main : T.hairline}`, background: jours === n ? T.main : '#fff', color: jours === n ? '#fff' : T.deep, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+              {n} jours
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Rien encore : on le dit, et on donne le geste suivant. */}
+      {data?.vide && (
+        <div style={{ ...s.card, background: T.pale, border: `1.5px solid ${T.main}22` }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: T.deep, lineHeight: 1.6, fontWeight: 600 }}>
+            {data.vide}
+          </p>
+        </div>
+      )}
+
+      {!data?.vide && a && (
+        <>
+          {/* ─── Ce que ça a rapporté ─────────────────────────────────────── */}
+          <div style={{ background: T.bgPanel, borderRadius: 16, padding: '20px 18px', marginBottom: 12, color: '#fff' }}>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+              Encaissé en ligne sur {jours} jours
+            </p>
+            <p style={{ margin: '6px 0 0', fontSize: 34, fontWeight: 800, letterSpacing: '-1px', lineHeight: 1 }}>
+              {euros(a.chiffre_affaires)}
+            </p>
+            {a.evolution_ca && (
+              <p style={{ margin: '8px 0 0', fontSize: 12.5 }}>
+                <span style={{ color: a.evolution_ca.sens === 'baisse' ? '#FCA5A5' : '#86EFAC', fontWeight: 800 }}>
+                  {a.evolution_ca.sens === 'stable' ? '=' : a.evolution_ca.sens === 'hausse' ? '↑' : '↓'} {Math.abs(a.evolution_ca.pct)} %
+                </span>
+                <span style={{ color: T.light }}> par rapport aux {jours} jours précédents</span>
+              </p>
+            )}
+            <p style={{ margin: '10px 0 0', fontSize: 11.5, color: T.light, lineHeight: 1.5 }}>
+              Ce que tes clients ont payé sur Yoppaa. Ce qu&rsquo;ils règlent au comptoir n&rsquo;y est pas.
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 12 }}>
+            {[
+              { label: 'Commandes', valeur: a.ventes, evo: a.evolution_ventes },
+              { label: 'Panier moyen', valeur: euros(a.panier_moyen) },
+              { label: 'Rendez-vous', valeur: a.rendez_vous },
+            ].map(k => (
+              <div key={k.label} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: `1px solid ${T.hairline}` }}>
+                <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{k.label}</p>
+                <p style={{ margin: '4px 0 0', fontSize: 22, fontWeight: 800, color: T.ink, lineHeight: 1.1 }}>
+                  {k.valeur}
+                </p>
+                <Evolution e={k.evo}/>
+              </div>
+            ))}
+          </div>
+
+          {/* ─── Ce qui cloche ────────────────────────────────────────────────
+              Affiché SEULEMENT s'il y a quelque chose à dire. Un bloc « 0
+              commande non récupérée » n'apprend rien et occupe l'écran. */}
+          {(att?.non_recuperees?.nombre > 0 || (att?.annulations?.annules ?? 0) > 0) && (
+            <Bloc titre="À regarder" enfants={
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {att.non_recuperees.nombre > 0 && (
+                  <p style={{ margin: 0, fontSize: 13, color: T.deep, lineHeight: 1.55 }}>
+                    <strong style={{ color: '#B45309' }}>{att.non_recuperees.nombre} commande{att.non_recuperees.nombre > 1 ? 's' : ''} payée{att.non_recuperees.nombre > 1 ? 's' : ''} mais jamais retirée{att.non_recuperees.nombre > 1 ? 's' : ''}</strong>
+                    {' '}({euros(att.non_recuperees.montant)}). Un appel suffit souvent à récupérer le client.
+                  </p>
+                )}
+                {(att.annulations?.annules ?? 0) > 0 && (
+                  <p style={{ margin: 0, fontSize: 13, color: T.deep, lineHeight: 1.55 }}>
+                    <strong>{att.annulations.annules} annulation{att.annulations.annules > 1 ? 's' : ''}</strong> sur {att.annulations.total},
+                    soit {att.annulations.pct} %.
+                  </p>
+                )}
+              </div>
+            }/>
+          )}
+
+          {/* ─── Ce qui se vend ───────────────────────────────────────────── */}
+          {data.catalogue?.top?.length > 0 && (
+            <Bloc titre="Ce qui part le plus" enfants={
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {data.catalogue.top.map((art, i) => (
+                  <div key={art.nom} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ width: 20, fontSize: 12, fontWeight: 800, color: T.muted }}>{i + 1}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{art.nom}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: T.main }}>{art.quantite}×</span>
+                    <span style={{ fontSize: 12, color: T.muted, fontWeight: 600, minWidth: 62, textAlign: 'right' }}>{euros(art.montant)}</span>
+                  </div>
+                ))}
+              </div>
+            }/>
+          )}
+        </>
+      )}
+
+      {/* ─── Qui te suit ─────────────────────────────────────────────────────
+          Toujours affiché, même à zéro vente : c'est ce qui bouge en premier
+          chez un commerce qui démarre, et c'est encourageant. */}
+      {aud && (
+        <Bloc titre="Qui te suit" enfants={
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <p style={{ margin: 0, fontSize: 13.5, color: T.deep, lineHeight: 1.55 }}>
+              <strong style={{ fontSize: 18, color: T.main }}>{aud.favoris}</strong>
+              {' '}habitant{aud.favoris > 1 ? 's ont' : ' a'} mis ton commerce en favori.
+              {aud.favoris > 0 && ' Ils sont prévenus de tes nouveautés.'}
+            </p>
+            {aud.note
+              ? (
+                <p style={{ margin: 0, fontSize: 13.5, color: T.deep, lineHeight: 1.55 }}>
+                  Note moyenne <strong style={{ color: T.main }}>{String(aud.note.note).replace('.', ',')}/5</strong>, sur {aud.note.nombre} avis.
+                </p>
+              )
+              : (
+                <p style={{ margin: 0, fontSize: 12.5, color: T.muted, lineHeight: 1.55 }}>
+                  Pas encore assez d&rsquo;avis pour afficher une note. Il en faut au moins trois :
+                  en dessous, une note dit ce qu&rsquo;une personne a pensé, pas ce que vaut ton commerce.
+                </p>
+              )}
+            {aud.deals?.vues > 0 && (
+              <p style={{ margin: 0, fontSize: 13.5, color: T.deep, lineHeight: 1.55 }}>
+                Tes offres ont été vues <strong>{aud.deals.vues}</strong> fois
+                {aud.deals.tauxClic != null && `, et ${aud.deals.tauxClic} % de ceux qui les ont vues ont cliqué`}.
+              </p>
+            )}
+          </div>
+        }/>
+      )}
+
+      <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.55, margin: '4px 2px 0' }}>
+        Tu ne vois jamais qui a commandé ni qui t&rsquo;a mis en favori : seulement des nombres.
+        C&rsquo;est la promesse faite aux habitants, et c&rsquo;est ce qui les met en confiance.
+      </p>
+    </div>
+  )
+}
+
 // ─── Onglet SIGNAUX ──────────────────────────────────────────────────────────
 // Deux natures de messages arrivent au commerçant, on ne les mélange pas :
 //   • ENVIES        : ce que des habitants ont voulu faire chez lui et qu'ils
@@ -7514,6 +7730,11 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
 
   // Vitrine : on parle de "Vitrine" plutôt que "Menu", et on masque "Créneaux" (pas de C&C)
   const tabs = [
+    // Les chiffres en premier : c'est ce qu'un commerçant vient voir en
+    // ouvrant son tableau de bord, et la landing les lui promet depuis le
+    // premier jour. Ouverts à TOUS les paliers, y compris le gratuit : voir
+    // ce que sa fiche produit est ce qui donne envie d'en faire plus.
+    { id: 'stats',    label: 'Chiffres', icon: 'chart' },
     { id: 'menu',     label: commercant?.categorie === 'detail' ? 'Boutique' : estVitrine ? 'Catalogue' : 'Menu', icon: 'menu' },
     peutDeals && { id: 'deals', label: 'Deals', icon: 'tag' },
     peutActus && { id: 'actus', label: 'Actus', icon: 'sliders' },
@@ -7566,6 +7787,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
         ))}
       </div>
 
+      {tab === 'stats'    && <TabStatistiques commercantId={commercantId} toast={showToast} />}
       {tab === 'menu'     && <TabMenu     commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'deals'    && peutDeals && <TabDeals commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'actus'    && peutActus && <TabActus commercantId={commercantId} commercant={commercant} toast={showToast} />}

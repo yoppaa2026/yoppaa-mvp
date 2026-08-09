@@ -59,6 +59,26 @@ input, textarea, select {
   overscroll-behavior-x: contain;
 }
 
+/* ── Les couleurs de la marque, en un seul endroit ─────────────────────────
+   L'objet `T` est recopié à l'identique dans une quinzaine de fichiers : un
+   changement de teinte demande aujourd'hui quinze modifications, et il suffit
+   d'en oublier une pour que deux écrans ne se ressemblent plus.
+
+   Ces variables sont la sortie de secours : tout ce qui s'écrit désormais en
+   CSS les utilise, et les objets `T` en JavaScript s'y raccrocheront au fur et
+   à mesure, sans grand remplacement risqué. */
+:root {
+  --y-ink:      #1A0840;
+  --y-deep:     #2D0F6B;
+  --y-panel:    #160636;
+  --y-main:     #6B35C4;
+  --y-mid:      #9660E0;
+  --y-light:    #C4A0F4;
+  --y-pale:     #EDE0FF;
+  --y-bg:       #F8F6FF;
+  --y-hairline: #EEE9F5;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    SOCLE BUREAU — phase 1 (09/08)
    ═══════════════════════════════════════════════════════════════════════════
@@ -80,7 +100,7 @@ input, textarea, select {
    `:focus-visible` et non `:focus` : le navigateur ne montre l'anneau que
    lorsque la navigation est réellement au clavier, jamais après un clic. */
 :where(a, button, input, textarea, select, summary, [role="button"], [tabindex]):focus-visible {
-  outline: 2px solid #6B35C4;
+  outline: 2px solid var(--y-main);
   outline-offset: 2px;
   border-radius: inherit;
 }
@@ -122,7 +142,7 @@ input, textarea, select {
 @media (min-width: 1024px) {
   .cat-bar, .jours-wrap, .filtres-wrap, .cats, .day-scroll, [data-scroll-x] {
     scrollbar-width: thin !important;
-    scrollbar-color: #C4A0F4 transparent;
+    scrollbar-color: var(--y-light) transparent;
     padding-bottom: 10px;
   }
   .cat-bar::-webkit-scrollbar,
@@ -140,7 +160,7 @@ input, textarea, select {
   .cats::-webkit-scrollbar-thumb,
   .day-scroll::-webkit-scrollbar-thumb,
   [data-scroll-x]::-webkit-scrollbar-thumb {
-    background: #C4A0F4;
+    background: var(--y-light);
     border-radius: 100px;
   }
   .cat-bar::-webkit-scrollbar-track,
@@ -150,5 +170,94 @@ input, textarea, select {
   .day-scroll::-webkit-scrollbar-track,
   [data-scroll-x]::-webkit-scrollbar-track {
     background: transparent;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SOCLE BUREAU — phase 2 (09/08) : la mise en page
+   ═══════════════════════════════════════════════════════════════════════════
+   La phase 1 rendait l'application UTILISABLE à la souris. Celle-ci la rend
+   habitable sur un grand écran : la colonne s'élargit, la navigation remonte,
+   les grilles se remplissent, les carrousels n'ont plus rien à cacher.
+
+   Même règle, sans exception : tout est sous `min-width: 1024px`. En dessous,
+   pas un pixel ne bouge, et c'est le banc qui le garantit.
+
+   ⚠️ `!important` PARTOUT, et ce n'est pas de la paresse. Chaque page porte son
+   propre bloc `<style>` rendu DANS le corps du document, donc APRÈS cette
+   feuille : à spécificité égale, c'est la page qui gagne. La phase 3 sortira
+   ces blocs, et les `!important` tomberont avec eux.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 1024px) {
+
+  /* ── La colonne ──────────────────────────────────────────────────────────
+     760 px, c'est une largeur de téléphone tenue à bout de bras. Sur un écran
+     de 1920, elle occupait 40 % de la surface et laissait 60 % de fond vide. */
+  .page-wrap {
+    max-width: 1200px !important;
+  }
+
+  /* ── La navigation ───────────────────────────────────────────────────────
+     Une barre d'onglets EN BAS est le repère d'une application téléphone. Dans
+     un navigateur de bureau, personne ne va la chercher là : c'était le signal
+     le plus fort que le site n'était pas fait pour le PC.
+
+     `order: -1` la fait remonter en tête du flux sans toucher au HTML, donc
+     sans rien changer sur mobile. Le balisage reste identique pour tout le
+     monde, y compris pour le futur shell natif. */
+  .navbar {
+    order: -1;
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    border-top: none !important;
+    border-bottom: 1px solid rgba(107, 53, 196, 0.2);
+    padding-bottom: 0 !important;
+  }
+  .navbar-tabs {
+    justify-content: center;
+    gap: 6px;
+  }
+  /* Les onglets sont en `flex: 1` en ligne : à quatre sur 1200 px, chacun
+     ferait 300 px de large et la barre ressemblerait à un tableau. */
+  .navbar-tabs > button {
+    flex: 0 0 auto !important;
+    min-width: 108px;
+    border-radius: 14px;
+  }
+
+  /* ── Les grilles ─────────────────────────────────────────────────────────
+     Deux colonnes dans 1200 px donneraient des cartes de 600 px : une fiche de
+     commerce n'a pas assez de contenu pour ça, elle paraîtrait vide. */
+  .commerces-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 0.875rem !important;
+  }
+  .articles-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  .grid3 {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+
+  /* ── Les carrousels deviennent des grilles ───────────────────────────────
+     La phase 1 leur rendait une barre de défilement, ce qui les rendait
+     atteignables. Ici, ils n'ont plus rien à cacher du tout : la place existe,
+     tout s'affiche d'un coup.
+
+     `.cat-bar` en est volontairement exclue : c'est la barre de catégories
+     collante de la boutique, et la faire passer sur trois lignes repousserait
+     le catalogue hors de l'écran. Elle garde sa barre de défilement. */
+  .cats, .day-scroll, [data-scroll-x] {
+    flex-wrap: wrap !important;
+    overflow-x: visible !important;
+    padding-bottom: 0;
+  }
+
+  /* ── De l'air ────────────────────────────────────────────────────────────
+     Les marges intérieures sont calées sur un écran de 390 px. Étirées à
+     1200 px, elles collaient le contenu aux bords. */
+  .scroll-body {
+    padding-bottom: 28px;
   }
 }

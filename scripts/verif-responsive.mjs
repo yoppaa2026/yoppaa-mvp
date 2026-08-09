@@ -16,7 +16,8 @@
 
 import { readFileSync } from 'node:fs'
 import {
-  SEUIL_BUREAU, SEUIL_LARGE, LARGEUR_CONTENU, LARGEUR_CHAMP, LARGEUR_TEXTE_LONG,
+  SEUIL_BUREAU, SEUIL_LARGE, LARGEUR_CONTENU, LARGEUR_CONTENU_BUREAU,
+  LARGEUR_CHAMP, LARGEUR_TEXTE_LONG,
 } from '../lib/responsive.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
@@ -68,7 +69,14 @@ for (const r of requetes) {
   verifier(`« ${r} » ne touche pas au mobile`,
     estCapacite || (minw && Number(minw[1]) >= SEUIL_BUREAU))
 }
-verifier('aucune max-width dans le socle bureau', !/max-width:/.test(socle))
+// ⚠️ C'est la CONDITION des media queries qu'on interdit, pas la propriété.
+// La première version de ce test refusait la chaîne « max-width: » n'importe
+// où, et il est passé au rouge dès que la phase 2 a plafonné la largeur de la
+// colonne. Un plafond de largeur est légitime ; une media query `max-width`
+// dans le socle bureau ne l'est pas, parce qu'elle ferait dépendre le rendu du
+// téléphone du travail PC.
+verifier('aucune media query max-width dans le socle bureau',
+  !requetes.some(r => /max-width/.test(r)))
 // Le seuil écrit dans la feuille doit être CELUI du module, pas un jumeau.
 verifier('la feuille utilise le seuil du module',
   socle.includes(`min-width: ${SEUIL_BUREAU}px`))
@@ -170,6 +178,48 @@ verifier('la barre latérale du tableau de bord tient toujours',
   /@media \(min-width: 1100px\)[\s\S]{0,120}\.sidebar \{ display: flex !important; \}/.test(dashShell))
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 7. PHASE 2 — LA MISE EN PAGE
+// ═══════════════════════════════════════════════════════════════════════════
+// On ne juge que le CSS RÉELLEMENT APPLIQUÉ : on démarre au `@media` et on
+// retire les commentaires. Sans ça, la phrase qui explique pourquoi `.cat-bar`
+// est exclue de l'étalement suffisait à faire croire qu'elle y était incluse.
+const brut2 = socle.slice(socle.indexOf('SOCLE BUREAU — phase 2'))
+const phase2 = brut2.slice(brut2.indexOf('@media')).replace(/\/\*[\s\S]*?\*\//g, '')
+verifier('la phase 2 existe', phase2.length > 500)
+
+// La colonne s'élargit, et la largeur vient du module partagé.
+verifier('la colonne s\'élargit sur grand écran',
+  new RegExp(`\\.page-wrap\\s*\\{[^}]*max-width:\\s*${LARGEUR_CONTENU_BUREAU}px`).test(phase2))
+// ⚠️ `!important` n'est pas de la paresse : chaque page porte son propre bloc
+// <style> rendu DANS le corps, donc APRÈS la feuille globale. À spécificité
+// égale, c'est la page qui gagne, et la règle bureau serait sans effet.
+verifier('la largeur bureau bat le style de la page',
+  /\.page-wrap\s*\{[^}]*max-width:[^;]*!important/.test(phase2))
+
+// La navigation remonte, sans que le HTML change : `order: -1` suffit, et le
+// balisage reste identique pour le futur shell natif.
+verifier('la navigation remonte en tête', /\.navbar\s*\{[^}]*order:\s*-1/.test(phase2))
+verifier('elle reste visible au défilement', /\.navbar\s*\{[^}]*position:\s*sticky/.test(phase2))
+verifier('les onglets ne s\'étirent plus sur toute la largeur',
+  /\.navbar-tabs\s*>\s*button\s*\{[^}]*flex:\s*0 0 auto\s*!important/.test(phase2))
+
+// Deux colonnes dans 1200 px donneraient des cartes de 600 px, trop larges
+// pour leur contenu.
+verifier('les commerces passent à trois colonnes',
+  /\.commerces-grid\s*\{[^}]*repeat\(3, 1fr\)\s*!important/.test(phase2))
+verifier('les articles aussi',
+  /\.articles-grid\s*\{[^}]*repeat\(3, 1fr\)\s*!important/.test(phase2))
+
+// Les carrousels n'ont plus rien à cacher : la place existe.
+verifier('les carrousels s\'étalent au lieu de défiler',
+  /\.cats, \.day-scroll, \[data-scroll-x\]\s*\{[^}]*flex-wrap:\s*wrap\s*!important/.test(phase2))
+// ⚠️ DÉCISION VOLONTAIRE : `.cat-bar` est la barre de catégories COLLANTE de la
+// boutique. La faire passer sur trois lignes repousserait le catalogue hors de
+// l'écran. Elle garde sa barre de défilement de la phase 1.
+const reglesQuiEtalent = /\.cats, \.day-scroll, \[data-scroll-x\]/.exec(phase2)
+verifier('la barre de catégories collante n\'est pas étalée',
+  !!reglesQuiEtalent && !/\.cat-bar[^{]*\{[^}]*flex-wrap/.test(phase2))
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

@@ -1488,6 +1488,23 @@ export default function Dashboard() {
               <IconLogout size={15}/>
               Déconnexion
             </button>
+            {/* Mentions légales, CGU commerçant et confidentialité. Même
+                exigence que côté client : les stores veulent ces textes
+                atteignables depuis l'application. Le commerçant, lui, a en
+                plus un intérêt direct à retrouver ses conditions et le DPA
+                sans les chercher sur le site. */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4, paddingTop: 10, borderTop: `1px solid ${T.main}22` }}>
+              {[
+                { href: '/legal#cgu-commercant', label: 'Conditions' },
+                { href: '/legal#confidentialite', label: 'Confidentialité' },
+                { href: '/legal#dpa', label: 'DPA' },
+              ].map(l => (
+                <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: '0.7rem', fontWeight: 600, color: T.light, opacity: 0.75, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                  {l.label}
+                </a>
+              ))}
+            </div>
           </div>
         </aside>
 

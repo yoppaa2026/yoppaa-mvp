@@ -30,8 +30,11 @@ function Section({ id, title, children }) {
   )
 }
 
-function H3({ children }) {
-  return <h3 style={{ fontWeight: 800, fontSize: '1rem', color: T.ink, marginTop: '1.5rem', marginBottom: '0.5rem' }}>{children}</h3>
+// `id` optionnel : certaines sous-sections doivent être atteignables par une
+// adresse directe. Google Play exige notamment une URL publique menant à la
+// procédure de suppression de compte, accessible SANS installer l'application.
+function H3({ id, children }) {
+  return <h3 id={id} style={{ fontWeight: 800, fontSize: '1rem', color: T.ink, marginTop: '1.5rem', marginBottom: '0.5rem', scrollMarginTop: '80px' }}>{children}</h3>
 }
 
 function P({ children }) {
@@ -265,8 +268,9 @@ export default function LegalPage() {
             <P>Conformément au RGPD, vous disposez des droits d'accès, rectification, effacement, limitation, portabilité et opposition. Pour exercer ces droits : support@yoppaa.app ou dpo@yoppaa.app</P>
             <P>En cas de litige non résolu, vous pouvez saisir l'Autorité de Protection des Données (APD) belge : www.autoriteprotectiondonnees.be</P>
 
-            <H3>Suppression de votre compte</H3>
+            <H3 id="suppression-compte">Suppression de votre compte</H3>
             <P>Vous pouvez supprimer votre compte à tout moment, vous-même et sans démarche préalable, depuis l'application : onglet <strong>Profil</strong>, puis <strong>Supprimer mon compte</strong>. Aucune demande écrite n'est nécessaire.</P>
+            <P><strong>Sans passer par l'application</strong>, et sans avoir à l'installer : écrivez à <strong>dpo@yoppaa.app</strong> depuis l'adresse email de votre compte, avec la mention « suppression de compte ». La demande est traitée dans un délai maximal de 30 jours, et vous recevez une confirmation. Cette page est accessible publiquement à l'adresse <strong>www.yoppaa.app/legal#suppression-compte</strong>.</P>
             <P><strong>Sont effacés définitivement :</strong> votre compte et votre adresse email, vos favoris et préférences, vos cartes de fidélité et les points qu'elles contiennent, vos avis et vos suggestions de commerces, ainsi que toute préinscription associée à votre adresse.</P>
             <P><strong>Sont conservés sous forme anonymisée :</strong> vos commandes et rendez-vous passés, que les commerçants sont légalement tenus de conserver comme pièces comptables. Votre nom, votre email et votre téléphone y sont remplacés par une mention neutre : plus aucune donnée ne permet de vous identifier.</P>
             <P>La suppression est <strong>irréversible</strong> et met fin à votre accès. Elle est temporairement refusée, avec indication du motif, tant qu'un engagement est en cours : commande non retirée, rendez-vous à venir, ou bon cadeau disposant encore d'un solde. Ces situations impliquent un tiers commerçant et doivent être dénouées d'abord. Vous pouvez alors nous écrire à dpo@yoppaa.app.</P>
@@ -275,7 +279,27 @@ export default function LegalPage() {
             <P>Yoppaa utilise uniquement des cookies et stockages techniques indispensables au fonctionnement (session, authentification, préférences locales), ainsi que la protection anti-abus Cloudflare Turnstile sur les formulaires. Aucun cookie publicitaire ou de suivi tiers n'est utilisé. Les notifications push (OneSignal) ne sont activées qu'à votre demande explicite et sont désactivables à tout moment.</P>
 
             <H3>Partage des données</H3>
-            <P>Yoppaa ne vend jamais les données personnelles. Les données peuvent être partagées avec : les commerçants partenaires (exécution de commande ou rendez-vous uniquement), Stripe (paiements), Supabase (hébergement, Europe), Vercel (infrastructure), Resend (emails transactionnels), Brevo (emails d'actualités, uniquement avec consentement marketing), OneSignal (notifications push, si activées), Cloudflare (protection anti-abus) et Anthropic (assistant de rédaction IA des commerçants : seuls les textes fournis par le commerçant lui sont transmis, jamais les données des Clients).</P>
+            <P><strong>Yoppaa ne vend jamais les données personnelles</strong> et n'en transmet aucune à des fins publicitaires. Les sous-traitants ci-dessous n'interviennent que pour faire fonctionner le service, chacun pour la seule finalité indiquée.</P>
+            <Ul items={[
+              'Commerçants partenaires : les données nécessaires à l’exécution d’une commande ou d’un rendez-vous, et rien d’autre.',
+              'Stripe (Irlande) : paiements en ligne. Les données bancaires ne transitent jamais par Yoppaa.',
+              'Supabase (Union européenne) : hébergement de la base de données.',
+              'Vercel : hébergement et diffusion de l’application.',
+              'Resend : emails transactionnels (confirmations, rappels, bons cadeaux).',
+              'Brevo : SMS de service des cartes de fidélité, qui traitent votre numéro de téléphone, et emails d’actualités Yoppaa, ces derniers uniquement si vous y avez consenti.',
+              'OneSignal : notifications push, uniquement si vous les avez activées.',
+              'Cloudflare : protection anti-abus des formulaires.',
+              'Upstash : limitation du nombre de requêtes pour prévenir les abus. Votre adresse IP y sert de clé de comptage, sur une fenêtre de quelques minutes.',
+              'Anthropic : assistant de rédaction proposé aux commerçants. Seuls les textes que le commerçant fournit lui-même sont transmis, jamais les données des Clients.',
+            ]}/>
+
+            <H3 id="cartographie">Localisation et cartographie</H3>
+            <P>Situer un commerce, calculer une distance ou préparer une tournée de livraison suppose de convertir des adresses en coordonnées. Yoppaa ne dispose pas de sa propre cartographie et fait appel à deux services européens.</P>
+            <Ul items={[
+              'OpenStreetMap / Nominatim (OpenStreetMap Foundation) : conversion des adresses en coordonnées et l’inverse. Lui sont transmis, selon le cas, l’adresse de livraison que vous saisissez, l’adresse que vous tapez pour vous situer, ou vos coordonnées GPS lorsque vous autorisez la géolocalisation. Cette dernière requête part directement de votre appareil.',
+              'OpenRouteService (Allemagne) : calcul des distances entre votre position et les commerces affichés, et optimisation de l’ordre de passage des livraisons d’un commerçant. Lui sont transmises des coordonnées géographiques, jamais votre nom ni vos coordonnées de contact.',
+            ]}/>
+            <P>Ces appels n'ont lieu que lorsque la fonction concernée est utilisée. <strong>Refuser la géolocalisation reste possible à tout moment</strong> : vous pouvez alors indiquer votre commune à la main, et aucune coordonnée n'est transmise.</P>
           </Section>
 
           {/* 5. DPA */}

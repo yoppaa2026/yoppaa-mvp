@@ -274,6 +274,56 @@ verifier('les CGU citent le lien de connexion de l\'email de confirmation',
 verifier('les CGU ne présentent plus le compte comme facultatif pour le suivi',
   !/compte \(facultative\) permet de suivre/.test(cguClient))
 
+// ─── CE QUE LES STORES EXIGENT ─────────────────────────────────────────────
+// ⚠️ Motif de rejet classique : la politique de confidentialité DOIT être
+// atteignable depuis l'APPLICATION, pas seulement depuis le site vitrine. Le
+// lien n'existait que dans le pied de la landing.
+for (const [ecran, chemin] of [['le Yopper', 'app/commander/page.js'], ['le commerçant', 'app/dashboard/page.js']]) {
+  const src = lire(chemin)
+  // Les liens sont construits depuis un tableau : on cherche la DESTINATION,
+  // pas un attribut écrit en dur, sinon le test rougit alors que le lien existe.
+  verifier(`${ecran} atteint la confidentialité depuis l'app`,
+    /['"]\/legal#confidentialite['"]/.test(src))
+  verifier(`${ecran} atteint ses conditions depuis l'app`,
+    /['"]\/legal#cgu-(client|commercant)['"]/.test(src))
+}
+
+// ⚠️ Google Play exige une URL PUBLIQUE de demande de suppression de compte,
+// utilisable sans installer l'application. L'ancre doit donc exister.
+verifier('la suppression de compte a une adresse directe',
+  /<H3 id="suppression-compte">/.test(legal))
+verifier('elle décrit une voie hors application',
+  /Sans passer par l'application/.test(legal))
+
+// ⚠️ TOUT TIERS QUI REÇOIT DES DONNÉES DOIT ÊTRE DÉCLARÉ. Ce que le formulaire
+// de sécurité des données de Google et les étiquettes de confidentialité
+// d'Apple annoncent doit correspondre à ce que le code fait vraiment.
+//
+// LE TEST QUI COMPTE : on part du CODE, pas de la liste. Un service appelé
+// quelque part et absent de la page fait rougir le banc.
+const TIERS_DECLARABLES = [
+  { nom: 'Nominatim', motif: /nominatim\.openstreetmap\.org/, attendu: /Nominatim/ },
+  { nom: 'OpenRouteService', motif: /api\.openrouteservice\.org/, attendu: /OpenRouteService/ },
+  { nom: 'Upstash', motif: /@upstash\/ratelimit/, attendu: /Upstash/ },
+  { nom: 'Brevo', motif: /transactionalSMS/, attendu: /Brevo/ },
+]
+const codeComplet = ['lib/geocode.js', 'lib/brevo.js', 'lib/ratelimit.js',
+  'app/api/distance/route.js', 'app/api/livraison/tournee-optimisee/route.js',
+  'app/commander/page.js'].map(f => { try { return lire(f) } catch { return '' } }).join('\n')
+for (const t of TIERS_DECLARABLES) {
+  if (!t.motif.test(codeComplet)) continue   // service retiré du code : plus rien à déclarer
+  verifier(`${t.nom} reçoit des données et figure dans la page légale`, t.attendu.test(legal))
+}
+// Brevo envoie AUSSI les SMS de fidélité : le décrire comme un simple outil
+// d'emailing marketing annonce la mauvaise donnée et la mauvaise finalité.
+verifier('Brevo est décrit pour les SMS, pas seulement pour les emails',
+  /Brevo : SMS de service/.test(legal))
+// La géolocalisation part directement de l'appareil du Yopper : ça se dit.
+verifier('la page dit que la requête part de l\'appareil',
+  /part directement de votre appareil/.test(legal))
+verifier('la page rappelle qu\'on peut refuser la géolocalisation',
+  /Refuser la géolocalisation reste possible/.test(legal))
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

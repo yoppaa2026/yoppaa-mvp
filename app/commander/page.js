@@ -3315,6 +3315,28 @@ export default function Commander() {
                     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
                   }}/>
                 )}
+
+                {/* ── Mentions légales, CGU et confidentialité ──────────────────
+                    ⚠️ OBLIGATOIRE POUR LES DEUX STORES. Apple et Google exigent
+                    que la politique de confidentialité soit atteignable DEPUIS
+                    L'APPLICATION, pas seulement depuis le site vitrine. Le lien
+                    n'existait que dans le pied de la landing : c'est un motif de
+                    rejet classique, et il ne coûte rien à corriger.
+                    Affiché pour TOUT LE MONDE, y compris sans compte : le
+                    visiteur qui commande en invité a exactement les mêmes
+                    droits d'information. */}
+                <div style={{ marginTop: 22, paddingTop: 16, borderTop: `1px solid ${T.pale}`, display: 'flex', flexWrap: 'wrap', gap: 14, justifyContent: 'center' }}>
+                  {[
+                    { href: '/legal#cgu-client', label: 'Conditions d’utilisation' },
+                    { href: '/legal#confidentialite', label: 'Confidentialité' },
+                    { href: '/legal#mentions', label: 'Mentions légales' },
+                  ].map(l => (
+                    <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: '0.74rem', fontWeight: 700, color: T.muted, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                      {l.label}
+                    </a>
+                  ))}
+                </div>
               </div>
             </div>
           )}

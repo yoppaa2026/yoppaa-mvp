@@ -119,7 +119,9 @@ export async function POST(request) {
       await admin.from('suggestions_commercants').delete().in('client_id', ids)
       await admin.from('avis').delete().in('client_id', ids)
       await admin.from('fidelite_cartes').delete().in('client_id', ids)
-      await admin.from('signalements_citoyens').delete().in('yopper_id', ids)
+      // signalements_citoyens : table retirée avec le module des services
+      // publics (09/08). Laisser l'appel ici ferait échouer le droit à
+      // l'effacement, ce qui serait un comble sur cette route précisément.
     }
     // Les cartes de fidélité créées au comptoir n'ont pas de client_id : elles
     // ne sont rattachées qu'au numéro de GSM, qui est lui-même une donnée
@@ -130,7 +132,6 @@ export async function POST(request) {
     if (email) {
       await admin.from('demandes_commande').delete().eq('client_email', email)
       await admin.from('pre_inscriptions').delete().eq('email', email)
-      await admin.from('signalements_citoyens').delete().eq('yopper_email', email)
     }
 
     // ── 3. Anonymisation de ce que la comptabilité impose de garder ─────────

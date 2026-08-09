@@ -42,6 +42,23 @@ for (const chemin of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/
   // descendre les photos, et faire disparaître les images de tout le monde.
   verifier(`${chemin} : les photos sont reprises plus bas`, /<GalerieCommerce/.test(src))
   verifier(`${chemin} : la couverture ouvre la série`, /photosFiche/.test(src))
+
+  // ⚠️ LE TEST QUI MANQUAIT, ET QUI A COÛTÉ LES PHOTOS DU SALON (09/08).
+  // Le banc vérifiait que `<GalerieCommerce` était bien ÉCRIT dans la page,
+  // jamais que des photos y arrivaient. La fiche rendez-vous demandait
+  // `select('id, url, type, ordre, legende')` : la colonne `legende` n'existe
+  // pas dans `commercant_photos`, PostgREST répondait 400, `data` valait null,
+  // et la galerie disparaissait SANS la moindre erreur visible. La fiche
+  // boutique, elle, lisait `*` et n'a jamais rien eu.
+  //
+  // La règle qui l'attrape : sur une table partagée par les deux fiches, on
+  // lit de la MÊME façon. Une liste de colonnes écrite à la main d'un seul
+  // côté est exactement la divergence qu'on ne veut plus.
+  const requetePhotos = /\.from\('commercant_photos'\)\s*\n?\s*\.select\((?:\s*\n\s*)?'([^']*)'\)/.exec(src)
+    || /from\('commercant_photos'\)\.select\('([^']*)'\)/.exec(src)
+  verifier(`${chemin} : la requête des photos est identifiable`, !!requetePhotos)
+  verifier(`${chemin} : les photos se lisent avec select('*'), comme l'autre fiche`,
+    requetePhotos?.[1] === '*', `obtenu « ${requetePhotos?.[1]} »`)
 }
 
 // Le titre du carrousel devait cesser de parler de « maison » : ça ne veut rien
@@ -250,6 +267,56 @@ verifier('le signup demande le site web', /site_web/.test(signup))
 verifier('le signup guide ce qu\'il faut donner à l\'IA', /Donne trois éléments/.test(signup))
 verifier('le signup affiche le nombre de demandes restantes', /restant/.test(signup))
 verifier('le texte proposé reste modifiable', /c'est le tien|c\\'est le tien/.test(signup))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE PANIER NE DOIT JAMAIS ÊTRE UN CUL-DE-SAC (Alex, 09/08)
+// ═══════════════════════════════════════════════════════════════════════════
+// Sur la fiche rendez-vous, ajouter un produit ne menait NULLE PART : ni total,
+// ni bouton. Le client était coincé, sauf à prendre un rendez-vous dont il
+// n'avait pas besoin, ou à ouvrir un produit pour rebondir vers la boutique,
+// ce qui vidait son panier au passage.
+//
+// Deux règles se vérifient ici, et elles sont indissociables : un panier non
+// vide doit toujours offrir une sortie, et cette sortie doit emporter le
+// panier avec elle.
+const fRdv = lire('app/commander/rdv/[slug]/page.js')
+const fBoutique = lire('app/commander/[slug]/page.js')
+
+verifier('la fiche rendez-vous montre une barre dès qu\'un produit est ajouté',
+  /barrePanierVisible/.test(fRdv))
+verifier('la barre affiche le total du panier', /totalProduits\.toFixed\(2\)/.test(fRdv))
+verifier('la barre propose de prendre rendez-vous', /Je prends rendez-vous/.test(fRdv))
+// LA SORTIE QUI MANQUAIT : celui qui veut juste un shampoing n'a aucune raison
+// de réserver un créneau.
+verifier('la barre propose de commander SANS rendez-vous',
+  /Je commande sans rendez-vous/.test(fRdv))
+verifier('cette sortie emporte le panier', /function commanderSansRdv\(\)[\s\S]{0,160}emporterPanierVersBoutique/.test(fRdv))
+// Les deux liens qui quittaient la page en perdant tout.
+verifier('le lien « Voir tout » dépose le panier',
+  /Voir tout[\s\S]{0,200}?/.test(fRdv) && /href=\{`\/commander\/\$\{commercant\.slug\}`\} onClick=\{emporterPanierVersBoutique\}/.test(fRdv))
+verifier('ouvrir un produit dépose le panier',
+  /\?article=\$\{p\.id\}`\} onClick=\{emporterPanierVersBoutique\}/.test(fRdv))
+// La barre est en position fixe : sans réserve en bas, elle recouvre le
+// dernier produit et le bouton du bon cadeau.
+verifier('la page réserve la place de la barre', /paddingBottom: 170/.test(fRdv))
+
+// Le panier voyage DANS LES DEUX SENS. C'est ce qui manquait : la boutique
+// déposait déjà pour le rendez-vous, jamais l'inverse.
+verifier('la boutique dépose vers le rendez-vous', /deposerPanierPourRdv/.test(fBoutique))
+verifier('la boutique reprend ce qui vient du rendez-vous', /reprendrePanierPourBoutique/.test(fBoutique))
+verifier('le rendez-vous reprend ce qui vient de la boutique', /reprendrePanierPourRdv/.test(fRdv))
+verifier('le rendez-vous dépose vers la boutique', /deposerPanierPourBoutique/.test(fRdv))
+// Chaque sens dit au client ce qui a suivi, plutôt que de laisser des articles
+// disparaître sans un mot.
+verifier('la boutique annonce le panier repris', /t&rsquo;ont suivi depuis la fiche/.test(fBoutique))
+verifier('le rendez-vous annonce le panier repris', /de la boutique t&rsquo;ont suivi/.test(fRdv))
+
+// ⚠️ UNE CLÉ PAR SENS. Avec une clé unique, la page qui dépose relit son propre
+// dépôt si le client fait marche arrière, et double ses articles.
+const { CLES, DUREE_PARTAGE_MS } = await import('../lib/panier-partage.js')
+verifier('les deux sens ont des clés distinctes', CLES.rdv('ciseaux') !== CLES.boutique('ciseaux'))
+verifier('la clé porte le slug du commerce', CLES.rdv('ciseaux').includes('ciseaux'))
+verifier('le dépôt ne survit pas à la journée', DUREE_PARTAGE_MS <= 60 * 60 * 1000)
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

@@ -8,7 +8,8 @@ import { canDo, isVitrine } from '@/lib/plans'
 import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau } from '@/lib/creneaux'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
-import { deposerPanierPourRdv } from '@/lib/panier-vers-rdv'
+import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
+import { compterVueFiche } from '@/lib/vue-fiche'
 import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
@@ -1785,6 +1786,57 @@ export default function CommanderSlug() {
     })
   }
 
+  // Vue de fiche : le premier chiffre que le commerçant cherche. Comptée une
+  // fois par session et par commerce, sans rien enregistrer sur le visiteur.
+  // La clé est partagée avec la fiche rendez-vous : une visite reste une visite,
+  // même si le client passe d'une page à l'autre.
+  useEffect(() => {
+    if (commercant?.id) compterVueFiche(commercant.id)
+  }, [commercant?.id])
+
+  // ─── PANIER RAPPORTÉ DE LA FICHE RENDEZ-VOUS (09/08) ─────────────────────
+  //
+  // Le trajet inverse existait déjà : la boutique déposait son panier avant
+  // d'envoyer le client vers le tunnel de rendez-vous. Dans l'autre sens, rien.
+  // Un client qui ajoutait un shampoing sur la fiche du salon puis ouvrait le
+  // produit arrivait ici les mains vides et devait tout recommencer.
+  //
+  // On reconstruit les lignes AVEC LES PRIX D'ICI : le dépôt ne transporte que
+  // des identifiants et des quantités, jamais un prix. Et on plafonne au stock
+  // du jour, sinon le panier repris annoncerait des articles indisponibles.
+  const [panierRepris, setPanierRepris] = useState(null)
+  const panierReprisRef = useRef(false)
+  useEffect(() => {
+    if (panierReprisRef.current) return
+    if (!slug || articles.length === 0) return
+    if (!canDo(commercant?.plan, 'commande')) return
+    const depot = reprendrePanierPourBoutique(slug)
+    panierReprisRef.current = true
+    if (!depot) return
+    const ajouts = {}
+    for (const l of depot.articles) {
+      const article = articles.find(a => String(a.id) === String(l.id))
+      if (!article || article.est_vitrine || !(Number(article.prix) > 0)) continue
+      const stockMax = getStockMax(article.id)
+      const qte = stockMax === Infinity ? l.quantite : Math.min(l.quantite, stockMax)
+      if (qte <= 0) continue
+      const remise = remiseSurArticle(article, dealsActifs)
+      ajouts[String(article.id)] = {
+        ...article,
+        prix: remise ? remise.prix : Number(article.prix),
+        prix_avant_deal: remise ? remise.prixBarre : null,
+        options: null,
+        quantite: qte,
+      }
+    }
+    const repris = Object.keys(ajouts).length
+    if (repris > 0) setPanier(prev => ({ ...prev, ...ajouts }))
+    if (repris > 0 || depot.ignores.length > 0) {
+      setPanierRepris({ repris, ignores: depot.ignores })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ne doit tourner qu'une fois, au premier catalogue chargé
+  }, [slug, articles.length, commercant?.plan])
+
   function qteTotaleArticle(articleId) {
     return Object.entries(panier).reduce((acc, [key, item]) => {
       if (key === String(articleId) || key.startsWith(`${articleId}_`)) return acc + item.quantite
@@ -2958,6 +3010,24 @@ export default function CommanderSlug() {
                   </div>
                 )}
               </div>
+
+              {/* Panier rapporté de la fiche rendez-vous : le dire, sinon le
+                  client ne sait pas si ses articles l'ont suivi. Symétrique du
+                  message affiché dans l'autre sens sur la fiche rendez-vous. */}
+              {panierRepris && (
+                <div style={{ margin: '10px 16px 0', background: panierRepris.ignores.length > 0 ? '#FFFBEB' : '#ECFDF5', border: `1px solid ${panierRepris.ignores.length > 0 ? '#FDE68A' : '#A7F3D0'}`, borderRadius: 10, padding: '8px 11px' }}>
+                  {panierRepris.repris > 0 && (
+                    <p style={{ margin: 0, fontSize: '0.74rem', fontWeight: 700, color: '#065F46', lineHeight: 1.45 }}>
+                      Tes {panierRepris.repris} article{panierRepris.repris > 1 ? 's' : ''} t&rsquo;ont suivi depuis la fiche.
+                    </p>
+                  )}
+                  {panierRepris.ignores.length > 0 && (
+                    <p style={{ margin: panierRepris.repris > 0 ? '4px 0 0' : 0, fontSize: '0.72rem', color: '#78350F', lineHeight: 1.45 }}>
+                      {panierRepris.ignores.join(', ')} n&rsquo;a{panierRepris.ignores.length > 1 ? 'ont' : ''} pas pu suivre : recompose{panierRepris.ignores.length > 1 ? '-les' : '-le'} ici.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Sélecteur de jour de retrait - pilote les stocks affichés et les créneaux dispo */}
               {peutCommander && joursDispos.length > 0 && (

@@ -18,7 +18,8 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { isVitrine, canDo } from '@/lib/plans'
 import { dealActifCeJour, remiseSurArticle } from '@/lib/deals'
-import { reprendrePanierPourRdv } from '@/lib/panier-vers-rdv'
+import { reprendrePanierPourRdv, deposerPanierPourBoutique } from '@/lib/panier-partage'
+import { compterVueFiche } from '@/lib/vue-fiche'
 import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
@@ -323,6 +324,50 @@ export default function CommanderRdvSlug() {
 
   const lignesPanier = Object.values(panierProduits)
   const totalProduits = lignesPanier.reduce((s, l) => s + l.prix * l.quantite, 0)
+  const nbProduitsPanier = lignesPanier.reduce((s, l) => s + l.quantite, 0)
+
+  // ─── SORTIR DE LA FICHE AVEC SON PANIER (09/08) ──────────────────────────
+  //
+  // Le panier de cette page ne vivait que dans le state : toute navigation le
+  // perdait. On le dépose donc avant de partir, exactement comme la boutique
+  // le dépose avant d'envoyer le client ici. Le module est le même, seul le
+  // sens change.
+  function emporterPanierVersBoutique() {
+    const aTransmettre = {}
+    for (const l of lignesPanier) {
+      aTransmettre[String(l.article.id)] = {
+        id: l.article.id,
+        nom: l.article.nom,
+        quantite: l.quantite,
+      }
+    }
+    deposerPanierPourBoutique(slug, aTransmettre)
+  }
+
+  // « Je commande sans rendez-vous » : le client repart avec son panier vers
+  // la boutique, où le tunnel de retrait existe déjà. Rien à réinventer ici.
+  function commanderSansRdv() {
+    emporterPanierVersBoutique()
+    router.push(`/commander/${slug}`)
+  }
+
+  // Réserver n'est proposé que si c'est réellement possible : module de
+  // rendez-vous actif ET au moins une prestation. Sinon la barre n'affiche que
+  // la sortie boutique, plutôt qu'un bouton qui ne mène nulle part.
+  const peutReserverIci = !commercant?._rdvDesactive && prestations.length > 0
+
+  // La barre est en position fixe : sans réserve en bas de page, elle
+  // recouvrirait le dernier produit et le bouton « Offrir un bon cadeau ».
+  const barrePanierVisible = etape === 1 && produitsAchetables && lignesPanier.length > 0
+
+  // Le panier est en bas de l'écran, les prestations sont plus haut : on
+  // remonte le client jusqu'à elles au lieu de lui demander de chercher.
+  function allerAuxPrestations() {
+    const cible = document.getElementById('prestations-rdv')
+    if (cible && scrollRef.current) {
+      scrollRef.current.scrollTo({ top: Math.max(0, cible.offsetTop - 12), behavior: 'smooth' })
+    }
+  }
   // Vendre ici demande trois choses : une formule qui ouvre la commande, un
   // compte Stripe réellement opérationnel, et un module de rendez-vous actif.
   // Sans le compte Stripe, le client remplirait un panier pour se heurter à
@@ -366,6 +411,12 @@ export default function CommanderRdvSlug() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- ne doit tourner qu'une fois, au premier catalogue chargé
   }, [slug, produits.length, produitsAchetables])
+
+  // Vue de fiche : le premier chiffre que le commerçant cherche. Comptée une
+  // fois par session et par commerce, sans rien enregistrer sur le visiteur.
+  useEffect(() => {
+    if (commercant?.id) compterVueFiche(commercant.id)
+  }, [commercant?.id])
 
   // Tracking stats deals (même mécanique best-effort que la fiche commerce) :
   // chaque event compte 1x par session client, fire-and-forget non bloquant.
@@ -641,9 +692,17 @@ export default function CommanderRdvSlug() {
         // Photos de la fiche : cette page ne les chargeait pas du tout, elle
         // n'affichait que la couverture en bandeau. Depuis que le haut de fiche
         // est une bannière, sans ça un salon n'aurait plus une seule image.
+        //
+        // ⚠️ `select('*')`, EXACTEMENT comme la fiche boutique. La liste de
+        // colonnes écrite à la main demandait `legende`, qui n'existe pas dans
+        // `commercant_photos` : PostgREST répondait 400, `data` valait null, et
+        // la galerie disparaissait SANS la moindre erreur visible. La fiche
+        // boutique, elle, n'a jamais rien eu parce qu'elle lit tout. Deux
+        // écritures différentes pour la même table, c'est la divergence qui a
+        // coûté les photos du salon.
         supabase
           .from('commercant_photos')
-          .select('id, url, type, ordre, legende')
+          .select('*')
           .eq('commercant_id', c.id)
           .order('ordre'),
       ])
@@ -1216,7 +1275,10 @@ export default function CommanderRdvSlug() {
             </svg>
             Ses produits
           </span>
-          <a href={`/commander/${commercant.slug}`}
+          {/* Ces deux liens quittaient la page en perdant le panier : le client
+              qui ouvrait un produit pour le regarder revenait les mains vides.
+              On dépose avant de partir, la boutique reprend à l'arrivée. */}
+          <a href={`/commander/${commercant.slug}`} onClick={emporterPanierVersBoutique}
             style={{ fontSize: '0.72rem', fontWeight: 800, color: T.main, textDecoration: 'none', flexShrink: 0 }}>
             Voir tout ({produits.length}) ›
           </a>
@@ -1259,7 +1321,7 @@ export default function CommanderRdvSlug() {
             return (
             <div key={p.id}
               style={{ flexShrink: 0, width: 118, background: '#fff', border: `1px solid ${qte > 0 ? T.main + '55' : T.pale}`, borderRadius: 14, overflow: 'hidden', boxShadow: qte > 0 ? `0 2px 10px ${T.main}22` : 'none' }}>
-              <a href={`/commander/${commercant.slug}?article=${p.id}`} style={{ display: 'block', textDecoration: 'none' }}>
+              <a href={`/commander/${commercant.slug}?article=${p.id}`} onClick={emporterPanierVersBoutique} style={{ display: 'block', textDecoration: 'none' }}>
                 {commercant.photos_catalogue_actif !== false && p.photo_url ? (
                   <div style={{ width: '100%', aspectRatio: '1', background: T.pale }}>
                     <img src={p.photo_url} alt={p.nom} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
@@ -1330,6 +1392,7 @@ export default function CommanderRdvSlug() {
         .prest-card { transition: all 0.15s; }
         .prest-card:hover { border-color: ${T.main}; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(107,53,196,0.12); }
         @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes panierPop { from { opacity:0; transform:translate(-50%, 14px); } to { opacity:1; transform:translate(-50%, 0); } }
         @keyframes dealGlow {
           0%, 100% { box-shadow: 0 4px 16px rgba(22,6,54,0.2),  0 0 0 0  rgba(196,160,244,0); }
           50%      { box-shadow: 0 6px 28px rgba(22,6,54,0.35), 0 0 0 10px rgba(196,160,244,0.45); }
@@ -1396,7 +1459,56 @@ export default function CommanderRdvSlug() {
         </div>
 
         {/* ── BODY ── */}
-        <div className="scroll-body" ref={scrollRef}>
+        {/* ── BARRE DE PANIER ───────────────────────────────────────────────
+            LE CUL-DE-SAC RÉPARÉ (Alex, 09/08). On pouvait ajouter des produits
+            sur cette fiche et il ne se passait RIEN : ni total, ni bouton. Le
+            client était coincé, sauf à prendre un rendez-vous dont il n'avait
+            pas besoin, ou à ouvrir un produit pour rebondir vers la boutique,
+            ce qui vidait son panier au passage.
+
+            DEUX SORTIES, PARCE QU'IL Y A DEUX INTENTIONS. Celui qui vient pour
+            sa coupe et prend un shampoing au passage paie tout d'un coup avec
+            son rendez-vous. Celui qui veut juste le shampoing n'a aucune raison
+            de réserver un créneau : il part vers la boutique, avec son panier.
+
+            Le bouton principal reste le rendez-vous : c'est le cœur de métier
+            du commerce, et c'est pour ça que le client est arrivé ici. */}
+        {barrePanierVisible && (
+          <div style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 16, zIndex: 60, width: 'calc(100% - 28px)', maxWidth: 440, background: '#fff', borderRadius: 20, border: `1.5px solid ${T.main}33`, boxShadow: '0 14px 40px rgba(22,6,54,0.28)', padding: '12px 14px 13px', animation: 'panierPop 0.25s ease-out' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                </svg>
+                <span style={{ position: 'absolute', top: -7, right: -9, minWidth: 17, height: 17, padding: '0 5px', borderRadius: 100, background: T.main, color: '#fff', fontSize: '0.64rem', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>{nbProduitsPanier}</span>
+              </span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: '0.82rem', fontWeight: 700, color: T.ink }}>
+                {nbProduitsPanier} article{nbProduitsPanier > 1 ? 's' : ''} à emporter
+              </span>
+              <span style={{ fontSize: '1rem', fontWeight: 900, color: T.ink, whiteSpace: 'nowrap' }}>{totalProduits.toFixed(2)} €</span>
+            </div>
+            {peutReserverIci && (
+              <button onClick={allerAuxPrestations}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 16px', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: '0.92rem', cursor: 'pointer', boxShadow: `0 8px 22px ${T.main}55` }}>
+                Je prends rendez-vous
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+              </button>
+            )}
+            <button onClick={commanderSansRdv}
+              style={{ width: '100%', marginTop: peutReserverIci ? 8 : 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: peutReserverIci ? '9px 14px' : '12px 16px', borderRadius: 100, border: peutReserverIci ? 'none' : `1.5px solid ${T.main}`, background: peutReserverIci ? 'transparent' : '#fff', color: T.main, fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: peutReserverIci ? '0.82rem' : '0.92rem', cursor: 'pointer' }}>
+              Je commande sans rendez-vous
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+            </button>
+            {peutReserverIci && (
+              <p style={{ margin: '7px 2px 0', fontSize: '0.68rem', color: T.muted, fontWeight: 600, textAlign: 'center', lineHeight: 1.4 }}>
+                Avec un rendez-vous, tu paies tout en une fois et tu repars avec le jour J.
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="scroll-body" ref={scrollRef} style={barrePanierVisible ? { paddingBottom: 170 } : undefined}>
 
           {loading && (
             <div style={{ padding: '3rem 1rem', textAlign: 'center', color: T.muted }}>Chargement…</div>
@@ -1604,7 +1716,7 @@ export default function CommanderRdvSlug() {
 
               {/* ─── ÉTAPE 1 - LISTE PRESTATIONS ─── */}
               {!commercant._rdvDesactive && etape === 1 && (
-                <div style={{ padding: '1.5rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
+                <div id="prestations-rdv" style={{ padding: '1.5rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

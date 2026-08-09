@@ -3202,6 +3202,7 @@ function TabLivraison({ commercantId, toast }) {
   const [inputCP, setInputCP] = useState('')
   const [fraisFixe, setFraisFixe] = useState('')
   const [gratuitDes, setGratuitDes] = useState('')
+  const [minimumCommande, setMinimumCommande] = useState('')
 
   useEffect(() => {
     (async () => {
@@ -3210,6 +3211,7 @@ function TabLivraison({ commercantId, toast }) {
         setCodesPostaux(data.codes_postaux || [])
         setFraisFixe(data.frais_fixe != null ? String(data.frais_fixe) : '')
         setGratuitDes(data.gratuit_des != null ? String(data.gratuit_des) : '')
+        setMinimumCommande(data.minimum_commande != null ? String(data.minimum_commande) : '')
       }
       setLoading(false)
     })()
@@ -3234,12 +3236,20 @@ function TabLivraison({ commercantId, toast }) {
       gratuit = parseFloat(gratuitDes.replace(',', '.'))
       if (isNaN(gratuit) || gratuit < 0) { toast('Seuil de gratuité invalide', 'error'); return }
     }
+    // Minimum de commande : vide ou 0 = aucun minimum, c'est le comportement
+    // d'avant. Un commerçant déjà configuré ne voit donc rien changer.
+    let mini = null
+    if (minimumCommande.trim()) {
+      mini = parseFloat(minimumCommande.replace(',', '.'))
+      if (isNaN(mini) || mini < 0) { toast('Minimum de commande invalide', 'error'); return }
+    }
     setSaving(true)
     const { error } = await supabase.from('livraison_config').upsert({
       commercant_id: commercantId,
       codes_postaux: codesPostaux,
       frais_fixe: frais,
       gratuit_des: gratuit,
+      minimum_commande: mini,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'commercant_id' })
     setSaving(false)
@@ -3299,14 +3309,28 @@ function TabLivraison({ commercantId, toast }) {
             <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Gratuit dès (€), optionnel</span>
             <input value={gratuitDes} onChange={e => setGratuitDes(e.target.value)} placeholder="Ex : 25" inputMode="decimal" style={inputStyle} />
           </label>
+          {/* Minimum de commande (09/08) : prendre sa voiture pour trois euros
+              de marchandise fait perdre de l'argent, essence et temps compris.
+              Vide = aucun minimum, donc rien ne change pour qui est déjà réglé. */}
+          <label style={{ flex: 1, minWidth: 140 }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Minimum de commande (€), optionnel</span>
+            <input value={minimumCommande} onChange={e => setMinimumCommande(e.target.value)} placeholder="Ex : 15" inputMode="decimal" style={inputStyle} />
+          </label>
         </div>
         <p style={{ margin: '10px 0 0', fontSize: 12, color: T.muted }}>
           Aperçu Yopper : {(() => {
             const f = parseFloat((fraisFixe || '0').replace(',', '.')) || 0
             const g = gratuitDes.trim() ? parseFloat(gratuitDes.replace(',', '.')) : null
-            if (f === 0) return 'Livraison gratuite'
-            return `Livraison ${f.toFixed(2)}€${g ? `, offerte dès ${g.toFixed(2)}€` : ''}`
+            const m = minimumCommande.trim() ? parseFloat(minimumCommande.replace(',', '.')) : null
+            const base = f === 0
+              ? 'Livraison gratuite'
+              : `Livraison ${f.toFixed(2)}€${g ? `, offerte dès ${g.toFixed(2)}€` : ''}`
+            return m > 0 ? `${base} · à partir de ${m.toFixed(2)}€ de commande` : base
           })()}
+        </p>
+        <p style={{ margin: '6px 0 0', fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+          Le minimum se compte sur les articles, sans les frais de livraison ni un éventuel bon cadeau :
+          tu roules toujours pour au moins ce montant de marchandise.
         </p>
       </div>
 

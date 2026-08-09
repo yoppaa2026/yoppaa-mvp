@@ -39,6 +39,7 @@ import { chargerBonValide, debiterBon } from '@/lib/bons-cadeaux-server'
 import { tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
 import { calculerCapaciteCreneau, creneauCommandable, STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
 import { brusselsInstant } from '@/lib/timezone'
+import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 
 export async function POST(request) {
@@ -166,13 +167,15 @@ export async function POST(request) {
       creneau = cl
       const { data: cfg } = await supabase
         .from('livraison_config')
-        .select('codes_postaux, frais_fixe, gratuit_des, actif')
+        .select('codes_postaux, frais_fixe, gratuit_des, minimum_commande, actif')
         .eq('commercant_id', commercant.id)
         .maybeSingle()
       if (!cfg || cfg.actif === false) {
         return NextResponse.json({ ok: false, error: 'La livraison n\'est pas configurée chez ce commerçant.' }, { status: 400 })
       }
-      if (!(cfg.codes_postaux || []).includes(String(code_postal_livraison).trim())) {
+      // Comparaison normalisée des deux côtés : un code saisi avec une espace
+      // insécable ne doit pas faire refuser une livraison sans raison lisible.
+      if (!zoneCouverte(cfg.codes_postaux, code_postal_livraison)) {
         return NextResponse.json({ ok: false, error: 'Ce code postal n\'est pas dans la zone de livraison.' }, { status: 400 })
       }
       livraisonConfig = cfg
@@ -266,8 +269,26 @@ export async function POST(request) {
     // panier atteint le seuil gratuit_des. En retrait : toujours 0.
     let fraisLivraisonCents = 0
     if (estLivraison && livraisonConfig) {
-      const offert = livraisonConfig.gratuit_des != null && totalEUR >= Number(livraisonConfig.gratuit_des)
-      fraisLivraisonCents = offert ? 0 : Math.round(Number(livraisonConfig.frais_fixe || 0) * 100)
+      // ⚠️ LE MINIMUM SE MESURE SUR LES ARTICLES, avant les frais et avant tout
+      // bon cadeau. Ajouter les frais ferait franchir le seuil sans que le
+      // panier grossisse, et un bon cadeau ferait passer sous le minimum une
+      // commande qui l'atteignait : dans les deux cas, le commerçant roulerait
+      // pour moins que ce qu'il a fixé.
+      const seuilMini = minimumAtteint({ total: totalEUR, minimum: livraisonConfig.minimum_commande })
+      if (!seuilMini.ok) {
+        return NextResponse.json({
+          ok: false,
+          error: `La livraison démarre à ${seuilMini.seuil.toFixed(2).replace('.', ',')} € chez ${commercant.nom}. Il te manque ${seuilMini.manque.toFixed(2).replace('.', ',')} €, ou choisis le retrait en magasin.`,
+          minimum_livraison: seuilMini.seuil,
+          manque: seuilMini.manque,
+        }, { status: 400 })
+      }
+      const calculFrais = fraisLivraison({
+        total: totalEUR,
+        frais_fixe: livraisonConfig.frais_fixe,
+        gratuit_des: livraisonConfig.gratuit_des,
+      })
+      fraisLivraisonCents = Math.round(calculFrais.montant * 100)
     }
     // Frais d'expédition boutique (server-side) : montant fixe boutique_frais_port,
     // offert dès boutique_gratuit_des. Zone CP optionnelle (vide = toute la Belgique).

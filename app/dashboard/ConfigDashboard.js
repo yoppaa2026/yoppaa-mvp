@@ -6737,6 +6737,103 @@ function TabRdvFermetures({ commercantId, toast }) {
 // ⚠️ UN COMMERCE QUI DÉMARRE EST À ZÉRO PARTOUT, et c'est normal. L'écran ne
 // doit pas ressembler à un bulletin de notes : quand il n'y a rien, il le dit
 // avec le geste suivant, il n'affiche pas une rangée de zéros.
+// ─── La courbe jour par jour ─────────────────────────────────────────────────
+//
+// Des barres, pas une ligne. Une ligne suggère une continuité entre deux jours
+// qui n'existe pas : on ne vend pas « un peu » entre mardi et mercredi. Les
+// journées vides restent visibles, en creux, sinon la période paraît pleine.
+//
+// L'échelle part TOUJOURS de zéro. Une échelle tronquée transforme une hausse
+// de 3 % en montagne, et c'est le mensonge le plus courant des tableaux de bord.
+function Courbe({ points = [], euros }) {
+  const max = Math.max(...points.map(p => p.montant), 0)
+  if (max <= 0) return null
+  const jourCourt = (iso) => {
+    const d = new Date(`${iso}T12:00:00Z`)
+    return `${d.getUTCDate()}/${d.getUTCMonth() + 1}`
+  }
+  const meilleur = points.reduce((a, b) => (b.montant > a.montant ? b : a), points[0])
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 96, marginBottom: 6 }}>
+        {points.map(p => (
+          <div key={p.jour} title={`${jourCourt(p.jour)} : ${euros(p.montant)}`}
+            style={{ flex: 1, minWidth: 2, height: '100%', display: 'flex', alignItems: 'flex-end' }}>
+            <div style={{
+              width: '100%',
+              height: `${Math.max(p.montant > 0 ? 4 : 2, Math.round((p.montant / max) * 100))}%`,
+              borderRadius: 3,
+              background: p.montant > 0 ? `linear-gradient(180deg, ${T.mid}, ${T.main})` : T.hairline,
+            }}/>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: T.muted, fontWeight: 700 }}>
+        <span>{jourCourt(points[0].jour)}</span>
+        <span>{jourCourt(points[points.length - 1].jour)}</span>
+      </div>
+      <p style={{ margin: '10px 0 0', fontSize: 12.5, color: T.deep, lineHeight: 1.55 }}>
+        Ta meilleure journée : <strong style={{ color: T.main }}>{jourCourt(meilleur.jour)}</strong>, {euros(meilleur.montant)}.
+      </p>
+    </div>
+  )
+}
+
+// ─── Les moments de pointe ───────────────────────────────────────────────────
+//
+// ⚠️ LA CONCLUSION SE TAIT SOUS UN CERTAIN VOLUME. Sur quatre commandes,
+// « ton heure de pointe est 14h » ne décrit rien d'autre que le hasard : les
+// barres restent affichées, la phrase disparaît. Même règle que l'évolution en
+// pourcentage et que la note moyenne.
+function Moments({ moments }) {
+  const { heures = [], jours = [], pic_heure, pic_jour } = moments || {}
+  const maxH = Math.max(...heures.map(h => h.nombre), 0)
+  const maxJ = Math.max(...jours.map(j => j.nombre), 0)
+  if (maxH <= 0) return null
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <p style={{ margin: '0 0 7px', fontSize: 11.5, fontWeight: 700, color: T.muted }}>Par heure (heure belge)</p>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 56 }}>
+          {heures.map(h => (
+            <div key={h.heure} title={`${h.heure}h : ${h.nombre}`} style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'flex-end' }}>
+              <div style={{ width: '100%', height: `${Math.max(h.nombre > 0 ? 6 : 3, Math.round((h.nombre / maxH) * 100))}%`, borderRadius: 3, background: h.nombre > 0 ? T.main : T.hairline }}/>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: T.muted, fontWeight: 700, marginTop: 4 }}>
+          <span>0h</span><span>12h</span><span>23h</span>
+        </div>
+      </div>
+      <div>
+        <p style={{ margin: '0 0 7px', fontSize: 11.5, fontWeight: 700, color: T.muted }}>Par jour de la semaine</p>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {jours.map(j => (
+            <div key={j.jour} style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ height: 44, display: 'flex', alignItems: 'flex-end' }}>
+                <div style={{ width: '100%', height: `${maxJ > 0 ? Math.max(j.nombre > 0 ? 8 : 4, Math.round((j.nombre / maxJ) * 100)) : 4}%`, borderRadius: 4, background: j.nombre > 0 ? T.main : T.hairline }}/>
+              </div>
+              <p style={{ margin: '5px 0 0', fontSize: 10.5, fontWeight: 800, color: T.muted }}>{j.nom.slice(0, 2)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      {pic_heure && pic_jour ? (
+        <p style={{ margin: 0, fontSize: 12.5, color: T.deep, lineHeight: 1.55 }}>
+          On te commande surtout le <strong style={{ color: T.main }}>{pic_jour.nom.toLowerCase()}</strong>,
+          et autour de <strong style={{ color: T.main }}>{pic_heure.heure}h</strong>.
+          C&rsquo;est le meilleur moment pour publier une offre.
+        </p>
+      ) : (
+        <p style={{ margin: 0, fontSize: 12, color: T.muted, lineHeight: 1.55 }}>
+          Pas encore assez de commandes pour dégager une tendance fiable. Les barres montrent
+          ce qui s&rsquo;est passé, sans en tirer de conclusion.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function TabStatistiques({ commercantId, toast }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -6823,9 +6920,15 @@ function TabStatistiques({ commercantId, toast }) {
       {!data?.vide && a && (
         <>
           {/* ─── Ce que ça a rapporté ─────────────────────────────────────── */}
+          {/* ⚠️ LE TOTAL COMPTE LES RENDEZ-VOUS À LEUR PRIX COMPLET (Alex,
+              09/08). La première version n'affichait que l'encaissé en ligne,
+              c'est-à-dire l'acompte : 8,75 € pour une coupe à 35 €. Le
+              commerçant en concluait, à juste titre, que ses rendez-vous ne
+              comptaient pas. La ventilation entre ce que Stripe a versé et ce
+              qui se règle au comptoir reste entière dans la Comptabilité. */}
           <div style={{ background: T.bgPanel, borderRadius: 16, padding: '20px 18px', marginBottom: 12, color: '#fff' }}>
             <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-              Encaissé en ligne sur {jours} jours
+              Chiffre d&rsquo;affaires sur {jours} jours
             </p>
             <p style={{ margin: '6px 0 0', fontSize: 34, fontWeight: 800, letterSpacing: '-1px', lineHeight: 1 }}>
               {euros(a.chiffre_affaires)}
@@ -6838,8 +6941,23 @@ function TabStatistiques({ commercantId, toast }) {
                 <span style={{ color: T.light }}> par rapport aux {jours} jours précédents</span>
               </p>
             )}
-            <p style={{ margin: '10px 0 0', fontSize: 11.5, color: T.light, lineHeight: 1.5 }}>
-              Ce que tes clients ont payé sur Yoppaa. Ce qu&rsquo;ils règlent au comptoir n&rsquo;y est pas.
+            {(a.ca_produits > 0 || a.ca_prestations > 0) && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                {[
+                  { label: 'Produits', valeur: a.ca_produits },
+                  { label: 'Prestations', valeur: a.ca_prestations },
+                ].map(part => (
+                  <div key={part.label} style={{ flex: 1, background: 'rgba(255,255,255,0.09)', borderRadius: 12, padding: '9px 12px' }}>
+                    <p style={{ margin: 0, fontSize: 10.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{part.label}</p>
+                    <p style={{ margin: '3px 0 0', fontSize: 16, fontWeight: 800, lineHeight: 1.1 }}>{euros(part.valeur)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p style={{ margin: '12px 0 0', fontSize: 11.5, color: T.light, lineHeight: 1.5 }}>
+              Dont <strong style={{ color: '#fff' }}>{euros(a.encaisse_en_ligne)}</strong> encaissés en ligne
+              {a.au_comptoir > 0 && <> et <strong style={{ color: '#fff' }}>{euros(a.au_comptoir)}</strong> à régler chez toi</>}.
+              Le détail, la TVA et les frais sont dans Comptabilité.
             </p>
           </div>
 
@@ -6881,6 +6999,37 @@ function TabStatistiques({ commercantId, toast }) {
             }/>
           )}
 
+          {/* ─── La courbe ────────────────────────────────────────────────────
+              Un point par jour, journées vides comprises. Sans elles, deux
+              ventes espacées de trois semaines donneraient deux barres collées
+              et l'effet d'une offre du jour deviendrait illisible. */}
+          {data.courbe?.length > 0 && data.courbe.some(j => j.montant > 0) && (
+            <Bloc titre={`Jour par jour sur ${jours} jours`} enfants={<Courbe points={data.courbe} euros={euros}/>}/>
+          )}
+
+          {/* ─── Quand on te commande ─────────────────────────────────────────
+              Le moment de la DEMANDE, pas celui du retrait : c'est lui qui dit
+              quand publier une offre. Le retrait vit déjà dans l'agenda. */}
+          {data.moments?.total > 0 && (
+            <Bloc titre="Quand on te commande" enfants={<Moments moments={data.moments}/>}/>
+          )}
+
+          {/* ─── Ce qui se réserve ───────────────────────────────────────────── */}
+          {data.catalogue?.prestations?.length > 0 && (
+            <Bloc titre="Ce qui se réserve le plus" enfants={
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {data.catalogue.prestations.map((p, i) => (
+                  <div key={p.nom} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ width: 20, fontSize: 12, fontWeight: 800, color: T.muted }}>{i + 1}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nom}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: T.main }}>{p.quantite}×</span>
+                    <span style={{ fontSize: 12, color: T.muted, fontWeight: 600, minWidth: 62, textAlign: 'right' }}>{euros(p.montant)}</span>
+                  </div>
+                ))}
+              </div>
+            }/>
+          )}
+
           {/* ─── Ce qui se vend ───────────────────────────────────────────── */}
           {data.catalogue?.top?.length > 0 && (
             <Bloc titre="Ce qui part le plus" enfants={
@@ -6905,6 +7054,21 @@ function TabStatistiques({ commercantId, toast }) {
       {aud && (
         <Bloc titre="Qui te suit" enfants={
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* ⚠️ LES VUES SONT ICI, PAS DANS LE BANDEAU DES VENTES, et c'est
+                voulu : le bandeau disparaît quand tout est à zéro, or c'est
+                précisément le moment où les vues sont le SEUL chiffre qui
+                bouge. Un commerçant qui vient de s'inscrire a besoin de voir
+                qu'on le regarde avant d'avoir vendu quoi que ce soit. */}
+            {aud.vues && (
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                <p style={{ margin: 0, fontSize: 13.5, color: T.deep, lineHeight: 1.55 }}>
+                  <strong style={{ fontSize: 18, color: T.main }}>{aud.vues.nombre}</strong>
+                  {' '}ouverture{aud.vues.nombre > 1 ? 's' : ''} de ta fiche sur {jours} jours.
+                  {aud.vues.nombre === 0 && ' Le compteur démarre : partage ton lien pour lancer la machine.'}
+                </p>
+                <Evolution e={aud.vues.evolution}/>
+              </div>
+            )}
             <p style={{ margin: 0, fontSize: 13.5, color: T.deep, lineHeight: 1.55 }}>
               <strong style={{ fontSize: 18, color: T.main }}>{aud.favoris}</strong>
               {' '}habitant{aud.favoris > 1 ? 's ont' : ' a'} mis ton commerce en favori.

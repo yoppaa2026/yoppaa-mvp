@@ -15,7 +15,10 @@ import {
   fenetres, commandeEncaissee, chiffreAffaires, panierMoyen, evolution,
   topArticles, nonRecuperees, tauxAnnulation, noteMoyenne, performanceDeals,
   messageVide, arrondi, SEUIL_EVOLUTION, MIN_AVIS_POUR_NOTE, STATUTS_COMMANDE,
+  valeurRdv, acompteRdv, rdvHonore, topPrestations, serieJournaliere,
+  momentsDePointe, MIN_POUR_POINTE, JOURS_SEMAINE,
 } from '../lib/statistiques.js'
+import { partiesBruxelles } from '../lib/timezone.js'
 
 const lireBrut = (chemin) => readFileSync(new URL('../' + chemin, import.meta.url), 'utf8')
 
@@ -79,19 +82,46 @@ const commandes = [
   { total: 99.00, statut: 'annulee_client_refund' },  // exclue
   { total: 50.00, statut: 'non_retire' },             // exclue
 ]
-egal('le chiffre d\'affaires ignore annulé et non retiré', chiffreAffaires(commandes, []), 34.50)
+egal('le chiffre d\'affaires ignore annulé et non retiré', chiffreAffaires(commandes, []).total, 34.50)
 
-// Pour un rendez-vous, seul l'ACOMPTE a transité par Yoppaa. Le solde se règle
-// au comptoir : l'annoncer serait inventer un chiffre.
+// ⚠️ DÉCISION D'ALEX, 09/08 : un rendez-vous compte pour son PRIX COMPLET.
+// La version précédente ne comptait que l'acompte encaissé en ligne, et le
+// commerçant en concluait que ses rendez-vous n'étaient pas comptés du tout.
+//
+// LE TEST QUI ATTRAPE LA RÉGRESSION : une coupe à 35 € avec 8,75 € d'acompte.
+// Si quelqu'un revient à l'acompte, `prestations` tombe à 8,75 et ce test rougit.
+egal('un RDV vaut son prix complet', valeurRdv({ prix_estime: 35, acompte_montant: 8.75 }), 35)
+egal('sans prix estimé, on se rabat sur l\'acompte', valeurRdv({ acompte_montant: 8.75 }), 8.75)
+egal('un RDV sans rien vaut zéro', valeurRdv({}), 0)
+egal('l\'acompte reste lisible à part', acompteRdv({ prix_estime: 35, acompte_montant: 8.75 }), 8.75)
+verifier('un RDV confirmé compte', rdvHonore({ statut: 'confirme' }))
+verifier('un RDV honoré compte', rdvHonore({ statut: 'honore' }))
+verifier('un no-show ne compte pas', !rdvHonore({ statut: 'no_show' }))
+verifier('un RDV annulé par le client ne compte pas', !rdvHonore({ statut: 'annule_client' }))
+verifier('un RDV annulé par le commerçant ne compte pas', !rdvHonore({ statut: 'annule_commercant' }))
+verifier('un RDV reporté ne compte pas', !rdvHonore({ statut: 'reporte' }))
+
 const rdvs = [
-  { statut: 'confirme', acompte_montant: 12.50 },
-  { statut: 'confirme', acompte_montant: 0 },      // sans acompte : rien encaissé
-  { statut: 'annule_client', acompte_montant: 20 },  // exclu
+  { statut: 'confirme', prix_estime: 35, acompte_montant: 8.75 },
+  { statut: 'confirme', prix_estime: 20, acompte_montant: 0 },   // réglé entièrement au comptoir
+  { statut: 'annule_client', prix_estime: 90, acompte_montant: 20 },  // exclu
+  { statut: 'no_show', prix_estime: 90, acompte_montant: 20 },        // exclu
 ]
-egal('seul l\'acompte des RDV confirmés compte', chiffreAffaires([], rdvs), 12.50)
-egal('commandes et RDV s\'additionnent', chiffreAffaires(commandes, rdvs), 47.00)
-egal('rien du tout', chiffreAffaires([], []), 0)
-egal('appel sans argument', chiffreAffaires(), 0)
+const caRdv = chiffreAffaires([], rdvs)
+egal('les prestations comptent à leur prix complet', caRdv.prestations, 55)
+egal('l\'encaissé en ligne ne retient que les acomptes', caRdv.encaisse_en_ligne, 8.75)
+egal('le reste est annoncé comme réglé au comptoir', caRdv.au_comptoir, 46.25)
+egal('le nombre de RDV suit les mêmes exclusions', caRdv.nb_rdv, 2)
+
+const caTout = chiffreAffaires(commandes, rdvs)
+egal('produits et prestations s\'additionnent', caTout.total, 89.50)
+egal('la part produits reste lisible', caTout.produits, 34.50)
+// La clé de rapprochement avec la Comptabilité : produits encaissés + acomptes.
+egal('l\'encaissé en ligne mélange produits et acomptes', caTout.encaisse_en_ligne, 43.25)
+verifier('le total est bien la somme des deux parts',
+  arrondi(caTout.produits + caTout.prestations) === caTout.total)
+egal('rien du tout', chiffreAffaires([], []).total, 0)
+egal('appel sans argument', chiffreAffaires().total, 0)
 
 // Panier moyen : sur les seules commandes encaissées, sinon il s'effondre à
 // cause des annulations.
@@ -141,7 +171,11 @@ egal('aucune perte', nonRecuperees([{ statut: 'recuperee', total: 10 }]).nombre,
 
 const annul = tauxAnnulation(commandes, rdvs)
 egal('annulations comptées des deux côtés', annul.annules, 2)
-egal('sur le total des deux', annul.total, 7)
+egal('sur le total des deux', annul.total, 8)
+// Un no-show n'est PAS une annulation : personne n'a décidé de renoncer, le
+// client n'est simplement pas venu. Il reste au dénominateur.
+egal('un no-show ne gonfle pas le taux d\'annulation',
+  tauxAnnulation([], [{ statut: 'no_show' }]).annules, 0)
 egal('rien à diviser', tauxAnnulation([], []), null)
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -188,7 +222,98 @@ verifier('avec catalogue mais sans deal, on parle de l\'offre',
   /offre du jour/i.test(messageVide({ aDesArticles: true, peutVendre: true })))
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 9. RGPD ET HONNÊTETÉ — ce que la route ne doit jamais renvoyer
+// 9. CE QUI SE RÉSERVE
+// ═══════════════════════════════════════════════════════════════════════════
+const noms = { p1: 'Coupe femme', p2: 'Coupe homme' }
+const rdvsPresta = [
+  { statut: 'honore', prestation_id: 'p1', prix_estime: 35 },
+  { statut: 'confirme', prestation_id: 'p1', prix_estime: 35 },
+  { statut: 'confirme', prestation_id: 'p2', prix_estime: 20 },
+  { statut: 'annule_client', prestation_id: 'p2', prix_estime: 20 },  // exclu
+  { statut: 'confirme', prestation_id: 'disparue', prix_estime: 15 },
+]
+const tp = topPrestations(rdvsPresta, noms)
+egal('la prestation la plus réservée est en tête', tp[0].nom, 'Coupe femme')
+egal('avec son nombre', tp[0].quantite, 2)
+egal('et son montant au prix complet', tp[0].montant, 70)
+// ⚠️ Une prestation retirée du catalogue ne doit pas faire disparaître les
+// rendez-vous déjà honorés : ils passent sous un libellé neutre.
+verifier('une prestation supprimée reste comptée',
+  tp.some(p => p.nom === 'Prestation supprimée' && p.quantite === 1))
+egal('les annulés sont exclus', tp.reduce((s, p) => s + p.quantite, 0), 4)
+egal('liste vide', topPrestations([], {}), [])
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. LE TEMPS — tout se compte en HEURE BELGE, jamais en UTC
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ C'EST LE PIÈGE DE CE FICHIER. Une commande passée à 00h30 heure belge est
+// horodatée 22h30 ou 23h30 UTC la VEILLE selon la saison. Compter sur l'heure
+// brute rangerait la vente dans le mauvais jour et décalerait les heures de
+// pointe d'une à deux heures en été.
+//
+// On mesure donc le test sur le défaut : deux instants choisis de part et
+// d'autre du changement d'heure, et dont la lecture UTC est FAUSSE.
+egal('hiver : 23h30 UTC le 15 est déjà le 16 à Bruxelles',
+  partiesBruxelles(new Date('2026-01-15T23:30:00Z')), { jour: '2026-01-16', heure: 0, jourSemaine: 5 })
+egal('été : 22h30 UTC le 15 est déjà le 16 à Bruxelles',
+  partiesBruxelles(new Date('2026-07-15T22:30:00Z')), { jour: '2026-07-16', heure: 0, jourSemaine: 4 })
+egal('été : midi UTC se lit 14h à Bruxelles',
+  partiesBruxelles(new Date('2026-07-15T12:00:00Z')).heure, 14)
+egal('hiver : midi UTC se lit 13h à Bruxelles',
+  partiesBruxelles(new Date('2026-01-15T12:00:00Z')).heure, 13)
+egal('une date invalide ne casse rien', partiesBruxelles('n\'importe quoi'), null)
+
+// ─── La courbe ──────────────────────────────────────────────────────────────
+const debutCourbe = new Date('2026-07-10T00:00:00Z')
+const courbe = serieJournaliere(
+  [
+    { statut: 'recupere', total: 20, created_at: '2026-07-10T09:00:00Z' },
+    { statut: 'recupere', total: 5,  created_at: '2026-07-10T15:00:00Z' },
+    { statut: 'annulee_client_refund', total: 99, created_at: '2026-07-11T09:00:00Z' },
+    // 22h30 UTC le 12 = 00h30 le 13 à Bruxelles : doit tomber le 13.
+    { statut: 'recupere', total: 7, created_at: '2026-07-12T22:30:00Z' },
+  ],
+  [{ statut: 'confirme', prix_estime: 35, created_at: '2026-07-11T10:00:00Z' }],
+  { debut: debutCourbe, jours: 5 }
+)
+egal('un point par jour, journées vides comprises', courbe.length, 5)
+egal('la courbe démarre au bon jour', courbe[0].jour, '2026-07-10')
+egal('deux ventes du même jour s\'additionnent', courbe[0].montant, 25)
+egal('une commande annulée ne monte pas la courbe',
+  courbe.find(j => j.jour === '2026-07-11').montant, 35)
+// LE TEST QUI ATTRAPE LE FUSEAU : sur l'heure UTC, ces 7 € tomberaient le 12.
+egal('une vente de fin de soirée tombe dans le bon jour',
+  courbe.find(j => j.jour === '2026-07-13').montant, 7)
+egal('le 12 reste vide', courbe.find(j => j.jour === '2026-07-12').montant, 0)
+egal('sans début, pas de courbe', serieJournaliere([], [], {}), [])
+
+// ─── Les moments de pointe ─────────────────────────────────────────────────
+// Sous le seuil : les barres existent, la conclusion se tait.
+const peu = momentsDePointe(
+  [{ statut: 'recupere', total: 10, created_at: '2026-07-15T12:00:00Z' }], [])
+egal('une seule commande ne fait pas une heure de pointe', peu.pic_heure, null)
+egal('ni un jour de pointe', peu.pic_jour, null)
+egal('les barres sont quand même là', peu.heures.length, 24)
+egal('et les sept jours aussi', peu.jours.length, 7)
+// ⚠️ Lundi doit tomber en case 0 : `getUTCDay()` rend 0 pour DIMANCHE.
+egal('la semaine commence le lundi', JOURS_SEMAINE[0], 'Lundi')
+egal('le lundi est bien en tête de liste', peu.jours[0].nom, 'Lundi')
+// Le 15 juillet 2026 est un mercredi : la barre doit tomber en case 2.
+egal('un mercredi tombe dans la case du mercredi', peu.jours[2].nombre, 1)
+egal('et 12h UTC se range à 14h', peu.heures[14].nombre, 1)
+
+const assez = momentsDePointe(
+  Array.from({ length: MIN_POUR_POINTE }, () => (
+    { statut: 'recupere', total: 10, created_at: '2026-07-18T16:00:00Z' })), [])
+egal('au seuil, on parle', assez.pic_heure.heure, 18)
+egal('le samedi est identifié', assez.pic_jour.nom, 'Samedi')
+egal('le total suit', assez.total, MIN_POUR_POINTE)
+// Les commandes non encaissées ne doivent pas peser sur les moments de pointe.
+egal('un panier abandonné ne crée pas de pic',
+  momentsDePointe([{ statut: 'annulee_paiement_ko', created_at: '2026-07-18T16:00:00Z' }], []).total, 0)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 11. RGPD ET HONNÊTETÉ — ce que la route ne doit jamais renvoyer
 // ═══════════════════════════════════════════════════════════════════════════
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 const route = lire('app/api/dashboard/statistiques/route.js')
@@ -204,11 +329,60 @@ verifier('la période est bornée', /Math\.min\(365/.test(routeCode))
 // Le count vit dans `count`, pas dans `data` : s'y tromper ferait croire qu'un
 // commerçant n'a aucun article et lui servirait le mauvais message.
 verifier('le comptage des articles lit bien count', /\{ count: nbArticles \}/.test(routeCode))
+// ⚠️ SANS `prix_estime`, le chiffre d'affaires retomberait silencieusement à
+// l'acompte : le reproche d'Alex du 09/08, à l'identique.
+verifier('la route charge le prix complet des prestations', /prix_estime/.test(routeCode))
+verifier('la route charge la prestation pour la nommer', /prestation_id/.test(routeCode))
+
+// La route des vues : elle ne doit RIEN enregistrer sur le visiteur.
+const routeVue = lire('app/api/fiche/vue/route.js')
+const routeVueCode = routeVue.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+for (const trace of ['ip', 'user_agent', 'yopper', 'client_id', 'session_id']) {
+  verifier(`la route des vues n'enregistre pas ${trace}`,
+    !new RegExp(`\\b${trace}\\b`, 'i').test(routeVueCode))
+}
+verifier('la route des vues valide le format de l\'identifiant', /UUID\.test/.test(routeVueCode))
+verifier('la route des vues passe par la fonction en base', /incrementer_vue_fiche/.test(routeVueCode))
+
+// La migration : agrégée par jour, fermée par RLS, et ses droits posés.
+const migVues = lireBrut('migrations/MIGRATION_VUES_FICHE.sql')
+verifier('la table des vues est agrégée par jour', /PRIMARY KEY \(commercant_id, jour\)/.test(migVues))
+verifier('RLS est activée sur les vues', /ENABLE ROW LEVEL SECURITY/.test(migVues))
+verifier('aucune policy permissive n\'ouvre la table', !/CREATE POLICY/.test(migVues))
+verifier('les droits sont posés explicitement', /GRANT SELECT, INSERT, UPDATE ON public\.fiche_vues/.test(migVues))
+verifier('le jour est calculé en heure belge', /Europe\/Brussels/.test(migVues))
+verifier('la fonction est SECURITY DEFINER', /SECURITY DEFINER/.test(migVues))
+
+// Le dédoublonnage vit côté navigateur, pas en base : la base ne doit pas
+// avoir de quoi reconnaître un visiteur.
+const vueFiche = lire('lib/vue-fiche.js')
+verifier('une vue n\'est comptée qu\'une fois par session', /sessionStorage/.test(vueFiche))
+verifier('les deux fiches partagent la même clé', /const CLE = /.test(vueFiche))
 
 const ecran = lire('app/dashboard/ConfigDashboard.js')
-const bloc = ecran.slice(ecran.indexOf('function TabStatistiques'), ecran.indexOf('// ─── Onglet SIGNAUX'))
+const bloc = ecran.slice(ecran.indexOf('// ─── La courbe jour par jour'), ecran.indexOf('// ─── Onglet SIGNAUX'))
 verifier('l\'écran existe', bloc.length > 1000)
-verifier('l\'écran dit que le comptoir n\'est pas compté', /comptoir/.test(bloc))
+// L'écran annonce un chiffre d'affaires COMPLET, et dit dans la même phrase
+// quelle part a réellement transité par Yoppaa. Sans ça, le commerçant
+// croirait que tout est sur son compte Stripe.
+verifier('l\'écran nomme bien un chiffre d\'affaires', /Chiffre d&rsquo;affaires sur \{jours\} jours/.test(bloc))
+verifier('l\'écran distingue l\'encaissé en ligne', /encaissés en ligne/.test(bloc))
+verifier('l\'écran renvoie vers la Comptabilité', /Comptabilité/.test(bloc))
+verifier('l\'écran dit ce qui reste à régler au comptoir', /comptoir/.test(bloc))
+verifier('l\'écran montre les vues de fiche', /ouverture\{aud\.vues\.nombre > 1 \? 's' : ''\} de ta fiche/.test(bloc))
+// ⚠️ LES VUES DOIVENT ÊTRE HORS DU BANDEAU DES VENTES. Ce bandeau disparaît
+// quand tout est à zéro, or c'est exactement le moment où les vues sont le
+// SEUL chiffre qui bouge. Les placer dedans les rendrait invisibles au
+// commerçant qui vient de s'inscrire, c'est-à-dire à celui qui en a besoin.
+verifier('les vues vivent dans le bloc toujours affiché',
+  bloc.indexOf('de ta fiche sur {jours} jours') > bloc.indexOf('titre="Qui te suit"'))
+verifier('un compteur à zéro donne le geste suivant', /Le compteur démarre/.test(bloc))
+verifier('l\'écran montre la courbe', /<Courbe /.test(bloc))
+verifier('l\'écran montre les moments de pointe', /<Moments /.test(bloc))
+verifier('l\'écran montre ce qui se réserve', /Ce qui se réserve le plus/.test(bloc))
+// ⚠️ Une échelle qui ne part pas de zéro transforme une hausse de 3 % en
+// montagne : c'est le mensonge le plus courant des tableaux de bord.
+verifier('la courbe part de zéro', /L&rsquo;échelle part TOUJOURS de zéro|échelle part TOUJOURS de zéro/.test(bloc))
 verifier('l\'écran rappelle qu\'on ne voit personne', /jamais qui a commandé/.test(bloc))
 verifier('les euros s\'écrivent à la française', /replace\('\.', ','\)/.test(bloc))
 // L'onglet doit être ouvert au palier gratuit : voir ce que sa fiche produit

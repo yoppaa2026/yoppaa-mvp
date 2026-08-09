@@ -17,7 +17,8 @@ import { createClient } from '@supabase/supabase-js'
 import {
   fenetres, chiffreAffaires, panierMoyen, evolution, topArticles,
   nonRecuperees, tauxAnnulation, noteMoyenne, performanceDeals,
-  commandeEncaissee, messageVide,
+  commandeEncaissee, messageVide, topPrestations, serieJournaliere,
+  momentsDePointe, rdvHonore,
 } from '@/lib/statistiques'
 import { canDo } from '@/lib/plans'
 
@@ -77,8 +78,12 @@ export async function GET(request) {
           .select('id, total, statut, created_at')
           .eq('commercant_id', commercantId)
           .gte('created_at', depuis),
+        // ⚠️ `prix_estime` est INDISPENSABLE : depuis le 09/08 un rendez-vous
+        // compte au tableau de bord pour son prix complet, pas pour son
+        // acompte. L'oublier ramènerait le chiffre à ce qui est encaissé en
+        // ligne, ce qui était justement le reproche d'Alex.
         supabase.from('rdv_reservations')
-          .select('id, statut, acompte_montant, created_at')
+          .select('id, statut, acompte_montant, prix_estime, prestation_id, created_at')
           .eq('commercant_id', commercantId)
           .gte('created_at', depuis),
         supabase.from('avis')
@@ -113,6 +118,20 @@ export async function GET(request) {
       lignes = data || []
     }
 
+    // Les noms des prestations : le rendez-vous ne porte qu'un identifiant.
+    // On les charge toujours, y compris les supprimées (`deleted_at`), sinon
+    // une prestation retirée du catalogue ferait disparaître du chiffre
+    // d'affaires les rendez-vous déjà honorés.
+    const idsPrestations = [...new Set(rdvActuels.filter(rdvHonore).map(r => r.prestation_id).filter(Boolean))]
+    const nomsPrestations = {}
+    if (idsPrestations.length > 0) {
+      const { data } = await supabase
+        .from('rdv_prestations')
+        .select('id, nom')
+        .in('id', idsPrestations)
+      for (const p of data || []) nomsPrestations[String(p.id)] = p.nom
+    }
+
     const caActuel = chiffreAffaires(cmdActuelles, rdvActuels)
     const caPrecedent = chiffreAffaires(cmdPrecedentes, rdvPrecedents)
     const ventesActuelles = cmdActuelles.filter(commandeEncaissee).length
@@ -124,18 +143,49 @@ export async function GET(request) {
       .select('id', { count: 'exact', head: true })
       .eq('commercant_id', commercantId)
 
-    const rien = caActuel === 0 && ventesActuelles === 0 && rdvActuels.length === 0
+    // Les vues de fiche : une ligne par jour, aucune donnée sur les visiteurs.
+    // La table peut ne pas exister encore (migration non passée) : dans ce cas
+    // on renvoie null et l'écran dit simplement que le compteur démarre.
+    let vues = null
+    let vuesParJour = []
+    {
+      const { data, error } = await supabase
+        .from('fiche_vues')
+        .select('jour, vues')
+        .eq('commercant_id', commercantId)
+        .gte('jour', f.debutPrecedent.toISOString().slice(0, 10))
+      if (!error) {
+        vuesParJour = data || []
+        const debutJour = f.debut.toISOString().slice(0, 10)
+        const actuelles = vuesParJour.filter(v => v.jour >= debutJour)
+        const precedentes = vuesParJour.filter(v => v.jour < debutJour)
+        const somme = (l) => l.reduce((s, v) => s + Number(v.vues || 0), 0)
+        vues = {
+          nombre: somme(actuelles),
+          evolution: evolution(somme(actuelles), somme(precedentes)),
+        }
+      }
+    }
+
+    const rien = caActuel.total === 0 && ventesActuelles === 0 && rdvActuels.length === 0
 
     return NextResponse.json({
       ok: true,
       periode: { jours, debut: f.debut.toISOString(), fin: f.fin.toISOString() },
       argent: {
-        chiffre_affaires: caActuel,
-        evolution_ca: evolution(caActuel, caPrecedent),
+        // Le total inclut le prix COMPLET des prestations réservées
+        // (décision d'Alex, 09/08). `encaisse_en_ligne` est la clé de
+        // rapprochement avec l'onglet Comptabilité.
+        chiffre_affaires: caActuel.total,
+        ca_produits: caActuel.produits,
+        ca_prestations: caActuel.prestations,
+        encaisse_en_ligne: caActuel.encaisse_en_ligne,
+        au_comptoir: caActuel.au_comptoir,
+        evolution_ca: evolution(caActuel.total, caPrecedent.total),
         panier_moyen: panierMoyen(cmdActuelles),
         ventes: ventesActuelles,
         evolution_ventes: evolution(ventesActuelles, ventesPrecedentes),
-        rendez_vous: rdvActuels.filter(r => r.statut === 'confirme').length,
+        rendez_vous: caActuel.nb_rdv,
       },
       attention: {
         non_recuperees: nonRecuperees(cmdActuelles),
@@ -143,9 +193,17 @@ export async function GET(request) {
       },
       catalogue: {
         top: topArticles(lignes, 5),
+        prestations: topPrestations(rdvActuels, nomsPrestations, 5),
       },
+      // La courbe : un point par jour, journées vides comprises, sinon deux
+      // ventes espacées de trois semaines donnent un trait plat mensonger.
+      courbe: serieJournaliere(cmdActuelles, rdvActuels, { debut: f.debut, jours }),
+      // Quand les gens commandent et réservent — le moment de la DEMANDE, en
+      // heure belge. Le moment du retrait vit déjà dans l'agenda.
+      moments: momentsDePointe(cmdActuelles, rdvActuels),
       audience: {
         favoris: favoris || 0,
+        vues,
         note: noteMoyenne(avis || []),
         deals: performanceDeals(deals || []),
       },

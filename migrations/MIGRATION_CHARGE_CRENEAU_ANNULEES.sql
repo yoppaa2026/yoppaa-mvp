@@ -65,10 +65,18 @@ REVOKE ALL ON FUNCTION charge_preparation_par_creneau(uuid) FROM public;
 GRANT EXECUTE ON FUNCTION charge_preparation_par_creneau(uuid) TO anon, authenticated;
 
 -- ─── Vérification ──────────────────────────────────────────────────────────
--- Doit renvoyer 0 : plus aucune commande annulée ou terminée ne pèse sur un
--- créneau. Compte, toutes fiches confondues, les commandes mortes qui seraient
--- encore prises en compte par la définition ci-dessus.
-SELECT COUNT(*) AS annulees_comptees
-FROM commandes
-WHERE statut IN ('annulee_client_refund', 'annulee_paiement_ko', 'recupere', 'non_retire')
-  AND statut IN ('paiement_en_attente', 'en_attente', 'en_preparation', 'pret');
+--
+-- ⚠️ LA PREMIÈRE VERSION DE CE CONTRÔLE NE PROUVAIT RIEN. Elle demandait les
+-- commandes dont le statut appartenait À LA FOIS à la liste des morts et à
+-- celle des vivants, deux ensembles disjoints : elle renvoyait 0 que la
+-- migration soit passée ou non. Alex a exécuté, lu « 0 », et aurait pu croire
+-- que c'était bon.
+--
+-- Une vérification de migration doit interroger l'ÉTAT RÉEL de la base, jamais
+-- une tautologie. Celle-ci lit le corps de la fonction tel qu'il est stocké.
+--
+-- Attendu : 1. Un 0 signifie que la migration n'a pas pris.
+SELECT COUNT(*) AS fonction_a_jour
+FROM pg_proc
+WHERE proname = 'charge_preparation_par_creneau'
+  AND prosrc LIKE '%paiement_en_attente%';

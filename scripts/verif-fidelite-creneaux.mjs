@@ -6,7 +6,10 @@
 // pouvait servir, soit en accepter plus qu'on ne peut préparer.
 
 import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '../lib/fidelite.js'
-import { calculerCapaciteCreneau } from '../lib/creneaux.js'
+import { calculerCapaciteCreneau, STATUTS_OCCUPENT_CRENEAU } from '../lib/creneaux.js'
+import { readFileSync } from 'node:fs'
+
+const lireBrut = (chemin) => readFileSync(new URL('../' + chemin, import.meta.url), 'utf8')
 
 let ok = 0, ko = 0
 const echecs = []
@@ -176,6 +179,75 @@ verifier('repli sur le réglage commerçant', c.modeTemps)
 c = calculerCapaciteCreneau({ max_commandes: 5 })
 egal('sans consommation connue', c.utilise, 0)
 verifier('créneau vide non complet', !c.complet)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA CAPACITÉ EST-ELLE VRAIMENT TENUE ? (09/08)
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ `calculerCapaciteCreneau` était juste, et ne servait qu'à GRISER les
+// créneaux pleins dans le navigateur. Aucun contrôle côté serveur : deux
+// clients qui payaient en même temps faisaient passer un créneau de cinq
+// commandes à sept, et une requête fabriquée visait un créneau affiché complet.
+// Le stock, lui, était protégé. Pas les créneaux.
+
+// Quelles commandes occupent un créneau. Confronté à la SOURCE, la contrainte
+// CHECK de la base, et pas à une liste écrite de mémoire.
+const migrationStatuts = lireBrut('migrations/MIGRATION_COMMANDES_STATUT_CHECK.sql')
+const blocCheck = migrationStatuts.slice(migrationStatuts.indexOf('CHECK (statut IN ('))
+const statutsEnBase = [...blocCheck.matchAll(/'([a-z_]+)'/g)].map(m => m[1])
+for (const s of STATUTS_OCCUPENT_CRENEAU) {
+  verifier(`« ${s} » existe vraiment en base`, statutsEnBase.includes(s))
+}
+// Une commande en cours de paiement garde sa place : elle est sur Stripe, le
+// cron d'expiration la libère si le paiement n'aboutit pas.
+verifier('une commande en cours de paiement occupe le créneau',
+  STATUTS_OCCUPENT_CRENEAU.includes('paiement_en_attente'))
+// ⚠️ CE QUI N'OCCUPE RIEN. La fonction en base charge_preparation_par_creneau
+// n'exclut que `recupere` et `non_retire` : elle compte donc les paniers
+// abandonnés et les commandes remboursées, qui saturent un créneau pour
+// toujours. Le commerçant lit « complet » alors que personne n'a réservé.
+for (const mort of ['annulee_client_refund', 'annulee_paiement_ko', 'recupere', 'non_retire']) {
+  verifier(`« ${mort} » n'occupe plus le créneau`, !STATUTS_OCCUPENT_CRENEAU.includes(mort))
+}
+
+// ⚠️ LE PIÈGE QUI AURAIT TOUT CASSÉ, et qui se joue sur `null` contre
+// `undefined`. La base renvoie `max_commandes: null` quand le commerçant n'a
+// jamais rempli le champ. Or `1 >= null` vaut `1 >= 0`, donc VRAI : toutes ses
+// commandes auraient été refusées. Avec `undefined`, la comparaison serait
+// fausse et rien n'aurait bloqué. Deux absences, deux comportements opposés :
+// c'est exactement pour ça que la route porte la garde `capaciteFixee`.
+verifier('capacité NULL : le calcul déclare complet à tort',
+  calculerCapaciteCreneau({ count: 1, max_commandes: null }).complet)
+verifier('capacité absente : le calcul ne bloque rien',
+  !calculerCapaciteCreneau({ count: 1 }).complet)
+// Et quand la capacité EST fixée, il compte juste.
+verifier('4 commandes sur 5 : il reste de la place',
+  !calculerCapaciteCreneau({ count: 4, max_commandes: 5 }).complet)
+verifier('5 commandes sur 5 : complet',
+  calculerCapaciteCreneau({ count: 5, max_commandes: 5 }).complet)
+
+// La route doit donc vérifier la capacité, ET ne le faire que si elle est fixée.
+const route = lireBrut('app/api/stripe/checkout/create-commande/route.js')
+const routeCode = route.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+verifier('la route contrôle la capacité côté serveur', /calculerCapaciteCreneau\(/.test(routeCode))
+verifier('elle ne contrôle que si une capacité est fixée', /capaciteFixee/.test(routeCode))
+verifier('elle compte la commande en cours de création', /count: occupantes\.length \+ 1/.test(routeCode))
+verifier('elle se limite au même jour', /\.eq\('date_commande', date_commande\)/.test(routeCode))
+verifier('elle exclut les annulées via la liste partagée', /STATUTS_OCCUPENT_CRENEAU/.test(routeCode))
+verifier('elle traite aussi la livraison', /creneau_livraison_id.*creneau_id|colonneCreneau/.test(routeCode))
+verifier('elle répond 409 et non 400', /creneau_complet: true[\s\S]{0,80}status: 409/.test(routeCode))
+
+// ⚠️ LE FAUX VERT ÉVITÉ DE JUSTESSE : la requête des créneaux ne lisait PAS les
+// colonnes de capacité. Le contrôle aurait calculé sur `undefined`, n'aurait
+// jamais rien bloqué, et aurait eu l'air parfaitement correct.
+for (const table of ['creneaux', 'livraison_creneaux']) {
+  const req = new RegExp(`from\\('${table}'\\)[\\s\\S]{0,200}?\\.select\\('([^']*)'\\)`).exec(routeCode)
+  verifier(`la requête ${table} est identifiable`, !!req)
+  for (const col of ['max_commandes', 'capacite_temps', 'mode_capacite']) {
+    verifier(`${table} lit bien ${col}`, !!req && req[1].includes(col), req?.[1])
+  }
+}
+verifier('le repli commerçant est chargé', /mode_capacite/.test(
+  /\.from\('commercants'\)[\s\S]{0,400}?\.select\('([^']*)'\)/.exec(routeCode)?.[1] || ''))
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

@@ -37,6 +37,7 @@ import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
 import { chargerBonValide, debiterBon } from '@/lib/bons-cadeaux-server'
 import { tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
+import { calculerCapaciteCreneau, STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
 import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 
 export async function POST(request) {
@@ -99,7 +100,7 @@ export async function POST(request) {
     // ─── 2) Récup commerçant + Stripe Connect prérequis ────────────────────
     const { data: commercant, error: errC } = await supabase
       .from('commercants')
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut')
+      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite')
       .eq('id', commercant_id)
       .single()
     if (errC || !commercant) {
@@ -152,7 +153,10 @@ export async function POST(request) {
     } else if (estLivraison) {
       const { data: cl, error: errCL } = await supabase
         .from('livraison_creneaux')
-        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id')
+        // ⚠️ max_commandes / capacite_temps / mode_capacite sont INDISPENSABLES :
+        // sans elles, le contrôle de capacité plus bas calcule sur `undefined`
+        // et ne bloque jamais rien. Il aurait l'air correct et ne servirait à rien.
+        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite')
         .eq('id', creneau_livraison_id)
         .single()
       if (errCL || !cl || cl.commercant_id !== commercant.id || !cl.actif) {
@@ -174,7 +178,9 @@ export async function POST(request) {
     } else {
       const { data: cr, error: errCre } = await supabase
         .from('creneaux')
-        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id')
+        // Mêmes colonnes de capacité que la livraison : les deux partagent le
+        // modèle de lib/creneaux.js, elles doivent se lire pareil.
+        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite')
         .eq('id', creneau_id)
         .single()
       if (errCre || !cr || cr.commercant_id !== commercant.id || !cr.actif) {
@@ -297,6 +303,85 @@ export async function POST(request) {
     const duCents = Math.round(duEUR * 100)
     // Dû entièrement couvert par le bon : confirmation directe, pas de Stripe.
     const couvertParBon = !!bonCadeau && duCents === 0
+
+    // ─── 4.7) Vérif CAPACITÉ du créneau, côté SERVEUR ──────────────────────
+    //
+    // ⚠️ ELLE N'EXISTAIT NULLE PART AILLEURS QUE DANS LE NAVIGATEUR (trouvé le
+    // 09/08). `calculerCapaciteCreneau` ne servait qu'à griser les créneaux
+    // pleins à l'écran. Le stock, lui, était bien protégé côté serveur par une
+    // réservation atomique — mais rien n'empêchait deux clients qui paient en
+    // même temps de faire passer un créneau de cinq commandes à sept, ni une
+    // requête fabriquée de viser un créneau affiché complet.
+    //
+    // Pour une boulangerie le samedi matin, un créneau qui déborde n'est pas un
+    // détail : c'est une promesse faite au commerçant et tenue par personne.
+    //
+    // On compte les commandes du MÊME créneau et du MÊME JOUR. La fonction en
+    // base utilisée par l'affichage, elle, agrège toutes dates confondues et
+    // n'exclut pas les annulées : elle est donc plus pessimiste que ce contrôle,
+    // ce qui est sans danger — l'écran cache un peu trop, le serveur tranche juste.
+    //
+    // ⚠️ ET SURTOUT : on ne contrôle QUE si une capacité est réellement fixée.
+    // `calculerCapaciteCreneau` compare `utilise >= capacite` ; avec une
+    // capacité nulle ou absente, `null` devient 0 et la comparaison est vraie
+    // pour n'importe quelle commande. Sans cette garde, un commerçant qui n'a
+    // jamais rempli le champ verrait TOUTES ses commandes refusées.
+    const capaciteFixee = ((creneau?.mode_capacite || commercant.mode_capacite) === 'temps')
+      ? Number(creneau?.capacite_temps) > 0
+      : Number(creneau?.max_commandes) > 0
+    if (creneau && !estBoutique && capaciteFixee) {
+      const colonneCreneau = estLivraison ? 'creneau_livraison_id' : 'creneau_id'
+      const { data: cmdMemeCreneau } = await supabase
+        .from('commandes')
+        .select('id')
+        .eq('commercant_id', commercant.id)
+        .eq(colonneCreneau, creneau.id)
+        .eq('date_commande', date_commande)
+        .in('statut', STATUTS_OCCUPENT_CRENEAU)
+      const occupantes = cmdMemeCreneau || []
+
+      // Mode « temps » : le plafond est une durée, pas un nombre de commandes.
+      // Il faut donc la somme des temps de préparation déjà engagés, plus celui
+      // de la commande en cours de création.
+      const modeTemps = (creneau.mode_capacite || commercant.mode_capacite) === 'temps'
+      let tempsCumul = 0
+      if (modeTemps && occupantes.length > 0) {
+        const { data: lignesExistantes } = await supabase
+          .from('commande_articles')
+          .select('quantite, article:articles(temps_prepa)')
+          .in('commande_id', occupantes.map(c => c.id))
+        for (const l of lignesExistantes || []) {
+          tempsCumul += Number(l.quantite || 0) * Number(l.article?.temps_prepa ?? 1)
+        }
+      }
+      // Ce que la commande en cours ajoute au créneau.
+      const tempsDemande = modeTemps
+        ? lignes.reduce((s, l) => {
+            const art = (articlesData || []).find(a => String(a.id) === String(l.article_id))
+            return s + Number(l.quantite || 0) * Number(art?.temps_prepa ?? 1)
+          }, 0)
+        : 0
+
+      const etat = calculerCapaciteCreneau(
+        {
+          ...creneau,
+          count: occupantes.length + 1,
+          temps_cumul: tempsCumul + tempsDemande,
+        },
+        { modeCapaciteDefaut: commercant.mode_capacite }
+      )
+      // `complet` est calculé EN INCLUANT la commande en cours : s'il est vrai,
+      // c'est que celle-ci ferait déborder le créneau.
+      if (etat.complet) {
+        return NextResponse.json({
+          ok: false,
+          error: estLivraison
+            ? 'Ce créneau de livraison vient d\'être complet. Choisis-en un autre.'
+            : 'Ce créneau vient d\'être complet. Choisis-en un autre.',
+          creneau_complet: true,
+        }, { status: 409 })
+      }
+    }
 
     // ─── 5) Vérif stock : commandes du jour + réservations en cours ────────
     const verifStock = await verifierStockDisponible({

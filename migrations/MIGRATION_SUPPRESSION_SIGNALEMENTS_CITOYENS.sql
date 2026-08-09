@@ -26,22 +26,21 @@
 -- (nom, adresse, téléphone d'une commune), sans enjeu de vie privée, et c'est
 -- une saisie qui resservirait si le module revenait un jour.
 --
+-- ⚠️ LES PHOTOS NE SE SUPPRIMENT PAS EN SQL. Supabase refuse toute écriture
+-- directe dans storage.objects (« Direct deletion from storage tables is not
+-- allowed »), justement pour éviter qu'on laisse des fichiers orphelins
+-- derrière soi. Le bucket se vide depuis l'interface Storage, ou par l'API.
+-- Faire les deux : la table ici, le bucket à la main. L'ordre importe peu,
+-- plus rien ne les lit.
+--
 -- Vérification attendue en fin de script :
---   table_restante = 0, photos_restantes = 0, signalements_commercants_intacts = (ton nombre habituel)
+--   table_restante = 0, signalements_commercants_intacts = (ton nombre habituel)
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- 1. Les photos d'abord : une fois la table partie, plus rien ne dit à quoi
---    ces fichiers correspondaient.
-DELETE FROM storage.objects WHERE bucket_id = 'signalements-photos';
-DELETE FROM storage.buckets WHERE id = 'signalements-photos';
-
--- 2. La table elle-même.
 DROP TABLE IF EXISTS public.signalements_citoyens;
 
 -- ─── Vérification ──────────────────────────────────────────────────────────
 SELECT
   (SELECT COUNT(*) FROM information_schema.tables
     WHERE table_schema = 'public' AND table_name = 'signalements_citoyens')  AS table_restante,
-  (SELECT COUNT(*) FROM storage.objects
-    WHERE bucket_id = 'signalements-photos')                                 AS photos_restantes,
   (SELECT COUNT(*) FROM public.signalements)                                 AS signalements_commercants_intacts;

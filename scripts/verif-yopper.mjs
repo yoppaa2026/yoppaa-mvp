@@ -12,7 +12,6 @@ import {
   extraireCodePostal,
   commercantEligibleDeal,
   commercantEligibleActu,
-  servicePublicEligible,
   codesPostauxDe,
 } from '../lib/morning-eligibilite.js'
 
@@ -123,9 +122,13 @@ verifier('une adresse sans code postal ne passe pas',
   !commercantEligibleActu({ ...PUBLIE_VENDRE, adresse: 'Grand-Place' }, cp))
 verifier('un commerçant absent ne casse rien', !commercantEligibleDeal(null, cp))
 
-verifier('un service public local passe', servicePublicEligible({ codes_postaux: ['5640'], national: false }, cp))
-verifier('un service NATIONAL ne passe pas', servicePublicEligible({ codes_postaux: ['5640'], national: true }, cp) === false)
-verifier('un service sans code postal ne passe pas', !servicePublicEligible({ codes_postaux: [], national: false }, cp))
+// Les services publics ont été retirés du produit (09/08) : le Good Morning ne
+// sert plus que des commerçants. On verrouille l'absence plutôt que de laisser
+// le module revenir par une porte dérobée.
+const morningLu = lire('lib/morning-contenu.js')
+verifier('le Morning n\'interroge plus les services publics', !/services_publics/.test(morningLu))
+verifier('la page Morning non plus',
+  !/services_publics/.test(lire('app/commander/morning/page.js').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n')))
 
 egal('code postal extrait de l\'adresse', extraireCodePostal('Rue du Moulin 12, 5640 Mettet'), '5640')
 egal('pas de code postal', extraireCodePostal('Grand-Place'), null)

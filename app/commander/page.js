@@ -6,7 +6,7 @@ import { fetchYopper } from '@/lib/fetch-yopper'
 import { libelleRetrait } from '@/lib/libelle-retrait'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
 import IconeRetrait from '@/app/components/IconeRetrait'
-import { canDo, PLAN_PUBLIC_ENABLED, bandeauCategorie } from '@/lib/plans'
+import { canDo, bandeauCategorie } from '@/lib/plans'
 import { morningADuContenu } from '@/lib/morning-contenu'
 import { lirePositionMemorisee, memoriserPosition, marquerDemandee, dejaDemandee, decisionGeoloc, etatAutorisation } from '@/lib/geoloc'
 import PillsStatut from './PillsStatut'
@@ -15,7 +15,6 @@ import ModalAvis from './ModalAvis'
 import OneSignalInit, { taggerFavoriOneSignal, syncYopperTags } from '@/app/components/OneSignalInit'
 import CarteNotifications from './CarteNotifications'
 import SupprimerCompte from './SupprimerCompte'
-import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 
 const T = {
   bg:      '#F8F6FF',
@@ -95,14 +94,6 @@ function IconSearch({ size = 36, color = T.muted }) {
     </svg>
   )
 }
-function IconWarning({ size = 12, color = '#fff' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
-      <path d="M12 9v4M12 17h.01"/>
-    </svg>
-  )
-}
 function IconHandshake({ size = 18, color = '#fff' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -121,74 +112,6 @@ function IconSparkle({ size = 18, color = T.main }) {
       <path d="M5 3v4M19 17v4M3 5h4M17 19h4"/>
     </svg>
   )
-}
-// Icône par type de service public (remplace les emojis SERVICE_TYPE_EMOJI).
-function IconService({ type, size = 22, color = '#2D0F6B' }) {
-  const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', style: { flexShrink: 0 } }
-  switch (type) {
-    case 'commune':
-      return (
-        <svg {...common}>
-          <path d="M3 11 12 4 21 11"/>
-          <path d="M5 11v9h14v-9"/>
-          <path d="M8 20v-7M12 20v-7M16 20v-7M3 20h18"/>
-        </svg>
-      )
-    case 'cpas':
-      return (
-        <svg {...common}>
-          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-        </svg>
-      )
-    case 'police':
-      return (
-        <svg {...common}>
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>
-          <path d="m9 12 2 2 4-4"/>
-        </svg>
-      )
-    case 'pompiers':
-      return (
-        <svg {...common}>
-          <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
-        </svg>
-      )
-    case 'ecole':
-      return (
-        <svg {...common}>
-          <path d="M22 10 12 5 2 10l10 5 10-5Z"/>
-          <path d="M6 12v5c0 1 3 2.5 6 2.5s6-1.5 6-2.5v-5"/>
-        </svg>
-      )
-    case 'urgence':
-      return (
-        <svg {...common}>
-          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
-          <path d="M12 9v4M12 17h.01"/>
-        </svg>
-      )
-    case 'medecin_garde':
-      return (
-        <svg {...common}>
-          <rect x="3" y="3" width="18" height="18" rx="3"/>
-          <path d="M12 8v8M8 12h8"/>
-        </svg>
-      )
-    case 'pharmacie_garde':
-      return (
-        <svg {...common}>
-          <path d="M10.5 4.5 4.5 10.5a3.5 3.5 0 0 0 5 5L15.5 9.5a3.5 3.5 0 1 0-5-5Z"/>
-          <path d="m8 8 7 7"/>
-        </svg>
-      )
-    default:
-      return (
-        <svg {...common}>
-          <rect x="4" y="3" width="16" height="18" rx="2"/>
-          <path d="M9 7h.01M15 7h.01M9 11h.01M15 11h.01M9 15h.01M15 15h.01M12 21v-3"/>
-        </svg>
-      )
-  }
 }
 
 function heureEnMinutes(heure) {
@@ -701,17 +624,6 @@ function PickupScreen({ commande, clientPrenom, onConfirm, onFermer }) {
   )
 }
 
-// ─── Carte commerce - redesignée ──────────────────────────────────────────────
-// ─── Carte d'un service public (Plan PUBLIC) ────────────────────────────────
-// Affichée dans la section "Services & administrations" sur /commander.
-// Différencie urgences nationales (badge rouge OFFICIEL) vs services locaux (badge violet OFFICIEL).
-const SERVICE_TYPE_LABEL = {
-  commune: 'Commune', cpas: 'CPAS', police: 'Police',
-  pompiers: 'Pompiers', ecole: 'École', urgence: 'Urgence',
-  medecin_garde: 'Médecin', pharmacie_garde: 'Pharmacie',
-  autre: 'Service',
-}
-
 // ─── Section "Mes avis" - affichée dans l'onglet Profil ────────────────────
 // Liste compacte des avis vérifiés (liés à une commande) postés par le Yopper.
 function SectionMesAvis({ clientId }) {
@@ -773,96 +685,6 @@ function SectionMesAvis({ clientId }) {
             <p style={{ fontSize: 11, color: T.muted, fontStyle: 'italic', textAlign: 'center', margin: '4px 0 0' }}>
               + {avis.length - 5} autres avis
             </p>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function CarteServicePublic({ s, onSelect, actusInfo }) {
-  const isUrgence = s.national || s.type === 'urgence'
-  const typeLabel = SERVICE_TYPE_LABEL[s.type] || 'Service'
-  const nbAlertes = actusInfo?.alertes || 0
-  const nbActus   = actusInfo?.actus   || 0
-  return (
-    <div onClick={onSelect}
-      style={{
-        background: '#fff',
-        border: `1px solid ${isUrgence ? '#FECACA' : T.pale}`,
-        borderLeft: `4px solid ${isUrgence ? '#DC2626' : T.deep}`,
-        borderRadius: 14,
-        padding: '10px 12px',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        transition: 'all 0.15s',
-        maxWidth: '100%',
-        overflow: 'hidden',
-        boxSizing: 'border-box',
-      }}>
-      <div style={{ width: 38, height: 38, borderRadius: 10, background: isUrgence ? '#FEE2E2' : '#EDE0FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <IconService type={s.type} size={20} color={isUrgence ? '#DC2626' : T.deep}/>
-      </div>
-      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', background: isUrgence ? '#DC2626' : T.deep, padding: '2px 7px', borderRadius: 100, letterSpacing: '0.6px', textTransform: 'uppercase', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            {isUrgence && <IconWarning size={9} color="#fff"/>}
-            {isUrgence ? 'Urgence' : 'Officiel'}
-          </span>
-          <span style={{ fontSize: 10, fontWeight: 600, color: T.muted, letterSpacing: '0.3px' }}>
-            {typeLabel}
-          </span>
-        </div>
-        <p style={{ fontSize: 13.5, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px', margin: 0, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {s.nom}
-        </p>
-        {/* Pills statut actu/alerte (pattern PillsStatut commerçant) :
-            alerte rouge pulse en priorité, actu violet juste à côté. */}
-        {(nbAlertes > 0 || nbActus > 0) && (
-          <div style={{ display: 'flex', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
-            {nbAlertes > 0 && (
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '2px 8px 2px 6px', borderRadius: 100,
-                background: '#FEE2E2', color: '#991B1B',
-                fontSize: 9, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase',
-              }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#DC2626', animation: 'pulseAlerte 1.4s ease-in-out infinite' }}/>
-                Alerte{nbAlertes > 1 ? `s · ${nbAlertes}` : ''}
-              </span>
-            )}
-            {nbActus > 0 && (
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '2px 8px 2px 6px', borderRadius: 100,
-                background: T.pale, color: T.deep,
-                fontSize: 9, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase',
-              }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.main }}/>
-                Actu{nbActus > 1 ? `s · ${nbActus}` : ''}
-              </span>
-            )}
-            <style>{`@keyframes pulseAlerte { 0%,100% { opacity: 1; transform: scale(1) } 50% { opacity: 0.5; transform: scale(1.3) } }`}</style>
-          </div>
-        )}
-      </div>
-      {/* Colonne droite : pill statut + bouton tel, alignes verticalement.
-          Affichee uniquement si au moins un des deux est present. */}
-      {((s.horaires_detail && Object.keys(s.horaires_detail).length > 0) || s.telephone) && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
-          {s.horaires_detail && Object.keys(s.horaires_detail).length > 0 && (
-            <PillStatutOuverture horaires={s.horaires_detail} compact/>
-          )}
-          {s.telephone && (
-            <a href={`tel:${s.telephone}`} onClick={e => e.stopPropagation()}
-              aria-label={`Appeler ${s.nom}`}
-              style={{ width: 34, height: 34, borderRadius: '50%', background: isUrgence ? '#DC2626' : T.main, color: '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8 19.79 19.79 0 01.22 2.18 2 2 0 012.2 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.11 6.11l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
-              </svg>
-            </a>
           )}
         </div>
       )}
@@ -1432,12 +1254,8 @@ export default function Commander() {
       .catch(() => {})
     return () => { vivant = false }
   }, [commune])
-  // Services publics (commune, CPAS, police, urgences) visibles dans la zone
-  const [servicesPublics, setServicesPublics] = useState([])
-  // Badge rouge sur l'onglet Services s'il y a au moins une alerte urgente active
-  const [alerteUrgenteActive, setAlerteUrgenteActive] = useState(false)
-  // Map service_id → { actus: n, alertes: n } pour afficher les pills sur les cards
-  const [actusParService, setActusParService] = useState(new Map())
+  // Les services publics (commune, CPAS, police, urgences) ont été retirés du
+  // produit le 09/08. Ni state, ni requête, ni onglet.
   // Modal d'avis post-commande : commande pour laquelle on propose un avis
   // (déclenché auto quand statut='recupere' et pas encore d'avis pour cette commande)
   const [avisCommande, setAvisCommande] = useState(null)
@@ -1456,12 +1274,12 @@ export default function Commander() {
   useEffect(() => {
     // Query param ?onglet=accueil prioritaire sur localStorage : utile pour
     // la démo (slide 8 force l'onglet Accueil sans dépendre de l'historique).
-    // Garde-fou V1 : si l'onglet demandé est 'services' (Officiel) et que le
-    // flag PLAN_PUBLIC_ENABLED est OFF, on retombe sur 'accueil' au lieu
-    // d'afficher une vue vide.
+    // Garde-fou : l'onglet « Officiel » n'existe plus (09/08). Un ancien lien
+    // ou un onglet mémorisé en localStorage retombe sur l'accueil plutôt que
+    // d'afficher une page vide.
     const urlParams = new URLSearchParams(window.location.search)
     const ongletFromUrl = urlParams.get('onglet')
-    const normaliser = (v) => (v === 'services' && !PLAN_PUBLIC_ENABLED) ? 'accueil' : v
+    const normaliser = (v) => (v === 'services' ? 'accueil' : v)
     if (ongletFromUrl) {
       setOngletState(normaliser(ongletFromUrl))
     } else {
@@ -1580,29 +1398,6 @@ export default function Commander() {
     return () => clearInterval(iv)
   }, [])
 
-  // ─── Services publics : on charge les nationaux + ceux de la commune ─────
-  useEffect(() => {
-    let annule = false
-    const codesPostaux = commune?.codes_postaux || []
-    let q = supabase
-      .from('services_publics')
-      .select('id, slug, type, nom, description, codes_postaux, national, telephone, adresse, latitude, longitude, logo_url, photo_couverture_url, horaires_detail')
-      .eq('statut', 'valide')
-      .order('national', { ascending: false })
-      .order('type')
-      .order('nom')
-    if (codesPostaux.length > 0) {
-      // overlap : national=true OR au moins un CP commun avec la commune
-      q = q.or(`national.eq.true,codes_postaux.ov.{${codesPostaux.join(',')}}`)
-    } else {
-      // Sans commune : on affiche au moins les urgences nationales
-      q = q.eq('national', true)
-    }
-    q.then(({ data }) => { if (!annule) setServicesPublics(data || []) })
-    return () => { annule = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
-  }, [commune?.id])
-
   // ─── Détection commandes récupérées → propose modale d'avis ─────────────
   // Avis vérifié = uniquement lié à une vraie commande (pas d'avis spontané = anti-troll).
   // Trigger : commande passée à statut='recupere' DEPUIS AU MOINS 60 MIN, pas
@@ -1651,42 +1446,6 @@ export default function Commander() {
       })
     return () => { annule = true }
   }, [clientCommandes, clientId, avisCommande])
-
-  // Vérifie s'il y a une alerte urgente active sur un service de la zone
-  // → déclenche le badge rouge sur l'onglet Services
-  // ET groupe les actus/alertes par service_id pour afficher les pills sur les cards
-  useEffect(() => {
-    if (servicesPublics.length === 0) {
-      setAlerteUrgenteActive(false)
-      setActusParService(new Map())
-      return
-    }
-    let annule = false
-    const today = new Date().toISOString().slice(0, 10)
-    const ids = servicesPublics.map(s => s.id)
-    supabase
-      .from('actualites')
-      .select('id, service_id, urgence')
-      .in('service_id', ids)
-      .eq('actif', true)
-      .lte('date_debut', today)
-      .gte('date_fin', today)
-      .then(({ data }) => {
-        if (annule) return
-        // Groupage par service_id
-        const map = new Map()
-        let anyAlerte = false
-        for (const a of data || []) {
-          const cur = map.get(a.service_id) || { actus: 0, alertes: 0 }
-          if (a.urgence) { cur.alertes++; anyAlerte = true }
-          else cur.actus++
-          map.set(a.service_id, cur)
-        }
-        setActusParService(map)
-        setAlerteUrgenteActive(anyAlerte)
-      })
-    return () => { annule = true }
-  }, [servicesPublics])
 
   // Cache reverse geocoding : si on a deja resolu une position proche (~100m), on
   // reutilise la valeur en localStorage et on evite de pinger Nominatim a chaque refresh
@@ -2689,10 +2448,6 @@ export default function Commander() {
                 </div>
               )}
 
-              {/* ─── Section "Services & administrations" RETIRÉE de la home ───
-                  Toutes ces fiches restent accessibles via l'onglet "Officiel".
-                  Le state servicesPublics + le fetch sont conservés car l'onglet
-                  Officiel et la détection d'alerte urgente les utilisent encore. */}
             </div>
           )}
 
@@ -3089,77 +2844,6 @@ export default function Commander() {
           )}
 
           {/* FAVORIS */}
-          {/* SERVICES - onglet dédié, hero + 2 sections (Urgences nationales / Locaux) */}
-          {onglet === 'services' && PLAN_PUBLIC_ENABLED && (() => {
-            const urgences = servicesPublics.filter(s => s.national || s.type === 'urgence')
-            const locaux   = servicesPublics.filter(s => !s.national && s.type !== 'urgence')
-            return (
-              <div>
-                <div className="hero-fullwidth" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, ${T.main} 100%)`, padding: '0.875rem 1rem 1.25rem', position: 'relative', overflow: 'hidden' }}>
-                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
-                  <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 20%, ${T.light}33 0%, transparent 55%), radial-gradient(circle at 10% 90%, ${T.mid}22 0%, transparent 50%)`, pointerEvents: 'none' }}/>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, position: 'relative' }}>
-                    <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>Officiel</p>
-                  </div>
-                  <h2 style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-0.6px', margin: 0, lineHeight: 1.1, position: 'relative', color: '#fff' }}>
-                    Services &amp; administrations
-                  </h2>
-                  {commune?.nom && (
-                    <p style={{ fontSize: '0.78rem', color: T.light, marginTop: 6, fontWeight: 600, opacity: 0.85, position: 'relative' }}>
-                      de {commune.nom} et services nationaux
-                    </p>
-                  )}
-                </div>
-
-                {servicesPublics.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: 16, background: T.pale, marginBottom: 12 }}>
-                      <IconService type="commune" size={36} color={T.main}/>
-                    </div>
-                    <p style={{ fontWeight: 800, color: T.ink, marginBottom: 6 }}>Pas de services pour ta zone</p>
-                    <p style={{ fontSize: '0.875rem', color: T.muted, lineHeight: 1.5 }}>
-                      On ajoute les communes au fil de l&rsquo;eau. Reviens bientôt.
-                    </p>
-                  </div>
-                )}
-
-                {urgences.length > 0 && (
-                  <div style={{ padding: '1rem 1rem 0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '1.2px' }}>
-                        Urgences
-                      </span>
-                      <div style={{ flex: 1, height: 1, background: T.pale }}/>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>{urgences.length}</span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
-                      {urgences.map(s => (
-                        <CarteServicePublic key={s.id} s={s} actusInfo={actusParService.get(s.id)} onSelect={() => router.push(`/commander/services/${s.slug}`)}/>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {locaux.length > 0 && (
-                  <div style={{ padding: '1.25rem 1rem 1.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '1.2px' }}>
-                        Services locaux{commune?.nom ? ` · ${commune.nom}` : ''}
-                      </span>
-                      <div style={{ flex: 1, height: 1, background: T.pale }}/>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>{locaux.length}</span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
-                      {locaux.map(s => (
-                        <CarteServicePublic key={s.id} s={s} actusInfo={actusParService.get(s.id)} onSelect={() => router.push(`/commander/services/${s.slug}`)}/>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })()}
-
           {/* TRIBU */}
           {onglet === 'tribu' && (
             <div>
@@ -3676,9 +3360,6 @@ export default function Commander() {
         <div className="navbar-tabs">
           {[
             { key: 'accueil',   label: 'Accueil',   badge: 0 },
-            // Onglet "Officiel" (services publics) : neutralisé V1 via PLAN_PUBLIC_ENABLED.
-            // Réactivation phase 2 sans toucher au code (juste flipper l'env var).
-            ...(PLAN_PUBLIC_ENABLED ? [{ key: 'services',  label: 'Officiel',  badge: alerteUrgenteActive ? 1 : 0 }] : []),
             // Onglet 'commandes' : pas de label (label vide) + icône plus grande pour compenser,
             // 2 pastilles distinctes (violette = commandes en cours, verte = RDVs a venir).
             // Pills légendées (icône + chiffre) : violette = commandes, verte = RDV.
@@ -3719,21 +3400,6 @@ export default function Commander() {
                     <path d="M7,13   L17,13"   stroke={stroke} strokeWidth="1.8" strokeLinecap="round" opacity={op * 0.85}/>
                     <path d="M7,16   L15,16"   stroke={stroke} strokeWidth="1.8" strokeLinecap="round" opacity={op * 0.85}/>
                     <path d="M7,19   L13,19"   stroke={stroke} strokeWidth="1.8" strokeLinecap="round" opacity={op * 0.85}/>
-                  </svg>
-                )}
-                {item.key === 'services' && (
-                  /* Bâtiment officiel : mairie/administration. Badge rouge si alerte urgente. */
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
-                    <path d="M3,11 L12,4 L21,11" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
-                    <path d="M5,11 L5,20 L19,20 L19,11" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
-                    <path d="M8,20 L8,13 M12,20 L12,13 M16,20 L16,13" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
-                    <path d="M3,20 L21,20" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
-                    {item.badge > 0 && (
-                      <>
-                        <circle cx="19" cy="5" r="5.5" fill="#DC2626" stroke="white" strokeWidth="1.8"/>
-                        <text x="19" y="8.8" textAnchor="middle" fontSize="8" fontWeight="900" fill="white" fontFamily="DM Sans,sans-serif">!</text>
-                      </>
-                    )}
                   </svg>
                 )}
                 {item.key === 'tribu' && (

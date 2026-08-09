@@ -19,13 +19,12 @@ import { supabase } from '@/lib/supabase'
 // décoratif, même comme illustration de type de commerce).
 import {
   Croissant, Cookie, Cake, Sandwich, Pizza, Coffee, ShoppingCart, Utensils, Beef,
-  Flower, Pill, Truck, Scissors, Glasses, Shirt, School, Stethoscope,
-  AlertTriangle, Building2, Store, Zap, Phone,
+  Flower, Pill, Truck, Scissors, Glasses, Shirt,
+  Store, Zap, Phone,
 } from 'lucide-react'
 import {
   commercantEligibleDeal as eligibleDeal,
   commercantEligibleActu as eligibleActu,
-  servicePublicEligible as eligibleService,
 } from '@/lib/morning-eligibilite'
 
 // ─── Tokens design system (canoniques) ─────────────────────────────
@@ -97,7 +96,7 @@ async function fetchMorningData(commune) {
   const today = new Date().toISOString().slice(0, 10)
   const cpDeLaCommune = new Set(commune.codes_postaux)
 
-  const [{ data: dealsRaw }, { data: actusCommercantRaw }, { data: actusPubliqueRaw }] = await Promise.all([
+  const [{ data: dealsRaw }, { data: actusCommercantRaw }] = await Promise.all([
     // 1) Deals de l'ÉDITION du jour : uniquement ceux retenus par le cron de
     //    7h30 (statut_morning='envoye', deadline 23 h la veille). Un deal publié
     //    après coup vit sur la fiche (pastille pill DEAL), pas dans le Morning.
@@ -127,19 +126,8 @@ async function fetchMorningData(commune) {
       .not('push_envoye_at', 'is', null)
       .lte('date_debut', today)
       .gte('date_fin', today),
-
-    // 3) Actus services publics locaux (commune, CPAS, police, écoles)
-    //    On exclut les nationaux (112, CEGENO, etc.) - trop génériques pour le morning
-    supabase
-      .from('actualites')
-      .select(`
-        id, titre, contenu, type, date_debut, date_fin, urgence, photo_url,
-        service:services_publics ( id, nom, type, codes_postaux, national )
-      `)
-      .not('service_id', 'is', null)
-      .eq('actif', true)
-      .lte('date_debut', today)
-      .gte('date_fin', today),
+    // Les actus des services publics ont été retirées du Morning avec le reste
+    // du module (Alex, 09/08).
   ])
 
   // Filtres : définis une seule fois dans lib/morning-eligibilite, partagés
@@ -148,7 +136,6 @@ async function fetchMorningData(commune) {
   // promettre un contenu que cette page n'affiche pas.
   const commercantEligibleDeal = (c) => eligibleDeal(c, cpDeLaCommune)
   const commercantEligibleActu = (c) => eligibleActu(c, cpDeLaCommune)
-  const servicePublicEligible  = (s) => eligibleService(s, cpDeLaCommune)
 
   // Stocks articles pour les deals
   const articleIds = (dealsRaw || [])
@@ -196,21 +183,8 @@ async function fetchMorningData(commune) {
       }
     })
 
-  // Icône par type de service public (Lucide React components)
-  const SERVICE_ICON = {
-    commune:           Building2,
-    cpas:              Building2,
-    police:            AlertTriangle,
-    pompiers:          AlertTriangle,
-    ecole:             School,
-    medecin_garde:     Stethoscope,
-    pharmacie_garde:   Pill,
-    urgence:           AlertTriangle,
-    autre:             Building2,
-  }
-
   // Priorité de plan dans le flux (morning_prioritaire : Communiquer/Vendre
-  // remontent avant Exister). Les officiels passent juste après les alertes.
+  // remontent avant Exister).
   const PRIO_PLAN = { vendre: 0, full: 0, communiquer: 0, exister: 1, on: 1 }
 
   const actusCommercant = (actusCommercantRaw || [])
@@ -229,24 +203,9 @@ async function fetchMorningData(commune) {
       prio: 2 + (PRIO_PLAN[a.commercant.plan] ?? 1),
     }))
 
-  const actusPubliques = (actusPubliqueRaw || [])
-    .filter(a => servicePublicEligible(a.service))
-    .map(a => ({
-      id: 'p-' + a.id,
-      commerce: a.service.nom,
-      Icon: SERVICE_ICON[a.service.type] || Building2,
-      logo: null,
-      slug: null,
-      categorie: 'Officiel',
-      titre: a.titre || null,
-      actu: a.contenu || a.titre,
-      photo: a.photo_url || null,
-      alerte: a.type === 'alerte' || a.urgence === true,
-      prio: 1,
-    }))
 
-  // Tri : alertes en tête, puis officiels, puis Communiquer/Vendre, puis Exister
-  const actus = [...actusPubliques, ...actusCommercant].sort((a, b) => {
+  // Tri : alertes en tête, puis Communiquer/Vendre, puis Exister
+  const actus = [...actusCommercant].sort((a, b) => {
     if (a.alerte !== b.alerte) return a.alerte ? -1 : 1
     return a.prio - b.prio
   })

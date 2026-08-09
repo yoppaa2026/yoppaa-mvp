@@ -133,7 +133,10 @@ export default function LegalPage() {
             <P>Yoppaa est une plateforme belge qui met en relation les habitants et les commerces de leur quartier : commande en ligne avec retrait en magasin (Click &amp; Collect), livraison locale, expédition pour les boutiques, prise de rendez-vous chez les commerçants de services, deals et actualités des commerces.</P>
 
             <H3>1. Accès à la plateforme</H3>
-            <P>L'accès à la plateforme Yoppaa est gratuit pour les clients. La commande est possible sans créer de compte ; la création d'un compte (facultative) permet de suivre ses commandes et rendez-vous. Yoppaa se réserve le droit de suspendre ou supprimer tout compte en cas d'utilisation frauduleuse ou contraire aux présentes CGU.</P>
+            <P>L'accès à la plateforme Yoppaa est gratuit pour les clients. <strong>La commande et la prise de rendez-vous restent possibles sans créer de compte</strong> : il suffit de renseigner ses coordonnées au moment de valider.</P>
+            <P>En revanche, <strong>l'accès aux données personnelles rattachées à une adresse email suppose d'avoir prouvé qu'on en est bien le titulaire</strong>. L'historique des commandes et des rendez-vous, les favoris, les cartes de fidélité et le dépôt d'un avis ne sont donc accessibles qu'après vérification de l'adresse email, par mot de passe ou par le lien de connexion contenu dans l'email de confirmation. Renseigner l'adresse d'un tiers ne donne accès à rien.</P>
+            <P>Le Client qui vient de commander sans compte peut suivre <strong>cette commande</strong> depuis l'appareil utilisé pour la passer, sans vérification supplémentaire.</P>
+            <P>Yoppaa se réserve le droit de suspendre ou supprimer tout compte en cas d'utilisation frauduleuse ou contraire aux présentes CGU.</P>
             <P>Le Client peut <strong>supprimer son compte à tout moment et par lui-même</strong>, depuis l'onglet Profil de l'application. Les modalités et les conséquences de cette suppression sont détaillées à l'article 4, Confidentialité. La suppression est refusée tant qu'une commande, un rendez-vous ou un bon cadeau en cours implique un commerçant tiers.</P>
 
             <H3>2. Processus de commande</H3>

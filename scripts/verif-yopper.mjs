@@ -248,6 +248,32 @@ verifier('la dernière position s\'affiche sans attendre le satellite',
   /const memo = lirePositionMemorisee\(\)/.test(accueil2))
 
 // ═══════════════════════════════════════════════════════════════════════════
+// LES CGU DOIVENT DIRE CE QUE LE CODE FAIT (09/08)
+// ═══════════════════════════════════════════════════════════════════════════
+// Depuis le durcissement du 03/08, rien de personnel ne s'ouvre sans preuve de
+// possession de la boîte mail. Les CGU, elles, annonçaient toujours un compte
+// « facultatif » permettant de suivre ses commandes. Un texte contractuel qui
+// promet un accès que le code refuse, ce n'est pas un détail de rédaction :
+// c'est ce qu'on oppose à Yoppaa en cas de litige, et c'est aussi ce que les
+// stores lisent au moment du dépôt.
+const legal = lire('app/legal/page.js')
+// On vise la SECTION, pas le sommaire : `id="…"` n'apparaît qu'une fois,
+// alors que `href="#…"` du sommaire vient plus haut dans le fichier.
+const cguClient = legal.slice(legal.indexOf('id="cgu-client"'), legal.indexOf('id="cgu-commercant"'))
+verifier('les CGU client existent', cguClient.length > 2000)
+// La commande sans compte reste possible : c'est la promesse de la landing.
+verifier('les CGU maintiennent la commande sans compte',
+  /sans créer de compte/.test(cguClient))
+// Mais l'accès aux données personnelles exige la preuve.
+verifier('les CGU conditionnent l\'accès aux données à la vérification',
+  /vérification de l'adresse email|prouvé qu'on en est bien le titulaire/.test(cguClient))
+verifier('les CGU citent le lien de connexion de l\'email de confirmation',
+  /lien de connexion contenu dans l'email de confirmation/.test(cguClient))
+// ⚠️ LA PHRASE QUI NE DOIT PLUS REVENIR : un compte présenté comme facultatif
+// POUR SUIVRE SES COMMANDES. C'est précisément ce que le code ne permet plus.
+verifier('les CGU ne présentent plus le compte comme facultatif pour le suivi',
+  !/compte \(facultative\) permet de suivre/.test(cguClient))
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

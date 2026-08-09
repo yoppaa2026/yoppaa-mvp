@@ -35,6 +35,22 @@ function empreinte(nom) {
 // d'identité flotte par-dessus le bas du bandeau : centré, le nom disparaissait
 // derrière elle et la bannière n'était plus qu'un aplat violet vide (constaté
 // par Alex le 05/08, capture à l'appui).
+//
+// ⚠️ ET SURTOUT : LE RETRAIT DU HAUT EST EN PIXELS, PAS EN POURCENTAGE.
+// Il valait `18%`, ce qui semblait raisonnable. Sauf qu'un padding en
+// pourcentage se calcule sur la LARGEUR du bloc, jamais sur sa hauteur : tant
+// que la colonne faisait 390 px, 18 % valaient 70 px et le nom tombait bien
+// dans le tiers haut. Le soir où la colonne est passée à 1200 px sur PC
+// (chantier bureau, phase 2), ces mêmes 18 % sont devenus 216 px, sur un
+// bandeau de 280 px de haut : le nom est allé se cacher derrière la carte
+// blanche. Alex, 09/08, capture à l'appui — le même défaut qu'en mai, revenu
+// par une porte différente.
+//
+// En pixels, la position ne dépend plus que de la hauteur du bandeau, qui est
+// la seule chose qui compte ici. Le PC agrandit ensuite le nom et descend un
+// peu le retrait, via `.banniere-commerce` dans globals.css.
+const RETRAIT_HAUT = 54
+
 export default function BanniereCommerce({ nom, hauteur = '100%', taillePolice = '1.5rem' }) {
   const h = empreinte(nom)
   const x1 = 60 + (h % 30)          // 60 → 89 %
@@ -43,10 +59,10 @@ export default function BanniereCommerce({ nom, hauteur = '100%', taillePolice =
   const y2 = 65 + (Math.floor(h / 11000) % 25)
 
   return (
-    <div style={{ position: 'absolute', inset: 0, height: hauteur, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', paddingTop: '18%', padding: '18% 24px 0', overflow: 'hidden' }}>
+    <div className="banniere-commerce" style={{ position: 'absolute', inset: 0, height: hauteur, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: `${RETRAIT_HAUT}px 24px 0`, overflow: 'hidden' }}>
       <div aria-hidden="true" style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at ${x1}% ${y1}%, ${T.mid}55 0%, transparent 60%), radial-gradient(circle at ${x2}% ${y2}%, ${T.light}22 0%, transparent 50%)` }}/>
 
-      <p style={{ position: 'relative', margin: 0, fontWeight: 900, fontSize: taillePolice, color: '#fff', letterSpacing: '-0.5px', textAlign: 'center', lineHeight: 1.2, textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}>
+      <p className="banniere-nom" style={{ position: 'relative', margin: 0, fontWeight: 900, fontSize: taillePolice, color: '#fff', letterSpacing: '-0.5px', textAlign: 'center', lineHeight: 1.2, textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}>
         {nom}
       </p>
 

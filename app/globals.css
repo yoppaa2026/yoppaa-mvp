@@ -260,4 +260,24 @@ input, textarea, select {
   .scroll-body {
     padding-bottom: 28px;
   }
+
+  /* ── Le bandeau du haut de fiche ─────────────────────────────────────────
+     ⚠️ LES DEUX FICHES AVAIENT DES HAUTEURS DIFFÉRENTES À CHAQUE PALIER :
+     220/280 pour les rendez-vous, 240/300/340 pour la boutique. Sur PC, la
+     fiche rendez-vous s'arrêtait donc 60 px plus bas que sa jumelle, alors
+     qu'elles sont censées se répondre au pixel près. Une seule hauteur ici,
+     pour les deux.
+
+     Le nom, lui, était calculé à 1,5 rem pour un écran de 390 px : sur 1200 px
+     il paraissait minuscule au milieu du bandeau. */
+  .fiche-hero {
+    height: 360px !important;
+  }
+  .banniere-commerce {
+    padding-top: 84px !important;
+  }
+  .banniere-nom {
+    font-size: 2.6rem !important;
+    letter-spacing: -1.5px !important;
+  }
 }

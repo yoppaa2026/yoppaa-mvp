@@ -220,6 +220,21 @@ const reglesQuiEtalent = /\.cats, \.day-scroll, \[data-scroll-x\]/.exec(phase2)
 verifier('la barre de catégories collante n\'est pas étalée',
   !!reglesQuiEtalent && !/\.cat-bar[^{]*\{[^}]*flex-wrap/.test(phase2))
 
+// ── Le bandeau de haut de fiche ────────────────────────────────────────────
+// ⚠️ Les deux fiches avaient des hauteurs de bandeau DIFFÉRENTES à chaque
+// palier : 220/280 pour les rendez-vous, 240/300/340 pour la boutique. Elles
+// sont censées se répondre au pixel près. Sur PC, une seule hauteur pour les
+// deux, et c'est celle-ci qui fait autorité.
+verifier('les deux fiches ont le même bandeau sur PC',
+  /\.fiche-hero\s*\{[^}]*height:\s*360px\s*!important/.test(phase2))
+// 1,5 rem était calibré pour un écran de 390 px : au milieu de 1200 px, le nom
+// du commerce paraissait minuscule.
+verifier('le nom du commerce est agrandi sur PC',
+  /\.banniere-nom\s*\{[^}]*font-size:\s*2\.6rem\s*!important/.test(phase2))
+verifier('le nom reste dans le tiers haut du bandeau',
+  /\.banniere-commerce\s*\{[^}]*padding-top:\s*(\d+)px/.test(phase2)
+  && Number(/\.banniere-commerce\s*\{[^}]*padding-top:\s*(\d+)px/.exec(phase2)[1]) < 360 / 3)
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 8. AUCUN CADRE NE DOIT REMPLACER L'APPLICATION SUR PC
 // ═══════════════════════════════════════════════════════════════════════════

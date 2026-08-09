@@ -30,6 +30,25 @@ const banniere = lire('app/components/BanniereCommerce.js')
 verifier('la bannière affiche le nom du commerce', /\{nom\}/.test(banniere))
 verifier('la bannière n\'affiche aucune photo', !/<img/.test(banniere))
 
+// ⚠️ LE PIÈGE DU PADDING EN POURCENTAGE, vécu deux fois.
+// Le nom doit tomber dans le TIERS HAUT du bandeau, sinon la carte blanche
+// d'identité, qui flotte par-dessus le bas, le recouvre. Le retrait valait
+// `18%`, ce qui marchait tant que la colonne faisait 390 px.
+//
+// Sauf qu'un padding en pourcentage se calcule sur la LARGEUR du bloc, JAMAIS
+// sur sa hauteur. Le jour où la colonne est passée à 1200 px sur PC, ces 18 %
+// sont devenus 216 px sur un bandeau de 280 px : le nom est allé se cacher
+// derrière la carte. Même défaut qu'en mai, revenu par une autre porte.
+const styleBanniere = banniere.slice(banniere.indexOf('className="banniere-commerce"'))
+verifier('le retrait du nom ne dépend pas de la largeur du bandeau',
+  !/padding[^:]*:\s*[`'"]?\$?\{?[^;]*\d+%/.test(styleBanniere.slice(0, 400)),
+  styleBanniere.slice(0, 200))
+verifier('le retrait est exprimé en pixels', /RETRAIT_HAUT = \d+/.test(banniere))
+// Les classes servent d'accroche aux règles PC : sans elles, impossible
+// d'agrandir le nom sur grand écran, un style en ligne ne porte pas de media query.
+verifier('la bannière est accrochable depuis la feuille globale',
+  /className="banniere-commerce"/.test(banniere) && /className="banniere-nom"/.test(banniere))
+
 for (const chemin of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
   const src = lire(chemin)
   // Viser le JSX, pas la feuille de style : `.fiche-hero { height }` apparaît

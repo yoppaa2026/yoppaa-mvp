@@ -21,6 +21,9 @@ import { generateRdvIcs, icsToBase64Attachment } from '../lib/ical.js'
 import { tauxFraisLivraison } from '../lib/tva.js'
 import { ventilerFrais } from '../lib/stripe-frais.js'
 import { contexteRetrait, textesRetrait, textesConfirmation } from '../lib/ecran-retrait.js'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -379,6 +382,150 @@ verifier('pas de centime perdu à l’arrondi', Math.abs((v.rdv.frais + v.comman
 
 verifier('total nul = pas de ventilation', ventilerFrais(1.00, 0, 0) === null)
 verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === null)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE PREMIER RENDU — la page blanche que rien ne voyait venir
+// ═══════════════════════════════════════════════════════════════════════════
+// L'onglet Profil du tableau de bord tombait sur une PAGE BLANCHE, pour tous
+// les commerçants, à cause d'une seule ligne :
+//
+//   const [form, setForm] = useState(null)
+//   const metierFiche = metierPhotos({ categorie: form.categorie })   // ⚠️
+//   ...
+//   if (loading || !form) return <p>Chargement…</p>                   // 120 lignes plus bas
+//
+// ⚠️ LE PREMIER RENDU A LIEU AVANT TOUT `useEffect`. À cet instant l'état vaut
+// encore `null`, et lire une propriété de `null` lève une TypeError qui emporte
+// tout l'écran. Le garde de chargement, écrit plus bas, n'a jamais l'occasion
+// de servir. Invisible au lint, au build ET au reste du banc : seul l'écran le
+// disait, et il fallait ouvrir l'onglet pour le voir.
+//
+// Ce test balaie TOUTE l'application. Il ne lit pas un fichier en particulier :
+// il cherche la FORME du défaut, partout, y compris dans du code écrit demain.
+const RACINE_APP = fileURLToPath(new URL('../app', import.meta.url))
+function fichiersReact(dossier) {
+  const sortie = []
+  for (const entree of readdirSync(dossier)) {
+    if (entree === 'node_modules' || entree === '.next') continue
+    const chemin = join(dossier, entree)
+    if (statSync(chemin).isDirectory()) sortie.push(...fichiersReact(chemin))
+    else if (/\.(js|jsx)$/.test(entree)) sortie.push(chemin)
+  }
+  return sortie
+}
+
+const fautifs = []
+for (const fichier of fichiersReact(RACINE_APP)) {
+  const lignes = readFileSync(fichier, 'utf8').split(/\r?\n/)
+
+  // Les états qui démarrent vides.
+  const etats = new Map()
+  lignes.forEach((ligne, i) => {
+    const m = ligne.match(/const\s*\[\s*(\w+)\s*,\s*set\w+\s*\]\s*=\s*useState\(\s*(null|undefined)?\s*\)/)
+    if (m) etats.set(m[1], i)
+  })
+
+  for (const [nom, declaration] of etats) {
+    // Le garde qui est CENSÉ protéger cet état.
+    let garde = Infinity
+    lignes.forEach((ligne, i) => {
+      if (i <= declaration || i >= garde) return
+      const protege = new RegExp(`if\\s*\\([^)]*(!${nom}\\b|${nom}\\s*===\\s*null)`).test(ligne)
+      if (protege && /return/.test(ligne)) garde = i
+    })
+    if (garde === Infinity) continue
+
+    // Un déréférencement sans `?.` AVANT ce garde, et au corps du composant
+    // (une indentation faible : ce qui est plus enfoncé vit dans une fonction
+    // appelée plus tard, quand l'état est rempli).
+    for (let i = declaration + 1; i < garde; i++) {
+      const ligne = lignes[i]
+      if (/^\s*\/\//.test(ligne)) continue
+      if ((ligne.match(/^\s*/) || [''])[0].length > 2) continue
+      if (!new RegExp(`(^|[^\\w?.])${nom}\\.[a-zA-Z_]`).test(ligne)) continue
+      fautifs.push(`${fichier.replace(/\\/g, '/').split('/app/').pop()}:${i + 1} → ${nom}`)
+    }
+  }
+}
+verifier('aucun écran ne lit un état vide avant son garde de chargement',
+  fautifs.length === 0, fautifs.join(' · '))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ENREGISTRER SANS AVOIR CHARGÉ — l'effacement silencieux
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ `infos_pratiques` était ÉCRIT par la sauvegarde du profil et JAMAIS chargé
+// par `fetchProfil`. La ligne d'enregistrement vaut
+// `(form.infos_pratiques || '').trim() || null` : absent du formulaire, le champ
+// partait donc à `null` À CHAQUE ENREGISTREMENT. Un commerçant qui venait
+// corriger son numéro de téléphone effaçait au passage ses infos pratiques,
+// qui s'affichent sur ses DEUX fiches et dans l'email de confirmation de
+// rendez-vous. Aucune erreur, aucun message : le texte disparaissait.
+//
+// La règle, générale : tout champ écrit doit d'abord avoir été lu.
+const config = readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8')
+const blocProfil = config.slice(config.indexOf('function TabProfil'), config.indexOf('function TabAccompagnement'))
+// ⚠️ On lit l'objet par ÉQUILIBRAGE D'ACCOLADES, pas jusqu'au bout de la ligne.
+// Une première version s'arrêtait au premier retour à la ligne : le jour où le
+// `setForm` a été mis en forme sur plusieurs lignes, le banc n'a plus vu que 7
+// champs sur 21 et a crié au loup. Un test qui dépend de la mise en forme du
+// code ne tient pas une semaine.
+function objetApres(texte, ancre) {
+  const depart = texte.indexOf(ancre)
+  if (depart < 0) return ''
+  // ⚠️ On repart de l'ANCRE, pas de sa fin : chercher après le `:` de « nom: »
+  // faisait tomber sur une accolade bien plus loin, et le bloc lu n'avait plus
+  // rien à voir. Le test comparait alors deux listes vides et passait au vert.
+  const ouvrante = texte.indexOf('{', depart)
+  if (ouvrante < 0) return ''
+  let profondeur = 0
+  for (let i = ouvrante; i < texte.length; i++) {
+    if (texte[i] === '{') profondeur++
+    else if (texte[i] === '}') { profondeur--; if (profondeur === 0) return texte.slice(ouvrante + 1, i) }
+  }
+  return ''
+}
+
+// Les clés de PREMIER NIVEAU seulement : sans ça, un `? null :` au fond d'un
+// ternaire passerait pour un champ nommé « null ».
+function clesPremierNiveau(objetBrut) {
+  // ⚠️ LES COMMENTAIRES D'ABORD. Une phrase française porte des virgules et des
+  // parenthèses : « ses infos pratiques, qui s'affichent sur ses DEUX fiches »
+  // était découpé comme s'il s'agissait de deux champs, et le champ suivant
+  // devenait invisible au banc. Mes propres commentaires cassaient mon test.
+  //
+  // ⚠️ ET LES FINS DE LIGNE WINDOWS. En JavaScript, `.` ne franchit ni `\n` NI
+  // `\r`, et `$` sans le drapeau `m` ne vaut qu'à la toute fin du texte. Découpé
+  // sur `\n` seul, chaque ligne gardait son `\r` final et `//.*$` ne mordait
+  // que sur la dernière : le nettoyage ne nettoyait rien. Deuxième fois dans la
+  // journée qu'un CRLF fait tomber un de mes tests.
+  const objet = objetBrut
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split(/\r?\n/).map(l => l.replace(/(^|\s)\/\/.*/, '$1')).join('\n')
+
+  const trouvees = new Set()
+  let profondeur = 0, morceau = ''
+  const enregistrer = () => {
+    const m = morceau.match(/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:/)
+    if (m) trouvees.add(m[1])
+    morceau = ''
+  }
+  for (const c of objet) {
+    if ('{[('.includes(c)) profondeur++
+    else if ('}])'.includes(c)) profondeur--
+    if (c === ',' && profondeur === 0) { enregistrer(); continue }
+    morceau += c
+  }
+  enregistrer()
+  return trouvees
+}
+
+const chargees = clesPremierNiveau(objetApres(blocProfil, 'setForm({ nom:'))
+const enregistrees = clesPremierNiveau(objetApres(blocProfil, ".from('commercants').update({ nom:"))
+const ecritesJamaisLues = [...enregistrees].filter(c => !chargees.has(c))
+verifier('aucun champ du profil n\'est enregistré sans avoir été chargé',
+  ecritesJamaisLues.length === 0, ecritesJamaisLues.join(', '))
+verifier('le banc a bien trouvé les deux listes de champs',
+  chargees.size > 10 && enregistrees.size > 10, `${chargees.size} chargés, ${enregistrees.size} enregistrés`)
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

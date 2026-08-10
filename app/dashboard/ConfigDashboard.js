@@ -4159,7 +4159,16 @@ function TabProfil({ commercantId, toast, onSaved }) {
   // Les conseils de prise de vue changent selon le métier : « recule-toi, prends
   // l'enseigne » ne veut rien dire pour un camion, et « ton produit phare »
   // sonne creux chez un coiffeur.
-  const metierFiche = metierPhotos({ categorie: form.categorie, type: form.type })
+  //
+  // ⚠️ `form?.` ET PAS `form.` : ce calcul est écrit ICI, tout en haut, alors
+  // que `form` démarre à `null` et n'est rempli que par `fetchProfil()`, dans un
+  // effet qui ne tourne qu'APRÈS le premier rendu. Le garde de chargement, lui,
+  // est 120 lignes plus bas. Écrit `form.categorie`, cette ligne lisait donc une
+  // propriété de `null` au tout premier rendu et faisait TOMBER TOUT L'ONGLET
+  // PROFIL sur une page blanche, pour tous les commerçants sans exception.
+  // Invisible au lint, invisible au build, invisible au banc : seul l'écran le
+  // disait. Même famille que la zone morte temporelle du 09/08.
+  const metierFiche = metierPhotos({ categorie: form?.categorie, type: form?.type })
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchProfil(); fetchPhotos() }, [commercantId])
@@ -4237,7 +4246,15 @@ function TabProfil({ commercantId, toast, onSaved }) {
     const { data } = await supabase.from('commercants').select('*').eq('id', commercantId).single()
     if (data) {
       const defaultHoraires = { lundi: { ouvert: true, debut: '07:00', fin: '14:00' }, mardi: { ouvert: true, debut: '07:00', fin: '14:00' }, mercredi: { ouvert: true, debut: '07:00', fin: '14:00' }, jeudi: { ouvert: true, debut: '07:00', fin: '14:00' }, vendredi: { ouvert: true, debut: '07:00', fin: '14:00' }, samedi: { ouvert: true, debut: '07:00', fin: '13:00' }, dimanche: { ouvert: false, debut: '07:00', fin: '12:00' } }
-      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', site_web: data.site_web || '', description: data.description || '', horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '' })
+      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', site_web: data.site_web || '', description: data.description || '',
+        // ⚠️ CE CHAMP ÉTAIT ENREGISTRÉ SANS JAMAIS ÊTRE CHARGÉ. La sauvegarde
+        // écrit `(form.infos_pratiques || '').trim() || null` : absent du
+        // formulaire, il partait donc à `null` à CHAQUE enregistrement. Un
+        // commerçant qui venait corriger son numéro de téléphone effaçait au
+        // passage ses infos pratiques, qui s'affichent sur ses DEUX fiches et
+        // dans l'email de confirmation de rendez-vous. Rien ne le prévenait.
+        infos_pratiques: data.infos_pratiques || '',
+        horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '' })
       setLogoPreview(data.logo_url || null)
     }
     setLoading(false)

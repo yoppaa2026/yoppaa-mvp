@@ -25,6 +25,7 @@ import { emailCommandeExpediee, emailRecapCommandesJour } from '../lib/resend.js
 import { partagerCommandes } from '../lib/commandes-vue.js'
 import { restaurerStockVariantes } from '../lib/stock-variantes-server.js'
 import { couleurRdv, texteLisibleSur, COULEUR_DEFAUT, ENCRE } from '../lib/agenda-couleurs.js'
+import { contenuBlocRdv, HAUTEUR_TROIS_LIGNES } from '../lib/agenda-bloc.js'
 import { nouveauxRdvs, idsDes, texteAlerteRdv } from '../lib/alerte-rdv.js'
 import { messagePanierRepris } from '../lib/panier-repris-message.js'
 import { normaliserEmail, memeEmail } from '../lib/email-normalise.js'
@@ -780,6 +781,93 @@ verifier('et ces deux-là ne sont pas marqués comme couleur de praticienne',
   couleurRdv({ statut: 'annule' }).estPraticien === false)
 verifier('alors qu\'un rendez-vous à venir l\'est',
   couleurRdv({ statut: 'confirme', couleurPraticien: '#E91E8C' }).estPraticien === true)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA PRESTATION S'ÉCRIT SUR TOUS LES BLOCS, MÊME LES PLUS COURTS
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ ELLE DISPARAISSAIT SOUS 36 PIXELS. Le bloc empilait l'heure, le prénom,
+// puis la prestation : un rendez-vous de trente minutes ne mesure que trente-
+// quatre pixels, la troisième ligne était rognée, et AUCUNE prestation d'une
+// demi-heure n'affichait son nom. Le commerçant ouvrait chaque rendez-vous pour
+// savoir ce qu'il avait à faire.
+//
+// Une reprise de la mise en page pourrait le regratter sans que rien ne
+// s'allume : le build compile aussi bien une ligne perdue. D'où ce banc, qui
+// EXÉCUTE la décision et relit ce qui en sort.
+{
+  const sophie = {
+    heure_debut: '14:30:00', client_prenom: 'Sophie',
+    prestation: { nom: 'Balayage' }, praticien: { prenom: 'Carole' },
+  }
+  // Trente minutes : la hauteur réelle du composant, 2 × 18 - 2 = 34 pixels.
+  const court = contenuBlocRdv({ hauteur: 34, rdv: sophie, praticienFiltre: 'all' })
+  egal('un bloc de 30 minutes nomme quand même la prestation', court.prestation, 'Balayage')
+  verifier('et l\'heure s\'y replie sur la ligne du prénom', court.titre === '14:30 Sophie', court.titre)
+  egal('elle n\'occupe donc plus de ligne à elle seule', court.heureSeule, null)
+
+  // Une heure : la place est là, chacun retrouve sa ligne.
+  const long = contenuBlocRdv({ hauteur: 70, rdv: sophie, praticienFiltre: 'all' })
+  egal('un bloc d\'une heure garde l\'heure sur sa ligne', long.heureSeule, '14:30')
+  egal('le titre n\'est alors que le prénom', long.titre, 'Sophie')
+  egal('et la praticienne accompagne la prestation', long.prestation, 'Carole · Balayage')
+
+  // Filtré sur une praticienne, son prénom serait du bruit : on la connaît déjà.
+  egal('filtré sur une personne, son prénom ne se répète pas',
+    contenuBlocRdv({ hauteur: 70, rdv: sophie, praticienFiltre: 'p1' }).prestation, 'Balayage')
+
+  // ⚠️ LA PRESTATION N'EST JAMAIS VIDE, quelle que soit la combinaison. Une
+  // ligne blanche dans un agenda ne se remarque pas, et personne ne saurait
+  // qu'une information a été perdue.
+  const combinaisons = []
+  for (const hauteur of [0, 34, 36, 37, 70, null, undefined, NaN]) {
+    for (const filtre of ['all', 'p1', null]) {
+      for (const rdv of [sophie, { heure_debut: '09:00:00' }, {}, null]) {
+        combinaisons.push(contenuBlocRdv({ hauteur, rdv, praticienFiltre: filtre }))
+      }
+    }
+  }
+  verifier(`la prestation est écrite sur les ${combinaisons.length} combinaisons`,
+    combinaisons.every(c => typeof c.prestation === 'string' && c.prestation.trim().length > 0),
+    JSON.stringify(combinaisons.find(c => !c.prestation?.trim())))
+  verifier('et le titre non plus n\'est jamais vide',
+    combinaisons.every(c => typeof c.titre === 'string' && c.titre.trim().length > 0))
+  // `heureSeule` n'est pas de la partie : elle vaut null par construction dès
+  // que l'heure se replie sur le titre, et rien ne l'écrit alors à l'écran.
+  verifier('aucun « undefined » ne se glisse dans les libellés',
+    !combinaisons.some(c => /undefined|null|NaN/.test(`${c.titre}|${c.prestation}`)),
+    JSON.stringify(combinaisons.find(c => /undefined|null|NaN/.test(`${c.titre}|${c.prestation}`))))
+
+  // ⚠️ UNE HAUTEUR ABSENTE NE DOIT PAS SE LIRE COMME « GRAND ». `Number(null)`
+  // vaut 0 et passe les comparaisons sans bruit ; c'est le format compact,
+  // celui qui montre le plus, qui doit l'emporter.
+  egal('sans hauteur connue, on prend le format compact',
+    contenuBlocRdv({ rdv: sophie, praticienFiltre: 'all' }).heureSeule, null)
+
+  // Le seuil est un « strictement plus grand » : 36 pixels ne suffisent pas.
+  egal('à 36 pixels exactement, encore compact',
+    contenuBlocRdv({ hauteur: HAUTEUR_TROIS_LIGNES, rdv: sophie }).heureSeule, null)
+  egal('à 37, la place est là', contenuBlocRdv({ hauteur: 37, rdv: sophie }).heureSeule, '14:30')
+
+  // Sans prestation renseignée, on écrit « RDV » plutôt qu'un vide.
+  egal('un rendez-vous sans prestation dit au moins « RDV »',
+    contenuBlocRdv({ hauteur: 34, rdv: { heure_debut: '09:00:00', client_prenom: 'Luc' } }).prestation, 'RDV')
+
+  // ⚠️ ET LE COMPOSANT DOIT S'EN SERVIR. Une fonction juste dont personne
+  // n'appelle le nom laisserait le défaut intact dans l'agenda. On vise
+  // l'APPEL, jamais la simple présence d'un import.
+  // Les commentaires sont retirés d'abord : celui qui explique le défaut cite
+  // la ligne fautive, et la recherche tomberait dessus.
+  const agenda = readFileSync(new URL('../app/dashboard/AgendaRdv.js', import.meta.url), 'utf8')
+    .split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+  verifier('l\'agenda appelle contenuBlocRdv', /contenuBlocRdv\(\{/.test(agenda))
+  verifier('il affiche la ligne de prestation qui en sort', /contenu\.prestation/.test(agenda))
+  // La ligne de prestation ne doit dépendre d'AUCUNE condition de hauteur.
+  const ligneMorte = agenda.split(/\r?\n/).find(l => /contenu\.prestation/.test(l) && /hauteur|&&|\?/.test(l))
+  verifier('et cette ligne ne dépend plus d\'une hauteur', !ligneMorte, ligneMorte)
+  verifier('plus aucun seuil de 36 pixels dans le composant',
+    !/hauteur\s*[<>]=?\s*36/.test(agenda),
+    (agenda.match(/.*hauteur\s*[<>]=?\s*36.*/) || [])[0])
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // L'ALERTE « NOUVEAU RENDEZ-VOUS », QUI N'EXISTAIT PAS

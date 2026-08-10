@@ -18,6 +18,7 @@
 import { useState, useMemo, useEffect, Fragment } from 'react'
 import BandeDefilante from '@/app/components/BandeDefilante'
 import { couleurRdv, COULEUR_DEFAUT } from '@/lib/agenda-couleurs'
+import { contenuBlocRdv } from '@/lib/agenda-bloc'
 
 const T = {
   bg:      '#F8F6FF',
@@ -335,9 +336,9 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                       const dureeM = (timeToMinutes(r.heure_fin) - timeToMinutes(r.heure_debut)) || PAS_MINUTES
                       const hauteur = (dureeM / PAS_MINUTES) * HAUTEUR_CELLULE - 2  // -2 pour respiration
                       const couleurs = couleurRdv({ statut: r.statut, couleurPraticien: r.praticien?.couleur_hex })
-                      const prenom = r.client_prenom || r.client_nom?.split(' ')[0] || 'Client'
                       const heureD = r.heure_debut?.slice(0,5)
                       const heureF = r.heure_fin?.slice(0,5)
+                      const contenu = contenuBlocRdv({ hauteur, rdv: r, praticienFiltre })
                       return (
                         <div key={r.id}
                           onClick={(e) => { e.stopPropagation(); if (onSelectRdv) onSelectRdv(r) }}
@@ -388,29 +389,19 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                               </svg>
                             </div>
                           )}
-                          {/* ⚠️ SUR UN BLOC COURT, L'HEURE PASSE SUR LA MÊME LIGNE
-                              QUE LE PRÉNOM. Elle occupait une ligne à elle seule,
-                              et la prestation, reléguée en troisième, disparaissait
-                              dès que le bloc descendait sous 36 pixels : une
-                              prestation de 30 minutes n'affichait donc AUCUN nom de
-                              prestation. Le commerçant devait ouvrir chaque
-                              rendez-vous pour savoir ce qu'il avait à faire. */}
-                          {hauteur > 36 ? (
-                            <div style={{ fontSize: 9, opacity: 0.9, fontWeight: 600, lineHeight: 1 }}>{heureD}</div>
+                          {/* Ce que le bloc écrit se décide dans contenuBlocRdv,
+                              hors du composant, pour que le banc puisse l'exécuter
+                              et relire ce qui en sort. La règle qu'il applique :
+                              sur un bloc court, c'est L'HEURE qui cède sa ligne et
+                              se replie sur le prénom, jamais la prestation. */}
+                          {contenu.heureSeule ? (
+                            <div style={{ fontSize: 9, opacity: 0.9, fontWeight: 600, lineHeight: 1 }}>{contenu.heureSeule}</div>
                           ) : null}
                           <div style={{ fontWeight: 800, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {hauteur > 36 ? prenom : `${heureD} ${prenom}`}
+                            {contenu.titre}
                           </div>
-                          {/* La prestation s'affiche TOUJOURS : c'est ce que le
-                              commerçant a à faire, l'information la plus utile du
-                              bloc après l'heure. */}
                           <div style={{ fontSize: 9, opacity: 0.85, fontWeight: 600, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {/* Bug 6.2 : quand filtre "Tous", afficher le prenom du praticien
-                                  a cote de la prestation pour identifier d'un coup d'oeil qui
-                                  fait le RDV. Filtre specifique praticien = deja identifie. */}
-                              {praticienFiltre === 'all' && r.praticien?.prenom && hauteur > 36
-                                ? `${r.praticien.prenom} · ${r.prestation?.nom || 'RDV'}`
-                                : (r.prestation?.nom || 'RDV')}
+                              {contenu.prestation}
                             </div>
                         </div>
                       )

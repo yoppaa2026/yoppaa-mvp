@@ -602,8 +602,11 @@ export default function Dashboard() {
   }, [commercant?.id])
   const [filtreStatut, setFiltreStatut] = useState('actives')
   const [vueMode, setVueMode] = useState('retrait')  // vue Commandes : 'retrait' | 'livraison'
-  const [tournee, setTournee] = useState(null)       // résultat /api/livraison/tournee-optimisee
-  const [tourneeLoading, setTourneeLoading] = useState(false)
+  // Une tournée PAR CRÉNEAU : un commerçant qui livre à midi et le soir fait
+  // deux tournées distinctes, et mélanger les deux donne un itinéraire absurde.
+  // Indexées par identifiant de créneau de livraison.
+  const [tournees, setTournees] = useState({})
+  const [tourneeLoading, setTourneeLoading] = useState(null)   // id du créneau en cours de calcul
   const [jourSelectionne, setJourSelectionne] = useState(null) // null = aujourd'hui par défaut
   const [modeHistorique, setModeHistorique] = useState(false)
   const [notificationsActives, setNotificationsActives] = useState(false)
@@ -947,27 +950,36 @@ export default function Dashboard() {
 
   // Optimise l'ordre de passage des livraisons actives du jour et récupère un
   // lien d'itinéraire. commandesALivrer = livraisons non terminées du jour.
-  async function optimiserTournee(commandeIds) {
-    if (!commandeIds || commandeIds.length === 0) return
-    setTourneeLoading(true)
-    setTournee(null)
+  // Optimise UNE tournée : un créneau, un jour. Le serveur choisit lui-même
+  // les commandes concernées — on ne lui envoie plus de liste d'identifiants,
+  // qui permettait de réclamer des adresses de livraison sans être personne.
+  async function optimiserTournee(creneauLivraisonId) {
+    if (!creneauLivraisonId || !commercant?.id) return
+    setTourneeLoading(creneauLivraisonId)
+    setTournees(prev => ({ ...prev, [creneauLivraisonId]: null }))
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { alert('Session expirée, reconnecte-toi.'); return }
       const res = await fetch('/api/livraison/tournee-optimisee', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commande_ids: commandeIds }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          commercant_id: commercant.id,
+          date: jourActif,
+          creneau_livraison_id: creneauLivraisonId,
+        }),
       })
       const data = await res.json()
       if (!data.ok) {
-        alert(data.error || 'Optimisation impossible.')
+        alert(data.error === 'acces_refuse' ? 'Accès refusé.' : (data.error || 'Optimisation impossible.'))
         return
       }
-      setTournee(data)
+      setTournees(prev => ({ ...prev, [creneauLivraisonId]: data }))
     } catch (e) {
       console.error('[dashboard] optimiserTournee', e)
       alert('Erreur réseau lors de l’optimisation.')
     } finally {
-      setTourneeLoading(false)
+      setTourneeLoading(null)
     }
   }
 
@@ -1064,8 +1076,37 @@ export default function Dashboard() {
     ? commandesDuJourTous.filter(c => vueMode === 'livraison' ? c.mode_retrait === 'livraison' : c.mode_retrait !== 'livraison')
     : commandesDuJourTous
 
-  // Livraisons du jour encore à livrer (pour l'optimisation de tournée).
-  const commandesALivrer = commandesDuJour.filter(c => ['en_attente','en_preparation','pret'].includes(c.statut))
+  // Livraisons du jour encore à livrer, GROUPÉES PAR CRÉNEAU.
+  //
+  // ⚠️ UNE TOURNÉE = UN CRÉNEAU. Avant, toutes les livraisons du jour partaient
+  // dans un seul itinéraire : un commerçant livrant à midi ET le soir recevait
+  // un trajet qui mélangeait les deux, donc inutilisable. Le créneau est la
+  // seule unité qui a du sens, c'est celle qu'il annonce à ses clients.
+  const commandesALivrer = commandesDuJour
+    .filter(c => ['en_attente','en_preparation','pret'].includes(c.statut))
+    .filter(c => (c.statut_livraison || null) !== 'livree')
+
+  const tourneesDuJour = (() => {
+    const par = new Map()
+    for (const c of commandesALivrer) {
+      const id = c.creneau_livraison_id
+      if (!id) continue   // sans créneau, pas de tournée : traité à la main
+      if (!par.has(id)) {
+        par.set(id, {
+          id,
+          heure_debut: c.creneau_livraison?.heure_debut || null,
+          heure_fin: c.creneau_livraison?.heure_fin || null,
+          commandes: [],
+        })
+      }
+      par.get(id).commandes.push(c)
+    }
+    return [...par.values()].sort((a, b) => String(a.heure_debut || '').localeCompare(String(b.heure_debut || '')))
+  })()
+
+  // Les livraisons sans créneau : elles n'entrent dans aucune tournée. On le
+  // DIT plutôt que de les laisser disparaître de l'écran d'organisation.
+  const livraisonsSansCreneau = commandesALivrer.filter(c => !c.creneau_livraison_id)
 
   const stats = {
     nouvelles:  commandesDuJour.filter(c => c.statut === 'en_attente').length,
@@ -1698,17 +1739,25 @@ export default function Dashboard() {
           <div className="scroll-zone">
             {ongletPrincipal === 'commandes' && (
               <>
-                {/* Tournée optimisée (vue Livraison, jour courant, livraisons à faire) */}
-                {vueMode === 'livraison' && !modeHistorique && commandesALivrer.length > 0 && (
-                  <div style={{ background: 'linear-gradient(135deg, #EEF2FF, #fff)', border: '1.5px solid #4F46E533', borderRadius: 14, padding: '0.875rem 1rem', margin: '0 0 0.875rem' }}>
+                {/* Tournées du jour, UNE PAR CRÉNEAU (vue Livraison) */}
+                {vueMode === 'livraison' && !modeHistorique && tourneesDuJour.map(t => {
+                  const tournee = tournees[t.id]
+                  const enCours = tourneeLoading === t.id
+                  const plage = t.heure_debut && t.heure_fin
+                    ? `${String(t.heure_debut).slice(0, 5)} – ${String(t.heure_fin).slice(0, 5)}`
+                    : 'Créneau'
+                  return (
+                  <div key={t.id} style={{ background: 'linear-gradient(135deg, #EEF2FF, #fff)', border: '1.5px solid #4F46E533', borderRadius: 14, padding: '0.875rem 1rem', margin: '0 0 0.875rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 20l-5.5 2V6l5.5-2m0 16l6-2m-6 2V4m6 14l5.5 2V6l-5.5-2m0 16V4m0 0L9 6" stroke="#4F46E5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        <span style={{ fontWeight: 800, color: T.ink, fontSize: 14 }}>Tournée du jour · {commandesALivrer.length} livraison{commandesALivrer.length > 1 ? 's' : ''}</span>
+                        <span style={{ fontWeight: 800, color: T.ink, fontSize: 14 }}>
+                          Tournée {plage} · {t.commandes.length} livraison{t.commandes.length > 1 ? 's' : ''}
+                        </span>
                       </div>
-                      <button onClick={() => optimiserTournee(commandesALivrer.map(c => c.id))} disabled={tourneeLoading}
-                        style={{ padding: '8px 14px', borderRadius: 100, border: 'none', background: tourneeLoading ? '#A5B4FC' : 'linear-gradient(135deg, #4F46E5, #6366F1)', color: '#fff', fontWeight: 800, fontSize: 13, cursor: tourneeLoading ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 14px #4F46E544' }}>
-                        {tourneeLoading ? 'Calcul…' : 'Optimiser la tournée'}
+                      <button onClick={() => optimiserTournee(t.id)} disabled={!!tourneeLoading}
+                        style={{ padding: '8px 14px', borderRadius: 100, border: 'none', background: enCours ? '#A5B4FC' : 'linear-gradient(135deg, #4F46E5, #6366F1)', color: '#fff', fontWeight: 800, fontSize: 13, cursor: tourneeLoading ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 14px #4F46E544' }}>
+                        {enCours ? 'Calcul…' : 'Optimiser la tournée'}
                       </button>
                     </div>
 
@@ -1727,21 +1776,44 @@ export default function Dashboard() {
 
                         {tournee.sans_coords?.length > 0 && (
                           <p style={{ fontSize: 11.5, color: '#B45309', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '6px 9px', marginTop: 8 }}>
-                            {tournee.sans_coords.length} commande{tournee.sans_coords.length > 1 ? 's' : ''} sans adresse géolocalisée, non incluse{tournee.sans_coords.length > 1 ? 's' : ''} dans l’itinéraire (#{tournee.sans_coords.map(s => s.numero).join(', #')}).
+                            {tournee.sans_coords.length} commande{tournee.sans_coords.length > 1 ? 's' : ''} sans adresse géolocalisée, non incluse{tournee.sans_coords.length > 1 ? 's' : ''} dans l’itinéraire (#{tournee.sans_coords.map(s => s.numero).join(', #')}). À faire à la main.
                           </p>
                         )}
 
-                        <a href={tournee.itineraire_url} target="_blank" rel="noopener noreferrer"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '9px 16px', borderRadius: 100, background: T.ink, color: '#fff', fontWeight: 800, fontSize: 13, textDecoration: 'none' }}>
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" stroke="#fff" strokeWidth="2"/><circle cx="12" cy="10" r="3" stroke="#fff" strokeWidth="2"/></svg>
-                          Ouvrir l’itinéraire
-                        </a>
+                        {/* ⚠️ Maps n'accepte que 9 étapes par lien : au-delà il les
+                            ignore SANS RIEN DIRE. On découpe, et on annonce le
+                            découpage plutôt que de laisser croire à un trajet complet. */}
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                          {(tournee.itineraires || []).map((seg, i) => (
+                            <a key={i} href={seg.url} target="_blank" rel="noopener noreferrer"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 100, background: T.ink, color: '#fff', fontWeight: 800, fontSize: 13, textDecoration: 'none' }}>
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" stroke="#fff" strokeWidth="2"/><circle cx="12" cy="10" r="3" stroke="#fff" strokeWidth="2"/></svg>
+                              {(tournee.itineraires || []).length > 1
+                                ? `Itinéraire ${i + 1}/${tournee.itineraires.length} · #${seg.de} → #${seg.a}`
+                                : 'Ouvrir l’itinéraire'}
+                            </a>
+                          ))}
+                        </div>
+                        {(tournee.itineraires || []).length > 1 && (
+                          <span style={{ display: 'block', fontSize: 10.5, color: T.muted, marginTop: 6 }}>
+                            Maps limite un itinéraire à dix arrêts : ta tournée est découpée en {tournee.itineraires.length} liens qui s’enchaînent.
+                          </span>
+                        )}
                         {tournee.methode === 'plus_proche_voisin' && (
                           <span style={{ display: 'block', fontSize: 10.5, color: T.muted, marginTop: 6 }}>Ordre calculé au plus proche. Itinéraire routier optimal via l’app Maps.</span>
                         )}
                       </div>
                     )}
                   </div>
+                  )
+                })}
+
+                {/* Livraisons sans créneau : elles n'entrent dans aucune tournée. */}
+                {vueMode === 'livraison' && !modeHistorique && livraisonsSansCreneau.length > 0 && (
+                  <p style={{ fontSize: 12, color: '#B45309', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 10, padding: '8px 11px', margin: '0 0 0.875rem' }}>
+                    {livraisonsSansCreneau.length} livraison{livraisonsSansCreneau.length > 1 ? 's' : ''} sans créneau (#{livraisonsSansCreneau.map(c => c.numero_commande).join(', #')}) :
+                    elle{livraisonsSansCreneau.length > 1 ? 's n\'entrent' : ' n\'entre'} dans aucune tournée, à organiser à la main.
+                  </p>
                 )}
                 {loading && (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem', gap: 10 }}>

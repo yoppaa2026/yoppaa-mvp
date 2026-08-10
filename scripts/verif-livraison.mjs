@@ -152,6 +152,101 @@ verifier('la migration ajoute la colonne', /ADD COLUMN IF NOT EXISTS minimum_com
 verifier('sa vérification interroge la base', /information_schema\.columns/.test(mig))
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 6. LA TOURNÉE (10/08)
+// ═══════════════════════════════════════════════════════════════════════════
+const tournee = lire('app/api/livraison/tournee-optimisee/route.js')
+const tourneeCode = tournee.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+
+// ⚠️ LA FUITE D'ADRESSES. La première version acceptait une liste
+// d'identifiants de commande venue du navigateur, SANS AUCUNE
+// AUTHENTIFICATION, lisait en service_role et renvoyait pour chacun
+// l'ADRESSE DE LIVRAISON. Quiconque présentait des identifiants obtenait les
+// adresses des clients, et pouvait même mélanger plusieurs commerçants dans un
+// seul appel : le premier servait de point de départ, tous les autres
+// livraient leurs adresses.
+// ⚠️ ON VÉRIFIE L'APPEL, PAS L'EXISTENCE DU CONTRÔLE. Mes premiers tests
+// cherchaient `auth_user_id !== user.id` n'importe où dans le fichier : ils
+// restaient verts quand on supprimait l'APPEL en gardant la fonction. Un
+// garde-fou jamais appelé ne garde rien.
+verifier('la tournée exige un jeton', /authorization/i.test(tourneeCode))
+verifier('le contrôle de propriété existe', /auth_user_id !== user\.id/.test(tourneeCode))
+verifier('et il est réellement APPELÉ',
+  /const commercant = await commercantDuProprietaire\(supabase, request, commercant_id\)/.test(tourneeCode))
+verifier('son échec coupe la requête',
+  /if \(!commercant\) \{[\s\S]{0,120}?status: 403/.test(tourneeCode))
+// LE TEST QUI COMPTE : la route ne doit accepter AUCUN identifiant de commande.
+// C'est elle qui choisit les commandes, à partir du commerce authentifié.
+verifier('la route n\'accepte plus de liste de commandes', !/commande_ids/.test(tourneeCode))
+verifier('elle sélectionne les commandes elle-même',
+  /\.eq\('commercant_id', commercant\.id\)/.test(tourneeCode))
+verifier('le tableau de bord envoie son jeton',
+  /Authorization: `Bearer \$\{session\.access_token\}`/.test(lire('app/dashboard/page.js')))
+
+// ⚠️ UNE TOURNÉE = UN CRÉNEAU. Avant, toutes les livraisons du jour partaient
+// dans un seul itinéraire : un commerçant livrant à midi ET le soir recevait
+// un trajet mélangeant les deux, donc inutilisable.
+verifier('la tournée porte sur un créneau', /creneau_livraison_id/.test(tourneeCode))
+verifier('et sur un jour précis', /\.eq\('date_commande', date\)/.test(tourneeCode))
+const dashLiv = lire('app/dashboard/page.js')
+// Là aussi, on vise la DÉCLARATION exacte : chercher le mot laissait passer un
+// simple renommage, et le regroupement disparaissait sans faire rougir.
+verifier('le tableau de bord groupe les livraisons par créneau',
+  /const tourneesDuJour = /.test(dashLiv) && /tourneesDuJour\.map\(t =>/.test(dashLiv))
+verifier('il annonce la plage horaire de chaque tournée', /Tournée \{plage\}/.test(dashLiv))
+// Une livraison sans créneau n'entre dans aucune tournée : le dire plutôt que
+// de la laisser disparaître de l'écran d'organisation.
+verifier('les livraisons sans créneau sont signalées', /livraisonsSansCreneau/.test(dashLiv))
+
+// ⚠️ GOOGLE MAPS N'ACCEPTE QUE NEUF ÉTAPES par lien, et IGNORE le reste SANS
+// RIEN DIRE. Un commerçant avec quinze livraisons croirait avoir son
+// itinéraire complet et en oublierait cinq sur la route.
+verifier('les arrêts sont découpés par lien', /ARRETS_PAR_LIEN/.test(tourneeCode))
+verifier('la limite reste sous celle de Maps',
+  Number(/const ARRETS_PAR_LIEN = (\d+)/.exec(tourneeCode)?.[1]) <= 10)
+verifier('plusieurs liens sont renvoyés', /itineraires: liensItineraire/.test(tourneeCode))
+verifier('le découpage est annoncé au commerçant', /Maps limite un itinéraire à dix arrêts/.test(dashLiv))
+// Chaque segment repart du dernier arrêt du précédent, sinon la tournée
+// recommencerait au commerce à chaque lien.
+verifier('les segments s\'enchaînent', /origine = destination/.test(tourneeCode))
+
+// ⚠️ LE DÉPART VIENT DE LA FICHE, pas d'un géocodage à chaque clic. Nominatim
+// est un service public dont la règle d'usage est d'une requête par seconde :
+// le rappeler à chaque optimisation est un gaspillage et un risque de blocage.
+verifier('le départ utilise les coordonnées du commerce', /commercant\.latitude/.test(tourneeCode))
+verifier('le géocodage n\'est qu\'un dernier recours',
+  tourneeCode.indexOf('commercant.latitude') < tourneeCode.indexOf('geocoderAdresse('))
+
+// Une commande déjà livrée n'a rien à faire dans une tournée.
+verifier('les livrées sont exclues', /\.neq\('statut_livraison', 'livree'\)/.test(tourneeCode))
+verifier('les statuts occupants viennent du module partagé',
+  /STATUTS_OCCUPENT_CRENEAU/.test(tourneeCode))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 7. LA SÉPARATION CLICK & COLLECT / LIVRAISON
+// ═══════════════════════════════════════════════════════════════════════════
+// Deux métiers, deux écrans. Un commerçant au comptoir ne doit pas voir les
+// livraisons dans sa file de retraits, et inversement.
+verifier('le tableau de bord sépare les deux vues',
+  /vueMode === 'livraison' \? c\.mode_retrait === 'livraison' : c\.mode_retrait !== 'livraison'/.test(dashLiv))
+verifier('la bascule n\'apparaît que si le commerce livre', /const livraisonActive = !!commercant\?\.livraison_actif/.test(dashLiv))
+
+const fiche = lire('app/commander/[slug]/page.js')
+// Côté client : le mode livraison n'existe que si le commerçant l'a activé ET
+// configuré. Un commerce sans zone ne doit pas proposer un choix qui échouera.
+verifier('la livraison client exige activation ET configuration',
+  /livraison_actif && livraisonConfig && livraisonConfig\.codes_postaux\?\.length > 0/.test(fiche))
+// Les créneaux ne se mélangent jamais : deux tables, deux états, deux
+// calendriers.
+verifier('les créneaux de livraison sont un état séparé', /joursDisposLivraison/.test(fiche))
+verifier('le créneau choisi est distinct de celui du retrait', /creneauLivraisonChoisi/.test(fiche))
+verifier('la commande envoie l\'un OU l\'autre', /creneau_livraison_id: creneauLivraisonChoisi\?\.id/.test(fiche))
+// Le serveur ne doit jamais accepter un créneau de retrait pour une livraison.
+verifier('le serveur lit le créneau dans la bonne table',
+  /estLivraison[\s\S]{0,300}?from\('livraison_creneaux'\)/.test(route))
+verifier('et range la commande du bon côté',
+  /creneau_id: \(estLivraison \|\| estBoutique\) \? null : creneau\.id/.test(route)
+  && /creneau_livraison_id: estLivraison \? creneau\.id : null/.test(route))
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

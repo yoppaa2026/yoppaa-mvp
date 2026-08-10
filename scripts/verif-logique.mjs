@@ -23,6 +23,7 @@ import { ventilerFrais } from '../lib/stripe-frais.js'
 import { contexteRetrait, textesRetrait, textesConfirmation } from '../lib/ecran-retrait.js'
 import { emailCommandeExpediee } from '../lib/resend.js'
 import { partagerCommandes } from '../lib/commandes-vue.js'
+import { restaurerStockVariantes } from '../lib/stock-variantes-server.js'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -384,6 +385,118 @@ verifier('pas de centime perdu à l’arrondi', Math.abs((v.rdv.frais + v.comman
 
 verifier('total nul = pas de ventilation', ventilerFrais(1.00, 0, 0) === null)
 verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === null)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE STOCK DES VERSIONS QUI NE REVENAIT JAMAIS
+// ═══════════════════════════════════════════════════════════════════════════
+// Yoppaa gère le stock de deux façons. En ALIMENTAIRE, une réservation à durée
+// de vie : le client abandonne, la note expire toute seule, rien à se rappeler.
+// En BOUTIQUE DE DÉTAIL, un décrément en dur de `article_variantes.stock`, fait
+// AVANT le paiement, qu'il faut penser à rendre.
+//
+// ⚠️ PERSONNE N'Y PENSAIT, SUR AUCUNE DES TROIS SORTIES : abandon du paiement
+// Stripe, expiration par le cron, annulation par le client. L'abandon de panier
+// étant le cas le plus courant du commerce en ligne, le stock d'une boutique se
+// vidait tout seul. Le commerçant finissait par afficher « épuisé » sur un
+// article dont il avait trois exemplaires sur l'étagère.
+//
+// On EXÉCUTE la restitution contre une fausse base, et on lit les stocks après.
+{
+  function fausseBase({ lignes, versions }) {
+    const stocks = new Map(versions.map(v => [v.id, v.stock]))
+    const appels = []
+    const api = {
+      from(table) {
+        const q = { table, _ids: null, _filtres: [] }
+        q.select = () => q
+        q.in = (col, vals) => { q._ids = vals; return q }
+        q.not = () => q
+        q.eq = (col, val) => { q._eq = val; return q }
+        q.update = (patch) => { q._patch = patch; return q }
+        // `await` sur la requête : c'est ici que la fausse base répond.
+        q.then = (resoudre) => {
+          if (q.table === 'commande_articles') {
+            return resoudre({ data: lignes.filter(l => q._ids.includes(l.commande_id) && l.variante_id), error: null })
+          }
+          if (q.table === 'article_variantes' && q._patch) {
+            appels.push({ id: q._eq, stock: q._patch.stock })
+            stocks.set(q._eq, q._patch.stock)
+            return resoudre({ error: null })
+          }
+          if (q.table === 'article_variantes') {
+            return resoudre({ data: [...stocks].filter(([id]) => q._ids.includes(id)).map(([id, stock]) => ({ id, stock })), error: null })
+          }
+          return resoudre({ data: [], error: null })
+        }
+        return q
+      },
+    }
+    return { api, stocks, appels }
+  }
+
+  // Deux pièces d'une même version dans la commande, plus une autre version.
+  const base = fausseBase({
+    lignes: [
+      { commande_id: 'c1', variante_id: 'vM', quantite: 2 },
+      { commande_id: 'c1', variante_id: 'vL', quantite: 1 },
+      { commande_id: 'c1', variante_id: null, quantite: 5 },   // article sans version
+      { commande_id: 'c2', variante_id: 'vM', quantite: 3 },   // autre commande
+    ],
+    versions: [{ id: 'vM', stock: 0 }, { id: 'vL', stock: 4 }],
+  })
+  const r1 = await restaurerStockVariantes(base.api, ['c1'])
+  verifier('la restitution aboutit', r1.ok === true)
+  egal('la version commandée deux fois récupère ses deux pièces', base.stocks.get('vM'), 2)
+  egal('l\'autre version récupère la sienne', base.stocks.get('vL'), 5)
+  egal('deux versions touchées, pas plus', r1.rendues, 2)
+
+  // ⚠️ ON ADDITIONNE AVANT D'ÉCRIRE. Deux lignes sur la même version, ou deux
+  // commandes annulées d'un coup, ne doivent pas donner deux écritures
+  // concurrentes dont l'une écraserait l'autre.
+  const base2 = fausseBase({
+    lignes: [
+      { commande_id: 'c1', variante_id: 'vM', quantite: 2 },
+      { commande_id: 'c2', variante_id: 'vM', quantite: 3 },
+    ],
+    versions: [{ id: 'vM', stock: 1 }],
+  })
+  await restaurerStockVariantes(base2.api, ['c1', 'c2'])
+  egal('deux commandes d\'un coup : une seule écriture, le total est juste', base2.stocks.get('vM'), 6)
+  egal('et une seule écriture a bien été faite', base2.appels.length, 1)
+
+  // Une commande sans aucune version ne doit rien écrire du tout.
+  const base3 = fausseBase({
+    lignes: [{ commande_id: 'c9', variante_id: null, quantite: 4 }],
+    versions: [{ id: 'vM', stock: 7 }],
+  })
+  const r3 = await restaurerStockVariantes(base3.api, ['c9'])
+  egal('sans version, rien n\'est touché', r3.rendues, 0)
+  egal('et le stock des autres versions ne bouge pas', base3.stocks.get('vM'), 7)
+
+  // Appelée sans commande : elle ne doit pas partir interroger la base.
+  egal('sans commande, elle ne fait rien', await restaurerStockVariantes(base3.api, []), { ok: true, rendues: 0 })
+}
+
+// ⚠️ LES TROIS SORTIES DOIVENT L'APPELER, et chacune sur une transition RÉELLE :
+// un `update(...)` filtré sur l'ancien statut, dont on lit le résultat. Sans
+// cette précaution, un webhook rejoué rendrait le stock une seconde fois et le
+// commerçant vendrait des pièces qu'il n'a pas.
+for (const [chemin, sortie] of [
+  ['app/api/cron/expire-reservations/route.js', 'l\'expiration par le cron'],
+  ['app/api/commande/cancel/route.js', 'l\'annulation par le client'],
+  ['app/api/stripe/webhook/route.js', 'l\'abandon du paiement'],
+]) {
+  const src = readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
+  verifier(`${sortie} rend le stock`, /restaurerStockVariantes\(/.test(src), chemin)
+  verifier(`${sortie} ne le rend que sur une bascule réelle`,
+    /\.eq\('statut', 'paiement_en_attente'\)[\s\S]{0,80}?\.select\('id'\)/.test(src)
+    || /\.neq\('statut', 'annulee_client_refund'\)[\s\S]{0,80}?\.select\('id'\)/.test(src), chemin)
+}
+// Et la version doit être ENREGISTRÉE, sans quoi il n'y a rien à rendre.
+verifier('la ligne de commande retient la version vendue',
+  /variante_id: variante \? variante\.id : null/.test(readFileSync(new URL('../lib/lignes-commande.js', import.meta.url), 'utf8')))
+verifier('et l\'insertion l\'écrit en base',
+  /variante_id: l\.variante_id/.test(readFileSync(new URL('../app/api/stripe/checkout/create-commande/route.js', import.meta.url), 'utf8')))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA COMMANDE DE BOUTIQUE QUI DISPARAISSAIT LE LENDEMAIN

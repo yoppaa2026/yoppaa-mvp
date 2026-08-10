@@ -543,6 +543,12 @@ export async function POST(request) {
         // POUR TOUJOURS — y compris en comptabilité, où un justificatif doit
         // tenir des années.
         article_nom: l.article_nom,
+        // ⚠️ LA VERSION VENDUE, et sans elle le stock ne peut PAS être rendu.
+        // Elle n'existait que sous forme de libellé dans `options` (« Version :
+        // M · Bleu »), et un libellé n'est pas une clé : deux versions peuvent
+        // porter le même nom après un renommage. Le stock d'une commande
+        // abandonnée était donc perdu pour toujours.
+        variante_id: l.variante_id || null,
         quantite: l.quantite,
         prix_unitaire: l.prix_unitaire,
         options: l.options,

@@ -14,7 +14,15 @@
 //      n'arrive JAMAIS (endpoint KO durablement, PI jamais finalisé), la commande
 //      reste indéfiniment en attente de paiement. On la bascule sur le statut
 //      terminal 'annulee_paiement_ko' (le même que le webhook payment_intent.
-//      canceled). Le stock a déjà été libéré par le point 1.
+//      canceled). Le stock ALIMENTAIRE a déjà été libéré par le point 1.
+//
+//   3. Stock des VERSIONS (boutique détail) rendu. ⚠️ Ce point manquait, et il
+//      manquait depuis toujours : « le stock a déjà été libéré » ne valait que
+//      pour l'alimentaire, qui réserve avec une durée de vie. Les versions,
+//      elles, sont décrémentées EN DUR avant le paiement. Chaque panier
+//      abandonné retirait une pièce des rayons de Yoppaa sans qu'elle quitte
+//      l'étagère du magasin, jusqu'à afficher « épuisé » sur un article
+//      parfaitement disponible.
 //      Sûr vs webhook tardif : si un paiement réussi arrive après coup, le handler
 //      webhook revive la commande (sa garde d'idempotence ne skippe que si
 //      paye_en_ligne=true, or ici il est resté false). Pas de "argent pris mais
@@ -24,6 +32,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 
 export async function GET(request) {
   const authHeader = request.headers.get('authorization') || ''
@@ -65,10 +74,31 @@ export async function GET(request) {
       return NextResponse.json({ ok: false, error: errCmd.message }, { status: 500 })
     }
 
+    // ─── 3) Rendre le stock des VERSIONS (boutique détail) ─────────────────
+    //
+    // ⚠️ LE COMMENTAIRE DU HAUT DE CE FICHIER DISAIT « le stock a déjà été
+    // libéré par le point 1 ». C'était vrai pour l'alimentaire, qui passe par
+    // une réservation à durée de vie. Ce ne l'a JAMAIS été pour les versions de
+    // la boutique de détail : leur stock est un décrément en dur de
+    // `article_variantes.stock`, fait avant le paiement, et que personne ne
+    // rendait. Chaque panier abandonné retirait donc une pièce des rayons de
+    // Yoppaa sans qu'elle quitte l'étagère du magasin.
+    //
+    // ⚠️ L'UPDATE CI-DESSUS EST NOTRE GARANTIE DE NE PAS RENDRE DEUX FOIS : il
+    // ne rend que les lignes qu'il a RÉELLEMENT fait basculer, grâce au filtre
+    // sur l'ancien statut. Une seconde exécution du cron ne trouve plus rien.
+    const idsExpirees = (commandes || []).map(c => c.id)
+    const restitution = await restaurerStockVariantes(supabase, idsExpirees)
+    if (!restitution.ok) {
+      // Non bloquant : le nettoyage principal a réussi, on le dit et on trace.
+      console.error('[cron/expire-reservations] restitution stock versions KO', restitution.error)
+    }
+
     return NextResponse.json({
       ok: true,
       deleted: reservations?.length || 0,
       commandes_expirees: commandes?.length || 0,
+      versions_rendues: restitution.rendues || 0,
     })
   } catch (e) {
     console.error('[cron/expire-reservations] exception', e)

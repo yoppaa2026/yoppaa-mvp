@@ -20,6 +20,7 @@ import { envoyerAuCommercant, emailCommandeAnnuleeYopper, emailCommandeAnnuleeCo
 import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
 import { recrediterBon } from '@/lib/bons-cadeaux-server'
+import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 
 export async function POST(request) {
   try {
@@ -153,7 +154,11 @@ export async function POST(request) {
     }
 
     // ─── 6) UPDATE commande (statut + annulee_at + motif) ──────────────────
-    const { error: errUpd } = await supabase
+    // ⚠️ `.neq('statut', 'annulee_client_refund')` ET `.select()` : l'UPDATE ne
+    // rend une ligne QUE s'il a réellement fait basculer la commande. C'est ce
+    // qui garantit qu'un double clic, ou un rejeu, ne rende pas le stock deux
+    // fois quelques lignes plus bas.
+    const { data: basculees, error: errUpd } = await supabase
       .from('commandes')
       .update({
         statut: 'annulee_client_refund',
@@ -161,9 +166,22 @@ export async function POST(request) {
         annulation_motif: 'client',
       })
       .eq('id', cmd.id)
+      .neq('statut', 'annulee_client_refund')
+      .select('id')
     if (errUpd) {
       console.error('[commande/cancel] UPDATE statut KO', errUpd)
       return NextResponse.json({ ok: false, error: 'Erreur mise à jour commande.' }, { status: 500 })
+    }
+
+    // ─── Rendre le stock des VERSIONS (boutique détail) ────────────────────
+    // Leur stock est décrémenté EN DUR à la commande, avant le paiement, et
+    // personne ne le rendait : une annulation retirait la pièce des rayons de
+    // Yoppaa alors qu'elle était toujours sur l'étagère du magasin.
+    if ((basculees || []).length > 0) {
+      const restitution = await restaurerStockVariantes(supabase, [cmd.id])
+      if (!restitution.ok) {
+        console.error('[commande/cancel] restitution stock versions KO', restitution.error, { commande_id: cmd.id })
+      }
     }
 
     // Bon cadeau utilisé sur la commande : la part payée par le bon revient

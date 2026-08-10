@@ -30,6 +30,7 @@ import { programmerRappelRdv } from '@/lib/rappels'
 import { recupererFraisStripe, ventilerFrais } from '@/lib/stripe-frais'
 import { crediterFidelite } from '@/lib/fidelite-server'
 import { canDo } from '@/lib/plans'
+import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -580,16 +581,36 @@ async function handlePaymentIntentFailed(paymentIntent, supabase) {
     return
   }
 
-  await supabase
+  // ⚠️ LE FILTRE SUR L'ANCIEN STATUT EST DANS L'UPDATE, pas seulement dans la
+  // lecture au-dessus. Deux livraisons du même événement en parallèle passent
+  // toutes les deux la lecture ; une seule fait basculer la ligne. C'est cette
+  // bascule, et elle seule, qui autorise à rendre le stock plus bas.
+  const { data: basculees } = await supabase
     .from('commandes')
     .update({ statut: 'annulee_paiement_ko' })
     .eq('id', commandeId)
+    .eq('statut', 'paiement_en_attente')
+    .select('id')
 
-  // Libère immédiatement les réservations stock
+  // Libère immédiatement les réservations stock (alimentaire)
   await supabase
     .from('commande_stock_reservation')
     .delete()
     .eq('commande_id', commandeId)
+
+  // ⚠️ ET LE STOCK DES VERSIONS (boutique détail), que RIEN ne rendait. Il est
+  // décrémenté en dur avant le paiement : un client qui ferme Stripe Checkout
+  // emportait donc sa pièce définitivement hors des rayons de Yoppaa, alors
+  // qu'elle n'avait jamais quitté l'étagère du magasin. L'abandon de panier
+  // étant le cas le plus courant du commerce en ligne, le stock d'une boutique
+  // se vidait tout seul jusqu'à afficher « épuisé » sur des articles
+  // parfaitement disponibles.
+  if ((basculees || []).length > 0) {
+    const restitution = await restaurerStockVariantes(supabase, [commandeId])
+    if (!restitution.ok) {
+      console.error('[webhook/PI failed] restitution stock versions KO', restitution.error, { commandeId })
+    }
+  }
 
   console.info('[webhook/PI failed] commande annulée KO + stock libéré', { commandeId, pi: paymentIntent.id })
 }

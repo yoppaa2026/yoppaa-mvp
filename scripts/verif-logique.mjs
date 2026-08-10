@@ -30,7 +30,7 @@ import { messagePanierRepris } from '../lib/panier-repris-message.js'
 import { normaliserEmail, memeEmail } from '../lib/email-normalise.js'
 import {
   referenceCommande, referenceComplete, referenceAvecNom,
-  prefixePourCommande, libelleSemaine,
+  prefixePourCommande, libelleSemaine, referenceRdv, referenceRdvComplete, PREFIXES,
 } from '../lib/numero-commande.js'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -410,39 +410,48 @@ verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === n
 //    pouvait chercher « 12 » là où son client annonçait « 3 ». Le repli est
 //    supprimé partout : une commande sans référence n'en affiche aucune, plutôt
 //    qu'un chiffre inventé.
-egal('un Click & Collect porte son C', referenceCommande({ numero_commande: 12, numero_prefixe: 'C' }), 'C12')
-egal('une livraison porte son L', referenceCommande({ numero_commande: 5, numero_prefixe: 'L' }), 'L5')
-egal('une expédition porte son E', referenceCommande({ numero_commande: 3, numero_prefixe: 'E' }), 'E3')
-egal('un retrait en magasin n\'a pas de préfixe', referenceCommande({ numero_commande: 12, numero_prefixe: '' }), '12')
-egal('ni quand le préfixe est absent', referenceCommande({ numero_commande: 12 }), '12')
+egal('un Click & Collect porte son CC', referenceCommande({ numero_commande: 12, numero_prefixe: 'CC' }), 'CC12')
+egal('une livraison porte son LI', referenceCommande({ numero_commande: 5, numero_prefixe: 'LI' }), 'LI5')
+egal('une expédition porte son EX', referenceCommande({ numero_commande: 3, numero_prefixe: 'EX' }), 'EX3')
+egal('un retrait en magasin porte son RE', referenceCommande({ numero_commande: 12, numero_prefixe: 'RE' }), 'RE12')
+egal('un rendez-vous porte son RV', referenceRdv({ numero_rdv: 7, numero_prefixe: 'RV' }), 'RV7')
+egal('un rendez-vous sans préfixe stocké le déduit', referenceRdv({ numero_rdv: 7 }), 'RV7')
+egal('sans préfixe du tout, le numéro seul', referenceCommande({ numero_commande: 12 }), '12')
 // ⚠️ SANS NUMÉRO, ON N'INVENTE RIEN. C'était tout le problème du repli.
 egal('pas de numéro, pas de référence', referenceCommande({ numero_commande: null }), null)
 egal('ni avec une valeur qui n\'est pas un nombre', referenceCommande({ numero_commande: 'douze' }), null)
 egal('sans rien du tout non plus', referenceCommande({}), null)
 // Le zéro n'est pas un numéro valide : le compteur commence à 1.
-egal('le numéro zéro reste affichable tel quel', referenceCommande({ numero_commande: 0, numero_prefixe: 'C' }), 'C0')
+egal('le numéro zéro reste affichable tel quel', referenceCommande({ numero_commande: 0, numero_prefixe: 'CC' }), 'CC0')
 
 // Le préfixe se calcule comme en base, pour pouvoir l'annoncer avant la commande.
 // ⚠️ Le Click & Collect se reconnaît à son CRÉNEAU : un retrait en magasin porte
 // le MÊME `mode_retrait` et n'a pas d'heure convenue. C'est la seule différence.
-egal('livraison', prefixePourCommande({ mode_retrait: 'livraison' }), 'L')
-egal('expédition', prefixePourCommande({ mode_retrait: 'expedition' }), 'E')
-egal('retrait avec créneau : Click & Collect', prefixePourCommande({ mode_retrait: 'retrait', creneau_id: 'x' }), 'C')
-egal('retrait sans créneau : magasin, sans préfixe', prefixePourCommande({ mode_retrait: 'retrait' }), '')
-egal('rien du tout : sans préfixe', prefixePourCommande({}), '')
+egal('livraison', prefixePourCommande({ mode_retrait: 'livraison' }), 'LI')
+egal('expédition', prefixePourCommande({ mode_retrait: 'expedition' }), 'EX')
+egal('retrait avec créneau : Click & Collect', prefixePourCommande({ mode_retrait: 'retrait', creneau_id: 'x' }), 'CC')
+egal('retrait sans créneau : magasin', prefixePourCommande({ mode_retrait: 'retrait' }), 'RE')
+egal('rien du tout : traité comme un retrait en magasin', prefixePourCommande({}), 'RE')
+// ⚠️ Deux lettres partout : aucun préfixe ne doit être vide ni long d'une seule
+// lettre, sinon la référence redevient ambiguë à l'oral et à l'écrit.
+for (const p of Object.keys(PREFIXES)) {
+  verifier(`le préfixe ${p} fait bien deux lettres`, /^[A-Z]{2}$/.test(p), p)
+}
 
 // La semaine lève la confusion d'une semaine à l'autre, là où on relit.
 egal('la semaine se dit simplement', libelleSemaine('2026-33'), 'sem. 33')
 egal('sans zéro inutile', libelleSemaine('2026-07'), 'sem. 7')
 egal('une semaine absente ne dit rien', libelleSemaine(null), null)
 egal('la référence complète porte la semaine',
-  referenceComplete({ numero_commande: 12, numero_prefixe: 'C', numero_semaine: '2026-33' }), 'C12 · sem. 33')
+  referenceComplete({ numero_commande: 12, numero_prefixe: 'CC', numero_semaine: '2026-33' }), 'CC12 · sem. 33')
 egal('sans semaine, elle reste courte',
-  referenceComplete({ numero_commande: 12, numero_prefixe: 'C' }), 'C12')
+  referenceComplete({ numero_commande: 12, numero_prefixe: 'CC' }), 'CC12')
+egal('un rendez-vous aussi porte sa semaine',
+  referenceRdvComplete({ numero_rdv: 7, numero_semaine: '2026-33' }), 'RV7 · sem. 33')
 // Au comptoir, le numéro va avec le prénom : c'est comme ça qu'on appelle
 // quelqu'un dans une file.
 egal('au comptoir, le prénom accompagne',
-  referenceAvecNom({ numero_commande: 12, numero_prefixe: 'C', client_prenom: 'Sophie' }), 'C12 · Sophie')
+  referenceAvecNom({ numero_commande: 12, numero_prefixe: 'CC', client_prenom: 'Sophie' }), 'CC12 · Sophie')
 egal('à défaut, le premier mot du nom',
   referenceAvecNom({ numero_commande: 12, client_nom: 'Dupont Jean' }), '12 · Dupont')
 egal('sans nom, le numéro seul', referenceAvecNom({ numero_commande: 12 }), '12')
@@ -480,7 +489,16 @@ for (const [chemin, ecran] of [
   verifier('un numéro déjà posé n\'est jamais recalculé',
     /IF NEW\.numero_commande IS NOT NULL THEN[\s\S]{0,60}?RETURN NEW/.test(mig))
   verifier('le préfixe distingue le créneau du retrait en magasin',
-    /NEW\.creneau_id IS NOT NULL\s+THEN 'C'/.test(mig))
+    /NEW\.creneau_id IS NOT NULL\s+THEN 'CC'/.test(mig) && /ELSE 'RE'/.test(mig))
+  // Les rendez-vous entrent dans le même mécanisme, avec leur propre préfixe.
+  verifier('les rendez-vous sont numérotés eux aussi',
+    /CREATE TRIGGER trg_set_rdv_numero/.test(mig) && /'RV'/.test(mig))
+  // ⚠️ Deux déclencheurs qui numérotent la même colonne se marcheraient dessus :
+  // on retire d'abord celui qui existerait déjà.
+  verifier('un ancien déclencheur de numérotation est retiré d\'abord',
+    /DROP TRIGGER IF EXISTS %I ON rdv_reservations/.test(mig))
+  verifier('les deux tables ont leur index unique',
+    /uidx_commande_numero/.test(mig) && /uidx_rdv_numero/.test(mig))
   verifier('la semaine est ISO, pour tenir le passage d\'année',
     /'IYYY-IW'/.test(mig))
   verifier('rien n\'est renuméroté dans le passé', !/UPDATE commandes\s+SET numero/.test(mig))

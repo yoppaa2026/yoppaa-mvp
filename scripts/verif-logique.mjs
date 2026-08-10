@@ -28,6 +28,10 @@ import { couleurRdv, texteLisibleSur, COULEUR_DEFAUT, ENCRE } from '../lib/agend
 import { nouveauxRdvs, idsDes, texteAlerteRdv } from '../lib/alerte-rdv.js'
 import { messagePanierRepris } from '../lib/panier-repris-message.js'
 import { normaliserEmail, memeEmail } from '../lib/email-normalise.js'
+import {
+  referenceCommande, referenceComplete, referenceAvecNom,
+  prefixePourCommande, libelleSemaine,
+} from '../lib/numero-commande.js'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -389,6 +393,98 @@ verifier('pas de centime perdu à l’arrondi', Math.abs((v.rdv.frais + v.comman
 
 verifier('total nul = pas de ventilation', ventilerFrais(1.00, 0, 0) === null)
 verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === null)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE NUMÉRO DE COMMANDE — le seul langage commun entre le client et le commerçant
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ DEUX DÉFAUTS, ET LE SECOND EST LE PLUS TRAÎTRE.
+//
+// 1. L'ancien déclencheur faisait `MAX(numero) + 1`. Deux commandes arrivées
+//    dans la même seconde LISENT LE MÊME MAXIMUM et repartent avec le MÊME
+//    numéro. Un samedi matin de boulangerie, le commerçant a deux « #7 » à
+//    servir. Corrigé en base par un compteur incrémenté SOUS VERROU : c'est le
+//    verrou de ligne, et lui seul, qui rend le doublon impossible.
+//
+// 2. L'application avait un REPLI qui recalculait « la position du jour » quand
+//    le numéro manquait, alors que la base numérote par SEMAINE. Le commerçant
+//    pouvait chercher « 12 » là où son client annonçait « 3 ». Le repli est
+//    supprimé partout : une commande sans référence n'en affiche aucune, plutôt
+//    qu'un chiffre inventé.
+egal('un Click & Collect porte son C', referenceCommande({ numero_commande: 12, numero_prefixe: 'C' }), 'C12')
+egal('une livraison porte son L', referenceCommande({ numero_commande: 5, numero_prefixe: 'L' }), 'L5')
+egal('une expédition porte son E', referenceCommande({ numero_commande: 3, numero_prefixe: 'E' }), 'E3')
+egal('un retrait en magasin n\'a pas de préfixe', referenceCommande({ numero_commande: 12, numero_prefixe: '' }), '12')
+egal('ni quand le préfixe est absent', referenceCommande({ numero_commande: 12 }), '12')
+// ⚠️ SANS NUMÉRO, ON N'INVENTE RIEN. C'était tout le problème du repli.
+egal('pas de numéro, pas de référence', referenceCommande({ numero_commande: null }), null)
+egal('ni avec une valeur qui n\'est pas un nombre', referenceCommande({ numero_commande: 'douze' }), null)
+egal('sans rien du tout non plus', referenceCommande({}), null)
+// Le zéro n'est pas un numéro valide : le compteur commence à 1.
+egal('le numéro zéro reste affichable tel quel', referenceCommande({ numero_commande: 0, numero_prefixe: 'C' }), 'C0')
+
+// Le préfixe se calcule comme en base, pour pouvoir l'annoncer avant la commande.
+// ⚠️ Le Click & Collect se reconnaît à son CRÉNEAU : un retrait en magasin porte
+// le MÊME `mode_retrait` et n'a pas d'heure convenue. C'est la seule différence.
+egal('livraison', prefixePourCommande({ mode_retrait: 'livraison' }), 'L')
+egal('expédition', prefixePourCommande({ mode_retrait: 'expedition' }), 'E')
+egal('retrait avec créneau : Click & Collect', prefixePourCommande({ mode_retrait: 'retrait', creneau_id: 'x' }), 'C')
+egal('retrait sans créneau : magasin, sans préfixe', prefixePourCommande({ mode_retrait: 'retrait' }), '')
+egal('rien du tout : sans préfixe', prefixePourCommande({}), '')
+
+// La semaine lève la confusion d'une semaine à l'autre, là où on relit.
+egal('la semaine se dit simplement', libelleSemaine('2026-33'), 'sem. 33')
+egal('sans zéro inutile', libelleSemaine('2026-07'), 'sem. 7')
+egal('une semaine absente ne dit rien', libelleSemaine(null), null)
+egal('la référence complète porte la semaine',
+  referenceComplete({ numero_commande: 12, numero_prefixe: 'C', numero_semaine: '2026-33' }), 'C12 · sem. 33')
+egal('sans semaine, elle reste courte',
+  referenceComplete({ numero_commande: 12, numero_prefixe: 'C' }), 'C12')
+// Au comptoir, le numéro va avec le prénom : c'est comme ça qu'on appelle
+// quelqu'un dans une file.
+egal('au comptoir, le prénom accompagne',
+  referenceAvecNom({ numero_commande: 12, numero_prefixe: 'C', client_prenom: 'Sophie' }), 'C12 · Sophie')
+egal('à défaut, le premier mot du nom',
+  referenceAvecNom({ numero_commande: 12, client_nom: 'Dupont Jean' }), '12 · Dupont')
+egal('sans nom, le numéro seul', referenceAvecNom({ numero_commande: 12 }), '12')
+
+// ⚠️ ET LE REPLI DOIT AVOIR DISPARU PARTOUT. S'il revient à un seul endroit,
+// les deux écrans recommencent à dire deux choses différentes.
+for (const [chemin, ecran] of [
+  ['app/dashboard/page.js', 'le tableau de bord'],
+  ['app/commander/page.js', 'l\'écran du client'],
+  ['app/api/yopper/commandes/route.js', 'la liste des commandes'],
+]) {
+  const src = readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
+    .split(/\r?\n/).map(l => l.replace(/(^|\s)\/\/.*/, '$1')).join('\n')
+  verifier(`${ecran} n'invente plus de position du jour`,
+    !/findIndex\(c => c\.id === commande/.test(src) && !/positionsMap/.test(src), chemin)
+  verifier(`${ecran} lit la référence partagée`, /referenceCommande\(/.test(src), chemin)
+}
+
+// La migration doit poser le verrou, l'unicité, et ne pas renuméroter le passé.
+{
+  // ⚠️ On retire les commentaires SQL AVANT de juger : l'en-tête de la migration
+  // EXPLIQUE le défaut corrigé, et cite donc « MAX(numero_commande) ». Un test
+  // qui lit les commentaires condamne la documentation du correctif.
+  const mig = readFileSync(new URL('../migrations/MIGRATION_NUMERO_COMMANDE.sql', import.meta.url), 'utf8')
+    .split(/\r?\n/).map(l => l.replace(/(^|\s)--.*/, '$1')).join('\n')
+  verifier('le compteur est incrémenté sous verrou de ligne',
+    /UPDATE compteurs_commande[\s\S]{0,200}?SET dernier = dernier \+ 1[\s\S]{0,200}?RETURNING dernier/.test(mig))
+  verifier('et surtout plus par MAX + 1', !/MAX\(numero_commande\)/.test(mig))
+  verifier('le doublon est rendu impossible par un index unique',
+    /CREATE UNIQUE INDEX[\s\S]{0,200}?commercant_id, numero_semaine, numero_prefixe, numero_commande/.test(mig))
+  // ⚠️ L'index ne doit couvrir que les nouvelles références : les anciennes
+  // commandes ont numero_semaine à NULL et des numéros qui se répètent d'une
+  // semaine à l'autre. Sans le filtre, l'index refuserait de se créer.
+  verifier('l\'index épargne les anciennes commandes', /WHERE numero_semaine IS NOT NULL/.test(mig))
+  verifier('un numéro déjà posé n\'est jamais recalculé',
+    /IF NEW\.numero_commande IS NOT NULL THEN[\s\S]{0,60}?RETURN NEW/.test(mig))
+  verifier('le préfixe distingue le créneau du retrait en magasin',
+    /NEW\.creneau_id IS NOT NULL\s+THEN 'C'/.test(mig))
+  verifier('la semaine est ISO, pour tenir le passage d\'année',
+    /'IYYY-IW'/.test(mig))
+  verifier('rien n\'est renuméroté dans le passé', !/UPDATE commandes\s+SET numero/.test(mig))
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // L'EMAIL QUI FAISAIT DISPARAÎTRE LES COMMANDES

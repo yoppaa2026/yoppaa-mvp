@@ -11,6 +11,7 @@ import { remplissageCreneaux } from '@/lib/creneaux'
 import BandeDefilante from '@/app/components/BandeDefilante'
 import { partagerCommandes } from '@/lib/commandes-vue'
 import { nouveauxRdvs, idsDes, texteAlerteRdv } from '@/lib/alerte-rdv'
+import { referenceCommande } from '@/lib/numero-commande'
 
 const T = {
   bg:      '#F8F6FF',
@@ -73,16 +74,18 @@ function getJoursDispos(horizon = 1) {
 }
 
 // FIX NUMÉRO : source unique = numero_commande DB, sans restriction <= 999
-function getNumeroJour(commandes, commandeId, jourKey) {
-  const duJour = [...commandes]
-    .filter(c => dateKey(c.date_commande || c.created_at) === jourKey)
-    .sort((a, b) => (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '') || new Date(a.created_at) - new Date(b.created_at))
-  const commande = duJour.find(c => c.id === commandeId)
-  // Priorité absolue : numero_commande de la DB (même source que le client)
-  if (commande?.numero_commande) return commande.numero_commande
-  // Fallback : position dans la liste triée du jour
-  const idx = duJour.findIndex(c => c.id === commandeId)
-  return idx === -1 ? '?' : idx + 1
+// ⚠️ IL Y AVAIT UN REPLI ICI, ET IL MENTAIT. Quand le numéro manquait, cette
+// fonction rendait « la position du jour » alors que la base numérote par
+// SEMAINE : le commerçant pouvait chercher « 12 » là où son client annonçait
+// « 3 ». Sur le seul point où ils doivent se comprendre, les deux écrans ne
+// disaient pas la même chose.
+//
+// Le compteur en base attribue désormais la référence à coup sûr, sous verrou
+// (MIGRATION_NUMERO_COMMANDE). Il n'y a plus rien à suppléer, et une commande
+// sans référence affiche « ? » plutôt qu'un chiffre inventé.
+function getNumeroJour(commandes, commandeId) {
+  const commande = commandes.find(c => c.id === commandeId)
+  return referenceCommande(commande || {}) || '?'
 }
 
 // ─── Notifications système ────────────────────────────────────────────────────
@@ -2088,14 +2091,13 @@ export default function Dashboard() {
                 )}
                 <div className="commandes-grid">
                   {commandesFiltrees.map(commande => {
-                    // En historique, calculer le numéro avec le jour de la commande,
-                    // pas le jour actif (sinon le filtre retourne "?")
-                    const jourCommande = dateKey(commande.date_commande || commande.created_at)
+                    // Le jour n'entre plus dans le calcul du numéro : la
+                    // référence est portée par la commande elle-même.
                     return (
                       <CarteCommande
                         key={commande.id}
                         commande={commande}
-                        numero={getNumeroJour(commandes, commande.id, modeHistorique ? jourCommande : jourActif)}
+                        numero={getNumeroJour(commandes, commande.id)}
                         onChangerStatut={changerStatut}
                         onLivraisonStatut={changerStatutLivraison}
                         onExpedier={expedierCommande}

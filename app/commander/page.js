@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper } from '@/lib/fetch-yopper'
 import { libelleRetrait } from '@/lib/libelle-retrait'
+import { referenceCommande } from '@/lib/numero-commande'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import { canDo, bandeauCategorie } from '@/lib/plans'
@@ -463,49 +464,40 @@ function PickupScreen({ commande, clientPrenom, onConfirm, onFermer }) {
   useEffect(() => {
     let annule = false
     async function rechercherNumero() {
-      // 1) numero_commande déjà présent → on l'utilise
-      if (commande.numero_commande) {
-        if (!annule) setNumeroCalcule(commande.numero_commande)
+      // 1) la référence est déjà là → on l'affiche telle quelle
+      const dejaLa = referenceCommande(commande)
+      if (dejaLa) {
+        if (!annule) setNumeroCalcule(dejaLa)
         return
       }
-      // 2) re-fetch la commande pour obtenir un numero_commande à jour
+      // 2) elle arrive avec un instant de retard sur le retour de paiement :
+      //    on relit la commande pour l'obtenir.
       if (commande.id) {
         const { data: fresh } = await supabase
           .from('commandes_stats')
-          .select('numero_commande, commercant_id, date_commande, created_at')
+          .select('numero_commande, numero_prefixe, numero_semaine')
           .eq('id', commande.id)
           .maybeSingle()
-        if (fresh?.numero_commande) {
-          if (!annule) setNumeroCalcule(fresh.numero_commande)
+        const relue = referenceCommande(fresh || {})
+        if (relue) {
+          if (!annule) setNumeroCalcule(relue)
           return
         }
-        // 3) fallback : position dans la liste triée du jour pour ce commerce
-        const cid = fresh?.commercant_id || commande.commercant_id
-        const dateRef = fresh?.date_commande || commande.date_commande
-        if (cid && dateRef) {
-          const dateStr = typeof dateRef === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateRef)
-            ? dateRef
-            : new Date(dateRef).toISOString().slice(0, 10)
-          const { data: duJour } = await supabase
-            .from('commandes_stats')
-            .select('id, created_at, creneau:creneaux(heure_debut)')
-            .eq('commercant_id', cid)
-            .eq('date_commande', dateStr)
-            .order('created_at', { ascending: true })
-          const tri = (duJour || []).sort((a, b) =>
-            (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '') ||
-            new Date(a.created_at) - new Date(b.created_at)
-          )
-          const idx = tri.findIndex(c => c.id === commande.id)
-          if (!annule) setNumeroCalcule(idx >= 0 ? idx + 1 : '?')
-          return
-        }
+        // ⚠️ IL Y AVAIT UN TROISIÈME RECOURS ICI, ET IL MENTAIT : il recalculait
+        // « la position du jour » alors que la base numérote par SEMAINE. Le
+        // client pouvait donc annoncer « 3 » au comptoir pendant que le
+        // commerçant cherchait « C12 ». Sur le seul point où ils doivent se
+        // comprendre, ils ne disaient pas la même chose.
+        //
+        // Le compteur en base attribue maintenant un numéro à coup sûr, sous
+        // verrou. Il n'y a plus rien à suppléer.
       }
       if (!annule) setNumeroCalcule('?')
     }
     rechercherNumero()
     return () => { annule = true }
-  }, [commande.id, commande.numero_commande, commande.commercant_id, commande.date_commande])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- on ne dépend que de l'identité de la commande et de sa référence, pas de l'objet entier qui change à chaque rendu
+  }, [commande.id, commande.numero_commande, commande.numero_prefixe])
 
   const numero = numeroCalcule ?? '…'
   const cren = commande.creneau || commande.creneau_livraison

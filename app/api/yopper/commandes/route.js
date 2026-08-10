@@ -28,6 +28,7 @@ import { createClient } from '@supabase/supabase-js'
 import { crediterFidelite } from '@/lib/fidelite-server'
 import { montantFidelisable } from '@/lib/fidelite'
 import { canDo } from '@/lib/plans'
+import { referenceCommande } from '@/lib/numero-commande'
 
 function admin() {
   return createClient(
@@ -50,38 +51,26 @@ async function yopperAuthentifie(request) {
   return identiteProuvee(request)
 }
 
-// Clé de date d'une commande (date_commande YYYY-MM-DD sinon created_at).
-function dateKeyOf(c) {
-  const ref = c.date_commande || c.created_at
-  if (typeof ref === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ref)) return ref
-  return new Date(ref).toISOString().slice(0, 10)
-}
+// `dateKeyOf` vivait ici pour reconstituer une position du jour. Elle n'a plus
+// d'objet : le numéro vient de la base, sous verrou, et ne se supplée plus.
+// (Elle portait au passage un `toISOString()`, qui rend la date de la VEILLE
+// entre minuit et deux heures du matin en Belgique.)
 
-// Enrichit chaque commande avec numeroAffiche : numero_commande de la DB en
-// priorité, sinon position du jour pour ce commerçant (tri créneau puis
-// created_at) — même logique que le dashboard / PickupScreen (parité affichage).
-async function enrichirNumeros(supabase, commandes) {
-  const cles = [...new Set(commandes.map(c => `${c.commercant_id}|${dateKeyOf(c)}`))]
-  const positionsMap = {}
-  await Promise.all(cles.map(async cle => {
-    const sep = cle.lastIndexOf('|')
-    const cid = cle.slice(0, sep)
-    const dateStr = cle.slice(sep + 1)
-    const { data: duJour } = await supabase
-      .from('commandes')
-      .select('id, created_at, creneau:creneaux(heure_debut)')
-      .eq('commercant_id', cid)
-      .eq('date_commande', dateStr)
-      .order('created_at', { ascending: true })
-    const tri = (duJour || []).sort((a, b) =>
-      (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '') ||
-      new Date(a.created_at) - new Date(b.created_at)
-    )
-    tri.forEach((c, idx) => { positionsMap[c.id] = idx + 1 })
-  }))
+// La référence telle que le client la lit : « C12 », « L5 », « 12 ».
+//
+// ⚠️ IL Y AVAIT UN REPLI ICI, ET IL MENTAIT. Quand le numéro manquait, cette
+// fonction recalculait « la position du jour » pour ce commerçant. Or la base
+// numérote par SEMAINE : le commerçant pouvait lire « 12 » là où son client
+// lisait « 3 ». Deux chiffres différents pour désigner la même commande, sur le
+// seul point où ils doivent absolument se comprendre.
+//
+// Le compteur en base attribue désormais un numéro à COUP SÛR, sous verrou
+// (MIGRATION_NUMERO_COMMANDE) : il n'y a plus rien à suppléer. Une commande sans
+// numéro n'affiche donc RIEN, plutôt qu'un chiffre inventé.
+function enrichirNumeros(commandes) {
   return commandes.map(c => ({
     ...c,
-    numeroAffiche: c.numero_commande || positionsMap[c.id] || null,
+    numeroAffiche: referenceCommande(c),
   }))
 }
 
@@ -120,7 +109,7 @@ export async function POST(request) {
         .eq('client_email', yopper.email)
         .order('created_at', { ascending: false })
       if (!data || data.length === 0) return NextResponse.json({ ok: true, commandes: [] })
-      const enriched = await enrichirNumeros(supabase, data)
+      const enriched = enrichirNumeros(data)
       return NextResponse.json({ ok: true, commandes: enriched })
     }
 

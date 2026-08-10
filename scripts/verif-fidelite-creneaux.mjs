@@ -238,11 +238,40 @@ egal('en hiver aussi, trop tard reste trop tard',
   creneauCommandable({ ...creneauMardi, jour_semaine: null }, {
     dateStr: '2026-01-13', maintenant: new Date('2026-01-13T16:00:00Z'), instantDebut: brusselsInstant,
   }).raison, 'cutoff')
-// Sans délai réglé (les créneaux C&C n'ont pas la colonne), on ne bloque rien.
-verifier('sans délai réglé, aucun blocage',
-  creneauCommandable({ jour_semaine: 'mardi', heure_debut: '18:00' }, {
-    dateStr: '2026-08-11', maintenant: new Date('2026-08-11T17:59:00Z'), instantDebut: brusselsInstant,
+// ⚠️ UN CRÉNEAU DÉJÀ COMMENCÉ N'EST PLUS COMMANDABLE, avec ou sans délai.
+// Ce filtre n'existait QUE dans le navigateur : la fiche masquait les créneaux
+// passés du jour, et le serveur les acceptait sans broncher. Un onglet ouvert
+// depuis le matin faisait tomber à 15h une commande pour le créneau de 11h15,
+// que le commerçant découvrait déjà en retard.
+//
+// Les créneaux C&C n'ont pas de colonne `cutoff_heures` : c'est donc le début
+// du créneau lui-même qui fait limite. 18h belge = 16h UTC en août.
+const creneauSansDelai = { jour_semaine: 'mardi', heure_debut: '18:00' }
+verifier('sans délai réglé, on peut commander avant le début',
+  creneauCommandable(creneauSansDelai, {
+    dateStr: '2026-08-11', maintenant: new Date('2026-08-11T15:59:00Z'), instantDebut: brusselsInstant,
   }).ok)
+egal('une minute APRÈS le début, c\'est refusé',
+  creneauCommandable(creneauSansDelai, {
+    dateStr: '2026-08-11', maintenant: new Date('2026-08-11T16:01:00Z'), instantDebut: brusselsInstant,
+  }).raison, 'passe')
+egal('un créneau du matin ne se commande plus l\'après-midi',
+  creneauCommandable({ jour_semaine: 'mardi', heure_debut: '11:15' }, {
+    dateStr: '2026-08-11', maintenant: new Date('2026-08-11T13:00:00Z'), instantDebut: brusselsInstant,
+  }).raison, 'passe')
+// Le motif distingue les deux cas : « passé » et « trop tard » n'appellent pas
+// le même message, et le client doit comprendre lequel le concerne.
+egal('avec un délai, le motif reste « cutoff »',
+  creneauCommandable(creneauMardi, {
+    dateStr: '2026-08-11', maintenant: new Date('2026-08-11T15:00:00Z'), instantDebut: brusselsInstant,
+  }).raison, 'cutoff')
+// Un créneau d'un jour FUTUR reste évidemment commandable.
+verifier('un créneau de la semaine prochaine passe',
+  creneauCommandable(creneauSansDelai, {
+    dateStr: '2026-08-18', maintenant: new Date('2026-08-11T20:00:00Z'), instantDebut: brusselsInstant,
+  }).ok)
+verifier('la route sait dire « déjà passé »',
+  /Ce créneau est déjà passé/.test(lireBrut('app/api/stripe/checkout/create-commande/route.js')))
 
 // La route doit appeler ce contrôle.
 const routeCreneau = lireBrut('app/api/stripe/checkout/create-commande/route.js')

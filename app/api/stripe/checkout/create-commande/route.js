@@ -347,7 +347,9 @@ export async function POST(request) {
       if (!etatCreneau.ok) {
         const message = etatCreneau.raison === 'jour'
           ? 'Ce créneau n\'est pas proposé ce jour-là. Choisis-en un autre.'
-          : `Il est trop tard pour ce créneau : ${commercant.nom} demande de commander au moins ${etatCreneau.heures} h à l'avance. Choisis un créneau plus tardif.`
+          : etatCreneau.raison === 'passe'
+            ? 'Ce créneau est déjà passé. Choisis-en un autre.'
+            : `Il est trop tard pour ce créneau : ${commercant.nom} demande de commander au moins ${etatCreneau.heures} h à l'avance. Choisis un créneau plus tardif.`
         return NextResponse.json({ ok: false, error: message, creneau_indisponible: true }, { status: 409 })
       }
     }

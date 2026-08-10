@@ -15,6 +15,7 @@ import {
   STATUTS_LIVRAISON, prochainStatutLivraison, transitionLivraisonValide,
   libelleSuiviLivraison,
 } from '../lib/livraison.js'
+import { emailCommandePrete, emailCommandeEnLivraison } from '../lib/resend.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -220,6 +221,88 @@ verifier('le géocodage n\'est qu\'un dernier recours',
 verifier('les livrées sont exclues', /\.neq\('statut_livraison', 'livree'\)/.test(tourneeCode))
 verifier('les statuts occupants viennent du module partagé',
   /STATUTS_OCCUPENT_CRENEAU/.test(tourneeCode))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6 bis. LES MESSAGES AU YOPPER, SELON LE MODE
+// ═══════════════════════════════════════════════════════════════════════════
+const routePrete = lire('app/api/emails/commande-prete/route.js')
+
+// ⚠️ « PRÊTE À RETIRER » N'A AUCUN SENS POUR UNE LIVRAISON. Le message était
+// écrit pour le retrait : un client en livraison recevait « Prête à retirer »,
+// l'adresse du COMMERCE et un lien d'itinéraire vers la boutique, alors qu'il
+// attend chez lui.
+// ⚠️ ON REND LES EMAILS POUR DE VRAI et on lit ce qui en sort. Chercher un mot
+// dans le fichier source ne prouve rien : le message peut contenir la bonne
+// phrase dans une branche jamais atteinte. Ici, le HTML jugé est exactement
+// celui que le Yopper recevra.
+const COMMUN = {
+  yopper_prenom: 'Alex', commercant_nom: 'La Mie de Test',
+  commercant_adresse: 'Rue Albert Premier 10, 5640 Mettet', commercant_slug: 'la-mie',
+  numero_commande: 42, heure_debut: '11:15:00', heure_fin: '11:30:00',
+}
+const mailRetrait = emailCommandePrete({ ...COMMUN })
+const mailLivraison = emailCommandePrete({
+  ...COMMUN, est_livraison: true, adresse_livraison: 'Rue de Prée 9G, 5640 Mettet',
+})
+
+// Le message de retrait, lui, ne doit pas bouger.
+verifier('retrait : on dit de venir retirer', mailRetrait.includes('Prête à retirer'))
+verifier('retrait : l\'adresse du commerce est donnée', mailRetrait.includes('Rue Albert Premier 10'))
+verifier('retrait : l\'itinéraire vers la boutique est proposé', mailRetrait.includes('Itinéraire Google Maps'))
+verifier('retrait : la plage horaire s\'affiche', mailRetrait.includes('11:15') && mailRetrait.includes('11:30'))
+
+// ⚠️ LE DÉFAUT CORRIGÉ : un client en LIVRAISON recevait ce message-là.
+verifier('livraison : on ne lui dit pas de venir retirer', !mailLivraison.includes('Prête à retirer'))
+verifier('livraison : aucun itinéraire vers la boutique', !mailLivraison.includes('Itinéraire Google Maps'))
+verifier('livraison : c\'est SON adresse qui est rappelée',
+  mailLivraison.includes('Rue de Prée 9G') && !mailLivraison.includes('Rue Albert Premier 10'))
+verifier('livraison : on lui dit de rester joignable', mailLivraison.includes('rester joignable'))
+verifier('livraison : la plage horaire s\'affiche aussi', mailLivraison.includes('11:15'))
+verifier('livraison : le numéro de commande est là', mailLivraison.includes('42'))
+
+// Sans horaire connu, aucune ligne d'heure ne doit s'imprimer. Avant, le
+// gabarit écrivait toujours la ligne et affichait « ? → ? ».
+const mailSansHeure = emailCommandePrete({ ...COMMUN, heure_debut: null, heure_fin: null })
+verifier('sans horaire, pas de « ? → ? »', !mailSansHeure.includes('?'))
+
+verifier('la route passe bien le mode', /est_livraison:\s+estLivraison/.test(routePrete))
+verifier('et l\'adresse de livraison', /adresse_livraison: cmd\.adresse_livraison/.test(routePrete))
+
+// ⚠️ L'HEURE VENAIT DE LA MAUVAISE TABLE. Une livraison a `creneau_id` à null
+// et son horaire dans `livraison_creneaux` : le message affichait « ? → ? ».
+verifier('la route lit les deux tables de créneaux',
+  /creneau:creneaux\(/.test(routePrete) && /creneau_livraison:livraison_creneaux\(/.test(routePrete))
+verifier('et choisit la bonne selon le mode',
+  /const creneau = estLivraison \? cmd\.creneau_livraison : cmd\.creneau/.test(routePrete))
+// ⚠️ Une plage inconnue ne doit plus s'imprimer « ? → ? » dans l'email. Elle
+// ne s'affiche QUE si elle est connue. Le test vise les emails de commande,
+// pas tout le fichier : les emails de rendez-vous ont leur propre logique.
+// ⚠️ AUCUN EMAIL N'EXISTAIT SUR « EN ROUTE », uniquement un push. Le push web
+// ne marche pas partout — Chrome sur iPhone ne le supporte pas — et c'est le
+// message qu'il ne faut surtout pas rater. Rendu pour de vrai, lui aussi.
+const mailEnRoute = emailCommandeEnLivraison({
+  yopper_prenom: 'Alex', commercant_nom: 'La Mie de Test', numero_commande: 42,
+  adresse_livraison: 'Rue de Prée 9G, 5640 Mettet',
+  heure_debut: '18:00:00', heure_fin: '19:00:00',
+})
+verifier('en route : le client sait que c\'est parti', /en route|arrive/i.test(mailEnRoute))
+verifier('en route : son adresse est rappelée', mailEnRoute.includes('Rue de Prée 9G'))
+verifier('en route : le créneau est rappelé', mailEnRoute.includes('18:00') && mailEnRoute.includes('19:00'))
+verifier('en route : on lui demande de confirmer la réception', /confirme la réception/i.test(mailEnRoute))
+verifier('en route : le lien mène au suivi', mailEnRoute.includes('onglet=commandes'))
+// Il ne doit surtout pas parler de retrait : personne ne se déplace.
+verifier('en route : aucun vocabulaire de retrait',
+  !/retirer|comptoir|viens le chercher/i.test(mailEnRoute))
+const routeStatutLiv = lire('app/api/livraison/statut/route.js')
+verifier('il est réellement envoyé', /emailCommandeEnLivraison\(\{/.test(routeStatutLiv))
+verifier('uniquement au départ, pas à l\'arrivée',
+  /statut_livraison === 'en_livraison' && cmd\.client_email/.test(routeStatutLiv))
+// L'email ne doit pas dépendre du push : un push qui échoue ne doit pas
+// emporter l'email avec lui.
+verifier('l\'email part avant le push',
+  routeStatutLiv.indexOf('emailCommandeEnLivraison(') < routeStatutLiv.indexOf('envoyerPushParExternalId('))
+verifier('son échec ne casse pas la suite',
+  /catch \(e\) \{[\s\S]{0,120}?email en route KO/.test(routeStatutLiv))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 7. LA SÉPARATION CLICK & COLLECT / LIVRAISON

@@ -26,8 +26,10 @@ export async function POST(request) {
       .from('commandes')
       .select(`
         id, numero_commande, client_email, client_prenom, mode_retrait,
+        adresse_livraison,
         commercant:commercants(nom, slug, adresse),
-        creneau:creneaux(heure_debut, heure_fin)
+        creneau:creneaux(heure_debut, heure_fin),
+        creneau_livraison:livraison_creneaux(heure_debut, heure_fin)
       `)
       .eq('id', commande_id)
       .single()
@@ -43,6 +45,12 @@ export async function POST(request) {
     // NB : le push « prête » est envoyé par /api/commande/push-statut (mode-aware,
     // clic vers l'onglet Commandes). Cette route ne gère que l'email.
 
+    // ⚠️ L'HEURE VIENT DE LA BONNE TABLE. Une livraison a `creneau_id` à null
+    // et son horaire dans `livraison_creneaux` : en lisant `creneaux`, le
+    // message affichait « ? → ? » à tous les clients en livraison.
+    const estLivraison = cmd.mode_retrait === 'livraison'
+    const creneau = estLivraison ? cmd.creneau_livraison : cmd.creneau
+
     try {
       const html = emailCommandePrete({
         yopper_prenom:     cmd.client_prenom || 'Yopper',
@@ -50,13 +58,19 @@ export async function POST(request) {
         commercant_adresse:cmd.commercant?.adresse || '',
         commercant_slug:   cmd.commercant?.slug || '',
         numero_commande:   cmd.numero_commande,
-        heure_debut:       cmd.creneau?.heure_debut,
-        heure_fin:         cmd.creneau?.heure_fin,
+        heure_debut:       creneau?.heure_debut,
+        heure_fin:         creneau?.heure_fin,
+        est_livraison:     estLivraison,
+        adresse_livraison: cmd.adresse_livraison,
       })
 
       await envoyerAuCommercant({
         to: cmd.client_email,
-        subject: `🎉 Ta commande #${cmd.numero_commande || ''} est prête chez ${cmd.commercant?.nom || ''}`,
+        // Dire « prête » à quelqu'un qui ne se déplace pas ne veut rien dire :
+        // ce qu'il attend, c'est de savoir que ça part.
+        subject: estLivraison
+          ? `🛵 Ta commande #${cmd.numero_commande || ''} est prête, livraison en préparation`
+          : `🎉 Ta commande #${cmd.numero_commande || ''} est prête chez ${cmd.commercant?.nom || ''}`,
         html,
       })
     } catch (e) {

@@ -24,6 +24,8 @@ import { contexteRetrait, textesRetrait, textesConfirmation } from '../lib/ecran
 import { emailCommandeExpediee } from '../lib/resend.js'
 import { partagerCommandes } from '../lib/commandes-vue.js'
 import { restaurerStockVariantes } from '../lib/stock-variantes-server.js'
+import { couleurRdv, texteLisibleSur, COULEUR_DEFAUT, ENCRE } from '../lib/agenda-couleurs.js'
+import { nouveauxRdvs, idsDes, texteAlerteRdv } from '../lib/alerte-rdv.js'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -385,6 +387,105 @@ verifier('pas de centime perdu à l’arrondi', Math.abs((v.rdv.frais + v.comman
 
 verifier('total nul = pas de ventilation', ventilerFrais(1.00, 0, 0) === null)
 verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === null)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L'AGENDA AUX COULEURS DES PRATICIENNES
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LA COULEUR NE SERVAIT À RIEN. Tous les rendez-vous confirmés étaient du
+// même violet, quel que soit le praticien : la couleur choisie pour Carole ne
+// vivait que dans une pastille de douze pixels au coin du bloc. Dans un salon à
+// trois praticiennes, il fallait lire les initiales une par une.
+//
+// ⚠️ ET LE PIÈGE DU CONTRASTE. Le réglage est un sélecteur de couleur SANS
+// contrainte : une praticienne peut choisir un rose très pâle. Du texte blanc
+// dessus devient illisible, et la fonctionnalité demandée pour gagner en
+// lisibilité l'aurait fait perdre. On calcule donc la clarté du fond.
+egal('le bloc prend la couleur de la praticienne',
+  couleurRdv({ statut: 'confirme', couleurPraticien: '#E91E8C' }).bg, '#E91E8C')
+egal('sans praticienne, le violet de la marque',
+  couleurRdv({ statut: 'confirme' }).bg, COULEUR_DEFAUT)
+egal('une couleur illisible retombe sur le violet',
+  couleurRdv({ statut: 'confirme', couleurPraticien: 'rose bonbon' }).bg, COULEUR_DEFAUT)
+// Sur un fond sombre, on écrit en blanc ; sur un fond clair, à l'encre.
+egal('texte blanc sur un fond soutenu', texteLisibleSur('#6B35C4'), '#fff')
+egal('texte sombre sur un rose pâle', texteLisibleSur('#FFD1E8'), ENCRE)
+egal('texte sombre sur du jaune', texteLisibleSur('#FFEB3B'), ENCRE)
+egal('texte blanc sur du bleu marine', texteLisibleSur('#0D2149'), '#fff')
+// ⚠️ La luminance est PERÇUE, pas une moyenne : l'œil est bien plus sensible au
+// vert qu'au bleu. Un vert vif et un bleu de même valeur numérique n'ont pas du
+// tout la même clarté, et une moyenne bête écrirait en blanc sur du vert clair.
+verifier('un vert vif est traité comme clair', texteLisibleSur('#7CFC00') === ENCRE)
+verifier('un bleu de même intensité est traité comme sombre', texteLisibleSur('#0000FC') === '#fff')
+// Les deux états sortis du planning gardent leur code : un rendez-vous annulé
+// ne doit pas se confondre avec la journée à faire.
+verifier('un rendez-vous annulé garde son rouge',
+  couleurRdv({ statut: 'annule', couleurPraticien: '#E91E8C' }).bg === '#FEE2E2')
+verifier('un client pas venu garde son gris',
+  couleurRdv({ statut: 'no_show', couleurPraticien: '#E91E8C' }).bg === '#E5E7EB')
+verifier('et ces deux-là ne sont pas marqués comme couleur de praticienne',
+  couleurRdv({ statut: 'annule' }).estPraticien === false)
+verifier('alors qu\'un rendez-vous à venir l\'est',
+  couleurRdv({ statut: 'confirme', couleurPraticien: '#E91E8C' }).estPraticien === true)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L'ALERTE « NOUVEAU RENDEZ-VOUS », QUI N'EXISTAIT PAS
+// ═══════════════════════════════════════════════════════════════════════════
+// Le commerçant alimentaire est prévenu à chaque commande, par un son et une
+// notification. Le salon ne l'était de RIEN : le commentaire du code disait
+// « pas de notif son ici, ajoutée dans RDV-10 », et RDV-10 n'est jamais venu.
+// Une cliente réservait, la coiffeuse ne le découvrait qu'en pensant à ouvrir
+// son agenda.
+{
+  const r = (id, extra = {}) => ({ id, date_rdv: '2026-08-12', heure_debut: '14:30:00', ...extra })
+
+  // ⚠️ AU PREMIER RELEVÉ, ON N'ANNONCE RIEN. Sinon le commerçant recevrait une
+  // alerte par rendez-vous déjà en agenda à chaque ouverture de son écran.
+  egal('le premier relevé n\'annonce rien', nouveauxRdvs(null, [r('a'), r('b')]), [])
+
+  const connus = idsDes([r('a'), r('b')])
+  egal('un rendez-vous de plus est repéré', nouveauxRdvs(connus, [r('a'), r('b'), r('c')]).map(x => x.id), ['c'])
+  egal('rien de neuf, rien à dire', nouveauxRdvs(connus, [r('a'), r('b')]), [])
+  egal('une annulation seule n\'annonce rien', nouveauxRdvs(connus, [r('a')]), [])
+
+  // ⚠️ LE CAS QUE LE COMPTAGE DES COMMANDES RATE. Entre deux relevés, un
+  // rendez-vous est annulé et un autre pris : le TOTAL n'a pas bougé. En
+  // comparant des longueurs, personne n'est prévenu et la nouvelle cliente
+  // arrive sans que personne ne l'attende.
+  const apres = [r('a'), r('z')]
+  egal('un annulé plus un pris, à total égal, est bien repéré',
+    nouveauxRdvs(connus, apres).map(x => x.id), ['z'])
+  verifier('alors qu\'un comptage n\'aurait rien vu', apres.length === 2)
+
+  // Ce que l'alerte raconte : « un rendez-vous est arrivé » obligerait à ouvrir
+  // l'agenda de toute façon.
+  const texte = texteAlerteRdv(
+    { client_prenom: 'Sophie', date_rdv: '2026-08-12', heure_debut: '14:30:00', praticien: { prenom: 'Carole' }, prestation: { nom: 'Balayage' } },
+    { aujourdhui: '2026-08-11', demain: '2026-08-12' })
+  verifier('l\'alerte nomme la cliente', texte.corps.includes('Sophie'))
+  verifier('elle dit quand', texte.corps.includes('demain') && texte.corps.includes('14:30'))
+  verifier('elle dit avec qui', texte.corps.includes('Carole'))
+  verifier('et ce qui est réservé', texte.corps.includes('Balayage'))
+  // Aujourd'hui se dit « aujourd'hui », pas « mercredi 11 août ».
+  const ceJour = texteAlerteRdv({ client_prenom: 'Luc', date_rdv: '2026-08-11', heure_debut: '09:00:00' }, { aujourdhui: '2026-08-11', demain: '2026-08-12' })
+  verifier('le jour même se dit simplement', ceJour.corps.includes("aujourd'hui"))
+  // Plus loin, on nomme le jour : « à 9h » sans date ne veut rien dire.
+  const plusLoin = texteAlerteRdv({ client_prenom: 'Luc', date_rdv: '2026-08-20', heure_debut: '09:00:00' }, { aujourdhui: '2026-08-11', demain: '2026-08-12' })
+  verifier('au-delà, la date est nommée', /jeudi 20 août/.test(plusLoin.corps), plusLoin.corps)
+  // Un rendez-vous sans praticienne ni prestation ne doit pas produire de trous.
+  const minimal = texteAlerteRdv({ date_rdv: '2026-08-12', heure_debut: '10:00:00' }, { aujourdhui: '2026-08-11', demain: '2026-08-12' })
+  verifier('sans nom ni prestation, la phrase tient debout',
+    !/undefined|null|·\s*$/.test(minimal.corps), minimal.corps)
+}
+// ⚠️ ET LE TAG DE LA NOTIFICATION DOIT DIFFÉRER. Deux notifications de même tag
+// se REMPLACENT : une commande arrivée juste après un rendez-vous effaçait
+// l'annonce du rendez-vous, et le commerçant n'en entendait jamais parler.
+{
+  const dash = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+  verifier('le tag de notification est paramétrable', /function envoyerNotification\(titre, body, tag =/.test(dash))
+  verifier('le rendez-vous a le sien', /'yoppaa-rdv'/.test(dash))
+  verifier('le tableau de bord repère les nouveaux rendez-vous', /nouveauxRdvs\(rdvsConnusRef\.current, rdvsData\)/.test(dash))
+  verifier('et il prend note de l\'existant au premier relevé', /rdvsConnusRef = useRef\(null\)/.test(dash))
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LE STOCK DES VERSIONS QUI NE REVENAIT JAMAIS

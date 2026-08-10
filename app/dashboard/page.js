@@ -10,6 +10,7 @@ import { canDo } from '@/lib/plans'
 import { remplissageCreneaux } from '@/lib/creneaux'
 import BandeDefilante from '@/app/components/BandeDefilante'
 import { partagerCommandes } from '@/lib/commandes-vue'
+import { nouveauxRdvs, idsDes, texteAlerteRdv } from '@/lib/alerte-rdv'
 
 const T = {
   bg:      '#F8F6FF',
@@ -96,7 +97,11 @@ async function demanderPermissionNotif() {
   return result === 'granted'
 }
 
-function envoyerNotification(titre, body) {
+// ⚠️ `tag` DOIT DIFFÉRER SELON CE QU'ON ANNONCE. Deux notifications qui portent
+// le même tag se REMPLACENT : une commande arrivée juste après un rendez-vous
+// effaçait l'annonce du rendez-vous, et le commerçant n'en entendait jamais
+// parler. Le tag était figé sur « yoppaa-commande » pour tout le monde.
+function envoyerNotification(titre, body, tag = 'yoppaa-commande') {
   // 1. Notification système (son natif du device)
   if ('Notification' in window && Notification.permission === 'granted') {
     try {
@@ -104,7 +109,7 @@ function envoyerNotification(titre, body) {
         body,
         icon: '/icon-pro-192.png',
         badge: '/icon-pro-192.png',
-        tag: 'yoppaa-commande',
+        tag,
         renotify: true,
       })
     } catch(e) {}
@@ -651,9 +656,16 @@ export default function Dashboard() {
   const [modeHistorique, setModeHistorique] = useState(false)
   const [notificationsActives, setNotificationsActives] = useState(false)
   const [nouvelleCommande, setNouvelleCommande] = useState(false)
+  // Alerte « nouveau rendez-vous » : elle n'existait pas, le salon ne recevait
+  // ni son ni bandeau là où l'alimentaire est prévenu à chaque commande.
+  const [nouveauRdv, setNouveauRdv] = useState(null)
   const [commandeRecuperee, setCommandeRecuperee] = useState(null) // { nom, numero }
   const router = useRouter()
   const dernierNombreRef = useRef(0)
+  // `null` tant qu'aucun relevé n'a eu lieu : au premier, on prend note de
+  // l'existant sans rien annoncer, sinon le commerçant recevrait une alerte par
+  // rendez-vous déjà en agenda à chaque ouverture de son tableau de bord.
+  const rdvsConnusRef = useRef(null)
   const pollingRef = useRef(null)
 
   const trierCommandes = (data) =>
@@ -918,7 +930,6 @@ export default function Dashboard() {
       setCommandes(triees)
 
       // Polling RDVs : meme interval pour eviter de multiplier les setInterval.
-      // Pas de notif son speciale ici (ajoutee dans RDV-10).
       const { data: rdvsData } = await supabase
         .from('rdv_reservations')
         // La commande liée vient avec : un rendez-vous du tunnel unique porte
@@ -931,7 +942,32 @@ export default function Dashboard() {
         .is('deleted_at', null)
         .order('date_rdv', { ascending: true })
         .order('heure_debut', { ascending: true })
-      if (rdvsData) setRdvs(rdvsData)
+      // ⚠️ LE SALON N'ÉTAIT PRÉVENU DE RIEN. Le commerçant alimentaire reçoit un
+      // son et une notification à chaque commande ; la coiffeuse ne découvrait
+      // ses nouveaux rendez-vous qu'en pensant à regarder son agenda.
+      //
+      // ⚠️ ON COMPARE DES IDENTIFIANTS, pas le nombre de lignes comme le fait la
+      // détection des commandes : entre deux relevés, un rendez-vous annulé et
+      // un autre pris laissent le total inchangé, et personne n'est prévenu.
+      if (rdvsData) {
+        const nouveaux = nouveauxRdvs(rdvsConnusRef.current, rdvsData)
+        rdvsConnusRef.current = idsDes(rdvsData)
+        if (nouveaux.length > 0) {
+          const aujourdhui = dateKey(new Date())
+          const demainD = new Date(); demainD.setDate(demainD.getDate() + 1)
+          // Le plus proche d'abord : c'est celui qui presse.
+          const aAnnoncer = [...nouveaux].sort((a, b) =>
+            String(a.date_rdv || '').localeCompare(String(b.date_rdv || ''))
+            || String(a.heure_debut || '').localeCompare(String(b.heure_debut || '')))[0]
+          const { titre, corps } = texteAlerteRdv(aAnnoncer, { aujourdhui, demain: dateKey(demainD) })
+          if (notificationsActives) {
+            envoyerNotification(titre, nouveaux.length > 1 ? `${corps} · et ${nouveaux.length - 1} autre${nouveaux.length > 2 ? 's' : ''}` : corps, 'yoppaa-rdv')
+          }
+          setNouveauRdv({ titre, corps, nombre: nouveaux.length })
+          setTimeout(() => setNouveauRdv(null), 8000)
+        }
+        setRdvs(rdvsData)
+      }
     }, 5000)
 
     return () => { if (pollingRef.current) clearInterval(pollingRef.current) }
@@ -1522,10 +1558,41 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Notif NOUVEAU RENDEZ-VOUS — le pendant exact de la nouvelle commande.
+          Le salon n'avait RIEN : la coiffeuse découvrait ses réservations en
+          pensant à ouvrir son agenda. Elle se place sous la carte de commande
+          quand les deux tombent ensemble, ce qui arrive chez une vitrine qui
+          vend aussi des produits. */}
+      {nouveauRdv && (
+        <div onClick={() => setNouveauRdv(null)}
+          style={{ position: 'fixed', top: 20 + (nouvelleCommande ? 90 : 0), right: 20, left: 20, zIndex: 9999, maxWidth: 360, marginLeft: 'auto', animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1)', cursor: 'pointer' }}>
+          <div style={{ background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 60%, ${T.main} 100%)`, borderRadius: 18, padding: '16px 18px', color: '#fff', boxShadow: `0 24px 48px rgba(22,6,54,0.4), 0 0 0 1px ${T.main}55`, display: 'flex', gap: 14, alignItems: 'center' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'wiggle 0.7s ease-in-out infinite alternate' }}>
+                <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>
+              </svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 10, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>
+                {nouveauRdv.nombre > 1 ? `${nouveauRdv.nombre} nouveaux rendez-vous` : 'Nouveau rendez-vous'}
+              </p>
+              <p style={{ fontSize: 15, fontWeight: 900, color: '#fff', letterSpacing: '-0.3px', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nouveauRdv.corps}</p>
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[T.light, T.mid, '#fff'].map((c, i) => (
+                <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: c, animation: `dotPulse 0.8s ease-in-out ${i*0.15}s infinite alternate` }}/>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Notif COMMANDE RÉCUPÉRÉE — card flottante en haut à droite (sans cacher la liste) */}
       {commandeRecuperee && (
         <div onClick={() => setCommandeRecuperee(null)}
-          style={{ position: 'fixed', top: nouvelleCommande ? 110 : 20, right: 20, left: 20, zIndex: 9998, maxWidth: 360, marginLeft: 'auto', animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1)', cursor: 'pointer' }}>
+          /* Trois cartes peuvent tomber en même temps chez une vitrine qui vend
+             aussi des produits : chacune se décale sous la précédente. */
+          style={{ position: 'fixed', top: 20 + (nouvelleCommande ? 90 : 0) + (nouveauRdv ? 90 : 0), right: 20, left: 20, zIndex: 9998, maxWidth: 360, marginLeft: 'auto', animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1)', cursor: 'pointer' }}>
           <div style={{ background: '#fff', borderRadius: 18, padding: '14px 18px', boxShadow: `0 24px 48px rgba(22,6,54,0.18), 0 0 0 1px ${T.hairline || T.pale}`, display: 'flex', gap: 14, alignItems: 'center' }}>
             <div style={{ width: 52, height: 52, borderRadius: 12, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 900, fontSize: 20, letterSpacing: '-0.5px', boxShadow: `0 6px 16px ${T.main}55` }}>
               #{commandeRecuperee.numero}

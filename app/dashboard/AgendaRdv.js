@@ -17,6 +17,7 @@
 
 import { useState, useMemo, useEffect, Fragment } from 'react'
 import BandeDefilante from '@/app/components/BandeDefilante'
+import { couleurRdv, COULEUR_DEFAUT } from '@/lib/agenda-couleurs'
 
 const T = {
   bg:      '#F8F6FF',
@@ -55,12 +56,14 @@ function isoDate(d) {
 function jourIdxLun(d) { return (d.getDay() + 6) % 7 }
 
 // Couleurs par statut (parallèle à STATUTS_RDV du dashboard)
-const COULEUR_STATUT = {
-  confirme: { bg: '#6B35C4', text: '#fff',    border: '#6B35C4' },
-  honore:   { bg: '#10B981', text: '#fff',    border: '#10B981' },
-  no_show:  { bg: '#E5E7EB', text: '#6B7280', border: '#9CA3AF' },
-  annule:   { bg: '#FEE2E2', text: '#991B1B', border: '#DC2626' },
-}
+// ⚠️ LES COULEURS VIVENT DÉSORMAIS DANS `lib/agenda-couleurs.js`, parce que le
+// bloc prend la couleur DU PRATICIEN et non plus celle du statut. Tous les
+// rendez-vous confirmés étaient du même violet : la couleur choisie pour Carole
+// ne servait qu'à une pastille de douze pixels, et dans un salon à trois
+// praticiennes il fallait lire les initiales une par une.
+//
+// La logique est sortie d'ici pour être testable : le calcul du contraste du
+// texte, en particulier, décide de la lisibilité de tout l'écran.
 
 export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDetail, onSelectRdv, onNouveauRdv }) {
   // Filtre praticien : 'all' = tous les praticiens, ou un praticien_id specifique.
@@ -331,7 +334,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                     {rdvsCommencantIci.map(r => {
                       const dureeM = (timeToMinutes(r.heure_fin) - timeToMinutes(r.heure_debut)) || PAS_MINUTES
                       const hauteur = (dureeM / PAS_MINUTES) * HAUTEUR_CELLULE - 2  // -2 pour respiration
-                      const couleurs = COULEUR_STATUT[r.statut] || COULEUR_STATUT.confirme
+                      const couleurs = couleurRdv({ statut: r.statut, couleurPraticien: r.praticien?.couleur_hex })
                       const prenom = r.client_prenom || r.client_nom?.split(' ')[0] || 'Client'
                       const heureD = r.heure_debut?.slice(0,5)
                       const heureF = r.heure_fin?.slice(0,5)
@@ -358,12 +361,23 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                             gap: 1,
                           }}
                           title={`${heureD}–${heureF} · ${r.client_prenom || ''} ${r.client_nom || ''} · ${r.prestation?.nom || ''}${r.praticien ? ' · avec ' + r.praticien.prenom : ''}${(r.commande?.commande_articles || []).length > 0 ? ' · produits à préparer' : ''}`}>
-                          {/* Badge praticien en haut à droite (couleur_hex ou initiale) */}
-                          {r.praticien && (
-                            <div style={{ position: 'absolute', top: 2, right: 2, width: 12, height: 12, borderRadius: '50%', background: r.praticien.couleur_hex || '#6B35C4', border: '1.5px solid #fff', boxShadow: '0 0 0 1px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 7, fontWeight: 900 }}>
+                          {/* Initiale de la praticienne, en haut à droite.
+                              ⚠️ ELLE NE PEUT PLUS ÊTRE UNE PASTILLE DE SA COULEUR :
+                              le bloc porte déjà cette couleur, la pastille s'y
+                              fondrait et disparaîtrait. Sur un bloc coloré on
+                              écrit donc l'initiale à même le fond, dans l'encre
+                              lisible calculée ; sur un bloc gris ou rouge (sorti
+                              du planning), la pastille colorée reprend son rôle,
+                              car c'est le seul rappel de qui tenait le rendez-vous. */}
+                          {r.praticien && (couleurs.estPraticien ? (
+                            <div style={{ position: 'absolute', top: 2, right: 4, color: couleurs.text, opacity: 0.85, fontSize: 9, fontWeight: 900, lineHeight: 1 }}>
                               {(r.praticien.prenom?.[0] || '').toUpperCase()}
                             </div>
-                          )}
+                          ) : (
+                            <div style={{ position: 'absolute', top: 2, right: 2, width: 12, height: 12, borderRadius: '50%', background: r.praticien.couleur_hex || COULEUR_DEFAUT, border: '1.5px solid #fff', boxShadow: '0 0 0 1px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 7, fontWeight: 900 }}>
+                              {(r.praticien.prenom?.[0] || '').toUpperCase()}
+                            </div>
+                          ))}
                           {/* Pastille « produits à préparer ». En haut à gauche
                               pour ne pas heurter la pastille praticien, à
                               droite. Le détail se lit en ouvrant le RDV. */}
@@ -399,11 +413,29 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
 
       {/* Legende discrete en bas */}
       <div style={{ display: 'flex', gap: 14, padding: '0.5rem 0.875rem', borderTop: `1px solid ${T.pale}`, fontSize: 10, color: T.muted, fontWeight: 600, flexWrap: 'wrap' }}>
+        {/* ⚠️ LA LÉGENDE DIT MAINTENANT LA VRAIE RÈGLE. Elle annonçait « violet =
+            confirmé, vert = honoré », alors que la couleur d'un bloc est celle
+            de la praticienne qui le tient. Une légende qui décrit un autre
+            écran que celui qu'on regarde est pire que pas de légende. */}
+        {praticiens.length > 0 ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ display: 'inline-flex', gap: 2 }}>
+              {praticiens.slice(0, 3).map(p => (
+                <span key={p.id} style={{ width: 10, height: 10, borderRadius: 3, background: p.couleur_hex || COULEUR_DEFAUT }}/>
+              ))}
+            </span>
+            Chaque couleur, une praticienne
+          </span>
+        ) : (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: COULEUR_DEFAUT }}/>À venir
+          </span>
+        )}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: T.main }}/>Confirmé
+          <span style={{ width: 10, height: 10, borderRadius: 3, background: '#FEE2E2', border: '1px solid #DC2626' }}/>Annulé
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: '#10B981' }}/>Honoré
+          <span style={{ width: 10, height: 10, borderRadius: 3, background: '#E5E7EB', border: '1px solid #9CA3AF' }}/>Pas venu
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
           <span style={{ width: 10, height: 10, borderRadius: 3, background: '#FFFBEB', border: '1px solid #FDE68A' }}/>Pause

@@ -2,7 +2,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { canDo, getIaConfig } from '@/lib/plans'
-import { normaliserCodeBon } from '@/lib/bons-cadeaux'
+// ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
+// elles auraient menti au commerçant le jour où on les change.
+import { normaliserCodeBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-cadeaux'
 import { estRemiseSurProduit } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement } from '@/lib/lancement'
@@ -185,7 +187,12 @@ function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 2 }) {
     // Ondes : ce que les habitants envoient vers le commerce.
     signal:    <><path d="M12 20v-8"/><path d="M8.5 15.5a5 5 0 017 0"/><path d="M5.5 12.5a9 9 0 0113 0"/><path d="M2.5 9.5a13 13 0 0119 0"/></>,
     chart:     <><path d="M3 3v18h18"/><path d="M7 15l3-4 3 3 5-7"/></>,
+    info:      <><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></>,
   }
+  // ⚠️ Un nom inconnu rendait un SVG VIDE, sans la moindre erreur : ni au lint,
+  // ni au build, ni au banc. Juste un trou dans l'interface que personne ne
+  // remarque avant de tomber dessus.
+  if (!paths[name] && typeof console !== 'undefined') console.warn(`[Icon] nom inconnu : ${name}`)
   return <svg {...props} style={{ flexShrink: 0, display: 'inline-block', verticalAlign: 'middle' }}>{paths[name]}</svg>
 }
 
@@ -5481,6 +5488,24 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved }) {
         <p style={{ fontSize: 12, color: T.light, margin: '6px 0 0', lineHeight: 1.5, opacity: 0.9 }}>
           Montant libre, payé en ligne, l&rsquo;argent arrive directement sur ton compte. Le bon s&rsquo;utilise en une ou plusieurs fois, en ligne ou au comptoir.
         </p>
+      </div>
+
+      {/* Comment ça marche, en clair.
+          Le commerçant règle la validité et encaisse au comptoir sans qu'on lui
+          ait jamais expliqué QUI fixe le montant, ni ce qu'il advient d'un bon
+          entamé, ni quand l'argent lui arrive. Trois questions qu'il se pose au
+          premier bon vendu, et qui se traduisent sinon par un appel. */}
+      <div style={{ ...s.card, marginBottom: 14, background: T.pale, boxShadow: 'none', border: `1px solid ${T.main}22` }}>
+        <p style={{ fontSize: 13, fontWeight: 800, color: T.deep, margin: '0 0 8px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Icon name="info" size={15} color={T.main}/> Comment ça marche
+        </p>
+        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11.5, color: T.deep, lineHeight: 1.7 }}>
+          <li><strong>C&rsquo;est l&rsquo;acheteur qui choisit le montant</strong>, librement, entre {BON_MONTANT_MIN} et {BON_MONTANT_MAX} €. Tu n&rsquo;as rien à préparer ni à mettre en vente.</li>
+          <li><strong>Un bon cadeau est une somme, pas un article.</strong> Le bénéficiaire l&rsquo;utilise sur ce qu&rsquo;il veut chez toi, ce qui t&rsquo;évite de devoir garder un produit en réserve pendant des mois.</li>
+          <li><strong>Il s&rsquo;utilise en plusieurs fois.</strong> Un bon de 50 € dépensé à hauteur de 30 € en garde 20 pour la prochaine visite, en ligne comme au comptoir.</li>
+          <li><strong>Tu es payé tout de suite</strong>, à l&rsquo;achat du bon, sur ton compte. Quand le bénéficiaire vient le dépenser, il ne te doit plus rien : c&rsquo;est déjà encaissé.</li>
+          <li><strong>La validité court à partir de la vente</strong> et se règle juste en dessous. Passé ce délai, le bon ne peut plus être utilisé.</li>
+        </ul>
       </div>
 
       {/* Configuration */}

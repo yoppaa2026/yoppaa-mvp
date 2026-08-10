@@ -533,6 +533,16 @@ export async function POST(request) {
       .insert(lignes.map(l => ({
         commande_id: commande.id,
         article_id: l.article_id,
+        // ⚠️ LE NOM EST FIGÉ À LA VENTE, comme le taux de TVA juste en dessous
+        // et pour la même raison : ce qui a été vendu ne doit pas changer parce
+        // que le catalogue a bougé. Il était CALCULÉ puis JETÉ, et le tableau de
+        // bord le retrouvait par jointure sur `articles`. Deux dégâts : un deal
+        // perdait son titre (« Lot de 3 » s'affichait sous le nom de l'article
+        // de base), et un article retiré du catalogue, ce qui arrive à chaque
+        // fin de collection en boutique de détail, rendait la commande illisible
+        // POUR TOUJOURS — y compris en comptabilité, où un justificatif doit
+        // tenir des années.
+        article_nom: l.article_nom,
         quantite: l.quantite,
         prix_unitaire: l.prix_unitaire,
         options: l.options,

@@ -385,6 +385,74 @@ verifier('total nul = pas de ventilation', ventilerFrais(1.00, 0, 0) === null)
 verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === null)
 
 // ═══════════════════════════════════════════════════════════════════════════
+// LE NOM DE CE QUI A ÉTÉ VENDU — figé à la vente, comme le taux de TVA
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ IL ÉTAIT CALCULÉ PUIS JETÉ. `construireLignesCommande` retient déjà le nom
+// vendu, titre du DEAL compris, et l'insertion ne l'écrivait pas : le tableau de
+// bord le retrouvait par jointure sur `articles`. Deux dégâts :
+//   • un « Lot de 3 » s'affichait sous le nom de l'article de base ;
+//   • un article retiré du catalogue, ce qui arrive à chaque fin de collection
+//     en boutique de détail, rendait la commande illisible POUR TOUJOURS —
+//     « 1× » suivi de rien sur la vignette, « — » sur le reçu du client, et un
+//     justificatif comptable vide alors qu'il doit tenir des années.
+//
+// On EXÉCUTE le constructeur de lignes et on lit ce qu'il rend.
+{
+  const article = { id: 'a1', nom: 'Écharpe en laine', prix: 39, actif: true, stock: 10, tva_taux: 21 }
+  const commercantTest = { id: 'c1', categorie: 'detail', tva_taux_defaut: 21 }
+  const base = {
+    articlesData: [article], optionsValeurs: [], variantesData: [], dealsData: [],
+    commercant: commercantTest, regime: 'assujetti', dateCommande: '2026-08-11',
+  }
+  const simple = construireLignesCommande({ ...base, panier: [{ id: 'a1', quantite: 2 }] })
+  verifier('la ligne porte le nom de ce qui a été vendu', simple.ok === true)
+  egal('et c\'est bien le nom de l\'article', simple.lignes?.[0]?.article_nom, 'Écharpe en laine')
+
+  // Un lot est une offre séparée : c'est SON titre que le commerçant doit lire,
+  // pas celui de l'article de base.
+  const lot = {
+    // ⚠️ `deal_type`, pas `type` : c'est ce champ que lit `estOffreSeparee`, et
+    // un jeu d'essai mal formé aurait fait passer le test sur une remise.
+    id: 'd1', article_id: 'a1', titre: 'Lot de 3 écharpes', prix_deal: 99,
+    unites_par_deal: 3, actif: true, deal_type: 'lot',
+    // Une offre séparée n'est retenue que si sa fenêtre couvre la date de la
+    // commande : sans dates, elle est refusée, et le test aurait mesuré ce
+    // refus au lieu de mesurer le nom.
+    date_debut: '2026-08-01', date_fin: '2026-08-31',
+  }
+  const avecLot = construireLignesCommande({
+    ...base, dealsData: [lot], panier: [{ id: 'a1', quantite: 1, deal_id: 'd1' }],
+  })
+  if (avecLot.ok) {
+    egal('un lot garde SON titre, pas celui de l\'article', avecLot.lignes?.[0]?.article_nom, 'Lot de 3 écharpes')
+  } else {
+    verifier('le jeu d\'essai du lot est valide', false, avecLot.error)
+  }
+}
+
+// Et la valeur doit être ÉCRITE, sinon tout ce qui précède ne sert à rien.
+const routeCmd = readFileSync(new URL('../app/api/stripe/checkout/create-commande/route.js', import.meta.url), 'utf8')
+verifier('l\'insertion enregistre le nom vendu',
+  /\.from\('commande_articles'\)[\s\S]{0,1400}?article_nom: l\.article_nom/.test(routeCmd))
+// Les trois écrans le lisent EN PREMIER, la jointure ne servant plus qu'aux
+// commandes d'avant la colonne.
+for (const [chemin, ecran] of [
+  ['app/dashboard/page.js', 'la vignette du commerçant'],
+  ['app/commander/page.js', 'la liste du client'],
+  ['lib/commande-notifs.js', 'les emails'],
+]) {
+  const src = readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
+  verifier(`${ecran} lit le nom figé avant la jointure`,
+    /article_nom \|\| (a|l|ligne)\.article\?\.nom/.test(src), chemin)
+}
+// La migration doit exister, et ne rien casser pour les commandes déjà passées.
+const migNom = readFileSync(new URL('../migrations/MIGRATION_COMMANDE_ARTICLE_NOM.sql', import.meta.url), 'utf8')
+verifier('la colonne est ajoutée sans contrainte de non-nullité',
+  /ADD COLUMN IF NOT EXISTS article_nom text/.test(migNom) && !/NOT NULL/.test(migNom))
+verifier('les droits sont posés explicitement', /GRANT SELECT ON commande_articles/.test(migNom))
+verifier('sa vérification interroge la base', /information_schema\.columns/.test(migNom))
+
+// ═══════════════════════════════════════════════════════════════════════════
 // L'EXPÉDITION — le seul mode qui ne disait rien à son client
 // ═══════════════════════════════════════════════════════════════════════════
 // Un client en retrait reçoit « ta commande est prête ». Un client en livraison

@@ -591,7 +591,10 @@ function PickupScreen({ commande, clientPrenom, onConfirm, onFermer }) {
           <div style={{ marginTop: 14, display: 'inline-block', textAlign: 'left', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 14, padding: '10px 16px', maxWidth: '100%' }}>
             {lignes.slice(0, 4).map((l, i) => (
               <p key={i} style={{ fontSize: '0.86rem', fontWeight: 700, color: 'rgba(255,255,255,0.92)', lineHeight: 1.6 }}>
-                {l.quantite} × {l.article?.nom || l.article_nom || 'Article'}
+                {/* Le nom figé à la vente d'abord : c'est ce que le client a
+                    acheté, titre du deal compris. La jointure ne sert que pour
+                    les commandes d'avant la colonne. */}
+                {l.quantite} × {l.article_nom || l.article?.nom || 'Article'}
               </p>
             ))}
             {lignes.length > 4 && (

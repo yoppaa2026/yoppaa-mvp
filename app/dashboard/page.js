@@ -323,15 +323,22 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
             return (
               <div key={ligne.id} style={{ marginBottom: 6, lineHeight: 1.4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: T.muted }}>
-                  {/* ⚠️ LE NOM VENAIT UNIQUEMENT DE LA JOINTURE. Un article
-                      supprimé ou désactivé, ce qui arrive tous les jours en
-                      boutique de détail quand une collection part, et la ligne
-                      s'affichait « 1× » suivi de RIEN : le commerçant ne savait
-                      plus ce qu'il avait vendu, et la commande devenait
-                      illisible pour toujours, y compris en comptabilité. */}
-                  <span style={{ fontWeight: 700, color: ligne.article?.nom ? T.ink : T.muted, fontStyle: ligne.article?.nom ? 'normal' : 'italic' }}>
-                    {ligne.quantite}× {ligne.article?.nom || 'Article retiré du catalogue'}
-                  </span>
+                  {/* ⚠️ LE NOM FIGÉ À LA VENTE D'ABORD, la jointure ensuite.
+                      Le nom ne venait QUE de la jointure : un article retiré du
+                      catalogue, ce qui arrive à chaque fin de collection en
+                      boutique de détail, et la ligne affichait « 1× » suivi de
+                      RIEN. Le commerçant ne savait plus ce qu'il avait vendu, et
+                      la commande devenait illisible pour toujours.
+                      Les commandes d'avant la colonne n'ont pas de nom figé :
+                      elles continuent de passer par la jointure, comme avant. */}
+                  {(() => {
+                    const nomVendu = ligne.article_nom || ligne.article?.nom
+                    return (
+                      <span style={{ fontWeight: 700, color: nomVendu ? T.ink : T.muted, fontStyle: nomVendu ? 'normal' : 'italic' }}>
+                        {ligne.quantite}× {nomVendu || 'Article retiré du catalogue'}
+                      </span>
+                    )
+                  })()}
                   <span style={{ fontWeight: 700, color: T.ink }}>{(ligne.quantite * ligne.prix_unitaire).toFixed(2)}€</span>
                 </div>
                 {Object.entries(optionsParGroupe).map(([groupe, vals]) => (

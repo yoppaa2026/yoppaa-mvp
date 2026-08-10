@@ -7,6 +7,7 @@ import AgendaRdv from './AgendaRdv'
 import ModalNouveauRdv from './ModalNouveauRdv'
 import { Reply, ClipboardList } from 'lucide-react'
 import { canDo } from '@/lib/plans'
+import { remplissageCreneaux } from '@/lib/creneaux'
 
 const T = {
   bg:      '#F8F6FF',
@@ -565,6 +566,12 @@ export default function Dashboard() {
   const [commandes, setCommandes] = useState([])
   const [rdvs, setRdvs] = useState([])
   const [creneauxRdv, setCreneauxRdv] = useState([])  // rdv_creneaux du commercant, pour la grille agenda (pauses)
+  // Grilles de créneaux alimentaires (retrait + tournées), pour AFFICHER LE
+  // REMPLISSAGE au commerçant. Chargées une seule fois par commerce : une grille
+  // hebdomadaire ne change pas toutes les minutes, elle n'a rien à faire dans le
+  // rafraîchissement des commandes.
+  const [creneauxRetrait, setCreneauxRetrait] = useState([])
+  const [creneauxLivraison, setCreneauxLivraison] = useState([])
   const [prestationsRdv, setPrestationsRdv] = useState([])  // rdv_prestations actives, pour la modale 'Nouveau RDV manuel'
   const [praticiensRdv, setPraticiensRdv] = useState([])    // rdv_praticiens actifs, pour AgendaRdv (filtre + badges)
   const [rdvSelectionne, setRdvSelectionne] = useState(null)  // RDV ouvert dans la modale details
@@ -779,6 +786,27 @@ export default function Dashboard() {
       clearInterval(interval)
     }
   }, [commercant?.id, chargerCommandes, chargerRdvs])
+
+  // ─── Grilles de créneaux, pour afficher le remplissage ────────────────────
+  // Volontairement HORS du polling : ces grilles sont une configuration, pas un
+  // flux. Ce qui bouge d'une minute à l'autre, ce sont les commandes, et elles
+  // sont déjà rafraîchies. Un effet à part suffit, et il suit le changement de
+  // commerce pour les comptes multi-boutiques.
+  useEffect(() => {
+    if (!commercant?.id) return
+    let annule = false
+    const cid = commercant.id
+    ;(async () => {
+      const [{ data: retrait }, { data: livraison }] = await Promise.all([
+        supabase.from('creneaux').select('*').eq('commercant_id', cid).eq('actif', true).order('heure_debut'),
+        supabase.from('livraison_creneaux').select('*').eq('commercant_id', cid).eq('actif', true).order('heure_debut'),
+      ])
+      if (annule) return
+      setCreneauxRetrait(retrait || [])
+      setCreneauxLivraison(livraison || [])
+    })()
+    return () => { annule = true }
+  }, [commercant?.id])
 
   // Fonction pour quitter le mode impersonation (logue end + nettoie flags + retour /admin)
   const quitterImpersonation = useCallback(async () => {
@@ -1107,6 +1135,23 @@ export default function Dashboard() {
   // Les livraisons sans créneau : elles n'entrent dans aucune tournée. On le
   // DIT plutôt que de les laisser disparaître de l'écran d'organisation.
   const livraisonsSansCreneau = commandesALivrer.filter(c => !c.creneau_livraison_id)
+
+  // Remplissage des créneaux du jour affiché, dans la vue affichée.
+  //
+  // ⚠️ LA CHARGE SE LIT SUR TOUTES LES COMMANDES, pas sur `commandesDuJour` :
+  // celle-ci est déjà filtrée par statut et par vue, alors qu'un créneau est
+  // occupé par tout ce qui attend d'être préparé, y compris les paiements en
+  // cours. Le tri revient à `remplissageCreneaux`, qui applique les mêmes
+  // statuts que le serveur.
+  //
+  // En historique, il n'y a pas de jour à remplir : on n'affiche rien.
+  const creneauxRemplis = modeHistorique ? [] : remplissageCreneaux({
+    creneaux: vueMode === 'livraison' ? creneauxLivraison : creneauxRetrait,
+    commandes,
+    jour: jourActif,
+    modeCapaciteDefaut: commercant?.mode_capacite,
+    champCreneau: vueMode === 'livraison' ? 'creneau_livraison_id' : 'creneau_id',
+  })
 
   const stats = {
     nouvelles:  commandesDuJour.filter(c => c.statut === 'en_attente').length,
@@ -1685,7 +1730,9 @@ export default function Dashboard() {
                     { v: 'livraison', label: 'Livraison', n: commandesDuJourTous.filter(c => c.mode_retrait === 'livraison').length },
                   ].map(m => (
                     <button key={m.v} onClick={() => { setVueMode(m.v); setFiltreStatut('actives') }}
-                      style={{ flex: 1, padding: '9px', borderRadius: 10, border: `2px solid ${vueMode === m.v ? T.main : T.hairline}`, background: vueMode === m.v ? T.main : '#fff', color: vueMode === m.v ? '#fff' : T.ink, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                      /* T.hairline n'existe pas dans la palette de cet écran : le bouton
+                         inactif rendait « 2px solid undefined », donc AUCUN contour. */
+                      style={{ flex: 1, padding: '9px', borderRadius: 10, border: `2px solid ${vueMode === m.v ? T.main : T.pale}`, background: vueMode === m.v ? T.main : '#fff', color: vueMode === m.v ? '#fff' : T.ink, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                       {m.label}{m.n > 0 ? ` · ${m.n}` : ''}
                     </button>
                   ))}
@@ -1739,6 +1786,43 @@ export default function Dashboard() {
           <div className="scroll-zone">
             {ongletPrincipal === 'commandes' && (
               <>
+                {/* Remplissage des créneaux du jour.
+                    Le commerçant règle « max 5 » ou « 30 min » dans sa configuration et
+                    son client lit « presque plein » sur la fiche : jusqu'ici, lui seul
+                    ne voyait rien et devait compter ses commandes à la main. */}
+                {creneauxRemplis.length > 0 && (
+                  <div style={{ background: '#fff', borderRadius: 14, padding: '12px 14px', marginBottom: 12, border: `1px solid ${T.pale}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                      <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Remplissage {vueMode === 'livraison' ? 'des tournées' : 'des créneaux'}
+                      </p>
+                      <span style={{ fontSize: '0.62rem', fontWeight: 700, color: T.main }}>{dateLabel(jourActif + 'T00:00:00')}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
+                      {creneauxRemplis.map(({ creneau, modeTemps, capacite, utiliseEff, complet, bientot, presque }) => {
+                        const couleur = complet ? T.rouge.badge : bientot ? T.orange.badge : presque ? '#CA8A04' : T.vert.badge
+                        const ratio = capacite > 0 ? Math.min(1, utiliseEff / capacite) : 0
+                        const etat = complet ? 'Complet' : bientot ? 'Bientôt plein' : presque ? 'Presque plein' : utiliseEff === 0 ? 'Libre' : 'De la place'
+                        return (
+                          <div key={creneau.id} style={{ minWidth: 98, flexShrink: 0, borderRadius: 10, padding: '8px 10px', background: complet ? T.rouge.cardBg : '#FBFAFF', border: `1.5px solid ${couleur}33` }}>
+                            <p style={{ fontSize: '0.72rem', fontWeight: 800, color: T.ink, letterSpacing: '-0.2px' }}>
+                              {String(creneau.heure_debut || '').slice(0, 5)}–{String(creneau.heure_fin || '').slice(0, 5)}
+                            </p>
+                            <p style={{ fontSize: '0.95rem', fontWeight: 900, color: couleur, lineHeight: 1.2, marginTop: 2 }}>
+                              {Math.round(utiliseEff)}<span style={{ color: T.muted, fontWeight: 800 }}>/{Math.round(capacite)}</span>
+                              {modeTemps && <span style={{ fontSize: '0.58rem', fontWeight: 700, color: T.muted, marginLeft: 3 }}>min</span>}
+                            </p>
+                            <div style={{ height: 4, borderRadius: 100, background: '#EEE9F8', overflow: 'hidden', marginTop: 5 }}>
+                              <div style={{ width: `${ratio * 100}%`, height: '100%', background: couleur, borderRadius: 100 }}/>
+                            </div>
+                            <p style={{ fontSize: '0.56rem', fontWeight: 800, color: couleur, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.3px' }}>{etat}</p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Tournées du jour, UNE PAR CRÉNEAU (vue Livraison) */}
                 {vueMode === 'livraison' && !modeHistorique && tourneesDuJour.map(t => {
                   const tournee = tournees[t.id]

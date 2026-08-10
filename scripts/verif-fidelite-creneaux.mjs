@@ -6,7 +6,7 @@
 // pouvait servir, soit en accepter plus qu'on ne peut préparer.
 
 import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '../lib/fidelite.js'
-import { calculerCapaciteCreneau, creneauCommandable, jourSemaineDe, STATUTS_OCCUPENT_CRENEAU } from '../lib/creneaux.js'
+import { calculerCapaciteCreneau, creneauCommandable, jourSemaineDe, remplissageCreneaux, STATUTS_OCCUPENT_CRENEAU } from '../lib/creneaux.js'
 import { brusselsInstant } from '../lib/timezone.js'
 import { readFileSync } from 'node:fs'
 
@@ -406,6 +406,164 @@ verifier('l\'ancienne fonction n\'est pas supprimée', !/DROP FUNCTION/.test(mig
 verifier('les droits sont posés explicitement',
   /GRANT EXECUTE ON FUNCTION charge_creneaux_par_jour/.test(migJour))
 verifier('sa vérification interroge la base', /FROM pg_proc/.test(migJour))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE REMPLISSAGE VU DU COMMERÇANT
+// ═══════════════════════════════════════════════════════════════════════════
+// Le commerçant règle « max 5 commandes » ou « 30 minutes » et son client lit
+// « presque plein » sur la fiche. Lui ne voyait RIEN : le tableau de bord
+// n'affichait ce remplissage nulle part, il fallait compter à la main.
+//
+// Ces tests EXÉCUTENT la fonction et lisent ce qui en sort. Le danger n'est pas
+// qu'elle rende un chiffre, c'est qu'elle rende un chiffre DIFFÉRENT de celui
+// que voit le client : le commerçant jurerait avoir de la place là où sa fiche
+// affiche « complet ».
+
+const JOUR = '2026-08-11'
+const NOM_JOUR = jourSemaineDe(JOUR)
+const AUTRE_JOUR = '2026-08-12'
+verifier('les deux dates de test tombent bien sur deux jours différents',
+  NOM_JOUR && jourSemaineDe(AUTRE_JOUR) && NOM_JOUR !== jourSemaineDe(AUTRE_JOUR))
+
+const CRENEAUX = [
+  { id: 'c11', jour_semaine: NOM_JOUR, heure_debut: '11:00', heure_fin: '11:15', max_commandes: 5, capacite_temps: 30, actif: true },
+  { id: 'c09', jour_semaine: NOM_JOUR, heure_debut: '09:00', heure_fin: '09:15', max_commandes: 5, capacite_temps: 30, actif: true },
+  { id: 'cAutre', jour_semaine: jourSemaineDe(AUTRE_JOUR), heure_debut: '10:00', heure_fin: '10:15', max_commandes: 5, actif: true },
+  { id: 'cOff', jour_semaine: NOM_JOUR, heure_debut: '08:00', heure_fin: '08:15', max_commandes: 5, actif: false },
+]
+const cmd = (statut, creneau_id, date_commande, articles = []) =>
+  ({ statut, creneau_id, date_commande, commande_articles: articles })
+const ligne = (quantite, temps_prepa) => ({ quantite, article: { temps_prepa } })
+
+const parId = (liste) => Object.fromEntries(liste.map(r => [r.creneau.id, r]))
+
+// ─── Mode « commandes » ────────────────────────────────────────────────────
+const vue = parId(remplissageCreneaux({
+  creneaux: CRENEAUX,
+  jour: JOUR,
+  modeCapaciteDefaut: 'commandes',
+  commandes: [
+    cmd('en_attente',          'c11', JOUR),
+    cmd('en_preparation',      'c11', JOUR),
+    cmd('paiement_en_attente', 'c11', JOUR),   // sa place est réservée le temps du paiement
+    cmd('annulee_client_refund', 'c11', JOUR), // ⚠️ ne doit RIEN occuper
+    cmd('recupere',            'c11', JOUR),   // terminée, elle libère la place
+    cmd('en_attente',          'c11', AUTRE_JOUR), // ⚠️ un autre jour, un autre créneau
+  ],
+}))
+egal('trois commandes actives remplissent le créneau', vue.c11?.utiliseEff, 3)
+egal('la capacité affichée est celle du créneau', vue.c11?.capacite, 5)
+verifier('le créneau n\'est pas annoncé complet', vue.c11?.complet === false)
+egal('un créneau sans commande reste à zéro', vue.c09?.utiliseEff, 0)
+verifier('un créneau vide est bien signalé libre', vue.c09?.complet === false && vue.c09?.bientot === false)
+verifier('le créneau d\'un autre jour de la semaine n\'est pas listé', vue.cAutre === undefined)
+verifier('un créneau désactivé n\'est pas listé', vue.cOff === undefined)
+
+// La ligne du haut ne doit pas être une liste dans le désordre : le commerçant
+// lit sa journée de gauche à droite.
+const ordre = remplissageCreneaux({ creneaux: CRENEAUX, jour: JOUR, modeCapaciteDefaut: 'commandes', commandes: [] })
+egal('les créneaux sortent triés par heure', ordre.map(r => r.creneau.id), ['c09', 'c11'])
+
+// Le seuil « complet » doit tomber au même endroit que sur la fiche client.
+const plein = parId(remplissageCreneaux({
+  creneaux: CRENEAUX, jour: JOUR, modeCapaciteDefaut: 'commandes',
+  commandes: Array.from({ length: 5 }, () => cmd('en_attente', 'c11', JOUR)),
+}))
+verifier('cinq commandes sur cinq : le créneau est complet', plein.c11?.complet === true)
+
+// ─── Mode « temps », celui des boulangeries ────────────────────────────────
+const enTemps = parId(remplissageCreneaux({
+  creneaux: CRENEAUX, jour: JOUR, modeCapaciteDefaut: 'temps',
+  commandes: [
+    cmd('en_attente', 'c11', JOUR, [ligne(2, 5), ligne(1, 3)]),   // 13 minutes
+    cmd('en_preparation', 'c11', JOUR, [ligne(3, 2)]),            // 6 minutes
+  ],
+}))
+egal('le temps de préparation est cumulé, quantités comprises', enTemps.c11?.utiliseEff, 19)
+egal('la capacité lue est celle en minutes', enTemps.c11?.capacite, 30)
+
+// ⚠️ LE PIÈGE QUI FERAIT DIVERGER LES DEUX ÉCRANS. La fonction SQL écrit
+// COALESCE(temps_prepa, 1) : un article sans temps réglé pèse UNE minute. Si le
+// tableau de bord comptait zéro, le commerçant verrait un créneau vide pendant
+// que son client le lit comme presque plein.
+const sansTemps = parId(remplissageCreneaux({
+  creneaux: CRENEAUX, jour: JOUR, modeCapaciteDefaut: 'temps',
+  commandes: [cmd('en_attente', 'c11', JOUR, [ligne(4, null), ligne(2, undefined)])],
+}))
+egal('un article sans temps de préparation vaut une minute, jamais zéro', sansTemps.c11?.utiliseEff, 6)
+// Les deux formes d'absence doivent donner le MÊME chiffre : `Number(null)`
+// vaut 0 et passe pour un nombre valide, `Number(undefined)` vaut NaN.
+const absenceNull = remplissageCreneaux({ creneaux: CRENEAUX, jour: JOUR, modeCapaciteDefaut: 'temps', commandes: [cmd('en_attente', 'c11', JOUR, [ligne(3, null)])] })
+const absenceUndef = remplissageCreneaux({ creneaux: CRENEAUX, jour: JOUR, modeCapaciteDefaut: 'temps', commandes: [cmd('en_attente', 'c11', JOUR, [ligne(3, undefined)])] })
+egal('colonne vide ou champ absent comptent pareil',
+  parId(absenceNull).c11?.utiliseEff, parId(absenceUndef).c11?.utiliseEff)
+// Mais un zéro écrit exprès reste zéro, comme le COALESCE qui ne remplace que
+// le NULL : sinon un article servi d'avance se mettrait à peser une minute.
+const zeroVoulu = parId(remplissageCreneaux({
+  creneaux: CRENEAUX, jour: JOUR, modeCapaciteDefaut: 'temps',
+  commandes: [cmd('en_attente', 'c11', JOUR, [ligne(5, 0)])],
+}))
+egal('un temps réglé à zéro reste zéro', zeroVoulu.c11?.utiliseEff, 0)
+
+// Même règle que la jointure LEFT de la fonction SQL : une commande sans ligne
+// compte tout de même pour une commande, sinon la capacité paraîtrait libre.
+const sansLigne = parId(remplissageCreneaux({
+  creneaux: CRENEAUX, jour: JOUR, modeCapaciteDefaut: 'commandes',
+  commandes: [cmd('en_attente', 'c11', JOUR, [])],
+}))
+egal('une commande sans ligne occupe quand même une place', sansLigne.c11?.utiliseEff, 1)
+
+// Le débordement du mode temps : une prépa trop longue à 9h empiète sur 11h, et
+// le commerçant doit le voir venir plutôt que le découvrir dans son fournil.
+const deborde = parId(remplissageCreneaux({
+  creneaux: CRENEAUX, jour: JOUR, modeCapaciteDefaut: 'temps',
+  commandes: [
+    cmd('en_attente', 'c09', JOUR, [ligne(1, 40)]),  // 40 min pour 30 de capacité
+    cmd('en_attente', 'c11', JOUR, [ligne(1, 5)]),
+  ],
+}))
+egal('le surplus du créneau précédent déborde sur le suivant', deborde.c11?.utiliseEff, 15)
+
+// ─── La séparation Click & Collect / Livraison ─────────────────────────────
+// Une commande à emporter ne doit pas remplir une tournée, et inversement.
+const TOURNEES = [{ id: 't18', jour_semaine: NOM_JOUR, heure_debut: '18:00', heure_fin: '19:00', max_commandes: 4, mode_capacite: 'commandes', actif: true }]
+const melange = [
+  { statut: 'en_attente', creneau_id: 'c11', creneau_livraison_id: null, date_commande: JOUR, commande_articles: [] },
+  { statut: 'en_attente', creneau_id: null, creneau_livraison_id: 't18', date_commande: JOUR, commande_articles: [] },
+  { statut: 'en_attente', creneau_id: null, creneau_livraison_id: 't18', date_commande: JOUR, commande_articles: [] },
+]
+const vueTournee = parId(remplissageCreneaux({
+  creneaux: TOURNEES, jour: JOUR, modeCapaciteDefaut: 'commandes',
+  commandes: melange, champCreneau: 'creneau_livraison_id',
+}))
+egal('la tournée ne compte que ses propres livraisons', vueTournee.t18?.utiliseEff, 2)
+const vueRetrait = parId(remplissageCreneaux({
+  creneaux: CRENEAUX, jour: JOUR, modeCapaciteDefaut: 'commandes', commandes: melange,
+}))
+egal('le créneau de retrait ne compte pas les livraisons', vueRetrait.c11?.utiliseEff, 1)
+
+// ⚠️ LA SOURCE EXTÉRIEURE. Les statuts occupants sont écrits DEUX fois : ici en
+// JavaScript et là-bas en SQL. S'ils divergent, le commerçant et le client
+// comptent deux choses différentes sans qu'aucune erreur ne se déclenche.
+const statutsSQL = (migJour.match(/statut IN \(([^)]+)\)/) || [])[1]
+egal('les statuts occupants sont les mêmes en SQL et en JavaScript',
+  statutsSQL ? statutsSQL.split(',').map(s => s.trim().replace(/'/g, '')) : null,
+  STATUTS_OCCUPENT_CRENEAU)
+
+// Et le tableau de bord doit APPELER cette fonction, pas seulement l'importer :
+// un calcul juste que personne ne branche n'affiche rien du tout.
+const dash = lireBrut('app/dashboard/page.js')
+verifier('le tableau de bord appelle le calcul de remplissage',
+  /const creneauxRemplis = [\s\S]{0,80}?remplissageCreneaux\(\{/.test(dash))
+verifier('il l\'affiche vraiment', /creneauxRemplis\.map\(/.test(dash))
+verifier('il bascule sur les créneaux de livraison dans la vue Livraison',
+  /vueMode === 'livraison' \? creneauxLivraison : creneauxRetrait/.test(dash))
+verifier('et il compte alors les commandes par leur créneau de livraison',
+  /vueMode === 'livraison' \? 'creneau_livraison_id' : 'creneau_id'/.test(dash))
+// La charge se lit sur TOUTES les commandes : `commandesDuJour` est déjà filtrée
+// par statut et par vue, elle donnerait un créneau faussement vide.
+verifier('la charge se lit sur toutes les commandes, pas sur la liste filtrée',
+  /remplissageCreneaux\(\{[\s\S]{0,200}?\n\s*commandes,\n/.test(dash))
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

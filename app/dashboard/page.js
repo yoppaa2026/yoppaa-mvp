@@ -323,7 +323,15 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
             return (
               <div key={ligne.id} style={{ marginBottom: 6, lineHeight: 1.4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: T.muted }}>
-                  <span style={{ fontWeight: 700, color: T.ink }}>{ligne.quantite}× {ligne.article?.nom}</span>
+                  {/* ⚠️ LE NOM VENAIT UNIQUEMENT DE LA JOINTURE. Un article
+                      supprimé ou désactivé, ce qui arrive tous les jours en
+                      boutique de détail quand une collection part, et la ligne
+                      s'affichait « 1× » suivi de RIEN : le commerçant ne savait
+                      plus ce qu'il avait vendu, et la commande devenait
+                      illisible pour toujours, y compris en comptabilité. */}
+                  <span style={{ fontWeight: 700, color: ligne.article?.nom ? T.ink : T.muted, fontStyle: ligne.article?.nom ? 'normal' : 'italic' }}>
+                    {ligne.quantite}× {ligne.article?.nom || 'Article retiré du catalogue'}
+                  </span>
                   <span style={{ fontWeight: 700, color: T.ink }}>{(ligne.quantite * ligne.prix_unitaire).toFixed(2)}€</span>
                 </div>
                 {Object.entries(optionsParGroupe).map(([groupe, vals]) => (
@@ -955,6 +963,18 @@ export default function Dashboard() {
     if (error) { alert(`Erreur : ${error.message}`); return }
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...patch } : c))
     crediterFideliteCommande(commandeId)
+
+    // ⚠️ PRÉVENIR LE CLIENT, ce que personne ne faisait. L'expédition était le
+    // SEUL mode sans aucune nouvelle : le retrait dit « ta commande est prête »,
+    // la livraison dit « le commerçant vient de partir », et celui qui avait payé
+    // un colis n'apprenait rien. Le numéro de suivi restait dans ce tableau de
+    // bord. Envoyé APRÈS la mise à jour en base, pour que la route relise le
+    // numéro qui vient d'être enregistré. Non bloquant : l'écran est déjà à jour.
+    fetch('/api/emails/commande-expediee', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commande_id: commandeId }),
+    }).catch(e => console.warn('[dashboard] email commande-expediee KO', e))
   }
 
   async function changerStatutLivraison(commandeId, statutLivraison) {

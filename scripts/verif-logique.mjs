@@ -21,6 +21,7 @@ import { generateRdvIcs, icsToBase64Attachment } from '../lib/ical.js'
 import { tauxFraisLivraison } from '../lib/tva.js'
 import { ventilerFrais } from '../lib/stripe-frais.js'
 import { contexteRetrait, textesRetrait, textesConfirmation } from '../lib/ecran-retrait.js'
+import { emailCommandeExpediee } from '../lib/resend.js'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -382,6 +383,64 @@ verifier('pas de centime perdu à l’arrondi', Math.abs((v.rdv.frais + v.comman
 
 verifier('total nul = pas de ventilation', ventilerFrais(1.00, 0, 0) === null)
 verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === null)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L'EXPÉDITION — le seul mode qui ne disait rien à son client
+// ═══════════════════════════════════════════════════════════════════════════
+// Un client en retrait reçoit « ta commande est prête ». Un client en livraison
+// reçoit « le commerçant vient de partir ». Celui qui avait payé un COLIS,
+// boutique détail en expédition, n'était prévenu de RIEN : le commerçant
+// marquait la commande expédiée, saisissait un numéro de suivi, et ce numéro ne
+// quittait jamais le tableau de bord. Le client ne pouvait le découvrir qu'en
+// revenant de lui-même sur le site ouvrir sa liste de commandes.
+//
+// L'email est RENDU et on lit le HTML produit, jamais le code source.
+const mailColis = emailCommandeExpediee({
+  yopper_prenom: 'Alex', commercant_nom: 'La Boutique Témoin', numero_commande: 77,
+  expedition_suivi: 'BE123456789', adresse_livraison: 'Rue de Prée 9G, 5640 Mettet',
+})
+verifier('colis : le client sait que c\'est parti', /parti|expédi/i.test(mailColis))
+verifier('colis : le numéro de suivi lui est donné', mailColis.includes('BE123456789'))
+verifier('colis : son adresse est rappelée', mailColis.includes('Rue de Prée 9G'))
+verifier('colis : le numéro de commande figure', mailColis.includes('77'))
+verifier('colis : le lien mène à ses commandes', mailColis.includes('onglet=commandes'))
+// ⚠️ Personne ne se déplace : le vocabulaire du retrait n'a rien à faire ici.
+verifier('colis : aucun vocabulaire de retrait',
+  !/à retirer|au comptoir|viens le chercher|Prête à retirer/i.test(mailColis))
+
+// ⚠️ LE NUMÉRO DE SUIVI EST FACULTATIF. Beaucoup d'envois partent sans, et le
+// message doit rester juste : ni cadre vide, ni promesse d'un suivi inexistant.
+const mailSansSuivi = emailCommandeExpediee({
+  yopper_prenom: 'Alex', commercant_nom: 'La Boutique Témoin', numero_commande: 78,
+  expedition_suivi: null, adresse_livraison: 'Rue de Prée 9G, 5640 Mettet',
+})
+verifier('sans suivi : on ne parle pas de numéro de suivi',
+  !/Numéro de suivi/i.test(mailSansSuivi))
+verifier('sans suivi : on ne renvoie pas vers un transporteur',
+  !/site du transporteur/i.test(mailSansSuivi))
+verifier('sans suivi : le client est quand même prévenu du départ',
+  /parti|route|expédi/i.test(mailSansSuivi))
+// Une chaîne d'espaces n'est pas un numéro de suivi.
+const mailSuiviVide = emailCommandeExpediee({ yopper_prenom: 'Alex', commercant_nom: 'X', numero_commande: 79, expedition_suivi: '   ' })
+verifier('un suivi fait d\'espaces ne compte pas', !/Numéro de suivi/i.test(mailSuiviVide))
+
+// Et le tableau de bord doit APPELER la route, sinon rien ne part.
+const routeExp = readFileSync(new URL('../app/api/emails/commande-expediee/route.js', import.meta.url), 'utf8')
+const dashExp = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+verifier('le tableau de bord déclenche l\'email en expédiant',
+  /expedierCommande[\s\S]{0,900}?\/api\/emails\/commande-expediee/.test(dashExp))
+// ⚠️ APRÈS l'écriture en base, sinon la route relirait l'ancien numéro de suivi
+// (ou pas de numéro du tout) et le client recevrait un email incomplet.
+verifier('il l\'envoie après avoir enregistré le numéro de suivi',
+  dashExp.indexOf("expedition_suivi: suivi || null") < dashExp.indexOf('/api/emails/commande-expediee'))
+verifier('la route rend bien l\'email', /emailCommandeExpediee\(\{/.test(routeExp))
+// Une route qui croit son appelant sur parole finit par envoyer le mauvais
+// message au mauvais client.
+verifier('elle refuse de parler de colis à une commande qui n\'en est pas un',
+  /mode_retrait !== 'expedition'/.test(routeExp))
+verifier('elle relit le numéro de suivi en base', /expedition_suivi/.test(routeExp))
+verifier('une commande sans adresse mail ne fait pas échouer la route',
+  /skipped: 'no_email'/.test(routeExp))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LE PREMIER RENDU — la page blanche que rien ne voyait venir

@@ -49,6 +49,21 @@ const T = {
   muted:   '#6B7280',
 }
 
+// La date d'un jour affiché, au format que la base attend.
+//
+// ⚠️ SURTOUT PAS `toISOString()`. La Belgique est en avance sur UTC : minuit
+// heure belge, c'est 22h ou 23h la VEILLE en temps universel. `toISOString()`
+// rendrait donc systématiquement le jour précédent pendant toute la soirée, et
+// la charge d'un créneau irait se ranger sous la mauvaise date.
+//
+// Cette formule est celle qui construit déjà `date_commande` à l'envoi : les
+// deux DOIVENT rester identiques, sinon la charge affichée ne retrouverait
+// jamais les commandes enregistrées.
+function jourLocalISO(date) {
+  const d = date instanceof Date ? date : new Date(date)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LONGS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
 
@@ -883,6 +898,14 @@ export default function CommanderSlug() {
   const [commercant, setCommercant] = useState(null)
   const [articles, setArticles] = useState([])
   const [creneaux, setCreneaux] = useState([])
+  // Charge des créneaux, indexée par JOUR puis par créneau. Elle ne vit pas
+  // dans les créneaux eux-mêmes : un créneau est une grille hebdomadaire,
+  // « mardi 11h15 » revient chaque semaine avec une charge différente.
+  // Seule celle du RETRAIT vit en état : le calendrier de retrait est
+  // reconstruit quand les créneaux ou les fermetures changent. Celui de la
+  // livraison n'est construit qu'une fois, à l'hydratation, sa charge lui est
+  // donc passée directement.
+  const [chargeCreneaux, setChargeCreneaux] = useState({})
   const [avisCommerce, setAvisCommerce] = useState([])
   const [notesInfo, setNotesInfo] = useState({ moyenne: 0, count: 0 })
   const [panier, setPanier] = useState({})
@@ -1285,9 +1308,14 @@ export default function CommanderSlug() {
     setDealActif(data.dealActif)
     setDealsActifs(data.dealsActifs || [])
     setFermetures(data.fermetures)
-    buildJoursDispos(data.commercant, data.creneaux, data.fermetures)
+    // Un cache écrit avant le 10/08 ne porte pas la charge : on retombe sur un
+    // objet vide, les créneaux s'affichent libres, et le prochain chargement
+    // rétablit les compteurs. Le serveur, lui, refuse de toute façon un
+    // créneau complet.
+    setChargeCreneaux(data.chargeCreneaux || {})
+    buildJoursDispos(data.commercant, data.creneaux, data.fermetures, data.chargeCreneaux || {})
     setLivraisonConfig(data.livraisonConfig || null)
-    setJoursDisposLivraison(construireJoursDispos(data.commercant, data.livraisonCreneaux || [], data.fermetures))
+    setJoursDisposLivraison(construireJoursDispos(data.commercant, data.livraisonCreneaux || [], data.fermetures, data.chargeLivraison || {}))
     setFoodtruckEmps(data.foodtruckEmps || [])
     setLoading(false)
     // Deep link partage : ?article=<id> ouvre directement la fiche de l'article
@@ -1337,16 +1365,21 @@ export default function CommanderSlug() {
       // sans l'identifiant du client ni celui de sa commande.
       supabase.from('avis_public').select('*').eq('commercant_id', c.id).order('created_at', { ascending: false }).limit(10),
       supabase.from('avis_public').select('note').eq('commercant_id', c.id),
-      // Charge de préparation agrégée par créneau : les lignes de commande ne
-      // sont plus lisibles publiquement, une fonction serveur fait la somme.
-      supabase.rpc('charge_preparation_par_creneau', { p_commercant_id: c.id }),
+      // Charge de préparation agrégée par créneau ET PAR JOUR : les lignes de
+      // commande ne sont plus lisibles publiquement, une fonction serveur fait
+      // la somme. Le jour est indispensable — un créneau « mardi 11h15 »
+      // revient chaque semaine, et sans la date on ne sait pas de quel mardi
+      // on parle.
+      supabase.rpc('charge_creneaux_par_jour', { p_commercant_id: c.id }),
       supabase.from('commercant_photos').select('*').eq('commercant_id', c.id).order('ordre'),
       supabase.from('yoppaa_deals').select('*').eq('commercant_id', c.id).eq('actif', true),
       supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', c.id).gte('date_fin', new Date().toISOString()),
       supabase.from('actualites').select('*').eq('commercant_id', c.id).eq('actif', true).order('created_at', { ascending: false }),
       supabase.from('livraison_config').select('*').eq('commercant_id', c.id).maybeSingle(),
       supabase.from('livraison_creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
-      supabase.from('commandes_stats').select('creneau_livraison_id').eq('commercant_id', c.id).eq('mode_retrait', 'livraison').not('statut', 'in', '(recupere,non_retire,annulee_client_refund,annulee_paiement_ko)'),
+      // `date_commande` est indispensable ici aussi : sans elle, une tournée de
+      // jeudi déjà pleine pesait sur le créneau de mardi, et inversement.
+      supabase.from('commandes_stats').select('creneau_livraison_id, date_commande').eq('commercant_id', c.id).eq('mode_retrait', 'livraison').not('statut', 'in', '(recupere,non_retire,annulee_client_refund,annulee_paiement_ko)'),
       // M5 food truck : emplacements (ponctuels + tournée hebdo) pour remplacer
       // l'adresse affichée par l'emplacement du jour
       supabase.from('foodtruck_emplacements').select('*').eq('commercant_id', c.id).eq('actif', true),
@@ -1356,22 +1389,42 @@ export default function CommanderSlug() {
       ? { moyenne: avisNotes.reduce((a, x) => a + x.note, 0) / avisNotes.length, count: avisNotes.length }
       : { moyenne: 0, count: 0 }
 
-    // La fonction serveur renvoie déjà les totaux par créneau : nombre de
-    // commandes et temps de préparation cumulé. Aucune ligne de commande ne
+    // La fonction serveur renvoie les totaux par créneau ET PAR JOUR : nombre
+    // de commandes et temps de préparation cumulé. Aucune ligne de commande ne
     // transite plus par le navigateur.
-    const countParCreneau = {}
-    const tempsParCreneau = {}
+    //
+    // ⚠️ LA DATE CHANGE TOUT. Avant, la charge était un total toutes dates
+    // confondues, et l'affichage se trompait dans LES DEUX SENS : pour
+    // aujourd'hui il appliquait ce total, donc une commande passée pour jeudi
+    // remplissait le créneau de ce matin ; pour les jours suivants il forçait
+    // le compteur à ZÉRO, donc un créneau déjà complet jeudi s'affichait libre
+    // et le client ne l'apprenait qu'au paiement.
+    const chargeParJour = {}
     ;(commandesActives || []).forEach(r => {
-      countParCreneau[r.creneau_id] = Number(r.nb_commandes) || 0
-      tempsParCreneau[r.creneau_id] = Number(r.temps_total) || 0
+      const jour = String(r.jour || '').slice(0, 10)
+      if (!jour || !r.creneau_id) return
+      if (!chargeParJour[jour]) chargeParJour[jour] = {}
+      chargeParJour[jour][r.creneau_id] = {
+        count: Number(r.nb_commandes) || 0,
+        temps: Number(r.temps_total) || 0,
+      }
     })
-    const creneauxAvecCount = (cren || []).map(cr => ({ ...cr, count: countParCreneau[cr.id] || 0, temps_cumul: tempsParCreneau[cr.id] || 0 }))
 
-    // Enrichissement capacité des créneaux LIVRAISON (count = nb commandes livraison
-    // actives sur ce créneau). Mode 'commandes' -> temps_cumul non utilisé (0).
-    const livCountParCreneau = {}
-    ;(livCmd || []).forEach(cmd => { if (cmd.creneau_livraison_id) livCountParCreneau[cmd.creneau_livraison_id] = (livCountParCreneau[cmd.creneau_livraison_id] || 0) + 1 })
-    const livraisonCreneauxAvecCount = (livCren || []).map(cr => ({ ...cr, count: livCountParCreneau[cr.id] || 0, temps_cumul: 0 }))
+    // Créneaux de LIVRAISON : même principe, en comptant les commandes de la
+    // vue publique. Mode 'commandes' → temps_cumul non utilisé (0).
+    const chargeLivraisonParJour = {}
+    ;(livCmd || []).forEach(cmd => {
+      const jour = String(cmd.date_commande || '').slice(0, 10)
+      if (!jour || !cmd.creneau_livraison_id) return
+      if (!chargeLivraisonParJour[jour]) chargeLivraisonParJour[jour] = {}
+      const actuel = chargeLivraisonParJour[jour][cmd.creneau_livraison_id]?.count || 0
+      chargeLivraisonParJour[jour][cmd.creneau_livraison_id] = { count: actuel + 1, temps: 0 }
+    })
+
+    // Les créneaux « nus » : la charge leur est appliquée jour par jour au
+    // moment de construire le calendrier, plus ici.
+    const creneauxAvecCount = (cren || []).map(cr => ({ ...cr, count: 0, temps_cumul: 0 }))
+    const livraisonCreneauxAvecCount = (livCren || []).map(cr => ({ ...cr, count: 0, temps_cumul: 0 }))
 
     const artIds = (arts||[]).map(a => a.id)
     let opts = {}
@@ -1440,6 +1493,10 @@ export default function CommanderSlug() {
       commercant: c,
       articles: arts || [],
       creneaux: creneauxAvecCount,
+      // La charge voyage à part des créneaux : un créneau est une grille
+      // hebdomadaire, sa charge dépend du jour affiché.
+      chargeCreneaux: chargeParJour,
+      chargeLivraison: chargeLivraisonParJour,
       avis: avis || [],
       notesInfo,
       options: opts,
@@ -1463,7 +1520,7 @@ export default function CommanderSlug() {
     hydrate(cacheData)
   }
 
-  function construireJoursDispos(c, creneauxAvecCount, fermeturesData) {
+  function construireJoursDispos(c, creneauxAvecCount, fermeturesData, chargeParJour = {}) {
     const horizon = c.horizon_commande || 1
     const heureOuverture = c.heure_ouverture_resa ? c.heure_ouverture_resa.slice(0,5) : '21:00'
     const now = maintenant()
@@ -1478,16 +1535,28 @@ export default function CommanderSlug() {
       })
     }
 
-    function creneauxPourDate(date, avecCount = true) {
+    // ⚠️ LA CHARGE SE LIT AU JOUR AFFICHÉ, plus « tout ou rien ».
+    // Avant, `avecCount` valait true pour aujourd'hui et false pour les jours
+    // suivants : le total toutes dates confondues remplissait donc les créneaux
+    // du matin avec des commandes de jeudi, pendant que jeudi s'affichait
+    // désespérément vide. Deux erreurs opposées, dans le même écran.
+    function creneauxPourDate(date) {
       const nomJour = JOURS[jourIdx(date)]
-      return creneauxAvecCount.filter(cr => cr.jour_semaine === nomJour || cr.jour_semaine === null)
-        .map(cr => avecCount ? cr : { ...cr, count: 0, temps_cumul: 0 })
+      const jourISO = jourLocalISO(date)
+      const duJour = chargeParJour[jourISO] || {}
+      return creneauxAvecCount
+        .filter(cr => cr.jour_semaine === nomJour || cr.jour_semaine === null)
+        .map(cr => ({
+          ...cr,
+          count: duJour[cr.id]?.count || 0,
+          temps_cumul: duJour[cr.id]?.temps || 0,
+        }))
     }
 
     if (!estEnFermeture(today)) {
-      const crensAujourdhui = creneauxPourDate(today, true).filter(cr => heureEnMinutes(cr.heure_debut) > now)
+      const crensAujourdhui = creneauxPourDate(today).filter(cr => heureEnMinutes(cr.heure_debut) > now)
       if (crensAujourdhui.length > 0) {
-        joursDispos.push({ date: new Date(today), label: "Aujourd'hui", creneaux: creneauxPourDate(today, true) })
+        joursDispos.push({ date: new Date(today), label: "Aujourd'hui", creneaux: creneauxPourDate(today) })
       }
     }
 
@@ -1495,7 +1564,7 @@ export default function CommanderSlug() {
       const d = new Date(today); d.setDate(d.getDate() + i)
       if (estEnFermeture(d)) continue
       const label = i === 1 ? 'Demain' : d.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
-      joursDispos.push({ date: d, label, creneaux: creneauxPourDate(d, false) })
+      joursDispos.push({ date: d, label, creneaux: creneauxPourDate(d) })
     }
 
     const resaOuverte = now >= heureEnMinutes(heureOuverture)
@@ -1503,29 +1572,29 @@ export default function CommanderSlug() {
       const d = new Date(today); d.setDate(d.getDate() + horizon)
       if (!estEnFermeture(d) && !joursDispos.find(j => j.date.getTime() === d.getTime())) {
         const label = horizon === 1 ? 'Demain' : d.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
-        joursDispos.push({ date: d, label, creneaux: creneauxPourDate(d, false) })
+        joursDispos.push({ date: d, label, creneaux: creneauxPourDate(d) })
       }
     }
 
     if (joursDispos.length === 0) {
-      joursDispos.push({ date: new Date(today), label: "Aujourd'hui", creneaux: creneauxPourDate(today, true) })
+      joursDispos.push({ date: new Date(today), label: "Aujourd'hui", creneaux: creneauxPourDate(today) })
     }
 
     return joursDispos
   }
 
-  // Wrapper : construit + pose l'état des jours de RETRAIT (comportement inchangé).
-  function buildJoursDispos(c, creneauxAvecCount, fermeturesData) {
-    setJoursDispos(construireJoursDispos(c, creneauxAvecCount, fermeturesData))
+  // Wrapper : construit + pose l'état des jours de RETRAIT.
+  function buildJoursDispos(c, creneauxAvecCount, fermeturesData, charge = chargeCreneaux) {
+    setJoursDispos(construireJoursDispos(c, creneauxAvecCount, fermeturesData, charge))
     setJourSelectionne(0)
   }
 
   useEffect(() => {
     if (commercant && creneaux.length > 0) {
-      buildJoursDispos(commercant, creneaux, fermetures)
+      buildJoursDispos(commercant, creneaux, fermetures, chargeCreneaux)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
-  }, [commercant, creneaux, fermetures])
+  }, [commercant, creneaux, fermetures, chargeCreneaux])
 
   // ─── FIX STOCK SYNC : charger les commandes du jour sélectionné ─────────────
   // Récupère les quantités déjà commandées par article pour le jour sélectionné
@@ -1535,7 +1604,7 @@ export default function CommanderSlug() {
     if (!commercant) return
     const jourDate = joursDispos[jourSelectionne]?.date || new Date()
     const d = new Date(jourDate)
-    const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    const dateStr = jourLocalISO(d)
 
     // Une seule fonction serveur remplace l'ancienne approche en deux temps,
     // qui lisait les commandes puis leurs lignes. Elle renvoie directement les
@@ -2022,7 +2091,7 @@ export default function CommanderSlug() {
 
       const jourDate = estDetail ? new Date() : ((modeCommande === 'livraison' ? creneauLivraisonChoisi?._date : joursDispos[jourSelectionne]?.date) || new Date())
       const d = new Date(jourDate)
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+      const dateStr = jourLocalISO(d)
 
       // Payload articles avec options structurées (groupe_id + valeur_ids)
       // La route recalcule tout server-side (anti-tampering)

@@ -319,6 +319,65 @@ verifier('le repli commerçant est chargé', /mode_capacite/.test(
   /\.from\('commercants'\)[\s\S]{0,400}?\.select\('([^']*)'\)/.exec(routeCode)?.[1] || ''))
 
 // ═══════════════════════════════════════════════════════════════════════════
+// LA CHARGE SE COMPTE PAR JOUR (10/08)
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ L'ANCIENNE FONCTION AGRÉGEAIT TOUTES DATES CONFONDUES, et l'affichage se
+// trompait dans LES DEUX SENS :
+//   • pour AUJOURD'HUI, le total complet s'appliquait, donc une commande passée
+//     pour jeudi remplissait le créneau de ce matin ;
+//   • pour les jours SUIVANTS, le compteur était forcé à ZÉRO, donc un créneau
+//     déjà complet jeudi s'affichait libre et le client ne l'apprenait qu'au
+//     paiement.
+// Un créneau « mardi 11h15 » revient chaque semaine : sans la date, impossible
+// de savoir de quel mardi on parle.
+const boutique = lireBrut('app/commander/[slug]/page.js')
+verifier('le navigateur appelle la fonction par jour',
+  /charge_creneaux_par_jour/.test(boutique))
+verifier('il n\'appelle plus l\'ancienne fonction agrégée',
+  !/rpc\('charge_preparation_par_creneau'/.test(boutique))
+verifier('la charge est indexée par jour puis par créneau',
+  /chargeParJour\[jour\]\[r\.creneau_id\]/.test(boutique))
+verifier('les créneaux d\'un jour reçoivent la charge de CE jour',
+  /const duJour = chargeParJour\[jourISO\]/.test(boutique))
+// Le drapeau « avecCount », qui mettait tout à zéro pour les jours suivants,
+// ne doit pas revenir : c'était le contournement du défaut, pas sa correction.
+// On vise la SIGNATURE et les APPELS, pas le mot : le commentaire du fichier a
+// le droit d'expliquer d'où l'on vient, c'est même son travail.
+verifier('le contournement « avecCount » a disparu de la signature',
+  !/creneauxPourDate\(date, avecCount/.test(boutique))
+verifier('plus aucun appel ne force la charge à zéro',
+  !/creneauxPourDate\([^)]*,\s*(true|false)\)/.test(boutique))
+// La livraison souffrait du même défaut, côté vue publique.
+verifier('la livraison compte aussi par jour',
+  /chargeLivraisonParJour\[jour\]/.test(boutique))
+verifier('la requête livraison ramène la date',
+  /select\('creneau_livraison_id, date_commande'\)/.test(boutique))
+
+// ⚠️ LE PIÈGE DU FUSEAU, et il aurait été invisible en journée. La Belgique est
+// en avance sur UTC : minuit heure belge, c'est 22h ou 23h la VEILLE en temps
+// universel. Avec `toISOString()`, la clé du jour aurait basculé sur la veille
+// toute la soirée, et la charge serait allée se ranger sous la mauvaise date.
+verifier('la clé du jour se construit en date locale',
+  /function jourLocalISO[\s\S]{0,400}?getFullYear\(\)[\s\S]{0,200}?getDate\(\)/.test(boutique))
+verifier('elle n\'utilise pas toISOString',
+  !/function jourLocalISO[\s\S]{0,400}?toISOString/.test(boutique))
+// La même formule doit servir à l'affichage ET à l'envoi de la commande,
+// sinon la charge affichée ne retrouverait jamais les commandes enregistrées.
+verifier('la date envoyée au serveur utilise la même formule',
+  /const dateStr = jourLocalISO\(d\)/.test(boutique))
+
+const migJour = lireBrut('migrations/MIGRATION_CHARGE_CRENEAU_PAR_JOUR.sql')
+verifier('la fonction groupe par créneau ET par jour',
+  /GROUP BY c\.creneau_id, c\.date_commande::date/.test(migJour))
+verifier('elle exclut les annulées et les terminées',
+  /statut IN \('paiement_en_attente', 'en_attente', 'en_preparation', 'pret'\)/.test(migJour))
+// ⚠️ L'ancienne fonction est CONSERVÉE le temps du déploiement : passer la
+// migration avant ou après le déploiement ne casse rien dans les deux cas.
+verifier('l\'ancienne fonction n\'est pas supprimée', !/DROP FUNCTION/.test(migJour))
+verifier('les droits sont posés explicitement',
+  /GRANT EXECUTE ON FUNCTION charge_creneaux_par_jour/.test(migJour))
+verifier('sa vérification interroge la base', /FROM pg_proc/.test(migJour))
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

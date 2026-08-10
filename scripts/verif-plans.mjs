@@ -133,6 +133,41 @@ verifier('la commande reste alimentaire', canDoAvecCategorie('vendre', 'commande
 verifier('le RDV reste vitrine', canDoAvecCategorie('vendre', 'rdv', 'alimentaire') === false)
 verifier('le RDV passe chez une vitrine', canDoAvecCategorie('vendre', 'rdv', 'vitrine') === true)
 
+// ═══════════════════════════════════════════════════════════════════════════
+// NE PAS VENDRE CE QUI N'EXISTE PAS
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LA PAGE D'INSCRIPTION PROMETTAIT UNE FONCTIONNALITÉ QUI N'A JAMAIS ÉTÉ
+// ÉCRITE. Le palier Vendre affichait à un commerce de détail « Réservation
+// produit + retrait en magasin », avec une fiche détaillée : « le Yopper
+// réserve un article, tu le mets de côté, tu reçois la notification, tu
+// confirmes la disponibilité ». AUCUNE ligne de code ne consultait cette
+// capacité. La fiche client, elle, était honnête et n'affichait rien : le
+// commentaire de `lib/plans.js` disait même « ne rien promettre ».
+//
+// Un commerçant souscrivait donc au palier payant sur du vide, et attendait une
+// notification qui n'arriverait jamais.
+//
+// Décision Alex du 10/08 : la réservation, c'est pour les TABLES de restaurant.
+// Le détail vend en ligne, avec retrait au magasin ou expédition.
+//
+// Même esprit que le test de la page /legal : ce qui est ANNONCÉ doit
+// correspondre à ce que le CODE fait.
+{
+  const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
+  const sansCommentaires = (src) => src.split(/\r?\n/).map(l => l.replace(/(^|\s)\/\/.*/, '$1')).join('\n')
+
+  for (const chemin of ['lib/plans.js', 'app/signup/page.js']) {
+    verifier(`${chemin} ne parle plus de réservation d'article`,
+      !/reservation_produit/.test(sansCommentaires(lire(chemin))), chemin)
+  }
+  const signup = lire('app/signup/page.js')
+  verifier('la page d\'inscription ne promet plus de « Réservation produit »',
+    !/Réservation produit/.test(signup))
+  // Et elle décrit ce qui existe VRAIMENT pour le détail.
+  verifier('elle annonce le retrait en magasin et l\'expédition',
+    /retrait en magasin ou expédition/i.test(signup))
+}
+
 if (clesDynamiques.length > 0) {
   console.log(`\n⚠️  ${clesDynamiques.length} appel(s) à clé calculée, non vérifiables ici :`)
   clesDynamiques.forEach(d => console.log('     ' + d))

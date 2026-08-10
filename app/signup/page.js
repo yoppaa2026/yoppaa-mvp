@@ -635,7 +635,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
             actif={categorie === 'detail'}
             onClick={() => setCategorie('detail')}
             titre="Détail"
-            sous="Réservation produit, retrait"
+            sous="Vente en ligne, retrait ou envoi"
             exemples="Vêtements, chaussures, fleuriste, librairie…"
             Icon={ShoppingBag}
           />
@@ -830,10 +830,17 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
     },
   ]
 
+  // ⚠️ CE QUI EST DÉCRIT ICI DOIT EXISTER DANS LE CODE. Cette carte promettait
+  // une « réservation produit » (le Yopper réserve, tu mets de côté, tu confirmes
+  // la disponibilité) dont AUCUNE ligne n'a jamais été écrite. Un commerçant de
+  // détail souscrivait donc au palier payant sur une fonctionnalité inexistante
+  // et attendait une notification qui n'arrivait pas. Décision Alex du 10/08 :
+  // la réservation, c'est pour les tables de restaurant, pas pour les articles.
+  // Le détail, c'est la vente en ligne, avec retrait au magasin ou envoi.
   const featuresDetail = [
     {
-      Icon: Package, titre: 'Réservation produit',
-      desc: 'Le Yopper réserve un article à venir chercher en magasin. Tu le mets de côté, tu reçois la notification, tu confirmes la disponibilité. Confirmation "Ton article est Yoppé !" côté Yopper. Parfait pour vêtements, livres, fleurs, jouets, etc.',
+      Icon: Package, titre: 'Vente en ligne de tes articles',
+      desc: 'Le Yopper commande depuis ta fiche et choisit : venir chercher au magasin, ou se faire envoyer le colis. Tailles et coloris avec leur stock, paiement en ligne ou au comptoir selon ce que tu préfères. Parfait pour vêtements, livres, fleurs, jouets, etc.',
       plan: 'vendre',
     },
   ]
@@ -2731,8 +2738,9 @@ function CardPlan({ plan, categorie, actif, onClick }) {
   // catégorie (alimentaire = Click & Collect, vitrine = RDV).
   const VENDRE_FEATURE_TRANSACTIONNEL = categorie === 'vitrine'
     ? 'Module RDV complet : prestations, créneaux, multi-praticiens'
+    // ⚠️ Le détail promettait une « réservation produit » qui n'existe pas.
     : categorie === 'detail'
-      ? 'Réservation produit + retrait en magasin'
+      ? 'Vente en ligne : retrait en magasin ou expédition'
       : 'Click & Collect + livraison + réservation table'
 
   const PLAN_CONFIG = {

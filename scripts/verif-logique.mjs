@@ -21,7 +21,7 @@ import { generateRdvIcs, icsToBase64Attachment } from '../lib/ical.js'
 import { tauxFraisLivraison } from '../lib/tva.js'
 import { ventilerFrais } from '../lib/stripe-frais.js'
 import { contexteRetrait, textesRetrait, textesConfirmation } from '../lib/ecran-retrait.js'
-import { emailCommandeExpediee } from '../lib/resend.js'
+import { emailCommandeExpediee, emailRecapCommandesJour } from '../lib/resend.js'
 import { partagerCommandes } from '../lib/commandes-vue.js'
 import { restaurerStockVariantes } from '../lib/stock-variantes-server.js'
 import { couleurRdv, texteLisibleSur, COULEUR_DEFAUT, ENCRE } from '../lib/agenda-couleurs.js'
@@ -438,6 +438,27 @@ verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === n
   // ⚠️ Un tag de notification propre : deux notifications de même tag se
   // REMPLACENT, une commande effacerait l'annonce du bon.
   verifier('avec son propre tag de notification', /'yoppaa-bon'/.test(dash))
+
+  // ⚠️ ET LE RÉCAPITULATIF DU MATIN. Un commerçant réglé dessus ne recevait
+  // AUCUN email quand on lui achetait un bon : l'envoi immédiat n'existe que
+  // pour « à chaque commande ». L'email est RENDU et on lit le HTML produit.
+  const recapAvec = emailRecapCommandesJour({
+    nom_commercant: 'La Mie de Test', date_jour: '2026-08-11', commandes: [],
+    bons_vendus: [{ montant_initial: 50 }, { montant_initial: 25 }],
+  })
+  verifier('le récapitulatif annonce les bons vendus', /2 bons cadeaux vendus/.test(recapAvec))
+  verifier('avec leur total', recapAvec.includes('75.00'))
+  verifier('et qu\'il n\'y a rien à préparer', /rien à préparer/.test(recapAvec))
+  // Sans bon vendu, aucun bloc : on n'écrit pas « 0 bon cadeau ».
+  const recapSans = emailRecapCommandesJour({ nom_commercant: 'X', date_jour: '2026-08-11', commandes: [] })
+  verifier('sans bon vendu, on n\'en parle pas', !/bon cadeau/i.test(recapSans))
+  // Un seul bon se dit au singulier.
+  const recapUn = emailRecapCommandesJour({ nom_commercant: 'X', date_jour: '2026-08-11', commandes: [], bons_vendus: [{ montant_initial: 40 }] })
+  verifier('un seul bon se dit au singulier',
+    /Bon cadeau vendu/.test(recapUn) && !/bons cadeaux/.test(recapUn))
+  const cronRecap = readFileSync(new URL('../app/api/cron/recap-jour-8h/route.js', import.meta.url), 'utf8')
+  verifier('le cron va bien les chercher', /from\('bons_cadeaux'\)/.test(cronRecap))
+  verifier('et les passe à l\'email', /bons_vendus:\s*bonsVeille/.test(cronRecap))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

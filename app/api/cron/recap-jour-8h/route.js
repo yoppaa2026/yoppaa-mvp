@@ -135,11 +135,24 @@ export async function GET(request) {
             }
           })
 
+          // ⚠️ LES BONS CADEAUX VENDUS LA VEILLE. Un commerçant réglé sur ce
+          // récapitulatif ne recevait AUCUN email quand on lui achetait un bon :
+          // l'envoi immédiat n'existe que pour « à chaque commande ». Il n'a
+          // rien à préparer, mais quelqu'un a offert son commerce.
+          // La journée entière, de minuit à minuit heure belge.
+          const { data: bonsVeille } = await supabase
+            .from('bons_cadeaux')
+            .select('id, montant_initial')
+            .eq('commercant_id', c.id)
+            .gte('created_at', `${dateJour}T00:00:00`)
+            .lte('created_at', `${dateJour}T23:59:59`)
+
           total = cmdsFlat.length
           html = emailRecapCommandesJour({
             nom_commercant: c.nom,
             date_jour:      dateJour,
             commandes:      cmdsFlat,
+            bons_vendus:    bonsVeille || [],
           })
           subject = total === 0
             ? `Aucune commande aujourd'hui`

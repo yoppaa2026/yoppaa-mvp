@@ -341,8 +341,14 @@ verifier('le rendez-vous reprend ce qui vient de la boutique', /reprendrePanierP
 verifier('le rendez-vous dépose vers la boutique', /deposerPanierPourBoutique/.test(fRdv))
 // Chaque sens dit au client ce qui a suivi, plutôt que de laisser des articles
 // disparaître sans un mot.
-verifier('la boutique annonce le panier repris', /t&rsquo;ont suivi depuis la fiche/.test(fBoutique))
-verifier('le rendez-vous annonce le panier repris', /de la boutique t&rsquo;ont suivi/.test(fRdv))
+// ⚠️ CE TEST VISAIT LE TEXTE MOT POUR MOT, et il visait un texte FAUX : « Tes
+// {n} article{s} t'ont suivi depuis la fiche », dont le pluriel ne s'appliquait
+// qu'au mot « article ». Avec un seul produit, le client lisait « Tes 1 article
+// t'ont suivi ». Le banc verrouillait donc la faute au lieu de l'interdire.
+// On vise désormais l'APPEL à la phrase partagée ; son contenu, lui, est
+// exécuté et vérifié dans verif:logique.
+verifier('la boutique annonce le panier repris', /messagePanierRepris\(\{/.test(fBoutique))
+verifier('le rendez-vous annonce le panier repris', /messagePanierRepris\(\{/.test(fRdv))
 
 // ⚠️ UNE CLÉ PAR SENS. Avec une clé unique, la page qui dépose relit son propre
 // dépôt si le client fait marche arrière, et double ses articles.

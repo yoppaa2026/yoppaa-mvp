@@ -9,6 +9,7 @@ import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau } from '@/lib/creneaux'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
+import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
 import { estFoodTruck as estFoodTruckType } from '@/lib/types-commerce'
 import { jourLocalISO, jourSemaineLocal } from '@/lib/timezone'
@@ -3096,20 +3097,26 @@ export default function CommanderSlug() {
               {/* Panier rapporté de la fiche rendez-vous : le dire, sinon le
                   client ne sait pas si ses articles l'ont suivi. Symétrique du
                   message affiché dans l'autre sens sur la fiche rendez-vous. */}
-              {panierRepris && (
+              {panierRepris && (() => {
+                // Les phrases vivent dans `lib/panier-repris-message.js` : elles
+                // s'écrivaient ici avec un pluriel appliqué au seul mot
+                // « article », ce qui donnait « Tes 1 article t'ont suivi ».
+                const msg = messagePanierRepris({ repris: panierRepris.repris, ignores: panierRepris.ignores, vers: 'boutique' })
+                return (
                 <div style={{ margin: '10px 16px 0', background: panierRepris.ignores.length > 0 ? '#FFFBEB' : '#ECFDF5', border: `1px solid ${panierRepris.ignores.length > 0 ? '#FDE68A' : '#A7F3D0'}`, borderRadius: 10, padding: '8px 11px' }}>
-                  {panierRepris.repris > 0 && (
+                  {msg.garde && (
                     <p style={{ margin: 0, fontSize: '0.74rem', fontWeight: 700, color: '#065F46', lineHeight: 1.45 }}>
-                      Tes {panierRepris.repris} article{panierRepris.repris > 1 ? 's' : ''} t&rsquo;ont suivi depuis la fiche.
+                      {msg.garde}
                     </p>
                   )}
-                  {panierRepris.ignores.length > 0 && (
-                    <p style={{ margin: panierRepris.repris > 0 ? '4px 0 0' : 0, fontSize: '0.72rem', color: '#78350F', lineHeight: 1.45 }}>
-                      {panierRepris.ignores.join(', ')} n&rsquo;a{panierRepris.ignores.length > 1 ? 'ont' : ''} pas pu suivre : recompose{panierRepris.ignores.length > 1 ? '-les' : '-le'} ici.
+                  {msg.perdus && (
+                    <p style={{ margin: msg.garde ? '4px 0 0' : 0, fontSize: '0.72rem', color: '#78350F', lineHeight: 1.45 }}>
+                      {msg.perdus}
                     </p>
                   )}
                 </div>
-              )}
+                )
+              })()}
 
               {/* Sélecteur de jour de retrait - pilote les stocks affichés et les créneaux dispo */}
               {peutCommander && joursDispos.length > 0 && (

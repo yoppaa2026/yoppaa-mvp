@@ -26,6 +26,7 @@ import { partagerCommandes } from '../lib/commandes-vue.js'
 import { restaurerStockVariantes } from '../lib/stock-variantes-server.js'
 import { couleurRdv, texteLisibleSur, COULEUR_DEFAUT, ENCRE } from '../lib/agenda-couleurs.js'
 import { nouveauxRdvs, idsDes, texteAlerteRdv } from '../lib/alerte-rdv.js'
+import { messagePanierRepris } from '../lib/panier-repris-message.js'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -387,6 +388,53 @@ verifier('pas de centime perdu à l’arrondi', Math.abs((v.rdv.frais + v.comman
 
 verifier('total nul = pas de ventilation', ventilerFrais(1.00, 0, 0) === null)
 verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === null)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// « TES 1 ARTICLE T'ONT SUIVI » — le message qui ne s'accordait pas
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LE PLURIEL N'ÉTAIT APPLIQUÉ QU'AU MOT « ARTICLE ». Avec un seul produit, le
+// client lisait « Tes 1 article t'ont suivi depuis la fiche » : ni le
+// déterminant, ni le verbe, ni le participe ne s'accordaient. Et « depuis la
+// fiche » ne veut rien dire pour quelqu'un qui ne sait pas ce qu'est une fiche.
+//
+// Une phrase fausse ne fait planter personne. Elle abîme la confiance en
+// silence, ce qui est pire.
+{
+  const un = messagePanierRepris({ repris: 1, vers: 'rdv' })
+  verifier('au singulier, la phrase s\'accorde', /Ton article est toujours/.test(un.garde), un.garde)
+  verifier('et ne dit surtout pas « Tes 1 »', !/Tes 1/.test(un.garde))
+  const trois = messagePanierRepris({ repris: 3, vers: 'rdv' })
+  verifier('au pluriel aussi', /Tes 3 articles sont toujours/.test(trois.garde), trois.garde)
+  verifier('aucun panier, aucun message', messagePanierRepris({ repris: 0 }).garde === null)
+
+  // Ce qui n'a pas pu suivre, sans deviner le genre du produit : « il » ou
+  // « elle » sur un nom d'article inconnu tombe une fois sur deux.
+  const perduUn = messagePanierRepris({ repris: 1, ignores: ['Shampoing bio'], vers: 'rdv' })
+  verifier('un article resté est nommé', perduUn.perdus.includes('Shampoing bio'))
+  verifier('au singulier, le verbe suit', /se commande depuis/.test(perduUn.perdus), perduUn.perdus)
+  const perduDeux = messagePanierRepris({ repris: 0, ignores: ['Shampoing', 'Masque'], vers: 'rdv' })
+  verifier('au pluriel, le verbe suit aussi', /se commandent depuis/.test(perduDeux.perdus), perduDeux.perdus)
+  verifier('et on les nomme tous', perduDeux.perdus.includes('Shampoing') && perduDeux.perdus.includes('Masque'))
+  // ⚠️ Aucun genre deviné : ni « il », ni « elle », ni « celui-ci ».
+  verifier('aucun genre n\'est supposé', !/\b(il|elle|celui|celle)\b/i.test(perduUn.perdus), perduUn.perdus)
+
+  // Le sens : on ne parle plus de « fiche », un mot d'informaticien.
+  for (const m of [un.garde, trois.garde, perduUn.perdus, perduDeux.perdus]) {
+    verifier('le mot « fiche » a disparu des messages', !/fiche/i.test(m || ''), m)
+  }
+  // Et aucune phrase ne doit sortir avec un trou.
+  for (const m of [un.garde, trois.garde, perduUn.perdus, perduDeux.perdus]) {
+    verifier('aucune phrase à trou', !/undefined|null|NaN/.test(m || ''), m)
+  }
+}
+// Les deux écrans doivent APPELER la source unique, pas garder leur version.
+for (const chemin of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
+  const src = readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
+    .split(/\r?\n/).map(l => l.replace(/(^|\s)\/\/.*/, '$1')).join('\n')
+  verifier(`${chemin} appelle la phrase partagée`, /messagePanierRepris\(\{/.test(src), chemin)
+  verifier(`${chemin} n'écrit plus le pluriel à la main`,
+    !/article\{[^}]*repris > 1/.test(src), chemin)
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // L'AGENDA AUX COULEURS DES PRATICIENNES

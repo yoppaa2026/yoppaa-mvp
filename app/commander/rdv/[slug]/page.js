@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase'
 import { isVitrine, canDo } from '@/lib/plans'
 import { dealActifCeJour, remiseSurArticle } from '@/lib/deals'
 import { reprendrePanierPourRdv, deposerPanierPourBoutique } from '@/lib/panier-partage'
+import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
 import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 import IconeRetrait from '@/app/components/IconeRetrait'
@@ -1299,20 +1300,24 @@ export default function CommanderRdvSlug() {
         )}
         {/* Panier rapporté de la boutique : le dire, sinon le client
             ne sait pas si ses articles l'ont suivi. */}
-        {panierRepris && (
+        {panierRepris && (() => {
+          // Mêmes phrases que dans l'autre sens, depuis la source unique.
+          const msg = messagePanierRepris({ repris: panierRepris.repris, ignores: panierRepris.ignores, vers: 'rdv' })
+          return (
           <div style={{ background: panierRepris.ignores.length > 0 ? '#FFFBEB' : '#ECFDF5', border: `1px solid ${panierRepris.ignores.length > 0 ? '#FDE68A' : '#A7F3D0'}`, borderRadius: 10, padding: '8px 11px', marginBottom: 10 }}>
-            {panierRepris.repris > 0 && (
+            {msg.garde && (
               <p style={{ margin: 0, fontSize: '0.74rem', fontWeight: 700, color: '#065F46', lineHeight: 1.45 }}>
-                Tes {panierRepris.repris} article{panierRepris.repris > 1 ? 's' : ''} de la boutique t&rsquo;ont suivi.
+                {msg.garde}
               </p>
             )}
-            {panierRepris.ignores.length > 0 && (
-              <p style={{ margin: panierRepris.repris > 0 ? '4px 0 0' : 0, fontSize: '0.72rem', color: '#78350F', lineHeight: 1.45 }}>
-                {panierRepris.ignores.join(', ')} se compose{panierRepris.ignores.length > 1 ? 'nt' : ''} en boutique et n&rsquo;a{panierRepris.ignores.length > 1 ? 'ont' : ''} pas pu suivre. Tu peux le{panierRepris.ignores.length > 1 ? 's' : ''} commander depuis la boutique.
+            {msg.perdus && (
+              <p style={{ margin: msg.garde ? '4px 0 0' : 0, fontSize: '0.72rem', color: '#78350F', lineHeight: 1.45 }}>
+                {msg.perdus}
               </p>
             )}
           </div>
-        )}
+          )
+        })()}
         <div data-scroll-x style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
           {/* Plus de troncature à 8 (04/08) : le client ne devait pas
               avoir à quitter le tunnel pour voir le neuvième produit,

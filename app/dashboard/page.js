@@ -272,6 +272,24 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
     ? dateLabel(jourCommande + 'T00:00:00')
     : null
 
+  // Ce que le commerçant doit préparer, dit en un mot.
+  const libelleMode = estExpedition ? 'Colis à envoyer'
+    : estLivraison ? 'À livrer'
+    : commande.creneau_id ? 'Click & Collect'
+    : 'Retrait en magasin'
+
+  // La date d'enlèvement, en toutes lettres. Le carré du numéro la donne en
+  // abrégé, mais « mer. 12/08 » collé sous un chiffre se lit mal quand on
+  // cherche vite.
+  const dateLisible = dateRef ? (() => {
+    const jour = dateKey(dateRef)
+    const aujourdhui = dateKey(new Date())
+    const demainD = new Date(); demainD.setDate(demainD.getDate() + 1)
+    if (jour === aujourdhui) return "Aujourd'hui"
+    if (jour === dateKey(demainD)) return 'Demain'
+    return dateLabel(jour + 'T00:00:00')
+  })() : null
+
   // Heure de retrait (swipe client) = updated_at quand statut = recupere
   const heureRetrait = (modeHistorique && commande.statut === 'recupere' && commande.updated_at)
     ? new Date(commande.updated_at).toLocaleString('fr-BE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -292,12 +310,23 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
             </div>
             <div>
               <p style={{ fontWeight: 800, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{nomAffiche}</p>
-              {heure && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                  <IconClock size={11} color={couleur.border}/>
-                  <span style={{ fontSize: '0.75rem', color: couleur.border, fontWeight: 700 }}>{heure}</span>
-                </div>
-              )}
+              {/* ⚠️ CE QUE LE COMMERÇANT DOIT LIRE SANS OUVRIR : quoi, quand,
+                  comment. Il n'avait que le prénom et le téléphone. Le MODE dit
+                  s'il prépare un colis, une remise au comptoir ou une tournée ;
+                  la DATE dit pour quand. Sans ça il ouvrait chaque commande. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.62rem', fontWeight: 800, color: couleur.border, background: `${couleur.border}14`, border: `1px solid ${couleur.border}33`, padding: '1px 7px', borderRadius: 100, whiteSpace: 'nowrap' }}>
+                  {libelleMode}
+                </span>
+                {dateLisible && (
+                  <span style={{ fontSize: '0.68rem', fontWeight: 700, color: T.ink }}>{dateLisible}</span>
+                )}
+                {heure && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', color: couleur.border, fontWeight: 800 }}>
+                    <IconClock size={10} color={couleur.border}/>{heure}
+                  </span>
+                )}
+              </div>
               {heureRetrait && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
                   <span style={{ fontSize: '0.65rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Retiré</span>
@@ -323,6 +352,13 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
               )}
               {estExpedition && commande.expedition_suivi && (
                 <p style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 700, margin: '3px 0 0' }}>Suivi : {commande.expedition_suivi}</p>
+              )}
+              {/* L'adresse mail : le seul moyen de joindre un client qui n'a pas
+                  laissé de numéro, et le commerçant n'y avait pas accès. */}
+              {commande.client_email && (
+                <p style={{ fontSize: '0.68rem', color: T.muted, fontWeight: 600, margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
+                  {commande.client_email}
+                </p>
               )}
             </div>
           </div>

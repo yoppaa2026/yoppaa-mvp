@@ -388,18 +388,30 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                               </svg>
                             </div>
                           )}
-                          <div style={{ fontSize: 9, opacity: 0.9, fontWeight: 600, lineHeight: 1 }}>{heureD}</div>
-                          <div style={{ fontWeight: 800, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prenom}</div>
-                          {hauteur > 36 && (
-                            <div style={{ fontSize: 9, opacity: 0.85, fontWeight: 600, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {/* ⚠️ SUR UN BLOC COURT, L'HEURE PASSE SUR LA MÊME LIGNE
+                              QUE LE PRÉNOM. Elle occupait une ligne à elle seule,
+                              et la prestation, reléguée en troisième, disparaissait
+                              dès que le bloc descendait sous 36 pixels : une
+                              prestation de 30 minutes n'affichait donc AUCUN nom de
+                              prestation. Le commerçant devait ouvrir chaque
+                              rendez-vous pour savoir ce qu'il avait à faire. */}
+                          {hauteur > 36 ? (
+                            <div style={{ fontSize: 9, opacity: 0.9, fontWeight: 600, lineHeight: 1 }}>{heureD}</div>
+                          ) : null}
+                          <div style={{ fontWeight: 800, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {hauteur > 36 ? prenom : `${heureD} ${prenom}`}
+                          </div>
+                          {/* La prestation s'affiche TOUJOURS : c'est ce que le
+                              commerçant a à faire, l'information la plus utile du
+                              bloc après l'heure. */}
+                          <div style={{ fontSize: 9, opacity: 0.85, fontWeight: 600, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {/* Bug 6.2 : quand filtre "Tous", afficher le prenom du praticien
                                   a cote de la prestation pour identifier d'un coup d'oeil qui
                                   fait le RDV. Filtre specifique praticien = deja identifie. */}
-                              {praticienFiltre === 'all' && r.praticien?.prenom
+                              {praticienFiltre === 'all' && r.praticien?.prenom && hauteur > 36
                                 ? `${r.praticien.prenom} · ${r.prestation?.nom || 'RDV'}`
                                 : (r.prestation?.nom || 'RDV')}
                             </div>
-                          )}
                         </div>
                       )
                     })}

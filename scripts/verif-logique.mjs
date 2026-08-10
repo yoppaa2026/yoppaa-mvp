@@ -26,6 +26,7 @@ import { partagerCommandes } from '../lib/commandes-vue.js'
 import { restaurerStockVariantes } from '../lib/stock-variantes-server.js'
 import { couleurRdv, texteLisibleSur, COULEUR_DEFAUT, ENCRE } from '../lib/agenda-couleurs.js'
 import { contenuBlocRdv, HAUTEUR_TROIS_LIGNES } from '../lib/agenda-bloc.js'
+import { statutCreneaux, pastilleCreneaux, prochainJourAvecCreneaux, aDesCreneaux, jourPlus } from '../lib/statut-commerce.js'
 import { nouveauxRdvs, idsDes, texteAlerteRdv } from '../lib/alerte-rdv.js'
 import { messagePanierRepris } from '../lib/panier-repris-message.js'
 import { normaliserEmail, memeEmail } from '../lib/email-normalise.js'
@@ -867,6 +868,202 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
   verifier('plus aucun seuil de 36 pixels dans le composant',
     !/hauteur\s*[<>]=?\s*36/.test(agenda),
     (agenda.match(/.*hauteur\s*[<>]=?\s*36.*/) || [])[0])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA PASTILLE DE DISPONIBILITÉ DE LA CARTE D'ACCUEIL
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LA PAGE D'ACCUEIL REFAISAIT SON PROPRE CALCUL, faux de trois façons, et
+// affichait « Résa dès 21:00 » sur des commerces parfaitement libres. Chaque
+// cas ci-dessous a été MESURÉ sur l'ancien code avant d'être corrigé.
+{
+  const LUNDI = '2026-08-10'   // un lundi
+  const MARDI = '2026-08-11'
+
+  // ⚠️ 1. UNE BOUTIQUE ET UN SALON N'ONT AUCUN CRÉNEAU, par construction : le
+  // détail vend en retrait libre ou en colis, la vitrine vend pendant le
+  // rendez-vous. Zéro créneau se lisait « fermé », et on leur collait une
+  // pastille de réservation de créneau. Sur la première page de l'application.
+  egal('une boutique n\'a pas de grille de créneaux', aDesCreneaux('detail'), false)
+  egal('un salon non plus', aDesCreneaux('vitrine'), false)
+  egal('un alimentaire, si', aDesCreneaux('alimentaire'), true)
+  egal('sans catégorie connue, on suppose l\'alimentaire', aDesCreneaux(null), true)
+  egal('aucune pastille de créneau sur une boutique',
+    statutCreneaux({ creneaux: [], commandes: [], jour: LUNDI, nowMin: 600, categorie: 'detail' }), null)
+  egal('ni sur un salon',
+    statutCreneaux({ creneaux: [], commandes: [], jour: LUNDI, nowMin: 600, categorie: 'vitrine' }), null)
+  egal('et rien à écrire quand il n\'y a pas de statut',
+    pastilleCreneaux({ statut: null, creneaux: [], jour: LUNDI }), null)
+
+  // ⚠️ 2. LES CRÉNEAUX DE TOUTE LA SEMAINE ÉTAIENT PRIS POUR CEUX D'AUJOURD'HUI.
+  // La requête ne demandait pas `jour_semaine` : la grille arrivait en bloc.
+  const grille = [
+    { id: 'lun', jour_semaine: 'lundi',  heure_debut: '07:00', max_commandes: 5 },
+    { id: 'sam', jour_semaine: 'samedi', heure_debut: '18:00', max_commandes: 5 },
+  ]
+  // Un lundi à 9h, le créneau du samedi 18h passait pour « disponible » parce
+  // que 18h est plus tard que 9h. Il tombe pourtant cinq jours plus loin.
+  egal('le créneau du samedi ne rend pas le lundi disponible',
+    statutCreneaux({ creneaux: grille, commandes: [], jour: LUNDI, nowMin: 9*60, categorie: 'alimentaire' }).etat,
+    'complet')
+  // Et l'inverse : les créneaux des autres jours ne bouchent pas non plus.
+  egal('le samedi, c\'est bien le créneau du samedi qui compte',
+    statutCreneaux({ creneaux: grille, commandes: [], jour: '2026-08-15', nowMin: 9*60, categorie: 'alimentaire' }).etat,
+    'ouvert')
+  // Un créneau sans jour vaut pour tous les jours (grilles d'avant le découpage).
+  egal('un créneau sans jour vaut tous les jours',
+    statutCreneaux({ creneaux: [{ id: 'x', heure_debut: '18:00', max_commandes: 5 }], commandes: [], jour: LUNDI, nowMin: 9*60, categorie: 'alimentaire' }).etat,
+    'ouvert')
+
+  // ⚠️ 3. LES COMMANDES DE TOUTES LES SEMAINES S'EMPILAIENT, ANNULÉES COMPRISES.
+  // Aucun filtre de date, et « tout ce qui n'est pas récupéré » pour occupant.
+  const creneauUnique = [{ id: 'c1', jour_semaine: 'lundi', heure_debut: '18:00', max_commandes: 5 }]
+  const fantomes = [
+    { creneau_id: 'c1', statut: 'annulee_client_refund', date_commande: '2026-07-20' },
+    { creneau_id: 'c1', statut: 'annulee_client_refund', date_commande: '2026-07-27' },
+    { creneau_id: 'c1', statut: 'annulee_paiement_ko',   date_commande: '2026-08-03' },
+    { creneau_id: 'c1', statut: 'non_retire',            date_commande: '2026-08-03' },
+    { creneau_id: 'c1', statut: 'annulee_client_refund', date_commande: LUNDI },
+  ]
+  egal('cinq commandes fantômes ne remplissent rien',
+    statutCreneaux({ creneaux: creneauUnique, commandes: fantomes, jour: LUNDI, nowMin: 9*60, categorie: 'alimentaire' }).etat,
+    'ouvert')
+  // ⚠️ CELUI-CI SÉPARE LES DEUX DÉFAUTS. Le cas précédent avait ses annulées
+  // réparties sur plusieurs semaines : le filtre de DATE suffisait à les
+  // écarter, et le test restait vert même en remettant « tout sauf récupéré »
+  // comme règle d'occupation. La mesure du défaut l'a pris sur le fait. Ici
+  // les cinq annulées tombent le BON jour : seule la règle de statut peut
+  // encore les écarter.
+  const annuleesDuJour = [
+    { creneau_id: 'c1', statut: 'annulee_client_refund', date_commande: LUNDI },
+    { creneau_id: 'c1', statut: 'annulee_client_refund', date_commande: LUNDI },
+    { creneau_id: 'c1', statut: 'annulee_paiement_ko',   date_commande: LUNDI },
+    { creneau_id: 'c1', statut: 'non_retire',            date_commande: LUNDI },
+    { creneau_id: 'c1', statut: 'recupere',              date_commande: LUNDI },
+  ]
+  egal('cinq commandes du jour, toutes sorties, ne bouchent rien',
+    statutCreneaux({ creneaux: creneauUnique, commandes: annuleesDuJour, jour: LUNDI, nowMin: 9*60, categorie: 'alimentaire' }).etat,
+    'ouvert')
+  // Les vraies commandes du JOUR, elles, comptent bien.
+  const vraies = (n, date) => Array.from({ length: n }, () => ({ creneau_id: 'c1', statut: 'en_attente', date_commande: date }))
+  egal('cinq vraies commandes du jour remplissent le créneau',
+    statutCreneaux({ creneaux: creneauUnique, commandes: vraies(5, LUNDI), jour: LUNDI, nowMin: 9*60, categorie: 'alimentaire' }).etat,
+    'complet')
+  egal('les mêmes, mais d\'un autre lundi, ne comptent pas',
+    statutCreneaux({ creneaux: creneauUnique, commandes: vraies(5, '2026-08-03'), jour: LUNDI, nowMin: 9*60, categorie: 'alimentaire' }).etat,
+    'ouvert')
+  // ⚠️ `paiement_en_attente` COMPTE : la place est réservée le temps de Stripe.
+  egal('un paiement en cours occupe bien sa place',
+    statutCreneaux({ creneaux: creneauUnique, commandes: Array.from({ length: 5 }, () => ({ creneau_id: 'c1', statut: 'paiement_en_attente', date_commande: LUNDI })), jour: LUNDI, nowMin: 9*60, categorie: 'alimentaire' }).etat,
+    'complet')
+  // Deux places ou moins : on presse le client.
+  egal('deux places restantes, on presse',
+    statutCreneaux({ creneaux: creneauUnique, commandes: vraies(3, LUNDI), jour: LUNDI, nowMin: 9*60, categorie: 'alimentaire' }).etat,
+    'urgent')
+
+  // ⚠️ UNE CAPACITÉ ABSENTE N'EST PAS UNE CAPACITÉ DE ZÉRO. `0 < null` vaut
+  // false : un créneau sans `max_commandes` se déclarait COMPLET pour toujours.
+  egal('sans plafond connu, on ne prétend pas que c\'est plein',
+    statutCreneaux({ creneaux: [{ id: 'z', jour_semaine: 'lundi', heure_debut: '18:00', max_commandes: null }], commandes: [], jour: LUNDI, nowMin: 9*60, categorie: 'alimentaire' }).etat,
+    'ouvert')
+  egal('et on ne le déclare pas « presque plein » non plus',
+    statutCreneaux({ creneaux: [{ id: 'z', jour_semaine: 'lundi', heure_debut: '18:00' }], commandes: [], jour: LUNDI, nowMin: 9*60, categorie: 'alimentaire' }).etat,
+    'ouvert')
+
+  // ⚠️ LA JOURNÉE D'UNE BOULANGERIE QUI FERME À 11H. C'est le cas d'Alex :
+  // « Résa dès 21:00 » pendant DIX HEURES, la seule phrase de l'application qui
+  // demandait au Yopper de partir. On dit maintenant QUAND, pas à partir de
+  // quelle heure.
+  const matin = [
+    { id: 'm-lun', jour_semaine: 'lundi', heure_debut: '11:00', max_commandes: 5 },
+    { id: 'm-mar', jour_semaine: 'mardi', heure_debut: '11:00', max_commandes: 5 },
+  ]
+  const libelleA = (heure, horizon = 2) => {
+    const statut = statutCreneaux({ creneaux: matin, commandes: [], jour: LUNDI, nowMin: parseInt(heure.slice(0,2))*60 + parseInt(heure.slice(3,5)), categorie: 'alimentaire' })
+    return pastilleCreneaux({ statut, creneaux: matin, jour: LUNDI, horizon })?.label
+  }
+  egal('08h00, la journée est devant', libelleA('08:00'), 'Créneaux disponibles')
+  egal('12h00, on annonce demain au lieu de 21h', libelleA('12:00'), 'Créneaux dès demain')
+  egal('18h00 aussi', libelleA('18:00'), 'Créneaux dès demain')
+  egal('20h59 aussi', libelleA('20:59'), 'Créneaux dès demain')
+  verifier('et plus AUCUNE heure magique nulle part',
+    !['08:00','12:00','14:00','18:00','20:59','21:00','23:00'].some(x => /21:00|21h/.test(String(libelleA(x)))),
+    ['08:00','12:00','18:00','23:00'].map(x => `${x}=${libelleA(x)}`).join(' | '))
+
+  // Horizon 1 = aujourd'hui seulement : on ne promet pas demain, et on ne
+  // renvoie pas non plus à une heure. On constate, simplement.
+  egal('en horizon 1, on ne promet pas demain', libelleA('12:00', 1), 'Plus de créneaux aujourd\'hui')
+
+  // Le jour nommé au-delà de demain : « à 9h » sans savoir quel jour ne dit rien.
+  const mardiSeul = [{ id: 'q', jour_semaine: 'mercredi', heure_debut: '10:00', max_commandes: 3 }]
+  const statutVide = statutCreneaux({ creneaux: mardiSeul, commandes: [], jour: LUNDI, nowMin: 12*60, categorie: 'alimentaire' })
+  egal('au-delà de demain, le jour est nommé',
+    pastilleCreneaux({ statut: statutVide, creneaux: mardiSeul, jour: LUNDI, horizon: 5 })?.label,
+    'Créneaux dès mercredi')
+
+  // Le commerce fermé aujourd'hui ne doit pas afficher un vert qui contredit
+  // le « Fermé » gris juste au-dessus.
+  const ouvertDemain = statutCreneaux({ creneaux: [{ id: 'k', jour_semaine: 'lundi', heure_debut: '18:00', max_commandes: 5 }], commandes: [], jour: LUNDI, nowMin: 9*60, categorie: 'alimentaire' })
+  egal('sous un « Fermé », pas de vert contradictoire',
+    pastilleCreneaux({ statut: ouvertDemain, creneaux: [], jour: LUNDI, fermeAujourdhui: true, quandOuvre: 'demain' })?.label,
+    'Créneaux dès demain')
+
+  // Le calcul de jour ne dérape pas au changement d'heure ni en fin de mois.
+  egal('lendemain simple', jourPlus('2026-08-10', 1), '2026-08-11')
+  egal('passage de mois', jourPlus('2026-08-31', 1), '2026-09-01')
+  egal('passage d\'année', jourPlus('2026-12-31', 1), '2027-01-01')
+  egal('fin de l\'heure d\'été belge', jourPlus('2026-10-25', 1), '2026-10-26')
+  egal('une date illisible ne fabrique rien', jourPlus('pas une date', 1), null)
+
+  // L'horizon borne la recherche du prochain jour : on ne promet jamais un
+  // jour que le commerçant n'a pas ouvert à la réservation.
+  const toutLesJours = [{ id: 't', heure_debut: '10:00', max_commandes: 5 }]
+  egal('horizon 1 ne regarde aucun lendemain',
+    prochainJourAvecCreneaux({ creneaux: toutLesJours, depuis: LUNDI, horizon: 1 }), null)
+  egal('horizon 2 regarde demain',
+    prochainJourAvecCreneaux({ creneaux: toutLesJours, depuis: LUNDI, horizon: 2 })?.jour, MARDI)
+  egal('un horizon absurde retombe sur le défaut',
+    prochainJourAvecCreneaux({ creneaux: toutLesJours, depuis: LUNDI, horizon: null })?.jour, MARDI)
+}
+
+// ⚠️ ET LES ÉCRANS DOIVENT S'EN SERVIR. Une règle juste que personne n'appelle
+// laisse le défaut intact à l'écran. On vise l'APPEL, et on interdit le retour
+// des trois requêtes fautives.
+{
+  const sansCommentaires = (src) => src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+  const accueil = sansCommentaires(readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8'))
+  verifier('l\'accueil appelle statutCreneaux', /statutCreneaux\(\{/.test(accueil))
+  verifier('et pastilleCreneaux', /pastilleCreneaux\(\{/.test(accueil))
+  verifier('il demande jour_semaine aux créneaux', /jour_semaine/.test(accueil))
+  verifier('il filtre les commandes sur les statuts occupants',
+    /\.in\('statut', STATUTS_OCCUPENT_CRENEAU\)/.test(accueil))
+  verifier('et sur la date de retrait', /\.gte\('date_commande'/.test(accueil))
+  verifier('plus aucun « tout sauf récupéré »', !/neq\('statut', 'recupere'\)/.test(accueil),
+    (accueil.match(/.*neq\('statut'.*/) || [])[0])
+  verifier('plus aucune heure de réservation en dur dans l\'accueil',
+    !/heure_ouverture_resa|'21:00'/.test(accueil),
+    (accueil.match(/.*(heure_ouverture_resa|'21:00').*/) || [])[0])
+  verifier('la disponibilité se rafraîchit au retour au premier plan',
+    /chargerNotes\(ids, commercants\)/.test(accueil))
+  verifier('les fermetures arrivent jusqu\'à la carte', /fermetures_exceptionnelles/.test(accueil))
+  verifier('la recherche ignore les accents', /sansAccents\(c\.nom\)/.test(accueil))
+  verifier('le jour des deals est le jour BELGE', !/new Date\(\)\.toISOString\(\)\.slice\(0, 10\)/.test(accueil),
+    (accueil.match(/.*new Date\(\)\.toISOString\(\)\.slice\(0, 10\).*/) || [])[0])
+  verifier('la déconnexion efface aussi les rendez-vous', /setClientRdvs\(\[\]\); setMesCartesFid/.test(accueil))
+
+  const fiche = sansCommentaires(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('la fiche n\'a plus de verrou horaire', !/heure_ouverture_resa|resaOuverte/.test(fiche),
+    (fiche.match(/.*(heure_ouverture_resa|resaOuverte).*/) || [])[0])
+  verifier('elle applique le délai par créneau', /creneauCommandable\(cr, \{/.test(fiche))
+  verifier('et son horizon par défaut est de 2 jours', /HORIZON_DEFAUT = 2/.test(fiche))
+  verifier('le message « aucun créneau » suit la liste réellement proposée',
+    /creneauxProposables\(\)\.length === 0/.test(fiche))
+
+  const config = sansCommentaires(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  verifier('le commerçant peut régler la clôture de ses créneaux', /cutoff_heures: n/.test(config))
+  verifier('le champ « ouverture des réservations » a disparu du profil',
+    !/heure_ouverture_resa/.test(config),
+    (config.match(/.*heure_ouverture_resa.*/) || [])[0])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

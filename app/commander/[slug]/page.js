@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { fetchYopper } from '@/lib/fetch-yopper'
 import { canDo, isVitrine } from '@/lib/plans'
 import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
-import { calculerCapaciteCreneau } from '@/lib/creneaux'
+import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
@@ -1539,9 +1539,28 @@ export default function CommanderSlug() {
     hydrate(cacheData)
   }
 
+  // ⚠️ L'HORIZON ET LE DÉLAI SONT DEUX QUESTIONS DIFFÉRENTES, et une seule
+  // heure fixe répondait aux deux, mal. L'horizon dit JUSQU'OÙ on peut
+  // réserver, le délai de chaque créneau dit JUSQU'À QUAND.
+  //
+  // Avant, le lendemain ne s'ouvrait qu'à `heure_ouverture_resa`, 21h par
+  // défaut. Une boulangerie dont le dernier créneau tombe à 11h passait donc
+  // DIX HEURES à afficher « Résa dès 21:00 » : le client qui pensait à son pain
+  // en rentrant du travail se voyait demander de revenir plus tard, alors que
+  // la commande pouvait parfaitement être prise. C'était la seule phrase de
+  // l'application qui invitait le Yopper à partir.
+  //
+  // Et le verrou débordait : il ajoutait le jour `horizon`, donc un jour de
+  // PLUS que ce que le commerçant avait choisi. Réglé sur trois jours, il en
+  // acceptait quatre à partir de 21h, sans jamais l'avoir demandé.
+  //
+  // Le défaut passe de 1 à 2 jours : « aujourd'hui seulement » n'a de sens que
+  // choisi exprès, jamais par défaut, sans quoi un commerce devient
+  // injoignable dès son dernier créneau passé.
+  const HORIZON_DEFAUT = 2
   function construireJoursDispos(c, creneauxAvecCount, fermeturesData, chargeParJour = {}) {
-    const horizon = c.horizon_commande || 1
-    const heureOuverture = c.heure_ouverture_resa ? c.heure_ouverture_resa.slice(0,5) : '21:00'
+    const horizonBrut = Number(c.horizon_commande)
+    const horizon = Number.isFinite(horizonBrut) && horizonBrut >= 1 ? horizonBrut : HORIZON_DEFAUT
     const now = maintenant()
     const joursDispos = []
     const today = new Date(); today.setHours(0,0,0,0)
@@ -1579,20 +1598,13 @@ export default function CommanderSlug() {
       }
     }
 
+    // L'horizon compte AUJOURD'HUI COMPRIS : réglé sur 2, il donne aujourd'hui
+    // et demain, ce que dit exactement le libellé du tableau de bord.
     for (let i = 1; i < horizon; i++) {
       const d = new Date(today); d.setDate(d.getDate() + i)
       if (estEnFermeture(d)) continue
       const label = i === 1 ? 'Demain' : d.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
       joursDispos.push({ date: d, label, creneaux: creneauxPourDate(d) })
-    }
-
-    const resaOuverte = now >= heureEnMinutes(heureOuverture)
-    if (horizon >= 1 && resaOuverte) {
-      const d = new Date(today); d.setDate(d.getDate() + horizon)
-      if (!estEnFermeture(d) && !joursDispos.find(j => j.date.getTime() === d.getTime())) {
-        const label = horizon === 1 ? 'Demain' : d.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
-        joursDispos.push({ date: d, label, creneaux: creneauxPourDate(d) })
-      }
     }
 
     if (joursDispos.length === 0) {
@@ -1606,6 +1618,32 @@ export default function CommanderSlug() {
   function buildJoursDispos(c, creneauxAvecCount, fermeturesData, charge = chargeCreneaux) {
     setJoursDispos(construireJoursDispos(c, creneauxAvecCount, fermeturesData, charge))
     setJourSelectionne(0)
+  }
+
+  // Les créneaux réellement PROPOSABLES pour le jour affiché.
+  //
+  // ⚠️ LE DÉLAI DU COMMERÇANT N'ÉTAIT PAS LU ICI. L'écran masquait seulement
+  // les créneaux du jour déjà commencés ; le délai (« commande jusqu'à 2h
+  // avant ») n'existait que côté serveur, et seulement pour la livraison. Le
+  // client voyait donc un créneau proposé, le choisissait, et se faisait
+  // refuser au paiement. On applique désormais `creneauCommandable`, la MÊME
+  // fonction que le serveur, pour que les deux disent la même chose.
+  //
+  // Et sur TOUS les jours, plus seulement aujourd'hui : un créneau de demain
+  // 8h avec douze heures de délai n'est plus commandable ce soir.
+  function creneauxProposables(index = jourSelectionne) {
+    const jour = joursDispos[index]
+    const liste = jour?.creneaux || creneaux
+    if (!jour?.date) return liste
+    const dateStr = jourLocalISO(jour.date)
+    const instantDebut = (d, h) => {
+      const [hh, mm] = String(h || '').slice(0, 5).split(':').map(Number)
+      const x = new Date(`${d}T00:00:00`)
+      if (isNaN(x.getTime()) || !Number.isFinite(hh)) return null
+      x.setHours(hh, mm || 0, 0, 0)
+      return x
+    }
+    return liste.filter(cr => creneauCommandable(cr, { dateStr, instantDebut }).ok)
   }
 
   useEffect(() => {
@@ -3584,12 +3622,7 @@ export default function CommanderSlug() {
 
                 <div className="grid3" style={{ marginBottom: '1.5rem' }}>
                   {[...new Map(
-                    (joursDispos[jourSelectionne]?.creneaux || creneaux)
-                      .filter(c => {
-                        const estAujourdhui = jourSelectionne === 0 && joursDispos[0]?.label === "Aujourd'hui"
-                        if (estAujourdhui && heureEnMinutes(c.heure_debut) <= maintenant()) return false
-                        return true
-                      })
+                    creneauxProposables()
                       .map(c => [`${c.heure_debut}-${c.heure_fin}`, c])
                   ).values()].map(c => {
                     // Capacité créneau factorisée dans lib/creneaux.js (partagée C&C + livraison)
@@ -3650,7 +3683,11 @@ export default function CommanderSlug() {
                       </div>
                     )
                   })}
-                  {(joursDispos[jourSelectionne]?.creneaux || []).length === 0 && (
+                  {/* Le message d'absence se mesure sur la liste RÉELLEMENT
+                      proposée : la grille pouvait n'afficher aucune case tout
+                      en restant muette, parce que le test portait sur les
+                      créneaux du jour avant filtrage. */}
+                  {creneauxProposables().length === 0 && (
                     <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '1.5rem', color: T.muted, fontSize: '0.875rem', fontWeight: 600 }}>
                       Aucun créneau disponible ce jour.
                     </div>

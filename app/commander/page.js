@@ -8,6 +8,9 @@ import { referenceCommande } from '@/lib/numero-commande'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import { canDo, bandeauCategorie } from '@/lib/plans'
+import { STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
+import { statutCreneaux, pastilleCreneaux, jourPlus } from '@/lib/statut-commerce'
+import { jourLocalISO } from '@/lib/timezone'
 import { morningADuContenu } from '@/lib/morning-contenu'
 import { lirePositionMemorisee, memoriserPosition, marquerDemandee, dejaDemandee, decisionGeoloc, etatAutorisation } from '@/lib/geoloc'
 import PillsStatut from './PillsStatut'
@@ -53,6 +56,13 @@ function parseTypes(type) {
   if (!type) return ['Commerce']
   const parts = type.split(/\s*[&\/,]\s*/).map(t => t.trim()).filter(Boolean)
   return parts.length >= 2 ? parts.slice(0, 2) : [type]
+}
+// ⚠️ LA RECHERCHE NE TROUVAIT RIEN SANS ACCENT. « epicerie » rendait zéro
+// résultat là où « Épicerie » en rendait un : personne ne tape la majuscule
+// accentuée sur un clavier de téléphone. On retire les accents des deux côtés
+// de la comparaison, jamais des libellés affichés.
+function sansAccents(v) {
+  return String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 }
 function distanceVolOiseau(lat1, lon1, lat2, lon2) {
   const R = 6371000
@@ -712,10 +722,11 @@ function BadgeTypeCommande({ mode, categorie = null }) {
   )
 }
 
-function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsActifs, actusActives, bonnesAffairesActives, onSelect, onToggleFavori }) {
+function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetures, dealsActifs, actusActives, bonnesAffairesActives, onSelect, onToggleFavori }) {
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
-  const statut = statutsCommerce[c.id]
+  const info = statutsCommerce[c.id]
+  const fermeturesDuCommerce = fermetures?.[c.id] || []
   const bonneAffaire = bonnesAffairesActives?.has(c.id) || false
 
   function getStatutPhysique() {
@@ -726,6 +737,19 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
     const todayIdx = nowDate.getDay()
     const j = JOURS_MAP[todayIdx]
     const h = c.horaires_detail?.[j]
+
+    // ⚠️ LES CONGÉS ÉTAIENT IGNORÉS ICI. La carte ne lisait que les horaires
+    // hebdomadaires : un commerce en fermeture exceptionnelle s'affichait
+    // « Ouvert · 07:00-14:00 » en vert, alors que sa fiche, elle, le savait
+    // fermé. Le Yopper se déplaçait pour rien.
+    const enFermeture = (date) => fermeturesDuCommerce.some(f => {
+      const debut = new Date(f.date_debut); debut.setHours(0,0,0,0)
+      const fin = new Date(f.date_fin); fin.setHours(23,59,59,999)
+      return date >= debut && date <= fin
+    })
+    if (enFermeture(nowDate)) {
+      return { dot: '#9CA3AF', label: 'Fermé exceptionnellement', color: '#6B7280', bg: '#F9FAFB', pulse: false, ferme: true, quand: null }
+    }
 
     // Plages du jour : 1 ou 2 (horaires à pause, ex. restauration 11-14 / 18-22)
     const plagesJour = (hj) => {
@@ -773,25 +797,25 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, dealsAct
     return { dot: '#9CA3AF', label: 'Fermé', color: '#6B7280', bg: '#F9FAFB', pulse: false }
   }
 
+  // ⚠️ PLUS D'HEURE MAGIQUE, ET PLUS DE PASTILLE LÀ OÙ IL N'Y A PAS DE GRILLE.
+  // On affichait « Résa dès 21:00 » sur TOUTES les boutiques et TOUS les
+  // salons, qui n'ont aucun créneau par construction, et sur les commerces
+  // alimentaires dont la journée était finie, pendant des heures. La pastille
+  // dit maintenant QUAND, ou ne dit rien.
   function getStatutResa(physiqueEtat) {
-    const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
-    const heureOuv = c.heure_ouverture_resa ? c.heure_ouverture_resa.slice(0,5) : '21:00'
-    const resaDemainOuverte = nowMin >= heureEnMinutes(heureOuv)
-    if (statut === 'ouvert') {
-      // Commerce fermé aujourd'hui : les créneaux existent bien, mais pas pour
-      // maintenant. On le dit, plutôt que d'afficher un vert qui contredit le
-      // « Fermé » affiché juste au-dessus.
-      if (physiqueEtat?.ferme) {
-        return { dot: T.main, label: `Créneaux dès ${physiqueEtat.quand}`, color: T.main, bg: T.pale }
-      }
-      return { dot: '#10B981', label: 'Créneaux disponibles', color: '#10B981', bg: '#F0FDF4' }
-    }
-    if (statut === 'urgent')  return { dot: '#EA580C', label: 'Réserve vite !', color: '#EA580C', bg: '#FFF7ED' }
-    if (statut === 'complet' || statut === 'ferme') {
-      if (resaDemainOuverte) return { dot: T.main, label: 'Réserver pour demain', color: T.main, bg: T.pale }
-      return { dot: '#9CA3AF', label: `Résa dès ${heureOuv}`, color: '#6B7280', bg: '#F9FAFB' }
-    }
-    return null
+    const p = pastilleCreneaux({
+      statut: info?.statut,
+      creneaux: info?.creneaux || [],
+      jour: info?.jour,
+      horizon: info?.horizon,
+      fermeAujourdhui: !!physiqueEtat?.ferme,
+      quandOuvre: physiqueEtat?.quand || null,
+    })
+    if (!p) return null
+    if (p.cle === 'ouvert')    return { dot: '#10B981', label: p.label, color: '#10B981', bg: '#F0FDF4' }
+    if (p.cle === 'urgent')    return { dot: '#EA580C', label: p.label, color: '#EA580C', bg: '#FFF7ED' }
+    if (p.cle === 'plus_tard') return { dot: T.main,    label: p.label, color: T.main,    bg: T.pale }
+    return { dot: '#9CA3AF', label: p.label, color: '#6B7280', bg: '#F9FAFB' }
   }
 
   const physique = getStatutPhysique()
@@ -1201,6 +1225,9 @@ export default function Commander() {
   const [erreurChargement, setErreurChargement] = useState(false)
   const [notesParCommerce, setNotesParCommerce] = useState({})
   const [statutsCommerce, setStatutsCommerce] = useState({})
+  // Fermetures exceptionnelles, par commerçant. La carte les ignorait : un
+  // commerce en congé s'affichait « Ouvert » en vert sur l'accueil.
+  const [fermetures, setFermetures] = useState({})
   // Set des commerçants qui ont un deal/actu actif aujourd'hui (pour dot LIVE sur pills)
   const [dealsActifs, setDealsActifs] = useState(new Set())
   const [actusActives, setActusActives] = useState(new Set())
@@ -1604,11 +1631,20 @@ export default function Commander() {
   // actu cote dashboard et revient sur l'app client). + polling 60s en backup.
   // Sans ces 2 mecanismes, les nouvelles actus/deals ne sont jamais visibles cote client
   // sans hard refresh. Bug rapporte Alex 2026-06-01.
+  // ⚠️ LA DISPONIBILITÉ NE SE RAFRAÎCHISSAIT JAMAIS. Les deals se remettaient à
+  // jour au retour au premier plan et toutes les minutes, la disponibilité des
+  // créneaux JAMAIS : elle était calculée une seule fois au montage. Une
+  // application installée sur téléphone n'est presque jamais rechargée, elle
+  // est seulement remise au premier plan : la carte montrait donc l'état du
+  // matin toute la journée, créneaux passés compris.
   useEffect(() => {
     if (commercants.length === 0) return
     const ids = commercants.map(c => c.id)
     const refresh = () => {
-      if (document.visibilityState === 'visible') chargerActiviteAujourdhui(ids)
+      if (document.visibilityState === 'visible') {
+        chargerActiviteAujourdhui(ids)
+        chargerNotes(ids, commercants)
+      }
     }
     const onVisChange = () => refresh()
     window.addEventListener('focus', refresh)
@@ -1650,7 +1686,11 @@ export default function Commander() {
   // Charge les deals et actus actifs aujourd'hui pour piloter le dot LIVE des pills
   async function chargerActiviteAujourdhui(ids) {
     if (!ids?.length) return
-    const aujourdhui = new Date().toISOString().slice(0, 10)
+    // ⚠️ LE JOUR SE LIT EN HEURE BELGE, PAS EN UTC. `toISOString()` renvoie le
+    // jour PRÉCÉDENT entre minuit et 2h du matin chez nous : une friterie ou
+    // une pizzeria, ouvertes à ces heures-là, affichaient le deal de la veille
+    // et masquaient celui du jour.
+    const aujourdhui = jourLocalISO(new Date())
     const [{ data: deals }, { data: actus }] = await Promise.all([
       // Deals actifs : date_deal = aujourd'hui, OU intervalle date_debut/date_fin qui englobe.
       // On charge aussi est_bonne_affaire pour piloter le badge dore sur la card.
@@ -1691,11 +1731,34 @@ export default function Commander() {
     setActusActives(actuSet)
   }
 
+  // ⚠️ CETTE FONCTION REFAISAIT SON PROPRE CALCUL DE DISPONIBILITÉ, avec des
+  // règles qui n'étaient celles de personne d'autre : aucun filtre de jour sur
+  // les créneaux, aucun filtre de date sur les commandes, et les annulées
+  // comptées comme occupantes à vie. Un commerce parfaitement libre pouvait
+  // afficher « Résa dès 21:00 ». Tout est parti dans `lib/statut-commerce.js`,
+  // qui applique les règles de `lib/creneaux.js`, celles du reste de l'app.
+  //
+  // Les FERMETURES arrivent avec : un commerce en congé annuel s'affichait
+  // « Ouvert · 07:00-14:00 » en vert sur l'accueil, alors que sa fiche, elle,
+  // le savait fermé.
   async function chargerNotes(ids, commercantsData = []) {
-    const [{ data: avisData }, { data: creneauxData }, { data: commandesData }] = await Promise.all([
+    const jour = jourLocalISO(new Date())
+    // Fenêtre utile : aujourd'hui plus l'horizon le plus long possible. Inutile
+    // de rapatrier les commandes d'il y a trois semaines, elles n'occupent plus
+    // rien.
+    const finFenetre = jourPlus(jour, 7)
+    const [{ data: avisData }, { data: creneauxData }, { data: commandesData }, { data: fermeturesData }] = await Promise.all([
       supabase.from('avis_public').select('commercant_id, note').in('commercant_id', ids),
-      supabase.from('creneaux').select('id, commercant_id, heure_debut, heure_fin, max_commandes, actif').in('commercant_id', ids).eq('actif', true),
-      supabase.from('commandes_stats').select('commercant_id, creneau_id').in('commercant_id', ids).neq('statut', 'recupere')
+      // `jour_semaine` est INDISPENSABLE : sans lui, la grille de toute la
+      // semaine est prise pour celle d'aujourd'hui.
+      supabase.from('creneaux').select('id, commercant_id, jour_semaine, heure_debut, heure_fin, max_commandes, actif').in('commercant_id', ids).eq('actif', true),
+      supabase.from('commandes_stats')
+        .select('commercant_id, creneau_id, statut, date_commande')
+        .in('commercant_id', ids)
+        .in('statut', STATUTS_OCCUPENT_CRENEAU)
+        .gte('date_commande', jour)
+        .lte('date_commande', finFenetre),
+      supabase.from('fermetures_exceptionnelles').select('commercant_id, date_debut, date_fin').in('commercant_id', ids),
     ])
     const notes = {}
     ids.forEach(id => {
@@ -1703,28 +1766,33 @@ export default function Commander() {
       notes[id] = av.length > 0 ? { moyenne: av.reduce((a, x) => a+x.note, 0)/av.length, count: av.length } : { moyenne: 0, count: 0 }
     })
     setNotesParCommerce(notes)
-    const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
+
+    const maintenant = new Date()
+    const nowMin = maintenant.getHours() * 60 + maintenant.getMinutes()
     const statuts = {}
     ids.forEach(id => {
-      const crensDuJour = (creneauxData||[]).filter(c => c.commercant_id === id)
-      const cmds = (commandesData||[]).filter(c => c.commercant_id === id)
-      const countParCren = {}
-      cmds.forEach(c => { countParCren[c.creneau_id] = (countParCren[c.creneau_id]||0)+1 })
-      const crensDispos = crensDuJour.filter(c => {
-        const debut = parseInt(c.heure_debut.slice(0,2))*60 + parseInt(c.heure_debut.slice(3,5))
-        return debut > nowMin && (countParCren[c.id]||0) < c.max_commandes
-      })
-      const placesTotales = crensDispos.reduce((acc, c) => acc + (c.max_commandes - (countParCren[c.id]||0)), 0)
-      if (crensDuJour.length === 0) { statuts[id] = 'ferme' }
-      else if (crensDispos.length === 0) {
-        const commercant = commercantsData.find(c => c.id === id)
-        const heureOuv = commercant?.heure_ouverture_resa ? commercant.heure_ouverture_resa.slice(0,5) : '21:00'
-        const tousPassees = crensDuJour.every(c => parseInt(c.heure_debut.slice(0,2))*60 + parseInt(c.heure_debut.slice(3,5)) <= nowMin)
-        statuts[id] = (nowMin >= heureEnMinutes(heureOuv) && tousPassees) ? 'ouvert' : 'complet'
-      } else if (placesTotales <= 2) { statuts[id] = 'urgent' }
-      else { statuts[id] = 'ouvert' }
+      const commercant = commercantsData.find(c => c.id === id)
+      const creneaux = (creneauxData||[]).filter(c => c.commercant_id === id)
+      statuts[id] = {
+        statut: statutCreneaux({
+          creneaux,
+          commandes: (commandesData||[]).filter(c => c.commercant_id === id),
+          jour,
+          nowMin,
+          categorie: commercant?.categorie,
+        }),
+        creneaux,
+        jour,
+        horizon: commercant?.horizon_commande,
+      }
     })
     setStatutsCommerce(statuts)
+    const parCommerce = {}
+    ;(fermeturesData || []).forEach(f => {
+      if (!parCommerce[f.commercant_id]) parCommerce[f.commercant_id] = []
+      parCommerce[f.commercant_id].push(f)
+    })
+    setFermetures(parCommerce)
   }
 
   // Les favoris passent par une route serveur : la table n'est plus lisible ni
@@ -2018,7 +2086,11 @@ export default function Commander() {
   const commercantsFiltres = commercants
     .filter(c => familleActive === 'tous' || familleDe(c) === familleActive)
     .filter(c => !metierActif || parseTypes(c.type).includes(metierActif))
-    .filter(c => !searchQuery.trim() || c.nom.toLowerCase().includes(searchQuery.toLowerCase()) || (c.type||'').toLowerCase().includes(searchQuery.toLowerCase()) || (c.adresse||'').toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter(c => {
+      const q = sansAccents(searchQuery.trim())
+      if (!q) return true
+      return sansAccents(c.nom).includes(q) || sansAccents(c.type).includes(q) || sansAccents(c.adresse).includes(q)
+    })
 
   // Retrait « prêt à retirer » : swipe pour confirmer le retrait au comptoir.
   // Expédition exclue du swipe retrait : un colis ne se « récupère » pas au
@@ -2499,7 +2571,7 @@ export default function Commander() {
                 </div>
               ) : (
                 <div className="commerces-grid">
-                  {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
+                  {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
                 </div>
               )}
 
@@ -3265,7 +3337,7 @@ export default function Commander() {
                       </p>
                     ) : (
                       <div className="commerces-grid" style={{ marginTop: 4 }}>
-                        {commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
+                        {commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
                       </div>
                     )}
                   </div>
@@ -3327,8 +3399,16 @@ export default function Commander() {
                     ;['yoppaa_email','yoppaa_nom','yoppaa_prenom','yoppaa_telephone','yoppaa_client_id','yoppaa_onglet'].forEach(k => localStorage.removeItem(k))
                     // Efface aussi le cookie serveur (vrai logout : get-own ne doit plus rien renvoyer).
                     fetch('/api/yopper/session', { method: 'DELETE' }).catch(() => {})
+                    // ⚠️ LES RENDEZ-VOUS RESTAIENT À L'ÉCRAN. Cette remise à zéro
+                    // oubliait `clientRdvs`, `mesCartesFid` et `commune` : après
+                    // déconnexion, les rendez-vous de la personne qui venait de
+                    // partir restaient affichés, et la pastille du pied de page
+                    // continuait de les compter. Le relevé toutes les cinq
+                    // secondes ne les effaçait pas non plus, il saute le tour
+                    // quand il n'y a plus d'email.
                     setClient({ nom:'', email:'', telephone:'', prenom:'' }); setClientId(null)
                     setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
+                    setClientRdvs([]); setMesCartesFid([]); setCommune(null)
                     // On reste sur l'onglet Profil (état invité + CTA connexion) et on remonte en haut.
                     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
                   }} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', padding: '0.875rem', background: 'transparent', color: '#DC2626', border: '1.5px solid #DC262633', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem' }}>
@@ -3348,8 +3428,16 @@ export default function Commander() {
                 {client.email && (
                   <SupprimerCompte email={client.email} onSupprime={() => {
                     ;['yoppaa_email','yoppaa_nom','yoppaa_prenom','yoppaa_telephone','yoppaa_client_id','yoppaa_onglet'].forEach(k => localStorage.removeItem(k))
+                    // ⚠️ LES RENDEZ-VOUS RESTAIENT À L'ÉCRAN. Cette remise à zéro
+                    // oubliait `clientRdvs`, `mesCartesFid` et `commune` : après
+                    // déconnexion, les rendez-vous de la personne qui venait de
+                    // partir restaient affichés, et la pastille du pied de page
+                    // continuait de les compter. Le relevé toutes les cinq
+                    // secondes ne les effaçait pas non plus, il saute le tour
+                    // quand il n'y a plus d'email.
                     setClient({ nom:'', email:'', telephone:'', prenom:'' }); setClientId(null)
                     setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
+                    setClientRdvs([]); setMesCartesFid([]); setCommune(null)
                     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
                   }}/>
                 )}

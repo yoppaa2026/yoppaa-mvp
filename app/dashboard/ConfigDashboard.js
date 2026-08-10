@@ -2740,6 +2740,20 @@ function TabCreneaux({ commercantId, toast }) {
     setCreneaux(prev => prev.map(c => c.id === id ? { ...c, delta_minutes: n } : c))
   }
 
+  // Clôture des commandes, en heures avant le début du créneau.
+  //
+  // ⚠️ CE RÉGLAGE N'EXISTAIT QUE POUR LA LIVRAISON. Côté Click & Collect, la
+  // seule limite était le début du créneau lui-même : on pouvait commander à
+  // 6h58 pour le créneau de 7h00, sans laisser au boulanger la moindre chance.
+  // Zéro reste le défaut, c'est-à-dire le comportement d'avant : personne ne se
+  // voit imposer un délai qu'il n'a pas choisi.
+  async function updateCutoff(id, val) {
+    const n = parseInt(val, 10)
+    if (isNaN(n) || n < 0) return
+    await supabase.from('creneaux').update({ cutoff_heures: n }).eq('id', id)
+    setCreneaux(prev => prev.map(c => c.id === id ? { ...c, cutoff_heures: n } : c))
+  }
+
   async function toggleCreneau(c) {
     await supabase.from('creneaux').update({ actif: !c.actif }).eq('id', c.id)
     fetchAll()
@@ -2920,8 +2934,12 @@ function TabCreneaux({ commercantId, toast }) {
   if (loading) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
 
   const HORIZONS = [
-    { val: 1, label: '1 jour',  desc: "Aujourd'hui seulement" },
-    { val: 2, label: '2 jours', desc: "Aujourd'hui + demain" },
+    // ⚠️ « 1 jour » se choisit maintenant EN CONNAISSANCE DE CAUSE. C'était le
+    // réglage par défaut, et il rendait le commerce injoignable dès son dernier
+    // créneau passé : plus rien à vendre jusqu'au lendemain matin. Le libellé
+    // le dit désormais franchement.
+    { val: 1, label: '1 jour',  desc: "Aujourd'hui seulement · rien pour demain" },
+    { val: 2, label: '2 jours', desc: "Aujourd'hui + demain (conseillé)" },
     { val: 3, label: '3 jours', desc: "Les 3 prochains jours" },
     { val: 4, label: '4 jours', desc: "Les 4 prochains jours" },
     { val: 5, label: '5 jours', desc: "Les 5 prochains jours" },
@@ -3131,6 +3149,16 @@ function TabCreneaux({ commercantId, toast }) {
                             style={{ ...s.input, width: 44, textAlign: 'center', padding: '2px 4px', fontSize: 13, fontWeight: 700 }} />
                           <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateDelta(c.id, (c.delta_minutes || 0) + 5)}>+</button>
                           <span style={{ fontSize: 10, color: T.muted }}>min</span>
+                        </div>
+                        {/* Clôture des commandes. Zéro = ouvert jusqu'au début
+                            du créneau, exactement comme avant ce réglage. */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                          <span style={{ fontSize: 11, color: T.muted }}>Clôture :</span>
+                          <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateCutoff(c.id, Math.max(0, (c.cutoff_heures || 0) - 1))}>−</button>
+                          <input type="number" value={c.cutoff_heures || 0} min={0} onChange={e => updateCutoff(c.id, e.target.value)}
+                            style={{ ...s.input, width: 44, textAlign: 'center', padding: '2px 4px', fontSize: 13, fontWeight: 700 }} />
+                          <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateCutoff(c.id, (c.cutoff_heures || 0) + 1)}>+</button>
+                          <span style={{ fontSize: 10, color: T.muted }}>h avant</span>
                         </div>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
@@ -4281,7 +4309,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
         // passage ses infos pratiques, qui s'affichent sur ses DEUX fiches et
         // dans l'email de confirmation de rendez-vous. Rien ne le prévenait.
         infos_pratiques: data.infos_pratiques || '',
-        horaires: data.horaires || '', heure_ouverture_resa: data.heure_ouverture_resa ? data.heure_ouverture_resa.slice(0,5) : '21:00', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '' })
+        horaires: data.horaires || '', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '' })
       setLogoPreview(data.logo_url || null)
     }
     setLoading(false)
@@ -4313,7 +4341,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
   async function saveProfil() {
     if (!form.nom.trim()) return toast('Le nom est obligatoire', 'error')
     setSaving(true)
-    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, site_web: (form.site_web || '').trim() || null, description: form.description.trim() || null, infos_pratiques: (form.infos_pratiques || '').trim() || null, horaires: form.horaires.trim() || null, heure_ouverture_resa: form.heure_ouverture_resa || '21:00', horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des) }).eq('id', commercantId)
+    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, site_web: (form.site_web || '').trim() || null, description: form.description.trim() || null, infos_pratiques: (form.infos_pratiques || '').trim() || null, horaires: form.horaires.trim() || null, horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des) }).eq('id', commercantId)
     setSaving(false)
     if (error) {
       console.error('[ConfigDashboard.saveProfil]', error)
@@ -4593,18 +4621,15 @@ function TabProfil({ commercantId, toast, onSaved }) {
               })}
             </div>
           </div>
-          {/* Réglage utile UNIQUEMENT en horizon 1 jour (le lendemain s'ouvre à
-              cette heure). Avec un horizon plus long, il ne pilote que le
-              dernier jour de l'horizon : bruit de config, on le masque. */}
-          {(form.horizon_commande || 1) === 1 && (
-            <div>
-              <label style={s.label}>Ouverture des réservations</label>
-              <p style={{ fontSize: 11, color: T.muted, marginBottom: 6 }}>
-                Heure à partir de laquelle les clients peuvent réserver pour le lendemain (défaut : 21h00)
-              </p>
-              <Input type="time" value={form.heure_ouverture_resa} onChange={e => setForm(p => ({ ...p, heure_ouverture_resa: e.target.value }))} style={{ width: 140 }} />
-            </div>
-          )}
+          {/* ⚠️ « OUVERTURE DES RÉSERVATIONS » A ÉTÉ RETIRÉ D'ICI. Ce champ
+              fixait l'heure à laquelle le lendemain devenait réservable, 21h
+              par défaut : une boulangerie dont le dernier créneau tombait à 11h
+              passait dix heures à afficher « Résa dès 21:00 » à ses clients,
+              alors qu'elle pouvait parfaitement prendre la commande.
+              Deux réglages le remplacent, chacun sur sa vraie question :
+              l'HORIZON dit jusqu'à quel jour on peut réserver, la CLÔTURE de
+              chaque créneau dit jusqu'à quelle heure. Les deux vivent dans
+              l'onglet Créneaux. La colonne reste en base, plus rien ne la lit. */}
         </div>
 
         {/* ─── Emplacements food truck (M5) : uniquement pour ce métier ─── */}

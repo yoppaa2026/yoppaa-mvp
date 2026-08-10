@@ -22,6 +22,7 @@ import { tauxFraisLivraison } from '../lib/tva.js'
 import { ventilerFrais } from '../lib/stripe-frais.js'
 import { contexteRetrait, textesRetrait, textesConfirmation } from '../lib/ecran-retrait.js'
 import { emailCommandeExpediee } from '../lib/resend.js'
+import { partagerCommandes } from '../lib/commandes-vue.js'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -383,6 +384,87 @@ verifier('pas de centime perdu à l’arrondi', Math.abs((v.rdv.frais + v.comman
 
 verifier('total nul = pas de ventilation', ventilerFrais(1.00, 0, 0) === null)
 verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === null)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA COMMANDE DE BOUTIQUE QUI DISPARAISSAIT LE LENDEMAIN
+// ═══════════════════════════════════════════════════════════════════════════
+// Le classement par jour a été pensé pour le Click & Collect alimentaire, où la
+// commande est attachée à un CRÉNEAU : passé le jour dit, elle a été retirée ou
+// elle ne le sera jamais, et l'historique est sa place.
+//
+// ⚠️ LA BOUTIQUE DE DÉTAIL N'A AUCUN CRÉNEAU. Le client passe « dans la
+// semaine », un colis part quand il est emballé. Une commande passée lundi et
+// pas encore expédiée basculait donc mardi dans l'Historique, un onglet qu'on
+// ouvre pour chercher, pas pour travailler. Le commerçant devait deviner qu'il
+// lui restait des colis à envoyer, et le client attendait un paquet que personne
+// ne préparait.
+//
+// On EXÉCUTE le partage sur de vraies commandes et on lit ce qui en sort.
+{
+  const JOURS_VUE = ['2026-08-11', '2026-08-12']   // aujourd'hui + horizon
+  const AUJ = '2026-08-11'
+  const cmdV = (id, jour, statut) => ({ id, jour, statut })
+  const jourDe = (c) => c.jour
+
+  const lot = [
+    cmdV('hier-a-faire',  '2026-08-10', 'en_attente'),
+    cmdV('hier-prete',    '2026-08-10', 'pret'),
+    cmdV('hier-finie',    '2026-08-10', 'recupere'),
+    cmdV('hier-annulee',  '2026-08-10', 'annulee_client_refund'),
+    cmdV('aujourdhui',    '2026-08-11', 'en_attente'),
+    cmdV('demain',        '2026-08-12', 'en_attente'),
+  ]
+  const vueDetail = partagerCommandes({
+    commandes: lot, categorie: 'detail', joursDispos: JOURS_VUE, jourActif: AUJ, aujourdhui: AUJ, jourDe,
+  })
+  const ids = (l) => l.map(c => c.id).sort()
+  egal('en boutique, les commandes d\'hier encore à faire remontent sur aujourd\'hui',
+    ids(vueDetail.duJour), ['aujourdhui', 'hier-a-faire', 'hier-prete'])
+  egal('les terminées et les annulées restent bien dans l\'historique',
+    ids(vueDetail.historique), ['hier-annulee', 'hier-finie'])
+
+  // ⚠️ ET SURTOUT PAS DEUX FOIS. Les faire apparaître aussi sur demain
+  // donnerait au commerçant l'impression d'avoir le double de travail.
+  const vueDemain = partagerCommandes({
+    commandes: lot, categorie: 'detail', joursDispos: JOURS_VUE, jourActif: '2026-08-12', aujourdhui: AUJ, jourDe,
+  })
+  egal('une commande en retard ne remonte que sur aujourd\'hui', ids(vueDemain.duJour), ['demain'])
+
+  // ⚠️ L'ALIMENTAIRE NE CHANGE PAS. Une commande du samedi non retirée doit
+  // finir en « non retiré », pas remonter indéfiniment sur le jour courant et
+  // saturer l'écran du boulanger.
+  const vueAlim = partagerCommandes({
+    commandes: lot, categorie: 'alimentaire', joursDispos: JOURS_VUE, jourActif: AUJ, aujourdhui: AUJ, jourDe,
+  })
+  egal('en alimentaire, rien ne remonte', ids(vueAlim.duJour), ['aujourdhui'])
+  egal('et tout ce qui est passé reste dans l\'historique',
+    ids(vueAlim.historique), ['hier-a-faire', 'hier-annulee', 'hier-finie', 'hier-prete'])
+
+  // La vitrine vend aussi des produits, sans créneau : même règle que le détail.
+  const vueVitrine = partagerCommandes({
+    commandes: lot, categorie: 'vitrine', joursDispos: JOURS_VUE, jourActif: AUJ, aujourdhui: AUJ, jourDe,
+  })
+  egal('la vitrine suit la même règle que le détail', ids(vueVitrine.duJour), ids(vueDetail.duJour))
+
+  // Aucune commande ne doit se retrouver nulle part : chacune est soit à faire,
+  // soit dans l'histoire, soit sur un autre jour du sélecteur.
+  const vues = [...vueDetail.duJour, ...vueDetail.historique].map(c => c.id)
+  verifier('aucune commande ne se perd entre les deux listes',
+    lot.filter(c => !vues.includes(c.id)).every(c => JOURS_VUE.includes(c.jour)),
+    lot.filter(c => !vues.includes(c.id)).map(c => c.id).join(', '))
+
+  // Sans fonction de jour, on ne devine pas : mieux vaut deux listes vides
+  // qu'un classement au hasard.
+  egal('sans clé de jour, le partage ne fabrique rien',
+    partagerCommandes({ commandes: lot, categorie: 'detail' }), { duJour: [], historique: [] })
+}
+// Et l'écran doit APPELER ce partage, pas en garder une copie divergente.
+{
+  const dash = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+  verifier('le tableau de bord appelle le partage partagé', /partagerCommandes\(\{/.test(dash))
+  verifier('il lui passe la catégorie du commerce', /categorie: commercant\?\.categorie/.test(dash))
+  verifier('et le commerçant voit qu\'une commande traîne', /En attente depuis/.test(dash))
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LE NOM DE CE QUI A ÉTÉ VENDU — figé à la vente, comme le taux de TVA

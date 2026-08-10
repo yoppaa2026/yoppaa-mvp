@@ -9,6 +9,7 @@ import { Reply, ClipboardList } from 'lucide-react'
 import { canDo } from '@/lib/plans'
 import { remplissageCreneaux } from '@/lib/creneaux'
 import BandeDefilante from '@/app/components/BandeDefilante'
+import { partagerCommandes } from '@/lib/commandes-vue'
 
 const T = {
   bg:      '#F8F6FF',
@@ -255,6 +256,17 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
   const prenom = commande.client_nom?.split(' ')[0] || commande.client_nom
   const nomAffiche = modeHistorique ? (commande.client_nom || prenom) : prenom
 
+  // ⚠️ « EN ATTENTE DEPUIS ». Une commande de boutique reste ouverte tant que le
+  // client n'est pas passé ou que le colis n'est pas parti : elle remonte donc
+  // sur la journée en cours. Sans le dire, le commerçant la prendrait pour une
+  // commande du jour et croirait avoir tout le temps devant lui.
+  const jourCommande = dateKey(commande.date_commande || commande.created_at)
+  const enAttenteDepuis = (!modeHistorique
+    && ['en_attente', 'en_preparation', 'pret'].includes(commande.statut)
+    && jourCommande && jourCommande < dateKey(new Date()))
+    ? dateLabel(jourCommande + 'T00:00:00')
+    : null
+
   // Heure de retrait (swipe client) = updated_at quand statut = recupere
   const heureRetrait = (modeHistorique && commande.statut === 'recupere' && commande.updated_at)
     ? new Date(commande.updated_at).toLocaleString('fr-BE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -286,6 +298,11 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
                   <span style={{ fontSize: '0.65rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Retiré</span>
                   <span style={{ fontSize: '0.72rem', color: '#2563EB', fontWeight: 700 }}>{heureRetrait}</span>
                 </div>
+              )}
+              {enAttenteDepuis && (
+                <span style={{ display: 'inline-block', marginTop: 3, background: '#FEF3C7', color: '#92400E', fontSize: '0.62rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100, letterSpacing: '0.2px' }}>
+                  En attente depuis {enAttenteDepuis.toLowerCase()}
+                </span>
               )}
               {commande.client_telephone && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
@@ -1113,8 +1130,33 @@ export default function Dashboard() {
   // Commandes hors horizon = historique
   // Tri : 1) date décroissante (récente d'abord) 2) numero_commande ascendant
   // (chronologie de prise de commande à l'intérieur d'un même jour)
-  const commandesHistorique = commandes
-    .filter(c => !joursDispos.includes(dateKey(c.date_commande || c.created_at)))
+  // ⚠️ UNE COMMANDE DE BOUTIQUE NON TERMINÉE DISPARAISSAIT LE LENDEMAIN.
+  //
+  // Le classement par jour a été pensé pour le Click & Collect alimentaire, où
+  // la commande est attachée à un CRÉNEAU : passé le jour dit, elle est retirée
+  // ou elle ne le sera jamais, et l'historique est sa place naturelle.
+  //
+  // La boutique de détail ne fonctionne pas comme ça. Il n'y a AUCUN créneau :
+  // le client passe « dans la semaine », et un colis part quand il est emballé.
+  // Une commande passée lundi et pas encore expédiée basculait donc mardi dans
+  // l'Historique, un onglet qu'on ouvre pour chercher, pas pour travailler. Le
+  // commerçant devait deviner qu'il lui restait des colis à envoyer.
+  //
+  // Une commande qui n'est pas finie reste sur le bureau. C'est tout.
+  // Le partage lui-même vit dans `lib/commandes-vue.js`, en fonction pure, pour
+  // que le banc puisse l'exécuter sur de vraies commandes plutôt que lire ce
+  // fichier.
+  const jourDeCommande = (c) => dateKey(c.date_commande || c.created_at)
+  const { duJour: _duJour, historique: _historique } = partagerCommandes({
+    commandes,
+    categorie: commercant?.categorie,
+    joursDispos,
+    jourActif,
+    aujourdhui: todayKey,
+    jourDe: jourDeCommande,
+  })
+
+  const commandesHistorique = _historique
     .sort((a, b) => {
       const dateA = a.date_commande || a.created_at
       const dateB = b.date_commande || b.created_at
@@ -1123,9 +1165,7 @@ export default function Dashboard() {
       return (a.numero_commande || 0) - (b.numero_commande || 0)
     })
 
-  const commandesDuJourTous = modeHistorique
-    ? commandesHistorique
-    : commandes.filter(c => dateKey(c.date_commande || c.created_at) === jourActif)
+  const commandesDuJourTous = modeHistorique ? commandesHistorique : _duJour
   // Vue séparée Retrait / Livraison si le commerce a la livraison activée.
   const livraisonActive = !!commercant?.livraison_actif
   const commandesDuJour = livraisonActive

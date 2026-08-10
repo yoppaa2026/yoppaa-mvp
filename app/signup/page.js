@@ -25,6 +25,7 @@ import TurnstileWidget from '@/app/components/TurnstileWidget'
 // Types de commerce : source unique lib/types-commerce (listes étendues 23/07,
 // double métier max 2, champ libre « Autre… »). Sélection via SelecteurTypes.
 import SelecteurTypes from '@/app/components/SelecteurTypes'
+import { estFoodTruck } from '@/lib/types-commerce'
 
 // ─── SKIP-LOGIC (esprit ODOO : adaptive selon plan + categorie) ────────────────
 // La structure 5 etapes reste constante, mais le CONTENU et les contraintes
@@ -1128,7 +1129,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
           )}
           {/* Food truck : l'adresse d'onboarding = ancre (commune, zone GMY, KYB),
               les emplacements de vente arriveront avec le module M5 */}
-          {(form.type || '').includes('Food truck') && (
+          {estFoodTruck(form.type) && (
             <p style={{ fontSize: 11, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
               Truck mobile ? Indique l&rsquo;adresse de ton dépôt ou de ton siège : elle définit ta commune sur Yoppaa. Tu annonceras ensuite tes emplacements de vente depuis ton tableau de bord.
             </p>

@@ -10,6 +10,8 @@ import { calculerCapaciteCreneau } from '@/lib/creneaux'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { compterVueFiche } from '@/lib/vue-fiche'
+import { estFoodTruck as estFoodTruckType } from '@/lib/types-commerce'
+import { jourLocalISO, jourSemaineLocal } from '@/lib/timezone'
 import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
@@ -59,10 +61,10 @@ const T = {
 // Cette formule est celle qui construit déjà `date_commande` à l'envoi : les
 // deux DOIVENT rester identiques, sinon la charge affichée ne retrouverait
 // jamais les commandes enregistrées.
-function jourLocalISO(date) {
-  const d = date instanceof Date ? date : new Date(date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
+// `jourLocalISO` vivait ici, en double avec le tableau de bord. Elle est
+// désormais dans `lib/timezone.js`, avec la raison d'être qui l'accompagne :
+// `toISOString()` rend la date de la VEILLE entre minuit et deux heures du
+// matin en Belgique. Une seule formule, testée au banc.
 
 const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LONGS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
@@ -2312,11 +2314,22 @@ export default function CommanderSlug() {
   // M5 food truck : l'emplacement du JOUR remplace l'adresse du dépôt sur la
   // fiche. Un ponctuel (date précise) prime sur la tournée hebdo. Fallback :
   // « Prochain emplacement annoncé bientôt » si rien n'est déclaré.
-  const estFoodTruck = (commercant?.type || '').toLowerCase().includes('food truck')
+  //
+  // ⚠️ LA DÉTECTION VIENT DE `lib/types-commerce.js`, ET C'EST LE FOND DU
+  // PROBLÈME. Elle s'écrivait ici `.includes('food truck')`, avec l'espace
+  // exigé, alors que le guide photos acceptait « foodtruck » et « food-truck ».
+  // Le type n'est pas toujours une valeur de la liste : le commerçant peut le
+  // saisir librement. Celui qui tapait « Foodtruck » recevait bien les conseils
+  // photo de son métier, mais sa fiche affichait l'adresse de son DÉPÔT au lieu
+  // du marché où il se trouvait. Le client se déplaçait au mauvais endroit.
+  const estFoodTruck = estFoodTruckType(commercant?.type)
   const emplacementDuJour = (() => {
     if (!estFoodTruck || foodtruckEmps.length === 0) return null
-    const todayISO = new Date().toISOString().slice(0, 10)
-    const jourKey = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'][new Date().getDay()]
+    // ⚠️ `jourLocalISO` et PAS `toISOString()` : minuit heure belge, c'est 22h
+    // la veille en temps universel. Entre minuit et deux heures du matin, la
+    // fiche cherchait l'emplacement d'HIER.
+    const todayISO = jourLocalISO(new Date())
+    const jourKey = jourSemaineLocal(new Date())
     return foodtruckEmps.find(e => e.type === 'ponctuel' && e.date_jour === todayISO)
       || foodtruckEmps.find(e => e.type === 'hebdo' && e.jour_semaine === jourKey)
       || null

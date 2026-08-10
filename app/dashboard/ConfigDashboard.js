@@ -11,6 +11,8 @@ import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import BandeDefilante from '@/app/components/BandeDefilante'
+import { estFoodTruck } from '@/lib/types-commerce'
+import { jourLocalISO, jourSemaineLocal } from '@/lib/timezone'
 import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
 import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '@/lib/fidelite'
@@ -3937,8 +3939,13 @@ function SectionEmplacementsFoodtruck({ commercantId, toast }) {
   // Édition d'une ligne de tournée hebdo (un seul formulaire ouvert à la fois)
   const [formHebdo, setFormHebdo] = useState(null)  // { jour, libelle, adresse, heure_debut, heure_fin }
 
-  const todayISO = new Date().toISOString().slice(0, 10)
-  const jourKey = JOURS_FT[(new Date().getDay() + 6) % 7]
+  // ⚠️ `jourLocalISO` et PAS `toISOString()`. Minuit heure belge, c'est 22h ou
+  // 23h LA VEILLE en temps universel : entre minuit et deux heures du matin,
+  // « Aujourd'hui je suis à… » enregistrait l'emplacement sous la date d'HIER,
+  // et la fiche du commerçant ne l'affichait jamais de la journée. Un marché de
+  // nuit ou un montage à une heure du matin, et le client ne trouvait personne.
+  const todayISO = jourLocalISO(new Date())
+  const jourKey = jourSemaineLocal(new Date())
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { charger() }, [commercantId])
@@ -3961,14 +3968,27 @@ function SectionEmplacementsFoodtruck({ commercantId, toast }) {
     return `${e.heure_debut.slice(0, 5)}–${e.heure_fin.slice(0, 5)}`
   }
 
+  // ⚠️ MODIFIER PLUTÔT QUE SUPPRIMER PUIS RECRÉER. Les trois enregistrements
+  // effaçaient l'ancienne ligne AVANT d'insérer la nouvelle. Si l'insertion
+  // échouait (réseau coupé au marché, ce qui est le quotidien d'un food truck),
+  // le commerçant se retrouvait sans AUCUN emplacement : sa fiche affichait
+  // « Prochain emplacement annoncé bientôt » alors qu'il était sur place.
+  // La modification, elle, ne détruit rien tant qu'elle n'a pas réussi.
+  async function enregistrerEmplacement(existant, valeurs) {
+    if (existant) {
+      return supabase.from('foodtruck_emplacements').update(valeurs).eq('id', existant.id)
+    }
+    return supabase.from('foodtruck_emplacements').insert(valeurs)
+  }
+
   async function declarerAujourdhui() {
     if (!auj.libelle.trim() || !auj.adresse.trim()) { toast('Nom du lieu et adresse obligatoires', 'error'); return }
-    // Un seul ponctuel par date : on remplace celui du jour s'il existe
-    if (ponctuelAuj) await supabase.from('foodtruck_emplacements').delete().eq('id', ponctuelAuj.id)
-    const { error } = await supabase.from('foodtruck_emplacements').insert({
+    // Un seul ponctuel par date : on met à jour celui du jour s'il existe.
+    const { error } = await enregistrerEmplacement(ponctuelAuj, {
       commercant_id: commercantId, type: 'ponctuel', date_jour: todayISO,
       libelle: auj.libelle.trim(), adresse: auj.adresse.trim(),
       heure_debut: auj.heure_debut || null, heure_fin: auj.heure_fin || null,
+      actif: true,
     })
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('C’est noté, ta fiche affiche ton emplacement du jour')
@@ -3980,11 +4000,11 @@ function SectionEmplacementsFoodtruck({ commercantId, toast }) {
     if (!futur.date_jour || !futur.libelle.trim() || !futur.adresse.trim()) { toast('Date, nom du lieu et adresse obligatoires', 'error'); return }
     if (futur.date_jour < todayISO) { toast('La date est déjà passée', 'error'); return }
     const existant = emps.find(e => e.type === 'ponctuel' && e.date_jour === futur.date_jour)
-    if (existant) await supabase.from('foodtruck_emplacements').delete().eq('id', existant.id)
-    const { error } = await supabase.from('foodtruck_emplacements').insert({
+    const { error } = await enregistrerEmplacement(existant, {
       commercant_id: commercantId, type: 'ponctuel', date_jour: futur.date_jour,
       libelle: futur.libelle.trim(), adresse: futur.adresse.trim(),
       heure_debut: futur.heure_debut || null, heure_fin: futur.heure_fin || null,
+      actif: true,
     })
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('Emplacement planifié')
@@ -3996,11 +4016,11 @@ function SectionEmplacementsFoodtruck({ commercantId, toast }) {
   async function saveHebdo() {
     if (!formHebdo || !formHebdo.libelle.trim() || !formHebdo.adresse.trim()) { toast('Nom du lieu et adresse obligatoires', 'error'); return }
     const existant = hebdoParJour[formHebdo.jour]
-    if (existant) await supabase.from('foodtruck_emplacements').delete().eq('id', existant.id)
-    const { error } = await supabase.from('foodtruck_emplacements').insert({
+    const { error } = await enregistrerEmplacement(existant, {
       commercant_id: commercantId, type: 'hebdo', jour_semaine: formHebdo.jour,
       libelle: formHebdo.libelle.trim(), adresse: formHebdo.adresse.trim(),
       heure_debut: formHebdo.heure_debut || null, heure_fin: formHebdo.heure_fin || null,
+      actif: true,
     })
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('Tournée mise à jour')
@@ -4581,7 +4601,9 @@ function TabProfil({ commercantId, toast, onSaved }) {
         </div>
 
         {/* ─── Emplacements food truck (M5) : uniquement pour ce métier ─── */}
-        {(form.type || '').toLowerCase().includes('food truck') && (
+        {/* Même détection que la fiche client : un commerçant qui a saisi
+            « Foodtruck » en métier libre reste un food truck. */}
+        {estFoodTruck(form.type) && (
           <SectionEmplacementsFoodtruck commercantId={commercantId} toast={toast}/>
         )}
 

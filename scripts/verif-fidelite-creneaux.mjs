@@ -7,7 +7,8 @@
 
 import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '../lib/fidelite.js'
 import { calculerCapaciteCreneau, creneauCommandable, jourSemaineDe, remplissageCreneaux, STATUTS_OCCUPENT_CRENEAU } from '../lib/creneaux.js'
-import { brusselsInstant } from '../lib/timezone.js'
+import { brusselsInstant, jourLocalISO, jourSemaineLocal } from '../lib/timezone.js'
+import { estFoodTruck } from '../lib/types-commerce.js'
 import { readFileSync } from 'node:fs'
 
 const lireBrut = (chemin) => readFileSync(new URL('../' + chemin, import.meta.url), 'utf8')
@@ -386,14 +387,84 @@ verifier('la requête livraison ramène la date',
 // en avance sur UTC : minuit heure belge, c'est 22h ou 23h la VEILLE en temps
 // universel. Avec `toISOString()`, la clé du jour aurait basculé sur la veille
 // toute la soirée, et la charge serait allée se ranger sous la mauvaise date.
-verifier('la clé du jour se construit en date locale',
-  /function jourLocalISO[\s\S]{0,400}?getFullYear\(\)[\s\S]{0,200}?getDate\(\)/.test(boutique))
-verifier('elle n\'utilise pas toISOString',
-  !/function jourLocalISO[\s\S]{0,400}?toISOString/.test(boutique))
+//
+// ⚠️ ON EXÉCUTE LA FORMULE, on ne la lit plus. Elle vivait en double, ici et au
+// tableau de bord ; elle est maintenant dans `lib/timezone.js`, et ce test
+// l'appelle sur un instant de nuit belge, celui exactement où `toISOString()`
+// bascule sur la veille.
+{
+  // 11 août 2026, 00h30 heure belge. En temps universel, c'est encore le 10 à
+  // 22h30 : `toISOString()` rendrait « 2026-08-10 ».
+  const nuitBelge = new Date('2026-08-10T22:30:00Z')
+  const parUTC = nuitBelge.toISOString().slice(0, 10)
+  // Le test n'a de sens que si la machine tourne bien à l'heure belge : sur un
+  // serveur en UTC les deux valeurs coïncident et il ne prouverait rien.
+  const decalage = -nuitBelge.getTimezoneOffset()
+  if (decalage > 0) {
+    egal('la clé du jour est celle qu\'on lit sur son horloge', jourLocalISO(nuitBelge), '2026-08-11')
+    verifier('elle ne vaut pas ce que rendrait toISOString', jourLocalISO(nuitBelge) !== parUTC, parUTC)
+    egal('et le jour de la semaine suit la même horloge', jourSemaineLocal(nuitBelge), 'mardi')
+  } else {
+    verifier('la formule reste cohérente hors fuseau belge', jourLocalISO(nuitBelge) === parUTC)
+  }
+}
+egal('un midi ordinaire tombe juste', jourLocalISO(new Date('2026-08-11T12:00:00Z')), '2026-08-11')
+egal('une date invalide ne rend pas « NaN-NaN-NaN »', jourLocalISO(new Date('n\'importe quoi')), '')
+verifier('la formule ne vit plus en double dans la fiche',
+  !/function jourLocalISO/.test(boutique))
 // La même formule doit servir à l'affichage ET à l'envoi de la commande,
 // sinon la charge affichée ne retrouverait jamais les commandes enregistrées.
 verifier('la date envoyée au serveur utilise la même formule',
   /const dateStr = jourLocalISO\(d\)/.test(boutique))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE FOOD TRUCK — une seule façon de reconnaître un camion
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LA QUESTION ÉTAIT POSÉE DE TROIS FAÇONS QUI NE RÉPONDAIENT PAS PAREIL. La
+// fiche client, le tableau de bord et l'inscription exigeaient l'espace exact
+// de « food truck » ; le guide photos acceptait aussi « foodtruck ». Or le
+// métier n'est pas toujours pris dans la liste : le commerçant peut le saisir
+// librement, et deux métiers cohabitent dans un même champ.
+//
+// Celui qui tapait « Foodtruck » recevait les conseils photo de son métier,
+// mais restait privé de l'onglet Emplacements, et sa fiche affichait l'adresse
+// de son DÉPÔT au lieu du marché où il se trouvait. Le client se déplaçait au
+// mauvais endroit.
+verifier('« Food truck », la valeur de la liste', estFoodTruck('Food truck'))
+verifier('« Foodtruck » en un mot compte aussi', estFoodTruck('Foodtruck'))
+verifier('« food-truck » avec un tiret également', estFoodTruck('food-truck'))
+verifier('un double métier est reconnu', estFoodTruck('Snack & Food truck'))
+verifier('une boulangerie n\'est pas un camion', !estFoodTruck('Boulangerie'))
+verifier('un métier vide non plus', !estFoodTruck('') && !estFoodTruck(null) && !estFoodTruck(undefined))
+// Et les quatre écrans doivent APPELER cette fonction, pas la réécrire.
+for (const [chemin, ecran] of [
+  ['app/commander/[slug]/page.js', 'la fiche client'],
+  ['app/dashboard/ConfigDashboard.js', 'le tableau de bord'],
+  ['app/signup/page.js', 'l\'inscription'],
+  ['lib/guide-photos.js', 'le guide photos'],
+]) {
+  // ⚠️ ON RETIRE LES COMMENTAIRES D'ABORD. La première version de ce test
+  // rougissait sur la fiche… à cause du commentaire qui EXPLIQUE le défaut
+  // corrigé et cite donc l'ancienne ligne. Un test doit juger le code, pas ce
+  // qu'on raconte à côté. (`.` ne franchit pas un `\r`, d'où le découpage.)
+  const src = lireBrut(chemin).split(/\r?\n/).map(l => l.replace(/(^|\s)\/\/.*/, '$1')).join('\n')
+  verifier(`${ecran} n'a plus sa propre détection`,
+    !/includes\('[Ff]ood [Tt]ruck'\)/.test(src) && !/\/food\.\?truck\/i\.test/.test(src), chemin)
+  verifier(`${ecran} appelle la fonction partagée`, /estFoodTruck(Type)?\(/.test(src), chemin)
+}
+
+// ⚠️ ET L'EMPLACEMENT NE DOIT PLUS ÊTRE DÉTRUIT AVANT D'ÊTRE REMPLACÉ. Les trois
+// enregistrements effaçaient l'ancienne ligne AVANT d'insérer la nouvelle : une
+// insertion qui échoue au marché, réseau coupé, et le commerçant se retrouvait
+// sans aucun emplacement pendant que sa fiche annonçait « bientôt ».
+const dashFT = lireBrut('app/dashboard/ConfigDashboard.js')
+const blocFT = dashFT.slice(dashFT.indexOf('function SectionEmplacementsFoodtruck'), dashFT.indexOf('function TabProfil'))
+verifier('aucun emplacement n\'est supprimé avant d\'être réécrit',
+  !/delete\(\)[\s\S]{0,120}?insert\(\{/.test(blocFT))
+verifier('l\'enregistrement passe par une modification quand la ligne existe',
+  /if \(existant\) \{[\s\S]{0,120}?\.update\(valeurs\)/.test(blocFT))
+verifier('les trois formulaires partagent ce chemin',
+  (blocFT.match(/enregistrerEmplacement\(/g) || []).length >= 4)
 
 const migJour = lireBrut('migrations/MIGRATION_CHARGE_CRENEAU_PAR_JOUR.sql')
 verifier('la fonction groupe par créneau ET par jour',

@@ -41,6 +41,7 @@ import { calculerCapaciteCreneau, creneauCommandable, STATUTS_OCCUPENT_CRENEAU }
 import { brusselsInstant } from '@/lib/timezone'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
+import { normaliserEmail } from '@/lib/email-normalise'
 
 export async function POST(request) {
   try {
@@ -475,7 +476,13 @@ export async function POST(request) {
         livraison_lng: coordsLivraison?.lng ?? null,
         frais_livraison: fraisLivraisonEUR,
         client_nom: nomComplet,
-        client_email,
+        // ⚠️ NORMALISÉ, sans quoi le client perd ses commandes en se connectant.
+        // L'email était enregistré TEL QUE TAPÉ et relu EN MINUSCULES par
+        // `identiteYopper` : celui qui avait saisi « Jean.Dupont@Gmail.com » ne
+        // retrouvait plus rien après connexion, comme s'il n'avait jamais
+        // commandé. Le défaut épargnait quiconque tape en minuscules, donc son
+        // auteur, ce qui est la pire des configurations.
+        client_email: normaliserEmail(client_email),
         client_telephone,
         rgpd_commande: true,
         rgpd_marketing: !!rgpd_marketing,

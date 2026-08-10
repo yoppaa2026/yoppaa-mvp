@@ -37,6 +37,7 @@ import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadat
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { REGIME_EMPORTER } from '@/lib/tva'
 import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
+import { normaliserEmail } from '@/lib/email-normalise'
 
 export async function POST(request) {
   try {
@@ -189,7 +190,9 @@ export async function POST(request) {
         mode_retrait: 'retrait',
         regime_tva: REGIME_EMPORTER,
         client_nom: nomComplet,
-        client_email,
+        // ⚠️ Normalisé : sans ça le client perd ses commandes en se connectant,
+        // l'email étant relu en minuscules par `identiteYopper`.
+        client_email: normaliserEmail(client_email),
         client_telephone,
         rgpd_commande: true,
         rgpd_marketing: !!rgpd_marketing,
@@ -307,7 +310,9 @@ export async function POST(request) {
             prix_estime: String(prixBase ?? ''),
             acompte_montant: String(acompteMontant),
             produits_montant: String(produitsCents / 100),
-            client_email,
+            // Le rendez-vous naît de ces métadonnées au webhook : sans
+            // normalisation ici, il repartirait avec l'email tel que tapé.
+            client_email: normaliserEmail(client_email),
             client_prenom,
             client_nom,
             client_telephone,

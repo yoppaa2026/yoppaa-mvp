@@ -27,6 +27,7 @@ import { restaurerStockVariantes } from '../lib/stock-variantes-server.js'
 import { couleurRdv, texteLisibleSur, COULEUR_DEFAUT, ENCRE } from '../lib/agenda-couleurs.js'
 import { nouveauxRdvs, idsDes, texteAlerteRdv } from '../lib/alerte-rdv.js'
 import { messagePanierRepris } from '../lib/panier-repris-message.js'
+import { normaliserEmail, memeEmail } from '../lib/email-normalise.js'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -388,6 +389,58 @@ verifier('pas de centime perdu à l’arrondi', Math.abs((v.rdv.frais + v.comman
 
 verifier('total nul = pas de ventilation', ventilerFrais(1.00, 0, 0) === null)
 verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === null)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L'EMAIL QUI FAISAIT DISPARAÎTRE LES COMMANDES
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ L'email du client était enregistré TEL QU'IL L'AVAIT TAPÉ, majuscules
+// comprises, et relu systématiquement EN MINUSCULES (`identiteYopper` applique
+// un `toLowerCase()`). La comparaison `client_email = <email du compte>` ne
+// retrouvait donc RIEN dès que le client avait saisi « Jean.Dupont@Gmail.com ».
+//
+// Il commandait, tout se passait bien. Il se connectait, et ses commandes ET
+// ses rendez-vous DISPARAISSAIENT de son écran.
+//
+// ⚠️ Et le défaut ÉPARGNAIT SON AUTEUR : qui tape son adresse en minuscules,
+// comme la plupart des gens sur téléphone, ne le rencontre jamais. C'est la
+// pire des configurations, celle où on ne peut pas se croire soi-même.
+egal('les majuscules tombent', normaliserEmail('Jean.Dupont@Gmail.com'), 'jean.dupont@gmail.com')
+egal('les espaces autour aussi', normaliserEmail('  jean@test.be  '), 'jean@test.be')
+egal('une adresse déjà propre ne bouge pas', normaliserEmail('jean@test.be'), 'jean@test.be')
+egal('rien du tout rend null', normaliserEmail(''), null)
+egal('null rend null', normaliserEmail(null), null)
+egal('des espaces seuls rendent null', normaliserEmail('   '), null)
+// ⚠️ La comparaison doit suivre la même règle, sinon on répare l'écriture et on
+// laisse la lecture divergente.
+verifier('deux écritures de la même adresse se retrouvent',
+  memeEmail('Jean.Dupont@Gmail.com', 'jean.dupont@gmail.com'))
+verifier('deux adresses différentes ne se confondent pas',
+  !memeEmail('jean@test.be', 'jeanne@test.be'))
+verifier('le vide ne vaut jamais le vide', !memeEmail('', '') && !memeEmail(null, null))
+
+// Et les trois endroits qui écrivent l'email doivent l'appeler : un seul oublié,
+// et le client concerné reperd tout.
+for (const [chemin, quoi] of [
+  ['app/api/stripe/checkout/create-commande/route.js', 'la commande'],
+  ['app/api/stripe/checkout/create-rdv-commande/route.js', 'le tunnel rendez-vous'],
+  ['app/api/stripe/webhook/route.js', 'le rendez-vous né du paiement'],
+]) {
+  const src = readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
+    .split(/\r?\n/).map(l => l.replace(/(^|\s)\/\/.*/, '$1')).join('\n')
+  verifier(`${quoi} enregistre l'email normalisé`,
+    /client_email: normaliserEmail\(/.test(src), chemin)
+  verifier(`${quoi} ne l'écrit plus brut`,
+    !/^\s*client_email,\s*$/m.test(src), chemin)
+}
+// La réparation de l'existant ne doit rien détruire.
+{
+  const mig = readFileSync(new URL('../migrations/MIGRATION_EMAIL_MINUSCULES.sql', import.meta.url), 'utf8')
+  verifier('la migration ne supprime rien', !/DELETE|DROP/i.test(mig))
+  verifier('elle ne touche que ce qui doit changer', /WHERE[\s\S]{0,120}?<> lower\(btrim\(/.test(mig))
+  verifier('elle couvre les commandes ET les rendez-vous',
+    /UPDATE commandes/.test(mig) && /UPDATE rdv_reservations/.test(mig))
+  verifier('sa vérification recompte ce qui resterait', /count\(\*\) FILTER/.test(mig))
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // « TES 1 ARTICLE T'ONT SUIVI » — le message qui ne s'accordait pas

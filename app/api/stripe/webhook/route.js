@@ -31,6 +31,7 @@ import { recupererFraisStripe, ventilerFrais } from '@/lib/stripe-frais'
 import { crediterFidelite } from '@/lib/fidelite-server'
 import { canDo } from '@/lib/plans'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
+import { normaliserEmail } from '@/lib/email-normalise'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -165,7 +166,10 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       commercant_id: meta.yoppaa_commercant_id,
       prestation_id: meta.prestation_id,
       praticien_id: meta.praticien_id || null,
-      client_email: meta.client_email,
+      // ⚠️ Normalisé : le rendez-vous naît ICI, à partir des métadonnées Stripe.
+      // Enregistré tel que tapé, il disparaissait de l'écran du client dès qu'il
+      // se connectait, `identiteYopper` relisant l'email en minuscules.
+      client_email: normaliserEmail(meta.client_email),
       client_prenom: meta.client_prenom,
       client_nom: meta.client_nom,
       client_telephone: meta.client_telephone,

@@ -12,6 +12,7 @@ import BandeDefilante from '@/app/components/BandeDefilante'
 import { partagerCommandes } from '@/lib/commandes-vue'
 import { nouveauxRdvs, idsDes, texteAlerteRdv } from '@/lib/alerte-rdv'
 import { referenceCommande } from '@/lib/numero-commande'
+import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '@/lib/bons-vendus'
 
 const T = {
   bg:      '#F8F6FF',
@@ -705,6 +706,11 @@ export default function Dashboard() {
   // l'existant sans rien annoncer, sinon le commerçant recevrait une alerte par
   // rendez-vous déjà en agenda à chaque ouverture de son tableau de bord.
   const rdvsConnusRef = useRef(null)
+  // Bons cadeaux vendus : le commerçant n'en savait RIEN depuis son tableau de
+  // bord. Même mécanique que les rendez-vous, on compare des identifiants.
+  const [bonsVendus, setBonsVendus] = useState([])
+  const [nouveauBon, setNouveauBon] = useState(null)
+  const bonsConnusRef = useRef(null)
   const pollingRef = useRef(null)
 
   const trierCommandes = (data) =>
@@ -1007,6 +1013,29 @@ export default function Dashboard() {
         }
         setRdvs(rdvsData)
       }
+
+      // ⚠️ LES BONS CADEAUX VENDUS. Le commerçant n'en savait rien depuis son
+      // tableau de bord : un email partait, mais UNIQUEMENT s'il était réglé sur
+      // « à chaque commande ». Réglé sur le récapitulatif du matin ou sur rien,
+      // il découvrait la vente dans ses chiffres, des jours plus tard.
+      // Il n'a rien à préparer, mais quelqu'un vient d'offrir son commerce.
+      const { data: bonsData } = await supabase
+        .from('bons_cadeaux')
+        .select('id, code, montant_initial, solde, statut, created_at, destinataire_mode')
+        .eq('commercant_id', commercant.id)
+        .order('created_at', { ascending: false })
+        .limit(60)
+      if (bonsData) {
+        const nouveaux = nouveauxRdvs(bonsConnusRef.current, bonsData)
+        bonsConnusRef.current = idsDes(bonsData)
+        if (nouveaux.length > 0) {
+          const { titre, corps } = texteBonVendu(nouveaux[0])
+          if (notificationsActives) envoyerNotification(titre, corps, 'yoppaa-bon')
+          setNouveauBon({ titre, corps, nombre: nouveaux.length })
+          setTimeout(() => setNouveauBon(null), 8000)
+        }
+        setBonsVendus(bonsData)
+      }
     }, 5000)
 
     return () => { if (pollingRef.current) clearInterval(pollingRef.current) }
@@ -1241,6 +1270,11 @@ export default function Dashboard() {
     })
 
   const commandesDuJourTous = modeHistorique ? commandesHistorique : _duJour
+
+  // Les bons vendus le jour affiché. `created_at` est la date de VENTE, celle
+  // où l'argent est entré, et non l'expiration du bon.
+  const bonsDuJourAffiche = modeHistorique ? [] : bonsDuJour(bonsVendus, jourActif, b => dateKey(b.created_at))
+  const resumeBons = resumeBonsVendus(bonsDuJourAffiche)
   // Vue séparée Retrait / Livraison si le commerce a la livraison activée.
   const livraisonActive = !!commercant?.livraison_actif
   const commandesDuJour = livraisonActive
@@ -1626,12 +1660,35 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Notif BON CADEAU VENDU. Il n'a rien à faire, donc pas le violet
+          d'urgence des commandes : du blanc, discret, mais il l'apprend au
+          moment où ça arrive au lieu de le découvrir dans ses chiffres. */}
+      {nouveauBon && (
+        <div onClick={() => setNouveauBon(null)}
+          style={{ position: 'fixed', top: 20 + (nouvelleCommande ? 90 : 0) + (nouveauRdv ? 90 : 0), right: 20, left: 20, zIndex: 9997, maxWidth: 360, marginLeft: 'auto', animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1)', cursor: 'pointer' }}>
+          <div style={{ background: '#fff', borderRadius: 18, padding: '14px 18px', boxShadow: `0 24px 48px rgba(22,6,54,0.18), 0 0 0 1px ${T.pale}`, display: 'flex', gap: 14, alignItems: 'center' }}>
+            <div style={{ width: 40, height: 40, borderRadius: 11, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/>
+                <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
+              </svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 10, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 2 }}>
+                {nouveauBon.nombre > 1 ? `${nouveauBon.nombre} bons cadeaux vendus` : 'Bon cadeau vendu'}
+              </p>
+              <p style={{ fontSize: 13, fontWeight: 700, color: T.ink, margin: 0, lineHeight: 1.35 }}>{nouveauBon.corps}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Notif COMMANDE RÉCUPÉRÉE — card flottante en haut à droite (sans cacher la liste) */}
       {commandeRecuperee && (
         <div onClick={() => setCommandeRecuperee(null)}
           /* Trois cartes peuvent tomber en même temps chez une vitrine qui vend
              aussi des produits : chacune se décale sous la précédente. */
-          style={{ position: 'fixed', top: 20 + (nouvelleCommande ? 90 : 0) + (nouveauRdv ? 90 : 0), right: 20, left: 20, zIndex: 9998, maxWidth: 360, marginLeft: 'auto', animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1)', cursor: 'pointer' }}>
+          style={{ position: 'fixed', top: 20 + (nouvelleCommande ? 90 : 0) + (nouveauRdv ? 90 : 0) + (nouveauBon ? 84 : 0), right: 20, left: 20, zIndex: 9998, maxWidth: 360, marginLeft: 'auto', animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1)', cursor: 'pointer' }}>
           <div style={{ background: '#fff', borderRadius: 18, padding: '14px 18px', boxShadow: `0 24px 48px rgba(22,6,54,0.18), 0 0 0 1px ${T.hairline || T.pale}`, display: 'flex', gap: 14, alignItems: 'center' }}>
             <div style={{ width: 52, height: 52, borderRadius: 12, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 900, fontSize: 20, letterSpacing: '-0.5px', boxShadow: `0 6px 16px ${T.main}55` }}>
               #{commandeRecuperee.numero}
@@ -1960,6 +2017,30 @@ export default function Dashboard() {
           <div className="scroll-zone">
             {ongletPrincipal === 'commandes' && (
               <>
+                {/* ⚠️ LES BONS CADEAUX VENDUS, que le commerçant ne voyait NULLE
+                    PART. Il n'a rien à préparer, d'où le bandeau discret plutôt
+                    qu'une vignette de commande avec ses boutons : mais quelqu'un
+                    vient d'offrir son commerce, et c'est un client qui viendra. */}
+                {resumeBons.nombre > 0 && (
+                  <div style={{ background: '#fff', borderRadius: 14, padding: '11px 14px', marginBottom: 12, border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 11, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/>
+                        <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        {resumeBons.nombre > 1 ? `${resumeBons.nombre} bons cadeaux vendus` : 'Bon cadeau vendu'}
+                      </p>
+                      <p style={{ fontSize: '0.95rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.3px', margin: '1px 0 0' }}>
+                        {resumeBons.total.toFixed(2)}€
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: T.muted, marginLeft: 7 }}>déjà encaissés · rien à préparer</span>
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Remplissage des créneaux du jour.
                     Le commerçant règle « max 5 » ou « 30 min » dans sa configuration et
                     son client lit « presque plein » sur la fiche : jusqu'ici, lui seul

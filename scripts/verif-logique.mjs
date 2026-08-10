@@ -29,6 +29,7 @@ import { nouveauxRdvs, idsDes, texteAlerteRdv } from '../lib/alerte-rdv.js'
 import { messagePanierRepris } from '../lib/panier-repris-message.js'
 import { normaliserEmail, memeEmail } from '../lib/email-normalise.js'
 import { ouvertLe, prochainJourOuvert } from '../lib/ouverture.js'
+import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '../lib/bons-vendus.js'
 import { jourSemaineDe } from '../lib/creneaux.js'
 import {
   referenceCommande, referenceComplete, referenceAvecNom,
@@ -395,6 +396,49 @@ verifier('pas de centime perdu à l’arrondi', Math.abs((v.rdv.frais + v.comman
 
 verifier('total nul = pas de ventilation', ventilerFrais(1.00, 0, 0) === null)
 verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === null)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE BON CADEAU VENDU, QUE LE COMMERÇANT NE VOYAIT NULLE PART
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ Quelqu'un achetait un bon cadeau, l'argent arrivait sur son compte, et son
+// tableau de bord n'en disait pas un mot. Un email partait, mais UNIQUEMENT s'il
+// était réglé sur « à chaque commande » : réglé sur le récapitulatif du matin ou
+// sur rien du tout, il découvrait la vente dans ses chiffres, des jours plus
+// tard. Il n'a rien à préparer, mais quelqu'un vient d'offrir SON commerce.
+{
+  const b = (id, montant, jour) => ({ id, montant_initial: montant, solde: montant, created_at: `${jour}T10:00:00Z` })
+  const jourDe = (x) => String(x.created_at).slice(0, 10)
+  const lot = [b('a', 50, '2026-08-11'), b('b', 25, '2026-08-11'), b('c', 100, '2026-08-10')]
+
+  egal('seuls les bons du jour affiché sont retenus',
+    bonsDuJour(lot, '2026-08-11', jourDe).map(x => x.id), ['a', 'b'])
+  egal('le résumé additionne', resumeBonsVendus(bonsDuJour(lot, '2026-08-11', jourDe)), { nombre: 2, total: 75 })
+  egal('aucun bon, aucun résumé', resumeBonsVendus([]), { nombre: 0, total: 0 })
+  egal('sans fonction de jour, on ne devine pas', bonsDuJour(lot, '2026-08-11'), [])
+
+  // ⚠️ C'EST LE MONTANT INITIAL QUI COMPTE, PAS LE SOLDE. Le solde baisse à
+  // mesure que le bénéficiaire dépense : un bon entièrement utilisé afficherait
+  // « 0 € » alors qu'il a bel et bien été vendu à son prix.
+  egal('un bon déjà dépensé reste compté à son prix de vente',
+    resumeBonsVendus([{ montant_initial: 50, solde: 0 }]), { nombre: 1, total: 50 })
+
+  // Ce qu'on lui dit : il n'a rien à faire, il a juste à savoir.
+  const txt = texteBonVendu({ montant_initial: 50 })
+  verifier('le montant est annoncé', txt.corps.includes('50.00'))
+  verifier('et qu\'il n\'a rien à préparer', /rien à préparer/.test(txt.corps))
+  verifier('sans montant, la phrase tient debout',
+    !/undefined|NaN/.test(texteBonVendu({}).corps), texteBonVendu({}).corps)
+
+  // Et le tableau de bord doit les charger ET les annoncer.
+  const dash = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+    .split(/\r?\n/).map(l => l.replace(/(^|\s)\/\/.*/, '$1')).join('\n')
+  verifier('le tableau de bord charge les bons vendus', /from\('bons_cadeaux'\)/.test(dash))
+  verifier('il les affiche pour le jour regardé', /bonsDuJour\(bonsVendus/.test(dash))
+  verifier('et il annonce une vente qui vient d\'arriver', /setNouveauBon\(/.test(dash))
+  // ⚠️ Un tag de notification propre : deux notifications de même tag se
+  // REMPLACENT, une commande effacerait l'annonce du bon.
+  verifier('avec son propre tag de notification', /'yoppaa-bon'/.test(dash))
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // « JE RÉCUPÈRE AUJOURD'HUI » ALORS QUE LE MAGASIN EST FERMÉ

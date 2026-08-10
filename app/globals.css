@@ -281,3 +281,89 @@ input, textarea, select {
     letter-spacing: -1.5px !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SOCLE BUREAU — les flèches de défilement (10/08)
+   ═══════════════════════════════════════════════════════════════════════════
+   Le tableau de bord est né sur téléphone : ses barres d'onglets, ses jours,
+   ses filtres et ses raccourcis défilent au doigt et masquent leur barre pour
+   rester propres. À la souris, il ne restait RIEN : ni barre, ni flèche, ni le
+   moindre indice qu'il y avait huit onglets de plus à droite. Le commerçant ne
+   les trouvait pas, et sur un écran de bureau c'est la moitié de son menu qui
+   disparaissait.
+
+   La phase 1 avait rendu la barre de défilement. Une barre fine se voit mal et
+   demande une visée précise ; une flèche se clique.
+
+   ⚠️ MÊME RÈGLE QUE TOUT LE SOCLE : ceci S'AJOUTE au-delà de 1024 px, et ne
+   réécrit jamais le mobile. En dessous, les flèches n'existent pas et le geste
+   du doigt reste la seule façon de faire, exactement comme avant. La double
+   condition `hover: hover` et `pointer: fine` écarte en plus les tablettes
+   tactiles larges, où une flèche serait un piège : on la viserait au doigt.
+
+   ⚠️ La piste NE PORTE PAS `data-scroll-x` : cet attribut déclenche
+   `flex-wrap: wrap` au-dessus de 1024 px, et une barre d'onglets passerait sur
+   trois lignes. Ici on veut une seule ligne, et des flèches pour la parcourir. */
+.bande-defilante {
+  position: relative;
+}
+
+/* Sur téléphone, la flèche n'existe pas du tout. */
+.bande-fleche {
+  display: none;
+}
+
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  .bande-fleche {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    margin: auto 0;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--y-pale);
+    border-radius: 50%;
+    background: #fff;
+    color: var(--y-main);
+    box-shadow: 0 2px 10px rgba(22, 6, 54, 0.16);
+    cursor: pointer;
+    z-index: 3;
+    transition: opacity 0.18s ease, filter 0.15s ease;
+  }
+  .bande-fleche-gauche  { left: -6px; }
+  .bande-fleche-droite  { right: -6px; }
+
+  /* Arrivé au bout, la flèche s'efface ET cesse d'être cliquable : une flèche
+     éteinte qui répond quand même est pire que pas de flèche du tout. */
+  .bande-fleche[data-active="non"] {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* ⚠️ `filter`, JAMAIS `transform` : un élément transformé devient le bloc
+     conteneur de ses descendants en `position: fixed`, ce qui décroche les
+     panneaux et les modales. Leçon du 09/08. */
+  .bande-fleche:hover {
+    filter: brightness(0.96);
+  }
+  .bande-fleche:focus-visible {
+    outline: 2px solid var(--y-main);
+    outline-offset: 2px;
+  }
+}
+
+/* ── Les chiffres du jour ──────────────────────────────────────────────────
+   Quatre compteurs (Nouvelles, En prépa, Prêtes, CA du jour) rangés en 2 × 2,
+   une grille calée sur un écran de 390 px. Étirée à 1200 px, elle donnait
+   quatre pavés énormes sur deux étages, alors que la place existe pour les
+   lire d'un seul coup d'œil. `auto-fit` évite de figer un nombre : l'onglet
+   Rendez-vous n'a pas forcément le même compte que l'onglet Commandes. */
+@media (min-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+}

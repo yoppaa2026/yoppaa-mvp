@@ -18,6 +18,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import {
   SEUIL_BUREAU, SEUIL_LARGE, LARGEUR_CONTENU, LARGEUR_CONTENU_BUREAU,
   LARGEUR_CHAMP, LARGEUR_TEXTE_LONG,
+  bordsDefilement, pasDefilement, PAS_MINIMUM,
 } from '../lib/responsive.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
@@ -274,6 +275,118 @@ for (const chemin of fichiersJs('app/commander')) {
   verifier(`${chemin} n'enferme pas l'application dans une iframe`, !/<iframe/.test(src), chemin)
   verifier(`${chemin} n'importe aucun cadre d'appareil`, !/MobileFrame|DeviceFrame|PhoneFrame/.test(src.replace(/\/\/.*$/gm, '')))
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LES FLÈCHES DE DÉFILEMENT DU TABLEAU DE BORD
+// ═══════════════════════════════════════════════════════════════════════════
+// Le tableau de bord est né sur téléphone : ses barres d'onglets, ses jours,
+// ses filtres et ses raccourcis défilent au doigt et masquent leur barre pour
+// rester propres. À la souris, il ne restait NI barre, NI flèche, NI le moindre
+// indice qu'il y avait huit onglets de plus à droite.
+//
+// ⚠️ CE QUI SE TESTE VRAIMENT ICI, c'est la décision d'ALLUMER une flèche. Une
+// flèche éteinte au mauvais moment cache du contenu ; une flèche allumée dans
+// le vide fait cliquer sur rien. On EXÉCUTE donc la fonction avec de vraies
+// mesures de navigateur et on lit ce qu'elle rend.
+
+// Bande plus large que sa fenêtre, au tout début : rien à gauche, tout à droite.
+egal('au départ, seule la flèche droite est allumée',
+  bordsDefilement({ scrollLeft: 0, scrollWidth: 900, clientWidth: 400 }),
+  { gauche: false, droite: true })
+// Au milieu, les deux.
+egal('au milieu, les deux flèches sont allumées',
+  bordsDefilement({ scrollLeft: 250, scrollWidth: 900, clientWidth: 400 }),
+  { gauche: true, droite: true })
+// Arrivé au bout, plus rien à droite.
+egal('au bout, la flèche droite s\'éteint',
+  bordsDefilement({ scrollLeft: 500, scrollWidth: 900, clientWidth: 400 }),
+  { gauche: true, droite: false })
+// Bande qui tient entièrement : aucune flèche, sinon on cliquerait dans le vide.
+egal('une bande entièrement visible n\'affiche aucune flèche',
+  bordsDefilement({ scrollLeft: 0, scrollWidth: 380, clientWidth: 400 }),
+  { gauche: false, droite: false })
+
+// ⚠️ LE PIXEL FRACTIONNAIRE, et il se serait vu tous les jours. Les navigateurs
+// rendent des largeurs à la virgule : arrivé au bout, le reste ne vaut pas 0
+// mais 0,4 px. Sans tolérance, la flèche droite resterait allumée en permanence
+// sur une bande pourtant terminée.
+egal('un reste de 0,4 pixel n\'allume pas la flèche',
+  bordsDefilement({ scrollLeft: 499.6, scrollWidth: 900, clientWidth: 400 }),
+  { gauche: true, droite: false })
+egal('un scrollLeft de 0,5 pixel n\'allume pas la flèche gauche',
+  bordsDefilement({ scrollLeft: 0.5, scrollWidth: 900, clientWidth: 400 }).gauche, false)
+// Un vrai reste, lui, doit bien allumer.
+egal('un reste de 40 pixels allume encore la flèche',
+  bordsDefilement({ scrollLeft: 460, scrollWidth: 900, clientWidth: 400 }).droite, true)
+// Appelée sans rien (premier rendu, avant montage) : aucune flèche, pas d'erreur.
+egal('sans mesure, aucune flèche', bordsDefilement(), { gauche: false, droite: false })
+
+// Le pas : franc, mais jamais plus large que la fenêtre, sinon on saute
+// par-dessus des éléments et le commerçant croit en avoir perdu.
+egal('le pas vaut 70 % de la largeur visible', pasDefilement(1000), 700)
+verifier('le pas ne dépasse jamais la fenêtre', pasDefilement(1000) < 1000)
+egal('sur une bande étroite, un plancher évite l\'immobilité', pasDefilement(50), PAS_MINIMUM)
+egal('un pas imposé est respecté', pasDefilement(1000, 240), 240)
+
+// ⚠️ LA RÈGLE DU CHANTIER : les flèches S'AJOUTENT sur PC, elles ne réécrivent
+// pas le mobile. Sur téléphone elles n'existent pas du tout.
+const socleFleches = socle.slice(socle.indexOf('les flèches de défilement'))
+verifier('la flèche n\'existe pas par défaut',
+  /\.bande-fleche\s*\{[^}]*display:\s*none/.test(socleFleches))
+verifier('elle n\'apparaît qu\'au-delà du seuil bureau',
+  new RegExp(`@media \\(min-width: ${SEUIL_BUREAU}px\\) and \\(hover: hover\\) and \\(pointer: fine\\)`).test(socleFleches))
+// Sur une tablette tactile large, une flèche serait un piège : on la viserait
+// au doigt. D'où la double condition, et pas seulement la largeur.
+verifier('le pointeur fin est exigé, pas seulement la largeur',
+  /pointer: fine/.test(socleFleches))
+verifier('aucune max-width ne se glisse dans la section',
+  !/max-width/.test(socleFleches))
+// Une flèche éteinte qui répond quand même est pire que pas de flèche du tout.
+verifier('la flèche éteinte cesse d\'être cliquable',
+  /\[data-active="non"\][^}]*pointer-events:\s*none/.test(socleFleches))
+// ⚠️ `filter`, JAMAIS `transform` : un élément transformé devient le bloc
+// conteneur de ses descendants en `position: fixed`. Leçon du 09/08.
+verifier('le survol n\'utilise pas transform',
+  !/\.bande-fleche:hover\s*\{[^}]*transform/.test(socleFleches))
+verifier('le clavier garde un contour visible',
+  /\.bande-fleche:focus-visible/.test(socleFleches))
+
+// ⚠️ LA PISTE NE PORTE PAS `data-scroll-x` : cet attribut déclenche
+// `flex-wrap: wrap` au-delà de 1024 px, et la barre d'onglets partirait sur
+// trois lignes. Les flèches n'auraient alors plus rien à faire défiler.
+const composantBande = lire('app/components/BandeDefilante.js')
+verifier('la piste ne porte pas data-scroll-x', !/data-scroll-x/.test(composantBande.replace(/\/\/.*$/gm, '')))
+// Et le composant doit APPELER la logique, pas la recopier : deux formules qui
+// divergent, ce sont deux comportements pour une seule flèche.
+verifier('le composant appelle bordsDefilement', /bordsDefilement\(el\)/.test(composantBande))
+verifier('le composant appelle pasDefilement', /pasDefilement\(el\.clientWidth, pas\)/.test(composantBande))
+verifier('la flèche annonce son état au DOM', /data-active=\{bords\.(gauche|droite) \? 'oui' : 'non'\}/.test(composantBande))
+// Une flèche éteinte ne doit pas non plus se ramasser au clavier.
+verifier('la flèche éteinte sort du parcours clavier', /tabIndex=\{bords\.(gauche|droite) \? 0 : -1\}/.test(composantBande))
+
+// ⚠️ LE TEST QUI COMPTE POUR LA SUITE : plus aucune bande du tableau de bord ne
+// doit défiler sans flèche. Une barre ajoutée demain avec `overflowX: 'auto'`
+// et sans enveloppe redeviendrait invisible sur PC sans que personne ne le voie.
+const ECRANS_DASHBOARD = ['app/dashboard/page.js', 'app/dashboard/ConfigDashboard.js', 'app/dashboard/AgendaRdv.js']
+let bandes = 0
+for (const chemin of ECRANS_DASHBOARD) {
+  const src = lire(chemin)
+  for (const ligne of src.split('\n')) {
+    // On vise les bandes HORIZONTALES seulement : une zone qui défile aussi en
+    // vertical (la grille de l'agenda, un tableau) a sa propre navigation.
+    if (!/overflowX:\s*'auto'/.test(ligne)) continue
+    if (/overflowY/.test(ligne)) continue
+    bandes++
+    verifier(`${chemin} : une bande reste atteignable à la souris`,
+      /<BandeDefilante/.test(ligne), ligne.trim().slice(0, 80))
+  }
+}
+verifier('toutes les bandes du tableau de bord sont passées en revue', bandes >= 6, `${bandes} trouvées`)
+
+// Les chiffres du jour : 2 × 2 sur téléphone, étalés sur une seule ligne dès
+// qu'il y a la place. Ils ne défilent pas, ils s'étirent.
+verifier('les compteurs du jour s\'étalent sur PC',
+  /\.stats-grid\s*\{[^}]*repeat\(auto-fit/.test(socle))
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

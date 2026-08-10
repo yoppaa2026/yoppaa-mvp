@@ -8,6 +8,7 @@ import ModalNouveauRdv from './ModalNouveauRdv'
 import { Reply, ClipboardList } from 'lucide-react'
 import { canDo } from '@/lib/plans'
 import { remplissageCreneaux } from '@/lib/creneaux'
+import BandeDefilante from '@/app/components/BandeDefilante'
 
 const T = {
   bg:      '#F8F6FF',
@@ -1674,7 +1675,7 @@ export default function Dashboard() {
             ].filter(Boolean)
             if (actions.length === 0) return null
             return (
-              <div style={{ display: 'flex', gap: 8, padding: '0 1rem', marginBottom: 10, overflowX: 'auto', scrollbarWidth: 'none' }}>
+              <BandeDefilante libelle="les raccourcis" style={{ display: 'flex', gap: 8, padding: '0 1rem', marginBottom: 10, overflowX: 'auto', scrollbarWidth: 'none' }}>
                 {actions.map(a => (
                   <button key={a.key} onClick={() => ouvrirConfig(a.key)}
                     style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 9, padding: '9px 14px', borderRadius: 12, border: `1.5px solid ${T.pale}`, background: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left', boxShadow: '0 1px 6px rgba(22,6,54,0.05)' }}>
@@ -1685,7 +1686,7 @@ export default function Dashboard() {
                     </span>
                   </button>
                 ))}
-              </div>
+              </BandeDefilante>
             )
           })()}
 
@@ -1741,7 +1742,7 @@ export default function Dashboard() {
 
               {/* Sélecteur jours */}
               {joursDispos.length > 0 && (
-                <div className="jours-wrap">
+                <BandeDefilante className="jours-wrap" libelle="les jours">
                   {joursDispos.map(jour => {
                     const actif = !modeHistorique && jour === jourActif
                     const nbCmds = commandes.filter(c => dateKey(c.date_commande || c.created_at) === jour).length
@@ -1767,18 +1768,18 @@ export default function Dashboard() {
                       <span style={{ background: modeHistorique ? 'rgba(255,255,255,0.3)' : '#E5E7EB', color: modeHistorique ? '#fff' : T.muted, fontSize: '0.6rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>{commandesHistorique.length}</span>
                     )}
                   </button>
-                </div>
+                </BandeDefilante>
               )}
 
               {/* Filtres statut */}
-              <div className="filtres-wrap">
+              <BandeDefilante className="filtres-wrap" libelle="les filtres">
                 {filtresStatut.map(f => (
                   <button key={f.key} className="pill" onClick={() => setFiltreStatut(f.key)}
                     style={{ borderColor: filtreStatut === f.key ? (f.color || T.main) : `${T.main}28`, background: filtreStatut === f.key ? (f.color || T.main) : '#fff', color: filtreStatut === f.key ? '#fff' : T.ink }}>
                     {f.label}{f.count > 0 ? ` · ${f.count}` : ''}
                   </button>
                 ))}
-              </div>
+              </BandeDefilante>
             </div>
           )}
 
@@ -1798,7 +1799,7 @@ export default function Dashboard() {
                       </p>
                       <span style={{ fontSize: '0.62rem', fontWeight: 700, color: T.main }}>{dateLabel(jourActif + 'T00:00:00')}</span>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
+                    <BandeDefilante libelle="les créneaux" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
                       {creneauxRemplis.map(({ creneau, modeTemps, capacite, utiliseEff, complet, bientot, presque }) => {
                         const couleur = complet ? T.rouge.badge : bientot ? T.orange.badge : presque ? '#CA8A04' : T.vert.badge
                         const ratio = capacite > 0 ? Math.min(1, utiliseEff / capacite) : 0
@@ -1819,7 +1820,7 @@ export default function Dashboard() {
                           </div>
                         )
                       })}
-                    </div>
+                    </BandeDefilante>
                   </div>
                 )}
 

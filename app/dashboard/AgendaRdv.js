@@ -16,6 +16,7 @@
 //  - onNouveauRdv(date, heure) : callback au clic sur un slot libre
 
 import { useState, useMemo, useEffect, Fragment } from 'react'
+import BandeDefilante from '@/app/components/BandeDefilante'
 
 const T = {
   bg:      '#F8F6FF',
@@ -241,7 +242,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
 
       {/* Filtre praticien — affiché uniquement si ≥2 praticiens sur ce commerce */}
       {praticiens.length >= 2 && (
-        <div style={{ display: 'flex', gap: 5, padding: '8px 0.875rem', overflowX: 'auto', borderBottom: `1px solid ${T.pale}`, scrollbarWidth: 'none' }}>
+        <BandeDefilante libelle="les praticiens" style={{ display: 'flex', gap: 5, padding: '8px 0.875rem', overflowX: 'auto', borderBottom: `1px solid ${T.pale}`, scrollbarWidth: 'none' }}>
           <button onClick={() => setPraticienFiltre('all')}
             style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 100, border: `1.5px solid ${praticienFiltre === 'all' ? T.main : T.pale}`, background: praticienFiltre === 'all' ? T.pale : '#fff', color: praticienFiltre === 'all' ? T.main : T.muted, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
             Tous
@@ -259,7 +260,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
               </button>
             )
           })}
-        </div>
+        </BandeDefilante>
       )}
 
       {/* Grille agenda — scroll vertical interne (+ horizontal en vue semaine

@@ -562,8 +562,16 @@ verifier('et il compte alors les commandes par leur créneau de livraison',
   /vueMode === 'livraison' \? 'creneau_livraison_id' : 'creneau_id'/.test(dash))
 // La charge se lit sur TOUTES les commandes : `commandesDuJour` est déjà filtrée
 // par statut et par vue, elle donnerait un créneau faussement vide.
-verifier('la charge se lit sur toutes les commandes, pas sur la liste filtrée',
-  /remplissageCreneaux\(\{[\s\S]{0,200}?\n\s*commandes,\n/.test(dash))
+//
+// ⚠️ On isole l'APPEL et on regarde ce qu'on lui passe, plutôt que de dessiner
+// la mise en forme du fichier. Une première version de ce test exigeait un
+// retour à la ligne Unix : `git` a restauré le fichier en fins de ligne
+// Windows et le test est tombé sans qu'une seule ligne de code ait changé.
+const appelRemplissage = (dash.match(/remplissageCreneaux\(\{[\s\S]{0,320}?\}\)/) || [''])[0]
+verifier('la charge se lit sur toutes les commandes',
+  /(^|[\s{,])commandes\s*,/.test(appelRemplissage), appelRemplissage.slice(0, 60))
+verifier('elle ne se lit surtout pas sur la liste déjà filtrée',
+  appelRemplissage.length > 0 && !/commandesDuJour/.test(appelRemplissage))
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

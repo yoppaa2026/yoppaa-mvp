@@ -10,6 +10,7 @@ import { classerProduitsParCategorie, produitParType } from '@/lib/produits-bout
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
+import BandeDefilante from '@/app/components/BandeDefilante'
 import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
 import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '@/lib/fidelite'
@@ -2961,7 +2962,7 @@ function TabCreneaux({ commercantId, toast }) {
       </div>
 
       {/* ─── Onglets jours ─── */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, overflowX: 'auto', scrollbarWidth: 'none' }}>
+      <BandeDefilante libelle="les jours" style={{ display: 'flex', gap: 4, marginBottom: 16, overflowX: 'auto', scrollbarWidth: 'none' }}>
         {JOURS_SEMAINE.map((jour, idx) => {
           const ouvert = jourOuvert(jour)
           const nbCren = creneauxDuJour(jour).length
@@ -2977,7 +2978,7 @@ function TabCreneaux({ commercantId, toast }) {
             </button>
           )
         })}
-      </div>
+      </BandeDefilante>
 
       {/* ─── Contenu du jour actif ─── */}
       {!jourOuvert(jourActif) ? (
@@ -6369,7 +6370,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       )}
 
       {/* Tabs jour de la semaine */}
-      <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 14, border: `1px solid ${T.hairline}`, overflowX: 'auto' }}>
+      <BandeDefilante libelle="les jours" style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 14, border: `1px solid ${T.hairline}`, overflowX: 'auto' }}>
         {JOURS_SEMAINE.map((j, i) => {
           const nbCreneaux = creneaux.filter(c => c.jour_semaine === j).length
           const ferme = joursFermesProfil.includes(j)
@@ -6386,7 +6387,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
             </button>
           )
         })}
-      </div>
+      </BandeDefilante>
 
       {/* Jour fermé au Profil : un créneau y serait invisible côté client */}
       {joursFermesProfil.includes(jourActif) && (
@@ -7804,7 +7805,7 @@ function TabComptabilite({ commercantId, toast }) {
           )}
 
           {apercu.journal?.length > 0 ? (
-            <div style={{ overflowX: 'auto' }}>
+            <BandeDefilante libelle="le journal" style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ textAlign: 'left', color: T.muted }}>
@@ -7827,7 +7828,7 @@ function TabComptabilite({ commercantId, toast }) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </BandeDefilante>
           ) : (
             <p style={{ fontSize: 12.5, color: T.muted }}>Aucune transaction sur cette période.</p>
           )}
@@ -7967,7 +7968,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
       {/* Barre d'onglets : UNE ligne défilable horizontalement (sur mobile les
           9+ onglets s'empilaient sur 3 lignes, layout ODOO = compact + scroll). */}
       <style>{`.cfg-tabs::-webkit-scrollbar { display: none }`}</style>
-      <div className="cfg-tabs" style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 14, marginBottom: 20, boxShadow: '0 2px 12px rgba(22,6,54,0.06)', border: `1px solid ${T.hairline}`, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+      <BandeDefilante className="cfg-tabs" libelle="les onglets" style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 14, marginBottom: 20, boxShadow: '0 2px 12px rgba(22,6,54,0.06)', border: `1px solid ${T.hairline}`, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             style={{ flex: '1 0 auto', padding: '10px 12px', whiteSpace: 'nowrap', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, transition: 'all 0.2s', background: tab === t.id ? T.bgPanel : 'transparent', color: tab === t.id ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, position: 'relative' }}>
@@ -7983,7 +7984,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
             )}
           </button>
         ))}
-      </div>
+      </BandeDefilante>
 
       {tab === 'stats'    && <TabStatistiques commercantId={commercantId} toast={showToast} />}
       {tab === 'menu'     && <TabMenu     commercantId={commercantId} commercant={commercant} toast={showToast} />}

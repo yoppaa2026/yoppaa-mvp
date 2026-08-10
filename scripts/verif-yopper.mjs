@@ -224,6 +224,46 @@ egal('sans API Permissions, deuxième fois', decisionGeoloc({ etat: null, dejaDe
 egal('appel sans argument', decisionGeoloc(), 'demander')
 verifier('une position se garde une demi-journée', DUREE_FRAICHE >= 6 * 3600 * 1000)
 
+// ⚠️ CRÉER UN COMPTE RÉARME LA DEMANDE (Alex, 10/08 : « lors de la création
+// d'un nouveau compte il ne propose pas la fenêtre pour la position »).
+// Le drapeau « déjà demandée » vit dans le NAVIGATEUR, pas dans le compte :
+// quelqu'un qui créait un compte sur un navigateur ayant déjà croisé Yoppaa ne
+// voyait donc JAMAIS la fenêtre, et devait cliquer sur la pastille d'adresse
+// pour l'ouvrir à la main. Or c'est au moment où l'on s'engage que la position
+// sert le plus : c'est elle qui fait apparaître les commerces autour de soi.
+const geoMod = await import('../lib/geoloc.js')
+verifier('la demande peut être réarmée', typeof geoMod.oublierDemande === 'function')
+// Une fois réarmée, la décision redevient « demander ».
+egal('après réarmement, on redemande', decisionGeoloc({ etat: 'prompt', dejaDemande: false }), 'demander')
+// ⚠️ MAIS UN REFUS RESTE UN REFUS. Réarmer ne doit jamais rouvrir la fenêtre à
+// quelqu'un qui a dit non : ce serait du harcèlement, et le navigateur ne
+// rouvrirait rien de toute façon.
+egal('réarmer ne contourne pas un refus', decisionGeoloc({ etat: 'denied', dejaDemande: false }), 'jamais')
+const defMdp = lire('app/commander/auth/definir-mdp/page.js')
+verifier('la création de compte réarme la demande', /oublierDemande\(\)/.test(defMdp))
+
+// ⚠️ LA POSITION SE RAFRAÎCHIT AU RETOUR AU PREMIER PLAN (Alex, 10/08). Le
+// Yopper ouvre l'application chez lui, la laisse en fond, la rouvre trois rues
+// plus loin : sans ça, elle lui montre encore les commerces de son point de
+// départ. Une application installée sur téléphone n'est presque jamais
+// rechargée, elle est seulement remise au premier plan.
+const accueilGeo = lire('app/commander/page.js')
+verifier('le retour au premier plan relance la position',
+  /visibilitychange['"]?, auRetour/.test(accueilGeo) && /addEventListener\('focus', auRetour\)/.test(accueilGeo))
+// ⚠️ IL DOIT REPASSER PAR LA DÉCISION, jamais par la demande directe : sinon la
+// fenêtre d'autorisation se rouvrirait à chaque bascule d'application, ce qui
+// est exactement le défaut corrigé le 07/08.
+verifier('et il repasse par la décision, pas par la demande directe',
+  /auRetour = \(\) => \{[^}]*geolocaliserAuDemarrage\(\)/.test(accueilGeo))
+verifier('les écouteurs sont retirés au démontage',
+  /removeEventListener\('visibilitychange', auRetour\)/.test(accueilGeo))
+// Et le geste volontaire : un appui long sur la pastille rafraîchit sans avoir
+// à ouvrir le panneau puis viser un bouton.
+verifier('un appui long sur la pastille rafraîchit', /onPointerDown=\{\(\) => \{/.test(accueilGeo)
+  && /appuiLongRef\.current = true/.test(accueilGeo))
+verifier('et l\'appui court garde son comportement',
+  /if \(appuiLongRef\.current\) \{ appuiLongRef\.current = false; return \}/.test(accueilGeo))
+
 const accueil2 = lire('app/commander/page.js')
 verifier('le démarrage passe par la décision', /geolocaliserAuDemarrage\(\)/.test(accueil2))
 verifier('la position est mémorisée', /memoriserPosition\(/.test(accueil2))

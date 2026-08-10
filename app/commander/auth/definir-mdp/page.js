@@ -17,6 +17,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import TurnstileWidget from '@/app/components/TurnstileWidget'
+import { oublierDemande } from '@/lib/geoloc'
 
 const T = {
   bgPanel: '#160636', main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4',
@@ -109,6 +110,15 @@ export default function DefinirMdpPage() {
       setMessage({ type: 'error', text: error.message || 'Erreur lors de la création du mot de passe.' })
       setLoading(false); return
     }
+    // ⚠️ ON RÉARME LA DEMANDE DE POSITION. Le drapeau « déjà demandée » vit dans
+    // le NAVIGATEUR, pas dans le compte : quelqu'un qui créait un compte sur un
+    // navigateur ayant déjà croisé Yoppaa ne voyait jamais la fenêtre, et devait
+    // aller cliquer sur la pastille d'adresse pour l'ouvrir à la main. Or c'est
+    // au moment où l'on s'engage que la position sert le plus : c'est elle qui
+    // fait apparaître les commerces autour de soi.
+    // Un refus antérieur reste respecté : `decisionGeoloc` répond « jamais » sur
+    // une autorisation refusée, quoi qu'il arrive ici.
+    oublierDemande()
     setPhase('succes')
     setLoading(false)
   }

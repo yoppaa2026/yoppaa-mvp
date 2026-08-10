@@ -1209,6 +1209,11 @@ export default function Commander() {
   const [geoLoading, setGeoLoading] = useState(false)
   const [rue, setRue] = useState(null)
   const [showLocManuelle, setShowLocManuelle] = useState(false)
+  // Appui long sur la pastille d'adresse : rafraîchir la position sans ouvrir le
+  // panneau. Deux références plutôt qu'un état : elles ne doivent surtout pas
+  // provoquer de rendu, sans quoi le bouton se reconstruirait pendant l'appui.
+  const appuiLongRef = useRef(false)
+  const minuteurAppuiRef = useRef(null)
   const [locManuelle, setLocManuelle] = useState('')
   // Filtre accueil : famille (3 catégories commerçant) + métier précis optionnel
   const [familleActive, setFamilleActive] = useState('tous')
@@ -1292,6 +1297,20 @@ export default function Commander() {
     // elle rouvrait la fenêtre d'autorisation encore et encore (Alex, 07/08).
     geolocaliserAuDemarrage()
 
+    // ⚠️ ET AU RETOUR AU PREMIER PLAN. Le Yopper ouvre l'application chez lui,
+    // la laisse en fond, la rouvre trois rues plus loin : sans ceci, elle lui
+    // montrait encore les commerces de son point de départ. Une application
+    // installée sur téléphone n'est presque jamais rechargée, elle est
+    // seulement remise au premier plan.
+    //
+    // ⚠️ On repasse par `geolocaliserAuDemarrage`, jamais par la demande
+    // directe : lui seul sait qu'une autorisation refusée ne se redemande pas.
+    // Appeler `demanderGeolocalisation` ici rouvrirait la fenêtre à chaque
+    // bascule d'application, exactement le défaut corrigé le 07/08.
+    const auRetour = () => { if (document.visibilityState === 'visible') geolocaliserAuDemarrage() }
+    document.addEventListener('visibilitychange', auRetour)
+    window.addEventListener('focus', auRetour)
+
     // Sess 7 : Safari iOS ITP purge le localStorage apres 7j sans visite,
     // ce qui fait "disparaitre" les RDV/commandes cote client iPhone. Fallback :
     // cookie HTTP-only Same-Site (route /api/yopper/session) qui survit a ITP.
@@ -1365,6 +1384,13 @@ export default function Commander() {
         })
         .catch(() => {})
     })
+
+    // Les écouteurs de retour au premier plan s'empileraient à chaque montage
+    // sans ce nettoyage, et la position serait redemandée autant de fois.
+    return () => {
+      document.removeEventListener('visibilitychange', auRetour)
+      window.removeEventListener('focus', auRetour)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [])
 
@@ -2308,7 +2334,24 @@ export default function Commander() {
                 {/* Pill d'adresse tappable : ouvre directement l'édition (le lien
                     « Saisir manuellement » séparé est supprimé, zéro friction).
                     Le GPS se relance depuis le panneau (« Utiliser ma position »). */}
-                <button onClick={() => setShowLocManuelle(v => !v)}
+                {/* ⚠️ APPUI LONG = RAFRAÎCHIR SANS OUVRIR LE PANNEAU. Le Yopper
+                    qui se déplace n'avait aucun moyen simple de redemander sa
+                    position : il fallait ouvrir le panneau puis viser « Utiliser
+                    ma position », deux gestes pour une action qu'on fait en
+                    marchant. Un appui long sur la pastille suffit désormais, et
+                    l'appui court garde son comportement, celui qu'on connaît. */}
+                <button onClick={() => { if (appuiLongRef.current) { appuiLongRef.current = false; return } setShowLocManuelle(v => !v) }}
+                onPointerDown={() => {
+                  appuiLongRef.current = false
+                  minuteurAppuiRef.current = setTimeout(() => {
+                    appuiLongRef.current = true
+                    demanderGeolocalisation()
+                  }, 550)
+                }}
+                onPointerUp={() => clearTimeout(minuteurAppuiRef.current)}
+                onPointerLeave={() => clearTimeout(minuteurAppuiRef.current)}
+                onContextMenu={e => e.preventDefault()}
+                title="Appui long pour rafraîchir ta position"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(12px)', border: `1px solid ${T.light}33`, borderRadius: 100, padding: '0.45rem 0.875rem 0.45rem 0.75rem', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', transition: 'all 0.2s', letterSpacing: '-0.2px' }}>
                 {geoLoading
                   ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="9" stroke="white" strokeWidth="2.5" strokeDasharray="30 10" strokeLinecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></circle></svg>

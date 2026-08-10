@@ -28,6 +28,8 @@ import { couleurRdv, texteLisibleSur, COULEUR_DEFAUT, ENCRE } from '../lib/agend
 import { nouveauxRdvs, idsDes, texteAlerteRdv } from '../lib/alerte-rdv.js'
 import { messagePanierRepris } from '../lib/panier-repris-message.js'
 import { normaliserEmail, memeEmail } from '../lib/email-normalise.js'
+import { ouvertLe, prochainJourOuvert } from '../lib/ouverture.js'
+import { jourSemaineDe } from '../lib/creneaux.js'
 import {
   referenceCommande, referenceComplete, referenceAvecNom,
   prefixePourCommande, libelleSemaine, referenceRdv, referenceRdvComplete, PREFIXES,
@@ -393,6 +395,78 @@ verifier('pas de centime perdu à l’arrondi', Math.abs((v.rdv.frais + v.comman
 
 verifier('total nul = pas de ventilation', ventilerFrais(1.00, 0, 0) === null)
 verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === null)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// « JE RÉCUPÈRE AUJOURD'HUI » ALORS QUE LE MAGASIN EST FERMÉ
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ EN BOUTIQUE, LE RETRAIT N'ÉTAIT SOUMIS À AUCUNE CONDITION. La date était
+// forcée à aujourd'hui et le contrôle valait `true` EN DUR : un dimanche, on
+// annonçait au client un retrait un dimanche, et il se déplaçait devant une
+// porte fermée. L'alimentaire est protégé par ses créneaux (pas de créneau, pas
+// de commande) ; la boutique n'en a pas, donc plus rien ne la protégeait.
+//
+// On EXÉCUTE la recherche sur de vraies dates, dont un vrai dimanche.
+{
+  // 2026-08-16 est un dimanche, 2026-08-17 un lundi.
+  const HORAIRES = {
+    lundi:    { ouvert: true, debut: '09:00', fin: '18:00' },
+    mardi:    { ouvert: true, debut: '09:00', fin: '18:00' },
+    mercredi: { ouvert: true, debut: '09:00', fin: '18:00' },
+    jeudi:    { ouvert: true, debut: '09:00', fin: '18:00' },
+    vendredi: { ouvert: true, debut: '09:00', fin: '18:00' },
+    samedi:   { ouvert: true, debut: '09:00', fin: '13:00' },
+    dimanche: { ouvert: false },
+  }
+  verifier('le jeu d\'essai vise bien un dimanche', jourSemaineDe('2026-08-16') === 'dimanche')
+
+  verifier('un dimanche, le magasin est fermé',
+    ouvertLe({ horairesDetail: HORAIRES, dateStr: '2026-08-16' }) === false)
+  verifier('un lundi, il est ouvert',
+    ouvertLe({ horairesDetail: HORAIRES, dateStr: '2026-08-17' }) === true)
+  egal('un dimanche, le retrait est annoncé pour le lendemain',
+    prochainJourOuvert({ horairesDetail: HORAIRES, depuis: '2026-08-16' }), '2026-08-17')
+  egal('un lundi, c\'est le jour même',
+    prochainJourOuvert({ horairesDetail: HORAIRES, depuis: '2026-08-17' }), '2026-08-17')
+
+  // ⚠️ LES CONGÉS PRIMENT sur la grille hebdomadaire. Un commerçant qui ferme
+  // deux semaines ne doit pas voir des commandes tomber pendant son absence.
+  const CONGES = [{ date_debut: '2026-08-17', date_fin: '2026-08-21' }]
+  egal('un congé repousse au premier jour rouvert',
+    prochainJourOuvert({ horairesDetail: HORAIRES, fermetures: CONGES, depuis: '2026-08-16' }), '2026-08-22')
+  verifier('et le jour de congé est bien fermé',
+    ouvertLe({ horairesDetail: HORAIRES, fermetures: CONGES, dateStr: '2026-08-18' }) === false)
+  // Une fermeture d'un seul jour n'a pas de date de fin.
+  verifier('une fermeture d\'un jour compte aussi',
+    ouvertLe({ horairesDetail: HORAIRES, fermetures: [{ date_debut: '2026-08-17' }], dateStr: '2026-08-17' }) === false)
+
+  // Fermé plus de deux semaines : on ne promet pas une date lointaine, on
+  // refuse la commande. C'est `creneauOk` qui s'appuie là-dessus.
+  const TOUJOURS_FERME = { lundi: { ouvert: false }, mardi: { ouvert: false }, mercredi: { ouvert: false }, jeudi: { ouvert: false }, vendredi: { ouvert: false }, samedi: { ouvert: false }, dimanche: { ouvert: false } }
+  egal('un commerce fermé en permanence ne propose aucune date',
+    prochainJourOuvert({ horairesDetail: TOUJOURS_FERME, depuis: '2026-08-16' }), null)
+
+  // ⚠️ SANS HORAIRES DU TOUT, ON N'INTERDIT RIEN. Un commerçant qui n'a pas
+  // encore rempli sa fiche ne doit pas voir ses ventes bloquées par notre
+  // prudence : fermer par défaut ferait perdre de l'argent à quelqu'un qui n'a
+  // rien demandé.
+  egal('sans horaires, le jour même reste possible',
+    prochainJourOuvert({ horairesDetail: null, depuis: '2026-08-16' }), '2026-08-16')
+  verifier('un commerce ouvert 24h/24 est toujours ouvert',
+    ouvertLe({ horairesDetail: { always_open: true }, dateStr: '2026-08-16' }) === true)
+  // Les horaires à pause (midi fermé) restent des jours ouverts.
+  verifier('un jour à deux plages reste ouvert',
+    ouvertLe({ horairesDetail: { dimanche: { ouvert: true, debut: '09:00', fin: '12:00', debut2: '14:00', fin2: '18:00' } }, dateStr: '2026-08-16' }) === true)
+
+  // Et l'écran doit s'appuyer dessus, sinon rien de tout ça ne sert.
+  const fiche = readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8')
+    .split(/\r?\n/).map(l => l.replace(/(^|\s)\/\/.*/, '$1')).join('\n')
+  verifier('la boutique cherche son prochain jour ouvert', /prochainJourOuvert\(\{/.test(fiche))
+  verifier('le retrait n\'est plus accepté sans condition',
+    !/modeBoutiqueEff === 'expedition' \? expeFormOk : true/.test(fiche))
+  verifier('la date de commande suit ce jour, pas aujourd\'hui',
+    /jourRetraitBoutique \|\| jourLocalISO\(new Date\(\)\)/.test(fiche))
+  verifier('et le client lit la date AVANT de payer', /À récupérer/.test(fiche))
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LE NUMÉRO DE COMMANDE — le seul langage commun entre le client et le commerçant

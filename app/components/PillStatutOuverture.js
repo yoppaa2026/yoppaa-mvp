@@ -21,6 +21,7 @@
 // même logique que celle qui pilote la pill.
 
 import { useState, useEffect } from 'react'
+import { creneauxDuJour } from '@/lib/ouverture'
 
 const JOURS_ORDRE = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 
@@ -41,15 +42,12 @@ function parseHHMM(s) {
   return h * 60 + m
 }
 
-export function getCreneauxJour(jourData) {
-  if (!jourData || jourData.ouvert === false) return []
-  if (Array.isArray(jourData.creneaux)) return jourData.creneaux
-  const out = []
-  if (jourData.debut && jourData.fin) out.push([jourData.debut, jourData.fin])
-  // Horaires à pause (restauration...) : 2e plage optionnelle debut2/fin2
-  if (jourData.debut2 && jourData.fin2) out.push([jourData.debut2, jourData.fin2])
-  return out
-}
+// La lecture des plages d'un jour vit désormais dans `lib/ouverture.js` : le
+// tunnel de commande en a besoin lui aussi, pour ne plus proposer un retrait un
+// jour de fermeture. Deux lectures différentes du même réglage, et les deux
+// écrans finiraient par ne plus dire la même chose. Réexporté sous son ancien
+// nom pour ne rien casser chez les appelants.
+export { creneauxDuJour as getCreneauxJour }
 
 export function calculerStatutOuverture(horaires, now) {
   if (!horaires || Object.keys(horaires).length === 0) return null
@@ -61,7 +59,7 @@ export function calculerStatutOuverture(horaires, now) {
 
   const jour = getDayBrussels(now)
   const minNow = getMinutesBrussels(now)
-  const creneauxAuj = getCreneauxJour(horaires[jour])
+  const creneauxAuj = creneauxDuJour(horaires[jour])
 
   // 1) Dans un créneau → OUVERT (ou « Ferme bientôt » à moins de 30 min)
   for (const [d, f] of creneauxAuj) {
@@ -89,7 +87,7 @@ export function calculerStatutOuverture(horaires, now) {
   const idx = JOURS_ORDRE.indexOf(jour)
   for (let i = 1; i <= 7; i++) {
     const next = JOURS_ORDRE[(idx + i) % 7]
-    const c = getCreneauxJour(horaires[next])
+    const c = creneauxDuJour(horaires[next])
     if (c.length > 0) {
       const labelJour = i === 1 ? 'demain' : next
       return { etat: 'ferme', label: 'Fermé', sousTitre: `Ouvre ${labelJour} à ${c[0][0]}` }

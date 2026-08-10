@@ -11,6 +11,7 @@ import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurA
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
+import { prochainJourOuvert } from '@/lib/ouverture'
 import { estFoodTruck as estFoodTruckType } from '@/lib/types-commerce'
 import { jourLocalISO, jourSemaineLocal } from '@/lib/timezone'
 import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
@@ -66,6 +67,21 @@ const T = {
 // désormais dans `lib/timezone.js`, avec la raison d'être qui l'accompagne :
 // `toISOString()` rend la date de la VEILLE entre minuit et deux heures du
 // matin en Belgique. Une seule formule, testée au banc.
+
+// « 2026-08-12 » → « demain » ou « mercredi 12 août ». Ancrage à midi en temps
+// universel : aucune bascule d'heure d'été à cette heure-là, le jour rendu est
+// donc toujours celui de la date écrite.
+function dateLisibleFr(dateStr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return ''
+  const d = new Date(`${dateStr}T12:00:00Z`)
+  if (isNaN(d.getTime())) return ''
+  const demainD = new Date(); demainD.setDate(demainD.getDate() + 1)
+  const demain = `${demainD.getFullYear()}-${String(demainD.getMonth() + 1).padStart(2, '0')}-${String(demainD.getDate()).padStart(2, '0')}`
+  if (dateStr === demain) return 'demain'
+  const jours = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
+  const mois = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre']
+  return `${jours[d.getUTCDay()]} ${d.getUTCDate()} ${mois[d.getUTCMonth()]}`
+}
 
 const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LONGS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
@@ -2092,9 +2108,19 @@ export default function CommanderSlug() {
       // Persistance client (localStorage + clients DB) - utile pour favoris/historique
       await getOuCreerClient(client.email, client.prenom, client.nom)
 
-      const jourDate = estDetail ? new Date() : ((modeCommande === 'livraison' ? creneauLivraisonChoisi?._date : joursDispos[jourSelectionne]?.date) || new Date())
+      // ⚠️ EN BOUTIQUE, LA DATE ÉTAIT FORCÉE À AUJOURD'HUI, sans jamais regarder
+      // les horaires : un dimanche, on annonçait au client un retrait un
+      // dimanche, et il se déplaçait devant une porte fermée. L'alimentaire est
+      // protégé par ses créneaux, la boutique n'en a pas.
+      // Un colis, lui, part quand le commerçant l'emballe : sa date reste celle
+      // de la commande.
+      const jourDate = estDetail
+        ? (modeBoutiqueEff === 'expedition' ? new Date() : new Date(`${jourRetraitBoutique || jourLocalISO(new Date())}T12:00:00Z`))
+        : ((modeCommande === 'livraison' ? creneauLivraisonChoisi?._date : joursDispos[jourSelectionne]?.date) || new Date())
       const d = new Date(jourDate)
-      const dateStr = jourLocalISO(d)
+      const dateStr = estDetail && modeBoutiqueEff !== 'expedition'
+        ? (jourRetraitBoutique || jourLocalISO(new Date()))
+        : jourLocalISO(d)
 
       // Payload articles avec options structurées (groupe_id + valeur_ids)
       // La route recalcule tout server-side (anti-tampering)
@@ -2284,12 +2310,28 @@ export default function CommanderSlug() {
     ? (commercant?.boutique_mode_vente === 'les_deux' ? ['retrait', 'expedition'] : [commercant?.boutique_mode_vente || 'retrait'])
     : []
   const modeBoutiqueEff = estDetail ? (boutiqueModes.includes(modeBoutique) ? modeBoutique : boutiqueModes[0]) : null
+  // ⚠️ LE JOUR OÙ LE CLIENT POURRA VRAIMENT VENIR CHERCHER.
+  // La boutique n'a pas de créneau : rien ne l'empêchait d'annoncer un retrait
+  // « aujourd'hui » un dimanche, ou en plein congé du commerçant. On cherche
+  // donc le premier jour réellement ouvert, horaires ET fermetures comprises.
+  const jourRetraitBoutique = estDetail
+    ? prochainJourOuvert({
+        horairesDetail: commercant?.horaires_detail,
+        fermetures,
+        depuis: jourLocalISO(new Date()),
+      })
+    : null
+  const retraitAujourdhui = jourRetraitBoutique === jourLocalISO(new Date())
+
   const cpExpe = (adresseLivraison.code_postal || '').trim()
   const zoneExpe = Array.isArray(commercant?.boutique_expedition_cp) ? commercant.boutique_expedition_cp : []
   const cpExpeOk = zoneExpe.length === 0 || zoneExpe.includes(cpExpe)
   const expeFormOk = !!(adresseLivraison.rue.trim() && cpExpe && adresseLivraison.ville.trim() && cpExpeOk)
   const creneauOk = estDetail
-    ? (modeBoutiqueEff === 'expedition' ? expeFormOk : true)
+    // ⚠️ `true` EN DUR, c'était le défaut : un retrait était accepté quel que
+    // soit le jour. Sans jour ouvert dans les deux semaines, le commerce est en
+    // congés et on ne prend pas la commande plutôt que de promettre une date.
+    ? (modeBoutiqueEff === 'expedition' ? expeFormOk : !!jourRetraitBoutique)
     : (modeCommande === 'livraison' ? livraisonFormOk : !!creneauChoisi)
   // Mode de la commande qui vient d'être passée (pour l'écran de confirmation étape 4).
   // On lit derniereCommande en priorité (source de vérité) avec repli sur l'état courant.
@@ -3434,11 +3476,26 @@ export default function CommanderSlug() {
                       </div>
                     )}
                     {modeBoutiqueEff === 'retrait' ? (
-                      <div style={{ background: T.pale, border: `1.5px solid ${T.main}33`, borderRadius: 14, padding: '0.75rem 1rem', marginBottom: '1.25rem' }}>
+                      <div style={{ background: jourRetraitBoutique ? T.pale : '#FEF2F2', border: `1.5px solid ${jourRetraitBoutique ? `${T.main}33` : '#DC262633'}`, borderRadius: 14, padding: '0.75rem 1rem', marginBottom: '1.25rem' }}>
+                        {/* ⚠️ ON DIT LA DATE AVANT DE PAYER. L'écran annonçait un
+                            retrait « aux heures d'ouverture » sans jamais regarder
+                            LESQUELLES : un dimanche, le client commandait en
+                            croyant passer le jour même. */}
+                        {!jourRetraitBoutique ? (
+                          <p style={{ fontSize: '0.82rem', color: '#991B1B', fontWeight: 700, lineHeight: 1.5, margin: 0 }}>
+                            {commercant?.nom} est fermé pour le moment et ne reprend pas les retraits dans les deux prochaines semaines. Reviens un peu plus tard 🟣
+                          </p>
+                        ) : (
                         <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 600, lineHeight: 1.5, margin: 0 }}>
-                          Ta commande est mise de côté : passe la récupérer {vitrine ? 'sur place' : 'en boutique'} aux heures d&rsquo;ouverture.
+                          <strong style={{ color: T.main }}>
+                            {retraitAujourdhui
+                              ? `À récupérer dès aujourd'hui`
+                              : `À récupérer à partir de ${dateLisibleFr(jourRetraitBoutique)}`}
+                          </strong>{' '}
+                          {vitrine ? 'sur place' : 'en boutique'}, aux heures d&rsquo;ouverture.
                           {commercant?.boutique_retrait_paiement === 'magasin' ? ' Tu paies au comptoir, au retrait.' : ''}
                         </p>
+                        )}
                       </div>
                     ) : (
                       <div style={{ background: '#fff', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '1.25rem', border: `1.5px solid ${T.pale}` }}>

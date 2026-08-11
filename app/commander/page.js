@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { fetchYopper } from '@/lib/fetch-yopper'
+import { fetchYopper, estSessionPerdue } from '@/lib/fetch-yopper'
 import { libelleRetrait } from '@/lib/libelle-retrait'
 import { referenceCommande } from '@/lib/numero-commande'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
@@ -395,8 +395,12 @@ function EditablePrenom({ client, setClient, clientId, openSignal }) {
     if (telephone) localStorage.setItem('yoppaa_telephone', telephone)
     setClient(p => ({ ...p, prenom, nom, telephone }))
     if (clientId) {
-      // Update profil côté serveur (RLS clients verrouillé), autorisé par le cookie Yopper.
-      await fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update-own', prenom, nom, telephone }) })
+      // ⚠️ ENCORE UN `fetch` NU. La route exige une identité PROUVÉE depuis le
+      // 03/08 : chaque enregistrement du prénom, du nom ou du téléphone partait
+      // donc dans le vide, avec un 401 que personne ne lisait. L'écran affichait
+      // la nouvelle valeur, prise du navigateur, et la base gardait l'ancienne.
+      // Attrapé par le test qui interdit les appels nus vers cette route.
+      await fetchYopper('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update-own', prenom, nom, telephone }) })
     }
     setSaving(false)
     setEditing(false)
@@ -1224,6 +1228,12 @@ export default function Commander() {
   // se réessayer, pas se déguiser en « aucun commerce chez toi ».
   const [erreurChargement, setErreurChargement] = useState(false)
   const [notesParCommerce, setNotesParCommerce] = useState({})
+  // ⚠️ LA PERTE DE SESSION DOIT SE VOIR. Sur iPhone, le jeton du Yopper peut
+  // mourir pendant que l'application dort. Jusqu'ici, tout se vidait en
+  // silence : zéro commande, zéro rendez-vous, zéro euro, pendant que son nom
+  // et son email restaient affichés. Il n'avait aucun moyen de comprendre, et
+  // redémarrer l'application n'y changeait rien.
+  const [sessionPerdue, setSessionPerdue] = useState(false)
   const [statutsCommerce, setStatutsCommerce] = useState({})
   // Fermetures exceptionnelles, par commerçant. La carte les ignorait : un
   // commerce en congé s'affichait « Ouvert » en vert sur l'accueil.
@@ -1396,7 +1406,11 @@ export default function Commander() {
       // reapparait apres chaque reload alors que la valeur est bien en DB.
       // Profil (prefill si manquant) + commune du Yopper, côté serveur (RLS clients
       // verrouillé, autorisé par le cookie Yopper). Un seul appel pour les deux.
-      fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-own' }) })
+      // ⚠️ C'ÉTAIT UN `fetch` NU sur une route qui exige une identité prouvée :
+      // elle répondait 401 à TOUS LES COUPS, et la commune du Yopper n'était
+      // jamais chargée par cette voie. Le `catch` muet et le `if (!data) return`
+      // faisaient passer l'échec pour un silence normal.
+      fetchYopper('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-own' }) })
         .then(r => r.json())
         .then(j => {
           const data = j?.client
@@ -1428,7 +1442,16 @@ export default function Commander() {
   useEffect(() => {
     const check = (user) => setAMotDePasse(!!user?.user_metadata?.has_password)
     supabase.auth.getUser().then(({ data }) => check(data?.user)).catch(() => {})
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => check(session?.user))
+    // ⚠️ CETTE ÉCOUTE IGNORAIT LA DÉCONNEXION. Elle ne regardait que le mot de
+    // passe, alors qu'elle est le seul endroit de l'application prévenu quand
+    // la session tombe. `SIGNED_OUT` est émis par la bibliothèque au moment
+    // exact où elle efface une session dont le renouvellement a été refusé :
+    // c'est là qu'il faut l'attraper, pas cinq secondes plus tard sur un 401.
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      check(session?.user)
+      if (event === 'SIGNED_OUT') setSessionPerdue(true)
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') setSessionPerdue(false)
+    })
     return () => { try { sub?.subscription?.unsubscribe() } catch (e) {} }
   }, [])
 
@@ -1437,12 +1460,26 @@ export default function Commander() {
   // Sinon après "Se déconnecter", la closure conservait l'ancien email et le
   // polling continuait à re-fetch les commandes, faisant réapparaître l'onglet
   // Commandes côté UI après le clear state.
+  // ⚠️ CE RELEVÉ TOURNAIT TOUTES LES 5 SECONDES SANS REGARDER SI L'ÉCRAN ÉTAIT
+  // ALLUMÉ, et c'est lui qui déclenchait la perte de session.
+  //
+  // Chaque tick lance deux appels, donc deux lectures de session. Dans les 90
+  // dernières secondes de vie du jeton, chaque lecture tente un renouvellement.
+  // Au retour au premier plan, ces tentatives se superposent à celle que la
+  // bibliothèque lance de son côté : le jeton de rafraîchissement est consommé
+  // deux fois, le second essai reçoit « déjà utilisé », et la session est
+  // effacée pour de bon.
+  //
+  // Les deux autres relevés de cette page vérifient déjà la visibilité ; celui-
+  // ci avait été oublié. Et cinq secondes n'apportaient rien : le Yopper n'a pas
+  // besoin de voir sa commande changer d'état à la seconde près.
   useEffect(() => {
     const iv = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
       const email = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_email') : null
       if (!email) return  // utilisateur déconnecté → on saute ce tick (mais on laisse l'interval tourner pour le cas re-login)
       chargerCommandesClient(email); chargerRdvsClient(email)
-    }, 5000)
+    }, 15000)
     return () => clearInterval(iv)
   }, [])
 
@@ -1803,8 +1840,13 @@ export default function Commander() {
     try {
       const r = await fetchYopper('/api/yopper/favoris')
       const j = await r.json()
+      // ⚠️ CETTE ROUTE REND UNE LISTE VIDE AVEC UN CODE 200 quand l'identité
+      // n'est pas prouvée. Impossible de distinguer « aucun favori » de « je ne
+      // te reconnais plus » en regardant la seule liste : on interroge donc la
+      // réponse elle-même avant d'effacer quoi que ce soit.
+      if (estSessionPerdue(r, j)) { setSessionPerdue(true); return }
       ids = j?.favoris || []
-    } catch { ids = [] }
+    } catch { return }  // panne réseau : on garde les favoris affichés
     setFavoris(ids)
     if (ids.length > 0) {
       const { data: comms } = await supabase
@@ -1831,16 +1873,23 @@ export default function Commander() {
       // était un 401 et l'onglet restait vide.
       const res = await fetchYopper('/api/rdv/mes-rdvs')
       const body = await res.json().catch(() => ({}))
+      // ⚠️ UNE SESSION PERDUE N'EST PAS UNE LISTE VIDE. Ce `setClientRdvs([])`
+      // effaçait les rendez-vous du Yopper à chaque relevé dès que son jeton
+      // mourait, sans le moindre signal. On garde ce qui est à l'écran et on le
+      // prévient : ses rendez-vous existent toujours, c'est l'accès qui est
+      // tombé.
+      if (estSessionPerdue(res, body)) { setSessionPerdue(true); return }
       if (!body?.ok) {
         console.warn('[chargerRdvsClient] route KO', body)
         setClientRdvs([])
         return
       }
+      setSessionPerdue(false)
       console.info('[chargerRdvsClient]', { email, count: body.count })
       setClientRdvs(body.rdvs || [])
     } catch (e) {
+      // Une exception réseau n'est pas non plus un vide : on ne touche à rien.
       console.error('[chargerRdvsClient] exception', e?.message)
-      setClientRdvs([])
     }
   }
 
@@ -1941,12 +1990,22 @@ export default function Commander() {
     // l'API serveur (service_role + cookie yoppaa_yopper). L'email vient du cookie
     // côté serveur, pas de ce paramètre. L'enrichissement numéro (numero_commande
     // ou position du jour) est fait côté serveur pour garder la parité d'affichage.
-    const res = await fetchYopper('/api/yopper/commandes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'list' }),
-    }).then(r => r.json()).catch(() => null)
-    setClientCommandes(res?.commandes || [])
+    // ⚠️ `setClientCommandes(res?.commandes || [])` EFFAÇAIT TOUT sur un 401.
+    // Le relevé tournant en boucle, les commandes disparaissaient et ne
+    // revenaient jamais, sans qu'aucun message n'explique pourquoi.
+    let res
+    try {
+      res = await fetchYopper('/api/yopper/commandes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list' }),
+      })
+    } catch { return }  // panne réseau : on garde l'affichage précédent
+    const body = await res.json().catch(() => null)
+    if (estSessionPerdue(res, body)) { setSessionPerdue(true); return }
+    if (!body?.ok && !body?.commandes) return
+    setSessionPerdue(false)
+    setClientCommandes(body?.commandes || [])
   }
 
   useEffect(() => {
@@ -2512,6 +2571,35 @@ export default function Commander() {
 
         {/* ── CONTENU ── */}
         <div className="scroll-body">
+
+          {/* ⚠️ LE BANDEAU QUI MANQUAIT. Quand la session du Yopper meurt, ses
+              commandes et ses rendez-vous ne disparaissent pas : c'est l'accès
+              qui tombe. Sans ce bandeau, il lisait « Aucune commande en cours »
+              et concluait que l'application avait perdu ses achats. Il est
+              affiché partout, pas seulement dans l'onglet Suivi : la perte se
+              constate aussi bien depuis le profil ou les favoris. */}
+          {sessionPerdue && client.email && (
+            <div style={{ margin: '0.875rem 1rem 0', background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)', border: '1.5px solid #F59E0B', borderRadius: 14, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1.5px solid #F59E0B' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+                </svg>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 10, fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.6px', margin: '0 0 2px' }}>
+                  Session expirée
+                </p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#78350F', margin: 0, lineHeight: 1.35 }}>
+                  Reconnecte-toi pour retrouver tes commandes et tes rendez-vous. Rien n&rsquo;est perdu 🟣
+                </p>
+              </div>
+              <button onClick={() => router.push('/commander/auth?redirect=/commander')}
+                style={{ padding: '8px 14px', borderRadius: 100, border: 'none', background: '#92400E', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
+                Se reconnecter
+              </button>
+            </div>
+          )}
 
           {/* ACCUEIL */}
           {onglet === 'accueil' && (

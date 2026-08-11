@@ -14,6 +14,7 @@ import {
   commercantEligibleActu,
   codesPostauxDe,
 } from '../lib/morning-eligibilite.js'
+import { estSessionPerdue, ERREUR_SESSION } from '../lib/session-perdue.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -363,6 +364,119 @@ verifier('la page dit que la requête part de l\'appareil',
   /part directement de votre appareil/.test(legal))
 verifier('la page rappelle qu\'on peut refuser la géolocalisation',
   /Refuser la géolocalisation reste possible/.test(legal))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA SESSION QUI MEURT EN ARRIÈRE-PLAN (Alex, 11/08)
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ « Retour dans l'app après quelques minutes, plus de commandes ni de
+// rendez-vous. Fermer et rouvrir ne solutionne pas, déconnexion et reconnexion
+// obligatoires. » Son profil restait pourtant affiché : nom, email, téléphone.
+//
+// Cause : sur iPhone, le renouvellement du jeton s'arrête en arrière-plan. Au
+// retour, la bibliothèque ET le relevé de 5 secondes le renouvellent en même
+// temps ; le jeton de rafraîchissement est consommé deux fois, le second essai
+// reçoit « déjà utilisé », et la session est EFFACÉE. `fetchYopper` partait
+// alors en anonyme sans le dire, et six `catch` posaient des listes vides.
+//
+// On EXÉCUTE la décision plutôt que de la lire dans le source.
+{
+  const rep = (status, corps) => [{ status }, corps]
+
+  verifier('un 401 est une session perdue', estSessionPerdue(...rep(401, { ok: false })))
+  verifier('le marqueur de fetchYopper aussi',
+    estSessionPerdue({ status: 401 }, { ok: false, error: ERREUR_SESSION }))
+  // ⚠️ LE CAS TRAÎTRE : la fidélité répond 200 avec `connecte:false`. Pour
+  // l'écran, c'est la même chose qu'un 401 ; c'est même le SEUL endroit qui
+  // disait la vérité sur la capture d'Alex (« Connecte-toi pour retrouver tes
+  // cartes ») pendant que tout le reste affichait zéro sans rien expliquer.
+  verifier('un 200 avec connecte:false est une session perdue',
+    estSessionPerdue(...rep(200, { ok: true, connecte: false, cartes: [] })))
+
+  // Et une VRAIE liste vide ne doit surtout pas déclencher le bandeau : un
+  // Yopper sans commande n'a pas à lire « ta session a expiré ».
+  verifier('une liste vide légitime n\'est PAS une session perdue',
+    !estSessionPerdue(...rep(200, { ok: true, commandes: [] })))
+  verifier('un compte connecté sans carte non plus',
+    !estSessionPerdue(...rep(200, { ok: true, connecte: true, cartes: [] })))
+  verifier('une panne serveur n\'est pas une session perdue',
+    !estSessionPerdue(...rep(500, { ok: false, error: 'boom' })))
+  verifier('sans réponse ni corps, on n\'invente rien', !estSessionPerdue(null, null))
+  verifier('ni avec un corps vide', !estSessionPerdue({ status: 200 }, undefined))
+}
+
+// ⚠️ ET LE TRANSPORT NE DOIT PLUS PARTIR EN ANONYME. Sans jeton, `fetchYopper`
+// envoyait quand même la requête : le serveur répondait en visiteur, et rien ne
+// permettait de distinguer « je ne suis plus authentifié » d'un vide.
+{
+  const fy = lire('lib/fetch-yopper.js')
+  verifier('fetchYopper tente un renouvellement avant d\'abandonner',
+    /refreshSession\(\)/.test(fy))
+  verifier('et sans jeton, il n\'appelle PAS le serveur',
+    /if \(!token\) return reponseSessionPerdue\(\)/.test(fy))
+  verifier('l\'en-tête d\'autorisation n\'est plus conditionnel',
+    !/if \(token\) headers\.Authorization/.test(fy),
+    (fy.match(/.*if \(token\) headers\.Authorization.*/) || [])[0])
+
+  const sb = lire('lib/supabase.js')
+  verifier('les options de session sont écrites, plus subies',
+    /persistSession: true/.test(sb) && /autoRefreshToken: true/.test(sb))
+}
+
+// ⚠️ ET L'ÉCRAN NE DOIT PLUS EFFACER SES LISTES NI SE TAIRE.
+{
+  const src = lire('app/commander/page.js')
+    .split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+
+  verifier('le relevé ne tourne que si l\'écran est allumé',
+    /visibilityState !== 'visible'\) return\s*\n\s*const email/.test(src))
+  verifier('et il a cessé de battre toutes les 5 secondes',
+    !/\}, 5000\)/.test(src), (src.match(/.*\}, 5000\).*/) || [])[0])
+  verifier('la déconnexion est écoutée', /event === 'SIGNED_OUT'/.test(src))
+  verifier('le renouvellement réussi lève l\'alerte', /event === 'TOKEN_REFRESHED'/.test(src))
+  verifier('le bandeau de session expirée existe', /Session expirée/.test(src))
+  verifier('il propose de se reconnecter', /Se reconnecter/.test(src))
+  // ⚠️ ON VISE L'INTÉRIEUR DE LA FONCTION, pas le fichier entier : la même
+  // ligne de garde existe dans le chargement des commandes, et un test posé sur
+  // tout le fichier resterait vert alors que les rendez-vous, eux, seraient de
+  // nouveau effacés. La mesure du défaut l'a pris sur le fait.
+  const corpsDe = (nom) => {
+    const debut = src.indexOf(`async function ${nom}(`)
+    if (debut < 0) return ''
+    const suite = src.slice(debut)
+    const fin = suite.indexOf('\n  }\n')
+    return fin < 0 ? suite : suite.slice(0, fin)
+  }
+  const corpsRdvs = corpsDe('chargerRdvsClient')
+  verifier('la fonction des rendez-vous a bien été trouvée', corpsRdvs.length > 100)
+  verifier('les rendez-vous ne sont plus effacés sur une session perdue',
+    /estSessionPerdue\([^)]*\)\) \{ setSessionPerdue\(true\); return \}/.test(corpsRdvs)
+    && !/setSessionPerdue\(true\)[^}]*setClientRdvs\(\[\]\)/.test(corpsRdvs),
+    corpsRdvs.slice(0, 100).replace(/\s+/g, ' '))
+
+  const corpsFavoris = corpsDe('chargerFavoris')
+  verifier('les favoris non plus',
+    /estSessionPerdue\([^)]*\)\) \{ setSessionPerdue\(true\); return \}/.test(corpsFavoris),
+    corpsFavoris.slice(0, 100).replace(/\s+/g, ' '))
+  verifier('les commandes non plus',
+    !/setClientCommandes\(res\?\.commandes \|\| \[\]\)/.test(src),
+    (src.match(/.*setClientCommandes\(res\?\.commandes.*/) || [])[0])
+  // ⚠️ DEUX APPELS NUS SUR UNE ROUTE QUI EXIGE UNE PREUVE. `get-own` et
+  // `update-own` répondaient 401 à tous les coups : la commune du Yopper
+  // n'était jamais chargée, et surtout son prénom, son nom et son téléphone
+  // n'étaient JAMAIS enregistrés. L'écran affichait la nouvelle valeur, lue du
+  // navigateur, et la base gardait l'ancienne.
+  //
+  // ⚠️ `get-or-create`, lui, est VOLONTAIREMENT ouvert : il sert au passage à
+  // la caisse d'un visiteur pas encore authentifié, et la route le traite avant
+  // son contrôle d'identité. L'interdire ferait échouer toute première
+  // commande. On ne vise donc que les deux actions protégées.
+  const blocsNus = src.split("await fetch('/api/yopper/client'").slice(1)
+  for (const action of ['get-own', 'update-own']) {
+    const fautif = blocsNus.find(b => b.slice(0, 250).includes(action))
+    verifier(`aucun appel nu pour l'action ${action}`, !fautif,
+      fautif ? fautif.slice(0, 130).replace(/\s+/g, ' ') : '')
+  }
+}
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

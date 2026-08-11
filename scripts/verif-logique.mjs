@@ -55,6 +55,14 @@ function egal(nom, obtenu, attendu) {
   verifier(nom, a === b, `obtenu ${a}, attendu ${b}`)
 }
 
+// ⚠️ RETIRER LES COMMENTAIRES AVANT DE JUGER UN FICHIER SOURCE. Trois tests ont
+// déjà été cassés par MES PROPRES commentaires : celui qui explique un défaut
+// corrigé cite forcément la ligne fautive, et la recherche tombait dessus.
+// Hissé au niveau du fichier après avoir été redéfini dans deux blocs séparés.
+function sansCommentaires(src) {
+  return src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. DEALS — la règle unique des promotions
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1030,7 +1038,6 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
 // laisse le défaut intact à l'écran. On vise l'APPEL, et on interdit le retour
 // des trois requêtes fautives.
 {
-  const sansCommentaires = (src) => src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
   const accueil = sansCommentaires(readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8'))
   verifier('l\'accueil appelle statutCreneaux', /statutCreneaux\(\{/.test(accueil))
   verifier('et pastilleCreneaux', /pastilleCreneaux\(\{/.test(accueil))
@@ -1135,10 +1142,62 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
       !/referenceCommande\((?:cmd|c)\),\s*numero_prefixe,/.test(src), chemin)
   }
 
+  // ⚠️ LES NOTIFICATIONS PUSH ET LES OBJETS D'EMAILS restaient au numéro nu
+  // alors que les CORPS avaient été corrigés. Le client lisait « #12 » sur son
+  // écran verrouillé, « #12 » dans l'objet, et « CC12 » deux centimètres plus
+  // bas dans le corps du même message.
+  const AU_NUMERO_NU = [
+    'app/api/commande/push-statut/route.js',
+    'app/api/livraison/statut/route.js',
+    'lib/rappels.js',
+    'app/api/commande/cancel/route.js',
+    'app/api/emails/commande-annulee/route.js',
+    'app/api/emails/commande-confirmee/route.js',
+    'app/api/emails/commande-expediee/route.js',
+    'app/api/emails/commande-prete/route.js',
+    'lib/commande-notifs.js',
+  ]
+  for (const chemin of AU_NUMERO_NU) {
+    const src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
+    // ⚠️ VISER LA LECTURE, PAS L'AFFICHAGE. Mon premier test ne cherchait que
+    // la forme en ligne `#${cmd.numero_commande}`. Or ces fichiers passent par
+    // une variable intermédiaire : casser `const num = referenceCommande(cmd)`
+    // en `const num = cmd.numero_commande` laissait le test vert. La mesure du
+    // défaut l'a montré, deux fois.
+    //
+    // La règle est donc simple et sans échappatoire : dans ces fichiers, on ne
+    // LIT plus jamais `numero_commande` d'une commande. `referenceCommande`
+    // prend la commande entière, elle n'a pas besoin du champ.
+    const fautives = src.split(/\r?\n/).filter(l =>
+      /\bcmd\.numero_commande\b/.test(l) || /\bc\.numero_commande\b/.test(l))
+    verifier(`${chemin} ne lit plus le numéro nu`,
+      fautives.length === 0, fautives[0])
+    verifier(`${chemin} rapatrie numero_prefixe`, /numero_prefixe/.test(src), chemin)
+  }
+
   const ecranRdv = readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8')
     .split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
   verifier('l\'écran « ton RDV est noté » affiche la référence', /referenceRdv\(rdvCree\)/.test(ecranRdv))
   verifier('et plus le numéro nu', !/#\{rdvCree\.numero_rdv\}/.test(ecranRdv))
+
+  // ⚠️ L'ÉCRAN « TA COMMANDE EST YOPPÉE » affichait « #4 » là où l'email disait
+  // « CC4 » (Alex, captures de 13h17 et 13h18). La route ne renvoyait pas le
+  // préfixe, alors qu'elle importait déjà de quoi former la référence.
+  const routeCommandes = sansCommentaires(readFileSync(new URL('../app/api/yopper/commandes/route.js', import.meta.url), 'utf8'))
+  verifier('get-one rapatrie le préfixe', /numero_commande, numero_prefixe/.test(routeCommandes))
+  verifier('et forme la référence pour l\'écran',
+    /enrichirNumeros\(\[data\]\)\[0\]/.test(routeCommandes))
+  // ⚠️ ET IL LUI FAUT LE CRÉNEAU. Sans lui, au retour de Stripe, l'écran se
+  // croyait en boutique et annonçait « tu passes quand ça t'arrange » à un
+  // client attendu à 17h00.
+  verifier('get-one rapatrie de quoi retrouver le contexte',
+    /mode_retrait, creneau_id/.test(routeCommandes))
+
+  const ficheCmd = sansCommentaires(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('l\'écran de confirmation affiche la référence, pas le numéro nu',
+    /numeroSequentiel: data\.numeroAffiche/.test(ficheCmd))
+  verifier('et son contexte se dérive de la commande relue',
+    /creneau: derniereCommande\?\.creneau/.test(ficheCmd))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

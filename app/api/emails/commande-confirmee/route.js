@@ -108,7 +108,7 @@ export async function POST(request) {
 
         await envoyerAuCommercant({
           to: cmd.commercant.email,
-          subject: `Nouvelle commande #${cmd.numero_commande || ''} — ${cmd.client_prenom || 'Yopper'}`,
+          subject: `Nouvelle commande #${referenceCommande(cmd) || ''} — ${cmd.client_prenom || 'Yopper'}`,
           html,
         })
       } catch (e) {

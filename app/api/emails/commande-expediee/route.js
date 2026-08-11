@@ -71,7 +71,7 @@ export async function POST(request) {
 
       await envoyerAuCommercant({
         to: cmd.client_email,
-        subject: `📦 Ton colis #${cmd.numero_commande || ''} est parti de chez ${cmd.commercant?.nom || ''}`,
+        subject: `📦 Ton colis #${referenceCommande(cmd) || ''} est parti de chez ${cmd.commercant?.nom || ''}`,
         html,
       })
     } catch (e) {

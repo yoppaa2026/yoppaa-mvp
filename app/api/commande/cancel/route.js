@@ -277,7 +277,7 @@ export async function POST(request) {
         })
         await envoyerAuCommercant({
           to: commercantFull.email,
-          subject: `Commande #${cmd.numero_commande || ''} annulée — ${cmd.client_nom?.split(' ')[0] || 'Yopper'}`,
+          subject: `Commande #${referenceCommande(cmd) || ''} annulée — ${cmd.client_nom?.split(' ')[0] || 'Yopper'}`,
           html,
         })
       } catch (e) {

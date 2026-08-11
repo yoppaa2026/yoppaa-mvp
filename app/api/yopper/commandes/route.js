@@ -86,12 +86,27 @@ export async function POST(request) {
     if (action === 'get-one') {
       const id = body.commande_id
       if (!id) return NextResponse.json({ ok: false, error: 'commande_id requis' }, { status: 400 })
+      // ⚠️ CE `select` PRIVAIT L'ÉCRAN DE CONFIRMATION DE TOUT CE QU'IL LUI
+      // FALLAIT, et deux défauts en découlaient directement :
+      //
+      //  • `numero_prefixe` absent → l'écran affichait « #4 » là où l'email et
+      //    le tableau de bord annonçaient « CC4 ». La fonction d'enrichissement
+      //    existait pourtant juste au-dessus, mais n'était appelée que par
+      //    l'action `list` ;
+      //  • `mode_retrait` et `creneau_id` absents → au retour de Stripe, l'état
+      //    local ayant été reconstruit, l'écran ne retrouvait plus le créneau et
+      //    se croyait en BOUTIQUE. Il annonçait « tu passes quand ça t'arrange,
+      //    pendant les heures d'ouverture » à un client attendu à 17h00 précises.
+      //
+      // Le contexte d'affichage doit se dériver de la commande RELUE, jamais
+      // d'un état d'écran qui ne survit pas à un aller-retour de paiement.
       const { data } = await supabase
         .from('commandes')
-        .select('id, numero_commande, total, date_commande, statut, client_nom')
+        .select('id, numero_commande, numero_prefixe, numero_semaine, total, date_commande, statut, client_nom, mode_retrait, creneau_id, creneau:creneaux(heure_debut, heure_fin)')
         .eq('id', id)
         .maybeSingle()
-      return NextResponse.json({ ok: true, commande: data || null })
+      const commande = data ? enrichirNumeros([data])[0] : null
+      return NextResponse.json({ ok: true, commande })
     }
 
     // ─── opérations "own" : autorisées par le cookie uniquement ────────────

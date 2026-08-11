@@ -15,6 +15,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerPushParExternalId } from '@/lib/onesignal'
+import { referenceCommande } from '@/lib/numero-commande'
 
 const URL_COMMANDES = '/commander?onglet=commandes'
 
@@ -34,7 +35,7 @@ export async function POST(request) {
     const { data: cmd, error } = await supabase
       .from('commandes')
       .select(`
-        id, numero_commande, client_email, mode_retrait,
+        id, numero_commande, numero_prefixe, client_email, mode_retrait,
         commercant:commercants(nom),
         creneau:creneaux(heure_debut, heure_fin)
       `)
@@ -55,7 +56,10 @@ export async function POST(request) {
     }
 
     const nom = cmd.commercant?.nom || 'le commerçant'
-    const num = cmd.numero_commande || ''
+    // ⚠️ La MÊME référence qu'à l'écran, dans l'email et au tableau de bord.
+    // Le numéro nu obligeait le client à deviner que son « #12 » et le « CC12 »
+    // du commerçant désignaient la même commande.
+    const num = referenceCommande(cmd) || ''
     const estLivraison = cmd.mode_retrait === 'livraison'
     const creneauTxt = cmd.creneau?.heure_debut
       ? `${cmd.creneau.heure_debut.slice(0, 5)}${cmd.creneau.heure_fin ? ` – ${cmd.creneau.heure_fin.slice(0, 5)}` : ''}`

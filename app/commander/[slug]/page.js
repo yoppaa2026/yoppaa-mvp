@@ -1250,7 +1250,10 @@ export default function CommanderSlug() {
           body: JSON.stringify({ action: 'get-one', commande_id: commandeId }),
         }).then(r => r.json()).then(j => j?.commande).catch(() => null)
         if (data) {
-          setDerniereCommande({ ...data, numeroSequentiel: data.numero_commande })
+          // ⚠️ `numeroSequentiel: data.numero_commande` FIGEAIT LE NUMÉRO NU.
+          // L'écran annonçait « #4 » quand l'email disait « CC4 ». La référence
+          // est désormais formée par la route, avec le préfixe qu'elle rapatrie.
+          setDerniereCommande({ ...data, numeroSequentiel: data.numeroAffiche || data.numero_commande })
           allerEtape(4)
           // Moment de plus forte intention : le Yopper vient de commander, on l'invite
           // à activer les push pour suivre le statut (prêt à retirer, en livraison...).
@@ -2378,9 +2381,18 @@ export default function CommanderSlug() {
   // VRAIMENT se passer. Elle annonçait « à ton créneau » aux commandes de
   // boutique, qui n'en ont pas, et envoyait chercher en magasin un colis parti
   // par la poste. Voir lib/ecran-retrait.js.
+  //
+  // ⚠️ LE CRÉNEAU ÉTAIT LU DANS L'ÉTAT LOCAL, QUI NE SURVIT PAS À STRIPE.
+  // Au retour du paiement, la page est remontée : `creneauChoisi` est vide.
+  // Le contexte tombait donc sur BOUTIQUE, et une commande de Click & Collect
+  // s'entendait dire « tu passes quand ça t'arrange, pendant les heures
+  // d'ouverture » alors que son email annonçait un retrait à 17h00 précises.
+  // Constaté par Alex le 11/08 sur une commande Kebabistro.
+  //
+  // La commande RELUE fait foi, et elle porte désormais son créneau.
   const contexteConfirmation = contexteRetrait({
     mode_retrait: derniereCommande?.mode_retrait || modeCommande,
-    creneau: creneauChoisi || null,
+    creneau: derniereCommande?.creneau || (derniereCommande?.creneau_id ? { id: derniereCommande.creneau_id } : null) || creneauChoisi || null,
     commercant: { categorie: commercant?.categorie },
   })
   const confirmation = textesConfirmation(contexteConfirmation, { commercantNom: commercant?.nom })

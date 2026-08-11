@@ -70,8 +70,8 @@ export async function POST(request) {
         // Dire « prête » à quelqu'un qui ne se déplace pas ne veut rien dire :
         // ce qu'il attend, c'est de savoir que ça part.
         subject: estLivraison
-          ? `🛵 Ta commande #${cmd.numero_commande || ''} est prête, livraison en préparation`
-          : `🎉 Ta commande #${cmd.numero_commande || ''} est prête chez ${cmd.commercant?.nom || ''}`,
+          ? `🛵 Ta commande #${referenceCommande(cmd) || ''} est prête, livraison en préparation`
+          : `🎉 Ta commande #${referenceCommande(cmd) || ''} est prête chez ${cmd.commercant?.nom || ''}`,
         html,
       })
     } catch (e) {

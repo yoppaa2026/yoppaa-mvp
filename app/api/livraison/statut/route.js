@@ -60,7 +60,7 @@ export async function POST(request) {
       try {
         await envoyerAuCommercant({
           to: cmd.client_email,
-          subject: `🛵 Ta commande #${cmd.numero_commande || ''} arrive`,
+          subject: `🛵 Ta commande #${referenceCommande(cmd) || ''} arrive`,
           html: emailCommandeEnLivraison({
             yopper_prenom: cmd.client_prenom || 'Yopper',
             commercant_nom: cmd.commercant?.nom || 'ton commerçant',
@@ -93,15 +93,20 @@ export async function POST(request) {
     // Clic → onglet Commandes de l'app (où le Yopper confirme la réception).
     const url = '/commander?onglet=commandes'
 
+    // ⚠️ LA NOTIFICATION SAUTAIT LE MODULE que l'email de ce même fichier
+    // utilise pourtant deux lignes plus haut. Le préfixe était déjà chargé,
+    // `referenceCommande` déjà importé : le client recevait « #12 » sur son
+    // écran verrouillé et « LI12 » dans sa boîte mail, pour la même commande.
+    const ref = referenceCommande(cmd) || ''
     const contenu = statut_livraison === 'en_livraison'
       ? {
           headings: '🛵 Ta commande arrive',
-          contents: `${nomCommerce} est parti te livrer ta commande #${cmd.numero_commande || ''}. Prépare-toi à la réceptionner et confirme la réception dans l’app.`,
+          contents: `${nomCommerce} est parti te livrer ta commande #${ref}. Prépare-toi à la réceptionner et confirme la réception dans l’app.`,
           data: { kind: 'livraison_en_route', commande_id: cmd.id },
         }
       : {
           headings: '✅ Commande livrée',
-          contents: `Ta commande #${cmd.numero_commande || ''} de chez ${nomCommerce} a été livrée. Bon appétit !`,
+          contents: `Ta commande #${ref} de chez ${nomCommerce} a été livrée. Bon appétit !`,
           data: { kind: 'livraison_livree', commande_id: cmd.id },
         }
 

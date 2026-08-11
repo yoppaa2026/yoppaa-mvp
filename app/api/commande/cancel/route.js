@@ -22,6 +22,7 @@ import { annulerPush } from '@/lib/onesignal'
 import { recrediterBon } from '@/lib/bons-cadeaux-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { referenceCommande } from '@/lib/numero-commande'
+import { libelleOptions } from '@/lib/options-ligne'
 
 export async function POST(request) {
   try {
@@ -223,14 +224,10 @@ export async function POST(request) {
       `)
       .eq('id', cmd.id)
       .single()
-    function formatOptions(opts) {
-      if (!Array.isArray(opts) || opts.length === 0) return null
-      return opts.map(o => `${o.groupe_nom ? o.groupe_nom + ': ' : ''}${o.valeur_nom || ''}`).join(' · ')
-    }
     const articlesFlat = (details?.articles || []).map(a => ({
       nom:            a.article?.nom || '—',
       quantite:       a.quantite,
-      option_libelle: formatOptions(a.options),
+      option_libelle: libelleOptions(a.options),
       prix_total:     Number(a.prix_unitaire || 0) * Number(a.quantite || 0),
     }))
 

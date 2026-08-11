@@ -21,6 +21,7 @@ import { generateRdvIcs, icsToBase64Attachment } from '../lib/ical.js'
 import { tauxFraisLivraison } from '../lib/tva.js'
 import { ventilerFrais } from '../lib/stripe-frais.js'
 import { contexteRetrait, textesRetrait, textesConfirmation } from '../lib/ecran-retrait.js'
+import { libelleOptions, ESPACE_INSECABLE } from '../lib/options-ligne.js'
 import { emailCommandeExpediee, emailRecapCommandesJour, emailRdvConfirme, emailCommandeConfirmee } from '../lib/resend.js'
 import { partagerCommandes } from '../lib/commandes-vue.js'
 import { restaurerStockVariantes } from '../lib/stock-variantes-server.js'
@@ -363,6 +364,144 @@ const rdvSans = textesConfirmation('rdv', { commercantNom: 'Ciseaux', avecProdui
 verifier('les produits sont annoncés', rdvAvec.some(e => /produits/i.test(e)), rdvAvec.join(' | '))
 verifier('et annoncés comme déjà payés', rdvAvec.some(e => /payés/i.test(e)))
 verifier('sans produits, on n’en parle pas', !rdvSans.some(e => /produits/i.test(e)), rdvSans.join(' | '))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6 ter. LA VERSION CHOISIE — de la vente au comptoir
+// ═══════════════════════════════════════════════════════════════════════════
+// Une taille et un coloris n'ont PAS de colonne à eux : ils vivent dans
+// `options`, le jsonb de la ligne. Le parcours complet est donc testé ici, de
+// la construction de la ligne jusqu'au texte lu par le vendeur.
+const rVariante = construireLignesCommande({
+  panier: [{ id: 'a1', quantite: 1, variante_id: 'v1' }],
+  articlesData, optionsValeurs: [],
+  variantesData: [{ id: 'v1', article_id: 'a1', actif: true, stock: 5, prix: 24.9, axe1_valeur: 'M', axe2_valeur: 'Bleu' }],
+  dealsData: [], commercant, regime: 'emporter', dateCommande: JOUR,
+})
+verifier('une ligne avec version se construit', rVariante.ok, JSON.stringify(rVariante))
+egal('la version est rangée dans options',
+  rVariante.lignes[0].options[0],
+  { groupe_nom: 'Version', valeur_nom: 'M · Bleu', prix_supplement: 0 })
+egal('et la ligne retient QUELLE version', rVariante.lignes[0].variante_id, 'v1')
+
+// Le libellé lu au comptoir, EXÉCUTÉ sur ce que la vente vient de produire.
+egal('libellé de la version vendue',
+  libelleOptions(rVariante.lignes[0].options), `Version${ESPACE_INSECABLE}: M · Bleu`)
+// ⚠️ L'ESPACE AVANT LE DEUX-POINTS EST INSÉCABLE, et l'interroger par son CODE
+// est la seule façon honnête de le vérifier : recopier le caractère dans ce
+// fichier ne prouve rien, il est invisible et redevient une espace ordinaire au
+// premier copier-coller. Trois vérifications sont tombées là-dessus.
+egal('l’espace avant le deux-points est bien insécable', ESPACE_INSECABLE.codePointAt(0), 0x00A0)
+verifier('et c’est bien elle qui sert dans le libellé',
+  libelleOptions([{ groupe_nom: 'Version', valeur_nom: 'M' }]).includes(`${ESPACE_INSECABLE}: `))
+verifier('jamais une espace ordinaire à sa place',
+  !/ : /.test(libelleOptions([{ groupe_nom: 'Version', valeur_nom: 'M' }])))
+egal('rien à dire rend null', libelleOptions(null), null)
+egal('liste vide rend null', libelleOptions([]), null)
+egal('valeurs vides rendent null', libelleOptions([{ groupe_nom: 'Version', valeur_nom: '  ' }]), null)
+egal('sans nom de groupe, la valeur seule',
+  libelleOptions([{ valeur_nom: 'andalouse' }]), 'andalouse')
+egal('plusieurs choix se séparent au point médian',
+  libelleOptions([{ groupe_nom: 'Version', valeur_nom: 'M' }, { groupe_nom: 'Sauce', valeur_nom: 'andalouse' }]),
+  `Version${ESPACE_INSECABLE}: M · Sauce${ESPACE_INSECABLE}: andalouse`)
+
+// ⚠️ ET LA REQUÊTE DOIT RAPPORTER DE QUOI L'ÉCRIRE. L'écran de retrait affichait
+// « 1 × Robe fleurie » sans taille ni coloris : ce n'était pas un défaut
+// d'affichage, la colonne n'était tout simplement pas demandée.
+const srcRouteCommandes = sansCommentaires(
+  readFileSync(new URL('../app/api/yopper/commandes/route.js', import.meta.url), 'utf8'))
+const selectListe = (srcRouteCommandes.match(/commande_articles\([^)]*\)/g) || []).join(' | ')
+verifier('la liste des commandes rapporte la version choisie',
+  /commande_articles\([^)]*\boptions\b/.test(srcRouteCommandes), selectListe)
+verifier('et le nom figé à la vente, pas celui du catalogue',
+  /commande_articles\([^)]*\barticle_nom\b/.test(srcRouteCommandes), selectListe)
+
+// L'écran de retrait s'en sert vraiment. Un `select` enrichi sans affichage ne
+// changerait rien pour le vendeur.
+const srcEcranClient = sansCommentaires(
+  readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8'))
+verifier('l’écran de retrait affiche la version',
+  /libelleOptions\(l\.options\)/.test(srcEcranClient))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6 quater. LE LIEN RENDEZ-VOUS ↔ COMMANDE, vu du commerçant
+// ═══════════════════════════════════════════════════════════════════════════
+// Les mêmes produits apparaissent à DEUX endroits du tableau de bord : dans le
+// rendez-vous, et dans la liste des commandes. Sans référence commune, rien ne
+// dit qu'il s'agit d'une seule vente, et le commerçant en prépare deux.
+const srcDashboard = sansCommentaires(
+  readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+
+verifier('les commandes rapportent le rendez-vous auquel elles appartiennent',
+  /rdv:rdv_reservations!commandes_rdv_reservation_id_fkey\(/.test(srcDashboard))
+verifier('avec de quoi le nommer et le situer',
+  /commandes_rdv_reservation_id_fkey\([^)]*numero_rdv[^)]*date_rdv[^)]*heure_debut/.test(srcDashboard))
+verifier('le rendez-vous rapporte la RÉFÉRENCE de sa commande',
+  /rdv_reservations_commande_id_fkey\([^)]*numero_prefixe/.test(srcDashboard))
+verifier('et la version des produits à préparer',
+  /rdv_reservations_commande_id_fkey\([\s\S]*?commande_articles\([^)]*options/.test(srcDashboard))
+
+// La carte de commande DIT que la commande appartient à un rendez-vous, et que
+// personne ne viendra la chercher au comptoir.
+verifier('la carte de commande annonce le rendez-vous',
+  /Lié à un rendez-vous/.test(srcDashboard))
+verifier('et prévient qu’elle ne sera pas retirée au comptoir',
+  /ne passera pas les chercher/.test(srcDashboard))
+verifier('le bloc du rendez-vous porte la référence de la commande',
+  /referenceCommande\(rdv\.commande\)/.test(srcDashboard))
+
+// ⚠️ DEUX LECTURES, UNE SEULE DÉFINITION. Le tableau de bord relit tout toutes
+// les cinq secondes : un `select` enrichi d'un côté seulement fait clignoter la
+// donnée, présente au chargement puis disparue au relevé suivant.
+const compter = (src, motif) => (src.match(motif) || []).length
+egal('les commandes se lisent partout avec la même définition',
+  compter(srcDashboard, /\.select\(SELECT_COMMANDES\)/g), 2)
+egal('les rendez-vous aussi',
+  compter(srcDashboard, /\.select\(SELECT_RDVS\)/g), 2)
+verifier('aucune requête de commandes ne reste recopiée à la main',
+  !/\.select\(`\*, creneau:creneaux/.test(srcDashboard))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6 quinquies. LA BARRE DU HAUT — la cloche ne sort plus de l'écran
+// ═══════════════════════════════════════════════════════════════════════════
+// Trois onglets (Commandes, Rendez-vous, Paramètres) faisaient déborder la
+// rangée : les deux blocs extrêmes refusaient de rétrécir et `overflow: hidden`
+// mangeait la droite, donc la cloche et la déconnexion.
+verifier('l’identité du commerce est le bloc qui cède',
+  /flexShrink: 1, minWidth: 0, overflow: 'hidden'/.test(srcDashboard))
+verifier('les onglets ne rétrécissent pas',
+  /backdropFilter: 'blur\(8px\)', border: '1px solid rgba\(255,255,255,0\.1\)', flexShrink: 0/.test(srcDashboard))
+// ⚠️ `[\s\S]*?` acceptait un `gap` trouvé DANS UNE AUTRE RÈGLE, plus bas dans la
+// feuille : le test restait vert alors que la rangée n'avait plus d'espacement.
+// `[^}]*?` s'arrête à l'accolade fermante, donc à l'intérieur de la règle.
+verifier('la rangée du haut respire',
+  /\.topbar-inner \{[^}]*?gap: 10px;/.test(srcDashboard))
+verifier('seul l’onglet ouvert porte son mot',
+  /\{actif && label\}/.test(srcDashboard))
+verifier('les autres restent nommés pour qui ne voit pas l’icône',
+  /aria-label=\{titre\}/.test(srcDashboard))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6 sexies. LE RENOUVELLEMENT DE SESSION — un seul à la fois
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ L'accueil lance QUATRE chargements en parallèle. Session endormie, les
+// quatre demandaient un renouvellement avec LE MÊME jeton, à usage unique : le
+// premier le consommait, les trois autres recevaient « Already Used », et la
+// bibliothèque effaçait la session. Le rattrapage fabriquait le problème.
+const srcFetchYopper = sansCommentaires(
+  readFileSync(new URL('../lib/fetch-yopper.js', import.meta.url), 'utf8'))
+verifier('un renouvellement partagé entre les appels concurrents',
+  /let renouvellementEnCours = null/.test(srcFetchYopper))
+verifier('les suivants attendent le même, ils n’en lancent pas un autre',
+  /if \(!renouvellementEnCours\)/.test(srcFetchYopper))
+egal('une seule demande de renouvellement dans tout le fichier',
+  compter(srcFetchYopper, /refreshSession\(/g), 1)
+verifier('et le verrou se relâche une fois la réponse revenue',
+  /\.finally\(\(\) => \{ renouvellementEnCours = null \}\)/.test(srcFetchYopper))
+// Ce qui ne doit JAMAIS revenir : appeler le serveur sans jeton. Le serveur
+// répond alors en visiteur anonyme, et l'écran ne distingue plus un vide
+// légitime d'une session perdue.
+verifier('sans jeton, on n’appelle pas le serveur',
+  /if \(!token\) return reponseSessionPerdue\(\)/.test(srcFetchYopper))
 
 // LE VERBE SE CONJUGUE, et il ne reste JAMAIS seul. « Yoppé ! » tout nu ne dit
 // pas ce qui vient de se passer, au moment précis où le client s'inquiète de

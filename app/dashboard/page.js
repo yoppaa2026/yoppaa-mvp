@@ -11,7 +11,8 @@ import { remplissageCreneaux } from '@/lib/creneaux'
 import BandeDefilante from '@/app/components/BandeDefilante'
 import { partagerCommandes } from '@/lib/commandes-vue'
 import { nouveauxRdvs, idsDes, texteAlerteRdv } from '@/lib/alerte-rdv'
-import { referenceCommande } from '@/lib/numero-commande'
+import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
+import { libelleOptions } from '@/lib/options-ligne'
 import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '@/lib/bons-vendus'
 import { peutMarquerNonRetire, ancienneteCommande } from '@/lib/rappels-retrait'
 
@@ -89,6 +90,25 @@ function getNumeroJour(commandes, commandeId) {
   const commande = commandes.find(c => c.id === commandeId)
   return referenceCommande(commande || {}) || '?'
 }
+
+// ─── Ce que le tableau de bord demande à la base ──────────────────────────────
+//
+// ⚠️ UNE SEULE DÉFINITION POUR DEUX LECTURES. Les commandes comme les rendez-
+// vous sont chargés à l'ouverture ET relus toutes les cinq secondes, par deux
+// `select` recopiés à l'identique. Celui qui gagne une colonne sans l'autre fait
+// clignoter l'écran : la donnée s'affiche au chargement puis disparaît au relevé
+// suivant, et rien n'explique pourquoi.
+//
+// ⚠️ LE HINT `!nom_de_contrainte` EST OBLIGATOIRE. Les deux tables se pointent
+// l'une l'autre (`commandes.rdv_reservation_id` et `rdv_reservations.commande_id`)
+// depuis MIGRATION_RDV_COMMANDE_LIEE : sans lui, PostgREST ne sait pas quelle
+// relation suivre et refuse la requête.
+const SELECT_COMMANDES = `*, creneau:creneaux(*), creneau_livraison:livraison_creneaux(*), commande_articles(*, article:articles(*)), rdv:rdv_reservations!commandes_rdv_reservation_id_fkey(id, numero_rdv, numero_prefixe, date_rdv, heure_debut, heure_fin, statut, prestation:rdv_prestations(nom), praticien:rdv_praticiens(prenom))`
+
+// Côté rendez-vous, la commande liée vient avec sa RÉFÉRENCE et le détail de ses
+// lignes : c'est ce qui permet au commerçant de retrouver le paquet dans son
+// onglet Commandes au lieu de le chercher au jugé.
+const SELECT_RDVS = `*, prestation:rdv_prestations(nom, duree_minutes, prix), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, numero_commande, numero_prefixe, numero_semaine, total, statut, commande_articles(quantite, article_nom, options, article:articles(nom)))`
 
 // ─── Notifications système ────────────────────────────────────────────────────
 let _notifPermission = 'default'
@@ -374,6 +394,37 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
             </span>
           </div>
         </div>
+        {/* ⚠️ CETTE COMMANDE N'EST PEUT-ÊTRE PAS À PRÉPARER POUR LE COMPTOIR, et
+            rien ne le disait. Les produits achetés dans le tunnel de rendez-vous
+            créent une commande ORDINAIRE, qui atterrit dans cette liste au
+            milieu des retraits en magasin. Le commerçant la voyait « prête »,
+            attendait un client qui ne viendrait jamais la chercher, puisqu'on
+            les lui remet au fauteuil, et finissait par la marquer non retirée.
+            Le lien existe en base depuis MIGRATION_RDV_COMMANDE_LIEE ; aucun des
+            deux écrans ne le lisait. */}
+        {commande.rdv && (
+          <div style={{ background: '#F5F3FF', borderRadius: 10, padding: '0.5rem 0.75rem', marginBottom: '0.625rem', border: '1px solid #DDD6FE' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 3 }}>
+              <span style={{ fontSize: '0.6rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                Lié à un rendez-vous
+              </span>
+              {referenceRdv(commande.rdv) && (
+                <span style={{ fontSize: '0.68rem', fontWeight: 900, color: '#fff', background: T.main, borderRadius: 100, padding: '1px 8px', whiteSpace: 'nowrap' }}>
+                  #{referenceRdv(commande.rdv)}
+                </span>
+              )}
+            </div>
+            <p style={{ fontSize: '0.78rem', fontWeight: 700, color: T.ink, margin: 0, lineHeight: 1.4 }}>
+              {commande.rdv.date_rdv ? dateLabel(commande.rdv.date_rdv + 'T00:00:00') : 'Date inconnue'}
+              {commande.rdv.heure_debut ? ` à ${String(commande.rdv.heure_debut).slice(0, 5)}` : ''}
+              {commande.rdv.prestation?.nom ? ` · ${commande.rdv.prestation.nom}` : ''}
+              {commande.rdv.praticien?.prenom ? ` · avec ${commande.rdv.praticien.prenom}` : ''}
+            </p>
+            <p style={{ fontSize: '0.7rem', fontWeight: 700, color: T.muted, margin: '2px 0 0', lineHeight: 1.4 }}>
+              À remettre pendant la prestation. Le client ne passera pas les chercher.
+            </p>
+          </div>
+        )}
         <div style={{ background: T.bg, borderRadius: 10, padding: '0.5rem 0.75rem', marginBottom: '0.625rem' }}>
           {commande.commande_articles?.map(ligne => {
             // Regroupe les options par groupe pour un affichage hiérarchisé
@@ -604,16 +655,36 @@ function CarteRdv({ rdv, onChangerStatut }) {
             annulée ne s'affiche plus, le client ayant été remboursé. */}
         {rdv.commande && !['annulee_client_refund', 'annulee_paiement_ko'].includes(rdv.commande.statut) && (rdv.commande.commande_articles || []).length > 0 && (
           <div style={{ background: '#ECFDF5', borderRadius: 8, padding: '0.5rem 0.75rem', marginBottom: 8, border: '1px solid #A7F3D0' }}>
-            <p style={{ fontSize: '0.62rem', fontWeight: 800, color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>
-              Produits à préparer · déjà payés
-            </p>
-            {rdv.commande.commande_articles.map((l, i) => (
-              <p key={i} style={{ fontSize: '0.78rem', color: '#065F46', lineHeight: 1.4, margin: 0, fontWeight: 700 }}>
-                {l.quantite} × {l.article?.nom || 'Article'}
+            {/* ⚠️ CE BLOC NE DISAIT PAS DE QUELLE COMMANDE IL PARLAIT. Les mêmes
+                produits vivent en double : ici, et dans l'onglet Commandes sous
+                une référence. Sans elle, le commerçant qui voit « 1 × Shampoing »
+                aux deux endroits ne peut pas savoir s'il s'agit d'une seule
+                vente ou de deux, et il en prépare deux. */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+              <p style={{ fontSize: '0.62rem', fontWeight: 800, color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                Produits à préparer · déjà payés
               </p>
-            ))}
+              {referenceCommande(rdv.commande) && (
+                <span style={{ fontSize: '0.68rem', fontWeight: 900, color: '#065F46', background: '#A7F3D055', border: '1px solid #6EE7B7', borderRadius: 100, padding: '1px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  #{referenceCommande(rdv.commande)}
+                </span>
+              )}
+            </div>
+            {rdv.commande.commande_articles.map((l, i) => {
+              const version = libelleOptions(l.options)
+              return (
+                <div key={i} style={{ marginBottom: 2 }}>
+                  <p style={{ fontSize: '0.78rem', color: '#065F46', lineHeight: 1.4, margin: 0, fontWeight: 700 }}>
+                    {l.quantite} × {l.article_nom || l.article?.nom || 'Article'}
+                  </p>
+                  {version && (
+                    <p style={{ fontSize: '0.7rem', color: '#047857', lineHeight: 1.35, margin: 0, fontWeight: 700 }}>{version}</p>
+                  )}
+                </div>
+              )
+            })}
             <p style={{ fontSize: '0.7rem', color: '#047857', margin: '4px 0 0', fontWeight: 800 }}>
-              {Number(rdv.commande.total).toFixed(2)}€ encaissés
+              {Number(rdv.commande.total).toFixed(2)}€ encaissés{nomComplet ? ` · à remettre à ${nomComplet}` : ''}
             </p>
           </div>
         )}
@@ -748,7 +819,7 @@ export default function Dashboard() {
   const chargerCommandes = useCallback(async (id) => {
     const { data } = await supabase
       .from('commandes')
-      .select(`*, creneau:creneaux(*), creneau_livraison:livraison_creneaux(*), commande_articles(*, article:articles(*))`)
+      .select(SELECT_COMMANDES)
       .eq('commercant_id', id)
       .order('created_at', { ascending: true })
     const triees = trierCommandes(data)
@@ -772,7 +843,7 @@ export default function Dashboard() {
         // client arrive. Sans elle, il les découvrirait dans un autre onglet
         // sans faire le lien avec le créneau. Le hint !..._commande_id_fkey
         // lève l'ambiguïté, les deux tables se pointant désormais l'une l'autre.
-        .select('*, prestation:rdv_prestations(nom, duree_minutes, prix), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, total, statut, commande_articles(quantite, prix_unitaire, article:articles(nom)))')
+        .select(SELECT_RDVS)
         .eq('commercant_id', id)
         .is('deleted_at', null)
         .order('date_rdv', { ascending: true })
@@ -958,7 +1029,7 @@ export default function Dashboard() {
     pollingRef.current = setInterval(async () => {
       const { data } = await supabase
         .from('commandes')
-        .select(`*, creneau:creneaux(*), creneau_livraison:livraison_creneaux(*), commande_articles(*, article:articles(*))`)
+        .select(SELECT_COMMANDES)
         .eq('commercant_id', commercant.id)
         // Exclut 'paiement_en_attente' : commande créée mais Stripe Checkout pas
         // encore validé. Sinon la notif "Nouvelle commande !" tomberait trop tôt
@@ -1006,7 +1077,7 @@ export default function Dashboard() {
         // client arrive. Sans elle, il les découvrirait dans un autre onglet
         // sans faire le lien avec le créneau. Le hint !..._commande_id_fkey
         // lève l'ambiguïté, les deux tables se pointant désormais l'une l'autre.
-        .select('*, prestation:rdv_prestations(nom, duree_minutes, prix), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, total, statut, commande_articles(quantite, prix_unitaire, article:articles(nom)))')
+        .select(SELECT_RDVS)
         .eq('commercant_id', commercant.id)
         .is('deleted_at', null)
         .order('date_rdv', { ascending: true })
@@ -1534,10 +1605,25 @@ export default function Dashboard() {
           background-image: radial-gradient(circle at 90% 50%, ${T.mid}33 0%, transparent 60%), radial-gradient(circle at 10% 50%, ${T.light}18 0%, transparent 50%);
           pointer-events: none;
         }
+        /* ⚠️ LA CLOCHE ET LA DÉCONNEXION SORTAIENT DE L'ÉCRAN chez un commerce à
+           TROIS onglets (Commandes, Rendez-vous, Paramètres). Les trois blocs
+           étaient posés en space-between SANS espacement déclaré, et les deux
+           extrêmes refusaient de rétrécir : la somme dépassait la largeur d'un
+           téléphone d'une cinquantaine de pixels, que overflow: hidden avalait
+           en silence, toujours du même côté, la droite.
+
+           Qui cède maintenant : l'identité, et elle seule. Le commerçant connaît
+           le nom de son commerce ; il a besoin de ses onglets et de ses deux
+           boutons.
+
+           ⚠️ ET PAS D'ACCENT GRAVE DANS CE COMMENTAIRE : toute cette feuille de
+           style vit dans un gabarit de chaîne, où le premier accent grave ferme
+           la chaîne et fait échouer l'analyse du fichier entier. */
         .topbar-inner {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          gap: 10px;
           padding: 0.75rem 1rem;
           position: relative;
           z-index: 1;
@@ -1878,7 +1964,7 @@ export default function Dashboard() {
           <div className="topbar">
             <div className="topbar-deco"/>
             <div className="topbar-inner">
-              <div style={{ flexShrink: 0, minWidth: 0 }}>
+              <div style={{ flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}>
                   <div style={{ display: 'flex', gap: 4 }}>
                     {[{c:'#fff',o:0.35},{c:T.light,o:1},{c:T.mid,o:1}].map((d,i) => (
@@ -1891,19 +1977,24 @@ export default function Dashboard() {
                 <p style={{ color: T.light, fontWeight: 600, fontSize: '0.68rem', opacity: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 'clamp(100px, 25vw, 240px)' }}>{commercant?.nom}</p>
               </div>
 
-              <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 3, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              {/* ⚠️ LE LIBELLÉ NE S'AFFICHE QUE SUR L'ONGLET OUVERT. Trois mots
+                  côte à côte prenaient 85 pixels de trop et poussaient la cloche
+                  hors de l'écran. On garde donc le mot là où il sert, pour dire
+                  où l'on est, et les autres se contentent de leur icône, qui
+                  reste nommée pour les lecteurs d'écran et au survol. */}
+              <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 3, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
                 {[
-                  { key: 'commandes', label: 'Cmd',    Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(commercant?.plan, 'commande') },
-                  { key: 'rdv',       label: 'RDV',    Icon: IconRdv,       visible: !!commercant?.rdv_actif || (commercant?.categorie === 'vitrine' && canDo(commercant?.plan, 'rdv')) },
-                  { key: 'config',    label: 'Config', Icon: IconConfig,    visible: true },
-                ].filter(t => t.visible).map(({ key, label, Icon }) => {
+                  { key: 'commandes', label: 'Cmd',    titre: 'Commandes',   Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(commercant?.plan, 'commande') },
+                  { key: 'rdv',       label: 'RDV',    titre: 'Rendez-vous', Icon: IconRdv,       visible: !!commercant?.rdv_actif || (commercant?.categorie === 'vitrine' && canDo(commercant?.plan, 'rdv')) },
+                  { key: 'config',    label: 'Config', titre: 'Paramètres',  Icon: IconConfig,    visible: true },
+                ].filter(t => t.visible).map(({ key, label, titre, Icon }) => {
                   const actif = ongletPrincipal === key
                   const badgeCount = key === 'commandes' ? stats.nouvelles : key === 'rdv' ? statsRdv.aujourdhui : 0
                   return (
-                    <button key={key} onClick={() => setOngletPrincipal(key)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '0.35rem 0.625rem', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.72rem', transition: 'all 0.2s', background: actif ? T.main : 'transparent', color: actif ? '#fff' : T.light, boxShadow: actif ? `0 3px 12px ${T.main}55` : 'none', position: 'relative', whiteSpace: 'nowrap' }}>
+                    <button key={key} onClick={() => setOngletPrincipal(key)} title={titre} aria-label={titre} aria-current={actif ? 'page' : undefined}
+                      style={{ display: 'flex', alignItems: 'center', gap: actif ? 5 : 0, padding: actif ? '0.35rem 0.625rem' : '0.35rem 0.5rem', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.72rem', transition: 'all 0.2s', background: actif ? T.main : 'transparent', color: actif ? '#fff' : T.light, boxShadow: actif ? `0 3px 12px ${T.main}55` : 'none', position: 'relative', whiteSpace: 'nowrap' }}>
                       <Icon size={13} color={actif ? '#fff' : T.light}/>
-                      {label}
+                      {actif && label}
                       {badgeCount > 0 && (
                         <span style={{ position: 'absolute', top: -4, right: -4, background: key === 'rdv' ? '#10B981' : '#DC2626', color: '#fff', fontSize: '0.55rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100, animation: key === 'commandes' ? 'pulse 2s ease infinite' : 'none' }}>{badgeCount}</span>
                       )}

@@ -6,6 +6,7 @@ import { fetchYopper, estSessionPerdue } from '@/lib/fetch-yopper'
 import { libelleRetrait } from '@/lib/libelle-retrait'
 import { referenceCommande } from '@/lib/numero-commande'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
+import { libelleOptions } from '@/lib/options-ligne'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import { canDo, bandeauCategorie } from '@/lib/plans'
 import { STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
@@ -595,14 +596,29 @@ function PickupScreen({ commande, clientPrenom, onConfirm, onFermer }) {
             boulanger, où l'écran doit se lire en une seconde. */}
         {(contexte === RETRAIT_BOUTIQUE || contexte === RETRAIT_RDV) && lignes.length > 0 && (
           <div style={{ marginTop: 14, display: 'inline-block', textAlign: 'left', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 14, padding: '10px 16px', maxWidth: '100%' }}>
-            {lignes.slice(0, 4).map((l, i) => (
-              <p key={i} style={{ fontSize: '0.86rem', fontWeight: 700, color: 'rgba(255,255,255,0.92)', lineHeight: 1.6 }}>
-                {/* Le nom figé à la vente d'abord : c'est ce que le client a
-                    acheté, titre du deal compris. La jointure ne sert que pour
-                    les commandes d'avant la colonne. */}
-                {l.quantite} × {l.article_nom || l.article?.nom || 'Article'}
-              </p>
-            ))}
+            {lignes.slice(0, 4).map((l, i) => {
+              // ⚠️ LA VERSION CHOISIE MANQUAIT, et c'est justement ce que le
+              // vendeur doit lire. « 1 × Robe fleurie » ne lui dit ni la taille
+              // ni le coloris : il sortait le mauvais paquet, ou demandait au
+              // client de reprendre son téléphone pour retrouver sa commande.
+              // Le libellé vit dans `options`, il n'a pas de colonne à lui.
+              const version = libelleOptions(l.options)
+              return (
+                <div key={i} style={{ marginBottom: i < Math.min(lignes.length, 4) - 1 ? 6 : 0 }}>
+                  <p style={{ fontSize: '0.86rem', fontWeight: 700, color: 'rgba(255,255,255,0.92)', lineHeight: 1.45 }}>
+                    {/* Le nom figé à la vente d'abord : c'est ce que le client a
+                        acheté, titre du deal compris. La jointure ne sert que pour
+                        les commandes d'avant la colonne. */}
+                    {l.quantite} × {l.article_nom || l.article?.nom || 'Article'}
+                  </p>
+                  {version && (
+                    <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#C4A0F4', lineHeight: 1.4 }}>
+                      {version}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
             {lignes.length > 4 && (
               <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>et {lignes.length - 4} autre{lignes.length - 4 > 1 ? 's' : ''}…</p>
             )}

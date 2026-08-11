@@ -120,7 +120,15 @@ export async function POST(request) {
         // boutique affiche ce qu'il y a à sortir, le vendeur devant retrouver le
         // bon paquet. Sans elles, la liste resterait vide sans que rien ne le
         // signale, exactement comme une branche morte.
-        .select('*, commercant:commercants(nom, type, categorie), creneau:creneaux(heure_debut, heure_fin), creneau_livraison:livraison_creneaux(heure_debut, heure_fin), commande_articles(quantite, article:articles(nom))')
+        //
+        // ⚠️ ET IL EN MANQUAIT DEUX, DONT CELLE QUI DIT QUOI SORTIR.
+        //  • `options` porte la VERSION choisie (taille, coloris) : elle n'a pas
+        //    de colonne à elle, elle ne vit que là. Sans elle, l'écran annonçait
+        //    « 1 × Robe fleurie » et le vendeur devait deviner la taille.
+        //  • `article_nom` est le nom FIGÉ à la vente. Sans lui, un lot « 3+1 »
+        //    s'affichait sous le nom de l'article de base, et un article retiré
+        //    du catalogue ne s'affichait plus du tout.
+        .select('*, commercant:commercants(nom, type, categorie), creneau:creneaux(heure_debut, heure_fin), creneau_livraison:livraison_creneaux(heure_debut, heure_fin), commande_articles(quantite, article_nom, options, article:articles(nom))')
         .eq('client_email', yopper.email)
         .order('created_at', { ascending: false })
       if (!data || data.length === 0) return NextResponse.json({ ok: true, commandes: [] })

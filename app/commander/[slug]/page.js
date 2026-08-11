@@ -11,7 +11,7 @@ import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurA
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
-import { prochainJourOuvert } from '@/lib/ouverture'
+import { joursRetraitBoutique } from '@/lib/ouverture'
 import { estFoodTruck as estFoodTruckType } from '@/lib/types-commerce'
 import { jourLocalISO, jourSemaineLocal } from '@/lib/timezone'
 import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
@@ -421,7 +421,10 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 }
 
 // ─── ArticleRow ───────────────────────────────────────────────────────────────
-function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null }) {
+// `jourRetrait` ('YYYY-MM-DD' ou null) : le jour SOUHAITÉ en boutique. Quand il
+// est fourni, il prime sur `joursDispos[jourSelectionne]`, qui est le sélecteur
+// de l'alimentaire et ne concerne pas une boutique.
+function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null }) {
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
   const hasVariantes = !!article.gere_variantes && variantes.length > 0
@@ -433,7 +436,9 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
   const stocksArticle = stocksJour[article.id] || {}
   const hasStockJour = Object.keys(stocksArticle).length > 0
 
-  const jourDateSelectionne = joursDispos[jourSelectionne]?.date || new Date()
+  const jourDateSelectionne = jourRetrait
+    ? new Date(`${jourRetrait}T12:00:00Z`)
+    : (joursDispos[jourSelectionne]?.date || new Date())
   const jourNomSelectionne = JOURS[jourIdx(jourDateSelectionne)]
 
   // Logique unifiée avec getStockMax :
@@ -959,6 +964,9 @@ export default function CommanderSlug() {
   const [modeCommande, setModeCommande] = useState('retrait')
   // ─── Boutique détail (Module 2 étape 5) : retrait boutique | expédition ───
   const [modeBoutique, setModeBoutique] = useState('retrait')
+  // Le jour de retrait SOUHAITÉ par le client, en boutique de détail. Indice
+  // dans la liste rendue par `joursRetraitBoutique`. Zéro = le premier proposé.
+  const [jourBoutiqueChoisi, setJourBoutiqueChoisi] = useState(0)
   const [livraisonConfig, setLivraisonConfig] = useState(null)
   const [joursDisposLivraison, setJoursDisposLivraison] = useState([])
   // M5 food truck : emplacements actifs (ponctuels + tournée hebdo)
@@ -1124,6 +1132,53 @@ export default function CommanderSlug() {
   const [fermetures, setFermetures] = useState([])
   const [derniereCommande, setDerniereCommande] = useState(null)
   const [isDesktop, setIsDesktop] = useState(false)
+
+  // ─── Monde BOUTIQUE (retrait libre / expédition, sans créneau) : catégorie
+  // détail ET, depuis le 31/07, les services (vitrine) qui vendent leurs
+  // produits au salon. Même machine, mêmes colonnes boutique_* en base.
+  //
+  // ⚠️ CE BLOC EST REMONTÉ ICI, ET CE N'EST PAS COSMÉTIQUE. Il vivait six cents
+  // lignes plus bas, alors que le chargement des stocks en a besoin. Le laisser
+  // en place aurait obligé à citer `estDetail` dans une liste de dépendances
+  // évaluée AVANT sa déclaration : zone morte temporelle, et page blanche au
+  // rendu. Le défaut est invisible au lint comme au build (vécu le 09/08).
+  const estDetail = commercant?.categorie === 'detail' || commercant?.categorie === 'vitrine'
+  const boutiqueModes = estDetail
+    ? (commercant?.boutique_mode_vente === 'les_deux' ? ['retrait', 'expedition'] : [commercant?.boutique_mode_vente || 'retrait'])
+    : []
+
+  // ⚠️ LE JOUR DE RETRAIT SOUHAITÉ, MAINTENANT CHOISI PAR LE CLIENT.
+  //
+  // Il n'y avait ici qu'une VALEUR UNIQUE, calculée dans son coin, pendant que
+  // l'écran affichait le sélecteur de jours de l'ALIMENTAIRE — construit sur les
+  // créneaux, qu'une boutique n'a pas. Résultat constaté par Alex le 11/08 :
+  // le sélecteur ne proposait que « Demain 12 août » alors que la boutique était
+  // ouverte ce mardi-là jusqu'à 18h30, et la commande partait quand même datée
+  // du 11. Deux vérités contradictoires dans le même écran, et un sélecteur qui
+  // ne pilotait rien.
+  //
+  // Décision d'Alex : le client indique un jour SOUHAITÉ, le commerçant
+  // confirme. Le jour même n'est proposé que s'il reste au commerçant le temps
+  // de préparer, délai qu'il règle lui-même.
+  const maintenantMinutes = (() => {
+    const d = new Date()
+    return d.getHours() * 60 + d.getMinutes()
+  })()
+  const joursBoutique = estDetail
+    ? joursRetraitBoutique({
+        horairesDetail: commercant?.horaires_detail,
+        fermetures,
+        depuis: jourLocalISO(new Date()),
+        maintenant: maintenantMinutes,
+        delaiHeures: commercant?.boutique_delai_heures,
+        horizon: 7,
+      })
+    : []
+  // Le jour retenu : celui que le client a choisi, à défaut le premier proposé.
+  const jourRetraitBoutique = estDetail
+    ? (joursBoutique[jourBoutiqueChoisi]?.jour || joursBoutique[0]?.jour || null)
+    : null
+  const retraitAujourdhui = jourRetraitBoutique === jourLocalISO(new Date())
 
   const [categorieActive, setCategorieActive] = useState(null)
   const [catBarVisible, setCatBarVisible] = useState(false)
@@ -1494,14 +1549,20 @@ export default function CommanderSlug() {
     const galerieAutres = (photosData||[]).filter(p => p.type !== 'couverture' && p.url)
     // Deals dont la fenêtre couvre aujourd'hui (date ponctuelle ou intervalle).
     // La règle vit dans lib/deals.js, partagée avec le calcul serveur.
-    const aujourdhuiDate = new Date().toISOString().slice(0, 10)
+    // ⚠️ LE JOUR SE LIT EN HEURE BELGE, PAS EN UTC. `toISOString()` renvoie le
+    // jour PRÉCÉDENT entre minuit et 2h du matin chez nous : une friterie ou une
+    // pizzeria, ouvertes à ces heures-là, affichaient le deal de la veille et
+    // masquaient celui du jour. Corrigé sur l'accueil le 10/08, la fiche avait
+    // été oubliée. Attrapé par le test qui interdit ces clés de jour en UTC.
+    const aujourdhuiDate = jourLocalISO(new Date())
     const dealsActifs = (dealsData || []).filter(d => dealActifCeJour(d, aujourdhuiDate))
     // Deal « vedette » affiché en bandeau : le premier deal générique, sinon le
     // premier deal tout court pour ne pas laisser le bandeau vide.
     const deal = dealsActifs.find(d => !d.article_id && !d.categorie_cible) || dealsActifs[0] || null
 
     // Filtrer les actus actives aujourd'hui (sur la fenêtre date_debut/date_fin)
-    const aujourdhui = new Date().toISOString().slice(0, 10)
+    // Même piège, même correctif : les actus se filtrent sur le jour BELGE.
+    const aujourdhui = jourLocalISO(new Date())
     const actusActives = (actualitesData || []).filter(a => {
       const dStart = a.date_debut ? a.date_debut.slice(0,10) : null
       const dEnd   = a.date_fin   ? a.date_fin.slice(0,10)   : null
@@ -1662,9 +1723,12 @@ export default function CommanderSlug() {
   // client soit cohérent avec ce que voit le commerçant sur son dashboard.
   const chargerCommandesJour = useCallback(async () => {
     if (!commercant) return
-    const jourDate = joursDispos[jourSelectionne]?.date || new Date()
-    const d = new Date(jourDate)
-    const dateStr = jourLocalISO(d)
+    // ⚠️ EN BOUTIQUE, LE STOCK SE LISAIT AU MAUVAIS JOUR. Le sélecteur affiché
+    // était celui de l'alimentaire, décalé d'un jour par rapport à la date
+    // réellement commandée : on interrogeait le 12 pour une commande du 11.
+    const dateStr = estDetail
+      ? (jourRetraitBoutique || jourLocalISO(new Date()))
+      : jourLocalISO(new Date(joursDispos[jourSelectionne]?.date || new Date()))
 
     // Une seule fonction serveur remplace l'ancienne approche en deux temps,
     // qui lisait les commandes puis leurs lignes. Elle renvoie directement les
@@ -1679,7 +1743,7 @@ export default function CommanderSlug() {
       map[r.article_id] = Number(r.quantite) || 0
     })
     setCommandesParArticleJour(map)
-  }, [commercant, joursDispos, jourSelectionne])
+  }, [commercant, joursDispos, jourSelectionne, estDetail, jourRetraitBoutique])
 
   // Recharge à chaque changement de jour ou de commerçant
   useEffect(() => {
@@ -1985,7 +2049,11 @@ export default function CommanderSlug() {
     const article = articles.find(a => a.id === articleId)
     if (!article) return Infinity
     const stocksArticle = stocksJour[articleId] || {}
-    const jourDateSelectionne = joursDispos[jourSelectionne]?.date || new Date()
+    // ⚠️ EN BOUTIQUE, C'EST LE JOUR SOUHAITÉ QUI COMPTE, pas le jour affiché par
+    // le sélecteur de l'alimentaire, décalé d'une journée.
+    const jourDateSelectionne = estDetail && jourRetraitBoutique
+      ? new Date(`${jourRetraitBoutique}T12:00:00Z`)
+      : (joursDispos[jourSelectionne]?.date || new Date())
     const jourNomSelectionne = JOURS[jourIdx(jourDateSelectionne)]
     const entryDay = stocksArticle[jourNomSelectionne]
     const dejaCommande = commandesParArticleJour[articleId] || 0
@@ -2343,26 +2411,7 @@ export default function CommanderSlug() {
   const slotsLivraison = joursDisposLivraison.flatMap(j => (j.creneaux || []).map(cr => ({ ...cr, _date: j.date, _jourLabel: j.label })))
   const cpDansZone = !!livraisonConfig?.codes_postaux?.includes((adresseLivraison.code_postal || '').trim())
   const livraisonFormOk = !!(adresseLivraison.rue.trim() && adresseLivraison.code_postal.trim() && adresseLivraison.ville.trim() && cpDansZone && creneauLivraisonChoisi)
-  // ─── Monde BOUTIQUE (retrait libre / expédition, sans créneau) : catégorie
-  // détail ET, depuis le 31/07, les services (vitrine) qui vendent leurs
-  // produits au salon. Même machine, mêmes colonnes boutique_* en base.
-  const estDetail = commercant?.categorie === 'detail' || commercant?.categorie === 'vitrine'
-  const boutiqueModes = estDetail
-    ? (commercant?.boutique_mode_vente === 'les_deux' ? ['retrait', 'expedition'] : [commercant?.boutique_mode_vente || 'retrait'])
-    : []
   const modeBoutiqueEff = estDetail ? (boutiqueModes.includes(modeBoutique) ? modeBoutique : boutiqueModes[0]) : null
-  // ⚠️ LE JOUR OÙ LE CLIENT POURRA VRAIMENT VENIR CHERCHER.
-  // La boutique n'a pas de créneau : rien ne l'empêchait d'annoncer un retrait
-  // « aujourd'hui » un dimanche, ou en plein congé du commerçant. On cherche
-  // donc le premier jour réellement ouvert, horaires ET fermetures comprises.
-  const jourRetraitBoutique = estDetail
-    ? prochainJourOuvert({
-        horairesDetail: commercant?.horaires_detail,
-        fermetures,
-        depuis: jourLocalISO(new Date()),
-      })
-    : null
-  const retraitAujourdhui = jourRetraitBoutique === jourLocalISO(new Date())
 
   const cpExpe = (adresseLivraison.code_postal || '').trim()
   const zoneExpe = Array.isArray(commercant?.boutique_expedition_cp) ? commercant.boutique_expedition_cp : []
@@ -3210,8 +3259,14 @@ export default function CommanderSlug() {
                 )
               })()}
 
-              {/* Sélecteur de jour de retrait - pilote les stocks affichés et les créneaux dispo */}
-              {peutCommander && joursDispos.length > 0 && (
+              {/* ⚠️ CE SÉLECTEUR EST CELUI DE L'ALIMENTAIRE, et il n'était pas
+                  masqué en boutique — seul oubli parmi les blocs voisins, qui
+                  testent tous `!estDetail`. Construit sur les CRÉNEAUX, qu'une
+                  boutique n'a pas, il n'y proposait que « Demain » et ne
+                  pilotait rien : la commande partait datée d'aujourd'hui. Il
+                  faussait quand même l'affichage des STOCKS, lus au jour
+                  affiché plutôt qu'au jour commandé. */}
+              {!estDetail && peutCommander && joursDispos.length > 0 && (
                 <div style={{ background: '#fff', borderBottom: `1px solid ${T.pale}`, padding: '0.625rem 1rem 0.5rem' }}>
                   <p style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.65rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -3227,6 +3282,38 @@ export default function CommanderSlug() {
                       return (
                         <button key={idx} onClick={() => changerJour(idx)}
                           style={{ flexShrink: 0, padding: '0.4rem 0.875rem', borderRadius: 12, border: `1.5px solid ${actif ? T.main : T.pale}`, background: actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: actif ? '#fff' : T.muted, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'center', lineHeight: 1.3, boxShadow: actif ? `0 4px 14px ${T.main}33` : 'none', transition: 'all 0.15s' }}>
+                          <div style={{ fontWeight: 800 }}>{jour.label}</div>
+                          <div style={{ fontSize: '0.65rem', opacity: actif ? 0.85 : 0.6, marginTop: 1 }}>{dateStr}</div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ─── Jour de retrait SOUHAITÉ, en boutique de détail ───────
+                  Bâti sur les HORAIRES, pas sur des créneaux qui n'existent
+                  pas. Le jour même n'apparaît que s'il reste au commerçant le
+                  temps de préparer, délai qu'il règle lui-même.
+                  ⚠️ Le mot « souhaité » n'est pas une précaution de langage :
+                  la commande n'est prête qu'une fois le commerçant l'ayant
+                  confirmée, et le client ne doit jamais se déplacer avant. */}
+              {estDetail && peutCommander && modeBoutiqueEff === 'retrait' && joursBoutique.length > 0 && (
+                <div style={{ background: '#fff', borderBottom: `1px solid ${T.pale}`, padding: '0.625rem 1rem 0.5rem' }}>
+                  <p style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.65rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="5" width="18" height="16" rx="2"/>
+                      <path d="M3 9h18M8 3v4M16 3v4"/>
+                    </svg>
+                    Je souhaite récupérer le
+                  </p>
+                  <div data-scroll-x style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+                    {joursBoutique.map((jour, idx) => {
+                      const actif = jourBoutiqueChoisi === idx
+                      const dateStr = new Date(`${jour.jour}T12:00:00Z`).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })
+                      return (
+                        <button key={jour.jour} onClick={() => setJourBoutiqueChoisi(idx)}
+                          style={{ flexShrink: 0, padding: '0.4rem 0.875rem', borderRadius: 12, border: `1.5px solid ${actif ? T.main : T.pale}`, background: actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: actif ? '#fff' : T.muted, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'center', lineHeight: 1.3, boxShadow: actif ? `0 4px 14px ${T.main}33` : 'none', transition: 'all 0.15s', textTransform: 'capitalize' }}>
                           <div style={{ fontWeight: 800 }}>{jour.label}</div>
                           <div style={{ fontSize: '0.65rem', opacity: actif ? 0.85 : 0.6, marginTop: 1 }}>{dateStr}</div>
                         </button>
@@ -3277,7 +3364,7 @@ export default function CommanderSlug() {
                           <div key={a.id}>
                             <ArticleRow article={a} panier={panier} optionsParArticle={optionsParArticle}
                               ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
-                              stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
+                              stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
                               onCommanderDemain={commanderPourJour}
                               getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')}
                               photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
@@ -3308,7 +3395,7 @@ export default function CommanderSlug() {
                         <div key={a.id}>
                           <ArticleRow article={a} panier={panier} optionsParArticle={optionsParArticle}
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
-                            stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos}
+                            stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
                             onCommanderDemain={commanderPourJour}
                             getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')}
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
@@ -3453,9 +3540,29 @@ export default function CommanderSlug() {
                   </div>
                   <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>Étape 2 · {commercant.nom}</p>
                 </div>
+                {/* ⚠️ « CHOISIS TON CRÉNEAU » S'AFFICHAIT SUR UNE BOUTIQUE, qui
+                    n'en a aucun. Le titre suit maintenant ce que le client a
+                    réellement à faire : un créneau en alimentaire, une adresse
+                    pour un colis, rien de plus qu'un retrait en boutique. */}
                 <h2 style={{ fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-0.6px', margin: 0, lineHeight: 1.1, position: 'relative' }}>
-                  <span style={{ color: '#fff' }}>Choisis ton </span>
-                  <span style={{ color: T.light }}>créneau</span>
+                  {estDetail ? (
+                    modeBoutiqueEff === 'expedition' ? (
+                      <>
+                        <span style={{ color: '#fff' }}>Où t&rsquo;envoyer ton </span>
+                        <span style={{ color: T.light }}>colis</span>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ color: '#fff' }}>Ton </span>
+                        <span style={{ color: T.light }}>retrait</span>
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <span style={{ color: '#fff' }}>Choisis ton </span>
+                      <span style={{ color: T.light }}>créneau</span>
+                    </>
+                  )}
                 </h2>
               </div>
 
@@ -3536,15 +3643,27 @@ export default function CommanderSlug() {
                             {commercant?.nom} est fermé pour le moment et ne reprend pas les retraits dans les deux prochaines semaines. Reviens un peu plus tard 🟣
                           </p>
                         ) : (
+                        // ⚠️ « À RÉCUPÉRER DÈS AUJOURD'HUI » ÉTAIT UNE PROMESSE
+                        // QUE PERSONNE NE TENAIT. La commande n'est prête que
+                        // lorsque le commerçant l'a préparée et l'a marquée
+                        // comme telle : le client pouvait se présenter dans la
+                        // demi-heure et repartir les mains vides.
+                        // Décision d'Alex : le jour est SOUHAITÉ, le commerçant
+                        // confirme, et on le dit franchement.
+                        <>
                         <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 600, lineHeight: 1.5, margin: 0 }}>
                           <strong style={{ color: T.main }}>
                             {retraitAujourdhui
-                              ? `À récupérer dès aujourd'hui`
-                              : `À récupérer à partir de ${dateLisibleFr(jourRetraitBoutique)}`}
+                              ? 'Retrait souhaité aujourd’hui'
+                              : `Retrait souhaité ${dateLisibleFr(jourRetraitBoutique)}`}
                           </strong>{' '}
                           {vitrine ? 'sur place' : 'en boutique'}, aux heures d&rsquo;ouverture.
                           {commercant?.boutique_retrait_paiement === 'magasin' ? ' Tu paies au comptoir, au retrait.' : ''}
                         </p>
+                        <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 600, lineHeight: 1.45, margin: '6px 0 0' }}>
+                          {commercant?.nom} prépare ta commande et te prévient dès qu&rsquo;elle t&rsquo;attend. <strong style={{ color: T.deep }}>Ne te déplace pas avant.</strong>
+                        </p>
+                        </>
                         )}
                       </div>
                     ) : (

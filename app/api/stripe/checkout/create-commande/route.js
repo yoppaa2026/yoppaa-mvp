@@ -38,7 +38,8 @@ import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
 import { chargerBonValide, debiterBon } from '@/lib/bons-cadeaux-server'
 import { tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
 import { calculerCapaciteCreneau, creneauCommandable, STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
-import { brusselsInstant } from '@/lib/timezone'
+import { brusselsInstant, jourBruxelles, minutesBruxelles } from '@/lib/timezone'
+import { joursRetraitBoutique } from '@/lib/ouverture'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 import { normaliserEmail } from '@/lib/email-normalise'
@@ -103,7 +104,9 @@ export async function POST(request) {
     // ─── 2) Récup commerçant + Stripe Connect prérequis ────────────────────
     const { data: commercant, error: errC } = await supabase
       .from('commercants')
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite')
+      // `horaires_detail` et `boutique_delai_heures` : la date de retrait d'une
+      // boutique n'était vérifiée NULLE PART côté serveur (voir plus bas).
+      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures')
       .eq('id', commercant_id)
       .single()
     if (errC || !commercant) {
@@ -126,6 +129,43 @@ export async function POST(request) {
       }
       if (estExpedition && surPlace) {
         return NextResponse.json({ ok: false, error: 'Une commande expédiée se paie en ligne.' }, { status: 400 })
+      }
+
+      // ⚠️ LA DATE DE RETRAIT N'ÉTAIT VÉRIFIÉE NULLE PART CÔTÉ SERVEUR. Seul
+      // son FORMAT l'était. Cette route ne relisait ni les horaires ni les
+      // fermetures : le serveur faisait confiance à l'écran. Un onglet resté
+      // ouvert depuis la veille, ou une requête fabriquée, faisait tomber une
+      // commande à retirer un dimanche ou en plein congé.
+      //
+      // C'est exactement le trou que `creneauCommandable` bouche pour
+      // l'alimentaire depuis le 10/08. La boutique n'a pas de créneau, donc
+      // rien ne la protégeait.
+      //
+      // ⚠️ Un COLIS n'a pas de jour de retrait : il part quand le commerçant
+      // l'emballe. On ne lui applique aucune de ces règles.
+      if (estRetraitBoutique) {
+        const { data: fermeturesCommercant } = await supabase
+          .from('fermetures_exceptionnelles')
+          .select('date_debut, date_fin')
+          .eq('commercant_id', commercant.id)
+        // ⚠️ HEURE BELGE, PAS CELLE DU SERVEUR. Vercel tourne en temps
+        // universel : `jourLocalISO(new Date())` y rendrait la veille entre
+        // minuit et 2h du matin, et refuserait une commande parfaitement
+        // valable. C'est le défaut du food truck, transposé au serveur.
+        const joursOk = joursRetraitBoutique({
+          horairesDetail: commercant.horaires_detail,
+          fermetures: fermeturesCommercant || [],
+          depuis: jourBruxelles(),
+          maintenant: minutesBruxelles(),
+          delaiHeures: commercant.boutique_delai_heures,
+          horizon: 14,
+        })
+        if (!joursOk.some(j => j.jour === date_commande)) {
+          return NextResponse.json({
+            ok: false,
+            error: `${commercant.nom} ne peut pas préparer ta commande pour cette date. Choisis un autre jour de retrait.`,
+          }, { status: 400 })
+        }
       }
     }
     // Chemins C&C / livraison (créneaux) : réservés à la catégorie alimentaire.

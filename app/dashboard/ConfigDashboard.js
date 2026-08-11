@@ -4309,7 +4309,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
         // passage ses infos pratiques, qui s'affichent sur ses DEUX fiches et
         // dans l'email de confirmation de rendez-vous. Rien ne le prévenait.
         infos_pratiques: data.infos_pratiques || '',
-        horaires: data.horaires || '', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '' })
+        horaires: data.horaires || '', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '', boutique_delai_heures: data.boutique_delai_heures ?? 2 })
       setLogoPreview(data.logo_url || null)
     }
     setLoading(false)
@@ -4341,7 +4341,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
   async function saveProfil() {
     if (!form.nom.trim()) return toast('Le nom est obligatoire', 'error')
     setSaving(true)
-    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, site_web: (form.site_web || '').trim() || null, description: form.description.trim() || null, infos_pratiques: (form.infos_pratiques || '').trim() || null, horaires: form.horaires.trim() || null, horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des) }).eq('id', commercantId)
+    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, site_web: (form.site_web || '').trim() || null, description: form.description.trim() || null, infos_pratiques: (form.infos_pratiques || '').trim() || null, horaires: form.horaires.trim() || null, horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des), boutique_delai_heures: Math.max(0, parseInt(form.boutique_delai_heures, 10) || 0) }).eq('id', commercantId)
     setSaving(false)
     if (error) {
       console.error('[ConfigDashboard.saveProfil]', error)
@@ -4744,6 +4744,37 @@ function TabProfil({ commercantId, toast, onSaved }) {
                     )
                   })}
                 </div>
+              </div>
+            )}
+
+            {/* ─── Délai de préparation ────────────────────────────────────
+                ⚠️ CE RÉGLAGE N'EXISTAIT PAS, et c'est ce qui empêchait de
+                proposer honnêtement un retrait le jour même. Tous les délais de
+                Yoppaa étaient attachés aux créneaux ; une boutique n'en a pas,
+                donc aucun ne s'appliquait à elle. Le client voyait « à récupérer
+                dès aujourd'hui » et pouvait se présenter dans la demi-heure. */}
+            {(form.boutique_mode_vente === 'retrait' || form.boutique_mode_vente === 'les_deux') && (
+              <div style={{ marginBottom: 12 }}>
+                <p style={{ ...s.label, marginBottom: 4 }}>Délai de préparation</p>
+                <p style={{ fontSize: 11, color: T.muted, marginBottom: 8, lineHeight: 1.5 }}>
+                  Le temps qu&rsquo;il te faut pour préparer une commande. Le retrait du jour même
+                  n&rsquo;est proposé que s&rsquo;il te reste ce délai avant ta fermeture.
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button type="button" style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px' }}
+                    onClick={() => setForm(p => ({ ...p, boutique_delai_heures: Math.max(0, Number(p.boutique_delai_heures ?? 2) - 1) }))}>−</button>
+                  <Input type="number" min={0} value={form.boutique_delai_heures ?? 2}
+                    onChange={e => setForm(p => ({ ...p, boutique_delai_heures: e.target.value }))}
+                    style={{ width: 70, textAlign: 'center' }} />
+                  <button type="button" style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px' }}
+                    onClick={() => setForm(p => ({ ...p, boutique_delai_heures: Number(p.boutique_delai_heures ?? 2) + 1 }))}>+</button>
+                  <span style={{ fontSize: 12, color: T.muted, fontWeight: 700 }}>heures</span>
+                </div>
+                <p style={{ fontSize: 11, color: T.main, marginTop: 6, fontWeight: 600, lineHeight: 1.5 }}>
+                  À zéro, le retrait du jour même reste proposé jusqu&rsquo;à ta fermeture.
+                  Dans tous les cas, c&rsquo;est <strong>toi</strong> qui confirmes : le client est prévenu
+                  quand tu marques sa commande prête, et on lui dit de ne pas se déplacer avant.
+                </p>
               </div>
             )}
 

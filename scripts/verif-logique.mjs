@@ -30,7 +30,8 @@ import { statutCreneaux, pastilleCreneaux, prochainJourAvecCreneaux, aDesCreneau
 import { nouveauxRdvs, idsDes, texteAlerteRdv } from '../lib/alerte-rdv.js'
 import { messagePanierRepris } from '../lib/panier-repris-message.js'
 import { normaliserEmail, memeEmail } from '../lib/email-normalise.js'
-import { ouvertLe, prochainJourOuvert } from '../lib/ouverture.js'
+import { ouvertLe, prochainJourOuvert, joursRetraitBoutique, limiteRetraitCeJour } from '../lib/ouverture.js'
+import { jourBruxelles, minutesBruxelles } from '../lib/timezone.js'
 import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '../lib/bons-vendus.js'
 import { jourSemaineDe } from '../lib/creneaux.js'
 import {
@@ -535,12 +536,19 @@ verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === n
   // Et l'écran doit s'appuyer dessus, sinon rien de tout ça ne sert.
   const fiche = readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8')
     .split(/\r?\n/).map(l => l.replace(/(^|\s)\/\/.*/, '$1')).join('\n')
-  verifier('la boutique cherche son prochain jour ouvert', /prochainJourOuvert\(\{/.test(fiche))
+  // ⚠️ CES DEUX TESTS VERROUILLAIENT L'ANCIEN COMPORTEMENT. Ils exigeaient
+  // `prochainJourOuvert` et le libellé « À récupérer », c'est-à-dire la valeur
+  // unique calculée dans son coin et la phrase qui promettait un retrait
+  // immédiat. Ils seraient restés verts en interdisant la correction : un test
+  // se mesure sur le DÉFAUT qu'il empêche, jamais sur la formulation d'hier.
+  // Même piège que `verif-fiche` le 10/08.
+  verifier('la boutique construit une LISTE de jours, plus une valeur unique',
+    /joursRetraitBoutique\(\{/.test(fiche))
   verifier('le retrait n\'est plus accepté sans condition',
     !/modeBoutiqueEff === 'expedition' \? expeFormOk : true/.test(fiche))
   verifier('la date de commande suit ce jour, pas aujourd\'hui',
     /jourRetraitBoutique \|\| jourLocalISO\(new Date\(\)\)/.test(fiche))
-  verifier('et le client lit la date AVANT de payer', /À récupérer/.test(fiche))
+  verifier('et le client lit la date AVANT de payer', /Retrait souhaité/.test(fiche))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -876,6 +884,177 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
   verifier('plus aucun seuil de 36 pixels dans le composant',
     !/hauteur\s*[<>]=?\s*36/.test(agenda),
     (agenda.match(/.*hauteur\s*[<>]=?\s*36.*/) || [])[0])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE JOUR DE RETRAIT D'UNE BOUTIQUE DE DÉTAIL (Alex, 11/08)
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LA BOUTIQUE AFFICHAIT LE SÉLECTEUR DE L'ALIMENTAIRE. Il se construit à
+// partir des CRÉNEAUX ; une boutique n'en a aucun. « Aujourd'hui » n'était donc
+// jamais poussé, et seul « Demain » apparaissait — alors que La Boutique Témoin
+// était ouverte ce mardi-là de 10h00 à 18h30 et qu'il était 13h30.
+//
+// Pire : ce sélecteur ne pilotait RIEN. La date envoyée venait d'un chemin
+// séparé et valait aujourd'hui. L'écran annonçait le 12, l'email, la fiche du
+// client et le tableau de bord disaient tous le 11.
+{
+  // Mardi 11 août 2026, boutique ouverte du lundi au samedi 10h00-18h30.
+  const MARDI = '2026-08-11'
+  const h = (heure) => parseInt(heure.slice(0, 2), 10) * 60 + parseInt(heure.slice(3, 5), 10)
+  const semaine = {
+    lundi:    { ouvert: true, debut: '10:00', fin: '18:30' },
+    mardi:    { ouvert: true, debut: '10:00', fin: '18:30' },
+    mercredi: { ouvert: true, debut: '10:00', fin: '18:30' },
+    jeudi:    { ouvert: true, debut: '10:00', fin: '18:30' },
+    vendredi: { ouvert: true, debut: '10:00', fin: '18:30' },
+    samedi:   { ouvert: true, debut: '10:00', fin: '18:30' },
+    dimanche: { ouvert: false },
+  }
+  const jours = (maintenant, extra = {}) => joursRetraitBoutique({
+    horairesDetail: semaine, fermetures: [], depuis: MARDI,
+    maintenant, delaiHeures: 2, horizon: 4, ...extra,
+  }).map(j => j.label)
+
+  // ⚠️ LE CAS EXACT D'ALEX : mardi 13h30, boutique ouverte jusqu'à 18h30, deux
+  // heures de préparation. Il reste largement le temps.
+  egal('mardi 13h30, aujourd\'hui est proposé', jours(h('13:30'))[0], "Aujourd'hui")
+  verifier('et ce n\'est plus la seule proposition', jours(h('13:30')).length > 1,
+    jours(h('13:30')).join(' | '))
+
+  // À 17h00, il ne reste qu'une heure et demie : moins que le délai réglé.
+  egal('à 17h00, plus le temps de préparer', jours(h('17:00'))[0], 'Demain')
+  // Pile à la limite : 16h30, il reste exactement les deux heures.
+  egal('à 16h30 pile, aujourd\'hui tient encore', jours(h('16:30'))[0], "Aujourd'hui")
+  egal('une minute plus tard, non', jours(h('16:31'))[0], 'Demain')
+  // Après la fermeture, évidemment.
+  egal('à 21h00, demain', jours(h('21:00'))[0], 'Demain')
+  // Avant l'ouverture, la journée est entière devant soi.
+  egal('à 08h00, aujourd\'hui', jours(h('08:00'))[0], "Aujourd'hui")
+
+  // ⚠️ SANS HEURE COURANTE, ON NE PROPOSE PAS LE JOUR MÊME. Mieux vaut rater
+  // une vente que promettre un retrait qu'on ne sait pas tenir.
+  egal('sans heure connue, jamais aujourd\'hui', jours(undefined)[0], 'Demain')
+  egal('ni avec une heure illisible', jours(NaN)[0], 'Demain')
+
+  // Le dimanche est fermé : il ne doit apparaître nulle part.
+  const suite = joursRetraitBoutique({
+    horairesDetail: semaine, fermetures: [], depuis: '2026-08-15',  // samedi
+    maintenant: h('11:00'), delaiHeures: 2, horizon: 4,
+  })
+  egal('le dimanche fermé est sauté', suite.map(j => j.jour),
+    ['2026-08-15', '2026-08-17', '2026-08-18'])
+  egal('et le lendemain du samedi se nomme par son jour', suite[1].label, 'lundi')
+
+  // Les congés priment sur la grille hebdomadaire.
+  const avecConges = joursRetraitBoutique({
+    horairesDetail: semaine,
+    fermetures: [{ date_debut: '2026-08-12', date_fin: '2026-08-13' }],
+    depuis: MARDI, maintenant: h('11:00'), delaiHeures: 2, horizon: 5,
+  })
+  egal('les jours de congés disparaissent', avecConges.map(j => j.jour),
+    ['2026-08-11', '2026-08-14', '2026-08-15'])
+
+  // ⚠️ SANS HORAIRES RENSEIGNÉS, ON N'INTERDIT RIEN. Même politique que le
+  // reste du module : un commerçant qui n'a pas fini sa fiche ne doit pas voir
+  // ses ventes bloquées par notre prudence.
+  const sansHoraires = joursRetraitBoutique({
+    horairesDetail: null, fermetures: [], depuis: MARDI,
+    maintenant: h('23:00'), delaiHeures: 2, horizon: 3,
+  })
+  egal('sans horaires, tous les jours sont proposés', sansHoraires.length, 3)
+  egal('y compris aujourd\'hui à 23h00', sansHoraires[0].label, "Aujourd'hui")
+
+  // Un commerce fermé en permanence ne propose rien plutôt que d'inventer.
+  egal('commerce fermé partout, aucune proposition',
+    joursRetraitBoutique({
+      horairesDetail: { lundi: { ouvert: false }, mardi: { ouvert: false }, mercredi: { ouvert: false },
+        jeudi: { ouvert: false }, vendredi: { ouvert: false }, samedi: { ouvert: false }, dimanche: { ouvert: false } },
+      fermetures: [], depuis: MARDI, maintenant: h('11:00'), horizon: 7,
+    }), [])
+
+  // Une date illisible ne fabrique pas de liste.
+  egal('date de départ illisible', joursRetraitBoutique({ depuis: 'pas une date' }), [])
+
+  // ⚠️ LA PAUSE DE MIDI NE FERME PAS LA JOURNÉE. C'est la fin de la DERNIÈRE
+  // plage qui compte : une boutique 10h-12h puis 14h-18h30 accepte encore une
+  // commande à 13h00, même si elle est fermée à cet instant précis.
+  const avecPause = { mardi: { ouvert: true, debut: '10:00', fin: '12:00', debut2: '14:00', fin2: '18:30' } }
+  egal('la limite se calcule sur la dernière plage',
+    limiteRetraitCeJour(avecPause, 'mardi', 2), h('16:30'))
+  egal('sans délai, la limite est la fermeture',
+    limiteRetraitCeJour(avecPause, 'mardi', 0), h('18:30'))
+  egal('un jour sans horaires n\'a pas de limite',
+    limiteRetraitCeJour({}, 'mardi', 2), null)
+
+  // ⚠️ ET LES ÉCRANS DOIVENT S'EN SERVIR. Une règle juste que personne
+  // n'applique laisse le défaut intact.
+  const fiche = sansCommentaires(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('la fiche construit la liste des jours de boutique',
+    /joursRetraitBoutique\(\{/.test(fiche))
+  verifier('le sélecteur de l\'alimentaire est masqué en détail',
+    /\{!estDetail && peutCommander && joursDispos\.length > 0/.test(fiche),
+    (fiche.match(/.*peutCommander && joursDispos\.length > 0.*/) || [])[0])
+  verifier('le jour retenu vient du choix du client',
+    /joursBoutique\[jourBoutiqueChoisi\]\?\.jour/.test(fiche))
+  // ⚠️ VISER LES TROIS ENDROITS, pas le motif. `estDetail && jourRetraitBoutique`
+  // apparaît à plusieurs endroits : en casser un seul laissait le banc vert.
+  // Mesuré, corrigé.
+  verifier('le chargement des stocks lit le jour souhaité',
+    /const dateStr = estDetail\s*\r?\n?\s*\? \(jourRetraitBoutique/.test(fiche),
+    (fiche.match(/.*const dateStr = estDetail.*/) || [])[0] || 'expression absente')
+  verifier('getStockMax aussi',
+    /const jourDateSelectionne = estDetail && jourRetraitBoutique/.test(fiche))
+  verifier('et la ligne d\'article reçoit le jour de retrait',
+    /jourRetrait=\{estDetail \? jourRetraitBoutique : null\}/.test(fiche))
+  verifier('plus aucun prochainJourOuvert dans la fiche',
+    !/prochainJourOuvert/.test(fiche),
+    (fiche.match(/.*prochainJourOuvert.*/) || [])[0])
+  // Le texte qui promettait un retrait immédiat.
+  verifier('« à récupérer dès aujourd\'hui » a disparu',
+    !/À récupérer dès aujourd/.test(fiche),
+    (fiche.match(/.*À récupérer dès aujourd.*/) || [])[0])
+  verifier('et la règle d\'attente est écrite noir sur blanc',
+    /Ne te déplace pas avant/.test(fiche))
+
+  // ⚠️ LE SERVEUR NE VÉRIFIAIT RIEN. Seul le FORMAT de la date était contrôlé :
+  // un onglet resté ouvert depuis la veille faisait tomber une commande à
+  // retirer un dimanche ou en plein congé.
+  const routeCmd2 = sansCommentaires(readFileSync(new URL('../app/api/stripe/checkout/create-commande/route.js', import.meta.url), 'utf8'))
+  // ⚠️ CE N'EST PAS D'APPELER LA FONCTION QUI COMPTE, C'EST DE REFUSER. Le
+  // premier test se contentait de la trouver dans le fichier : neutraliser la
+  // condition laissait le banc vert, alors que le serveur acceptait de nouveau
+  // n'importe quelle date. Mesuré, corrigé.
+  verifier('le serveur calcule les jours possibles', /joursRetraitBoutique\(\{/.test(routeCmd2))
+  verifier('ET REFUSE une date qui n\'y figure pas',
+    /if \(!joursOk\.some\(j => j\.jour === date_commande\)\)/.test(routeCmd2),
+    (routeCmd2.match(/.*joursOk\.some.*/) || [])[0] || 'refus absent')
+  verifier('il rapatrie les horaires pour le faire',
+    /horaires_detail, boutique_delai_heures/.test(routeCmd2))
+  verifier('et les fermetures exceptionnelles',
+    /from\('fermetures_exceptionnelles'\)/.test(routeCmd2))
+  // ⚠️ HEURE BELGE CÔTÉ SERVEUR. Vercel tourne en temps universel : lire
+  // l'horloge de la machine rendrait la veille entre minuit et 2h du matin.
+  verifier('le serveur lit l\'heure BELGE, pas la sienne',
+    /jourBruxelles\(\)/.test(routeCmd2) && /minutesBruxelles\(\)/.test(routeCmd2))
+  verifier('il n\'utilise pas jourLocalISO pour cette comparaison',
+    !/depuis: jourLocalISO/.test(routeCmd2),
+    (routeCmd2.match(/.*depuis: jourLocalISO.*/) || [])[0])
+}
+
+// Les deux raccourcis d'heure belge, EXÉCUTÉS : c'est le seul moyen de
+// s'assurer qu'ils ne retombent pas sur l'horloge de la machine.
+{
+  // 10 août 2026, 00h30 heure belge = 09/08 22h30 en temps universel.
+  const nuit = new Date('2026-08-10T00:30:00+02:00')
+  egal('à 00h30 belge, le jour est bien le 10', jourBruxelles(nuit), '2026-08-10')
+  egal('et il est 30 minutes après minuit', minutesBruxelles(nuit), 30)
+  // En plein après-midi, rien de piégeux.
+  const aprem = new Date('2026-08-11T13:30:00+02:00')
+  egal('13h30 belge fait 810 minutes', minutesBruxelles(aprem), 810)
+  egal('et le jour est le 11', jourBruxelles(aprem), '2026-08-11')
+  // ⚠️ EN HIVER, L'ÉCART N'EST PLUS LE MÊME (une heure au lieu de deux).
+  const hiver = new Date('2026-01-15T00:30:00+01:00')
+  egal('le 15 janvier à 00h30, toujours le bon jour', jourBruxelles(hiver), '2026-01-15')
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -253,10 +253,23 @@ egal('liste vide', topPrestations([], {}), [])
 //
 // On mesure donc le test sur le défaut : deux instants choisis de part et
 // d'autre du changement d'heure, et dont la lecture UTC est FAUSSE.
-egal('hiver : 23h30 UTC le 15 est déjà le 16 à Bruxelles',
-  partiesBruxelles(new Date('2026-01-15T23:30:00Z')), { jour: '2026-01-16', heure: 0, jourSemaine: 5 })
-egal('été : 22h30 UTC le 15 est déjà le 16 à Bruxelles',
-  partiesBruxelles(new Date('2026-07-15T22:30:00Z')), { jour: '2026-07-16', heure: 0, jourSemaine: 4 })
+// ⚠️ ON COMPARE LES CHAMPS, PAS L'OBJET ENTIER. Ces deux tests comparaient la
+// structure complète : ajouter `minute` et `minutes` à `partiesBruxelles`, pour
+// que le serveur puisse lire l'heure belge, les a fait rougir alors que la
+// règle qu'ils défendent — la bascule de jour — restait parfaitement juste.
+// Un test qui casse à chaque champ ajouté ne défend plus rien, il gêne.
+{
+  const hiver = partiesBruxelles(new Date('2026-01-15T23:30:00Z'))
+  egal('hiver : 23h30 UTC le 15 est déjà le 16 à Bruxelles',
+    { jour: hiver.jour, heure: hiver.heure, jourSemaine: hiver.jourSemaine },
+    { jour: '2026-01-16', heure: 0, jourSemaine: 5 })
+  const ete = partiesBruxelles(new Date('2026-07-15T22:30:00Z'))
+  egal('été : 22h30 UTC le 15 est déjà le 16 à Bruxelles',
+    { jour: ete.jour, heure: ete.heure, jourSemaine: ete.jourSemaine },
+    { jour: '2026-07-16', heure: 0, jourSemaine: 4 })
+  // Et les minutes suivent la même heure murale, c'est ce qui sert au serveur.
+  egal('les minutes accompagnent l\'heure belge', hiver.minutes, 30)
+}
 egal('été : midi UTC se lit 14h à Bruxelles',
   partiesBruxelles(new Date('2026-07-15T12:00:00Z')).heure, 14)
 egal('hiver : midi UTC se lit 13h à Bruxelles',

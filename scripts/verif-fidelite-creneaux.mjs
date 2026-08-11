@@ -414,8 +414,16 @@ verifier('la formule ne vit plus en double dans la fiche',
   !/function jourLocalISO/.test(boutique))
 // La même formule doit servir à l'affichage ET à l'envoi de la commande,
 // sinon la charge affichée ne retrouverait jamais les commandes enregistrées.
+// ⚠️ CE TEST VERROUILLAIT UNE LIGNE, PAS UNE RÈGLE. Il exigeait le littéral
+// `const dateStr = jourLocalISO(d)` : dès que le calcul du jour a dû distinguer
+// la boutique de l'alimentaire, il est passé au rouge alors que la règle, elle,
+// était respectée. Ce qui compte est qu'AUCUNE date de jour ne se fabrique par
+// conversion en temps universel — c'est ça, le défaut qu'on interdit.
 verifier('la date envoyée au serveur utilise la même formule',
-  /const dateStr = jourLocalISO\(d\)/.test(boutique))
+  /jourLocalISO\(/.test(boutique))
+verifier('et aucune clé de jour ne passe par le temps universel',
+  !/toISOString\(\)\.slice\(0, ?10\)/.test(boutique),
+  (boutique.match(/.*toISOString\(\)\.slice\(0, ?10\).*/) || [])[0])
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LE FOOD TRUCK — une seule façon de reconnaître un camion

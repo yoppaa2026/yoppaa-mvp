@@ -22,6 +22,14 @@
 // Les règles vivent dans `lib/rappels-retrait.js`, pures et testées.
 //
 // Sécurité : header Authorization: Bearer <CRON_SECRET>.
+//
+// ⚠️ HORAIRE : 09h00 UTC, soit 11h00 à Bruxelles. L'ancien cron tournait à
+// 00h30 ; un rappel de retrait ne se lit pas à deux heures du matin. Même
+// famille que le SMS de fidélité envoyé à 3h, corrigé le 05/08.
+//
+// ⚠️ ET L'EXPLICATION VIT ICI, PAS DANS `vercel.json`. Ce fichier suit un
+// schéma STRICT : toute clé inconnue fait échouer le déploiement entier
+// (« `crons[4]` should NOT have additional property »). On n'y commente rien.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'

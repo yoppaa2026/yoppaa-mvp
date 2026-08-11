@@ -1010,8 +1010,22 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
   // ⚠️ ET PAS À N'IMPORTE QUELLE HEURE. L'ancien tournait à 00h30 : un rappel
   // de retrait ne se lit pas à deux heures du matin. Même famille que le SMS de
   // fidélité envoyé à 3h, corrigé le 05/08.
-  const heureCron = (vercel.match(/"path": "\/api\/cron\/rappels-retrait",\s*\r?\n\s*"schedule": "(\d+) (\d+)/) || [])[2]
-  verifier('à une heure décente', Number(heureCron) >= 6 && Number(heureCron) <= 18, `heure UTC = ${heureCron}`)
+  // ⚠️ `vercel.json` SUIT UN SCHÉMA STRICT. Une clé inconnue dans une entrée de
+  // cron fait échouer le DÉPLOIEMENT ENTIER, pas seulement le cron :
+  //   « Invalid vercel.json - `crons[4]` should NOT have additional property »
+  // J'y avais mis un `_pourquoi` pour expliquer le remplacement du cron
+  // nocturne. La production ne s'est pas mise à jour. Les explications vont
+  // dans le fichier de la route, jamais ici.
+  const conf = JSON.parse(vercel)
+  const clesInconnues = (conf.crons || []).flatMap(c =>
+    Object.keys(c).filter(k => !['path', 'schedule'].includes(k)))
+  verifier('aucune clé inconnue dans les crons de vercel.json',
+    clesInconnues.length === 0, clesInconnues.join(', '))
+
+  const cron = (conf.crons || []).find(c => c.path.includes('rappels-retrait'))
+  const heureCron = Number((cron?.schedule || '').split(' ')[1])
+  verifier('les rappels partent à une heure décente',
+    heureCron >= 6 && heureCron <= 18, `heure UTC = ${heureCron}`)
 
   const routeRappels = sansCommentaires(readFileSync(new URL('../app/api/cron/rappels-retrait/route.js', import.meta.url), 'utf8'))
   verifier('le cron applique la règle partagée', /rappelAEnvoyer\(cmd, maintenant\)/.test(routeRappels))

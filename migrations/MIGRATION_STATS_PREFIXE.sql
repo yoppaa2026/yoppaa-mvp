@@ -21,6 +21,13 @@
 -- Date : 2026-08-11
 -- ════════════════════════════════════════════════════════════════════════════
 
+-- ⚠️ LES DEUX NOUVELLES COLONNES VONT À LA FIN, ET C'EST OBLIGATOIRE.
+-- `CREATE OR REPLACE VIEW` sait AJOUTER des colonnes, jamais en renommer ni en
+-- réordonner. Les glisser avant `created_at` revient, pour Postgres, à demander
+-- de renommer la neuvième colonne : il refuse par
+--   ERROR 42P16: cannot change name of view column "created_at" to "numero_prefixe"
+-- L'ordre des colonnes d'une vue n'a aucune importance pour l'application, qui
+-- les demande par leur nom.
 CREATE OR REPLACE VIEW commandes_stats AS
 SELECT
   id,
@@ -31,9 +38,9 @@ SELECT
   mode_retrait,
   date_commande,
   numero_commande,
+  created_at,
   numero_prefixe,   -- CC | LI | EX | RE, posé par le déclencheur
-  numero_semaine,   -- 'IYYY-IW', la semaine de RETRAIT
-  created_at
+  numero_semaine    -- 'IYYY-IW', la semaine de RETRAIT
 FROM commandes;
 
 -- ⚠️ GRANT systématique : un CREATE OR REPLACE VIEW conserve les droits

@@ -16,6 +16,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerPushParExternalId } from '@/lib/onesignal'
 import { envoyerAuCommercant, emailCommandeEnLivraison } from '@/lib/resend'
+import { referenceCommande } from '@/lib/numero-commande'
 
 export async function POST(request) {
   try {
@@ -33,7 +34,7 @@ export async function POST(request) {
     const { data: cmd, error } = await supabase
       .from('commandes')
       .select(`
-        id, numero_commande, client_email, client_nom, client_prenom,
+        id, numero_commande, numero_prefixe, client_email, client_nom, client_prenom,
         adresse_livraison,
         commercant:commercants(nom, slug),
         creneau_livraison:livraison_creneaux(heure_debut, heure_fin)
@@ -63,7 +64,7 @@ export async function POST(request) {
           html: emailCommandeEnLivraison({
             yopper_prenom: cmd.client_prenom || 'Yopper',
             commercant_nom: cmd.commercant?.nom || 'ton commerçant',
-            numero_commande: cmd.numero_commande,
+            numero_commande: referenceCommande(cmd),
             adresse_livraison: cmd.adresse_livraison,
             heure_debut: cmd.creneau_livraison?.heure_debut,
             heure_fin: cmd.creneau_livraison?.heure_fin,

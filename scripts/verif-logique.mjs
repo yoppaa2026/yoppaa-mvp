@@ -21,7 +21,7 @@ import { generateRdvIcs, icsToBase64Attachment } from '../lib/ical.js'
 import { tauxFraisLivraison } from '../lib/tva.js'
 import { ventilerFrais } from '../lib/stripe-frais.js'
 import { contexteRetrait, textesRetrait, textesConfirmation } from '../lib/ecran-retrait.js'
-import { emailCommandeExpediee, emailRecapCommandesJour } from '../lib/resend.js'
+import { emailCommandeExpediee, emailRecapCommandesJour, emailRdvConfirme, emailCommandeConfirmee } from '../lib/resend.js'
 import { partagerCommandes } from '../lib/commandes-vue.js'
 import { restaurerStockVariantes } from '../lib/stock-variantes-server.js'
 import { couleurRdv, texteLisibleSur, COULEUR_DEFAUT, ENCRE } from '../lib/agenda-couleurs.js'
@@ -1064,6 +1064,81 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
   verifier('le champ « ouverture des réservations » a disparu du profil',
     !/heure_ouverture_resa/.test(config),
     (config.match(/.*heure_ouverture_resa.*/) || [])[0])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA RÉFÉRENCE DOIT ÊTRE LA MÊME À L'ÉCRAN ET DANS L'EMAIL
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ AUCUN EMAIL NE PORTAIT LA RÉFÉRENCE. Les écrans affichaient « CC12 »
+// depuis la refonte de la numérotation, mais les appelants passaient aux
+// gabarits le numéro BRUT : les emails écrivaient « #12 ». Le client lisait un
+// numéro dans sa boîte mail et un autre à l'écran, et le commerçant, qui
+// cherche « CC12 » dans son tableau de bord, ne pouvait plus faire le lien.
+// L'email du RENDEZ-VOUS, lui, n'affichait aucun numéro du tout.
+//
+// On REND les emails et on lit ce qui en sort.
+{
+  const rdv = {
+    yopper_prenom: 'Sophie', commercant_nom: 'Ciseaux', commercant_adresse: 'Rue X',
+    prestation_nom: 'Balayage', date_rdv: '2026-08-14', heure_debut: '14:30:00',
+    heure_fin: '15:30:00', duree_minutes: 60, prix_estime: 45,
+    numero_rdv: referenceRdv({ numero_rdv: 7 }),
+  }
+  const htmlRdv = emailRdvConfirme(rdv)
+  verifier('l\'email de rendez-vous porte enfin une référence', /#RV7/.test(htmlRdv),
+    (htmlRdv.match(/.{0,40}Rendez-vous.{0,60}/) || [])[0])
+  verifier('et il ne dit plus « #7 » tout court', !/#7</.test(htmlRdv))
+
+  // Sans numéro (rendez-vous d'avant la numérotation), aucune ligne vide ni
+  // dièse orphelin : on n'écrit rien plutôt qu'un « # » seul.
+  const htmlSansNum = emailRdvConfirme({ ...rdv, numero_rdv: null })
+  verifier('sans numéro, pas de ligne « Rendez-vous # » vide', !/Rendez-vous <strong/.test(htmlSansNum))
+
+  // La commande : même exigence, et c'est la référence qui doit voyager.
+  const htmlCmd = emailCommandeConfirmee({
+    yopper_prenom: 'Luc', commercant_nom: 'La Mie', commercant_adresse: 'Rue Y',
+    numero_commande: referenceCommande({ numero_commande: 12, numero_prefixe: 'CC' }),
+    articles: [{ nom: 'Pain', quantite: 1, prix_total: 3 }], total: 3,
+    date_retrait: '2026-08-12', heure_debut: '07:00:00', heure_fin: '07:30:00',
+  })
+  verifier('l\'email de commande dit CC12', /#CC12/.test(htmlCmd),
+    (htmlCmd.match(/.{0,30}Commande.{0,60}/) || [])[0])
+  verifier('et plus jamais « #12 » nu', !/#12</.test(htmlCmd))
+
+  // Une commande d'AVANT la numérotation n'a pas de préfixe : on affiche son
+  // numéro nu plutôt que rien, c'est encore la meilleure information.
+  egal('sans préfixe, le numéro nu reste affichable',
+    referenceCommande({ numero_commande: 12 }), '12')
+
+  // ⚠️ ET LES APPELANTS DOIVENT PASSER LA RÉFÉRENCE. Un gabarit correct nourri
+  // du numéro brut réécrirait « #12 » sans que rien ne s'allume.
+  const APPELANTS = [
+    'lib/commande-notifs.js',
+    'app/api/commande/cancel/route.js',
+    'app/api/cron/recap-jour-8h/route.js',
+    'app/api/emails/commande-annulee/route.js',
+    'app/api/emails/commande-confirmee/route.js',
+    'app/api/emails/commande-expediee/route.js',
+    'app/api/emails/commande-prete/route.js',
+    'app/api/livraison/statut/route.js',
+  ]
+  for (const chemin of APPELANTS) {
+    const src = readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
+      .split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+    verifier(`${chemin} passe la référence, pas le numéro brut`,
+      !/numero_commande:\s*cmd\.numero_commande/.test(src), chemin)
+    verifier(`${chemin} rapatrie numero_prefixe`, /numero_prefixe/.test(src), chemin)
+    // Le dérapage de la reprise automatique : un « numero_prefixe, » orphelin
+    // laissé dans l'objet d'appel, variable inexistante dans cette portée,
+    // aurait planté À L'ENVOI de chaque email et nulle part ailleurs.
+    verifier(`${chemin} n'a pas de numero_prefixe orphelin`,
+      !/referenceCommande\((?:cmd|c)\),\s*numero_prefixe,/.test(src), chemin)
+  }
+
+  const ecranRdv = readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8')
+    .split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+  verifier('l\'écran « ton RDV est noté » affiche la référence', /referenceRdv\(rdvCree\)/.test(ecranRdv))
+  verifier('et plus le numéro nu', !/#\{rdvCree\.numero_rdv\}/.test(ecranRdv))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

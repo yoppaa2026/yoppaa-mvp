@@ -37,6 +37,7 @@ function enGras(texte) {
 }
 import { fetchYopper } from '@/lib/fetch-yopper'
 import { redirectTop } from '@/lib/redirect-top'
+import { referenceRdv } from '@/lib/numero-commande'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import HorairesSection from '../../HorairesSection'
 import CarteFideliteFiche from '../../CarteFideliteFiche'
@@ -553,7 +554,7 @@ export default function CommanderRdvSlug() {
               const j = await res.json()
               console.info('[rdv stripe] poll response', j)
               if (j.ok && j.rdv?.numero_rdv) {
-                setRdvCree(p => ({ ...(p || {}), id: j.rdv.id, numero_rdv: j.rdv.numero_rdv, acompte_montant: j.rdv.acompte_montant ?? p?.acompte_montant }))
+                setRdvCree(p => ({ ...(p || {}), id: j.rdv.id, numero_rdv: j.rdv.numero_rdv, numero_prefixe: j.rdv.numero_prefixe, acompte_montant: j.rdv.acompte_montant ?? p?.acompte_montant }))
                 clearInterval(pollInterval)
                 console.info('[rdv stripe] numero recupere', j.rdv.numero_rdv)
               } else if (attempts >= MAX_ATTEMPTS) {
@@ -2412,11 +2413,17 @@ export default function CommanderRdvSlug() {
                       <span style={{ color: T.main }}>pp</span>
                       <span style={{ color: T.mid }}>aa</span>
                     </p>
-                    {rdvCree.numero_rdv && (
+                    {/* ⚠️ LE NUMÉRO NU NE SUFFISAIT PAS. Cet écran affichait
+                        « #7 » quand l'agenda du commerçant, lui, annonce
+                        « RV7 » depuis la refonte de la numérotation. Sur le
+                        seul point où le client et le commerçant doivent se
+                        comprendre, ils ne disaient pas la même chose. La
+                        référence vient du module partagé, comme partout. */}
+                    {referenceRdv(rdvCree) && (
                       <div style={{ position: 'relative', display: 'inline-block', marginBottom: 12 }}>
                         <span aria-hidden="true" style={{ position: 'absolute', inset: '-30% -18%', borderRadius: '50%', background: `radial-gradient(circle, ${T.mid} 0%, transparent 68%)`, animation: 'cf-halo 2.8s ease-in-out infinite', pointerEvents: 'none' }}/>
                         <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '7px 24px', boxShadow: `0 4px 16px ${T.main}44`, animation: 'cf-numero 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.1s both' }}>
-                          <span style={{ fontWeight: 900, fontSize: '1.5rem', color: '#fff', letterSpacing: '-0.5px' }}>#{rdvCree.numero_rdv}</span>
+                          <span style={{ fontWeight: 900, fontSize: '1.5rem', color: '#fff', letterSpacing: '-0.5px' }}>#{referenceRdv(rdvCree)}</span>
                         </span>
                       </div>
                     )}

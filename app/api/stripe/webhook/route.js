@@ -26,6 +26,7 @@ import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, email
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { debiterBon, recrediterBon } from '@/lib/bons-cadeaux-server'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
+import { referenceRdv } from '@/lib/numero-commande'
 import { programmerRappelRdv } from '@/lib/rappels'
 import { recupererFraisStripe, ventilerFrais } from '@/lib/stripe-frais'
 import { crediterFidelite } from '@/lib/fidelite-server'
@@ -737,6 +738,7 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
     .from('rdv_reservations')
     .select(`
       id, date_rdv, heure_debut, heure_fin, duree_minutes, prix_estime,
+      numero_rdv, numero_prefixe,
       acompte_paye_en_ligne, acompte_montant,
       client_email, client_prenom, client_nom, client_telephone, notes_client,
       annulation_token, commande_id,
@@ -809,6 +811,8 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       heure_fin:               rdv.heure_fin,
       duree_minutes:           rdv.duree_minutes,
       prix_estime:             rdv.prix_estime,
+      // La MÊME référence qu'à l'écran et qu'à l'agenda du commerçant : « RV12 ».
+      numero_rdv:              referenceRdv(rdv),
       acompte_paye:            !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),
       acompte_montant:         rdv.acompte_montant,
       delai_annulation_heures: rdv.commercant.rdv_delai_annulation_heures || 24,

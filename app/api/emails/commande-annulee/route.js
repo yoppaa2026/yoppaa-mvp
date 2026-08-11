@@ -11,6 +11,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailCommandeAnnuleeYopper, emailCommandeAnnuleeCommercant } from '@/lib/resend'
+import { referenceCommande } from '@/lib/numero-commande'
 
 export async function POST(request) {
   try {
@@ -28,7 +29,7 @@ export async function POST(request) {
     const { data: cmd, error: errCmd } = await supabase
       .from('commandes')
       .select(`
-        id, numero_commande, total, date_commande, paye_en_ligne,
+        id, numero_commande, numero_prefixe, total, date_commande, paye_en_ligne,
         client_email, client_prenom, client_nom,
         commercant:commercants(id, nom, email, notif_mode),
         creneau:creneaux(heure_debut, heure_fin),
@@ -56,7 +57,7 @@ export async function POST(request) {
         const html = emailCommandeAnnuleeYopper({
           yopper_prenom:   cmd.client_prenom || 'Yopper',
           commercant_nom:  cmd.commercant?.nom || '',
-          numero_commande: cmd.numero_commande,
+          numero_commande: referenceCommande(cmd),
           total:           cmd.total,
           refund_ok:       refund_status === 'succeeded' || refund_status === 'pending',
           refund_manuel:   refundManuel,
@@ -79,7 +80,7 @@ export async function POST(request) {
           nom_commercant:  cmd.commercant.nom,
           yopper_prenom:   cmd.client_prenom,
           yopper_nom:      cmd.client_nom,
-          numero_commande: cmd.numero_commande,
+          numero_commande: referenceCommande(cmd),
           articles:        articlesFlat,
           total:           cmd.total,
           date_retrait:    cmd.date_commande,

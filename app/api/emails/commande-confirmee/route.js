@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailCommandeConfirmee, emailNouvelleCommandeCommercant } from '@/lib/resend'
+import { referenceCommande } from '@/lib/numero-commande'
 
 export async function POST(request) {
   try {
@@ -27,7 +28,7 @@ export async function POST(request) {
     const { data: cmd, error: errCmd } = await supabase
       .from('commandes')
       .select(`
-        id, numero_commande, total, notes_client, date_commande,
+        id, numero_commande, numero_prefixe, total, notes_client, date_commande,
         client_email, client_prenom, client_nom, client_telephone,
         annulation_token,
         commercant:commercants(id, nom, slug, adresse, email, notif_mode, delai_annulation_heures),
@@ -66,7 +67,7 @@ export async function POST(request) {
           commercant_nom:          cmd.commercant?.nom || '',
           commercant_adresse:      cmd.commercant?.adresse || '',
           commercant_slug:         cmd.commercant?.slug || '',
-          numero_commande:         cmd.numero_commande,
+          numero_commande:         referenceCommande(cmd),
           articles:                articlesFlat,
           total:                   cmd.total,
           date_retrait:            cmd.date_commande,
@@ -96,7 +97,7 @@ export async function POST(request) {
           yopper_nom:      cmd.client_nom,
           yopper_email:    cmd.client_email,
           yopper_telephone:cmd.client_telephone,
-          numero_commande: cmd.numero_commande,
+          numero_commande: referenceCommande(cmd),
           articles:        articlesFlat,
           total:           cmd.total,
           date_retrait:    cmd.date_commande,

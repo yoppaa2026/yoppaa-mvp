@@ -17,6 +17,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
+import { referenceRdv } from '@/lib/numero-commande'
 
 export async function POST(request) {
   try {
@@ -36,7 +37,7 @@ export async function POST(request) {
     const { data: rdv, error: errRdv } = await supabase
       .from('rdv_reservations')
       .select(`
-        id, numero_rdv, date_rdv, heure_debut, heure_fin, duree_minutes,
+        id, numero_rdv, numero_prefixe, date_rdv, heure_debut, heure_fin, duree_minutes,
         prix_estime, acompte_paye, acompte_paye_en_ligne, acompte_montant,
         client_email, client_prenom, client_nom, client_telephone, notes_client,
         annulation_token,
@@ -87,6 +88,8 @@ export async function POST(request) {
           heure_fin:               rdv.heure_fin,
           duree_minutes:           rdv.duree_minutes,
           prix_estime:             rdv.prix_estime,
+          // La MÊME référence qu'à l'écran et qu'à l'agenda du commerçant.
+          numero_rdv:              referenceRdv(rdv),
           acompte_paye:            !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),
           acompte_montant:         rdv.acompte_montant,
           delai_annulation_heures: rdv.commercant?.rdv_delai_annulation_heures || 24,

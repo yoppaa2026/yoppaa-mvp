@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRecapRdvJour, emailRecapCommandesJour } from '@/lib/resend'
 import { resolvePlan } from '@/lib/plans'
+import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
 
 export async function GET(request) {
   const authHeader = request.headers.get('authorization') || ''
@@ -67,7 +68,7 @@ export async function GET(request) {
           const { data: rdvs, error: errRdvs } = await supabase
             .from('rdv_reservations')
             .select(`
-              id, heure_debut, heure_fin, duree_minutes, numero_rdv,
+              id, heure_debut, heure_fin, duree_minutes, numero_rdv, numero_prefixe,
               client_prenom, client_nom, client_telephone,
               prestation:rdv_prestations(nom)
             `)
@@ -85,7 +86,7 @@ export async function GET(request) {
             heure_debut:    r.heure_debut,
             heure_fin:      r.heure_fin,
             duree_minutes:  r.duree_minutes,
-            numero_rdv:     r.numero_rdv,
+            numero_rdv:     referenceRdv(r),
             yopper_prenom:  r.client_prenom,
             yopper_nom:     r.client_nom,
             yopper_telephone: r.client_telephone,
@@ -109,7 +110,7 @@ export async function GET(request) {
           const { data: cmds, error: errCmds } = await supabase
             .from('commandes')
             .select(`
-              id, numero_commande, total, client_nom,
+              id, numero_commande, numero_prefixe, total, client_nom,
               creneau:creneaux(heure_debut),
               creneau_livraison:livraison_creneaux(heure_debut),
               commande_articles(quantite)
@@ -127,7 +128,7 @@ export async function GET(request) {
             const [prenom, ...reste] = String(cmd.client_nom || '').split(' ')
             return {
               heure_debut:     cmd.creneau?.heure_debut || cmd.creneau_livraison?.heure_debut,
-              numero_commande: cmd.numero_commande,
+              numero_commande: referenceCommande(cmd),
               yopper_prenom:   prenom || cmd.client_nom,
               yopper_nom:      reste.join(' '),
               nb_articles:     (cmd.commande_articles || []).reduce((s, a) => s + (a.quantite || 0), 0),

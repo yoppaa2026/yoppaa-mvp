@@ -21,6 +21,7 @@ import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
 import { recrediterBon } from '@/lib/bons-cadeaux-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
+import { referenceCommande } from '@/lib/numero-commande'
 
 export async function POST(request) {
   try {
@@ -46,7 +47,7 @@ export async function POST(request) {
     const selectCols = `
       id, statut, paye_en_ligne, total, stripe_payment_intent_id,
       client_email, client_nom, annulation_token, created_at, commercant_id,
-      numero_commande, date_commande, creneau_id, rappel_push_id,
+      numero_commande, numero_prefixe, date_commande, creneau_id, rappel_push_id,
       bon_cadeau_id, bon_cadeau_montant,
       commercants:commercant_id (id, nom, slug, stripe_account_id, delai_annulation_heures),
       creneau:creneaux!creneau_id (heure_debut)
@@ -238,7 +239,7 @@ export async function POST(request) {
         const html = emailCommandeAnnuleeYopper({
           yopper_prenom:   cmd.client_nom?.split(' ')[0] || 'Yopper',
           commercant_nom:  commercant?.nom || '',
-          numero_commande: cmd.numero_commande,
+          numero_commande: referenceCommande(cmd),
           total:           cmd.total,
           refund_ok:       refundStatus === 'succeeded' || refundStatus === 'pending',
           refund_manuel:   refundManuel,
@@ -265,7 +266,7 @@ export async function POST(request) {
           nom_commercant:  commercant.nom,
           yopper_prenom:   cmd.client_nom?.split(' ')[0],
           yopper_nom:      cmd.client_nom?.split(' ').slice(1).join(' '),
-          numero_commande: cmd.numero_commande,
+          numero_commande: referenceCommande(cmd),
           articles:        articlesFlat,
           total:           cmd.total,
           date_retrait:    cmd.date_commande,
@@ -287,7 +288,7 @@ export async function POST(request) {
     return NextResponse.json({
       ok: true,
       commande_id: cmd.id,
-      numero_commande: cmd.numero_commande,
+      numero_commande: referenceCommande(cmd),
       refund_id: refundId,
       refund_status: refundStatus,
       refund_error: refundError,

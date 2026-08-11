@@ -25,7 +25,7 @@ export async function GET(request) {
 
     const { data: rdv } = await supabase
       .from('rdv_reservations')
-      .select('id, numero_rdv, statut, acompte_montant, acompte_paye_en_ligne, date_rdv, heure_debut, heure_fin')
+      .select('id, numero_rdv, numero_prefixe, statut, acompte_montant, acompte_paye_en_ligne, date_rdv, heure_debut, heure_fin')
       .eq('stripe_checkout_session_id', sessionId)
       .maybeSingle()
 

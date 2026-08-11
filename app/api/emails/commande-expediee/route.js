@@ -16,6 +16,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailCommandeExpediee } from '@/lib/resend'
+import { referenceCommande } from '@/lib/numero-commande'
 
 export async function POST(request) {
   try {
@@ -33,7 +34,7 @@ export async function POST(request) {
     const { data: cmd, error } = await supabase
       .from('commandes')
       .select(`
-        id, numero_commande, client_email, client_prenom, mode_retrait,
+        id, numero_commande, numero_prefixe, client_email, client_prenom, mode_retrait,
         adresse_livraison, expedition_suivi,
         commercant:commercants(nom, slug)
       `)
@@ -63,7 +64,7 @@ export async function POST(request) {
       const html = emailCommandeExpediee({
         yopper_prenom:     cmd.client_prenom || 'Yopper',
         commercant_nom:    cmd.commercant?.nom || '',
-        numero_commande:   cmd.numero_commande,
+        numero_commande:   referenceCommande(cmd),
         expedition_suivi:  cmd.expedition_suivi,
         adresse_livraison: cmd.adresse_livraison,
       })

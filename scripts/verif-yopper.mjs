@@ -336,6 +336,22 @@ verifier('la suppression de compte a une adresse directe',
 verifier('elle décrit une voie hors application',
   /Sans passer par l'application/.test(legal))
 
+// ⚠️ ET UNE SECONDE ADRESSE, POUR L'EFFACEMENT PARTIEL. Google la publie sur la
+// fiche du store, à côté de la précédente : la question « proposez-vous un moyen
+// de supprimer une partie des données SANS supprimer le compte » est distincte,
+// et le RGPD nous oblige à répondre oui. Retirer cet identifiant casserait un
+// lien affiché dans le Play Store, sans que rien ne le signale.
+verifier('l’effacement partiel a sa propre adresse',
+  /<H3 id="droits-donnees">/.test(legal))
+verifier('et il est dit qu’on ne supprime pas son compte pour autant',
+  /jamais obligé de supprimer votre compte/.test(legal))
+// Les trois exigences de Google pour cette page : la procédure, ce qui part, ce
+// qui reste et pour combien de temps.
+verifier('l’effacement partiel nomme ce qui peut partir',
+  /Peuvent être effacés à votre demande/.test(legal))
+verifier('et ce que la loi oblige à garder, avec sa durée',
+  /Ne peuvent pas être effacés isolément[\s\S]{0,400}7 ans/.test(legal))
+
 // ⚠️ TOUT TIERS QUI REÇOIT DES DONNÉES DOIT ÊTRE DÉCLARÉ. Ce que le formulaire
 // de sécurité des données de Google et les étiquettes de confidentialité
 // d'Apple annoncent doit correspondre à ce que le code fait vraiment.

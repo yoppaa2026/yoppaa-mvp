@@ -264,8 +264,18 @@ export default function LegalPage() {
               'Logs techniques : 12 mois maximum',
             ]}/>
 
-            <H3>Droits des utilisateurs</H3>
-            <P>Conformément au RGPD, vous disposez des droits d'accès, rectification, effacement, limitation, portabilité et opposition. Pour exercer ces droits : support@yoppaa.app ou dpo@yoppaa.app</P>
+            {/* ⚠️ L'ANCRE `droits-donnees` EST PUBLIÉE SUR LA FICHE GOOGLE PLAY.
+                Google exige, pour la suppression PARTIELLE de données, une page
+                qui nomme le service, décrive la procédure de façon distincte, et
+                dise ce qui est effacé, ce qui est conservé et pour combien de
+                temps. Les trois points sont couverts ci-dessous. Ne pas retirer
+                l'identifiant : il casserait un lien affiché dans le store. */}
+            <H3 id="droits-donnees">Droits des utilisateurs et suppression d&rsquo;une partie de vos données</H3>
+            <P>Conformément au RGPD, vous disposez des droits d'accès, rectification, effacement, limitation, portabilité et opposition sur les données que Yoppaa détient à votre sujet.</P>
+            <P><strong>Vous n'êtes jamais obligé de supprimer votre compte pour faire effacer une partie de vos données.</strong> Écrivez à <strong>dpo@yoppaa.app</strong> depuis l'adresse email de votre compte, en indiquant ce que vous souhaitez voir effacé. La demande est traitée dans un délai maximal de 30 jours et vous recevez une confirmation.</P>
+            <P><strong>Peuvent être effacés à votre demande, sans toucher au reste :</strong> vos avis, vos suggestions de commerces et les photos qui les accompagnent, vos favoris, votre numéro de téléphone, votre commune, ainsi que vos consentements aux communications. Vos cartes de fidélité peuvent également être supprimées, en sachant que les points qu'elles contiennent sont alors perdus.</P>
+            <P><strong>Ne peuvent pas être effacés isolément :</strong> les commandes et rendez-vous déjà passés, que les commerçants sont légalement tenus de conserver comme pièces comptables pendant 7 ans. Ils sont en revanche anonymisés à la suppression du compte, votre nom, votre email et votre téléphone y étant remplacés par une mention neutre.</P>
+            <P>Pour effacer l'intégralité de votre compte, voyez la section suivante.</P>
             <P>En cas de litige non résolu, vous pouvez saisir l'Autorité de Protection des Données (APD) belge : www.autoriteprotectiondonnees.be</P>
 
             <H3 id="suppression-compte">Suppression de votre compte</H3>

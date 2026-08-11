@@ -32,6 +32,10 @@ import { messagePanierRepris } from '../lib/panier-repris-message.js'
 import { normaliserEmail, memeEmail } from '../lib/email-normalise.js'
 import { ouvertLe, prochainJourOuvert, joursRetraitBoutique, limiteRetraitCeJour } from '../lib/ouverture.js'
 import { jourBruxelles, minutesBruxelles } from '../lib/timezone.js'
+import {
+  rappelAEnvoyer, heuresDAttente, baremeRappels, peutMarquerNonRetire,
+  ancienneteCommande, texteRappelRetrait, RAPPEL_TROP_TARD_HEURES,
+} from '../lib/rappels-retrait.js'
 import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '../lib/bons-vendus.js'
 import { jourSemaineDe } from '../lib/creneaux.js'
 import {
@@ -884,6 +888,167 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
   verifier('plus aucun seuil de 36 pixels dans le composant',
     !/hauteur\s*[<>]=?\s*36/.test(agenda),
     (agenda.match(/.*hauteur\s*[<>]=?\s*36.*/) || [])[0])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LES COMMANDES QUI POURRISSENT DANS UN COIN (Alex, 11/08)
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ UNE COMMANDE PRÊTE POUVAIT DORMIR INDÉFINIMENT. Le commerçant la marque
+// prête, le client reçoit UN message, et plus rien ne se passait jamais : ni
+// relance, ni signal côté commerçant. La commande restait « Prête » à vie, son
+// stock retiré des rayons.
+//
+// Décision d'Alex : rappels à 24, 48 et 72 h en détail et services, un seul à
+// 24 h en alimentaire, et ⚠️ AUCUNE ANNULATION AUTOMATIQUE — le commerçant
+// décide, le code lui rappelle.
+{
+  const T0 = new Date('2026-08-11T10:00:00Z')
+  const plus = (h) => new Date(T0.getTime() + h * 3600 * 1000)
+  const cmd = (extra = {}) => ({
+    statut: 'pret', pret_at: T0.toISOString(), rappel_retrait_nb: 0,
+    commercant: { categorie: 'detail' }, ...extra,
+  })
+
+  egal('une commande fraîche n\'est pas relancée', rappelAEnvoyer(cmd(), plus(3)), null)
+  egal('à 23 heures, pas encore', rappelAEnvoyer(cmd(), plus(23)), null)
+  egal('à 24 heures, le premier rappel part', rappelAEnvoyer(cmd(), plus(24)), { palier: 24, rang: 1 })
+  // ⚠️ ET IL NE PART QU'UNE FOIS. Un cron qui repasse toutes les heures ne doit
+  // pas réveiller le client à chaque tour : c'est le compteur qui l'en empêche.
+  egal('le même rappel ne repart pas', rappelAEnvoyer(cmd({ rappel_retrait_nb: 1 }), plus(30)), null)
+  egal('à 48 heures, le deuxième', rappelAEnvoyer(cmd({ rappel_retrait_nb: 1 }), plus(48)), { palier: 48, rang: 2 })
+  egal('à 72 heures, le troisième', rappelAEnvoyer(cmd({ rappel_retrait_nb: 2 }), plus(72)), { palier: 72, rang: 3 })
+  egal('et après le troisième, on se tait', rappelAEnvoyer(cmd({ rappel_retrait_nb: 3 }), plus(120)), null)
+
+  // ⚠️ L'ALIMENTAIRE N'A QU'UN SEUL PALIER. Un pain n'attend pas trois jours.
+  const alim = (extra = {}) => cmd({ commercant: { categorie: 'alimentaire' }, ...extra })
+  egal('en alimentaire, un rappel à 24 heures', rappelAEnvoyer(alim(), plus(24)), { palier: 24, rang: 1 })
+  egal('et rien à 48', rappelAEnvoyer(alim({ rappel_retrait_nb: 1 }), plus(48)), null)
+  egal('le barème alimentaire n\'a qu\'un palier', baremeRappels('alimentaire'), [24])
+  egal('celui des produits en a trois', baremeRappels('detail'), [24, 48, 72])
+  egal('un service vend des produits, même barème', baremeRappels('vitrine'), [24, 48, 72])
+
+  // ⚠️ SANS DATE, ON N'ENVOIE RIEN. `Number(null)` vaut 0 et passerait les
+  // comparaisons : toutes les commandes prêtes seraient relancées au premier
+  // passage du cron. On teste l'ABSENCE, jamais le nombre.
+  egal('sans date de mise à disposition, aucun rappel',
+    rappelAEnvoyer(cmd({ pret_at: null }), plus(48)), null)
+  egal('ni avec une date illisible',
+    rappelAEnvoyer(cmd({ pret_at: 'pas une date' }), plus(48)), null)
+  egal('une commande pas encore prête n\'est pas relancée',
+    rappelAEnvoyer(cmd({ statut: 'en_preparation' }), plus(48)), null)
+  egal('une commande déjà récupérée non plus',
+    rappelAEnvoyer(cmd({ statut: 'recupere' }), plus(48)), null)
+  // Un compteur absent vaut zéro, pas NaN.
+  egal('compteur absent, le premier rappel part quand même',
+    rappelAEnvoyer(cmd({ rappel_retrait_nb: null }), plus(24)), { palier: 24, rang: 1 })
+
+  // ⚠️ LE PLAFOND D'UNE SEMAINE. La reprise du 11/08 a daté neuf commandes
+  // d'essai avec leur date de création : sans ce plafond, le premier passage du
+  // cron leur aurait envoyé leurs trois rappels d'un coup.
+  egal('au-delà d\'une semaine, l\'automate se tait',
+    rappelAEnvoyer(cmd(), plus(RAPPEL_TROP_TARD_HEURES + 1)), null)
+  egal('juste avant le plafond, il parle encore',
+    rappelAEnvoyer(cmd(), plus(RAPPEL_TROP_TARD_HEURES - 1))?.palier, 24)
+
+  egal('l\'attente se compte en heures', heuresDAttente(T0.toISOString(), plus(36)), 36)
+  egal('sans date, pas d\'attente calculable', heuresDAttente(null, plus(36)), null)
+
+  // ─── Ce que le commerçant voit ────────────────────────────────────────
+  egal('avant 24 heures, on ne signale rien', ancienneteCommande(T0.toISOString(), plus(20)), null)
+  egal('à 24 heures, « prête depuis hier »', ancienneteCommande(T0.toISOString(), plus(25))?.texte, 'Prête depuis hier')
+  egal('à trois jours, on le dit', ancienneteCommande(T0.toISOString(), plus(74))?.texte, 'Prête depuis 3 jours')
+  egal('et c\'est marqué urgent', ancienneteCommande(T0.toISOString(), plus(74))?.urgent, true)
+  egal('deux jours, pas encore urgent', ancienneteCommande(T0.toISOString(), plus(50))?.urgent, false)
+
+  // ⚠️ « NON RETIRÉ » ÉTAIT INATTEIGNABLE EN BOUTIQUE. Le bouton n'apparaît que
+  // si la commande a un CRÉNEAU, pour vérifier que l'heure est passée. Une
+  // commande de boutique n'en a pas : le statut restait « Prête » à vie et le
+  // stock ne revenait jamais en rayon.
+  const boutique = { statut: 'pret', date_commande: '2026-08-11' }
+  egal('le jour même, le commerçant ne peut pas encore trancher',
+    peutMarquerNonRetire(boutique, new Date('2026-08-11T18:00:00')), false)
+  egal('le lendemain, il le peut',
+    peutMarquerNonRetire(boutique, new Date('2026-08-12T09:00:00')), true)
+  // Le comportement à créneau ne bouge pas.
+  const avecCreneau = { statut: 'pret', date_commande: '2026-08-11', creneau: { heure_fin: '11:30:00' } }
+  egal('à créneau, avant la fin, non',
+    peutMarquerNonRetire(avecCreneau, new Date('2026-08-11T11:00:00')), false)
+  egal('à créneau, après la fin, oui',
+    peutMarquerNonRetire(avecCreneau, new Date('2026-08-11T12:00:00')), true)
+  egal('une commande pas prête ne se déclare pas non retirée',
+    peutMarquerNonRetire({ ...boutique, statut: 'en_preparation' }, new Date('2026-08-13T09:00:00')), false)
+  egal('sans date de retrait, on ne devine pas',
+    peutMarquerNonRetire({ statut: 'pret' }, new Date('2026-08-13T09:00:00')), false)
+
+  // Les textes ne laissent jamais de trou ni de dièse orphelin.
+  const t24 = texteRappelRetrait({ commercantNom: 'La Boutique', reference: 'RE1', palier: 24 })
+  verifier('le rappel nomme le commerce et la référence',
+    t24.corps.includes('La Boutique') && t24.corps.includes('#RE1'), t24.corps)
+  const sansRef = texteRappelRetrait({ commercantNom: 'La Boutique', reference: null, palier: 72 })
+  verifier('sans référence, pas de dièse orphelin', !/#\s/.test(sansRef.corps), sansRef.corps)
+  verifier('sans nom de commerce, la phrase tient debout',
+    !/undefined|null/.test(texteRappelRetrait({ palier: 48 }).corps))
+  verifier('à 72 heures, on propose de prévenir plutôt que d\'insister',
+    /préviens/.test(texteRappelRetrait({ commercantNom: 'X', palier: 72 }).corps))
+
+  // ⚠️ L'ANNULATION AUTOMATIQUE DOIT AVOIR DISPARU. Le cron `non-retire-daily`
+  // basculait chaque nuit toute commande prête dont le jour de retrait était
+  // passé, sans rappel, sans prévenir personne, et SANS RENDRE LE STOCK. Il
+  // contredisait frontalement la décision d'Alex : le commerçant décide, et lui
+  // seul. Ce test interdit son retour.
+  const vercel = readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')
+  // ⚠️ ON REGARDE LES CHEMINS, PAS LE FICHIER. Le commentaire qui explique la
+  // suppression cite forcément le nom du cron supprimé, et la recherche tombait
+  // dessus. C'est la quatrième fois que mes propres commentaires cassent un
+  // test : ici, `vercel.json` étant du JSON, l'explication vit dans une clé
+  // `_pourquoi` qu'il faut écarter comme on écarte les commentaires ailleurs.
+  const cheminsCron = [...vercel.matchAll(/"path":\s*"([^"]+)"/g)].map(m => m[1])
+  verifier('le cron qui annulait en silence a disparu',
+    !cheminsCron.some(p => /non-retire-daily/.test(p)),
+    cheminsCron.join(' '))
+  verifier('les rappels le remplacent', /api\/cron\/rappels-retrait/.test(vercel))
+  // ⚠️ ET PAS À N'IMPORTE QUELLE HEURE. L'ancien tournait à 00h30 : un rappel
+  // de retrait ne se lit pas à deux heures du matin. Même famille que le SMS de
+  // fidélité envoyé à 3h, corrigé le 05/08.
+  const heureCron = (vercel.match(/"path": "\/api\/cron\/rappels-retrait",\s*\r?\n\s*"schedule": "(\d+) (\d+)/) || [])[2]
+  verifier('à une heure décente', Number(heureCron) >= 6 && Number(heureCron) <= 18, `heure UTC = ${heureCron}`)
+
+  const routeRappels = sansCommentaires(readFileSync(new URL('../app/api/cron/rappels-retrait/route.js', import.meta.url), 'utf8'))
+  verifier('le cron applique la règle partagée', /rappelAEnvoyer\(cmd, maintenant\)/.test(routeRappels))
+  // ⚠️ IL NE DOIT RIEN ANNULER. C'est toute la décision d'Alex.
+  verifier('et ne bascule AUCUN statut',
+    !/statut: 'non_retire'/.test(routeRappels),
+    (routeRappels.match(/.*statut: 'non_retire'.*/) || [])[0])
+  verifier('le compteur est posé AVANT l\'envoi',
+    routeRappels.indexOf('rappel_retrait_nb: decision.rang') < routeRappels.indexOf('envoyerAuCommercant('))
+  verifier('avec un verrou sur la valeur précédente',
+    /\.eq\('rappel_retrait_nb', decision\.rang - 1\)/.test(routeRappels))
+  verifier('une livraison n\'est jamais relancée', /\.neq\('mode_retrait', 'livraison'\)/.test(routeRappels))
+
+  // ⚠️ LE STOCK DOIT REVENIR. Le tableau de bord posait le statut depuis le
+  // navigateur, qui ne peut pas écrire dans la table des versions : chaque
+  // commande déclarée non retirée retirait une pièce des rayons pour toujours.
+  const routeNonRetire = sansCommentaires(readFileSync(new URL('../app/api/commande/non-retire/route.js', import.meta.url), 'utf8'))
+  verifier('la route rend le stock des versions', /restaurerStockVariantes\(supabase, \[commandeId\]\)/.test(routeNonRetire))
+  verifier('elle vérifie que le commerçant est propriétaire',
+    /auth_user_id !== user\.id/.test(routeNonRetire))
+  // ⚠️ L'IDEMPOTENCE VIENT DE L'APPELANT : l'UPDATE filtré sur l'ancien statut.
+  // Sans lui, deux clics rendraient le stock deux fois et le feraient gonfler.
+  verifier('l\'update est filtré sur l\'ancien statut',
+    /\.eq\('statut', 'pret'\)/.test(routeNonRetire))
+  // ⚠️ ON VISE L'APPEL, PAS L'IMPORT. `restaurerStockVariantes` apparaît en tête
+  // de fichier dans la ligne d'import : la comparaison de positions trouvait
+  // celle-là et concluait à l'envers.
+  verifier('et le stock n\'est rendu que si la ligne a basculé',
+    routeNonRetire.indexOf('if (!basculee)') < routeNonRetire.indexOf('restaurerStockVariantes(supabase'),
+    `garde=${routeNonRetire.indexOf('if (!basculee)')}, appel=${routeNonRetire.indexOf('restaurerStockVariantes(supabase')}`)
+
+  const dash = sansCommentaires(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+  verifier('le tableau de bord passe par la route pour non_retire',
+    /'\/api\/commande\/non-retire'/.test(dash))
+  verifier('le bouton ne dépend plus d\'un créneau', /peutMarquerNonRetire\(commande/.test(dash))
+  verifier('et la commande vieillit sous les yeux du commerçant',
+    /ancienneteCommande\(commande\.pret_at/.test(dash))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

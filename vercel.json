@@ -17,8 +17,9 @@
       "schedule": "*/5 * * * *"
     },
     {
-      "path": "/api/cron/non-retire-daily",
-      "schedule": "30 0 * * *"
+      "_pourquoi": "REMPLACE non-retire-daily, qui annulait en silence chaque nuit a 00h30 sans rendre le stock. Decision Alex 11/08 : aucune annulation automatique, le commercant decide. 09h00 UTC = 11h00 a Bruxelles : un rappel de retrait ne se lit pas a 2h du matin.",
+      "path": "/api/cron/rappels-retrait",
+      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/cron/reveal-21juillet",

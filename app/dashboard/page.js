@@ -13,6 +13,7 @@ import { partagerCommandes } from '@/lib/commandes-vue'
 import { nouveauxRdvs, idsDes, texteAlerteRdv } from '@/lib/alerte-rdv'
 import { referenceCommande } from '@/lib/numero-commande'
 import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '@/lib/bons-vendus'
+import { peutMarquerNonRetire, ancienneteCommande } from '@/lib/rappels-retrait'
 
 const T = {
   bg:      '#F8F6FF',
@@ -417,6 +418,27 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
             )
           })}
         </div>
+        {/* ⚠️ LA COMMANDE DOIT VIEILLIR SOUS LES YEUX DU COMMERÇANT.
+            Jusqu'ici, une commande prête restait « Prête » sans jamais rien
+            dire : elle pouvait dormir des semaines sur une étagère, son stock
+            retiré des rayons, sans que rien ne la distingue de celle d'il y a
+            dix minutes. C'est le pendant des rappels envoyés au client :
+            puisque l'annulation lui appartient — décision d'Alex du 11/08 —
+            encore faut-il qu'il voie ce qu'il a à décider.
+            Rien avant vingt-quatre heures : afficher « prête depuis 3 heures »
+            sur toutes les commandes du jour ne serait que du bruit. */}
+        {commande.statut === 'pret' && (() => {
+          const age = ancienneteCommande(commande.pret_at, new Date())
+          if (!age) return null
+          return (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 6, padding: '3px 10px', borderRadius: 100, background: age.urgent ? '#FEF2F2' : '#FFFBEB', border: `1px solid ${age.urgent ? '#DC262633' : '#F59E0B44'}` }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={age.urgent ? '#DC2626' : '#B45309'} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+              </svg>
+              <span style={{ fontSize: '0.68rem', fontWeight: 800, color: age.urgent ? '#991B1B' : '#92400E' }}>{age.texte}</span>
+            </div>
+          )
+        })()}
         {/* Expédition boutique : à « Prête », remplace le bouton générique par
             « Marquer expédiée » avec saisie du n° de suivi (manuel, optionnel) */}
         {estExpedition && commande.statut === 'pret' && (
@@ -460,21 +482,23 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
             Marquer livrée
           </button>
         )}
-        {/* Bouton Non retiré — retrait uniquement, visible dès que le créneau est passé, confirmation obligatoire */}
+        {/* ⚠️ CE BOUTON N'APPARAISSAIT JAMAIS EN BOUTIQUE. Il exigeait un
+            CRÉNEAU pour vérifier que l'heure était passée ; une commande de
+            détail n'en a aucun, donc `creneauPasse` restait faux et le bouton
+            se retirait. Le statut « non retiré » y était donc INATTEIGNABLE :
+            la commande restait « Prête » à vie et le stock des versions ne
+            revenait jamais en rayon.
+            La règle vit maintenant dans `lib/rappels-retrait.js` : à créneau,
+            c'est sa fin qui fait foi ; sans créneau, c'est le lendemain du jour
+            de retrait, pour laisser au client sa journée entière. */}
         {!estLivraison && !estExpedition && commande.statut === 'pret' && (() => {
-          const maintenant = new Date()
-          let creneauPasse = false
-          if (commande.creneau?.heure_fin) {
-            const dateRef = commande.date_commande || commande.created_at
-            const dateFin = typeof dateRef === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateRef)
-              ? new Date(dateRef + 'T' + commande.creneau.heure_fin.slice(0,5) + ':00')
-              : new Date(dateRef)
-            creneauPasse = maintenant > dateFin
-          }
-          if (!creneauPasse) return null
+          if (!peutMarquerNonRetire(commande, new Date())) return null
+          const quand = commande.creneau?.heure_fin
+            ? `Créneau : ${commande.creneau?.heure_debut?.slice(0,5)}–${commande.creneau?.heure_fin?.slice(0,5)}`
+            : `Retrait souhaité : ${commande.date_commande || '—'}`
           return (
             <button onClick={() => {
-              if (window.confirm(`Marquer comme non retiré ?\n\nClient : ${commande.client_nom}\nCréneau : ${commande.creneau?.heure_debut?.slice(0,5)}–${commande.creneau?.heure_fin?.slice(0,5)}\n\nConfirme que le client ne s'est pas présenté.`)) {
+              if (window.confirm(`Marquer comme non retiré ?\n\nClient : ${commande.client_nom}\n${quand}\n\nConfirme que le client ne s'est pas présenté. Les articles retournent en stock.`)) {
                 onChangerStatut(commande.id, 'non_retire')
               }
             }}
@@ -1053,6 +1077,28 @@ export default function Dashboard() {
   }
 
   async function changerStatut(commandeId, statut) {
+    // ⚠️ « NON RETIRÉ » PASSE PAR UNE ROUTE SERVEUR, et lui seul. Les articles à
+    // versions sont décrémentés en dur à la commande : sans restitution, chaque
+    // commande déclarée non retirée retirait DÉFINITIVEMENT une pièce des
+    // rayons. Le navigateur ne peut pas rendre ce stock, la table des versions
+    // ne lui est pas ouverte en écriture. La route pose le statut ET rend le
+    // stock, filtrée sur l'ancien statut pour ne le rendre qu'une seule fois.
+    if (statut === 'non_retire') {
+      const { data: { session } = {} } = await supabase.auth.getSession()
+      const res = await fetch('/api/commande/non-retire', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ commande_id: commandeId }),
+      }).catch(() => null)
+      const j = await res?.json().catch(() => null)
+      if (!j?.ok) { alert(`Impossible de marquer non retirée : ${j?.error || 'erreur inconnue'}`); return }
+      setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, statut } : c))
+      return
+    }
+
     await supabase.from('commandes').update({ statut }).eq('id', commandeId)
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, statut } : c))
 

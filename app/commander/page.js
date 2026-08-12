@@ -939,12 +939,17 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
                 </span>
               )}
               {c.distance != null && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.7rem', color: T.muted, fontWeight: 600 }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.7rem', color: T.muted, fontWeight: 600, minWidth: 0 }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                     <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
                     <circle cx="12" cy="10" r="3"/>
                   </svg>
-                  {formatDistance(c.distance)}
+                  {/* Le nom du lieu n'apparaît que s'il diffère du siège :
+                      « 1,2 km » suffit pour une boulangerie, « Salle Saint-Roch »
+                      est ce qui manque à un cours de yoga ou à un food truck. */}
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {c.lieu_proche?.libelle ? `${c.lieu_proche.libelle} · ` : ''}{formatDistance(c.distance)}
+                  </span>
                 </span>
               )}
             </div>
@@ -1668,6 +1673,7 @@ export default function Commander() {
       if (data?.length > 0) {
         chargerNotes(data.map(c => c.id), data)
         chargerActiviteAujourdhui(data.map(c => c.id))
+        chargerLieux(data.map(c => c.id))
       }
     } catch (e) {
       // On GARDE la liste précédente : mieux vaut des commerces d'il y a une
@@ -2030,20 +2036,82 @@ export default function Commander() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [position, commercants.length])
 
-  function calculerDistances(liste, pos) {
+  // ─── Les lieux d'activité des commerces affichés ─────────────────────────
+  //
+  // Une requête à part plutôt qu'une jointure : la vue publique
+  // `commercants_public` expose des colonnes choisies, et lui greffer une
+  // relation demanderait de la recréer. Les lieux sont peu nombreux et
+  // n'appartiennent qu'aux commerces qui bougent ou qui ont plusieurs adresses.
+  //
+  // Rangés dans une référence plutôt que dans un état : ils ne s'affichent
+  // jamais seuls, ils ne servent qu'à mesurer. Un état de plus ferait rejouer
+  // le calcul des distances à contretemps.
+  const lieuxRef = useRef({})
+
+  async function chargerLieux(ids) {
+    if (!ids?.length) return
+    const { data } = await supabase
+      .from('commercant_lieux')
+      .select('commercant_id, type, jour_semaine, date_jour, libelle, adresse, latitude, longitude, actif')
+      .in('commercant_id', ids)
+      .eq('actif', true)
+    const parCommercant = {}
+    for (const l of (data || [])) {
+      (parCommercant[l.commercant_id] ||= []).push(l)
+    }
+    lieuxRef.current = parCommercant
+    // ⚠️ LES LIEUX ARRIVENT APRÈS LES COMMERCES, et souvent après la position.
+    // Sans ce recalcul, la distance resterait celle du siège social jusqu'au
+    // prochain relevé : la professeure de yoga apparaîtrait à huit kilomètres
+    // pendant les premières secondes, c'est-à-dire pendant tout le temps où le
+    // Yopper regarde son écran. La mise à jour est fonctionnelle : on repart de
+    // la liste réellement affichée, pas d'une copie figée dans la fermeture.
+    if (position) {
+      setCommercants(prev => avecDistances(prev, position, parCommercant))
+    }
+  }
+
+  // Le calcul lui-même, séparé de la pose dans l'état : deux chemins y mènent,
+  // l'arrivée de la position et celle des lieux.
+  function avecDistances(liste, pos, lieuxParCommercant = lieuxRef.current) {
     // Distance à vol d'oiseau (Haversine) pour le tri "près de toi". C'est la
     // norme des apps de découverte (Yelp, résultats Google Maps, store locators)
     // et c'est suffisant à l'échelle locale. La distance routière (ORS via la
     // route /api/distance, en réserve) est réservée au module livraison alim, où
     // elle a un sens opérationnel (frais + zones). Décision Alex 05/07.
-    const avecDistance = liste.map(c => ({
-      ...c,
-      distance: c.latitude && c.longitude
-        ? distanceVolOiseau(pos.lat, pos.lng, parseFloat(c.latitude), parseFloat(c.longitude))
-        : null,
-    }))
+    //
+    // ⚠️ ELLE SE MESURAIT DEPUIS LE SIÈGE SOCIAL, ET C'ÉTAIT FAUX POUR TROIS
+    // COMMERÇANTS SUR QUATRE DÈS QU'IL BOUGE. Le food truck affichait la
+    // distance jusqu'à son dépôt pendant qu'il était au marché, et la
+    // professeure de yoga inscrite chez elle la distance jusqu'à son domicile.
+    // Un Yopper à deux rues de la salle de cours la voyait à huit kilomètres et
+    // passait son chemin.
+    //
+    // On mesure désormais jusqu'au lieu ACTIF LE PLUS PROCHE, celui du jour
+    // compris. C'est aussi ce qui rend une professeure de yoga visible dans
+    // toutes ses communes, décision d'Alex du 12/08 : elle est proche de
+    // quiconque habite près de l'une de ses salles.
+    const jour = jourLocalISO(new Date())
+    const avecDistance = liste.map(c => {
+      const lieux = lieuxDuJour({ commercant: c, lieux: lieuxParCommercant[c.id] || [], jour })
+      let distance = null
+      let lieuProche = null
+      for (const l of lieux) {
+        if (!l.latitude || !l.longitude) continue
+        const d = distanceVolOiseau(pos.lat, pos.lng, parseFloat(l.latitude), parseFloat(l.longitude))
+        if (distance === null || d < distance) { distance = d; lieuProche = l }
+      }
+      // Le nom du lieu n'est affiché que s'il diffère du siège : « 1,2 km »
+      // suffit pour une boulangerie, « Salle Saint-Roch · 1,2 km » est ce qui
+      // manque à un cours de yoga.
+      return { ...c, distance, lieu_proche: lieuProche?.source === 'siege' ? null : lieuProche }
+    })
     avecDistance.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
-    setCommercants(avecDistance)
+    return avecDistance
+  }
+
+  function calculerDistances(liste, pos) {
+    setCommercants(avecDistances(liste, pos))
   }
 
   async function geocoderAdresseManuelle(adresse) {

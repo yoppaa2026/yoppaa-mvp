@@ -658,6 +658,25 @@ egal('un salon n’est pas itinérant', estItinerant([boutique2]), false)
 egal('une prof de yoga l’est', estItinerant([salleMettet]), true)
 egal('sans lieu, personne ne l’est', estItinerant([]), false)
 
+// ─── L'ACCUEIL MESURE JUSQU'AU BON ENDROIT ────────────────────────────────
+// ⚠️ La distance se mesurait depuis le SIÈGE SOCIAL. Le food truck affichait la
+// distance jusqu'à son dépôt pendant qu'il était au marché, et la professeure de
+// yoga inscrite chez elle la distance jusqu'à son domicile. Un Yopper à deux
+// rues de la salle de cours la voyait à huit kilomètres et passait son chemin.
+verifier('l’accueil mesure la distance sur les lieux du jour',
+  /lieuxDuJour\(\{ commercant: c, lieux: lieuxParCommercant/.test(srcEcranClient))
+verifier('et garde le plus proche',
+  /if \(distance === null \|\| d < distance\)/.test(srcEcranClient))
+verifier('il charge les lieux des commerces affichés',
+  /from\('commercant_lieux'\)/.test(srcEcranClient))
+// ⚠️ LES LIEUX ARRIVENT APRÈS LA POSITION. Sans recalcul, la distance resterait
+// celle du siège pendant tout le temps où le Yopper regarde son écran.
+verifier('et remesure quand ils arrivent',
+  /setCommercants\(prev => avecDistances\(prev, position, parCommercant\)\)/.test(srcEcranClient))
+// Le nom du lieu n'est montré que s'il diffère du siège.
+verifier('la carte nomme le lieu quand il diffère du siège',
+  /lieu_proche\?\.libelle \? `\$\{c\.lieu_proche\.libelle\} · ` : ''/.test(srcEcranClient))
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 6 quinquies. LA BARRE DU HAUT — la cloche ne sort plus de l'écran
 // ═══════════════════════════════════════════════════════════════════════════

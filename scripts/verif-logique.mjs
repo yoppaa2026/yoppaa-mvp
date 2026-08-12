@@ -39,6 +39,7 @@ import {
 } from '../lib/rappels-retrait.js'
 import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '../lib/bons-vendus.js'
 import { jourSemaineDe } from '../lib/creneaux.js'
+import { lieuxDuJour, communesDuCommercant, estItinerant } from '../lib/lieux-activite.js'
 import {
   referenceCommande, referenceComplete, referenceAvecNom,
   prefixePourCommande, libelleSemaine, referenceRdv, referenceRdvComplete, PREFIXES,
@@ -547,6 +548,99 @@ verifier('les rendez-vous à clôturer remontent en premier',
 // haut, donc le nom du client et la date du rendez-vous.
 verifier('la modale de détail est rendue hors de la zone défilante',
   srcDashboard.indexOf('{rdvSelectionne && (') > srcDashboard.indexOf('<ConfigDashboard'))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6 sexies bis. OÙ SE PASSE L'ACTIVITÉ, ET QUAND
+// ═══════════════════════════════════════════════════════════════════════════
+// Le siège social n'est pas le lieu de l'activité. Un commerçant inscrit à son
+// domicile envoyait ses clients chez lui, et une professeure de yoga qui donne
+// cours dans trois salles ne pouvait pas les décrire.
+//
+// 2026-08-12 est un MERCREDI. Toutes les dates de ce bloc en découlent, et
+// c'est volontaire : un test de calendrier qui se lit doit dire son jour.
+const MERCREDI = '2026-08-12'
+const JEUDI = '2026-08-13'
+
+const salon = {
+  nom: 'Ciseaux', adresse: 'Rue de Prée 9G, Mettet',
+  latitude: 50.3, longitude: 4.6, commune_id: 'com-mettet',
+  siege_social_est_lieu_activite: true,
+}
+// La professeure de yoga : inscrite chez elle, elle donne cours ailleurs.
+const yoga = {
+  nom: 'Yoga Sophie', adresse: 'Rue du Domicile 1, Mettet',
+  latitude: 50.31, longitude: 4.61, commune_id: 'com-mettet',
+  siege_social_est_lieu_activite: false,
+}
+const salleMettet = { id: 'l1', type: 'hebdo', jour_semaine: 'mercredi', libelle: 'Salle Saint-Roch', adresse: 'Place, Mettet', commune_id: 'com-mettet', actif: true }
+const salleBiesme = { id: 'l2', type: 'hebdo', jour_semaine: 'jeudi', libelle: 'Salle des fêtes', adresse: 'Rue, Biesme', commune_id: 'com-biesme', actif: true }
+const marcheNoel = { id: 'l3', type: 'ponctuel', date_jour: MERCREDI, libelle: 'Marché de Noël', adresse: 'Grand-Place', commune_id: 'com-namur', actif: true }
+
+// ─── Le cas ordinaire : rien ne change pour l'immense majorité ─────────────
+// ⚠️ C'est la garantie la plus importante du chantier. La colonne vaut `true`
+// par défaut : un commerçant déjà inscrit doit rester exactement où il est.
+egal('sans lieu déclaré, le siège fait office de lieu d’activité',
+  lieuxDuJour({ commercant: salon, lieux: [], jour: MERCREDI }).map(l => l.adresse),
+  ['Rue de Prée 9G, Mettet'])
+egal('et il est marqué comme venant du siège',
+  lieuxDuJour({ commercant: salon, lieux: [] })[0].source, 'siege')
+
+// ─── L'itinérante : le bon lieu, le bon jour ──────────────────────────────
+egal('mercredi, la prof de yoga est à Mettet',
+  lieuxDuJour({ commercant: yoga, lieux: [salleMettet, salleBiesme], jour: MERCREDI }).map(l => l.libelle),
+  ['Salle Saint-Roch'])
+egal('jeudi, elle est à Biesme',
+  lieuxDuJour({ commercant: yoga, lieux: [salleMettet, salleBiesme], jour: JEUDI }).map(l => l.libelle),
+  ['Salle des fêtes'])
+// ⚠️ ET SON DOMICILE N'APPARAÎT JAMAIS. C'est tout l'objet du chantier : la
+// case décochée retire le siège social des lieux où l'on envoie un client.
+verifier('son domicile n’est jamais proposé',
+  !lieuxDuJour({ commercant: yoga, lieux: [salleMettet, salleBiesme], jour: MERCREDI })
+    .some(l => /Domicile/.test(l.adresse || '')))
+
+// ─── Le ponctuel PRIME sur l'habitude ─────────────────────────────────────
+// Le marché de Noël remplace la tournée du jour, il ne s'y ajoute pas : on ne
+// peut pas être à deux endroits à la fois.
+egal('un ponctuel remplace l’hebdomadaire ce jour-là',
+  lieuxDuJour({ commercant: yoga, lieux: [salleMettet, salleBiesme, marcheNoel], jour: MERCREDI }).map(l => l.libelle),
+  ['Marché de Noël'])
+egal('et le lendemain, la tournée reprend',
+  lieuxDuJour({ commercant: yoga, lieux: [salleMettet, salleBiesme, marcheNoel], jour: JEUDI }).map(l => l.libelle),
+  ['Salle des fêtes'])
+
+// ─── Deux sièges d'exploitation : les deux, tous les jours ────────────────
+const boutique2 = { id: 'l4', type: 'permanent', libelle: 'Boutique de Fosses', adresse: 'Rue, Fosses', commune_id: 'com-fosses', actif: true }
+egal('un second siège d’exploitation reste ouvert tous les jours',
+  lieuxDuJour({ commercant: salon, lieux: [boutique2], jour: JEUDI }).map(l => l.libelle),
+  ['Ciseaux', 'Boutique de Fosses'])
+
+// ─── Un lieu désactivé disparaît, sans exception ──────────────────────────
+egal('un lieu désactivé ne s’affiche plus',
+  lieuxDuJour({ commercant: yoga, lieux: [{ ...salleMettet, actif: false }], jour: MERCREDI }), [])
+
+// ─── Sans date, on montre les permanents plutôt que rien ──────────────────
+egal('sans jour, on rend au moins les permanents',
+  lieuxDuJour({ commercant: salon, lieux: [boutique2] }).length, 2)
+
+// ─── TOUTES SES COMMUNES, TOUT LE TEMPS (décision Alex du 12/08) ──────────
+// L'autre option, ne la montrer que dans la commune du jour, l'aurait rendue
+// invisible six jours sur sept à ceux qui la cherchent.
+egal('la prof de yoga apparaît dans ses deux communes',
+  communesDuCommercant({ commercant: yoga, lieux: [salleMettet, salleBiesme] }).sort(),
+  ['com-biesme', 'com-mettet'])
+egal('et son domicile ne l’inscrit pas dans la sienne',
+  communesDuCommercant({ commercant: yoga, lieux: [] }), [])
+egal('le salon reste dans la sienne',
+  communesDuCommercant({ commercant: salon, lieux: [] }), ['com-mettet'])
+egal('un lieu désactivé ne rattache à aucune commune',
+  communesDuCommercant({ commercant: yoga, lieux: [{ ...salleBiesme, actif: false }] }), [])
+
+// ─── Itinérant ou pas : la fiche ne dit pas la même chose ─────────────────
+// La question se lit sur les LIEUX, jamais sur la catégorie : un food truck et
+// une professeure de yoga n'ont pas le même métier mais le même besoin.
+egal('un salon n’est pas itinérant', estItinerant([boutique2]), false)
+egal('une prof de yoga l’est', estItinerant([salleMettet]), true)
+egal('sans lieu, personne ne l’est', estItinerant([]), false)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 6 quinquies. LA BARRE DU HAUT — la cloche ne sort plus de l'écran

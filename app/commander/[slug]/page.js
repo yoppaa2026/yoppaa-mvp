@@ -12,9 +12,12 @@ import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-
 import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
 import { joursRetraitBoutique } from '@/lib/ouverture'
-import { estFoodTruck as estFoodTruckType } from '@/lib/types-commerce'
-import { jourLocalISO, jourSemaineLocal } from '@/lib/timezone'
+// ⚠️ `estFoodTruck` n'est plus importé ici depuis le 12/08 : le MÉTIER ne dit
+// pas si un commerce bouge. C'est `estItinerant`, qui lit les lieux déclarés,
+// qui décide, et une professeure de yoga en profite comme un food truck.
+import { jourLocalISO } from '@/lib/timezone'
 import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
+import { lieuxDuJour, estItinerant } from '@/lib/lieux-activite'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import GalerieCommerce from '@/app/components/GalerieCommerce'
@@ -2464,20 +2467,47 @@ export default function CommanderSlug() {
   // saisir librement. Celui qui tapait « Foodtruck » recevait bien les conseils
   // photo de son métier, mais sa fiche affichait l'adresse de son DÉPÔT au lieu
   // du marché où il se trouvait. Le client se déplaçait au mauvais endroit.
-  const estFoodTruck = estFoodTruckType(commercant?.type)
-  const emplacementDuJour = (() => {
-    if (!estFoodTruck || foodtruckEmps.length === 0) return null
-    // ⚠️ `jourLocalISO` et PAS `toISOString()` : minuit heure belge, c'est 22h
-    // la veille en temps universel. Entre minuit et deux heures du matin, la
-    // fiche cherchait l'emplacement d'HIER.
-    const todayISO = jourLocalISO(new Date())
-    const jourKey = jourSemaineLocal(new Date())
-    return foodtruckEmps.find(e => e.type === 'ponctuel' && e.date_jour === todayISO)
-      || foodtruckEmps.find(e => e.type === 'hebdo' && e.jour_semaine === jourKey)
-      || null
-  })()
+  //
+  // ⚠️ CETTE DÉTECTION NE PILOTE PLUS L'AFFICHAGE DES LIEUX, et c'est le progrès
+  // du 12/08 : le métier ne dit pas si un commerce bouge. Une professeure de
+  // yoga qui donne cours dans deux salles n'est pas un food truck, et a le même
+  // besoin. C'est `estItinerant`, qui lit les LIEUX déclarés, qui décide.
+
+  // ⚠️ LA RÉSOLUTION DU LIEU N'EST PLUS RÉSERVÉE AU FOOD TRUCK, et elle ne vit
+  // plus ici. Elle est passée dans `lib/lieux-activite.js` le 12/08, parce que
+  // trois écrans posent la même question et qu'une divergence entre deux d'entre
+  // eux enverrait un client au mauvais endroit sans que rien ne le signale.
+  //
+  // Ce qu'elle apporte de neuf : une professeure de yoga qui donne cours dans
+  // deux salles, et un commerçant inscrit à la BCE à son DOMICILE dont la fiche
+  // envoyait ses clients chez lui.
+  //
+  // ⚠️ `jourLocalISO` et PAS `toISOString()` : minuit heure belge, c'est 22h la
+  // veille en temps universel. Entre minuit et deux heures du matin, la fiche
+  // cherchait le lieu d'HIER.
+  const lieuxAujourdhui = lieuxDuJour({
+    commercant,
+    lieux: foodtruckEmps,
+    jour: jourLocalISO(new Date()),
+  })
+  // Le premier de la liste est la réponse la plus précise à « où es-tu
+  // aujourd'hui » : le ponctuel, sinon la tournée du jour, sinon un lieu fixe.
+  const emplacementDuJour = lieuxAujourdhui[0] || null
+  // Le commerce bouge-t-il ? La question se lit sur ses lieux, jamais sur son
+  // métier : un food truck et une professeure de yoga n'ont pas le même métier
+  // mais le même besoin.
+  const commerceItinerant = estItinerant(foodtruckEmps)
   // Adresse effective affichée + envoyée à Maps
   const adresseAffichee = emplacementDuJour ? emplacementDuJour.adresse : commercant?.adresse
+
+  // Le planning de la semaine, pour un commerce qui bouge : le client doit
+  // savoir quand le trouver, pas seulement où il est aujourd'hui.
+  const semaineItinerante = commerceItinerant
+    ? ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'].map(j => ({
+        jour: j,
+        lieu: foodtruckEmps.find(e => e.actif !== false && e.type === 'hebdo' && e.jour_semaine === j) || null,
+      })).filter(x => x.lieu)
+    : []
 
   function ouvrirMaps() {
     if (!adresseAffichee) return
@@ -3035,8 +3065,12 @@ export default function CommanderSlug() {
                       retour de paiement, lui, RESTE ici : celui qui revient de sa
                       banque doit le voir sans avoir à faire défiler la page. */}
 
-                  {/* Food truck : bandeau emplacement du jour au-dessus des actions */}
-                  {estFoodTruck && (
+                  {/* ⚠️ LE BANDEAU DU LIEU DU JOUR N'EST PLUS RÉSERVÉ AU FOOD
+                      TRUCK. Il était conditionné au métier, alors qu'une
+                      professeure de yoga qui donne cours dans deux salles a
+                      exactement le même besoin : dire où elle est aujourd'hui.
+                      La condition se lit désormais sur les LIEUX déclarés. */}
+                  {commerceItinerant && (
                     emplacementDuJour ? (
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, background: T.pale, border: `1.5px solid ${T.main}33`, borderRadius: 12, padding: '9px 12px' }}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 2 }}>
@@ -3064,10 +3098,29 @@ export default function CommanderSlug() {
                     )
                   )}
 
+                  {/* La semaine, pour qui bouge. Savoir où il est aujourd'hui ne
+                      suffit pas : le client qui consulte un mardi soir veut
+                      savoir s'il pourra venir jeudi, et où. */}
+                  {semaineItinerante.length > 1 && (
+                    <div style={{ marginTop: 8, background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 12, padding: '9px 12px' }}>
+                      <p style={{ margin: '0 0 6px', fontSize: '0.66rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Où me trouver cette semaine
+                      </p>
+                      {semaineItinerante.map(({ jour, lieu }) => (
+                        <p key={jour} style={{ margin: '0 0 2px', fontSize: '0.74rem', color: T.deep, lineHeight: 1.45 }}>
+                          <strong style={{ textTransform: 'capitalize' }}>{jour}</strong> · {lieu.libelle}
+                          {lieu.heure_debut && lieu.heure_fin
+                            ? ` · ${lieu.heure_debut.slice(0, 5)}–${lieu.heure_fin.slice(0, 5)}`
+                            : ''}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', flexWrap: 'nowrap' }}>
-                    {/* Food truck sans emplacement du jour : on masque l'adresse du
-                        dépôt (le camion n'y est pas), le bandeau ci-dessus informe */}
-                    {adresseAffichee && !(estFoodTruck && !emplacementDuJour) && (
+                    {/* Un commerce itinérant sans lieu du jour : on masque
+                        l'adresse du siège, il n'y est pas. Le bandeau informe. */}
+                    {adresseAffichee && !(commerceItinerant && !emplacementDuJour) && (
                       <button className="action-btn" onClick={ouvrirMaps}
                         style={{ flex: 1, minWidth: 0, justifyContent: 'flex-start' }}
                         aria-label={`Ouvrir ${adresseAffichee} dans Maps`}>
@@ -3075,7 +3128,7 @@ export default function CommanderSlug() {
                           <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
                           <circle cx="12" cy="10" r="3"/>
                         </svg>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{estFoodTruck ? 'Itinéraire' : adresseAffichee}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{commerceItinerant ? 'Itinéraire' : adresseAffichee}</span>
                       </button>
                     )}
                     {commercant.telephone && (

@@ -608,6 +608,22 @@ egal('et le lendemain, la tournée reprend',
   lieuxDuJour({ commercant: yoga, lieux: [salleMettet, salleBiesme, marcheNoel], jour: JEUDI }).map(l => l.libelle),
   ['Salle des fêtes'])
 
+// ⚠️ L'ORDRE COMPTE : LE LIEU DU JOUR EN PREMIER. Les écrans prennent le
+// premier de la liste pour répondre à « où es-tu aujourd'hui ». Un food truck
+// qui n'a PAS décoché la case du signup a donc son dépôt parmi ses lieux : s'il
+// passait devant, sa fiche annoncerait le dépôt alors qu'il est au marché, et
+// on aurait ressuscité le défaut que le module food truck avait corrigé.
+const truck = { ...yoga, siege_social_est_lieu_activite: true, nom: 'Le Truck', adresse: 'Dépôt, Mettet' }
+egal('le lieu du jour passe devant le siège',
+  lieuxDuJour({ commercant: truck, lieux: [salleMettet], jour: MERCREDI })[0].libelle,
+  'Salle Saint-Roch')
+egal('et le ponctuel devant tout le reste',
+  lieuxDuJour({ commercant: truck, lieux: [salleMettet, marcheNoel], jour: MERCREDI })[0].libelle,
+  'Marché de Noël')
+// Le siège reste dans la liste, il n'est pas effacé : il a juste cédé la tête.
+egal('le siège reste présent, en second',
+  lieuxDuJour({ commercant: truck, lieux: [salleMettet], jour: MERCREDI }).length, 2)
+
 // ─── Deux sièges d'exploitation : les deux, tous les jours ────────────────
 const boutique2 = { id: 'l4', type: 'permanent', libelle: 'Boutique de Fosses', adresse: 'Rue, Fosses', commune_id: 'com-fosses', actif: true }
 egal('un second siège d’exploitation reste ouvert tous les jours',

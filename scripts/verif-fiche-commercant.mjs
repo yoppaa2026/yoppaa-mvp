@@ -353,6 +353,24 @@ for (const chemin of ['app/dashboard/ConfigDashboard.js', 'app/commander/[slug]/
     !/foodtruck_emplacements/.test(lire(chemin)))
 }
 
+// ─── LA FICHE DIT OÙ ALLER, POUR TOUT LE MONDE ────────────────────────────
+// Le bandeau « aujourd'hui je suis ici » était conditionné au MÉTIER food
+// truck. Une professeure de yoga qui donne cours dans deux salles ne l'avait
+// donc jamais, et sa fiche affichait l'adresse de son domicile.
+const ficheClient = sansCommentaires(lire('app/commander/[slug]/page.js'))
+
+verifier('la fiche résout le lieu par la fonction partagée',
+  /lieuxDuJour\(\{/.test(ficheClient))
+verifier('le bandeau du jour se décide sur les lieux, pas sur le métier',
+  /\{commerceItinerant && \(/.test(ficheClient))
+// ⚠️ SAVOIR OÙ IL EST AUJOURD'HUI NE SUFFIT PAS. Le client qui consulte un mardi
+// soir veut savoir s'il pourra venir jeudi, et où.
+verifier('un commerce qui bouge annonce sa semaine',
+  /Où me trouver cette semaine/.test(ficheClient))
+// Un itinérant sans lieu du jour : on masque l'adresse du siège, il n'y est pas.
+verifier('l’adresse du siège est masquée quand le commerce est ailleurs',
+  /!\(commerceItinerant && !emplacementDuJour\)/.test(ficheClient))
+
 const signup = lire('app/signup/page.js')
 verifier('le signup demande le site web', /site_web/.test(signup))
 verifier('le signup guide ce qu\'il faut donner à l\'IA', /Donne trois éléments/.test(signup))

@@ -444,7 +444,8 @@ verifier('« food-truck » avec un tiret également', estFoodTruck('food-truck')
 verifier('un double métier est reconnu', estFoodTruck('Snack & Food truck'))
 verifier('une boulangerie n\'est pas un camion', !estFoodTruck('Boulangerie'))
 verifier('un métier vide non plus', !estFoodTruck('') && !estFoodTruck(null) && !estFoodTruck(undefined))
-// Et les quatre écrans doivent APPELER cette fonction, pas la réécrire.
+// ⚠️ AUCUN ÉCRAN NE RÉÉCRIT CETTE DÉTECTION. C'est la règle, et elle vaut pour
+// tout le monde, y compris ceux qui ne s'en servent plus.
 for (const [chemin, ecran] of [
   ['app/commander/[slug]/page.js', 'la fiche client'],
   ['app/dashboard/ConfigDashboard.js', 'le tableau de bord'],
@@ -458,8 +459,31 @@ for (const [chemin, ecran] of [
   const src = lireBrut(chemin).split(/\r?\n/).map(l => l.replace(/(^|\s)\/\/.*/, '$1')).join('\n')
   verifier(`${ecran} n'a plus sa propre détection`,
     !/includes\('[Ff]ood [Tt]ruck'\)/.test(src) && !/\/food\.\?truck\/i\.test/.test(src), chemin)
+}
+
+// ⚠️ ET CEUX QUI EN ONT ENCORE BESOIN L'APPELLENT. La liste s'est réduite le
+// 12/08 : LA FICHE CLIENT N'EN A PLUS BESOIN DU TOUT. Le métier ne dit pas si un
+// commerce bouge, et c'est justement le progrès du module LIEUX : une
+// professeure de yoga qui donne cours dans deux salles n'est pas un food truck
+// et a exactement le même besoin. C'est `estItinerant`, qui lit les lieux
+// déclarés, qui décide désormais.
+//
+// Ce test exigeait `estFoodTruck(` dans la fiche, il aurait donc interdit cette
+// correction. Il verrouillait un appel, pas un défaut.
+for (const [chemin, ecran] of [
+  ['app/dashboard/ConfigDashboard.js', 'le tableau de bord'],
+  ['app/signup/page.js', 'l\'inscription'],
+  ['lib/guide-photos.js', 'le guide photos'],
+]) {
+  const src = lireBrut(chemin).split(/\r?\n/).map(l => l.replace(/(^|\s)\/\/.*/, '$1')).join('\n')
   verifier(`${ecran} appelle la fonction partagée`, /estFoodTruck(Type)?\(/.test(src), chemin)
 }
+
+// Et la fiche, elle, décide sur les LIEUX.
+const ficheSrc = lireBrut('app/commander/[slug]/page.js')
+  .split(/\r?\n/).map(l => l.replace(/(^|\s)\/\/.*/, '$1')).join('\n')
+verifier('la fiche client décide sur les lieux, pas sur le métier',
+  /estItinerant\(/.test(ficheSrc) && !/estFoodTruckType\(/.test(ficheSrc))
 
 // ⚠️ ET L'EMPLACEMENT NE DOIT PLUS ÊTRE DÉTRUIT AVANT D'ÊTRE REMPLACÉ. Les trois
 // enregistrements effaçaient l'ancienne ligne AVANT d'insérer la nouvelle : une

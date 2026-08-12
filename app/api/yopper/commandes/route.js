@@ -25,9 +25,7 @@
 import { NextResponse } from 'next/server'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { createClient } from '@supabase/supabase-js'
-import { crediterFidelite } from '@/lib/fidelite-server'
-import { montantFidelisable } from '@/lib/fidelite'
-import { canDo } from '@/lib/plans'
+import { crediterFideliteCommande } from '@/lib/fidelite-server'
 import { referenceCommande } from '@/lib/numero-commande'
 
 function admin() {
@@ -128,7 +126,12 @@ export async function POST(request) {
         //  • `article_nom` est le nom FIGÉ à la vente. Sans lui, un lot « 3+1 »
         //    s'affichait sous le nom de l'article de base, et un article retiré
         //    du catalogue ne s'affichait plus du tout.
-        .select('*, commercant:commercants(nom, type, categorie), creneau:creneaux(heure_debut, heure_fin), creneau_livraison:livraison_creneaux(heure_debut, heure_fin), commande_articles(quantite, article_nom, options, article:articles(nom))')
+        //
+        // ⚠️ ET LE STATUT DU RENDEZ-VOUS VIENT AVEC. Sans lui, une commande dont
+        // le rendez-vous a été annulé continuait d'afficher « On te les remet à
+        // ton rendez-vous » pour un rendez-vous disparu, sans numéro ni geste.
+        // Le hint lève l'ambiguïté, les deux tables se pointant l'une l'autre.
+        .select('*, commercant:commercants(nom, type, categorie), creneau:creneaux(heure_debut, heure_fin), creneau_livraison:livraison_creneaux(heure_debut, heure_fin), commande_articles(quantite, article_nom, options, article:articles(nom)), rdv:rdv_reservations!commandes_rdv_reservation_id_fkey(id, statut, date_rdv, heure_debut)')
         .eq('client_email', yopper.email)
         .order('created_at', { ascending: false })
       if (!data || data.length === 0) return NextResponse.json({ ok: true, commandes: [] })
@@ -153,29 +156,10 @@ export async function POST(request) {
       const { error } = await supabase.from('commandes').update(patch).eq('id', id)
       if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
 
-      // Crédit fidélité automatique (Vendre) : le SWIPE CLIENT est le chemin
-      // normal du retrait vers 'recupere' (le dashboard ne couvre que
-      // expédition/livraison/bouton commerçant). Best-effort, idempotent.
-      try {
-        const { data: full } = await supabase
-          .from('commandes').select('id, commercant_id, client_telephone, client_email, total, bon_cadeau_montant').eq('id', id).maybeSingle()
-        if (full) {
-          const { data: commercant } = await supabase
-            .from('commercants').select('*').eq('id', full.commercant_id).maybeSingle()
-          if (commercant?.fidelite_actif && canDo(commercant.plan, 'fidelite_auto')) {
-            // Hors part payée par bon cadeau : elle a déjà rempli la carte de
-            // celui qui a acheté le bon (lib/fidelite).
-            const credit = commercant.fidelite_mecanique === 'cagnotte'
-              ? { montant: montantFidelisable(full) }
-              : { passages: 1 }
-            await crediterFidelite(supabase, commercant, full.client_telephone, credit, {
-              source: 'commande', commande_id: full.id, client_email: full.client_email || null,
-            })
-          }
-        }
-      } catch (e) {
-        console.error('[yopper/commandes] credit fidelite KO (non-bloquant)', e?.message)
-      }
+      // Crédit fidélité automatique (Vendre). Le geste du Yopper est UN des
+      // chemins vers « récupérée » ; le rendez-vous honoré en est un autre
+      // depuis le 12/08. Les deux créditent la même carte, par la même fonction.
+      await crediterFideliteCommande(supabase, id, '[yopper/commandes]')
       return NextResponse.json({ ok: true })
     }
 

@@ -36,6 +36,18 @@ const JOURS_CRT  = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 const JOURS_LONG = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
 const MOIS_CRT   = ['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc']
 
+// Ce qu'on écrit sur la pastille d'un rendez-vous passé. Les libellés du
+// tableau de bord vivent dans `page.js` avec leurs couleurs et leurs actions :
+// ici on n'a besoin que du mot, et le recopier évite d'exporter une structure
+// entière pour trois caractères.
+const LIBELLES_STATUT = {
+  confirme: 'Confirmé',
+  honore: 'Honoré',
+  no_show: 'No-show',
+  annule_client: 'Annulé par le client',
+  annule_commercant: 'Annulé',
+}
+
 const PAS_MINUTES = 30      // granularité grille
 const HAUTEUR_CELLULE = 32  // hauteur d'une cellule 30min en pixels
 const LARGEUR_HEURES  = 56  // largeur de la colonne labels heures à gauche
@@ -88,6 +100,13 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
   // (demande Alex 01/08). En semaine sur petit écran, la grille défile
   // horizontalement avec des colonnes de largeur minimale.
   const [vueForcee, setVueForcee] = useState(null)   // null = auto | 'jour' | 'semaine'
+  // ⚠️ L'HISTORIQUE MANQUAIT TOUT ENTIER. Naviguer semaine par semaine permet de
+  // retrouver un rendez-vous quand on sait quand il a eu lieu ; ça ne remplace
+  // pas la question réelle du commerçant, « qu'est-ce que j'ai oublié de
+  // clôturer ? ». Cette vue répond à celle-là : tous les rendez-vous passés,
+  // du plus récent au plus ancien, et ceux qui traînent encore en « confirmé »
+  // remontent en premier.
+  const [historique, setHistorique] = useState(false)
   const vueSemaine = vueForcee ? vueForcee === 'semaine' : isDesktop
   const nbJours = vueSemaine ? 7 : 1
   const scrollH = vueSemaine && !isDesktop           // besoin d'un défilement horizontal ?
@@ -185,14 +204,44 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
     return m
   }, [joursAffiches, rdvsVisibles])
 
+  // ─── L'HISTORIQUE ─────────────────────────────────────────────────────────
+  //
+  // Tout ce qui est déjà passé, annulations comprises. Naviguer semaine par
+  // semaine permet de retrouver un rendez-vous quand on sait quand il a eu lieu ;
+  // ça ne répond pas à la vraie question du commerçant, « qu'ai-je oublié de
+  // clôturer ? ».
+  //
+  // ⚠️ LES RENDEZ-VOUS RESTÉS « CONFIRMÉ » ALORS QUE LEUR DATE EST PASSÉE
+  // REMONTENT EN PREMIER. Ce sont les seuls sur lesquels il reste un geste à
+  // faire : marquer honoré, ou constater l'absence. Les trier par date les
+  // noierait au milieu de tout le reste.
+  const rdvsPasses = useMemo(() => {
+    const aujourdhuiIso = isoDate(today)
+    const rang = r => (r.statut === 'confirme' ? 0 : 1)
+    return (rdvs || [])
+      .filter(r => r.date_rdv && r.date_rdv < aujourdhuiIso)
+      .filter(r => praticienFiltre === 'all' || r.praticien_id === praticienFiltre)
+      .sort((a, b) =>
+        rang(a) - rang(b)
+        || String(b.date_rdv).localeCompare(String(a.date_rdv))
+        || String(b.heure_debut || '').localeCompare(String(a.heure_debut || '')))
+  }, [rdvs, praticienFiltre, today])
+
+  const aClore = rdvsPasses.filter(r => r.statut === 'confirme').length
+
   // Navigation
+  //
+  // ⚠️ LE PASSÉ ÉTAIT INTERDIT, et c'était un verrou volontaire, commenté
+  // « pas de navigation dans le passe pour MVP ». Un agenda qui ne remonte pas
+  // est pourtant inutilisable au quotidien : le commerçant qui a oublié de
+  // marquer un rendez-vous honoré la veille n'avait AUCUN moyen d'y revenir,
+  // alors que ses commandes, elles, ont leur historique depuis le début.
   function decaler(jours) {
     const d = new Date(refDate)
     d.setDate(refDate.getDate() + jours)
-    if (d < today) return  // pas de navigation dans le passe pour MVP
     setRefDate(d)
   }
-  function allerAujourdhui() { setRefDate(today) }
+  function allerAujourdhui() { setRefDate(today); setHistorique(false) }
 
   // Label du header navigation
   const headerLabel = vueSemaine
@@ -267,9 +316,76 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
         </BandeDefilante>
       )}
 
+      {/* ⚠️ L'ACCÈS À L'HISTORIQUE EST UNE BANDE À PART, pas un bouton de plus
+          dans l'en-tête. Celui-ci porte déjà deux flèches, un libellé et la
+          bascule Jour/Semaine : un cinquième élément y aurait débordé sur
+          téléphone, exactement comme la cloche du tableau de bord. */}
+      <button onClick={() => setHistorique(h => !h)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 0.875rem', border: 'none', borderBottom: `1px solid ${T.pale}`, background: historique ? T.pale : '#fff', color: historique ? T.main : T.muted, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+        {historique ? (
+          <>← Revenir à l&rsquo;agenda</>
+        ) : (
+          <>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+            </svg>
+            Historique
+            {aClore > 0 && (
+              <span style={{ background: '#DC2626', color: '#fff', fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 100 }}>
+                {aClore} à clôturer
+              </span>
+            )}
+          </>
+        )}
+      </button>
+
+      {/* L'historique : une liste, pas une grille. On ne cherche pas un horaire
+          libre dans le passé, on cherche un rendez-vous. */}
+      {historique && (
+        <div style={{ maxHeight: '70vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0.625rem 0.875rem' }}>
+          {rdvsPasses.length === 0 && (
+            <p style={{ textAlign: 'center', color: T.muted, fontSize: '0.82rem', padding: '2rem 0', margin: 0 }}>
+              Aucun rendez-vous passé pour le moment.
+            </p>
+          )}
+          {rdvsPasses.map(r => {
+            // ⚠️ `couleurRdv` ne connaît qu'un seul « annule », là où la base en
+            // distingue deux selon qui a annulé. Sans cette normalisation, un
+            // rendez-vous annulé reprenait la couleur de sa praticienne et se
+            // confondait avec la journée à faire.
+            const c = couleurRdv({
+              statut: String(r.statut || '').startsWith('annule') ? 'annule' : r.statut,
+              couleurPraticien: r.praticien?.couleur_hex,
+            })
+            const d = new Date(`${r.date_rdv}T12:00:00`)
+            const aFaire = r.statut === 'confirme'
+            return (
+              <button key={r.id} onClick={() => onSelectRdv && onSelectRdv(r)}
+                style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '0.5rem 0.625rem', marginBottom: 6, borderRadius: 10, border: `1.5px solid ${aFaire ? '#FCA5A5' : T.pale}`, background: aFaire ? '#FEF2F2' : '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                <span style={{ width: 6, alignSelf: 'stretch', borderRadius: 100, background: c.bg || COULEUR_DEFAUT, flexShrink: 0 }}/>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {[r.client_prenom, r.client_nom].filter(Boolean).join(' ') || 'Client'}
+                    {r.prestation?.nom ? ` · ${r.prestation.nom}` : ''}
+                  </span>
+                  <span style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: T.muted, marginTop: 1 }}>
+                    {JOURS_CRT[jourIdxLun(d)]} {d.getDate()} {MOIS_CRT[d.getMonth()]}
+                    {r.heure_debut ? ` · ${r.heure_debut.slice(0, 5)}` : ''}
+                    {r.praticien?.prenom ? ` · ${r.praticien.prenom}` : ''}
+                  </span>
+                </span>
+                <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '3px 8px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0, background: aFaire ? '#DC2626' : T.bg, color: aFaire ? '#fff' : T.muted }}>
+                  {aFaire ? 'À clôturer' : (LIBELLES_STATUT[r.statut] || r.statut)}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* Grille agenda — scroll vertical interne (+ horizontal en vue semaine
           sur petit écran : 7 colonnes ne tiennent pas dans 375 px) */}
-      <div style={{ maxHeight: '70vh', overflowY: 'auto', overflowX: scrollH ? 'auto' : 'hidden', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{ display: historique ? 'none' : undefined, maxHeight: '70vh', overflowY: 'auto', overflowX: scrollH ? 'auto' : 'hidden', WebkitOverflowScrolling: 'touch' }}>
         <div style={{ display: 'grid', gridTemplateColumns: `${LARGEUR_HEURES}px repeat(${nbJours}, ${scrollH ? 'minmax(96px, 1fr)' : '1fr'})`, position: 'relative', minWidth: scrollH ? LARGEUR_HEURES + 7 * 96 : undefined }}>
 
           {/* Header jours (sticky top dans le scroll) */}

@@ -11,9 +11,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { crediterFidelite } from '@/lib/fidelite-server'
-import { canDo } from '@/lib/plans'
-import { montantFidelisable } from '@/lib/fidelite'
+import { crediterFideliteCommande } from '@/lib/fidelite-server'
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -31,31 +29,20 @@ export async function POST(request) {
       { auth: { persistSession: false } }
     )
 
+    // Le seul contrôle propre à cette route : on ne crédite que du définitif.
     const { data: cmd, error: errCmd } = await supabase
-      .from('commandes')
-      .select('id, commercant_id, client_telephone, client_email, total, bon_cadeau_montant, statut')
-      .eq('id', commandeId).maybeSingle()
+      .from('commandes').select('id, statut').eq('id', commandeId).maybeSingle()
     if (errCmd) throw new Error(errCmd.message)
     if (!cmd) return NextResponse.json({ ok: false, error: 'Commande introuvable' }, { status: 404 })
     if (cmd.statut !== 'recupere') {
       return NextResponse.json({ ok: false, error: 'Commande non finalisée' }, { status: 400 })
     }
 
-    const { data: commercant, error: errCom } = await supabase
-      .from('commercants').select('*').eq('id', cmd.commercant_id).maybeSingle()
-    if (errCom) throw new Error(errCom.message)
-    if (!commercant?.fidelite_actif || !canDo(commercant.plan, 'fidelite_auto')) {
-      return NextResponse.json({ ok: true, skipped: 'fidelite_inactive' })
-    }
-
-    // La part réglée par un bon cadeau est retirée : elle a déjà rempli la
-    // carte de celui qui a acheté le bon (voir lib/fidelite).
-    const credit = commercant.fidelite_mecanique === 'cagnotte'
-      ? { montant: montantFidelisable(cmd) }
-      : { passages: 1 }
-    const res = await crediterFidelite(supabase, commercant, cmd.client_telephone, credit, {
-      source: 'commande', commande_id: cmd.id, client_email: cmd.client_email || null,
-    })
+    // ⚠️ LA RÈGLE DU BON CADEAU VIT DANS `lib/fidelite-server.js`, ET NULLE PART
+    // AILLEURS. Elle était recopiée dans trois routes, et il suffisait d'en
+    // oublier une pour que le double comptage revienne par celle-là : s'offrir
+    // un bon à soi-même remplissait alors la cagnotte deux fois.
+    const res = await crediterFideliteCommande(supabase, commandeId, '[fidelite/crediter]')
     return NextResponse.json(res)
   } catch (e) {
     console.error('[fidelite/crediter] KO', e?.message)

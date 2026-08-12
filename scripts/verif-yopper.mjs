@@ -182,13 +182,34 @@ egal('commande absente', montantFidelisable(), 0)
 egal('centimes justes', montantFidelisable({ total: 10.05, bon_cadeau_montant: 3.33 }), 6.72)
 egal('bon négatif ignoré', montantFidelisable({ total: 10, bon_cadeau_montant: -5 }), 10)
 
-// Les trois chemins de crédit doivent tous passer par cette règle, sinon le
-// double comptage revient par celui qu'on a oublié.
-for (const chemin of ['app/api/fidelite/crediter/route.js', 'app/api/yopper/commandes/route.js']) {
+// ⚠️ CE TEST VERROUILLAIT L'ENDROIT DE LA RÈGLE, PAS LA RÈGLE. Il exigeait que
+// CHAQUE route contienne `montantFidelisable(` et `bon_cadeau_montant`, ce qui
+// interdisait précisément la bonne correction : sortir le bloc, recopié trois
+// fois, dans une fonction unique. Un test doit se mesurer sur le défaut qu'il
+// empêche, ici le double comptage, jamais sur la façon dont c'était écrit.
+//
+// La règle est donc vérifiée là où elle vit maintenant, et on exige des chemins
+// de crédit qu'ils y passent, ce qui est plus fort qu'avant : oublier une route
+// n'est plus possible, il n'y a plus de copie à oublier.
+const fideliteServeur = lire('lib/fidelite-server.js')
+verifier('la règle du bon cadeau vit dans lib/fidelite-server.js',
+  /montantFidelisable\(/.test(fideliteServeur))
+verifier('et elle lit bien le montant du bon',
+  /bon_cadeau_montant/.test(fideliteServeur))
+verifier('le crédit d\'une commande ne part jamais du total brut',
+  !/montant: Number\((cmd|full)\.total \|\| 0\)/.test(fideliteServeur))
+
+// Tous les chemins qui clôturent une commande passent par la fonction partagée.
+// Le geste du Yopper, le bouton du commerçant, et le rendez-vous honoré depuis
+// le 12/08 : trois portes, un seul crédit.
+for (const chemin of [
+  'app/api/fidelite/crediter/route.js',
+  'app/api/yopper/commandes/route.js',
+  'app/api/commande/produits-remis/route.js',
+]) {
   const src = lire(chemin)
-  verifier(`${chemin} déduit la part payée en bon`, /montantFidelisable\(/.test(src))
-  verifier(`${chemin} ne crédite plus le total brut`, !/montant: Number\((cmd|full)\.total \|\| 0\)/.test(src))
-  verifier(`${chemin} lit bien le montant du bon`, /bon_cadeau_montant/.test(src))
+  verifier(`${chemin} passe par le crédit partagé`, /crediterFideliteCommande\(/.test(src))
+  verifier(`${chemin} ne recopie pas la règle du bon`, !/montantFidelisable\(/.test(src))
 }
 
 // L'achat d'un bon cadeau doit remplir la carte de l'ACHETEUR.

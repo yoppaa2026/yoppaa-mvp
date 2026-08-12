@@ -247,7 +247,7 @@ const ACTIONS_RDV_LABEL = {
 }
 
 // ─── Carte commande ───────────────────────────────────────────────────────────
-function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, onExpedier, modeHistorique = false }) {
+function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, onExpedier, onProduitsRemis, modeHistorique = false }) {
   const statut = STATUTS[commande.statut] || STATUTS['en_attente']
   const { couleur } = statut
   const estLivraison = commande.mode_retrait === 'livraison'
@@ -423,6 +423,17 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
             <p style={{ fontSize: '0.7rem', fontWeight: 700, color: T.muted, margin: '2px 0 0', lineHeight: 1.4 }}>
               À remettre pendant la prestation. Le client ne passera pas les chercher.
             </p>
+            {/* Le filet. Marquer le rendez-vous honoré clôture normalement cette
+                commande toute seule ; ce bouton sert quand la prestation s'est
+                passée sans que les produits soient remis, ou l'inverse. */}
+            {!modeHistorique && ['en_attente', 'en_preparation', 'pret'].includes(commande.statut) && (
+              <button onClick={() => {
+                if (window.confirm('Confirmer que tu as remis ces produits au client ?')) onProduitsRemis?.(commande.id)
+              }}
+                style={{ width: '100%', marginTop: 8, padding: '0.5rem', background: T.main, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: '0.78rem', fontFamily: '"DM Sans", sans-serif' }}>
+                Produits remis au client
+              </button>
+            )}
           </div>
         )}
         <div style={{ background: T.bg, borderRadius: 10, padding: '0.5rem 0.75rem', marginBottom: '0.625rem' }}>
@@ -1147,6 +1158,32 @@ export default function Dashboard() {
     }).catch(e => console.warn('[dashboard] credit fidelite KO', e))
   }
 
+  // ─── Les produits d'un rendez-vous viennent d'être remis ─────────────────
+  //
+  // ⚠️ CETTE COMMANDE NE POUVAIT ÊTRE CLÔTURÉE PAR PERSONNE, ni par le client,
+  // qui n'a qu'un bouton « J'ai compris » sur son écran, ni par le commerçant,
+  // dont la vignette n'offrait aucune action. Elle restait « prête » pour
+  // toujours, faussait les compteurs, déclenchait des rappels de retrait et
+  // finissait en « client non venu » alors qu'il était venu.
+  //
+  // Passe par le serveur, comme « non retiré » : le crédit de fidélité doit
+  // suivre, et le navigateur n'a pas les droits d'écriture sur les cartes.
+  async function produitsRemis(commandeId) {
+    const { data: { session } = {} } = await supabase.auth.getSession()
+    const res = await fetch('/api/commande/produits-remis', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({ commande_id: commandeId }),
+    }).catch(() => null)
+    const j = await res?.json().catch(() => null)
+    if (!j?.ok) return false
+    setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, statut: 'recupere' } : c))
+    return true
+  }
+
   async function changerStatut(commandeId, statut) {
     // ⚠️ « NON RETIRÉ » PASSE PAR UNE ROUTE SERVEUR, et lui seul. Les articles à
     // versions sont décrémentés en dur à la commande : sans restitution, chaque
@@ -1301,6 +1338,15 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rdv_id: rdvId }),
       }).catch(e => console.warn('[dashboard] email rdv-honore KO', e))
+
+      // ⚠️ LE RENDEZ-VOUS HONORÉ EMPORTE SES PRODUITS. C'est le moment exact où
+      // le commerçant tend le sachet : lui demander un second geste dans un
+      // autre onglet, c'est s'assurer qu'il l'oubliera. La route est filtrée sur
+      // l'ancien statut, donc rejouer un « honoré » ne crédite pas deux fois.
+      const rdvHonore = rdvs.find(r => r.id === rdvId)
+      if (rdvHonore?.commande?.id) {
+        await produitsRemis(rdvHonore.commande.id)
+      }
     } else if (statut === 'no_show') {
       // Notif Yopper qu'il a été marqué absent (transparence + permet contestation).
       // L'acompte n'est PAS refundé (le commerçant a bloqué le créneau pour rien).
@@ -2319,6 +2365,7 @@ export default function Dashboard() {
                         onChangerStatut={changerStatut}
                         onLivraisonStatut={changerStatutLivraison}
                         onExpedier={expedierCommande}
+                        onProduitsRemis={produitsRemis}
                         modeHistorique={modeHistorique}
                       />
                     )
@@ -2377,19 +2424,9 @@ export default function Dashboard() {
                     onCreated={() => chargerRdvs(commercant.id)}
                   />
                 )}
-                {/* Modale details RDV : reutilise la CarteRdv qu'on avait codee pour l'ancienne vue liste */}
-                {rdvSelectionne && (
-                  <div onClick={() => setRdvSelectionne(null)}
-                    style={{ position: 'fixed', inset: 0, background: 'rgba(26,8,64,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem', backdropFilter: 'blur(4px)' }}>
-                    <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '85vh', overflowY: 'auto' }}>
-                      <CarteRdv rdv={rdvSelectionne} onChangerStatut={(id, st) => { changerStatutRdv(id, st); setRdvSelectionne(null) }}/>
-                      <button onClick={() => setRdvSelectionne(null)}
-                        style={{ width: '100%', marginTop: 12, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>
-                        Fermer
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {/* ⚠️ LA MODALE DE DÉTAIL N'EST PLUS ICI, et elle ne doit jamais y
+                    revenir. Voir le bloc « Modale détail RDV » au niveau
+                    supérieur, juste avant la fermeture du composant. */}
               </>
             )}
 
@@ -2399,6 +2436,30 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ─── Modale détail RDV ────────────────────────────────────────────────
+          ⚠️ RENDUE ICI, HORS DE `.scroll-zone`, ET C'EST TOUT L'ENJEU.
+          Elle vivait à l'intérieur de la zone défilante, qui porte
+          `-webkit-overflow-scrolling: touch`. Sur iPhone, ce réglage PIÈGE les
+          éléments en `position: fixed` : ils se placent par rapport au
+          conteneur qui défile et non par rapport à l'écran. La modale
+          commençait donc sous l'en-tête des statistiques, qui lui mangeait le
+          haut, et le nom du client comme la date du rendez-vous étaient
+          invisibles.
+          L'écran de retrait du client porte le même avertissement depuis le
+          05/08 : « rendu HORS de page-wrap ». Même piège, même remède. */}
+      {rdvSelectionne && (
+        <div onClick={() => setRdvSelectionne(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(26,8,64,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9998, padding: '1rem', backdropFilter: 'blur(4px)' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '85dvh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <CarteRdv rdv={rdvSelectionne} onChangerStatut={(id, st) => { changerStatutRdv(id, st); setRdvSelectionne(null) }}/>
+            <button onClick={() => setRdvSelectionne(null)}
+              style={{ width: '100%', marginTop: 12, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -37,6 +37,7 @@ import { envoyerAuCommercant, emailRappelRetrait } from '@/lib/resend'
 import { envoyerPushParExternalId } from '@/lib/onesignal'
 import { referenceCommande } from '@/lib/numero-commande'
 import { rappelAEnvoyer, texteRappelRetrait, RAPPEL_TROP_TARD_HEURES } from '@/lib/rappels-retrait'
+import { rdvPorteLesProduits } from '@/lib/ecran-retrait'
 
 export async function GET(request) {
   const authHeader = request.headers.get('authorization') || ''
@@ -61,8 +62,9 @@ export async function GET(request) {
       .from('commandes')
       .select(`
         id, numero_commande, numero_prefixe, pret_at, rappel_retrait_nb,
-        client_email, client_prenom, client_nom, mode_retrait,
-        commercant:commercants(nom, adresse, categorie)
+        client_email, client_prenom, client_nom, mode_retrait, rdv_reservation_id,
+        commercant:commercants(nom, adresse, categorie),
+        rdv:rdv_reservations!commandes_rdv_reservation_id_fkey(id, statut)
       `)
       .eq('statut', 'pret')
       .not('pret_at', 'is', null)
@@ -81,6 +83,17 @@ export async function GET(request) {
     const details = []
 
     for (const cmd of (commandes || [])) {
+      // ⚠️ NE JAMAIS RÉCLAMER LE RETRAIT DE PRODUITS ATTENDUS AU FAUTEUIL.
+      // Une commande passée dans le tunnel de rendez-vous se remet PENDANT la
+      // prestation : « ta commande t'attend, viens la chercher » envoyé la
+      // veille du rendez-vous est un contresens, et il enverrait le client
+      // faire un déplacement pour rien.
+      //
+      // Le rappel redevient juste dès que le rendez-vous tombe : annulé avec
+      // produits gardés, ou no-show. Les produits attendent alors vraiment en
+      // boutique, et la commande a rejoint le chemin du retrait ordinaire.
+      if (cmd.rdv_reservation_id && rdvPorteLesProduits(cmd.rdv)) { ignores++; continue }
+
       const decision = rappelAEnvoyer(cmd, maintenant)
       if (!decision) { ignores++; continue }
 

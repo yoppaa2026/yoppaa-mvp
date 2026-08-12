@@ -20,7 +20,7 @@ import { libelleRetrait, estRetraitBoutique } from '../lib/libelle-retrait.js'
 import { generateRdvIcs, icsToBase64Attachment } from '../lib/ical.js'
 import { tauxFraisLivraison } from '../lib/tva.js'
 import { ventilerFrais } from '../lib/stripe-frais.js'
-import { contexteRetrait, textesRetrait, textesConfirmation } from '../lib/ecran-retrait.js'
+import { contexteRetrait, textesRetrait, textesConfirmation, rdvPorteLesProduits } from '../lib/ecran-retrait.js'
 import { libelleOptions, ESPACE_INSECABLE } from '../lib/options-ligne.js'
 import { emailCommandeExpediee, emailRecapCommandesJour, emailRdvConfirme, emailCommandeConfirmee } from '../lib/resend.js'
 import { partagerCommandes } from '../lib/commandes-vue.js'
@@ -459,6 +459,94 @@ egal('les rendez-vous aussi',
   compter(srcDashboard, /\.select\(SELECT_RDVS\)/g), 2)
 verifier('aucune requête de commandes ne reste recopiée à la main',
   !/\.select\(`\*, creneau:creneaux/.test(srcDashboard))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6 quater bis. QUAND LE RENDEZ-VOUS TOMBE, LA COMMANDE LUI SURVIT
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ À l'annulation, le client choisit le sort de ses produits. S'il les GARDE,
+// il n'est remboursé que de son acompte et la commande reste en boutique. Elle
+// conservait pourtant son rendez-vous, donc l'écran annonçait « on te les remet
+// à ton rendez-vous » pour un rendez-vous disparu : ni numéro à montrer, ni
+// geste, ni moyen d'aller les chercher. Même impasse après un no-show.
+egal('un rendez-vous confirmé porte ses produits', rdvPorteLesProduits({ statut: 'confirme' }), true)
+egal('un rendez-vous honoré aussi', rdvPorteLesProduits({ statut: 'honore' }), true)
+egal('un rendez-vous annulé par le client ne les porte plus', rdvPorteLesProduits({ statut: 'annule_client' }), false)
+egal('annulé par le commerçant non plus', rdvPorteLesProduits({ statut: 'annule_commercant' }), false)
+egal('un no-show non plus', rdvPorteLesProduits({ statut: 'no_show' }), false)
+// Rendez-vous non chargé : on ne présume pas sa mort. Une commande qui vient
+// d'être passée en a forcément un vivant.
+egal('sans rendez-vous chargé, on ne présume rien', rdvPorteLesProduits(undefined), true)
+
+// L'écran qui en découle, EXÉCUTÉ. C'est là que le mensonge se voyait.
+const cmdRdvVivant = { mode_retrait: 'retrait', rdv_reservation_id: 'r1', rdv: { statut: 'confirme' }, commercant: { categorie: 'vitrine' } }
+const cmdRdvTombe = { mode_retrait: 'retrait', rdv_reservation_id: 'r1', rdv: { statut: 'annule_client' }, commercant: { categorie: 'vitrine' } }
+egal('rendez-vous vivant : les produits attendent au fauteuil', contexteRetrait(cmdRdvVivant), 'rdv')
+egal('rendez-vous tombé : la commande redevient un retrait en magasin', contexteRetrait(cmdRdvTombe), 'boutique')
+// Et elle retrouve TOUT ce qui va avec, à commencer par le geste qui la clôture.
+verifier('et elle retrouve le geste qui la clôture',
+  textesRetrait(contexteRetrait(cmdRdvTombe)).avecGeste === true)
+verifier('et le numéro à montrer au comptoir',
+  textesRetrait(contexteRetrait(cmdRdvTombe)).badge === 'MONTRE CE NUMÉRO')
+
+// La liste des commandes doit rapporter ce statut, sinon la règle ne s'applique
+// jamais : `contexteRetrait` retomberait sur son défaut prudent.
+verifier('la liste des commandes rapporte le statut du rendez-vous',
+  /rdv:rdv_reservations!commandes_rdv_reservation_id_fkey\([^)]*statut/.test(srcRouteCommandes))
+
+// ⚠️ ET LE CRON DE RAPPELS SUIT LA MÊME RÈGLE. Sans ce filtre, un client dont
+// les produits attendent son rendez-vous de vendredi recevait dès le lendemain
+// « ta commande t'attend, viens la chercher », et se déplaçait pour rien.
+const srcCronRappels = sansCommentaires(
+  readFileSync(new URL('../app/api/cron/rappels-retrait/route.js', import.meta.url), 'utf8'))
+verifier('le cron ne réclame pas le retrait de produits attendus au fauteuil',
+  /rdv_reservation_id && rdvPorteLesProduits\(cmd\.rdv\)/.test(srcCronRappels))
+verifier('et il demande le statut du rendez-vous pour pouvoir en juger',
+  /rdv:rdv_reservations!commandes_rdv_reservation_id_fkey\([^)]*statut/.test(srcCronRappels))
+
+// ─── La boucle se ferme, et par UN seul crédit ────────────────────────────
+// Le rendez-vous honoré est le moment exact où le commerçant tend le sachet :
+// lui demander un second geste dans un autre onglet, c'est s'assurer qu'il
+// l'oubliera.
+verifier('un rendez-vous honoré clôture la commande de produits',
+  /statut === 'honore'[\s\S]{0,900}await produitsRemis\(/.test(srcDashboard))
+verifier('et un bouton manuel reste sur la vignette',
+  /Produits remis au client/.test(srcDashboard))
+// L'idempotence vient de l'UPDATE filtré sur les anciens statuts : l'automatique
+// suivi du manuel ne crédite la fidélité qu'une fois.
+const srcProduitsRemis = sansCommentaires(
+  readFileSync(new URL('../app/api/commande/produits-remis/route.js', import.meta.url), 'utf8'))
+verifier('la remise des produits est idempotente',
+  /\.in\('statut', STATUTS_REMISABLES\)/.test(srcProduitsRemis))
+verifier('et elle vérifie que le commerçant possède bien la commande',
+  /auth_user_id !== user\.id/.test(srcProduitsRemis))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6 quater ter. L'AGENDA REMONTE DANS LE PASSÉ
+// ═══════════════════════════════════════════════════════════════════════════
+// Le verrou était volontaire et commenté « pour MVP ». Un agenda qui ne remonte
+// pas est inutilisable : le commerçant qui a oublié de clôturer un rendez-vous
+// la veille n'avait aucun moyen d'y revenir, alors que ses commandes ont leur
+// historique depuis le début.
+const srcAgenda = sansCommentaires(
+  readFileSync(new URL('../app/dashboard/AgendaRdv.js', import.meta.url), 'utf8'))
+verifier('plus aucun verrou n’interdit le passé',
+  !/if \(d < today\) return/.test(srcAgenda))
+verifier('un historique des rendez-vous passés existe',
+  /const \[historique, setHistorique\]/.test(srcAgenda))
+verifier('il ne montre que ce qui est déjà passé',
+  /r\.date_rdv < aujourdhuiIso/.test(srcAgenda))
+// ⚠️ Ce qui reste à CLÔTURER remonte en premier : c'est la seule chose sur
+// laquelle il reste un geste à faire, et la trier par date la noierait.
+verifier('les rendez-vous à clôturer remontent en premier',
+  /rang\(a\) - rang\(b\)/.test(srcAgenda))
+
+// ⚠️ LA MODALE DE DÉTAIL EST RENDUE HORS DE LA ZONE DÉFILANTE. Elle vivait
+// dedans, et `-webkit-overflow-scrolling: touch` PIÈGE les éléments en
+// `position: fixed` sur iPhone : ils se placent par rapport au conteneur qui
+// défile, pas par rapport à l'écran. L'en-tête des statistiques lui mangeait le
+// haut, donc le nom du client et la date du rendez-vous.
+verifier('la modale de détail est rendue hors de la zone défilante',
+  srcDashboard.indexOf('{rdvSelectionne && (') > srcDashboard.indexOf('<ConfigDashboard'))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 6 quinquies. LA BARRE DU HAUT — la cloche ne sort plus de l'écran

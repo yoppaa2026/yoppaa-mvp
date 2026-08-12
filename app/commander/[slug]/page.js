@@ -1459,7 +1459,7 @@ export default function CommanderSlug() {
       supabase.from('commandes_stats').select('creneau_livraison_id, date_commande').eq('commercant_id', c.id).eq('mode_retrait', 'livraison').not('statut', 'in', '(recupere,non_retire,annulee_client_refund,annulee_paiement_ko)'),
       // M5 food truck : emplacements (ponctuels + tournée hebdo) pour remplacer
       // l'adresse affichée par l'emplacement du jour
-      supabase.from('foodtruck_emplacements').select('*').eq('commercant_id', c.id).eq('actif', true),
+      supabase.from('commercant_lieux').select('*').eq('commercant_id', c.id).eq('actif', true),
     ])
 
     const notesInfo = avisNotes?.length > 0

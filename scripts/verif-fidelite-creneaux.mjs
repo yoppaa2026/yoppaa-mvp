@@ -465,14 +465,21 @@ for (const [chemin, ecran] of [
 // enregistrements effaçaient l'ancienne ligne AVANT d'insérer la nouvelle : une
 // insertion qui échoue au marché, réseau coupé, et le commerçant se retrouvait
 // sans aucun emplacement pendant que sa fiche annonçait « bientôt ».
+// ⚠️ CE TEST DÉCOUPAIT LE FICHIER ENTRE DEUX NOMS DE FONCTION, et il a rougi le
+// 12/08 au renommage de `SectionEmplacementsFoodtruck` en `SectionLieux` : la
+// section n'était plus réservée aux food trucks, une professeure de yoga ayant
+// exactement le même besoin. Le test verrouillait donc un NOM, pas un défaut, et
+// il aurait interdit la correction en restant rouge.
+//
+// Il juge maintenant le fichier entier sur ce qui compte : nulle part on ne
+// détruit avant d'avoir réussi à écrire, et le chemin de sauvegarde est partagé.
 const dashFT = lireBrut('app/dashboard/ConfigDashboard.js')
-const blocFT = dashFT.slice(dashFT.indexOf('function SectionEmplacementsFoodtruck'), dashFT.indexOf('function TabProfil'))
 verifier('aucun emplacement n\'est supprimé avant d\'être réécrit',
-  !/delete\(\)[\s\S]{0,120}?insert\(\{/.test(blocFT))
+  !/delete\(\)[\s\S]{0,120}?insert\(\{/.test(dashFT))
 verifier('l\'enregistrement passe par une modification quand la ligne existe',
-  /if \(existant\) \{[\s\S]{0,120}?\.update\(valeurs\)/.test(blocFT))
+  /if \(existant\) \{[\s\S]{0,160}?\.update\(valeurs\)/.test(dashFT))
 verifier('les trois formulaires partagent ce chemin',
-  (blocFT.match(/enregistrerEmplacement\(/g) || []).length >= 4)
+  (dashFT.match(/enregistrerEmplacement\(/g) || []).length >= 4)
 
 const migJour = lireBrut('migrations/MIGRATION_CHARGE_CRENEAU_PAR_JOUR.sql')
 verifier('la fonction groupe par créneau ET par jour',

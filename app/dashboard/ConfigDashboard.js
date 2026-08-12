@@ -3958,12 +3958,22 @@ function TabFidelite({ commercantId, commercant, toast, onSaved }) {
   )
 }
 
-// ─── M5 Food truck : « emplacement du jour » + tournée hebdomadaire ──────────
-// Un PONCTUEL (date précise) prime sur la tournée hebdo du même jour. La fiche
-// client remplace l'adresse affichée par l'emplacement résolu du jour, avec
-// fallback « Prochain emplacement annoncé bientôt » si rien n'est déclaré.
+// ─── MES LIEUX : où se passe l'activité, et quand ───────────────────────────
+//
+// Un PONCTUEL (date précise) prime sur la tournée hebdo du même jour, et les
+// lieux PERMANENTS restent de la partie tous les jours. La fiche client affiche
+// le lieu résolu du jour à la place de l'adresse du siège.
+//
+// ⚠️ CETTE SECTION N'EST PLUS RÉSERVÉE AUX FOOD TRUCKS. Elle avait été écrite
+// pour eux, et elle décrivait déjà exactement le besoin d'une professeure de
+// yoga qui donne cours dans deux salles : un lieu par jour, avec des exceptions.
+// Deux métiers sans rapport, le même besoin. Seul le nom était trop étroit, la
+// table s'appelle désormais `commercant_lieux`.
+//
+// Ce qu'elle a gagné le 12/08 : les lieux PERMANENTS, ceux du salon à deux
+// adresses ou du commerçant inscrit à son domicile mais qui travaille ailleurs.
 const JOURS_FT = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
-function SectionEmplacementsFoodtruck({ commercantId, toast }) {
+function SectionLieux({ commercantId, toast, estMobile = false }) {
   const [emps, setEmps] = useState([])
   const [loading, setLoading] = useState(true)
   // « Aujourd'hui je suis à… » : zéro friction, 2 champs obligatoires + 1 bouton
@@ -3973,6 +3983,8 @@ function SectionEmplacementsFoodtruck({ commercantId, toast }) {
   const [showFutur, setShowFutur] = useState(false)
   // Édition d'une ligne de tournée hebdo (un seul formulaire ouvert à la fois)
   const [formHebdo, setFormHebdo] = useState(null)  // { jour, libelle, adresse, heure_debut, heure_fin }
+  // Ajout d'un lieu PERMANENT : un second siège d'exploitation, un atelier.
+  const [perm, setPerm] = useState({ libelle: '', adresse: '' })
 
   // ⚠️ `jourLocalISO` et PAS `toISOString()`. Minuit heure belge, c'est 22h ou
   // 23h LA VEILLE en temps universel : entre minuit et deux heures du matin,
@@ -3985,7 +3997,7 @@ function SectionEmplacementsFoodtruck({ commercantId, toast }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { charger() }, [commercantId])
   async function charger() {
-    const { data, error } = await supabase.from('foodtruck_emplacements').select('*').eq('commercant_id', commercantId)
+    const { data, error } = await supabase.from('commercant_lieux').select('*').eq('commercant_id', commercantId)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); setLoading(false); return }
     setEmps(data || [])
     setLoading(false)
@@ -4011,9 +4023,9 @@ function SectionEmplacementsFoodtruck({ commercantId, toast }) {
   // La modification, elle, ne détruit rien tant qu'elle n'a pas réussi.
   async function enregistrerEmplacement(existant, valeurs) {
     if (existant) {
-      return supabase.from('foodtruck_emplacements').update(valeurs).eq('id', existant.id)
+      return supabase.from('commercant_lieux').update(valeurs).eq('id', existant.id)
     }
-    return supabase.from('foodtruck_emplacements').insert(valeurs)
+    return supabase.from('commercant_lieux').insert(valeurs)
   }
 
   async function declarerAujourdhui() {
@@ -4064,9 +4076,31 @@ function SectionEmplacementsFoodtruck({ commercantId, toast }) {
   }
 
   async function supprimer(id) {
-    const { error } = await supabase.from('foodtruck_emplacements').delete().eq('id', id)
+    const { error } = await supabase.from('commercant_lieux').delete().eq('id', id)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     setEmps(prev => prev.filter(e => e.id !== id))
+  }
+
+  // ─── Les lieux PERMANENTS ────────────────────────────────────────────────
+  // Le salon à deux adresses, l'atelier du commerçant inscrit à son domicile.
+  // Ils sont de la partie tous les jours, sans jour ni date.
+  const permanents = emps.filter(e => e.type === 'permanent')
+
+  async function ajouterPermanent() {
+    if (!perm.libelle.trim() || !perm.adresse.trim()) { toast('Nom du lieu et adresse obligatoires', 'error'); return }
+    // ⚠️ LE PREMIER LIEU DÉCLARÉ DEVIENT LE PRINCIPAL. C'est celui que le signup
+    // a créé, ou à défaut celui-ci : sans lieu principal, un commerçant qui a
+    // décoché la case n'aurait aucune adresse de référence.
+    const { error } = await supabase.from('commercant_lieux').insert({
+      commercant_id: commercantId, type: 'permanent',
+      libelle: perm.libelle.trim(), adresse: perm.adresse.trim(),
+      principal: permanents.length === 0,
+      actif: true,
+    })
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast('Lieu ajouté')
+    setPerm({ libelle: '', adresse: '' })
+    charger()
   }
 
   const field = { padding: '8px 10px', borderRadius: 9, border: `1.5px solid ${T.hairline}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box' }
@@ -4076,9 +4110,48 @@ function SectionEmplacementsFoodtruck({ commercantId, toast }) {
 
   return (
     <div style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: 16, marginTop: 16 }}>
-      <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Mes emplacements</p>
+      <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Mes lieux</p>
       <p style={{ margin: '0 0 14px', fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
-        Ta fiche affiche l’emplacement du jour à la place de l’adresse du dépôt. Un emplacement ponctuel remplace ta tournée habituelle ce jour-là.
+        C’est ici que tes clients viennent te trouver. Ta fiche affiche le lieu du jour à la place de l’adresse de ton siège, et un lieu ponctuel remplace ta tournée habituelle ce jour-là.
+      </p>
+
+      {/* ─── Lieux fixes ─────────────────────────────────────────────────────
+          Le salon à deux adresses, l'atelier du commerçant inscrit à son
+          domicile. Ils valent tous les jours, sans jour ni date. */}
+      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mes lieux fixes</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+        {permanents.length === 0 && (
+          <p style={{ margin: 0, fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
+            Aucun lieu fixe. Ta fiche utilise l’adresse de ton siège social, sauf si tu as décoché la case à l’inscription.
+          </p>
+        )}
+        {permanents.map(e => (
+          <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 10, border: `1px solid ${T.hairline}`, padding: '8px 12px' }}>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 12.5, fontWeight: 800, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {e.libelle}{e.principal ? ' · principal' : ''}
+              </span>
+              <span style={{ display: 'block', fontSize: 11.5, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {e.adresse}
+              </span>
+            </span>
+            <button onClick={() => supprimer(e.id)} style={{ ...btnMini, color: '#DC2626', borderColor: '#FCA5A5', flexShrink: 0 }}>Retirer</button>
+          </div>
+        ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderRadius: 10, border: `1px dashed ${T.pale}`, padding: '10px 12px' }}>
+          <input style={field} placeholder="Nom du lieu (ex : Salle Saint-Roch)" value={perm.libelle}
+            onChange={e => setPerm(p => ({ ...p, libelle: e.target.value }))}/>
+          <input style={field} placeholder="Adresse complète (pour l’itinéraire)" value={perm.adresse}
+            onChange={e => setPerm(p => ({ ...p, adresse: e.target.value }))}/>
+          <button onClick={ajouterPermanent} style={{ ...btnMini, alignSelf: 'flex-start' }}>Ajouter ce lieu</button>
+        </div>
+      </div>
+
+      {/* ─── Lieux du jour ───────────────────────────────────────────────────
+          Pour qui change d'endroit : food truck, cours donnés dans plusieurs
+          salles, marchés. */}
+      <p style={{ margin: '14px 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+        {estMobile ? 'Mes emplacements du jour' : 'Je change d’endroit selon les jours'}
       </p>
 
       {/* Aujourd'hui : état + déclaration rapide */}
@@ -4632,12 +4705,15 @@ function TabProfil({ commercantId, toast, onSaved }) {
               l'onglet Créneaux. La colonne reste en base, plus rien ne la lit. */}
         </div>
 
-        {/* ─── Emplacements food truck (M5) : uniquement pour ce métier ─── */}
-        {/* Même détection que la fiche client : un commerçant qui a saisi
-            « Foodtruck » en métier libre reste un food truck. */}
-        {estFoodTruck(form.type) && (
-          <SectionEmplacementsFoodtruck commercantId={commercantId} toast={toast}/>
-        )}
+        {/* ─── MES LIEUX : plus réservé aux food trucks ─────────────────────
+            ⚠️ Cette section était conditionnée à `estFoodTruck(form.type)`, et
+            c'est ce qui la rendait invisible à une professeure de yoga qui donne
+            cours dans deux salles. Elle décrivait pourtant déjà exactement son
+            besoin : un lieu par jour, avec des exceptions. Deux métiers sans
+            rapport, le même besoin.
+            Elle s'affiche donc pour tout le monde : chacun y déclare ses lieux
+            fixes, et ceux qui bougent y posent leur tournée. */}
+        <SectionLieux commercantId={commercantId} toast={toast} estMobile={estFoodTruck(form.type)}/>
 
         {/* ─── Notifications RDV ou Commandes ─── */}
         {/* Toggle unique notif_mode (chaque/recap_jour/aucun) qui s'applique aux RDV

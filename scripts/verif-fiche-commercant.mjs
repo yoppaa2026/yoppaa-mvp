@@ -326,6 +326,33 @@ verifier('le lieu d’activité est enregistré avec ses coordonnées',
 egal('la recherche d’adresse n’est écrite qu’une fois',
   (signupSrc.match(/nominatim\.openstreetmap\.org/g) || []).length, 1)
 
+// ─── L'ÉDITEUR DE LIEUX, ouvert à tous ────────────────────────────────────
+// ⚠️ Cette section était conditionnée à `estFoodTruck`, ce qui la rendait
+// invisible à une professeure de yoga qui donne cours dans deux salles. Elle
+// décrivait pourtant déjà exactement son besoin : un lieu par jour, avec des
+// exceptions. Deux métiers sans rapport, le même besoin.
+const configSrc = sansCommentaires(lire('app/dashboard/ConfigDashboard.js'))
+
+verifier('l’éditeur de lieux n’est plus réservé aux food trucks',
+  !/estFoodTruck\(form\.type\) && \(\s*<SectionLieux/.test(configSrc))
+verifier('et il s’affiche pour tout le monde',
+  /<SectionLieux commercantId=/.test(configSrc))
+verifier('on peut y déclarer un lieu fixe',
+  /type: 'permanent'/.test(configSrc))
+// ⚠️ SANS LIEU PRINCIPAL, un commerçant qui a décoché la case du signup n'a
+// aucune adresse de référence : sa fiche n'aurait rien à afficher les jours
+// sans tournée.
+verifier('le premier lieu déclaré devient le principal',
+  /principal: permanents\.length === 0/.test(configSrc))
+
+// ⚠️ PLUS UNE SEULE RÉFÉRENCE À L'ANCIEN NOM DE TABLE. Elle a été renommée en
+// base : une requête oubliée échouerait en silence, la fiche affichant
+// simplement aucun lieu, sans que rien ne le signale.
+for (const chemin of ['app/dashboard/ConfigDashboard.js', 'app/commander/[slug]/page.js', 'app/signup/page.js']) {
+  verifier(`${chemin} interroge commercant_lieux et non l’ancienne table`,
+    !/foodtruck_emplacements/.test(lire(chemin)))
+}
+
 const signup = lire('app/signup/page.js')
 verifier('le signup demande le site web', /site_web/.test(signup))
 verifier('le signup guide ce qu\'il faut donner à l\'IA', /Donne trois éléments/.test(signup))

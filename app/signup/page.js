@@ -933,6 +933,80 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
   )
 }
 
+// ─── Un champ d'adresse avec sa recherche ────────────────────────────────────
+//
+// ⚠️ IL Y EN A DEUX DEPUIS LE 12/08, et c'est pour ça que ce composant existe.
+// Le siège social et le lieu d'activité se saisissent tous les deux avec la même
+// recherche, la même mise en forme et le même repli. Les recopier aurait garanti
+// qu'ils divergent : l'un corrigé, l'autre oublié.
+//
+// La recherche part DIRECTEMENT du navigateur vers OpenStreetMap. C'est déclaré
+// dans la politique de confidentialité et dans la fiche Play Store.
+function ChampAdresse({ valeur, position, onTexte, onChoisir, placeholder }) {
+  const [suggestions, setSuggestions] = useState([])
+  const [cherche, setCherche] = useState(false)
+  const minuteur = useRef(null)
+
+  function chercher(query) {
+    if (!query || query.length < 3) { setSuggestions([]); return }
+    setCherche(true)
+    clearTimeout(minuteur.current)
+    minuteur.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&accept-language=fr&countrycodes=be&addressdetails=1`, {
+          headers: { Accept: 'application/json' },
+        })
+        setSuggestions(await res.json() || [])
+      } catch { setSuggestions([]) }
+      setCherche(false)
+    }, 400)
+  }
+
+  // Compose une adresse propre « Rue X 12, 5640 Localité » depuis les champs
+  // structurés. Le `display_name` brut intercale les hameaux et les lieux-dits,
+  // et la troncature perdait la localité et le code postal.
+  function choisir(s) {
+    const a = s.address || {}
+    const rue = a.road || a.pedestrian || a.square || ''
+    const num = a.house_number || ''
+    const localite = a.village || a.town || a.city || a.municipality || a.hamlet || ''
+    const cp = a.postcode || ''
+    const adresse = rue
+      ? `${rue}${num ? ` ${num}` : ''}${(cp || localite) ? `, ${[cp, localite].filter(Boolean).join(' ')}` : ''}`
+      : s.display_name.split(',').slice(0, 3).join(', ')
+    setSuggestions([])
+    onChoisir({ adresse, latitude: parseFloat(s.lat), longitude: parseFloat(s.lon), code_postal: cp || null })
+  }
+
+  return (
+    <>
+      <div style={{ position: 'relative' }}>
+        <input type="text" value={valeur}
+          onChange={e => { onTexte(e.target.value); chercher(e.target.value) }}
+          placeholder={placeholder} style={inputStyle()}/>
+        {cherche && (
+          <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: T.muted }}>…</span>
+        )}
+        {suggestions.length > 0 && (
+          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 12, marginTop: 4, boxShadow: '0 8px 24px rgba(22,6,54,0.12)', zIndex: 10, maxHeight: 240, overflowY: 'auto' }}>
+            {suggestions.map(s => (
+              <button key={s.place_id} type="button" onClick={() => choisir(s)}
+                style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', borderBottom: `1px solid ${T.hairline}`, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 13, color: T.deep }}>
+                {s.display_name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {position?.latitude && position?.longitude && (
+        <p style={{ fontSize: 11, color: '#10B981', fontWeight: 700, margin: '6px 0 0' }}>
+          ✓ Position GPS confirmée ({Number(position.latitude).toFixed(4)}, {Number(position.longitude).toFixed(4)})
+        </p>
+      )}
+    </>
+  )
+}
+
 // ─── ÉTAPE 2 : INFOS DE BASE ──────────────────────────────────────────────────
 // - Nom, type, adresse (autocomplete Nominatim), téléphone, description ≥20
 // - Sauvegarde auto champ par champ (debounce 600ms)
@@ -954,20 +1028,85 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
   const [propositions, setPropositions] = useState([])
   const [iaEnCours, setIaEnCours] = useState(false)
   const [iaMessage, setIaMessage] = useState(null)
-  const [suggestions, setSuggestions] = useState([])
-  const [searchingAdresse, setSearchingAdresse] = useState(false)
   const [saving, setSaving] = useState(false)
   const debounceRef = useRef(null)
-  const nominatimRef = useRef(null)
+
+  // ─── Le lieu d'activité, quand il diffère du siège social ────────────────
+  //
+  // ⚠️ LE SIGNUP N'EN GÈRE QU'UN SEUL, et volontairement. Il porte déjà cinq
+  // étapes, c'est la première impression qu'un commerçant a de Yoppaa : lui
+  // demander d'y déclarer trois salles et leurs jours l'y ferait renoncer. Les
+  // lieux multiples et leur planning vivent dans l'onglet Config, plus tard,
+  // tranquillement.
+  const [activiteAilleurs, setActiviteAilleurs] = useState(
+    commercant.siege_social_est_lieu_activite === false)
+  const [lieu, setLieu] = useState({ id: null, adresse: '', latitude: null, longitude: null })
+
+  // Le lieu déjà déclaré, s'il y en a un. On ne recharge que celui du signup,
+  // c'est-à-dire le principal.
+  useEffect(() => {
+    if (!activiteAilleurs) return
+    let annule = false
+    supabase.from('commercant_lieux')
+      .select('id, adresse, latitude, longitude')
+      .eq('commercant_id', commercant.id)
+      .eq('principal', true)
+      .maybeSingle()
+      .then(({ data }) => { if (data && !annule) setLieu(data) })
+    return () => { annule = true }
+  }, [activiteAilleurs, commercant.id])
+
+  // La case. Recochée, le lieu déclaré ici disparaît : le commerçant vient de
+  // dire que son activité se passe bien au siège, laisser une adresse orpheline
+  // la ferait ressortir sur sa fiche sans qu'il comprenne d'où elle vient.
+  async function basculerLieuActivite(ailleurs) {
+    setActiviteAilleurs(ailleurs)
+    onSaving?.('saving')
+    await supabase.from('commercants')
+      .update({ siege_social_est_lieu_activite: !ailleurs })
+      .eq('id', commercant.id)
+    if (!ailleurs && lieu.id) {
+      await supabase.from('commercant_lieux').delete().eq('id', lieu.id)
+      setLieu({ id: null, adresse: '', latitude: null, longitude: null })
+    }
+    onUpdate({ ...commercant, siege_social_est_lieu_activite: !ailleurs })
+    onSaving?.('saved')
+  }
+
+  // ⚠️ LES COORDONNÉES SONT ENREGISTRÉES AVEC L'ADRESSE, jamais devinées plus
+  // tard. C'est ce qui manquait aux emplacements de food truck : sans elles, la
+  // distance affichée au client se mesurait depuis le dépôt.
+  async function enregistrerLieuActivite({ adresse, latitude, longitude }) {
+    onSaving?.('saving')
+    const valeurs = {
+      commercant_id: commercant.id,
+      type: 'permanent',
+      principal: true,
+      libelle: form.nom?.trim() || commercant.nom || 'Mon activité',
+      adresse, latitude, longitude,
+      actif: true,
+    }
+    const { data } = lieu.id
+      ? await supabase.from('commercant_lieux').update(valeurs).eq('id', lieu.id).select().single()
+      : await supabase.from('commercant_lieux').insert(valeurs).select().single()
+    if (data) setLieu(data)
+    onSaving?.('saved')
+  }
 
   // Validation des champs requis (basée sur les seuils du brief)
+  //
+  // ⚠️ DÉCOCHER LA CASE SANS DONNER D'ADRESSE NE DOIT PAS PASSER. Le commerçant
+  // vient de déclarer que son activité se passe ailleurs : le laisser avancer
+  // sans dire où, c'est une fiche sans lieu de retrait, donc un client sans
+  // destination.
   const valide =
     form.nom.trim().length >= 2 &&
     form.type.trim().length > 0 &&
     form.adresse.trim().length > 0 &&
     form.telephone.trim().length >= 8 &&
     form.description.trim().length >= 20 &&
-    form.latitude && form.longitude
+    form.latitude && form.longitude &&
+    (!activiteAilleurs || (lieu.adresse?.trim().length > 0 && lieu.latitude && lieu.longitude))
 
   // Sauvegarde auto (debounced)
   function updateField(k, v) {
@@ -1026,47 +1165,9 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
     setIaEnCours(false)
   }
 
-  // Autocomplete Nominatim (Belgique en priorité)
-  async function chercherAdresse(query) {
-    if (!query || query.length < 3) { setSuggestions([]); return }
-    setSearchingAdresse(true)
-    clearTimeout(nominatimRef.current)
-    nominatimRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&accept-language=fr&countrycodes=be&addressdetails=1`, {
-          headers: { Accept: 'application/json' },
-        })
-        const data = await res.json()
-        setSuggestions(data || [])
-      } catch { setSuggestions([]) }
-      setSearchingAdresse(false)
-    }, 400)
-  }
-
-  function choisirSuggestion(s) {
-    // Compose une adresse propre « Rue X 12, 5640 Localité » depuis les champs
-    // structurés Nominatim. Le display_name brut intercale les hameaux/lieux-dits
-    // (ex. « La Marchauderie ») et la troncature perdait la localité et le CP.
-    const a = s.address || {}
-    const rue = a.road || a.pedestrian || a.square || ''
-    const num = a.house_number || ''
-    const localite = a.village || a.town || a.city || a.municipality || a.hamlet || ''
-    const cp = a.postcode || ''
-    const adresse = rue
-      ? `${rue}${num ? ` ${num}` : ''}${(cp || localite) ? `, ${[cp, localite].filter(Boolean).join(' ')}` : ''}`
-      : s.display_name.split(',').slice(0, 3).join(', ')
-    setForm(p => ({
-      ...p,
-      adresse,
-      latitude: parseFloat(s.lat),
-      longitude: parseFloat(s.lon),
-    }))
-    setSuggestions([])
-    clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => sauvegarder({
-      ...form, adresse, latitude: parseFloat(s.lat), longitude: parseFloat(s.lon),
-    }), 100)
-  }
+  // ⚠️ LA RECHERCHE D'ADRESSE VIT DANS `ChampAdresse`, hissé au niveau du
+  // fichier : il y a DEUX champs depuis le 12/08, le siège social et le lieu
+  // d'activité, et les recopier aurait garanti qu'ils divergent.
 
   async function continuer() {
     if (!valide) return
@@ -1108,40 +1209,59 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
         </Field>
       </Card>
 
-      <Card titre="Localisation" sous="L'adresse permet aux clients de te trouver sur la carte.">
-        <Field label="Adresse complète *">
-          <div style={{ position: 'relative' }}>
-            <input type="text" value={form.adresse}
-              onChange={e => { updateField('adresse', e.target.value); chercherAdresse(e.target.value) }}
-              placeholder="Ex: Place Meunier 1, 5640 Mettet"
-              style={inputStyle()}/>
-            {searchingAdresse && (
-              <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: T.muted }}>…</span>
-            )}
-            {suggestions.length > 0 && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 12, marginTop: 4, boxShadow: '0 8px 24px rgba(22,6,54,0.12)', zIndex: 10, maxHeight: 240, overflowY: 'auto' }}>
-                {suggestions.map(s => (
-                  <button key={s.place_id} type="button" onClick={() => choisirSuggestion(s)}
-                    style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', borderBottom: `1px solid ${T.hairline}`, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 13, color: T.deep }}>
-                    {s.display_name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          {form.latitude && form.longitude && (
-            <p style={{ fontSize: 11, color: '#10B981', fontWeight: 700, margin: '6px 0 0' }}>
-              ✓ Position GPS confirmée ({form.latitude.toFixed(4)}, {form.longitude.toFixed(4)})
-            </p>
-          )}
-          {/* Food truck : l'adresse d'onboarding = ancre (commune, zone GMY, KYB),
-              les emplacements de vente arriveront avec le module M5 */}
-          {estFoodTruck(form.type) && (
-            <p style={{ fontSize: 11, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
-              Truck mobile ? Indique l&rsquo;adresse de ton dépôt ou de ton siège : elle définit ta commune sur Yoppaa. Tu annonceras ensuite tes emplacements de vente depuis ton tableau de bord.
-            </p>
-          )}
+      {/* ⚠️ DEUX ADRESSES DEPUIS LE 12/08, ET C'EST TOUT L'ENJEU. Ce champ unique
+          servait à la fois de mention légale, de point de retrait, de base de
+          calcul des distances et de rattachement communal. Un commerçant inscrit
+          à la BCE à son DOMICILE saisissait son domicile pour être en règle, et
+          Yoppaa y envoyait ses clients.
+          La case reste cochée par défaut : pour l'immense majorité, les deux
+          adresses n'en font qu'une, et le formulaire ne s'allonge pas d'un pouce. */}
+      <Card titre="Localisation" sous="On distingue l'adresse de ton entreprise de l'endroit où se passe ton activité.">
+        <Field label="Adresse du siège social *">
+          <ChampAdresse
+            valeur={form.adresse}
+            position={form}
+            placeholder="Ex: Place Meunier 1, 5640 Mettet"
+            onTexte={v => updateField('adresse', v)}
+            onChoisir={({ adresse, latitude, longitude }) => {
+              setForm(p => ({ ...p, adresse, latitude, longitude }))
+              sauvegarder({ ...form, adresse, latitude, longitude })
+            }}
+          />
+          <p style={{ fontSize: 11, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+            Celle de ton inscription à la Banque-Carrefour des Entreprises.
+          </p>
         </Field>
+
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer', margin: '2px 0 14px' }}>
+          <input type="checkbox" checked={!activiteAilleurs}
+            onChange={e => basculerLieuActivite(!e.target.checked)}
+            style={{ width: 17, height: 17, accentColor: T.main, marginTop: 1, flexShrink: 0, cursor: 'pointer' }}/>
+          <span style={{ fontSize: 13, fontWeight: 700, color: T.deep, lineHeight: 1.45 }}>
+            Mon activité se passe à cette adresse
+            <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: T.muted, marginTop: 2 }}>
+              Décoche si tu travailles ailleurs : à domicile inscrit mais atelier en ville, salle de cours louée, tournée sur plusieurs endroits.
+            </span>
+          </span>
+        </label>
+
+        {activiteAilleurs && (
+          <Field label="Où se passe ton activité ? *">
+            <ChampAdresse
+              valeur={lieu.adresse}
+              position={lieu}
+              placeholder="Ex: Salle Saint-Roch, 5640 Mettet"
+              onTexte={v => setLieu(p => ({ ...p, adresse: v }))}
+              onChoisir={enregistrerLieuActivite}
+            />
+            <p style={{ fontSize: 11, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+              C&rsquo;est cette adresse que verront tes clients, et elle seule.
+              {estFoodTruck(form.type)
+                ? ' Tu ajouteras tes autres emplacements et leurs jours depuis ton tableau de bord.'
+                : ' Tu pourras en ajouter d’autres, et leur donner un jour de la semaine, depuis ton tableau de bord.'}
+            </p>
+          </Field>
+        )}
         <Field label="Téléphone *">
           <input type="tel" value={form.telephone} onChange={e => updateField('telephone', e.target.value)} placeholder="+32 71 00 00 00" style={inputStyle()}/>
         </Field>

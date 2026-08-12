@@ -23,6 +23,12 @@ const verifier = (nom, cond, detail = '') => {
 const egal = (nom, a, b) => verifier(nom, JSON.stringify(a) === JSON.stringify(b), `obtenu ${JSON.stringify(a)}, attendu ${JSON.stringify(b)}`)
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
+// ⚠️ RETIRER LES COMMENTAIRES AVANT DE JUGER UN FICHIER SOURCE. Celui qui
+// explique un défaut corrigé cite forcément la ligne fautive, et la recherche
+// tombe dessus. Le piège s'est refermé cinq fois sur ce projet.
+const sansCommentaires = (src) =>
+  src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. LA BANNIÈRE — toujours le nom, jamais la photo
 // ═══════════════════════════════════════════════════════════════════════════
@@ -280,6 +286,45 @@ verifier('l\'IA ne parle pas de Yoppaa dans le texte', /Ne mentionne ni Yoppaa/.
 verifier('pas de tiret cadratin', /jamais le tiret cadratin/.test(routeIa))
 // Le site est une source à prendre avec des pincettes, pas une vérité.
 verifier('le site est présenté comme une source prudente', /avec prudence/.test(routeIa))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE SIÈGE SOCIAL N'EST PAS LE LIEU DE L'ACTIVITÉ (12/08)
+// ═══════════════════════════════════════════════════════════════════════════
+// Un champ unique servait à la fois de mention légale, de point de retrait, de
+// base de calcul des distances et de rattachement communal. Un commerçant
+// inscrit à la BCE à son DOMICILE le saisissait pour être en règle, et Yoppaa y
+// envoyait ses clients.
+const signupSrc = sansCommentaires(lire('app/signup/page.js'))
+
+verifier('le signup nomme le siège social pour ce qu’il est',
+  /Adresse du siège social/.test(signupSrc))
+verifier('et rappelle d’où vient cette adresse',
+  /Banque-Carrefour des Entreprises/.test(signupSrc))
+verifier('la case demande si l’activité s’y passe',
+  /Mon activité se passe à cette adresse/.test(signupSrc))
+verifier('et elle écrit bien la colonne prévue',
+  /siege_social_est_lieu_activite/.test(signupSrc))
+
+// ⚠️ DÉCOCHER SANS DONNER D'ADRESSE NE DOIT PAS PASSER. Le commerçant vient de
+// déclarer que son activité se passe ailleurs : avancer sans dire où, c'est une
+// fiche sans lieu de retrait, donc un client sans destination.
+verifier('on ne peut pas avancer sans dire où se passe l’activité',
+  /!activiteAilleurs \|\| \(lieu\.adresse\?\.trim\(\)\.length > 0 && lieu\.latitude && lieu\.longitude\)/.test(signupSrc))
+
+// ⚠️ LES COORDONNÉES SONT ENREGISTRÉES AVEC L'ADRESSE, jamais devinées plus
+// tard. C'est ce qui manquait aux emplacements de food truck : sans elles, la
+// distance affichée au client se mesurait depuis le dépôt.
+// ⚠️ ANCRÉ SUR LE PAYLOAD ÉCRIT, pas sur la table. La première version cherchait
+// `commercant_lieux` puis les trois colonnes dans les 600 caractères suivants :
+// elle tombait sur la requête de LECTURE, qui les sélectionne aussi, et restait
+// verte alors que l'écriture ne les enregistrait plus.
+verifier('le lieu d’activité est enregistré avec ses coordonnées',
+  /type: 'permanent'[\s\S]{0,200}adresse, latitude, longitude/.test(signupSrc))
+
+// ⚠️ UNE SEULE RECHERCHE D'ADRESSE POUR LES DEUX CHAMPS. Les recopier aurait
+// garanti qu'ils divergent : l'un corrigé, l'autre oublié.
+egal('la recherche d’adresse n’est écrite qu’une fois',
+  (signupSrc.match(/nominatim\.openstreetmap\.org/g) || []).length, 1)
 
 const signup = lire('app/signup/page.js')
 verifier('le signup demande le site web', /site_web/.test(signup))

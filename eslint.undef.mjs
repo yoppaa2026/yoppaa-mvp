@@ -1,0 +1,51 @@
+// Config JETABLE : rallume `no-undef`, éteinte dans la config normale parce que
+// typescript-eslint la désactive. C'est elle, et elle seule, qui voit un
+// identifiant utilisé sans être importé — invisible au build comme au banc.
+// Lancée par `npm run verif:undef`.
+import { defineConfig, globalIgnores } from 'eslint/config'
+
+const NAVIGATEUR = {
+  window: 'readonly', document: 'readonly', navigator: 'readonly', location: 'readonly',
+  fetch: 'readonly', console: 'readonly', localStorage: 'readonly', sessionStorage: 'readonly',
+  setTimeout: 'readonly', clearTimeout: 'readonly', setInterval: 'readonly', clearInterval: 'readonly',
+  requestAnimationFrame: 'readonly', cancelAnimationFrame: 'readonly',
+  alert: 'readonly', confirm: 'readonly', prompt: 'readonly',
+  URL: 'readonly', URLSearchParams: 'readonly', Blob: 'readonly', File: 'readonly',
+  FileReader: 'readonly', FormData: 'readonly', Image: 'readonly', Audio: 'readonly',
+  Headers: 'readonly', Request: 'readonly', Response: 'readonly', AbortController: 'readonly',
+  Notification: 'readonly', ResizeObserver: 'readonly', IntersectionObserver: 'readonly',
+  MutationObserver: 'readonly', Event: 'readonly', CustomEvent: 'readonly',
+  HTMLElement: 'readonly', Element: 'readonly', Node: 'readonly', DOMParser: 'readonly',
+  atob: 'readonly', btoa: 'readonly', crypto: 'readonly', structuredClone: 'readonly',
+  performance: 'readonly', history: 'readonly', screen: 'readonly', matchMedia: 'readonly',
+  requestIdleCallback: 'readonly', queueMicrotask: 'readonly', TextEncoder: 'readonly',
+  TextDecoder: 'readonly', ReadableStream: 'readonly', Canvas: 'readonly', OffscreenCanvas: 'readonly',
+  self: 'readonly', caches: 'readonly', indexedDB: 'readonly', WebSocket: 'readonly',
+  XMLHttpRequest: 'readonly', MediaRecorder: 'readonly', SpeechSynthesisUtterance: 'readonly',
+  speechSynthesis: 'readonly', AbortSignal: 'readonly', BroadcastChannel: 'readonly',
+}
+
+const NODE = {
+  process: 'readonly', Buffer: 'readonly', __dirname: 'readonly', __filename: 'readonly',
+  global: 'readonly', module: 'writable', require: 'readonly', exports: 'writable',
+}
+
+export default defineConfig([
+  globalIgnores(['.next/**', 'out/**', 'build/**', 'node_modules/**', 'public/**']),
+  {
+    files: ['**/*.{js,jsx,mjs}'],
+    // La règle factice ci-dessous ne signale jamais rien : sans ça, chaque
+    // `eslint-disable` du code remonterait comme directive inutile.
+    linterOptions: { reportUnusedDisableDirectives: 'off' },
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: { ...NAVIGATEUR, ...NODE, React: 'readonly' },
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    // Le code porte des `eslint-disable-next-line react-hooks/exhaustive-deps`.
+    // Ce plugin factice évite 43 « rule not found » qui noieraient le vrai signal.
+    plugins: { 'react-hooks': { rules: { 'exhaustive-deps': { create: () => ({}) } } } },
+    rules: { 'no-undef': 'error' },
+  },
+])

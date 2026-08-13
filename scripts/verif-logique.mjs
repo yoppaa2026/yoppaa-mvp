@@ -46,6 +46,10 @@ import {
 } from '../lib/lieux-activite.js'
 import { adresseRendezVous, champsLieu } from '../lib/lieu-fige.js'
 import {
+  capacitePrestation, estCoursCollectif, placesRestantes, estComplet,
+  premierePlaceLibre, libellePlaces, regrouperEnSeances,
+} from '../lib/cours-collectifs.js'
+import {
   referenceCommande, referenceComplete, referenceAvecNom,
   prefixePourCommande, libelleSemaine, referenceRdv, referenceRdvComplete, PREFIXES,
 } from '../lib/numero-commande.js'
@@ -803,6 +807,91 @@ egal('les colonnes gravées portent l’identifiant, le nom et l’adresse',
 // ⚠️ Un objet VIDE, pas des `null` : on n'écrase pas ce qu'on ne sait pas, et
 // un commerce sans lieu déclaré doit continuer de réserver normalement.
 egal('sans lieu, on n’écrit rien plutôt que du vide', champsLieu(null), {})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6 quater. LES COURS COLLECTIFS — plusieurs personnes sur un créneau
+// ═══════════════════════════════════════════════════════════════════════════
+// Yoppaa ne connaissait qu'un modèle de rendez-vous, une personne pour un
+// créneau, ce qui décrit bien un coiffeur et pas du tout un cours de yoga de
+// dix personnes à 10h.
+const cours = { id: 'p1', nom: 'Hatha yoga', capacite: 12 }
+const soloPresta = { id: 'p2', nom: 'Coupe', capacite: 1 }
+
+// ⚠️ LA GARANTIE QUI COMPTE : une prestation qui n'a jamais vu ce réglage
+// reste INDIVIDUELLE. Le défaut est 1, et tout le parc bascule sans bouger.
+egal('une prestation d’avant la bascule reste individuelle',
+  capacitePrestation({ nom: 'Coupe' }), 1)
+egal('et un salon ne devient jamais un cours', estCoursCollectif({ nom: 'Coupe' }), false)
+
+// ⚠️ TESTER L'ABSENCE, JAMAIS LE NOMBRE. `Number(null)` vaut 0 et passerait un
+// `< 1` sans broncher, `undefined` donne NaN : les deux formes de l'absence se
+// comportent à l'opposé, et ce projet s'y est déjà fait prendre deux fois.
+egal('une capacité nulle vaut 1', capacitePrestation({ capacite: null }), 1)
+egal('une capacité vide vaut 1', capacitePrestation({ capacite: '' }), 1)
+egal('une capacité à zéro vaut 1', capacitePrestation({ capacite: 0 }), 1)
+egal('une capacité aberrante vaut 1', capacitePrestation({ capacite: -5 }), 1)
+egal('une capacité en texte est lue', capacitePrestation({ capacite: '8' }), 8)
+// Une capacité décimale n'a aucun sens : on ne compte pas 8,7 personnes. Sans
+// l'arrondi, la dernière place resterait éternellement libre sans être
+// attribuable, et le cours n'afficherait jamais « Complet ».
+egal('une capacité décimale est arrondie vers le bas',
+  capacitePrestation({ capacite: 8.7 }), 8)
+egal('un cours de 12 est collectif', estCoursCollectif(cours), true)
+
+egal('il reste 4 places sur 12 quand 8 sont prises', placesRestantes(cours, 8), 4)
+// Une capacité réduite après coup afficherait sinon un nombre négatif.
+egal('on ne descend jamais sous zéro', placesRestantes({ capacite: 5 }, 9), 0)
+egal('douze inscrits, c’est complet', estComplet(cours, 12), true)
+egal('onze, non', estComplet(cours, 11), false)
+
+// ⚠️ LA PLACE SE LIBÈRE AU MILIEU, et c'est le piège qui aurait coûté le plus
+// cher. Sur un cours où les places 1, 2 et 4 sont prises, la suivante est la 3,
+// pas la 5. Compter les inscrits aurait redonné une place DÉJÀ OCCUPÉE :
+// l'index unique aurait rejeté l'inscription, et le client aurait lu « ce
+// créneau vient d'être pris » devant un cours à moitié vide.
+egal('la place libérée au milieu est réattribuée',
+  premierePlaceLibre(cours, [1, 2, 4]), 3)
+egal('et l’ordre des places prises n’y change rien',
+  premierePlaceLibre(cours, [4, 1, 2]), 3)
+egal('un cours vide commence à la place 1', premierePlaceLibre(cours, []), 1)
+egal('un créneau individuel occupé ne rend aucune place',
+  premierePlaceLibre(soloPresta, [1]), null)
+egal('un cours plein non plus',
+  premierePlaceLibre({ capacite: 3 }, [1, 2, 3]), null)
+
+// ⚠️ UN COURS COMPLET RESTE AFFICHÉ, grisé (décision Alex du 13/08). Le faire
+// disparaître laisserait croire qu'il n'y a pas cours ce jour-là, alors que
+// l'information utile est « c'est plein, regarde un autre jour ».
+egal('le client lit combien il reste de places', libellePlaces(cours, 8), '4 places restantes')
+egal('et le singulier est respecté', libellePlaces(cours, 11), '1 place restante')
+egal('un cours plein le dit', libellePlaces(cours, 12), 'Complet')
+// Sur un rendez-vous individuel, la mention n'a aucun sens : rendre null
+// permet à l'écran de masquer la ligne au lieu d'afficher « 1 place restante »
+// à qui prend rendez-vous chez son coiffeur.
+egal('un rendez-vous individuel n’affiche aucune jauge', libellePlaces(soloPresta, 0), null)
+
+// ⚠️ UN BLOC PAR COURS, PAS UNE LIGNE PAR INSCRIT. Dix lignes empilées sur le
+// même créneau rendent la journée illisible, et c'est le genre d'écran qu'un
+// commerçant cesse d'ouvrir.
+const inscriptions = [
+  { id: 'a', date_rdv: '2026-08-18', heure_debut: '10:00', prestation_id: 'p1', place_no: 3, client_prenom: 'Zoé' },
+  { id: 'b', date_rdv: '2026-08-18', heure_debut: '10:00', prestation_id: 'p1', place_no: 1, client_prenom: 'Ali' },
+  { id: 'c', date_rdv: '2026-08-18', heure_debut: '18:00', prestation_id: 'p2', place_no: 1, client_prenom: 'Bob' },
+]
+const seances = regrouperEnSeances(inscriptions)
+egal('les inscrits d’un même cours tiennent en une séance', seances.length, 2)
+egal('la séance de 10h porte ses deux inscrits', seances[0].inscrits.length, 2)
+// Triés par place, sans quoi l'ordre serait celui de la base, donc l'ordre
+// d'inscription, et la liste changerait d'un rafraîchissement à l'autre.
+egal('et ils sont rangés par place', seances[0].inscrits.map(i => i.client_prenom), ['Ali', 'Zoé'])
+egal('les séances sont rangées par heure', seances.map(s => s.heure_debut), ['10:00', '18:00'])
+// Deux prestations différentes à la même heure restent deux séances : un
+// praticien peut donner un cours pendant qu'un autre reçoit en individuel.
+egal('deux prestations à la même heure font deux séances',
+  regrouperEnSeances([
+    { date_rdv: '2026-08-18', heure_debut: '10:00', prestation_id: 'p1', place_no: 1 },
+    { date_rdv: '2026-08-18', heure_debut: '10:00', prestation_id: 'p2', place_no: 1 },
+  ]).length, 2)
 
 // ⚠️ TOUS LES CANAUX, ET TOUS LES ÉCRANS QUI GRAVENT. Corrigés un par un, ils
 // auraient divergé : c'est exactement ce qui s'était produit avec les numéros

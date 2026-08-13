@@ -474,14 +474,22 @@ for (const [id, sujet] of [['fiche', 'la vitrine'], ['contact', 'les coordonnée
 
 // ⚠️ LES INTITULÉS DISENT CE QU'ON Y RÈGLE, jamais comment c'est rangé en base.
 // « Mes lieux » ne parlait à personne, relevé par Alex le 13/08.
-verifier('« Mes lieux » est devenu « Où me trouver »',
-  /Où me trouver/.test(configSrc) && !/>Mes lieux<\/p>/.test(configSrc))
-verifier('« Mes lieux fixes » est devenu « Mon adresse d’accueil »',
-  /Mon adresse d’accueil/.test(configSrc) && !/>Mes lieux fixes</.test(configSrc))
-verifier('« Ma tournée habituelle » est devenue « Ma semaine type »',
-  /Ma semaine type/.test(configSrc) && !/>Ma tournée habituelle</.test(configSrc))
-verifier('« Emplacements ponctuels » est devenu « Dates exceptionnelles »',
-  /Dates exceptionnelles/.test(configSrc) && !/>Emplacements ponctuels à venir</.test(configSrc))
+// ⚠️ CES TESTS FIGEAIENT LES MOTS, ET ILS ONT ROUGI UNE HEURE APRÈS AVOIR ÉTÉ
+// ÉCRITS, au moment exact où Alex trouvait les intitulés encore tièdes. C'est
+// la neuvième fois qu'un test de ce banc verrouille une forme au lieu d'une
+// règle. Un libellé se retouche, c'est même le propre d'un libellé : ce qui ne
+// doit pas revenir, c'est le VOCABULAIRE DE LA BASE dans l'écran du commerçant.
+for (const jargon of ['Mes lieux fixes', 'Ma tournée habituelle', 'Emplacements ponctuels', 'lieu ponctuel']) {
+  verifier(`« ${jargon} » ne s’affiche plus au commerçant`,
+    !new RegExp(`>${jargon}|${jargon}</`).test(configSrc))
+}
+// ⚠️ ET CE QUI COMPTE VRAIMENT : les trois blocs se distinguent par leur DURÉE,
+// dite en toutes lettres. C'est ce qu'Alex a retenu après trois propositions :
+// un nom concret ne suffit pas si rien ne dit combien de temps il vaut.
+verifier('la section porte un titre qui parle', /Où me trouver/.test(configSrc))
+for (const duree of ['Valables tous les jours', 'Se répète chaque semaine', 'Ne valent qu’un jour donné']) {
+  verifier(`un bloc dit sa durée : « ${duree} »`, configSrc.includes(duree))
+}
 
 // ─── LA QUESTION QUI COMMANDE TOUT ────────────────────────────────────────
 // ⚠️ UNE SEULE QUESTION DÉCIDE DE CE QUI S'AFFICHE ENSUITE. Avant, le

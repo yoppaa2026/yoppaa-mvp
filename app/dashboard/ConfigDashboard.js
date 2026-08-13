@@ -16,7 +16,11 @@ import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import BandeDefilante from '@/app/components/BandeDefilante'
-import { estFoodTruck } from '@/lib/types-commerce'
+// ⚠️ `estFoodTruck` NE SERT PLUS ICI, ET C'EST VOULU. Le métier ne dit pas si
+// un commerce bouge, ce sont ses LIEUX qui le disent : une professeure de yoga
+// et un food truck n'ont pas le même métier et ont le même besoin. Cette
+// section a cessé d'être conditionnée au métier le 12/08, et son dernier usage,
+// un titre qui changeait selon la catégorie, est parti le 13/08.
 import { jourLocalISO, jourSemaineLocal } from '@/lib/timezone'
 import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
@@ -4061,7 +4065,7 @@ const JOURS_FT = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', '
 function parHeure(a, b) {
   return String(a?.heure_debut || '').localeCompare(String(b?.heure_debut || ''))
 }
-function SectionLieux({ commercantId, toast, estMobile = false }) {
+function SectionLieux({ commercantId, toast }) {
   const [emps, setEmps] = useState([])
   const [loading, setLoading] = useState(true)
   // « Aujourd'hui je suis à… » : zéro friction, 2 champs obligatoires + 1 bouton
@@ -4369,11 +4373,12 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
       {/* ─── Lieux fixes ─────────────────────────────────────────────────────
           Le salon à deux adresses, l'atelier du commerçant inscrit à son
           domicile. Ils valent tous les jours, sans jour ni date. */}
-      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mon adresse d’accueil</p>
+      <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mes adresses</p>
+      <p style={{ margin: '0 0 8px', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>Valables tous les jours, toute l’année.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
         {permanents.length === 0 && (
           <p style={{ margin: 0, fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
-            Aucun lieu fixe. Ta fiche utilise l’adresse de ton siège social, sauf si tu as décoché la case à l’inscription.
+            Aucune adresse pour l’instant. Ta fiche utilise celle de ton siège social, sauf si tu as répondu que tu changes d’endroit.
           </p>
         )}
         {permanents.map(e => (
@@ -4404,8 +4409,14 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
       {/* ─── Lieux du jour ───────────────────────────────────────────────────
           Pour qui change d'endroit : food truck, cours donnés dans plusieurs
           salles, marchés. */}
-      <p style={{ margin: '14px 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-        {estMobile ? 'Mes emplacements du jour' : 'Quand je change d’endroit'}
+      {/* Ce bloc ne se range pas par durée comme les trois autres : c'est un
+          GESTE, celui d'annoncer sa position du jour en deux champs et un
+          bouton. On le nomme donc pour ce qu'il fait. */}
+      <p style={{ margin: '14px 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+        Où je suis aujourd’hui
+      </p>
+      <p style={{ margin: '0 0 8px', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>
+        Juste pour aujourd’hui, sans toucher à ton planning.
       </p>
 
       {/* Aujourd'hui : état + déclaration rapide */}
@@ -4437,7 +4448,8 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
       </div>
 
       {/* Tournée hebdo type */}
-      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ma semaine type</p>
+      <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mon planning</p>
+      <p style={{ margin: '0 0 8px', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>Se répète chaque semaine, aux mêmes jours.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
         {JOURS_FT.map((jour, idx) => {
           // ⚠️ UNE LISTE, PAS UN LIEU. Un food truck sert le midi sur une place
@@ -4529,9 +4541,10 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
       )}
 
       {/* Ponctuels à venir (marchés, événements) */}
-      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Dates exceptionnelles</p>
+      <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mes dates particulières</p>
+      <p style={{ margin: '0 0 8px', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>Ne valent qu’un jour donné, et remplacent ton planning ce jour-là.</p>
       {futurs.length === 0 && !showFutur && (
-        <p style={{ margin: '0 0 8px', fontSize: 12, color: T.muted }}>Aucun. Planifie un marché ou un événement à l’avance.</p>
+        <p style={{ margin: '0 0 8px', fontSize: 12, color: T.muted }}>Aucune pour l’instant. Un marché, un salon, un stage : annonce-le à l’avance.</p>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
         {futurs.map(e => (
@@ -5160,7 +5173,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
             rapport, le même besoin.
             Elle s'affiche donc pour tout le monde : chacun y déclare ses lieux
             fixes, et ceux qui bougent y posent leur tournée. */}
-        <SectionLieux commercantId={commercantId} toast={toast} estMobile={estFoodTruck(form.type)}/>
+        <SectionLieux commercantId={commercantId} toast={toast}/>
       </>)}
 
       {/* ─── REGLAGES : le fonctionnement, pas la vitrine ─────────────────── */}

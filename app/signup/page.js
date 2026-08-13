@@ -15,6 +15,7 @@ import {
   User, Heart, Radio, Sun, Megaphone, Flame, AlertTriangle, Bell, Mail, Sparkles, BarChart3,
   ShoppingCart, Bike, Utensils, Calendar, Briefcase, Clock, Users, Package, CreditCard, Star, Download,
   Smartphone, Printer, Camera, FileText, Pencil, CheckCircle, Check, Circle, Shield, IdCard,
+  MapPin, Gift,
 } from 'lucide-react'
 // Logo canonique Yoppaa : wordmark + 5 dots V2-B (spec validee 12/06).
 // Ne JAMAIS redessiner les dots ailleurs : importer YoppaaLogo ou YoppaaDots.
@@ -706,6 +707,12 @@ function BadgePlan({ plan }) {
     exister:     { bg: '#ECFDF5', fg: '#065F46', label: 'Inclus avec Exister' },
     communiquer: { bg: '#EDE0FF', fg: '#2D0F6B', label: 'Inclus avec Communiquer' },
     vendre:      { bg: '#FEF3C7', fg: '#78350F', label: 'Inclus avec Vendre' },
+    // ⚠️ CE QUI EST DÉCRIT ICI DOIT EXISTER DANS LE CODE, et ce badge est la
+    // seule exception tolérée. Une fonction annoncée sans être marquée ainsi
+    // est une promesse : le commerçant souscrit au palier payant en comptant
+    // dessus, attend, et ne revient pas. Le cas s'était déjà produit le 10/08
+    // avec une « réservation produit » dont aucune ligne n'avait été écrite.
+    bientot:     { bg: '#F3F4F6', fg: '#4B5563', label: 'En construction, pas encore disponible' },
   }
   const c = COLORS[plan]
   if (!c) return null
@@ -768,22 +775,29 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
     },
     {
       Icon: Bell, titre: 'Push ciblé',
-      desc: 'Notification push envoyée uniquement à tes Yoppers favoris. Tu choisis le moment et tu peux segmenter (par centre d\'intérêt, ancienneté, dernière interaction). Yoppaa relaie le message via OneSignal : tu ne vois jamais les emails ou identités individuelles, tout reste conforme au RGPD.',
+      desc: 'Notification envoyée à tes Yoppers favoris, ceux qui ont choisi de te suivre. Tu choisis le moment. Yoppaa relaie le message : tu ne vois jamais leur email ni leur identité, tout passe par nous pour respecter le RGPD.',
       plan: 'communiquer',
     },
     {
       Icon: Mail, titre: 'Newsletter ciblée',
-      desc: 'Email envoyé à tes Yoppers favoris via Brevo (notre service intégré). Plus long et structuré qu\'un push. Tu rédiges dans ton tableau de bord, Yoppaa envoie pour toi. Désabonnement automatique conforme RGPD. Stats d\'ouverture et de clic dans ton tableau de bord.',
-      plan: 'communiquer',
+      desc: 'Un email plus long et plus construit qu’une notification, envoyé à tes Yoppers favoris depuis ton tableau de bord. Pas encore ouvert : un envoi commercial exige le consentement explicite de chaque Yopper, et nous le mettons en place avant d’activer cette fonction.',
+      plan: 'bientot',
     },
     {
       Icon: Sparkles, titre: 'IA Yoppaa',
-      desc: 'Assistant IA intégré pour rédiger plus vite. Communiquer (IA bridée) : reformulation de textes, suggestions d\'idées d\'actus, correction orthographique. Vendre (IA avancée) : rédaction complète, segmentation automatique des Yoppers, analyse de performance, benchmarking. Tu valides toujours avant publication, l\'IA propose, tu décides.',
+      desc: 'Un assistant qui écrit à ta place quand la page blanche bloque : ta présentation, tes actus, tes deals. Tu lui donnes trois éléments, il te propose des textes que tu retouches à ta main. Il propose, tu décides : rien n’est publié sans toi.',
       plan: 'communiquer',
     },
     {
       Icon: BarChart3, titre: 'Statistiques',
-      desc: 'Exister : compteur vues, favoris, signaux. Communiquer : engagement push, taux d\'ouverture, performance newsletter. Vendre : suivi conversion complet, ROI par action, export comptable.',
+      desc: 'Combien de personnes ont vu ta fiche, combien t’ont mis en favori, combien t’ont envoyé un signal. Avec Vendre, tu suis aussi tes ventes, tes rendez-vous et ton chiffre d’affaires, et tu exportes tout pour ta comptabilité.',
+      plan: 'exister',
+    },
+    {
+      // ⚠️ Le module existe et fonctionne, et le signup n'en disait pas un mot :
+      // un commerçant ne pouvait pas savoir qu'il l'avait.
+      Icon: MapPin, titre: 'Plusieurs endroits, ou un seul',
+      desc: 'Si tu bouges, tu déclares où tu es et quand : les mêmes endroits chaque semaine, deux services dans la même journée pour un food truck, ou une date exceptionnelle comme un marché de Noël. Ta fiche annonce l’endroit du jour, et la distance affichée au Yopper part de là, pas de ton siège social. Si tu ne bouges pas, tu n’as rien à régler.',
       plan: 'exister',
     },
   ]
@@ -803,8 +817,8 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
     },
     {
       Icon: Utensils, titre: 'Réservation de table',
-      desc: 'Pour les restaurateurs : tu configures tes capacités (X tables de 2, Y tables de 4, etc.) et tes créneaux par service (midi, soir). Le Yopper réserve depuis ta fiche, choisit l\'horaire et le nombre de personnes. Acompte optionnel. Confirmation "Ta table est Yoppée !" côté Yopper.',
-      plan: 'vendre',
+      desc: 'Pour les restaurateurs : tes capacités par service, et le Yopper réserve depuis ta fiche en choisissant son horaire et le nombre de personnes. C’est le prochain module que nous construisons, il n’est pas encore utilisable.',
+      plan: 'bientot',
     },
   ]
 
@@ -820,8 +834,16 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
       plan: 'vendre',
     },
     {
-      Icon: Clock, titre: 'Créneaux RDV',
-      desc: 'Tu définis tes plages horaires par jour de la semaine, avec pause déjeuner si tu veux. Durée des créneaux configurable (15 min, 30 min, 1 h). Exceptions ponctuelles supportées.',
+      Icon: Clock, titre: 'Créneaux de rendez-vous',
+      desc: 'Tes plages horaires jour par jour, avec pause si tu en prends une, et la durée des créneaux au choix (15 min, 30 min, 1 h). Les exceptions ponctuelles sont prévues.',
+      plan: 'vendre',
+    },
+    {
+      // ⚠️ Livré le 13/08. Sans cette ligne, un studio de yoga ou une
+      // auto-école ne peut pas deviner que Yoppaa gère autre chose que du
+      // tête-à-tête, et passe son chemin.
+      Icon: Users, titre: 'Cours collectifs',
+      desc: 'Un créneau peut accueillir plusieurs personnes : tu dis combien, et le Yopper voit les places restantes avant de s’inscrire. Le cours s’affiche « complet » quand il est plein, et ton agenda montre la liste des inscrits en un bloc plutôt qu’en dix lignes. Pour le yoga, le pilates, un coach, une auto-école.',
       plan: 'vendre',
     },
     {
@@ -854,8 +876,15 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
       plan: 'vendre',
     },
     {
-      Icon: Star, titre: 'Fidélité configurable',
-      desc: 'Programme à points entièrement paramétrable : règle de gain (X € = Y points), seuils de récompense, type de récompense (% de remise, produit offert). Statistiques fidélité dans ton tableau de bord.',
+      Icon: Star, titre: 'Carte de fidélité',
+      desc: 'Tu fixes la règle, par exemple 10 € dépensés donnent 1 point, et ce que le client gagne au bout : une remise, un produit offert. Plus de carton perdu au fond d’un sac, tout se compte tout seul.',
+      plan: 'vendre',
+    },
+    {
+      // ⚠️ Le module est complet depuis le 31/07 et n'apparaissait nulle part
+      // dans le signup : un commerçant payait pour une fonction qu'il ignorait.
+      Icon: Gift, titre: 'Bons cadeaux',
+      desc: 'Tes clients achètent un bon d’un montant qu’ils choisissent, à offrir. Le bénéficiaire le fait valoir chez toi, et le solde restant se garde pour la prochaine fois. Tu es payé à l’achat du bon.',
       plan: 'vendre',
     },
     {
@@ -2471,7 +2500,23 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
       </Card>
 
       {/* Boutique Yoppaa : Success Pack + Kits hardware + Consommables */}
-      <Card titre="Boutique Yoppaa" sous="Service d'accompagnement et matériel optionnels. Tu pourras aussi commander à tout moment depuis ton tableau de bord.">
+      <Card titre="Boutique Yoppaa" sous="Du matériel et de l'accompagnement, si tu en veux.">
+
+        {/* ⚠️ EN HAUT, ET PAS EN BAS. Le message « tu peux continuer sans rien
+            ajouter » existait déjà, mais en italique gris sous la liste : il
+            ressemblait à une note de bas de page, et on ne le lisait qu'après
+            avoir fait défiler tous les produits. Un commerçant qui s'inscrit
+            doit savoir AVANT de regarder les prix qu'il n'a rien à prendre. */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#ECFDF5', border: '1.5px solid #A7F3D0', borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
+          <span style={{ flexShrink: 0, marginTop: 1, color: '#065F46' }}><Check size={17} strokeWidth={2.6}/></span>
+          <p style={{ margin: 0, fontSize: 12.5, color: '#065F46', fontWeight: 700, lineHeight: 1.5 }}>
+            Rien n’est obligatoire ici.
+            <span style={{ display: 'block', fontWeight: 500, marginTop: 3 }}>
+              Tu peux passer cette étape et continuer. Tout reste disponible dans ton
+              tableau de bord, et tu commanderas le jour où tu en auras vraiment besoin.
+            </span>
+          </p>
+        </div>
 
         {/* Produits principaux pour la catégorie */}
         <div style={{ display: 'grid', gap: 10 }}>
@@ -2505,13 +2550,13 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
             </span>
           </div>
         ) : (
-          <p style={{ fontSize: 12, color: T.muted, marginTop: 14, textAlign: 'center', fontStyle: 'italic' }}>
-            Aucun produit sélectionné. Tu peux continuer sans rien ajouter, c&apos;est optionnel.
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 14, textAlign: 'center' }}>
+            Rien de sélectionné, et c&apos;est très bien : continue.
           </p>
         )}
 
         <p style={{ fontSize: 10.5, color: T.muted, marginTop: 14, lineHeight: 1.5, textAlign: 'center' }}>
-          Paiement sécurisé Stripe. Tu peux ajouter ou commander d&apos;autres produits à tout moment depuis ton tableau de bord.
+          Paiement sécurisé par Stripe. Tu retrouveras cette boutique dans ton tableau de bord, onglet Boutique Yoppaa.
         </p>
       </Card>
 

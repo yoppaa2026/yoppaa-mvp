@@ -459,6 +459,65 @@ verifier('le chevauchement de créneaux se juge par emplacement',
   /filter\(e => !parLieu \|\| \(e\.lieu_id \|\| null\) === \(form\.lieu_id \|\| null\)\)/.test(configSrc))
 
 // ═══════════════════════════════════════════════════════════════════════════
+// LE SIGNUP NE PROMET QUE CE QUI EXISTE
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LA RÈGLE LA PLUS CHÈRE DE CET ÉCRAN. Un commerçant qui s'inscrit lit le
+// glossaire, souscrit à un palier payant en comptant sur une fonction, attend,
+// et ne revient pas. Le cas s'était produit le 10/08 avec une « réservation
+// produit » dont aucune ligne n'avait jamais été écrite ; l'audit du 13/08 en a
+// trouvé QUATRE de plus, à la veille d'ouvrir aux premiers vrais commerçants.
+//
+// Ce qui n'existe pas peut être annoncé, mais SEULEMENT avec le badge qui le
+// dit. Sans badge, c'est une promesse.
+const signupSrcTxt = lire('app/signup/page.js')
+
+verifier('le badge « en construction » existe',
+  /bientot:\s*\{[^}]*En construction, pas encore disponible/.test(signupSrcTxt))
+
+// ⚠️ LA NEWSLETTER N'EST PAS BLOQUÉE PAR LA TECHNIQUE MAIS PAR LE DROIT : il
+// n'existe aucun consentement marketing sur les Yoppers, donc aucun envoi
+// commercial n'est légal aujourd'hui.
+verifier('la newsletter est annoncée comme pas encore ouverte',
+  /consentement explicite de chaque Yopper/.test(signupSrcTxt))
+// ⚠️ La réservation de table arrive (module M6, décision Alex du 13/08), mais
+// un restaurateur ne doit pas croire qu'il l'aura en payant aujourd'hui.
+verifier('la réservation de table est annoncée comme à venir',
+  /prochain module que nous construisons/.test(signupSrcTxt))
+egal('et les deux portent bien le badge',
+  (signupSrcTxt.match(/plan: 'bientot',/g) || []).length, 2)
+
+// ⚠️ L'IA ÉCRIT, ELLE N'ANALYSE PAS. Deux routes existent, `presentation` et
+// `generer-post`. « Segmentation automatique des Yoppers », « analyse de
+// performance » et « benchmarking » ne correspondaient à rien.
+verifier('l’IA ne promet plus d’analyser ni de segmenter',
+  !/segmentation automatique|benchmarking|analyse de performance/.test(signupSrcTxt))
+// ⚠️ Le push part à TOUS les favoris : aucun ciblage par ancienneté ou par
+// centre d'intérêt n'existe.
+verifier('le push ne promet plus de segmenter',
+  !/segmenter \(par centre d’intérêt|segmenter \(par centre d'intérêt/.test(signupSrcTxt))
+
+// ─── ET CE QUI EXISTE DOIT ÊTRE DIT ───────────────────────────────────────
+// ⚠️ Le symétrique, tout aussi coûteux : un commerçant qui paie pour une
+// fonction qu'il ignore ne s'en sert pas, et trouve que Yoppaa ne vaut pas son
+// prix. Les bons cadeaux existaient depuis le 31/07 sans être mentionnés.
+for (const [nom, marqueur] of [
+  ['les bons cadeaux', 'Bons cadeaux'],
+  ['les cours collectifs', 'Cours collectifs'],
+  ['les emplacements multiples', 'Plusieurs endroits, ou un seul'],
+]) {
+  verifier(`le signup annonce ${nom}`, signupSrcTxt.includes(marqueur))
+}
+
+// ─── ON PEUT PASSER LES PACKS SANS RIEN PRENDRE ───────────────────────────
+// ⚠️ Le message existait, mais en italique gris SOUS la liste : il ressemblait
+// à une note de bas de page et ne se lisait qu'après avoir fait défiler tous
+// les prix. Relevé par Alex le 13/08, avant d'ouvrir aux vrais commerçants.
+verifier('l’étape des packs dit d’emblée que rien n’est obligatoire',
+  /Rien n’est obligatoire ici/.test(signupSrcTxt))
+verifier('et qu’on retrouvera tout dans le tableau de bord',
+  /Tout reste disponible dans ton\s*\n?\s*tableau de bord/.test(signupSrcTxt))
+
+// ═══════════════════════════════════════════════════════════════════════════
 // L'ONGLET PROFIL, DÉCOUPÉ EN QUATRE
 // ═══════════════════════════════════════════════════════════════════════════
 // ⚠️ IL FAISAIT 647 LIGNES ET MÉLANGEAIT QUATRE SUJETS SANS RAPPORT : ce que le

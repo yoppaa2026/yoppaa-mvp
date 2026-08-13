@@ -10,6 +10,7 @@ import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement } from '@/lib/lancement'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { lieuEnConflit } from '@/lib/lieux-activite'
+import { capacitePrestation } from '@/lib/cours-collectifs'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
@@ -6048,7 +6049,7 @@ function TabRdvPrestations({ commercantId, toast }) {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
-  const initialForm = { nom: '', description: '', duree_minutes: '30', prix_mode: 'fixe', prix: '', prix_min: '', prix_max: '', acompte_pourcent: '0', actif: true, tva_taux: '' }
+  const initialForm = { nom: '', description: '', duree_minutes: '30', prix_mode: 'fixe', prix: '', prix_min: '', prix_max: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1' }
   const [form, setForm] = useState(initialForm)
   // Propositions IA pour la description de la prestation (surface 'prestation')
   const [propsIa, setPropsIa] = useState([])
@@ -6116,6 +6117,9 @@ function TabRdvPrestations({ commercantId, toast }) {
       acompte_pourcent: String(p.acompte_pourcent ?? 0),
       actif: p.actif !== false,
       tva_taux: p.tva_taux ?? '',
+      // Une prestation d'avant la bascule n'a pas de capacité : elle vaut 1,
+      // c'est-à-dire ce qu'elle a toujours été.
+      capacite: String(capacitePrestation(p)),
     })
     setEditId(p.id)
     // Précharge les praticiens autorisés depuis la junction existante
@@ -6149,6 +6153,11 @@ function TabRdvPrestations({ commercantId, toast }) {
       // Vide = pas renseigné : null, jamais 0, sinon la prestation passerait
       // pour exonérée alors qu'elle n'a simplement pas été réglée.
       tva_taux: form.tva_taux === '' || form.tva_taux == null ? null : Number(form.tva_taux),
+      // ⚠️ COMBIEN DE PERSONNES SUR UN MÊME CRÉNEAU. 1 = rendez-vous
+      // individuel, c'est-à-dire tout le parc existant et l'immense majorité
+      // des métiers à rendez-vous. Au-delà, c'est un cours collectif : dix
+      // personnes de 10h à 11h chez une professeure de yoga.
+      capacite: capacitePrestation({ capacite: form.capacite }),
     }
     setSaving(true)
     // INSERT/UPDATE prestation
@@ -6285,6 +6294,24 @@ function TabRdvPrestations({ commercantId, toast }) {
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Acompte (%)</label>
                 <Input type="number" min="0" max="100" value={form.acompte_pourcent} onChange={e => setForm({ ...form, acompte_pourcent: e.target.value })}/>
               </div>
+            </div>
+
+            {/* ⚠️ COMBIEN DE PERSONNES SUR UN MÊME CRÉNEAU. Yoppaa ne
+                connaissait qu'un modèle, une personne pour un créneau, ce qui
+                décrit bien un coiffeur et pas du tout un cours de yoga de dix
+                personnes à 10h. Le champ vaut 1 par défaut : le commerçant qui
+                ne le touche pas ne voit aucune différence. */}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>
+                Personnes par créneau
+              </label>
+              <Input type="number" min="1" max="100" value={form.capacite}
+                onChange={e => setForm({ ...form, capacite: e.target.value })}/>
+              <p style={{ fontSize: 11, color: T.muted, margin: '4px 0 0', lineHeight: 1.45 }}>
+                {capacitePrestation({ capacite: form.capacite }) > 1
+                  ? `Cours collectif : ${capacitePrestation({ capacite: form.capacite })} personnes peuvent réserver le même horaire, et tes clients voient les places restantes.`
+                  : 'Rendez-vous individuel : une seule personne par horaire. Augmente pour un cours collectif.'}
+              </p>
             </div>
             {/* TVA de la prestation. Le prix affiché reste celui que paie le
                 client : le taux détermine seulement la part de TVA à l'intérieur. */}

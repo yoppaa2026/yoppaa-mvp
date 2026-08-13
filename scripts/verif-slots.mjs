@@ -91,6 +91,93 @@ egal('motif = réservé', pris?.motif, 'reserve')
 verifier('10h30 reste libre', slots.find(s => s.heure === '10:30')?.pris === false)
 verifier('09h30 libre (finit à 10h00)', slots.find(s => s.heure === '09:30')?.pris === false)
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LES COURS COLLECTIFS — un créneau qui accueille plusieurs personnes
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LA GARANTIE QUI COMPTE D'ABORD : sans capacité, RIEN NE CHANGE. Tous les
+// tests précédents s'exécutent sans ce paramètre, et ils sont verts. Les lignes
+// ci-dessous vérifient la même chose explicitement, parce que l'immense
+// majorité des métiers à rendez-vous reste individuelle et qu'une régression
+// ici ne se verrait qu'au moment où un client renoncerait à réserver.
+const RESA_10H = { heure_debut: '10:00', heure_fin: '10:30', prestation_id: 'cours', place_no: 1 }
+
+slots = genererSlots({
+  dateChoisie: mercredi, dureeMinutes: 30,
+  creneaux: [creneauCarole], reservations: [RESA_10H], horairesDetail: horaires,
+})
+verifier('sans capacité, une réservation ferme le créneau',
+  slots.find(s => s.heure === '10:00')?.pris === true)
+egal('et aucune jauge n’est calculée',
+  slots.find(s => s.heure === '10:00')?.placesTotal, null)
+
+// Avec une capacité de 3, la même réservation ne ferme plus rien.
+slots = genererSlots({
+  dateChoisie: mercredi, dureeMinutes: 30,
+  creneaux: [creneauCarole], reservations: [RESA_10H], horairesDetail: horaires,
+  capacite: 3, prestationId: 'cours',
+})
+let cours10h = slots.find(s => s.heure === '10:00')
+verifier('un cours de 3 reste ouvert avec un inscrit', cours10h?.pris === false, JSON.stringify(cours10h))
+egal('et il annonce sa jauge', [cours10h?.placesPrises, cours10h?.placesTotal], [1, 3])
+egal('en disant quelles places sont prises', cours10h?.placesOccupees, [1])
+
+// Plein : le créneau se ferme, avec un motif qui lui est propre.
+slots = genererSlots({
+  dateChoisie: mercredi, dureeMinutes: 30,
+  creneaux: [creneauCarole], horairesDetail: horaires,
+  reservations: [
+    { ...RESA_10H, place_no: 1 }, { ...RESA_10H, place_no: 2 }, { ...RESA_10H, place_no: 3 },
+  ],
+  capacite: 3, prestationId: 'cours',
+})
+cours10h = slots.find(s => s.heure === '10:00')
+verifier('un cours plein est pris', cours10h?.pris === true)
+egal('avec le motif « complet »', cours10h?.motif, 'complet')
+// ⚠️ Le motif compte : « réservé » ferait disparaître le créneau, alors que la
+// décision d'Alex est de l'AFFICHER grisé. Un cours qui disparaît laisse croire
+// qu'il n'y a pas cours ce jour-là.
+egal('et les 3 places sont connues', cours10h?.placesOccupees, [1, 2, 3])
+
+// ⚠️ LA PLACE LIBÉRÉE AU MILIEU. Les places 1 et 3 sont prises, la 2 est libre :
+// l'écran doit la connaître, sans quoi l'inscription redemanderait la 4, qui
+// n'existe pas, ou la 3, déjà occupée.
+slots = genererSlots({
+  dateChoisie: mercredi, dureeMinutes: 30,
+  creneaux: [creneauCarole], horairesDetail: horaires,
+  reservations: [{ ...RESA_10H, place_no: 1 }, { ...RESA_10H, place_no: 3 }],
+  capacite: 3, prestationId: 'cours',
+})
+egal('les places prises remontent telles quelles',
+  slots.find(s => s.heure === '10:00')?.placesOccupees, [1, 3])
+
+// ⚠️ UN CHEVAUCHEMENT À HEURE DIFFÉRENTE RESTE BLOQUANT, capacité ou pas :
+// personne ne peut être à deux endroits. C'est la garde qui empêche un cours
+// d'ouvrir un trou dans l'agenda d'un praticien.
+slots = genererSlots({
+  dateChoisie: mercredi, dureeMinutes: 30,
+  creneaux: [creneauCarole], horairesDetail: horaires,
+  reservations: [{ heure_debut: '10:15', heure_fin: '10:45', prestation_id: 'autre', place_no: 1 }],
+  capacite: 3, prestationId: 'cours',
+})
+verifier('un rendez-vous qui déborde bloque le cours',
+  slots.find(s => s.heure === '10:00')?.pris === true)
+egal('et le motif dit bien pourquoi',
+  slots.find(s => s.heure === '10:00')?.motif, 'incompatible')
+
+// ⚠️ UNE AUTRE PRESTATION AU MÊME HORAIRE N'EST PAS LA MÊME SÉANCE. Sans ce
+// filtre, un rendez-vous individuel de 10h à 10h30 compterait comme un inscrit
+// au cours de yoga de 10h, et la jauge mentirait dans les deux sens.
+slots = genererSlots({
+  dateChoisie: mercredi, dureeMinutes: 30,
+  creneaux: [creneauCarole], horairesDetail: horaires,
+  reservations: [{ heure_debut: '10:00', heure_fin: '10:30', prestation_id: 'coupe', place_no: 1 }],
+  capacite: 3, prestationId: 'cours',
+})
+verifier('une autre prestation au même horaire bloque, sans compter dans la jauge',
+  slots.find(s => s.heure === '10:00')?.pris === true)
+egal('la jauge du cours reste vide',
+  slots.find(s => s.heure === '10:00')?.placesPrises, 0)
+
 // ─── Multi-praticiens : la règle « Sans préférence » ───────────────────────
 const resas = [
   { heure_debut: '10:00', heure_fin: '10:30', praticien_id: 'carole' },

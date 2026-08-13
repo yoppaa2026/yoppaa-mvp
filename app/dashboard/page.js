@@ -722,7 +722,16 @@ function CarteRdv({ rdv, onChangerStatut }) {
                             : action === 'honore' ? null
                             : 'Remettre ce RDV en CONFIRMÉ ?'
                   if (msg && !window.confirm(msg)) return
-                  onChangerStatut(rdv.id, action)
+                  // ⚠️ DEUX ANNULATIONS QUI NE SE RESSEMBLENT PAS. Déplacer un
+                  // emplacement oblige à libérer les rendez-vous qui s'y
+                  // tenaient, mais le client n'est pas éconduit pour autant :
+                  // il est invité à reprendre sa place à la nouvelle adresse.
+                  // Le même geste, deux lectures opposées, et c'est le texte
+                  // reçu qui décide laquelle.
+                  const raison = action === 'annule_commercant'
+                    && window.confirm('Est-ce parce que tu déplaces cet endroit ?\n\nOK : le client lira « ton RDV change d’endroit » et sera invité à reprendre sa place.\nAnnuler : annulation ordinaire.')
+                    ? 'lieu' : 'commercant'
+                  onChangerStatut(rdv.id, action, raison)
                 }}
                   style={{
                     padding: '0.5rem 0.5rem', borderRadius: 10,
@@ -1314,7 +1323,13 @@ export default function Dashboard() {
     }
   }
 
-  async function changerStatutRdv(rdvId, statut) {
+  // `raison` sert au seul cas où l'annulation n'en est pas vraiment une : le
+  // commerçant DÉPLACE un emplacement, et le verrou l'oblige à libérer les
+  // rendez-vous qui s'y tenaient (règle d'Alex du 13/08). Le client reçoit
+  // alors « ton RDV change d'endroit » et une invitation à reprendre sa place,
+  // au lieu d'un « annulé par le commerçant » qui lui ferait croire qu'on ne
+  // veut plus de lui.
+  async function changerStatutRdv(rdvId, statut, raison = 'commercant') {
     const { error } = await supabase.from('rdv_reservations').update({ statut }).eq('id', rdvId)
     if (error) {
       console.error('[dashboard] changerStatutRdv', error)
@@ -1330,7 +1345,7 @@ export default function Dashboard() {
       fetch('/api/emails/rdv-annule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rdv_id: rdvId, raison_annulation: 'commercant' }),
+        body: JSON.stringify({ rdv_id: rdvId, raison_annulation: raison }),
       }).catch(e => console.warn('[dashboard] email rdv-annule KO', e))
     } else if (statut === 'honore') {
       fetch('/api/emails/rdv-honore', {
@@ -2452,7 +2467,7 @@ export default function Dashboard() {
         <div onClick={() => setRdvSelectionne(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(26,8,64,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9998, padding: '1rem', backdropFilter: 'blur(4px)' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '85dvh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <CarteRdv rdv={rdvSelectionne} onChangerStatut={(id, st) => { changerStatutRdv(id, st); setRdvSelectionne(null) }}/>
+            <CarteRdv rdv={rdvSelectionne} onChangerStatut={(id, st, raison) => { changerStatutRdv(id, st, raison); setRdvSelectionne(null) }}/>
             <button onClick={() => setRdvSelectionne(null)}
               style={{ width: '100%', marginTop: 12, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>
               Fermer

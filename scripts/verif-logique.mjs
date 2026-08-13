@@ -22,7 +22,7 @@ import { tauxFraisLivraison } from '../lib/tva.js'
 import { ventilerFrais } from '../lib/stripe-frais.js'
 import { contexteRetrait, textesRetrait, textesConfirmation, rdvPorteLesProduits } from '../lib/ecran-retrait.js'
 import { libelleOptions, ESPACE_INSECABLE } from '../lib/options-ligne.js'
-import { emailCommandeExpediee, emailRecapCommandesJour, emailRdvConfirme, emailCommandeConfirmee } from '../lib/resend.js'
+import { emailCommandeExpediee, emailRecapCommandesJour, emailRdvConfirme, emailCommandeConfirmee, emailRdvAnnule } from '../lib/resend.js'
 import { partagerCommandes } from '../lib/commandes-vue.js'
 import { restaurerStockVariantes } from '../lib/stock-variantes-server.js'
 import { couleurRdv, texteLisibleSur, COULEUR_DEFAUT, ENCRE } from '../lib/agenda-couleurs.js'
@@ -887,6 +887,45 @@ egal('et ils sont rangés par place', seances[0].inscrits.map(i => i.client_pren
 egal('les séances sont rangées par heure', seances.map(s => s.heure_debut), ['10:00', '18:00'])
 // Deux prestations différentes à la même heure restent deux séances : un
 // praticien peut donner un cours pendant qu'un autre reçoit en individuel.
+// ─── DÉPLACER UN LIEU N'EST PAS ÉCONDUIRE UN CLIENT ───────────────────────
+// ⚠️ Le verrou d'Alex oblige à annuler les rendez-vous d'un emplacement qu'on
+// déplace. Sans motif propre, le client lit « Annulé par Studio Souffle » et
+// comprend qu'on ne veut plus de lui, alors que le cours a simplement changé
+// d'adresse et qu'il est invité à revenir. Un même geste, deux lectures
+// opposées : c'est le texte qui décide.
+//
+// ⚠️ L'EMAIL EST RENDU ET RELU, jamais cherché dans le source : un libellé
+// écrit mais jamais atteint par une condition resterait invisible au client.
+const BASE_ANNUL = {
+  yopper_prenom: 'Ali', commercant_nom: 'Studio Souffle', commercant_slug: 'studio-souffle',
+  prestation_nom: 'Hatha yoga', date_rdv: '2026-08-18', heure_debut: '10:00:00',
+}
+const mailLieu = emailRdvAnnule({ ...BASE_ANNUL, raison_annulation: 'lieu' })
+const mailOrdinaire = emailRdvAnnule({ ...BASE_ANNUL, raison_annulation: 'commercant' })
+
+verifier('le déplacement annonce un changement d’endroit, pas une annulation',
+  /change d’endroit/.test(mailLieu) && !/Annulé par/.test(mailLieu), mailLieu.slice(0, 0))
+verifier('et invite explicitement à reprendre sa place',
+  /Reprends ta place/.test(mailLieu) && /Reprendre ma place/.test(mailLieu))
+// L'annulation ordinaire ne doit surtout pas hériter de ce ton : elle annonce
+// bien une annulation, et son bouton reste une invitation neutre.
+verifier('une annulation ordinaire reste une annulation',
+  /Annulé par/.test(mailOrdinaire) && !/change d’endroit/.test(mailOrdinaire))
+verifier('avec son bouton habituel',
+  /Reprendre un RDV/.test(mailOrdinaire) && !/Reprendre ma place/.test(mailOrdinaire))
+// Les autres motifs ne bougent pas d'un pouce.
+verifier('l’annulation par le client reste inchangée',
+  /Annulé à ta demande/.test(emailRdvAnnule({ ...BASE_ANNUL, raison_annulation: 'yopper' })))
+verifier('et l’annulation automatique aussi',
+  /paiement non finalisé/.test(emailRdvAnnule({ ...BASE_ANNUL, raison_annulation: 'auto' })))
+
+const srcDashRdv = sansCommentaires(
+  readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+verifier('le tableau de bord sait transmettre le motif',
+  /raison_annulation: raison/.test(srcDashRdv))
+verifier('et demande au commerçant lequel des deux c’est',
+  /\? 'lieu' : 'commercant'/.test(srcDashRdv))
+
 // ─── L'AGENDA : UN COURS COMPTE POUR UN BLOC, PAS POUR DOUZE ──────────────
 // ⚠️ Les blocs de l'agenda sont placés en position ABSOLUE sur leur heure de
 // début. Douze inscrits au même cours se seraient empilés exactement l'un sur

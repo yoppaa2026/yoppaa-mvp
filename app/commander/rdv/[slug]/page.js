@@ -23,6 +23,7 @@ import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
 import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 import { champsLieuPour } from '@/lib/lieu-fige'
+import { capacitePrestation, estCoursCollectif, premierePlaceLibre, libellePlaces } from '@/lib/cours-collectifs'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import GalerieCommerce from '@/app/components/GalerieCommerce'
@@ -780,6 +781,11 @@ export default function CommanderRdvSlug() {
         creneaux: creneauxFiltres,
         reservations: reservationsFiltrees,
         horairesDetail: commercant.horaires_detail,
+        // ⚠️ La capacité fait la différence entre « ce créneau est pris » et
+        // « il reste des places ». Sans elle, un cours de dix se fermerait dès
+        // le premier inscrit.
+        capacite: capacitePrestation(prestationChoisie),
+        prestationId: prestationChoisie?.id || null,
       })
       setSlots(list)
       // Tri des reservations par heure_debut pour la section info 'Deja pris'
@@ -855,6 +861,10 @@ export default function CommanderRdvSlug() {
   // Enrichit chaque jour avec le nombre de slots libres pour la prestation choisie
   // (necessite reservations60j + commercant.horaires_detail). Utilise par le mini-calendrier
   // pour afficher un dot vert (dispo) / rouge (complet ou ferme) par jour.
+  // Le créneau retenu, avec sa jauge et surtout SES PLACES DÉJÀ OCCUPÉES :
+  // c'est de là que sort le numéro de place du prochain inscrit.
+  const slotChoisi = slots.find(s => s.heure === heureChoisie) || null
+
   const joursAvecDispo = joursDispos.map(j => {
     if (!j.ouvert || !prestationChoisie) return { ...j, nbLibres: 0 }
     const resaDuJour = reservations60j.filter(r => r.date_rdv === j.iso)
@@ -865,6 +875,10 @@ export default function CommanderRdvSlug() {
       creneaux: creneauxFiltres,
       reservations: resaFiltree,
       horairesDetail: commercant?.horaires_detail,
+      // Le mini-calendrier doit compter pareil : sans la capacité, un jour de
+      // cours apparaîtrait complet alors qu'il reste neuf places.
+      capacite: capacitePrestation(prestationChoisie),
+      prestationId: prestationChoisie?.id || null,
     })
     return { ...j, nbLibres: list.filter(s => !s.pris).length }
   })
@@ -1192,9 +1206,20 @@ export default function CommanderRdvSlug() {
         tva_taux: prestationChoisie.tva_taux ?? null,
         notes_client: client.notes.trim() || null,
         rgpd_marketing: rgpdMarketing,
+        // ⚠️ LA CAPACITÉ EST GRAVÉE, comme la TVA et pour la même raison : la
+        // contrainte d'exclusion la lit pour savoir si elle doit s'appliquer,
+        // et une contrainte ne peut pas interroger une table voisine.
+        capacite_creneau: capacitePrestation(prestationChoisie),
+        // ⚠️ LA PREMIÈRE PLACE LIBRE, pas « nombre d'inscrits + 1 ». Quand
+        // quelqu'un annule, sa place se libère AU MILIEU : sur un cours où les
+        // places 1, 2 et 4 sont prises, la suivante est la 3. Compter aurait
+        // redonné une place déjà occupée, l'index unique aurait rejeté
+        // l'inscription, et le client aurait lu « ce créneau vient d'être
+        // pris » devant un cours à moitié vide.
+        place_no: premierePlaceLibre(prestationChoisie, slotChoisi?.placesOccupees || []) || 1,
       }
 
-      console.info('[rdv] inserting', { id: rdvId, date: dateStr, heure: heureChoisie })
+      console.info('[rdv] inserting', { id: rdvId, date: dateStr, heure: heureChoisie, place: payload.place_no })
       const { error } = await supabase.from('rdv_reservations').insert(payload)
 
       if (error) {
@@ -1203,7 +1228,12 @@ export default function CommanderRdvSlug() {
         //   23P01 = exclusion_violation -> rdv_no_overlap_praticien (chevauchement)
         if (error.code === '23505' || error.code === '23P01') {
           console.warn('[rdv] double-booking caught', error.code)
-          setSubmitError('Ce créneau vient d\'être pris par un autre client. Choisis-en un autre.')
+          // ⚠️ Le texte doit dire ce qui s'est VRAIMENT passé. Sur un cours de
+          // douze, « ce créneau vient d'être pris » laisserait croire que le
+          // cours est annulé, alors qu'il ne reste simplement plus de place.
+          setSubmitError(estCoursCollectif(prestationChoisie)
+            ? 'La dernière place vient d’être prise. Choisis un autre horaire.'
+            : 'Ce créneau vient d\'être pris par un autre client. Choisis-en un autre.')
           setHeureChoisie(null)
           setSubmitting(false)
           setTimeout(() => allerEtape(2), 1200)
@@ -2056,29 +2086,46 @@ export default function CommanderRdvSlug() {
                   {/* SECTION 1 : SLOTS LIBRES UNIQUEMENT - gros boutons, lecture immediate */}
                   {dateChoisie && !slotsLoading && slots.filter(s => !s.pris).length > 0 && (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(82px, 1fr))', gap: 8, marginBottom: 14 }}>
-                      {slots.filter(s => !s.pris).map(({ heure }) => {
+                      {/* ⚠️ UN COURS COMPLET RESTE AFFICHÉ, GRISÉ (décision Alex du
+                          13/08). Le faire disparaître laisserait croire qu'il n'y a
+                          pas cours ce jour-là, alors que l'information utile est
+                          « c'est plein, regarde un autre jour ». Un créneau
+                          individuel pris, lui, disparaît toujours : personne n'a
+                          besoin de savoir que le coiffeur est occupé à 14h. */}
+                      {slots.filter(s => !s.pris || s.motif === 'complet').map(({ heure, pris, placesTotal, placesPrises }) => {
                         const choisi = heureChoisie === heure
+                        const jauge = placesTotal ? libellePlaces({ capacite: placesTotal }, placesPrises || 0) : null
                         return (
-                          <button key={heure} onClick={() => setHeureChoisie(heure)}
+                          <button key={heure} onClick={() => { if (!pris) setHeureChoisie(heure) }}
+                            disabled={pris}
+                            aria-label={pris ? `${heure}, complet` : heure}
                             style={{
-                              padding: '0.75rem 0.5rem', borderRadius: 12,
-                              border: `1.5px solid ${choisi ? T.main : T.pale}`,
-                              background: choisi ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
-                              color: choisi ? '#fff' : T.ink,
+                              padding: jauge ? '0.6rem 0.5rem' : '0.75rem 0.5rem', borderRadius: 12,
+                              border: `1.5px solid ${pris ? '#E5E7EB' : choisi ? T.main : T.pale}`,
+                              background: pris ? '#F9FAFB' : choisi ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
+                              color: pris ? '#9CA3AF' : choisi ? '#fff' : T.ink,
                               fontWeight: 800, fontSize: '0.95rem',
-                              cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                              cursor: pris ? 'not-allowed' : 'pointer', fontFamily: '"DM Sans", sans-serif',
                               transition: 'all 0.15s', letterSpacing: '-0.2px',
-                              boxShadow: choisi ? `0 6px 18px ${T.main}55` : 'none',
+                              boxShadow: choisi && !pris ? `0 6px 18px ${T.main}55` : 'none',
                               position: 'relative',
                             }}
-                            onMouseOver={e => { if (!choisi) { e.currentTarget.style.borderColor = T.main + '88'; e.currentTarget.style.transform = 'translateY(-1px)' } }}
-                            onMouseOut={e => { if (!choisi) { e.currentTarget.style.borderColor = T.pale; e.currentTarget.style.transform = 'translateY(0)' } }}>
-                            {choisi && (
+                            onMouseOver={e => { if (!choisi && !pris) { e.currentTarget.style.borderColor = T.main + '88'; e.currentTarget.style.transform = 'translateY(-1px)' } }}
+                            onMouseOut={e => { if (!choisi && !pris) { e.currentTarget.style.borderColor = T.pale; e.currentTarget.style.transform = 'translateY(0)' } }}>
+                            {choisi && !pris && (
                               <span style={{ position: 'absolute', top: 4, right: 4, width: 14, height: 14, borderRadius: '50%', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
                                 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
                               </span>
                             )}
                             {heure}
+                            {/* La jauge n'apparaît que sur un cours : afficher
+                                « 1 place restante » à qui prend rendez-vous chez
+                                son coiffeur n'aurait aucun sens. */}
+                            {jauge && (
+                              <span style={{ display: 'block', fontSize: '0.6rem', fontWeight: 700, marginTop: 2, color: pris ? '#9CA3AF' : choisi ? 'rgba(255,255,255,0.85)' : T.muted, letterSpacing: 0 }}>
+                                {jauge}
+                              </span>
+                            )}
                           </button>
                         )
                       })}

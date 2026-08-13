@@ -34,6 +34,7 @@ import { canDo } from '@/lib/plans'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { champsLieuPour } from '@/lib/lieu-fige'
+import { capacitePrestation, premierePlaceLibre } from '@/lib/cours-collectifs'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -248,6 +249,32 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
     Object.assign(payload, await champsLieuPour(supabase, cLieu, {
       jour: meta.date_rdv, heure: meta.heure_debut,
     }))
+
+    // ⚠️ LA PLACE SE CALCULE ICI, PAS AU MOMENT DU PAIEMENT. Entre le clic du
+    // client et l'arrivée de ce webhook, d'autres personnes ont pu s'inscrire :
+    // une place figée dans les métadonnées Stripe serait périmée, et l'index
+    // unique rejetterait l'insertion après que le client a payé.
+    //
+    // On lit les places déjà prises sur CETTE séance, et on choisit la
+    // première libre. ⚠️ Pas « nombre d'inscrits + 1 » : une annulation libère
+    // une place AU MILIEU.
+    const { data: presta } = await supabase
+      .from('rdv_prestations').select('capacite').eq('id', meta.prestation_id).maybeSingle()
+    const capacite = capacitePrestation(presta)
+    payload.capacite_creneau = capacite
+
+    if (capacite > 1) {
+      const { data: dejaLa } = await supabase
+        .from('rdv_reservations')
+        .select('place_no')
+        .eq('commercant_id', meta.yoppaa_commercant_id)
+        .eq('date_rdv', meta.date_rdv)
+        .eq('heure_debut', meta.heure_debut)
+        .eq('prestation_id', meta.prestation_id)
+        .in('statut', ['confirme', 'honore'])
+        .is('deleted_at', null)
+      payload.place_no = premierePlaceLibre(presta, (dejaLa || []).map(r => r.place_no)) || 1
+    }
 
     const { error } = await supabase.from('rdv_reservations').insert(payload)
     if (error) throw error

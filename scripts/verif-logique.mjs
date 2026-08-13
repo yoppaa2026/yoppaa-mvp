@@ -887,6 +887,37 @@ egal('et ils sont rangés par place', seances[0].inscrits.map(i => i.client_pren
 egal('les séances sont rangées par heure', seances.map(s => s.heure_debut), ['10:00', '18:00'])
 // Deux prestations différentes à la même heure restent deux séances : un
 // praticien peut donner un cours pendant qu'un autre reçoit en individuel.
+// ─── LES TROIS ÉCRANS QUI INSCRIVENT, ET CE QU'ILS GRAVENT ────────────────
+// ⚠️ La capacité doit être gravée partout : la contrainte d'exclusion la lit
+// pour savoir si elle s'applique, et un écran qui l'oublierait laisserait la
+// contrainte bloquer le deuxième inscrit de ses cours.
+const srcResaRdv = sansCommentaires(
+  readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+const srcWebhookRdv = sansCommentaires(
+  readFileSync(new URL('../app/api/stripe/webhook/route.js', import.meta.url), 'utf8'))
+
+verifier('la réservation grave la capacité',
+  /capacite_creneau: capacitePrestation\(prestationChoisie\)/.test(srcResaRdv))
+// ⚠️ ANCRÉ SUR `premierePlaceLibre`, jamais sur un comptage : c'est la
+// différence entre réattribuer la place libérée au milieu et en redemander une
+// déjà occupée.
+verifier('et prend la première place libre',
+  /place_no: premierePlaceLibre\(prestationChoisie, slotChoisi\?\.placesOccupees/.test(srcResaRdv))
+verifier('le paiement d’acompte grave la capacité aussi',
+  /payload\.capacite_creneau = capacite/.test(srcWebhookRdv))
+// ⚠️ La place se calcule à l'arrivée du WEBHOOK, pas au moment du paiement :
+// entre les deux, d'autres personnes ont pu s'inscrire, et une place figée
+// dans les métadonnées Stripe serait périmée APRÈS que le client a payé.
+verifier('et la calcule au moment de créer le rendez-vous',
+  /payload\.place_no = premierePlaceLibre\(presta,/.test(srcWebhookRdv))
+// Le moteur reçoit la capacité, sans quoi un cours se fermerait au premier
+// inscrit et personne ne pourrait jamais être deux.
+egal('l’écran passe la capacité au moteur, aux deux endroits qui comptent',
+  (srcResaRdv.match(/capacite: capacitePrestation\(prestationChoisie\)/g) || []).length, 2)
+// Un cours complet reste affiché, grisé : le filtre laisse passer ce motif.
+verifier('un cours complet reste affiché',
+  /slots\.filter\(s => !s\.pris \|\| s\.motif === 'complet'\)/.test(srcResaRdv))
+
 egal('deux prestations à la même heure font deux séances',
   regrouperEnSeances([
     { date_rdv: '2026-08-18', heure_debut: '10:00', prestation_id: 'p1', place_no: 1 },

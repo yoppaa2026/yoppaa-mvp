@@ -44,6 +44,7 @@ import {
   lieuALHeure, plagesSeChevauchent, lieuEnConflit,
   lieuPrincipal, lieuDeLaPlage, lieuDeLaReservation, libelleLieu,
 } from '../lib/lieux-activite.js'
+import { adresseRendezVous, champsLieu } from '../lib/lieu-fige.js'
 import {
   referenceCommande, referenceComplete, referenceAvecNom,
   prefixePourCommande, libelleSemaine, referenceRdv, referenceRdvComplete, PREFIXES,
@@ -767,6 +768,77 @@ egal('un rendez-vous garde le lieu figé à la réservation',
 egal('un rendez-vous d’avant se résout à sa date et à son heure',
   lieuDeLaReservation({ date_rdv: MERCREDI, heure_debut: '19:30' }, { commercant: truck, lieux: deuxServices })?.libelle,
   'Zoning')
+
+// ─── CE QUE LE CLIENT LIT, PARTOUT PAREIL ─────────────────────────────────
+// ⚠️ LE PARCOURS RENDEZ-VOUS ENVOYAIT LES CLIENTS AU SIÈGE SOCIAL. L'email de
+// confirmation, celui d'annulation, le rappel de la veille et « Mes
+// rendez-vous » lisaient tous `commercants.adresse`, sans jamais consulter les
+// lieux. Pour une commerçante inscrite à son domicile mais qui donne cours en
+// salle, cela veut dire envoyer un inconnu CHEZ ELLE.
+egal('l’adresse annoncée est celle gravée dans le rendez-vous',
+  adresseRendezVous({
+    lieu_libelle: 'Salle Saint-Roch', lieu_adresse: 'Place, Mettet',
+    commercant: { adresse: 'Rue du Domicile 1' },
+  }),
+  'Salle Saint-Roch, Place, Mettet')
+// ⚠️ Le repli n'est pas un luxe : il vaut pour l'immense majorité des commerces
+// et pour tous les rendez-vous ANTÉRIEURS à la bascule, qui n'ont rien de gravé.
+egal('sans lieu gravé, le siège reste la réponse',
+  adresseRendezVous({ commercant: { adresse: 'Rue de Prée 9G, Mettet' } }),
+  'Rue de Prée 9G, Mettet')
+egal('un lieu gravé sans nom donne quand même son adresse',
+  adresseRendezVous({ lieu_adresse: 'Zoning 2', commercant: { adresse: 'Dépôt' } }),
+  'Zoning 2')
+egal('et sans rien du tout, on n’invente pas', adresseRendezVous({}), '')
+
+// Les colonnes gravées se construisent en un seul endroit : quatre canaux les
+// lisent, trois écrans les écrivent, et une divergence enverrait un client au
+// mauvais endroit sans que rien ne le signale.
+egal('les colonnes gravées portent l’identifiant, le nom et l’adresse',
+  champsLieu({ id: 'l1', libelle: 'Salle', adresse: 'Place 1' }),
+  { lieu_id: 'l1', lieu_libelle: 'Salle', lieu_adresse: 'Place 1' })
+// ⚠️ Un objet VIDE, pas des `null` : on n'écrase pas ce qu'on ne sait pas, et
+// un commerce sans lieu déclaré doit continuer de réserver normalement.
+egal('sans lieu, on n’écrit rien plutôt que du vide', champsLieu(null), {})
+
+// ⚠️ TOUS LES CANAUX, ET TOUS LES ÉCRANS QUI GRAVENT. Corrigés un par un, ils
+// auraient divergé : c'est exactement ce qui s'était produit avec les numéros
+// de commande, corrigés dans les corps d'emails et oubliés dans les objets.
+const CANAUX_LIEU = [
+  ['la confirmation de rendez-vous', 'app/api/emails/rdv-confirme/route.js'],
+  ['l’email d’annulation', 'app/api/emails/rdv-annule/route.js'],
+  ['le rappel de la veille', 'app/api/cron/rdv-reminder-9h/route.js'],
+  ['« Mes rendez-vous »', 'app/api/rdv/mes-rdvs/route.js'],
+]
+for (const [nom, chemin] of CANAUX_LIEU) {
+  const src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
+  verifier(`${nom} annonce le lieu du rendez-vous`, /adresseRendezVous\(/.test(src))
+  verifier(`${nom} ne lit plus l’adresse du siège`,
+    !/commercant[?]?\.adresse \|\| ''/.test(src))
+}
+
+const ECRANS_QUI_GRAVENT = [
+  ['la réservation par le client', 'app/commander/rdv/[slug]/page.js'],
+  ['le paiement d’acompte', 'app/api/stripe/webhook/route.js'],
+  ['la création par le commerçant', 'app/dashboard/ModalNouveauRdv.js'],
+]
+// ⚠️ ANCRÉ SUR L'ÉCRITURE, PAS SUR L'APPEL. La première version cherchait
+// `champsLieuPour(` et restait VERTE quand on neutralisait son résultat :
+// l'appel était bien écrit, il ne servait simplement plus à rien. Un test qui
+// vérifie qu'un morceau de code EXISTE ne dit rien de ce qu'il fait, et c'est
+// la quatrième forme du test faussement vert de ce projet.
+for (const [nom, chemin] of ECRANS_QUI_GRAVENT) {
+  const src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
+  verifier(`${nom} grave le lieu dans la réservation`,
+    /Object\.assign\(payload, await champsLieuPour\(/.test(src)
+    || /\.\.\.lieu,/.test(src) && /const lieu = await champsLieuPour\(/.test(src))
+}
+// Le lieu se résout à la DATE ET À L'HEURE : c'est ce qui distingue le service
+// du midi de celui du soir chez un food truck.
+const srcResaClient = sansCommentaires(
+  readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+verifier('et il le résout à l’heure du rendez-vous',
+  /champsLieuPour\(supabase, commercant, \{ jour: dateStr, heure: heureChoisie \}\)/.test(srcResaClient))
 
 // ─── L'ACCUEIL MESURE JUSQU'AU BON ENDROIT ────────────────────────────────
 // ⚠️ La distance se mesurait depuis le SIÈGE SOCIAL. Le food truck affichait la

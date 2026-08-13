@@ -18,6 +18,7 @@ import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { referenceRdv } from '@/lib/numero-commande'
+import { adresseRendezVous } from '@/lib/lieu-fige'
 
 export async function POST(request) {
   try {
@@ -40,7 +41,7 @@ export async function POST(request) {
         id, numero_rdv, numero_prefixe, date_rdv, heure_debut, heure_fin, duree_minutes,
         prix_estime, acompte_paye, acompte_paye_en_ligne, acompte_montant,
         client_email, client_prenom, client_nom, client_telephone, notes_client,
-        annulation_token,
+        annulation_token, lieu_id, lieu_libelle, lieu_adresse,
         commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode, infos_pratiques),
         prestation:rdv_prestations(nom, duree_minutes),
         praticien:rdv_praticiens(prenom, nom, couleur_hex)
@@ -63,7 +64,7 @@ export async function POST(request) {
           heure_fin: rdv.heure_fin,
           prestation_nom: rdv.prestation?.nom || 'Prestation',
           commercant_nom: rdv.commercant?.nom || '',
-          commercant_adresse: rdv.commercant?.adresse || '',
+          commercant_adresse: adresseRendezVous(rdv),
           commercant_telephone: rdv.commercant?.telephone,
           commercant_email: rdv.commercant?.email,
           // ATTENDEE : sans lui, iOS ne propose pas le calendrier.
@@ -80,7 +81,7 @@ export async function POST(request) {
         const html = emailRdvConfirme({
           yopper_prenom:           rdv.client_prenom || 'Yopper',
           commercant_nom:          rdv.commercant?.nom || '',
-          commercant_adresse:      rdv.commercant?.adresse || '',
+          commercant_adresse:      adresseRendezVous(rdv),
           commercant_slug:         rdv.commercant?.slug || '',
           prestation_nom:          rdv.prestation?.nom || '',
           date_rdv:                rdv.date_rdv,

@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
+import { champsLieuPour } from '@/lib/lieu-fige'
 
 const T = {
   main:    '#6B35C4',
@@ -200,6 +201,9 @@ export default function ModalNouveauRdv({
         rgpd_marketing: false,
         source: 'commercant',               // distingue des RDVs pris en ligne par un Yopper
       }
+      // ⚠️ LE LIEU EST GRAVÉ À LA RÉSERVATION, ici aussi. Un rendez-vous pris
+      // au comptoir par le commerçant doit dire où aller comme les autres.
+      Object.assign(payload, await champsLieuPour(supabase, commercant, { jour: dateStr, heure: heureInit }))
       const { error: errInsert } = await supabase.from('rdv_reservations').insert(payload)
       if (errInsert) {
         if (errInsert.code === '23505') {

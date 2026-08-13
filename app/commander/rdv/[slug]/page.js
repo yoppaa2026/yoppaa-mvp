@@ -22,6 +22,7 @@ import { reprendrePanierPourRdv, deposerPanierPourBoutique } from '@/lib/panier-
 import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
 import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
+import { champsLieuPour } from '@/lib/lieu-fige'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import GalerieCommerce from '@/app/components/GalerieCommerce'
@@ -1163,7 +1164,12 @@ export default function CommanderRdvSlug() {
 
       // UUID client-side : pas besoin de .select() après insert
       const rdvId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null
+      // ⚠️ LE LIEU EST GRAVÉ À LA RÉSERVATION. Sans lui, la confirmation
+      // annonce le siège social, donc le DOMICILE d'une commerçante inscrite
+      // chez elle mais qui donne cours en salle.
+      const lieu = await champsLieuPour(supabase, commercant, { jour: dateStr, heure: heureChoisie })
       const payload = {
+        ...lieu,
         ...(rdvId ? { id: rdvId } : {}),
         commercant_id: commercant.id,
         client_id: cid,

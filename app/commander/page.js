@@ -3057,6 +3057,19 @@ export default function Commander() {
                                     </span></>
                                   )}
                                 </p>
+                                {/* ⚠️ OÙ ALLER. Cet écran ne disait que QUAND : le Yopper devait
+                                    rouvrir la fiche du commerce pour retrouver l'adresse, et il y
+                                    lisait le siège social, donc le DOMICILE d'une commerçante
+                                    inscrite chez elle mais qui donne cours en salle. L'adresse
+                                    affichée ici est celle GRAVÉE dans le rendez-vous. */}
+                                {r.lieu_affiche && (
+                                  <p style={{ display: 'flex', alignItems: 'flex-start', gap: 4, fontSize: '0.74rem', color: T.muted, lineHeight: 1.4, marginTop: 3 }}>
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 2 }}>
+                                      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+                                    </svg>
+                                    <span>{r.lieu_affiche}</span>
+                                  </p>
+                                )}
                               </div>
                               {r.prix_estime != null && (
                                 <p style={{ fontWeight: 900, color: T.main, fontSize: '0.95rem', letterSpacing: '-0.3px', flexShrink: 0 }}>{Number(r.prix_estime).toFixed(0)}€</p>

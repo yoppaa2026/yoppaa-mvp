@@ -15,6 +15,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRdvReminder } from '@/lib/resend'
+import { adresseRendezVous } from '@/lib/lieu-fige'
 
 export async function GET(request) {
   // 1) Securite : verifie Bearer token
@@ -75,7 +76,7 @@ export async function GET(request) {
         const html = emailRdvReminder({
           yopper_prenom:           r.client_prenom || 'Yopper',
           commercant_nom:          r.commercant.nom,
-          commercant_adresse:      r.commercant.adresse || '',
+          commercant_adresse:      adresseRendezVous(r),
           commercant_slug:         r.commercant.slug || '',
           prestation_nom:          r.prestation.nom,
           date_rdv:                r.date_rdv,

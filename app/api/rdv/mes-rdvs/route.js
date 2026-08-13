@@ -27,6 +27,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { identiteProuvee } from '@/lib/yopper-auth'
+import { adresseRendezVous } from '@/lib/lieu-fige'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -51,7 +52,8 @@ export async function GET(request) {
       commercant_id, prestation_id, praticien_id,
       acompte_paye_en_ligne, acompte_montant, acompte_paye_date,
       annulation_token, client_email,
-      commercant:commercants(nom, slug, type, categorie, rdv_delai_annulation_heures),
+      lieu_id, lieu_libelle, lieu_adresse,
+      commercant:commercants(nom, slug, type, categorie, adresse, rdv_delai_annulation_heures),
       prestation:rdv_prestations(nom, duree_minutes),
       praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url)
     `)
@@ -65,9 +67,14 @@ export async function GET(request) {
     return NextResponse.json({ ok: false, error: error.message, rdvs: [] }, { status: 500 })
   }
 
+  // ⚠️ OÙ ALLER, ET PAS SEULEMENT QUAND. L'écran « Mes rendez-vous » ne
+  // recevait aucune adresse : le Yopper devait rouvrir la fiche du commerce
+  // pour la retrouver, et il y lisait le siège social, donc le DOMICILE d'une
+  // commerçante inscrite chez elle mais qui donne cours en salle.
   const enriched = (data || []).map(r => ({
     ...r,
     prestation_nom: r.prestation?.nom || null,
+    lieu_affiche: adresseRendezVous(r),
   }))
 
   return NextResponse.json({ ok: true, count: enriched.length, rdvs: enriched })

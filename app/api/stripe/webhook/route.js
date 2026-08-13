@@ -33,6 +33,7 @@ import { crediterFidelite } from '@/lib/fidelite-server'
 import { canDo } from '@/lib/plans'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { normaliserEmail } from '@/lib/email-normalise'
+import { champsLieuPour } from '@/lib/lieu-fige'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -234,6 +235,19 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
     } catch (e) {
       console.warn('[webhook] frais Stripe RDV non enregistrés (non bloquant)', e?.message)
     }
+
+    // ⚠️ LE LIEU EST GRAVÉ À LA RÉSERVATION, ici comme dans les deux autres
+    // écrans qui créent un rendez-vous. Sans lui, la confirmation annonce le
+    // siège social, donc le DOMICILE d'une commerçante inscrite chez elle mais
+    // qui donne cours en salle.
+    const { data: cLieu } = await supabase
+      .from('commercants')
+      .select('id, nom, adresse, latitude, longitude, commune_id, siege_social_est_lieu_activite')
+      .eq('id', meta.yoppaa_commercant_id)
+      .maybeSingle()
+    Object.assign(payload, await champsLieuPour(supabase, cLieu, {
+      jour: meta.date_rdv, heure: meta.heure_debut,
+    }))
 
     const { error } = await supabase.from('rdv_reservations').insert(payload)
     if (error) throw error

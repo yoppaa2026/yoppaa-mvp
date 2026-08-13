@@ -12,6 +12,7 @@ import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRdvAnnule } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { annulerPush } from '@/lib/onesignal'
+import { adresseRendezVous } from '@/lib/lieu-fige'
 
 export async function POST(request) {
   try {
@@ -53,7 +54,7 @@ export async function POST(request) {
       heure_fin: rdv.heure_fin,
       prestation_nom: rdv.prestation?.nom || 'Prestation',
       commercant_nom: rdv.commercant?.nom || '',
-      commercant_adresse: rdv.commercant?.adresse || '',
+      commercant_adresse: adresseRendezVous(rdv),
       commercant_telephone: rdv.commercant?.telephone,
       commercant_email: rdv.commercant?.email,
       // ATTENDEE : sans lui, iOS ne propose pas le calendrier.

@@ -2655,8 +2655,12 @@ function TabCreneaux({ commercantId, toast }) {
   const [jourActif, setJourActif] = useState('lundi')
   const [showForm, setShowForm] = useState(false)
   const [showFermetureForm, setShowFermetureForm] = useState(false)
-  const [form, setForm] = useState({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true, capacite_temps: 30 })
+  const [form, setForm] = useState({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true, capacite_temps: 30, lieu_id: '' })
   const [fermetureForm, setFermetureForm] = useState({ date_debut: '', date_fin: '', motif: '' })
+  // Le planning par emplacement, et les emplacements eux-mêmes. Décoché par
+  // défaut : l'immense majorité des commerces ne bouge pas.
+  const [parLieu, setParLieu] = useState(false)
+  const [lieux, setLieux] = useState([])
   const [saving, setSaving] = useState(false)
   const [savingFermeture, setSavingFermeture] = useState(false)
   const [showCopier, setShowCopier] = useState(false)
@@ -2672,16 +2676,23 @@ function TabCreneaux({ commercantId, toast }) {
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: cren }, { data: comm }, { data: ferm }] = await Promise.all([
+    const [{ data: cren }, { data: comm }, { data: ferm }, { data: lieux }] = await Promise.all([
       supabase.from('creneaux').select('*').eq('commercant_id', commercantId).order('heure_debut'),
-      supabase.from('commercants').select('horizon_commande, mode_capacite, horaires_detail').eq('id', commercantId).single(),
-      supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', commercantId).order('date_debut')
+      supabase.from('commercants').select('horizon_commande, mode_capacite, horaires_detail, planning_par_lieu').eq('id', commercantId).single(),
+      supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', commercantId).order('date_debut'),
+      supabase.from('commercant_lieux').select('id, type, jour_semaine, date_jour, libelle, heure_debut, heure_fin, actif')
+        .eq('commercant_id', commercantId).eq('actif', true),
     ])
     setCreneaux(cren || [])
     setHorizon(comm?.horizon_commande || 1)
     setModeGlobal(comm?.mode_capacite || 'commandes')
     setHoraires(comm?.horaires_detail || null)
     setFermetures(ferm || [])
+    // ⚠️ Les emplacements ne servent QUE si le commerçant a coché « mes horaires
+    // changent selon l'endroit ». Sans ce drapeau, aucun sélecteur n'apparaît et
+    // les créneaux ne désignent aucun lieu, exactement comme avant.
+    setParLieu(comm?.planning_par_lieu === true)
+    setLieux(lieux || [])
     setLoading(false)
   }
 
@@ -2697,6 +2708,16 @@ function TabCreneaux({ commercantId, toast }) {
   function creneauxDuJour(jour) {
     // jour_semaine === null = anciens créneaux globaux — affichés uniquement sur lundi par convention
     return creneaux.filter(c => c.jour_semaine === jour || (c.jour_semaine === null && jour === 'lundi'))
+  }
+  // Les emplacements proposables pour un créneau de ce jour : ceux de la
+  // tournée ce jour-là, et les lieux fixes, valables tous les jours.
+  function lieuxDuJourEditeur(jour) {
+    return lieux.filter(l => l.type === 'permanent'
+      || (l.type === 'hebdo' && l.jour_semaine === jour))
+  }
+  function nomDuLieu(lieuId) {
+    if (!lieuId) return null
+    return lieux.find(l => l.id === lieuId)?.libelle || null
   }
   function creneauxNull() {
     return creneaux.filter(c => c.jour_semaine === null)
@@ -2819,8 +2840,13 @@ function TabCreneaux({ commercantId, toast }) {
       }
     }
 
-    // Superposition sur ce jour
+    // Superposition sur ce jour.
+    // ⚠️ DEUX EMPLACEMENTS DIFFÉRENTS PEUVENT PARTAGER UNE HEURE sans se
+    // gêner : un food truck qui sert de 11h à 14h sur une place ne peut pas,
+    // mais deux salles tenues par des personnes différentes le peuvent. On ne
+    // compare donc que les créneaux du MÊME emplacement.
     const existants = creneauxDuJour(jourActif)
+      .filter(e => !parLieu || (e.lieu_id || null) === (form.lieu_id || null))
     for (const e of existants) {
       if (form.heure_debut < e.heure_fin.slice(0,5) && form.heure_fin > e.heure_debut.slice(0,5)) {
         toast('Ce créneau chevauche un créneau existant', 'error'); return
@@ -2836,11 +2862,15 @@ function TabCreneaux({ commercantId, toast }) {
       max_commandes: parseInt(form.max_commandes) || 5,
       delta_minutes: parseInt(form.delta_minutes) || 0,
       actif: form.actif,
-      capacite_temps: parseFloat(form.capacite_temps) || 30
+      capacite_temps: parseFloat(form.capacite_temps) || 30,
+      // ⚠️ VIDE NE VEUT PAS DIRE « NULLE PART », il veut dire « là où se passe
+      // l'activité ». C'est ce qui protège tous les commerces qui n'ont pas
+      // activé le planning par emplacement, c'est-à-dire presque tous.
+      lieu_id: parLieu ? (form.lieu_id || null) : null,
     })
     if (error) { toast('Erreur : ' + error.message, 'error'); setSaving(false); return }
     toast('Créneau ajouté'); setSaving(false); setShowForm(false)
-    setForm({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true, capacite_temps: 30 })
+    setForm({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true, capacite_temps: 30, lieu_id: '' })
     fetchAll()
   }
 
@@ -3076,6 +3106,27 @@ function TabCreneaux({ commercantId, toast }) {
           {showForm && (
             <div style={{ ...s.cardActive, marginBottom: 12 }}>
               <h3 style={{ ...s.h3, marginBottom: 14 }}>+ Nouveau créneau · {jourActif}</h3>
+              {/* ⚠️ N'APPARAÎT QUE SI « mes horaires changent selon l'endroit »
+                  est coché dans Mes lieux. Demander l'emplacement à une
+                  boulangerie serait une question absurde. */}
+              {parLieu && (
+                <div style={{ marginBottom: 12 }}>
+                  <label style={s.label}>Emplacement</label>
+                  <select value={form.lieu_id}
+                    onChange={e => setForm(p => ({ ...p, lieu_id: e.target.value }))}
+                    style={{ width: '100%', padding: '9px 11px', borderRadius: 9, border: `1.5px solid ${T.hairline}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', background: '#fff', color: T.deep, boxSizing: 'border-box' }}>
+                    <option value="">Partout où je suis ce jour-là</option>
+                    {lieuxDuJourEditeur(jourActif).map(l => (
+                      <option key={l.id} value={l.id}>
+                        {l.libelle}{l.heure_debut ? ` · ${String(l.heure_debut).slice(0, 5)}–${String(l.heure_fin || '').slice(0, 5)}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>
+                    Laisse « partout » si ce créneau vaut quel que soit l’endroit.
+                  </p>
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
                 <div><label style={s.label}>Début *</label><Input type="time" value={form.heure_debut} onChange={e => setForm(p => ({ ...p, heure_debut: e.target.value }))} /></div>
                 <div><label style={s.label}>Fin *</label><Input type="time" value={form.heure_fin} onChange={e => setForm(p => ({ ...p, heure_fin: e.target.value }))} /></div>
@@ -3124,6 +3175,17 @@ function TabCreneaux({ commercantId, toast }) {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 18, fontWeight: 800, color: T.ink, letterSpacing: '-0.5px' }}>{c.heure_debut.slice(0,5)} – {c.heure_fin.slice(0,5)}</div>
+                        {/* L'emplacement de ce créneau, quand le commerçant en
+                            tient plusieurs. Un créneau sans emplacement vaut
+                            partout où il se trouve ce jour-là. */}
+                        {parLieu && (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: c.lieu_id ? T.main : T.muted, marginTop: 2 }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+                            </svg>
+                            {nomDuLieu(c.lieu_id) || 'Partout ce jour-là'}
+                          </div>
+                        )}
                         {horsH && <span style={{ fontSize: 10, fontWeight: 700, color: '#92400E', background: '#FEF3C7', padding: '1px 6px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 3 }}><AlertTriangle size={11} strokeWidth={2}/> Hors horaires</span>}
                         {modeGlobal === 'commandes' && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 8 }}>
@@ -3996,6 +4058,11 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
   const [formHebdo, setFormHebdo] = useState(null)  // { id, jour, libelle, adresse, heures… }
   // Ajout d'un lieu PERMANENT : un second siège d'exploitation, un atelier.
   const [perm, setPerm] = useState({ libelle: '', adresse: '', latitude: null, longitude: null })
+  // ⚠️ LE SYSTÈME CLASSIQUE RESTE LA NORME, et cette case est DÉCOCHÉE par
+  // défaut. Une boulangerie, un salon ou un cabinet ne bougeront jamais : leur
+  // demander à chaque plage horaire « et c'était à quel endroit ? » serait une
+  // question absurde posée à l'immense majorité pour servir une minorité.
+  const [planningParLieu, setPlanningParLieu] = useState(false)
 
   // ⚠️ `jourLocalISO` et PAS `toISOString()`. Minuit heure belge, c'est 22h ou
   // 23h LA VEILLE en temps universel : entre minuit et deux heures du matin,
@@ -4008,10 +4075,24 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { charger() }, [commercantId])
   async function charger() {
-    const { data, error } = await supabase.from('commercant_lieux').select('*').eq('commercant_id', commercantId)
+    const [{ data, error }, { data: c }] = await Promise.all([
+      supabase.from('commercant_lieux').select('*').eq('commercant_id', commercantId),
+      supabase.from('commercants').select('planning_par_lieu').eq('id', commercantId).maybeSingle(),
+    ])
     if (error) { toast(`Erreur : ${error.message}`, 'error'); setLoading(false); return }
     setEmps(data || [])
+    setPlanningParLieu(c?.planning_par_lieu === true)
     setLoading(false)
+  }
+
+  async function basculerPlanningParLieu(actif) {
+    setPlanningParLieu(actif)   // l'écran répond tout de suite
+    const { error } = await supabase.from('commercants')
+      .update({ planning_par_lieu: actif }).eq('id', commercantId)
+    if (error) { setPlanningParLieu(!actif); toast(`Erreur : ${error.message}`, 'error'); return }
+    toast(actif
+      ? 'Tes horaires se règlent maintenant emplacement par emplacement'
+      : 'Tes horaires valent de nouveau pour tout ton commerce')
   }
 
   // ⚠️ UN JOUR PEUT PORTER PLUSIEURS EMPLACEMENTS depuis le 13/08, et c'est le
@@ -4119,6 +4200,15 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
     // deux, et se repérer au jour écraserait le service du midi en enregistrant
     // celui du soir.
     const existant = formHebdo.id ? emps.find(e => e.id === formHebdo.id) : null
+    // Le verrou vaut aussi pour une MODIFICATION : changer l'adresse ou
+    // l'horaire d'un emplacement déplace tous les rendez-vous qui s'y tiennent.
+    if (existant) {
+      const bloquants = await rdvsQuiBloquent(existant.id)
+      if (bloquants > 0) {
+        toast(`${bloquants} rendez-vous ${bloquants > 1 ? 'sont prévus' : 'est prévu'} à cet endroit. Annule-les depuis l’agenda avant de le déplacer, et propose une nouvelle place à tes clients.`, 'error')
+        return
+      }
+    }
     if (conflit({
       id: formHebdo.id, type: 'hebdo', jour_semaine: formHebdo.jour,
       heure_debut: formHebdo.heure_debut || null, heure_fin: formHebdo.heure_fin || null,
@@ -4136,7 +4226,32 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
     charger()
   }
 
+  // ⚠️ UN EMPLACEMENT QUI PORTE DES RENDEZ-VOUS NE BOUGE PLUS. Règle d'Alex du
+  // 13/08 : le commerçant doit d'abord annuler ces rendez-vous, et il peut
+  // ensuite inviter ses clients à reprendre place ailleurs. Déplacer en
+  // silence enverrait des gens à une adresse où personne ne les attend, et ils
+  // ne l'apprendraient qu'en arrivant.
+  //
+  // On ne compte que les rendez-vous À VENIR et encore debout : un rendez-vous
+  // honoré la semaine dernière ne doit rien interdire, il appartient au passé.
+  async function rdvsQuiBloquent(lieuId) {
+    if (!lieuId) return 0
+    const { count } = await supabase
+      .from('rdv_reservations')
+      .select('id', { count: 'exact', head: true })
+      .eq('lieu_id', lieuId)
+      .eq('statut', 'confirme')
+      .gte('date_rdv', todayISO)
+      .is('deleted_at', null)
+    return count || 0
+  }
+
   async function supprimer(id) {
+    const bloquants = await rdvsQuiBloquent(id)
+    if (bloquants > 0) {
+      toast(`${bloquants} rendez-vous ${bloquants > 1 ? 'sont prévus' : 'est prévu'} à cet endroit. Annule-les depuis l’agenda avant de le retirer, et propose une nouvelle place à tes clients.`, 'error')
+      return
+    }
     const { error } = await supabase.from('commercant_lieux').delete().eq('id', id)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     setEmps(prev => prev.filter(e => e.id !== id))
@@ -4317,6 +4432,27 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
           )
         })}
       </div>
+
+      {/* ─── L'INTERRUPTEUR ──────────────────────────────────────────────────
+          ⚠️ DÉCOCHÉ PAR DÉFAUT, et il ne s'affiche qu'à qui a déclaré au moins
+          un emplacement variable. Une boulangerie ne verra jamais cette case :
+          poser la question « tes horaires changent-ils selon l'endroit ? » à
+          qui n'a qu'une adresse, c'est inventer un doute qui n'existe pas. */}
+      {emps.some(e => e.type === 'hebdo' || e.type === 'ponctuel') && (
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer', background: planningParLieu ? T.pale : '#fff', border: `1.5px solid ${planningParLieu ? T.main : T.hairline}`, borderRadius: 12, padding: '11px 13px', margin: '0 0 14px' }}>
+          <input type="checkbox" checked={planningParLieu}
+            onChange={e => basculerPlanningParLieu(e.target.checked)}
+            style={{ width: 17, height: 17, accentColor: T.main, marginTop: 1, flexShrink: 0, cursor: 'pointer' }}/>
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: T.deep, lineHeight: 1.45 }}>
+            Mes horaires changent selon l’endroit où je suis
+            <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: T.muted, marginTop: 3 }}>
+              Coche si tes créneaux de commande ou de rendez-vous ne sont pas les mêmes
+              d’un emplacement à l’autre. Sinon, laisse décoché : tes horaires valent
+              pour tout ton commerce, et tu n’as rien à régler emplacement par emplacement.
+            </span>
+          </span>
+        </label>
+      )}
 
       {/* Ponctuels à venir (marchés, événements) */}
       <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Emplacements ponctuels à venir</p>

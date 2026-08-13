@@ -409,6 +409,50 @@ verifier('l’éditeur refuse deux emplacements qui se chevauchent',
   /lieuEnConflit\(emps, candidat\)/.test(configSrc))
 egal('et les trois formulaires passent par ce refus',
   (configSrc.match(/if \(conflit\(\{/g) || []).length, 3)
+
+// ─── L'INTERRUPTEUR, ET LE SYSTÈME CLASSIQUE QU'IL PROTÈGE ────────────────
+// ⚠️ LA GARANTIE LA PLUS IMPORTANTE DU CHANTIER. Une boulangerie, un salon ou
+// un cabinet ne bougeront jamais : leur demander à chaque plage horaire « et
+// c'était à quel endroit ? » serait une question absurde posée à l'immense
+// majorité pour servir une minorité.
+verifier('le planning par emplacement s’active par une case',
+  /planning_par_lieu: actif/.test(configSrc))
+// Décoché par défaut : `=== true` et non une valeur qui traînerait.
+verifier('et il est décoché tant qu’on ne l’a pas coché',
+  /setPlanningParLieu\(c\?\.planning_par_lieu === true\)/.test(configSrc))
+// ⚠️ La case elle-même ne s'affiche qu'à qui a déclaré un emplacement variable :
+// poser la question à qui n'a qu'une adresse invente un doute qui n'existe pas.
+verifier('la case ne s’affiche qu’à qui bouge',
+  /emps\.some\(e => e\.type === 'hebdo' \|\| e\.type === 'ponctuel'\) && \(/.test(configSrc))
+// ⚠️ ON COMPTE, on ne cherche pas. La première version testait la PRÉSENCE de
+// `{parLieu && (` : il y a deux blocs conditionnés, le sélecteur du formulaire
+// et l'emplacement affiché sur chaque créneau, et en décrocher un laissait le
+// test vert puisque l'autre suffisait à le satisfaire.
+egal('les deux blocs d’emplacement suivent la même case',
+  (configSrc.match(/\{parLieu && \(/g) || []).length, 2)
+// ⚠️ VIDE NE VEUT PAS DIRE « NULLE PART », il veut dire « là où se passe
+// l'activité ». Sans ce garde-fou, activer puis désactiver la case laisserait
+// des créneaux rattachés à un emplacement que plus rien n'affiche.
+verifier('un créneau ne retient un emplacement que si la case est cochée',
+  /lieu_id: parLieu \? \(form\.lieu_id \|\| null\) : null/.test(configSrc))
+// Deux emplacements différents peuvent partager une heure sans se gêner : on ne
+// compare les chevauchements qu'à l'intérieur d'un même emplacement.
+verifier('le chevauchement de créneaux se juge par emplacement',
+  /filter\(e => !parLieu \|\| \(e\.lieu_id \|\| null\) === \(form\.lieu_id \|\| null\)\)/.test(configSrc))
+
+// ─── LE VERROU : un emplacement qui porte des rendez-vous ne bouge plus ───
+// ⚠️ Règle d'Alex du 13/08. Déplacer en silence enverrait des gens à une
+// adresse où personne ne les attend, et ils ne l'apprendraient qu'en arrivant.
+verifier('un emplacement qui porte des rendez-vous est verrouillé',
+  /async function rdvsQuiBloquent\(lieuId\)/.test(configSrc))
+egal('le verrou protège la suppression ET la modification',
+  (configSrc.match(/await rdvsQuiBloquent\(/g) || []).length, 2)
+// ⚠️ Seuls les rendez-vous À VENIR et encore debout bloquent : un rendez-vous
+// honoré la semaine dernière appartient au passé et ne doit rien interdire.
+verifier('seuls les rendez-vous à venir et confirmés bloquent',
+  /\.eq\('statut', 'confirme'\)[\s\S]{0,80}\.gte\('date_rdv', todayISO\)/.test(configSrc))
+verifier('et le message dit quoi faire, pas seulement non',
+  /Annule-les depuis l’agenda/.test(configSrc))
 // ⚠️ SANS LIEU PRINCIPAL, un commerçant qui a décoché la case du signup n'a
 // aucune adresse de référence : sa fiche n'aurait rien à afficher les jours
 // sans tournée.

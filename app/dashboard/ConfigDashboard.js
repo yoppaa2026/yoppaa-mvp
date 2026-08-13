@@ -6652,6 +6652,11 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
   const [loading, setLoading] = useState(true)
   const [jourActif, setJourActif] = useState('lundi')
   const [praticienFiltre, setPraticienFiltre] = useState('all')  // 'all' | 'tous' | praticienId
+  // Le planning par emplacement, décoché par défaut, et les emplacements
+  // eux-mêmes. Une professeure de yoga donne cours à Mettet le mardi et à
+  // Biesme le jeudi : ses plages de réservation ne sont pas les mêmes.
+  const [parLieuRdv, setParLieuRdv] = useState(false)
+  const [lieuxDispo, setLieuxDispo] = useState([])
   // Copie d'un jour vers d'autres jours (demande Alex 01/08, même geste que la
   // duplication des horaires du Profil) : on REMPLACE les créneaux des jours
   // cibles, sinon les copies successives s'empilent en doublons.
@@ -6666,6 +6671,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
   const [saving, setSaving] = useState(false)
   const initialForm = {
     praticien_id: 'tous',
+    lieu_id: '',
     jour_semaine: 'lundi',
     heure_debut: '09:00',
     heure_fin: '18:00',
@@ -6682,7 +6688,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: cren }, { data: prat }] = await Promise.all([
+    const [{ data: cren }, { data: prat }, { data: comm }, { data: lieuxRdv }] = await Promise.all([
       supabase
         .from('rdv_creneaux')
         .select('*')
@@ -6696,10 +6702,30 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         .eq('commercant_id', commercantId)
         .is('deleted_at', null)
         .order('ordre', { ascending: true }),
+      supabase.from('commercants').select('planning_par_lieu').eq('id', commercantId).maybeSingle(),
+      supabase.from('commercant_lieux')
+        .select('id, type, jour_semaine, libelle, heure_debut, heure_fin, actif')
+        .eq('commercant_id', commercantId).eq('actif', true),
     ])
     setCreneaux(cren || [])
     setPraticiens(prat || [])
+    // ⚠️ Les emplacements ne servent QUE si le commerçant a coché « mes
+    // horaires changent selon l'endroit ». Sans ce drapeau, aucun sélecteur
+    // n'apparaît et les plages ne désignent aucun lieu, comme avant.
+    setParLieuRdv(comm?.planning_par_lieu === true)
+    setLieuxDispo(lieuxRdv || [])
     setLoading(false)
+  }
+
+  // Les emplacements proposables pour une plage de ce jour : ceux de la
+  // tournée ce jour-là, et les lieux fixes, valables tous les jours.
+  function lieuxDuJourRdv(jour) {
+    return lieuxDispo.filter(l => l.type === 'permanent'
+      || (l.type === 'hebdo' && l.jour_semaine === jour))
+  }
+  function nomLieuRdv(lieuId) {
+    if (!lieuId) return null
+    return lieuxDispo.find(l => l.id === lieuId)?.libelle || null
   }
 
   // Helper : récupère le nom d'un praticien à partir de son id (pour affichage)
@@ -6732,6 +6758,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
   function openEdit(c) {
     setForm({
       praticien_id: c.praticien_id || 'tous',
+      lieu_id: c.lieu_id || '',
       jour_semaine: c.jour_semaine || 'lundi',
       heure_debut: (c.heure_debut || '09:00').slice(0,5),
       heure_fin: (c.heure_fin || '18:00').slice(0,5),
@@ -6754,6 +6781,10 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     const payload = {
       commercant_id: commercantId,
       praticien_id: form.praticien_id === 'tous' ? null : form.praticien_id,
+      // ⚠️ Vide ne veut pas dire « nulle part », il veut dire « là où se passe
+      // l'activité ». C'est ce qui protège tous les commerces qui n'ont pas
+      // activé le planning par emplacement, c'est-à-dire presque tous.
+      lieu_id: parLieuRdv ? (form.lieu_id || null) : null,
       jour_semaine: form.jour_semaine,
       heure_debut: form.heure_debut + ':00',
       heure_fin: form.heure_fin + ':00',
@@ -6957,6 +6988,17 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                     {c.pause_debut && c.pause_fin && (
                       <span>Pause {c.pause_debut.slice(0,5)} – {c.pause_fin.slice(0,5)}</span>
                     )}
+                    {/* L'emplacement de cette plage, quand le commerçant en
+                        tient plusieurs. Sans lui, deux plages identiques à deux
+                        adresses différentes seraient indiscernables. */}
+                    {parLieuRdv && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: c.lieu_id ? T.main : T.muted, fontWeight: c.lieu_id ? 700 : 500 }}>
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+                        </svg>
+                        {nomLieuRdv(c.lieu_id) || 'Partout ce jour-là'}
+                      </span>
+                    )}
                     {!c.actif && <span style={{ color: '#DC2626', fontWeight: 700 }}>Inactif</span>}
                   </div>
                 </div>
@@ -7003,6 +7045,30 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
               style={{ width: '100%', padding: '10px 12px', border: `1.5px solid ${T.hairline}`, borderRadius: 8, fontSize: 14, fontFamily: '"DM Sans", sans-serif', marginBottom: 10, background: '#fff' }}>
               {JOURS_SEMAINE.map((j, i) => <option key={j} value={j}>{JOURS_LABELS[i] === 'Dim.' ? 'Dimanche' : JOURS_LABELS[i]}</option>)}
             </select>
+
+            {/* ⚠️ L'EMPLACEMENT DE CETTE PLAGE. N'apparaît que si « mes horaires
+                changent selon l'endroit » est coché dans Mes lieux : demander
+                l'endroit à un salon de coiffure serait absurde.
+                Une professeure de yoga donne cours à Mettet le mardi et à
+                Biesme le jeudi ; ses plages de réservation ne sont pas les
+                mêmes, et son client doit savoir où se présenter. */}
+            {parLieuRdv && (
+              <>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Emplacement</label>
+                <select value={form.lieu_id} onChange={e => setForm({ ...form, lieu_id: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', border: `1.5px solid ${T.hairline}`, borderRadius: 8, fontSize: 14, fontFamily: '"DM Sans", sans-serif', marginBottom: 4, background: '#fff' }}>
+                  <option value="">Partout où je suis ce jour-là</option>
+                  {lieuxDuJourRdv(form.jour_semaine).map(l => (
+                    <option key={l.id} value={l.id}>
+                      {l.libelle}{l.heure_debut ? ` · ${String(l.heure_debut).slice(0, 5)}–${String(l.heure_fin || '').slice(0, 5)}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p style={{ fontSize: 11, color: T.muted, margin: '0 0 10px', lineHeight: 1.45 }}>
+                  Laisse « partout » si tu proposes ces horaires quel que soit l’endroit.
+                </p>
+              </>
+            )}
 
             {/* Horaires début/fin */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>

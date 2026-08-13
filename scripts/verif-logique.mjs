@@ -1008,7 +1008,11 @@ for (const [nom, chemin] of ECRANS_QUI_GRAVENT) {
 const srcResaClient = sansCommentaires(
   readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
 verifier('et il le résout à l’heure du rendez-vous',
-  /champsLieuPour\(supabase, commercant, \{ jour: dateStr, heure: heureChoisie \}\)/.test(srcResaClient))
+  /jour: dateStr, heure: heureChoisie/.test(srcResaClient))
+// ⚠️ Mais le CHOIX EXPLICITE du commerçant l'emporte : quand la plage de
+// réservation désigne un emplacement, le déduire de l'heure le contredirait.
+verifier('sauf si la plage désigne elle-même un emplacement',
+  /lieuId: plageChoisie\?\.lieu_id \|\| null/.test(srcResaClient))
 
 // ─── L'ACCUEIL MESURE JUSQU'AU BON ENDROIT ────────────────────────────────
 // ⚠️ La distance se mesurait depuis le SIÈGE SOCIAL. Le food truck affichait la

@@ -458,6 +458,26 @@ verifier('un créneau ne retient un emplacement que si la case est cochée',
 verifier('le chevauchement de créneaux se juge par emplacement',
   /filter\(e => !parLieu \|\| \(e\.lieu_id \|\| null\) === \(form\.lieu_id \|\| null\)\)/.test(configSrc))
 
+// ─── LES PLAGES DE RENDEZ-VOUS AUSSI ──────────────────────────────────────
+// ⚠️ Une professeure de yoga donne cours à Mettet le mardi et à Biesme le
+// jeudi : ses plages de réservation ne sont pas les mêmes, et son client doit
+// savoir où se présenter. Seuls les créneaux de RETRAIT portaient un
+// emplacement, ce qui laissait tout le module rendez-vous de côté.
+verifier('une plage de réservation porte son emplacement',
+  /lieu_id: parLieuRdv \? \(form\.lieu_id \|\| null\) : null/.test(configSrc))
+// ⚠️ ON COMPTE, on ne cherche pas : le sélecteur du formulaire et l'emplacement
+// affiché sur chaque plage dépendent tous deux de la case, et en décrocher un
+// laisserait le test vert puisque l'autre suffirait à le satisfaire. Le même
+// piège s'est refermé une heure plus tôt sur l'éditeur de créneaux de retrait.
+egal('les deux blocs d’emplacement des plages suivent la même case',
+  (configSrc.match(/\{parLieuRdv && \(/g) || []).length, 2)
+// Modifier une plage doit reprendre son emplacement, sans quoi chaque
+// modification le remettrait à « partout » en silence.
+verifier('modifier une plage garde son emplacement',
+  /lieu_id: c\.lieu_id \|\| '',/.test(configSrc))
+egal('les deux éditeurs proposent les mêmes emplacements du jour',
+  (configSrc.match(/type === 'permanent'\s*\n?\s*\|\| \(l\.type === 'hebdo' && l\.jour_semaine === jour\)/g) || []).length, 2)
+
 // ─── LE VERROU : un emplacement qui porte des rendez-vous ne bouge plus ───
 // ⚠️ Règle d'Alex du 13/08. Déplacer en silence enverrait des gens à une
 // adresse où personne ne les attend, et ils ne l'apprendraient qu'en arrivant.

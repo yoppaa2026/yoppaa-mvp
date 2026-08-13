@@ -1181,7 +1181,15 @@ export default function CommanderRdvSlug() {
       // ⚠️ LE LIEU EST GRAVÉ À LA RÉSERVATION. Sans lui, la confirmation
       // annonce le siège social, donc le DOMICILE d'une commerçante inscrite
       // chez elle mais qui donne cours en salle.
-      const lieu = await champsLieuPour(supabase, commercant, { jour: dateStr, heure: heureChoisie })
+      // ⚠️ Si la PLAGE de réservation désigne un emplacement, c'est celui-là et
+      // pas un autre : c'est le choix explicite du commerçant, et le déduire de
+      // l'heure le contredirait. Deux plages peuvent se suivre au même endroit,
+      // ou se tenir à deux adresses sans que les horaires le disent.
+      const plageChoisie = (creneauxFiltres || []).find(c =>
+        c.lieu_id && c.heure_debut?.slice(0, 5) <= heureChoisie && c.heure_fin?.slice(0, 5) > heureChoisie)
+      const lieu = await champsLieuPour(supabase, commercant, {
+        jour: dateStr, heure: heureChoisie, lieuId: plageChoisie?.lieu_id || null,
+      })
       const payload = {
         ...lieu,
         ...(rdvId ? { id: rdvId } : {}),

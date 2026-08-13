@@ -47,7 +47,7 @@ import {
 import { adresseRendezVous, champsLieu } from '../lib/lieu-fige.js'
 import {
   capacitePrestation, estCoursCollectif, placesRestantes, estComplet,
-  premierePlaceLibre, libellePlaces, regrouperEnSeances,
+  premierePlaceLibre, libellePlaces, regrouperEnSeances, blocsAgenda,
 } from '../lib/cours-collectifs.js'
 import {
   referenceCommande, referenceComplete, referenceAvecNom,
@@ -887,6 +887,53 @@ egal('et ils sont rangés par place', seances[0].inscrits.map(i => i.client_pren
 egal('les séances sont rangées par heure', seances.map(s => s.heure_debut), ['10:00', '18:00'])
 // Deux prestations différentes à la même heure restent deux séances : un
 // praticien peut donner un cours pendant qu'un autre reçoit en individuel.
+// ─── L'AGENDA : UN COURS COMPTE POUR UN BLOC, PAS POUR DOUZE ──────────────
+// ⚠️ Les blocs de l'agenda sont placés en position ABSOLUE sur leur heure de
+// début. Douze inscrits au même cours se seraient empilés exactement l'un sur
+// l'autre : le commerçant n'aurait vu qu'un seul nom, celui du dernier rendu,
+// sans aucun moyen de savoir que onze autres personnes viennent.
+const JOUR_COURS = '2026-08-18'
+const inscritsEtCoupe = [
+  { id: 'y1', date_rdv: JOUR_COURS, heure_debut: '10:00', heure_fin: '11:00', prestation_id: 'yoga', capacite_creneau: 12, place_no: 3, client_prenom: 'Zoé' },
+  { id: 'y2', date_rdv: JOUR_COURS, heure_debut: '10:00', heure_fin: '11:00', prestation_id: 'yoga', capacite_creneau: 12, place_no: 1, client_prenom: 'Ali' },
+  { id: 'c1', date_rdv: JOUR_COURS, heure_debut: '10:00', heure_fin: '10:30', prestation_id: 'coupe', capacite_creneau: 1, place_no: 1, client_prenom: 'Max' },
+]
+const blocs = blocsAgenda(inscritsEtCoupe)
+// ⚠️ TOUS LES ACCÈS SONT OPTIONNELS. Une première version écrivait
+// `blocs[0].inscrits.length` : cassé, le regroupement rendait `undefined` et
+// le banc PLANTAIT au lieu de rougir. Un banc qui s'arrête ne dit pas quel
+// défaut il a trouvé, il dit seulement qu'il n'a pas fini.
+egal('trois rendez-vous donnent deux blocs', blocs.length, 2)
+egal('le cours est une séance', blocs[0]?.type, 'seance')
+egal('avec ses deux inscrits', blocs[0]?.inscrits?.length, 2)
+egal('rangés par place', blocs[0]?.inscrits?.map(i => i.client_prenom), ['Ali', 'Zoé'])
+egal('et la jauge du cours', [blocs[0]?.inscrits?.length, blocs[0]?.capacite], [2, 12])
+// ⚠️ Un rendez-vous individuel reste un bloc à lui seul, exactement comme
+// avant : le regroupement ne doit pas avaler les salons.
+egal('le rendez-vous individuel reste seul', blocs[1]?.type, 'rdv')
+egal('et porte bien son rendez-vous', blocs[1]?.rdv?.client_prenom, 'Max')
+// Une réservation d'avant la bascule n'a pas de capacité gravée : elle vaut 1.
+egal('un rendez-vous d’avant reste individuel',
+  blocsAgenda([{ id: 'x', heure_debut: '09:00' }])[0]?.type, 'rdv')
+// ⚠️ DEUX COURS DIFFÉRENTS À LA MÊME HEURE RESTENT DEUX SÉANCES. Sans la
+// prestation dans la clé, le yoga et le pilates de 10h fusionneraient en un
+// seul bloc, et le commerçant lirait une jauge qui additionne deux cours.
+egal('deux cours différents au même horaire font deux blocs',
+  blocsAgenda([
+    { id: 'a', date_rdv: JOUR_COURS, heure_debut: '10:00', prestation_id: 'yoga', capacite_creneau: 12, place_no: 1 },
+    { id: 'b', date_rdv: JOUR_COURS, heure_debut: '10:00', prestation_id: 'pilates', capacite_creneau: 8, place_no: 1 },
+  ]).length, 2)
+egal('une liste vide ne casse rien', [blocsAgenda([]).length, blocsAgenda().length], [0, 0])
+
+verifier('l’agenda regroupe les inscrits en séances',
+  /blocsAgenda\(rdvsCommencantIci\)/.test(srcAgenda))
+verifier('et n’empile plus un bloc par inscrit',
+  !/\{rdvsCommencantIci\.map\(r =>/.test(srcAgenda))
+verifier('un cours ouvre sa liste, pas une fiche',
+  /setSeanceOuverte\(seance\)/.test(srcAgenda))
+verifier('et de là on ouvre la fiche d’un inscrit',
+  /setSeanceOuverte\(null\); if \(onSelectRdv\) onSelectRdv\(i\)/.test(srcAgenda))
+
 // ─── LES TROIS ÉCRANS QUI INSCRIVENT, ET CE QU'ILS GRAVENT ────────────────
 // ⚠️ La capacité doit être gravée partout : la contrainte d'exclusion la lit
 // pour savoir si elle s'applique, et un écran qui l'oublierait laisserait la

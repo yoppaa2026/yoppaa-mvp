@@ -18,6 +18,7 @@
 import { useState, useMemo, useEffect, Fragment } from 'react'
 import BandeDefilante from '@/app/components/BandeDefilante'
 import { couleurRdv, COULEUR_DEFAUT } from '@/lib/agenda-couleurs'
+import { blocsAgenda } from '@/lib/cours-collectifs'
 import { contenuBlocRdv } from '@/lib/agenda-bloc'
 
 const T = {
@@ -83,6 +84,10 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
   // Sess 5f : le commercant multi-prat peut isoler l'agenda d'un praticien pour
   // voir uniquement les RDV pris avec lui/elle.
   const [praticienFiltre, setPraticienFiltre] = useState('all')
+  // Le cours dont on regarde la liste des inscrits. Un cours n'ouvre pas la
+  // fiche d'un rendez-vous, il ouvre SA LISTE : c'est de là qu'on choisit
+  // ensuite la personne dont on veut le détail.
+  const [seanceOuverte, setSeanceOuverte] = useState(null)
   // refDate : 1er jour visible. Sur desktop = aujourd'hui (vue semaine glissante).
   // Sur mobile = jour actif (vue 1 jour avec nav prev/next).
   const today = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d }, [])
@@ -447,8 +452,51 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                     onMouseOut={peutCreer ? (e) => e.currentTarget.style.background = bgCellule : undefined}
                     title={state === 'ferme' ? 'Fermé' : state === 'pause' ? 'Pause' : peutCreer ? 'Ajouter un RDV ici' : ''}>
 
+                    {/* ⚠️ UN COURS COMPTE POUR UN BLOC, PAS POUR DOUZE. Les
+                        blocs sont placés en position absolue sur leur heure de
+                        début : douze inscrits au même cours se seraient
+                        empilés exactement l'un sur l'autre, et le commerçant
+                        n'aurait vu qu'un seul nom, celui du dernier rendu.
+                        Le regroupement se lit sur `capacite_creneau`, gravé
+                        dans la réservation : aucune jointure nécessaire. */}
+                    {blocsAgenda(rdvsCommencantIci).filter(b => b.type === 'seance').map(seance => {
+                      const dureeM = (timeToMinutes(seance.heure_fin) - timeToMinutes(seance.heure_debut)) || PAS_MINUTES
+                      const hauteur = (dureeM / PAS_MINUTES) * HAUTEUR_CELLULE - 2
+                      const premier = seance.inscrits[0]
+                      const couleurs = couleurRdv({ statut: premier?.statut, couleurPraticien: premier?.praticien?.couleur_hex })
+                      const nom = premier?.prestation?.nom || 'Cours'
+                      const complet = seance.inscrits.length >= seance.capacite
+                      return (
+                        <div key={seance.cle}
+                          onClick={(e) => { e.stopPropagation(); setSeanceOuverte(seance) }}
+                          title={`${seance.heure_debut?.slice(0, 5)}–${seance.heure_fin?.slice(0, 5)} · ${nom} · ${seance.inscrits.length} inscrit${seance.inscrits.length > 1 ? 's' : ''} sur ${seance.capacite}`}
+                          style={{
+                            position: 'absolute', top: 1, left: 2, right: 2, height: hauteur,
+                            background: couleurs.bg, color: couleurs.text,
+                            borderRadius: 6, padding: '3px 5px', fontSize: 10, fontWeight: 700,
+                            cursor: 'pointer', overflow: 'hidden',
+                            boxShadow: `0 2px 6px ${couleurs.border}44`,
+                            border: `1px solid ${couleurs.border}`,
+                            zIndex: 2, display: 'flex', flexDirection: 'column', gap: 1,
+                          }}>
+                          <div style={{ fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {nom}
+                          </div>
+                          {/* La jauge, qui est TOUTE l'information utile d'un
+                              coup d'œil : combien de personnes viennent, et
+                              reste-t-il de la place. */}
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, opacity: 0.92 }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                            </svg>
+                            {seance.inscrits.length}/{seance.capacite}{complet ? ' · complet' : ''}
+                          </div>
+                        </div>
+                      )
+                    })}
+
                     {/* Render RDV blocks sur la cellule de depart uniquement */}
-                    {rdvsCommencantIci.map(r => {
+                    {blocsAgenda(rdvsCommencantIci).filter(b => b.type === 'rdv').map(b => b.rdv).map(r => {
                       const dureeM = (timeToMinutes(r.heure_fin) - timeToMinutes(r.heure_debut)) || PAS_MINUTES
                       const hauteur = (dureeM / PAS_MINUTES) * HAUTEUR_CELLULE - 2  // -2 pour respiration
                       const couleurs = couleurRdv({ statut: r.statut, couleurPraticien: r.praticien?.couleur_hex })
@@ -566,6 +614,63 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
           Tap sur une case blanche pour ajouter un RDV
         </span>
       </div>
+
+      {/* ─── LA LISTE D'UN COURS ────────────────────────────────────────────
+          ⚠️ Un cours n'ouvre pas une fiche, il ouvre SA LISTE. Le commerçant a
+          besoin de savoir qui vient avant de s'occuper d'une personne en
+          particulier, et il ne peut pas le déduire d'un bloc qui n'affiche
+          qu'un compteur.
+
+          ⚠️ RENDUE ICI, EN FIN DE COMPOSANT, et non dans la grille : celle-ci
+          défile, et sur iOS `-webkit-overflow-scrolling: touch` PIÈGE
+          `position: fixed`, l'élément se plaçant alors par rapport au
+          conteneur qui défile et non par rapport à l'écran. C'est le défaut
+          corrigé le 12/08 sur la modale de détail, il ne doit pas revenir. */}
+      {seanceOuverte && (
+        <div onClick={() => setSeanceOuverte(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 9998, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', width: '100%', maxWidth: 520, borderRadius: '18px 18px 0 0', padding: '18px 18px 26px', maxHeight: '80svh', overflowY: 'auto' }}>
+            <div style={{ width: 38, height: 4, borderRadius: 100, background: T.pale, margin: '0 auto 14px' }}/>
+            <p style={{ margin: '0 0 2px', fontSize: 15, fontWeight: 900, color: T.ink }}>
+              {seanceOuverte.inscrits[0]?.prestation?.nom || 'Cours'}
+            </p>
+            <p style={{ margin: '0 0 14px', fontSize: 12.5, color: T.muted, fontWeight: 600 }}>
+              {seanceOuverte.heure_debut?.slice(0, 5)}–{seanceOuverte.heure_fin?.slice(0, 5)}
+              {' · '}{seanceOuverte.inscrits.length} inscrit{seanceOuverte.inscrits.length > 1 ? 's' : ''} sur {seanceOuverte.capacite}
+              {seanceOuverte.inscrits.length >= seanceOuverte.capacite ? ' · complet' : ''}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {seanceOuverte.inscrits.map(i => (
+                <button key={i.id}
+                  onClick={() => { setSeanceOuverte(null); if (onSelectRdv) onSelectRdv(i) }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 12, padding: '10px 12px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: T.pale, color: T.main, fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {i.place_no || 1}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {[i.client_prenom, i.client_nom].filter(Boolean).join(' ') || 'Client'}
+                    </span>
+                    {i.client_telephone && (
+                      <span style={{ display: 'block', fontSize: 11.5, color: T.muted, fontWeight: 600 }}>{i.client_telephone}</span>
+                    )}
+                  </span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                    <path d="M9 18l6-6-6-6"/>
+                  </svg>
+                </button>
+              ))}
+            </div>
+
+            <button onClick={() => setSeanceOuverte(null)}
+              style={{ width: '100%', marginTop: 14, padding: '11px 14px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.deep, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

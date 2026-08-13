@@ -9,6 +9,7 @@ import {
   timeToMinutes, minutesToTime, jourSemaineDate, isoDate,
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos,
 } from '../lib/rdv-slots.js'
+import { horairesDepuisLieux } from '../lib/lieux-activite.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -177,6 +178,43 @@ verifier('une autre prestation au même horaire bloque, sans compter dans la jau
   slots.find(s => s.heure === '10:00')?.pris === true)
 egal('la jauge du cours reste vide',
   slots.find(s => s.heure === '10:00')?.placesPrises, 0)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LES HORAIRES DÉDUITS DES EMPLACEMENTS ARRIVENT-ILS JUSQU'ICI ?
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LA DÉDUCTION SERAIT JUSTE ET INUTILE si le moteur ne savait pas la lire.
+// Les horaires ne servent pas qu'à l'affichage : ce moteur les CROISE avec les
+// plages de rendez-vous et écarte tout créneau tombant hors ouverture. C'est
+// pour ça qu'on ne pouvait pas se contenter de supprimer la grille chez un
+// commerçant itinérant, il serait passé pour fermé toute la semaine.
+//
+// On vérifie donc le bout de la chaîne, en EXÉCUTANT les deux fonctions à la
+// suite : des emplacements en entrée, des créneaux en sortie.
+const MARDI = new Date(mercredi); MARDI.setDate(mercredi.getDate() - 1)
+const horairesDuTruck = horairesDepuisLieux([
+  { type: 'hebdo', jour_semaine: 'mardi', libelle: 'Place', heure_debut: '11:00:00', heure_fin: '14:00:00', actif: true },
+  { type: 'hebdo', jour_semaine: 'mardi', libelle: 'Zoning', heure_debut: '18:00', heure_fin: '21:00', actif: true },
+])
+const slotsTruck = genererSlots({
+  dateChoisie: MARDI, dureeMinutes: 30,
+  creneaux: [{ jour_semaine: 'mardi', heure_debut: '08:00', heure_fin: '23:00', pas_minutes: 60, actif: true }],
+  reservations: [], horairesDetail: horairesDuTruck,
+})
+const heuresTruck = slotsTruck.map(s => s.heure)
+verifier('le moteur propose le service du midi', heuresTruck.includes('12:00'), heuresTruck.join(' '))
+verifier('et celui du soir', heuresTruck.includes('19:00'), heuresTruck.join(' '))
+// ⚠️ LE CAS QUI JUSTIFIE TOUT LE RESTE. En prenant simplement le minimum et le
+// maximum des deux services, la journée aurait couru de 11h à 21h : le client
+// se serait vu proposer un créneau à 16h devant un camion absent.
+verifier('mais rien pendant la coupure', !heuresTruck.includes('16:00'), heuresTruck.join(' '))
+verifier('ni avant le premier service', !heuresTruck.includes('09:00'), heuresTruck.join(' '))
+// Un jour sans emplacement ferme le commerce : aucun créneau, comme il se doit.
+egal('un jour sans emplacement ne propose rien',
+  genererSlots({
+    dateChoisie: mercredi, dureeMinutes: 30,
+    creneaux: [{ jour_semaine: 'mercredi', heure_debut: '08:00', heure_fin: '20:00', pas_minutes: 60, actif: true }],
+    reservations: [], horairesDetail: horairesDuTruck,
+  }).length, 0)
 
 // ─── Multi-praticiens : la règle « Sans préférence » ───────────────────────
 const resas = [

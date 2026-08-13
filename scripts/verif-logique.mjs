@@ -42,7 +42,7 @@ import { jourSemaineDe } from '../lib/creneaux.js'
 import {
   lieuxDuJour, communesDuCommercant, estItinerant,
   lieuALHeure, plagesSeChevauchent, lieuEnConflit,
-  lieuPrincipal, lieuDeLaPlage, lieuDeLaReservation, libelleLieu,
+  lieuPrincipal, lieuDeLaPlage, lieuDeLaReservation, libelleLieu, horairesDepuisLieux,
 } from '../lib/lieux-activite.js'
 import { adresseRendezVous, champsLieu } from '../lib/lieu-fige.js'
 import {
@@ -762,6 +762,15 @@ egal('un créneau du soir retombe sur celui du soir',
 egal('une plage qui désigne un lieu le garde',
   lieuDeLaPlage({ lieu_id: 'm2', jour_semaine: 'mercredi', heure_debut: '12:00' }, { commercant: truck, lieux: deuxServices })?.libelle,
   'Zoning')
+// ⚠️ TROU DÉCOUVERT EN MESURANT UNE AUTRE FONCTION : rien ne vérifiait qu'un
+// emplacement DÉSACTIVÉ cesse d'être proposé ici. La mutation qui retirait le
+// filtre laissait le banc entièrement vert, et un commerçant qui range un
+// emplacement sans le supprimer aurait continué d'y envoyer ses clients.
+egal('un emplacement désactivé n’est plus proposé',
+  lieuDeLaPlage({ jour_semaine: 'mercredi', heure_debut: '12:00' },
+    { commercant: truck, lieux: deuxServices.map(l => ({ ...l, actif: false })) })?.source, 'siege')
+egal('et un emplacement désactivé ne compte pas non plus dans le jour',
+  lieuxDuJour({ commercant: yoga, lieux: deuxServices.map(l => ({ ...l, actif: false })), jour: MERCREDI }), [])
 
 // ─── CE QUI EST DÉJÀ PRIS NE BOUGE PLUS ───────────────────────────────────
 // ⚠️ Le lieu figé gagne TOUJOURS sur le calcul. C'est ce qui fait qu'un
@@ -887,6 +896,71 @@ egal('et ils sont rangés par place', seances[0].inscrits.map(i => i.client_pren
 egal('les séances sont rangées par heure', seances.map(s => s.heure_debut), ['10:00', '18:00'])
 // Deux prestations différentes à la même heure restent deux séances : un
 // praticien peut donner un cours pendant qu'un autre reçoit en individuel.
+// ═══════════════════════════════════════════════════════════════════════════
+// LES HORAIRES DÉDUITS DES EMPLACEMENTS
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ DEUX ÉCRANS DISAIENT LA MÊME CHOSE SANS SE PARLER. Un food truck qui
+// déclarait « mardi, Place du Marché, 11h-14h » devait EN PLUS remplir « mardi
+// 07:00 → 18:30 » dans ses horaires, et rien ne disait lequel faisait foi.
+//
+// ⚠️ ET ON NE POUVAIT PAS SIMPLEMENT SUPPRIMER LA GRILLE : le moteur de
+// créneaux CROISE les horaires avec les plages de rendez-vous et écarte tout
+// créneau hors ouverture. Les retirer aurait fait passer le commerce pour
+// fermé toute la semaine, sans qu'aucun créneau ne soit plus proposé.
+const truckSemaine = [
+  { type: 'hebdo', jour_semaine: 'mardi', libelle: 'Place', heure_debut: '11:00:00', heure_fin: '14:00:00', actif: true },
+  { type: 'hebdo', jour_semaine: 'mardi', libelle: 'Zoning', heure_debut: '18:00', heure_fin: '21:00', actif: true },
+  { type: 'hebdo', jour_semaine: 'jeudi', libelle: 'Biesme', heure_debut: '09:00', heure_fin: '12:00', actif: true },
+  { type: 'permanent', libelle: 'Dépôt', adresse: 'x', actif: true },
+]
+const horairesTruck = horairesDepuisLieux(truckSemaine)
+
+// ⚠️ LES DEUX SERVICES NE SE FONDENT PAS EN UN SEUL. Midi 11h-14h et soir
+// 18h-21h donneraient, en prenant le minimum et le maximum, une ouverture de
+// 11h à 21h : le client se verrait proposer un créneau à 16h devant un camion
+// absent. Le format porte `debut2`/`fin2` pour les commerces à coupure, et le
+// moteur de créneaux sait déjà les lire.
+egal('deux services donnent une journée à coupure',
+  horairesTruck.mardi, { ouvert: true, debut: '11:00', fin: '14:00', debut2: '18:00', fin2: '21:00' })
+egal('un seul service donne une plage simple',
+  horairesTruck.jeudi, { ouvert: true, debut: '09:00', fin: '12:00' })
+egal('un jour sans emplacement est fermé', horairesTruck.lundi, { ouvert: false })
+// Un lieu PERMANENT ne dit rien du calendrier : il vaut tous les jours, sans
+// horaire propre. Le compter ouvrirait la semaine entière.
+egal('un dépôt permanent n’ouvre aucun jour', horairesTruck.dimanche, { ouvert: false })
+egal('un lieu désactivé n’ouvre rien',
+  horairesDepuisLieux([{ type: 'hebdo', jour_semaine: 'lundi', heure_debut: '08:00', heure_fin: '10:00', actif: false }]).lundi,
+  { ouvert: false })
+// Présent ce jour-là mais sans heures : on sait qu'il est ouvert, pas quand.
+// Mieux vaut le dire que d'inventer des bornes que le moteur prendrait au mot.
+egal('présent sans heures, on ne les invente pas',
+  horairesDepuisLieux([{ type: 'hebdo', jour_semaine: 'samedi', actif: true }]).samedi,
+  { ouvert: true, sansHoraire: true })
+// Au-delà de deux services, le format ne sait pas les décrire : on couvre du
+// premier au dernier EN LE SIGNALANT, pour que l'écran puisse le dire plutôt
+// que de laisser croire à une précision qui n'existe pas.
+egal('trois services sont couverts et signalés',
+  horairesDepuisLieux([
+    { type: 'hebdo', jour_semaine: 'lundi', heure_debut: '08:00', heure_fin: '10:00', actif: true },
+    { type: 'hebdo', jour_semaine: 'lundi', heure_debut: '12:00', heure_fin: '14:00', actif: true },
+    { type: 'hebdo', jour_semaine: 'lundi', heure_debut: '18:00', heure_fin: '20:00', actif: true },
+  ]).lundi,
+  { ouvert: true, debut: '08:00', fin: '20:00', approximatif: true })
+egal('les sept jours sont toujours décrits',
+  Object.keys(horairesDepuisLieux([])).length, 7)
+// ⚠️ SEULE LA TOURNÉE HEBDOMADAIRE FAIT LE CALENDRIER. Un marché ponctuel du
+// 18 août n'ouvre pas tous les mardis de l'année, et un dépôt permanent
+// n'ouvre aucun jour : le compter aurait ouvert la semaine entière chez un
+// food truck qui ne sort que le samedi.
+egal('un emplacement ponctuel n’ouvre pas son jour de semaine',
+  horairesDepuisLieux([
+    { type: 'ponctuel', date_jour: '2026-08-18', jour_semaine: 'mardi', heure_debut: '09:00', heure_fin: '17:00', actif: true },
+  ]).mardi, { ouvert: false })
+egal('et un lieu permanent n’ouvre aucun jour',
+  horairesDepuisLieux([
+    { type: 'permanent', jour_semaine: 'lundi', heure_debut: '09:00', heure_fin: '17:00', actif: true },
+  ]).lundi, { ouvert: false })
+
 // ─── DÉPLACER UN LIEU N'EST PAS ÉCONDUIRE UN CLIENT ───────────────────────
 // ⚠️ Le verrou d'Alex oblige à annuler les rendez-vous d'un emplacement qu'on
 // déplace. Sans motif propre, le client lit « Annulé par Studio Souffle » et

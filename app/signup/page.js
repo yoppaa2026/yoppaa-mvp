@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import ChampAdresse from '@/app/components/ChampAdresse'
 import { useRouter } from 'next/navigation'
 import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
 import { compresserImage } from '@/lib/compress-image'
@@ -933,80 +934,6 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
   )
 }
 
-// ─── Un champ d'adresse avec sa recherche ────────────────────────────────────
-//
-// ⚠️ IL Y EN A DEUX DEPUIS LE 12/08, et c'est pour ça que ce composant existe.
-// Le siège social et le lieu d'activité se saisissent tous les deux avec la même
-// recherche, la même mise en forme et le même repli. Les recopier aurait garanti
-// qu'ils divergent : l'un corrigé, l'autre oublié.
-//
-// La recherche part DIRECTEMENT du navigateur vers OpenStreetMap. C'est déclaré
-// dans la politique de confidentialité et dans la fiche Play Store.
-function ChampAdresse({ valeur, position, onTexte, onChoisir, placeholder }) {
-  const [suggestions, setSuggestions] = useState([])
-  const [cherche, setCherche] = useState(false)
-  const minuteur = useRef(null)
-
-  function chercher(query) {
-    if (!query || query.length < 3) { setSuggestions([]); return }
-    setCherche(true)
-    clearTimeout(minuteur.current)
-    minuteur.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&accept-language=fr&countrycodes=be&addressdetails=1`, {
-          headers: { Accept: 'application/json' },
-        })
-        setSuggestions(await res.json() || [])
-      } catch { setSuggestions([]) }
-      setCherche(false)
-    }, 400)
-  }
-
-  // Compose une adresse propre « Rue X 12, 5640 Localité » depuis les champs
-  // structurés. Le `display_name` brut intercale les hameaux et les lieux-dits,
-  // et la troncature perdait la localité et le code postal.
-  function choisir(s) {
-    const a = s.address || {}
-    const rue = a.road || a.pedestrian || a.square || ''
-    const num = a.house_number || ''
-    const localite = a.village || a.town || a.city || a.municipality || a.hamlet || ''
-    const cp = a.postcode || ''
-    const adresse = rue
-      ? `${rue}${num ? ` ${num}` : ''}${(cp || localite) ? `, ${[cp, localite].filter(Boolean).join(' ')}` : ''}`
-      : s.display_name.split(',').slice(0, 3).join(', ')
-    setSuggestions([])
-    onChoisir({ adresse, latitude: parseFloat(s.lat), longitude: parseFloat(s.lon), code_postal: cp || null })
-  }
-
-  return (
-    <>
-      <div style={{ position: 'relative' }}>
-        <input type="text" value={valeur}
-          onChange={e => { onTexte(e.target.value); chercher(e.target.value) }}
-          placeholder={placeholder} style={inputStyle()}/>
-        {cherche && (
-          <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: T.muted }}>…</span>
-        )}
-        {suggestions.length > 0 && (
-          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 12, marginTop: 4, boxShadow: '0 8px 24px rgba(22,6,54,0.12)', zIndex: 10, maxHeight: 240, overflowY: 'auto' }}>
-            {suggestions.map(s => (
-              <button key={s.place_id} type="button" onClick={() => choisir(s)}
-                style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', borderBottom: `1px solid ${T.hairline}`, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 13, color: T.deep }}>
-                {s.display_name}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      {position?.latitude && position?.longitude && (
-        <p style={{ fontSize: 11, color: '#10B981', fontWeight: 700, margin: '6px 0 0' }}>
-          ✓ Position GPS confirmée ({Number(position.latitude).toFixed(4)}, {Number(position.longitude).toFixed(4)})
-        </p>
-      )}
-    </>
-  )
-}
-
 // ─── ÉTAPE 2 : INFOS DE BASE ──────────────────────────────────────────────────
 // - Nom, type, adresse (autocomplete Nominatim), téléphone, description ≥20
 // - Sauvegarde auto champ par champ (debounce 600ms)
@@ -1219,6 +1146,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
       <Card titre="Localisation" sous="On distingue l'adresse de ton entreprise de l'endroit où se passe ton activité.">
         <Field label="Adresse du siège social *">
           <ChampAdresse
+            style={inputStyle()}
             valeur={form.adresse}
             position={form}
             placeholder="Ex: Place Meunier 1, 5640 Mettet"
@@ -1248,6 +1176,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
         {activiteAilleurs && (
           <Field label="Où se passe ton activité ? *">
             <ChampAdresse
+            style={inputStyle()}
               valeur={lieu.adresse}
               position={lieu}
               placeholder="Ex: Salle Saint-Roch, 5640 Mettet"

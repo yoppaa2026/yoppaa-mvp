@@ -9,6 +9,8 @@ import { estRemiseSurProduit } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement } from '@/lib/lancement'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
+import { lieuEnConflit } from '@/lib/lieux-activite'
+import ChampAdresse from '@/app/components/ChampAdresse'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
@@ -3973,18 +3975,27 @@ function TabFidelite({ commercantId, commercant, toast, onSaved }) {
 // Ce qu'elle a gagné le 12/08 : les lieux PERMANENTS, ceux du salon à deux
 // adresses ou du commerçant inscrit à son domicile mais qui travaille ailleurs.
 const JOURS_FT = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+
+// Les emplacements d'un même jour se lisent dans l'ordre du service : le midi
+// avant le soir. Un lieu sans horaire vaut la journée entière, il passe donc
+// devant, et c'est ce que `''` obtient sans cas particulier.
+function parHeure(a, b) {
+  return String(a?.heure_debut || '').localeCompare(String(b?.heure_debut || ''))
+}
 function SectionLieux({ commercantId, toast, estMobile = false }) {
   const [emps, setEmps] = useState([])
   const [loading, setLoading] = useState(true)
   // « Aujourd'hui je suis à… » : zéro friction, 2 champs obligatoires + 1 bouton
-  const [auj, setAuj] = useState({ libelle: '', adresse: '', heure_debut: '', heure_fin: '' })
+  const [auj, setAuj] = useState({ libelle: '', adresse: '', latitude: null, longitude: null, heure_debut: '', heure_fin: '' })
   // Ponctuel futur (événement, marché…)
-  const [futur, setFutur] = useState({ date_jour: '', libelle: '', adresse: '', heure_debut: '', heure_fin: '' })
+  const [futur, setFutur] = useState({ date_jour: '', libelle: '', adresse: '', latitude: null, longitude: null, heure_debut: '', heure_fin: '' })
   const [showFutur, setShowFutur] = useState(false)
-  // Édition d'une ligne de tournée hebdo (un seul formulaire ouvert à la fois)
-  const [formHebdo, setFormHebdo] = useState(null)  // { jour, libelle, adresse, heure_debut, heure_fin }
+  // Édition d'une ligne de tournée hebdo (un seul formulaire ouvert à la fois).
+  // `id` distingue une modification d'un ajout : un jour peut désormais porter
+  // DEUX emplacements, celui du midi et celui du soir.
+  const [formHebdo, setFormHebdo] = useState(null)  // { id, jour, libelle, adresse, heures… }
   // Ajout d'un lieu PERMANENT : un second siège d'exploitation, un atelier.
-  const [perm, setPerm] = useState({ libelle: '', adresse: '' })
+  const [perm, setPerm] = useState({ libelle: '', adresse: '', latitude: null, longitude: null })
 
   // ⚠️ `jourLocalISO` et PAS `toISOString()`. Minuit heure belge, c'est 22h ou
   // 23h LA VEILLE en temps universel : entre minuit et deux heures du matin,
@@ -4003,9 +4014,24 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
     setLoading(false)
   }
 
-  const ponctuelAuj = emps.find(e => e.type === 'ponctuel' && e.date_jour === todayISO)
-  const hebdoParJour = Object.fromEntries(emps.filter(e => e.type === 'hebdo').map(e => [e.jour_semaine, e]))
-  const effectifAuj = (ponctuelAuj?.actif ? ponctuelAuj : null) || (hebdoParJour[jourKey]?.actif ? hebdoParJour[jourKey] : null)
+  // ⚠️ UN JOUR PEUT PORTER PLUSIEURS EMPLACEMENTS depuis le 13/08, et c'est le
+  // besoin des FOOD TRUCKS, où c'est la norme : le service du midi sur une
+  // place, celui du soir dans un zoning. Cette liste était auparavant un objet
+  // « un lieu par jour », ce qui écrasait silencieusement le second.
+  const ponctuelsAuj = emps
+    .filter(e => e.type === 'ponctuel' && e.date_jour === todayISO)
+    .sort(parHeure)
+  const hebdoParJour = {}
+  for (const e of emps.filter(e => e.type === 'hebdo')) {
+    (hebdoParJour[e.jour_semaine] ||= []).push(e)
+  }
+  for (const jour of Object.keys(hebdoParJour)) hebdoParJour[jour].sort(parHeure)
+
+  const ponctuelAuj = ponctuelsAuj[0] || null
+  const effectifsAuj = ponctuelsAuj.length > 0
+    ? ponctuelsAuj.filter(e => e.actif)
+    : (hebdoParJour[jourKey] || []).filter(e => e.actif)
+  const effectifAuj = effectifsAuj[0] || null
   const futurs = emps
     .filter(e => e.type === 'ponctuel' && e.date_jour >= todayISO)
     .sort((a, b) => a.date_jour.localeCompare(b.date_jour))
@@ -4028,44 +4054,79 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
     return supabase.from('commercant_lieux').insert(valeurs)
   }
 
+  // ⚠️ DEUX EMPLACEMENTS QUI SE CHEVAUCHENT N'ONT PAS DE RÉPONSE. « Où es-tu à
+  // 12h30 » rendrait le premier de la liste, c'est-à-dire l'ordre d'insertion
+  // en base : le client apprendrait où aller au hasard. On refuse la saisie
+  // plutôt que de trancher à sa place.
+  function conflit(candidat) {
+    const gene = lieuEnConflit(emps, candidat)
+    if (!gene) return false
+    const quand = gene.heure_debut
+      ? `de ${String(gene.heure_debut).slice(0, 5)} à ${String(gene.heure_fin || '').slice(0, 5)}`
+      : 'toute la journée'
+    toast(`« ${gene.libelle} » occupe déjà ce moment (${quand}). Ajuste les heures.`, 'error')
+    return true
+  }
+
   async function declarerAujourdhui() {
     if (!auj.libelle.trim() || !auj.adresse.trim()) { toast('Nom du lieu et adresse obligatoires', 'error'); return }
-    // Un seul ponctuel par date : on met à jour celui du jour s'il existe.
-    const { error } = await enregistrerEmplacement(ponctuelAuj, {
+    // Le même emplacement se remplace, un autre s'AJOUTE : un food truck peut
+    // annoncer son service du midi puis celui du soir.
+    const memeLibelle = ponctuelsAuj.find(e => e.libelle === auj.libelle.trim())
+    if (conflit({
+      id: memeLibelle?.id, type: 'ponctuel', date_jour: todayISO,
+      heure_debut: auj.heure_debut || null, heure_fin: auj.heure_fin || null,
+    })) return
+    const { error } = await enregistrerEmplacement(memeLibelle, {
       commercant_id: commercantId, type: 'ponctuel', date_jour: todayISO,
       libelle: auj.libelle.trim(), adresse: auj.adresse.trim(),
+      latitude: auj.latitude, longitude: auj.longitude,
       heure_debut: auj.heure_debut || null, heure_fin: auj.heure_fin || null,
       actif: true,
     })
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('C’est noté, ta fiche affiche ton emplacement du jour')
-    setAuj({ libelle: '', adresse: '', heure_debut: '', heure_fin: '' })
+    setAuj({ libelle: '', adresse: '', latitude: null, longitude: null, heure_debut: '', heure_fin: '' })
     charger()
   }
 
   async function ajouterFutur() {
     if (!futur.date_jour || !futur.libelle.trim() || !futur.adresse.trim()) { toast('Date, nom du lieu et adresse obligatoires', 'error'); return }
     if (futur.date_jour < todayISO) { toast('La date est déjà passée', 'error'); return }
-    const existant = emps.find(e => e.type === 'ponctuel' && e.date_jour === futur.date_jour)
+    const existant = emps.find(e => e.type === 'ponctuel' && e.date_jour === futur.date_jour
+      && e.libelle === futur.libelle.trim())
+    if (conflit({
+      id: existant?.id, type: 'ponctuel', date_jour: futur.date_jour,
+      heure_debut: futur.heure_debut || null, heure_fin: futur.heure_fin || null,
+    })) return
     const { error } = await enregistrerEmplacement(existant, {
       commercant_id: commercantId, type: 'ponctuel', date_jour: futur.date_jour,
       libelle: futur.libelle.trim(), adresse: futur.adresse.trim(),
+      latitude: futur.latitude, longitude: futur.longitude,
       heure_debut: futur.heure_debut || null, heure_fin: futur.heure_fin || null,
       actif: true,
     })
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('Emplacement planifié')
-    setFutur({ date_jour: '', libelle: '', adresse: '', heure_debut: '', heure_fin: '' })
+    setFutur({ date_jour: '', libelle: '', adresse: '', latitude: null, longitude: null, heure_debut: '', heure_fin: '' })
     setShowFutur(false)
     charger()
   }
 
   async function saveHebdo() {
     if (!formHebdo || !formHebdo.libelle.trim() || !formHebdo.adresse.trim()) { toast('Nom du lieu et adresse obligatoires', 'error'); return }
-    const existant = hebdoParJour[formHebdo.jour]
+    // ⚠️ On modifie CE lieu-là, pas « le lieu du jour ». Le jour peut en porter
+    // deux, et se repérer au jour écraserait le service du midi en enregistrant
+    // celui du soir.
+    const existant = formHebdo.id ? emps.find(e => e.id === formHebdo.id) : null
+    if (conflit({
+      id: formHebdo.id, type: 'hebdo', jour_semaine: formHebdo.jour,
+      heure_debut: formHebdo.heure_debut || null, heure_fin: formHebdo.heure_fin || null,
+    })) return
     const { error } = await enregistrerEmplacement(existant, {
       commercant_id: commercantId, type: 'hebdo', jour_semaine: formHebdo.jour,
       libelle: formHebdo.libelle.trim(), adresse: formHebdo.adresse.trim(),
+      latitude: formHebdo.latitude ?? null, longitude: formHebdo.longitude ?? null,
       heure_debut: formHebdo.heure_debut || null, heure_fin: formHebdo.heure_fin || null,
       actif: true,
     })
@@ -4094,12 +4155,13 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
     const { error } = await supabase.from('commercant_lieux').insert({
       commercant_id: commercantId, type: 'permanent',
       libelle: perm.libelle.trim(), adresse: perm.adresse.trim(),
+      latitude: perm.latitude, longitude: perm.longitude,
       principal: permanents.length === 0,
       actif: true,
     })
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('Lieu ajouté')
-    setPerm({ libelle: '', adresse: '' })
+    setPerm({ libelle: '', adresse: '', latitude: null, longitude: null })
     charger()
   }
 
@@ -4141,8 +4203,11 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderRadius: 10, border: `1px dashed ${T.pale}`, padding: '10px 12px' }}>
           <input style={field} placeholder="Nom du lieu (ex : Salle Saint-Roch)" value={perm.libelle}
             onChange={e => setPerm(p => ({ ...p, libelle: e.target.value }))}/>
-          <input style={field} placeholder="Adresse complète (pour l’itinéraire)" value={perm.adresse}
-            onChange={e => setPerm(p => ({ ...p, adresse: e.target.value }))}/>
+          <ChampAdresse style={field} valeur={perm.adresse} position={perm}
+            placeholder="Adresse complète (pour l’itinéraire)"
+            couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted }}
+            onTexte={v => setPerm(p => ({ ...p, adresse: v, latitude: null, longitude: null }))}
+            onChoisir={({ adresse, latitude, longitude }) => setPerm(p => ({ ...p, adresse, latitude, longitude }))}/>
           <button onClick={ajouterPermanent} style={{ ...btnMini, alignSelf: 'flex-start' }}>Ajouter ce lieu</button>
         </div>
       </div>
@@ -4157,15 +4222,19 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
       {/* Aujourd'hui : état + déclaration rapide */}
       <div style={{ background: T.pale, borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
         <p style={{ margin: '0 0 8px', fontSize: 12.5, fontWeight: 800, color: T.deep }}>
-          {effectifAuj
-            ? <>Aujourd’hui : {effectifAuj.libelle}{fmtHeures(effectifAuj) ? ` · ${fmtHeures(effectifAuj)}` : ''}{effectifAuj.type === 'hebdo' ? ' (tournée habituelle)' : ''}</>
-            : 'Aucun emplacement annoncé aujourd’hui : ta fiche affiche « Prochain emplacement annoncé bientôt ».'}
+          {effectifsAuj.length === 0
+            ? 'Aucun emplacement annoncé aujourd’hui : ta fiche affiche « Prochain emplacement annoncé bientôt ».'
+            : <>Aujourd’hui : {effectifsAuj.map(e => `${e.libelle}${fmtHeures(e) ? ` · ${fmtHeures(e)}` : ''}`).join(' puis ')}
+              {effectifAuj?.type === 'hebdo' ? ' (tournée habituelle)' : ''}</>}
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <input style={field} placeholder="Nom du lieu (ex : Place du Marché)" value={auj.libelle}
             onChange={e => setAuj(p => ({ ...p, libelle: e.target.value }))}/>
-          <input style={field} placeholder="Adresse complète (pour l’itinéraire)" value={auj.adresse}
-            onChange={e => setAuj(p => ({ ...p, adresse: e.target.value }))}/>
+          <ChampAdresse style={field} valeur={auj.adresse} position={auj}
+            placeholder="Adresse complète (pour l’itinéraire)"
+            couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted }}
+            onTexte={v => setAuj(p => ({ ...p, adresse: v, latitude: null, longitude: null }))}
+            onChoisir={({ adresse, latitude, longitude }) => setAuj(p => ({ ...p, adresse, latitude, longitude }))}/>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input type="time" style={{ ...field, flex: 1 }} value={auj.heure_debut} onChange={e => setAuj(p => ({ ...p, heure_debut: e.target.value }))}/>
             <span style={{ fontSize: 12, color: T.muted }}>→</span>
@@ -4182,31 +4251,57 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
       <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ma tournée habituelle</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
         {JOURS_FT.map((jour, idx) => {
-          const e = hebdoParJour[jour]
+          // ⚠️ UNE LISTE, PAS UN LIEU. Un food truck sert le midi sur une place
+          // et le soir dans un zoning : le jour porte les deux.
+          const duJour = hebdoParJour[jour] || []
           const enEdition = formHebdo?.jour === jour
           const labels = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
           return (
             <div key={jour} style={{ borderRadius: 10, border: `1px solid ${T.hairline}`, padding: '8px 12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 800, color: T.ink, width: 74, flexShrink: 0 }}>{labels[idx]}</span>
-                {e && !enEdition ? (
-                  <>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: T.deep, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {e.libelle}{fmtHeures(e) ? ` · ${fmtHeures(e)}` : ''}
-                    </span>
-                    <button style={btnMini} onClick={() => setFormHebdo({ jour, libelle: e.libelle, adresse: e.adresse, heure_debut: (e.heure_debut || '').slice(0, 5), heure_fin: (e.heure_fin || '').slice(0, 5) })}>Modifier</button>
-                    <button onClick={() => supprimer(e.id)} aria-label={`Retirer ${labels[idx]}`}
-                      style={{ width: 24, height: 24, borderRadius: 100, border: 'none', background: '#FEE2E2', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontWeight: 800, flexShrink: 0, padding: 0 }}>✕</button>
-                  </>
-                ) : !enEdition ? (
+                {duJour.length === 0 && !enEdition && (
                   <button style={{ ...btnMini, marginLeft: 'auto' }}
-                    onClick={() => setFormHebdo({ jour, libelle: '', adresse: '', heure_debut: '', heure_fin: '' })}>+ Ajouter</button>
-                ) : null}
+                    onClick={() => setFormHebdo({ jour, libelle: '', adresse: '', latitude: null, longitude: null, heure_debut: '', heure_fin: '' })}>+ Ajouter</button>
+                )}
+                {duJour.length > 0 && !enEdition && (
+                  <button style={{ ...btnMini, marginLeft: 'auto' }}
+                    onClick={() => setFormHebdo({ jour, libelle: '', adresse: '', latitude: null, longitude: null, heure_debut: '', heure_fin: '' })}>+ Autre moment</button>
+                )}
               </div>
+
+              {duJour.map(e => (
+                <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, paddingLeft: 82 }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: T.deep, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {e.libelle}{fmtHeures(e) ? ` · ${fmtHeures(e)}` : ''}
+                    {!e.latitude && (
+                      <span title="Sans position, ce lieu n’apparaît pas dans les distances" style={{ color: '#D97706', fontWeight: 800 }}> ·&nbsp;position manquante</span>
+                    )}
+                  </span>
+                  <button style={btnMini} onClick={() => setFormHebdo({
+                    id: e.id, jour, libelle: e.libelle, adresse: e.adresse,
+                    latitude: e.latitude, longitude: e.longitude,
+                    heure_debut: (e.heure_debut || '').slice(0, 5), heure_fin: (e.heure_fin || '').slice(0, 5),
+                  })}>Modifier</button>
+                  <button onClick={() => supprimer(e.id)} aria-label={`Retirer ${e.libelle}`}
+                    style={{ width: 24, height: 24, borderRadius: 100, border: 'none', background: '#FEE2E2', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontWeight: 800, flexShrink: 0, padding: 0 }}>✕</button>
+                </div>
+              ))}
+
+              {duJour.length > 1 && (
+                <p style={{ margin: '6px 0 0', paddingLeft: 82, fontSize: 11, color: T.muted, lineHeight: 1.45 }}>
+                  Plusieurs moments ce jour-là : les heures décident où tes clients te trouvent.
+                </p>
+              )}
+
               {enEdition && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                   <input style={field} placeholder="Nom du lieu" value={formHebdo.libelle} onChange={ev => setFormHebdo(p => ({ ...p, libelle: ev.target.value }))}/>
-                  <input style={field} placeholder="Adresse complète" value={formHebdo.adresse} onChange={ev => setFormHebdo(p => ({ ...p, adresse: ev.target.value }))}/>
+                  <ChampAdresse style={field} valeur={formHebdo.adresse} position={formHebdo}
+                    placeholder="Adresse complète"
+                    couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted }}
+                    onTexte={v => setFormHebdo(p => ({ ...p, adresse: v, latitude: null, longitude: null }))}
+                    onChoisir={({ adresse, latitude, longitude }) => setFormHebdo(p => ({ ...p, adresse, latitude, longitude }))}/>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input type="time" style={{ ...field, flex: 1 }} value={formHebdo.heure_debut} onChange={ev => setFormHebdo(p => ({ ...p, heure_debut: ev.target.value }))}/>
                     <span style={{ fontSize: 12, color: T.muted }}>→</span>
@@ -4246,7 +4341,11 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input type="date" min={todayISO} style={field} value={futur.date_jour} onChange={e => setFutur(p => ({ ...p, date_jour: e.target.value }))}/>
           <input style={field} placeholder="Nom du lieu (ex : Marché de Mettet)" value={futur.libelle} onChange={e => setFutur(p => ({ ...p, libelle: e.target.value }))}/>
-          <input style={field} placeholder="Adresse complète" value={futur.adresse} onChange={e => setFutur(p => ({ ...p, adresse: e.target.value }))}/>
+          <ChampAdresse style={field} valeur={futur.adresse} position={futur}
+            placeholder="Adresse complète"
+            couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted }}
+            onTexte={v => setFutur(p => ({ ...p, adresse: v, latitude: null, longitude: null }))}
+            onChoisir={({ adresse, latitude, longitude }) => setFutur(p => ({ ...p, adresse, latitude, longitude }))}/>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input type="time" style={{ ...field, flex: 1 }} value={futur.heure_debut} onChange={e => setFutur(p => ({ ...p, heure_debut: e.target.value }))}/>
             <span style={{ fontSize: 12, color: T.muted }}>→</span>

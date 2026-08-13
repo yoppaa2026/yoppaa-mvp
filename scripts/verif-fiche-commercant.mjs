@@ -10,7 +10,7 @@
 // inconnu que NOTRE serveur va chercher. Elle mérite de vrais tests, parce
 // qu'une erreur y coûte bien plus qu'un affichage de travers.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { CONSEILS_PHOTOS, MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '../lib/guide-photos.js'
 import { normaliserUrl, estIpPrivee, texteUtile } from '../lib/site-web.js'
 
@@ -22,6 +22,23 @@ const verifier = (nom, cond, detail = '') => {
 }
 const egal = (nom, a, b) => verifier(nom, JSON.stringify(a) === JSON.stringify(b), `obtenu ${JSON.stringify(a)}, attendu ${JSON.stringify(b)}`)
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
+
+// Tous les fichiers JS sous ces dossiers, pour les règles qui portent sur le
+// PROJET ENTIER et non sur un fichier nommé. Une règle du genre « ceci ne doit
+// exister qu'une fois » ne vaut que si elle regarde partout : bornée à un
+// fichier, elle interdit surtout de déplacer le code.
+function fichiersJs(dossiers) {
+  const trouves = []
+  const parcourir = (url) => {
+    for (const e of readdirSync(url, { withFileTypes: true })) {
+      const enfant = new URL(`${e.name}${e.isDirectory() ? '/' : ''}`, url)
+      if (e.isDirectory()) parcourir(enfant)
+      else if (/\.jsx?$/.test(e.name)) trouves.push(enfant)
+    }
+  }
+  for (const d of dossiers) parcourir(new URL(`../${d}/`, import.meta.url))
+  return trouves
+}
 
 // ⚠️ RETIRER LES COMMENTAIRES AVANT DE JUGER UN FICHIER SOURCE. Celui qui
 // explique un défaut corrigé cite forcément la ligne fautive, et la recherche
@@ -321,10 +338,27 @@ verifier('on ne peut pas avancer sans dire où se passe l’activité',
 verifier('le lieu d’activité est enregistré avec ses coordonnées',
   /type: 'permanent'[\s\S]{0,200}adresse, latitude, longitude/.test(signupSrc))
 
-// ⚠️ UNE SEULE RECHERCHE D'ADRESSE POUR LES DEUX CHAMPS. Les recopier aurait
-// garanti qu'ils divergent : l'un corrigé, l'autre oublié.
-egal('la recherche d’adresse n’est écrite qu’une fois',
-  (signupSrc.match(/nominatim\.openstreetmap\.org/g) || []).length, 1)
+// ⚠️ UNE SEULE RECHERCHE D'ADRESSE DANS TOUT LE PROJET. Les recopier aurait
+// garanti qu'elles divergent : l'une corrigée, l'autre oubliée.
+//
+// ⚠️ CE TEST VERROUILLAIT UNE FORME et a rougi le 13/08 au moment exact où on
+// l'améliorait : il comptait les appels DANS LE SIGNUP et valait 1, donc il
+// interdisait de sortir le composant pour que l'éditeur de lieux s'en serve
+// aussi. Il compte désormais dans TOUT le projet, ce qui est la règle qu'on
+// voulait, et il est plus fort qu'avant : une seconde copie, où qu'elle
+// naisse, le fait rougir.
+// ⚠️ On cible le CHAMP DE SAISIE avec ses suggestions, pas tout appel à
+// OpenStreetMap : le projet en fait trois usages sans rapport, l'autocomplétion
+// d'une adresse saisie, le géocodage inverse d'une position, et la résolution
+// d'une adresse unique. Les confondre ferait rougir le banc pour rien.
+const champsAutocomplete = fichiersJs(['app', 'lib']).filter(f => {
+  const src = readFileSync(f, 'utf8')
+  return /nominatim\.openstreetmap\.org\/search/.test(src) && /suggestions/.test(src)
+})
+egal('un seul champ d’adresse à suggestions dans tout le projet',
+  champsAutocomplete.length, 1)
+verifier('et il vit dans le composant partagé',
+  /ChampAdresse\.js$/.test(String(champsAutocomplete[0] || '')))
 
 // ─── L'ÉDITEUR DE LIEUX, ouvert à tous ────────────────────────────────────
 // ⚠️ Cette section était conditionnée à `estFoodTruck`, ce qui la rendait
@@ -339,6 +373,42 @@ verifier('et il s’affiche pour tout le monde',
   /<SectionLieux commercantId=/.test(configSrc))
 verifier('on peut y déclarer un lieu fixe',
   /type: 'permanent'/.test(configSrc))
+
+// ─── LES LIEUX SAISIS DANS CONFIG ONT ENFIN LEURS COORDONNÉES ─────────────
+// ⚠️ SANS LATITUDE, UN LIEU S'AFFICHE MAIS NE RAPPROCHE PERSONNE. L'accueil
+// trie par distance et ignore un lieu sans coordonnées : une professeure de
+// yoga pouvait déclarer sa seconde salle et rester invisible aux habitants de
+// cette commune. Seuls les lieux du signup en avaient.
+verifier('l’éditeur géocode les adresses saisies',
+  /<ChampAdresse/.test(configSrc))
+egal('les quatre formulaires de lieu géocodent',
+  (configSrc.match(/<ChampAdresse/g) || []).length, 4)
+// Ancré sur le payload ÉCRIT : la requête de lecture sélectionne aussi ces
+// colonnes, et s'y accrocher laisserait passer une écriture qui les oublie.
+egal('les trois sortes de lieu enregistrent leurs coordonnées',
+  (configSrc.match(/latitude: (perm|auj|futur|formHebdo)\./g) || []).length, 4)
+
+// ─── DEUX EMPLACEMENTS LE MÊME JOUR ───────────────────────────────────────
+// ⚠️ C'est la norme chez les food trucks : le service du midi sur une place,
+// celui du soir dans un zoning. La tournée les rangeait dans un objet indexé
+// par jour, ce qui écrasait silencieusement le second.
+verifier('la tournée range les emplacements par jour en LISTE',
+  /\(hebdoParJour\[e\.jour_semaine\] \|\|= \[\]\)\.push\(e\)/.test(configSrc))
+verifier('et on peut en ajouter un autre le même jour',
+  /\+ Autre moment/.test(configSrc))
+// ⚠️ Se repérer au JOUR pour modifier écraserait le service du midi en
+// enregistrant celui du soir. On modifie CE lieu-là, par son identifiant.
+verifier('modifier vise un emplacement précis, pas « le lieu du jour »',
+  /formHebdo\.id \? emps\.find\(e => e\.id === formHebdo\.id\) : null/.test(configSrc))
+
+// ─── ET ILS NE PEUVENT PAS SE MARCHER DESSUS ──────────────────────────────
+// ⚠️ Sans ce refus, « où es-tu à 12h30 » rendrait le premier de la liste,
+// c'est-à-dire l'ordre d'insertion en base : le client apprendrait où aller au
+// hasard. On refuse la saisie plutôt que de trancher à sa place.
+verifier('l’éditeur refuse deux emplacements qui se chevauchent',
+  /lieuEnConflit\(emps, candidat\)/.test(configSrc))
+egal('et les trois formulaires passent par ce refus',
+  (configSrc.match(/if \(conflit\(\{/g) || []).length, 3)
 // ⚠️ SANS LIEU PRINCIPAL, un commerçant qui a décoché la case du signup n'a
 // aucune adresse de référence : sa fiche n'aurait rien à afficher les jours
 // sans tournée.

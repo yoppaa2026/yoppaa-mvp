@@ -322,21 +322,39 @@ verifier('la case demande si l’activité s’y passe',
 verifier('et elle écrit bien la colonne prévue',
   /siege_social_est_lieu_activite/.test(signupSrc))
 
-// ⚠️ DÉCOCHER SANS DONNER D'ADRESSE NE DOIT PAS PASSER. Le commerçant vient de
-// déclarer que son activité se passe ailleurs : avancer sans dire où, c'est une
-// fiche sans lieu de retrait, donc un client sans destination.
-verifier('on ne peut pas avancer sans dire où se passe l’activité',
-  /!activiteAilleurs \|\| \(lieu\.adresse\?\.trim\(\)\.length > 0 && lieu\.latitude && lieu\.longitude\)/.test(signupSrc))
+// ⚠️ LE SIGNUP NE DEMANDE PLUS L'ADRESSE DU LIEU D'ACTIVITÉ (décision Alex du
+// 13/08). « Siège d'exploitation » est un terme de la Banque-Carrefour qui
+// désigne une unité d'établissement déclarée : une salle louée deux heures le
+// mardi n'en est pas une, et le mot faisait croire à une formalité. Le signup
+// était aussi le pire moment pour la question, ne gérant qu'UN lieu là où un
+// food truck en a deux par jour.
+//
+// ⚠️ CES DEUX TESTS ONT ROUGI ICI, ET C'EST NORMAL : ils verrouillaient le
+// comportement de la veille. On ne les supprime pas, on les remplace par la
+// garantie qui compte VRAIMENT et qui, elle, ne doit jamais tomber : un client
+// n'est jamais envoyé chez un commerçant qui n'a pas dit où il accueille.
+verifier('le signup ne réclame plus d’adresse de lieu d’activité',
+  !/Où se passe ton activité/.test(signupSrc))
+verifier('et décocher la case ne bloque plus l’inscription',
+  !/!activiteAilleurs \|\| \(lieu\./.test(signupSrc))
+// Le contrôle n'est pas abandonné, il est DÉPLACÉ : le commerçant est prévenu
+// que la suite se règle au tableau de bord, et que son adresse n'est pas
+// montrée en attendant.
+verifier('mais il annonce la suite au commerçant',
+  /Tu diras où tes clients te trouvent juste après/.test(signupSrc))
+verifier('et prévient que son adresse n’est pas montrée en attendant',
+  /ton adresse n’est pas montrée à tes clients/.test(signupSrc))
 
-// ⚠️ LES COORDONNÉES SONT ENREGISTRÉES AVEC L'ADRESSE, jamais devinées plus
-// tard. C'est ce qui manquait aux emplacements de food truck : sans elles, la
-// distance affichée au client se mesurait depuis le dépôt.
-// ⚠️ ANCRÉ SUR LE PAYLOAD ÉCRIT, pas sur la table. La première version cherchait
-// `commercant_lieux` puis les trois colonnes dans les 600 caractères suivants :
-// elle tombait sur la requête de LECTURE, qui les sélectionne aussi, et restait
-// verte alors que l'écriture ne les enregistrait plus.
-verifier('le lieu d’activité est enregistré avec ses coordonnées',
-  /type: 'permanent'[\s\S]{0,200}adresse, latitude, longitude/.test(signupSrc))
+// ⚠️ LE RAPPEL DE CONFIG EST CE QUI REND LE RETRAIT SANS DANGER. Sans lui, un
+// professeur de yoga inscrit chez lui n'apprendrait qu'en voyant un client ne
+// pas venir que sa fiche n'annonce aucune adresse.
+const configSrcLieux = sansCommentaires(lire('app/dashboard/ConfigDashboard.js'))
+verifier('« Mes lieux » réclame le lieu manquant',
+  /Tes clients ne savent pas encore où te trouver/.test(configSrcLieux))
+// Et seulement dans ce cas : afficher l'alerte à qui a coché la case, ou à qui
+// a déjà déclaré un lieu, la viderait de son sens.
+verifier('et seulement à qui a décoché la case sans rien déclarer',
+  /siegeEstLeLieu === false && emps\.length === 0/.test(configSrcLieux))
 
 // ⚠️ UNE SEULE RECHERCHE D'ADRESSE DANS TOUT LE PROJET. Les recopier aurait
 // garanti qu'elles divergent : l'une corrigée, l'autre oubliée.

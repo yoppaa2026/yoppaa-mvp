@@ -4056,13 +4056,19 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
   // `id` distingue une modification d'un ajout : un jour peut désormais porter
   // DEUX emplacements, celui du midi et celui du soir.
   const [formHebdo, setFormHebdo] = useState(null)  // { id, jour, libelle, adresse, heures… }
-  // Ajout d'un lieu PERMANENT : un second siège d'exploitation, un atelier.
+  // Ajout d'un lieu PERMANENT : une seconde adresse, un atelier, une salle
+  // louée à l'année. ⚠️ Ne PAS écrire « siège d'exploitation » : ce terme de la
+  // Banque-Carrefour désigne une unité d'établissement déclarée, ce qu'une
+  // salle louée n'est pas, et il ferait croire à une formalité administrative.
   const [perm, setPerm] = useState({ libelle: '', adresse: '', latitude: null, longitude: null })
   // ⚠️ LE SYSTÈME CLASSIQUE RESTE LA NORME, et cette case est DÉCOCHÉE par
   // défaut. Une boulangerie, un salon ou un cabinet ne bougeront jamais : leur
   // demander à chaque plage horaire « et c'était à quel endroit ? » serait une
   // question absurde posée à l'immense majorité pour servir une minorité.
   const [planningParLieu, setPlanningParLieu] = useState(false)
+  // `null` tant qu'on ne sait pas : un rappel affiché pendant le chargement,
+  // puis retiré, ferait clignoter une alerte pour rien.
+  const [siegeEstLeLieu, setSiegeEstLeLieu] = useState(null)
 
   // ⚠️ `jourLocalISO` et PAS `toISOString()`. Minuit heure belge, c'est 22h ou
   // 23h LA VEILLE en temps universel : entre minuit et deux heures du matin,
@@ -4077,11 +4083,12 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
   async function charger() {
     const [{ data, error }, { data: c }] = await Promise.all([
       supabase.from('commercant_lieux').select('*').eq('commercant_id', commercantId),
-      supabase.from('commercants').select('planning_par_lieu').eq('id', commercantId).maybeSingle(),
+      supabase.from('commercants').select('planning_par_lieu, siege_social_est_lieu_activite').eq('id', commercantId).maybeSingle(),
     ])
     if (error) { toast(`Erreur : ${error.message}`, 'error'); setLoading(false); return }
     setEmps(data || [])
     setPlanningParLieu(c?.planning_par_lieu === true)
+    setSiegeEstLeLieu(c?.siege_social_est_lieu_activite !== false)
     setLoading(false)
   }
 
@@ -4262,6 +4269,11 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
   // Ils sont de la partie tous les jours, sans jour ni date.
   const permanents = emps.filter(e => e.type === 'permanent')
 
+  // ⚠️ Le commerçant a décoché la case au signup, donc son siège social ne
+  // compte PAS comme lieu d'activité, et il n'a déclaré aucun lieu : sa fiche
+  // n'a rien à annoncer. C'est le seul cas où l'écran doit insister.
+  const aucunLieuAlorsQuIlEnFaut = siegeEstLeLieu === false && emps.length === 0
+
   async function ajouterPermanent() {
     if (!perm.libelle.trim() || !perm.adresse.trim()) { toast('Nom du lieu et adresse obligatoires', 'error'); return }
     // ⚠️ LE PREMIER LIEU DÉCLARÉ DEVIENT LE PRINCIPAL. C'est celui que le signup
@@ -4291,6 +4303,28 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
       <p style={{ margin: '0 0 14px', fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
         C’est ici que tes clients viennent te trouver. Ta fiche affiche le lieu du jour à la place de l’adresse de ton siège, et un lieu ponctuel remplace ta tournée habituelle ce jour-là.
       </p>
+
+      {/* ─── LE RAPPEL, et il n'est pas décoratif ────────────────────────────
+          ⚠️ C'est lui qui rend sans danger le retrait de l'adresse du signup
+          (décision Alex du 13/08). Le commerçant y a déclaré que son activité
+          se passe ailleurs, sans dire où : tant qu'il ne l'a pas fait, sa fiche
+          n'annonce AUCUNE adresse. Sans ce rappel, il ne l'apprendrait qu'en
+          voyant un client ne pas venir. */}
+      {aucunLieuAlorsQuIlEnFaut && (
+        <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 12, padding: '11px 13px', marginBottom: 14 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>
+          </svg>
+          <p style={{ margin: 0, fontSize: 12, color: '#92400E', fontWeight: 700, lineHeight: 1.5 }}>
+            Tes clients ne savent pas encore où te trouver.
+            <span style={{ display: 'block', fontSize: 11, fontWeight: 500, marginTop: 3 }}>
+              Tu as indiqué à l’inscription que ton activité ne se passe pas à l’adresse
+              de ton siège. Ajoute au moins un lieu ci-dessous : tant qu’il n’y en a
+              aucun, ta fiche n’affiche pas d’adresse.
+            </span>
+          </p>
+        </div>
+      )}
 
       {/* ─── Lieux fixes ─────────────────────────────────────────────────────
           Le salon à deux adresses, l'atelier du commerçant inscrit à son

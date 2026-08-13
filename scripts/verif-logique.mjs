@@ -629,9 +629,12 @@ egal('et le ponctuel devant tout le reste',
 egal('le siège reste présent, en second',
   lieuxDuJour({ commercant: truck, lieux: [salleMettet], jour: MERCREDI }).length, 2)
 
-// ─── Deux sièges d'exploitation : les deux, tous les jours ────────────────
+// ─── Deux adresses fixes : les deux, tous les jours ───────────────────────
+// ⚠️ Ne pas dire « siège d'exploitation » : ce terme de la Banque-Carrefour
+// désigne une unité d'établissement déclarée, ce qu'une salle louée n'est pas.
+// Le mot a été retiré du signup le 13/08 pour cette raison.
 const boutique2 = { id: 'l4', type: 'permanent', libelle: 'Boutique de Fosses', adresse: 'Rue, Fosses', commune_id: 'com-fosses', actif: true }
-egal('un second siège d’exploitation reste ouvert tous les jours',
+egal('une seconde adresse fixe reste ouverte tous les jours',
   lieuxDuJour({ commercant: salon, lieux: [boutique2], jour: JEUDI }).map(l => l.libelle),
   ['Ciseaux', 'Boutique de Fosses'])
 

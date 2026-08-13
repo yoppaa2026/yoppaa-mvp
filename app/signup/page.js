@@ -958,82 +958,60 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
   const [saving, setSaving] = useState(false)
   const debounceRef = useRef(null)
 
-  // ─── Le lieu d'activité, quand il diffère du siège social ────────────────
+  // ─── Le siège social est-il le lieu de l'activité ? ──────────────────────
   //
-  // ⚠️ LE SIGNUP N'EN GÈRE QU'UN SEUL, et volontairement. Il porte déjà cinq
-  // étapes, c'est la première impression qu'un commerçant a de Yoppaa : lui
-  // demander d'y déclarer trois salles et leurs jours l'y ferait renoncer. Les
-  // lieux multiples et leur planning vivent dans l'onglet Config, plus tard,
-  // tranquillement.
+  // ⚠️ LE SIGNUP NE DEMANDE PLUS OÙ SE PASSE L'ACTIVITÉ, seulement SI c'est
+  // ailleurs. Décision d'Alex du 13/08, et elle corrige une erreur de
+  // vocabulaire autant qu'une erreur d'ergonomie.
+  //
+  // « Siège d'exploitation » est un terme de la Banque-Carrefour : il désigne
+  // une unité d'établissement déclarée. Une salle de yoga louée deux heures le
+  // mardi n'en est pas une, l'emplacement d'un food truck sur une place non
+  // plus. Le mot faisait croire à une formalité administrative là où il n'y a
+  // qu'une question simple : où tes clients te trouvent.
+  //
+  // Et le signup était le pire moment pour la poser. Il porte déjà cinq étapes,
+  // il ne gérait qu'UN lieu là où le besoin en compte trois ou quatre, et le
+  // commerçant qui s'inscrit ne sait pas encore ce que Yoppaa fera de cette
+  // adresse. L'éditeur de lieux de Config fait tout, et le fait mieux.
+  //
+  // ⚠️ LA CASE, ELLE, RESTE, et ce n'est pas un demi-choix. Elle porte une
+  // information que Config ne peut pas deviner : accueille-t-on du monde à
+  // cette adresse ? Sans elle, le défaut `siege_social_est_lieu_activite`
+  // reste à `true` et la fiche d'un professeur de yoga inscrit chez lui
+  // annonce SON DOMICILE jusqu'au jour où il pense à ouvrir Config. Décochée,
+  // elle déclenche le rappel affiché en tête de « Mes lieux ».
   const [activiteAilleurs, setActiviteAilleurs] = useState(
     commercant.siege_social_est_lieu_activite === false)
-  const [lieu, setLieu] = useState({ id: null, adresse: '', latitude: null, longitude: null })
-
-  // Le lieu déjà déclaré, s'il y en a un. On ne recharge que celui du signup,
-  // c'est-à-dire le principal.
-  useEffect(() => {
-    if (!activiteAilleurs) return
-    let annule = false
-    supabase.from('commercant_lieux')
-      .select('id, adresse, latitude, longitude')
-      .eq('commercant_id', commercant.id)
-      .eq('principal', true)
-      .maybeSingle()
-      .then(({ data }) => { if (data && !annule) setLieu(data) })
-    return () => { annule = true }
-  }, [activiteAilleurs, commercant.id])
-
-  // La case. Recochée, le lieu déclaré ici disparaît : le commerçant vient de
-  // dire que son activité se passe bien au siège, laisser une adresse orpheline
-  // la ferait ressortir sur sa fiche sans qu'il comprenne d'où elle vient.
   async function basculerLieuActivite(ailleurs) {
     setActiviteAilleurs(ailleurs)
     onSaving?.('saving')
     await supabase.from('commercants')
       .update({ siege_social_est_lieu_activite: !ailleurs })
       .eq('id', commercant.id)
-    if (!ailleurs && lieu.id) {
-      await supabase.from('commercant_lieux').delete().eq('id', lieu.id)
-      setLieu({ id: null, adresse: '', latitude: null, longitude: null })
-    }
     onUpdate({ ...commercant, siege_social_est_lieu_activite: !ailleurs })
-    onSaving?.('saved')
-  }
-
-  // ⚠️ LES COORDONNÉES SONT ENREGISTRÉES AVEC L'ADRESSE, jamais devinées plus
-  // tard. C'est ce qui manquait aux emplacements de food truck : sans elles, la
-  // distance affichée au client se mesurait depuis le dépôt.
-  async function enregistrerLieuActivite({ adresse, latitude, longitude }) {
-    onSaving?.('saving')
-    const valeurs = {
-      commercant_id: commercant.id,
-      type: 'permanent',
-      principal: true,
-      libelle: form.nom?.trim() || commercant.nom || 'Mon activité',
-      adresse, latitude, longitude,
-      actif: true,
-    }
-    const { data } = lieu.id
-      ? await supabase.from('commercant_lieux').update(valeurs).eq('id', lieu.id).select().single()
-      : await supabase.from('commercant_lieux').insert(valeurs).select().single()
-    if (data) setLieu(data)
     onSaving?.('saved')
   }
 
   // Validation des champs requis (basée sur les seuils du brief)
   //
-  // ⚠️ DÉCOCHER LA CASE SANS DONNER D'ADRESSE NE DOIT PAS PASSER. Le commerçant
-  // vient de déclarer que son activité se passe ailleurs : le laisser avancer
-  // sans dire où, c'est une fiche sans lieu de retrait, donc un client sans
-  // destination.
+  // ⚠️ DÉCOCHER LA CASE NE BLOQUE PLUS L'INSCRIPTION. La version du 12/08
+  // exigeait ici une adresse de lieu d'activité, ce qui condamnait le
+  // commerçant à la saisir au pire moment : dans un formulaire de cinq étapes,
+  // sans jour ni horaire, alors qu'il en a souvent trois à déclarer.
+  //
+  // Ce n'est pas un contrôle abandonné, c'est un contrôle DÉPLACÉ : décocher
+  // la case retire l'adresse du siège des lieux montrés au client, donc la
+  // fiche n'annonce plus rien, et « Mes lieux » réclame le complément dès la
+  // première connexion au tableau de bord. Le client n'est jamais envoyé chez
+  // un commerçant qui n'a pas dit où il accueille.
   const valide =
     form.nom.trim().length >= 2 &&
     form.type.trim().length > 0 &&
     form.adresse.trim().length > 0 &&
     form.telephone.trim().length >= 8 &&
     form.description.trim().length >= 20 &&
-    form.latitude && form.longitude &&
-    (!activiteAilleurs || (lieu.adresse?.trim().length > 0 && lieu.latitude && lieu.longitude))
+    form.latitude && form.longitude
 
   // Sauvegarde auto (debounced)
   function updateField(k, v) {
@@ -1173,23 +1151,23 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
           </span>
         </label>
 
+        {/* ⚠️ ON NE DEMANDE PLUS L'ADRESSE ICI, on annonce seulement la suite.
+            Le signup ne gérait qu'un lieu, sans jour ni horaire, là où un food
+            truck en a deux par jour et une professeure de yoga trois dans la
+            semaine. Tout se règle dans « Mes lieux », qui sait le faire. */}
         {activiteAilleurs && (
-          <Field label="Où se passe ton activité ? *">
-            <ChampAdresse
-            style={inputStyle()}
-              valeur={lieu.adresse}
-              position={lieu}
-              placeholder="Ex: Salle Saint-Roch, 5640 Mettet"
-              onTexte={v => setLieu(p => ({ ...p, adresse: v }))}
-              onChoisir={enregistrerLieuActivite}
-            />
-            <p style={{ fontSize: 11, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
-              C&rsquo;est cette adresse que verront tes clients, et elle seule.
-              {estFoodTruck(form.type)
-                ? ' Tu ajouteras tes autres emplacements et leurs jours depuis ton tableau de bord.'
-                : ' Tu pourras en ajouter d’autres, et leur donner un jour de la semaine, depuis ton tableau de bord.'}
+          <div style={{ background: T.pale, borderRadius: 12, padding: '11px 13px', margin: '0 0 14px' }}>
+            <p style={{ margin: 0, fontSize: 12, color: T.deep, fontWeight: 700, lineHeight: 1.5 }}>
+              Parfait, on note. Tu diras où tes clients te trouvent juste après,
+              depuis ton tableau de bord.
+              <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: T.muted, marginTop: 3 }}>
+                {estFoodTruck(form.type)
+                  ? 'Tes emplacements, leurs jours et leurs heures, autant que tu veux.'
+                  : 'Un ou plusieurs endroits, avec leurs jours et leurs heures si tu bouges.'}
+                {' '}En attendant, ton adresse n’est pas montrée à tes clients.
+              </span>
             </p>
-          </Field>
+          </div>
         )}
         <Field label="Téléphone *">
           <input type="tel" value={form.telephone} onChange={e => updateField('telephone', e.target.value)} placeholder="+32 71 00 00 00" style={inputStyle()}/>

@@ -39,7 +39,11 @@ import {
 } from '../lib/rappels-retrait.js'
 import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '../lib/bons-vendus.js'
 import { jourSemaineDe } from '../lib/creneaux.js'
-import { lieuxDuJour, communesDuCommercant, estItinerant } from '../lib/lieux-activite.js'
+import {
+  lieuxDuJour, communesDuCommercant, estItinerant,
+  lieuALHeure, plagesSeChevauchent, lieuEnConflit,
+  lieuPrincipal, lieuDeLaPlage, lieuDeLaReservation, libelleLieu,
+} from '../lib/lieux-activite.js'
 import {
   referenceCommande, referenceComplete, referenceAvecNom,
   prefixePourCommande, libelleSemaine, referenceRdv, referenceRdvComplete, PREFIXES,
@@ -657,6 +661,112 @@ egal('un lieu désactivé ne rattache à aucune commune',
 egal('un salon n’est pas itinérant', estItinerant([boutique2]), false)
 egal('une prof de yoga l’est', estItinerant([salleMettet]), true)
 egal('sans lieu, personne ne l’est', estItinerant([]), false)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6 ter bis. DEUX EMPLACEMENTS LE MÊME JOUR — le midi et le soir
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ Le besoin vient des FOOD TRUCKS, où c'est la norme et non l'exception :
+// le service du midi sur une place, celui du soir dans un zoning. La table
+// l'interdisait par un index unique « un lieu par jour », et la règle ne savait
+// répondre qu'à « où es-tu aujourd'hui ».
+//
+// La question devient « où es-tu à telle heure », et c'est aussi ce qui
+// rattache un rendez-vous à un lieu SANS rattacher un lieu à chaque créneau :
+// le créneau a une heure, le lieu a une plage, l'intersection tranche.
+const truckMidi = { id: 'm1', type: 'hebdo', jour_semaine: 'mercredi', libelle: 'Place du Marché', adresse: 'Place 1', heure_debut: '11:00:00', heure_fin: '14:00:00', actif: true }
+const truckSoir = { id: 'm2', type: 'hebdo', jour_semaine: 'mercredi', libelle: 'Zoning', adresse: 'Zoning 2', heure_debut: '18:00', heure_fin: '21:00', actif: true }
+const deuxServices = [truckMidi, truckSoir]
+
+egal('à midi, le food truck est sur la place',
+  lieuALHeure({ commercant: truck, lieux: deuxServices, jour: MERCREDI, heure: '12:30' })?.libelle,
+  'Place du Marché')
+egal('le soir, il est au zoning',
+  lieuALHeure({ commercant: truck, lieux: deuxServices, jour: MERCREDI, heure: '19:00' })?.libelle,
+  'Zoning')
+// Entre deux services, mieux vaut annoncer le prochain que de ne rien dire.
+egal('entre les deux, on annonce le prochain',
+  lieuALHeure({ commercant: truck, lieux: deuxServices, jour: MERCREDI, heure: '15:00' })?.libelle,
+  'Zoning')
+egal('avant l’ouverture, on annonce le premier',
+  lieuALHeure({ commercant: truck, lieux: deuxServices, jour: MERCREDI, heure: '08:00' })?.libelle,
+  'Place du Marché')
+egal('sans heure, la réponse reste celle d’avant',
+  lieuALHeure({ commercant: truck, lieux: deuxServices, jour: MERCREDI })?.libelle,
+  'Place du Marché')
+// Sans emplacement ce jour-là ET sans siège déclaré comme lieu, il n'y a rien à
+// répondre. Avec un siège coché, c'est lui qui répond, ce que la ligne suivante
+// vérifie : les deux comportements comptent.
+egal('un jour sans emplacement ne répond rien',
+  lieuALHeure({ commercant: yoga, lieux: deuxServices, jour: JEUDI, heure: '12:30' }), null)
+egal('mais un siège déclaré répond toujours',
+  lieuALHeure({ commercant: truck, lieux: deuxServices, jour: JEUDI, heure: '12:30' })?.source, 'siege')
+
+// ⚠️ LA PLAGE QUI PASSE MINUIT. Un food truck de nuit annonce 22h → 02h. Sans
+// ce cas, sa plage serait vide et il n'aurait de lieu à AUCUNE heure de son
+// service, celle de 23h30 comprise.
+const truckNuit = [{ id: 'n1', type: 'hebdo', jour_semaine: 'mercredi', libelle: 'Nuit', adresse: 'x', heure_debut: '22:00', heure_fin: '02:00', actif: true }]
+egal('23h30 tombe dans un service qui passe minuit',
+  lieuALHeure({ commercant: truck, lieux: truckNuit, jour: MERCREDI, heure: '23:30' })?.libelle, 'Nuit')
+egal('1h du matin aussi',
+  lieuALHeure({ commercant: truck, lieux: truckNuit, jour: MERCREDI, heure: '01:00' })?.libelle, 'Nuit')
+
+// ─── Deux plages ne peuvent pas se marcher dessus ─────────────────────────
+// ⚠️ Sans cette garde, « où es-tu à 12h30 » rendrait le premier de la liste,
+// c'est-à-dire l'ordre d'insertion en base : le client apprendrait où aller au
+// hasard. L'éditeur refuse la saisie plutôt que de trancher à sa place.
+egal('deux plages qui se recouvrent sont en conflit',
+  lieuEnConflit(deuxServices, { type: 'hebdo', jour_semaine: 'mercredi', heure_debut: '12:00', heure_fin: '13:00' })?.libelle,
+  'Place du Marché')
+egal('deux plages jointives passent',
+  lieuEnConflit(deuxServices, { type: 'hebdo', jour_semaine: 'mercredi', heure_debut: '14:00', heure_fin: '18:00' }), null)
+egal('un autre jour ne gêne personne',
+  lieuEnConflit(deuxServices, { type: 'hebdo', jour_semaine: 'jeudi', heure_debut: '12:00', heure_fin: '13:00' }), null)
+egal('on ne se compare pas à soi-même en modification',
+  lieuEnConflit(deuxServices, { id: 'm1', type: 'hebdo', jour_semaine: 'mercredi', heure_debut: '11:00', heure_fin: '14:00' }), null)
+// Un lieu sans horaire vaut toute la journée : il ne peut pas en côtoyer un autre.
+egal('un lieu sans horaire occupe la journée entière',
+  lieuEnConflit(deuxServices, { type: 'hebdo', jour_semaine: 'mercredi' })?.libelle, 'Place du Marché')
+egal('deux plages disjointes ne se chevauchent pas',
+  plagesSeChevauchent(truckMidi, truckSoir), false)
+
+// ─── LE SYSTÈME CLASSIQUE RESTE LA NORME ──────────────────────────────────
+// ⚠️ La garantie la plus importante du chantier, comme la case par défaut du
+// 12/08 : une boulangerie n'activera jamais le planning par lieu. Ses créneaux
+// ne désignent aucun lieu, et vide ne veut pas dire « nulle part », il veut
+// dire « là où se passe l'activité ».
+egal('une plage sans lieu désigne le lieu du commerce',
+  libelleLieu(lieuDeLaPlage({ jour_semaine: 'mercredi' }, { commercant: salon, lieux: [] })),
+  'Ciseaux, Rue de Prée 9G, Mettet')
+egal('le lieu principal du salon est son adresse',
+  lieuPrincipal({ commercant: salon, lieux: [] })?.source, 'siege')
+
+// ⚠️ LE FOOD TRUCK TEL QU'IL EXISTE DÉJÀ, et c'est le défaut que l'exécution a
+// débusqué : case du siège décochée, aucun lieu permanent, donc AUCUN lieu
+// principal. Ses créneaux de retrait actuels, qui ne désignent aucun lieu, se
+// retrouvaient sans la moindre adresse. Le repli se fait sur le jour et l'heure
+// de la plage elle-même.
+egal('un créneau de midi retombe sur l’emplacement de midi',
+  lieuDeLaPlage({ jour_semaine: 'mercredi', heure_debut: '12:00' }, { commercant: truck, lieux: deuxServices })?.libelle,
+  'Place du Marché')
+egal('un créneau du soir retombe sur celui du soir',
+  lieuDeLaPlage({ jour_semaine: 'mercredi', heure_debut: '19:00' }, { commercant: truck, lieux: deuxServices })?.libelle,
+  'Zoning')
+egal('une plage qui désigne un lieu le garde',
+  lieuDeLaPlage({ lieu_id: 'm2', jour_semaine: 'mercredi', heure_debut: '12:00' }, { commercant: truck, lieux: deuxServices })?.libelle,
+  'Zoning')
+
+// ─── CE QUI EST DÉJÀ PRIS NE BOUGE PLUS ───────────────────────────────────
+// ⚠️ Le lieu figé gagne TOUJOURS sur le calcul. C'est ce qui fait qu'un
+// rendez-vous d'il y a six mois dit encore où il a eu lieu, même si
+// l'emplacement a été supprimé depuis.
+egal('un rendez-vous garde le lieu figé à la réservation',
+  lieuDeLaReservation({ lieu_libelle: 'Salle Saint-Roch', lieu_adresse: 'Place, Mettet', date_rdv: MERCREDI, heure_debut: '19:00' },
+    { commercant: truck, lieux: deuxServices })?.libelle,
+  'Salle Saint-Roch')
+// Les rendez-vous ANTÉRIEURS à la bascule n'ont rien de figé : eux se calculent.
+egal('un rendez-vous d’avant se résout à sa date et à son heure',
+  lieuDeLaReservation({ date_rdv: MERCREDI, heure_debut: '19:30' }, { commercant: truck, lieux: deuxServices })?.libelle,
+  'Zoning')
 
 // ─── L'ACCUEIL MESURE JUSQU'AU BON ENDROIT ────────────────────────────────
 // ⚠️ La distance se mesurait depuis le SIÈGE SOCIAL. Le food truck affichait la

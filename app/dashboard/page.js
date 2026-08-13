@@ -1746,8 +1746,32 @@ export default function Dashboard() {
         .scroll-zone {
           flex: 1;
           overflow-y: auto;
+          /* ⚠️ SANS CETTE LIGNE, LE TABLEAU DE BORD DÉFILE LATÉRALEMENT. En CSS,
+             un axe en 'auto' force l'autre à devenir défilable : 'overflow-y:
+             auto' seul rend donc 'overflow-x' scrollable, et il suffit qu'un
+             enfant dépasse d'un pixel pour que toute la page glisse. Le
+             commerçant voit alors ses cartes décalées et une bande vide à
+             droite, sans comprendre ce qu'il a fait. */
+          overflow-x: hidden;
+          /* Et sur mobile, le geste latéral ne doit pas non plus entraîner la
+             page qui se trouve derrière. */
+          overscroll-behavior-x: contain;
           padding: 1rem;
           -webkit-overflow-scrolling: touch;
+        }
+
+        /* ⚠️ MASQUER NE SUFFIT PAS, IL FAUT QUE LE CONTENU S'ADAPTE. Sans ce
+           plafond, 'overflow-x: hidden' se contenterait de COUPER ce qui
+           dépasse : le commerçant ne verrait plus la page glisser, mais le
+           bord droit de ses cartes aurait disparu, ce qui est pire parce que
+           rien ne le signale.
+           ⚠️ AUCUN BACKTICK DANS CE COMMENTAIRE : ce bloc vit dans un template
+           literal JavaScript, et un seul backtick y ferme la chaîne et casse
+           le fichier entier. Piège vécu le 12/08, refait le 13/08. */
+        .scroll-zone > * { max-width: 100%; }
+        .scroll-zone :where(input, textarea, select, img, video, table) {
+          max-width: 100%;
+          box-sizing: border-box;
         }
 
         .commandes-grid {

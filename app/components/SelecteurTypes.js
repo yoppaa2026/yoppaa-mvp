@@ -46,7 +46,16 @@ export default function SelecteurTypes({ categorie, value, onChange }) {
     padding: '7px 13px', borderRadius: 100, cursor: desactive ? 'default' : 'pointer',
     border: actif ? `1.5px solid ${C.main}` : `1.5px solid ${C.hairline}`,
     background: actif ? C.main : '#fff', color: actif ? '#fff' : desactive ? '#B8B3C7' : C.ink,
-    fontSize: 13, fontWeight: 700, fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap',
+    fontSize: 13, fontWeight: 700, fontFamily: 'inherit', transition: 'all 0.15s',
+    // ⚠️ `nowrap` SANS PLAFOND POUSSE LA PAGE HORS DE L'ÉCRAN. Un libellé long
+    // comme « Primeur (fruits et légumes) » ou « Épicerie - supérette » refuse
+    // de se couper, et sur un téléphone étroit il élargit la rangée, donc la
+    // carte, donc toute la page, qui se met à défiler latéralement.
+    //
+    // On garde `nowrap`, parce qu'un nom de métier coupé en deux lignes au
+    // milieu d'un mot se lit mal, mais on le plafonne : une pastille ne peut
+    // plus dépasser la largeur disponible, elle se replie avant.
+    whiteSpace: 'nowrap', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis',
   })
 
   return (

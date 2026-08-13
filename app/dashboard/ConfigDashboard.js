@@ -55,6 +55,17 @@ const s = {
     marginBottom: 12,
     border: `1px solid ${T.hairline}`,
     boxShadow: '0 1px 3px rgba(22,6,54,0.04)',
+    // ⚠️ UNE CARTE NE DOIT JAMAIS POUSSER LA PAGE HORS DE L'ÉCRAN. Le padding
+    // s'ajoutait à la largeur sans `border-box`, et un contenu insécable, une
+    // adresse email ou un lien, l'élargissait encore : le tableau de bord se
+    // mettait à défiler latéralement, et le commerçant voyait ses cartes
+    // décalées avec une bande vide à droite.
+    boxSizing: 'border-box',
+    maxWidth: '100%',
+    // Un mot qui ne peut pas être coupé, comme
+    // « verstappenalexandre+ciseauxprovisoires@gmail.com », force sinon la
+    // largeur de son conteneur, quelles que soient les règles au-dessus.
+    overflowWrap: 'anywhere',
   },
   cardActive: {
     background: '#fff',
@@ -63,6 +74,11 @@ const s = {
     marginBottom: 12,
     border: `1.5px solid ${T.bgPanel}`,
     boxShadow: `0 8px 24px rgba(22,6,54,0.12)`,
+    // Mêmes garde-fous que `card` : une carte ouverte déborde exactement comme
+    // une carte fermée, et c'est même elle qu'on regarde quand on saisit.
+    boxSizing: 'border-box',
+    maxWidth: '100%',
+    overflowWrap: 'anywhere',
   },
   label: {
     display: 'block',

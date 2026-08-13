@@ -388,6 +388,52 @@ verifier('toutes les bandes du tableau de bord sont passées en revue', bandes >
 verifier('les compteurs du jour s\'étalent sur PC',
   /\.stats-grid\s*\{[^}]*repeat\(auto-fit/.test(socle))
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LE TABLEAU DE BORD NE DÉFILE PAS LATÉRALEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ EN CSS, UN AXE EN `auto` FORCE L'AUTRE À DEVENIR DÉFILABLE. `.scroll-zone`
+// portait `overflow-y: auto` sans rien dire de l'horizontal : il suffisait
+// qu'un enfant dépasse d'un pixel pour que toute la page glisse. Le commerçant
+// voyait ses cartes décalées et une bande vide à droite, sans comprendre ce
+// qu'il avait fait. Constaté par Alex le 13/08 sur l'onglet Profil.
+const dashSrc = lire('app/dashboard/page.js')
+verifier('la zone de défilement bloque l’axe horizontal',
+  /\.scroll-zone\s*\{[^}]*overflow-x:\s*hidden/.test(dashSrc))
+// ⚠️ MASQUER NE SUFFIT PAS : sans plafond, `overflow-x: hidden` se contenterait
+// de COUPER ce qui dépasse, et le bord droit des cartes disparaîtrait sans que
+// rien ne le signale. C'est pire que le défilement, qui au moins se voit.
+verifier('et le contenu s’adapte au lieu d’être coupé',
+  /\.scroll-zone > \*\s*\{[^}]*max-width:\s*100%/.test(dashSrc))
+verifier('les champs et les images ne débordent pas non plus',
+  /\.scroll-zone :where\(input, textarea, select, img, video, table\)/.test(dashSrc))
+
+// Les cartes de Config, qui sont ce que le commerçant regarde le plus.
+const cfgSrc = lire('app/dashboard/ConfigDashboard.js')
+// ⚠️ ON JUGE LE CONTENU DES DEUX STYLES, pas la mise en forme du code. La
+// première version exigeait les trois propriétés à la suite : un commentaire
+// glissé entre deux lignes la faisait rougir, alors que le style était juste.
+// Un test qui fige la façon d'écrire interdit d'expliquer le pourquoi.
+for (const nom of ['card', 'cardActive']) {
+  const debut = cfgSrc.indexOf(`  ${nom}: {`)
+  const bloc = debut === -1 ? '' : cfgSrc.slice(debut, cfgSrc.indexOf('\n  },', debut))
+  verifier(`le style « ${nom} » ne peut plus pousser la page`,
+    /boxSizing: 'border-box'/.test(bloc)
+    && /maxWidth: '100%'/.test(bloc)
+    && /overflowWrap: 'anywhere'/.test(bloc), bloc ? 'trouvé mais incomplet' : 'style introuvable')
+}
+
+// ⚠️ Un mot insécable force la largeur de son conteneur quelles que soient les
+// règles au-dessus : une adresse email de quarante-huit caractères suffit.
+verifier('un mot insécable ne pousse plus la carte',
+  /overflowWrap: 'anywhere'/.test(cfgSrc))
+
+// ⚠️ `nowrap` sans plafond pousse la page hors de l'écran : un libellé comme
+// « Primeur (fruits et légumes) » refuse de se couper et élargit la rangée,
+// donc la carte, donc la page entière.
+const selSrc = lire('app/components/SelecteurTypes.js')
+verifier('une pastille de métier ne dépasse plus la largeur disponible',
+  /whiteSpace: 'nowrap', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis'/.test(selSrc))
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

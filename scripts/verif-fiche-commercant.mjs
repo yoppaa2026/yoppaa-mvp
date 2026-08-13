@@ -508,6 +508,33 @@ for (const [nom, marqueur] of [
   verifier(`le signup annonce ${nom}`, signupSrcTxt.includes(marqueur))
 }
 
+// ─── L'ÉTAPE HORAIRES SAIT QUE CERTAINS N'EN ONT PAS ──────────────────────
+// ⚠️ TROU DE COHÉRENCE INTRODUIT LE JOUR MÊME. Depuis que les horaires se
+// déduisent des emplacements, un commerçant qui change d'endroit remplissait
+// sept lignes à l'inscription pour se les faire RÉÉCRIRE dès sa première
+// tournée déclarée. Une question sans réponse, posée au pire moment.
+verifier('l’étape horaires reconnaît qui change d’endroit',
+  /function horairesViennentDesLieux/.test(signupSrcTxt))
+// ⚠️ ON COMPTE : le message apparaît DEUX fois, dans l'encadré du haut et dans
+// l'indication sous le bouton. En décrocher un laissait le test vert puisque
+// l'autre suffisait, et le commerçant qui ne lit que le bouton n'aurait rien su.
+egal('elle le lui dit aux deux endroits',
+  (signupSrcTxt.match(/tes horaires viendront de tes emplacements/g) || []).length, 2)
+verifier('et elle le laisse passer',
+  /\|\| horairesViennentDesLieux\(commercant\)/.test(signupSrcTxt))
+
+// ─── LES EXEMPLES DOIVENT PARLER À CEUX QU'ON VISE ────────────────────────
+// ⚠️ Un studio de yoga, un coach ou une auto-école lisaient « Coiffeur,
+// opticien, esthéticienne, garagiste » et concluaient que Yoppaa n'était pas
+// pour eux. Les cours collectifs sont pourtant livrés, et le module RDV les
+// couvre depuis toujours.
+verifier('les services citent aussi les cours et le coaching',
+  /yoga, coach, auto-école/.test(signupSrcTxt))
+// Le food truck, lui, est le cas d'usage qui a fait naître tout le module
+// LIEUX : il doit se reconnaître dès la première question.
+verifier('l’alimentaire cite le food truck',
+  /traiteur, food truck/.test(signupSrcTxt))
+
 // ─── ON PEUT PASSER LES PACKS SANS RIEN PRENDRE ───────────────────────────
 // ⚠️ Le message existait, mais en italique gris SOUS la liste : il ressemblait
 // à une note de bas de page et ne se lisait qu'après avoir fait défiler tous

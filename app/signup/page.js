@@ -47,6 +47,15 @@ function peutSkipperHoraires(plan, categorie) {
   return plan === 'exister' && categorie === 'vitrine'
 }
 
+// ⚠️ UN COMMERÇANT QUI CHANGE D'ENDROIT N'A PAS D'HORAIRES FIXES, et lui en
+// demander ici est une question qui n'a pas de réponse. Depuis le 13/08, ses
+// horaires sont DÉDUITS de ses emplacements : ce qu'il saisirait à cette étape
+// serait réécrit dès sa première tournée déclarée. Autant le lui dire et le
+// laisser passer, plutôt que de lui faire remplir sept lignes pour rien.
+function horairesViennentDesLieux(commercant) {
+  return commercant?.siege_social_est_lieu_activite === false
+}
+
 // ─── GENERATEURS DE VISUELS AUTO (fallback branded Yoppaa) ────────────────────
 // Quand le commercant n'a pas de logo/photo, on lui propose de generer un
 // visuel propre dans la charte Yoppaa. Esprit Gmail/Notion : cercle initiale.
@@ -583,7 +592,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
         Bienvenue sur Yoppaa
       </h1>
       <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 16px' }}>
-        Crée ton compte et choisis ton plan. Tu pourras tout configurer en quelques minutes.
+        Crée ton compte et choisis ta formule. Le reste se remplit en quelques minutes, et tout se modifie ensuite depuis ton tableau de bord.
       </p>
 
       {/* Bandeau d'accroche : rassure sur la gratuité du plan Exister + essai 30j sur Communiquer/Vendre */}
@@ -619,8 +628,8 @@ function Etape1Compte({ session, commercant, onCompte }) {
             actif={categorie === 'alimentaire'}
             onClick={() => setCategorie('alimentaire')}
             titre="Alimentaire"
-            sous="Click & Collect, livraison"
-            exemples="Boulangerie, friterie, traiteur, snack…"
+            sous="Commande à l’avance et livraison"
+            exemples="Boulangerie, friterie, traiteur, food truck, épicerie…"
             Icon={Croissant}
           />
           <CategorieCard
@@ -628,8 +637,8 @@ function Etape1Compte({ session, commercant, onCompte }) {
             actif={categorie === 'vitrine'}
             onClick={() => setCategorie('vitrine')}
             titre="Service"
-            sous="Vitrine en ligne + prise de RDV"
-            exemples="Coiffeur, opticien, esthéticienne, garagiste…"
+            sous="Ta vitrine et tes rendez-vous"
+            exemples="Coiffeur, esthéticienne, garagiste, yoga, coach, auto-école…"
             Icon={Scissors}
           />
           <CategorieCard
@@ -638,7 +647,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
             onClick={() => setCategorie('detail')}
             titre="Détail"
             sous="Vente en ligne, retrait ou envoi"
-            exemples="Vêtements, chaussures, fleuriste, librairie…"
+            exemples="Vêtements, chaussures, fleuriste, librairie, déco…"
             Icon={ShoppingBag}
           />
         </div>
@@ -1805,7 +1814,12 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
   // Skip-logic : un service vitrine en plan Exister peut ne pas avoir d'horaires
   // (coiffeur 100% RDV, garagiste sur appel...). Master section 4.
   const plan = getPlanActif(commercant, onboarding)
+  // ⚠️ ET CELUI QUI CHANGE D'ENDROIT PEUT PASSER AUSSI, quel que soit son plan
+  // et sa catégorie : ses horaires ne se saisissent pas ici, ils se déduisent
+  // de ses emplacements. Le bloquer sur une grille qu'on va réécrire serait
+  // lui faire perdre son temps au pire moment, celui de l'inscription.
   const skipAutorise = peutSkipperHoraires(plan, commercant.categorie)
+    || horairesViennentDesLieux(commercant)
 
   async function continuer() {
     if (!valide) return
@@ -1845,6 +1859,25 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
       <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 24px' }}>
         Configure ton planning hebdomadaire. Tu pourras gérer les fermetures exceptionnelles depuis ton tableau de bord.
       </p>
+
+      {/* ⚠️ CE COMMERÇANT N'A PAS D'HORAIRES FIXES, et lui en demander ici est
+          une question sans réponse. Il a dit à l'étape précédente que son
+          activité ne se passe pas à l'adresse de son siège : depuis le 13/08,
+          ses horaires sont DÉDUITS de ses emplacements, et ce qu'il saisirait
+          ici serait réécrit dès sa première tournée déclarée. */}
+      {horairesViennentDesLieux(commercant) && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: T.pale, border: `1.5px solid ${T.main}44`, borderRadius: 14, padding: '13px 15px', marginBottom: 16 }}>
+          <span style={{ flexShrink: 0, marginTop: 1, color: T.main }}><MapPin size={17} strokeWidth={2.2}/></span>
+          <p style={{ margin: 0, fontSize: 12.5, color: T.deep, fontWeight: 700, lineHeight: 1.5 }}>
+            Tu changes d’endroit : tes horaires viendront de tes emplacements.
+            <span style={{ display: 'block', fontWeight: 500, marginTop: 3, color: T.muted }}>
+              Tu déclareras où tu es et à quelles heures depuis ton tableau de bord,
+              et tes horaires d’ouverture en découleront tout seuls. Tu peux donc passer
+              cette étape, ou poser ici des heures indicatives en attendant.
+            </span>
+          </p>
+        </div>
+      )}
 
       <Card titre="Planning hebdomadaire" sous="Astuce : configure lundi puis copie sur tous les jours.">
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
@@ -1909,7 +1942,10 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
         continuer={continuer}
         valide={valide}
         saving={saving}
-        hint={valide ? null : (skipAutorise ? 'Tu peux passer cette étape si tu fonctionnes uniquement sur RDV.' : 'Coche au moins un jour d\'ouverture.')}
+        hint={valide ? null : (horairesViennentDesLieux(commercant)
+          ? 'Tu peux passer : tes horaires viendront de tes emplacements.'
+          : skipAutorise ? 'Tu peux passer cette étape si tu fonctionnes uniquement sur RDV.'
+          : 'Coche au moins un jour d\'ouverture.')}
         plusTard={skipAutorise ? configurerPlusTard : null}
         plusTardLabel="Je fonctionne sur RDV uniquement, je configurerai plus tard →"
       />

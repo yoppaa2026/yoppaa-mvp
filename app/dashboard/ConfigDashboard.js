@@ -9,7 +9,7 @@ import { estRemiseSurProduit } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement } from '@/lib/lancement'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
-import { lieuEnConflit } from '@/lib/lieux-activite'
+import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
 import { capacitePrestation } from '@/lib/cours-collectifs'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import TabGenerateur from './TabGenerateur'
@@ -4106,6 +4106,24 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
     setEmps(data || [])
     setPlanningParLieu(c?.planning_par_lieu === true)
     setSiegeEstLeLieu(c?.siege_social_est_lieu_activite !== false)
+    // ⚠️ SANS CETTE ÉCRITURE, LE COMMERCE PASSERAIT POUR FERMÉ TOUTE LA
+    // SEMAINE. Les horaires ne servent pas qu'à l'affichage : le moteur de
+    // créneaux les croise avec les plages de rendez-vous et écarte tout créneau
+    // tombant hors ouverture. Chez qui a répondu « je change d'endroit », la
+    // grille n'est plus saisie à la main, elle est DÉDUITE des emplacements et
+    // réécrite à chaque ajout, modification ou retrait.
+    //
+    // ⚠️ ET SEULEMENT POUR LUI : chez un commerce qui ne bouge pas, écraser des
+    // horaires saisis à la main serait une catastrophe silencieuse.
+    //
+    // ⚠️ On part de la liste QUI VIENT D'ARRIVER, jamais de l'état React :
+    // celui-ci ne sera à jour qu'au rendu suivant, et on écrirait les horaires
+    // d'avant la modification qu'on vient justement d'enregistrer.
+    if (c?.siege_social_est_lieu_activite === false) {
+      const horaires = horairesDepuisLieux(data || [])
+      supabase.from('commercants').update({ horaires_detail: horaires }).eq('id', commercantId)
+        .then(({ error: e }) => { if (e) console.warn('[lieux] horaires non synchronisés', e.message) })
+    }
     setLoading(false)
   }
 
@@ -4316,9 +4334,14 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
 
   return (
     <div style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: 16, marginTop: 16 }}>
-      <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Mes lieux</p>
+      <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Où me trouver</p>
       <p style={{ margin: '0 0 14px', fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
-        C’est ici que tes clients viennent te trouver. Ta fiche affiche le lieu du jour à la place de l’adresse de ton siège, et un lieu ponctuel remplace ta tournée habituelle ce jour-là.
+        Les endroits où tes clients viennent te trouver, et quand. Ta fiche annonce
+        celui du jour, et une date exceptionnelle remplace ta semaine type ce jour-là.
+        <span style={{ display: 'block', marginTop: 4 }}>
+          Les heures que tu poses ici deviennent tes horaires d’ouverture : tu n’as
+          rien à saisir deux fois.
+        </span>
       </p>
 
       {/* ─── LE RAPPEL, et il n'est pas décoratif ────────────────────────────
@@ -4346,7 +4369,7 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
       {/* ─── Lieux fixes ─────────────────────────────────────────────────────
           Le salon à deux adresses, l'atelier du commerçant inscrit à son
           domicile. Ils valent tous les jours, sans jour ni date. */}
-      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mes lieux fixes</p>
+      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mon adresse d’accueil</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
         {permanents.length === 0 && (
           <p style={{ margin: 0, fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
@@ -4382,7 +4405,7 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
           Pour qui change d'endroit : food truck, cours donnés dans plusieurs
           salles, marchés. */}
       <p style={{ margin: '14px 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-        {estMobile ? 'Mes emplacements du jour' : 'Je change d’endroit selon les jours'}
+        {estMobile ? 'Mes emplacements du jour' : 'Quand je change d’endroit'}
       </p>
 
       {/* Aujourd'hui : état + déclaration rapide */}
@@ -4414,7 +4437,7 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
       </div>
 
       {/* Tournée hebdo type */}
-      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ma tournée habituelle</p>
+      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ma semaine type</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
         {JOURS_FT.map((jour, idx) => {
           // ⚠️ UNE LISTE, PAS UN LIEU. Un food truck sert le midi sur une place
@@ -4506,7 +4529,7 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
       )}
 
       {/* Ponctuels à venir (marchés, événements) */}
-      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Emplacements ponctuels à venir</p>
+      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Dates exceptionnelles</p>
       {futurs.length === 0 && !showFutur && (
         <p style={{ margin: '0 0 8px', fontSize: 12, color: T.muted }}>Aucun. Planifie un marché ou un événement à l’avance.</p>
       )}
@@ -4550,10 +4573,105 @@ function SectionLieux({ commercantId, toast, estMobile = false }) {
   )
 }
 
+// ⚠️ LES QUATRE SUJETS DE L'ONGLET PROFIL. Il en empilait autant sur un seul
+// écran de 647 lignes, et le commerçant y descendait en scrollant à travers
+// tout, sans repère. Chaque intitulé dit ce qu'on y règle, jamais comment
+// c'est rangé en base : « Mes lieux » ne parlait à personne.
+// ─── LA QUESTION QUI COMMANDE TOUT ──────────────────────────────────────────
+//
+// ⚠️ UNE SEULE QUESTION, ET ELLE DÉCIDE DE CE QUI S'AFFICHE ENSUITE. Avant, le
+// commerçant remplissait ses horaires d'ouverture PUIS ses emplacements avec
+// leurs heures, sans que rien ne dise lequel faisait foi. Deux saisies pour une
+// seule réalité, donc une contradiction qui n'attendait que d'arriver.
+//
+// Répondre « oui » laisse l'écran d'hier, celui de l'immense majorité : une
+// adresse, des horaires par jour. Répondre « non » retire la grille, parce que
+// ce sont alors les emplacements qui portent les heures.
+//
+// ⚠️ La colonne s'appelle `siege_social_est_lieu_activite` et son défaut est
+// `true` : un commerçant déjà inscrit répond donc « oui » sans avoir rien fait,
+// et ne voit aucune différence.
+function ChoixLieuUnique({ commercantId, valeur, onChange, toast }) {
+  const [enregistre, setEnregistre] = useState(false)
+
+  useEffect(() => {
+    if (valeur !== null) return
+    let annule = false
+    supabase.from('commercants').select('siege_social_est_lieu_activite').eq('id', commercantId).maybeSingle()
+      .then(({ data }) => { if (!annule) onChange(data?.siege_social_est_lieu_activite !== false) })
+    return () => { annule = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- lecture unique au montage
+  }, [commercantId])
+
+  async function repondre(memeEndroit) {
+    onChange(memeEndroit)
+    setEnregistre(true)
+    const { error } = await supabase.from('commercants')
+      .update({ siege_social_est_lieu_activite: memeEndroit }).eq('id', commercantId)
+    setEnregistre(false)
+    if (error) { onChange(!memeEndroit); toast(`Erreur : ${error.message}`, 'error'); return }
+    toast(memeEndroit
+      ? 'Tes horaires valent pour toute la semaine, à ton adresse'
+      : 'Ce sont tes emplacements qui donnent tes horaires')
+  }
+
+  if (valeur === null) return null
+
+  const choix = [
+    { val: true,  titre: 'Toujours au même endroit',
+      sous: 'Une adresse, des horaires par jour. C’est le cas d’un salon, d’une boulangerie, d’un cabinet.' },
+    { val: false, titre: 'Je change d’endroit',
+      sous: 'Food truck, cours donnés dans plusieurs salles, marchés. Ce sont tes emplacements qui donnent tes horaires.' },
+  ]
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <p style={{ margin: '0 0 4px', fontSize: 13.5, fontWeight: 800, color: T.ink }}>
+        Où tes clients te trouvent-ils ?
+      </p>
+      <p style={{ margin: '0 0 10px', fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+        Ta réponse décide de ce que tu as à remplir ensuite. Tu peux en changer quand tu veux.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {choix.map(c => {
+          const actif = valeur === c.val
+          return (
+            <button key={String(c.val)} onClick={() => repondre(c.val)} disabled={enregistre}
+              style={{ display: 'flex', alignItems: 'flex-start', gap: 10, textAlign: 'left', width: '100%',
+                padding: '11px 13px', borderRadius: 12, cursor: enregistre ? 'wait' : 'pointer',
+                border: `1.5px solid ${actif ? T.main : T.hairline}`, background: actif ? T.pale : '#fff',
+                fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box' }}>
+              <span style={{ width: 17, height: 17, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+                border: `2px solid ${actif ? T.main : T.hairline}`, background: actif ? T.main : '#fff',
+                boxShadow: actif ? `inset 0 0 0 3px #fff` : 'none' }}/>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: T.deep }}>{c.titre}</span>
+                <span style={{ display: 'block', fontSize: 11.5, color: T.muted, marginTop: 2, lineHeight: 1.45 }}>{c.sous}</span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+const SOUS_ONGLETS_PROFIL = [
+  { id: 'fiche',    label: 'Ma fiche' },
+  { id: 'contact',  label: 'Mes coordonnées' },
+  { id: 'lieux',    label: 'Où me trouver' },
+  { id: 'reglages', label: 'Réglages' },
+]
+
 function TabProfil({ commercantId, toast, onSaved }) {
   const [form, setForm] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [sousOnglet, setSousOnglet] = useState('fiche')
+  // ⚠️ `null` tant qu'on ne sait pas : afficher la grille des horaires puis la
+  // retirer une seconde plus tard ferait clignoter l'écran, et un commerçant
+  // qui commence à saisir verrait son champ disparaître sous ses doigts.
+  const [siegeEstLeLieu, setSiegeEstLeLieu] = useState(null)
   // Duplication d'horaires : jour source ouvert + jours cibles cochés
   const [copieSource, setCopieSource] = useState(null)
   const [copieCibles, setCopieCibles] = useState([])
@@ -4719,6 +4837,26 @@ function TabProfil({ commercantId, toast, onSaved }) {
     <div>
       <h2 style={s.h2}>Profil du commerce</h2>
 
+      {/* ─── LES QUATRE SOUS-ONGLETS ─────────────────────────────────────────
+          ⚠️ CET ECRAN FAISAIT 647 LIGNES ET MELANGEAIT QUATRE SUJETS SANS
+          RAPPORT : ce que le client voit, comment te joindre, ou et quand tu
+          travailles, et des reglages de fonctionnement. On y descendait en
+          scrollant a travers tout, sans repere. Releve par Alex le 13/08.
+          Le decoupage suit celui des onglets Boutique et Rendez-vous, qui ont
+          deja leurs sous-onglets : on ne cree pas une facon de naviguer de
+          plus. */}
+      <BandeDefilante libelle="les sections du profil"
+        style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 16, border: `1px solid ${T.hairline}`, overflowX: 'auto', scrollbarWidth: 'none' }}>
+        {SOUS_ONGLETS_PROFIL.map(o => (
+          <button key={o.id} onClick={() => setSousOnglet(o.id)}
+            style={{ flex: '1 0 auto', padding: '9px 14px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap', transition: 'all 0.2s', background: sousOnglet === o.id ? T.bgPanel : 'transparent', color: sousOnglet === o.id ? '#fff' : T.muted }}>
+            {o.label}
+          </button>
+        ))}
+      </BandeDefilante>
+
+      {/* ─── MA FICHE : tout ce que le client voit de toi ─────────────────── */}
+      {sousOnglet === 'fiche' && (<>
       {/* Badge catégorie — lecture seule. Pour changer, contacter support. */}
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px 6px 8px', borderRadius: 100, background: T.pale, border: `1px solid ${T.main}33`, marginBottom: 14 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center' }}>
@@ -4846,7 +4984,6 @@ function TabProfil({ commercantId, toast, onSaved }) {
         <p style={{ fontSize: 10, color: T.muted, marginTop: 8 }}>Tous les ratios acceptés, compression automatique. Les conseils sont là pour aider, pas pour contraindre.</p>
       </div>
 
-      {/* Infos */}
       <div style={s.card}>
         <div style={{ display: 'grid', gap: 14 }}>
           <div>
@@ -4857,6 +4994,26 @@ function TabProfil({ commercantId, toast, onSaved }) {
             <label style={s.label}>Type de commerce</label>
             <SelecteurTypes categorie={form.categorie} value={form.type} onChange={v => setForm(p => ({ ...p, type: v }))}/>
           </div>
+          <div>
+            <label style={s.label}>Description (visible clients)</label>
+            <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Décrivez votre commerce..." />
+          </div>
+          <div>
+            <label style={s.label}>Infos pratiques (visible clients)</label>
+            <p style={{ fontSize: 11, color: T.muted, marginBottom: 6, lineHeight: 1.5 }}>
+              Politique d&rsquo;annulation, modes de paiement acceptés, consignes... Affichées sur ta fiche et dans l&rsquo;email de confirmation de RDV.
+            </p>
+            <Textarea value={form.infos_pratiques || ''} onChange={e => setForm(p => ({ ...p, infos_pratiques: e.target.value }))}
+              placeholder={'Ex : Paiement en liquide ou QR code.\nToute annulation moins de 24h avant le RDV sera facturée.'} />
+          </div>
+        </div>
+      </div>
+      </>)}
+
+      {/* ─── MES COORDONNEES : comment on te joint ────────────────────────── */}
+      {sousOnglet === 'contact' && (
+      <div style={s.card}>
+        <div style={{ display: 'grid', gap: 14 }}>
           {[
             { label: 'Email', key: 'email', placeholder: '', type: 'email', disabled: true, hint: 'Non modifiable, contact support' },
             { label: 'Téléphone', key: 'telephone', placeholder: '+32 470 00 00 00', type: 'tel' },
@@ -4872,19 +5029,21 @@ function TabProfil({ commercantId, toast, onSaved }) {
               {f.hint && <p style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>{f.hint}</p>}
             </div>
           ))}
-          <div>
-            <label style={s.label}>Description (visible clients)</label>
-            <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Décrivez votre commerce..." />
-          </div>
-          <div>
-            <label style={s.label}>Infos pratiques (visible clients)</label>
-            <p style={{ fontSize: 11, color: T.muted, marginBottom: 6, lineHeight: 1.5 }}>
-              Politique d&rsquo;annulation, modes de paiement acceptés, consignes... Affichées sur ta fiche et dans l&rsquo;email de confirmation de RDV.
-            </p>
-            <Textarea value={form.infos_pratiques || ''} onChange={e => setForm(p => ({ ...p, infos_pratiques: e.target.value }))}
-              placeholder={'Ex : Paiement en liquide ou QR code.\nToute annulation moins de 24h avant le RDV sera facturée.'} />
-          </div>
+        </div>
+      </div>
+      )}
 
+      {/* ─── OU ET QUAND : l'endroit et les heures, jamais les deux fois ───
+          ⚠️ DEUX ECRANS DISAIENT LA MEME CHOSE SANS SE PARLER. Un food truck
+          qui declare « mardi, Place du Marche, 11h-14h » devait EN PLUS
+          remplir « mardi 07:00 → 18:30 » ici, et rien ne disait lequel
+          faisait foi. La grille ne s'affiche donc que pour qui ne bouge pas ;
+          les autres la voient DEDUITE de leurs emplacements. */}
+      {sousOnglet === 'lieux' && (<>
+      <div style={s.card}>
+        <ChoixLieuUnique commercantId={commercantId} valeur={siegeEstLeLieu} onChange={setSiegeEstLeLieu} toast={toast}/>
+        {siegeEstLeLieu !== false && (
+        <div style={{ display: 'grid', gap: 14 }}>
           <div>
             <label style={s.label}>Horaires d'ouverture</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
@@ -4990,6 +5149,8 @@ function TabProfil({ commercantId, toast, onSaved }) {
               chaque créneau dit jusqu'à quelle heure. Les deux vivent dans
               l'onglet Créneaux. La colonne reste en base, plus rien ne la lit. */}
         </div>
+        )}
+      </div>
 
         {/* ─── MES LIEUX : plus réservé aux food trucks ─────────────────────
             ⚠️ Cette section était conditionnée à `estFoodTruck(form.type)`, et
@@ -5000,7 +5161,11 @@ function TabProfil({ commercantId, toast, onSaved }) {
             Elle s'affiche donc pour tout le monde : chacun y déclare ses lieux
             fixes, et ceux qui bougent y posent leur tournée. */}
         <SectionLieux commercantId={commercantId} toast={toast} estMobile={estFoodTruck(form.type)}/>
+      </>)}
 
+      {/* ─── REGLAGES : le fonctionnement, pas la vitrine ─────────────────── */}
+      {sousOnglet === 'reglages' && (
+      <div style={s.card}>
         {/* ─── Notifications RDV ou Commandes ─── */}
         {/* Toggle unique notif_mode (chaque/recap_jour/aucun) qui s'applique aux RDV
             pour les vitrines ET aux commandes C&C pour les alimentaires Vendre.
@@ -5180,6 +5345,7 @@ function TabProfil({ commercantId, toast, onSaved }) {
           </button>
         </div>
       </div>
+      )}
 
       <div style={{ ...s.card, background: T.pale, boxShadow: 'none', border: 'none' }}>
         <p style={{ fontSize: 12, color: T.main, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Lightbulb size={13} strokeWidth={1.8}/> URL client : yoppaa.app/commander</p>

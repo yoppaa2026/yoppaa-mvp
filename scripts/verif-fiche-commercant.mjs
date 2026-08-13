@@ -458,6 +458,49 @@ verifier('un créneau ne retient un emplacement que si la case est cochée',
 verifier('le chevauchement de créneaux se juge par emplacement',
   /filter\(e => !parLieu \|\| \(e\.lieu_id \|\| null\) === \(form\.lieu_id \|\| null\)\)/.test(configSrc))
 
+// ═══════════════════════════════════════════════════════════════════════════
+// L'ONGLET PROFIL, DÉCOUPÉ EN QUATRE
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ IL FAISAIT 647 LIGNES ET MÉLANGEAIT QUATRE SUJETS SANS RAPPORT : ce que le
+// client voit, comment te joindre, où et quand tu travailles, et des réglages
+// de fonctionnement. On y descendait en scrollant à travers tout, sans repère.
+egal('l’onglet Profil a ses quatre sections',
+  (configSrc.match(/\{ id: '(fiche|contact|lieux|reglages)',/g) || []).length, 4)
+for (const [id, sujet] of [['fiche', 'la vitrine'], ['contact', 'les coordonnées'],
+  ['lieux', 'où et quand'], ['reglages', 'le fonctionnement']]) {
+  verifier(`la section « ${sujet} » s’affiche seule`,
+    new RegExp(`sousOnglet === '${id}' &&`).test(configSrc))
+}
+
+// ⚠️ LES INTITULÉS DISENT CE QU'ON Y RÈGLE, jamais comment c'est rangé en base.
+// « Mes lieux » ne parlait à personne, relevé par Alex le 13/08.
+verifier('« Mes lieux » est devenu « Où me trouver »',
+  /Où me trouver/.test(configSrc) && !/>Mes lieux<\/p>/.test(configSrc))
+verifier('« Mes lieux fixes » est devenu « Mon adresse d’accueil »',
+  /Mon adresse d’accueil/.test(configSrc) && !/>Mes lieux fixes</.test(configSrc))
+verifier('« Ma tournée habituelle » est devenue « Ma semaine type »',
+  /Ma semaine type/.test(configSrc) && !/>Ma tournée habituelle</.test(configSrc))
+verifier('« Emplacements ponctuels » est devenu « Dates exceptionnelles »',
+  /Dates exceptionnelles/.test(configSrc) && !/>Emplacements ponctuels à venir</.test(configSrc))
+
+// ─── LA QUESTION QUI COMMANDE TOUT ────────────────────────────────────────
+// ⚠️ UNE SEULE QUESTION DÉCIDE DE CE QUI S'AFFICHE ENSUITE. Avant, le
+// commerçant remplissait ses horaires PUIS ses emplacements avec leurs heures,
+// sans que rien ne dise lequel faisait foi : deux saisies pour une réalité.
+verifier('une seule question décide de la suite',
+  /Où tes clients te trouvent-ils \?/.test(configSrc))
+verifier('et la grille des horaires disparaît quand il bouge',
+  /\{siegeEstLeLieu !== false && \(/.test(configSrc))
+// ⚠️ SANS L'ÉCRITURE DÉDUITE, LE COMMERCE PASSERAIT POUR FERMÉ TOUTE LA
+// SEMAINE : le moteur de créneaux croise les horaires avec les plages de
+// rendez-vous et écarte tout créneau hors ouverture.
+verifier('les horaires sont réécrits depuis les emplacements',
+  /horairesDepuisLieux\(data \|\| \[\]\)/.test(configSrc))
+// ⚠️ Et seulement pour qui bouge : écraser des horaires saisis à la main chez
+// une boulangerie serait une catastrophe silencieuse.
+verifier('mais jamais chez un commerce qui ne bouge pas',
+  /if \(c\?\.siege_social_est_lieu_activite === false\) \{/.test(configSrc))
+
 // ─── LES PLAGES DE RENDEZ-VOUS AUSSI ──────────────────────────────────────
 // ⚠️ Une professeure de yoga donne cours à Mettet le mardi et à Biesme le
 // jeudi : ses plages de réservation ne sont pas les mêmes, et son client doit

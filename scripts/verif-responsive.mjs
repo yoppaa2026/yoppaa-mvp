@@ -371,14 +371,22 @@ const ECRANS_DASHBOARD = ['app/dashboard/page.js', 'app/dashboard/ConfigDashboar
 let bandes = 0
 for (const chemin of ECRANS_DASHBOARD) {
   const src = lire(chemin)
-  for (const ligne of src.split('\n')) {
+  const lignes = src.split('\n')
+  for (let i = 0; i < lignes.length; i++) {
+    const ligne = lignes[i]
     // On vise les bandes HORIZONTALES seulement : une zone qui défile aussi en
     // vertical (la grille de l'agenda, un tableau) a sa propre navigation.
     if (!/overflowX:\s*'auto'/.test(ligne)) continue
     if (/overflowY/.test(ligne)) continue
     bandes++
+    // ⚠️ ON REGARDE LA LIGNE ET CELLE D'AVANT. La première version exigeait
+    // l'enveloppe sur la MÊME ligne que le style : une bande écrite sur deux
+    // lignes, ce qui est le cas dès qu'elle porte quelques propriétés, la
+    // faisait rougir alors qu'elle était parfaitement enveloppée. Le test
+    // verrouillait la mise en forme du code au lieu de la règle.
+    const voisinage = (lignes[i - 1] || '') + ligne
     verifier(`${chemin} : une bande reste atteignable à la souris`,
-      /<BandeDefilante/.test(ligne), ligne.trim().slice(0, 80))
+      /<BandeDefilante/.test(voisinage), ligne.trim().slice(0, 80))
   }
 }
 verifier('toutes les bandes du tableau de bord sont passées en revue', bandes >= 6, `${bandes} trouvées`)

@@ -13,7 +13,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { CONSEILS_PHOTOS, MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '../lib/guide-photos.js'
 import { normaliserUrl, estIpPrivee, texteUtile } from '../lib/site-web.js'
-import { symbolePourType, couleurPourNom, logoProvisoireSvg } from '../lib/logo-provisoire.js'
+import { symbolePourType, couleurPourNom, logoProvisoireSvg, propositionsLogo } from '../lib/logo-provisoire.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -552,6 +552,41 @@ verifier('deux commerces du même métier n’ont pas la même couleur',
 egal('la couleur d’un nom ne change pas',
   couleurPourNom('Le Fournil').clair, couleurPourNom('Le Fournil').clair)
 
+// ─── ON PROPOSE, ON N'IMPOSE PAS ──────────────────────────────────────────
+// ⚠️ Un logo qu'on choisit devient le sien ; un logo imposé reste « celui de
+// Yoppaa », et le commerçant s'en détache au lieu de se l'approprier. Demande
+// d'Alex du 14/08, après avoir vu la première version qui n'en donnait qu'un.
+const propsCoiffeur = propositionsLogo({ nom: 'Ciseaux provisoires', type: 'Coiffeur' })
+verifier('le commerçant a le choix entre plusieurs logos', propsCoiffeur.length >= 5)
+// ⚠️ ON COMPTE LES SYMBOLES DISTINCTS, pas les propositions. La première
+// version se contentait d'un total : ne garder qu'un seul symbole décliné en
+// cinq couleurs l'aurait satisfaite, alors que le commerçant n'aurait plus eu
+// aucun choix de DESSIN, seulement de teinte.
+verifier('et entre plusieurs symboles, pas seulement plusieurs couleurs',
+  new Set(propsCoiffeur.map(p => p.symbole)).size >= 3,
+  [...new Set(propsCoiffeur.map(p => p.symbole))].join(' '))
+// ⚠️ Le premier reste le symbole le plus ATTENDU pour son métier : proposer
+// n'est pas noyer, et un coiffeur doit voir des ciseaux en premier.
+egal('et le premier est le symbole de son métier', propsCoiffeur[0].symbole, 'ciseaux')
+// Des clés uniques, sans quoi React rendrait n'importe quoi et le choix
+// mémorisé désignerait deux propositions différentes.
+egal('chaque proposition a sa propre clé',
+  new Set(propsCoiffeur.map(p => p.cle)).size, propsCoiffeur.length)
+verifier('toutes les propositions sont des SVG complets',
+  propsCoiffeur.every(p => p.svg.startsWith('<svg') && p.svg.trim().endsWith('</svg>')))
+// ⚠️ Les autres couleurs S'ÉLOIGNENT du violet, et c'est voulu : un fleuriste
+// ou une boucherie peuvent vouloir du vert ou du rouge. Leur imposer notre
+// violet reviendrait à leur imposer notre identité, alors que c'est la leur
+// qu'un logo doit porter.
+verifier('les propositions ne sont pas toutes du même violet',
+  new Set(propsCoiffeur.map(p => p.teinte)).size >= 4)
+// Le choix explicite doit être respecté, sans quoi la grille ne servirait à rien.
+verifier('le symbole choisi est bien celui qu’on obtient',
+  /d="M13 2 3 14/.test(logoProvisoireSvg({ nom: 'X', type: 'Coiffeur', symbole: 'eclair' })))
+// Un métier sans correspondance propose quand même quelque chose.
+verifier('un métier inconnu a lui aussi le choix',
+  propositionsLogo({ nom: 'X', type: 'Métier inédit' }).length >= 5)
+
 const svgLogo = logoProvisoireSvg({ nom: 'Ciseaux provisoires', type: 'Coiffeur' })
 verifier('le logo est un SVG complet',
   svgLogo.startsWith('<svg') && svgLogo.trim().endsWith('</svg>'))
@@ -566,6 +601,21 @@ verifier('le signup explique à quoi sert le logo',
   /tes clients te reconnaîtront/.test(signupSrcTxt))
 verifier('et rappelle que le sien vaut mieux que le nôtre',
   /Le tien vaut mieux que le nôtre/.test(signupSrcTxt))
+// La grille est affichée, et chaque vignette déclenche la génération de CE
+// choix-là : sans les paramètres, tous les boutons rendraient le même logo.
+// ⚠️ ANCRÉ SUR LE PARCOURS, pas sur le nom de la fonction. La première version
+// cherchait `propositionsLogo({ nom:` et restait verte quand on neutralisait
+// son résultat : l'appel était bien écrit, il ne servait simplement plus à rien.
+//
+// ⚠️ ET LA LIMITE EST ASSUMÉE : un test qui lit du source prouve que le code
+// est écrit et relié, jamais qu'il s'exécute. Une expression glissée devant
+// l'appel pour l'annuler passerait encore. C'est la ligne suivante qui porte la
+// vraie garantie, parce qu'elle lie chaque vignette à SON symbole : sans elle,
+// tous les boutons rendraient le même logo, ce qui se verrait à l'écran.
+verifier('le signup affiche la grille de propositions',
+  /propositionsLogo\(\{[^}]*\}\)\.map\(p => \(/.test(signupSrcTxt))
+verifier('et chaque vignette applique son propre symbole',
+  /genererLogoAuto\(\{ symbole: p\.symbole, teinte: p\.teinte \}\)/.test(signupSrcTxt))
 
 // ─── AUCUN CHIFFRE QU'ON NE PEUT PAS PROUVER ──────────────────────────────
 // ⚠️ « Une belle photo, c'est +40 % de clics » ne reposait sur RIEN : ni sur

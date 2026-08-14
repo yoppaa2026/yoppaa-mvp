@@ -6,7 +6,7 @@ import BanniereCommerce from '@/app/components/BanniereCommerce'
 import { useRouter } from 'next/navigation'
 import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
 import { compresserImage } from '@/lib/compress-image'
-import { logoProvisoireSvg } from '@/lib/logo-provisoire'
+import { logoProvisoireSvg, propositionsLogo } from '@/lib/logo-provisoire'
 import { conseilPhoto, MAX_PHOTOS } from '@/lib/guide-photos'
 import { SHOP_PRODUCTS, classerProduitsParCategorie } from '@/lib/produits-boutique'
 // Icônes Lucide React : SVG inline alignés sur la charte canonique Yoppaa.
@@ -69,8 +69,8 @@ async function canvasVersBlob(canvas) {
 //
 // Le tracé vit dans lib/logo-provisoire.js, qui n'a besoin ni du navigateur ni
 // de React : il rend un SVG, donc il se teste au banc.
-async function logoProvisoireCanvas(nom, type) {
-  const svg = logoProvisoireSvg({ nom, type, taille: 512 })
+async function logoProvisoireCanvas(nom, type, choix = null) {
+  const svg = logoProvisoireSvg({ nom, type, taille: 512, symbole: choix?.symbole, teinte: choix?.teinte })
   const image = new Image()
   // On passe par une data URI plutôt que par un blob object URL : pas d'URL à
   // révoquer, donc pas de fuite si la génération échoue en cours de route.
@@ -1278,13 +1278,13 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
 
   // Fallback "Genere-moi" : produit un cercle violet avec initiale du nom
   // dans la charte Yoppaa. Pas de friction, propre, identitaire.
-  async function genererLogoAuto() {
+  async function genererLogoAuto(choix = null) {
     setError('')
     setUploadingLogo(true)
     onSaving?.('saving')
     try {
       const nom = commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Y'
-      const canvas = await logoProvisoireCanvas(nom, commercant.type)
+      const canvas = await logoProvisoireCanvas(nom, commercant.type, choix)
       const blob = await canvasVersBlob(canvas)
       if (!blob) { setError('Génération du logo impossible.'); return }
       const fileName = `logo-${commercant.id}-${Date.now()}.png`
@@ -1479,7 +1479,34 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
           onFile={uploadLogo}
           maxWidth={140}
         />
-        <BoutonGenererVisuel onClick={genererLogoAuto} disabled={uploadingLogo} libelle="Je n'ai pas encore de logo, dépanne-moi"/>
+        {/* ⚠️ ON PROPOSE, ON N'IMPOSE PAS (Alex, 14/08). Un logo qu'on choisit
+            devient le sien ; un logo imposé reste « celui de Yoppaa », et le
+            commerçant s'en détache au lieu de se l'approprier. Le premier de
+            la grille est le symbole le plus attendu pour son métier, dans une
+            teinte dérivée de son nom : c'est une proposition, pas un verdict. */}
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px dashed ${T.hairline}` }}>
+          <p style={{ fontSize: 12, fontWeight: 800, color: T.bgPanel, margin: '0 0 3px' }}>
+            Pas encore de logo ? Choisis-en un en attendant
+          </p>
+          <p style={{ fontSize: 11, color: T.muted, margin: '0 0 10px', lineHeight: 1.45 }}>
+            Il reprend le symbole de ton métier. Tu le remplaceras par le tien quand tu voudras.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(58px, 1fr))', gap: 8 }}>
+            {propositionsLogo({ nom: commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Yoppaa', type: commercant.type }).map(p => (
+              <button key={p.cle} type="button" disabled={uploadingLogo}
+                onClick={() => genererLogoAuto({ symbole: p.symbole, teinte: p.teinte })}
+                aria-label={`Choisir ce logo, symbole ${p.symbole}`}
+                style={{ padding: 0, border: `2px solid ${T.hairline}`, borderRadius: 14, background: 'none', cursor: uploadingLogo ? 'wait' : 'pointer', aspectRatio: '1/1', overflow: 'hidden', lineHeight: 0, transition: 'border-color 0.15s, transform 0.15s' }}
+                onMouseOver={e => { if (!uploadingLogo) { e.currentTarget.style.borderColor = T.main; e.currentTarget.style.transform = 'translateY(-2px)' } }}
+                onMouseOut={e => { e.currentTarget.style.borderColor = T.hairline; e.currentTarget.style.transform = 'none' }}>
+                {/* Le SVG est rendu tel quel : pas d'aller-retour au serveur
+                    pour un aperçu, et ce qu'il voit est exactement ce qu'il
+                    obtiendra en cliquant. */}
+                <span style={{ display: 'block', width: '100%' }} dangerouslySetInnerHTML={{ __html: p.svg.replace('width="512" height="512"', 'width="100%" height="100%"') }}/>
+              </button>
+            ))}
+          </div>
+        </div>
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
           <strong style={{ color: T.bgPanel }}>Le tien vaut mieux que le nôtre :</strong> c&apos;est ton identité,
           celle qu&apos;on retrouve sur ta vitrine et sur tes sacs. Ton logo seul sur fond uni,
@@ -1594,20 +1621,6 @@ function inputStyle() {
   return { width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 14, color: T.ink, background: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: '"DM Sans", sans-serif' }
 }
 
-// Lien discret affichee sous chaque UploadZone pour proposer la generation
-// auto d'un visuel branded Yoppaa quand le commercant n'a pas de logo/photo.
-function BoutonGenererVisuel({ onClick, disabled, libelle }) {
-  return (
-    <button onClick={onClick} disabled={disabled} type="button"
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '8px 14px', background: T.pale, border: `1px dashed ${T.light}`, borderRadius: 100, color: T.deep, fontSize: 12, fontWeight: 700, cursor: disabled ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s' }}
-      onMouseEnter={e => { if (!disabled) { e.currentTarget.style.background = T.light; e.currentTarget.style.color = '#fff' } }}
-      onMouseLeave={e => { if (!disabled) { e.currentTarget.style.background = T.pale; e.currentTarget.style.color = T.deep } }}
-    >
-      <Sparkles size={13} strokeWidth={2.2}/>
-      {libelle}
-    </button>
-  )
-}
 
 function NavEtape({ retour, continuer, valide, saving, hint, plusTard, plusTardLabel }) {
   return (

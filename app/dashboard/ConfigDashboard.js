@@ -11,7 +11,9 @@ import { avantLancement, libelleLancement } from '@/lib/lancement'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
 import { capacitePrestation } from '@/lib/cours-collectifs'
-import { datesDeSeances, exclusionsQuiSeChevauchent } from '@/lib/abonnements'
+import { datesDeSeances, exclusionsQuiSeChevauchent, placerLaSerie, resumeDeLaSerie, seancesDeLaFormule, fenetreDeValidite } from '@/lib/abonnements'
+import { lieuALHeure } from '@/lib/lieux-activite'
+import { champsLieu } from '@/lib/lieu-fige'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
@@ -6236,7 +6238,7 @@ function TabRdv({ commercantId, commercant, toast }) {
       {subTab === 'prestations' && <TabRdvPrestations commercantId={commercantId} toast={toast} />}
       {subTab === 'praticiens'  && <TabRdvPraticiens commercantId={commercantId} toast={toast} />}
       {subTab === 'creneaux'    && <TabRdvCreneaux commercantId={commercantId} commercant={commercant} toast={toast} />}
-      {subTab === 'abonnements' && <TabRdvAbonnements commercantId={commercantId} toast={toast} />}
+      {subTab === 'abonnements' && <TabRdvAbonnements commercantId={commercantId} commercant={commercant} toast={toast} />}
       {subTab === 'fermetures'  && <TabRdvFermetures commercantId={commercantId} toast={toast} />}
     </div>
   )
@@ -6646,9 +6648,29 @@ function dureeParlante(jours) {
   return n === 1 ? '1 jour' : `${n} jours`
 }
 
-function TabRdvAbonnements({ commercantId, toast }) {
+// L'heure de fin d'une séance, à partir de son début et de sa durée.
+function heurePlusMinutes(hhmm, minutes) {
+  const [h, m] = String(hhmm || '00:00').slice(0, 5).split(':').map(Number)
+  const total = h * 60 + m + (Number(minutes) || 0)
+  const hh = String(Math.floor(total / 60) % 24).padStart(2, '0')
+  const mm = String(total % 60).padStart(2, '0')
+  return `${hh}:${mm}`
+}
+
+function TabRdvAbonnements({ commercantId, commercant, toast }) {
   const [formules, setFormules] = useState([])
   const [prestations, setPrestations] = useState([])
+  const [abonnes, setAbonnes] = useState([])
+  const [lieux, setLieux] = useState([])
+  const [showInscription, setShowInscription] = useState(false)
+  const [inscrivant, setInscrivant] = useState(false)
+  const initialInscription = {
+    formule_id: '', mode: 'place_fixe',
+    client_prenom: '', client_nom: '', client_telephone: '', client_email: '',
+    jour_semaine: 'lundi', heure_debut: '10:00',
+    paye: false, mode_paiement: '',
+  }
+  const [insc, setInsc] = useState(initialInscription)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
@@ -6669,17 +6691,203 @@ function TabRdvAbonnements({ commercantId, toast }) {
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: f }, { data: p }] = await Promise.all([
+    const [{ data: f }, { data: p }, { data: a }, { data: l }] = await Promise.all([
       supabase.from('abonnement_formules').select('*')
         .eq('commercant_id', commercantId).is('deleted_at', null)
         .order('ordre', { ascending: true }).order('created_at', { ascending: true }),
-      supabase.from('rdv_prestations').select('id, nom, capacite')
+      supabase.from('rdv_prestations').select('id, nom, capacite, duree_minutes, tva_taux')
         .eq('commercant_id', commercantId).is('deleted_at', null)
         .order('ordre', { ascending: true }),
+      supabase.from('abonnements').select('*')
+        .eq('commercant_id', commercantId).is('deleted_at', null)
+        .order('created_at', { ascending: false }),
+      supabase.from('commercant_lieux').select('*')
+        .eq('commercant_id', commercantId).is('deleted_at', null),
     ])
     setFormules(f || [])
     setPrestations(p || [])
+    setAbonnes(a || [])
+    setLieux(l || [])
     setLoading(false)
+  }
+
+  // ═══ LA SOUSCRIPTION ═══════════════════════════════════════════════════
+  // ⚠️ TOUT SE GRAVE À LA SIGNATURE. Période, prix, plafond hebdomadaire, lieu :
+  // modifier la formule l'an prochain ne doit pas réécrire les contrats déjà
+  // signés, exactement comme le prix et la TVA d'un rendez-vous.
+  async function inscrire() {
+    const formule = formules.find(f => f.id === insc.formule_id)
+    if (!formule) return toast('Choisis une formule', 'error')
+    if (!insc.client_prenom.trim()) return toast('Le prénom est obligatoire', 'error')
+    // ⚠️ En mode crédit, l'email n'est pas un confort : c'est la clé qui relie
+    // la réservation en ligne à l'abonnement. La base le refuse aussi.
+    if (insc.mode === 'credit' && !insc.client_email.trim()) {
+      return toast('Un abonnement à réserver soi-même exige un email', 'error')
+    }
+    const presta = prestations.find(p => p.id === formule.prestation_id)
+    if (!presta) return toast('Le cours de cette formule n’existe plus', 'error')
+
+    const aujourdhui = new Date().toISOString().slice(0, 10)
+    const fenetre = fenetreDeValidite(formule, { achatLe: aujourdhui })
+    if (!fenetre) return toast('Cette formule est incomplète, corrige-la d’abord', 'error')
+
+    const total = seancesDeLaFormule(formule, { jourSemaine: insc.jour_semaine })
+    if (total <= 0) return toast('Cette formule ne contient aucune séance ce jour-là', 'error')
+
+    const contrat = {
+      commercant_id: commercantId,
+      formule_id: formule.id,
+      prestation_id: presta.id,
+      client_prenom: insc.client_prenom.trim(),
+      client_nom: insc.client_nom.trim() || null,
+      client_telephone: insc.client_telephone.trim() || null,
+      // Email NORMALISÉ : c'est la clé de rattachement partout dans le projet,
+      // et une majuscule a déjà fait disparaître des commandes ici.
+      client_email: insc.client_email.trim().toLowerCase() || null,
+      mode: insc.mode,
+      type: formule.type,
+      jour_semaine: insc.mode === 'place_fixe' ? insc.jour_semaine : null,
+      heure_debut: insc.mode === 'place_fixe' ? insc.heure_debut : null,
+      date_debut: fenetre.debut,
+      date_fin: fenetre.fin,
+      prix: Number(formule.prix) || 0,
+      seances_total: total,
+      seances_par_semaine: formule.seances_par_semaine || 1,
+      statut: 'actif',
+      paye: !!insc.paye,
+      paye_le: insc.paye ? new Date().toISOString() : null,
+      mode_paiement: insc.paye ? (insc.mode_paiement || 'sur_place') : null,
+    }
+
+    setInscrivant(true)
+
+    // ─── Mode crédit : aucune séance générée, la cliente choisira ───────────
+    if (insc.mode === 'credit') {
+      const { error } = await supabase.from('abonnements').insert(contrat)
+      setInscrivant(false)
+      if (error) return toast(`Erreur : ${error.message}`, 'error')
+      toast(`${contrat.client_prenom} a ${total} séances à réserver`)
+      setShowInscription(false); setInsc(initialInscription)
+      return fetchAll()
+    }
+
+    // ─── Mode place fixe : on réserve toutes les séances d'un coup ──────────
+    const dates = datesDeSeances({
+      dateDebut: fenetre.debut, dateFin: fenetre.fin,
+      jourSemaine: insc.jour_semaine, periodesExclues: formule.periodes_exclues,
+    })
+
+    // Les places déjà prises, lues EN BASE pour toutes les dates à la fois.
+    const { data: dejaLa, error: errLecture } = await supabase
+      .from('rdv_reservations')
+      .select('date_rdv, place_no')
+      .eq('commercant_id', commercantId)
+      .eq('prestation_id', presta.id)
+      .eq('heure_debut', insc.heure_debut)
+      .in('date_rdv', dates)
+      .in('statut', ['confirme', 'honore'])
+      .is('deleted_at', null)
+    if (errLecture) { setInscrivant(false); return toast(`Erreur : ${errLecture.message}`, 'error') }
+
+    const occupeesParDate = {}
+    for (const r of dejaLa || []) {
+      (occupeesParDate[r.date_rdv] = occupeesParDate[r.date_rdv] || []).push(r.place_no)
+    }
+    const serie = placerLaSerie({
+      dates, capacite: capacitePrestation(presta), occupeesParDate,
+    })
+
+    // ⚠️ ON NE CACHE JAMAIS UN TROU. Une cliente qui paie 36 séances et n'en
+    // reçoit que 33 sans que personne ne le remarque, c'est le défaut le plus
+    // cher de tous. Les dates complètes sont nommées, et le commerçant tranche.
+    if (serie.completes.length > 0) {
+      const suite = window.confirm(`${resumeDeLaSerie(serie)}\n\nCréer quand même l’abonnement avec les séances disponibles ?`)
+      if (!suite) { setInscrivant(false); return }
+    }
+    if (serie.placees.length === 0) {
+      setInscrivant(false)
+      return toast('Aucune séance disponible sur cette période', 'error')
+    }
+
+    const { data: cree, error: errContrat } = await supabase
+      .from('abonnements').insert(contrat).select('id').single()
+    if (errContrat || !cree) {
+      setInscrivant(false)
+      return toast(`Erreur : ${errContrat?.message || 'échec'}`, 'error')
+    }
+
+    const duree = presta.duree_minutes || 60
+    // ⚠️ La place est réaffectée explicitement plus bas plutôt qu'en raccourci
+    // d'objet : le banc exige de voir une ÉCRITURE, et `place_no,` tout seul
+    // ressemble trop à une colonne qu'on lit dans un `select`.
+    const lignes = serie.placees.map(({ date, place_no: place }) => {
+      // ⚠️ LE LIEU EST GRAVÉ SÉANCE PAR SÉANCE, et il peut changer d'une
+      // semaine à l'autre : un marché de Noël remplace la salle habituelle.
+      // La règle est celle du module LIEUX, lue en mémoire et non en base :
+      // trente-six requêtes pour une inscription seraient absurdes.
+      const lieu = lieuALHeure({ commercant, lieux, jour: date, heure: insc.heure_debut })
+      return {
+        commercant_id: commercantId,
+        client_id: null,
+        prestation_id: presta.id,
+        abonnement_id: cree.id,
+        client_prenom: contrat.client_prenom,
+        client_nom: contrat.client_nom,
+        client_telephone: contrat.client_telephone,
+        client_email: contrat.client_email,
+        date_rdv: date,
+        heure_debut: insc.heure_debut,
+        heure_fin: heurePlusMinutes(insc.heure_debut, duree),
+        duree_minutes: duree,
+        // ⚠️ PRIX ZÉRO SUR LA SÉANCE, le montant vit sur le contrat. Le
+        // recopier trente-six fois multiplierait le chiffre d'affaires par
+        // trente-six dans les statistiques.
+        prix_estime: 0,
+        acompte_paye: false,
+        statut: 'confirme',
+        tva_taux: presta.tva_taux ?? null,
+        rgpd_marketing: false,
+        source: 'commercant',
+        place_no: place,
+        capacite_creneau: capacitePrestation(presta),
+        ...champsLieu(lieu),
+      }
+    })
+
+    const { error: errSeances } = await supabase.from('rdv_reservations').insert(lignes)
+    setInscrivant(false)
+    if (errSeances) {
+      // Le contrat existe, les séances non : on le dit franchement plutôt que
+      // de laisser un abonnement fantôme sans expliquer pourquoi.
+      return toast(errSeances.code === '23505'
+        ? 'Des places viennent d’être prises pendant l’inscription. Le contrat est créé, relance la génération.'
+        : `Contrat créé, mais les séances ont échoué : ${errSeances.message}`, 'error')
+    }
+    toast(`${contrat.client_prenom} est inscrite, ${lignes.length} séances réservées`)
+    setShowInscription(false); setInsc(initialInscription)
+    fetchAll()
+  }
+
+  async function resilier(a) {
+    if (!window.confirm(`Résilier l’abonnement de ${a.client_prenom} ? Ses séances à venir seront annulées.`)) return
+    const aujourdhui = new Date().toISOString().slice(0, 10)
+    const { error } = await supabase.from('abonnements')
+      .update({ statut: 'resilie' }).eq('id', a.id)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    // ⚠️ LES SÉANCES PASSÉES NE BOUGENT PAS. Elles ont eu lieu, elles comptent
+    // dans l'historique et dans les statistiques ; seul l'avenir se libère.
+    //
+    // ⚠️ ET LE STATUT S'ÉCRIT `annule_commercant`, jamais « annule » tout
+    // court : cette valeur-là n'existe pas en base. Le projet distingue qui a
+    // annulé, et trois statuts inventés de mémoire ont déjà faussé des
+    // statistiques entières.
+    await supabase.from('rdv_reservations')
+      .update({ statut: 'annule_commercant' })
+      .eq('abonnement_id', a.id)
+      .gte('date_rdv', aujourdhui)
+      .eq('statut', 'confirme')
+    toast('Abonnement résilié, les places à venir sont libérées')
+    fetchAll()
   }
 
   function openNew() {
@@ -6997,6 +7205,169 @@ function TabRdvAbonnements({ commercantId, toast }) {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* ═══ LES ABONNÉS ═══════════════════════════════════════════════════ */}
+      {formules.length > 0 && (
+        <div style={{ marginTop: 26 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+            <div>
+              <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>Abonnés</p>
+              <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+                {abonnes.length === 0 ? 'Personne pour l’instant' : `${abonnes.length} personne${abonnes.length > 1 ? 's' : ''}`}
+              </p>
+            </div>
+            <button onClick={() => { setInsc(initialInscription); setShowInscription(true) }}
+              style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
+              + Inscrire quelqu’un
+            </button>
+          </div>
+
+          {showInscription && (
+            <div style={{ background: '#fff', borderRadius: 14, padding: 16, border: `1px solid ${T.hairline}`, marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>La formule *</label>
+              <select value={insc.formule_id} onChange={e => setInsc({ ...insc, formule_id: e.target.value })}
+                style={{ ...s.input, marginBottom: 12 }}>
+                <option value="">Choisis une formule…</option>
+                {formules.filter(f => f.actif !== false).map(f => (
+                  <option key={f.id} value={f.id}>{f.libelle}{f.prix > 0 ? ` · ${Number(f.prix).toFixed(2)} €` : ''}</option>
+                ))}
+              </select>
+
+              {/* ⚠️ LA QUESTION QUI SÉPARE LES DEUX POPULATIONS. Une même
+                  formule, au même prix, se consomme de deux façons selon la
+                  personne : certaines ne toucheront jamais l'application. */}
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 6 }}>Qui réserve les séances ?</label>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                {[
+                  { id: 'place_fixe', titre: 'Je bloque sa place', desc: 'Toutes les semaines, elle n’a rien à faire' },
+                  { id: 'credit',     titre: 'Elle réserve',        desc: 'Chaque séance se déduit de son solde' },
+                ].map(o => (
+                  <button key={o.id} onClick={() => setInsc({ ...insc, mode: o.id })}
+                    style={{ flex: '1 1 150px', minWidth: 0, textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', background: insc.mode === o.id ? `${T.main}12` : '#fff', border: `1.5px solid ${insc.mode === o.id ? T.main : T.hairline}`, fontFamily: '"DM Sans", sans-serif' }}>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: insc.mode === o.id ? T.main : T.ink }}>{o.titre}</span>
+                    <span style={{ display: 'block', fontSize: 11, color: T.muted, marginTop: 2 }}>{o.desc}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Prénom *</label>
+                  <Input value={insc.client_prenom} onChange={e => setInsc({ ...insc, client_prenom: e.target.value })}/>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Nom</label>
+                  <Input value={insc.client_nom} onChange={e => setInsc({ ...insc, client_nom: e.target.value })}/>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Téléphone</label>
+                  <Input value={insc.client_telephone} onChange={e => setInsc({ ...insc, client_telephone: e.target.value })}/>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>
+                    Email {insc.mode === 'credit' ? '*' : ''}
+                  </label>
+                  <Input type="email" value={insc.client_email} onChange={e => setInsc({ ...insc, client_email: e.target.value })}/>
+                </div>
+              </div>
+              {insc.mode === 'credit' && (
+                <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.55, margin: '-6px 0 12px' }}>
+                  L’email est indispensable ici : c’est lui qui relie ses réservations à son abonnement.
+                </p>
+              )}
+
+              {insc.mode === 'place_fixe' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Son jour *</label>
+                    <select value={insc.jour_semaine} onChange={e => setInsc({ ...insc, jour_semaine: e.target.value })} style={s.input}>
+                      {JOURS_APERCU.map(j => <option key={j} value={j}>{j}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Son heure *</label>
+                    <Input type="time" value={insc.heure_debut} onChange={e => setInsc({ ...insc, heure_debut: e.target.value })}/>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginBottom: 12 }}>
+                <Toggle value={insc.paye} onChange={v => setInsc({ ...insc, paye: v })} label="Déjà payé"/>
+              </div>
+              {insc.paye && (
+                <select value={insc.mode_paiement} onChange={e => setInsc({ ...insc, mode_paiement: e.target.value })}
+                  style={{ ...s.input, marginBottom: 12 }}>
+                  <option value="sur_place">Sur place</option>
+                  <option value="virement">Virement</option>
+                </select>
+              )}
+
+              {/* Ce que la souscription va produire, AVANT de la produire. */}
+              {(() => {
+                const f = formules.find(x => x.id === insc.formule_id)
+                if (!f) return null
+                const n = seancesDeLaFormule(f, { jourSemaine: insc.jour_semaine })
+                return (
+                  <div style={{ background: `${T.main}0D`, border: `1px solid ${T.main}33`, borderRadius: 10, padding: 12, marginBottom: 14 }}>
+                    <p style={{ fontSize: 13, fontWeight: 800, color: T.main, margin: 0 }}>
+                      {n} séance{n > 1 ? 's' : ''}
+                      {insc.mode === 'place_fixe'
+                        ? ` seront réservées le ${insc.jour_semaine} à ${insc.heure_debut}.`
+                        : ' à réserver quand elle le souhaite.'}
+                    </p>
+                  </div>
+                )
+              })()}
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={inscrire} disabled={inscrivant}
+                  style={{ ...s.btn, ...s.btnPrimary, opacity: inscrivant ? 0.6 : 1, flex: '1 1 140px' }}>
+                  {inscrivant ? 'Inscription…' : 'Inscrire'}
+                </button>
+                <button onClick={() => { setShowInscription(false); setInsc(initialInscription) }}
+                  style={{ ...s.btn, ...s.btnGhost }}>Annuler</button>
+              </div>
+            </div>
+          )}
+
+          {abonnes.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {abonnes.map(a => {
+                const f = formules.find(x => x.id === a.formule_id)
+                const resilie = a.statut === 'resilie'
+                return (
+                  <div key={a.id} style={{ background: '#fff', borderRadius: 12, padding: 14, border: `1px solid ${T.hairline}`, opacity: resilie ? 0.5 : 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+                        <p style={{ fontSize: 14, fontWeight: 800, color: T.ink, overflowWrap: 'anywhere' }}>
+                          {a.client_prenom} {a.client_nom || ''}
+                          {resilie && <span style={{ ...s.tag, background: '#FEE2E2', color: '#B91C1C', marginLeft: 8 }}>Résilié</span>}
+                        </p>
+                        <p style={{ fontSize: 12, color: T.muted, marginTop: 3, overflowWrap: 'anywhere' }}>
+                          {f ? `${f.libelle} · ` : ''}{a.seances_total} séance{a.seances_total > 1 ? 's' : ''}
+                          {a.mode === 'place_fixe' ? ` · ${a.jour_semaine} à ${String(a.heure_debut || '').slice(0, 5)}` : ' · elle réserve elle-même'}
+                        </p>
+                        <p style={{ fontSize: 11.5, color: T.muted, marginTop: 3 }}>
+                          Du {dateCourte(a.date_debut)} au {dateCourte(a.date_fin)}
+                          {' · '}
+                          {a.paye
+                            ? <span style={{ color: '#15803D', fontWeight: 700 }}>Payé</span>
+                            : <span style={{ color: '#B45309', fontWeight: 700 }}>Paiement en attente</span>}
+                        </p>
+                      </div>
+                      {!resilie && (
+                        <button onClick={() => resilier(a)} style={{ ...s.btn, ...s.btnDanger, padding: '7px 12px', fontSize: 12, flexShrink: 0 }}>Résilier</button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

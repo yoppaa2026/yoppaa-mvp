@@ -299,10 +299,15 @@ verifier('au moins un mercredi ouvert sur 14 jours', jours.some(j => j.ouvert))
 // lu ce commentaire. Le banc compte les écritures existantes et exige qu'elles
 // soient toutes déclarées ici : un chemin de plus rougit tant qu'il n'est pas
 // équipé.
+// ⚠️ CETTE LISTE A DÉJÀ SERVI. Le 15/08, la génération de série des
+// abonnements a ajouté un quatrième chemin d'écriture dans ConfigDashboard, et
+// le banc a rougi AVANT que quiconque teste l'écran : « aucun chemin d'écriture
+// n'échappe à la liste ». C'est exactement le rôle qu'on lui demande.
 const CHEMINS_ECRITURE = [
   'app/api/stripe/webhook/route.js',
   'app/commander/rdv/[slug]/page.js',
   'app/dashboard/ModalNouveauRdv.js',
+  'app/dashboard/ConfigDashboard.js',
 ]
 
 const CHAINE_INSERT = /from\('rdv_reservations'\)\s*\n?\s*\.insert\(/g
@@ -360,6 +365,25 @@ verifier('et lit les places en base, pas dans l’état de l’écran',
 // Le chevauchement ne doit plus refuser un CO-INSCRIT du même cours.
 verifier('un co-inscrit du même cours n’est plus vu comme un conflit',
   /memeSeance/.test(srcModale) && /capacite > 1 && memeSeance/.test(srcModale))
+
+// ─── LA GÉNÉRATION DE SÉRIE DES ABONNEMENTS ────────────────────────────────
+// ⚠️ LE STATUT D'ANNULATION S'ÉCRIT `annule_commercant`. « annule » tout court
+// N'EXISTE PAS en base : le projet distingue qui a annulé, et trois statuts
+// inventés de mémoire ont déjà faussé des statistiques entières. Ce test
+// existe parce que je l'ai écrit de mémoire avant de le vérifier.
+const srcConfig = sansCommentaires(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+verifier('résilier un abonnement écrit un statut qui existe',
+  /statut: 'annule_commercant'/.test(srcConfig))
+verifier('et jamais « annule » tout court',
+  !/statut: 'annule'/.test(srcConfig))
+// ⚠️ Seules les séances À VENIR se libèrent : les passées ont eu lieu et
+// comptent dans l'historique comme dans les statistiques.
+verifier('la résiliation ne touche que les séances à venir',
+  /\.gte\('date_rdv', aujourdhui\)/.test(srcConfig))
+// ⚠️ LE PRIX VIT SUR LE CONTRAT, PAS SUR CHAQUE SÉANCE. Le recopier trente-six
+// fois multiplierait le chiffre d'affaires par trente-six.
+verifier('une séance d’abonnement ne porte pas le prix du contrat',
+  /prix_estime: 0,/.test(srcConfig))
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

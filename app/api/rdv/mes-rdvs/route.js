@@ -52,6 +52,7 @@ export async function GET(request) {
       commercant_id, prestation_id, praticien_id,
       acompte_paye_en_ligne, acompte_montant, acompte_paye_date,
       annulation_token, client_email,
+      abonnement_id,
       lieu_id, lieu_libelle, lieu_adresse,
       commercant:commercants(nom, slug, type, categorie, adresse, rdv_delai_annulation_heures),
       prestation:rdv_prestations(nom, duree_minutes),

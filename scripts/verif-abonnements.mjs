@@ -17,6 +17,7 @@ import {
   cleSemaine, dateEcartee, exclusionsQuiSeChevauchent, datesDeSeances,
   seancesDeLaFormule, fenetreDeValidite, soldeAbonnement, abonnementValable,
   peutReserverSurAbonnement, libelleSolde, placerLaSerie, resumeDeLaSerie,
+  libellePrixSeance,
 } from '../lib/abonnements.js'
 import { jourSemaineDe } from '../lib/creneaux.js'
 
@@ -340,6 +341,43 @@ const individuel = placerLaSerie({
 })
 verifier('un créneau individuel déjà pris reste complet',
   individuel.placees.length === 0 && individuel.completes.length === 1)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ CE QUE LA CLIENTE LIT SOUS SA SÉANCE : PAS « 0 € »
+//
+// Le prix vit sur le CONTRAT et chaque séance porte `prix_estime: 0`, pour ne
+// pas multiplier le chiffre d'affaires du commerçant par trente-six. Mais
+// l'écran « Mes rendez-vous » affichait le prix dès qu'il n'était pas nul, et
+// ZÉRO N'EST PAS NUL : une cliente qui avait réglé son année à 400 € voyait
+// trente-six lignes à « 0 € ». Troisième fois sur ce projet que `0` se fait
+// passer pour une valeur légitime là où il fallait tester l'ABSENCE.
+// ═══════════════════════════════════════════════════════════════════════════
+egal('une séance d’abonnement dit qu’elle est déjà payée',
+  libellePrixSeance({ abonnement_id: 'a1', prix_estime: 0 }), 'Compris dans ton abonnement')
+egal('un rendez-vous ordinaire garde son prix',
+  libellePrixSeance({ abonnement_id: null, prix_estime: 35 }), null)
+// ⚠️ ET UNE PRESTATION RÉELLEMENT OFFERTE GARDE SON « 0 € ». On ne regarde pas
+// le nombre, on regarde s'il y a un contrat derrière : c'est la vraie question,
+// et c'est ce qui distingue « déjà payé » de « gratuit ».
+egal('une prestation offerte hors abonnement reste à 0 €',
+  libellePrixSeance({ abonnement_id: null, prix_estime: 0 }), null)
+egal('un rendez-vous sans prix n’invente rien',
+  libellePrixSeance({ prix_estime: null }), null)
+egal('et un objet absent ne fait pas tomber l’écran', libellePrixSeance(null), null)
+
+// ⚠️ ET LA COLONNE DOIT ARRIVER JUSQU'À L'ÉCRAN. Un libellé conditionné à un
+// champ absent du `select` ne s'affiche JAMAIS, sans la moindre erreur. C'est
+// exactement ce qui avait vidé la galerie photos d'une fiche, et la route des
+// rendez-vous du Yopper énumère ses colonnes une par une.
+const srcMesRdvs = readFileSync(new URL('../app/api/rdv/mes-rdvs/route.js', import.meta.url), 'utf8')
+verifier('la route des rendez-vous du Yopper ramène le lien vers l’abonnement',
+  /abonnement_id/.test(srcMesRdvs))
+
+// Et le total dépensé ne compte pas une séance déjà réglée sur le contrat.
+const srcCommander = readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8')
+  .split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+verifier('le total dépensé exclut les séances d’abonnement',
+  /statut === 'honore' && !r\.abonnement_id/.test(srcCommander))
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

@@ -14,6 +14,7 @@ import { statutCreneaux, pastilleCreneaux, jourPlus } from '@/lib/statut-commerc
 import { jourLocalISO } from '@/lib/timezone'
 import { lieuxDuJour } from '@/lib/lieux-activite'
 import { morningADuContenu } from '@/lib/morning-contenu'
+import { libellePrixSeance } from '@/lib/abonnements'
 import { lirePositionMemorisee, memoriserPosition, marquerDemandee, dejaDemandee, decisionGeoloc, etatAutorisation } from '@/lib/geoloc'
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
@@ -2207,9 +2208,20 @@ export default function Commander() {
     + rdvsActifs.length * 3
 
   // Statistiques additionnelles (cards grid 2x2)
+  // ⚠️ UNE SÉANCE D'ABONNEMENT NE COMPTE PAS ICI, et son exclusion est
+  // EXPLICITE. Elle porte `prix_estime: 0`, donc l'addition ne changeait rien
+  // en chiffres, mais elle changeait le sens : cette carte prétendait totaliser
+  // ce que le Yopper a dépensé, en additionnant trente-six zéros pour une
+  // cliente qui avait réglé son année. Le prix vit sur le CONTRAT.
+  //
+  // ⚠️ CE TOTAL RESTE INCOMPLET tant que l'écran d'abonnement n'existe pas :
+  // le montant du contrat n'est lu nulle part côté Yopper. L'exclusion dit au
+  // moins clairement pourquoi, au lieu de faire croire à un calcul juste.
   const totalDepense =
     clientCommandes.reduce((acc, c) => acc + Number(c.total || 0), 0)
-    + rdvsActifs.filter(r => r.statut === 'honore').reduce((acc, r) => acc + Number(r.prix_estime || 0), 0)
+    + rdvsActifs
+      .filter(r => r.statut === 'honore' && !r.abonnement_id)
+      .reduce((acc, r) => acc + Number(r.prix_estime || 0), 0)
   const commercesUniques = new Set([
     ...clientCommandes.map(c => c.commercant_id),
     ...rdvsActifs.map(r => r.commercant_id),
@@ -3071,7 +3083,16 @@ export default function Commander() {
                                   </p>
                                 )}
                               </div>
-                              {r.prix_estime != null && (
+                              {/* ⚠️ UNE SÉANCE D'ABONNEMENT N'EST PAS À « 0 € »,
+                                  elle est DÉJÀ PAYÉE. Le prix vit sur le
+                                  contrat, chaque séance porte zéro pour ne pas
+                                  multiplier le chiffre d'affaires du commerçant
+                                  par trente-six, et l'affichage testait
+                                  `!= null` : une cliente qui avait réglé son
+                                  année voyait trente-six lignes à « 0 € ». */}
+                              {libellePrixSeance(r) ? (
+                                <p style={{ fontWeight: 800, color: '#10B981', fontSize: '0.7rem', flexShrink: 0, textAlign: 'right', maxWidth: 92, lineHeight: 1.3 }}>{libellePrixSeance(r)}</p>
+                              ) : r.prix_estime != null && (
                                 <p style={{ fontWeight: 900, color: T.main, fontSize: '0.95rem', letterSpacing: '-0.3px', flexShrink: 0 }}>{Number(r.prix_estime).toFixed(0)}€</p>
                               )}
                             </div>
@@ -3136,7 +3157,12 @@ export default function Commander() {
                             </p>
                           </div>
                           <div style={{ textAlign: 'right' }}>
-                            {r.prix_estime != null && <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(r.prix_estime).toFixed(0)}€</p>}
+                            {/* Même règle dans l'historique : « 0 € » sur une
+                                séance d'abonnement se lit comme une séance
+                                gratuite, pas comme une séance déjà réglée. */}
+                            {libellePrixSeance(r)
+                              ? <p style={{ fontWeight: 800, color: '#10B981', marginBottom: 3, fontSize: '0.66rem', lineHeight: 1.3 }}>Compris dans<br/>ton abonnement</p>
+                              : r.prix_estime != null && <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(r.prix_estime).toFixed(0)}€</p>}
                             <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: statutBg, color: statutColor }}>{statutLabel}</span>
                           </div>
                         </div>

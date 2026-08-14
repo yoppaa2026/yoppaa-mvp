@@ -64,8 +64,15 @@ export default function BandeDefilante({ children, className, style, libelle = '
     el.scrollBy({ left: sens * pasDefilement(el.clientWidth, pas), behavior: 'smooth' })
   }
 
+  // ⚠️ L'ÉTAT REMONTE SUR L'ENVELOPPE, et pas seulement sur les flèches. Les
+  // flèches n'existent qu'au-delà de 1024 px, donc sur téléphone RIEN ne disait
+  // qu'il restait des onglets à côté : le commerçant passait devant sans les
+  // voir. Ces deux attributs allument un voile en bord de piste, à toutes les
+  // largeurs, du côté où il reste vraiment quelque chose.
   return (
-    <div className="bande-defilante">
+    <div className="bande-defilante"
+      data-gauche={bords.gauche ? 'oui' : 'non'}
+      data-droite={bords.droite ? 'oui' : 'non'}>
       <div ref={piste} className={className} style={style}>{children}</div>
       <button type="button" className="bande-fleche bande-fleche-gauche"
         aria-label={`Faire défiler ${libelle} vers la gauche`}

@@ -308,7 +308,42 @@ input, textarea, select {
   position: relative;
 }
 
-/* Sur téléphone, la flèche n'existe pas du tout. */
+/* ───────────────────────────────────────────────────────────────────────────
+   LE VOILE DE BORD — l'indice qui manquait sur téléphone (15/08)
+   ───────────────────────────────────────────────────────────────────────────
+   ⚠️ LE DÉFAUT QUE ÇA CORRIGE. Les flèches ci-dessous n'existent qu'au-delà de
+   1024 px, et c'était un choix assumé : sur téléphone le doigt suffit. Sauf
+   qu'il faut d'abord SAVOIR qu'il y a quelque chose à faire glisser. Une barre
+   d'onglets qui se termine pile au bord de l'écran ressemble à une barre
+   complète, et le commerçant ne cherche pas ce dont il ignore l'existence.
+
+   Le voile s'allume donc À TOUTES LES LARGEURS, et seulement DU CÔTÉ où il
+   reste réellement du contenu : c'est un signal, pas une décoration. L'état
+   vient de `bordsDefilement`, la même fonction pure qui pilote les flèches.
+
+   ⚠️ UN MASQUE, PAS UN DÉGRADÉ DE COULEUR. Ces barres n'ont pas toutes le même
+   fond : les onglets sont sur du blanc, les jours et les filtres sur le fond de
+   page. Un dégradé vers le blanc laisserait une trace sale sur la moitié
+   d'entre elles. Le masque fait disparaître le CONTENU, il ignore le fond.
+
+   ⚠️ Et surtout : aucun `filter` ni `backdrop-filter` ici. C'est ce qui avait
+   fait geler le défilement sur iPhone. Un masque se compose sur le GPU, et il
+   n'est posé que sur les pistes qui débordent vraiment. */
+.bande-defilante[data-droite="oui"] > :first-child {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent 100%);
+}
+.bande-defilante[data-gauche="oui"] > :first-child {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 26px);
+  mask-image: linear-gradient(to right, transparent 0, #000 26px);
+}
+.bande-defilante[data-gauche="oui"][data-droite="oui"] > :first-child {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
+}
+
+/* Sur téléphone, la flèche n'existe pas du tout : le voile ci-dessus est le
+   seul indice, et le doigt reste la seule façon de faire. */
 .bande-fleche {
   display: none;
 }

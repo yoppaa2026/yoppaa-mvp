@@ -487,6 +487,67 @@ for (const chemin of FICHIERS_BUREAU) {
     nues.length === 0, nues.join(' · '))
 }
 
+// ─── LE VOILE DE BORD EXISTE AUSSI SUR TÉLÉPHONE ──────────────────────────
+// ⚠️ REMARQUE D'ALEX, 15/08 : « il faut un indice visuel sur mobile aussi, car
+// on ne sait pas toujours qu'il y a d'autres onglets et le commerçant passera à
+// côté. » Les flèches, elles, sont volontairement réservées au bureau : sur
+// téléphone c'est le doigt. Mais encore faut-il SAVOIR qu'il y a quelque chose
+// à faire glisser.
+//
+// Le défaut à interdire est donc précis : un voile enfermé dans un
+// `@media (min-width: …)` serait invisible là où il sert le plus.
+const cssGlobal = lire('app/globals.css')
+
+// Les plages du fichier qui vivent à l'intérieur d'un `@media`.
+function plagesMedia(css) {
+  const plages = []
+  for (const m of css.matchAll(/@media/g)) {
+    const ouvre = css.indexOf('{', m.index)
+    if (ouvre < 0) continue
+    let profondeur = 0
+    for (let i = ouvre; i < css.length; i++) {
+      if (css[i] === '{') profondeur++
+      else if (css[i] === '}') {
+        profondeur--
+        if (profondeur === 0) { plages.push([ouvre, i]); break }
+      }
+    }
+  }
+  return plages
+}
+
+function vitHorsMedia(css, selecteur) {
+  const idx = css.indexOf(selecteur)
+  if (idx < 0) return false
+  return !plagesMedia(css).some(([d, f]) => idx > d && idx < f)
+}
+
+// ⚠️ ON MESURE LA SONDE AVANT DE S'EN SERVIR, sur les deux réponses possibles.
+verifier('la sonde voit une règle libre',
+  vitHorsMedia('.a { color: red }', '.a'))
+verifier('la sonde voit une règle enfermée dans un média',
+  !vitHorsMedia('@media (min-width: 1024px) { .a { color: red } }', '.a'))
+verifier('et un média refermé ne piège pas la règle qui suit',
+  vitHorsMedia('@media (min-width: 1024px) { .b { color: red } } .a { color: blue }', '.a'))
+
+verifier('le voile de bord droit s’applique à toutes les largeurs',
+  vitHorsMedia(cssGlobal, '.bande-defilante[data-droite="oui"]'))
+verifier('le voile de bord gauche aussi',
+  vitHorsMedia(cssGlobal, '.bande-defilante[data-gauche="oui"]'))
+// ⚠️ Le masque, pas un dégradé : ces barres n'ont pas toutes le même fond, et
+// un dégradé vers le blanc salirait la moitié d'entre elles.
+verifier('le voile masque le contenu plutôt que de peindre un fond',
+  /\.bande-defilante\[data-droite="oui"\][^}]*mask-image/.test(cssGlobal))
+// ⚠️ Et surtout aucun flou : c'est ce qui avait fait geler le défilement iPhone.
+verifier('le voile n’introduit aucun flou',
+  !/\.bande-defilante\[data-[^}]*(backdrop-)?filter: *blur/.test(cssGlobal))
+
+// L'état doit remonter sur l'enveloppe, sinon le CSS ci-dessus ne s'allume
+// jamais. Les flèches et le voile lisent la MÊME mesure.
+const srcBande = lire('app/components/BandeDefilante.js')
+verifier('l’enveloppe porte l’état du bord gauche', /data-gauche=\{bords\.gauche/.test(srcBande))
+verifier('l’enveloppe porte l’état du bord droit', /data-droite=\{bords\.droite/.test(srcBande))
+
 // Les classes CSS qui déclarent le défilement doivent elles aussi être portées
 // par une BandeDefilante : `.jours-wrap` et `.filtres-wrap` du tableau de bord
 // défilent sans un seul style en ligne.

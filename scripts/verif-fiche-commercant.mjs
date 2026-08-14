@@ -508,6 +508,34 @@ for (const [nom, marqueur] of [
   verifier(`le signup annonce ${nom}`, signupSrcTxt.includes(marqueur))
 }
 
+// ─── AUCUN CHIFFRE QU'ON NE PEUT PAS PROUVER ──────────────────────────────
+// ⚠️ « Une belle photo, c'est +40 % de clics » ne reposait sur RIEN : ni sur
+// les statistiques de Yoppaa, qui n'existaient pas encore, ni sur une étude
+// citée. Une allégation chiffrée invérifiable est une promesse commerciale, et
+// le commerçant qui ne voit pas ces 40 % arriver a raison de nous le
+// reprocher. C'est aussi le genre de phrase qu'une émission de défense du
+// consommateur relève en premier.
+verifier('le signup n’avance plus de pourcentage invérifiable',
+  !/\+40 ?% de clics/.test(signupSrcTxt))
+
+// ⚠️ NE JAMAIS LAISSER CROIRE QUE TOUT LUI REVIENT. Yoppaa ne prend aucune
+// commission, c'est vrai, mais Stripe prélève ses frais à la source et c'est le
+// commerçant qui les supporte. Les taire au signup pour les lui faire découvrir
+// sur son premier versement est précisément le reproche à éviter.
+verifier('les frais Stripe sont annoncés dès l’inscription',
+  /1,4 ?% \+ 0,25 ?€/.test(signupSrcTxt))
+verifier('et la commission Yoppaa est nommée, jamais sous-entendue',
+  !/\(0 ?% commission\)/.test(signupSrcTxt))
+
+// Les cartes de plans sont ce qu'on voit AVANT le glossaire : elles portaient
+// les mêmes promesses fantômes.
+verifier('les cartes de plans ne vendent plus la newsletter',
+  !/Newsletter, segmentation/.test(signupSrcTxt))
+verifier('ni l’IA avancée',
+  !/IA avancée, export comptable/.test(signupSrcTxt))
+verifier('ni la réservation de table comme acquise',
+  !/livraison \+ réservation table/.test(signupSrcTxt))
+
 // ─── L'ÉTAPE HORAIRES SAIT QUE CERTAINS N'EN ONT PAS ──────────────────────
 // ⚠️ TROU DE COHÉRENCE INTRODUIT LE JOUR MÊME. Depuis que les horaires se
 // déduisent des emplacements, un commerçant qui change d'endroit remplissait

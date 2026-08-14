@@ -881,7 +881,13 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
   const featuresVendre = [
     {
       Icon: CreditCard, titre: 'Paiement en ligne',
-      desc: 'Stripe Connect intégré : ton Yopper paie son acompte ou sa commande directement sur ta fiche. Aucune commission Yoppaa. Ton argent va directement sur ton compte bancaire.',
+      // ⚠️ NE JAMAIS LAISSER CROIRE QUE TOUT LUI REVIENT. Yoppaa ne prend
+      // effectivement aucune commission, mais Stripe prélève ses frais à la
+      // source, et c'est le commerçant qui les supporte. Les taire ici pour les
+      // découvrir sur son premier versement, c'est exactement le reproche qu'on
+      // ne veut pas s'attirer. La page /legal les chiffre déjà, le signup doit
+      // dire la même chose.
+      desc: 'Ton client paie son acompte ou sa commande depuis ta fiche, et l’argent arrive sur ton compte bancaire sous quelques jours. Yoppaa ne prend aucune commission. Seuls les frais de Stripe, notre prestataire de paiement, s’appliquent : environ 1,4 % + 0,25 € par transaction pour une carte européenne.',
       plan: 'vendre',
     },
     {
@@ -1499,7 +1505,14 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
         Tes visuels
       </h1>
       <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 12px' }}>
-        Une belle photo, c&rsquo;est <strong style={{ color: T.bgPanel }}>+40 % de clics</strong> sur ta page. Tu pourras en ajouter d&rsquo;autres plus tard.
+        {/* ⚠️ « +40 % DE CLICS » A ÉTÉ RETIRÉ D'ICI. Ce chiffre ne reposait sur
+            aucune mesure : ni sur les statistiques de Yoppaa, qui n'existaient
+            pas encore, ni sur une étude citée. Une allégation chiffrée
+            invérifiable est une promesse commerciale, et le commerçant qui ne
+            voit pas ces 40 % arriver a raison de nous le reprocher. On dit
+            plutôt ce qui est vrai et vérifiable : la photo est ce qu'on voit
+            avant le nom. */}
+        Ta photo est ce qu&rsquo;un client voit avant même ton nom, dans la liste des commerces autour de lui. Tu pourras en ajouter d&rsquo;autres plus tard.
       </p>
 
       {/* Bloc d'aide : ce qui fonctionne, ce qui ne fonctionne pas */}
@@ -2849,7 +2862,7 @@ function CardPlan({ plan, categorie, actif, onClick }) {
     // ⚠️ Le détail promettait une « réservation produit » qui n'existe pas.
     : categorie === 'detail'
       ? 'Vente en ligne : retrait en magasin ou expédition'
-      : 'Click & Collect + livraison + réservation table'
+      : 'Commande à l’avance et livraison'
 
   const PLAN_CONFIG = {
     exister: {
@@ -2870,7 +2883,7 @@ function CardPlan({ plan, categorie, actif, onClick }) {
         'Tout Exister, plus :',
         'Actus illimitées, deals, Bonnes affaires',
         'Push ciblés aux Yoppers favoris',
-        'Newsletter, segmentation, IA assistant',
+        'Un assistant qui rédige tes textes à ta place',
       ],
       note: 'Sans engagement, résiliable en 1 clic',
     },
@@ -2881,8 +2894,8 @@ function CardPlan({ plan, categorie, actif, onClick }) {
       features: [
         'Tout Communiquer, plus :',
         VENDRE_FEATURE_TRANSACTIONNEL,
-        'Paiement en ligne (0 % commission)',
-        'Fidélité, IA avancée, export comptable',
+        'Paiement en ligne, sans commission Yoppaa',
+        'Carte de fidélité, bons cadeaux, export comptable',
       ],
       note: 'Sans engagement, résiliable en 1 clic',
     },

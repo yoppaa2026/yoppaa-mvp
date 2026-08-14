@@ -2,9 +2,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import ChampAdresse from '@/app/components/ChampAdresse'
+import BanniereCommerce from '@/app/components/BanniereCommerce'
 import { useRouter } from 'next/navigation'
 import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
 import { compresserImage } from '@/lib/compress-image'
+import { logoProvisoireSvg } from '@/lib/logo-provisoire'
 import { conseilPhoto, MAX_PHOTOS } from '@/lib/guide-photos'
 import { SHOP_PRODUCTS, classerProduitsParCategorie } from '@/lib/produits-boutique'
 // Icônes Lucide React : SVG inline alignés sur la charte canonique Yoppaa.
@@ -35,12 +37,6 @@ import { estFoodTruck } from '@/lib/types-commerce'
 function getPlanActif(commercant, onboarding) {
   return onboarding?.plan_choisi || commercant?.plan || 'exister'
 }
-// Exister = gratuit a vie : visuels et horaires sont fortement optionnels
-// (on offre une experience zero friction). Le commercant peut tout completer
-// depuis son dashboard apres signup.
-function peutSkipperVisuels(plan) {
-  return plan === 'exister' || plan === 'communiquer'
-}
 // Horaires d'ouverture obligatoires SAUF pour services vitrine en plan Exister
 // (un coiffeur peut etre purement sur RDV sans horaires fixes).
 function peutSkipperHoraires(plan, categorie) {
@@ -64,103 +60,36 @@ async function canvasVersBlob(canvas) {
   return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/png', 0.95))
 }
 
-function genererLogoCanvas(nom) {
-  const taille = 512
+// ⚠️ L'INITIALE A ÉTÉ REMPLACÉE PAR LE SYMBOLE DU MÉTIER (Alex, 14/08). Sur
+// l'accueil, la vignette d'un commerce fait 68 pixels de côté : un « C » blanc
+// dans un cercle violet peut être Ciseaux, Carrefour ou Chez Momo. Ça
+// ressemblait à un avatar par défaut, c'est-à-dire à l'absence de logo, et ça
+// desservait exactement ce qu'un logo doit servir : reconnaître un commerce
+// sans avoir à lire.
+//
+// Le tracé vit dans lib/logo-provisoire.js, qui n'a besoin ni du navigateur ni
+// de React : il rend un SVG, donc il se teste au banc.
+async function logoProvisoireCanvas(nom, type) {
+  const svg = logoProvisoireSvg({ nom, type, taille: 512 })
+  const image = new Image()
+  // On passe par une data URI plutôt que par un blob object URL : pas d'URL à
+  // révoquer, donc pas de fuite si la génération échoue en cours de route.
+  image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
+  await new Promise((resolve, reject) => {
+    image.onload = resolve
+    image.onerror = () => reject(new Error('SVG illisible'))
+  })
   const canvas = document.createElement('canvas')
-  canvas.width = taille
-  canvas.height = taille
-  const ctx = canvas.getContext('2d')
-  // Gradient radial violet : du clair au centre vers le sombre en bord
-  const grad = ctx.createRadialGradient(taille * 0.4, taille * 0.35, 30, taille / 2, taille / 2, taille / 2)
-  grad.addColorStop(0, '#9660E0')
-  grad.addColorStop(0.6, '#6B35C4')
-  grad.addColorStop(1, '#2D0F6B')
-  ctx.fillStyle = grad
-  ctx.beginPath()
-  ctx.arc(taille / 2, taille / 2, taille / 2, 0, Math.PI * 2)
-  ctx.fill()
-  // Initiale en blanc, Plus Jakarta Sans 800
-  const nomClean = (nom || 'Y').trim()
-  const initiale = nomClean.charAt(0).toUpperCase()
-  ctx.fillStyle = '#FFFFFF'
-  ctx.font = 'bold 300px "Plus Jakarta Sans", system-ui, sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(initiale, taille / 2, taille / 2 + 12)
+  canvas.width = 512
+  canvas.height = 512
+  canvas.getContext('2d').drawImage(image, 0, 0, 512, 512)
   return canvas
 }
 
 // Dots V2-B (5 dots maillon) — spec canonique 2026-06-12, fond fonce.
 // Sequence : grand / mini / grand / mini / grand, decalage vertical 0.4*base
 // sur les 4 dots du milieu pour former le sourire.
-function dessinerDotsV2B(ctx, centerX, topY, base, colors) {
-  const mini = base * 0.55
-  const gap = base * 0.55
-  const offset = base * 0.4
-  const total = 3 * base + 2 * mini + 4 * gap
-  let x = centerX - total / 2
-  // d1 grand (pas d'offset)
-  ctx.fillStyle = colors[0]
-  ctx.beginPath(); ctx.arc(x + base / 2, topY + base / 2, base / 2, 0, Math.PI * 2); ctx.fill()
-  x += base + gap
-  // d2 mini (offset)
-  ctx.fillStyle = colors[1]
-  ctx.beginPath(); ctx.arc(x + mini / 2, topY + offset + mini / 2, mini / 2, 0, Math.PI * 2); ctx.fill()
-  x += mini + gap
-  // d3 grand (offset)
-  ctx.fillStyle = colors[2]
-  ctx.beginPath(); ctx.arc(x + base / 2, topY + offset + base / 2, base / 2, 0, Math.PI * 2); ctx.fill()
-  x += base + gap
-  // d4 mini (offset)
-  ctx.fillStyle = colors[3]
-  ctx.beginPath(); ctx.arc(x + mini / 2, topY + offset + mini / 2, mini / 2, 0, Math.PI * 2); ctx.fill()
-  x += mini + gap
-  // d5 grand (pas d'offset)
-  ctx.fillStyle = colors[4]
-  ctx.beginPath(); ctx.arc(x + base / 2, topY + base / 2, base / 2, 0, Math.PI * 2); ctx.fill()
-}
 
-function genererCoverCanvas(nom) {
-  const w = 1600, h = 900
-  const canvas = document.createElement('canvas')
-  canvas.width = w; canvas.height = h
-  const ctx = canvas.getContext('2d')
-  // Gradient diagonal sombre Yoppaa
-  const grad = ctx.createLinearGradient(0, 0, w, h)
-  grad.addColorStop(0, '#160636')
-  grad.addColorStop(0.5, '#2D0F6B')
-  grad.addColorStop(1, '#1A0840')
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, w, h)
-  // Halo violet en haut a droite (rappel du header Yoppaa)
-  const halo = ctx.createRadialGradient(w * 0.85, h * 0.15, 0, w * 0.85, h * 0.15, w * 0.55)
-  halo.addColorStop(0, 'rgba(150, 96, 224, 0.35)')
-  halo.addColorStop(1, 'rgba(150, 96, 224, 0)')
-  ctx.fillStyle = halo
-  ctx.fillRect(0, 0, w, h)
-  // Nom du commerce centre (Plus Jakarta Sans 800 minuscules style wordmark)
-  ctx.fillStyle = '#FFFFFF'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  let fontSize = 130
-  ctx.font = `800 ${fontSize}px "Plus Jakarta Sans", system-ui, sans-serif`
-  const nomClean = (nom || 'Mon commerce').trim()
-  while (ctx.measureText(nomClean).width > w * 0.82 && fontSize > 50) {
-    fontSize -= 6
-    ctx.font = `800 ${fontSize}px "Plus Jakarta Sans", system-ui, sans-serif`
-  }
-  ctx.fillText(nomClean, w / 2, h / 2 - 40)
-  // Dots V2-B SOUS le nom (5 dots maillon, palette fond fonce)
-  // Couleurs : blanc / light / light / mid / mid (cf. composant YoppaaLogo)
-  const dotBase = 56
-  const dotsTopY = h / 2 + 60
-  dessinerDotsV2B(ctx, w / 2, dotsTopY, dotBase, ['#FFFFFF', '#C4A0F4', '#C4A0F4', '#9660E0', '#9660E0'])
-  // Slogan "sur Yoppaa" SOUS les dots
-  ctx.fillStyle = 'rgba(196, 160, 244, 0.9)'
-  ctx.font = '600 34px "Plus Jakarta Sans", system-ui, sans-serif'
-  ctx.fillText('sur Yoppaa', w / 2, dotsTopY + dotBase + 50)
-  return canvas
-}
 
 // ─── PALETTE ──────────────────────────────────────────────────────────────────
 const T = {
@@ -1286,14 +1215,11 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
 // - URL couverture insérée dans commercant_photos (type='couverture')
 function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, avancer, retour }) {
   const [logoUrl, setLogoUrl] = useState(commercant.logo_url || null)
-  const [couvertureUrl, setCouvertureUrl] = useState(null)
   // S4 : galerie = jusqu'a 4 photos supplementaires affichees en carrousel
   // sur la fiche client. Stockees en commercant_photos type='galerie'.
   const [galerie, setGalerie] = useState([])
   const [uploadingLogo, setUploadingLogo] = useState(false)
-  const [uploadingCover, setUploadingCover] = useState(false)
   const [uploadingGalerie, setUploadingGalerie] = useState(false)
-  const [warningCover, setWarningCover] = useState(null) // avertissement non bloquant (orientation, qualité…)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   // La couverture compte pour une : neuf de plus font dix photos en tout.
@@ -1308,8 +1234,6 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
       .order('ordre')
       .then(({ data }) => {
         if (annule) return
-        const couv = (data || []).find(p => p.type === 'couverture')
-        if (couv?.url) setCouvertureUrl(couv.url)
         setGalerie((data || []).filter(p => p.type === 'galerie' && p.url))
       })
     return () => { annule = true }
@@ -1360,7 +1284,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     onSaving?.('saving')
     try {
       const nom = commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Y'
-      const canvas = genererLogoCanvas(nom)
+      const canvas = await logoProvisoireCanvas(nom, commercant.type)
       const blob = await canvasVersBlob(canvas)
       if (!blob) { setError('Génération du logo impossible.'); return }
       const fileName = `logo-${commercant.id}-${Date.now()}.png`
@@ -1377,71 +1301,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     }
   }
 
-  async function genererCoverAuto() {
-    setError(''); setWarningCover(null)
-    setUploadingCover(true)
-    onSaving?.('saving')
-    try {
-      const nom = commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Mon commerce'
-      const canvas = genererCoverCanvas(nom)
-      const blob = await canvasVersBlob(canvas)
-      if (!blob) { setError('Génération de la couverture impossible.'); return }
-      const fileName = `cover-${commercant.id}-${Date.now()}.png`
-      const { error: upErr } = await supabase.storage.from('logos').upload(fileName, blob, { upsert: true, contentType: 'image/png' })
-      if (upErr) { setError(`Upload échoué : ${upErr.message}`); return }
-      const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
-      const url = urlData.publicUrl
-      await supabase.from('commercant_photos')
-        .delete()
-        .eq('commercant_id', commercant.id)
-        .eq('type', 'couverture')
-      await supabase.from('commercant_photos').insert({
-        commercant_id: commercant.id,
-        type: 'couverture',
-        url,
-        ordre: 0,
-      })
-      setCouvertureUrl(url)
-      onSaving?.('saved')
-    } finally {
-      setUploadingCover(false)
-    }
-  }
 
-  async function uploadCouverture(file) {
-    setError('')
-    setWarningCover(null)
-    const { error: err, dims } = await validerFichier(file)
-    if (err) { setError(err); return }
-    // Warning non bloquant : orientation portrait sur la couverture = mauvais rendu
-    // sur la fiche client. On accepte mais on prévient.
-    if (dims && dims.h > dims.w * 1.1) {
-      setWarningCover('Cette photo est en mode portrait : elle s\'affichera mal sur la couverture (paysage). On la garde quand même, mais on conseille de la remplacer par une photo prise à l\'horizontale.')
-    } else if (dims && Math.min(dims.w, dims.h) < 500) {
-      setWarningCover('La photo est un peu petite pour la couverture. Une image plus large (≥ 1200 px) rendra mieux sur grand écran.')
-    }
-    setUploadingCover(true)
-    // Compression client automatique (feedback_zero_friction) — cover paysage
-    const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
-    const fileName = `cover-${commercant.id}-${Date.now()}.jpg`
-    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
-    if (upErr) { setError(`Upload échoué : ${upErr.message}`); setUploadingCover(false); return }
-    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
-    const url = urlData.publicUrl
-    // Une seule photo de couverture : on supprime l'ancienne entrée si elle existe
-    await supabase.from('commercant_photos')
-      .delete()
-      .eq('commercant_id', commercant.id)
-      .eq('type', 'couverture')
-    await supabase.from('commercant_photos').insert({
-      commercant_id: commercant.id,
-      type: 'couverture',
-      url,
-      ordre: 0,
-    })
-    setCouvertureUrl(url)
-    setUploadingCover(false)
-  }
 
   // S4 : ajout d'une photo a la galerie (max 4). Ordre = max courant + 1
   // pour preserver l'ordre d'affichage du carousel cote fiche client.
@@ -1491,8 +1351,15 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
   async function continuer() {
     setSaving(true)
     if (onboarding) {
+      // ⚠️ `photo_ok` PORTE 20 DES 100 POINTS DU SCORE, et le seuil pour
+      // soumettre est de 60. Le brancher sur une photo de couverture qu'on ne
+      // demande plus aurait rendu ces 20 points inatteignables : un commerçant
+      // de service, qui peut déjà passer les horaires, se serait retrouvé
+      // bloqué sous le seuil sans comprendre pourquoi.
+      // Il porte donc désormais sur la galerie, qui est ce qu'on lui demande
+      // vraiment et ce que ses clients verront.
       const { data } = await supabase.from('onboarding_commercants')
-        .update({ photo_ok: !!couvertureUrl }).eq('id', onboarding.id).select().single()
+        .update({ photo_ok: galerie.length > 0 }).eq('id', onboarding.id).select().single()
       if (data) onUpdateOb(data)
     }
     setSaving(false)
@@ -1548,25 +1415,20 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
         </p>
       </div>
 
-      <Card titre="Photo de couverture" sous="C'est ta vignette sur Yoppaa : la première chose qu'un client voit en parcourant les commerces. Doit être ultra reconnaissable et qualitative.">
-        <UploadZone
-          url={couvertureUrl}
-          uploading={uploadingCover}
-          aspect="16/9"
-          minHeight={180}
-          label="Ajouter la photo de couverture"
-          onFile={f => uploadCouverture(f)}
-        />
-        {warningCover && (
-          <div style={{ marginTop: 10, padding: '8px 12px', background: '#FFF7ED', borderLeft: '3px solid #EA580C', borderRadius: 6, fontSize: 12, color: '#7C2D12', fontWeight: 600, lineHeight: 1.45, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-            <AlertTriangle size={14} strokeWidth={2.2} style={{ flexShrink: 0, marginTop: 1 }}/>
-            <span>{warningCover}</span>
-          </div>
-        )}
-        <BoutonGenererVisuel onClick={genererCoverAuto} disabled={uploadingCover} libelle="Je n'ai pas de photo, génère une couverture aux couleurs de Yoppaa"/>
-        <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
-          <strong style={{ color: T.bgPanel }}>Idéal :</strong> ta façade telle qu&apos;on la voit depuis la rue, c&apos;est le <strong style={{ color: T.bgPanel }}>premier repère</strong> pour le client qui arrive à pied. Enseigne nette et lisible, couleurs vives, lumière du jour. Format paysage 16:9, qualité maximale. Si pas de façade exploitable (boutique en galerie, food truck mobile), prends un produit phare très photogénique.
+      {/* ⚠️ « PHOTO DE COUVERTURE » RETIRÉE ICI (Alex, 14/08). Elle ne
+          devenait PAS la bannière du haut de fiche : celle-ci est dessinée par
+          le composant BanniereCommerce, à partir du nom, et ne lit aucune
+          image. On demandait donc un travail au commerçant pour une photo qui
+          n'apparaissait pas là où le titre le laissait croire.
+          À la place, il voit ce que sa fiche donnera vraiment. */}
+      <Card titre="Le haut de ta fiche" sous="Il est créé automatiquement à partir du nom de ton commerce. Rien à faire, et rien à uploader.">
+        <div style={{ position: 'relative', height: 150, borderRadius: 14, overflow: 'hidden', border: `1px solid ${T.hairline}` }}>
+          <BanniereCommerce nom={commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Ton commerce'} taillePolice="1.3rem"/>
         </div>
+        <p style={{ fontSize: 11.5, color: T.muted, margin: '10px 0 0', lineHeight: 1.5 }}>
+          C&apos;est la signature Yoppaa : un Yopper reconnaît une fiche Yoppaa avant même
+          de lire. Tes photos à toi, elles, s&apos;affichent juste en dessous.
+        </p>
       </Card>
 
       <Card titre={`Mon commerce en images (${galerie.length + 1}/${MAX_PHOTOS})`} sous="Elles défilent dans cet ordre sur ta page. Rien n'est obligatoire, mais trois photos valent mieux qu'une.">
@@ -1601,7 +1463,13 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
         </div>
       </Card>
 
-      <Card titre="Logo" sous="Affiché dans la card flottante de ta page client. Format carré conseillé.">
+      {/* ⚠️ LE LOGO N'EST PAS UN ORNEMENT, et le texte doit le dire (Alex,
+          14/08). C'est la seule image qui accompagne un commerce PARTOUT :
+          l'accueil, la liste des favoris, le suivi de commande. Un Yopper
+          retrouve son boulanger à sa vignette avant de lire son nom. On peut
+          lui en générer un, mais son vrai logo vaudra toujours mieux : c'est
+          son identité, pas la nôtre. */}
+      <Card titre="Ton logo" sous="C'est à ça que tes clients te reconnaîtront dans la liste des commerces, dans leurs favoris et sur leurs commandes.">
         <UploadZone
           url={logoUrl}
           uploading={uploadingLogo}
@@ -1611,9 +1479,15 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
           onFile={uploadLogo}
           maxWidth={140}
         />
-        <BoutonGenererVisuel onClick={genererLogoAuto} disabled={uploadingLogo} libelle="Je n'ai pas de logo, génère un cercle violet avec mon initiale"/>
+        <BoutonGenererVisuel onClick={genererLogoAuto} disabled={uploadingLogo} libelle="Je n'ai pas encore de logo, dépanne-moi"/>
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
-          <strong style={{ color: T.bgPanel }}>Idéal :</strong> ton logo seul sur fond uni (blanc ou couleur). Si tu n&apos;en as pas, une photo carrée recadrée sur ton enseigne fait l&apos;affaire.
+          <strong style={{ color: T.bgPanel }}>Le tien vaut mieux que le nôtre :</strong> c&apos;est ton identité,
+          celle qu&apos;on retrouve sur ta vitrine et sur tes sacs. Ton logo seul sur fond uni,
+          ou une photo carrée bien recadrée sur ton enseigne.
+          <span style={{ display: 'block', marginTop: 4 }}>
+            Si tu n&apos;en as pas encore, on t&apos;en fabrique un aux couleurs de ton métier
+            pour que ta fiche ne reste pas vide. Tu le remplaceras quand tu voudras.
+          </span>
         </div>
       </Card>
 
@@ -1628,7 +1502,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
         continuer={continuer}
         valide={true}
         saving={saving}
-        hint={couvertureUrl || logoUrl ? null : (peutSkipperVisuels(getPlanActif(commercant, onboarding)) ? 'Tu peux passer et ajouter tes visuels plus tard depuis ton tableau de bord.' : 'Recommandé pour ta visibilité.')}
+        hint={logoUrl || galerie.length > 0 ? null : 'Sans logo ni photo, ta fiche paraît vide. Tu peux aussi les ajouter plus tard depuis ton tableau de bord.'}
       />
     </div>
   )
@@ -2539,7 +2413,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
         <ScoreBar score={score}/>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 14, fontSize: 12 }}>
           <ScoreItem label="Adresse géocodable" ok={commercant.latitude && commercant.longitude} pts={20}/>
-          <ScoreItem label="Photo couverture" ok={onboarding.photo_ok} pts={20}/>
+          <ScoreItem label="Au moins une photo" ok={onboarding.photo_ok} pts={20}/>
           <ScoreItem label="Horaires" ok={commercant.horaires_detail && Object.values(commercant.horaires_detail).some(h => h?.ouvert)} pts={20}/>
           <ScoreItem label="Description ≥ 20" ok={commercant.description?.length >= 20} pts={10}/>
           <ScoreItem label="Logo" ok={!!commercant.logo_url} pts={10}/>

@@ -13,6 +13,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { CONSEILS_PHOTOS, MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '../lib/guide-photos.js'
 import { normaliserUrl, estIpPrivee, texteUtile } from '../lib/site-web.js'
+import { symbolePourType, couleurPourNom, logoProvisoireSvg } from '../lib/logo-provisoire.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -507,6 +508,64 @@ for (const [nom, marqueur] of [
 ]) {
   verifier(`le signup annonce ${nom}`, signupSrcTxt.includes(marqueur))
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE HAUT DE FICHE EST GÉNÉRÉ, ON NE LE DEMANDE PLUS
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LA « PHOTO DE COUVERTURE » N'ALLAIT PAS OÙ LE COMMERÇANT CROYAIT. Le haut
+// de fiche est dessiné par `BanniereCommerce` à partir du nom, et ne lit AUCUNE
+// image. Cette photo servait de première photo de galerie, sous un titre qui
+// promettait une bannière : on faisait travailler le commerçant pour un
+// résultat qu'il ne verrait jamais là où on le lui annonçait.
+verifier('le signup ne demande plus de photo de couverture',
+  !/<Card titre="Photo de couverture"/.test(signupSrcTxt))
+verifier('mais il montre le haut de fiche généré',
+  /<BanniereCommerce nom=/.test(signupSrcTxt))
+// ⚠️ `photo_ok` PORTE 20 DES 100 POINTS, et le seuil pour soumettre est 60. Le
+// laisser branché sur une photo qu'on ne demande plus aurait rendu ces points
+// inatteignables : un commerçant de service, qui peut déjà passer les horaires,
+// se serait retrouvé bloqué sous le seuil sans comprendre pourquoi.
+verifier('le score compte désormais les photos de galerie',
+  /photo_ok: galerie\.length > 0/.test(signupSrcTxt))
+
+// ─── LE LOGO DIT LE MÉTIER, PLUS UNE INITIALE ─────────────────────────────
+// ⚠️ Sur l'accueil, la vignette fait 68 pixels : un « C » blanc dans un cercle
+// violet peut être Ciseaux, Carrefour ou Chez Momo. Ça ressemblait à un avatar
+// par défaut, donc à l'absence de logo, et ça desservait ce qu'un logo doit
+// servir : reconnaître un commerce sans avoir à lire. Relevé par Alex le 14/08.
+egal('un coiffeur reçoit des ciseaux', symbolePourType('Coiffeur'), 'ciseaux')
+egal('une boulangerie reçoit du pain', symbolePourType('Boulangerie'), 'pain')
+egal('un cours de yoga reçoit des haltères', symbolePourType('Cours - coaching'), 'halteres')
+egal('un food truck reçoit une fourchette', symbolePourType('Food truck'), 'fourchette')
+// Un métier inconnu ne doit rien inventer : la boutique dit « un commerce »,
+// ce qui reste vrai quoi qu'il arrive.
+egal('un métier inconnu retombe sur la boutique', symbolePourType('Métier inédit'), 'boutique')
+egal('et un type vide aussi', symbolePourType(''), 'boutique')
+egal('comme un type absent', symbolePourType(null), 'boutique')
+
+// ⚠️ LA COULEUR VIENT DU NOM, pas du hasard : deux coiffeurs de la même rue
+// partagent le même symbole et doivent rester distinguables.
+verifier('deux commerces du même métier n’ont pas la même couleur',
+  couleurPourNom('Ciseaux provisoires').clair !== couleurPourNom('Coiffure Martine').clair)
+// ⚠️ Et elle ne bouge JAMAIS pour un nom donné : un logo qui changerait à
+// chaque affichage ne serait pas un logo.
+egal('la couleur d’un nom ne change pas',
+  couleurPourNom('Le Fournil').clair, couleurPourNom('Le Fournil').clair)
+
+const svgLogo = logoProvisoireSvg({ nom: 'Ciseaux provisoires', type: 'Coiffeur' })
+verifier('le logo est un SVG complet',
+  svgLogo.startsWith('<svg') && svgLogo.trim().endsWith('</svg>'))
+verifier('il porte bien le symbole du métier', /circle cx="6" cy="6"/.test(svgLogo))
+verifier('et il n’écrit aucune initiale', !/<text|font-size/.test(svgLogo))
+
+// ─── ET LE TEXTE DIT POURQUOI LE LOGO COMPTE ──────────────────────────────
+// ⚠️ Demande d'Alex : le logo touche à l'identité du commerçant, c'est ce qui
+// permet au Yopper de le retrouver. Le signup le présentait comme un ornement
+// « affiché dans la card flottante », ce qui ne dit rien à personne.
+verifier('le signup explique à quoi sert le logo',
+  /tes clients te reconnaîtront/.test(signupSrcTxt))
+verifier('et rappelle que le sien vaut mieux que le nôtre',
+  /Le tien vaut mieux que le nôtre/.test(signupSrcTxt))
 
 // ─── AUCUN CHIFFRE QU'ON NE PEUT PAS PROUVER ──────────────────────────────
 // ⚠️ « Une belle photo, c'est +40 % de clics » ne reposait sur RIEN : ni sur

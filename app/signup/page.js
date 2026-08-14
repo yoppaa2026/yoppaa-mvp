@@ -2283,7 +2283,13 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
     const { data: ob, error: obErr } = await supabase.from('onboarding_commercants')
       .update({
         statut: 'en_attente_validation',
-        validation_auto_score: score,
+        // ⚠️ LE POURCENTAGE, PAS L'OBJET. `scoreOnboarding` rendait un nombre
+        // avant le 14/08 ; depuis, elle rend un bilan complet (pourcentage,
+        // critères, manquants). Le nom de la variable n'a pas bougé, donc cette
+        // écriture a continué de passer l'objet entier dans une colonne
+        // `integer`, et PostgreSQL refusait la soumission au tout dernier
+        // clic du parcours d'inscription.
+        validation_auto_score: score.pourcentage,
         success_pack_choisi: aSuccessPack ? 'success_pack' : null,
         completed_at: new Date().toISOString(),
       })
@@ -2336,7 +2342,8 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
           type: commercant.type,
           email: commercant.email,
           plan: commercant.plan,
-          score,
+          // Même raison qu'au-dessus : on annonce un pourcentage, pas un bilan.
+          score: score.pourcentage,
           success_pack: shopChoices.has('success_pack') ? 'success_pack' : null,
           shop_choices: [...shopChoices],
           shop_total_ht: totalChoisis,

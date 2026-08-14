@@ -13,7 +13,8 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { CONSEILS_PHOTOS, MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '../lib/guide-photos.js'
 import { normaliserUrl, estIpPrivee, texteUtile } from '../lib/site-web.js'
-import { symbolePourType, couleurPourNom, logoProvisoireSvg, propositionsLogo } from '../lib/logo-provisoire.js'
+import { symbolePourType, symbolesPourType, couleurPourNom, logoProvisoireSvg, propositionsLogo } from '../lib/logo-provisoire.js'
+import { TYPES_SERVICE, TYPES_ALIMENTAIRE, TYPES_DETAIL } from '../lib/types-commerce.js'
 import { emailMerciPreinscription } from '../lib/resend-landing.js'
 
 let ok = 0, ko = 0
@@ -655,6 +656,67 @@ verifier('les frais Stripe sont annoncés dès l’inscription',
   /1,4 ?% \+ 0,25 ?€/.test(signupSrcTxt))
 verifier('et la commission Yoppaa est nommée, jamais sous-entendue',
   !/\(0 ?% commission\)/.test(signupSrcTxt))
+
+// ─── LE SCORE S'ÉCRIT EN NOMBRE, JAMAIS EN OBJET ──────────────────────────
+// ⚠️ DÉFAUT VÉCU LE 15/08, AU PIRE ENDROIT POSSIBLE : le tout dernier clic du
+// parcours d'inscription. `scoreOnboarding` rendait un NOMBRE avant le 14/08 ;
+// depuis, elle rend un bilan complet. Le nom de la variable, `score`, n'a pas
+// changé, donc l'écriture en base a continué de passer l'objet entier dans une
+// colonne `integer`. PostgreSQL refusait, et le commerçant lisait un pavé de
+// JSON en rouge à la place de sa validation.
+//
+// ⚠️ AUCUN OUTIL NE POUVAIT L'ATTRAPER : ni le lint, ni le build, ni le banc,
+// puisque le type ne change qu'à l'exécution et que la colonne est en base. Un
+// changement de type de retour est un changement de contrat, et il faut aller
+// relire CHAQUE appelant. Cette vérification tient la place de cette relecture.
+// `signupSrc` est déjà lu plus haut, sans commentaires : on le réutilise.
+verifier('le score écrit en base est un pourcentage',
+  /validation_auto_score: *score\.pourcentage/.test(signupSrc))
+verifier('et jamais le bilan complet',
+  !/validation_auto_score: *score *[,}]/.test(signupSrc))
+verifier('le score annoncé à Yoppaa est un pourcentage aussi',
+  !/^\s*score, *$/m.test(signupSrc))
+
+// ─── LES MÉTIERS, ET LE SYMBOLE QU'ON LEUR PROPOSE ────────────────────────
+// ⚠️ AJOUT DU 15/08 : « Yoga - pilates ». Une professeure de yoga ne trouvait
+// pas son métier dans la liste ; le plus proche, « Cours - coaching », ne dit
+// rien d'elle. C'est la première impression d'un vrai commerçant sur le signup.
+verifier('le yoga et le pilates ont leur propre métier',
+  TYPES_SERVICE.includes('Yoga - pilates'))
+
+// ⚠️ L'ORDRE DES SYMBOLES COMPTE PLUS QUE LEUR PRÉSENCE. Le bien-être et la
+// salle de sport partageaient une seule ligne dans la table, donc un studio de
+// yoga se voyait proposer un HALTÈRE en premier. Un commerçant pressé prend
+// toujours la première proposition : mettre la feuille en second ne suffit pas.
+egal('le yoga propose une feuille en premier', symbolePourType('Yoga - pilates'), 'feuille')
+egal('le massage aussi', symbolePourType('Massage - bien-être'), 'feuille')
+// Non-régression : le sport garde son haltère.
+egal('la salle de sport garde son haltère', symbolePourType('Salle de sport'), 'halteres')
+egal('et le coach sportif aussi', symbolePourType('Coach sportif'), 'halteres')
+verifier('le yoga garde quand même l’haltère en secours',
+  symbolesPourType('Yoga - pilates').includes('halteres'))
+
+// ⚠️ LA CONTRAINTE QUI N'ÉTAIT TESTÉE NULLE PART. L'en-tête de
+// `lib/types-commerce.js` l'écrit noir sur blanc depuis le 23/07 : les libellés
+// ne peuvent contenir ni « & », ni « / », ni « , », parce que `splitTypes`
+// découpe les doubles métiers sur ces trois caractères. Un libellé fautif
+// couperait le métier en deux SANS ERREUR, et personne ne le verrait avant
+// qu'un commerçant s'affiche avec un métier tronqué.
+for (const [nomListe, liste] of [
+  ['alimentaire', TYPES_ALIMENTAIRE], ['service', TYPES_SERVICE], ['détail', TYPES_DETAIL],
+]) {
+  const fautifs = liste.filter(t => /[&/,]/.test(t))
+  verifier(`aucun métier ${nomListe} ne contient un séparateur de double métier`,
+    fautifs.length === 0, fautifs.join(' · '))
+  verifier(`aucun métier ${nomListe} n’est vide ou mal détouré`,
+    liste.every(t => typeof t === 'string' && t === t.trim() && t.length > 1))
+}
+// ⚠️ ON MESURE LA SONDE : sans ce cas, un balayage qui ne trouve jamais rien
+// passerait pour une preuve.
+verifier('un libellé fautif serait bien repéré', /[&/,]/.test('Boulangerie & Pâtisserie'))
+
+// Un métier inconnu ne casse rien, il retombe sur la boutique générique.
+egal('un métier hors liste reste servi', symbolePourType('Astrologue'), 'boutique')
 
 // ─── LA MÊME RÈGLE, MAIS PARTOUT AILLEURS ─────────────────────────────────
 // ⚠️ Le signup avait été corrigé le 14/08, et lui seul. Onze autres surfaces

@@ -652,6 +652,16 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {[i.client_prenom, i.client_nom].filter(Boolean).join(' ') || 'Client'}
+                      {/* ⚠️ DISTINGUER L'ABONNÉE DE CELLE QUI PAIE À LA SÉANCE.
+                          Sur une liste de douze noms identiques, le commerçant
+                          n'a aucun moyen de savoir qui a déjà réglé son année
+                          et qui doit payer en arrivant. Le lien existe déjà
+                          dans la réservation, il ne manquait qu'à le dire. */}
+                      {i.abonnement_id && (
+                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 900, color: T.main, background: T.pale, borderRadius: 100, padding: '1px 7px', verticalAlign: 'middle' }}>
+                          abonnée
+                        </span>
+                      )}
                     </span>
                     {i.client_telephone && (
                       <span style={{ display: 'block', fontSize: 11.5, color: T.muted, fontWeight: 600 }}>{i.client_telephone}</span>

@@ -385,6 +385,26 @@ verifier('la résiliation ne touche que les séances à venir',
 verifier('une séance d’abonnement ne porte pas le prix du contrat',
   /prix_estime: 0,/.test(srcConfig))
 
+// ─── L'ABONNÉE SE RECONNAÎT DANS L'AGENDA ──────────────────────────────────
+// Sur une liste de douze noms, rien ne disait qui avait déjà réglé son année et
+// qui devait payer en arrivant. Le lien existait dans la réservation depuis la
+// migration, il ne manquait qu'à l'afficher.
+const srcAgenda = sansCommentaires(readFileSync(new URL('../app/dashboard/AgendaRdv.js', import.meta.url), 'utf8'))
+verifier('l’agenda distingue une abonnée d’une séance à l’unité',
+  /i\.abonnement_id &&/.test(srcAgenda))
+
+// ⚠️ ET LA COLONNE DOIT ARRIVER JUSQU'À L'ÉCRAN. Un badge conditionné à un
+// champ absent du `select` ne s'affiche JAMAIS, sans la moindre erreur : c'est
+// exactement ce qui avait vidé la galerie photos d'une des deux fiches. Le
+// select part de `*` aujourd'hui ; le jour où quelqu'un le resserre pour gagner
+// quelques octets, ce test le rattrape.
+const srcTableau = sansCommentaires(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+const selectRdvs = /const SELECT_RDVS = `([^`]*)`/.exec(srcTableau)?.[1] || ''
+verifier('le select de l’agenda est bien lu', selectRdvs.length > 0)
+verifier('il ramène de quoi reconnaître une abonnée',
+  selectRdvs.trimStart().startsWith('*') || /abonnement_id/.test(selectRdvs),
+  selectRdvs.slice(0, 60))
+
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

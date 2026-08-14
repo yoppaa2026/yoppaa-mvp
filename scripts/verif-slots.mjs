@@ -5,6 +5,7 @@
 // dire. Le bug du 05/08, où la pause d'une praticienne bloquait ses collègues,
 // a vécu ici pendant des semaines.
 
+import { readFileSync, readdirSync } from 'node:fs'
 import {
   timeToMinutes, minutesToTime, jourSemaineDate, isoDate,
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos,
@@ -275,6 +276,90 @@ const jours = genererJoursDispos({ nbJours: 14, horairesDetail: horaires, crenea
 egal('14 jours générés', jours.length, 14)
 verifier('les mercredis sont ouverts', jours.filter(j => j.ouvert).every(j => jourSemaineDate(j.date) === 'mercredi'), JSON.stringify(jours.filter(j => j.ouvert).map(j => isoDate(j.date))))
 verifier('au moins un mercredi ouvert sur 14 jours', jours.some(j => j.ouvert))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOUS LES CHEMINS QUI CRÉENT UNE RÉSERVATION GRAVENT LA PLACE ET LA CAPACITÉ
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ DÉFAUT TROUVÉ LE 15/08 DANS DU CODE DÉJÀ LIVRÉ. Le module des cours
+// collectifs du 13/08 avait équipé la réservation en ligne et le webhook
+// Stripe, mais PAS la création manuelle depuis le tableau de bord. Résultat :
+//
+//   • sans `place_no`, deux inscrits d'un même cours se disputaient la place 1
+//     et l'index unique renvoyait « ce créneau vient d'être pris » devant un
+//     cours à moitié vide ;
+//   • sans `capacite_creneau`, la valeur par défaut 1 activait la contrainte
+//     d'exclusion, qui bloque le deuxième inscrit dès qu'un praticien est nommé.
+//
+// Et le contrôle de chevauchement de la modale refusait de toute façon TOUT
+// rendez-vous superposé : la commerçante ne pouvait pas inscrire la deuxième
+// personne de son cours de dix.
+//
+// ⚠️ ON COMPTE, ON NE CHERCHE PAS. Vérifier les trois fichiers connus laisserait
+// passer le quatrième chemin, écrit dans six mois par quelqu'un qui n'aura pas
+// lu ce commentaire. Le banc compte les écritures existantes et exige qu'elles
+// soient toutes déclarées ici : un chemin de plus rougit tant qu'il n'est pas
+// équipé.
+const CHEMINS_ECRITURE = [
+  'app/api/stripe/webhook/route.js',
+  'app/commander/rdv/[slug]/page.js',
+  'app/dashboard/ModalNouveauRdv.js',
+]
+
+const CHAINE_INSERT = /from\('rdv_reservations'\)\s*\n?\s*\.insert\(/g
+
+function fichiersQuiInserent(dossier) {
+  const trouves = []
+  const parcourir = (url) => {
+    for (const e of readdirSync(url, { withFileTypes: true })) {
+      const enfant = new URL(`${e.name}${e.isDirectory() ? '/' : ''}`, url)
+      if (e.isDirectory()) { parcourir(enfant); continue }
+      if (!/\.jsx?$/.test(e.name)) continue
+      const src = readFileSync(enfant, 'utf8')
+      if (CHAINE_INSERT.test(src)) trouves.push(`${url.pathname.split('/yoppaa-mvp/')[1] || ''}${e.name}`)
+      CHAINE_INSERT.lastIndex = 0
+    }
+  }
+  parcourir(new URL(`../${dossier}/`, import.meta.url))
+  return trouves
+}
+
+const ecrivains = fichiersQuiInserent('app')
+verifier('aucun chemin d’écriture n’échappe à la liste',
+  ecrivains.length === CHEMINS_ECRITURE.length,
+  `trouvés : ${ecrivains.join(' · ')}`)
+for (const f of ecrivains) {
+  verifier(`${f} est un chemin déclaré`, CHEMINS_ECRITURE.some(c => f.endsWith(c.split('/').pop())))
+}
+
+// ⚠️ RETIRER LES COMMENTAIRES, ET EXIGER UNE AFFECTATION. Ce test est né
+// FAUSSEMENT VERT : la mutation qui retirait les deux colonnes du payload ne
+// le faisait pas rougir, parce que les commentaires ci-dessus CITENT
+// `place_no` et `capacite_creneau` pour expliquer le défaut. Chercher un mot
+// dans un fichier qui parle de ce mot ne prouve rien. On cherche donc la forme
+// `place_no:`, qui est une écriture et pas une explication.
+const sansCommentaires = (src) =>
+  src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+
+for (const chemin of CHEMINS_ECRITURE) {
+  const src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
+  // Les trois chemins n'écrivent pas de la même façon : le webhook complète un
+  // payload déjà construit (`payload.place_no = …`), les deux autres déclarent
+  // la propriété (`place_no: …`). Les deux formes sont des ÉCRITURES, et c'est
+  // tout ce qui compte ici.
+  verifier(`${chemin} grave la place occupée`, /place_no\s*[:=][^=]/.test(src))
+  verifier(`${chemin} grave la capacité du créneau`, /capacite_creneau\s*[:=][^=]/.test(src))
+}
+
+// ⚠️ ET LA PLACE SE CALCULE, elle ne se devine pas. Un chemin qui écrirait
+// `place_no: 1` en dur retomberait exactement dans le défaut d'origine.
+const srcModale = readFileSync(new URL('../app/dashboard/ModalNouveauRdv.js', import.meta.url), 'utf8')
+verifier('la création manuelle demande la première place LIBRE',
+  /premierePlaceLibre\(/.test(srcModale))
+verifier('et lit les places en base, pas dans l’état de l’écran',
+  /\.eq\('heure_debut', heureInit\)/.test(srcModale))
+// Le chevauchement ne doit plus refuser un CO-INSCRIT du même cours.
+verifier('un co-inscrit du même cours n’est plus vu comme un conflit',
+  /memeSeance/.test(srcModale) && /capacite > 1 && memeSeance/.test(srcModale))
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

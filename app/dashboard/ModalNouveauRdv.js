@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
+import { capacitePrestation, premierePlaceLibre } from '@/lib/cours-collectifs'
 
 const T = {
   main:    '#6B35C4',
@@ -97,18 +98,61 @@ export default function ModalNouveauRdv({
         nbCreneaux: (creneaux || []).length,
         nbRdvsExistants: (rdvsExistants || []).length,
       })
-      // 1) Overlap avec un RDV existant : on regarde dans rdvsExistants (state du dashboard)
-      const overlap = (rdvsExistants || []).some(r => {
+      // 1) Overlap avec un RDV existant.
+      //
+      // ⚠️ CE CONTRÔLE IGNORAIT LES COURS COLLECTIFS, et c'était un vrai trou :
+      // il refusait TOUT rendez-vous qui se superpose, donc la commerçante ne
+      // pouvait pas inscrire la deuxième personne d'un cours de dix depuis son
+      // tableau de bord. Le module du 13/08 avait équipé la réservation en
+      // ligne et le webhook, jamais ce chemin-là.
+      //
+      // On sépare donc deux natures de superposition :
+      //   • LA MÊME SÉANCE (même prestation, même date, même heure de début) :
+      //     ce sont des CO-INSCRITS, pas un conflit, tant qu'il reste de la
+      //     place ;
+      //   • tout le reste : un conflit, exactement comme avant, parce que
+      //     personne ne peut faire deux choses différentes à la même heure.
+      const capacite = capacitePrestation(presta)
+      const memeSeance = (r) => r.prestation_id === presta.id
+        && r.date_rdv === dateStr
+        && String(r.heure_debut || '').slice(0, 5) === heureInit.slice(0, 5)
+
+      const conflitReel = (rdvsExistants || []).some(r => {
         if (r.date_rdv !== dateStr) return false
         if (!['confirme', 'honore'].includes(r.statut)) return false
+        if (capacite > 1 && memeSeance(r)) return false
         const rStart = timeToMinutes(r.heure_debut)
         const rEnd   = timeToMinutes(r.heure_fin)
         return debutMin < rEnd && finMin > rStart
       })
-      if (overlap) {
+      if (conflitReel) {
         setError('Ce créneau chevauche un RDV déjà existant. Choisis un autre horaire.')
         setSubmitting(false)
         return
+      }
+
+      // ⚠️ LES PLACES SE LISENT EN BASE, JAMAIS DANS L'ÉTAT DE L'ÉCRAN. L'agenda
+      // peut avoir quelques minutes de retard, et une place attribuée deux fois
+      // serait rejetée par l'index unique avec un message incompréhensible.
+      let placeNo = 1
+      if (capacite > 1) {
+        const { data: dejaLa } = await supabase
+          .from('rdv_reservations')
+          .select('place_no')
+          .eq('commercant_id', commercant.id)
+          .eq('prestation_id', presta.id)
+          .eq('date_rdv', dateStr)
+          .eq('heure_debut', heureInit)
+          .in('statut', ['confirme', 'honore'])
+          .is('deleted_at', null)
+        const prises = (dejaLa || []).map(r => r.place_no)
+        const libre = premierePlaceLibre(presta, prises)
+        if (libre === null) {
+          setError(`Ce cours est complet (${capacite} personne${capacite > 1 ? 's' : ''}).`)
+          setSubmitting(false)
+          return
+        }
+        placeNo = libre
       }
 
       // 2) Bornes shop ce jour-la : le RDV doit tenir ENTIÈREMENT dans une des
@@ -200,6 +244,13 @@ export default function ModalNouveauRdv({
         notes_client: notes.trim() || null,
         rgpd_marketing: false,
         source: 'commercant',               // distingue des RDVs pris en ligne par un Yopper
+        // ⚠️ LA PLACE ET LA CAPACITÉ, GRAVÉES ICI AUSSI. Sans `place_no`, deux
+        // inscrits d'un même cours se disputaient la place 1 et l'index unique
+        // renvoyait « ce créneau vient d'être pris » devant un cours vide. Sans
+        // `capacite_creneau`, la contrainte d'exclusion, active quand elle vaut
+        // 1, bloquait le deuxième inscrit dès qu'un praticien était nommé.
+        place_no: placeNo,
+        capacite_creneau: capacite,
       }
       // ⚠️ LE LIEU EST GRAVÉ À LA RÉSERVATION, ici aussi. Un rendez-vous pris
       // au comptoir par le commerçant doit dire où aller comme les autres.
@@ -207,7 +258,12 @@ export default function ModalNouveauRdv({
       const { error: errInsert } = await supabase.from('rdv_reservations').insert(payload)
       if (errInsert) {
         if (errInsert.code === '23505') {
-          setError('Ce créneau exact vient d\'être pris (autre RDV identique). Recharge ton agenda.')
+          // ⚠️ SUR UN COURS, CE MESSAGE MENTAIT. La place calculée juste avant
+          // vient d'être prise par quelqu'un d'autre : le cours n'est pas
+          // « déjà pris », il a simplement bougé pendant la saisie.
+          setError(capacite > 1
+            ? 'Une place vient d\'être prise pendant ta saisie. Réessaie, la suivante sera calculée.'
+            : 'Ce créneau exact vient d\'être pris (autre RDV identique). Recharge ton agenda.')
         } else {
           setError(`Erreur : ${errInsert.message || 'inconnue'}`)
         }

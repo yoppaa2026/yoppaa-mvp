@@ -16,7 +16,7 @@ import {
   TYPES_FORMULE, MODES_ABONNEMENT, STATUTS_ABONNEMENT,
   cleSemaine, dateEcartee, exclusionsQuiSeChevauchent, datesDeSeances,
   seancesDeLaFormule, fenetreDeValidite, soldeAbonnement, abonnementValable,
-  peutReserverSurAbonnement, libelleSolde,
+  peutReserverSurAbonnement, libelleSolde, placerLaSerie, resumeDeLaSerie,
 } from '../lib/abonnements.js'
 import { jourSemaineDe } from '../lib/creneaux.js'
 
@@ -292,6 +292,54 @@ egal('et quand les dix séances sont prises',
   peutReserverSurAbonnement(CARNET_SIGNE, { date: '2026-12-01', seancesUtilisees: 10 }).raison,
   'solde_epuise')
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. LA SÉRIE : QUELLE PLACE, QUELLE SEMAINE
+// ═══════════════════════════════════════════════════════════════════════════
+const TROIS = ['2026-09-07', '2026-09-14', '2026-09-21']
+
+egal('sur un cours vide, tout le monde prend la place 1',
+  placerLaSerie({ dates: TROIS, capacite: 10 }).placees,
+  [{ date: '2026-09-07', place_no: 1 }, { date: '2026-09-14', place_no: 1 }, { date: '2026-09-21', place_no: 1 }])
+
+// ⚠️ LA PLACE SE LIBÈRE AU MILIEU, et la série doit le savoir semaine par
+// semaine : sur un cours où 1, 2 et 4 sont pris, la suivante est la 3.
+egal('chaque semaine prend le premier TROU, pas le suivant du compte',
+  placerLaSerie({
+    dates: TROIS, capacite: 10,
+    occupeesParDate: { '2026-09-07': [1, 2, 4], '2026-09-14': [1], '2026-09-21': [] },
+  }).placees,
+  [{ date: '2026-09-07', place_no: 3 }, { date: '2026-09-14', place_no: 2 }, { date: '2026-09-21', place_no: 1 }])
+
+// ⚠️ UNE SEMAINE COMPLÈTE NE FAIT PAS TOMBER TOUTE LA SÉRIE. Inscrire une
+// cliente en novembre sur une année bien remplie doit marcher.
+const partielle = placerLaSerie({
+  dates: TROIS, capacite: 2,
+  occupeesParDate: { '2026-09-14': [1, 2] },
+})
+egal('la semaine pleine est écartée', partielle.completes, ['2026-09-14'])
+verifier('les autres sont quand même placées', partielle.placees.length === 2)
+
+// ⚠️ ET ON NOMME LES DATES QUI MANQUENT. « 3 séances n'ont pas pu être
+// placées » laisse le commerçant chercher lesquelles.
+verifier('le résumé nomme la date complète',
+  resumeDeLaSerie(partielle).includes('14/09'), resumeDeLaSerie(partielle))
+verifier('et dit combien passent sur combien',
+  resumeDeLaSerie(partielle).includes('2 séances sur 3'), resumeDeLaSerie(partielle))
+verifier('une série sans obstacle ne parle pas de complet',
+  !resumeDeLaSerie(placerLaSerie({ dates: TROIS, capacite: 10 })).includes('Complet'))
+egal('une série vide le dit',
+  resumeDeLaSerie({ placees: [], completes: [] }), 'Aucune séance à placer sur cette période.')
+egal('et le singulier est accordé',
+  resumeDeLaSerie(placerLaSerie({ dates: ['2026-09-07'], capacite: 5 })), '1 séance sera réservée.')
+
+// Un rendez-vous individuel garde exactement l'ancien comportement : capacité 1,
+// donc une seule place possible, et la deuxième inscription est refusée.
+const individuel = placerLaSerie({
+  dates: ['2026-09-07'], capacite: 1, occupeesParDate: { '2026-09-07': [1] },
+})
+verifier('un créneau individuel déjà pris reste complet',
+  individuel.placees.length === 0 && individuel.completes.length === 1)
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

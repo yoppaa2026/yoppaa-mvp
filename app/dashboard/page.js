@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
 import ModalNouveauRdv from './ModalNouveauRdv'
+import ModalDeplacerRdv from './ModalDeplacerRdv'
 import { Reply, ClipboardList } from 'lucide-react'
 import { canDo } from '@/lib/plans'
 import { remplissageCreneaux } from '@/lib/creneaux'
@@ -590,7 +591,7 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
 // ─── Carte RDV (vitrine) ──────────────────────────────────────────────────────
 // Affichage d'un RDV pour le commercant : heure, prestation, duree, client (nom/tel/email),
 // notes du client, prix estime. Actions : Honore / No-show / Annuler.
-function CarteRdv({ rdv, onChangerStatut }) {
+function CarteRdv({ rdv, onChangerStatut, onDeplacer = null }) {
   const statut = STATUTS_RDV[rdv.statut] || STATUTS_RDV['confirme']
   const { couleur } = statut
 
@@ -708,6 +709,30 @@ function CarteRdv({ rdv, onChangerStatut }) {
           </div>
         )}
 
+        {/* DÉPLACER, et c'est un geste à part.
+            ⚠️ IL MANQUAIT, et son absence forçait un contresens : pour décaler
+            une cliente d'une heure, le commerçant n'avait d'autre choix que
+            d'ANNULER puis de recréer. Le client lisait « ton rendez-vous est
+            annulé », le numéro changeait, et l'historique gardait la trace
+            d'une annulation qui n'avait jamais eu lieu.
+            Réservé au statut confirmé : un rendez-vous honoré a eu lieu, un
+            rendez-vous annulé n'a plus de place à reprendre. */}
+        {onDeplacer && rdv.statut === 'confirme' && (
+          <button onClick={() => onDeplacer(rdv)}
+            style={{
+              width: '100%', marginTop: 10, padding: '0.5rem',
+              borderRadius: 10, border: `1.5px solid ${T.main}`,
+              background: '#fff', color: T.main, fontWeight: 800, fontSize: '0.78rem',
+              cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m14 15 2 2-2 2"/><path d="M8 17h8"/>
+            </svg>
+            Déplacer ce RDV
+          </button>
+        )}
+
         {/* Actions selon statut */}
         {statut.actions.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: statut.actions.length === 3 ? '2fr 1fr 1fr' : '1fr', gap: 6, marginTop: 10 }}>
@@ -769,6 +794,7 @@ export default function Dashboard() {
   const [praticiensRdv, setPraticiensRdv] = useState([])    // rdv_praticiens actifs, pour AgendaRdv (filtre + badges)
   const [rdvSelectionne, setRdvSelectionne] = useState(null)  // RDV ouvert dans la modale details
   const [nouveauRdvSlot, setNouveauRdvSlot] = useState(null)  // { date, heure } -> ouvre la modale d'ajout manuel
+  const [rdvADeplacer, setRdvADeplacer] = useState(null)      // RDV ouvert dans la modale de déplacement
   // Mode impersonation : admin Yoppaa connecte en tant qu'un commercant pour le support.
   // Detecte via localStorage yoppaa_admin_impersonating (set depuis /admin "Voir Dashboard").
   // Affiche un banner sticky en haut + bouton Quitter qui revient sur /admin.
@@ -2491,13 +2517,28 @@ export default function Dashboard() {
         <div onClick={() => setRdvSelectionne(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(26,8,64,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9998, padding: '1rem', backdropFilter: 'blur(4px)' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '85dvh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <CarteRdv rdv={rdvSelectionne} onChangerStatut={(id, st, raison) => { changerStatutRdv(id, st, raison); setRdvSelectionne(null) }}/>
+            <CarteRdv rdv={rdvSelectionne}
+              onChangerStatut={(id, st, raison) => { changerStatutRdv(id, st, raison); setRdvSelectionne(null) }}
+              onDeplacer={(r) => { setRdvSelectionne(null); setRdvADeplacer(r) }}/>
             <button onClick={() => setRdvSelectionne(null)}
               style={{ width: '100%', marginTop: 12, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>
               Fermer
             </button>
           </div>
         </div>
+      )}
+
+      {/* ─── Modale « Déplacer ce RDV » ────────────────────────────────────── */}
+      {rdvADeplacer && commercant && (
+        <ModalDeplacerRdv
+          commercant={commercant}
+          rdv={rdvADeplacer}
+          prestations={prestationsRdv}
+          creneaux={creneauxRdv}
+          rdvsExistants={rdvs}
+          onClose={() => setRdvADeplacer(null)}
+          onDeplace={() => { setRdvADeplacer(null); chargerRdvs(commercant.id) }}
+        />
       )}
     </div>
   )

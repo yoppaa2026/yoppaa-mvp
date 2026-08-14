@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
 import { capacitePrestation, premierePlaceLibre } from '@/lib/cours-collectifs'
+import { creneauAcceptable, creneauxDuJour } from '@/lib/deplacement-rdv'
 
 const T = {
   main:    '#6B35C4',
@@ -98,35 +99,39 @@ export default function ModalNouveauRdv({
         nbCreneaux: (creneaux || []).length,
         nbRdvsExistants: (rdvsExistants || []).length,
       })
-      // 1) Overlap avec un RDV existant.
+      // 1) CE CRÉNEAU ACCEPTE-T-IL CE RENDEZ-VOUS ?
       //
-      // ⚠️ CE CONTRÔLE IGNORAIT LES COURS COLLECTIFS, et c'était un vrai trou :
-      // il refusait TOUT rendez-vous qui se superpose, donc la commerçante ne
-      // pouvait pas inscrire la deuxième personne d'un cours de dix depuis son
-      // tableau de bord. Le module du 13/08 avait équipé la réservation en
-      // ligne et le webhook, jamais ce chemin-là.
+      // ⚠️ LA RÈGLE A DÉMÉNAGÉ DANS `lib/deplacement-rdv.js`, et ce n'est pas
+      // un rangement. Le déplacement d'un rendez-vous, livré le 15/08, doit
+      // poser EXACTEMENT les mêmes questions que la création : chevauchement,
+      // jour de fermeture, heures d'ouverture, pause, dépassement de créneau.
+      // Deux copies de cinq contrôles auraient divergé au premier correctif, et
+      // le commerçant aurait obtenu un créneau par une porte et un refus par
+      // l'autre. Elle est PURE, donc le banc l'exécute au lieu de la lire.
       //
-      // On sépare donc deux natures de superposition :
-      //   • LA MÊME SÉANCE (même prestation, même date, même heure de début) :
-      //     ce sont des CO-INSCRITS, pas un conflit, tant qu'il reste de la
-      //     place ;
-      //   • tout le reste : un conflit, exactement comme avant, parce que
-      //     personne ne peut faire deux choses différentes à la même heure.
+      // Elle distingue toujours deux natures de superposition : les CO-INSCRITS
+      // d'un même cours, qui ne sont pas un conflit tant qu'il reste de la
+      // place, et tout le reste, qui en est un.
+      //
+      // Un seul changement d'ordre : les contrôles de structure (fermeture,
+      // horaires, pause) passent désormais AVANT le calcul des places. Un
+      // rendez-vous posé un jour de fermeture disait « ce cours est complet »,
+      // il dit maintenant « ton commerce est fermé ce jour-là », ce qui est la
+      // vraie raison.
       const capacite = capacitePrestation(presta)
-      const memeSeance = (r) => r.prestation_id === presta.id
-        && r.date_rdv === dateStr
-        && String(r.heure_debut || '').slice(0, 5) === heureInit.slice(0, 5)
-
-      const conflitReel = (rdvsExistants || []).some(r => {
-        if (r.date_rdv !== dateStr) return false
-        if (!['confirme', 'honore'].includes(r.statut)) return false
-        if (capacite > 1 && memeSeance(r)) return false
-        const rStart = timeToMinutes(r.heure_debut)
-        const rEnd   = timeToMinutes(r.heure_fin)
-        return debutMin < rEnd && finMin > rStart
+      const verdict = creneauAcceptable({
+        dateStr,
+        heureDebut: heureInit,
+        dureeMinutes: dureeMin,
+        horaireJour,
+        creneauxJour: creneauxDuJour(creneaux, { dateStr, jour: jourKey }),
+        rdvsExistants,
+        capacite,
+        prestationId: presta.id,
       })
-      if (conflitReel) {
-        setError('Ce créneau chevauche un RDV déjà existant. Choisis un autre horaire.')
+      if (!verdict.ok) {
+        console.warn('[ModalNouveauRdv] créneau refusé', verdict)
+        setError(verdict.message)
         setSubmitting(false)
         return
       }
@@ -155,71 +160,13 @@ export default function ModalNouveauRdv({
         placeNo = libre
       }
 
-      // 2) Bornes shop ce jour-la : le RDV doit tenir ENTIÈREMENT dans une des
-      // plages d'ouverture (horaires à pause : debut/fin + debut2/fin2 optionnels)
-      if (!horaireJour || horaireJour.ouvert === false) {
-        setError(`Ton commerce est fermé ce jour-là.`)
-        setSubmitting(false)
-        return
-      }
-      const plagesShop = []
-      if (horaireJour.debut && horaireJour.fin) plagesShop.push([timeToMinutes(horaireJour.debut), timeToMinutes(horaireJour.fin)])
-      if (horaireJour.debut2 && horaireJour.fin2) plagesShop.push([timeToMinutes(horaireJour.debut2), timeToMinutes(horaireJour.fin2)])
-      if (plagesShop.length > 0 && !plagesShop.some(([a, b]) => debutMin >= a && finMin <= b)) {
-        const plagesTxt = plagesShop.map(([a, b]) => `${minutesToTime(a)}-${minutesToTime(b)}`).join(' et ')
-        setError(`Ce RDV tombe en dehors de tes heures d'ouverture (${plagesTxt}).`)
-        setSubmitting(false)
-        return
-      }
-
-      // 3) Chevauchement pause
-      const creneauxJour = (creneaux || []).filter(c =>
-        c.actif !== false
-        && (c.date_specifique === dateStr || (!c.date_specifique && c.jour_semaine === jourKey))
-      )
-      console.info('[ModalNouveauRdv] check pause', {
-        jourKey,
-        creneauxJour: creneauxJour.map(c => ({ jour: c.jour_semaine, pauseD: c.pause_debut, pauseF: c.pause_fin })),
-      })
-      const pauseConflict = creneauxJour.some(c => {
-        if (!c.pause_debut || !c.pause_fin) return false
-        const pS = timeToMinutes(c.pause_debut), pE = timeToMinutes(c.pause_fin)
-        const conflict = debutMin < pE && finMin > pS
-        if (conflict) console.warn('[ModalNouveauRdv] pause conflict detected', { debutMin, finMin, pS, pE })
-        return conflict
-      })
-      if (pauseConflict) {
-        setError('Ce RDV chevauche ta pause.')
-        setSubmitting(false)
-        return
-      }
-
-      // 3b) Chevauchement avec la BORNE DU CRENEAU (debut/fin du creneau jour)
-      // Important : un RDV qui demarre dans le creneau mais le DEPASSE doit etre refuse
-      // (ex: 11h+2h sur un creneau 9h-12h -> dépasse à 13h).
-      const creneauOverflow = creneauxJour.some(c => {
-        const cDebut = timeToMinutes(c.heure_debut)
-        const cFin   = timeToMinutes(c.heure_fin)
-        if (debutMin < cDebut || debutMin >= cFin) return false  // pas dans ce creneau
-        if (finMin > cFin) {
-          console.warn('[ModalNouveauRdv] creneau overflow', { debutMin, finMin, cDebut, cFin })
-          return true
-        }
-        return false
-      })
-      if (creneauOverflow) {
-        setError('Ce RDV dépasse la fin du créneau d\'ouverture (déborde sur pause ou fermeture).')
-        setSubmitting(false)
-        return
-      }
-
-      // 4) Acompte (figé selon prestation ou pourcent global)
+      // 2) Acompte (figé selon prestation ou pourcent global)
       const acomptePct = presta.acompte_pourcent || commercant.rdv_acompte_global || 0
       const acompteMontant = (prixEstime != null && acomptePct > 0)
         ? Math.round(prixEstime * acomptePct) / 100
         : null
 
-      // 5) Insert
+      // 3) Insert
       const rdvId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null
       const payload = {
         ...(rdvId ? { id: rdvId } : {}),
@@ -271,7 +218,7 @@ export default function ModalNouveauRdv({
         return
       }
 
-      // 6) Email de confirmation au Yopper (non-bloquant, fire-and-forget).
+      // 4) Email de confirmation au Yopper (non-bloquant, fire-and-forget).
       //    Pas d'email commercant (c'est lui qui cree le RDV, il sait deja).
       if (rdvId && (email.trim() || null)) {
         fetch('/api/emails/rdv-confirme', {
@@ -281,7 +228,7 @@ export default function ModalNouveauRdv({
         }).catch(e => console.warn('[ModalNouveauRdv] emails fire-and-forget KO', e))
       }
 
-      // 7) Success : callback + close
+      // 5) Success : callback + close
       if (onCreated) onCreated()
       onClose()
 

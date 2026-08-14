@@ -11,6 +11,10 @@ import {
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos,
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
+import {
+  creneauAcceptable, creneauxDuJour, deplacementUtile, champsDuDeplacement,
+  heureDeFin, minutesDeLHeure,
+} from '../lib/deplacement-rdv.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -362,9 +366,11 @@ verifier('la création manuelle demande la première place LIBRE',
   /premierePlaceLibre\(/.test(srcModale))
 verifier('et lit les places en base, pas dans l’état de l’écran',
   /\.eq\('heure_debut', heureInit\)/.test(srcModale))
-// Le chevauchement ne doit plus refuser un CO-INSCRIT du même cours.
-verifier('un co-inscrit du même cours n’est plus vu comme un conflit',
-  /memeSeance/.test(srcModale) && /capacite > 1 && memeSeance/.test(srcModale))
+// ⚠️ LE CHEVAUCHEMENT NE DOIT PLUS REFUSER UN CO-INSCRIT du même cours. Ce
+// test cherchait `memeSeance` dans la modale ; la règle a déménagé le 15/08
+// dans `lib/deplacement-rdv.js` pour être partagée avec le déplacement, et elle
+// y est désormais EXÉCUTÉE plus bas (« un co-inscrit du même cours passe »),
+// ce qui vaut mieux que de chercher un mot. Ne reste ici que la délégation.
 
 // ─── LA GÉNÉRATION DE SÉRIE DES ABONNEMENTS ────────────────────────────────
 // ⚠️ LE STATUT D'ANNULATION S'ÉCRIT `annule_commercant`. « annule » tout court
@@ -404,6 +410,222 @@ verifier('le select de l’agenda est bien lu', selectRdvs.length > 0)
 verifier('il ramène de quoi reconnaître une abonnée',
   selectRdvs.trimStart().startsWith('*') || /abonnement_id/.test(selectRdvs),
   selectRdvs.slice(0, 60))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DÉPLACER UN RENDEZ-VOUS (15/08)
+//
+// ⚠️ CE GESTE N'EXISTAIT PAS, et son absence forçait un contresens : décaler
+// une cliente d'une heure obligeait à ANNULER puis recréer. Le client lisait
+// « ton rendez-vous est annulé », le numéro changeait, et l'historique gardait
+// la trace d'une annulation qui n'avait jamais eu lieu.
+//
+// ⚠️ ET LA RÈGLE EST EXÉCUTÉE, PAS LUE. Chercher `creneauAcceptable` dans un
+// fichier ne prouve rien du tout : ce banc a déjà été faussement vert cinq fois
+// pour cette raison exacte. On lui donne des horaires, des rendez-vous et une
+// pause, et on lit ce qui en sort.
+// ═══════════════════════════════════════════════════════════════════════════
+const HORAIRE_AVEC_PAUSE = { ouvert: true, debut: '09:00', fin: '12:00', debut2: '13:00', fin2: '18:00' }
+const CRENEAU_JOUR = [{ jour_semaine: 'lundi', heure_debut: '09:00', heure_fin: '18:00', pause_debut: '12:00', pause_fin: '13:00' }]
+const BASE = {
+  dateStr: '2026-09-07',
+  dureeMinutes: 60,
+  horaireJour: HORAIRE_AVEC_PAUSE,
+  creneauxJour: CRENEAU_JOUR,
+  rdvsExistants: [],
+  capacite: 1,
+  prestationId: 'p1',
+}
+const juger = (extra) => creneauAcceptable({ ...BASE, ...extra })
+
+egal('un créneau ordinaire est accepté', juger({ heureDebut: '10:00' }).ok, true)
+egal('sans durée, on refuse au lieu d’inventer', juger({ heureDebut: '10:00', dureeMinutes: 0 }).raison, 'duree_inconnue')
+egal('un jour de fermeture est nommé', juger({ heureDebut: '10:00', horaireJour: { ouvert: false } }).raison, 'ferme')
+egal('un horaire absent vaut fermé', juger({ heureDebut: '10:00', horaireJour: null }).raison, 'ferme')
+egal('avant l’ouverture', juger({ heureDebut: '08:00' }).raison, 'hors_horaires')
+egal('après la fermeture', juger({ heureDebut: '17:30', dureeMinutes: 60 }).raison, 'hors_horaires')
+egal('en plein dans la pause', juger({ heureDebut: '12:00' }).raison, 'hors_horaires')
+egal('à cheval sur la pause', juger({ heureDebut: '11:30' }).raison, 'hors_horaires')
+egal('l’après-midi rouvre', juger({ heureDebut: '13:00' }).ok, true)
+// ⚠️ Le message d'un refus d'horaires NOMME les plages. Un « impossible » nu
+// oblige le commerçant à aller relire ses horaires dans un autre onglet.
+verifier('le refus d’horaires nomme les plages',
+  /09:00-12:00 et 13:00-18:00/.test(juger({ heureDebut: '08:00' }).message),
+  juger({ heureDebut: '08:00' }).message)
+
+// La pause déclarée sur le CRÉNEAU, sans coupure dans les horaires du commerce.
+egal('la pause du créneau bloque aussi',
+  creneauAcceptable({ ...BASE, heureDebut: '12:00', horaireJour: { ouvert: true, debut: '09:00', fin: '18:00' } }).raison,
+  'pause')
+// Un rendez-vous qui commence dans le créneau mais le dépasse.
+egal('deux heures à 17h débordent la fermeture',
+  creneauAcceptable({ ...BASE, heureDebut: '17:00', dureeMinutes: 120, horaireJour: { ouvert: true, debut: '09:00', fin: '20:00' } }).raison,
+  'depasse_creneau')
+
+// ─── LE CHEVAUCHEMENT, ET SON EXCEPTION ────────────────────────────────────
+const DEJA_LA = [
+  { id: 'r1', prestation_id: 'p1', date_rdv: '2026-09-07', heure_debut: '10:00', heure_fin: '11:00', statut: 'confirme' },
+]
+egal('un rendez-vous déjà pris bloque', juger({ heureDebut: '10:30', rdvsExistants: DEJA_LA }).raison, 'conflit')
+egal('un rendez-vous annulé ne bloque rien',
+  juger({ heureDebut: '10:30', rdvsExistants: [{ ...DEJA_LA[0], statut: 'annule_commercant' }] }).ok, true)
+egal('un autre jour ne bloque rien',
+  juger({ heureDebut: '10:30', rdvsExistants: [{ ...DEJA_LA[0], date_rdv: '2026-09-08' }] }).ok, true)
+// ⚠️ LES CO-INSCRITS D'UN MÊME COURS NE SONT PAS UN CONFLIT. C'est le défaut du
+// 15/08 : la commerçante ne pouvait inscrire qu'UNE personne par cours.
+egal('un co-inscrit du même cours passe',
+  juger({ heureDebut: '10:00', rdvsExistants: DEJA_LA, capacite: 12 }).ok, true)
+egal('mais une AUTRE prestation à la même heure reste un conflit',
+  juger({ heureDebut: '10:00', rdvsExistants: DEJA_LA, capacite: 12, prestationId: 'p2' }).raison, 'conflit')
+egal('et sur un rendez-vous individuel, la même heure reste un conflit',
+  juger({ heureDebut: '10:00', rdvsExistants: DEJA_LA }).raison, 'conflit')
+
+// ⚠️ LE TEST QUI JUSTIFIE TOUT LE MODULE : UN RENDEZ-VOUS NE SE CHEVAUCHE PAS
+// LUI-MÊME. Sans `exclureId`, décaler un rendez-vous d'une heure à l'intérieur
+// de sa propre durée serait refusé, c'est-à-dire précisément le décalage qu'on
+// demande le plus souvent. Le déplacement serait livré mort-né.
+egal('sans exclusion, le rendez-vous se bloque lui-même',
+  juger({ heureDebut: '10:30', rdvsExistants: DEJA_LA }).raison, 'conflit')
+egal('en s’excluant, il se déplace de trente minutes',
+  juger({ heureDebut: '10:30', rdvsExistants: DEJA_LA, exclureId: 'r1' }).ok, true)
+egal('mais il bute toujours sur le rendez-vous du VOISIN',
+  juger({
+    heureDebut: '10:30', exclureId: 'r1',
+    rdvsExistants: [...DEJA_LA, { id: 'r2', prestation_id: 'p1', date_rdv: '2026-09-07', heure_debut: '11:00', heure_fin: '12:00', statut: 'confirme' }],
+  }).raison, 'conflit')
+
+// ─── LES HEURES, ET LES DEUX FORMES DE L'ABSENCE ───────────────────────────
+// ⚠️ `Number(null)` vaut 0 et `Number(undefined)` vaut NaN : ce projet s'y est
+// fait prendre deux fois. Une heure absente ne doit JAMAIS valoir minuit.
+egal('une heure absente n’est pas minuit', minutesDeLHeure(null), null)
+egal('une heure vide non plus', minutesDeLHeure(''), null)
+egal('09:30 se lit', minutesDeLHeure('09:30'), 570)
+egal('09:30:00 aussi', minutesDeLHeure('09:30:00'), 570)
+egal('25:00 n’existe pas', minutesDeLHeure('25:00'), null)
+egal('une fin se déduit', heureDeFin('10:00', 90), '11:30')
+egal('sans durée, pas de fin', heureDeFin('10:00', null), null)
+egal('sans heure, pas de fin', heureDeFin(null, 60), null)
+
+// ─── LE DÉPLACEMENT QUI N'EN EST PAS UN ────────────────────────────────────
+const RDV_TEST = { id: 'r1', date_rdv: '2026-09-07', heure_debut: '10:00:00' }
+egal('replacer au même endroit n’est pas un déplacement',
+  deplacementUtile(RDV_TEST, { date: '2026-09-07', heure: '10:00' }), false)
+egal('changer l’heure en est un', deplacementUtile(RDV_TEST, { date: '2026-09-07', heure: '11:00' }), true)
+egal('changer le jour aussi', deplacementUtile(RDV_TEST, { date: '2026-09-14', heure: '10:00' }), true)
+
+// ─── ⚠️ LA PLACE FAIT PARTIE DU DÉPLACEMENT ────────────────────────────────
+// C'est le piège de ce module, et c'est le défaut du 13/08 qui ressort par une
+// autre porte : celle de la MISE À JOUR au lieu de l'insertion. Un rendez-vous
+// déplacé qui garderait sa place d'origine se retrouve sur la même place qu'un
+// inscrit du cours d'arrivée, et l'index unique rejette l'écriture avec « ce
+// créneau vient d'être pris » devant un cours à moitié vide.
+const majDeplacement = champsDuDeplacement({
+  date: '2026-09-14', heure: '11:00', dureeMinutes: 60,
+  placeNo: 3, capacite: 12,
+  champsLieu: { lieu_id: 'L1', lieu_libelle: 'Salle communale', lieu_adresse: 'Rue du Centre 1' },
+})
+egal('le déplacement réécrit la date', majDeplacement.date_rdv, '2026-09-14')
+egal('et l’heure de début', majDeplacement.heure_debut, '11:00')
+egal('et l’heure de fin, déduite de la durée figée', majDeplacement.heure_fin, '12:00')
+egal('ET LA PLACE SUR LE COURS D’ARRIVÉE', majDeplacement.place_no, 3)
+egal('et la capacité du créneau', majDeplacement.capacite_creneau, 12)
+egal('et le lieu regravé', majDeplacement.lieu_libelle, 'Salle communale')
+// ⚠️ UN RENDEZ-VOUS INDIVIDUEL GARDE UNE CAPACITÉ DE 1. La contrainte
+// d'exclusion s'active à cette valeur : écrire 0 ou null la désarmerait et
+// laisserait deux clients sur le même fauteuil.
+egal('une capacité absente vaut 1, jamais 0',
+  champsDuDeplacement({ date: '2026-09-14', heure: '11:00', dureeMinutes: 30, placeNo: 1, capacite: null }).capacite_creneau, 1)
+// Sans lieu résolu, on n'écrase pas ce qu'on ne sait pas.
+verifier('sans lieu connu, aucune colonne de lieu n’est écrasée',
+  !('lieu_libelle' in champsDuDeplacement({ date: '2026-09-14', heure: '11:00', dureeMinutes: 30, placeNo: 1, capacite: 1 })))
+
+// ─── LES CRÉNEAUX DU JOUR ──────────────────────────────────────────────────
+const TOUS_CRENEAUX = [
+  { jour_semaine: 'lundi', heure_debut: '09:00', heure_fin: '12:00' },
+  { jour_semaine: 'mardi', heure_debut: '09:00', heure_fin: '12:00' },
+  { date_specifique: '2026-09-07', heure_debut: '14:00', heure_fin: '18:00' },
+  { jour_semaine: 'lundi', heure_debut: '18:00', heure_fin: '20:00', actif: false },
+]
+const duLundi = creneauxDuJour(TOUS_CRENEAUX, { dateStr: '2026-09-07', jour: 'lundi' })
+egal('le jour retient sa règle hebdo et sa date précise, jamais l’inactif', duLundi.length, 2)
+egal('un créneau désactivé ne compte pas', duLundi.filter(c => c.actif === false).length, 0)
+
+// ─── LA MISE À JOUR PASSE PAR LA RÈGLE, ELLE NE LA RECOPIE PAS ─────────────
+// ⚠️ CE QUI EST TESTÉ ICI EST LE SEUL POINT QUE L'EXÉCUTION NE PEUT PAS
+// ATTEINDRE : que l'écran appelle bien la fonction, et ne rebâtisse pas son
+// objet à la main. Commentaires retirés, parce qu'un commentaire qui cite le
+// nom cherché rend le test vert alors que le code a disparu.
+const srcDeplacer = sansCommentaires(readFileSync(new URL('../app/dashboard/ModalDeplacerRdv.js', import.meta.url), 'utf8'))
+verifier('l’écran de déplacement bâtit sa mise à jour avec la règle',
+  /champsDuDeplacement\(/.test(srcDeplacer))
+verifier('il s’exclut lui-même du chevauchement', /exclureId: rdv\?\.id/.test(srcDeplacer))
+verifier('il relit les places EN BASE', /\.eq\('heure_debut', heure\)/.test(srcDeplacer))
+verifier('et il s’exclut aussi de cette lecture',
+  /filter\(r => String\(r\.id\) !== String\(rdv\.id\)\)/.test(srcDeplacer))
+verifier('il regrave le lieu au nouveau jour', /champsLieuPour\(/.test(srcDeplacer))
+verifier('il prévient le client du changement', /deplace: true/.test(srcDeplacer))
+
+// ⚠️ ET LA CRÉATION MANUELLE JUGE AVEC LA MÊME RÈGLE. Deux copies de cinq
+// contrôles auraient divergé au premier correctif, et le commerçant aurait
+// obtenu un créneau par une porte et un refus par l'autre.
+verifier('la création manuelle juge avec la même règle',
+  /creneauAcceptable\(/.test(sansCommentaires(srcModale)))
+
+// ⚠️ ET AUCUN AUTRE ÉCRAN NE DÉPLACE UN RENDEZ-VOUS DANS SON COIN. Un chemin
+// qui réécrirait `date_rdv` sans repasser par la règle retomberait exactement
+// dans le défaut de la place dupliquée. On regarde le contenu de chaque appel
+// à `.update(` sur les réservations.
+// ⚠️ ON LIT L'ARGUMENT DE `.update(`, PAS LES 400 CARACTÈRES QUI SUIVENT. Ma
+// première version prenait une fenêtre de taille fixe, et elle a rougi sur la
+// résiliation d'un abonnement : `.update({ statut: … }).gte('date_rdv', …)`.
+// Ce code FILTRE sur la date, il ne l'écrit pas. Un test qui confond les deux
+// finit par être désactivé, et c'est ainsi qu'on perd une garde.
+const CHEMINS_DEPLACEMENT = ['app/dashboard/ModalDeplacerRdv.js']
+const CHAINE_UPDATE = /from\('rdv_reservations'\)\s*\n?\s*\.update\(/g
+function argumentDeLAppel(src, depuis) {
+  let profondeur = 0
+  for (let i = depuis; i < src.length; i++) {
+    if (src[i] === '(') profondeur++
+    else if (src[i] === ')') {
+      profondeur--
+      if (profondeur === 0) return src.slice(depuis, i)
+    }
+  }
+  return src.slice(depuis)
+}
+const deplaceurs = []
+const parcourirMaj = (url) => {
+  for (const e of readdirSync(url, { withFileTypes: true })) {
+    const enfant = new URL(`${e.name}${e.isDirectory() ? '/' : ''}`, url)
+    if (e.isDirectory()) { parcourirMaj(enfant); continue }
+    if (!/\.jsx?$/.test(e.name)) continue
+    const src = sansCommentaires(readFileSync(enfant, 'utf8'))
+    const chemin = `${url.pathname.split('/yoppaa-mvp/')[1] || ''}${e.name}`
+    let m
+    while ((m = CHAINE_UPDATE.exec(src)) !== null) {
+      const arg = argumentDeLAppel(src, m.index + m[0].length - 1)
+      if (/date_rdv|heure_debut|champsDuDeplacement|\bmaj\b/.test(arg)) { deplaceurs.push(chemin); break }
+    }
+    CHAINE_UPDATE.lastIndex = 0
+  }
+}
+parcourirMaj(new URL('../app/', import.meta.url))
+verifier('aucun autre écran ne réécrit le créneau d’un rendez-vous',
+  deplaceurs.length === CHEMINS_DEPLACEMENT.length
+  && deplaceurs.every(f => CHEMINS_DEPLACEMENT.some(c => f.endsWith(c.split('/').pop()))),
+  `trouvés : ${deplaceurs.join(' · ') || 'aucun'}`)
+
+// ⚠️ ET LE CALENDRIER DU CLIENT DOIT SUIVRE. Apple, Google et Outlook
+// reconnaissent l'événement à son identifiant et n'acceptent de le déplacer que
+// si le numéro de séquence a GRANDI. À séquence égale, le fichier est reçu,
+// ouvert, et sans effet : le client garde l'ancienne heure dans son agenda et
+// se présente à ce moment-là. Le défaut serait invisible de notre côté.
+const srcRouteConfirme = sansCommentaires(readFileSync(new URL('../app/api/emails/rdv-confirme/route.js', import.meta.url), 'utf8'))
+verifier('un déplacement incrémente la séquence du fichier calendrier',
+  /sequence: deplace \?/.test(srcRouteConfirme))
+verifier('et le sujet de l’email dit « déplacé », pas « confirmé »',
+  /deplace[\s\S]{0,120}déplacé/.test(srcRouteConfirme))
+verifier('le commerçant ne s’auto-notifie pas de son propre déplacement',
+  /!deplace && rdv\.commercant\?\.notif_mode/.test(srcRouteConfirme))
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

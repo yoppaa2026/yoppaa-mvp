@@ -22,7 +22,9 @@ import { adresseRendezVous } from '@/lib/lieu-fige'
 
 export async function POST(request) {
   try {
-    const { rdv_id } = await request.json()
+    // `deplace` : le rendez-vous existait déjà et vient d'être décalé par le
+    // commerçant. Mêmes informations, mais annoncées comme un CHANGEMENT.
+    const { rdv_id, deplace = false, ancienne_date = null, ancienne_heure = null } = await request.json()
     if (!rdv_id) {
       return NextResponse.json({ ok: false, error: 'rdv_id requis' }, { status: 400 })
     }
@@ -74,7 +76,19 @@ export async function POST(request) {
           rappel_24h: true,
           status: 'CONFIRMED',
           method: 'REQUEST',
-          sequence: 0,
+          // ⚠️ SANS SEQUENCE QUI AUGMENTE, LE CALENDRIER DU CLIENT IGNORE LA
+          // MISE À JOUR. Apple, Google et Outlook reconnaissent l'événement à
+          // son UID, ici l'identifiant du rendez-vous, et n'acceptent de le
+          // déplacer que si le numéro de séquence a grandi. À séquence égale,
+          // le fichier est reçu, ouvert, et sans effet : le client garde
+          // l'ancienne heure dans son agenda et vient à ce moment-là.
+          //
+          // ⚠️ ET UN SIMPLE 1 NE SUFFIT PAS : un rendez-vous déplacé DEUX fois
+          // repartirait à 1, et le deuxième déplacement serait perdu. Les
+          // minutes écoulées depuis 1970 sont le compteur le plus simple qui
+          // grandisse tout seul, et il reste très loin du plafond de la norme
+          // (2 147 483 647, atteint vers l'an 6053).
+          sequence: deplace ? Math.floor(Date.now() / 60000) : 0,
         })
         const attachment = icsToBase64Attachment(ics, `rdv-${rdv.id}.ics`)
 
@@ -99,11 +113,16 @@ export async function POST(request) {
           praticien_nom:           rdv.praticien?.nom || null,
           praticien_couleur:       rdv.praticien?.couleur_hex || null,
           infos_pratiques:         rdv.commercant?.infos_pratiques || null,
+          deplace,
+          ancienne_date,
+          ancienne_heure,
         })
 
         await envoyerAuCommercant({   // helper reutilise, accepte n'importe quel 'to'
           to: rdv.client_email,
-          subject: `Ton RDV chez ${rdv.commercant?.nom || 'le commerçant'} est confirmé`,
+          subject: deplace
+            ? `Ton RDV chez ${rdv.commercant?.nom || 'le commerçant'} a été déplacé`
+            : `Ton RDV chez ${rdv.commercant?.nom || 'le commerçant'} est confirmé`,
           html,
           attachments: [attachment],
         })
@@ -113,7 +132,12 @@ export async function POST(request) {
     }
 
     // 2) Email Commercant si notif_mode='chaque'
-    if (rdv.commercant?.notif_mode === 'chaque' && rdv.commercant?.email) {
+    //
+    // ⚠️ SAUF SUR UN DÉPLACEMENT. C'est LUI qui vient de décaler ce
+    // rendez-vous depuis son tableau de bord : lui annoncer « nouveau RDV »
+    // pour un rendez-vous qu'il connaît déjà lui ferait croire qu'il en a deux.
+    // Même raisonnement que la création manuelle, qui ne s'auto-notifie pas.
+    if (!deplace && rdv.commercant?.notif_mode === 'chaque' && rdv.commercant?.email) {
       try {
         const html = emailNouveauRdvCommercant({
           nom_commercant:  rdv.commercant.nom,

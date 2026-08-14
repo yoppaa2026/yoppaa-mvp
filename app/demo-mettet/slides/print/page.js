@@ -262,7 +262,7 @@ function Slide6() {
 // ─── 7 ─────────────────────────────────────────────────────────────
 function Slide7() {
   const items = [
-    { icon: '💰', label: '0 % de commission',        detail: 'La totalité du paiement revient au commerçant. Nous ne sommes pas un intermédiaire qui prélève.' },
+    { icon: '💰', label: '0 % de commission Yoppaa', detail: 'Nous ne prélevons rien sur les ventes. Seuls les frais du prestataire de paiement s\'appliquent, comme pour un terminal de carte en magasin.' },
     { icon: '🆓', label: 'Plan gratuit à vie',       detail: 'Présence, actualités, favoris, signaux citoyens. Zéro euro, à vie.' },
     { icon: '🚪', label: 'Sortie libre',             detail: 'Vous résiliez, vous basculez vers le plan gratuit. Vos données restent les vôtres.' },
     { icon: '🇧🇪', label: 'Données hébergées en UE', detail: 'Conformité RGPD intégrale. Aucun transfert hors d\'Europe.' },

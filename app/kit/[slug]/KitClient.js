@@ -17,12 +17,12 @@ const T = {
 // la fiche accepte les commandes, le discours devient transactionnel.
 const TEXTES_AVANT = [
   { cle: 'clients', label: 'Pour tes clients', texte: 'Bientôt, notre quartier tient dans ta poche. Je fais partie de l’aventure Yoppaa, viens t’inscrire :' },
-  { cle: 'commercant', label: 'Pour un autre commerçant', texte: 'Une app belge pour le commerce de proximité arrive, sans commission. Réserve ta place de commerçant :' },
+  { cle: 'commercant', label: 'Pour un autre commerçant', texte: 'Une app belge pour le commerce de proximité arrive, sans commission Yoppaa sur tes ventes. Réserve ta place de commerçant :' },
   { cle: 'court', label: 'Version courte', texte: 'Notre quartier dans ta poche, ça arrive. Inscris-toi :' },
 ]
 const TEXTES_APRES = [
   { cle: 'clients', label: 'Pour tes clients', texte: 'On est sur Yoppaa 🟣 Commandez chez nous en ligne, c’est prêt quand vous arrivez :' },
-  { cle: 'commercant', label: 'Pour un autre commerçant', texte: 'On vend sur Yoppaa, l’app de notre commune : zéro commission sur nos ventes. Jette un œil :' },
+  { cle: 'commercant', label: 'Pour un autre commerçant', texte: 'On vend sur Yoppaa, l’app de notre commune : zéro commission Yoppaa sur nos ventes. Jette un œil :' },
   { cle: 'court', label: 'Version courte', texte: 'Retrouve-nous sur Yoppaa, l’app de notre commune :' },
 ]
 

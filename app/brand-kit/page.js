@@ -572,7 +572,7 @@ export default function BrandKit() {
       sub: 'serie lancement 2/6 · annonce officielle',
       options: {
         titre: "L'app belge du commerce local arrive.",
-        sousTitre: 'Sans commission. Sans frais cache. Vraiment.',
+        sousTitre: 'Zero commission Yoppaa sur tes ventes.',
         showFooter: true, bigDotsSignature: true,
       },
     },
@@ -582,7 +582,7 @@ export default function BrandKit() {
       filename: 'yoppaa-post-fb-pitch-1080',
       sub: 'serie lancement 3/6 · differenciation Appetito',
       options: {
-        titre: 'Vraiment 0 commission. Vraiment 0 frais caches.',
+        titre: 'Yoppaa ne prend rien sur tes ventes.',
         sousTitre: "19,90 EUR HTVA / mois, c'est tout.",
         showFooter: true, bigDotsSignature: true,
       },

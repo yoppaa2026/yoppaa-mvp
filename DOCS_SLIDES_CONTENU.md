@@ -120,7 +120,7 @@
 - Eyebrow : « PAS DE PETITS CARACTÈRES »
 - Titre : « Notre **transparence** »
 - 4 fiches :
-  - 💰 **0 % de commission** — La totalité du paiement revient au commerçant. Nous ne sommes pas un intermédiaire qui prélève.
+  - 💰 **0 % de commission Yoppaa** — Nous ne prélevons rien sur les ventes. Seuls les frais du prestataire de paiement s'appliquent, comme pour un terminal de carte en magasin.
   - 🆓 **Plan gratuit à vie** — Présence, actualités, favoris, signaux citoyens. Zéro euro, à vie.
   - 🚪 **Sortie libre** — Vous résiliez, vous basculez vers le plan gratuit. Vos données restent les vôtres. Aucun engagement.
   - 🇧🇪 **Données hébergées en UE** — Conformité RGPD intégrale. Aucun transfert hors d'Europe.

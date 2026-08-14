@@ -790,7 +790,7 @@ const FORMULES = [
       'Fidélité automatique : chaque commande et chaque rendez-vous remplit la carte, sans rien faire',
       'Bons cadeaux à offrir : tes clients font découvrir ton commerce à leurs proches',
       'Assistant IA complet : rédaction avancée pour tes articles, tes deals et tes actus, avec un usage étendu',
-      '0% de commission sur tes ventes',
+      '0% de commission Yoppaa sur tes ventes',
     ],
   },
 ]
@@ -976,7 +976,7 @@ export default function LandingReveal({ referent = null }) {
               name: 'Yoppaa',
               inLanguage: 'fr-BE',
               publisher: { '@id': 'https://www.yoppaa.app/#organization' },
-              description: "L'app belge qui réunit les commerces de quartier : commande à l'avance, rendez-vous en ligne, fidélité et bons cadeaux, sans commission pour les commerçants.",
+              description: "L'app belge qui réunit les commerces de quartier : commande à l'avance, rendez-vous en ligne, fidélité et bons cadeaux, sans commission Yoppaa pour les commerçants.",
             },
           ],
         }) }}
@@ -1031,8 +1031,8 @@ export default function LandingReveal({ referent = null }) {
         <p style={{ fontSize: '1.02rem', color: T.muted, lineHeight: 1.7, maxWidth: 620, margin: '0 auto 28px', fontWeight: 500 }}>
           Pas une app par commerce, pas une app par secteur : une seule, pour tout ton quartier.
           Tu commandes, tu réserves et tu cumules tes points en quelques secondes. Tes commerçants,
-          eux, ne nous reversent aucune commission sur ce que tu leur achètes, et ta commune reste
-          vivante.
+          eux, ne reversent aucune commission à Yoppaa sur ce que tu leur achètes, et ta commune
+          reste vivante.
         </p>
         {/* Les familles de commerçants (taxonomie produit : alimentaire /
             services / détail, plus tous ceux qui n'entrent dans aucune case).
@@ -1057,9 +1057,9 @@ export default function LandingReveal({ referent = null }) {
             </div>
           ))}
         </div>
-        {/* Le corollaire du 0 % de commission : un modèle sans commission n'a
-            aucune raison d'exclure les tout petits, contrairement aux places de
-            marché qui doivent rentabiliser chaque vendeur. */}
+        {/* Le corollaire du zéro prélèvement Yoppaa : un modèle qui ne vit pas
+            des ventes n'a aucune raison d'exclure les tout petits, contrairement
+            aux places de marché qui doivent rentabiliser chaque vendeur. */}
         <p style={{ fontSize: '0.98rem', color: T.deep, lineHeight: 1.7, maxWidth: 640, margin: '22px auto 0', fontWeight: 600 }}>
           Personne n&rsquo;est trop petit pour Yoppaa. La formule Exister est gratuite, pour toujours :
           que tu sois seul ou toute une équipe, ouvert tous les jours ou juste le samedi, tu as ta
@@ -1132,7 +1132,7 @@ export default function LandingReveal({ referent = null }) {
           {/* Chiffres punch */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14, maxWidth: 760, margin: '0 auto 48px' }}>
             {[
-              { chiffre: '0%', label: 'de commission sur tes ventes' },
+              { chiffre: '0%', label: 'de commission Yoppaa sur tes ventes' },
               { chiffre: '30 jours', label: "d'essai gratuit, sans carte de paiement" },
               { chiffre: '10 min', label: 'pour mettre ta page en ligne' },
               { chiffre: '0€', label: 'la formule Exister, pour toujours' },
@@ -1314,7 +1314,7 @@ export default function LandingReveal({ referent = null }) {
               commerces de quartier, pas se servir sur leur dos.
             </p>
             <p style={{ margin: 0, fontSize: '0.95rem', color: T.muted, lineHeight: 1.7, fontWeight: 500 }}>
-              Ici, pas de commission sur les ventes, pas de revente de données, pas d&rsquo;algorithme qui
+              Ici, pas de commission Yoppaa sur les ventes, pas de revente de données, pas d&rsquo;algorithme qui
               cache tes commerçants derrière des annonces sponsorisées. Une app, ton quartier, et c&rsquo;est tout. 🟣
             </p>
           </div>

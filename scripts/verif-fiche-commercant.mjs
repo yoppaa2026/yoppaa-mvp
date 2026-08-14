@@ -14,6 +14,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { CONSEILS_PHOTOS, MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '../lib/guide-photos.js'
 import { normaliserUrl, estIpPrivee, texteUtile } from '../lib/site-web.js'
 import { symbolePourType, couleurPourNom, logoProvisoireSvg, propositionsLogo } from '../lib/logo-provisoire.js'
+import { emailMerciPreinscription } from '../lib/resend-landing.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -654,6 +655,83 @@ verifier('les frais Stripe sont annoncés dès l’inscription',
   /1,4 ?% \+ 0,25 ?€/.test(signupSrcTxt))
 verifier('et la commission Yoppaa est nommée, jamais sous-entendue',
   !/\(0 ?% commission\)/.test(signupSrcTxt))
+
+// ─── LA MÊME RÈGLE, MAIS PARTOUT AILLEURS ─────────────────────────────────
+// ⚠️ Le signup avait été corrigé le 14/08, et lui seul. Onze autres surfaces
+// publiques disaient encore « sans commission » sans dire de QUI, et deux
+// allaient plus loin : « la totalité du paiement revient au commerçant », sur
+// la diapositive intitulée « Notre transparence », juste au-dessus de la
+// promesse d'offrir l'abonnement à vie à qui trouverait un piège dans nos
+// conditions. Yoppaa ne prélève rien, c'est vrai ; le prestataire de paiement,
+// lui, prélève, et c'est le commerçant qui le supporte.
+//
+// La règle tient en une phrase : LÀ OÙ UNE COMMISSION EST NIÉE, CELUI QUI NE
+// LA PREND PAS EST NOMMÉ. Deux formes valent attribution, « commission
+// Yoppaa » et la première personne (« nous ne prenons aucune commission ») :
+// le banc accepte les deux et refuse l'affirmation sans sujet.
+const TEXTES_PUBLICS = [
+  'app/components/LandingReveal.js', 'app/kit/[slug]/KitClient.js', 'app/classement/page.js',
+  'app/brand-kit/page.js', 'app/demo-mettet/slides/page.js', 'app/demo-mettet/slides/print/page.js',
+  'app/demo-mettet/cheat-sheet/page.js', 'app/dashboard/TabPaiements.js', 'app/signup/page.js',
+  'app/legal/page.js', 'app/page.tsx', 'lib/resend-landing.js',
+]
+
+// Une phrase entre guillemets est du discours RAPPORTÉ, pas une promesse : la
+// landing cite le « 0% de commission » devenu ticket d'entrée du secteur, pour
+// dire justement que tout le monde l'affiche. Sans cette exception, le banc
+// nous interdirait de citer un concurrent.
+const horsCitations = (src) => src.replace(/«[^»]*»/g, ' ')
+
+function commissionsOrphelines(txt) {
+  const orphelines = []
+  // ⚠️ La fenêtre se découpe dans le texte NETTOYÉ, jamais dans l'original :
+  // les index d'un `matchAll` ne valent que pour la chaîne qui l'a produit.
+  const propre = horsCitations(sansCommentaires(txt))
+  for (const m of propre.matchAll(/commission/gi)) {
+    const fenetre = propre.slice(Math.max(0, m.index - 70), m.index + 70).replace(/\s+/g, ' ')
+    if (/Commission europ/i.test(fenetre)) continue          // l'institution, pas un prélèvement
+    if (/Yoppaa/i.test(fenetre)) continue                    // nommée
+    if (/nous ne (prenons|prélevons|percevons)/i.test(fenetre)) continue   // première personne
+    orphelines.push(fenetre)
+  }
+  return orphelines
+}
+
+// ⚠️ ON MESURE SUR LE DÉFAUT : la formulation d'origine doit bien être vue
+// comme orpheline, sinon le balayage qui suit ne prouverait rien.
+verifier('une commission sans sujet est bien détectée',
+  commissionsOrphelines('Aucune commission sur tes ventes, promis.').length === 1)
+verifier('une commission attribuée à Yoppaa passe',
+  commissionsOrphelines('Yoppaa ne prend aucune commission sur tes ventes.').length === 0)
+verifier('une commission attribuée à la première personne passe',
+  commissionsOrphelines('Sur leurs ventes, nous ne prenons aucune commission.').length === 0)
+verifier('la Commission européenne n’est pas un prélèvement',
+  commissionsOrphelines('encadrés par les clauses types de la Commission européenne').length === 0)
+
+for (const chemin of TEXTES_PUBLICS) {
+  const orphelines = commissionsOrphelines(lire(chemin))
+  verifier(`${chemin} nomme qui ne prend pas de commission`,
+    orphelines.length === 0, orphelines[0] || '')
+}
+
+// L'affirmation ABSOLUE, elle, n'a aucune forme acceptable : il n'existe pas
+// de paiement en ligne sans frais, et le dire est faux quel que soit le sujet.
+const PROMESSE_ABSOLUE = /totalité du paiement revient|(0|zéro|zero|aucun|sans) frais cach/i
+for (const chemin of TEXTES_PUBLICS) {
+  verifier(`${chemin} ne promet pas l’absence totale de frais`,
+    !PROMESSE_ABSOLUE.test(sansCommentaires(lire(chemin))))
+}
+
+// ⚠️ RENDU, PAS LU. L'email de pré-inscription est le tout premier contact
+// écrit d'un commerçant avec Yoppaa : on le fabrique et on lit ce qui en sort.
+const emailPionnier = emailMerciPreinscription({ mode_landing: 'reveal', type_utilisateur: 'commercant' })
+verifier('l’email de pré-inscription annonce les frais du prestataire',
+  /1,4 ?% \+ 0,25 ?€/.test(emailPionnier))
+verifier('et il nomme Yoppaa là où il parle de commission',
+  commissionsOrphelines(emailPionnier).length === 0, commissionsOrphelines(emailPionnier)[0] || '')
+// Non-régression : le Yopper ne paie rien, la question ne le concerne pas.
+verifier('l’email du Yopper ne parle toujours pas de commission',
+  !/commission/i.test(emailMerciPreinscription({ mode_landing: 'reveal', type_utilisateur: 'yopper' })))
 
 // Les cartes de plans sont ce qu'on voit AVANT le glossaire : elles portaient
 // les mêmes promesses fantômes.

@@ -72,7 +72,7 @@ const OBJECTIONS = [
   },
   {
     q: 'Et la concurrence ? TGTG, Uber Eats sont déjà là.',
-    r: 'Ils ciblent les chaînes et les grandes villes. Yoppaa cible le commerce de proximité belge. 0 % de commission contre 25 à 30 % chez eux. Pas le même terrain de jeu.',
+    r: 'Ils ciblent les chaînes et les grandes villes. Yoppaa cible le commerce de proximité belge. 0 % de commission Yoppaa contre 25 à 30 % chez eux : le commerçant ne paie que les frais de son prestataire de paiement, comme sur son terminal de carte. Pas le même terrain de jeu.',
   },
   {
     q: 'Les commerçants mettetois vont-ils suivre ?',
@@ -155,7 +155,7 @@ export default function CheatSheet() {
             <Eyebrow>3 chiffres à marteler</Eyebrow>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 6 }}>
               {[
-                { n: '0 %', l: 'de commission sur les ventes' },
+                { n: '0 %', l: 'de commission Yoppaa sur les ventes' },
                 { n: '0 €', l: 'pour la commune, à vie' },
                 { n: '5', l: 'fiches officielles déjà construites' },
               ].map((c, i) => (

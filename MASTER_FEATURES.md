@@ -428,7 +428,8 @@ Cette section sert de copywriting de référence pour toutes les UI.
 ### Paiement & encaissement
 
 #### Paiement en ligne
-**Description officielle** : Stripe Connect intégré : le Yopper paie son acompte ou sa commande directement sur ta fiche. **0 % de commission Yoppaa, jamais**. Ton argent va directement sur ton compte bancaire.
+**Description officielle** : Stripe Connect intégré : le Yopper paie son acompte ou sa commande directement sur ta fiche. **0 % de commission Yoppaa, jamais**. Ton argent va directement sur ton compte bancaire. Seuls les frais de Stripe, notre prestataire de paiement, s'appliquent : environ 1,4 % + 0,25 € par transaction pour une carte européenne.
+⚠️ **Ne jamais écrire que la totalité du paiement revient au commerçant** : les frais du prestataire existent et doivent être annoncés partout où la commission est évoquée.
 **Flag** : `paiement_ligne`
 **Disponible avec** : Vendre
 

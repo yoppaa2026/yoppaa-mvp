@@ -45,6 +45,7 @@ import {
   lieuPrincipal, lieuDeLaPlage, lieuDeLaReservation, libelleLieu, horairesDepuisLieux,
 } from '../lib/lieux-activite.js'
 import { adresseRendezVous, champsLieu } from '../lib/lieu-fige.js'
+import { scoreOnboarding, SEUIL_SOUMISSION } from '../lib/score-onboarding.js'
 import {
   capacitePrestation, estCoursCollectif, placesRestantes, estComplet,
   premierePlaceLibre, libellePlaces, regrouperEnSeances, blocsAgenda,
@@ -960,6 +961,75 @@ egal('et un lieu permanent n’ouvre aucun jour',
   horairesDepuisLieux([
     { type: 'permanent', jour_semaine: 'lundi', heure_debut: '09:00', heure_fin: '17:00', actif: true },
   ]).lundi, { ouvert: false })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE SCORE DU SIGNUP — 100 % DOIT ÊTRE ATTEIGNABLE
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ IL NE L'ÉTAIT PAS. Dix des cent points étaient donnés pour « au moins un
+// article au menu », or AUCUN écran du signup ne permet d'ajouter un article :
+// le commerçant plafonnait à 90 % sans jamais comprendre ce qui manquait, et
+// terminait son inscription sur un échec. Relevé par Alex le 14/08.
+const FICHE_COMPLETE = {
+  latitude: 50.3, longitude: 4.6,
+  description: 'Une présentation assez longue pour passer le seuil.',
+  logo_url: 'https://x/logo.png', telephone: '071 01 00 00',
+  horaires_detail: { lundi: { ouvert: true, debut: '09:00', fin: '18:00' } },
+}
+egal('une fiche complète atteint 100 %',
+  scoreOnboarding({ commercant: FICHE_COMPLETE, onboarding: { photo_ok: true } }).pourcentage, 100)
+verifier('et elle est déclarée complète',
+  scoreOnboarding({ commercant: FICHE_COMPLETE, onboarding: { photo_ok: true } }).complet)
+
+// ⚠️ ET LE MÊME DÉFAUT SE CACHAIT AILLEURS, plus discret : les horaires valent
+// vingt points, mais un service en formule Exister peut les passer, et depuis
+// le 13/08 celui dont les horaires viennent de ses emplacements aussi. Pour
+// eux, le plafond tombait à 70 % sans qu'ils aient rien mal fait.
+const sansHoraires = scoreOnboarding({
+  commercant: { ...FICHE_COMPLETE, horaires_detail: null },
+  onboarding: { photo_ok: true }, horairesRequis: false,
+})
+egal('un commerce sans horaires atteint 100 % lui aussi', sansHoraires.pourcentage, 100)
+egal('parce que le critère est retiré du calcul, pas laissé rouge',
+  sansHoraires.criteres.some(c => c.cle === 'horaires'), false)
+egal('et le total des points possibles baisse d’autant', sansHoraires.total, 80)
+
+// Un dossier vide ne trompe personne.
+egal('une fiche vide vaut 0 %', scoreOnboarding({}).pourcentage, 0)
+verifier('et ne permet pas de soumettre', !scoreOnboarding({}).peutSoumettre)
+// ⚠️ L'ARRONDI NE DOIT JAMAIS AFFICHER 99 % QUAND TOUT EST COCHÉ. Sans les
+// horaires, cinq critères sur six donnent 81,25 % : un 99 % affiché alors que
+// tout est fait serait un mensonge cruel, juste avant le bouton d'envoi.
+egal('l’arrondi ne fabrique jamais de 99 % trompeur',
+  scoreOnboarding({ commercant: FICHE_COMPLETE, onboarding: { photo_ok: true }, horairesRequis: false }).pourcentage, 100)
+
+// Le seuil garde le même sens pour tout le monde, puisqu'il est en pourcentage.
+const partiel = scoreOnboarding({
+  commercant: { latitude: 1, longitude: 1, telephone: '071 01 00 00', logo_url: 'x' },
+  onboarding: { photo_ok: true },
+})
+verifier(`à ${SEUIL_SOUMISSION} % ou plus, on peut envoyer son dossier`,
+  partiel.peutSoumettre, `${partiel.pourcentage} %`)
+// ⚠️ Le seuil se lit depuis la règle, jamais réécrit à la main : le jour où il
+// change, ce test suit au lieu de mentir sur ce qu'il vérifie.
+verifier('et juste en dessous, non',
+  !scoreOnboarding({ commercant: { latitude: 1, longitude: 1 }, onboarding: { photo_ok: true } }).peutSoumettre)
+
+// ⚠️ CE QUI MANQUE SE DIT DANS L'ORDRE DE CE QUI RAPPORTE LE PLUS. Un
+// commerçant pressé doit savoir par quoi commencer, pas relire une liste.
+const presque = scoreOnboarding({
+  commercant: { latitude: 1, longitude: 1, telephone: '071 01 00 00' },
+  onboarding: {},
+})
+egal('le manque le plus lourd vient en premier', presque.manquants[0].poids, 20)
+// ⚠️ ET C'EST L'ORDRE DE DÉCLARATION QUI LE GARANTIT, pas un tri. Deux
+// mutations ont montré qu'un `sort` par précaution ne changeait jamais rien :
+// il a été retiré, et la garantie déplacée ici, où elle se vérifie vraiment.
+// Un critère ajouté demain au mauvais endroit fera rougir cette ligne.
+const poidsDeclares = scoreOnboarding({}).criteres.map(c => c.poids)
+verifier('les critères sont déclarés du plus lourd au plus léger',
+  poidsDeclares.every((p, i) => i === 0 || poidsDeclares[i - 1] >= p), poidsDeclares.join(' '))
+verifier('et chaque manque porte son mode d’emploi',
+  presque.manquants.every(m => typeof m.aide === 'string' && m.aide.length > 10))
 
 // ─── DÉPLACER UN LIEU N'EST PAS ÉCONDUIRE UN CLIENT ───────────────────────
 // ⚠️ Le verrou d'Alex oblige à annuler les rendez-vous d'un emplacement qu'on

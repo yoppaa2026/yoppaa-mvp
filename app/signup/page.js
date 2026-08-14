@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
 import { compresserImage } from '@/lib/compress-image'
 import { logoProvisoireSvg, propositionsLogo } from '@/lib/logo-provisoire'
+import { scoreOnboarding, SEUIL_SOUMISSION } from '@/lib/score-onboarding'
 import { conseilPhoto, MAX_PHOTOS } from '@/lib/guide-photos'
 import { SHOP_PRODUCTS, classerProduitsParCategorie } from '@/lib/produits-boutique'
 // Icônes Lucide React : SVG inline alignés sur la charte canonique Yoppaa.
@@ -2224,7 +2225,6 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(onboarding.statut === 'en_attente_validation' || onboarding.statut === 'valide')
   const [error, setError] = useState('')
-  const [stockMenu, setStockMenu] = useState(0)
 
   // Classement des produits selon la catégorie du commerçant
   const { principaux, secondaires } = classerProduitsParCategorie(commercant.categorie)
@@ -2245,28 +2245,18 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
     .filter(Boolean)
     .reduce((sum, p) => sum + p.prix, 0)
 
-  // Compte les articles du commerçant (pour le score)
-  useEffect(() => {
-    let annule = false
-    supabase.from('articles')
-      .select('id', { count: 'exact', head: true })
-      .eq('commercant_id', commercant.id)
-      .then(({ count }) => { if (!annule) setStockMenu(count || 0) })
-    return () => { annule = true }
-  }, [commercant.id])
 
   // Calcul du score 0-100 selon le brief
-  const score = (() => {
-    let s = 0
-    if (commercant.latitude && commercant.longitude) s += 20      // adresse géocodable
-    if (onboarding.photo_ok) s += 20                              // photo couverture uploadée
-    if (commercant.horaires_detail && Object.values(commercant.horaires_detail).some(h => h?.ouvert)) s += 20  // horaires
-    if (commercant.description && commercant.description.length >= 20) s += 10
-    if (commercant.logo_url) s += 10
-    if (commercant.telephone && /^\+?[\d\s.-]{8,}$/.test(commercant.telephone)) s += 10
-    if (stockMenu >= 1) s += 10
-    return s
-  })()
+  // ⚠️ LES HORAIRES NE CONCERNENT PAS TOUT LE MONDE, et c'est ce qui empêchait
+  // certains d'atteindre 100 % : un service en formule Exister peut les passer,
+  // et depuis le 13/08 celui dont les horaires viennent de ses emplacements
+  // aussi. Le critère est alors retiré du calcul, pas laissé rouge à vie.
+  const score = scoreOnboarding({
+    commercant,
+    onboarding,
+    horairesRequis: !peutSkipperHoraires(getPlanActif(commercant, onboarding), commercant.categorie)
+      && !horairesViennentDesLieux(commercant),
+  })
   // S5 : KYB obligatoire avant soumission. Sans KYB rempli (BCE + nom prenom +
   // recto + verso), bouton "Envoyer" disabled. La validation FINALE (kyb_statut
   // = 'valide') est faite par Yoppaa cote admin avant publication de la fiche.
@@ -2277,7 +2267,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
   if (!commercant.kyb_id_recto_url) kybManques.push('carte d\'identité recto')
   if (!commercant.kyb_id_verso_url) kybManques.push('carte d\'identité verso')
   const kybRempli = kybManques.length === 0
-  const peutSoumettre = score >= 60 && kybRempli
+  const peutSoumettre = score.peutSoumettre && kybRempli
 
   async function soumettre() {
     if (!peutSoumettre || submitting) return
@@ -2374,7 +2364,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 13, color: T.deep, lineHeight: 1.9 }}>
             <li><strong>Commerce :</strong> {commercant.nom}</li>
             <li><strong>Plan choisi :</strong> {PLAN_LABEL[commercant.plan]}</li>
-            <li><strong>Score profil :</strong> {score} / 100</li>
+            <li><strong>Ta fiche :</strong> {score.pourcentage} % complète{score.complet ? ' 🟣' : ''}</li>
             {[...shopChoices].map(type => {
               const p = SHOP_PRODUCTS.find(p => p.type === type)
               if (!p) return null
@@ -2383,6 +2373,20 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
             {shopChoices.size > 0 && <li style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.hairline}` }}><strong>Total boutique :</strong> {totalChoisis.toFixed(2).replace('.', ',')}€ HTVA</li>}
           </ul>
         </Card>
+        <div style={{ background: T.pale, borderRadius: 14, padding: '14px 16px', marginTop: 16, textAlign: 'left' }}>
+          <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 800, color: T.deep }}>
+            Et après, qu'est-ce qui t'attend ?
+          </p>
+          <p style={{ margin: 0, fontSize: 12, color: T.muted, lineHeight: 1.6 }}>
+            Dès que ta page est en ligne, ton tableau de bord t'ouvre le reste : ton
+            catalogue, tes créneaux, tes actus, tes deals. Rien d'obligatoire, rien à
+            faire dans l'urgence, et tout se remplit au fil de l'eau.
+            <span style={{ display: 'block', marginTop: 6, color: T.deep, fontWeight: 600 }}>
+              Le plus utile pour commencer : ajouter tes premiers articles ou tes
+              premières prestations. C'est ce que tes clients viendront chercher.
+            </span>
+          </p>
+        </div>
         <p style={{ fontSize: 12, color: T.muted, marginTop: 16 }}>
           Tu peux fermer cette page. On te recontacte par email à <strong>{commercant.email}</strong>.
         </p>
@@ -2441,19 +2445,49 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
         </div>
       )}
 
-      {/* Score */}
-      <Card titre="Ton score de complétude" sous="Minimum 60 / 100 pour soumettre.">
-        <ScoreBar score={score}/>
+      {/* ─── LE SCORE, ET LA VICTOIRE QU'IL DOIT PERMETTRE ────────────────
+          ⚠️ IL ÉTAIT IMPOSSIBLE D'ATTEINDRE 100 %. Dix points étaient donnés
+          pour « au moins un article au menu », or aucun écran du signup ne
+          permet d'en ajouter : le commerçant plafonnait à 90 % sans comprendre
+          ce qui manquait, et terminait son inscription sur un échec.
+          Le calcul vit désormais dans lib/score-onboarding.js, qui ne compte
+          que ce qui est FAISABLE ICI, et qui retire les horaires de la liste
+          quand ils ne concernent pas ce commerçant. Tout le monde peut donc
+          arriver à 100 %. */}
+      <Card titre="Où tu en es" sous={`Il t'en faut ${SEUIL_SOUMISSION} % pour envoyer ton dossier.`}>
+        <ScoreBar score={score.pourcentage}/>
+
+        {score.complet ? (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#ECFDF5', border: '1.5px solid #A7F3D0', borderRadius: 12, padding: '12px 14px', marginTop: 14 }}>
+            <span style={{ flexShrink: 0, marginTop: 1, color: '#065F46' }}><CheckCircle size={18} strokeWidth={2.4}/></span>
+            <p style={{ margin: 0, fontSize: 12.5, color: '#065F46', fontWeight: 800, lineHeight: 1.5 }}>
+              Ta fiche est complète. 🟣
+              <span style={{ display: 'block', fontWeight: 500, marginTop: 3 }}>
+                Tout y est, et tu peux envoyer ton dossier. Le reste, ton catalogue,
+                tes créneaux, tes deals, t&apos;attend dans ton tableau de bord : tu
+                l&apos;ajouteras tranquillement une fois ton compte validé.
+              </span>
+            </p>
+          </div>
+        ) : (
+          <p style={{ fontSize: 11.5, color: T.muted, margin: '12px 0 0', lineHeight: 1.5 }}>
+            {score.manquants.length === 1
+              ? 'Il ne te manque plus qu’une chose : '
+              : `Il te reste ${score.manquants.length} points à compléter, en commençant par le plus utile : `}
+            <strong style={{ color: T.deep }}>{score.manquants[0]?.label.toLowerCase()}</strong>.
+            {score.manquants[0]?.aide ? ` ${score.manquants[0].aide}` : ''}
+          </p>
+        )}
+
+        {/* La liste vient de la règle : un critère qui ne concerne pas ce
+            commerçant n'y figure pas du tout, au lieu de rester rouge à vie. */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 14, fontSize: 12 }}>
-          <ScoreItem label="Adresse géocodable" ok={commercant.latitude && commercant.longitude} pts={20}/>
-          <ScoreItem label="Au moins une photo" ok={onboarding.photo_ok} pts={20}/>
-          <ScoreItem label="Horaires" ok={commercant.horaires_detail && Object.values(commercant.horaires_detail).some(h => h?.ouvert)} pts={20}/>
-          <ScoreItem label="Description ≥ 20" ok={commercant.description?.length >= 20} pts={10}/>
-          <ScoreItem label="Logo" ok={!!commercant.logo_url} pts={10}/>
-          <ScoreItem label="Téléphone valide" ok={commercant.telephone && /^\+?[\d\s.-]{8,}$/.test(commercant.telephone)} pts={10}/>
-          <ScoreItem label="Menu (≥ 1 article)" ok={stockMenu >= 1} pts={10}/>
+          {score.criteres.map(c => (
+            <ScoreItem key={c.cle} label={c.label} ok={c.atteint} pts={c.poids}/>
+          ))}
         </div>
       </Card>
+
 
       {/* Boutique Yoppaa : Success Pack + Kits hardware + Consommables */}
       <Card titre="Boutique Yoppaa" sous="Du matériel et de l'accompagnement, si tu en veux.">
@@ -2534,7 +2568,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
                 </span>
               </>
             ) : (
-              `Score trop bas (${score}/100). Reviens sur les étapes précédentes pour compléter ton profil.`
+              `Il te manque encore un peu : ${score.pourcentage} % sur les ${SEUIL_SOUMISSION} % attendus. Reviens aux étapes précédentes pour compléter.`
             )}
           </p>
         )}

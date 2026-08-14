@@ -11,6 +11,7 @@ import {
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos,
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
+import { capacitePrestation } from '../lib/cours-collectifs.js'
 import {
   creneauAcceptable, creneauxDuJour, deplacementUtile, champsDuDeplacement,
   heureDeFin, minutesDeLHeure,
@@ -613,6 +614,60 @@ verifier('aucun autre écran ne réécrit le créneau d’un rendez-vous',
   deplaceurs.length === CHEMINS_DEPLACEMENT.length
   && deplaceurs.every(f => CHEMINS_DEPLACEMENT.some(c => f.endsWith(c.split('/').pop()))),
   `trouvés : ${deplaceurs.join(' · ') || 'aucun'}`)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LA CAPACITÉ DOIT ARRIVER JUSQU'AUX MODALES (défaut trouvé par Alex, 15/08)
+//
+// Le module des cours collectifs était juste, la modale de création aussi. Mais
+// le tableau de bord chargeait les prestations SANS la colonne `capacite`, et
+// `capacitePrestation` d'une prestation qui n'en a pas rend **1**, son repli.
+// Un cours de douze redevenait donc un rendez-vous individuel, et la deuxième
+// inscrite lisait « ce créneau chevauche un RDV déjà existant ».
+//
+// ⚠️ RIEN NE L'A SIGNALÉ : une colonne absente d'un `select` ne lève aucune
+// erreur, elle vaut `undefined`, et le repli silencieux fait le reste. Ni le
+// lint, ni le build, ni ce banc ne l'ont vu. Troisième défaut de cette forme
+// après la galerie photos d'une fiche et le lien vers l'abonnement.
+//
+// On ne vérifie donc pas une colonne, on vérifie LE CONTRAT ENTIER : tout champ
+// de prestation que les modales lisent doit être demandé par la requête.
+// ═══════════════════════════════════════════════════════════════════════════
+const CHAMPS_PRESTATION_LUS = [
+  'id',               // clé de rapprochement avec la réservation
+  'nom',              // affiché dans le sélecteur
+  'duree_minutes',    // borne la fin du rendez-vous
+  'prix',             // prix estimé
+  'acompte_pourcent', // acompte figé
+  'tva_taux',         // TVA figée à la réservation
+  'capacite',         // ⚠️ celui qui manquait
+]
+const selectPrestations = /from\('rdv_prestations'\)\s*\n?[\s\S]{0,900}?\.select\('([^']+)'\)/.exec(srcTableau)?.[1] || ''
+verifier('le select des prestations du tableau de bord est bien lu',
+  selectPrestations.length > 0, selectPrestations)
+for (const champ of CHAMPS_PRESTATION_LUS) {
+  verifier(`la requête demande « ${champ} »`,
+    new RegExp(`(^|,\\s*)${champ}(\\s*,|$)`).test(selectPrestations),
+    selectPrestations)
+}
+
+// ⚠️ ET LA CONSÉQUENCE, EXÉCUTÉE, parce que c'est elle qui explique le défaut :
+// une prestation sans capacité n'est pas « de capacité inconnue », elle vaut 1.
+// Le repli est volontaire et protège tout le parc de coiffeurs ; c'est justement
+// pour ça qu'une colonne oubliée passe inaperçue.
+egal('une prestation sans capacité vaut 1, silencieusement',
+  capacitePrestation({ id: 'p1', nom: 'Hatha yoga', duree_minutes: 60 }), 1)
+egal('et avec sa capacité, elle vaut ce qu’elle dit',
+  capacitePrestation({ id: 'p1', nom: 'Hatha yoga', duree_minutes: 60, capacite: 12 }), 12)
+// La démonstration complète du défaut d'Alex : même cours, même heure, deuxième
+// personne. Refusée sans la colonne, acceptée avec.
+const DEUXIEME = {
+  ...BASE, heureDebut: '10:00', prestationId: 'p1',
+  rdvsExistants: [{ id: 'r1', prestation_id: 'p1', date_rdv: '2026-09-07', heure_debut: '10:00', heure_fin: '11:00', statut: 'confirme' }],
+}
+egal('sans la capacité, la deuxième inscrite est refusée',
+  creneauAcceptable({ ...DEUXIEME, capacite: capacitePrestation({ nom: 'Hatha yoga' }) }).raison, 'conflit')
+egal('avec la capacité, elle passe',
+  creneauAcceptable({ ...DEUXIEME, capacite: capacitePrestation({ nom: 'Hatha yoga', capacite: 12 }) }).ok, true)
 
 // ⚠️ ET LE CALENDRIER DU CLIENT DOIT SUIVRE. Apple, Google et Outlook
 // reconnaissent l'événement à son identifiant et n'acceptent de le déplacer que

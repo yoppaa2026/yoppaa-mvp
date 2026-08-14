@@ -902,7 +902,24 @@ export default function Dashboard() {
         .is('deleted_at', null),
       supabase
         .from('rdv_prestations')
-        .select('id, nom, duree_minutes, prix, prix_min, prix_max, acompte_pourcent, ordre, tva_taux')
+        // ⚠️ `capacite` MANQUAIT, ET C'EST CE QUI TUAIT LES COURS COLLECTIFS.
+        //
+        // Le module du 13/08 était juste, la modale de création aussi : elle
+        // demande `capacitePrestation(presta)` pour savoir si deux personnes
+        // peuvent partager un horaire. Mais cette colonne n'arrivait jamais
+        // jusqu'à elle, et `capacitePrestation` d'une prestation SANS capacité
+        // rend 1, sa valeur de repli. Un cours de douze devenait donc un
+        // rendez-vous individuel, et la deuxième inscrite se voyait refuser
+        // « ce créneau chevauche un RDV déjà existant ».
+        //
+        // ⚠️ AUCUNE ERREUR NULLE PART. Ni au lint, ni au build, ni au banc :
+        // une colonne absente d'un `select` ne lève rien, elle vaut
+        // `undefined`, et un repli silencieux fait le reste. C'est le troisième
+        // défaut de cette forme sur ce projet, après la galerie photos d'une
+        // fiche et le lien vers l'abonnement dans « Mes rendez-vous ». Le banc
+        // exige désormais que TOUS les champs lus par les modales soient
+        // demandés ici.
+        .select('id, nom, duree_minutes, prix, prix_min, prix_max, acompte_pourcent, ordre, tva_taux, capacite')
         .eq('commercant_id', id)
         .eq('actif', true)
         .is('deleted_at', null)

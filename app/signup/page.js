@@ -2099,7 +2099,15 @@ function CardKYB({ commercant, onUpdate, onSaving }) {
           <p style={{ fontSize: 11, color: '#DC2626', marginTop: 4, fontWeight: 600, lineHeight: 1.45 }}>
             {verifBce.raison === 'checksum' ? (
               <>
-                Ce numéro n&rsquo;existe pas au registre BCE (contrôle mod 97 échoué).
+                {/* ⚠️ CE MESSAGE AFFIRMAIT CE QU'IL NE POUVAIT PAS SAVOIR.
+                    Il disait « ce numéro n'existe pas au registre BCE », alors
+                    que le contrôle est PUREMENT ARITHMÉTIQUE, un modulo 97 sur
+                    les chiffres saisis : aucune consultation du registre n'a
+                    lieu. Un numéro parfaitement inexistant mais bien formé
+                    passait donc, et un commerçant qui avait juste inversé deux
+                    chiffres s'entendait dire que son entreprise n'existe pas.
+                    On dit ce qu'on a vérifié, et rien de plus. */}
+                Ce numéro n&rsquo;est pas valide, vérifie les chiffres.
                 <br/>
                 Vérifie le numéro exact sur{' '}
                 <a href="https://kbopub.economie.fgov.be/kbopub/zoeknummerform.html?lang=fr"

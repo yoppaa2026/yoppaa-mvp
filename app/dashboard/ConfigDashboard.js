@@ -11,6 +11,7 @@ import { avantLancement, libelleLancement } from '@/lib/lancement'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
 import { capacitePrestation } from '@/lib/cours-collectifs'
+import { datesDeSeances, exclusionsQuiSeChevauchent } from '@/lib/abonnements'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
@@ -6209,22 +6210,33 @@ function TabRdv({ commercantId, commercant, toast }) {
     { id: 'prestations', label: 'Prestations' },
     { id: 'praticiens',  label: 'Praticiens' },
     { id: 'creneaux',    label: 'Créneaux' },
+    { id: 'abonnements', label: 'Abonnements' },
     { id: 'fermetures',  label: 'Fermetures' },
   ]
   return (
     <div>
-      {/* Barre sous-onglets RDV */}
-      <div style={{ display: 'flex', gap: 6, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 16, boxShadow: '0 1px 6px rgba(22,6,54,0.05)', border: `1px solid ${T.hairline}` }}>
+      {/* Barre sous-onglets RDV.
+          ⚠️ ELLE DÉFILE ET ELLE MONTRE SES FLÈCHES. Avec quatre onglets et
+          `flex: 1`, les libellés se comprimaient déjà ; le cinquième les
+          écrasait franchement. La règle du projet ne souffre aucune exception :
+          quand une barre est plus large que l'écran, le commerçant doit VOIR
+          qu'il reste quelque chose à côté, jamais le deviner. `flex: 1 0 auto`
+          remplit la largeur disponible sans jamais rogner un mot, et
+          BandeDefilante pose les flèches sur ordinateur. */}
+      <style>{`.rdv-subtabs::-webkit-scrollbar { display: none }`}</style>
+      <BandeDefilante className="rdv-subtabs" libelle="les sections rendez-vous"
+        style={{ display: 'flex', gap: 6, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 16, boxShadow: '0 1px 6px rgba(22,6,54,0.05)', border: `1px solid ${T.hairline}`, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
         {subTabs.map(t => (
           <button key={t.id} onClick={() => setSubTab(t.id)}
-            style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, background: subTab === t.id ? T.main : 'transparent', color: subTab === t.id ? '#fff' : T.muted, transition: 'all 0.2s' }}>
+            style={{ flex: '1 0 auto', padding: '8px 12px', whiteSpace: 'nowrap', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, background: subTab === t.id ? T.main : 'transparent', color: subTab === t.id ? '#fff' : T.muted, transition: 'all 0.2s' }}>
             {t.label}
           </button>
         ))}
-      </div>
+      </BandeDefilante>
       {subTab === 'prestations' && <TabRdvPrestations commercantId={commercantId} toast={toast} />}
       {subTab === 'praticiens'  && <TabRdvPraticiens commercantId={commercantId} toast={toast} />}
       {subTab === 'creneaux'    && <TabRdvCreneaux commercantId={commercantId} commercant={commercant} toast={toast} />}
+      {subTab === 'abonnements' && <TabRdvAbonnements commercantId={commercantId} toast={toast} />}
       {subTab === 'fermetures'  && <TabRdvFermetures commercantId={commercantId} toast={toast} />}
     </div>
   )
@@ -6596,6 +6608,395 @@ function TabRdvPrestations({ commercantId, toast }) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══ ABONNEMENTS : LES FORMULES QUE LE COMMERÇANT VEND ═════════════════════
+// ⚠️ ON N'ACHÈTE PLUS UNE SÉANCE, ON ACHÈTE UN DROIT. Une professeure de yoga
+// vend une place fixe pour toute une année scolaire, un coach sportif vend un
+// carnet de dix séances : dans les deux cas la séance est payée AVANT d'être
+// réservée, et la séance à l'unité n'est plus qu'un reste, quand il en reste.
+//
+// Deux formes, qui remplissent LE MÊME compteur (cf. lib/abonnements.js) :
+// une période avec ses dates, ou un carnet avec son nombre et sa validité.
+//
+// ⚠️ L'APERÇU DU BAS N'EST PAS DÉCORATIF, C'EST LE GARDE-FOU. Yoppaa ne
+// maintient aucun calendrier scolaire, c'est le commerçant qui coche ses
+// semaines : la SEULE protection contre une saisie de travers est qu'il lise
+// le nombre de séances obtenu avant de confirmer. Emily attend 36, elle lit
+// 36, ou elle voit tout de suite qu'elle s'est trompée.
+const JOURS_APERCU = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+
+function dateCourte(iso) {
+  if (!iso) return ''
+  return new Date(`${iso}T12:00:00`).toLocaleDateString('fr-BE', { day: 'numeric', month: 'long' })
+}
+
+// « 180 jours » ne parle à personne, « 6 mois » si.
+function dureeParlante(jours) {
+  const n = parseInt(jours, 10)
+  if (!Number.isFinite(n) || n <= 0) return ''
+  if (n % 30 === 0 && n >= 30) {
+    const mois = n / 30
+    return mois === 1 ? '1 mois' : `${mois} mois`
+  }
+  return n === 1 ? '1 jour' : `${n} jours`
+}
+
+function TabRdvAbonnements({ commercantId, toast }) {
+  const [formules, setFormules] = useState([])
+  const [prestations, setPrestations] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const initialForm = {
+    libelle: '', type: 'periode', prestation_id: '',
+    date_debut: '', date_fin: '',
+    seances_carnet: '10', validite_jours: '180',
+    prix: '', seances_par_semaine: '1', actif: true,
+    periodes_exclues: [],
+  }
+  const [form, setForm] = useState(initialForm)
+  const [jourApercu, setJourApercu] = useState('lundi')
+  const [exclu, setExclu] = useState({ debut: '', fin: '', libelle: '' })
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
+  useEffect(() => { fetchAll() }, [commercantId])
+
+  async function fetchAll() {
+    setLoading(true)
+    const [{ data: f }, { data: p }] = await Promise.all([
+      supabase.from('abonnement_formules').select('*')
+        .eq('commercant_id', commercantId).is('deleted_at', null)
+        .order('ordre', { ascending: true }).order('created_at', { ascending: true }),
+      supabase.from('rdv_prestations').select('id, nom, capacite')
+        .eq('commercant_id', commercantId).is('deleted_at', null)
+        .order('ordre', { ascending: true }),
+    ])
+    setFormules(f || [])
+    setPrestations(p || [])
+    setLoading(false)
+  }
+
+  function openNew() {
+    setEditId(null); setForm(initialForm); setExclu({ debut: '', fin: '', libelle: '' }); setShowForm(true)
+  }
+  function openEdit(f) {
+    setEditId(f.id)
+    setForm({
+      libelle: f.libelle || '', type: f.type || 'periode', prestation_id: f.prestation_id || '',
+      date_debut: f.date_debut || '', date_fin: f.date_fin || '',
+      seances_carnet: f.seances_carnet != null ? String(f.seances_carnet) : '10',
+      validite_jours: f.validite_jours != null ? String(f.validite_jours) : '180',
+      prix: f.prix != null ? String(f.prix) : '',
+      seances_par_semaine: String(f.seances_par_semaine ?? 1),
+      actif: f.actif !== false,
+      periodes_exclues: Array.isArray(f.periodes_exclues) ? f.periodes_exclues : [],
+    })
+    setExclu({ debut: '', fin: '', libelle: '' })
+    setShowForm(true)
+  }
+
+  function ajouterExclusion() {
+    const debut = exclu.debut, fin = exclu.fin || exclu.debut
+    if (!debut) return toast('Indique au moins le premier jour sans cours', 'error')
+    if (fin < debut) return toast('La fin ne peut pas précéder le début', 'error')
+    const candidate = { debut, fin, libelle: exclu.libelle.trim() || null }
+    // ⚠️ ON NOMME CELLE QUI GÊNE. Deux congés qui se recouvrent font croire au
+    // commerçant qu'il a retiré deux semaines alors qu'il n'en a retiré qu'une,
+    // et le compte de séances part de travers sans que rien ne le dise.
+    const conflit = exclusionsQuiSeChevauchent([...form.periodes_exclues, candidate])
+    if (conflit) {
+      const gene = conflit.find(c => c !== candidate) || conflit[0]
+      return toast(`Chevauche « ${gene.libelle || dateCourte(gene.debut)} »`, 'error')
+    }
+    setForm(p => ({ ...p, periodes_exclues: [...p.periodes_exclues, candidate].sort((a, b) => a.debut < b.debut ? -1 : 1) }))
+    setExclu({ debut: '', fin: '', libelle: '' })
+  }
+
+  function retirerExclusion(i) {
+    setForm(p => ({ ...p, periodes_exclues: p.periodes_exclues.filter((_, k) => k !== i) }))
+  }
+
+  // L'aperçu, recalculé à chaque frappe. Assez léger pour ne pas mériter de
+  // mémoïsation : au pire cinquante-deux tours de boucle.
+  const dates = form.type === 'periode'
+    ? datesDeSeances({
+        dateDebut: form.date_debut, dateFin: form.date_fin,
+        jourSemaine: jourApercu, periodesExclues: form.periodes_exclues,
+      })
+    : []
+  const nbCarnet = parseInt(form.seances_carnet, 10)
+
+  async function save() {
+    if (!form.libelle.trim()) return toast('Donne un nom à ta formule', 'error')
+    if (!form.prestation_id) return toast('Choisis le cours concerné', 'error')
+    if (form.type === 'periode') {
+      if (!form.date_debut || !form.date_fin) return toast('Indique les dates de début et de fin', 'error')
+      if (form.date_fin < form.date_debut) return toast('La fin ne peut pas précéder le début', 'error')
+    } else {
+      if (!(nbCarnet > 0)) return toast('Un carnet doit contenir au moins une séance', 'error')
+      if (!(parseInt(form.validite_jours, 10) > 0)) return toast('Indique la durée de validité du carnet', 'error')
+    }
+    const payload = {
+      commercant_id: commercantId,
+      prestation_id: form.prestation_id,
+      libelle: form.libelle.trim(),
+      type: form.type,
+      // ⚠️ CHAQUE FORME NETTOIE LES CHAMPS DE L'AUTRE. Une formule passée de
+      // période à carnet garderait sinon ses anciennes dates, que la contrainte
+      // de cohérence en base accepterait sans broncher puisqu'elle ne regarde
+      // que les champs de la forme choisie.
+      date_debut: form.type === 'periode' ? form.date_debut : null,
+      date_fin:   form.type === 'periode' ? form.date_fin   : null,
+      periodes_exclues: form.type === 'periode' ? form.periodes_exclues : [],
+      seances_carnet: form.type === 'carnet' ? nbCarnet : null,
+      validite_jours: form.type === 'carnet' ? parseInt(form.validite_jours, 10) : null,
+      // Vide = pas renseigné : null plutôt que 0, qui ferait passer la formule
+      // pour gratuite.
+      prix: form.prix === '' ? 0 : Number(form.prix),
+      seances_par_semaine: Math.max(1, parseInt(form.seances_par_semaine, 10) || 1),
+      actif: !!form.actif,
+    }
+    setSaving(true)
+    const { error } = editId
+      ? await supabase.from('abonnement_formules').update(payload).eq('id', editId)
+      : await supabase.from('abonnement_formules').insert(payload)
+    setSaving(false)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    toast(editId ? 'Formule mise à jour' : 'Formule créée')
+    setShowForm(false); setEditId(null); setForm(initialForm)
+    fetchAll()
+  }
+
+  async function softDelete(f) {
+    if (!window.confirm(`Supprimer la formule "${f.libelle}" ? Les abonnements déjà souscrits ne sont pas touchés, ils gardent leurs conditions.`)) return
+    const { error } = await supabase.from('abonnement_formules')
+      .update({ deleted_at: new Date().toISOString() }).eq('id', f.id)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    toast('Formule supprimée')
+    fetchAll()
+  }
+
+  if (loading) return <p style={{ color: T.muted, padding: 16 }}>Chargement…</p>
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div>
+          <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>Abonnements</p>
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+            {formules.length === 0 ? 'Aucune formule' : `${formules.length} formule${formules.length > 1 ? 's' : ''}`}
+          </p>
+        </div>
+        <button onClick={openNew}
+          style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
+          + Ajouter une formule
+        </button>
+      </div>
+
+      {formules.length === 0 && !showForm && (
+        <div style={{ background: '#fff', borderRadius: 14, padding: 24, border: `1px solid ${T.hairline}` }}>
+          <p style={{ fontSize: 14, fontWeight: 800, color: T.ink, marginBottom: 8 }}>Tes clients paient d’avance ?</p>
+          <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.65, marginBottom: 10 }}>
+            Une formule d’abonnement, c’est un droit vendu une fois pour plusieurs séances. Deux façons de le faire :
+          </p>
+          <p style={{ fontSize: 12.5, color: T.ink, lineHeight: 1.65, marginBottom: 4 }}>
+            <strong>Une période</strong> · « Année, du 1er septembre au 3 juillet, hors congés ». Pour les cours qui suivent l’année scolaire.
+          </p>
+          <p style={{ fontSize: 12.5, color: T.ink, lineHeight: 1.65 }}>
+            <strong>Un carnet</strong> · « 10 séances valables 6 mois ». Pour les suivis, les cures et les forfaits.
+          </p>
+        </div>
+      )}
+
+      {showForm && (
+        <div style={{ background: '#fff', borderRadius: 14, padding: 16, border: `1px solid ${T.hairline}`, marginBottom: 14, maxWidth: '100%' }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Nom de la formule *</label>
+          <Input value={form.libelle} onChange={e => setForm({ ...form, libelle: e.target.value })}
+            placeholder="Année, Semestre 1, Carnet de 10…" style={{ marginBottom: 12 }}/>
+
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Le cours concerné *</label>
+          <select value={form.prestation_id} onChange={e => setForm({ ...form, prestation_id: e.target.value })}
+            style={{ ...s.input, marginBottom: 12 }}>
+            <option value="">Choisis un cours…</option>
+            {prestations.map(p => <option key={p.id} value={p.id}>{p.nom}</option>)}
+          </select>
+          {prestations.length === 0 && (
+            <p style={{ fontSize: 11.5, color: '#B45309', margin: '-6px 0 12px', lineHeight: 1.5 }}>
+              Crée d’abord une prestation dans l’onglet Prestations : c’est elle qui porte la durée et le nombre de places.
+            </p>
+          )}
+
+          {/* ⚠️ LA QUESTION QUI COMMANDE TOUT LE RESTE DU FORMULAIRE. */}
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 6 }}>Qu’est-ce que tu vends ?</label>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+            {[
+              { id: 'periode', titre: 'Une période', desc: 'Du 1er septembre au 3 juillet' },
+              { id: 'carnet',  titre: 'Un carnet',   desc: '10 séances valables 6 mois' },
+            ].map(o => (
+              <button key={o.id} onClick={() => setForm({ ...form, type: o.id })}
+                style={{ flex: '1 1 150px', minWidth: 0, textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', background: form.type === o.id ? `${T.main}12` : '#fff', border: `1.5px solid ${form.type === o.id ? T.main : T.hairline}`, fontFamily: '"DM Sans", sans-serif' }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: form.type === o.id ? T.main : T.ink }}>{o.titre}</span>
+                <span style={{ display: 'block', fontSize: 11, color: T.muted, marginTop: 2 }}>{o.desc}</span>
+              </button>
+            ))}
+          </div>
+
+          {form.type === 'periode' ? (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Premier jour *</label>
+                  <Input type="date" value={form.date_debut} onChange={e => setForm({ ...form, date_debut: e.target.value })}/>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Dernier jour *</label>
+                  <Input type="date" value={form.date_fin} onChange={e => setForm({ ...form, date_fin: e.target.value })}/>
+                </div>
+              </div>
+
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Les semaines sans cours</label>
+              <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.55, margin: '0 0 8px' }}>
+                Congés scolaires, fermeture annuelle, jours fériés. Ces jours-là ne comptent pas de séance.
+              </p>
+              {form.periodes_exclues.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+                  {form.periodes_exclues.map((p, i) => (
+                    <div key={`${p.debut}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.bgSoft || '#F7F5FC', borderRadius: 8, padding: '7px 10px', minWidth: 0 }}>
+                      <span style={{ fontSize: 12, color: T.ink, fontWeight: 700, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+                        {p.libelle ? `${p.libelle} · ` : ''}{dateCourte(p.debut)}{p.fin && p.fin !== p.debut ? ` au ${dateCourte(p.fin)}` : ''}
+                      </span>
+                      <button onClick={() => retirerExclusion(i)}
+                        style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#DC2626', fontWeight: 800, fontSize: 12, flexShrink: 0 }}>Retirer</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <Input type="date" value={exclu.debut} onChange={e => setExclu({ ...exclu, debut: e.target.value })}/>
+                <Input type="date" value={exclu.fin} onChange={e => setExclu({ ...exclu, fin: e.target.value })}/>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                <Input value={exclu.libelle} onChange={e => setExclu({ ...exclu, libelle: e.target.value })}
+                  placeholder="Congé d’automne" style={{ flex: '1 1 140px', minWidth: 0 }}/>
+                <button onClick={ajouterExclusion}
+                  style={{ ...s.btn, ...s.btnGhost, padding: '10px 14px', fontSize: 12.5, flexShrink: 0 }}>Ajouter</button>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Nombre de séances *</label>
+                <Input type="number" min="1" value={form.seances_carnet} onChange={e => setForm({ ...form, seances_carnet: e.target.value })}/>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Valables (jours) *</label>
+                <Input type="number" min="1" value={form.validite_jours} onChange={e => setForm({ ...form, validite_jours: e.target.value })}/>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Prix (€)</label>
+              <Input type="number" min="0" step="0.01" value={form.prix} onChange={e => setForm({ ...form, prix: e.target.value })}/>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Séances par semaine</label>
+              <Input type="number" min="1" value={form.seances_par_semaine} onChange={e => setForm({ ...form, seances_par_semaine: e.target.value })}/>
+            </div>
+          </div>
+          {/* ⚠️ LE PLAFOND N'EST PAS UN DÉTAIL : sans lui, un client qui réserve
+              lui-même consomme tout son abonnement en deux mois alors qu'on lui
+              en vend une séance par semaine. */}
+          <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.55, margin: '-4px 0 14px' }}>
+            Le maximum qu’un client peut réserver dans une même semaine. Laisse 1 si tu vends une séance hebdomadaire : ceux qui veulent venir deux fois prennent un second abonnement.
+          </p>
+
+          {/* ⚠️ L'APERÇU. Le seul rempart contre une saisie de travers, puisque
+              Yoppaa ne connaît aucun calendrier scolaire. */}
+          <div style={{ background: `${T.main}0D`, border: `1px solid ${T.main}33`, borderRadius: 10, padding: 12, marginBottom: 14 }}>
+            {form.type === 'carnet' ? (
+              nbCarnet > 0 && parseInt(form.validite_jours, 10) > 0 ? (
+                <p style={{ fontSize: 13, fontWeight: 800, color: T.main, margin: 0 }}>
+                  {nbCarnet} séance{nbCarnet > 1 ? 's' : ''}, valables {dureeParlante(form.validite_jours)} à partir de l’achat.
+                </p>
+              ) : (
+                <p style={{ fontSize: 12.5, color: T.muted, margin: 0 }}>Indique le nombre de séances et leur durée de validité.</p>
+              )
+            ) : dates.length > 0 ? (
+              <>
+                <p style={{ fontSize: 13, fontWeight: 800, color: T.main, margin: '0 0 4px' }}>
+                  {dates.length} séance{dates.length > 1 ? 's' : ''} du {dateCourte(dates[0])} au {dateCourte(dates[dates.length - 1])}.
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                  <span style={{ fontSize: 11.5, color: T.muted }}>Pour un cours du</span>
+                  <select value={jourApercu} onChange={e => setJourApercu(e.target.value)}
+                    style={{ ...s.input, width: 'auto', padding: '6px 8px', fontSize: 12 }}>
+                    {JOURS_APERCU.map(j => <option key={j} value={j}>{j}</option>)}
+                  </select>
+                </div>
+                <p style={{ fontSize: 11.5, color: T.muted, margin: '8px 0 0', lineHeight: 1.55 }}>
+                  Vérifie ce nombre : c’est exactement ce que tes clients auront.
+                </p>
+              </>
+            ) : (
+              <p style={{ fontSize: 12.5, color: T.muted, margin: 0 }}>
+                Renseigne les dates pour voir combien de séances la formule contiendra.
+              </p>
+            )}
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <Toggle value={form.actif} onChange={v => setForm({ ...form, actif: v })} label="Formule proposée"/>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={save} disabled={saving}
+              style={{ ...s.btn, ...s.btnPrimary, opacity: saving ? 0.6 : 1, flex: '1 1 140px' }}>
+              {saving ? 'Enregistrement…' : (editId ? 'Mettre à jour' : 'Créer la formule')}
+            </button>
+            <button onClick={() => { setShowForm(false); setEditId(null); setForm(initialForm) }}
+              style={{ ...s.btn, ...s.btnGhost, flex: '0 1 auto' }}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {formules.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {formules.map(f => {
+            const presta = prestations.find(p => p.id === f.prestation_id)
+            const resume = f.type === 'carnet'
+              ? `${f.seances_carnet} séances · ${dureeParlante(f.validite_jours)}`
+              : `Du ${dateCourte(f.date_debut)} au ${dateCourte(f.date_fin)}`
+            const nbExclus = Array.isArray(f.periodes_exclues) ? f.periodes_exclues.length : 0
+            return (
+              <div key={f.id} style={{ background: '#fff', borderRadius: 12, padding: 14, border: `1px solid ${T.hairline}`, opacity: f.actif ? 1 : 0.55, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+                    <p style={{ fontSize: 14, fontWeight: 800, color: T.ink, overflowWrap: 'anywhere' }}>{f.libelle}</p>
+                    <p style={{ fontSize: 12, color: T.muted, marginTop: 3, overflowWrap: 'anywhere' }}>
+                      {presta ? `${presta.nom} · ` : ''}{resume}
+                    </p>
+                    <p style={{ fontSize: 11.5, color: T.muted, marginTop: 3 }}>
+                      {f.prix > 0 ? `${Number(f.prix).toFixed(2)} €` : 'Prix non renseigné'}
+                      {f.seances_par_semaine > 1 ? ` · jusqu’à ${f.seances_par_semaine} par semaine` : ' · 1 par semaine'}
+                      {nbExclus > 0 ? ` · ${nbExclus} période${nbExclus > 1 ? 's' : ''} sans cours` : ''}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => openEdit(f)} style={{ ...s.btn, ...s.btnGhost, padding: '7px 12px', fontSize: 12 }}>Modifier</button>
+                    <button onClick={() => softDelete(f)} style={{ ...s.btn, ...s.btnDanger, padding: '7px 12px', fontSize: 12 }}>Supprimer</button>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
@@ -8106,10 +8507,15 @@ function TabSignaux({ commercantId, toast, signalementsEnAttente = 0 }) {
   ]
   return (
     <div>
-      <div style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 16, border: `1px solid ${T.hairline}`, boxShadow: '0 1px 4px rgba(22,6,54,0.04)' }}>
+      {/* Même règle que partout ailleurs : la barre défile et montre ses
+          flèches. Deux onglets tiennent aujourd'hui, mais « Signalements » plus
+          sa pastille de compteur frôle déjà le bord sur un petit téléphone. */}
+      <style>{`.signaux-subtabs::-webkit-scrollbar { display: none }`}</style>
+      <BandeDefilante className="signaux-subtabs" libelle="les sections signaux"
+        style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 16, border: `1px solid ${T.hairline}`, boxShadow: '0 1px 4px rgba(22,6,54,0.04)', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
         {SOUS_ONGLETS.map(t => (
           <button key={t.id} onClick={() => setSub(t.id)}
-            style={{ flex: 1, minWidth: 80, padding: '10px 6px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 12.5, transition: 'all 0.2s', background: sub === t.id ? T.bgPanel : 'transparent', color: sub === t.id ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            style={{ flex: '1 0 auto', minWidth: 80, padding: '10px 12px', whiteSpace: 'nowrap', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 12.5, transition: 'all 0.2s', background: sub === t.id ? T.bgPanel : 'transparent', color: sub === t.id ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             <Icon name={t.icon} size={14} color={sub === t.id ? '#fff' : T.muted}/>
             {t.label}
             {t.badge > 0 && (
@@ -8119,7 +8525,7 @@ function TabSignaux({ commercantId, toast, signalementsEnAttente = 0 }) {
             )}
           </button>
         ))}
-      </div>
+      </BandeDefilante>
       {sub === 'envies' && <TabEnvies commercantId={commercantId} toast={toast} />}
       {sub === 'signalements' && <TabSignalements commercantId={commercantId} toast={toast} />}
     </div>

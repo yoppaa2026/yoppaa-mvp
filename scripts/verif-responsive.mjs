@@ -442,6 +442,61 @@ const selSrc = lire('app/components/SelecteurTypes.js')
 verifier('une pastille de métier ne dépasse plus la largeur disponible',
   /whiteSpace: 'nowrap', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis'/.test(selSrc))
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AUCUNE BANDE QUI DÉFILE SANS SES FLÈCHES, DANS TOUT LE TABLEAU DE BORD
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ RÈGLE D'ALEX, 15/08 : « quand les onglets sont plus larges que l'écran, le
+// commerçant doit être guidé, il ne doit pas deviner. Cette règle s'applique
+// partout. »
+//
+// Elle avait déjà été appliquée le 10/08, puis oubliée deux fois : la barre des
+// sous-onglets RDV et celle des signaux étaient restées de simples `flex` où
+// les libellés se comprimaient jusqu'à devenir illisibles. Le cinquième onglet
+// RDV, Abonnements, a rendu le défaut évident.
+//
+// Le test ne cherche pas un composant, il cherche UN DÉFAUT : une piste qui
+// défile à l'horizontale sans que rien ne le signale. La question posée est
+// « à qui appartient ce style ? », et la réponse doit toujours être
+// BandeDefilante.
+const FICHIERS_BUREAU = ['app/dashboard/page.js', 'app/dashboard/ConfigDashboard.js', 'app/dashboard/AgendaRdv.js']
+
+function pistesSansFleches(src) {
+  const nues = []
+  for (const m of src.matchAll(/overflowX: *'auto'/g)) {
+    // L'élément qui porte le style est celui dont la balise s'ouvre juste
+    // avant : on remonte au dernier `<` et on lit son nom.
+    const debutBalise = src.lastIndexOf('<', m.index)
+    if (debutBalise < 0) { nues.push('style orphelin'); continue }
+    const nom = src.slice(debutBalise + 1).match(/^[A-Za-z][\w.]*/)?.[0] || '?'
+    if (nom !== 'BandeDefilante') nues.push(`<${nom}> ligne ${src.slice(0, m.index).split('\n').length}`)
+  }
+  return nues
+}
+
+// ⚠️ ON MESURE LA SONDE AVANT DE S'EN SERVIR. Sans ces deux cas, un balayage
+// qui ne trouve jamais rien passerait pour une preuve alors qu'il ne prouve
+// rien du tout.
+verifier('une piste nue est bien repérée',
+  pistesSansFleches(`<div style={{ overflowX: 'auto' }}>`).length === 1)
+verifier('une piste enveloppée ne l’est pas',
+  pistesSansFleches(`<BandeDefilante style={{ overflowX: 'auto' }}>`).length === 0)
+
+for (const chemin of FICHIERS_BUREAU) {
+  const nues = pistesSansFleches(lire(chemin))
+  verifier(`${chemin} ne laisse aucune bande défiler sans flèches`,
+    nues.length === 0, nues.join(' · '))
+}
+
+// Les classes CSS qui déclarent le défilement doivent elles aussi être portées
+// par une BandeDefilante : `.jours-wrap` et `.filtres-wrap` du tableau de bord
+// défilent sans un seul style en ligne.
+const srcBureau = lire('app/dashboard/page.js')
+for (const m of srcBureau.matchAll(/\.([a-z-]+) *\{[^}]*overflow-x: *auto/g)) {
+  const classe = m[1]
+  const utilisee = new RegExp(`<BandeDefilante[^>]*className="${classe}"`).test(srcBureau)
+  verifier(`la classe défilante « ${classe} » est portée par une BandeDefilante`, utilisee)
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

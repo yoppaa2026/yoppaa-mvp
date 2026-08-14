@@ -1424,7 +1424,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
           À la place, il voit ce que sa fiche donnera vraiment. */}
       <Card titre="Le haut de ta fiche" sous="Il est créé automatiquement à partir du nom de ton commerce. Rien à faire, et rien à uploader.">
         <div style={{ position: 'relative', height: 150, borderRadius: 14, overflow: 'hidden', border: `1px solid ${T.hairline}` }}>
-          <BanniereCommerce nom={commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Ton commerce'} taillePolice="1.3rem"/>
+          <BanniereCommerce nom={commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Ton commerce'} taillePolice="1.3rem" compact/>
         </div>
         <p style={{ fontSize: 11.5, color: T.muted, margin: '10px 0 0', lineHeight: 1.5 }}>
           C&apos;est la signature Yoppaa : un Yopper reconnaît une fiche Yoppaa avant même

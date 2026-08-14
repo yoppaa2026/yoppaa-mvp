@@ -65,15 +65,32 @@ verifier('la bannière n\'affiche aucune photo', !/<img/.test(banniere))
 // sur sa hauteur. Le jour où la colonne est passée à 1200 px sur PC, ces 18 %
 // sont devenus 216 px sur un bandeau de 280 px : le nom est allé se cacher
 // derrière la carte. Même défaut qu'en mai, revenu par une autre porte.
-const styleBanniere = banniere.slice(banniere.indexOf('className="banniere-commerce"'))
+// ⚠️ CES DEUX TESTS VERROUILLAIENT UNE SYNTAXE, pas une règle, et le 15/08
+// l'un a rougi pendant que L'AUTRE DEVENAIT FAUSSEMENT VERT. En passant la
+// classe en gabarit, pour y ajouter `banniere-compacte`, l'écriture
+// `className="banniere-commerce"` a disparu du fichier :
+//
+//   • le test d'accroche, qui la cherchait mot pour mot, a rougi ;
+//   • le test du retrait découpait le fichier à partir de cette même chaîne.
+//     `indexOf` a rendu -1, `slice(-1)` a rendu UN SEUL CARACTÈRE, et le test
+//     a continué de passer en ne regardant plus rien du tout.
+//
+// C'est la deuxième fois qu'un découpage par `indexOf` se retourne ainsi, après
+// le renommage d'une section de Config le 12/08. On juge donc le fichier ENTIER,
+// et on cherche la classe telle qu'elle est UTILISÉE, quelle que soit la façon
+// de l'écrire.
+//
+// ⚠️ ET LA VALEUR S'ARRÊTE À LA VIRGULE, pas au point-virgule : on est dans un
+// objet JavaScript, pas dans une feuille de style. Bornée au point-virgule, la
+// recherche courait au-delà du `padding` jusqu'aux pourcentages des dégradés
+// radiaux, et rougissait sur un code parfaitement correct.
 verifier('le retrait du nom ne dépend pas de la largeur du bandeau',
-  !/padding[^:]*:\s*[`'"]?\$?\{?[^;]*\d+%/.test(styleBanniere.slice(0, 400)),
-  styleBanniere.slice(0, 200))
+  !/padding[^:]*:[^,]*\d+%/.test(banniere))
 verifier('le retrait est exprimé en pixels', /RETRAIT_HAUT = \d+/.test(banniere))
 // Les classes servent d'accroche aux règles PC : sans elles, impossible
 // d'agrandir le nom sur grand écran, un style en ligne ne porte pas de media query.
 verifier('la bannière est accrochable depuis la feuille globale',
-  /className="banniere-commerce"/.test(banniere) && /className="banniere-nom"/.test(banniere))
+  /className=[^>]*banniere-commerce/.test(banniere) && /className=[^>]*banniere-nom/.test(banniere))
 
 for (const chemin of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
   const src = lire(chemin)

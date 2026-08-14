@@ -277,8 +277,25 @@ input, textarea, select {
     padding-top: 84px !important;
   }
   .banniere-nom {
-    font-size: 2.6rem !important;
+    /* ⚠️ L'ÉCHELLE MULTIPLIE, ELLE NE REMPLACE PAS. Le nom garde sa taille de
+       bureau, mais un nom long la réduit par paliers. Sans ce facteur,
+       « Centre Respire - Yoga et Pilates » passait sur deux lignes et le mot
+       « Pilates » était coupé net par le bas du bandeau (Alex, 15/08). */
+    font-size: calc(2.6rem * var(--banniere-echelle, 1)) !important;
     letter-spacing: -1.5px !important;
+  }
+
+  /* ⚠️ UNE MINIATURE N'EST PAS UNE PETITE VERSION DU GRAND ÉCRAN. L'aperçu du
+     signup tient dans 150 px de haut ; les mesures ci-dessus sont taillées pour
+     un hero de 360 px. Appliquées à l'aperçu, elles débordaient MÊME AVEC UN NOM
+     COURT : 84 de retrait, 50 de nom et 21 de signature font déjà 155.
+     L'aperçu garde donc ses propres mesures, y compris sur ordinateur. */
+  .banniere-compacte {
+    padding-top: 34px !important;
+  }
+  .banniere-compacte .banniere-nom {
+    font-size: calc(1.3rem * var(--banniere-echelle, 1)) !important;
+    letter-spacing: -0.5px !important;
   }
 }
 

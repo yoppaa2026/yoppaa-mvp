@@ -11,6 +11,8 @@
 // carrousel « Mon commerce en images », où elles sont regardées pour ce
 // qu'elles sont plutôt que rognées en bandeau.
 
+import { echelleNomBanniere } from '@/lib/responsive'
+
 const T = {
   bgPanel: '#160636',
   deep:    '#2D0F6B',
@@ -51,7 +53,13 @@ function empreinte(nom) {
 // peu le retrait, via `.banniere-commerce` dans globals.css.
 const RETRAIT_HAUT = 54
 
-export default function BanniereCommerce({ nom, hauteur = '100%', taillePolice = '1.5rem' }) {
+// ⚠️ `compact` EXISTE PARCE QU'UNE MINIATURE N'EST PAS UNE PETITE VERSION DU
+// GRAND ÉCRAN. L'aperçu du signup tient dans 150 px de haut ; au-delà de
+// 1024 px, `globals.css` imposait au nom 2,6 rem et 84 px de retrait, mesures
+// taillées pour le hero de 360 px d'une vraie fiche. Aucun nom, même court, ne
+// pouvait tenir. Un aperçu se déclare comme tel, il ne se corrige pas au cas
+// par cas.
+export default function BanniereCommerce({ nom, hauteur = '100%', taillePolice = '1.5rem', compact = false }) {
   const h = empreinte(nom)
   const x1 = 60 + (h % 30)          // 60 → 89 %
   const y1 = 10 + (Math.floor(h / 30) % 25)
@@ -59,10 +67,15 @@ export default function BanniereCommerce({ nom, hauteur = '100%', taillePolice =
   const y2 = 65 + (Math.floor(h / 11000) % 25)
 
   return (
-    <div className="banniere-commerce" style={{ position: 'absolute', inset: 0, height: hauteur, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: `${RETRAIT_HAUT}px 24px 0`, overflow: 'hidden' }}>
+    <div className={`banniere-commerce${compact ? ' banniere-compacte' : ''}`}
+      // ⚠️ L'ÉCHELLE VOYAGE EN VARIABLE CSS, et c'est ce qui la rend efficace
+      // partout. Une taille calculée en JavaScript serait écrasée par les
+      // règles `!important` du socle bureau ; en variable, elle multiplie la
+      // taille QUELLE QU'ELLE SOIT, sur téléphone comme sur ordinateur.
+      style={{ '--banniere-echelle': echelleNomBanniere(nom), position: 'absolute', inset: 0, height: hauteur, background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 40%, ${T.main} 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: `${RETRAIT_HAUT}px 24px 0`, overflow: 'hidden' }}>
       <div aria-hidden="true" style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at ${x1}% ${y1}%, ${T.mid}55 0%, transparent 60%), radial-gradient(circle at ${x2}% ${y2}%, ${T.light}22 0%, transparent 50%)` }}/>
 
-      <p className="banniere-nom" style={{ position: 'relative', margin: 0, fontWeight: 900, fontSize: taillePolice, color: '#fff', letterSpacing: '-0.5px', textAlign: 'center', lineHeight: 1.2, textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}>
+      <p className="banniere-nom" style={{ position: 'relative', margin: 0, fontWeight: 900, fontSize: `calc(${taillePolice} * var(--banniere-echelle, 1))`, color: '#fff', letterSpacing: '-0.5px', textAlign: 'center', lineHeight: 1.2, textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}>
         {nom}
       </p>
 

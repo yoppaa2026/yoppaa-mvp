@@ -19,6 +19,7 @@ import {
   SEUIL_BUREAU, SEUIL_LARGE, LARGEUR_CONTENU, LARGEUR_CONTENU_BUREAU,
   LARGEUR_CHAMP, LARGEUR_TEXTE_LONG,
   bordsDefilement, pasDefilement, PAS_MINIMUM,
+  echelleNomBanniere, ECHELLE_NOM_MINIMALE,
 } from '../lib/responsive.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
@@ -230,8 +231,17 @@ verifier('les deux fiches ont le même bandeau sur PC',
   /\.fiche-hero\s*\{[^}]*height:\s*360px\s*!important/.test(phase2))
 // 1,5 rem était calibré pour un écran de 390 px : au milieu de 1200 px, le nom
 // du commerce paraissait minuscule.
+//
+// ⚠️ CE TEST VERROUILLAIT UNE FORME, et il a rougi le 15/08 au moment exact où
+// le code s'améliorait : il exigeait `font-size: 2.6rem !important` à la
+// lettre, donc il interdisait d'y ajouter le facteur d'échelle qui empêche un
+// nom long de déborder. Il compare maintenant la taille de bureau à celle du
+// téléphone, ce qui est la règle qu'on voulait tenir, et laisse libre la façon
+// de l'écrire.
+const remBureauNom = Number(/\.banniere-nom\s*\{[^}]*font-size:[^;]*?([\d.]+)rem/.exec(phase2)?.[1])
+const remMobileNom = Number(/taillePolice = '([\d.]+)rem'/.exec(lire('app/components/BanniereCommerce.js'))?.[1])
 verifier('le nom du commerce est agrandi sur PC',
-  /\.banniere-nom\s*\{[^}]*font-size:\s*2\.6rem\s*!important/.test(phase2))
+  remBureauNom > remMobileNom, `bureau ${remBureauNom} / mobile ${remMobileNom}`)
 verifier('le nom reste dans le tiers haut du bandeau',
   /\.banniere-commerce\s*\{[^}]*padding-top:\s*(\d+)px/.test(phase2)
   && Number(/\.banniere-commerce\s*\{[^}]*padding-top:\s*(\d+)px/.exec(phase2)[1]) < 360 / 3)
@@ -486,6 +496,77 @@ for (const chemin of FICHIERS_BUREAU) {
   verifier(`${chemin} ne laisse aucune bande défiler sans flèches`,
     nues.length === 0, nues.join(' · '))
 }
+
+// ─── LE NOM TIENT DANS SON BANDEAU ────────────────────────────────────────
+// ⚠️ DÉFAUT VU PAR ALEX LE 15/08 : « Centre Respire - Yoga et Pilates » sortait
+// du bandeau, « Pilates » coupé net par le bas, et la signature en points
+// passée sous la ligne de flottaison.
+//
+// ⚠️ LA CAUSE N'ÉTAIT PAS LA LONGUEUR DU NOM, c'était l'APERÇU qui héritait des
+// mesures du vrai bandeau. Au-delà de 1024 px, le socle bureau impose 84 px de
+// retrait et 2,6 rem, taillés pour un hero de 360 px. L'aperçu du signup fait
+// 150 px. Le calcul ci-dessous le prouve plutôt que de le supposer.
+const cssB = lire('app/globals.css')
+const signupB = lire('app/signup/page.js')
+
+const HAUTEUR_LIGNE = 1.2          // `lineHeight` du nom, dans le composant
+const HAUTEUR_POINTS = 21          // les points : 11 de haut, 10 de marge
+const PX_PAR_REM = 16
+
+function hauteurNecessaire({ retrait, rem, lignes }) {
+  return retrait + (rem * PX_PAR_REM * HAUTEUR_LIGNE * lignes) + HAUTEUR_POINTS
+}
+
+// La hauteur réelle de l'aperçu, lue dans le signup et non recopiée ici.
+const hauteurApercu = Number(signupB.match(/height: (\d+), borderRadius: 14, overflow: 'hidden'/)?.[1])
+verifier('la hauteur de l’aperçu est bien lue dans le signup', hauteurApercu > 0, `${hauteurApercu}`)
+
+// Les mesures du bureau, lues dans la CSS.
+const retraitBureau = Number(cssB.match(/\.banniere-commerce \{\s*padding-top: (\d+)px/)?.[1])
+const remBureau = Number(cssB.match(/\.banniere-nom \{[^}]*font-size: calc\(([\d.]+)rem/)?.[1])
+verifier('les mesures du bandeau de bureau sont lisibles',
+  retraitBureau > 0 && remBureau > 0, `${retraitBureau} / ${remBureau}`)
+
+// ⚠️ ON MESURE LE DÉFAUT : avec les mesures du hero, l'aperçu déborde MÊME SUR
+// UNE SEULE LIGNE. Sans cette vérification, la règle compacte pourrait être
+// supprimée un jour sans que personne ne comprenne pourquoi elle existait.
+verifier('les mesures du hero ne peuvent PAS tenir dans l’aperçu',
+  hauteurNecessaire({ retrait: retraitBureau, rem: remBureau, lignes: 1 }) > hauteurApercu,
+  `${Math.round(hauteurNecessaire({ retrait: retraitBureau, rem: remBureau, lignes: 1 }))} px pour ${hauteurApercu}`)
+
+// Et les mesures compactes, elles, tiennent sur DEUX lignes.
+const retraitCompact = Number(cssB.match(/\.banniere-compacte \{\s*padding-top: (\d+)px/)?.[1])
+const remCompact = Number(cssB.match(/\.banniere-compacte \.banniere-nom \{[^}]*font-size: calc\(([\d.]+)rem/)?.[1])
+verifier('l’aperçu a ses propres mesures sur ordinateur',
+  retraitCompact > 0 && remCompact > 0, `${retraitCompact} / ${remCompact}`)
+verifier('et elles tiennent, même sur deux lignes',
+  hauteurNecessaire({ retrait: retraitCompact, rem: remCompact, lignes: 2 }) <= hauteurApercu,
+  `${Math.round(hauteurNecessaire({ retrait: retraitCompact, rem: remCompact, lignes: 2 }))} px pour ${hauteurApercu}`)
+
+// L'aperçu doit se déclarer comme tel, sinon la règle compacte ne l'atteint pas.
+verifier('l’aperçu du signup se déclare compact', /<BanniereCommerce[^/]*compact/.test(signupB))
+
+// ⚠️ L'ÉCHELLE MULTIPLIE, elle ne remplace pas : sans le facteur dans le
+// `calc`, un nom long reprendrait la taille pleine et redéborderait.
+verifier('la taille de bureau est multipliée par l’échelle du nom',
+  /\.banniere-nom \{[^}]*calc\([\d.]+rem \* var\(--banniere-echelle/.test(cssB))
+verifier('le composant transmet l’échelle en variable CSS',
+  /'--banniere-echelle': echelleNomBanniere\(nom\)/.test(lire('app/components/BanniereCommerce.js')))
+
+// La règle elle-même, EXÉCUTÉE.
+egal('un nom court garde sa taille pleine', echelleNomBanniere('Chez Nini'), 1)
+egal('le nom qui a débordé est réduit', echelleNomBanniere('Centre Respire - Yoga et Pilates'), 0.68)
+egal('un nom à rallonge est réduit davantage',
+  echelleNomBanniere('Institut de beauté et de bien-être du centre de Mettet'), ECHELLE_NOM_MINIMALE)
+// ⚠️ Un nom vide n'est pas un nom très long.
+egal('un nom vide garde la taille pleine', echelleNomBanniere(''), 1)
+egal('et un nom absent aussi', echelleNomBanniere(null), 1)
+verifier('l’échelle ne descend jamais sous le plancher',
+  echelleNomBanniere('x'.repeat(400)) === ECHELLE_NOM_MINIMALE)
+// L'échelle ne remonte jamais quand le nom s'allonge.
+verifier('l’échelle décroît avec la longueur',
+  [5, 25, 35, 60].every((n, i, tab) =>
+    i === 0 || echelleNomBanniere('x'.repeat(n)) <= echelleNomBanniere('x'.repeat(tab[i - 1]))))
 
 // ─── LE VOILE DE BORD EXISTE AUSSI SUR TÉLÉPHONE ──────────────────────────
 // ⚠️ REMARQUE D'ALEX, 15/08 : « il faut un indice visuel sur mobile aussi, car

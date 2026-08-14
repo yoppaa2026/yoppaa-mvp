@@ -617,6 +617,25 @@ verifier('le signup affiche la grille de propositions',
 verifier('et chaque vignette applique son propre symbole',
   /genererLogoAuto\(\{ symbole: p\.symbole, teinte: p\.teinte \}\)/.test(signupSrcTxt))
 
+// ─── DIRE QUE C'EST PROVISOIRE, ET POURQUOI ON Y TIENT ────────────────────
+// ⚠️ Demande d'Alex du 14/08. « Yoppaa exige un logo pour l'uniformité de
+// l'application » est vrai et se lit comme une contrainte administrative : le
+// commerçant y entend une case à cocher de plus, et il passe. Ce qui le
+// convainc, c'est ce que ça lui rapporte à LUI.
+verifier('le signup dit que le logo prêté est provisoire',
+  /C&apos;est un dépannage/.test(signupSrcTxt))
+verifier('et explique ce que ça lui rapporte, pas ce que Yoppaa exige',
+  /retrouve son boulanger dans une liste/.test(signupSrcTxt))
+// ⚠️ Le mot qui ne doit PAS apparaître : on n'impose pas, on explique. Un
+// commerçant à qui l'on dit « la plateforme exige » cherche comment y couper.
+// ⚠️ SUR L'AFFICHÉ, PAS SUR LE SOURCE BRUT. Ce test a rougi à sa première
+// écriture parce que le COMMENTAIRE qui explique la correction cite forcément
+// la formulation qu'on bannit. Le piège est documenté en tête de ce banc, et il
+// s'est quand même refermé : un commentaire a le droit de dire d'où l'on vient,
+// c'est même son travail.
+verifier('sans jamais parler d’exigence ni d’uniformité',
+  !/exige un logo|uniformité de l’app|uniformité de l'app/.test(sansCommentaires(signupSrcTxt)))
+
 // ─── AUCUN CHIFFRE QU'ON NE PEUT PAS PROUVER ──────────────────────────────
 // ⚠️ « Une belle photo, c'est +40 % de clics » ne reposait sur RIEN : ni sur
 // les statistiques de Yoppaa, qui n'existaient pas encore, ni sur une étude

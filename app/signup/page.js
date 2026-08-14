@@ -1491,6 +1491,26 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
           <p style={{ fontSize: 11, color: T.muted, margin: '0 0 10px', lineHeight: 1.45 }}>
             Il reprend le symbole de ton métier. Tu le remplaceras par le tien quand tu voudras.
           </p>
+
+          {/* ⚠️ DIRE QUE C'EST PROVISOIRE, ET POURQUOI ON Y TIENT (Alex, 14/08).
+              Formuler ça comme une règle de la plateforme serait exact et
+              contre-productif : le commerçant y entendrait une case à cocher de
+              plus, et chercherait comment y couper. Ce qui le convainc, c'est ce
+              que ça lui rapporte à LUI, et ça se démontre en une image : une
+              liste de commerces sans vignette est illisible, et celui qui n'en a
+              pas est celui qu'on ne remarque pas. */}
+          <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: T.pale, borderRadius: 12, padding: '11px 13px', marginBottom: 12 }}>
+            <span style={{ flexShrink: 0, marginTop: 1, color: T.main }}><Sparkles size={16} strokeWidth={2.2}/></span>
+            <p style={{ margin: 0, fontSize: 11.5, color: T.deep, fontWeight: 700, lineHeight: 1.5 }}>
+              C&apos;est un dépannage, et ça se remplace en dix secondes.
+              <span style={{ display: 'block', fontWeight: 500, color: T.muted, marginTop: 3 }}>
+                Sur Yoppaa, chaque commerce a sa vignette : c&apos;est à ça qu&apos;un habitant
+                retrouve son boulanger dans une liste, d&apos;un coup d&apos;œil et sans lire.
+                Celui qui n&apos;en a pas est celui qu&apos;on ne remarque pas. Alors on t&apos;en
+                prête un, le temps que tu mettes le tien.
+              </span>
+            </p>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(58px, 1fr))', gap: 8 }}>
             {propositionsLogo({ nom: commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Yoppaa', type: commercant.type }).map(p => (
               <button key={p.cle} type="button" disabled={uploadingLogo}

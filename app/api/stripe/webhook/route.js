@@ -31,6 +31,7 @@ import { programmerRappelRdv } from '@/lib/rappels'
 import { recupererFraisStripe, ventilerFrais } from '@/lib/stripe-frais'
 import { crediterFidelite } from '@/lib/fidelite-server'
 import { canDo } from '@/lib/plans'
+import { contratDepuisFormule } from '@/lib/abonnements'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { champsLieuPour } from '@/lib/lieu-fige'
@@ -351,7 +352,93 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
     return
   }
 
+  if (kind === PAYMENT_KIND.ABONNEMENT) {
+    await handleAbonnementSucceeded(paymentIntent, supabase)
+    return
+  }
+
   console.warn('[stripe/webhook] kind non reconnu dans payment_intent.succeeded', { kind, meta })
+}
+
+// ─── Abonnement acheté en ligne : paiement OK → le contrat naît ────────────
+//
+// ⚠️ LE CONTRAT NAÎT ICI ET NULLE PART AILLEURS. Le créer au moment du clic
+// aurait produit un abonnement à chaque panier abandonné, et un solde de
+// séances offert à qui ferme l'onglet. Même règle que l'acompte d'un
+// rendez-vous depuis le 04/08.
+//
+// ⚠️ ET C'EST IDEMPOTENT. Stripe rejoue ses webhooks, c'est normal et
+// documenté. Sans ce garde-fou, une cliente qui paie une fois se retrouverait
+// avec deux contrats, donc le double de séances, et personne ne saurait
+// lequel est le bon. On reconnaît un rejeu à la référence du paiement.
+async function handleAbonnementSucceeded(paymentIntent, supabase) {
+  const meta = paymentIntent.metadata || {}
+  const formuleId = meta.formule_id
+  if (!formuleId) {
+    console.warn('[stripe/webhook] abonnement sans formule_id', paymentIntent.id)
+    return
+  }
+
+  const { data: dejaLa } = await supabase
+    .from('abonnements')
+    .select('id')
+    .eq('stripe_payment_intent_id', paymentIntent.id)
+    .maybeSingle()
+  if (dejaLa) {
+    console.info('[stripe/webhook] abonnement déjà créé, rejeu ignoré', { id: dejaLa.id })
+    return
+  }
+
+  const { data: formule } = await supabase
+    .from('abonnement_formules')
+    .select('*')
+    .eq('id', formuleId)
+    .maybeSingle()
+  if (!formule) {
+    console.error('[stripe/webhook] formule introuvable', formuleId)
+    return
+  }
+
+  // ⚠️ LA DATE D'ACHAT VIENT DE STRIPE, pas de notre horloge. Un webhook rejoué
+  // trois jours plus tard fabriquerait sinon une fenêtre de validité décalée de
+  // trois jours, et un carnet de six mois n'aurait pas la durée vendue.
+  const achatLe = new Date((paymentIntent.created || Math.floor(Date.now() / 1000)) * 1000)
+    .toISOString().slice(0, 10)
+
+  const contrat = contratDepuisFormule(formule, {
+    achatLe,
+    commercantId: formule.commercant_id,
+    client: {
+      email: meta.client_email,
+      prenom: meta.client_prenom,
+      nom: meta.client_nom,
+      telephone: meta.client_telephone,
+    },
+  })
+  if (!contrat) {
+    console.error('[stripe/webhook] contrat incalculable', { formuleId, achatLe })
+    return
+  }
+
+  // ⚠️ LE NOMBRE DE SÉANCES VIENT DU PAIEMENT, pas d'un recalcul. Un commerçant
+  // qui modifie ses congés entre le clic et l'encaissement livrerait sinon
+  // autre chose que ce qui a été payé, et c'est le client qui aurait raison.
+  const seancesPayees = Number.parseInt(meta.seances_total, 10)
+  if (Number.isFinite(seancesPayees) && seancesPayees > 0) {
+    contrat.seances_total = seancesPayees
+  }
+
+  const { data: cree, error } = await supabase
+    .from('abonnements')
+    .insert({ ...contrat, stripe_payment_intent_id: paymentIntent.id })
+    .select('id')
+    .single()
+
+  if (error) {
+    console.error('[stripe/webhook] insert abonnement KO', error)
+    return
+  }
+  console.info('[stripe/webhook] abonnement créé', { id: cree?.id, formuleId, seances: contrat.seances_total })
 }
 
 // ─── Bon cadeau : paiement OK → activation + emails ─────────────────────────

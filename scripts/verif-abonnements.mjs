@@ -19,6 +19,8 @@ import {
   peutReserverSurAbonnement, libelleSolde, placerLaSerie, resumeDeLaSerie,
   libellePrixSeance, STATUTS_CONSOMMENT_SEANCE, seancesConsommees, datesConsommees,
   etatAbonnement, joursEntre,
+  formuleVendableEnLigne, seancesVenduesEnLigne, resumeFormulePublique,
+  contratDepuisFormule, libelleValidite, formatDateCourte,
 } from '../lib/abonnements.js'
 import { jourSemaineDe } from '../lib/creneaux.js'
 
@@ -441,6 +443,201 @@ const verdictAbo = peutReserverSurAbonnement(CARNET_20, {
 })
 egal('avec 16 séances au compteur, elle peut réserver', verdictAbo.ok, true)
 egal('et le solde annoncé est le même partout', verdictAbo.solde, 16)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA VENTE EN LIGNE (décision d'Alex du 15/08)
+// ═══════════════════════════════════════════════════════════════════════════
+const ANNEE_VITRINE = {
+  id: 'f1', commercant_id: 'c1', type: 'periode', libelle: 'Année 2026-2027',
+  prix: 400, seances_par_semaine: 1, vente_en_ligne: true, actif: true,
+  date_debut: '2026-09-01', date_fin: '2027-07-03', periodes_exclues: CONGES_TEST,
+}
+const CARNET_VITRINE = {
+  id: 'f2', commercant_id: 'c1', type: 'carnet', libelle: 'Carnet 20 séances',
+  prix: 150, seances_carnet: 20, validite_jours: 180, seances_par_semaine: 3,
+  vente_en_ligne: true, actif: true,
+}
+
+// ⚠️ RIEN NE SE MET EN VITRINE TOUT SEUL. La colonne vaut `false` par défaut en
+// base ; une formule qu'on n'a pas explicitement mise en vente ne s'affiche
+// nulle part, brouillon ou tarif négocié compris.
+egal('une formule mise en vente est vendable', formuleVendableEnLigne(CARNET_VITRINE), true)
+egal('sans la case cochée, rien ne s’affiche',
+  formuleVendableEnLigne({ ...CARNET_VITRINE, vente_en_ligne: false }), false)
+egal('une case absente vaut non', formuleVendableEnLigne({ ...CARNET_VITRINE, vente_en_ligne: undefined }), false)
+egal('une formule désactivée ne se vend pas',
+  formuleVendableEnLigne({ ...CARNET_VITRINE, actif: false }), false)
+egal('une formule supprimée non plus',
+  formuleVendableEnLigne({ ...CARNET_VITRINE, deleted_at: '2026-08-01T10:00:00Z' }), false)
+// « Acheter » quelque chose de gratuit n'a aucun sens, et Stripe refuse sous 0,50 €.
+egal('un prix à zéro n’est pas une vente', formuleVendableEnLigne({ ...CARNET_VITRINE, prix: 0 }), false)
+egal('un carnet vide non plus', formuleVendableEnLigne({ ...CARNET_VITRINE, seances_carnet: 0 }), false)
+
+// ⚠️ LE TEST QUI VALIDE LA RÈGLE DU JOUR LE MOINS FAVORABLE.
+//
+// Le compte d'une période dépend du jour choisi : l'année commence un mardi et
+// finit un vendredi. La cliente qui achète en ligne n'en choisit aucun, donc on
+// vend le minimum : lui vendre le maximum lui laisserait réclamer une séance de
+// plus que ce que la commerçante avait prévu.
+//
+// Et ce minimum tombe sur **36**, le chiffre qu'Emily annonce elle-même. Ce
+// n'est pas le code qui se confirme tout seul, c'est une source extérieure.
+egal('le lundi est le jour le moins favorable', seancesDeLaFormule(ANNEE_VITRINE, { jourSemaine: 'lundi' }), 36)
+egal('le mardi en offrirait 38', seancesDeLaFormule(ANNEE_VITRINE, { jourSemaine: 'mardi' }), 38)
+egal('EN LIGNE, ON VEND LE MINIMUM : 36', seancesVenduesEnLigne(ANNEE_VITRINE), 36)
+egal('un carnet vend simplement son nombre', seancesVenduesEnLigne(CARNET_VITRINE), 20)
+// Deux séances par semaine doublent ce qui est vendu sur une période.
+egal('le rythme multiplie ce qui est vendu',
+  seancesVenduesEnLigne({ ...ANNEE_VITRINE, seances_par_semaine: 2 }), 72)
+egal('une période sans dates ne vend rien',
+  seancesVenduesEnLigne({ ...ANNEE_VITRINE, date_debut: null }), 0)
+
+// ─── CE QUE LA VITRINE ANNONCE ─────────────────────────────────────────────
+const vitrineCarnet = resumeFormulePublique(CARNET_VITRINE, { achatLe: '2026-09-15' })
+egal('le carnet dit combien de séances', vitrineCarnet.seancesLibelle, '20 séances')
+egal('et jusqu’à quand, en français', vitrineCarnet.validite, 'Valable 6 mois')
+egal('la fenêtre part du jour de l’achat', vitrineCarnet.fenetre.debut, '2026-09-15')
+egal('et court sur 180 jours', vitrineCarnet.fenetre.fin, '2027-03-14')
+egal('le rythme est annoncé', vitrineCarnet.rythme, 'Jusqu’à 3 séances par semaine'.replace('’', "'"))
+const vitrineAnnee = resumeFormulePublique(ANNEE_VITRINE)
+egal('la période annonce ses bornes', vitrineAnnee.validite, 'Du 1er septembre au 3 juillet')
+egal('et son rythme au singulier', vitrineAnnee.rythme, 'Une séance par semaine')
+// ⚠️ Le client doit comprendre qu'il achète un DROIT À RÉSERVER, pas un
+// planning déjà posé, sinon il attend un agenda qui n'arrivera jamais.
+verifier('la vitrine dit que le client réserve lui-même',
+  /réserves tes séances toi-même/.test(vitrineAnnee.reservation))
+
+// Les durées se disent comme un humain les dit.
+egal('180 jours', libelleValidite(180), '6 mois')
+egal('365 jours', libelleValidite(365), '1 an')
+egal('730 jours', libelleValidite(730), '2 ans')
+egal('30 jours', libelleValidite(30), '1 mois')
+egal('45 jours restent des jours', libelleValidite(45), '45 jours')
+egal('zéro ne se dit pas', libelleValidite(0), null)
+egal('le premier du mois s’écrit 1er', formatDateCourte('2026-09-01'), '1er septembre')
+egal('les autres non', formatDateCourte('2026-09-03'), '3 septembre')
+
+// ─── LE CONTRAT FIGÉ À L'ACHAT ─────────────────────────────────────────────
+const contrat = contratDepuisFormule(CARNET_VITRINE, {
+  achatLe: '2026-09-15', commercantId: 'c1',
+  client: { email: '  Marie.Dupont@Mail.BE ', prenom: 'Marie', nom: 'Dupont', telephone: '0472 11 22 33' },
+})
+// ⚠️ ACHETÉ EN LIGNE = MODE CRÉDIT. Personne d'autre que le commerçant ne peut
+// poser les séances de quelqu'un, et il n'est pas là au moment de l'achat.
+egal('un achat en ligne crée toujours un contrat en mode crédit', contrat.mode, 'credit')
+egal('et il est payé', contrat.paye, true)
+egal('par le mode qui n’avait jusqu’ici aucun moteur', contrat.mode_paiement, 'en_ligne')
+egal('le prix est figé', contrat.prix, 150)
+egal('le nombre de séances aussi', contrat.seances_total, 20)
+egal('le plafond hebdomadaire aussi', contrat.seances_par_semaine, 3)
+egal('la période est figée, début', contrat.date_debut, '2026-09-15')
+egal('et fin', contrat.date_fin, '2027-03-14')
+// ⚠️ L'EMAIL EST NORMALISÉ. Un email non normalisé a déjà fait DISPARAÎTRE des
+// commandes sur ce projet, et c'est lui qui relie le contrat à ses séances.
+egal('l’email est normalisé', contrat.client_email, 'marie.dupont@mail.be')
+egal('un contrat sans date d’achat n’existe pas', contratDepuisFormule(CARNET_VITRINE, {}), null)
+egal('une formule absente non plus', contratDepuisFormule(null, { achatLe: '2026-09-15' }), null)
+
+// Le contrat issu de l'achat se relit tout de suite avec le reste du module.
+const etatAchat = etatAbonnement({ ...contrat, id: 'ab9' }, [], { aujourdhui: '2026-09-15' })
+egal('à l’achat, tout le solde est disponible', etatAchat.solde, 20)
+egal('et le contrat est valable le jour même', etatAchat.valable, true)
+egal('il reste 180 jours', etatAchat.joursRestants, 180)
+
+// ⚠️ ET LA COLONNE DOIT ARRIVER JUSQU'À LA VITRINE. Une formule vendable dont
+// `vente_en_ligne` n'est pas demandé au `select` ne s'affiche JAMAIS. C'est le
+// défaut qui a coûté les cours collectifs quelques heures plus tôt.
+const srcFiche = readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8')
+verifier('la fiche demande la colonne de mise en vente', /vente_en_ligne/.test(srcFiche))
+verifier('et ne charge que ce qui est réellement en vente',
+  /\.eq\('vente_en_ligne', true\)/.test(srcFiche))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE CHEMIN DE PAIEMENT — le seul endroit où un défaut se paie en euros
+// ═══════════════════════════════════════════════════════════════════════════
+const sansComm = (src) => src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+const srcCheckout = sansComm(readFileSync(new URL('../app/api/stripe/checkout/create-abonnement/route.js', import.meta.url), 'utf8'))
+const srcWebhook = sansComm(readFileSync(new URL('../app/api/stripe/webhook/route.js', import.meta.url), 'utf8'))
+
+// ⚠️ L'ÉCRAN NE PROTÈGE RIEN. Il ne montre que ce qui est vendable, mais une
+// requête forgée n'a pas d'écran : sans revalidation serveur, n'importe qui
+// achèterait un brouillon ou un tarif négocié en devinant son identifiant.
+verifier('le serveur revalide qu’une formule est bien en vente',
+  /formuleVendableEnLigne\(formule\)/.test(srcCheckout))
+// L'argent va au commerçant, jamais à la plateforme.
+verifier('le paiement part sur le compte du commerçant',
+  /stripeAccount: commercant\.stripe_account_id/.test(srcCheckout))
+verifier('et Yoppaa ne prélève rien', /calculApplicationFee\(/.test(srcCheckout))
+verifier('un commerçant sans compte Stripe ne peut pas vendre',
+  /stripe_account_charges_enabled/.test(srcCheckout))
+// Stripe refuse sous 0,50 € : mieux vaut le dire que de laisser échouer.
+verifier('un montant sous le minimum Stripe est refusé', /prixCents < 50/.test(srcCheckout))
+
+// ⚠️ LE CONTRAT NAÎT AU WEBHOOK, PAS AU CLIC. Le créer avant produirait un
+// abonnement à chaque panier abandonné, et un solde offert à qui ferme l'onglet.
+verifier('le clic ne crée aucun contrat',
+  !/from\('abonnements'\)\s*\n?\s*\.insert/.test(srcCheckout))
+verifier('le webhook, lui, le crée',
+  /from\('abonnements'\)\s*\n?\s*\.insert/.test(srcWebhook))
+
+// ⚠️ STRIPE REJOUE SES WEBHOOKS. Sans garde, une cliente qui paie une fois a
+// deux contrats, donc le double de séances.
+verifier('un rejeu de webhook est reconnu',
+  /\.eq\('stripe_payment_intent_id', paymentIntent\.id\)/.test(srcWebhook))
+// ⚠️ CE TEST EST NÉ MUET, et la mutation l'a démontré. Il cherchait
+// `stripe_payment_intent_id: paymentIntent.id` n'importe où dans le webhook :
+// or ce fragment existe DÉJÀ deux fois, pour le rendez-vous et pour la
+// commande. Retirer la trace du contrat d'abonnement ne le faisait donc pas
+// rougir. On ancre sur l'insertion du contrat elle-même.
+verifier('et la trace du paiement est écrite SUR LE CONTRAT',
+  /\.insert\(\{ \.\.\.contrat, stripe_payment_intent_id: paymentIntent\.id \}\)/.test(srcWebhook))
+
+// ⚠️ LA DATE D'ACHAT VIENT DE STRIPE, pas de notre horloge : un webhook rejoué
+// trois jours plus tard fabriquerait une fenêtre de validité décalée d'autant.
+verifier('la date d’achat vient du paiement, pas de l’horloge du serveur',
+  /paymentIntent\.created/.test(srcWebhook))
+
+// ⚠️ LE NOMBRE DE SÉANCES VOYAGE AVEC LE PAIEMENT. Un commerçant qui modifie
+// ses congés entre le clic et l'encaissement livrerait sinon autre chose que ce
+// qui a été payé, et c'est le client qui aurait raison.
+verifier('le nombre de séances payées voyage dans le paiement',
+  /seances_total: String\(seances\)/.test(srcCheckout))
+verifier('et le webhook le respecte plutôt que de recalculer',
+  /meta\.seances_total/.test(srcWebhook))
+
+// La migration déclare la colonne et l'index qui rendent tout ça vrai.
+const srcMigPaiement = readFileSync(new URL('../migrations/MIGRATION_ABONNEMENTS_PAIEMENT.sql', import.meta.url), 'utf8')
+verifier('la migration crée la colonne du paiement',
+  /ADD COLUMN IF NOT EXISTS stripe_payment_intent_id/.test(srcMigPaiement))
+// ⚠️ L'unicité vit EN BASE : deux rejeux simultanés passent tous les deux la
+// lecture du code avant que l'un ait écrit. Même leçon que le double-booking.
+verifier('et l’index unique qui rend deux contrats impossibles',
+  /CREATE UNIQUE INDEX IF NOT EXISTS abonnements_paiement_unique/.test(srcMigPaiement))
+verifier('index partiel : les ventes à la main ne se gênent pas',
+  /WHERE stripe_payment_intent_id IS NOT NULL/.test(srcMigPaiement))
+
+// Et la migration d'ouverture publique n'ouvre que ce qui est en vente.
+// ⚠️ ON RETIRE LES COMMENTAIRES SQL AVANT DE JUGER. Ce test est né FAUSSEMENT
+// ROUGE : la migration EXPLIQUE, en toutes lettres, qu'il ne faut jamais poser
+// un « USING (true) », et le test lisait sa propre mise en garde comme une
+// infraction. Même piège que le 15/08 sur `place_no`, retourné : là un
+// commentaire rendait un test vert à tort, ici il le rend rouge à tort. Dans
+// les deux cas, chercher un mot dans un fichier qui parle de ce mot ne prouve
+// rien. On juge le CODE.
+const sansCommSql = (src) => src
+  .split(/\r?\n/)
+  .filter(l => !/^\s*--/.test(l))
+  .join('\n')
+const srcMigVente = sansCommSql(readFileSync(new URL('../migrations/MIGRATION_ABONNEMENTS_VENTE_LIGNE.sql', import.meta.url), 'utf8'))
+verifier('la lecture publique exige les trois conditions',
+  /vente_en_ligne IS TRUE AND actif IS TRUE AND deleted_at IS NULL/.test(srcMigVente))
+// ⚠️ JAMAIS un USING (true) : c'est ce qui avait fuité à l'audit du 03/08.
+verifier('aucun USING (true) sur les formules', !/USING \(true\)/.test(srcMigVente))
+verifier('la colonne est fausse par défaut', /DEFAULT false/.test(srcMigVente))
+verifier('et le GRANT anon est explicite', /GRANT SELECT ON abonnement_formules TO anon/.test(srcMigVente))
+// ⚠️ `abonnements` porte des noms et des téléphones : elle RESTE fermée.
+verifier('la table des contrats n’est jamais ouverte à l’anonyme',
+  !/GRANT[^\n]*ON abonnements TO anon/.test(srcMigVente))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ⚠️ CE QUE LA CLIENTE LIT SOUS SA SÉANCE : PAS « 0 € »

@@ -6680,6 +6680,10 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
     date_debut: '', date_fin: '',
     seances_carnet: '10', validite_jours: '180',
     prix: '', seances_par_semaine: '1', actif: true,
+    // ⚠️ FAUX PAR DÉFAUT, comme en base. Rien ne part en vitrine sans que le
+    // commerçant le dise : un brouillon ou un tarif négocié pour une cliente
+    // en particulier n'a rien à faire sur la fiche publique.
+    vente_en_ligne: false,
     periodes_exclues: [],
   }
   const [form, setForm] = useState(initialForm)
@@ -6903,6 +6907,7 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
       prix: f.prix != null ? String(f.prix) : '',
       seances_par_semaine: String(f.seances_par_semaine ?? 1),
       actif: f.actif !== false,
+      vente_en_ligne: f.vente_en_ligne === true,
       periodes_exclues: Array.isArray(f.periodes_exclues) ? f.periodes_exclues : [],
     })
     setExclu({ debut: '', fin: '', libelle: '' })
@@ -6969,6 +6974,7 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
       prix: form.prix === '' ? 0 : Number(form.prix),
       seances_par_semaine: Math.max(1, parseInt(form.seances_par_semaine, 10) || 1),
       actif: !!form.actif,
+      vente_en_ligne: !!form.vente_en_ligne,
     }
     setSaving(true)
     const { error } = editId
@@ -7160,8 +7166,29 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
             )}
           </div>
 
-          <div style={{ marginBottom: 14 }}>
+          <div style={{ marginBottom: 10 }}>
             <Toggle value={form.actif} onChange={v => setForm({ ...form, actif: v })} label="Formule proposée"/>
+          </div>
+
+          {/* ⚠️ LA MISE EN VITRINE EST UN GESTE À PART, et volontairement
+              séparée de « Formule proposée ». Une formule peut très bien
+              exister pour l'usage du commerçant seul, un tarif négocié ou un
+              brouillon, sans jamais s'afficher au public. La colonne vaut faux
+              par défaut en base : rien ne se publie tout seul, y compris le
+              jour où la migration passe sur des formules déjà créées. */}
+          <div style={{ marginBottom: 14, background: T.bg, borderRadius: 10, padding: '10px 12px', border: `1px solid ${T.border}` }}>
+            <Toggle value={form.vente_en_ligne} onChange={v => setForm({ ...form, vente_en_ligne: v })}
+              label="Vendre cette formule en ligne"/>
+            <p style={{ fontSize: 11, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+              {form.vente_en_ligne
+                ? <>Elle apparaît sur ta fiche publique. Le client paie en une fois par Bancontact ou par carte, et <strong>l&rsquo;argent arrive directement sur ton compte</strong>. Il réserve ensuite ses séances lui-même, dans la limite que tu as fixée par semaine.</>
+                : <>Elle reste pour toi seul : tu inscris tes clients à la main et tu encaisses comme tu veux. Coche pour la mettre en vente sur ta fiche.</>}
+            </p>
+            {form.vente_en_ligne && !(Number(form.prix) > 0) && (
+              <p style={{ fontSize: 11.5, color: '#B45309', margin: '6px 0 0', fontWeight: 700, lineHeight: 1.5 }}>
+                Indique un prix : une formule à 0 € ne peut pas être achetée en ligne.
+              </p>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -7187,7 +7214,19 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
               <div key={f.id} style={{ background: '#fff', borderRadius: 12, padding: 14, border: `1px solid ${T.hairline}`, opacity: f.actif ? 1 : 0.55, minWidth: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
                   <div style={{ flex: '1 1 180px', minWidth: 0 }}>
-                    <p style={{ fontSize: 14, fontWeight: 800, color: T.ink, overflowWrap: 'anywhere' }}>{f.libelle}</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <p style={{ fontSize: 14, fontWeight: 800, color: T.ink, overflowWrap: 'anywhere' }}>{f.libelle}</p>
+                      {/* ⚠️ CE QUI EST EN VITRINE DOIT SE VOIR D'UN COUP D'ŒIL.
+                          Sans cette pastille, le commerçant ne peut pas savoir
+                          ce que ses clients voient sans rouvrir chaque formule
+                          une par une, et il finirait par vendre sans le savoir
+                          ou par croire vendre alors que rien n'est publié. */}
+                      {f.vente_en_ligne && (
+                        <span style={{ fontSize: 10, fontWeight: 800, color: '#065F46', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 100, padding: '2px 7px', whiteSpace: 'nowrap' }}>
+                          En vente
+                        </span>
+                      )}
+                    </div>
                     <p style={{ fontSize: 12, color: T.muted, marginTop: 3, overflowWrap: 'anywhere' }}>
                       {presta ? `${presta.nom} · ` : ''}{resume}
                     </p>

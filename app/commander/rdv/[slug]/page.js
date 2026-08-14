@@ -45,6 +45,8 @@ import HorairesSection from '../../HorairesSection'
 import CarteFideliteFiche from '../../CarteFideliteFiche'
 import BonCadeauModal from '../../BonCadeauModal'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
+import BlocAbonnements from './BlocAbonnements'
+import { formuleVendableEnLigne } from '@/lib/abonnements'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Lock, Flame, Star, Phone, Calendar } from 'lucide-react'
 
@@ -184,6 +186,9 @@ export default function CommanderRdvSlug() {
 
   const [commercant, setCommercant] = useState(null)
   const [prestations, setPrestations] = useState([])
+  // Les formules d'abonnement mises en vente par le commerçant. La politique
+  // RLS ne rend visibles que celles qu'il a explicitement publiées.
+  const [formulesAbo, setFormulesAbo] = useState([])
   const [creneauxConfig, setCreneauxConfig] = useState([])  // les rdv_creneaux du commerçant
   const [praticiens, setPraticiens] = useState([])          // rdv_praticiens actifs
   const [junctionMap, setJunctionMap] = useState({})        // { prestation_id: [praticien_id, ...] }
@@ -721,6 +726,24 @@ export default function CommanderRdvSlug() {
       if (annule) return
       setPhotos(photosData || [])
       setPrestations(prest || [])
+      // ⚠️ LES FORMULES SONT CHARGÉES À PART, ET C'EST VOLONTAIRE. Une erreur
+      // sur cette lecture ne doit pas emporter la fiche entière : un commerce
+      // sans abonnement, c'est-à-dire l'immense majorité, doit continuer de
+      // fonctionner exactement comme avant. Le bloc ne s'affiche que s'il y a
+      // quelque chose à vendre.
+      supabase
+        .from('abonnement_formules')
+        .select('id, commercant_id, prestation_id, libelle, type, date_debut, date_fin, seances_carnet, validite_jours, periodes_exclues, prix, seances_par_semaine, actif, vente_en_ligne, deleted_at, ordre')
+        .eq('commercant_id', c.id)
+        .eq('vente_en_ligne', true)
+        .eq('actif', true)
+        .is('deleted_at', null)
+        .order('ordre', { ascending: true })
+        .then(({ data, error }) => {
+          if (annule) return
+          if (error) { console.warn('[fiche rdv] formules abonnement KO', error.message); return }
+          setFormulesAbo((data || []).filter(formuleVendableEnLigne))
+        })
       setCreneauxConfig(cren || [])
       setPraticiens(prat || [])
       // Build junction map : prestation_id -> [praticien_id, ...]
@@ -1850,6 +1873,15 @@ export default function CommanderRdvSlug() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* ─── Abonnements ────────────────────────────────────────────
+                  SOUS les prestations, décision d'Alex du 15/08 : on comprend
+                  d'abord ce que fait ce commerce, on s'abonne ensuite. Et pas
+                  dans la boutique : un abonnement porte une durée, un solde et
+                  des règles, qui n'ont aucune place sur une fiche produit. */}
+              {etape === 1 && formulesAbo.length > 0 && (
+                <BlocAbonnements commercant={commercant} formules={formulesAbo} prestations={prestations}/>
               )}
 
               {etape === 1 && produits.length > 0 && renderProduits()}

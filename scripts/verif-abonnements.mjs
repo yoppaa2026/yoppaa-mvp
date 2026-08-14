@@ -17,7 +17,8 @@ import {
   cleSemaine, dateEcartee, exclusionsQuiSeChevauchent, datesDeSeances,
   seancesDeLaFormule, fenetreDeValidite, soldeAbonnement, abonnementValable,
   peutReserverSurAbonnement, libelleSolde, placerLaSerie, resumeDeLaSerie,
-  libellePrixSeance,
+  libellePrixSeance, STATUTS_CONSOMMENT_SEANCE, seancesConsommees, datesConsommees,
+  etatAbonnement, joursEntre,
 } from '../lib/abonnements.js'
 import { jourSemaineDe } from '../lib/creneaux.js'
 
@@ -341,6 +342,105 @@ const individuel = placerLaSerie({
 })
 verifier('un créneau individuel déjà pris reste complet',
   individuel.placees.length === 0 && individuel.completes.length === 1)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE DÉCOMPTE : « 150 € = 20 séances, et chaque résa fait -1 » (Alex, 15/08)
+//
+// ⚠️ DÉCOMPTÉE À LA RÉSERVATION, RENDUE SI ANNULÉE À TEMPS. Réserver bloque un
+// créneau, donc ça coûte une place au commerçant ; prévenir à l'avance ne coûte
+// rien à personne. Un no-show est perdu.
+//
+// ⚠️ ET « À TEMPS » NE DEMANDE AUCUNE COLONNE : `/api/rdv/cancel` REFUSE déjà
+// toute annulation passé le délai. Un `annule_client` est donc dans les temps
+// PAR CONSTRUCTION. Ce banc le vérifie sur la route elle-même, pas sur une
+// intention : si ce garde-fou disparaît de la route, la règle de décompte
+// devient fausse et le banc doit rougir AVANT qu'une cliente perde une séance.
+// ═══════════════════════════════════════════════════════════════════════════
+const CARNET_20 = {
+  id: 'ab1', type: 'carnet', mode: 'credit', statut: 'actif', prix: 150,
+  seances_total: 20, seances_par_semaine: 3,
+  date_debut: '2026-09-01', date_fin: '2027-03-01',
+}
+const R = (statut, date_rdv, abonnement_id = 'ab1') => ({ abonnement_id, statut, date_rdv })
+
+egal('une réservation confirmée consomme', seancesConsommees([R('confirme', '2026-09-07')]), 1)
+egal('une séance honorée aussi', seancesConsommees([R('honore', '2026-09-07')]), 1)
+egal('un no-show est perdu', seancesConsommees([R('no_show', '2026-09-07')]), 1)
+egal('une annulation par la cliente REND la séance',
+  seancesConsommees([R('annule_client', '2026-09-07')]), 0)
+egal('une annulation par le commerçant aussi',
+  seancesConsommees([R('annule_commercant', '2026-09-07')]), 0)
+egal('un reporté ne consomme pas', seancesConsommees([R('reporte', '2026-09-07')]), 0)
+// ⚠️ On ne compte QUE les séances de CE contrat. Une cliente peut avoir un
+// carnet chez sa coiffeuse et un autre à son cours de yoga.
+egal('les séances d’un autre contrat ne comptent pas',
+  seancesConsommees([R('confirme', '2026-09-07', 'ab2')], { abonnementId: 'ab1' }), 0)
+egal('sans contrat précisé, on compte tout ce qui est fourni',
+  seancesConsommees([R('confirme', '2026-09-07', 'ab2')]), 1)
+egal('une liste vide ne consomme rien', seancesConsommees([]), 0)
+egal('une liste absente non plus', seancesConsommees(null), 0)
+// ⚠️ Les statuts sont ceux de la base, jamais inventés de mémoire.
+egal('trois statuts consomment, et trois seulement', STATUTS_CONSOMMENT_SEANCE.length, 3)
+for (const s of STATUTS_CONSOMMENT_SEANCE) {
+  verifier(`« ${s} » est un statut de rendez-vous qui existe`,
+    /confirme|honore|annule_client|annule_commercant|no_show|reporte/.test(s) && s !== 'annule')
+}
+
+// ⚠️ LE GARDE-FOU DONT DÉPEND TOUTE LA RÈGLE. Si la route d'annulation cesse
+// de refuser les annulations tardives, « annulé = annulé à temps » devient
+// faux, et une cliente qui prévient une heure avant récupérerait sa séance.
+const srcCancel = readFileSync(new URL('../app/api/rdv/cancel/route.js', import.meta.url), 'utf8')
+verifier('la route d’annulation refuse encore les annulations hors délai',
+  /cutoff_expired: true/.test(srcCancel) && /now > cutoffDate/.test(srcCancel))
+
+// ─── LE SOLDE, TEL QU'IL S'AFFICHE ─────────────────────────────────────────
+const HISTORIQUE = [
+  R('honore', '2026-09-07'), R('honore', '2026-09-14'),
+  R('annule_client', '2026-09-21'),          // rendue
+  R('no_show', '2026-09-28'),                // perdue
+  R('confirme', '2026-10-05'),               // déjà décomptée
+  R('confirme', '2026-10-12', 'ab2'),        // autre contrat
+]
+const etat = etatAbonnement(CARNET_20, HISTORIQUE, { aujourdhui: '2026-10-01' })
+egal('le contrat annonce 20 séances', etat.total, 20)
+egal('quatre sont consommées, pas six', etat.consommees, 4)
+egal('il en reste 16', etat.solde, 16)
+egal('et l’écran sait le dire', etat.libelle, 'Il te reste 16 séances')
+egal('le prix du contrat est porté par l’état', etat.prix, 150)
+egal('le contrat est vivant au 1er octobre', etat.valable, true)
+egal('il n’est pas épuisé', etat.epuise, false)
+egal('et son solde n’est pas inconnu', etat.soldeInconnu, false)
+egal('la durée restante se compte en jours', etat.joursRestants, 151)
+egal('les dates retenues sont celles de CE contrat', etat.dates.length, 4)
+
+// ⚠️ ÉPUISÉ ET INCONNU NE SE RESSEMBLENT PAS. Zéro veut dire « tout consommé »,
+// null veut dire « on ne sait pas », et on ne refuse pas pour la même raison.
+const etatEpuise = etatAbonnement({ ...CARNET_20, seances_total: 2 }, HISTORIQUE, { aujourdhui: '2026-10-01' })
+egal('un solde tombé à zéro est épuisé', etatEpuise.epuise, true)
+egal('et ne descend jamais sous zéro', etatEpuise.solde, 0)
+const etatInconnu = etatAbonnement({ ...CARNET_20, seances_total: null }, HISTORIQUE, { aujourdhui: '2026-10-01' })
+egal('un contrat sans total a un solde INCONNU', etatInconnu.soldeInconnu, true)
+egal('et il n’est surtout pas déclaré épuisé', etatInconnu.epuise, false)
+egal('un contrat absent ne rend rien', etatAbonnement(null, []), null)
+
+// La durée restante, et ses bornes.
+egal('un contrat qui finit demain', joursEntre('2026-10-01', '2026-10-02'), 1)
+egal('un contrat qui finit aujourd’hui', joursEntre('2026-10-01', '2026-10-01'), 0)
+egal('une date passée ne rend jamais un négatif', joursEntre('2026-10-01', '2026-09-01'), 0)
+egal('sans date, pas de durée', joursEntre('2026-10-01', null), null)
+// ⚠️ Le passage à l'heure d'hiver ne doit pas avaler ni inventer un jour : le
+// dernier dimanche d'octobre 2026 tombe le 25.
+egal('le changement d’heure n’ajoute ni ne retire un jour',
+  joursEntre('2026-10-24', '2026-10-26'), 2)
+
+// Le décompte alimente directement la question « peut-elle réserver ? ».
+const verdictAbo = peutReserverSurAbonnement(CARNET_20, {
+  date: '2026-10-19',
+  seancesUtilisees: seancesConsommees(HISTORIQUE, { abonnementId: 'ab1' }),
+  datesDejaPrises: datesConsommees(HISTORIQUE, { abonnementId: 'ab1' }),
+})
+egal('avec 16 séances au compteur, elle peut réserver', verdictAbo.ok, true)
+egal('et le solde annoncé est le même partout', verdictAbo.solde, 16)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ⚠️ CE QUE LA CLIENTE LIT SOUS SA SÉANCE : PAS « 0 € »

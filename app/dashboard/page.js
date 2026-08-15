@@ -1445,6 +1445,15 @@ export default function Dashboard() {
   // Le choix fait dans la fenêtre, exécuté puis confirmé.
   async function repondreActionRdv(choix) {
     if (!actionRdv) return
+    // ⚠️ LA PORTE VERS LE DÉPLACEMENT. Alex cherchait à décaler un rendez-vous
+    // et se retrouvait dans la fenêtre d'annulation : on l'emmène là où il
+    // voulait aller, au lieu de lui laisser annuler puis recréer.
+    if (choix === 'deplacer') {
+      const rdv = actionRdv.rdv
+      setActionRdv(null)
+      setRdvADeplacer(rdv)
+      return
+    }
     const decision = statutDepuisChoix(actionRdv.action, choix)
     // « Ne rien faire » est un résultat comme un autre : on referme, sans bruit
     // et surtout sans rien écrire.

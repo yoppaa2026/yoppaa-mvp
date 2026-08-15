@@ -840,11 +840,32 @@ egal('sans date, on n’invente rien', quandRdv({ heure_debut: '10:00:00' }), '1
 
 // L'annulation propose les DEUX annulations sur le même écran, nommées.
 const qAnnule = questionRdv('annule_commercant', RDV_CONFIRM)
-egal('annuler pose trois choix', qAnnule.actions.map(a => a.valeur), ['annuler', 'lieu', 'rien'])
+// ⚠️ LA PORTE DE SORTIE VERS LE DÉPLACEMENT, EN PREMIER. Relevé par Alex le
+// 15/08 : il cherchait à DÉCALER un rendez-vous et se retrouvait dans la
+// fenêtre d'annulation. Neuf fois sur dix, un commerçant qui annule veut en
+// réalité déplacer. Quand quelqu'un se trompe de porte, on ne lui répond pas
+// qu'il s'est trompé : on ouvre la bonne.
+egal('annuler propose d’abord de déplacer',
+  qAnnule.actions.map(a => a.valeur), ['deplacer', 'annuler', 'lieu', 'rien'])
+verifier('et cette sortie est offerte comme le bon geste, pas comme un danger',
+  qAnnule.actions[0].ton === 'principal')
+// ⚠️ ET ELLE N'ÉCRIT RIEN. Rendre un statut ici annulerait le rendez-vous au
+// moment précis où le commerçant demande à le garder.
+egal('déplacer depuis la fenêtre d’annulation n’annule rien',
+  statutDepuisChoix('annule_commercant', 'deplacer'), null)
+// ⚠️ LES DEUX ANNULATIONS COMMENCENT PAR LE VERBE DU GESTE. Ma première version
+// écrivait « Je change d'endroit, invite-le à reprendre sa place » : Alex l'a lu
+// comme un déplacement de rendez-vous, et il avait raison de le lire ainsi. Le
+// verbe qui ouvre la phrase doit être celui du geste, jamais celui de la raison.
+for (const valeur of ['annuler', 'lieu']) {
+  verifier(`« ${valeur} » annonce d’abord qu’on annule`,
+    /^Annuler/.test(qAnnule.actions.find(a => a.valeur === valeur).label),
+    qAnnule.actions.find(a => a.valeur === valeur).label)
+}
 verifier('le rendez-vous concerné est rappelé', /Sophie Martin/.test(qAnnule.details))
 verifier('et son moment aussi', /17 août/.test(qAnnule.details))
-verifier('le déplacement de lieu est proposé EN CLAIR, pas dans une seconde fenêtre',
-  /change d’endroit/.test(qAnnule.actions.find(a => a.valeur === 'lieu').label))
+verifier('le changement d’adresse est proposé EN CLAIR, pas dans une seconde fenêtre',
+  /change d’adresse/.test(qAnnule.actions.find(a => a.valeur === 'lieu').label))
 
 // ⚠️ LA GARDE QUI TIENT LE DÉFAUT D'ORIGINE. Aucun bouton ne s'appelle « OK »
 // ni « Annuler » tout court : sur un écran d'annulation, « Annuler » ne veut

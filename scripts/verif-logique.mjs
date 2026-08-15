@@ -1144,8 +1144,17 @@ verifier('l’agenda regroupe les inscrits en séances',
   /blocsAgenda\(rdvsCommencantIci\)/.test(srcAgenda))
 verifier('et n’empile plus un bloc par inscrit',
   !/\{rdvsCommencantIci\.map\(r =>/.test(srcAgenda))
+// ⚠️ ANCRÉ SUR LA RÈGLE, PAS SUR L'ARGUMENT. Ce test exigeait
+// `setSeanceOuverte(seance)` mot pour mot. Le 15/08, ajouter la date du jour au
+// cours ouvert, pour pouvoir y inscrire quelqu'un de plus, l'a fait rougir
+// alors que le comportement était intact et le code meilleur. C'est le test qui
+// VERROUILLE UNE FORME, déjà rencontré plusieurs fois : il n'empêche pas un
+// défaut, il empêche une amélioration.
+// Ce qui compte est ailleurs : le clic sur un COURS ouvre la LISTE, et surtout
+// pas la fiche d'un seul inscrit, sinon onze personnes deviennent invisibles.
 verifier('un cours ouvre sa liste, pas une fiche',
-  /setSeanceOuverte\(seance\)/.test(srcAgenda))
+  /setSeanceOuverte\(\{?\s*\.?\.?\.?seance/.test(srcAgenda)
+  && !/e\.stopPropagation\(\); if \(onSelectRdv\) onSelectRdv\(seance/.test(srcAgenda))
 verifier('et de là on ouvre la fiche d’un inscrit',
   /setSeanceOuverte\(null\); if \(onSelectRdv\) onSelectRdv\(i\)/.test(srcAgenda))
 

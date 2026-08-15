@@ -466,9 +466,12 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                       const couleurs = couleurRdv({ statut: premier?.statut, couleurPraticien: premier?.praticien?.couleur_hex })
                       const nom = premier?.prestation?.nom || 'Cours'
                       const complet = seance.inscrits.length >= seance.capacite
+                      // ⚠️ LE JOUR VOYAGE AVEC LE COURS. Sans lui, le panneau
+                      // des inscrits ne saurait pas quelle date proposer pour
+                      // en ajouter un de plus : le bloc ne porte que des heures.
                       return (
                         <div key={seance.cle}
-                          onClick={(e) => { e.stopPropagation(); setSeanceOuverte(seance) }}
+                          onClick={(e) => { e.stopPropagation(); setSeanceOuverte({ ...seance, jourDate: j.date }) }}
                           title={`${seance.heure_debut?.slice(0, 5)}–${seance.heure_fin?.slice(0, 5)} · ${nom} · ${seance.inscrits.length} inscrit${seance.inscrits.length > 1 ? 's' : ''} sur ${seance.capacite}`}
                           style={{
                             position: 'absolute', top: 1, left: 2, right: 2, height: hauteur,
@@ -674,8 +677,40 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
               ))}
             </div>
 
+            {/* ─── INSCRIRE QUELQU'UN DE PLUS ────────────────────────────────
+                ⚠️ CE BOUTON N'EXISTAIT PAS, ET C'ÉTAIT UNE IMPASSE. Relevé par
+                Alex le 15/08 : une fois un cours créé, la case de l'agenda
+                cesse d'être cliquable (elle porte déjà un rendez-vous), et
+                cliquer sur le cours n'ouvrait que la LISTE des inscrits. La
+                commerçante voyait « 1/12 » et n'avait aucun moyen d'ajouter la
+                deuxième personne. Un cours de douze places sur lequel on ne
+                peut inscrire qu'une seule personne ne sert à rien.
+                Le geste est ici, à l'endroit où elle constate qu'il reste de la
+                place, et pas ailleurs. */}
+            {onNouveauRdv && seanceOuverte.jourDate && (
+              seanceOuverte.inscrits.length >= seanceOuverte.capacite ? (
+                <p style={{ margin: '14px 0 0', padding: '10px 12px', borderRadius: 12, background: '#FEF3C7', border: '1.5px solid #F59E0B', fontSize: 12, fontWeight: 700, color: '#92400E', lineHeight: 1.45 }}>
+                  Ce cours est complet. Libère une place en annulant une inscription pour en ajouter une autre.
+                </p>
+              ) : (
+                <button
+                  onClick={() => {
+                    const jour = seanceOuverte.jourDate
+                    const heure = seanceOuverte.heure_debut?.slice(0, 5)
+                    setSeanceOuverte(null)
+                    onNouveauRdv(jour, heure)
+                  }}
+                  style={{ width: '100%', marginTop: 14, padding: '12px 14px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 13.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, boxShadow: '0 3px 12px rgba(107,53,196,0.35)' }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>
+                  </svg>
+                  Inscrire quelqu&rsquo;un ({seanceOuverte.capacite - seanceOuverte.inscrits.length} place{seanceOuverte.capacite - seanceOuverte.inscrits.length > 1 ? 's' : ''} libre{seanceOuverte.capacite - seanceOuverte.inscrits.length > 1 ? 's' : ''})
+                </button>
+              )
+            )}
+
             <button onClick={() => setSeanceOuverte(null)}
-              style={{ width: '100%', marginTop: 14, padding: '11px 14px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.deep, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+              style={{ width: '100%', marginTop: 10, padding: '11px 14px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.deep, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
               Fermer
             </button>
           </div>

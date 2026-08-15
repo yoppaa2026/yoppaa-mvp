@@ -767,6 +767,49 @@ verifier('l’ouverture revérifie la règle au moment du clic',
 verifier('et elle rafraîchit le commerçant pour que la bannière disparaisse',
   /onSaved\?\.\(\)/.test(corpsOuvrir))
 
+// ═══════════════════════════════════════════════════════════════════════════
+// INSCRIRE UNE DEUXIÈME PERSONNE SUR UN COURS
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ IMPASSE TROUVÉE PAR ALEX LE 15/08, en testant Centre Respire. Une fois le
+// cours créé, la case de l'agenda cesse d'être cliquable (elle porte déjà un
+// rendez-vous), et cliquer sur le cours n'ouvrait que la LISTE des inscrits.
+// La commerçante lisait « 1/12 » et n'avait AUCUN moyen d'ajouter la deuxième
+// personne. Un cours de douze places où l'on ne peut en inscrire qu'une seule
+// ne sert à rien : c'est tout le module qui tombait.
+
+verifier('le panneau des inscrits sait ajouter quelqu’un',
+  /Inscrire quelqu&rsquo;un/.test(srcAgenda))
+// Le bouton appelle le MÊME chemin que la création depuis une case libre : une
+// seconde façon de créer un rendez-vous finirait par diverger de la première.
+verifier('et il passe par la création de rendez-vous existante',
+  /onNouveauRdv\(jour, heure\)/.test(srcAgenda))
+// ⚠️ SANS LE JOUR, RIEN N'EST POSSIBLE : le bloc de cours ne porte que des
+// heures, la date vit sur la colonne de l'agenda.
+verifier('le jour voyage avec le cours ouvert',
+  /setSeanceOuverte\(\{ \.\.\.seance, jourDate: j\.date \}\)/.test(srcAgenda))
+verifier('et le bouton ne s’affiche pas sans lui',
+  /onNouveauRdv && seanceOuverte\.jourDate &&/.test(srcAgenda))
+
+// Complet : on ne propose pas un geste impossible, on dit quoi faire à la
+// place. Un bouton grisé sans explication renvoie le commerçant à ses
+// suppositions.
+// ⚠️ ANCRÉ SUR LE GARDE-FOU, PAS SUR LA COMPARAISON. Écrit
+// `inscrits.length >= capacite ?` tout seul, ce test restait VERT sans une
+// ligne du correctif : la même comparaison existe vingt lignes plus haut, dans
+// l'en-tête du panneau qui affiche « · complet ». Mesuré par mutation, il était
+// muet. C'est le piège du test qui CHERCHE au lieu de situer.
+verifier('un cours complet n’offre pas le bouton mais une explication',
+  /jourDate && \(\s*seanceOuverte\.inscrits\.length >= seanceOuverte\.capacite \?/.test(srcAgenda))
+verifier('et l’explication dit comment libérer une place',
+  /Libère une place en annulant une inscription/.test(srcAgenda))
+
+// Le nombre de places libres est annoncé : c'est ce qui dit à la commerçante
+// combien de personnes elle peut encore prendre au téléphone.
+// ⚠️ Le `} place` fait tout le travail : sans lui, le test tombait sur les deux
+// ternaires de pluriel du même bouton et restait vert.
+verifier('le bouton annonce les places restantes',
+  /seanceOuverte\.capacite - seanceOuverte\.inscrits\.length\} place/.test(srcAgenda))
+
 // La fiche publique garde son message de repli : fermée, elle invite à
 // téléphoner plutôt que de laisser croire à une panne.
 const srcFicheRdv = sansCommentaires(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))

@@ -20,6 +20,11 @@ import BoutonIaInline from './BoutonIaInline'
 import { champsModifies } from '@/lib/formulaire-modifie'
 import { peutActiverRdv, etatActivationRdv } from '@/lib/activation-rdv'
 import { BarreEnregistrer, ModaleQuitter, useAvertirAvantDeQuitter } from './BarreEnregistrer'
+// ⚠️ Le POSTE qui affiche ces fenêtres est monté une seule fois, dans
+// `app/dashboard/page.js`, qui rend cet écran. On n'importe ici que la
+// fonction qui pose la question.
+import { confirme } from './PosteConfirmation'
+import { confirmationSimple } from '@/lib/confirmations'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import BandeDefilante from '@/app/components/BandeDefilante'
 // ⚠️ `estFoodTruck` NE SERT PLUS ICI, ET C'EST VOULU. Le métier ne dit pas si
@@ -528,7 +533,7 @@ function TabMenu({ commercantId, commercant, toast }) {
   }
 
   async function supprimerCategorie(cat) {
-    if (!confirm(`Supprimer la catégorie "${cat}" ? Les articles resteront mais sans catégorie.`)) return
+    if (!await confirme(confirmationSimple({ titre: `Supprimer la catégorie « ${cat} » ?`, message: 'Tes articles restent en place, ils se retrouvent simplement sans catégorie.', action: 'Oui, supprimer la catégorie' }))) return
     const { error } = await supabase.from('articles').update({ categorie: null }).eq('commercant_id', commercantId).eq('categorie', cat)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('Catégorie supprimée'); fetchArticles()
@@ -545,7 +550,7 @@ function TabMenu({ commercantId, commercant, toast }) {
   }
 
   async function deleteArticle(id) {
-    if (!confirm('Supprimer cet article ?')) return
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer cet article ?', message: 'Il disparaît de ta carte. Les commandes déjà passées ne changent pas.', action: 'Oui, supprimer cet article' }))) return
     const { data, error } = await supabase.from('articles').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     if (!data || data.length === 0) { toast('Suppression refusée par les permissions Supabase (RLS)', 'error'); return }
@@ -1152,7 +1157,7 @@ function OptionsArticle({ articleId, toast }) {
   }
 
   async function deleteGroupe(id) {
-    if (!confirm('Supprimer ce groupe et toutes ses options ?')) return
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer ce groupe ?', message: 'Toutes ses options disparaissent avec lui.', action: 'Oui, supprimer le groupe' }))) return
     const { data, error } = await supabase.from('article_options_groupes').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     if (!data || data.length === 0) { toast('Suppression refusée par les permissions Supabase (RLS)', 'error'); return }
@@ -1512,16 +1517,16 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
   // Fermeture exceptionnelle (congés) couvrant aujourd'hui
   const congeAuj = !!fermeturesSemaine[jourActuelKey]
 
-  function ouvrirEdition(jour) {
+  async function ouvrirEdition(jour) {
     // Fermeture exceptionnelle (congés) sur la prochaine occurrence de ce jour :
     // avertit avant d'autoriser une dérogation de stock.
     if (fermeturesSemaine[jour]) {
       const motif = fermeturesSemaine[jour].motif
-      const ok = window.confirm(`Fermeture exceptionnelle prévue ce ${jour}${motif ? ` (${motif})` : ''}. Prévoir du stock ce jour-là quand même ?`)
+      const ok = await confirme(confirmationSimple({ titre: `Tu es en congé ce ${jour}`, message: motif ? `Motif noté : ${motif}. Prévoir du stock ce jour-là quand même ?` : 'Prévoir du stock ce jour-là quand même ?', action: 'Oui, prévoir du stock', ton: 'principal' }))
       if (!ok) return
     } else if (joursFermes.includes(jour)) {
       // Jour fermé au Profil : avertit avant d'autoriser une dérogation de stock.
-      const ok = window.confirm(`Ton commerce est fermé le ${jour} (horaires du Profil). Prévoir du stock ce jour-là quand même ?`)
+      const ok = await confirme(confirmationSimple({ titre: `Ton commerce est fermé le ${jour}`, message: 'C’est ce que disent tes horaires dans le Profil. Prévoir du stock ce jour-là quand même ?', action: 'Oui, prévoir du stock', ton: 'principal' }))
       if (!ok) return
     }
     const eff = dispoEffectif(jour)
@@ -1987,7 +1992,7 @@ function TabDeals({ commercantId, commercant, toast }) {
   }
 
   async function deleteDeal(id) {
-    if (!confirm('Supprimer ce deal ?')) return
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer ce deal ?', message: 'Il disparaît de ta fiche tout de suite.', action: 'Oui, supprimer ce deal' }))) return
     const { data, error } = await supabase.from('yoppaa_deals').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     if (!data || data.length === 0) { toast('Suppression refusée (RLS)', 'error'); return }
@@ -2486,7 +2491,7 @@ function TabActus({ commercantId, commercant, toast }) {
   }
 
   async function deleteActu(id) {
-    if (!confirm('Supprimer cette actualité ?')) return
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer cette actualité ?', message: 'Elle disparaît de ta fiche tout de suite.', action: 'Oui, supprimer l’actualité' }))) return
     const { data, error } = await supabase.from('actualites').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     if (!data || data.length === 0) { toast('Suppression refusée (RLS)', 'error'); return }
@@ -2811,7 +2816,7 @@ function TabCreneaux({ commercantId, toast }) {
 
   // ─── Fix suppression individuelle ─────────────────────────────────────────
   async function deleteCreneau(id) {
-    if (!confirm('Supprimer ce créneau ?')) return
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer ce créneau ?', message: 'Tes clients ne pourront plus le choisir.', action: 'Oui, supprimer ce créneau' }))) return
     const { data: cmdLiees } = await supabase.from('commandes').select('id').eq('creneau_id', id).not('statut', 'in', '(recupere,non_retire)')
     if (cmdLiees?.length > 0) { toast(`Impossible : ${cmdLiees.length} commande(s) active(s) sur ce créneau`, 'error'); return }
     const { error } = await supabase.from('creneaux').delete().eq('id', id)
@@ -2827,7 +2832,7 @@ function TabCreneaux({ commercantId, toast }) {
     const msg = nbNull > 0
       ? `Supprimer les ${crenJour.length} créneaux du ${jourActif} ? (dont ${nbNull} créneaux legacy sans jour assigné)`
       : `Supprimer les ${crenJour.length} créneaux du ${jourActif} ?`
-    if (!confirm(msg)) return
+    if (!await confirme(confirmationSimple({ titre: `Supprimer les créneaux du ${jourActif} ?`, message: msg, action: 'Oui, tous les supprimer' }))) return
 
     // Vérifier commandes actives
     const avecCmd = []
@@ -2842,7 +2847,7 @@ function TabCreneaux({ commercantId, toast }) {
       toast('Impossible : tous ont des commandes actives', 'error'); return
     }
     if (avecCmd.length > 0) {
-      if (!confirm(`${avecCmd.length} créneau(x) ont des commandes actives.\nOK = supprimer uniquement les ${sansCmd.length} créneaux libres`)) return
+      if (!await confirme(confirmationSimple({ titre: 'Certains créneaux ont des commandes', message: `${avecCmd.length} créneau${avecCmd.length > 1 ? 'x sont' : ' est'} déjà réservé${avecCmd.length > 1 ? 's' : ''} par des clients : ceux-là seront gardés.`, action: `Supprimer seulement les ${sansCmd.length} créneaux libres` }))) return
     }
 
     // Supprimer un par un (évite le bug .in())
@@ -2863,7 +2868,7 @@ function TabCreneaux({ commercantId, toast }) {
     if (jourOuvert(jourActif) && horaires?.[jourActif]) {
       const h = horaireJour(jourActif)
       if (form.heure_debut < h.debut || form.heure_fin > h.fin) {
-        if (!confirm(`Ce créneau est hors des horaires d'ouverture (${h.debut}–${h.fin}).\nContinuer quand même ?`)) return
+        if (!await confirme(confirmationSimple({ titre: 'Ce créneau sort de tes heures d’ouverture', message: `Tu ouvres de ${h.debut} à ${h.fin} ce jour-là.`, action: 'Le créer quand même', ton: 'principal' }))) return
       }
     }
 
@@ -2931,7 +2936,7 @@ function TabCreneaux({ commercantId, toast }) {
 
     const existants = creneauxDuJour(jourActif)
     if (existants.length > 0) {
-      if (!confirm(`${existants.length} créneau(x) existent déjà pour ${jourActif}.\nOK = remplacer · Annuler = abandonner`)) return
+      if (!await confirme(confirmationSimple({ titre: `Des créneaux existent déjà le ${jourActif}`, message: `Il y en a ${existants.length}. Les nouveaux prendront leur place.`, action: 'Oui, remplacer les créneaux existants' }))) return
       for (const c of existants) await supabase.from('creneaux').delete().eq('id', c.id)
     }
 
@@ -2985,7 +2990,7 @@ function TabCreneaux({ commercantId, toast }) {
   }
 
   async function deleteFermeture(id) {
-    if (!confirm('Supprimer cette fermeture ?')) return
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer cette fermeture ?', message: 'Ce jour redeviendra ouvert à la réservation.', action: 'Oui, supprimer la fermeture' }))) return
     await supabase.from('fermetures_exceptionnelles').delete().eq('id', id)
     toast('Fermeture supprimée'); fetchAll()
   }
@@ -3775,7 +3780,7 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
   }, [surModifications, nbModifsFidelite, saving, actif])
 
   async function desactiver() {
-    if (!confirm('Désactiver la fidélité ? Les cartes de tes clients sont conservées.')) return
+    if (!await confirme(confirmationSimple({ titre: 'Désactiver le programme de fidélité ?', message: 'Les cartes de tes clients sont conservées, tu peux le réactiver quand tu veux.', action: 'Oui, désactiver la fidélité' }))) return
     const { error } = await supabase.from('commercants').update({ fidelite_actif: false }).eq('id', commercantId)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('Fidélité désactivée (cartes conservées)')
@@ -3848,7 +3853,7 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
 
   async function utiliserRecompense() {
     if (!carte || (carte.recompenses_disponibles || 0) < 1) return
-    if (!confirm(`Utiliser la récompense maintenant ?\n${libelleRecompense(commercant)}`)) return
+    if (!await confirme(confirmationSimple({ titre: 'Utiliser la récompense maintenant ?', details: libelleRecompense(commercant), action: 'Oui, utiliser la récompense', ton: 'principal' }))) return
     setBusy(true)
     const { data, error } = await supabase.from('fidelite_cartes')
       .update({ recompenses_disponibles: carte.recompenses_disponibles - 1, updated_at: new Date().toISOString() })
@@ -3862,7 +3867,7 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
 
   async function supprimerCarte() {
     if (!carte) return
-    if (!confirm(`Supprimer la carte ${afficherTelephone(carte.telephone)} ? (numéro mal tapé, demande du client...)`)) return
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer cette carte de fidélité ?', message: 'À faire en cas de numéro mal tapé, ou si le client le demande.', details: afficherTelephone(carte.telephone), action: 'Oui, supprimer la carte' }))) return
     const { error } = await supabase.from('fidelite_cartes').delete().eq('id', carte.id)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     setCarte(null)
@@ -5002,7 +5007,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
   }
 
   async function supprimerLogo() {
-    if (!confirm('Supprimer le logo ?')) return
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer ton logo ?', message: 'Ta fiche reprendra le logo provisoire en attendant.', action: 'Oui, supprimer le logo' }))) return
     await supabase.from('commercants').update({ logo_url: null }).eq('id', commercantId)
     setLogoPreview(null); toast('Logo supprimé')
   }
@@ -6730,7 +6735,7 @@ function TabRdvPrestations({ commercantId, toast }) {
   }
 
   async function softDelete(p) {
-    if (!window.confirm(`Supprimer la prestation "${p.nom}" ? Les RDV existants liés à cette prestation ne seront pas affectés.`)) return
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer cette prestation ?', message: 'Les rendez-vous déjà pris ne bougent pas, elle disparaît seulement de ce que tes clients peuvent réserver.', details: p.nom, action: 'Oui, supprimer la prestation' }))) return
     const { error } = await supabase.from('rdv_prestations').update({ deleted_at: new Date().toISOString() }).eq('id', p.id)
     if (error) return toast(`Erreur : ${error.message}`, 'error')
     toast('Prestation supprimée')
@@ -7135,7 +7140,7 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
     // reçoit que 33 sans que personne ne le remarque, c'est le défaut le plus
     // cher de tous. Les dates complètes sont nommées, et le commerçant tranche.
     if (serie.completes.length > 0) {
-      const suite = window.confirm(`${resumeDeLaSerie(serie)}\n\nCréer quand même l’abonnement avec les séances disponibles ?`)
+      const suite = await confirme(confirmationSimple({ titre: 'Toutes les séances n’ont pas trouvé de place', message: resumeDeLaSerie(serie), action: 'Créer avec les séances disponibles', ton: 'principal' }))
       if (!suite) { setInscrivant(false); return }
     }
     if (serie.placees.length === 0) {
@@ -7203,7 +7208,7 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
   }
 
   async function resilier(a) {
-    if (!window.confirm(`Résilier l’abonnement de ${a.client_prenom} ? Ses séances à venir seront annulées.`)) return
+    if (!await confirme(confirmationSimple({ titre: `Résilier l’abonnement de ${a.client_prenom} ?`, message: 'Ses séances à venir seront annulées. Celles déjà passées restent dans ton historique.', action: 'Oui, résilier l’abonnement' }))) return
     const aujourdhui = new Date().toISOString().slice(0, 10)
     const { error } = await supabase.from('abonnements')
       .update({ statut: 'resilie' }).eq('id', a.id)
@@ -7318,7 +7323,7 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
   }
 
   async function softDelete(f) {
-    if (!window.confirm(`Supprimer la formule "${f.libelle}" ? Les abonnements déjà souscrits ne sont pas touchés, ils gardent leurs conditions.`)) return
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer cette formule ?', message: 'Les abonnements déjà souscrits ne sont pas touchés, ils gardent leurs conditions.', details: f.libelle, action: 'Oui, supprimer la formule' }))) return
     const { error } = await supabase.from('abonnement_formules')
       .update({ deleted_at: new Date().toISOString() }).eq('id', f.id)
     if (error) return toast(`Erreur : ${error.message}`, 'error')
@@ -7835,7 +7840,7 @@ function TabRdvPraticiens({ commercantId, toast }) {
   }
 
   async function softDelete(p) {
-    if (!window.confirm(`Supprimer le praticien "${p.prenom}${p.nom ? ' ' + p.nom : ''}" ? Les RDV existants ne seront pas affectés.`)) return
+    if (!await confirme(confirmationSimple({ titre: 'Retirer cette personne de ton équipe ?', message: 'Les rendez-vous déjà pris avec elle ne bougent pas.', details: `${p.prenom}${p.nom ? ' ' + p.nom : ''}`, action: 'Oui, la retirer' }))) return
     const { error } = await supabase.from('rdv_praticiens').update({ deleted_at: new Date().toISOString() }).eq('id', p.id)
     if (error) return toast(`Erreur : ${error.message}`, 'error')
     toast('Praticien supprimé')
@@ -8113,7 +8118,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     // Jour fermé au Profil : le créneau ne servira à rien tant que les horaires
     // ne sont pas ouverts (le moteur de slots croise les deux). On prévient.
     if (joursFermesProfil.includes(form.jour_semaine) &&
-        !window.confirm(`Ton commerce est déclaré FERMÉ le ${form.jour_semaine} dans tes horaires (Profil).\n\nTant que tu ne l'ouvres pas, ce créneau ne s'affichera pas côté client. Le créer quand même ?`)) return
+        !await confirme(confirmationSimple({ titre: `Tu es déclaré fermé le ${form.jour_semaine}`, message: 'C’est ce que disent tes horaires dans le Profil. Tant que tu ne les ouvres pas, ce créneau ne s’affichera pas chez tes clients.', action: 'Le créer quand même', ton: 'principal' }))) return
     const payload = {
       commercant_id: commercantId,
       praticien_id: form.praticien_id === 'tous' ? null : form.praticien_id,
@@ -8156,7 +8161,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     if (source.length === 0) return toast('Aucun créneau à copier sur ce jour', 'error')
     const dejaRemplis = cibles.filter(j => creneaux.some(c => c.jour_semaine === j))
     if (dejaRemplis.length > 0 &&
-        !window.confirm(`Les créneaux déjà présents le ${dejaRemplis.join(', ')} seront remplacés par ceux du ${jourActif}. Continuer ?`)) return
+        !await confirme(confirmationSimple({ titre: 'Des créneaux vont être remplacés', message: `Ceux du ${dejaRemplis.join(', ')} laisseront la place à ceux du ${jourActif}.`, action: 'Oui, les remplacer' }))) return
     setCopieLoading(true)
     const idsARemplacer = creneaux.filter(c => cibles.includes(c.jour_semaine)).map(c => c.id)
     if (idsARemplacer.length > 0) {
@@ -8184,7 +8189,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
   }
 
   async function softDelete(c) {
-    if (!window.confirm(`Supprimer ce créneau (${c.jour_semaine} ${c.heure_debut?.slice(0,5)} – ${c.heure_fin?.slice(0,5)}) ?`)) return
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer ce créneau de rendez-vous ?', message: 'Tes clients ne pourront plus réserver sur cette plage.', details: `${c.jour_semaine} ${c.heure_debut?.slice(0,5)} – ${c.heure_fin?.slice(0,5)}`, action: 'Oui, supprimer ce créneau' }))) return
     const { error } = await supabase.from('rdv_creneaux').update({ deleted_at: new Date().toISOString() }).eq('id', c.id)
     if (error) return toast(`Erreur : ${error.message}`, 'error')
     toast('Créneau supprimé')
@@ -8532,7 +8537,7 @@ function TabRdvFermetures({ commercantId, toast }) {
     const label = f.date_debut === f.date_fin
       ? `Supprimer la fermeture du ${f.date_debut} ?`
       : `Supprimer la fermeture du ${f.date_debut} au ${f.date_fin} ?`
-    if (!window.confirm(label)) return
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer cette fermeture ?', message: 'Ces jours redeviendront ouverts à la réservation.', details: label, action: 'Oui, supprimer la fermeture' }))) return
     const { error } = await supabase.from('rdv_fermetures').update({ deleted_at: new Date().toISOString() }).eq('id', f.id)
     if (error) return toast(`Erreur : ${error.message}`, 'error')
     toast('Fermeture supprimée')

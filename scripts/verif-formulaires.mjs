@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs'
 import {
   normaliserValeur, champsModifies, estModifie, libelleModifications, MESSAGE_QUITTER,
 } from '../lib/formulaire-modifie.js'
+import { confirmationSimple, confirmationDeuxGestes, meriteConfirmation } from '../lib/confirmations.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -281,6 +282,73 @@ verifier('et l’avertissement est bien armé', /e\.returnValue = MESSAGE_QUITTE
 // Icônes en SVG, jamais d'emoji : règle du projet.
 verifier('la barre n’utilise aucun emoji',
   !/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(barre))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. PLUS UNE SEULE FENÊTRE DU NAVIGATEUR DANS LE TABLEAU DE BORD
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ VINGT-NEUF `window.confirm()` Y VIVAIENT. Le défaut trouvé par Alex sur
+// l'annulation d'un rendez-vous n'était donc pas isolé : DEUX autres portaient
+// exactement le même mal, celui où le sens n'est pas dans le bouton mais dans
+// une légende à côté.
+//   « OK = supprimer uniquement les 3 créneaux libres »
+//   « OK = remplacer · Annuler = abandonner »
+
+const simple = confirmationSimple({ titre: 'Supprimer cet article ?', action: 'Oui, supprimer cet article' })
+egal('une question simple propose deux issues', simple.actions.length, 2)
+egal('et la sortie sans effet est la dernière',
+  simple.actions[simple.actions.length - 1].valeur, 'non')
+egal('la sortie sans effet est neutre, jamais rouge',
+  simple.actions[simple.actions.length - 1].ton, 'neutre')
+verifier('le geste est rouge par défaut, parce qu’il détruit', simple.actions[0].ton === 'danger')
+verifier('un geste qui ne détruit pas ne l’est pas',
+  confirmationSimple({ titre: 'x', action: 'Oui, continuer', ton: 'principal' }).actions[0].ton === 'principal')
+
+const deux = confirmationDeuxGestes({ titre: 'x', premier: 'Tout supprimer', second: 'Ne supprimer que les libres' })
+egal('deux gestes possibles font trois boutons', deux.actions.length, 3)
+egal('et la sortie sans effet reste la dernière', deux.actions[2].valeur, 'non')
+
+// ⚠️ AUCUN BOUTON AMBIGU, NULLE PART. C'est la garde qui tient le défaut
+// d'origine : « OK » et « Annuler » ne disent pas ce qu'ils déclenchent.
+for (const config of [simple, deux, confirmationSimple({ titre: 'x', action: 'Oui, supprimer la carte' })]) {
+  for (const bouton of config.actions) {
+    verifier('aucun bouton ne s’appelle OK ni Annuler',
+      !['ok', 'annuler', 'oui', 'non', 'confirmer', 'continuer'].includes(bouton.label.trim().toLowerCase()),
+      bouton.label)
+  }
+}
+
+// Ce qui ne doit PAS être confirmé compte autant que le reste : douze fenêtres
+// par jour deviennent un réflexe, et le jour où l'une compte, personne ne la lit.
+verifier('un rendez-vous honoré ne se fait pas confirmer', meriteConfirmation('honore') === false)
+verifier('mais une suppression, oui', meriteConfirmation('supprimer_article') === true)
+
+// ⚠️ LA GARDE QUI EMPÊCHE LE RETOUR PAR LA PETITE PORTE.
+for (const fichier of ['app/dashboard/page.js', 'app/dashboard/ConfigDashboard.js',
+  'app/dashboard/AgendaRdv.js', 'app/dashboard/ModalNouveauRdv.js', 'app/dashboard/ModalDeplacerRdv.js']) {
+  const src = sansCommentaires(lire(fichier))
+  verifier(`aucune fenêtre du navigateur dans ${fichier.split('/').pop()}`,
+    !/window\.confirm\(/.test(src) && !/[^a-zA-Z.]confirm\(/.test(src.replace(/confirme\(/g, '')),
+    fichier)
+}
+
+// Les deux pièges nommément, pour que personne ne les réécrive.
+const srcCfg = sansCommentaires(lire('app/dashboard/ConfigDashboard.js'))
+verifier('la légende « OK = supprimer uniquement » a disparu',
+  !/OK = supprimer uniquement/.test(srcCfg))
+verifier('la légende « OK = remplacer · Annuler = abandonner » a disparu',
+  !/OK = remplacer/.test(srcCfg))
+
+// ⚠️ ET LE POSTE EST MONTÉ, SINON RIEN NE S'AFFICHE. `confirme()` rendrait
+// `null` partout, donc AUCUN geste destructif ne partirait : le repli penche du
+// bon côté, mais le commerçant croirait que ses clics ne font rien.
+verifier('le poste de confirmation est monté dans la page du tableau de bord',
+  /<PosteConfirmation \/>/.test(sansCommentaires(lire('app/dashboard/page.js'))))
+const srcPoste = sansCommentaires(lire('app/dashboard/PosteConfirmation.js'))
+verifier('sans poste monté, on ne détruit rien',
+  /if \(typeof ouvrirLaFenetre !== 'function'\) return Promise\.resolve\(null\)/.test(srcPoste))
+// Une promesse laissée en suspens gèle l'appelant sur un `await` qui ne revient
+// jamais : le commerçant croirait que son clic n'a rien fait.
+verifier('la promesse se résout toujours', /demande\?\.resoudre\?\.\(valeur \?\? null\)/.test(srcPoste))
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

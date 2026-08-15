@@ -323,8 +323,17 @@ export default function ModalNouveauRdv({
           <div style={{ marginBottom: 10 }}>
             <label style={labelSt}>Email (optionnel)</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="marie.dupont@..." style={inputSt} autoComplete="off"/>
-            <p style={{ fontSize: '0.68rem', color: T.muted, marginTop: 3 }}>
-              Renseigne pour envoyer une confirmation par mail. Laisse vide sinon.
+            {/* ⚠️ « OPTIONNEL » A LONGTEMPS MENTI. La colonne était en NOT NULL
+                en base : le commerçant lisait « optionnel », laissait le champ
+                vide, et recevait une erreur qu'il ne pouvait pas comprendre.
+                Relevé par Alex le 15/08, corrigé par
+                MIGRATION_RDV_EMAIL_OPTIONNEL.sql.
+                Le mot tient donc enfin, et l'écran dit ce qu'on perd sans lui
+                plutôt que de promettre vaguement quelque chose en plus. */}
+            <p style={{ fontSize: '0.68rem', color: T.muted, marginTop: 3, lineHeight: 1.45 }}>
+              {email.trim()
+                ? 'Ton client recevra sa confirmation, son rappel de la veille et son fichier calendrier.'
+                : 'Sans email, pas de confirmation ni de rappel : le rendez-vous ne vit que dans ton agenda. C’est parfait pour quelqu’un qui te réserve par téléphone.'}
             </p>
           </div>
 

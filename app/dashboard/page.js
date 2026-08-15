@@ -6,7 +6,9 @@ import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
 import ModalNouveauRdv from './ModalNouveauRdv'
 import ModaleConfirmation from './ModaleConfirmation'
+import PosteConfirmation, { confirme } from './PosteConfirmation'
 import { questionRdv, confirmationRdv, statutDepuisChoix } from '@/lib/confirmation-rdv'
+import { confirmationSimple } from '@/lib/confirmations'
 import ModalDeplacerRdv from './ModalDeplacerRdv'
 import { Reply, ClipboardList } from 'lucide-react'
 import { canDo } from '@/lib/plans'
@@ -430,8 +432,8 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
                 commande toute seule ; ce bouton sert quand la prestation s'est
                 passée sans que les produits soient remis, ou l'inverse. */}
             {!modeHistorique && ['en_attente', 'en_preparation', 'pret'].includes(commande.statut) && (
-              <button onClick={() => {
-                if (window.confirm('Confirmer que tu as remis ces produits au client ?')) onProduitsRemis?.(commande.id)
+              <button onClick={async () => {
+                if (await confirme(confirmationSimple({ titre: 'Tu as remis ces produits ?', message: 'La commande passera en récupérée.', action: 'Oui, je les ai remis', ton: 'principal' }))) onProduitsRemis?.(commande.id)
               }}
                 style={{ width: '100%', marginTop: 8, padding: '0.5rem', background: T.main, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: '0.78rem', fontFamily: '"DM Sans", sans-serif' }}>
                 Produits remis au client
@@ -535,8 +537,13 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
           </button>
         )}
         {estLivraison && commande.statut === 'pret' && statutLiv === 'en_livraison' && (
-          <button onClick={() => {
-            if (window.confirm(`Confirmer la livraison ?\n\nClient : ${commande.client_nom}\n${commande.adresse_livraison || ''}\n\nLa commande sera marquée comme livrée.`)) {
+          <button onClick={async () => {
+            if (await confirme(confirmationSimple({
+              titre: 'Tu as livré cette commande ?',
+              message: 'Elle passera en livrée, et le client en sera prévenu.',
+              details: `${commande.client_nom}${commande.adresse_livraison ? ` · ${commande.adresse_livraison}` : ''}`,
+              action: 'Oui, c’est livré', ton: 'principal',
+            }))) {
               onLivraisonStatut(commande.id, 'livree')
             }
           }}
@@ -562,8 +569,13 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
             ? `Créneau : ${commande.creneau?.heure_debut?.slice(0,5)}–${commande.creneau?.heure_fin?.slice(0,5)}`
             : `Retrait souhaité : ${commande.date_commande || '—'}`
           return (
-            <button onClick={() => {
-              if (window.confirm(`Marquer comme non retiré ?\n\nClient : ${commande.client_nom}\n${quand}\n\nConfirme que le client ne s'est pas présenté. Les articles retournent en stock.`)) {
+            <button onClick={async () => {
+              if (await confirme(confirmationSimple({
+                titre: 'Ce client n’est pas venu chercher sa commande ?',
+                message: 'Les articles retournent en stock, et la commande sort de ta liste du jour.',
+                details: `${commande.client_nom} · ${quand}`,
+                action: 'Oui, il n’est pas venu',
+              }))) {
                 onChangerStatut(commande.id, 'non_retire')
               }
             }}
@@ -576,8 +588,12 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
         })()}
         {/* Remettre en Prête si non retiré par erreur */}
         {commande.statut === 'non_retire' && (
-          <button onClick={() => {
-            if (window.confirm('Annuler le statut "Non retiré" et remettre la commande en "Prête" ?')) {
+          <button onClick={async () => {
+            if (await confirme(confirmationSimple({
+              titre: 'Remettre cette commande en « Prête » ?',
+              message: 'Le client est finalement passé, ou tu l’avais marquée absent par erreur.',
+              action: 'Oui, la remettre en Prête', ton: 'principal',
+            }))) {
               onChangerStatut(commande.id, 'pret')
             }
           }}
@@ -2598,6 +2614,13 @@ export default function Dashboard() {
           }}
         />
       )}
+
+      {/* ⚠️ LE POSTE DE CONFIRMATION, MONTÉ UNE SEULE FOIS POUR TOUTE LA PAGE.
+          C'est lui qui répond aux `confirme()` appelés de partout, y compris
+          depuis ConfigDashboard, qui est rendu plus haut dans cette même page.
+          Sans lui, `confirme()` rend `null` et aucun geste destructif ne part :
+          le repli penche du côté qui ne détruit pas. */}
+      <PosteConfirmation />
 
       {/* ─── LA FENÊTRE QUI DEMANDE, PUIS QUI CONFIRME ────────────────────── */}
       <ModaleConfirmation

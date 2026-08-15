@@ -4333,10 +4333,17 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
   // Ils sont de la partie tous les jours, sans jour ni date.
   const permanents = emps.filter(e => e.type === 'permanent')
 
-  // ⚠️ Le commerçant a décoché la case au signup, donc son siège social ne
-  // compte PAS comme lieu d'activité, et il n'a déclaré aucun lieu : sa fiche
-  // n'a rien à annoncer. C'est le seul cas où l'écran doit insister.
-  const aucunLieuAlorsQuIlEnFaut = siegeEstLeLieu === false && emps.length === 0
+  // ⚠️ L'AVERTISSEMENT VAUT MAINTENANT POUR TOUT LE MONDE (Alex, 15/08).
+  //
+  // Il ne s'affichait qu'aux commerçants ayant décoché la case du signup,
+  // parce que les autres retombaient sur leur siège. Ce repli a disparu :
+  // l'adresse d'inscription ne sert plus qu'à valider le dossier. **Aucun lieu
+  // déclaré veut donc dire aucune adresse sur la fiche, pour tous.**
+  //
+  // Sans ce changement, un commerçant qui répond « toujours au même endroit »
+  // sans rien saisir aurait une fiche muette et aucun écran pour le lui dire :
+  // il l'apprendrait en voyant un client ne pas venir.
+  const aucunLieuAlorsQuIlEnFaut = emps.length === 0
 
   async function ajouterPermanent() {
     if (!perm.libelle.trim() || !perm.adresse.trim()) { toast('Nom du lieu et adresse obligatoires', 'error'); return }
@@ -4384,11 +4391,10 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
       </p>
 
       {/* ─── LE RAPPEL, et il n'est pas décoratif ────────────────────────────
-          ⚠️ C'est lui qui rend sans danger le retrait de l'adresse du signup
-          (décision Alex du 13/08). Le commerçant y a déclaré que son activité
-          se passe ailleurs, sans dire où : tant qu'il ne l'a pas fait, sa fiche
-          n'annonce AUCUNE adresse. Sans ce rappel, il ne l'apprendrait qu'en
-          voyant un client ne pas venir. */}
+          ⚠️ C'est lui qui rend sans danger le fait que l'adresse d'inscription
+          ne serve plus qu'au dossier (décision Alex du 15/08). Tant qu'aucun
+          lieu n'est déclaré, la fiche n'annonce AUCUNE adresse. Sans ce rappel,
+          le commerçant ne l'apprendrait qu'en voyant un client ne pas venir. */}
       {aucunLieuAlorsQuIlEnFaut && (
         <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 12, padding: '11px 13px', marginBottom: 14 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
@@ -4397,9 +4403,10 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
           <p style={{ margin: 0, fontSize: 12, color: '#92400E', fontWeight: 700, lineHeight: 1.5 }}>
             Tes clients ne savent pas encore où te trouver.
             <span style={{ display: 'block', fontSize: 11, fontWeight: 500, marginTop: 3 }}>
-              Tu as indiqué à l’inscription que ton activité ne se passe pas à l’adresse
-              de ton siège. Ajoute au moins un lieu ci-dessous : tant qu’il n’y en a
-              aucun, ta fiche n’affiche pas d’adresse.
+              L’adresse de ton inscription sert uniquement à valider ton dossier :
+              elle n’est jamais montrée à tes clients. Indique ci-dessous où ils
+              viennent te trouver. Tant qu’il n’y a rien, ta fiche n’affiche
+              aucune adresse.
             </span>
           </p>
         </div>
@@ -4452,6 +4459,35 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
 
       {/* ─── TOUT CE QUI SUIT NE CONCERNE QUE LES COMMERCES QUI BOUGENT ────── */}
       {mobile && (<>
+
+      {/* ⚠️ UNE ADRESSE FIXE RESTÉE D'AVANT NE DOIT PAS DEVENIR INVISIBLE.
+          En masquant le bloc des adresses fixes en mode mobile, j'ai créé un
+          cas où un lieu ACTIF continuait d'alimenter la fiche sans que son
+          propriétaire puisse le voir ni le retirer. C'est le cas de Centre
+          Respire, qui porte une « Salle Respire » permanente en plus de son
+          planning. On ne propose pas d'en ajouter, mais on montre ce qui
+          existe, et on permet de le retirer. */}
+      {permanents.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Adresse fixe déclarée</p>
+          <p style={{ margin: '0 0 8px', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>
+            Valable tous les jours, en plus de ton planning. Retire-la si tu ne
+            reçois personne à cet endroit.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {permanents.map(e => (
+              <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 10, border: `1px solid ${T.hairline}`, padding: '8px 12px' }}>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 800, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.libelle}</span>
+                  <span style={{ display: 'block', fontSize: 11.5, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.adresse}</span>
+                </span>
+                <button onClick={() => supprimer(e.id)} style={{ ...btnMini, color: '#DC2626', borderColor: '#FCA5A5', flexShrink: 0 }}>Retirer</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
 
       {/* Tournée hebdo type */}
       <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mon planning</p>

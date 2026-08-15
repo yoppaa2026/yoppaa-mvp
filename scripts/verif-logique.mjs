@@ -586,14 +586,33 @@ const salleMettet = { id: 'l1', type: 'hebdo', jour_semaine: 'mercredi', libelle
 const salleBiesme = { id: 'l2', type: 'hebdo', jour_semaine: 'jeudi', libelle: 'Salle des fêtes', adresse: 'Rue, Biesme', commune_id: 'com-biesme', actif: true }
 const marcheNoel = { id: 'l3', type: 'ponctuel', date_jour: MERCREDI, libelle: 'Marché de Noël', adresse: 'Grand-Place', commune_id: 'com-namur', actif: true }
 
-// ─── Le cas ordinaire : rien ne change pour l'immense majorité ─────────────
-// ⚠️ C'est la garantie la plus importante du chantier. La colonne vaut `true`
-// par défaut : un commerçant déjà inscrit doit rester exactement où il est.
-egal('sans lieu déclaré, le siège fait office de lieu d’activité',
-  lieuxDuJour({ commercant: salon, lieux: [], jour: MERCREDI }).map(l => l.adresse),
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LE SIÈGE SOCIAL N'EST PLUS JAMAIS UN LIEU (décision d'Alex du 15/08)
+//
+// « L'adresse du signup ne doit servir qu'à la validation du dossier. »
+// Ces tests disaient EXACTEMENT LE CONTRAIRE il y a une heure : ils
+// garantissaient que le siège fasse office de lieu. Ils sont retournés, parce
+// qu'une adresse saisie pour être en règle à la BCE n'est pas une invitation à
+// venir sonner, et que le domicile d'une commerçante était publié sans qu'elle
+// l'ait jamais demandé.
+//
+// ⚠️ CE QUI REND LA BASCULE SANS DANGER : `MIGRATION_ADRESSE_SIEGE_DELIEE.sql`
+// a recopié le siège dans un VRAI lieu permanent pour les huit commerces dont
+// l'activité s'y passait. Le salon ci-dessous en porte un, comme dans la base.
+// ═══════════════════════════════════════════════════════════════════════════
+const ciseauxLieu = { id: 'l0', type: 'permanent', libelle: 'Ciseaux', adresse: 'Rue de Prée 9G, Mettet', commune_id: 'com-mettet', actif: true }
+
+egal('le lieu déclaré fait l’adresse du commerce',
+  lieuxDuJour({ commercant: salon, lieux: [ciseauxLieu], jour: MERCREDI }).map(l => l.adresse),
   ['Rue de Prée 9G, Mettet'])
-egal('et il est marqué comme venant du siège',
-  lieuxDuJour({ commercant: salon, lieux: [] })[0].source, 'siege')
+// ⚠️ AUCUNE ADRESSE EST UNE RÉPONSE VALABLE, et c'est le cœur du changement.
+// Un commerçant qui n'a rien déclaré n'a rien à annoncer, et son tableau de
+// bord le lui dit. Retomber sur son siège publierait une adresse
+// administrative qu'il n'a jamais offerte à ses clients.
+egal('sans aucun lieu déclaré, on n’annonce AUCUNE adresse',
+  lieuxDuJour({ commercant: salon, lieux: [], jour: MERCREDI }), [])
+verifier('et le siège n’apparaît nulle part, même seul',
+  !lieuxDuJour({ commercant: salon, lieux: [] }).some(l => l.source === 'siege'))
 
 // ─── L'itinérante : le bon lieu, le bon jour ──────────────────────────────
 egal('mercredi, la prof de yoga est à Mettet',
@@ -620,19 +639,25 @@ egal('et le lendemain, la tournée reprend',
 
 // ⚠️ L'ORDRE COMPTE : LE LIEU DU JOUR EN PREMIER. Les écrans prennent le
 // premier de la liste pour répondre à « où es-tu aujourd'hui ». Un food truck
-// qui n'a PAS décoché la case du signup a donc son dépôt parmi ses lieux : s'il
-// passait devant, sa fiche annoncerait le dépôt alors qu'il est au marché, et
-// on aurait ressuscité le défaut que le module food truck avait corrigé.
-const truck = { ...yoga, siege_social_est_lieu_activite: true, nom: 'Le Truck', adresse: 'Dépôt, Mettet' }
-egal('le lieu du jour passe devant le siège',
-  lieuxDuJour({ commercant: truck, lieux: [salleMettet], jour: MERCREDI })[0].libelle,
+// qui a aussi un dépôt déclaré en lieu fixe verrait sinon sa fiche annoncer le
+// dépôt alors qu'il est au marché, et on aurait ressuscité le défaut que le
+// module food truck avait corrigé.
+const truck = { ...yoga, nom: 'Le Truck', adresse: 'Dépôt, Mettet' }
+const depot = { id: 'l5', type: 'permanent', libelle: 'Le dépôt', adresse: 'Dépôt, Mettet', commune_id: 'com-mettet', actif: true }
+egal('le lieu du jour passe devant le lieu fixe',
+  lieuxDuJour({ commercant: truck, lieux: [salleMettet, depot], jour: MERCREDI })[0].libelle,
   'Salle Saint-Roch')
 egal('et le ponctuel devant tout le reste',
-  lieuxDuJour({ commercant: truck, lieux: [salleMettet, marcheNoel], jour: MERCREDI })[0].libelle,
+  lieuxDuJour({ commercant: truck, lieux: [salleMettet, depot, marcheNoel], jour: MERCREDI })[0].libelle,
   'Marché de Noël')
-// Le siège reste dans la liste, il n'est pas effacé : il a juste cédé la tête.
-egal('le siège reste présent, en second',
-  lieuxDuJour({ commercant: truck, lieux: [salleMettet], jour: MERCREDI }).length, 2)
+// Le lieu fixe reste dans la liste, il n'est pas effacé : il a cédé la tête.
+egal('le lieu fixe reste présent, en second',
+  lieuxDuJour({ commercant: truck, lieux: [salleMettet, depot], jour: MERCREDI }).length, 2)
+// ⚠️ ET SON ADRESSE D'INSCRIPTION N'EST JAMAIS DE LA PARTIE, même quand elle
+// ressemble à un vrai lieu : elle n'existe que dans `commercants.adresse`.
+verifier('l’adresse d’inscription du truck n’est jamais proposée',
+  !lieuxDuJour({ commercant: truck, lieux: [salleMettet], jour: MERCREDI })
+    .some(l => l.source === 'siege'))
 
 // ─── Deux adresses fixes : les deux, tous les jours ───────────────────────
 // ⚠️ Ne pas dire « siège d'exploitation » : ce terme de la Banque-Carrefour
@@ -640,7 +665,7 @@ egal('le siège reste présent, en second',
 // Le mot a été retiré du signup le 13/08 pour cette raison.
 const boutique2 = { id: 'l4', type: 'permanent', libelle: 'Boutique de Fosses', adresse: 'Rue, Fosses', commune_id: 'com-fosses', actif: true }
 egal('une seconde adresse fixe reste ouverte tous les jours',
-  lieuxDuJour({ commercant: salon, lieux: [boutique2], jour: JEUDI }).map(l => l.libelle),
+  lieuxDuJour({ commercant: salon, lieux: [ciseauxLieu, boutique2], jour: JEUDI }).map(l => l.libelle),
   ['Ciseaux', 'Boutique de Fosses'])
 
 // ─── Un lieu désactivé disparaît, sans exception ──────────────────────────
@@ -649,7 +674,7 @@ egal('un lieu désactivé ne s’affiche plus',
 
 // ─── Sans date, on montre les permanents plutôt que rien ──────────────────
 egal('sans jour, on rend au moins les permanents',
-  lieuxDuJour({ commercant: salon, lieux: [boutique2] }).length, 2)
+  lieuxDuJour({ commercant: salon, lieux: [ciseauxLieu, boutique2] }).length, 2)
 
 // ─── TOUTES SES COMMUNES, TOUT LE TEMPS (décision Alex du 12/08) ──────────
 // L'autre option, ne la montrer que dans la commune du jour, l'aurait rendue
@@ -659,8 +684,8 @@ egal('la prof de yoga apparaît dans ses deux communes',
   ['com-biesme', 'com-mettet'])
 egal('et son domicile ne l’inscrit pas dans la sienne',
   communesDuCommercant({ commercant: yoga, lieux: [] }), [])
-egal('le salon reste dans la sienne',
-  communesDuCommercant({ commercant: salon, lieux: [] }), ['com-mettet'])
+egal('le salon reste dans la sienne, par SON LIEU et non par son siège',
+  communesDuCommercant({ commercant: salon, lieux: [ciseauxLieu] }), ['com-mettet'])
 egal('un lieu désactivé ne rattache à aucune commune',
   communesDuCommercant({ commercant: yoga, lieux: [{ ...salleBiesme, actif: false }] }), [])
 
@@ -707,8 +732,11 @@ egal('sans heure, la réponse reste celle d’avant',
 // vérifie : les deux comportements comptent.
 egal('un jour sans emplacement ne répond rien',
   lieuALHeure({ commercant: yoga, lieux: deuxServices, jour: JEUDI, heure: '12:30' }), null)
-egal('mais un siège déclaré répond toujours',
-  lieuALHeure({ commercant: truck, lieux: deuxServices, jour: JEUDI, heure: '12:30' })?.source, 'siege')
+// ⚠️ ET HORS DE TOUTE PLAGE, PLUS RIEN NE RÉPOND. Le siège comblait ce trou ;
+// il ne le comble plus, et c'est voulu : mieux vaut ne rien annoncer qu'annoncer
+// une adresse administrative.
+egal('hors de toute plage, aucun lieu ne répond',
+  lieuALHeure({ commercant: truck, lieux: deuxServices, jour: JEUDI, heure: '12:30' }), null)
 
 // ⚠️ LA PLAGE QUI PASSE MINUIT. Un food truck de nuit annonce 22h → 02h. Sans
 // ce cas, sa plage serait vide et il n'aurait de lieu à AUCUNE heure de son
@@ -744,10 +772,14 @@ egal('deux plages disjointes ne se chevauchent pas',
 // ne désignent aucun lieu, et vide ne veut pas dire « nulle part », il veut
 // dire « là où se passe l'activité ».
 egal('une plage sans lieu désigne le lieu du commerce',
-  libelleLieu(lieuDeLaPlage({ jour_semaine: 'mercredi' }, { commercant: salon, lieux: [] })),
+  libelleLieu(lieuDeLaPlage({ jour_semaine: 'mercredi' }, { commercant: salon, lieux: [ciseauxLieu] })),
   'Ciseaux, Rue de Prée 9G, Mettet')
-egal('le lieu principal du salon est son adresse',
-  lieuPrincipal({ commercant: salon, lieux: [] })?.source, 'siege')
+egal('le lieu principal du salon est le lieu qu’il a déclaré',
+  lieuPrincipal({ commercant: salon, lieux: [ciseauxLieu] })?.libelle, 'Ciseaux')
+// ⚠️ Et sans lieu déclaré, il n'y a pas de lieu principal. Le siège ne vient
+// plus boucher le trou.
+egal('sans lieu déclaré, aucun lieu principal',
+  lieuPrincipal({ commercant: salon, lieux: [] }), null)
 
 // ⚠️ LE FOOD TRUCK TEL QU'IL EXISTE DÉJÀ, et c'est le défaut que l'exécution a
 // débusqué : case du siège décochée, aucun lieu permanent, donc AUCUN lieu
@@ -767,9 +799,9 @@ egal('une plage qui désigne un lieu le garde',
 // emplacement DÉSACTIVÉ cesse d'être proposé ici. La mutation qui retirait le
 // filtre laissait le banc entièrement vert, et un commerçant qui range un
 // emplacement sans le supprimer aurait continué d'y envoyer ses clients.
-egal('un emplacement désactivé n’est plus proposé',
+egal('un emplacement désactivé n’est plus proposé, et rien ne le remplace',
   lieuDeLaPlage({ jour_semaine: 'mercredi', heure_debut: '12:00' },
-    { commercant: truck, lieux: deuxServices.map(l => ({ ...l, actif: false })) })?.source, 'siege')
+    { commercant: truck, lieux: deuxServices.map(l => ({ ...l, actif: false })) }), null)
 egal('et un emplacement désactivé ne compte pas non plus dans le jour',
   lieuxDuJour({ commercant: yoga, lieux: deuxServices.map(l => ({ ...l, actif: false })), jour: MERCREDI }), [])
 

@@ -949,23 +949,17 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
   // commerçant qui s'inscrit ne sait pas encore ce que Yoppaa fera de cette
   // adresse. L'éditeur de lieux de Config fait tout, et le fait mieux.
   //
-  // ⚠️ LA CASE, ELLE, RESTE, et ce n'est pas un demi-choix. Elle porte une
-  // information que Config ne peut pas deviner : accueille-t-on du monde à
-  // cette adresse ? Sans elle, le défaut `siege_social_est_lieu_activite`
-  // reste à `true` et la fiche d'un professeur de yoga inscrit chez lui
-  // annonce SON DOMICILE jusqu'au jour où il pense à ouvrir Config. Décochée,
-  // elle déclenche le rappel affiché en tête de « Mes lieux ».
-  const [activiteAilleurs, setActiviteAilleurs] = useState(
-    commercant.siege_social_est_lieu_activite === false)
-  async function basculerLieuActivite(ailleurs) {
-    setActiviteAilleurs(ailleurs)
-    onSaving?.('saving')
-    await supabase.from('commercants')
-      .update({ siege_social_est_lieu_activite: !ailleurs })
-      .eq('id', commercant.id)
-    onUpdate({ ...commercant, siege_social_est_lieu_activite: !ailleurs })
-    onSaving?.('saved')
-  }
+  // ⚠️ ET LA CASE A DISPARU AUSSI (Alex, 15/08). Elle demandait « mon activité
+  // se passe-t-elle à cette adresse ? », donc au commerçant d'arbitrer entre
+  // une adresse administrative et un lieu d'accueil, au moment où il ne sait
+  // pas encore ce que Yoppaa en fera. Cochée par défaut, elle publiait le
+  // DOMICILE de qui s'inscrit chez lui.
+  //
+  // Plus de question, plus d'arbitrage : cette adresse ne sert qu'au dossier,
+  // un message le dit, et les lieux d'activité s'encodent au Profil. Le
+  // commerçant part donc avec `siege_social_est_lieu_activite` à son défaut
+  // `true`, qui ne veut plus dire « mon siège est mon lieu » mais « j'ai une
+  // adresse fixe », et c'est le Profil qui le règle.
 
   // Validation des champs requis (basée sur les seuils du brief)
   //
@@ -1113,36 +1107,28 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
           </p>
         </Field>
 
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer', margin: '2px 0 14px' }}>
-          <input type="checkbox" checked={!activiteAilleurs}
-            onChange={e => basculerLieuActivite(!e.target.checked)}
-            style={{ width: 17, height: 17, accentColor: T.main, marginTop: 1, flexShrink: 0, cursor: 'pointer' }}/>
-          <span style={{ fontSize: 13, fontWeight: 700, color: T.deep, lineHeight: 1.45 }}>
-            Mon activité se passe à cette adresse
-            <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: T.muted, marginTop: 2 }}>
-              Décoche si tu travailles ailleurs : à domicile inscrit mais atelier en ville, salle de cours louée, tournée sur plusieurs endroits.
+        {/* ⚠️ LA CASE A DISPARU, ET AVEC ELLE UNE AMBIGUÏTÉ (Alex, 15/08).
+            Elle demandait si l'activité s'y passe, donc au commerçant
+            d'arbitrer, au pire moment, entre une adresse administrative et un
+            lieu d'accueil. Coché par défaut, ce qui publiait le DOMICILE de qui
+            s'inscrit chez lui sans qu'il ait rien demandé.
+            La règle est désormais sans exception : cette adresse ne sert qu'à
+            valider le dossier, et les lieux d'activité s'encodent au Profil.
+            La colonne `siege_social_est_lieu_activite` survit, mais elle ne dit
+            plus « mon siège est mon lieu » : elle dit « une adresse fixe » ou
+            « je change d'endroit », et c'est le Profil qui la règle. */}
+        <div style={{ background: T.pale, borderRadius: 12, padding: '11px 13px', margin: '2px 0 14px' }}>
+          <p style={{ margin: 0, fontSize: 12, color: T.deep, fontWeight: 700, lineHeight: 1.5 }}>
+            Cette adresse ne sert qu’à valider ton dossier.
+            <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: T.muted, marginTop: 3 }}>
+              Elle n’est jamais montrée à tes clients. Tu indiqueras juste après,
+              depuis ton profil, où ils viennent te trouver :{' '}
+              {estFoodTruck(form.type)
+                ? 'tes emplacements, leurs jours et leurs heures, autant que tu veux.'
+                : 'une adresse fixe, ou plusieurs endroits selon les jours si tu bouges.'}
             </span>
-          </span>
-        </label>
-
-        {/* ⚠️ ON NE DEMANDE PLUS L'ADRESSE ICI, on annonce seulement la suite.
-            Le signup ne gérait qu'un lieu, sans jour ni horaire, là où un food
-            truck en a deux par jour et une professeure de yoga trois dans la
-            semaine. Tout se règle dans « Mes lieux », qui sait le faire. */}
-        {activiteAilleurs && (
-          <div style={{ background: T.pale, borderRadius: 12, padding: '11px 13px', margin: '0 0 14px' }}>
-            <p style={{ margin: 0, fontSize: 12, color: T.deep, fontWeight: 700, lineHeight: 1.5 }}>
-              Parfait, on note. Tu diras où tes clients te trouvent juste après,
-              depuis ton tableau de bord.
-              <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: T.muted, marginTop: 3 }}>
-                {estFoodTruck(form.type)
-                  ? 'Tes emplacements, leurs jours et leurs heures, autant que tu veux.'
-                  : 'Un ou plusieurs endroits, avec leurs jours et leurs heures si tu bouges.'}
-                {' '}En attendant, ton adresse n’est pas montrée à tes clients.
-              </span>
-            </p>
-          </div>
-        )}
+          </p>
+        </div>
         <Field label="Téléphone *">
           <input type="tel" value={form.telephone} onChange={e => updateField('telephone', e.target.value)} placeholder="+32 71 00 00 00" style={inputStyle()}/>
         </Field>

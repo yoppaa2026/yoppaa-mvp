@@ -337,10 +337,16 @@ verifier('le signup nomme le siège social pour ce qu’il est',
   /Adresse du siège social/.test(signupSrc))
 verifier('et rappelle d’où vient cette adresse',
   /Banque-Carrefour des Entreprises/.test(signupSrc))
-verifier('la case demande si l’activité s’y passe',
-  /Mon activité se passe à cette adresse/.test(signupSrc))
-verifier('et elle écrit bien la colonne prévue',
-  /siege_social_est_lieu_activite/.test(signupSrc))
+// ⚠️ CES DEUX TESTS SONT MORTS AVEC LA CASE (Alex, 15/08), et c'est voulu.
+// Ils garantissaient qu'on DEMANDE si l'activité se passe à cette adresse, et
+// que la réponse s'écrive en base. La question elle-même a disparu : le signup
+// ne fait plus arbitrer personne, il ANNONCE que cette adresse ne sert qu'au
+// dossier. Le remplacement est juste en dessous, et il vérifie l'inverse.
+// ⚠️ ANCRÉ SUR L'ÉCRITURE, PAS SUR LE MOT. Le signup LIT encore la colonne,
+// pour savoir s'il doit demander des horaires fixes, et c'est légitime. Ce qui
+// ne doit plus exister, c'est qu'il la RÈGLE : ce choix appartient au Profil.
+verifier('le signup n’écrit plus la colonne d’arbitrage',
+  !/update\(\{ siege_social_est_lieu_activite/.test(signupSrc))
 
 // ⚠️ LE SIGNUP NE DEMANDE PLUS L'ADRESSE DU LIEU D'ACTIVITÉ (décision Alex du
 // 13/08). « Siège d'exploitation » est un terme de la Banque-Carrefour qui
@@ -360,10 +366,21 @@ verifier('et décocher la case ne bloque plus l’inscription',
 // Le contrôle n'est pas abandonné, il est DÉPLACÉ : le commerçant est prévenu
 // que la suite se règle au tableau de bord, et que son adresse n'est pas
 // montrée en attendant.
-verifier('mais il annonce la suite au commerçant',
-  /Tu diras où tes clients te trouvent juste après/.test(signupSrc))
-verifier('et prévient que son adresse n’est pas montrée en attendant',
-  /ton adresse n’est pas montrée à tes clients/.test(signupSrc))
+// ⚠️ ET LE 15/08 A SUPPRIMÉ LA CASE ELLE-MÊME. « Mon activité se passe à cette
+// adresse » demandait au commerçant d'arbitrer, au pire moment, entre une
+// adresse administrative et un lieu d'accueil. Cochée par défaut, elle publiait
+// le DOMICILE de qui s'inscrit chez lui.
+// La règle n'a plus d'exception : cette adresse ne sert qu'au dossier, et un
+// message le DIT. C'est lui qu'on garde, parce que sans lui le commerçant ne
+// saurait pas où va cette adresse ni où mettre la vraie.
+verifier('la case d’arbitrage a disparu du signup',
+  !/Mon activité se passe à cette adresse/.test(signupSrc))
+verifier('le signup dit à quoi sert cette adresse',
+  /Cette adresse ne sert qu’à valider ton dossier/.test(signupSrc))
+verifier('et qu’elle n’est jamais montrée aux clients',
+  /n’est jamais montrée à tes clients/.test(signupSrc))
+verifier('et il annonce où les vraies adresses se règlent',
+  /depuis ton profil, où ils viennent te trouver/.test(signupSrc))
 
 // ⚠️ LE RAPPEL DE CONFIG EST CE QUI REND LE RETRAIT SANS DANGER. Sans lui, un
 // professeur de yoga inscrit chez lui n'apprendrait qu'en voyant un client ne
@@ -371,10 +388,16 @@ verifier('et prévient que son adresse n’est pas montrée en attendant',
 const configSrcLieux = sansCommentaires(lire('app/dashboard/ConfigDashboard.js'))
 verifier('« Mes lieux » réclame le lieu manquant',
   /Tes clients ne savent pas encore où te trouver/.test(configSrcLieux))
-// Et seulement dans ce cas : afficher l'alerte à qui a coché la case, ou à qui
-// a déjà déclaré un lieu, la viderait de son sens.
-verifier('et seulement à qui a décoché la case sans rien déclarer',
-  /siegeEstLeLieu === false && emps\.length === 0/.test(configSrcLieux))
+// ⚠️ ET IL VAUT MAINTENANT POUR TOUT LE MONDE (Alex, 15/08). L'alerte ne
+// s'affichait qu'à qui avait décoché la case du signup, parce que les autres
+// retombaient sur leur siège. Ce repli n'existe plus : AUCUN lieu déclaré veut
+// dire aucune adresse sur la fiche, pour tous. Restreindre l'alerte laisserait
+// un commerçant « toujours au même endroit » avec une fiche muette et rien
+// pour le lui dire.
+verifier('et il s’affiche dès qu’aucun lieu n’est déclaré, sans exception',
+  /const aucunLieuAlorsQuIlEnFaut = emps\.length === 0/.test(configSrcLieux))
+verifier('l’alerte dit à quoi sert l’adresse d’inscription',
+  /sert uniquement à valider ton dossier/.test(configSrcLieux))
 
 // ⚠️ UNE SEULE RECHERCHE D'ADRESSE DANS TOUT LE PROJET. Les recopier aurait
 // garanti qu'elles divergent : l'une corrigée, l'autre oubliée.

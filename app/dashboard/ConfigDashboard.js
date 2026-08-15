@@ -6531,11 +6531,19 @@ function TabRdv({ commercantId, commercant, toast, onSaved }) {
     onSaved?.()
   }
 
+  // ⚠️ « ABONNEMENTS » A QUITTÉ CETTE BARRE le 15/08, pour le CATALOGUE, à côté
+  // des produits et des prestations (décision d'Alex). Un abonnement est une
+  // chose qu'on VEND, au même titre qu'un produit : il n'avait rien à faire
+  // dans les réglages de la prise de rendez-vous, qui décrivent COMMENT on
+  // travaille et non ce qu'on propose.
+  // ⚠️ Il reste réservé aux commerces de SERVICE, et c'est délibéré : une
+  // séance d'abonnement EST un rendez-vous, avec sa place dans l'agenda et son
+  // rappel. Les autres métiers ont les cartes cadeaux, qui font déjà le
+  // pointage au comptoir sans agenda.
   const subTabs = [
     { id: 'prestations', label: 'Prestations' },
     { id: 'praticiens',  label: 'Praticiens' },
     { id: 'creneaux',    label: 'Créneaux' },
-    { id: 'abonnements', label: 'Abonnements' },
     { id: 'fermetures',  label: 'Fermetures' },
   ]
   return (
@@ -6583,7 +6591,6 @@ function TabRdv({ commercantId, commercant, toast, onSaved }) {
       {subTab === 'prestations' && <TabRdvPrestations commercantId={commercantId} toast={toast} />}
       {subTab === 'praticiens'  && <TabRdvPraticiens commercantId={commercantId} toast={toast} />}
       {subTab === 'creneaux'    && <TabRdvCreneaux commercantId={commercantId} commercant={commercant} toast={toast} />}
-      {subTab === 'abonnements' && <TabRdvAbonnements commercantId={commercantId} commercant={commercant} toast={toast} />}
       {subTab === 'fermetures'  && <TabRdvFermetures commercantId={commercantId} toast={toast} />}
     </div>
   )
@@ -9786,6 +9793,62 @@ function TabComptabilite({ commercantId, toast }) {
 // ─── Composant principal ──────────────────────────────────────────────────────
 // tabInitial : permet aux raccourcis de la vue principale (Actions rapides)
 // d'ouvrir directement le bon onglet, sans faire chercher le commerçant.
+// ─── LE CATALOGUE : TOUT CE QUE LE COMMERÇANT VEND ───────────────────────────
+//
+// ⚠️ DÉCISION D'ALEX DU 15/08 : « l'onglet abonnement devrait aller dans le
+// catalogue à côté des produits ». Il vivait sous Prise de RDV, avec les
+// praticiens et les créneaux, c'est-à-dire au milieu des réglages qui décrivent
+// COMMENT on travaille. Or un abonnement est une chose qu'on VEND, exactement
+// comme un produit ou une prestation. Le modèle mental redevient simple : tout
+// ce que je propose est au même endroit.
+//
+// ⚠️ ET IL RESTE RÉSERVÉ AUX COMMERCES DE SERVICE, exactement comme avant : ce
+// déplacement n'ouvre rien à personne. Une séance d'abonnement EST un
+// rendez-vous, avec sa ligne d'agenda, sa place et son rappel de la veille ;
+// une formule pointe d'ailleurs obligatoirement vers une prestation. Ouvrir ce
+// module à une boulangerie demanderait à sa cliente de réserver un créneau pour
+// chacun de ses dix pains.
+//
+// La question a été posée et tranchée le même soir : les autres métiers ont les
+// CARTES CADEAUX, qui font déjà le pointage au comptoir sans agenda. Bâtir un
+// second système de pointage à côté du premier aurait produit deux règles
+// jumelles, dont une qu'on oublierait de corriger.
+function TabCatalogue({ commercantId, commercant, toast }) {
+  const [sousOnglet, setSousOnglet] = useState('produits')
+  const estVitrine = commercant?.categorie === 'vitrine'
+  const peutAbonnements = estVitrine && canDo(commercant?.plan, 'rdv')
+
+  // Sans abonnements, aucune barre : une barre à un seul onglet n'apprend rien
+  // et vole de la hauteur d'écran à un téléphone.
+  if (!peutAbonnements) {
+    return <TabMenu commercantId={commercantId} commercant={commercant} toast={toast} />
+  }
+
+  const sousOnglets = [
+    { id: 'produits', label: 'Prestations et produits' },
+    { id: 'abonnements', label: 'Abonnements' },
+  ]
+
+  return (
+    <div>
+      {/* La barre défile et montre ses flèches, règle du projet sans exception. */}
+      <style>{`.catalogue-subtabs::-webkit-scrollbar { display: none }`}</style>
+      <BandeDefilante className="catalogue-subtabs" libelle="les sections du catalogue"
+        style={{ display: 'flex', gap: 6, background: '#fff', padding: 4, borderRadius: 12, marginBottom: 16, boxShadow: '0 1px 6px rgba(22,6,54,0.05)', border: `1px solid ${T.hairline}`, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+        {sousOnglets.map(t => (
+          <button key={t.id} onClick={() => setSousOnglet(t.id)}
+            style={{ flex: '1 0 auto', padding: '8px 12px', whiteSpace: 'nowrap', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, background: sousOnglet === t.id ? T.main : 'transparent', color: sousOnglet === t.id ? '#fff' : T.muted, transition: 'all 0.2s' }}>
+            {t.label}
+          </button>
+        ))}
+      </BandeDefilante>
+
+      {sousOnglet === 'produits' && <TabMenu commercantId={commercantId} commercant={commercant} toast={toast} />}
+      {sousOnglet === 'abonnements' && <TabRdvAbonnements commercantId={commercantId} commercant={commercant} toast={toast} />}
+    </div>
+  )
+}
+
 export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
   const [tab, setTab] = useState(tabInitial)
   const [toastMsg, setToastMsg] = useState('')
@@ -9972,7 +10035,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
       </BandeDefilante>
 
       {tab === 'stats'    && <TabStatistiques commercantId={commercantId} toast={showToast} />}
-      {tab === 'menu'     && <TabMenu     commercantId={commercantId} commercant={commercant} toast={showToast} />}
+      {tab === 'menu'     && <TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'deals'    && peutDeals && <TabDeals commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'actus'    && peutActus && <TabActus commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'ia'       && iaActif && <TabGenerateur commercantId={commercantId} commercant={commercant} toast={showToast} />}

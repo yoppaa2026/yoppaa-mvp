@@ -888,6 +888,31 @@ verifier('et plus aucun jour d’aperçu à choisir',
 verifier('l’aperçu vient de la lib, exécutée par ce banc',
   /phraseApercuFormule\(formulePourApercu\)/.test(srcAbo))
 
+// ─── LES ABONNEMENTS ONT DÉMÉNAGÉ DANS LE CATALOGUE (Alex, 15/08) ──────────
+// ⚠️ « L'onglet abonnement devrait aller dans le catalogue à côté des
+// produits. » Un abonnement est une chose qu'on VEND, pas un réglage de la
+// façon dont on travaille : il n'avait rien à faire entre les praticiens et les
+// créneaux.
+verifier('les abonnements vivent désormais dans le catalogue',
+  /sousOnglet === 'abonnements' && <TabRdvAbonnements/.test(srcAbo))
+verifier('et ils ont quitté la barre de la prise de rendez-vous',
+  !/subTab === 'abonnements'/.test(srcAbo))
+
+// ⚠️ ET LE DÉPLACEMENT N'OUVRE RIEN À PERSONNE. Une séance d'abonnement EST un
+// rendez-vous, avec sa ligne d'agenda et son rappel, et une formule pointe
+// obligatoirement vers une prestation. Ouvrir ce module à une boulangerie
+// demanderait à sa cliente de réserver un créneau pour chacun de ses dix pains.
+// Les autres métiers ont les cartes cadeaux, qui pointent déjà au comptoir sans
+// agenda. Décision d'Alex le même soir.
+verifier('le catalogue ne propose les abonnements qu’aux commerces de service',
+  /const peutAbonnements = estVitrine && canDo\(commercant\?\.plan, 'rdv'\)/.test(srcAbo))
+verifier('et sans eux, aucune barre de sous-onglets ne s’affiche',
+  /if \(!peutAbonnements\) \{[\s\S]{0,160}return <TabMenu/.test(srcAbo))
+// La formule reste attachée à une prestation : c'est ce qui rend le module
+// inapplicable à un métier sans agenda, et c'est volontaire.
+verifier('une formule exige toujours une prestation',
+  /if \(!form\.prestation_id\) return toast/.test(srcAbo))
+
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

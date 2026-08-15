@@ -17,6 +17,8 @@ import { champsLieu } from '@/lib/lieu-fige'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
+import { champsModifies } from '@/lib/formulaire-modifie'
+import { BarreEnregistrer, ModaleQuitter, useAvertirAvantDeQuitter } from './BarreEnregistrer'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import BandeDefilante from '@/app/components/BandeDefilante'
 // ⚠️ `estFoodTruck` NE SERT PLUS ICI, ET C'EST VOULU. Le métier ne dit pas si
@@ -3321,7 +3323,7 @@ function TabCreneaux({ commercantId, toast }) {
 // ─── Onglet LIVRAISON ─────────────────────────────────────────────────────────
 // Config zone (codes postaux) + frais (fixe + gratuit dès X€). Créneaux livraison
 // gérés dans un second temps (calqués sur TabCreneaux via livraison_creneaux).
-function TabLivraison({ commercantId, toast }) {
+function TabLivraison({ commercantId, toast, surModifications }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [codesPostaux, setCodesPostaux] = useState([])
@@ -3329,16 +3331,25 @@ function TabLivraison({ commercantId, toast }) {
   const [fraisFixe, setFraisFixe] = useState('')
   const [gratuitDes, setGratuitDes] = useState('')
   const [minimumCommande, setMinimumCommande] = useState('')
+  // Cet écran n'a pas d'objet `form` unique, ses valeurs vivent dans quatre
+  // états séparés. On en fabrique donc l'image pour la comparaison, et
+  // seulement pour elle.
+  const [initial, setInitial] = useState(null)
 
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from('livraison_config').select('*').eq('commercant_id', commercantId).maybeSingle()
-      if (data) {
-        setCodesPostaux(data.codes_postaux || [])
-        setFraisFixe(data.frais_fixe != null ? String(data.frais_fixe) : '')
-        setGratuitDes(data.gratuit_des != null ? String(data.gratuit_des) : '')
-        setMinimumCommande(data.minimum_commande != null ? String(data.minimum_commande) : '')
+      const valeurs = {
+        codesPostaux: data?.codes_postaux || [],
+        fraisFixe: data?.frais_fixe != null ? String(data.frais_fixe) : '',
+        gratuitDes: data?.gratuit_des != null ? String(data.gratuit_des) : '',
+        minimumCommande: data?.minimum_commande != null ? String(data.minimum_commande) : '',
       }
+      setCodesPostaux(valeurs.codesPostaux)
+      setFraisFixe(valeurs.fraisFixe)
+      setGratuitDes(valeurs.gratuitDes)
+      setMinimumCommande(valeurs.minimumCommande)
+      setInitial(valeurs)
       setLoading(false)
     })()
   }, [commercantId])
@@ -3353,21 +3364,24 @@ function TabLivraison({ commercantId, toast }) {
 
   function retirerCP(cp) { setCodesPostaux(prev => prev.filter(x => x !== cp)) }
 
+  // ⚠️ Rend true ou false depuis le 15/08 : la fenêtre de sortie doit savoir si
+  // l'écriture a réussi avant de démonter l'écran. Le bouton du bas ignore ce
+  // retour et se comporte comme avant.
   async function sauvegarder() {
-    if (codesPostaux.length === 0) { toast('Ajoute au moins un code postal de livraison', 'error'); return }
+    if (codesPostaux.length === 0) { toast('Ajoute au moins un code postal de livraison', 'error'); return false }
     const frais = parseFloat((fraisFixe || '0').replace(',', '.'))
-    if (isNaN(frais) || frais < 0) { toast('Frais de livraison invalide', 'error'); return }
+    if (isNaN(frais) || frais < 0) { toast('Frais de livraison invalide', 'error'); return false }
     let gratuit = null
     if (gratuitDes.trim()) {
       gratuit = parseFloat(gratuitDes.replace(',', '.'))
-      if (isNaN(gratuit) || gratuit < 0) { toast('Seuil de gratuité invalide', 'error'); return }
+      if (isNaN(gratuit) || gratuit < 0) { toast('Seuil de gratuité invalide', 'error'); return false }
     }
     // Minimum de commande : vide ou 0 = aucun minimum, c'est le comportement
     // d'avant. Un commerçant déjà configuré ne voit donc rien changer.
     let mini = null
     if (minimumCommande.trim()) {
       mini = parseFloat(minimumCommande.replace(',', '.'))
-      if (isNaN(mini) || mini < 0) { toast('Minimum de commande invalide', 'error'); return }
+      if (isNaN(mini) || mini < 0) { toast('Minimum de commande invalide', 'error'); return false }
     }
     setSaving(true)
     const { error } = await supabase.from('livraison_config').upsert({
@@ -3379,9 +3393,31 @@ function TabLivraison({ commercantId, toast }) {
       updated_at: new Date().toISOString(),
     }, { onConflict: 'commercant_id' })
     setSaving(false)
-    if (error) { toast('Erreur : ' + error.message, 'error'); return }
+    if (error) { toast('Erreur : ' + error.message, 'error'); return false }
+    setInitial({ codesPostaux, fraisFixe, gratuitDes, minimumCommande })
     toast('Livraison enregistrée', 'success')
+    return true
   }
+
+  // ─── Le garde-fou des modifications non enregistrées ─────────────────────
+  const courantLivraison = { codesPostaux, fraisFixe, gratuitDes, minimumCommande }
+  const nbModifsLivraison = champsModifies(initial, courantLivraison).length
+  useAvertirAvantDeQuitter(nbModifsLivraison > 0)
+  const actionsLivraison = useRef({})
+  actionsLivraison.current = {
+    enregistrer: sauvegarder,
+    ignorer: () => {
+      setCodesPostaux(initial.codesPostaux)
+      setFraisFixe(initial.fraisFixe)
+      setGratuitDes(initial.gratuitDes)
+      setMinimumCommande(initial.minimumCommande)
+      toast('Modifications abandonnées')
+    },
+  }
+  useEffect(() => {
+    surModifications?.({ modifie: nbModifsLivraison > 0, nb: nbModifsLivraison, saving, actions: actionsLivraison })
+    return () => surModifications?.(null)
+  }, [surModifications, nbModifsLivraison, saving])
 
   if (loading) return <div style={{ padding: 20, color: T.muted, fontWeight: 600 }}>Chargement…</div>
 
@@ -3603,25 +3639,37 @@ function SectionCreneauxLivraison({ commercantId, toast }) {
   )
 }
 
+// Les réglages du programme, tirés du commerçant. Sortie de `useState` pour
+// servir DEUX fois : l'état modifiable et son image de départ. Les écrire deux
+// fois à la main, c'est prendre le risque qu'ils divergent un jour, et alors la
+// barre d'enregistrement s'afficherait sur un écran auquel personne n'a touché.
+function configFidelite(commercant) {
+  const preset = presetFidelite(commercant?.categorie)
+  return {
+    fidelite_mecanique: commercant?.fidelite_mecanique || preset.fidelite_mecanique,
+    fidelite_seuil_passages: commercant?.fidelite_seuil_passages || 10,
+    fidelite_taux_cagnotte: commercant?.fidelite_taux_cagnotte || 5,
+    fidelite_seuil_cagnotte: commercant?.fidelite_seuil_cagnotte || 10,
+    fidelite_recompense_type: commercant?.fidelite_recompense_type || preset.fidelite_recompense_type,
+    fidelite_recompense_valeur: commercant?.fidelite_recompense_valeur ?? preset.fidelite_recompense_valeur,
+    fidelite_recompense_libelle: commercant?.fidelite_recompense_libelle || preset.fidelite_recompense_libelle,
+    fidelite_sms_actif: commercant?.fidelite_sms_actif !== false,
+  }
+}
+
 // ─── B.6 Fidélité : configuration + pointage comptoir (brief 31/07) ──────────
 // LE GSM = LA CARTE : le commerçant tape le numéro du client, la carte se crée
 // à la volée. Communiquer = ce pointage comptoir ; Vendre = + crédit AUTO sur
 // les transactions Yoppaa (branché étape 4). SMS Brevo branchés à l'étape 6.
-function TabFidelite({ commercantId, commercant, toast, onSaved }) {
+function TabFidelite({ commercantId, commercant, toast, onSaved, surModifications }) {
   const actif = commercant?.fidelite_actif === true
   const peutAuto = canDo(commercant?.plan, 'fidelite_auto')
   const [saving, setSaving] = useState(false)
   const [showConfig, setShowConfig] = useState(!actif)
-  const [cfg, setCfg] = useState({
-    fidelite_mecanique: commercant?.fidelite_mecanique || presetFidelite(commercant?.categorie).fidelite_mecanique,
-    fidelite_seuil_passages: commercant?.fidelite_seuil_passages || 10,
-    fidelite_taux_cagnotte: commercant?.fidelite_taux_cagnotte || 5,
-    fidelite_seuil_cagnotte: commercant?.fidelite_seuil_cagnotte || 10,
-    fidelite_recompense_type: commercant?.fidelite_recompense_type || presetFidelite(commercant?.categorie).fidelite_recompense_type,
-    fidelite_recompense_valeur: commercant?.fidelite_recompense_valeur ?? presetFidelite(commercant?.categorie).fidelite_recompense_valeur,
-    fidelite_recompense_libelle: commercant?.fidelite_recompense_libelle || presetFidelite(commercant?.categorie).fidelite_recompense_libelle,
-    fidelite_sms_actif: commercant?.fidelite_sms_actif !== false,
-  })
+  const [cfg, setCfg] = useState(() => configFidelite(commercant))
+  // La même image de départ, gardée à part : c'est elle qui dit si le
+  // programme a bougé, et c'est elle que « Ignorer » restitue.
+  const [initial, setInitial] = useState(() => configFidelite(commercant))
 
   // Pointage comptoir
   const [telInput, setTelInput] = useState('')
@@ -3670,13 +3718,19 @@ function TabFidelite({ commercantId, commercant, toast, onSaved }) {
   }, [commercantId, actif, carte?.updated_at])
 
   async function sauverConfig(activer = false) {
-    const patch = {
+    // ⚠️ LES RÉGLAGES D'ABORD, L'ACTIVATION ENSUITE, ET LES DEUX SÉPARÉS. Ce
+    // sont les réglages seuls qui deviennent la nouvelle référence après
+    // enregistrement : y laisser `fidelite_sms_credits: 25` ferait REPARTIR ce
+    // cadeau de 25 SMS à chaque enregistrement suivant, puisque `cfg` est
+    // recopié dans le patch. Un solde de SMS payés serait écrasé par 25.
+    const reglages = {
       ...cfg,
       fidelite_seuil_passages: Math.min(50, Math.max(2, parseInt(cfg.fidelite_seuil_passages) || 10)),
       fidelite_taux_cagnotte: Math.min(30, Math.max(1, parseFloat(cfg.fidelite_taux_cagnotte) || 5)),
       fidelite_seuil_cagnotte: Math.max(1, parseFloat(cfg.fidelite_seuil_cagnotte) || 10),
       fidelite_recompense_valeur: parseFloat(cfg.fidelite_recompense_valeur) || null,
     }
+    const patch = { ...reglages }
     if (activer) {
       patch.fidelite_actif = true
       // 25 SMS offerts à la première activation (une seule fois)
@@ -3685,11 +3739,39 @@ function TabFidelite({ commercantId, commercant, toast, onSaved }) {
     setSaving(true)
     const { error } = await supabase.from('commercants').update(patch).eq('id', commercantId)
     setSaving(false)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return false }
+    // Les valeurs bornées (seuil ramené entre 2 et 50, taux entre 1 et 30) sont
+    // ce qui part vraiment en base : c'est donc `reglages` et non `cfg` qui
+    // devient la nouvelle référence. Sinon un seuil saisi à 99, corrigé à 50 par
+    // le garde-fou, laisserait la barre affichée après un enregistrement réussi.
+    setCfg(reglages)
+    setInitial(reglages)
     toast(activer ? 'Fidélité activée, 25 SMS offerts 🟣' : 'Programme mis à jour')
     setShowConfig(false)
     onSaved?.()
+    return true
   }
+
+  // ─── Le garde-fou des modifications non enregistrées ─────────────────────
+  // ⚠️ Rien à surveiller tant que le panneau de réglages est replié : ses
+  // champs ne sont pas à l'écran, donc personne n'a rien saisi.
+  const nbModifsFidelite = showConfig ? champsModifies(initial, cfg).length : 0
+  useAvertirAvantDeQuitter(nbModifsFidelite > 0)
+  const actionsFidelite = useRef({})
+  actionsFidelite.current = {
+    enregistrer: () => sauverConfig(!actif),
+    ignorer: () => { setCfg(initial); toast('Modifications abandonnées') },
+  }
+  useEffect(() => {
+    surModifications?.({
+      modifie: nbModifsFidelite > 0, nb: nbModifsFidelite, saving, actions: actionsFidelite,
+      // Le mot doit dire ce que fait le bouton : sur un programme jamais
+      // activé, enregistrer c'est activer, et le commerçant a le droit de le
+      // savoir avant d'appuyer.
+      libelleAction: actif ? 'Enregistrer' : 'Activer la fidélité',
+    })
+    return () => surModifications?.(null)
+  }, [surModifications, nbModifsFidelite, saving, actif])
 
   async function desactiver() {
     if (!confirm('Désactiver la fidélité ? Les cartes de tes clients sont conservées.')) return
@@ -4761,8 +4843,13 @@ const SOUS_ONGLETS_PROFIL = [
   { id: 'reglages', label: 'Réglages' },
 ]
 
-function TabProfil({ commercantId, toast, onSaved }) {
+function TabProfil({ commercantId, toast, onSaved, surModifications }) {
   const [form, setForm] = useState(null)
+  // ⚠️ L'ÉTAT TEL QU'IL EST EN BASE, figé au chargement et re-figé après chaque
+  // enregistrement. C'est LUI qui permet de dire si quelque chose a changé, et
+  // c'est lui que « Ignorer » restitue. Sans cette copie, on ne saurait
+  // comparer qu'à du vide, et « Ignorer » ne pourrait rien rendre.
+  const [initial, setInitial] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [sousOnglet, setSousOnglet] = useState('fiche')
@@ -4875,8 +4962,8 @@ function TabProfil({ commercantId, toast, onSaved }) {
     setLoading(true)
     const { data } = await supabase.from('commercants').select('*').eq('id', commercantId).single()
     if (data) {
-      const defaultHoraires = { lundi: { ouvert: true, debut: '07:00', fin: '14:00' }, mardi: { ouvert: true, debut: '07:00', fin: '14:00' }, mercredi: { ouvert: true, debut: '07:00', fin: '14:00' }, jeudi: { ouvert: true, debut: '07:00', fin: '14:00' }, vendredi: { ouvert: true, debut: '07:00', fin: '14:00' }, samedi: { ouvert: true, debut: '07:00', fin: '13:00' }, dimanche: { ouvert: false, debut: '07:00', fin: '12:00' } }
-      setForm({ nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', site_web: data.site_web || '', description: data.description || '',
+      const defaultHoraires = { lundi:{ ouvert: true, debut: '07:00', fin: '14:00' }, mardi: { ouvert: true, debut: '07:00', fin: '14:00' }, mercredi: { ouvert: true, debut: '07:00', fin: '14:00' }, jeudi: { ouvert: true, debut: '07:00', fin: '14:00' }, vendredi: { ouvert: true, debut: '07:00', fin: '14:00' }, samedi: { ouvert: true, debut: '07:00', fin: '13:00' }, dimanche: { ouvert: false, debut: '07:00', fin: '12:00' } }
+      const profil = { nom: data.nom || '', type: data.type || '', email: data.email || '', telephone: data.telephone || '', adresse: data.adresse || '', site_web: data.site_web || '', description: data.description || '',
         // ⚠️ CE CHAMP ÉTAIT ENREGISTRÉ SANS JAMAIS ÊTRE CHARGÉ. La sauvegarde
         // écrit `(form.infos_pratiques || '').trim() || null` : absent du
         // formulaire, il partait donc à `null` à CHAQUE enregistrement. Un
@@ -4884,7 +4971,13 @@ function TabProfil({ commercantId, toast, onSaved }) {
         // passage ses infos pratiques, qui s'affichent sur ses DEUX fiches et
         // dans l'email de confirmation de rendez-vous. Rien ne le prévenait.
         infos_pratiques: data.infos_pratiques || '',
-        horaires: data.horaires || '', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '', boutique_delai_heures: data.boutique_delai_heures ?? 2 })
+        horaires: data.horaires || '', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '', boutique_delai_heures: data.boutique_delai_heures ?? 2 }
+      setForm(profil)
+      // ⚠️ LE MÊME OBJET DANS LES DEUX ÉTATS, ET C'EST VOULU. `setForm` ne
+      // modifie jamais en place (toujours `{ ...p, … }`), donc la référence
+      // gardée ici reste l'image fidèle de la base tant qu'on n'a pas
+      // enregistré. C'est cette image que « Ignorer » restitue.
+      setInitial(profil)
       setLogoPreview(data.logo_url || null)
     }
     setLoading(false)
@@ -4913,21 +5006,59 @@ function TabProfil({ commercantId, toast, onSaved }) {
     setLogoPreview(null); toast('Logo supprimé')
   }
 
+  // ⚠️ CETTE FONCTION REND DÉSORMAIS true OU false. Elle ne rendait rien, et la
+  // barre d'enregistrement comme la fenêtre de sortie ont besoin de savoir si
+  // l'écriture a réussi : enchaîner sur le changement d'onglet après un refus de
+  // validation ferait perdre exactement le travail qu'on prétend protéger.
+  // Le bouton historique du sous-onglet Réglages ignore ce retour, il continue
+  // de fonctionner à l'identique.
   async function saveProfil() {
-    if (!form.nom.trim()) return toast('Le nom est obligatoire', 'error')
+    if (!form.nom.trim()) { toast('Le nom est obligatoire', 'error'); return false }
     setSaving(true)
     const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, site_web: (form.site_web || '').trim() || null, description: form.description.trim() || null, infos_pratiques: (form.infos_pratiques || '').trim() || null, horaires: form.horaires.trim() || null, horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des), boutique_delai_heures: Math.max(0, parseInt(form.boutique_delai_heures, 10) || 0) }).eq('id', commercantId)
     setSaving(false)
     if (error) {
       console.error('[ConfigDashboard.saveProfil]', error)
       toast(`Erreur enregistrement : ${error.message}`, 'error')
-      return
+      return false
     }
+    // Ce qui est en base devient la nouvelle référence : la barre disparaît.
+    setInitial(form)
     toast('Profil mis à jour')
     // Rafraîchit le commerçant parent : les onglets conditionnels (ex. Livraison
     // via livraison_actif) apparaissent/disparaissent sans reload manuel.
     onSaved?.()
+    return true
   }
+
+  // ─── Le garde-fou des modifications non enregistrées ─────────────────────
+  // ⚠️ CE SOUS-ONGLET N'AVAIT AUCUN BOUTON D'ENREGISTREMENT. `saveProfil`
+  // n'était appelée QUE depuis « Réglages », le quatrième sous-onglet : tout ce
+  // qu'un commerçant saisissait dans « Ma fiche » ou « Mes coordonnées »
+  // n'avait littéralement aucun moyen d'être enregistré depuis l'écran où il
+  // se trouvait, et repartait avec lui en changeant d'onglet. C'est le défaut
+  // relevé par Alex le 15/08.
+  const champsModifiesProfil = champsModifies(initial, form)
+  const nbModifsProfil = champsModifiesProfil.length
+  useAvertirAvantDeQuitter(nbModifsProfil > 0)
+
+  // Les actions vivent dans une référence rafraîchie à CHAQUE rendu : le parent
+  // garde la référence, jamais la fonction. Sans ça il rappellerait une
+  // fermeture périmée et enregistrerait le formulaire tel qu'il était trois
+  // frappes plus tôt.
+  const actionsProfil = useRef({})
+  actionsProfil.current = {
+    enregistrer: saveProfil,
+    // ⚠️ « Ignorer » ne touche PAS aux photos, au logo ni aux lieux : ils
+    // s'écrivent immédiatement en base, chacun par son propre bouton, et n'ont
+    // jamais été en attente d'enregistrement. Restituer `initial` ne défait que
+    // ce qui est réellement en attente.
+    ignorer: () => { setForm(initial); toast('Modifications abandonnées') },
+  }
+  useEffect(() => {
+    surModifications?.({ modifie: nbModifsProfil > 0, nb: nbModifsProfil, saving, actions: actionsProfil })
+    return () => surModifications?.(null)
+  }, [surModifications, nbModifsProfil, saving])
 
   if (loading || !form) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
 
@@ -6073,10 +6204,14 @@ const SIGN_TYPE_ICON = {
 // débit d'un montant) + derniers bons vendus. Le commerçant ne voit que SES
 // bons (RLS ownership) ; l'achat et l'activation passent par les API
 // service_role (Stripe Checkout + webhook).
-function TabBonsCadeaux({ commercantId, commercant, toast, onSaved }) {
+function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModifications }) {
   const [actif, setActif] = useState(!!commercant?.bons_cadeaux_actif)
   const [validite, setValidite] = useState(String(commercant?.bons_cadeaux_validite_mois || 12))
   const [savingCfg, setSavingCfg] = useState(false)
+  const [initial, setInitial] = useState(() => ({
+    actif: !!commercant?.bons_cadeaux_actif,
+    validite: String(commercant?.bons_cadeaux_validite_mois || 12),
+  }))
   // Pointage comptoir
   const [codeInput, setCodeInput] = useState('')
   const [bon, setBon] = useState(null)
@@ -6107,11 +6242,27 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved }) {
       .update({ bons_cadeaux_actif: actif, bons_cadeaux_validite_mois: mois })
       .eq('id', commercantId)
     setSavingCfg(false)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return false }
     setValidite(String(mois))
+    // La durée bornée est celle qui part en base : c'est elle la référence.
+    setInitial({ actif, validite: String(mois) })
     toast(actif ? 'Bons cadeaux activés 🟣' : 'Bons cadeaux désactivés')
     onSaved?.()
+    return true
   }
+
+  // ─── Le garde-fou des modifications non enregistrées ─────────────────────
+  const nbModifsBons = champsModifies(initial, { actif, validite }).length
+  useAvertirAvantDeQuitter(nbModifsBons > 0)
+  const actionsBons = useRef({})
+  actionsBons.current = {
+    enregistrer: saveCfg,
+    ignorer: () => { setActif(initial.actif); setValidite(initial.validite); toast('Modifications abandonnées') },
+  }
+  useEffect(() => {
+    surModifications?.({ modifie: nbModifsBons > 0, nb: nbModifsBons, saving: savingCfg, actions: actionsBons })
+    return () => surModifications?.(null)
+  }, [surModifications, nbModifsBons, savingCfg])
 
   async function chercherBon() {
     const code = normaliserCodeBon(codeInput)
@@ -9508,6 +9659,48 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
   const [toastType, setToastType] = useState('success')
   const [commercant, setCommercant] = useState(null)
 
+  // ─── Le travail en attente d'enregistrement ─────────────────────────────
+  // Un seul onglet est monté à la fois : un seul formulaire peut donc être en
+  // attente, et la barre vit ICI plutôt que dans chaque onglet. Elle est ainsi
+  // toujours au même endroit, toujours au-dessus du reste, et un onglet qui
+  // oublierait de la poser ne peut pas exister.
+  const [modifs, setModifs] = useState({ modifie: false, nb: 0, saving: false, libelleAction: 'Enregistrer' })
+  const actionsModifs = useRef(null)
+  const [ongletVise, setOngletVise] = useState(null)
+
+  // ⚠️ RÉFÉRENCE STABLE, et la comparaison avant `setModifs` n'est pas une
+  // optimisation : l'enfant déclare son état depuis un effet, donc écrire un
+  // nouvel objet à chaque rendu relancerait le rendu, qui relancerait l'effet,
+  // sans fin.
+  const declarerModifications = useCallback(etat => {
+    actionsModifs.current = etat?.actions || null
+    const suivant = { modifie: !!etat?.modifie, nb: etat?.nb || 0, saving: !!etat?.saving, libelleAction: etat?.libelleAction || 'Enregistrer' }
+    setModifs(p => (p.modifie === suivant.modifie && p.nb === suivant.nb && p.saving === suivant.saving && p.libelleAction === suivant.libelleAction) ? p : suivant)
+  }, [])
+
+  function changerOnglet(id) {
+    if (id === tab) return
+    // Changer d'onglet démonte le formulaire : c'est la sortie qui coûte le
+    // plus cher, et la seule qu'aucun bouton ne voit venir.
+    if (modifs.modifie) { setOngletVise(id); return }
+    setTab(id)
+  }
+
+  async function enregistrerPuisContinuer() {
+    const ok = await actionsModifs.current?.current?.enregistrer?.()
+    // ⚠️ On ne quitte QUE si l'enregistrement a réussi. Un nom vide ou une
+    // erreur réseau laisse le commerçant sur son écran, avec son texte.
+    if (ok === false) { setOngletVise(null); return }
+    if (ongletVise) setTab(ongletVise)
+    setOngletVise(null)
+  }
+
+  function abandonnerPuisContinuer() {
+    actionsModifs.current?.current?.ignorer?.()
+    if (ongletVise) setTab(ongletVise)
+    setOngletVise(null)
+  }
+
   function showToast(msg, type = 'success') {
     setToastMsg(msg); setToastType(type)
     setTimeout(() => setToastMsg(''), 3000)
@@ -9619,13 +9812,17 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
   ].filter(Boolean)
 
   return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', paddingBottom: 24 }}>
+    // ⚠️ La barre est en `fixed` : sans cette marge, elle recouvrirait le bas de
+    // l'écran, donc le dernier champ du formulaire et souvent le bouton
+    // historique. On ne protège pas le travail en cachant l'endroit où on le
+    // saisit.
+    <div style={{ fontFamily: '"DM Sans", sans-serif', paddingBottom: modifs.modifie ? 104 : 24 }}>
       {/* Barre d'onglets : UNE ligne défilable horizontalement (sur mobile les
           9+ onglets s'empilaient sur 3 lignes, layout ODOO = compact + scroll). */}
       <style>{`.cfg-tabs::-webkit-scrollbar { display: none }`}</style>
       <BandeDefilante className="cfg-tabs" libelle="les onglets" style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 14, marginBottom: 20, boxShadow: '0 2px 12px rgba(22,6,54,0.06)', border: `1px solid ${T.hairline}`, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
         {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button key={t.id} onClick={() => changerOnglet(t.id)}
             style={{ flex: '1 0 auto', padding: '10px 12px', whiteSpace: 'nowrap', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, transition: 'all 0.2s', background: tab === t.id ? T.bgPanel : 'transparent', color: tab === t.id ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, position: 'relative' }}>
             <Icon name={t.icon} size={16} color={tab === t.id ? '#fff' : T.muted}/>
             {t.label}
@@ -9647,18 +9844,36 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
       {tab === 'actus'    && peutActus && <TabActus commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'ia'       && iaActif && <TabGenerateur commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
-      {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} toast={showToast} />}
+      {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} toast={showToast} surModifications={declarerModifications} />}
       {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} />}
-      {tab === 'fidelite' && canDo(commercant?.plan, 'fidelite') && <TabFidelite commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}
-      {tab === 'bons' && canDo(commercant?.plan, 'bons_cadeaux') && <TabBonsCadeaux commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}
+      {tab === 'fidelite' && canDo(commercant?.plan, 'fidelite') && <TabFidelite commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
+      {tab === 'bons' && canDo(commercant?.plan, 'bons_cadeaux') && <TabBonsCadeaux commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
       {tab === 'comptabilite' && canDo(commercant?.plan, 'export_comptable') && <TabComptabilite commercantId={commercantId} toast={showToast} />}
-      {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} />}
+      {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
       {tab === 'accompagnement' && <TabAccompagnement commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
       {tab === 'signaux' && <TabSignaux commercantId={commercantId} toast={showToast} signalementsEnAttente={signalementsEnAttente} />}
 
       <Toast message={toastMsg} type={toastType} />
+
+      {/* La barre ODOO : elle n'existe que quand il y a quelque chose à perdre. */}
+      <BarreEnregistrer
+        visible={modifs.modifie}
+        nb={modifs.nb}
+        saving={modifs.saving}
+        libelleAction={modifs.libelleAction}
+        onEnregistrer={() => actionsModifs.current?.current?.enregistrer?.()}
+        onIgnorer={() => actionsModifs.current?.current?.ignorer?.()}
+      />
+      <ModaleQuitter
+        ouverte={!!ongletVise}
+        nb={modifs.nb}
+        saving={modifs.saving}
+        onEnregistrer={enregistrerPuisContinuer}
+        onAbandonner={abandonnerPuisContinuer}
+        onRester={() => setOngletVise(null)}
+      />
     </div>
   )
 }

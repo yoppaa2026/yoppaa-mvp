@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "verif": "npm run verif:undef && npm run verif:logique && npm run verif:plans && npm run verif:slots && npm run verif:comptable && npm run verif:fidelite && npm run verif:signaux && npm run verif:yopper && npm run verif:fiche && npm run verif:stats && npm run verif:responsive && npm run verif:livraison && npm run verif:abonnements",
+    "verif": "npm run verif:undef && npm run verif:logique && npm run verif:plans && npm run verif:slots && npm run verif:comptable && npm run verif:fidelite && npm run verif:signaux && npm run verif:yopper && npm run verif:fiche && npm run verif:stats && npm run verif:responsive && npm run verif:livraison && npm run verif:abonnements && npm run verif:formulaires",
     "verif:undef": "eslint --config eslint.undef.mjs --no-config-lookup \"app/**/*.js\" \"lib/**/*.js\" \"scripts/**/*.mjs\"",
     "verif:logique": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-logique.mjs",
     "verif:plans": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-plans.mjs",
@@ -20,7 +20,8 @@
     "verif:stats": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-statistiques.mjs",
     "verif:responsive": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-responsive.mjs",
     "verif:livraison": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-livraison.mjs",
-    "verif:abonnements": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-abonnements.mjs"
+    "verif:abonnements": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-abonnements.mjs",
+    "verif:formulaires": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-formulaires.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.3",

@@ -3077,7 +3077,13 @@ function clesPremierNiveau(objetBrut) {
   return trouvees
 }
 
-const chargees = clesPremierNiveau(objetApres(blocProfil, 'setForm({ nom:'))
+// ⚠️ L'OBJET A ÉTÉ SORTI DE `setForm` LE 15/08 : il sert désormais deux fois,
+// pour l'état modifiable et pour son image de départ, celle qui dit s'il reste
+// du travail non enregistré. Ancré sur `setForm({ nom:`, ce test ne trouvait
+// plus rien et accusait les 17 champs d'être écrits sans être chargés. Le
+// contrat n'a pas changé, seul son nom : c'est très exactement le piège du
+// changement de type de retour, vu d'un autre côté.
+const chargees = clesPremierNiveau(objetApres(blocProfil, 'const profil = { nom:'))
 const enregistrees = clesPremierNiveau(objetApres(blocProfil, ".from('commercants').update({ nom:"))
 const ecritesJamaisLues = [...enregistrees].filter(c => !chargees.has(c))
 verifier('aucun champ du profil n\'est enregistré sans avoir été chargé',

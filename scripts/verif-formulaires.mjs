@@ -351,6 +351,36 @@ verifier('sans poste monté, on ne détruit rien',
 verifier('la promesse se résout toujours', /demande\?\.resoudre\?\.\(valeur \?\? null\)/.test(srcPoste))
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 7. UN CHAMP QUI SE REMPLIT TOUT SEUL DOIT LE MONTRER
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ QUESTION D'ALEX LE 15/08 : « que se passe-t-il si on ne met pas de quantité
+// dans séances par semaine ? » Réponse : il valait 1 partout, EN SILENCE. Aucun
+// bug, 1 est la bonne valeur par défaut. Mais un commerçant qui vide le champ en
+// pensant « pas de limite » obtenait le contraire, la limite la plus stricte
+// possible, et ne l'apprenait qu'à la première cliente qui ne pouvait pas
+// réserver sa deuxième séance.
+const srcCfgChamps = sansCommentaires(lire('app/dashboard/ConfigDashboard.js'))
+
+verifier('le plafond hebdomadaire se normalise à la sortie du champ',
+  /onBlur=\{\(\) => setForm\(p => \(\{[\s\S]{0,200}seances_par_semaine: String\(Math\.max\(1,/.test(srcCfgChamps))
+
+// ⚠️ ET LE DÉFAUT QUE CETTE CORRECTION A DÉBUSQUÉ, QUI EST LE PLUS GRAVE DES
+// DEUX. `Input` écrivait ses propres `onFocus` et `onBlur` APRÈS le
+// `{...props}` : un appelant qui passait `onBlur` ne voyait JAMAIS son code
+// s'exécuter, sans erreur ni avertissement. Ma normalisation serait restée
+// morte, et le banc l'aurait déclarée verte.
+for (const composant of ['Input', 'Textarea']) {
+  const debut = srcCfgChamps.indexOf(`function ${composant}({`)
+  const corps = debut >= 0 ? srcCfgChamps.slice(debut, debut + 700) : ''
+  verifier(`${composant} reçoit onFocus et onBlur en paramètres`,
+    new RegExp(`function ${composant}\\(\\{ style, onFocus, onBlur`).test(corps), composant)
+  verifier(`${composant} chaîne le gestionnaire de l’appelant`,
+    /onBlur=\{\(e\) => \{ setFocused\(false\); onBlur\?\.\(e\) \}\}/.test(corps), composant)
+  verifier(`${composant} ne l’avale plus sur le focus non plus`,
+    /onFocus=\{\(e\) => \{ setFocused\(true\); onFocus\?\.\(e\) \}\}/.test(corps), composant)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

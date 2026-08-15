@@ -146,26 +146,36 @@ const s = {
   tag: { display: 'inline-block', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 },
 }
 
-function Input({ style, ...props }) {
+// ⚠️ IL AVALAIT LES `onFocus` ET `onBlur` QU'ON LUI DONNAIT, EN SILENCE. Ses
+// propres gestionnaires étaient écrits APRÈS le `{...props}`, donc ils
+// gagnaient : un appelant qui passait `onBlur` ne voyait jamais son code
+// s'exécuter, sans la moindre erreur ni le moindre avertissement. Trouvé le
+// 15/08 en posant la normalisation du plafond hebdomadaire, qui serait restée
+// morte. Les deux sont désormais CHAÎNÉS : le nôtre pour le liseré de focus,
+// puis celui de l'appelant.
+function Input({ style, onFocus, onBlur, ...props }) {
   const [focused, setFocused] = useState(false)
   return (
     <input {...props}
       style={{ ...s.input, ...(focused ? s.inputFocus : {}), ...style }}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      onFocus={(e) => { setFocused(true); onFocus?.(e) }}
+      onBlur={(e) => { setFocused(false); onBlur?.(e) }}
     />
   )
 }
 
-function Textarea({ style, ...props }) {
+// Même correction que sur `Input`, et pour la même raison : il avalait lui aussi
+// les gestionnaires de focus qu'on lui passait. Personne ne s'en servait encore,
+// mais le premier qui l'aurait fait aurait cherché longtemps.
+function Textarea({ style, onFocus, onBlur, ...props }) {
   const [focused, setFocused] = useState(false)
   return (
     <textarea {...props}
       // Un texte long a droit à plus de largeur qu'un champ d'une ligne, mais
       // pas à toute la largeur de l'écran pour autant.
       style={{ ...s.input, maxWidth: LARGEUR_TEXTE_LONG, resize: 'vertical', minHeight: 80, ...(focused ? s.inputFocus : {}), ...style }}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      onFocus={(e) => { setFocused(true); onFocus?.(e) }}
+      onBlur={(e) => { setFocused(false); onBlur?.(e) }}
     />
   )
 }
@@ -7465,7 +7475,24 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
             </div>
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Séances par semaine</label>
-              <Input type="number" min="1" value={form.seances_par_semaine} onChange={e => setForm({ ...form, seances_par_semaine: e.target.value })}/>
+              {/* ⚠️ LE CHAMP VIDE SE REMPLIT SOUS SES YEUX, ET C'EST TOUT
+                  L'INTÉRÊT. Vidé, ce champ valait déjà 1 partout, en silence :
+                  à l'enregistrement, dans l'aperçu et au plafond hebdomadaire.
+                  Aucun bug, mais un commerçant qui vide en pensant « pas de
+                  limite » obtenait le contraire, la limite la plus stricte
+                  possible, et ne l'apprenait qu'à la première cliente qui ne
+                  pouvait pas réserver sa deuxième séance.
+                  On ne corrige donc pas la valeur, qui était juste : on la lui
+                  MONTRE, à la sortie du champ, pour qu'il n'ait rien à deviner.
+                  ⚠️ À la sortie et pas à la frappe : effacer pour retaper « 2 »
+                  ferait apparaître un 1 sous les doigts, au milieu de la
+                  saisie. */}
+              <Input type="number" min="1" value={form.seances_par_semaine}
+                onChange={e => setForm({ ...form, seances_par_semaine: e.target.value })}
+                onBlur={() => setForm(p => ({
+                  ...p,
+                  seances_par_semaine: String(Math.max(1, parseInt(p.seances_par_semaine, 10) || 1)),
+                }))}/>
             </div>
           </div>
           {/* ⚠️ LE PLAFOND N'EST PAS UN DÉTAIL : sans lui, un client qui réserve

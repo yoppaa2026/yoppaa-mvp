@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper, estSessionPerdue } from '@/lib/fetch-yopper'
+import CarteAbonnement from './CarteAbonnement'
 import { libelleRetrait } from '@/lib/libelle-retrait'
 import { referenceCommande } from '@/lib/numero-commande'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
@@ -1289,6 +1290,9 @@ export default function Commander() {
   const [mesCartesFid, setMesCartesFid] = useState([])
   const [fidConnecte, setFidConnecte] = useState(true)
   const [clientRdvs, setClientRdvs] = useState([])
+  // Les abonnements de la cliente. Vide pour l'immense majorité des Yoppers,
+  // et c'est justement pour ça que ça vit ICI et pas dans un onglet dédié.
+  const [clientAbonnements, setClientAbonnements] = useState([])
   // Commune du Yopper (référentiel `communes` joint via clients.commune_id)
   // commune = null  : pas encore chargé ou client pas connecté
   // commune = false : client connecté mais aucune commune setée → modale ConfirmCommune
@@ -1409,7 +1413,7 @@ export default function Commander() {
         setClient(p => ({ ...p, email, nom: nom || '', prenom: prenom || '', telephone: telephone || '' }))
         setClientId(id)
         chargerFavoris(id)
-        chargerCommandesClient(email); chargerRdvsClient(email)
+        chargerCommandesClient(email); chargerRdvsClient(email); chargerAbonnementsClient()
         // Sync cookie serveur AWAITED (pas fire-and-forget) : le cookie doit
         // refléter le client courant AVANT l'appel get-own (commune/profil), sinon
         // get-own lit un cookie périmé -> mauvais client -> la modale commune
@@ -1501,7 +1505,7 @@ export default function Commander() {
       if (document.visibilityState !== 'visible') return
       const email = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_email') : null
       if (!email) return  // utilisateur déconnecté → on saute ce tick (mais on laisse l'interval tourner pour le cas re-login)
-      chargerCommandesClient(email); chargerRdvsClient(email)
+      chargerCommandesClient(email); chargerRdvsClient(email); chargerAbonnementsClient()
     }, 15000)
     return () => clearInterval(iv)
   }, [])
@@ -1729,7 +1733,7 @@ export default function Commander() {
     const refresh = () => {
       if (document.visibilityState === 'visible') {
         chargerCommandesClient(email)
-        chargerRdvsClient(email)
+        chargerRdvsClient(email); chargerAbonnementsClient()
       }
     }
     const onVisChange = () => refresh()
@@ -1917,6 +1921,24 @@ export default function Commander() {
     }
   }
 
+  // Les abonnements de la cliente : combien de séances il lui reste, et
+  // jusqu'à quand. La route exige une identité PROUVÉE, donc `fetchYopper` et
+  // jamais un `fetch` nu, qui repartirait avec un 401 et un écran vide.
+  async function chargerAbonnementsClient() {
+    try {
+      const res = await fetchYopper('/api/yopper/abonnements')
+      const body = await res.json().catch(() => ({}))
+      // ⚠️ Une session perdue n'est pas une absence d'abonnement. On garde ce
+      // qui est à l'écran et le bandeau de reconnexion fait le reste : effacer
+      // ici dirait à une cliente qu'elle n'a rien acheté.
+      if (estSessionPerdue(res, body)) { setSessionPerdue(true); return }
+      if (!body?.ok) return
+      setClientAbonnements(body.abonnements || [])
+    } catch (e) {
+      console.error('[chargerAbonnementsClient] exception', e?.message)
+    }
+  }
+
   // Annulation d'un RDV depuis la vue Mes RDVs. Auth par rdv_id + client_email
   // (pas besoin du token dans ce contexte, le user est déjà identifié côté front).
   // Refund Stripe automatique côté serveur si acompte payé en ligne + avant cutoff.
@@ -1954,6 +1976,10 @@ export default function Commander() {
           return
         }
         await chargerRdvsClient(rdv.client_email)
+        // ⚠️ ET LE SOLDE, PARCE QU'IL VIENT DE CHANGER. Une séance annulée à
+        // temps est RENDUE (décision du 15/08) : sans ce rechargement, la
+        // cliente lit encore l'ancien solde et croit avoir perdu sa séance.
+        await chargerAbonnementsClient()
         showToast({ msg: `C'est noté ! ${data.message || 'Ton RDV est annulé'} 🟣`, type: 'success' })
       } catch (e) {
         console.error('[annulerRdv] erreur', e)
@@ -2149,7 +2175,7 @@ export default function Commander() {
     const id = j?.client?.id
     if (!id) return null
     setClientId(id); localStorage.setItem('yoppaa_client_id', id); localStorage.setItem('yoppaa_email', email); localStorage.setItem('yoppaa_nom', nom)
-    if (!j.created) { chargerFavoris(id); chargerCommandesClient(email); chargerRdvsClient(email) }
+    if (!j.created) { chargerFavoris(id); chargerCommandesClient(email); chargerRdvsClient(email); chargerAbonnementsClient() }
     return id
   }
 
@@ -3034,6 +3060,22 @@ export default function Commander() {
 
               {/* ─── SOUS-ONGLET 'RENDEZ-VOUS' ─── */}
               <div style={{ padding: '1rem 1rem 1rem', display: sousOngletCmd === 'rdvs' ? 'block' : 'none' }}>
+                {/* ─── MES ABONNEMENTS ──────────────────────────────────────
+                    ⚠️ AU-DESSUS DES RENDEZ-VOUS, ET PAS DANS UN ONGLET À PART.
+                    Un onglet « Abonnements » resterait vide à vie pour la quasi
+                    totalité des Yoppers ; ici, la cliente qui en a un lit son
+                    solde au moment exact où elle regarde ses séances.
+                    Rien ne s'affiche quand il n'y en a pas. */}
+                {clientAbonnements.length > 0 && (
+                  <div style={{ marginBottom: '1.25rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>Mes abonnements</span>
+                      <span style={{ background: T.main, color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{clientAbonnements.length}</span>
+                    </div>
+                    {clientAbonnements.map(a => <CarteAbonnement key={a.id} abonnement={a} />)}
+                  </div>
+                )}
+
                 {/* RDVs a venir */}
                 {rdvsAVenir.length > 0 && (
                   <>

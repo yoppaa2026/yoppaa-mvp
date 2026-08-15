@@ -21,6 +21,7 @@ import {
   etatAbonnement, joursEntre,
   formuleVendableEnLigne, seancesVenduesEnLigne, resumeFormulePublique,
   contratDepuisFormule, libelleValidite, formatDateCourte,
+  resumeAbonnementClient, detailValidite, detailUtilisation, partConsommee,
 } from '../lib/abonnements.js'
 import { jourSemaineDe } from '../lib/creneaux.js'
 
@@ -33,6 +34,10 @@ const verifier = (nom, cond, detail = '') => {
 const egal = (nom, a, b) => verifier(nom, JSON.stringify(a) === JSON.stringify(b),
   `obtenu ${JSON.stringify(a)}, attendu ${JSON.stringify(b)}`)
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
+// Un commentaire qui cite le terme cherché rend un test faussement vert, et
+// celui qui l'explique le rend faussement rouge. On retire les deux.
+const sansCommentSrc = (src) =>
+  src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -675,6 +680,124 @@ const srcCommander = readFileSync(new URL('../app/commander/page.js', import.met
   .split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
 verifier('le total dépensé exclut les séances d’abonnement',
   /statut === 'honore' && !r\.abonnement_id/.test(srcCommander))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L'ÉCRAN DE LA CLIENTE : « combien me reste-t-il, et jusqu'à quand ? »
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ CET ÉCRAN N'EXISTAIT PAS. Depuis le 15/08 une cliente peut acheter en
+// ligne : elle payait 150 €, recevait un email, et l'application ne lui en
+// reparlait plus jamais. Question d'Alex, restée sans réponse jusqu'ici.
+
+const etatDe = (abo, resas = [], jour = '2026-10-01') =>
+  etatAbonnement(abo, resas, { aujourdhui: jour })
+
+const CONTRAT_CLIENTE = {
+  id: 'a1', type: 'periode', mode: 'credit', statut: 'actif', prix: 150,
+  seances_total: 36, date_debut: '2026-09-01', date_fin: '2027-07-03',
+}
+const resaSur = (n, statut = 'confirme') =>
+  Array.from({ length: n }, (_, i) => ({ id: `r${i}`, abonnement_id: 'a1', statut }))
+
+// ⚠️ L'ORDRE DES QUESTIONS EST LA FONCTION. Annoncer « il te reste 12 séances »
+// sur un abonnement résilié serait un mensonge, et c'est exactement ce qu'un
+// enchaînement écrit dans le désordre produirait.
+egal('un abonnement vivant annonce son solde',
+  resumeAbonnementClient(etatDe(CONTRAT_CLIENTE, resaSur(24))).titre, 'Il te reste 12 séances')
+egal('et une seule séance se dit au singulier',
+  resumeAbonnementClient(etatDe(CONTRAT_CLIENTE, resaSur(35))).titre, 'Il te reste 1 séance')
+egal('un abonnement résilié le dit AVANT de parler solde',
+  resumeAbonnementClient(etatDe({ ...CONTRAT_CLIENTE, statut: 'resilie' }, resaSur(24))).titre,
+  'Abonnement résilié')
+verifier('et il n’est plus utilisable',
+  resumeAbonnementClient(etatDe({ ...CONTRAT_CLIENTE, statut: 'resilie' })).utilisable === false)
+
+// Hors fenêtre : on ne promet plus rien, et on dit ce qui a été fait.
+const finiCliente = resumeAbonnementClient(etatDe(CONTRAT_CLIENTE, resaSur(30), '2027-09-01'))
+egal('un abonnement périmé annonce sa fin', finiCliente.titre, 'Terminé le 3 juillet')
+egal('et raconte ce qui en a été fait', finiCliente.detail, '30 séances sur 36')
+verifier('un abonnement périmé n’est plus utilisable', finiCliente.utilisable === false)
+
+// ⚠️ UN SOLDE INCONNU N'EST PAS UN SOLDE ÉPUISÉ. L'écran doit dire qu'il ne
+// sait pas, jamais refuser : une cliente a payé.
+const inconnuCliente = resumeAbonnementClient(etatDe({ ...CONTRAT_CLIENTE, seances_total: null }))
+egal('sans nombre de séances, on n’invente pas de solde', inconnuCliente.ton, 'inconnu')
+verifier('et l’abonnement reste utilisable', inconnuCliente.utilisable === true)
+verifier('la barre de progression ne s’affiche pas sans total',
+  partConsommee(etatDe({ ...CONTRAT_CLIENTE, seances_total: null })) === null)
+
+// Épuisé se dit d'un solde CONNU tombé à zéro.
+const epuiseCliente = resumeAbonnementClient(etatDe(CONTRAT_CLIENTE, resaSur(36)))
+egal('toutes les séances utilisées', epuiseCliente.ton, 'epuise')
+verifier('et on ne peut plus réserver dessus', epuiseCliente.utilisable === false)
+
+// La barre, en clair.
+egal('aucune séance prise, barre à zéro', partConsommee(etatDe(CONTRAT_CLIENTE, [])), 0)
+egal('la moitié prise, barre à la moitié', partConsommee(etatDe(CONTRAT_CLIENTE, resaSur(18))), 0.5)
+egal('tout pris, barre pleine', partConsommee(etatDe(CONTRAT_CLIENTE, resaSur(36))), 1)
+verifier('et jamais au-delà de 1', partConsommee(etatDe(CONTRAT_CLIENTE, resaSur(50))) === 1)
+
+// ⚠️ L'URGENCE SEULEMENT QUAND ELLE EST VRAIE. Rappeler « plus que 200 jours »
+// toute l'année use l'avertissement, et le jour où il compte vraiment plus
+// personne ne le lit. Seuil à 30 jours.
+egal('loin de la fin, on annonce juste la date',
+  detailValidite(etatDe(CONTRAT_CLIENTE, [], '2026-10-01')), 'Valable jusqu’au 3 juillet')
+egal('à douze jours de la fin, on le dit',
+  detailValidite(etatDe(CONTRAT_CLIENTE, [], '2027-06-21')),
+  'Valable jusqu’au 3 juillet, plus que 12 jours')
+egal('le dernier jour se nomme',
+  detailValidite(etatDe(CONTRAT_CLIENTE, [], '2027-07-03')),
+  'Valable jusqu’au 3 juillet, dernier jour')
+egal('sans date de fin, aucune promesse', detailValidite({ fin: null, joursRestants: null }), '')
+egal('zéro séance suivie se dit au pluriel',
+  detailUtilisation({ consommees: 0, total: 0 }), '0 séances suivies')
+
+verifier('aucun tiret cadratin dans ce que lit la cliente',
+  !resumeAbonnementClient(etatDe(CONTRAT_CLIENTE, resaSur(2))).titre.includes('—')
+  && !detailValidite(etatDe(CONTRAT_CLIENTE, [], '2027-06-21')).includes('—'))
+
+// ─── LA ROUTE : c'est elle qui décide qui voit quoi ────────────────────────
+const srcRouteAbo = sansCommentSrc(lire('app/api/yopper/abonnements/route.js'))
+
+verifier('la route exige une identité PROUVÉE, le cookie ne suffit pas',
+  /identiteProuvee\(request\)/.test(srcRouteAbo))
+verifier('et rend 401 sans elle', /status: 401/.test(srcRouteAbo))
+// ⚠️ L'EMAIL VIENT DE L'IDENTITÉ, JAMAIS DU CORPS DE LA REQUÊTE. Sinon
+// n'importe qui énumère les clientes d'un commerce.
+verifier('le filtre se fait sur l’email de l’identité',
+  /\.eq\('client_email', yopper\.email\)/.test(srcRouteAbo))
+verifier('et rien ne vient du corps de la requête', !/request\.json\(\)/.test(srcRouteAbo))
+
+// ⚠️ LE CONTRAT ENTIER, PAS UNE COLONNE. Une colonne absente d'un select vaut
+// `undefined`, ne lève aucune erreur, et le repli bien conçu finit le travail
+// en silence : sans `seances_total`, la route annoncerait « solde inconnu » à
+// une cliente qui a pourtant payé 36 séances. Cinq occurrences sur ce projet.
+const selectAbo = /from\('abonnements'\)[\s\S]{0,400}?\.select\('([^']+)'\)/.exec(srcRouteAbo)?.[1] || ''
+for (const champ of ['id', 'commercant_id', 'type', 'mode', 'statut', 'prix', 'seances_total', 'date_debut', 'date_fin']) {
+  verifier(`la requête demande « ${champ} »`,
+    new RegExp(`(^|,\\s*)${champ}(\\s*,|$)`).test(selectAbo), selectAbo || 'select introuvable')
+}
+const selectResas = /from\('rdv_reservations'\)[\s\S]{0,300}?\.select\('([^']+)'\)/.exec(srcRouteAbo)?.[1] || ''
+for (const champ of ['abonnement_id', 'statut']) {
+  verifier(`le décompte demande « ${champ} »`,
+    new RegExp(`(^|,\\s*)${champ}(\\s*,|$)`).test(selectResas), selectResas || 'select introuvable')
+}
+
+// ─── L'ÉCRAN ───────────────────────────────────────────────────────────────
+const srcClientAbo = sansCommentSrc(lire('app/commander/page.js'))
+verifier('la cliente charge ses abonnements avec fetchYopper, pas un fetch nu',
+  /fetchYopper\('\/api\/yopper\/abonnements'\)/.test(srcClientAbo))
+verifier('la carte est montée dans l’onglet des rendez-vous',
+  /<CarteAbonnement /.test(srcClientAbo))
+// ⚠️ Une session perdue n'est pas une absence d'abonnement : effacer ici
+// dirait à une cliente qu'elle n'a rien acheté.
+const debutCharge = srcClientAbo.indexOf('async function chargerAbonnementsClient(')
+const corpsCharge = srcClientAbo.slice(debutCharge, debutCharge + 900)
+verifier('une session perdue n’efface pas les abonnements',
+  /estSessionPerdue\(res, body\)/.test(corpsCharge)
+  && !/setClientAbonnements\(\[\]\)/.test(corpsCharge))
+// Une séance annulée à temps est RENDUE : le solde affiché doit suivre.
+verifier('annuler un rendez-vous recharge le solde',
+  /chargerRdvsClient\(rdv\.client_email\)[\s\S]{0,200}chargerAbonnementsClient\(\)/.test(srcClientAbo))
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

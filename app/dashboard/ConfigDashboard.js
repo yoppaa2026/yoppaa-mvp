@@ -11,7 +11,7 @@ import { avantLancement, libelleLancement } from '@/lib/lancement'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
 import { capacitePrestation } from '@/lib/cours-collectifs'
-import { datesDeSeances, exclusionsQuiSeChevauchent, placerLaSerie, resumeDeLaSerie, seancesDeLaFormule, fenetreDeValidite } from '@/lib/abonnements'
+import { datesDeSeances, exclusionsQuiSeChevauchent, placerLaSerie, resumeDeLaSerie, seancesDeLaFormule, fenetreDeValidite, phraseApercuFormule, expliquerApercuFormule } from '@/lib/abonnements'
 import { lieuALHeure } from '@/lib/lieux-activite'
 import { champsLieu } from '@/lib/lieu-fige'
 import ChampAdresse from '@/app/components/ChampAdresse'
@@ -7022,7 +7022,6 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
     periodes_exclues: [],
   }
   const [form, setForm] = useState(initialForm)
-  const [jourApercu, setJourApercu] = useState('lundi')
   const [exclu, setExclu] = useState({ debut: '', fin: '', libelle: '' })
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
@@ -7271,14 +7270,23 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
   }
 
   // L'aperçu, recalculé à chaque frappe. Assez léger pour ne pas mériter de
-  // mémoïsation : au pire cinquante-deux tours de boucle.
-  const dates = form.type === 'periode'
-    ? datesDeSeances({
-        dateDebut: form.date_debut, dateFin: form.date_fin,
-        jourSemaine: jourApercu, periodesExclues: form.periodes_exclues,
-      })
-    : []
+  // mémoïsation : au pire sept fois cinquante-deux tours de boucle.
+  //
+  // ⚠️ IL PARLE DÉSORMAIS SANS JOUR. La phrase et son explication vivent dans
+  // `lib/abonnements.js`, pures, donc le banc les EXÉCUTE et relit ce qu'elles
+  // disent au lieu de chercher des mots dans du JSX.
   const nbCarnet = parseInt(form.seances_carnet, 10)
+  const formulePourApercu = {
+    type: form.type,
+    date_debut: form.date_debut,
+    date_fin: form.date_fin,
+    periodes_exclues: form.periodes_exclues,
+    seances_carnet: nbCarnet,
+    validite_jours: parseInt(form.validite_jours, 10),
+    seances_par_semaine: Math.max(1, parseInt(form.seances_par_semaine, 10) || 1),
+  }
+  const apercuFormule = phraseApercuFormule(formulePourApercu)
+  const explicationApercu = expliquerApercuFormule(formulePourApercu)
 
   async function save() {
     if (!form.libelle.trim()) return toast('Donne un nom à ta formule', 'error')
@@ -7470,33 +7478,33 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
           {/* ⚠️ L'APERÇU. Le seul rempart contre une saisie de travers, puisque
               Yoppaa ne connaît aucun calendrier scolaire. */}
           <div style={{ background: `${T.main}0D`, border: `1px solid ${T.main}33`, borderRadius: 10, padding: 12, marginBottom: 14 }}>
-            {form.type === 'carnet' ? (
-              nbCarnet > 0 && parseInt(form.validite_jours, 10) > 0 ? (
-                <p style={{ fontSize: 13, fontWeight: 800, color: T.main, margin: 0 }}>
-                  {nbCarnet} séance{nbCarnet > 1 ? 's' : ''}, valables {dureeParlante(form.validite_jours)} à partir de l’achat.
-                </p>
-              ) : (
-                <p style={{ fontSize: 12.5, color: T.muted, margin: 0 }}>Indique le nombre de séances et leur durée de validité.</p>
-              )
-            ) : dates.length > 0 ? (
+            {/* ⚠️ PLUS DE JOUR IMPOSÉ (demande d'Alex, 15/08 au soir). Un menu
+                déroulant siégeait ici pour désigner le jour du cours, et il
+                faisait dire à l'aperçu un nombre qui ne valait que pour ce
+                jour-là.
+                ⚠️ Ce commentaire ne cite PAS la phrase retirée, et c'est
+                délibéré : le banc l'interdit, et `sansCommentaires` ne sait pas
+                reconnaître les lignes de continuation d'un commentaire JSX. La
+                sortie est de reformuler, jamais de complexifier le filtre.
+                Le client choisit lui-même son jour : on annonce donc le jour le
+                MOINS favorable, seul nombre qu'on puisse tenir quel que soit son
+                choix. Le calcul vit dans la lib, exécuté par le banc. */}
+            {apercuFormule ? (
               <>
-                <p style={{ fontSize: 13, fontWeight: 800, color: T.main, margin: '0 0 4px' }}>
-                  {dates.length} séance{dates.length > 1 ? 's' : ''} du {dateCourte(dates[0])} au {dateCourte(dates[dates.length - 1])}.
+                <p style={{ fontSize: 13, fontWeight: 800, color: T.main, margin: 0, lineHeight: 1.45 }}>
+                  {apercuFormule}
                 </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                  <span style={{ fontSize: 11.5, color: T.muted }}>Pour un cours du</span>
-                  <select value={jourApercu} onChange={e => setJourApercu(e.target.value)}
-                    style={{ ...s.input, width: 'auto', padding: '6px 8px', fontSize: 12 }}>
-                    {JOURS_APERCU.map(j => <option key={j} value={j}>{j}</option>)}
-                  </select>
-                </div>
-                <p style={{ fontSize: 11.5, color: T.muted, margin: '8px 0 0', lineHeight: 1.55 }}>
-                  Vérifie ce nombre : c’est exactement ce que tes clients auront.
-                </p>
+                {explicationApercu && (
+                  <p style={{ fontSize: 11.5, color: T.muted, margin: '8px 0 0', lineHeight: 1.55 }}>
+                    {explicationApercu}
+                  </p>
+                )}
               </>
             ) : (
               <p style={{ fontSize: 12.5, color: T.muted, margin: 0 }}>
-                Renseigne les dates pour voir combien de séances la formule contiendra.
+                {form.type === 'carnet'
+                  ? 'Indique le nombre de séances et leur durée de validité.'
+                  : 'Renseigne les dates pour voir combien de séances la formule contiendra.'}
               </p>
             )}
           </div>

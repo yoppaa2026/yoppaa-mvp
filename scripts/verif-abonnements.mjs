@@ -22,8 +22,9 @@ import {
   formuleVendableEnLigne, seancesVenduesEnLigne, resumeFormulePublique,
   contratDepuisFormule, libelleValidite, formatDateCourte,
   resumeAbonnementClient, detailValidite, detailUtilisation, partConsommee,
+  phraseApercuFormule, expliquerApercuFormule,
 } from '../lib/abonnements.js'
-import { jourSemaineDe } from '../lib/creneaux.js'
+import { jourSemaineDe, JOURS_SEMAINE_FR } from '../lib/creneaux.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -798,6 +799,94 @@ verifier('une session perdue n’efface pas les abonnements',
 // Une séance annulée à temps est RENDUE : le solde affiché doit suivre.
 verifier('annuler un rendez-vous recharge le solde',
   /chargerRdvsClient\(rdv\.client_email\)[\s\S]{0,200}chargerAbonnementsClient\(\)/.test(srcClientAbo))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L'APERÇU D'UNE FORMULE, SANS JOUR IMPOSÉ (Alex, 15/08 au soir)
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ « Il faut aussi supprimer le jour pour lequel l'abonnement est valable, le
+// client choisit lui-même. » Suite directe de sa correction du matin : le jour
+// fixe pour 36 semaines était une erreur de conception.
+//
+// ⚠️ ET ÇA CHANGE LE NOMBRE ANNONCÉ, c'est tout l'enjeu. L'aperçu disait « 46
+// séances » pour le jour du menu déroulant. Sans jour, on ne peut plus promettre
+// 46 : selon le jour choisi il y en aura 43, 44 ou 46, parce que les congés ne
+// tombent pas également sur la semaine. On annonce donc le MINIMUM.
+
+// Une année scolaire avec un congé qui tombe un lundi et pas les autres jours :
+// le lundi perd une séance que le mardi garde. C'est exactement le cas qui
+// interdit d'annoncer le nombre d'un jour choisi au hasard.
+const FORMULE_APERCU = {
+  type: 'periode',
+  date_debut: '2026-09-07',   // un lundi
+  date_fin: '2026-12-21',
+  seances_par_semaine: 1,
+  periodes_exclues: [{ debut: '2026-11-02', fin: '2026-11-08' }],   // une semaine entière
+}
+
+const phrase = phraseApercuFormule(FORMULE_APERCU)
+verifier('l’aperçu d’une période annonce un nombre', /\d+ séances/.test(phrase), phrase)
+// ⚠️ LE MOT QUI ENGAGE. « 46 séances » se lit comme une promesse ferme ;
+// « au minimum » dit la vérité, et c'est la vérité qu'on tiendra.
+verifier('et il dit que c’est un MINIMUM', /au minimum/.test(phrase), phrase)
+verifier('la période est rappelée en clair',
+  /du 7 septembre au 21 décembre/.test(phrase), phrase)
+
+// Le nombre annoncé est celui du jour le MOINS favorable, celui que la vente en
+// ligne utilise déjà. Aucun client ne peut donc recevoir moins que promis.
+const minimum = Math.min(...JOURS_SEMAINE_FR.map(j => datesDeSeances({
+  dateDebut: FORMULE_APERCU.date_debut, dateFin: FORMULE_APERCU.date_fin,
+  jourSemaine: j, periodesExclues: FORMULE_APERCU.periodes_exclues,
+}).length))
+verifier('le nombre annoncé est celui du jour le moins favorable',
+  phrase.startsWith(`${minimum} séance`), `${phrase} / minimum calculé ${minimum}`)
+// ⚠️ ET IL EST BIEN INFÉRIEUR AU MEILLEUR JOUR : sans cet écart, le test ne
+// prouverait rien, il pourrait passer sur une formule où tous les jours sont
+// équivalents. Mesuré ici, sur une vraie semaine de congé.
+const maximum = Math.max(...JOURS_SEMAINE_FR.map(j => datesDeSeances({
+  dateDebut: FORMULE_APERCU.date_debut, dateFin: FORMULE_APERCU.date_fin,
+  jourSemaine: j, periodesExclues: FORMULE_APERCU.periodes_exclues,
+}).length))
+verifier('et le cas de test porte bien un écart entre les jours', maximum > minimum,
+  `min ${minimum}, max ${maximum}`)
+
+// L'explication accompagne toujours le nombre : sans elle, le commerçant croit
+// à une erreur de calcul et va chercher son jour manquant.
+verifier('l’explication dit que le client choisit son jour',
+  /choisit lui-même son jour/.test(expliquerApercuFormule(FORMULE_APERCU)))
+verifier('et pourquoi le nombre est un minimum',
+  /moins favorable/.test(expliquerApercuFormule(FORMULE_APERCU)))
+
+// Deux séances par semaine doublent le compte annoncé.
+verifier('le rythme hebdomadaire multiplie le minimum',
+  phraseApercuFormule({ ...FORMULE_APERCU, seances_par_semaine: 2 })
+    .startsWith(`${minimum * 2} séance`))
+
+// Le carnet ne parle pas de jour du tout : il n'en a jamais eu.
+const carnet = phraseApercuFormule({ type: 'carnet', seances_carnet: 10, validite_jours: 180 })
+egal('un carnet annonce ses séances et sa validité', carnet, '10 séances, valables 6 mois à partir de l’achat.')
+egal('et il ne parle d’aucun minimum', /minimum/.test(carnet), false)
+egal('ni d’aucun jour', expliquerApercuFormule({ type: 'carnet' }), '')
+
+// Une saisie incomplète ne raconte rien plutôt que d'inventer un nombre.
+egal('sans dates, aucun aperçu', phraseApercuFormule({ type: 'periode' }), null)
+egal('sans nombre de séances, aucun aperçu de carnet',
+  phraseApercuFormule({ type: 'carnet', validite_jours: 180 }), null)
+egal('sans validité non plus',
+  phraseApercuFormule({ type: 'carnet', seances_carnet: 10 }), null)
+egal('et rien du tout ne casse rien', phraseApercuFormule(null), null)
+
+verifier('aucun tiret cadratin dans l’aperçu',
+  !phrase.includes('—') && !expliquerApercuFormule(FORMULE_APERCU).includes('—'))
+
+// ⚠️ ET LE SÉLECTEUR A BIEN DISPARU DE L'ÉCRAN. C'est la garde qui tient la
+// demande d'Alex : le laisser reviendrait à réimposer un jour.
+const srcAbo = sansCommentSrc(lire('app/dashboard/ConfigDashboard.js'))
+verifier('plus aucun « Pour un cours du » dans l’éditeur de formule',
+  !/Pour un cours du/.test(srcAbo))
+verifier('et plus aucun jour d’aperçu à choisir',
+  !/jourApercu/.test(srcAbo))
+verifier('l’aperçu vient de la lib, exécutée par ce banc',
+  /phraseApercuFormule\(formulePourApercu\)/.test(srcAbo))
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

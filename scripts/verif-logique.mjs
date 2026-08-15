@@ -1099,8 +1099,18 @@ const srcDashRdv = sansCommentaires(
   readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
 verifier('le tableau de bord sait transmettre le motif',
   /raison_annulation: raison/.test(srcDashRdv))
+// ⚠️ LA QUESTION A DÉMÉNAGÉ, LA RÈGLE EST INTACTE. Ce test exigeait le ternaire
+// `? 'lieu' : 'commercant'` DANS le tableau de bord. Le 15/08, la question est
+// passée d'un `window.confirm()` piégeux (« OK pour déplacer, Annuler pour
+// annuler ») à une vraie fenêtre, et la traduction du choix vit désormais dans
+// `lib/confirmation-rdv.js`, où le banc des créneaux l'EXÉCUTE au lieu de la
+// lire. Le test rougissait donc sur un correctif, ce qui est le symptôme du
+// test qui verrouille une forme.
+const srcConfirmRdv = sansCommentaires(
+  readFileSync(new URL('../lib/confirmation-rdv.js', import.meta.url), 'utf8'))
 verifier('et demande au commerçant lequel des deux c’est',
-  /\? 'lieu' : 'commercant'/.test(srcDashRdv))
+  /raison: choix === 'lieu' \? 'lieu' : 'commercant'/.test(srcConfirmRdv)
+  && /statutDepuisChoix\(/.test(srcDashRdv))
 
 // ─── L'AGENDA : UN COURS COMPTE POUR UN BLOC, PAS POUR DOUZE ──────────────
 // ⚠️ Les blocs de l'agenda sont placés en position ABSOLUE sur leur heure de

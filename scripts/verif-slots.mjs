@@ -12,6 +12,7 @@ import {
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
 import { peutActiverRdv, messageActivationRdv, etatActivationRdv } from '../lib/activation-rdv.js'
+import { nomClient, quandRdv, questionRdv, confirmationRdv, statutDepuisChoix } from '../lib/confirmation-rdv.js'
 import { capacitePrestation } from '../lib/cours-collectifs.js'
 import {
   creneauAcceptable, creneauxDuJour, deplacementUtile, champsDuDeplacement,
@@ -809,6 +810,121 @@ verifier('et l’explication dit comment libérer une place',
 // ternaires de pluriel du même bouton et restait vert.
 verifier('le bouton annonce les places restantes',
   /seanceOuverte\.capacite - seanceOuverte\.inscrits\.length\} place/.test(srcAgenda))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DEMANDER AVANT D'AGIR, PUIS CONFIRMER CE QUI A ÉTÉ FAIT
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ CE QUI EXISTAIT AVANT LE 15/08. Annuler un rendez-vous enchaînait DEUX
+// `window.confirm()`. Le second demandait « Est-ce parce que tu déplaces cet
+// endroit ? » avec pour seules réponses OK et Annuler, où « Annuler » voulait
+// dire « annulation ordinaire », donc CONTINUER. Alex l'a résumé en une
+// phrase : « ok pour déplacer, annuler pour annuler ». Un bouton dont le mot
+// dit le contraire de ce qu'il fait est une fausse manœuvre qui attend son tour.
+
+const RDV_CONFIRM = {
+  id: 'r1', client_prenom: 'Sophie', client_nom: 'Martin',
+  date_rdv: '2026-08-17', heure_debut: '10:00:00',
+}
+
+egal('le client se nomme', nomClient(RDV_CONFIRM), 'Sophie Martin')
+egal('et sans nom on ne dit pas « undefined »', nomClient({}), 'ce client')
+egal('le moment se lit en clair', quandRdv(RDV_CONFIRM), 'lundi 17 août à 10:00')
+// ⚠️ Le midi en dur de la conversion est une CONVENTION du projet, pas une
+// protection mesurable ici : joué en mutation, le passer à minuit UTC ne casse
+// rien sous nos fuseaux, qui sont en avance sur UTC. On garde la convention pour
+// que toutes les dates du projet se lisent pareil, et ce test ne juge donc que
+// la mise en forme, ce qu'il fait vraiment.
+egal('un jour d’hiver se lit correctement', quandRdv({ date_rdv: '2026-01-05', heure_debut: '09:00:00' }),
+  'lundi 5 janvier à 09:00')
+egal('sans date, on n’invente rien', quandRdv({ heure_debut: '10:00:00' }), '10:00')
+
+// L'annulation propose les DEUX annulations sur le même écran, nommées.
+const qAnnule = questionRdv('annule_commercant', RDV_CONFIRM)
+egal('annuler pose trois choix', qAnnule.actions.map(a => a.valeur), ['annuler', 'lieu', 'rien'])
+verifier('le rendez-vous concerné est rappelé', /Sophie Martin/.test(qAnnule.details))
+verifier('et son moment aussi', /17 août/.test(qAnnule.details))
+verifier('le déplacement de lieu est proposé EN CLAIR, pas dans une seconde fenêtre',
+  /change d’endroit/.test(qAnnule.actions.find(a => a.valeur === 'lieu').label))
+
+// ⚠️ LA GARDE QUI TIENT LE DÉFAUT D'ORIGINE. Aucun bouton ne s'appelle « OK »
+// ni « Annuler » tout court : sur un écran d'annulation, « Annuler » ne veut
+// plus rien dire, on ne sait pas si l'on annule le rendez-vous ou la question.
+for (const action of ['annule_commercant', 'no_show', 'confirme']) {
+  const q = questionRdv(action, RDV_CONFIRM)
+  verifier(`« ${action} » pose une vraie question`, !!q?.titre)
+  for (const bouton of q.actions) {
+    verifier(`aucun bouton ambigu sur « ${action} »`,
+      !['ok', 'annuler', 'oui', 'non', 'confirmer'].includes(bouton.label.trim().toLowerCase()),
+      bouton.label)
+    verifier(`le bouton porte une phrase sur « ${action} »`, bouton.label.length > 8, bouton.label)
+  }
+  // Le geste qui ne touche à rien est TOUJOURS le dernier, et il existe
+  // toujours : une fenêtre sans sortie force la main.
+  egal(`« ${action} » laisse toujours repartir sans rien faire`,
+    q.actions[q.actions.length - 1].valeur, 'rien')
+}
+
+// « Honoré » ne demande rien : le faire confirmer douze fois par jour à une
+// professeure de yoga en ferait un réflexe, donc rien du tout.
+egal('marquer honoré ne pose aucune question', questionRdv('honore', RDV_CONFIRM), null)
+
+// ⚠️ « NE RIEN FAIRE » N'ÉCRIT JAMAIS RIEN. C'est la sortie de secours : si elle
+// produisait un statut, la fenêtre serait pire que le `window.confirm` qu'elle
+// remplace.
+egal('ne rien faire n’écrit rien', statutDepuisChoix('annule_commercant', 'rien'), null)
+egal('ne rien faire n’écrit rien non plus sur un absent', statutDepuisChoix('no_show', 'rien'), null)
+egal('annuler ordinairement', statutDepuisChoix('annule_commercant', 'annuler'),
+  { statut: 'annule_commercant', raison: 'commercant' })
+egal('annuler pour cause de lieu', statutDepuisChoix('annule_commercant', 'lieu'),
+  { statut: 'annule_commercant', raison: 'lieu' })
+egal('marquer absent', statutDepuisChoix('no_show', 'no_show'),
+  { statut: 'no_show', raison: 'commercant' })
+// Un choix qui ne correspond pas à l'action n'écrit rien : mieux vaut ne rien
+// faire que deviner.
+egal('un choix incohérent n’écrit rien', statutDepuisChoix('no_show', 'lieu'), null)
+
+// Ce qu'on lit APRÈS. Les deux annulations ne racontent PAS la même histoire.
+verifier('la confirmation d’annulation nomme le client',
+  /Sophie Martin/.test(confirmationRdv('annule_commercant', { rdv: RDV_CONFIRM, raison: 'commercant' })))
+verifier('l’annulation ordinaire dit que le client est prévenu',
+  /prévenu/.test(confirmationRdv('annule_commercant', { rdv: RDV_CONFIRM, raison: 'commercant' })))
+verifier('l’annulation pour changement de lieu l’invite à reprendre sa place',
+  /reprendre sa place/.test(confirmationRdv('annule_commercant', { rdv: RDV_CONFIRM, raison: 'lieu' })))
+verifier('les deux annulations ne disent PAS la même chose',
+  confirmationRdv('annule_commercant', { rdv: RDV_CONFIRM, raison: 'lieu' })
+  !== confirmationRdv('annule_commercant', { rdv: RDV_CONFIRM, raison: 'commercant' }))
+verifier('le déplacement se confirme aussi',
+  /déplacé/.test(confirmationRdv('deplace', { rdv: RDV_CONFIRM })))
+verifier('aucun tiret cadratin dans ces fenêtres',
+  !confirmationRdv('annule_commercant', { rdv: RDV_CONFIRM }).includes('—')
+  && !qAnnule.message.includes('—'))
+
+// ⚠️ ET PLUS AUCUN `window.confirm` SUR LES ACTIONS D'UN RENDEZ-VOUS. C'est la
+// garde qui empêche le défaut de revenir par la petite porte.
+const srcTableauBrut = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+verifier('les actions d’un rendez-vous ne passent plus par window.confirm',
+  !/Est-ce parce que tu déplaces cet endroit/.test(srcTableauBrut)
+  && !/ANNULER ce RDV/.test(srcTableauBrut))
+// ⚠️ ANCRÉ SUR CE QUI L'OUVRE, PAS SUR LE NOM DE LA BALISE. Écrit
+// `<ModaleConfirmation` tout seul, ce test restait vert quand on désactivait la
+// fenêtre d'un `{false && …}` : le nom était toujours là, plus rien ne
+// s'affichait. Mesuré par mutation, il était muet.
+verifier('la fenêtre de confirmation est montée dans le tableau de bord',
+  /<ModaleConfirmation\s+ouverte=\{!!actionRdv\}/.test(srcTableau))
+verifier('et le déplacement d’un rendez-vous la déclenche aussi',
+  /confirmationRdv\('deplace'/.test(srcTableau))
+// On ne confirme que ce qui a eu lieu : annoncer « c'est annulé » après un
+// échec ferait croire que le client est prévenu alors que rien n'a bougé.
+verifier('rien n’est confirmé si l’écriture a échoué',
+  /if \(!ok\) \{ setActionRdv\(null\); return \}/.test(srcTableau))
+verifier('la phrase de confirmation arrive bien jusqu’à la fenêtre',
+  /confirmation=\{confirmationRdvTexte\}/.test(srcTableau))
+
+// ⚠️ CE QUE CE BANC NE TIENT PAS, ET IL VAUT MIEUX L'ÉCRIRE QUE LE LAISSER
+// CROIRE. Mesuré en mutation : neutraliser l'ÉTAT qui porte la phrase de
+// confirmation, en le remplaçant par une constante, ne fait rougir aucun test.
+// Un banc qui lit du texte ne voit pas un recâblage de mémoire d'écran. Seule
+// une vérification à la main, ou un jour un test de parcours, l'attraperait.
 
 // La fiche publique garde son message de repli : fermée, elle invite à
 // téléphoner plutôt que de laisser croire à une panne.

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
 import ModalNouveauRdv from './ModalNouveauRdv'
+import ModaleConfirmation from './ModaleConfirmation'
+import { questionRdv, confirmationRdv, statutDepuisChoix } from '@/lib/confirmation-rdv'
 import ModalDeplacerRdv from './ModalDeplacerRdv'
 import { Reply, ClipboardList } from 'lucide-react'
 import { canDo } from '@/lib/plans'
@@ -591,7 +593,7 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
 // ─── Carte RDV (vitrine) ──────────────────────────────────────────────────────
 // Affichage d'un RDV pour le commercant : heure, prestation, duree, client (nom/tel/email),
 // notes du client, prix estime. Actions : Honore / No-show / Annuler.
-function CarteRdv({ rdv, onChangerStatut, onDeplacer = null }) {
+function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = null }) {
   const statut = STATUTS_RDV[rdv.statut] || STATUTS_RDV['confirme']
   const { couleur } = statut
 
@@ -741,22 +743,18 @@ function CarteRdv({ rdv, onChangerStatut, onDeplacer = null }) {
               if (!cfg) return null
               const isPrincipal = action === 'honore' || action === 'confirme'
               return (
+                // ⚠️ PLUS AUCUN `window.confirm()` ICI. Annuler en posait DEUX
+                // à la suite, et le second demandait « Est-ce parce que tu
+                // déplaces cet endroit ? » avec pour seules réponses OK et
+                // Annuler, où « Annuler » voulait dire « annulation ordinaire »,
+                // donc CONTINUER. Relevé par Alex le 15/08. La question passe
+                // désormais par une vraie fenêtre, dont chaque bouton porte la
+                // phrase de ce qu'il fait, et qui confirme ensuite ce qui a été
+                // fait. « Honoré » reste immédiat : le faire confirmer douze
+                // fois par jour en ferait un réflexe, donc rien du tout.
                 <button key={action} onClick={() => {
-                  const msg = action === 'no_show' ? 'Marquer ce client en NO-SHOW ? Le client sera notifié et tu gardes l\'acompte (le créneau était bloqué).'
-                            : action === 'annule_commercant' ? 'ANNULER ce RDV ? Le client sera notifié et son acompte (si payé) sera remboursé.'
-                            : action === 'honore' ? null
-                            : 'Remettre ce RDV en CONFIRMÉ ?'
-                  if (msg && !window.confirm(msg)) return
-                  // ⚠️ DEUX ANNULATIONS QUI NE SE RESSEMBLENT PAS. Déplacer un
-                  // emplacement oblige à libérer les rendez-vous qui s'y
-                  // tenaient, mais le client n'est pas éconduit pour autant :
-                  // il est invité à reprendre sa place à la nouvelle adresse.
-                  // Le même geste, deux lectures opposées, et c'est le texte
-                  // reçu qui décide laquelle.
-                  const raison = action === 'annule_commercant'
-                    && window.confirm('Est-ce parce que tu déplaces cet endroit ?\n\nOK : le client lira « ton RDV change d’endroit » et sera invité à reprendre sa place.\nAnnuler : annulation ordinaire.')
-                    ? 'lieu' : 'commercant'
-                  onChangerStatut(rdv.id, action, raison)
+                  if (action === 'honore' || !onDemanderAction) { onChangerStatut(rdv.id, action, 'commercant'); return }
+                  onDemanderAction(rdv, action)
                 }}
                   style={{
                     padding: '0.5rem 0.5rem', borderRadius: 10,
@@ -795,6 +793,12 @@ export default function Dashboard() {
   const [rdvSelectionne, setRdvSelectionne] = useState(null)  // RDV ouvert dans la modale details
   const [nouveauRdvSlot, setNouveauRdvSlot] = useState(null)  // { date, heure } -> ouvre la modale d'ajout manuel
   const [rdvADeplacer, setRdvADeplacer] = useState(null)      // RDV ouvert dans la modale de déplacement
+  // La question posée avant d'agir sur un rendez-vous, puis la phrase qui dit
+  // ce qui a été fait. Deux états et pas un : la fenêtre reste ouverte après le
+  // geste pour confirmer, au lieu de disparaître en laissant deviner.
+  const [actionRdv, setActionRdv] = useState(null)            // { rdv, action }
+  const [confirmationRdvTexte, setConfirmationRdvTexte] = useState(null)
+  const [actionEnCours, setActionEnCours] = useState(false)
   // Mode impersonation : admin Yoppaa connecte en tant qu'un commercant pour le support.
   // Detecte via localStorage yoppaa_admin_impersonating (set depuis /admin "Voir Dashboard").
   // Affiche un banner sticky en haut + bouton Quitter qui revient sur /admin.
@@ -1372,12 +1376,17 @@ export default function Dashboard() {
   // alors « ton RDV change d'endroit » et une invitation à reprendre sa place,
   // au lieu d'un « annulé par le commerçant » qui lui ferait croire qu'on ne
   // veut plus de lui.
+  // ⚠️ REND DÉSORMAIS true OU false. La fenêtre de confirmation doit savoir si
+  // l'écriture a réussi : annoncer « le rendez-vous est annulé » après un échec
+  // réseau ferait croire au commerçant que son client est prévenu alors que
+  // rien n'a bougé. Les appelants qui ignorent ce retour se comportent comme
+  // avant.
   async function changerStatutRdv(rdvId, statut, raison = 'commercant') {
     const { error } = await supabase.from('rdv_reservations').update({ statut }).eq('id', rdvId)
     if (error) {
       console.error('[dashboard] changerStatutRdv', error)
       alert(`Erreur : ${error.message}`)
-      return
+      return false
     }
     setRdvs(prev => prev.map(r => r.id === rdvId ? { ...r, statut } : r))
 
@@ -1414,6 +1423,28 @@ export default function Dashboard() {
         body: JSON.stringify({ rdv_id: rdvId }),
       }).catch(e => console.warn('[dashboard] email rdv-no-show KO', e))
     }
+    return true
+  }
+
+  // Le choix fait dans la fenêtre, exécuté puis confirmé.
+  async function repondreActionRdv(choix) {
+    if (!actionRdv) return
+    const decision = statutDepuisChoix(actionRdv.action, choix)
+    // « Ne rien faire » est un résultat comme un autre : on referme, sans bruit
+    // et surtout sans rien écrire.
+    if (!decision) { setActionRdv(null); return }
+    setActionEnCours(true)
+    const ok = await changerStatutRdv(actionRdv.rdv.id, decision.statut, decision.raison)
+    setActionEnCours(false)
+    // ⚠️ ON NE CONFIRME QUE CE QUI A EU LIEU. Annoncer « c'est annulé » après un
+    // échec ferait croire au commerçant que son client est prévenu.
+    if (!ok) { setActionRdv(null); return }
+    setConfirmationRdvTexte(confirmationRdv(actionRdv.action, { rdv: actionRdv.rdv, raison: decision.raison }))
+  }
+
+  function fermerActionRdv() {
+    setActionRdv(null)
+    setConfirmationRdvTexte(null)
   }
 
   async function seDeconnecter() {
@@ -2536,6 +2567,7 @@ export default function Dashboard() {
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '85dvh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <CarteRdv rdv={rdvSelectionne}
               onChangerStatut={(id, st, raison) => { changerStatutRdv(id, st, raison); setRdvSelectionne(null) }}
+              onDemanderAction={(r, action) => { setRdvSelectionne(null); setActionRdv({ rdv: r, action }) }}
               onDeplacer={(r) => { setRdvSelectionne(null); setRdvADeplacer(r) }}/>
             <button onClick={() => setRdvSelectionne(null)}
               style={{ width: '100%', marginTop: 12, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>
@@ -2554,9 +2586,28 @@ export default function Dashboard() {
           creneaux={creneauxRdv}
           rdvsExistants={rdvs}
           onClose={() => setRdvADeplacer(null)}
-          onDeplace={() => { setRdvADeplacer(null); chargerRdvs(commercant.id) }}
+          onDeplace={() => {
+            // Le déplacement se confirme comme le reste : la modale se ferme,
+            // et une fenêtre dit ce qui vient d'être fait. Sans elle, le
+            // commerçant ne sait pas si le client a été prévenu.
+            const deplace = rdvADeplacer
+            setRdvADeplacer(null)
+            chargerRdvs(commercant.id)
+            setActionRdv({ rdv: deplace, action: 'deplace' })
+            setConfirmationRdvTexte(confirmationRdv('deplace', { rdv: deplace }))
+          }}
         />
       )}
+
+      {/* ─── LA FENÊTRE QUI DEMANDE, PUIS QUI CONFIRME ────────────────────── */}
+      <ModaleConfirmation
+        ouverte={!!actionRdv}
+        {...(actionRdv && !confirmationRdvTexte ? (questionRdv(actionRdv.action, actionRdv.rdv) || {}) : {})}
+        enCours={actionEnCours}
+        confirmation={confirmationRdvTexte}
+        onChoix={repondreActionRdv}
+        onFermer={fermerActionRdv}
+      />
     </div>
   )
 }

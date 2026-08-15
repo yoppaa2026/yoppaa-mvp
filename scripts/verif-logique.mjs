@@ -1262,7 +1262,14 @@ const FICHES_PUBLIQUES = [
 ]
 for (const [nom, chemin] of FICHES_PUBLIQUES) {
   const src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
-  verifier(`${nom} demande où se passe l’activité`, /lieuxDuJour\(\{/.test(src))
+  // ⚠️ DEUX PORTES D'ENTRÉE ACCEPTÉES, PARCE QUE LA RÈGLE A GAGNÉ UNE COUCHE.
+  // Ce test exigeait `lieuxDuJour({` mot pour mot. Le 15/08 au soir, la
+  // résolution de l'adresse affichée est passée par `lieuAAfficher`, qui appelle
+  // `lieuxDuJour` et supprime le repli sur le siège : le test rougissait donc
+  // sur le correctif. Ce qui compte est que la fiche demande à la LIB, jamais
+  // qu'elle appelle telle fonction plutôt que telle autre.
+  verifier(`${nom} demande où se passe l’activité`,
+    /(lieuAAfficher|lieuxDuJour)\(\{/.test(src))
   verifier(`${nom} charge les lieux du commerçant`, /from\('commercant_lieux'\)/.test(src))
   // ⚠️ ANCRÉ SUR L'AFFICHAGE, pas sur l'appel : appeler `lieuxDuJour` sans se
   // servir du résultat laisserait le test vert et le client au mauvais endroit.

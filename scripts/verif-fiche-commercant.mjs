@@ -16,6 +16,7 @@ import { normaliserUrl, estIpPrivee, texteUtile } from '../lib/site-web.js'
 import { symbolePourType, symbolesPourType, couleurPourNom, logoProvisoireSvg, propositionsLogo } from '../lib/logo-provisoire.js'
 import { TYPES_SERVICE, TYPES_ALIMENTAIRE, TYPES_DETAIL } from '../lib/types-commerce.js'
 import { emailMerciPreinscription } from '../lib/resend-landing.js'
+import { lieuAAfficher } from '../lib/lieux-activite.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -993,6 +994,48 @@ const ficheClient = sansCommentaires(lire('app/commander/[slug]/page.js'))
 
 verifier('la fiche résout le lieu par la fonction partagée',
   /lieuxDuJour\(\{/.test(ficheClient))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ AUCUNE FICHE NE RETOMBE SUR L'ADRESSE D'INSCRIPTION
+// ═══════════════════════════════════════════════════════════════════════════
+// TROUVÉ PAR ALEX LE 15/08 AU SOIR, SUR SA PROPRE FICHE. Le module LIEUX avait
+// retiré le siège social de la lib le matin même, mais les DEUX fiches
+// gardaient le repli en dur, dans l'écran :
+//     emplacementDuJour?.adresse || commercant?.adresse
+// Un SAMEDI, une professeure qui ne donne cours que le lundi et le mardi n'a
+// aucun lieu du jour. Sa fiche affichait donc l'adresse de son INSCRIPTION, à
+// Mettet, alors que ses cours se donnent à Biesme. Un client s'y serait rendu.
+//
+// La règle est EXÉCUTÉE ici, pas relue : c'est la seule façon d'attraper le
+// jour sans tournée, qui est précisément le cas où le défaut se produisait.
+const SALLE_BIESME = { id: 'p1', type: 'permanent', libelle: 'Salle Respire', adresse: 'Rue de Prée 9G, 5640 Biesme', actif: true }
+const COURS_LUNDI = { id: 'h1', type: 'hebdo', jour_semaine: 'lundi', libelle: 'Salle Respire 1', adresse: 'Rue de Prée 9G, 5640 Biesme', actif: true }
+
+// Un SAMEDI, sans cours : c'est le cas qui produisait le défaut.
+const samedi = lieuAAfficher({ lieux: [SALLE_BIESME, COURS_LUNDI], jour: '2026-08-15' })
+egal('hors des jours de cours, la fiche montre le lieu principal',
+  samedi?.adresse, 'Rue de Prée 9G, 5640 Biesme')
+// Le lundi, le lieu du jour gagne : c'est la réponse la plus précise.
+const lundi = lieuAAfficher({ lieux: [SALLE_BIESME, COURS_LUNDI], jour: '2026-08-17' })
+egal('le jour de cours, c’est le lieu du jour qui parle', lundi?.libelle, 'Salle Respire 1')
+
+// ⚠️ ET SANS AUCUN LIEU, ON NE REND RIEN. Rien vaut mieux qu'une fausse
+// adresse : le bloc « Où me trouver cette semaine » raconte déjà le reste, et
+// un food truck n'a par nature aucune adresse fixe à annoncer.
+verifier('sans lieu déclaré, aucune adresse n’est inventée',
+  lieuAAfficher({ lieux: [], jour: '2026-08-15' }) === null)
+verifier('et un itinérant pur n’a pas d’adresse fixe un jour sans tournée',
+  lieuAAfficher({ lieux: [COURS_LUNDI], jour: '2026-08-15' }) === null)
+
+// La garde qui empêche le repli de revenir par la petite porte, sur les DEUX
+// fiches : c'est d'y être resté après le correctif du matin qu'il a fait mal.
+for (const chemin of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
+  const src = sansCommentaires(lire(chemin))
+  verifier(`aucun repli sur l’adresse d’inscription dans ${chemin.split('/').slice(-2).join('/')}`,
+    !/adresseAffichee = [^\n]*commercant\??\.adresse/.test(src), chemin)
+  verifier(`et l’adresse vient de la fonction partagée dans ${chemin.split('/').slice(-2).join('/')}`,
+    /lieuAAfficher\(\{/.test(src), chemin)
+}
 verifier('le bandeau du jour se décide sur les lieux, pas sur le métier',
   /\{commerceItinerant && \(/.test(ficheClient))
 // ⚠️ SAVOIR OÙ IL EST AUJOURD'HUI NE SUFFIT PAS. Le client qui consulte un mardi

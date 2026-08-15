@@ -17,7 +17,7 @@ import { joursRetraitBoutique } from '@/lib/ouverture'
 // qui décide, et une professeure de yoga en profite comme un food truck.
 import { jourLocalISO } from '@/lib/timezone'
 import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
-import { lieuxDuJour, estItinerant } from '@/lib/lieux-activite'
+import { lieuxDuJour, estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import GalerieCommerce from '@/app/components/GalerieCommerce'
@@ -2497,8 +2497,14 @@ export default function CommanderSlug() {
   // métier : un food truck et une professeure de yoga n'ont pas le même métier
   // mais le même besoin.
   const commerceItinerant = estItinerant(foodtruckEmps)
-  // Adresse effective affichée + envoyée à Maps
-  const adresseAffichee = emplacementDuJour ? emplacementDuJour.adresse : commercant?.adresse
+  // ⚠️ L'ADRESSE AFFICHÉE NE RETOMBE PLUS SUR LE SIÈGE. C'est le même défaut que
+  // sur la fiche des services, trouvé par Alex le 15/08 : hors des jours de
+  // tournée, `emplacementDuJour` est nul et cet écran affichait
+  // `commercant.adresse`, c'est-à-dire l'adresse d'INSCRIPTION. Le module LIEUX
+  // l'avait retirée de la lib le matin même ; elle restait en dur dans les deux
+  // écrans. La règle vit désormais dans la lib, une seule fois pour les deux.
+  const lieuAffiche = lieuAAfficher({ lieux: foodtruckEmps, jour: jourLocalISO(new Date()) })
+  const adresseAffichee = lieuAffiche?.adresse || ''
 
   // Le planning de la semaine, pour un commerce qui bouge : le client doit
   // savoir quand le trouver, pas seulement où il est aujourd'hui.

@@ -47,7 +47,7 @@ import BonCadeauModal from '../../BonCadeauModal'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 import BlocAbonnements from './BlocAbonnements'
 import { formuleVendableEnLigne } from '@/lib/abonnements'
-import { lieuxDuJour, estItinerant } from '@/lib/lieux-activite'
+import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { jourLocalISO } from '@/lib/timezone'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Lock, Flame, Star, Phone, Calendar } from 'lucide-react'
@@ -385,15 +385,14 @@ export default function CommanderRdvSlug() {
   // ⚠️ `jourLocalISO` et PAS `toISOString()` : minuit heure belge, c'est 22h la
   // veille en temps universel. Entre minuit et deux heures du matin, la fiche
   // chercherait le lieu d'HIER. Même garde que sur la fiche boutique.
-  const lieuxAujourdhui = lieuxDuJour({
-    commercant,
-    lieux: lieuxActivite,
-    jour: jourLocalISO(new Date()),
-  })
-  // Le premier de la liste est la réponse la plus précise à « où es-tu
-  // aujourd'hui » : l'exceptionnel, sinon la tournée du jour, sinon un lieu fixe.
-  const emplacementDuJour = lieuxAujourdhui[0] || null
-  const adresseAffichee = emplacementDuJour?.adresse || commercant?.adresse || ''
+  // ⚠️ PLUS AUCUN REPLI SUR `commercant.adresse`. C'est le siège social, délié
+  // le 15/08 au matin, et il était resté en dur ICI, dans l'écran. Un SAMEDI,
+  // une professeure qui ne donne cours que le lundi et le mardi n'a aucun lieu
+  // du jour : sa fiche affichait donc l'adresse de son INSCRIPTION, à Mettet,
+  // alors que ses cours se donnent à Biesme. Trouvé par Alex en regardant sa
+  // propre fiche. La règle vit maintenant dans la lib, pour les deux fiches.
+  const lieuAffiche = lieuAAfficher({ lieux: lieuxActivite, jour: jourLocalISO(new Date()) })
+  const adresseAffichee = lieuAffiche?.adresse || ''
   // Le commerce bouge-t-il ? La question se lit sur ses lieux, jamais sur son
   // métier : un food truck et une professeure de yoga n'ont pas le même métier
   // mais exactement le même besoin.
@@ -1771,8 +1770,8 @@ export default function CommanderRdvSlug() {
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
                         {/* Le NOM de l'endroit d'abord quand il y en a un : « Salle
                             Saint-Roch » dit plus à une cliente qu'un numéro de rue. */}
-                        {emplacementDuJour?.libelle && emplacementDuJour.source !== 'siege'
-                          ? `${emplacementDuJour.libelle} · ${adresseAffichee}`
+                        {lieuAffiche?.libelle
+                          ? `${lieuAffiche.libelle} · ${adresseAffichee}`
                           : adresseAffichee}
                       </span>
                     </button>

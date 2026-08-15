@@ -11,6 +11,7 @@ import {
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos,
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
+import { peutActiverRdv, messageActivationRdv, etatActivationRdv } from '../lib/activation-rdv.js'
 import { capacitePrestation } from '../lib/cours-collectifs.js'
 import {
   creneauAcceptable, creneauxDuJour, deplacementUtile, champsDuDeplacement,
@@ -681,6 +682,96 @@ verifier('et le sujet de l’email dit « déplacé », pas « confirmé »',
   /deplace[\s\S]{0,120}déplacé/.test(srcRouteConfirme))
 verifier('le commerçant ne s’auto-notifie pas de son propre déplacement',
   /!deplace && rdv\.commercant\?\.notif_mode/.test(srcRouteConfirme))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OUVRIR LA PRISE DE RENDEZ-VOUS : L'INTERRUPTEUR QUI N'EXISTAIT NULLE PART
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ DÉFAUT TROUVÉ PAR ALEX LE 15/08, sur Centre Respire. `rdv_actif` n'était
+// écrit QUE depuis /admin. Prestations, praticiens et créneaux encodés jusqu'au
+// bout, et la fiche continuait d'annoncer aux clients qu'il fallait téléphoner.
+// C'est le défaut le plus coûteux de ce module : personne ne peut réserver, et
+// le commerçant ne l'apprend jamais.
+
+verifier('le module d’activation existe et s’exécute', typeof peutActiverRdv === 'function')
+
+// La règle, exécutée. Une page de réservation VIDE est pire qu'une page fermée :
+// fermée, le client téléphone ; vide, il croit qu'il n'y a jamais de place.
+egal('rien d’encodé, on n’ouvre pas',
+  peutActiverRdv({ prestationsActives: 0, creneaux: 0 }).manque, ['prestation', 'creneau'])
+egal('une prestation sans créneau, on n’ouvre pas',
+  peutActiverRdv({ prestationsActives: 1, creneaux: 0 }).manque, ['creneau'])
+egal('un créneau sans prestation, on n’ouvre pas',
+  peutActiverRdv({ prestationsActives: 0, creneaux: 3 }).manque, ['prestation'])
+verifier('une prestation ET un créneau, on ouvre',
+  peutActiverRdv({ prestationsActives: 1, creneaux: 1 }).ok === true)
+
+// ⚠️ LE COMPTE ABSENT DOIT BLOQUER. `undefined` et `null` ne sont pas zéro, et
+// un test écrit avec `!n` les confondrait avec un compte à zéro par chance
+// plutôt que par raisonnement. Ici la question est « sait-on qu'il y en a ? ».
+verifier('un inventaire pas encore chargé n’ouvre rien',
+  peutActiverRdv({}).ok === false
+  && peutActiverRdv({ prestationsActives: null, creneaux: null }).ok === false
+  && peutActiverRdv({ prestationsActives: undefined, creneaux: 2 }).ok === false)
+
+// Le message NOMME ce qui manque. « Configuration incomplète » fait refermer
+// l'écran, « ajoute une prestation » fait agir.
+verifier('le message nomme la prestation manquante',
+  /prestation/.test(peutActiverRdv({ prestationsActives: 0, creneaux: 2 }).message))
+verifier('le message nomme la plage manquante',
+  /plage de rendez-vous/.test(peutActiverRdv({ prestationsActives: 2, creneaux: 0 }).message))
+egal('rien à dire quand tout est prêt',
+  peutActiverRdv({ prestationsActives: 1, creneaux: 1 }).message, '')
+verifier('aucun tiret cadratin dans les messages d’activation',
+  !messageActivationRdv(['prestation', 'creneau']).includes('—'))
+
+// Trois états et pas deux : « prêt à ouvrir » et « il te manque encore quelque
+// chose » n'appellent pas du tout le même geste.
+egal('déjà ouvert, plus rien à annoncer',
+  etatActivationRdv({ rdvActif: true, prestationsActives: 0, creneaux: 0 }).etat, 'ouvert')
+verifier('déjà ouvert, aucun bouton d’ouverture',
+  etatActivationRdv({ rdvActif: true }).peutOuvrir === false)
+egal('fermé mais tout est prêt',
+  etatActivationRdv({ rdvActif: false, prestationsActives: 2, creneaux: 4 }).etat, 'pret')
+verifier('et le bouton s’affiche',
+  etatActivationRdv({ rdvActif: false, prestationsActives: 2, creneaux: 4 }).peutOuvrir === true)
+egal('fermé et incomplet',
+  etatActivationRdv({ rdvActif: false, prestationsActives: 0, creneaux: 4 }).etat, 'incomplet')
+verifier('et le bouton NE s’affiche PAS',
+  etatActivationRdv({ rdvActif: false, prestationsActives: 0, creneaux: 4 }).peutOuvrir === false)
+verifier('l’état fermé dit toujours que les clients ne peuvent pas réserver',
+  /ne peuvent pas encore réserver/.test(etatActivationRdv({ rdvActif: false, prestationsActives: 0, creneaux: 0 }).titre))
+
+// ⚠️ LE TEST QUI TIENT LE DÉFAUT D'ORIGINE : le commerçant doit pouvoir écrire
+// `rdv_actif` LUI-MÊME. Tant que seul /admin le pose, il est dans une impasse.
+verifier('le tableau de bord sait ouvrir la prise de RDV',
+  /update\(\{ rdv_actif: true \}\)/.test(srcConfig))
+verifier('et le profil sait la refermer',
+  /rdv_actif: !!form\.rdv_actif/.test(srcConfig))
+verifier('l’interrupteur est bien à l’écran, pas seulement dans le payload',
+  /setForm\(p => \(\{ \.\.\.p, rdv_actif: e\.target\.checked \}\)\)/.test(srcConfig))
+
+// La bannière vit dans l'onglet Prise de RDV, là où le commerçant encode, et
+// pas trois onglets plus loin : une aide qu'il faut aller chercher ne l'est pas.
+verifier('la bannière d’ouverture est dans l’onglet Prise de RDV',
+  /etatActivationRdv\(\{[\s\S]{0,200}rdvActif/.test(srcConfig))
+verifier('le bouton d’ouverture ne s’affiche que quand c’est possible',
+  /etatRdv\.peutOuvrir && \(/.test(srcConfig))
+
+// ⚠️ ET LE GARDE-FOU EST REVÉRIFIÉ AU CLIC. Entre l'affichage de la bannière et
+// l'appui sur le bouton, une prestation a pu être désactivée dans un autre
+// onglet : juger sur l'état affiché ouvrirait une fiche vide.
+const debutOuvrir = srcConfig.indexOf('async function ouvrirLesReservations(')
+const corpsOuvrir = srcConfig.slice(debutOuvrir, srcConfig.indexOf('\n  }', debutOuvrir))
+verifier('l’ouverture revérifie la règle au moment du clic',
+  /peutActiverRdv\(\{/.test(corpsOuvrir) && /if \(!verdict\.ok\)/.test(corpsOuvrir))
+verifier('et elle rafraîchit le commerçant pour que la bannière disparaisse',
+  /onSaved\?\.\(\)/.test(corpsOuvrir))
+
+// La fiche publique garde son message de repli : fermée, elle invite à
+// téléphoner plutôt que de laisser croire à une panne.
+const srcFicheRdv = sansCommentaires(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+verifier('fiche fermée : le client est invité à téléphoner',
+  /pas encore activé la prise de RDV/.test(srcFicheRdv))
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

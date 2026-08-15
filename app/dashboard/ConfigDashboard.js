@@ -18,6 +18,7 @@ import ChampAdresse from '@/app/components/ChampAdresse'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import { champsModifies } from '@/lib/formulaire-modifie'
+import { peutActiverRdv, etatActivationRdv } from '@/lib/activation-rdv'
 import { BarreEnregistrer, ModaleQuitter, useAvertirAvantDeQuitter } from './BarreEnregistrer'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import BandeDefilante from '@/app/components/BandeDefilante'
@@ -5015,7 +5016,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
   async function saveProfil() {
     if (!form.nom.trim()) { toast('Le nom est obligatoire', 'error'); return false }
     setSaving(true)
-    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, site_web: (form.site_web || '').trim() || null, description: form.description.trim() || null, infos_pratiques: (form.infos_pratiques || '').trim() || null, horaires: form.horaires.trim() || null, horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des), boutique_delai_heures: Math.max(0, parseInt(form.boutique_delai_heures, 10) || 0) }).eq('id', commercantId)
+    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, site_web: (form.site_web || '').trim() || null, description: form.description.trim() || null, infos_pratiques: (form.infos_pratiques || '').trim() || null, horaires: form.horaires.trim() || null, horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, rdv_actif: !!form.rdv_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des), boutique_delai_heures: Math.max(0, parseInt(form.boutique_delai_heures, 10) || 0) }).eq('id', commercantId)
     setSaving(false)
     if (error) {
       console.error('[ConfigDashboard.saveProfil]', error)
@@ -5399,6 +5400,29 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
       {/* ─── REGLAGES : le fonctionnement, pas la vitrine ─────────────────── */}
       {sousOnglet === 'reglages' && (
       <div style={s.card}>
+        {/* ─── Ouverture des réservations ─────────────────────────────────
+            ⚠️ Cet interrupteur N'EXISTAIT NULLE PART. `rdv_actif` ne s'écrivait
+            que depuis /admin : un commerçant ne pouvait ni ouvrir sa prise de
+            RDV, ni la refermer pendant ses congés.
+            L'ouverture se fait normalement depuis la bannière de l'onglet
+            Prise de RDV, qui vérifie qu'il y a bien une prestation et un
+            créneau. Ici, c'est l'interrupteur de tous les jours : on referme
+            avant de partir, on rouvre en rentrant. */}
+        {form.categorie === 'vitrine' && canDo(form.plan, 'rdv') && (
+          <div style={{ marginBottom: 18, paddingBottom: 16, borderBottom: `1px solid ${T.pale}` }}>
+            <p style={{ ...s.label, marginBottom: 10 }}>Prise de rendez-vous</p>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.rdv_actif ? T.main : T.pale}`, background: form.rdv_actif ? T.pale : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
+              <input type="checkbox" checked={!!form.rdv_actif} onChange={e => setForm(p => ({ ...p, rdv_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>Mes clients peuvent réserver en ligne</p>
+                <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
+                  Décoche pendant tes congés : ta fiche reste visible, mais elle invite tes clients à t&rsquo;appeler plutôt qu&rsquo;à réserver.
+                </p>
+              </div>
+            </label>
+          </div>
+        )}
+
         {/* ─── Notifications RDV ou Commandes ─── */}
         {/* Toggle unique notif_mode (chaque/recap_jour/aucun) qui s'applique aux RDV
             pour les vitrines ET aux commandes C&C pour les alimentaires Vendre.
@@ -6443,8 +6467,55 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
 // Sess 5a : Prestations CRUD. Sess 5b : Praticiens. Sess 5c : Créneaux.
 // ═════════════════════════════════════════════════════════════════════════
 
-function TabRdv({ commercantId, commercant, toast }) {
+function TabRdv({ commercantId, commercant, toast, onSaved }) {
   const [subTab, setSubTab] = useState('prestations')
+  // ⚠️ L'INTERRUPTEUR QUI N'EXISTAIT NULLE PART. Voir lib/activation-rdv.js :
+  // `rdv_actif` ne s'écrivait que depuis /admin, et le commerçant configurait
+  // tout sans jamais pouvoir ouvrir sa fiche. La bannière vit ICI, là où il
+  // bloque, et pas trois onglets plus loin dans les Réglages.
+  const [inventaire, setInventaire] = useState(null)
+  const [ouverture, setOuverture] = useState(false)
+  const rdvActif = commercant?.rdv_actif === true
+
+  // Recompté à chaque changement de sous-onglet : ajouter une prestation puis
+  // revenir doit faire passer la bannière de « il te manque » à « ouvre ».
+  useEffect(() => {
+    if (!commercantId || rdvActif) return
+    let annule = false
+    ;(async () => {
+      const [p, c] = await Promise.all([
+        supabase.from('rdv_prestations').select('id', { count: 'exact', head: true })
+          .eq('commercant_id', commercantId).eq('actif', true).is('deleted_at', null),
+        supabase.from('rdv_creneaux').select('id', { count: 'exact', head: true })
+          .eq('commercant_id', commercantId).is('deleted_at', null),
+      ])
+      if (!annule) setInventaire({ prestations: p.count || 0, creneaux: c.count || 0 })
+    })()
+    return () => { annule = true }
+  }, [commercantId, rdvActif, subTab])
+
+  const etatRdv = etatActivationRdv({
+    rdvActif,
+    prestationsActives: inventaire?.prestations,
+    creneaux: inventaire?.creneaux,
+  })
+
+  async function ouvrirLesReservations() {
+    // ⚠️ Le garde-fou est revérifié ICI, au moment du clic, et pas seulement à
+    // l'affichage : entre les deux, une prestation a pu être désactivée.
+    const verdict = peutActiverRdv({
+      prestationsActives: inventaire?.prestations,
+      creneaux: inventaire?.creneaux,
+    })
+    if (!verdict.ok) { toast(verdict.message, 'error'); return }
+    setOuverture(true)
+    const { error } = await supabase.from('commercants').update({ rdv_actif: true }).eq('id', commercantId)
+    setOuverture(false)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast('C’est ouvert, tes clients peuvent réserver 🟣')
+    onSaved?.()
+  }
+
   const subTabs = [
     { id: 'prestations', label: 'Prestations' },
     { id: 'praticiens',  label: 'Praticiens' },
@@ -6454,6 +6525,28 @@ function TabRdv({ commercantId, commercant, toast }) {
   ]
   return (
     <div>
+      {/* ─── LA BANNIÈRE D'OUVERTURE ────────────────────────────────────────
+          Tant que la prise de RDV est fermée, la fiche publique dit au client
+          de téléphoner. Le commerçant doit l'apprendre ici, à l'endroit exact
+          où il encode, et pouvoir y remédier d'un bouton. */}
+      {!rdvActif && inventaire && (
+        <div style={{ background: etatRdv.peutOuvrir ? T.pale : '#FEF3C7', border: `1.5px solid ${etatRdv.peutOuvrir ? T.main : '#F59E0B'}`, borderRadius: 14, padding: 16, marginBottom: 16, display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <AlertTriangle size={18} strokeWidth={2} color={etatRdv.peutOuvrir ? T.main : '#B45309'} style={{ flexShrink: 0, marginTop: 2 }}/>
+          <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+            <p style={{ fontSize: 13.5, fontWeight: 800, color: T.ink, margin: '0 0 4px' }}>{etatRdv.titre}</p>
+            <p style={{ fontSize: 12, color: T.deep, lineHeight: 1.55, margin: 0 }}>
+              {etatRdv.message} Aujourd&rsquo;hui, ta fiche leur dit de t&rsquo;appeler.
+            </p>
+          </div>
+          {etatRdv.peutOuvrir && (
+            <button type="button" onClick={ouvrirLesReservations} disabled={ouverture}
+              style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, cursor: ouverture ? 'wait' : 'pointer', opacity: ouverture ? 0.7 : 1 }}>
+              <Icon name="check" size={14}/> {ouverture ? 'Ouverture…' : 'Ouvrir les réservations'}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Barre sous-onglets RDV.
           ⚠️ ELLE DÉFILE ET ELLE MONTRE SES FLÈCHES. Avec quatre onglets et
           `flex: 1`, les libellés se comprimaient déjà ; le cinquième les
@@ -9845,7 +9938,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
       {tab === 'ia'       && iaActif && <TabGenerateur commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
       {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} toast={showToast} surModifications={declarerModifications} />}
-      {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} />}
+      {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}
       {tab === 'fidelite' && canDo(commercant?.plan, 'fidelite') && <TabFidelite commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
       {tab === 'bons' && canDo(commercant?.plan, 'bons_cadeaux') && <TabBonsCadeaux commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}

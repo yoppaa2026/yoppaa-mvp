@@ -31,6 +31,7 @@ export async function POST(request) {
       .select(`
         id, date_rdv, heure_debut, heure_fin, acompte_paye_en_ligne, acompte_montant,
         client_email, client_prenom, rappel_push_id,
+        lieu_id, lieu_libelle, lieu_adresse,
         commercant:commercants(nom, slug, adresse, telephone, email),
         prestation:rdv_prestations(nom)
       `)

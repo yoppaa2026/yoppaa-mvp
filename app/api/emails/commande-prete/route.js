@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailCommandePrete } from '@/lib/resend'
 import { referenceCommande } from '@/lib/numero-commande'
+import { adresseRendezVous } from '@/lib/lieu-fige'
 
 export async function POST(request) {
   try {
@@ -27,6 +28,7 @@ export async function POST(request) {
       .from('commandes')
       .select(`
         id, numero_commande, numero_prefixe, client_email, client_prenom, mode_retrait,
+        lieu_id, lieu_libelle, lieu_adresse,
         adresse_livraison,
         commercant:commercants(nom, slug, adresse),
         creneau:creneaux(heure_debut, heure_fin),
@@ -56,7 +58,7 @@ export async function POST(request) {
       const html = emailCommandePrete({
         yopper_prenom:     cmd.client_prenom || 'Yopper',
         commercant_nom:    cmd.commercant?.nom || '',
-        commercant_adresse:cmd.commercant?.adresse || '',
+        commercant_adresse:adresseRendezVous({ ...cmd, commercant: cmd.commercant }),
         commercant_slug:   cmd.commercant?.slug || '',
         numero_commande:   referenceCommande(cmd),
         heure_debut:       creneau?.heure_debut,

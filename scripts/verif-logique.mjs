@@ -1189,17 +1189,40 @@ egal('deux prestations à la même heure font deux séances',
 // ⚠️ TOUS LES CANAUX, ET TOUS LES ÉCRANS QUI GRAVENT. Corrigés un par un, ils
 // auraient divergé : c'est exactement ce qui s'était produit avec les numéros
 // de commande, corrigés dans les corps d'emails et oubliés dans les objets.
+// ⚠️ LA LISTE A DOUBLÉ LE 15/08. Elle ne couvrait que les quatre canaux du
+// rendez-vous, alors que les COMMANDES annoncent elles aussi « viens ici », et
+// qu'elles retombaient toutes sur `commercants.adresse`. Une commande retirée
+// chez une commerçante itinérante envoyait donc le client à son siège, malgré
+// le lieu gravé sur la commande depuis le 13/08.
+//
+// ⚠️ Le repli sur le siège N'A PAS DISPARU de `adresseRendezVous`, et c'est
+// volontaire : un rendez-vous ANTÉRIEUR au module n'a aucun lieu gravé, et le
+// siège reste alors la seule vérité historique. Le retirer réécrirait le passé.
 const CANAUX_LIEU = [
   ['la confirmation de rendez-vous', 'app/api/emails/rdv-confirme/route.js'],
   ['l’email d’annulation', 'app/api/emails/rdv-annule/route.js'],
   ['le rappel de la veille', 'app/api/cron/rdv-reminder-9h/route.js'],
   ['« Mes rendez-vous »', 'app/api/rdv/mes-rdvs/route.js'],
+  ['la confirmation de commande', 'app/api/emails/commande-confirmee/route.js'],
+  ['l’email « commande prête »', 'app/api/emails/commande-prete/route.js'],
+  ['le rappel de retrait', 'app/api/cron/rappels-retrait/route.js'],
+  ['les notifications de commande', 'lib/commande-notifs.js'],
+  ['l’annulation d’un rendez-vous', 'app/api/rdv/cancel/route.js'],
+  ['les emails du webhook Stripe', 'app/api/stripe/webhook/route.js'],
 ]
 for (const [nom, chemin] of CANAUX_LIEU) {
   const src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
   verifier(`${nom} annonce le lieu du rendez-vous`, /adresseRendezVous\(/.test(src))
   verifier(`${nom} ne lit plus l’adresse du siège`,
     !/commercant[?]?\.adresse \|\| ''/.test(src))
+  // ⚠️ ET LA COLONNE DOIT ÊTRE DEMANDÉE. Appeler `adresseRendezVous` sur un
+  // enregistrement dont le `select` ne ramène pas `lieu_libelle` rend
+  // systématiquement le siège, SANS la moindre erreur : la fonction est bien
+  // appelée, elle n'a simplement rien à lire. Ce test est né MUET, et c'est la
+  // mesure par mutation qui l'a montré. Troisième fois aujourd'hui que ce
+  // projet se fait avoir par une colonne absente d'une requête, après la
+  // capacité des cours et le lien vers l'abonnement.
+  verifier(`${nom} demande bien le lieu gravé`, /lieu_libelle/.test(src))
 }
 
 // ⚠️ LES FICHES PUBLIQUES AUSSI, ET C'EST CE QUI MANQUAIT (Alex, 15/08).

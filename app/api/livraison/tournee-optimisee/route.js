@@ -25,6 +25,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { geocoderAdresse } from '@/lib/geocode'
 import { STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
+import { lieuxDuJour } from '@/lib/lieux-activite'
+import { jourLocalISO } from '@/lib/timezone'
 
 const ORS_OPTIM = 'https://api.openrouteservice.org/optimization'
 
@@ -206,14 +208,30 @@ export async function POST(request) {
     // chaque optimisation : gaspillage, lenteur, et un service public dont la
     // règle d'usage est d'une requête par seconde. Le géocodage ne reste qu'en
     // dernier recours, pour un commerce dont la fiche n'a pas de coordonnées.
+    // ⚠️ ET LE DÉPART EST LE LIEU D'ACTIVITÉ, PLUS LE SIÈGE (Alex, 15/08).
+    // L'adresse d'inscription ne sert qu'à valider le dossier : faire partir la
+    // tournée de là enverrait le livreur au domicile d'un commerçant inscrit
+    // chez lui, et lui ferait recalculer tout son trajet depuis le mauvais
+    // point. On part du lieu où il exerce aujourd'hui, celui-là même que ses
+    // clients voient sur sa fiche.
+    const { data: lieuxCom } = await supabase
+      .from('commercant_lieux')
+      .select('id, type, jour_semaine, date_jour, libelle, adresse, latitude, longitude, heure_debut, heure_fin, principal, actif')
+      .eq('commercant_id', commercant.id)
+      .eq('actif', true)
+    const departLieu = lieuxDuJour({ lieux: lieuxCom || [], jour: jourLocalISO(new Date()) })[0] || null
+
     let depart = null
-    if (Number.isFinite(Number(commercant.latitude)) && Number.isFinite(Number(commercant.longitude))) {
-      depart = { lat: Number(commercant.latitude), lng: Number(commercant.longitude) }
-    } else {
-      depart = await geocoderAdresse(commercant.adresse)
+    if (Number.isFinite(Number(departLieu?.latitude)) && Number.isFinite(Number(departLieu?.longitude))) {
+      depart = { lat: Number(departLieu.latitude), lng: Number(departLieu.longitude) }
+    } else if (departLieu?.adresse) {
+      depart = await geocoderAdresse(departLieu.adresse)
     }
     if (!depart) {
-      return NextResponse.json({ ok: false, error: 'Adresse du commerce non géolocalisable. Vérifie-la dans Profil.' }, { status: 422 })
+      return NextResponse.json({
+        ok: false,
+        error: 'Le lieu d’où part ta tournée n’est pas géolocalisable. Vérifie-le dans Profil, section « Où me trouver ».',
+      }, { status: 422 })
     }
 
     const apiKey = process.env.ORS_API_KEY || process.env.NEXT_PUBLIC_ORS_API_KEY
@@ -235,7 +253,7 @@ export async function POST(request) {
     return NextResponse.json({
       ok: true,
       methode,
-      depart: { nom: commercant.nom, adresse: commercant.adresse },
+      depart: { nom: departLieu?.libelle || commercant.nom, adresse: departLieu?.adresse || commercant.adresse },
       ordre,
       itineraires: liensItineraire(depart, ordreArrets),
       sans_coords: sansCoords,

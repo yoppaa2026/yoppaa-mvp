@@ -210,12 +210,24 @@ verifier('le découpage est annoncé au commerçant', /Maps limite un itinérair
 // recommencerait au commerce à chaque lien.
 verifier('les segments s\'enchaînent', /origine = destination/.test(tourneeCode))
 
-// ⚠️ LE DÉPART VIENT DE LA FICHE, pas d'un géocodage à chaque clic. Nominatim
-// est un service public dont la règle d'usage est d'une requête par seconde :
-// le rappeler à chaque optimisation est un gaspillage et un risque de blocage.
-verifier('le départ utilise les coordonnées du commerce', /commercant\.latitude/.test(tourneeCode))
+// ⚠️ LE DÉPART EST LE LIEU D'ACTIVITÉ, PAS LE SIÈGE (Alex, 15/08).
+//
+// Il partait de `commercants.latitude/longitude`, c'est-à-dire de l'adresse
+// d'inscription. Celle-ci ne sert plus qu'à valider le dossier : faire partir
+// une tournée de là enverrait le livreur au DOMICILE d'un commerçant inscrit
+// chez lui, et lui ferait recalculer tout son trajet depuis le mauvais point.
+verifier('le départ vient du lieu d’activité du jour',
+  /lieuxDuJour\(\{ lieux: lieuxCom/.test(tourneeCode))
+verifier('et de ses coordonnées', /departLieu\?\.latitude/.test(tourneeCode))
+// ⚠️ Et pas d'un géocodage à chaque clic. Nominatim est un service public dont
+// la règle d'usage est d'une requête par seconde : le rappeler à chaque
+// optimisation est un gaspillage et un risque de blocage.
 verifier('le géocodage n\'est qu\'un dernier recours',
-  tourneeCode.indexOf('commercant.latitude') < tourneeCode.indexOf('geocoderAdresse('))
+  tourneeCode.indexOf('departLieu?.latitude') < tourneeCode.indexOf('geocoderAdresse(departLieu'))
+// Et le message d'erreur envoie au bon endroit : « Profil », section des lieux,
+// et non plus vers une adresse que le commerçant ne peut pas corriger là.
+verifier('un lieu non géolocalisable renvoie vers la bonne section',
+  /Où me trouver/.test(tourneeCode))
 
 // Une commande déjà livrée n'a rien à faire dans une tournée.
 verifier('les livrées sont exclues', /\.neq\('statut_livraison', 'livree'\)/.test(tourneeCode))

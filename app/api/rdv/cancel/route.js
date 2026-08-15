@@ -20,6 +20,7 @@ import { envoyerAuCommercant, emailRdvAnnule } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
+import { adresseRendezVous } from '@/lib/lieu-fige'
 
 export async function POST(request) {
   try {
@@ -48,6 +49,7 @@ export async function POST(request) {
       stripe_refund_id, client_email, client_prenom, client_nom, annulation_token,
       date_rdv, heure_debut, heure_fin, duree_minutes, motif_annulation,
       commercant_id, rappel_push_id, commande_id,
+      lieu_id, lieu_libelle, lieu_adresse,
       commercant:commercants(id, nom, slug, adresse, stripe_account_id, rdv_delai_annulation_heures),
       prestation:rdv_prestations(nom)
     `
@@ -264,7 +266,7 @@ export async function POST(request) {
           heure_fin:    rdv.heure_fin,
           duree_minutes:rdv.duree_minutes,
           commercant_nom:commercant?.nom || 'Yoppaa',
-          commercant_adresse: commercant?.adresse || '',
+          commercant_adresse: adresseRendezVous({ ...rdv, commercant }),
           prestation_nom: rdv.prestation?.nom || 'Rendez-vous',
           client_email: rdv.client_email,
           client_nom:   [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' '),

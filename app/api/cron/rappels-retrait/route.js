@@ -38,6 +38,7 @@ import { envoyerPushParExternalId } from '@/lib/onesignal'
 import { referenceCommande } from '@/lib/numero-commande'
 import { rappelAEnvoyer, texteRappelRetrait, RAPPEL_TROP_TARD_HEURES } from '@/lib/rappels-retrait'
 import { rdvPorteLesProduits } from '@/lib/ecran-retrait'
+import { adresseRendezVous } from '@/lib/lieu-fige'
 
 export async function GET(request) {
   const authHeader = request.headers.get('authorization') || ''
@@ -63,6 +64,7 @@ export async function GET(request) {
       .select(`
         id, numero_commande, numero_prefixe, pret_at, rappel_retrait_nb,
         client_email, client_prenom, client_nom, mode_retrait, rdv_reservation_id,
+        lieu_id, lieu_libelle, lieu_adresse,
         commercant:commercants(nom, adresse, categorie),
         rdv:rdv_reservations!commandes_rdv_reservation_id_fkey(id, statut)
       `)
@@ -136,7 +138,7 @@ export async function GET(request) {
             html: emailRappelRetrait({
               yopper_prenom: cmd.client_prenom || 'Yopper',
               commercant_nom: cmd.commercant?.nom,
-              commercant_adresse: cmd.commercant?.adresse,
+              commercant_adresse: adresseRendezVous({ ...cmd, commercant: cmd.commercant }),
               numero_commande: reference,
               palier: decision.palier,
               texte: texte.corps,

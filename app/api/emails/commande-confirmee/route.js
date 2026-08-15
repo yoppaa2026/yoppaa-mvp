@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailCommandeConfirmee, emailNouvelleCommandeCommercant } from '@/lib/resend'
 import { referenceCommande } from '@/lib/numero-commande'
+import { adresseRendezVous } from '@/lib/lieu-fige'
 
 export async function POST(request) {
   try {
@@ -31,6 +32,7 @@ export async function POST(request) {
         id, numero_commande, numero_prefixe, total, notes_client, date_commande,
         client_email, client_prenom, client_nom, client_telephone,
         annulation_token,
+        lieu_id, lieu_libelle, lieu_adresse,
         commercant:commercants(id, nom, slug, adresse, email, notif_mode, delai_annulation_heures),
         creneau:creneaux(heure_debut, heure_fin),
         articles:commande_articles(quantite, prix_unitaire, prix_total, option_libelle, article:articles(nom))
@@ -65,7 +67,7 @@ export async function POST(request) {
         const html = emailCommandeConfirmee({
           yopper_prenom:           cmd.client_prenom || 'Yopper',
           commercant_nom:          cmd.commercant?.nom || '',
-          commercant_adresse:      cmd.commercant?.adresse || '',
+          commercant_adresse:      adresseRendezVous({ ...cmd, commercant: cmd.commercant }),
           commercant_slug:         cmd.commercant?.slug || '',
           numero_commande:         referenceCommande(cmd),
           articles:                articlesFlat,

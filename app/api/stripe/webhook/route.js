@@ -32,6 +32,7 @@ import { recupererFraisStripe, ventilerFrais } from '@/lib/stripe-frais'
 import { crediterFidelite } from '@/lib/fidelite-server'
 import { canDo } from '@/lib/plans'
 import { contratDepuisFormule } from '@/lib/abonnements'
+import { adresseRendezVous } from '@/lib/lieu-fige'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { champsLieuPour } from '@/lib/lieu-fige'
@@ -870,6 +871,7 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       acompte_paye_en_ligne, acompte_montant,
       client_email, client_prenom, client_nom, client_telephone, notes_client,
       annulation_token, commande_id,
+      lieu_id, lieu_libelle, lieu_adresse,
       commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode, infos_pratiques),
       prestation:rdv_prestations(nom),
       praticien:rdv_praticiens(prenom, nom, couleur_hex)
@@ -914,7 +916,7 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       heure_fin: rdv.heure_fin,
       prestation_nom: rdv.prestation.nom,
       commercant_nom: rdv.commercant.nom,
-      commercant_adresse: rdv.commercant.adresse || '',
+      commercant_adresse: adresseRendezVous(rdv),
       commercant_telephone: rdv.commercant.telephone,
       commercant_email: rdv.commercant.email,
       // ATTENDEE : sans lui, iOS ne propose pas le calendrier.
@@ -931,7 +933,7 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
     const html = emailRdvConfirme({
       yopper_prenom:           rdv.client_prenom || 'Yopper',
       commercant_nom:          rdv.commercant.nom,
-      commercant_adresse:      rdv.commercant.adresse || '',
+      commercant_adresse:      adresseRendezVous(rdv),
       commercant_slug:         rdv.commercant.slug || '',
       prestation_nom:          rdv.prestation.nom,
       date_rdv:                rdv.date_rdv,

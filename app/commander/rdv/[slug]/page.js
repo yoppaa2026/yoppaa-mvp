@@ -47,6 +47,8 @@ import BonCadeauModal from '../../BonCadeauModal'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 import BlocAbonnements from './BlocAbonnements'
 import { formuleVendableEnLigne } from '@/lib/abonnements'
+import { lieuxDuJour, estItinerant } from '@/lib/lieux-activite'
+import { jourLocalISO } from '@/lib/timezone'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Lock, Flame, Star, Phone, Calendar } from 'lucide-react'
 
@@ -189,6 +191,9 @@ export default function CommanderRdvSlug() {
   // Les formules d'abonnement mises en vente par le commerçant. La politique
   // RLS ne rend visibles que celles qu'il a explicitement publiées.
   const [formulesAbo, setFormulesAbo] = useState([])
+  // Les endroits où ce commerçant exerce. Sans eux, la fiche annonce le siège
+  // social, donc le domicile de qui s'est inscrit chez lui.
+  const [lieuxActivite, setLieuxActivite] = useState([])
   const [creneauxConfig, setCreneauxConfig] = useState([])  // les rdv_creneaux du commerçant
   const [praticiens, setPraticiens] = useState([])          // rdv_praticiens actifs
   const [junctionMap, setJunctionMap] = useState({})        // { prestation_id: [praticien_id, ...] }
@@ -375,6 +380,33 @@ export default function CommanderRdvSlug() {
   // une erreur au paiement. Sans le module de rendez-vous, il n'y a pas de
   // tunnel où le déposer : le panier n'irait nulle part, et les produits se
   // vendent alors depuis la boutique.
+  // ─── OÙ TROUVER CE COMMERÇANT ────────────────────────────────────────────
+  //
+  // ⚠️ `jourLocalISO` et PAS `toISOString()` : minuit heure belge, c'est 22h la
+  // veille en temps universel. Entre minuit et deux heures du matin, la fiche
+  // chercherait le lieu d'HIER. Même garde que sur la fiche boutique.
+  const lieuxAujourdhui = lieuxDuJour({
+    commercant,
+    lieux: lieuxActivite,
+    jour: jourLocalISO(new Date()),
+  })
+  // Le premier de la liste est la réponse la plus précise à « où es-tu
+  // aujourd'hui » : l'exceptionnel, sinon la tournée du jour, sinon un lieu fixe.
+  const emplacementDuJour = lieuxAujourdhui[0] || null
+  const adresseAffichee = emplacementDuJour?.adresse || commercant?.adresse || ''
+  // Le commerce bouge-t-il ? La question se lit sur ses lieux, jamais sur son
+  // métier : un food truck et une professeure de yoga n'ont pas le même métier
+  // mais exactement le même besoin.
+  const commerceItinerant = estItinerant(lieuxActivite)
+  // ⚠️ ANNONCER SEULEMENT L'ENDROIT DU JOUR NE SUFFIT PAS pour qui bouge. Une
+  // professeure qui donne cours dans trois salles et ne travaille pas
+  // aujourd'hui aurait une fiche muette, ou pire, annonçant son siège.
+  const semaineItinerante = commerceItinerant
+    ? ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+        .map(j => ({ jour: j, lieux: lieuxActivite.filter(l => l.actif !== false && l.type === 'hebdo' && l.jour_semaine === j) }))
+        .filter(x => x.lieux.length > 0)
+    : []
+
   const produitsAchetables = canDo(commercant?.plan, 'commande')
     && commercant?.stripe_account_charges_enabled === true
     && !commercant?._rdvDesactive
@@ -657,6 +689,31 @@ export default function CommanderRdvSlug() {
         if (errArts) console.warn('[rdv fiche] fetch produits KO', errArts.message)
         if (annule) return
         setProduits(arts || [])
+      }
+
+      // ⚠️ OÙ SE PASSE L'ACTIVITÉ, ET LE MODULE LIEUX N'ÉTAIT JAMAIS ARRIVÉ ICI.
+      //
+      // Cette fiche affichait `commercants.adresse` en direct, c'est-à-dire le
+      // SIÈGE SOCIAL, sans jamais consulter les lieux. Une professeure de yoga
+      // inscrite à son domicile mais qui donne cours en salle envoyait donc ses
+      // clientes CHEZ ELLE, et un food truck annonçait l'adresse de son dépôt.
+      // C'est exactement le défaut que le module du 13/08 devait corriger : il
+      // a été branché sur l'accueil et sur la fiche boutique, jamais sur celle
+      // des services, qui est pourtant la seule que voit un métier de service.
+      //
+      // ⚠️ ET C'EST CHARGÉ AVANT LE POINT DE SORTIE ci-dessous. Un commerce qui
+      // n'a pas activé la prise de rendez-vous affiche quand même sa fiche, et
+      // il a autant besoin de dire où il est. C'est le cas du commerce sous les
+      // yeux d'Alex au moment où il a signalé le défaut.
+      {
+        const { data: lieuxData, error: errLieux } = await supabase
+          .from('commercant_lieux')
+          .select('*')
+          .eq('commercant_id', c.id)
+          .eq('actif', true)
+        if (errLieux) console.warn('[rdv fiche] fetch lieux KO', errLieux.message)
+        if (annule) return
+        setLieuxActivite(lieuxData || [])
       }
 
       if (!c.rdv_actif) {
@@ -1698,17 +1755,26 @@ export default function CommanderRdvSlug() {
                   </div>
                 )}
 
-                {/* Actions (adresse + appeler, alignées sur le pattern fiche commerce) */}
+                {/* Actions (adresse + appeler, alignées sur le pattern fiche commerce)
+                    ⚠️ L'ADRESSE VIENT DES LIEUX, PAS DU SIÈGE. Voir le
+                    commentaire du chargement : cette fiche envoyait les clients
+                    au domicile de qui s'est inscrit chez lui. */}
                 <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', flexWrap: 'nowrap' }}>
-                  {commercant.adresse && (
-                    <button className="action-btn" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(commercant.adresse)}`, '_blank')}
+                  {adresseAffichee && (
+                    <button className="action-btn" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(adresseAffichee)}`, '_blank')}
                       style={{ flex: 1, minWidth: 0, justifyContent: 'flex-start' }}
-                      aria-label={`Ouvrir ${commercant.adresse} dans Maps`}>
+                      aria-label={`Ouvrir ${adresseAffichee} dans Maps`}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                         <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
                         <circle cx="12" cy="10" r="3"/>
                       </svg>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{commercant.adresse}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                        {/* Le NOM de l'endroit d'abord quand il y en a un : « Salle
+                            Saint-Roch » dit plus à une cliente qu'un numéro de rue. */}
+                        {emplacementDuJour?.libelle && emplacementDuJour.source !== 'siege'
+                          ? `${emplacementDuJour.libelle} · ${adresseAffichee}`
+                          : adresseAffichee}
+                      </span>
                     </button>
                   )}
                   {commercant.telephone && (
@@ -1722,6 +1788,37 @@ export default function CommanderRdvSlug() {
                     </a>
                   )}
                 </div>
+
+                {/* ⚠️ OÙ LE TROUVER CETTE SEMAINE, pour qui bouge.
+                    Annoncer seulement l'endroit du jour laisse une fiche muette
+                    les jours sans cours, et une professeure qui donne cours dans
+                    trois salles serait introuvable six jours sur sept. */}
+                {semaineItinerante.length > 0 && (
+                  <div style={{ marginTop: 12, background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 12, padding: '10px 12px' }}>
+                    <p style={{ margin: '0 0 6px', fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                      Où me trouver cette semaine
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {semaineItinerante.map(({ jour, lieux }) => (
+                        <div key={jour} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: '0.76rem', lineHeight: 1.5 }}>
+                          <span style={{ fontWeight: 800, color: T.deep, textTransform: 'capitalize', minWidth: 68, flexShrink: 0 }}>{jour}</span>
+                          <span style={{ color: T.muted, minWidth: 0 }}>
+                            {/* Un jour peut porter DEUX emplacements, le midi et
+                                le soir. Les écraser l'un l'autre ferait rater la
+                                moitié des rendez-vous possibles. */}
+                            {lieux.map((l, i) => (
+                              <span key={l.id || i}>
+                                {i > 0 && <span style={{ color: T.pale }}> · </span>}
+                                <strong style={{ color: T.deep, fontWeight: 700 }}>{l.libelle || l.adresse}</strong>
+                                {l.heure_debut && l.heure_fin ? ` ${String(l.heure_debut).slice(0, 5)}–${String(l.heure_fin).slice(0, 5)}` : ''}
+                              </span>
+                            ))}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Carte de fidélité juste sous les informations du commerce
                     (Alex, 05/08) : elle parle de MA relation avec ce commerce et

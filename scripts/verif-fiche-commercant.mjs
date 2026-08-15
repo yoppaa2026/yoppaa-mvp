@@ -882,11 +882,18 @@ for (const jargon of ['Mes lieux fixes', 'Ma tournée habituelle', 'Emplacements
   verifier(`« ${jargon} » ne s’affiche plus au commerçant`,
     !new RegExp(`>${jargon}|${jargon}</`).test(configSrc))
 }
-// ⚠️ ET CE QUI COMPTE VRAIMENT : les trois blocs se distinguent par leur DURÉE,
-// dite en toutes lettres. C'est ce qu'Alex a retenu après trois propositions :
-// un nom concret ne suffit pas si rien ne dit combien de temps il vaut.
+// ⚠️ ET CE QUI COMPTE VRAIMENT : chaque bloc dit COMBIEN DE TEMPS il vaut, en
+// toutes lettres. C'est ce qu'Alex a retenu après trois propositions : un nom
+// concret ne suffit pas si rien ne dit sa durée.
+//
+// ⚠️ LA LISTE A MAIGRI LE 15/08, et c'est le point : « Valables tous les
+// jours » décrivait une adresse permanente qui coexistait avec le planning et
+// le contredisait. Alex : « ce n'est pas clair », avec un « IDEM ? » entre les
+// deux. Le bloc ne s'affiche plus pour un commerce qui bouge, donc sa phrase
+// n'a plus à exister. Restent les deux durées qui ne se marchent pas dessus :
+// ce qui se répète, et ce qui ne vaut qu'un jour.
 verifier('la section porte un titre qui parle', /Où me trouver/.test(configSrc))
-for (const duree of ['Valables tous les jours', 'Se répète chaque semaine', 'Ne valent qu’un jour donné']) {
+for (const duree of ['Se répète chaque semaine', 'Remplace ton planning un jour donné']) {
   verifier(`un bloc dit sa durée : « ${duree} »`, configSrc.includes(duree))
 }
 

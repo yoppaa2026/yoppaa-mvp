@@ -4068,7 +4068,29 @@ const JOURS_FT = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', '
 function parHeure(a, b) {
   return String(a?.heure_debut || '').localeCompare(String(b?.heure_debut || ''))
 }
-function SectionLieux({ commercantId, toast }) {
+// ⚠️ DEUX CAS, ET RIEN ENTRE LES DEUX (décision d'Alex du 15/08).
+//
+// Cette section empilait QUATRE sous-parties pour tout le monde : des adresses
+// valables toute l'année, un raccourci « où je suis aujourd'hui », un planning
+// hebdomadaire et des dates particulières. Alex, en la relisant : « ce n'est
+// pas clair », avec une flèche entre « Mes adresses » et « Mon planning » et un
+// « IDEM ? ». Il avait raison : les deux répondent à la même question, et rien
+// ne disait laquelle l'emportait.
+//
+// La réponse tient en une phrase : **soit une adresse fixe, soit un planning
+// par jour.** Un commerce ne peut pas être les deux à la fois, et c'est déjà la
+// question posée juste au-dessus, « Où tes clients te trouvent-ils ? ».
+//
+//   • adresse FIXE  → une adresse, celle du siège ou une autre. Rien d'autre.
+//   • adresse MOBILE → le planning de la semaine, jusqu'à deux endroits par
+//     jour, plus les emplacements exceptionnels. Pas d'adresse permanente, qui
+//     contredirait le planning sans qu'on sache qui gagne.
+//
+// ⚠️ LE CAS ÉCARTÉ, ET IL FAUT LE DIRE : le salon à DEUX adresses permanentes.
+// Il redevient possible en passant en mobile et en posant ses deux endroits sur
+// tous les jours. Les lieux déjà enregistrés ne sont pas supprimés, seulement
+// masqués dans le mode où ils n'ont pas de sens.
+function SectionLieux({ commercantId, toast, mobile = false }) {
   const [emps, setEmps] = useState([])
   const [loading, setLoading] = useState(true)
   // « Aujourd'hui je suis à… » : zéro friction, 2 champs obligatoires + 1 bouton
@@ -4343,12 +4365,22 @@ function SectionLieux({ commercantId, toast }) {
     <div style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: 16, marginTop: 16 }}>
       <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Où me trouver</p>
       <p style={{ margin: '0 0 14px', fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
-        Les endroits où tes clients viennent te trouver, et quand. Ta fiche annonce
-        celui du jour, et une date exceptionnelle remplace ta semaine type ce jour-là.
-        <span style={{ display: 'block', marginTop: 4 }}>
-          Les heures que tu poses ici deviennent tes horaires d’ouverture : tu n’as
-          rien à saisir deux fois.
-        </span>
+        {mobile ? (
+          <>
+            Tu as répondu que tu changes d’endroit : c’est donc ton planning qui dit
+            où tu es, jour par jour. Ta fiche annonce l’endroit du jour, et un
+            emplacement exceptionnel remplace ton planning ce jour-là.
+            <span style={{ display: 'block', marginTop: 4 }}>
+              Les heures que tu poses ici deviennent tes horaires d’ouverture : tu n’as
+              rien à saisir deux fois.
+            </span>
+          </>
+        ) : (
+          <>
+            Tu as répondu que tes clients te trouvent toujours au même endroit.
+            Une seule adresse suffit donc, et tes horaires se règlent au-dessus.
+          </>
+        )}
       </p>
 
       {/* ─── LE RAPPEL, et il n'est pas décoratif ────────────────────────────
@@ -4373,17 +4405,19 @@ function SectionLieux({ commercantId, toast }) {
         </div>
       )}
 
-      {/* ─── Lieux fixes ─────────────────────────────────────────────────────
-          Le salon à deux adresses, l'atelier du commerçant inscrit à son
-          domicile. Ils valent tous les jours, sans jour ni date. */}
-      <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mes adresses</p>
-      <p style={{ margin: '0 0 8px', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>Valables tous les jours, toute l’année.</p>
+      {/* ─── UNE SEULE ADRESSE, et seulement quand le commerce ne bouge pas ──
+          ⚠️ En mode mobile, ce bloc est MASQUÉ. Une adresse valable tous les
+          jours et un planning qui dit où l'on est chaque jour se contredisent,
+          et le commerçant n'a aucun moyen de savoir laquelle sa fiche retient.
+          C'est le « IDEM ? » d'Alex, et il n'avait pas de réponse. */}
+      {!mobile && (<>
+      <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mon adresse</p>
+      <p style={{ margin: '0 0 8px', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>
+        {permanents.length === 0
+          ? 'Ta fiche utilise l’adresse de ton inscription. Tu peux en indiquer une autre ici.'
+          : 'Cette adresse remplace celle de ton inscription sur ta fiche.'}
+      </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-        {permanents.length === 0 && (
-          <p style={{ margin: 0, fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
-            Aucune adresse pour l’instant. Ta fiche utilise celle de ton siège social, sauf si tu as répondu que tu changes d’endroit.
-          </p>
-        )}
         {permanents.map(e => (
           <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 10, border: `1px solid ${T.hairline}`, padding: '8px 12px' }}>
             <span style={{ flex: 1, minWidth: 0 }}>
@@ -4397,58 +4431,27 @@ function SectionLieux({ commercantId, toast }) {
             <button onClick={() => supprimer(e.id)} style={{ ...btnMini, color: '#DC2626', borderColor: '#FCA5A5', flexShrink: 0 }}>Retirer</button>
           </div>
         ))}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderRadius: 10, border: `1px dashed ${T.pale}`, padding: '10px 12px' }}>
-          <input style={field} placeholder="Nom du lieu (ex : Salle Saint-Roch)" value={perm.libelle}
-            onChange={e => setPerm(p => ({ ...p, libelle: e.target.value }))}/>
-          <ChampAdresse style={field} valeur={perm.adresse} position={perm}
-            placeholder="Adresse complète (pour l’itinéraire)"
-            couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted }}
-            onTexte={v => setPerm(p => ({ ...p, adresse: v, latitude: null, longitude: null }))}
-            onChoisir={({ adresse, latitude, longitude }) => setPerm(p => ({ ...p, adresse, latitude, longitude }))}/>
-          <button onClick={ajouterPermanent} style={{ ...btnMini, alignSelf: 'flex-start' }}>Ajouter ce lieu</button>
-        </div>
-      </div>
-
-      {/* ─── Lieux du jour ───────────────────────────────────────────────────
-          Pour qui change d'endroit : food truck, cours donnés dans plusieurs
-          salles, marchés. */}
-      {/* Ce bloc ne se range pas par durée comme les trois autres : c'est un
-          GESTE, celui d'annoncer sa position du jour en deux champs et un
-          bouton. On le nomme donc pour ce qu'il fait. */}
-      <p style={{ margin: '14px 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-        Où je suis aujourd’hui
-      </p>
-      <p style={{ margin: '0 0 8px', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>
-        Juste pour aujourd’hui, sans toucher à ton planning.
-      </p>
-
-      {/* Aujourd'hui : état + déclaration rapide */}
-      <div style={{ background: T.pale, borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
-        <p style={{ margin: '0 0 8px', fontSize: 12.5, fontWeight: 800, color: T.deep }}>
-          {effectifsAuj.length === 0
-            ? 'Aucun emplacement annoncé aujourd’hui : ta fiche affiche « Prochain emplacement annoncé bientôt ».'
-            : <>Aujourd’hui : {effectifsAuj.map(e => `${e.libelle}${fmtHeures(e) ? ` · ${fmtHeures(e)}` : ''}`).join(' puis ')}
-              {effectifAuj?.type === 'hebdo' ? ' (tournée habituelle)' : ''}</>}
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <input style={field} placeholder="Nom du lieu (ex : Place du Marché)" value={auj.libelle}
-            onChange={e => setAuj(p => ({ ...p, libelle: e.target.value }))}/>
-          <ChampAdresse style={field} valeur={auj.adresse} position={auj}
-            placeholder="Adresse complète (pour l’itinéraire)"
-            couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted }}
-            onTexte={v => setAuj(p => ({ ...p, adresse: v, latitude: null, longitude: null }))}
-            onChoisir={({ adresse, latitude, longitude }) => setAuj(p => ({ ...p, adresse, latitude, longitude }))}/>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input type="time" style={{ ...field, flex: 1 }} value={auj.heure_debut} onChange={e => setAuj(p => ({ ...p, heure_debut: e.target.value }))}/>
-            <span style={{ fontSize: 12, color: T.muted }}>→</span>
-            <input type="time" style={{ ...field, flex: 1 }} value={auj.heure_fin} onChange={e => setAuj(p => ({ ...p, heure_fin: e.target.value }))}/>
+        {/* ⚠️ UNE SEULE, PAS DEUX. Le formulaire disparaît dès qu'une adresse
+            est posée : deux adresses permanentes rouvriraient exactement
+            l'ambiguïté qu'on vient de fermer. Pour deux endroits, il faut
+            répondre « je change d'endroit » au-dessus. */}
+        {permanents.length === 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderRadius: 10, border: `1px dashed ${T.pale}`, padding: '10px 12px' }}>
+            <input style={field} placeholder="Nom du lieu (ex : Salle Saint-Roch)" value={perm.libelle}
+              onChange={e => setPerm(p => ({ ...p, libelle: e.target.value }))}/>
+            <ChampAdresse style={field} valeur={perm.adresse} position={perm}
+              placeholder="Adresse complète (pour l’itinéraire)"
+              couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted }}
+              onTexte={v => setPerm(p => ({ ...p, adresse: v, latitude: null, longitude: null }))}
+              onChoisir={({ adresse, latitude, longitude }) => setPerm(p => ({ ...p, adresse, latitude, longitude }))}/>
+            <button onClick={ajouterPermanent} style={{ ...btnMini, alignSelf: 'flex-start' }}>Utiliser cette adresse</button>
           </div>
-          <button onClick={declarerAujourdhui}
-            style={{ padding: '10px 14px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-            {ponctuelAuj ? 'Remplacer l’emplacement du jour' : 'Je suis ici aujourd’hui'}
-          </button>
-        </div>
+        )}
       </div>
+      </>)}
+
+      {/* ─── TOUT CE QUI SUIT NE CONCERNE QUE LES COMMERCES QUI BOUGENT ────── */}
+      {mobile && (<>
 
       {/* Tournée hebdo type */}
       <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mon planning</p>
@@ -4543,9 +4546,51 @@ function SectionLieux({ commercantId, toast }) {
         </label>
       )}
 
+      {/* ─── Lieux du jour ───────────────────────────────────────────────────
+          Pour qui change d'endroit : food truck, cours donnés dans plusieurs
+          salles, marchés. */}
+      {/* Ce bloc ne se range pas par durée comme les trois autres : c'est un
+          GESTE, celui d'annoncer sa position du jour en deux champs et un
+          bouton. On le nomme donc pour ce qu'il fait. */}
+      <p style={{ margin: '14px 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+        Emplacement exceptionnel
+      </p>
+      <p style={{ margin: '0 0 8px', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>
+        Remplace ton planning un jour donné, sans y toucher. Pour aujourd’hui,
+        c’est ici ; pour un jour à venir, c’est juste en dessous.
+      </p>
+
+      {/* Aujourd'hui : état + déclaration rapide */}
+      <div style={{ background: T.pale, borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
+        <p style={{ margin: '0 0 8px', fontSize: 12.5, fontWeight: 800, color: T.deep }}>
+          {effectifsAuj.length === 0
+            ? 'Aucun emplacement annoncé aujourd’hui : ta fiche affiche « Prochain emplacement annoncé bientôt ».'
+            : <>Aujourd’hui : {effectifsAuj.map(e => `${e.libelle}${fmtHeures(e) ? ` · ${fmtHeures(e)}` : ''}`).join(' puis ')}
+              {effectifAuj?.type === 'hebdo' ? ' (tournée habituelle)' : ''}</>}
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <input style={field} placeholder="Nom du lieu (ex : Place du Marché)" value={auj.libelle}
+            onChange={e => setAuj(p => ({ ...p, libelle: e.target.value }))}/>
+          <ChampAdresse style={field} valeur={auj.adresse} position={auj}
+            placeholder="Adresse complète (pour l’itinéraire)"
+            couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted }}
+            onTexte={v => setAuj(p => ({ ...p, adresse: v, latitude: null, longitude: null }))}
+            onChoisir={({ adresse, latitude, longitude }) => setAuj(p => ({ ...p, adresse, latitude, longitude }))}/>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="time" style={{ ...field, flex: 1 }} value={auj.heure_debut} onChange={e => setAuj(p => ({ ...p, heure_debut: e.target.value }))}/>
+            <span style={{ fontSize: 12, color: T.muted }}>→</span>
+            <input type="time" style={{ ...field, flex: 1 }} value={auj.heure_fin} onChange={e => setAuj(p => ({ ...p, heure_fin: e.target.value }))}/>
+          </div>
+          <button onClick={declarerAujourdhui}
+            style={{ padding: '10px 14px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+            {ponctuelAuj ? 'Remplacer l’emplacement du jour' : 'Je suis ici aujourd’hui'}
+          </button>
+        </div>
+      </div>
+
       {/* Ponctuels à venir (marchés, événements) */}
-      <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mes dates particulières</p>
-      <p style={{ margin: '0 0 8px', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>Ne valent qu’un jour donné, et remplacent ton planning ce jour-là.</p>
+      <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>À venir</p>
+      <p style={{ margin: '0 0 8px', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>Un marché, un salon, un stage : annonce-le à l’avance.</p>
       {futurs.length === 0 && !showFutur && (
         <p style={{ margin: '0 0 8px', fontSize: 12, color: T.muted }}>Aucune pour l’instant. Un marché, un salon, un stage : annonce-le à l’avance.</p>
       )}
@@ -4585,6 +4630,7 @@ function SectionLieux({ commercantId, toast }) {
       ) : (
         <button style={btnMini} onClick={() => setShowFutur(true)}>+ Planifier un emplacement</button>
       )}
+      </>)}
     </div>
   )
 }
@@ -5176,7 +5222,11 @@ function TabProfil({ commercantId, toast, onSaved }) {
             rapport, le même besoin.
             Elle s'affiche donc pour tout le monde : chacun y déclare ses lieux
             fixes, et ceux qui bougent y posent leur tournée. */}
-        <SectionLieux commercantId={commercantId} toast={toast}/>
+        {/* ⚠️ LA MÊME QUESTION COMMANDE LES DEUX. `siegeEstLeLieu` pilote déjà
+            la grille d'horaires ci-dessus ; elle pilote maintenant aussi ce que
+            cette section propose, sinon le commerçant lit deux réponses à la
+            même question sans savoir laquelle sa fiche retiendra. */}
+        <SectionLieux commercantId={commercantId} toast={toast} mobile={siegeEstLeLieu === false}/>
       </>)}
 
       {/* ─── REGLAGES : le fonctionnement, pas la vitrine ─────────────────── */}

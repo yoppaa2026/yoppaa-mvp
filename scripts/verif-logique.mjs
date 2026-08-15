@@ -1170,6 +1170,60 @@ for (const [nom, chemin] of CANAUX_LIEU) {
     !/commercant[?]?\.adresse \|\| ''/.test(src))
 }
 
+// ⚠️ LES FICHES PUBLIQUES AUSSI, ET C'EST CE QUI MANQUAIT (Alex, 15/08).
+//
+// Le module LIEUX du 13/08 a été branché sur l'accueil, sur la fiche boutique
+// et sur les quatre canaux de notification. **Jamais sur la fiche des
+// SERVICES**, qui est pourtant la seule que voit un métier de service. Elle
+// affichait `commercants.adresse` en direct, donc le SIÈGE SOCIAL : une
+// professeure de yoga inscrite à son domicile envoyait ses clientes chez elle,
+// et un food truck annonçait l'adresse de son dépôt.
+//
+// Ce banc a couvert le geste (graver) et les emails (annoncer), en oubliant
+// LIRE. On liste donc les deux fiches, et chacune doit passer par `lieuxDuJour`
+// avant d'afficher quoi que ce soit.
+const FICHES_PUBLIQUES = [
+  ['la fiche boutique', 'app/commander/[slug]/page.js'],
+  ['la fiche des services', 'app/commander/rdv/[slug]/page.js'],
+]
+for (const [nom, chemin] of FICHES_PUBLIQUES) {
+  const src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
+  verifier(`${nom} demande où se passe l’activité`, /lieuxDuJour\(\{/.test(src))
+  verifier(`${nom} charge les lieux du commerçant`, /from\('commercant_lieux'\)/.test(src))
+  // ⚠️ ANCRÉ SUR L'AFFICHAGE, pas sur l'appel : appeler `lieuxDuJour` sans se
+  // servir du résultat laisserait le test vert et le client au mauvais endroit.
+  // C'est la cinquième fois que ce projet écrit un test qui vérifie qu'un
+  // morceau de code EXISTE au lieu de vérifier ce qu'il fait.
+  verifier(`${nom} affiche l’adresse qui en sort`, /adresseAffichee/.test(src))
+  verifier(`${nom} n’affiche plus le siège en direct`,
+    !/encodeURIComponent\(commercant\??\.adresse\)/.test(src))
+}
+// Et le jour se lit en heure BELGE. Entre minuit et deux heures du matin,
+// `toISOString()` rend la veille, et la fiche annoncerait le lieu d'hier.
+for (const [nom, chemin] of FICHES_PUBLIQUES) {
+  const src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
+  verifier(`${nom} cherche le lieu du bon jour`, /jour: jourLocalISO\(new Date\(\)\)/.test(src))
+}
+
+// ⚠️ DEUX CAS ET RIEN ENTRE LES DEUX, côté réglage (Alex, 15/08).
+//
+// La section « Où me trouver » empilait quatre sous-parties pour tout le monde,
+// dont une adresse valable toute l'année ET un planning par jour. Les deux
+// répondent à la même question et rien ne disait laquelle l'emportait : « ce
+// n'est pas clair », avec un « IDEM ? » entre les deux.
+const srcConfigLieux = sansCommentaires(
+  readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+verifier('la section des lieux sait si le commerce bouge',
+  /function SectionLieux\(\{ commercantId, toast, mobile/.test(srcConfigLieux))
+verifier('et la réponse vient de la question déjà posée',
+  /mobile=\{siegeEstLeLieu === false\}/.test(srcConfigLieux))
+// ⚠️ Un commerce qui bouge n'a PAS d'adresse permanente : elle contredirait son
+// planning. Le bloc est donc masqué, pas seulement déplacé.
+verifier('un commerce qui bouge ne se voit pas proposer d’adresse fixe',
+  /\{!mobile && \(<>/.test(srcConfigLieux))
+verifier('et un commerce fixe ne se voit pas proposer de planning',
+  /\{mobile && \(<>/.test(srcConfigLieux))
+
 const ECRANS_QUI_GRAVENT = [
   ['la réservation par le client', 'app/commander/rdv/[slug]/page.js'],
   ['le paiement d’acompte', 'app/api/stripe/webhook/route.js'],

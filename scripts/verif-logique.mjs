@@ -1193,8 +1193,19 @@ verifier('et la calcule au moment de créer le rendez-vous',
   /payload\.place_no = premierePlaceLibre\(presta,/.test(srcWebhookRdv))
 // Le moteur reçoit la capacité, sans quoi un cours se fermerait au premier
 // inscrit et personne ne pourrait jamais être deux.
-egal('l’écran passe la capacité au moteur, aux deux endroits qui comptent',
-  (srcResaRdv.match(/capacite: capacitePrestation\(prestationChoisie\)/g) || []).length, 2)
+//
+// ⚠️ TROIS ENDROITS DÉCIDENT, ET LE TROISIÈME A MANQUÉ PENDANT TROIS JOURS
+// (défaut trouvé par Alex le 16/08) : la grille des créneaux, le mini-calendrier
+// qui compte les jours encore libres, et le CONTRÔLE D'AVANT INSERTION. Ce
+// dernier ignorait la capacité, donc la grille annonçait dix places restantes
+// et le bouton de confirmation refusait la troisième inscrite.
+//
+// Ce test comptait « deux endroits », et il avait raison le jour où il a été
+// écrit. Un compte se périme ; ce qui ne se périme pas, c'est que TOUT endroit
+// qui tranche la disponibilité doit connaître la capacité. Si ce nombre
+// descend, c'est qu'un de ces trois l'a reperdue.
+egal('les trois endroits qui tranchent connaissent la capacité',
+  (srcResaRdv.match(/capacite: capacitePrestation\(prestationChoisie\)/g) || []).length, 3)
 // Un cours complet reste affiché, grisé : le filtre laisse passer ce motif.
 verifier('un cours complet reste affiché',
   /slots\.filter\(s => !s\.pris \|\| s\.motif === 'complet'\)/.test(srcResaRdv))

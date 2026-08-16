@@ -81,7 +81,7 @@ function formatPrix(prestation) {
   return 'Sur demande'
 }
 
-import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos } from '@/lib/rdv-slots'
+import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation } from '@/lib/rdv-slots'
 
 // ─── Mini-calendrier mensuel (deroulant depuis le picker horizontal de 14 jours) ─
 // Affiche les 60 jours regroupes par mois. Cellules cliquables si ouvert, gris si ferme.
@@ -1062,15 +1062,25 @@ export default function CommanderRdvSlug() {
       }
       const busyFiltres = filtrerReservationsPourSlots(busy, praticienChoisi, praticiensEligibles)
       console.info('[rdv] reservations bloquantes apres filtre praticien', busyFiltres)
-      const overlap = busyFiltres.some(r => {
-        const rStart = timeToMinutes(r.heure_debut)
-        const rEnd   = timeToMinutes(r.heure_fin)
-        const ov = debutMin < rEnd && finMin > rStart
-        if (ov) console.warn('[rdv] overlap', { nouveau: `${debutMin}-${finMin}`, existant: `${rStart}-${rEnd}` })
-        return ov
+      // ⚠️ CE CONTRÔLE REFAISAIT LE CALCUL SANS LA CAPACITÉ (défaut trouvé par
+      // Alex le 16/08). La grille annonçait « 10 places restantes » et ce
+      // garde-fou refusait la troisième inscrite, parce qu'il tenait tout
+      // chevauchement pour un conflit. Il appelle maintenant la MÊME fonction
+      // que la grille : une règle, un seul endroit où elle est écrite.
+      const conflit = conflitReservation({
+        debut: debutMin, fin: finMin,
+        prestationId: prestationChoisie?.id || null,
+        capacite: capacitePrestation(prestationChoisie),
+        reservations: busyFiltres,
       })
-      if (overlap) {
-        setSubmitError('Ce créneau chevauche un RDV déjà pris. Choisis-en un autre.')
+      if (conflit.conflit) {
+        console.warn('[rdv] conflit', { nouveau: `${debutMin}-${finMin}`, raison: conflit.raison, inscrits: conflit.inscrits })
+        // Deux refus, deux raisons, deux phrases. « Ce créneau chevauche un RDV »
+        // devant un cours qui vient d'afficher complet enverrait chercher un
+        // problème qui n'existe pas.
+        setSubmitError(conflit.raison === 'complet'
+          ? 'Ce cours vient d’afficher complet, sa dernière place a été prise. Choisis un autre horaire.'
+          : 'Ce créneau chevauche un RDV déjà pris. Choisis-en un autre.')
         setHeureChoisie(null)
         setSubmitting(false)
         setTimeout(() => allerEtape(2), 1200)
@@ -1870,10 +1880,19 @@ export default function CommanderRdvSlug() {
                   </div>
                 )}
 
-                {/* Horaires complets (collapsible) - meme widget que la fiche alimentaire */}
-                <div style={{ marginTop: 12 }}>
-                  <HorairesSection horaires={commercant.horaires_detail} variant="card"/>
-                </div>
+                {/* Horaires complets (collapsible) - meme widget que la fiche alimentaire
+                    ⚠️ SAUF POUR QUI BOUGE (décision d'Alex, 16/08). Chez un
+                    commerce itinérant, ce sont les EMPLACEMENTS qui portent les
+                    heures : le bloc « Où me trouver cette semaine » juste
+                    au-dessus dit déjà le jour, la salle ET l'horaire. Garder
+                    les deux, c'était afficher deux fois la même chose, et se
+                    contredire dès que la déduction avait pris du retard.
+                    Une vérité, un seul endroit où on la lit. */}
+                {!commerceItinerant && (
+                  <div style={{ marginTop: 12 }}>
+                    <HorairesSection horaires={commercant.horaires_detail} variant="card"/>
+                  </div>
+                )}
               </div>
 
               {/* ─── BANDEAU RDV DÉSACTIVÉ (vitrine publiée mais module RDV pas activé) ─── */}
@@ -2276,7 +2295,16 @@ export default function CommanderRdvSlug() {
                       - Sans preference : tous, avec le nom pour clarifier
                       Evite l'ambiguite du screenshot Alex qui montrait un RDV Carole
                       sur une reservation avec Alex. */}
+                  {/* ⚠️ MUET SUR UN COURS COLLECTIF (décision d'Alex, 16/08).
+                      Sur un cours de douze, ce bloc affichait « 10:00 – 11:00 »
+                      autant de fois qu'il y avait d'inscrites, juste au-dessus
+                      d'une grille qui annonçait dix places libres à cette même
+                      heure. Il donnait donc l'impression d'un agenda saturé, et
+                      disait le contraire de la vérité. Sur un rendez-vous
+                      individuel il garde tout son sens : une heure listée est
+                      une heure réellement perdue. */}
                   {(() => {
+                    if (estCoursCollectif(prestationChoisie)) return null
                     const rdvsAffiches = praticienChoisi
                       ? reservationsJour.filter(r => r.praticien_id === praticienChoisi.id || r.praticien_id === null)
                       : reservationsJour

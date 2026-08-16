@@ -3279,7 +3279,12 @@ export default function CommanderSlug() {
                   )
                 })()}
 
-                {commercant.horaires_detail && <HorairesSection horaires={commercant.horaires_detail}/>}
+                {/* ⚠️ PAS DE GRILLE D'HORAIRES POUR QUI BOUGE (décision d'Alex,
+                    16/08). Le bloc « Où me trouver cette semaine » porte déjà le
+                    jour, l'endroit et l'heure : la grille répétait la même
+                    information, et la contredisait dès que la déduction depuis
+                    les emplacements avait pris du retard. */}
+                {commercant.horaires_detail && !commerceItinerant && <HorairesSection horaires={commercant.horaires_detail}/>}
 
                 {/* Mention discrete + signal Yopper si le plan/feature n'est pas active */}
                 {!peutCommander && !vitrine && (

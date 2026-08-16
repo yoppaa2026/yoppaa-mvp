@@ -8,7 +8,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import {
   timeToMinutes, minutesToTime, jourSemaineDate, isoDate,
-  filtrerReservationsPourSlots, genererSlots, genererJoursDispos,
+  filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation,
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
 import { peutActiverRdv, messageActivationRdv, etatActivationRdv } from '../lib/activation-rdv.js'
@@ -952,6 +952,147 @@ verifier('la phrase de confirmation arrive bien jusqu’à la fenêtre',
 const srcFicheRdv = sansCommentaires(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
 verifier('fiche fermée : le client est invité à téléphoner',
   /pas encore activé la prise de RDV/.test(srcFicheRdv))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LA RÈGLE DU CONFLIT, EXÉCUTÉE (défaut trouvé par Alex le 16/08)
+//
+// Elle vivait en DEUX exemplaires : celui du moteur, qui comptait les places
+// d'un cours collectif, et celui du contrôle d'avant insertion dans le tunnel
+// client, qui les ignorait. La grille annonçait « 10 places restantes » et le
+// bouton « Confirmer mon RDV » répondait « ce créneau chevauche un RDV déjà
+// pris ». Le code était correct des deux côtés, l'un ne savait simplement pas
+// tout ce que l'autre savait.
+//
+// ⚠️ CE N'EST PAS UN CALCUL FAUX, C'EST UNE COPIE QUI N'A PAS SUIVI. Aucun
+// outil ne l'attrape : ni le lint, ni le build, ni ce banc tant qu'il ne
+// vérifiait que le moteur. On EXÉCUTE donc la règle, et on exige que les deux
+// appelants passent par elle.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const COURS = 'p-yoga'
+const AUTRE = 'p-massage'
+// Deux inscrites à 10:00 sur un cours de douze. C'est le cas exact d'Alex.
+const DEUX_INSCRITES = [
+  { heure_debut: '10:00', heure_fin: '11:00', prestation_id: COURS, place_no: 1 },
+  { heure_debut: '10:00', heure_fin: '11:00', prestation_id: COURS, place_no: 2 },
+]
+
+let c = conflitReservation({ debut: 600, fin: 660, prestationId: COURS, capacite: 12, reservations: DEUX_INSCRITES })
+verifier('la troisième inscrite d’un cours de douze passe', !c.conflit, JSON.stringify(c))
+egal('et le compte des inscrites est juste', c.inscrits, 2)
+egal('les places déjà tenues sont rendues', c.placesOccupees, [1, 2])
+
+// ⚠️ LE COMPORTEMENT D'AVANT LES COURS COLLECTIFS, INTACT. Sans capacité, un
+// chevauchement reste un refus : c'est le cas de l'immense majorité des
+// métiers, et c'est ce que ce banc protège depuis le premier jour.
+c = conflitReservation({ debut: 600, fin: 660, reservations: DEUX_INSCRITES })
+verifier('chez un coiffeur, le même horaire reste refusé', c.conflit)
+egal('et le motif est l’occupation', c.raison, 'occupe')
+egal('un rendez-vous individuel ne parle pas de places', c.inscrits, null)
+
+// Un cours PLEIN se ferme, et il le dit avec son propre mot : « ce créneau
+// chevauche un RDV » devant un cours complet enverrait chercher un problème
+// qui n'existe pas.
+const DOUZE = Array.from({ length: 12 }, (_, i) => ({
+  heure_debut: '10:00', heure_fin: '11:00', prestation_id: COURS, place_no: i + 1,
+}))
+c = conflitReservation({ debut: 600, fin: 660, prestationId: COURS, capacite: 12, reservations: DOUZE })
+verifier('un cours plein refuse la treizième', c.conflit)
+egal('et le motif le nomme', c.raison, 'complet')
+
+// ⚠️ UNE AUTRE PRESTATION AU MÊME HORAIRE BLOQUE TOUJOURS. Un massage de 10h à
+// 11h occupe la praticienne : le cours de yoga ne peut pas se tenir en même
+// temps, quel que soit le nombre de places qu'il reste.
+c = conflitReservation({
+  debut: 600, fin: 660, prestationId: COURS, capacite: 12,
+  reservations: [{ heure_debut: '10:00', heure_fin: '11:00', prestation_id: AUTRE, place_no: 1 }],
+})
+verifier('une autre prestation au même horaire bloque le cours', c.conflit)
+egal('et ce n’est pas « complet »', c.raison, 'occupe')
+
+// Un chevauchement PARTIEL n'est pas la même séance : personne ne peut être à
+// deux endroits à la fois, même dans un cours à moitié vide.
+c = conflitReservation({
+  debut: 600, fin: 660, prestationId: COURS, capacite: 12,
+  reservations: [{ heure_debut: '10:30', heure_fin: '11:30', prestation_id: COURS, place_no: 1 }],
+})
+verifier('un cours qui déborde sur un autre est refusé', c.conflit)
+
+// Les deux formes d'entrée qui circulent vraiment : des minutes côté moteur,
+// des heures côté base. Les mélanger était le plus court chemin vers une
+// troisième copie de la règle.
+const enMinutes = conflitReservation({
+  debut: 600, fin: 660, prestationId: COURS, capacite: 12,
+  reservations: [{ start: 600, end: 660, prestation_id: COURS, place_no: 1 }],
+})
+egal('minutes et heures donnent le même verdict', enMinutes.inscrits, 1)
+
+// Rien à côté : on ne refuse personne.
+c = conflitReservation({ debut: 600, fin: 660, prestationId: COURS, capacite: 12, reservations: [] })
+verifier('un agenda vide n’empêche rien', !c.conflit)
+c = conflitReservation({ debut: 600, fin: 660 })
+verifier('et l’absence de réservations ne casse rien', !c.conflit)
+
+// ⚠️ LE FILTRE PAR PRATICIEN PERDAIT LES COLONNES DES COURS. Sa branche « sans
+// préférence » reconstruisait un objet à partir de la clé `heure_debut-heure_fin`,
+// donc sans `prestation_id` ni `place_no`. Deux inscrites sur deux praticiennes
+// différentes fermaient alors un cours de douze, la règle ne pouvant plus
+// reconnaître qu'elles étaient à la MÊME séance.
+const DEUX_PRATICIENNES = [
+  { heure_debut: '10:00:00', heure_fin: '11:00:00', praticien_id: 'pr-1', prestation_id: COURS, place_no: 1 },
+  { heure_debut: '10:00:00', heure_fin: '11:00:00', praticien_id: 'pr-2', prestation_id: COURS, place_no: 2 },
+]
+const bloquantesCours = filtrerReservationsPourSlots(DEUX_PRATICIENNES, null, [{ id: 'pr-1' }, { id: 'pr-2' }])
+verifier('le filtre garde la prestation de chaque réservation',
+  bloquantesCours.length > 0 && bloquantesCours.every(r => r.prestation_id === COURS),
+  JSON.stringify(bloquantesCours))
+verifier('et il garde le numéro de place',
+  bloquantesCours.every(r => r.place_no > 0), JSON.stringify(bloquantesCours))
+c = conflitReservation({ debut: 600, fin: 660, prestationId: COURS, capacite: 12, reservations: bloquantesCours })
+verifier('un cours reste ouvert malgré deux praticiennes occupées', !c.conflit, JSON.stringify(c))
+
+// ─── LES DEUX APPELANTS PASSENT PAR LA RÈGLE ──────────────────────────────
+// ⚠️ Ancré sur l'APPEL, pas sur le nom importé : importer sans appeler
+// laisserait le test vert avec la vieille boucle toujours en place.
+const srcTunnel = sansCommentaires(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+verifier('le tunnel client interroge la règle commune',
+  /conflitReservation\(\{[\s\S]{0,220}?capacite: capacitePrestation\(prestationChoisie\)/.test(srcTunnel))
+verifier('et il ne refait plus le calcul à la main',
+  !/const overlap = busyFiltres\.some/.test(srcTunnel))
+verifier('un cours complet reçoit sa propre phrase',
+  /conflit\.raison === 'complet'/.test(srcTunnel))
+
+const srcMoteur = readFileSync(new URL('../lib/rdv-slots.js', import.meta.url), 'utf8')
+verifier('le moteur de créneaux l’interroge aussi',
+  /const c = conflitReservation\(\{/.test(srcMoteur))
+
+// ⚠️ « DÉJÀ PRIS CE JOUR-LÀ » EST MUET SUR UN COURS (décision d'Alex, 16/08).
+// Il affichait « 10:00 – 11:00 » autant de fois qu'il y avait d'inscrites,
+// juste au-dessus d'une grille annonçant dix places libres à cette heure : il
+// disait donc le contraire de la vérité.
+verifier('le bloc des heures prises se tait sur un cours collectif',
+  /if \(estCoursCollectif\(prestationChoisie\)\) return null/.test(srcTunnel))
+
+// ⚠️ CHEZ QUI BOUGE, LA GRILLE D'HORAIRES DISPARAÎT DES DEUX FICHES. Le bloc
+// « Où me trouver cette semaine » porte déjà le jour, l'endroit et l'heure :
+// afficher les deux, c'était se contredire dès que la déduction avait pris du
+// retard, ce qu'Alex a lu sur sa propre fiche (mardi annoncé en salle, et
+// « Fermé » dans la grille, le même jour).
+verifier('la fiche rendez-vous cache la grille pour un commerce itinérant',
+  /\{!commerceItinerant && \([\s\S]{0,220}?<HorairesSection/.test(srcTunnel))
+const srcFicheBoutique = sansCommentaires(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+verifier('la fiche boutique aussi',
+  /!commerceItinerant && <HorairesSection/.test(srcFicheBoutique))
+
+// ⚠️ ET LA BASCULE DE MODE RECALCULE LES HORAIRES. Sans cela, répondre « je
+// change d'endroit » laissait la vieille grille en place : une journée entière
+// restait grisée côté client, parce que `genererJoursDispos` lit ces horaires
+// pour savoir quels jours proposer. Aucune erreur, aucun avertissement.
+const srcConfigLieux = sansCommentaires(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+verifier('répondre « je change d’endroit » déduit les horaires sur-le-champ',
+  /if \(!memeEndroit\) \{[\s\S]{0,320}?patch\.horaires_detail = horairesDepuisLieux\(lieux \|\| \[\]\)/.test(srcConfigLieux))
+verifier('et la réponse inverse ne touche pas à la grille saisie à la main',
+  /const patch = \{ siege_social_est_lieu_activite: memeEndroit \}/.test(srcConfigLieux))
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

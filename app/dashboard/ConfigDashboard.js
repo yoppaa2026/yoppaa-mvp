@@ -4802,8 +4802,27 @@ function ChoixLieuUnique({ commercantId, valeur, onChange, toast }) {
   async function repondre(memeEndroit) {
     onChange(memeEndroit)
     setEnregistre(true)
-    const { error } = await supabase.from('commercants')
-      .update({ siege_social_est_lieu_activite: memeEndroit }).eq('id', commercantId)
+
+    // ⚠️ RÉPONDRE « JE CHANGE D'ENDROIT » NE SUFFISAIT PAS, ET C'EST CE QUI
+    // RENDAIT UNE JOURNÉE ENTIÈRE INRÉSERVABLE (défaut trouvé par Alex le
+    // 16/08). La colonne basculait, mais `horaires_detail` gardait la grille
+    // d'avant. Or elle ne sert pas qu'à l'affichage : `genererJoursDispos` la
+    // lit pour savoir quels jours proposer. Une professeure qui donnait cours
+    // le lundi ET le mardi voyait donc son mardi grisé côté client, parce que
+    // sa vieille grille disait « mardi : fermé ». Aucune erreur, aucun
+    // avertissement, et personne ne pouvait réserver ce jour-là.
+    //
+    // La déduction existait, mais elle n'avait lieu qu'au chargement de cette
+    // section : elle ne se déclenchait donc jamais au moment où la réponse
+    // change, c'est-à-dire exactement quand elle est nécessaire.
+    const patch = { siege_social_est_lieu_activite: memeEndroit }
+    if (!memeEndroit) {
+      const { data: lieux } = await supabase.from('commercant_lieux')
+        .select('*').eq('commercant_id', commercantId)
+      patch.horaires_detail = horairesDepuisLieux(lieux || [])
+    }
+
+    const { error } = await supabase.from('commercants').update(patch).eq('id', commercantId)
     setEnregistre(false)
     if (error) { onChange(!memeEndroit); toast(`Erreur : ${error.message}`, 'error'); return }
     toast(memeEndroit

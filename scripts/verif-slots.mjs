@@ -1378,6 +1378,31 @@ verifier('et l’intitulé vient bien du jour actif',
   /libellePeriodeStats\(\{ jour: jourActif, aujourdhui: todayKey, historique: modeHistorique \}\)/.test(srcTableauStats))
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ L'AGENDA DOIT POUVOIR SE DÉROULER JUSQU'AU BOUT (Alex, 16/08)
+//
+// « L'agenda accroche au scroll, pas moyen d'aller jusqu'au bout. » Deux
+// causes, toutes deux consignées après le diagnostic iPhone du 16/07 :
+//
+//   • `vh` vaut le GRAND viewport, celui du téléphone barre d'adresse
+//     RÉTRACTÉE. Tant que la barre est visible, 70vh dépasse le bas de l'écran,
+//     et comme c'est un conteneur INTERNE qui défile, la page ne peut pas
+//     descendre pour révéler la fin. On ne peut littéralement pas l'atteindre.
+//     `vh` se recalcule en plus quand la barre se rétracte : reflow au milieu
+//     du geste, donc accrochage. `svh` est stable.
+//
+//   • `-webkit-overflow-scrolling: touch` était nécessaire avant iOS 13 pour
+//     l'inertie, native depuis. Il PIÈGE `position: fixed` à l'intérieur du
+//     conteneur, défaut déjà corrigé le 12/08 sur la modale de détail.
+// ═══════════════════════════════════════════════════════════════════════════
+const srcAgendaScroll = readFileSync(new URL('../app/dashboard/AgendaRdv.js', import.meta.url), 'utf8')
+verifier('aucune hauteur en `vh` dans l’agenda',
+  !/maxHeight: '\d+vh'/.test(srcAgendaScroll))
+egal('les deux zones qui défilent sont bornées en `svh`',
+  (srcAgendaScroll.match(/maxHeight: '\d+svh'/g) || []).length, 3)
+verifier('et plus de défilement tactile hérité d’avant iOS 13',
+  !/WebkitOverflowScrolling/.test(srcAgendaScroll))
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

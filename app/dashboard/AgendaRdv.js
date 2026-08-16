@@ -347,7 +347,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
       {/* L'historique : une liste, pas une grille. On ne cherche pas un horaire
           libre dans le passé, on cherche un rendez-vous. */}
       {historique && (
-        <div style={{ maxHeight: '70vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0.625rem 0.875rem' }}>
+        <div style={{ maxHeight: '70svh', overflowY: 'auto', padding: '0.625rem 0.875rem' }}>
           {rdvsPasses.length === 0 && (
             <p style={{ textAlign: 'center', color: T.muted, fontSize: '0.82rem', padding: '2rem 0', margin: 0 }}>
               Aucun rendez-vous passé pour le moment.
@@ -389,8 +389,26 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
       )}
 
       {/* Grille agenda — scroll vertical interne (+ horizontal en vue semaine
-          sur petit écran : 7 colonnes ne tiennent pas dans 375 px) */}
-      <div style={{ display: historique ? 'none' : undefined, maxHeight: '70vh', overflowY: 'auto', overflowX: scrollH ? 'auto' : 'hidden', WebkitOverflowScrolling: 'touch' }}>
+          sur petit écran : 7 colonnes ne tiennent pas dans 375 px)
+
+          ⚠️ `svh` ET NON `vh` (défaut trouvé par Alex le 16/08 : « l'agenda
+          accroche au scroll, pas moyen d'aller jusqu'au bout »).
+          `vh` vaut le GRAND viewport, celui du téléphone barre d'adresse
+          RÉTRACTÉE. Tant que la barre est visible, 70vh dépasse donc le bas de
+          l'écran : la fin de la zone qui défile se trouve sous la barre, et
+          comme c'est un conteneur INTERNE qui défile, la page ne peut pas
+          descendre davantage pour la révéler. On ne peut littéralement pas
+          atteindre le bout. Et `vh` se recalcule quand la barre se rétracte,
+          ce qui produit un reflow au milieu du geste, d'où l'accrochage.
+          `svh` est le PETIT viewport : stable, jamais recalculé.
+
+          ⚠️ `-webkit-overflow-scrolling: touch` RETIRÉ. Il était nécessaire
+          avant iOS 13 pour l'inertie, qui est native depuis. Il reste surtout
+          deux ennuis : il PIÈGE `position: fixed` à l'intérieur du conteneur
+          (défaut corrigé le 12/08 sur la modale, documenté plus bas dans ce
+          fichier), et il fabrique une zone de défilement dont le geste ne
+          s'enchaîne pas avec celui de la page. */}
+      <div style={{ display: historique ? 'none' : undefined, maxHeight: '70svh', overflowY: 'auto', overflowX: scrollH ? 'auto' : 'hidden' }}>
         <div style={{ display: 'grid', gridTemplateColumns: `${LARGEUR_HEURES}px repeat(${nbJours}, ${scrollH ? 'minmax(96px, 1fr)' : '1fr'})`, position: 'relative', minWidth: scrollH ? LARGEUR_HEURES + 7 * 96 : undefined }}>
 
           {/* Header jours (sticky top dans le scroll) */}

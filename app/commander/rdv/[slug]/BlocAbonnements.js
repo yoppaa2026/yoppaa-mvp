@@ -12,7 +12,7 @@
 // conteste avec raison.
 
 import { useState, useEffect } from 'react'
-import { resumeFormulePublique } from '@/lib/abonnements'
+import { resumeFormulePublique, cleAchatAbonnement } from '@/lib/abonnements'
 
 const T = {
   main:  '#6B35C4',
@@ -90,6 +90,17 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
         setEnvoi(false)
         return
       }
+      // ⚠️ DEUX REPÈRES POUR RECONNAÎTRE CE CONTRAT AU RETOUR. Le webhook
+      // Stripe l'écrira dans quelques secondes, et l'écran de confirmation doit
+      // pouvoir distinguer CE contrat-là d'un abonnement plus ancien chez le
+      // même commerçant, sans quoi un renouvellement afficherait les dates et
+      // le solde de l'abonnement précédent.
+      try {
+        sessionStorage.setItem(cleAchatAbonnement(commercant?.slug), JSON.stringify({
+          formuleId: choisie.id,
+          partiA: new Date().toISOString(),
+        }))
+      } catch { /* navigation privée : on affichera l'écran sans le détail */ }
       window.location.href = body.url
     } catch (e) {
       setErreur(`Connexion interrompue : ${e?.message || 'réessaie'}`)

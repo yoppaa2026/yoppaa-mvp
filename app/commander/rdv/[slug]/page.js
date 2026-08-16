@@ -11,6 +11,14 @@
 //   2 = sélection date + créneau           (RDV-4b)
 //   3 = coordonnées + RGPD                 (RDV-4c)
 //   4 = confirmation écran "RDV pris ! 🟣" (RDV-4d)
+//   5 = confirmation d'un ABONNEMENT acheté en ligne
+//
+// ⚠️ AU-DELÀ DE L'ÉTAPE 3, ON EST SUR UN ÉCRAN DE CONFIRMATION, et un écran de
+// confirmation ne porte NI en-tête de fiche, NI fil des étapes : le client sait
+// où il vient d'acheter, et le lui rappeler en grand ne fait que repousser ce
+// qu'il cherche. Les conditions s'écrivent donc `etape < 4` et non `!== 4`,
+// pour que toute étape ajoutée demain hérite de la règle au lieu de rouvrir le
+// défaut relevé par Alex le 16/08.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useState, useRef } from 'react'
@@ -46,7 +54,8 @@ import CarteFideliteFiche from '../../CarteFideliteFiche'
 import BonCadeauModal from '../../BonCadeauModal'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 import BlocAbonnements from './BlocAbonnements'
-import { formuleVendableEnLigne, messageRetourAbonnement } from '@/lib/abonnements'
+import ConfirmationAbonnement from './ConfirmationAbonnement'
+import { formuleVendableEnLigne, messageRetourAbonnement, cleAchatAbonnement, contratQuiVientDEtreAchete } from '@/lib/abonnements'
 import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { jourLocalISO } from '@/lib/timezone'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
@@ -282,6 +291,8 @@ export default function CommanderRdvSlug() {
   const [bonModalOuvert, setBonModalOuvert] = useState(false)
   const [bonRetour, setBonRetour] = useState(null)          // 'ok' | 'annule' après retour Stripe achat de bon
   const [abonnementRetour, setAbonnementRetour] = useState(null)  // idem, achat d'abonnement
+  const [contratAchete, setContratAchete] = useState(null)  // le contrat relu en base après paiement
+  const [aboEnAttente, setAboEnAttente] = useState(false)   // on interroge encore, le webhook n'a pas fini
   const [loading, setLoading] = useState(true)
   const [erreur, setErreur] = useState(null)
 
@@ -542,11 +553,22 @@ export default function CommanderRdvSlug() {
   //
   // ⚠️ Le paramètre est nettoyé de l'URL comme pour le bon cadeau, sans quoi un
   // rafraîchissement rejouerait la confirmation d'un achat déjà fait.
+  //
+  // ⚠️ ET « OK » OUVRE UN ÉCRAN, PAS UN ENCADRÉ (Alex, 17/08). La confirmation
+  // vivait au milieu de la fiche, entre les deals et les horaires, quand une
+  // commande et un rendez-vous ouvrent chacun leur écran. Sur le montant le
+  // plus élevé du catalogue, c'était la plus discrète des trois.
+  //
+  // ⚠️ « ANNULÉ » RESTE SUR LA FICHE, et ce n'est pas une inconséquence : rien
+  // n'a été acheté, il n'y a donc rien à confirmer. L'envoyer sur un écran plein
+  // pour lui dire qu'il ne s'est rien passé l'éloignerait du bouton qui lui
+  // permet de réessayer.
   useEffect(() => {
     try {
       const p = new URLSearchParams(window.location.search).get('abonnement')
       if (p === 'ok' || p === 'annule') {
         setAbonnementRetour(p)
+        if (p === 'ok') { setAboEnAttente(true); setEtape(5) }
         const url = new URL(window.location.href)
         url.searchParams.delete('abonnement')
         url.searchParams.delete('session_id')
@@ -554,6 +576,53 @@ export default function CommanderRdvSlug() {
       }
     } catch { /* ignore */ }
   }, [])
+
+  // ⚠️ LE CONTRAT SE RELIT EN BASE, IL NE SE RECONSTITUE PAS. Ce qu'on croyait
+  // vendre avant la redirection n'est pas ce qui a été écrit : c'est le webhook
+  // Stripe qui crée le contrat, quelques secondes après ce retour, et lui seul
+  // sait combien de séances ont été payées. Un écran qui annoncerait des
+  // séances que personne n'a encore écrites serait faux précisément le jour où
+  // le webhook échoue, c'est-à-dire le seul jour où ça compte.
+  //
+  // On interroge donc jusqu'à le voir, quinze fois au maximum, exactement comme
+  // le tunnel rendez-vous attend son numéro. Passé ce délai, l'écran le dit.
+  useEffect(() => {
+    if (abonnementRetour !== 'ok' || !commercant?.id) return
+    let vivant = true
+    let repere = null
+    try {
+      const brut = sessionStorage.getItem(cleAchatAbonnement(slug))
+      if (brut) repere = JSON.parse(brut)
+    } catch { /* onglet sans mémoire : on affichera l'écran sans le détail */ }
+
+    let tentatives = 0
+    const MAX = 15
+    const timer = setInterval(async () => {
+      tentatives++
+      try {
+        const res = await fetchYopper('/api/yopper/abonnements')
+        const j = await res.json()
+        const trouve = contratQuiVientDEtreAchete(j?.abonnements || [], {
+          formuleId: repere?.formuleId || null,
+          partiA: repere?.partiA || null,
+          commercantId: commercant.id,
+        })
+        if (!vivant) return
+        if (trouve) {
+          setContratAchete(trouve)
+          setAboEnAttente(false)
+          clearInterval(timer)
+          try { sessionStorage.removeItem(cleAchatAbonnement(slug)) } catch { /* ignore */ }
+          return
+        }
+      } catch (e) {
+        console.error('[abo] relecture du contrat', e?.message)
+      }
+      if (tentatives >= MAX && vivant) { setAboEnAttente(false); clearInterval(timer) }
+    }, 1000)
+
+    return () => { vivant = false; clearInterval(timer) }
+  }, [abonnementRetour, commercant?.id, slug])
 
   // Change d'étape ET remonte en haut du conteneur scrollable (UX fluide).
   // Centralisé pour cohérence sur toutes les transitions du tunnel RDV.
@@ -1726,7 +1795,7 @@ export default function CommanderRdvSlug() {
                   d'identité en avait déjà disparu ; le bandeau restait, et il
                   n'était plus qu'un grand aplat mauve avec un nom que le client
                   vient justement de choisir. Il sait chez qui il a réservé. */}
-              {etape !== 4 && (
+              {etape < 4 && (
               <div className="fiche-hero" style={{ position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 3 }}/>
                 {/* Même bannière que sur une fiche boutique : deux fiches
@@ -1766,7 +1835,7 @@ export default function CommanderRdvSlug() {
                   du numéro : le client a fini, et cet écran ne doit plus
                   raconter qu'une chose. Le bloc de confirmation porte déjà le
                   nom du commerce, la date et l'heure. */}
-              {etape !== 4 && (
+              {etape < 4 && (
               <div style={{ background: '#fff', margin: '-36px 12px 0', borderRadius: 22, padding: '1.125rem 1.25rem 1rem', boxShadow: `0 12px 36px rgba(22,6,54,0.18), 0 2px 8px ${T.main}22`, border: `1px solid ${T.pale}`, position: 'relative' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
                   <div style={{ width: 64, height: 64, borderRadius: 16, background: commercant.logo_url ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, border: '3px solid #fff', boxShadow: '0 6px 20px rgba(22,6,54,0.22)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: -28 }}>
@@ -1891,10 +1960,14 @@ export default function CommanderRdvSlug() {
                     c'est pourtant ce qui donne envie de pousser la porte. */}
                 {etape === 1 && <GalerieCommerce photos={photosFiche} nomCommerce={commercant.nom} />}
 
-                {/* ⚠️ RETOUR D'ACHAT D'UN ABONNEMENT. Il passe AVANT le bon
-                    cadeau et il est plus haut, plus grand, parce que c'est le
-                    montant le plus élevé que le client puisse engager sur
-                    Yoppaa. Avant le 16/08, il n'y avait rien du tout. */}
+                {/* ⚠️ RETOUR D'ACHAT D'UN ABONNEMENT, cas « annulé » seulement.
+                    Rien n'a été acheté, il n'y a donc rien à confirmer, et cet
+                    encadré garde le client à portée du bouton qui lui permet de
+                    réessayer. Le cas « payé » ouvre l'écran de l'étape 5 depuis
+                    le 17/08, comme toute autre transaction de Yoppaa.
+                    ⚠️ Le texte vient de la MÊME fonction dans les deux cas :
+                    deux écritures d'un même message finissent toujours par se
+                    contredire. */}
                 {etape === 1 && abonnementRetour && (() => {
                   const m = messageRetourAbonnement(abonnementRetour, { nomCommerce: commercant.nom })
                   if (!m) return null
@@ -2856,6 +2929,24 @@ export default function CommanderRdvSlug() {
                     Prendre un autre RDV chez {commercant.nom}
                   </button>
                 </div>
+              )}
+
+              {/* ─── ÉTAPE 5 - CONFIRMATION D'UN ABONNEMENT ACHETÉ EN LIGNE ───
+                  ⚠️ « Le client doit garder ses repères » (Alex, 17/08) : c'est
+                  un écran, comme la commande et comme le rendez-vous, et non
+                  plus un encadré posé au milieu de la fiche. */}
+              {etape === 5 && (
+                <ConfirmationAbonnement
+                  commercant={commercant}
+                  contrat={contratAchete}
+                  enAttente={aboEnAttente}
+                  onReserver={() => {
+                    setAbonnementRetour(null)
+                    setContratAchete(null)
+                    allerEtape(1)
+                  }}
+                  onAccueil={() => router.push('/commander')}
+                />
               )}
             </>
           )}

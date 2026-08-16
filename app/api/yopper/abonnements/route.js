@@ -50,7 +50,13 @@ export async function GET(request) {
   // pourtant payé 36 séances.
   const { data: contrats, error } = await db
     .from('abonnements')
-    .select('id, commercant_id, type, mode, statut, prix, seances_total, seances_par_semaine, date_debut, date_fin, created_at')
+    //
+    // ⚠️ `prestation_id` ET `formule_id` sont là POUR L'ÉCRAN, pas pour le
+    // calcul : le premier dit QUEL COURS ce contrat couvre, le second permet
+    // d'en afficher le nom. Sans eux, l'écran de confirmation d'achat annonce
+    // « ton abonnement » sans jamais dire lequel, et la fiche ne peut pas
+    // reconnaître le cours que la cliente a déjà payé.
+    .select('id, commercant_id, formule_id, prestation_id, type, mode, statut, prix, seances_total, seances_par_semaine, date_debut, date_fin, created_at')
     // L'email est stocké en minuscules partout où il s'écrit (contrat en ligne
     // comme inscription à la main), et `identiteProuvee` le rend en minuscules.
     // Les deux se rencontrent donc toujours.
@@ -69,24 +75,41 @@ export async function GET(request) {
   // Les séances consommées SE COMPTENT, elles ne se décrémentent pas. Un
   // compteur stocké dérive au premier accident, et plus personne ne sait
   // ensuite quel chiffre est le bon.
-  const [{ data: reservations }, { data: commercants }] = await Promise.all([
+  const formuleIds = [...new Set(contrats.map(c => c.formule_id).filter(Boolean))]
+
+  const [{ data: reservations }, { data: commercants }, { data: formules }] = await Promise.all([
     db.from('rdv_reservations')
       .select('id, abonnement_id, statut, date_rdv, heure_debut')
       .in('abonnement_id', ids),
     db.from('commercants')
       .select('id, nom, slug, logo_url')
       .in('id', commercantIds),
+    // Le nom de la formule est ce que la cliente a lu au moment de payer. C'est
+    // sous ce nom-là qu'elle reconnaît son contrat, pas sous « 36 séances ».
+    formuleIds.length
+      ? db.from('abonnement_formules').select('id, libelle, prestation_id').in('id', formuleIds)
+      : Promise.resolve({ data: [] }),
   ])
 
   const parCommercant = Object.fromEntries((commercants || []).map(c => [c.id, c]))
+  const parFormule = Object.fromEntries((formules || []).map(f => [f.id, f]))
   const aujourdhui = jourLocalISO()
 
   const abonnements = contrats.map(contrat => {
     const etat = etatAbonnement(contrat, reservations || [], { aujourdhui })
     const commercant = parCommercant[contrat.commercant_id] || null
+    const formule = parFormule[contrat.formule_id] || null
     return {
       ...etat,
       seancesParSemaine: contrat.seances_par_semaine ?? null,
+      // ⚠️ LE COURS COUVERT PEUT VENIR DE LA FORMULE. Les contrats vendus en
+      // ligne avant le 17/08 n'ont pas de `prestation_id` : leur formule, elle,
+      // l'a toujours eu. Prendre le contrat d'abord garde le choix figé à la
+      // signature, et le repli sur la formule évite de rendre muets les
+      // contrats déjà vendus.
+      prestationId: contrat.prestation_id ?? formule?.prestation_id ?? null,
+      formule: formule ? { id: formule.id, libelle: formule.libelle } : null,
+      acheteLe: contrat.created_at ?? null,
       commercant: commercant
         ? { id: commercant.id, nom: commercant.nom, slug: commercant.slug, logo_url: commercant.logo_url }
         : null,

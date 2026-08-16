@@ -21,6 +21,7 @@ import {
   etatAbonnement, joursEntre,
   formuleVendableEnLigne, seancesVenduesEnLigne, resumeFormulePublique,
   contratDepuisFormule, libelleValidite, formatDateCourte,
+  etapesApresAbonnement, contratQuiVientDEtreAchete,
   resumeAbonnementClient, detailValidite, detailUtilisation, partConsommee,
   phraseApercuFormule, expliquerApercuFormule,
 } from '../lib/abonnements.js'
@@ -773,7 +774,12 @@ verifier('et rien ne vient du corps de la requête', !/request\.json\(\)/.test(s
 // en silence : sans `seances_total`, la route annoncerait « solde inconnu » à
 // une cliente qui a pourtant payé 36 séances. Cinq occurrences sur ce projet.
 const selectAbo = /from\('abonnements'\)[\s\S]{0,400}?\.select\('([^']+)'\)/.exec(srcRouteAbo)?.[1] || ''
-for (const champ of ['id', 'commercant_id', 'type', 'mode', 'statut', 'prix', 'seances_total', 'date_debut', 'date_fin']) {
+// ⚠️ `formule_id`, `prestation_id` et `created_at` sont arrivés le 17/08 pour
+// l'écran de confirmation d'achat : le cours couvert, le nom de la formule et
+// la date d'achat. Ils vivent DANS CETTE LISTE et pas dans un test à part,
+// parce qu'une deuxième vérification écrite plus bas s'était laissée tromper
+// par le select VOISIN, celui des formules, qui porte le même nom de colonne.
+for (const champ of ['id', 'commercant_id', 'formule_id', 'prestation_id', 'type', 'mode', 'statut', 'prix', 'seances_total', 'date_debut', 'date_fin', 'created_at']) {
   verifier(`la requête demande « ${champ} »`,
     new RegExp(`(^|,\\s*)${champ}(\\s*,|$)`).test(selectAbo), selectAbo || 'select introuvable')
 }
@@ -1061,6 +1067,174 @@ verifier('rien n’est dit pendant la frappe',
   /emailSaisi\.includes\('@'\) && emailSaisi !== emailCompte/.test(srcBlocAbo))
 verifier('l’avertissement nomme l’adresse qui recevra l’abonnement',
   /Ton abonnement sera rattaché à <strong>\{form\.email\.trim\(\)\}<\/strong>/.test(srcBlocAbo))
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L'ÉCRAN DE CONFIRMATION D'UN ABONNEMENT (Alex, 17/08)
+//
+// « C'est une fenêtre qui s'ouvre sur la fiche et pas un écran de confirmation
+// comme pour toutes les autres transactions, il faut modifier et faire comme
+// pour le reste, le client doit garder ses repères. »
+//
+// ⚠️ UNE COMMANDE OUVRE UN ÉCRAN, UN RENDEZ-VOUS OUVRE UN ÉCRAN, et
+// l'abonnement — le montant le plus élevé du catalogue — se contentait d'un
+// cadre vert posé entre les deals et les horaires.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const etapesCredit = etapesApresAbonnement({ mode: 'credit', nomCommerce: 'Centre Respire' })
+egal('trois lignes disent la suite, ni plus ni moins', etapesCredit.length, 3)
+// ⚠️ CE QU'IL DOIT SAVOIR EN PREMIER : il a une preuve d'achat. Pour un montant
+// à trois chiffres, c'est la première chose qu'on cherche quand ça se passe mal.
+verifier('la preuve d’achat vient en premier', /preuve d’achat/.test(etapesCredit[0]))
+// ⚠️ DANS LES DEUX MODES. Le premier test ne lisait que la branche « crédit » :
+// la même ligne existe en « place fixe », et la casser ne faisait rougir
+// personne. Une règle qui vaut des deux côtés se vérifie des deux côtés.
+verifier('dans les deux modes, y compris place fixe',
+  /preuve d’achat/.test(etapesApresAbonnement({ mode: 'place_fixe' })[0]))
+// ⚠️ ET LA PHRASE QUI MANQUAIT VRAIMENT : en mode crédit, AUCUNE séance n'est
+// posée à l'agenda. Sans qu'on le dise, l'acheteur attend un planning qui
+// n'arrivera jamais.
+verifier('en crédit, on dit que rien n’est encore réservé',
+  /pas encore réservées/.test(etapesCredit[1]))
+verifier('et on dit où il choisira ses dates',
+  /Centre Respire/.test(etapesCredit[1]))
+// Le contraire exactement quand les séances SONT posées : lui dire de réserver
+// l'enverrait chercher un geste qui n'existe pas.
+const etapesFixe = etapesApresAbonnement({ mode: 'place_fixe', nomCommerce: 'Centre Respire' })
+verifier('en place fixe, on dit qu’elles sont déjà réservées',
+  /déjà réservées/.test(etapesFixe[1]))
+verifier('et surtout PAS qu’il lui reste à les poser',
+  !etapesFixe.some(e => /pas encore réservées/.test(e)))
+// Sans nom de commerce, la phrase reste une phrase française.
+verifier('sans nom de commerce, la phrase tient debout',
+  !/ de ,|depuis la fiche de\./.test(etapesApresAbonnement({ mode: 'credit' })[1]))
+
+// ─── RETROUVER LE CONTRAT QU'ON VIENT DE PAYER ────────────────────────────
+//
+// ⚠️ « LE PLUS RÉCENT CHEZ CE COMMERÇANT » NE SUFFIT PAS, et c'est tout le
+// sujet. Une cliente qui RENOUVELLE en a déjà un : tant que le webhook Stripe
+// n'a pas écrit le nouveau contrat, l'ancien est le plus récent, et l'écran
+// annoncerait des dates et un solde périmés. Comme plus rien ne le
+// contredirait ensuite, l'erreur resterait affichée.
+const ANCIEN = { commercant: { id: 'c1' }, formule: { id: 'f1' }, acheteLe: '2026-01-10T09:00:00Z', total: 12 }
+const NOUVEAU = { commercant: { id: 'c1' }, formule: { id: 'f1' }, acheteLe: '2026-08-17T14:32:00Z', total: 36 }
+const AUTRE_COMMERCE = { commercant: { id: 'c2' }, formule: { id: 'f9' }, acheteLe: '2026-08-17T14:33:00Z', total: 5 }
+const clic = '2026-08-17T14:30:00Z'
+
+egal('le contrat tout juste écrit est reconnu',
+  contratQuiVientDEtreAchete([ANCIEN, NOUVEAU], { formuleId: 'f1', partiA: clic, commercantId: 'c1' })?.total, 36)
+egal('et l’ancien contrat de la même formule est écarté',
+  contratQuiVientDEtreAchete([ANCIEN], { formuleId: 'f1', partiA: clic, commercantId: 'c1' }), null)
+egal('un contrat d’un autre commerce n’est jamais pris',
+  contratQuiVientDEtreAchete([AUTRE_COMMERCE], { formuleId: 'f9', partiA: clic, commercantId: 'c1' }), null)
+egal('ni celui d’une autre formule',
+  contratQuiVientDEtreAchete([NOUVEAU], { formuleId: 'f2', partiA: clic, commercantId: 'c1' }), null)
+// ⚠️ SANS REPÈRE, ON NE DEVINE PAS. Un onglet qui a perdu sa mémoire doit faire
+// dire à l'écran qu'il attend, ce qui est vrai, plutôt qu'afficher un contrat
+// dont personne ne sait s'il est le bon.
+egal('sans repère, on ne rend rien plutôt que de se tromper',
+  contratQuiVientDEtreAchete([ANCIEN, NOUVEAU], { commercantId: 'c1' }), null)
+egal('et une liste vide ne rend rien non plus',
+  contratQuiVientDEtreAchete([], { formuleId: 'f1', partiA: clic }), null)
+// ⚠️ L'HORLOGE DU TÉLÉPHONE N'EST PAS CELLE DE LA BASE. Cinq minutes d'écart sur
+// un mobile n'ont rien d'exceptionnel : sans marge, le contrat tout juste écrit
+// passerait pour un vieux contrat et l'écran resterait muet.
+egal('quatre minutes d’écart d’horloge ne font pas perdre le contrat',
+  contratQuiVientDEtreAchete([{ ...NOUVEAU, acheteLe: '2026-08-17T14:26:00Z' }],
+    { formuleId: 'f1', partiA: clic, commercantId: 'c1' })?.total, 36)
+egal('mais une heure d’écart, si',
+  contratQuiVientDEtreAchete([{ ...NOUVEAU, acheteLe: '2026-08-17T13:20:00Z' }],
+    { formuleId: 'f1', partiA: clic, commercantId: 'c1' }), null)
+// Une date d'achat absente ne doit pas se faire passer pour récente : sinon un
+// contrat sans horodatage l'emporterait sur celui qu'on cherche.
+// ⚠️ ET QUAND DEUX CONTRATS PASSENT, C'EST LE PLUS RÉCENT. Le premier jeu de
+// données ne le vérifiait pas : le filtre de temps écartait l'ancien, il ne
+// restait qu'un candidat, et inverser le tri ne faisait rougir personne. Le cas
+// arrive dès qu'on cherche sur la seule formule, sans instant de départ.
+const RENOUVELLE = { commercant: { id: 'c1' }, formule: { id: 'f1' }, acheteLe: '2026-09-01T10:00:00Z', total: 48 }
+egal('entre deux contrats recevables, le plus récent l’emporte',
+  contratQuiVientDEtreAchete([NOUVEAU, RENOUVELLE], { formuleId: 'f1', commercantId: 'c1' })?.total, 48)
+egal('et l’ordre de la liste n’y change rien',
+  contratQuiVientDEtreAchete([RENOUVELLE, NOUVEAU], { formuleId: 'f1', commercantId: 'c1' })?.total, 48)
+egal('un contrat sans date d’achat n’est pas retenu',
+  contratQuiVientDEtreAchete([{ commercant: { id: 'c1' }, formule: { id: 'f1' }, total: 99 }],
+    { formuleId: 'f1', partiA: clic, commercantId: 'c1' }), null)
+
+// ─── LE COURS COUVERT, FIGÉ À LA SIGNATURE ────────────────────────────────
+//
+// ⚠️ IL MANQUAIT, et l'inscription à la main le posait pourtant depuis le
+// premier jour : deux chemins vers la même table, un seul des deux renseignait
+// la colonne. Sans elle, rien ne relie un abonnement au cours de yoga qu'il
+// paie, donc la fiche ne peut pas proposer d'y poser une séance.
+const CONTRAT_LIGNE = contratDepuisFormule(
+  { id: 'f1', commercant_id: 'c1', prestation_id: 'presta-yoga', type: 'carnet',
+    seances_carnet: 10, validite_jours: 180, prix: 180, seances_par_semaine: 1 },
+  { achatLe: '2026-08-17', client: { email: 'A@B.be', prenom: 'Alex' } },
+)
+egal('un contrat acheté en ligne sait quel cours il couvre',
+  CONTRAT_LIGNE.prestation_id, 'presta-yoga')
+egal('une formule sans cours ne fabrique pas de rattachement',
+  contratDepuisFormule(
+    { id: 'f2', commercant_id: 'c1', type: 'carnet', seances_carnet: 5, validite_jours: 90, prix: 90 },
+    { achatLe: '2026-08-17', client: { email: 'a@b.be' } },
+  ).prestation_id, null)
+
+// ─── LE BRANCHEMENT, CÔTÉ ÉCRAN ───────────────────────────────────────────
+const srcConfAbo = sansCommentSrc(lire('app/commander/rdv/[slug]/ConfirmationAbonnement.js'))
+const srcFicheRdv = sansCommentSrc(lire('app/commander/rdv/[slug]/page.js'))
+const srcBloc = sansCommentSrc(lire('app/commander/rdv/[slug]/BlocAbonnements.js'))
+
+// ⚠️ UN ÉCRAN, PAS UN ENCADRÉ. C'est la demande exacte d'Alex.
+verifier('le retour d’un paiement réussi ouvre un écran',
+  /if \(p === 'ok'\) \{ setAboEnAttente\(true\); setEtape\(5\) \}/.test(srcFicheRdv))
+verifier('et cet écran est bien monté',
+  /etape === 5 && \(\s*<ConfirmationAbonnement/.test(srcFicheRdv))
+// ⚠️ « ANNULÉ » RESTE SUR LA FICHE : rien n'a été acheté, il n'y a rien à
+// confirmer, et l'écran plein l'éloignerait du bouton pour réessayer.
+verifier('un paiement annulé ne quitte pas la fiche',
+  !/if \(p === 'annule'\).*setEtape/.test(srcFicheRdv))
+// ⚠️ LE CONTRAT SE RELIT EN BASE. Reconstituer l'affichage depuis ce qu'on
+// croyait vendre serait faux précisément le jour où le webhook échoue,
+// c'est-à-dire le seul jour où ça compte.
+verifier('le contrat affiché est relu en base',
+  /fetchYopper\('\/api\/yopper\/abonnements'\)/.test(srcFicheRdv))
+verifier('et on attend le webhook au lieu d’inventer',
+  /contratQuiVientDEtreAchete\(/.test(srcFicheRdv))
+// Les deux repères, posés avant de partir chez Stripe.
+verifier('la formule choisie est mémorisée avant le paiement',
+  /formuleId: choisie\.id/.test(srcBloc))
+verifier('et l’instant du clic aussi',
+  /partiA: new Date\(\)\.toISOString\(\)/.test(srcBloc))
+
+// ⚠️ LE TEXTE VIENT DES MÊMES FONCTIONS QUE L'EMAIL. Un email qui annonce autre
+// chose que l'écran est pire que pas d'email du tout.
+verifier('l’écran reprend les textes du module partagé',
+  /messageRetourAbonnement, resumeContratAchete, etapesApresAbonnement/.test(srcConfAbo))
+// ⚠️ ET IL NE MONTRE AUCUN CHIFFRE TANT QUE LE CONTRAT N'EST PAS LÀ. Un
+// « 0 séances » le temps que le webhook réponde serait un mensonge de trois
+// secondes sur un achat à trois chiffres.
+verifier('aucun chiffre affiché avant que le contrat existe',
+  /seances !== null && \(/.test(srcConfAbo))
+verifier('et l’attente se dit au lieu de laisser un blanc',
+  /!contrat && \(/.test(srcConfAbo) && /On enregistre ton abonnement/.test(srcConfAbo))
+
+// ─── CE QUE LA ROUTE DOIT RENDRE ──────────────────────────────────────────
+//
+// ⚠️ LE PIÈGE LE PLUS FRÉQUENT DE CE PROJET : une colonne absente du select
+// vaut undefined, ne lève aucune erreur, et la fonctionnalité meurt en silence.
+// L'écran a besoin du cours couvert, du nom de la formule et de la date d'achat.
+// ⚠️ LES COLONNES SE VÉRIFIENT PLUS HAUT, dans la liste du select des
+// abonnements. Elles avaient d'abord été testées ici, par un motif qui
+// cherchait le nom de colonne dans N'IMPORTE QUEL select du fichier : la
+// requête voisine, celle des formules, porte `prestation_id` elle aussi, et
+// retirer la colonne du contrat laissait donc le banc vert. Mesuré en mutation.
+verifier('la route rend le cours couvert', /prestationId:/.test(srcRouteAbo))
+verifier('le nom de la formule', /libelle: formule\.libelle/.test(srcRouteAbo))
+verifier('et la date d’achat', /acheteLe: contrat\.created_at/.test(srcRouteAbo))
+// ⚠️ LES CONTRATS VENDUS AVANT LE 17/08 N'ONT PAS DE prestation_id : leur
+// formule, elle, l'a toujours eu. Sans ce repli, ils resteraient muets.
+verifier('un contrat ancien retrouve son cours via sa formule',
+  /contrat\.prestation_id \?\? formule\?\.prestation_id/.test(srcRouteAbo))
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

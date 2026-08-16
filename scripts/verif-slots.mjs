@@ -1168,8 +1168,17 @@ verifier('la fiche boutique aussi',
 // ⚠️ DEUX BLOCS, PAS UN : la carte d'identité ET le bandeau du haut. Le premier
 // correctif n'avait retiré que la carte, et le bandeau restait seul, grand aplat
 // mauve portant le nom d'un commerce que le client vient de choisir.
+//
+// ⚠️ ET LA CONDITION DIT « AVANT LA CONFIRMATION », PAS « SAUF L'ÉTAPE 4 ».
+// Ce test exigeait `etape !== 4` : le jour où l'étape 5 est arrivée (l'écran de
+// confirmation d'un abonnement, 17/08), cette forme a fait RÉAPPARAÎTRE le
+// bandeau et la carte sur le nouvel écran, sans que rien ne prévienne. Une
+// exception nommée ne protège que les étapes qu'on connaissait au moment de
+// l'écrire ; un seuil couvre aussi celles d'après.
 egal('l’écran de confirmation n’affiche ni la carte ni le bandeau',
-  (srcTunnel.match(/\{etape !== 4 && \(/g) || []).length, 2)
+  (srcTunnel.match(/\{etape < 4 && \(/g) || []).length, 2)
+verifier('et la règle vaut pour TOUT écran de confirmation, pas pour la seule étape 4',
+  !/etape !== 4/.test(srcTunnel))
 
 // ⚠️ LE BOUTON RETOUR NE FAISAIT RIEN À L'ÉTAPE 4 (trouvé par Alex, 16/08) :
 // une suite de `else if` sans sortie finale, donc une impasse qui s'ouvre toute

@@ -3112,13 +3112,25 @@ export default function CommanderSlug() {
                       <p style={{ margin: '0 0 6px', fontSize: '0.66rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                         Où me trouver cette semaine
                       </p>
+                      {/* ⚠️ L'ADRESSE SOUS LE NOM DE LA SALLE (Alex, 16/08).
+                          « Salle Respire 1 » dit à une habituée où aller, et
+                          absolument rien à quelqu'un qui vient pour la première
+                          fois. Le nom reste en tête, il est plus parlant, mais
+                          il ne peut pas tenir lieu d'adresse. */}
                       {semaineItinerante.map(({ jour, lieu }) => (
-                        <p key={jour} style={{ margin: '0 0 2px', fontSize: '0.74rem', color: T.deep, lineHeight: 1.45 }}>
-                          <strong style={{ textTransform: 'capitalize' }}>{jour}</strong> · {lieu.libelle}
-                          {lieu.heure_debut && lieu.heure_fin
-                            ? ` · ${lieu.heure_debut.slice(0, 5)}–${lieu.heure_fin.slice(0, 5)}`
-                            : ''}
-                        </p>
+                        <div key={jour} style={{ margin: '0 0 5px' }}>
+                          <p style={{ margin: 0, fontSize: '0.74rem', color: T.deep, lineHeight: 1.45 }}>
+                            <strong style={{ textTransform: 'capitalize' }}>{jour}</strong> · {lieu.libelle}
+                            {lieu.heure_debut && lieu.heure_fin
+                              ? ` · ${lieu.heure_debut.slice(0, 5)}–${lieu.heure_fin.slice(0, 5)}`
+                              : ''}
+                          </p>
+                          {lieu.libelle && lieu.adresse && (
+                            <p style={{ margin: '1px 0 0', fontSize: '0.7rem', color: T.muted, lineHeight: 1.4 }}>
+                              {lieu.adresse}
+                            </p>
+                          )}
+                        </div>
                       ))}
                     </div>
                   )}

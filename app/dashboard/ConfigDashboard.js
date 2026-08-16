@@ -4200,6 +4200,12 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
   // `id` distingue une modification d'un ajout : un jour peut désormais porter
   // DEUX emplacements, celui du midi et celui du soir.
   const [formHebdo, setFormHebdo] = useState(null)  // { id, jour, libelle, adresse, heures… }
+  // ⚠️ RECOPIER UN JOUR SUR D'AUTRES (demande d'Alex, 16/08). Une professeure
+  // qui donne cours dans la même salle du lundi au vendredi saisissait le nom,
+  // l'adresse complète et deux horaires CINQ FOIS. La grille des horaires fixes
+  // savait déjà le faire ; le planning par emplacements, non.
+  const [copieDepuis, setCopieDepuis] = useState(null)   // le jour source, ou null
+  const [copieVers, setCopieVers] = useState([])         // les jours cochés
   // Ajout d'un lieu PERMANENT : une seconde adresse, un atelier, une salle
   // louée à l'année. ⚠️ Ne PAS écrire « siège d'exploitation » : ce terme de la
   // Banque-Carrefour désigne une unité d'établissement déclarée, ce qu'une
@@ -4392,6 +4398,63 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('Tournée mise à jour')
     setFormHebdo(null)
+    charger()
+  }
+
+  // ⚠️ RECOPIER UN JOUR SUR D'AUTRES (demande d'Alex, 16/08). Une professeure
+  // qui donne cours dans la même salle du lundi au vendredi saisissait le nom,
+  // l'adresse complète et deux horaires CINQ FOIS. La grille des horaires fixes
+  // proposait déjà « Dupliquer sur d'autres jours » ; le planning par
+  // emplacements, non, alors que c'est là que la saisie est la plus longue.
+  //
+  // ⚠️ ON COPIE TOUS LES MOMENTS DU JOUR, pas seulement le premier. Un food
+  // truck qui sert le midi sur une place et le soir dans un zoning veut les
+  // deux, et n'en recopier qu'un lui ferait perdre la moitié de son service
+  // sans rien dire.
+  async function dupliquerJour() {
+    const source = hebdoParJour[copieDepuis] || []
+    if (source.length === 0) { toast('Ce jour n’a aucun emplacement à copier', 'error'); return }
+    if (copieVers.length === 0) { toast('Choisis au moins un jour', 'error'); return }
+
+    // ⚠️ ON VÉRIFIE TOUT AVANT D'ÉCRIRE QUOI QUE CE SOIT. Écrire au fil de l'eau
+    // laisserait le commerçant avec trois jours copiés et un refus au milieu,
+    // sans savoir ce qui est passé. Et on nomme celui qui gêne, comme partout
+    // ailleurs : « ça n'a pas marché » n'aide personne à corriger.
+    const posesVirtuels = []
+    for (const cible of copieVers) {
+      for (const e of source) {
+        const candidat = {
+          type: 'hebdo', jour_semaine: cible,
+          heure_debut: e.heure_debut || null, heure_fin: e.heure_fin || null,
+        }
+        const gene = lieuEnConflit([...emps, ...posesVirtuels], candidat)
+        if (gene) {
+          const quand = gene.heure_debut
+            ? `de ${String(gene.heure_debut).slice(0, 5)} à ${String(gene.heure_fin || '').slice(0, 5)}`
+            : 'toute la journée'
+          toast(`« ${gene.libelle} » occupe déjà ce moment le ${cible} (${quand}). Rien n’a été copié.`, 'error')
+          return
+        }
+        // Les copies déjà décidées comptent pour la suivante : deux moments du
+        // même jour source ne peuvent pas se marcher dessus sur la cible.
+        posesVirtuels.push({ ...candidat, id: `copie-${posesVirtuels.length}`, libelle: e.libelle, actif: true })
+      }
+    }
+
+    const lignes = copieVers.flatMap(cible => source.map(e => ({
+      commercant_id: commercantId, type: 'hebdo', jour_semaine: cible,
+      libelle: e.libelle, adresse: e.adresse,
+      latitude: e.latitude ?? null, longitude: e.longitude ?? null,
+      heure_debut: e.heure_debut || null, heure_fin: e.heure_fin || null,
+      actif: true,
+    })))
+    const { error } = await supabase.from('commercant_lieux').insert(lignes)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast(`Copié sur ${copieVers.length} jour${copieVers.length > 1 ? 's' : ''}`)
+    setCopieDepuis(null); setCopieVers([])
+    // ⚠️ `charger()` fait tout le reste : il relit les emplacements ET redéduit
+    // les horaires d'ouverture. Sans lui, les jours copiés resteraient fermés
+    // aux yeux du moteur de créneaux, donc inréservables.
     charger()
   }
 
@@ -4633,6 +4696,47 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
                 <p style={{ margin: '6px 0 0', paddingLeft: 82, fontSize: 11, color: T.muted, lineHeight: 1.45 }}>
                   Plusieurs moments ce jour-là : les heures décident où tes clients te trouvent.
                 </p>
+              )}
+
+              {/* ⚠️ DUPLIQUER CE JOUR (demande d'Alex, 16/08). Même geste et même
+                  vocabulaire que la grille des horaires fixes : deux endroits
+                  qui font la même chose doivent la faire pareil. */}
+              {duJour.length > 0 && !enEdition && (
+                copieDepuis === jour ? (
+                  <div style={{ marginTop: 8, paddingLeft: 82 }}>
+                    <p style={{ margin: '0 0 6px', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>
+                      Copier {duJour.length > 1 ? `les ${duJour.length} moments` : 'cet emplacement'} sur :
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
+                      {JOURS_FT.filter(j => j !== jour).map(j => {
+                        const coche = copieVers.includes(j)
+                        return (
+                          <button key={j}
+                            onClick={() => setCopieVers(p => coche ? p.filter(x => x !== j) : [...p, j])}
+                            style={{ padding: '4px 10px', borderRadius: 100, cursor: 'pointer', fontSize: 11, fontWeight: 800,
+                              fontFamily: '"DM Sans", sans-serif', textTransform: 'capitalize',
+                              border: `1.5px solid ${coche ? T.main : T.hairline}`,
+                              background: coche ? T.pale : '#fff', color: coche ? T.main : T.muted }}>
+                            {j.slice(0, 3)}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={dupliquerJour}
+                        style={{ flex: 1, padding: '6px 10px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 11.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                        Copier
+                      </button>
+                      <button onClick={() => { setCopieDepuis(null); setCopieVers([]) }}
+                        style={{ ...btnMini, flex: 1 }}>Annuler</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => { setCopieDepuis(jour); setCopieVers([]) }}
+                    style={{ marginTop: 6, marginLeft: 82, padding: '3px 10px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 800, fontSize: 10.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                    ⧉ Dupliquer sur d&rsquo;autres jours
+                  </button>
+                )
               )}
 
               {enEdition && (

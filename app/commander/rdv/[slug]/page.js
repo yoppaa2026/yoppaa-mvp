@@ -1722,7 +1722,14 @@ export default function CommanderRdvSlug() {
                 </div>
               </div>
 
-              {/* ─── CARD INFOS COMMERÇANT (chevauche le hero photo) ─── */}
+              {/* ─── CARD INFOS COMMERÇANT (chevauche le hero photo) ───
+                  ⚠️ ABSENTE DE L'ÉCRAN DE CONFIRMATION (Alex, 16/08). Une fois
+                  le rendez-vous pris, la description du commerce, sa pastille
+                  d'ouverture et son planning n'ont plus rien à faire au-dessus
+                  du numéro : le client a fini, et cet écran ne doit plus
+                  raconter qu'une chose. Le bloc de confirmation porte déjà le
+                  nom du commerce, la date et l'heure. */}
+              {etape !== 4 && (
               <div style={{ background: '#fff', margin: '-36px 12px 0', borderRadius: 22, padding: '1.125rem 1.25rem 1rem', boxShadow: `0 12px 36px rgba(22,6,54,0.18), 0 2px 8px ${T.main}22`, border: `1px solid ${T.pale}`, position: 'relative' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
                   <div style={{ width: 64, height: 64, borderRadius: 16, background: commercant.logo_url ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, border: '3px solid #fff', boxShadow: '0 6px 20px rgba(22,6,54,0.22)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: -28 }}>
@@ -1814,12 +1821,19 @@ export default function CommanderRdvSlug() {
                           <span style={{ color: T.muted, minWidth: 0 }}>
                             {/* Un jour peut porter DEUX emplacements, le midi et
                                 le soir. Les écraser l'un l'autre ferait rater la
-                                moitié des rendez-vous possibles. */}
+                                moitié des rendez-vous possibles.
+                                ⚠️ ET L'ADRESSE PASSE SOUS LE NOM (Alex, 16/08) :
+                                « Salle Respire 1 » dit à une habituée où aller,
+                                et absolument rien à qui vient pour la première
+                                fois. Le nom garde la tête, il est plus parlant,
+                                mais il ne peut pas tenir lieu d'adresse. */}
                             {lieux.map((l, i) => (
-                              <span key={l.id || i}>
-                                {i > 0 && <span style={{ color: T.pale }}> · </span>}
+                              <span key={l.id || i} style={{ display: 'block', marginTop: i > 0 ? 5 : 0 }}>
                                 <strong style={{ color: T.deep, fontWeight: 700 }}>{l.libelle || l.adresse}</strong>
                                 {l.heure_debut && l.heure_fin ? ` ${String(l.heure_debut).slice(0, 5)}–${String(l.heure_fin).slice(0, 5)}` : ''}
+                                {l.libelle && l.adresse && (
+                                  <span style={{ display: 'block', fontSize: '0.72rem', color: T.muted, lineHeight: 1.4 }}>{l.adresse}</span>
+                                )}
                               </span>
                             ))}
                           </span>
@@ -1894,6 +1908,7 @@ export default function CommanderRdvSlug() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* ─── BANDEAU RDV DÉSACTIVÉ (vitrine publiée mais module RDV pas activé) ─── */}
               {commercant._rdvDesactive && (

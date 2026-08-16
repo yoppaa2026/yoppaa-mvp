@@ -1095,6 +1095,80 @@ verifier('et la réponse inverse ne touche pas à la grille saisie à la main',
   /const patch = \{ siege_social_est_lieu_activite: memeEndroit \}/.test(srcConfigLieux))
 
 // ═══════════════════════════════════════════════════════════════════════════
+// DUPLIQUER UN JOUR DU PLANNING (demande d'Alex, 16/08)
+//
+// Une professeure qui donne cours dans la même salle du lundi au vendredi
+// saisissait le nom, l'adresse complète et deux horaires CINQ FOIS. La grille
+// des horaires fixes savait déjà recopier un jour ; le planning par
+// emplacements, non, alors que c'est là que la saisie est la plus longue.
+// ═══════════════════════════════════════════════════════════════════════════
+verifier('un jour du planning se recopie sur d’autres',
+  /async function dupliquerJour\(\)/.test(srcConfigLieux))
+// ⚠️ TOUS LES MOMENTS DU JOUR, pas seulement le premier. Un food truck qui sert
+// le midi sur une place et le soir dans un zoning perdrait la moitié de son
+// service, et rien ne le lui dirait.
+verifier('et il emporte TOUS les moments du jour',
+  /copieVers\.flatMap\(cible => source\.map\(/.test(srcConfigLieux))
+
+// ⚠️ ON LIT LE CORPS DE LA FONCTION, PAS LE FICHIER. Chercher « charger() »
+// quelque part après l'insertion le trouvait DIX LIGNES PLUS LOIN, dans une
+// autre fonction : le test restait vert alors que la copie ne rechargeait plus
+// rien. Mesuré par mutation, il était muet. Le comptage d'accolades borne la
+// lecture à la fonction visée.
+function corpsDeLaFonction(src, nom) {
+  const debut = src.indexOf(`async function ${nom}(`)
+  if (debut < 0) return ''
+  const ouvrante = src.indexOf('{', src.indexOf(')', debut))
+  if (ouvrante < 0) return ''
+  let profondeur = 0
+  for (let i = ouvrante; i < src.length; i++) {
+    if (src[i] === '{') profondeur++
+    else if (src[i] === '}') {
+      profondeur--
+      if (profondeur === 0) return src.slice(ouvrante, i + 1)
+    }
+  }
+  return ''
+}
+const corpsCopie = corpsDeLaFonction(srcConfigLieux, 'dupliquerJour')
+verifier('la fonction de copie est bien retrouvée', corpsCopie.length > 200, `${corpsCopie.length} caractères`)
+
+// ⚠️ L'ORDRE EST LA GARANTIE : tout est vérifié AVANT la moindre écriture.
+// Écrire au fil de l'eau laisserait trois jours copiés et un refus au milieu,
+// sans que le commerçant sache ce qui est passé.
+const iControle = corpsCopie.indexOf('posesVirtuels.push(')
+const iEcriture = corpsCopie.indexOf('.insert(lignes)')
+verifier('rien n’est écrit avant que tout soit vérifié',
+  iControle > 0 && iEcriture > 0 && iControle < iEcriture,
+  `contrôle ${iControle}, écriture ${iEcriture}`)
+// ⚠️ ET LE RECHARGEMENT SUIT L'ÉCRITURE, sans quoi les jours copiés resteraient
+// FERMÉS aux yeux du moteur : c'est `charger()` qui redéduit les horaires
+// d'ouverture depuis les emplacements. Copier un jour sans cela donnerait un
+// planning juste et des créneaux introuvables, exactement le défaut du matin.
+verifier('et les horaires se redéduisent après la copie',
+  iEcriture > 0 && corpsCopie.indexOf('charger()', iEcriture) > iEcriture)
+// ⚠️ CE QUE CE BANC NE TIENT PAS, ET IL VAUT MIEUX L'ÉCRIRE. Mesuré en
+// mutation : glisser un `return` juste avant `charger()` ne fait rougir aucun
+// test. Le texte est toujours là, la ligne ne s'exécute plus. Un banc qui LIT
+// du code ne voit pas du code mort ; seul un test de parcours l'attraperait.
+// La sortie n'est pas de complexifier le filtre, c'est de le savoir.
+
+// ─── L'ADRESSE SOUS LE NOM DE LA SALLE (demande d'Alex, 16/08) ────────────
+// « Salle Respire 1 » dit à une habituée où aller, et absolument rien à qui
+// vient pour la première fois. Le nom garde la tête, il est plus parlant, mais
+// il ne peut pas tenir lieu d'adresse.
+verifier('la fiche rendez-vous donne l’adresse sous le nom de l’endroit',
+  /\{l\.libelle && l\.adresse && \(/.test(srcTunnel))
+verifier('la fiche boutique aussi',
+  /\{lieu\.libelle && lieu\.adresse && \(/.test(srcFicheBoutique))
+
+// ⚠️ L'ÉCRAN DE CONFIRMATION NE PORTE PLUS LA FICHE AU-DESSUS (Alex, 16/08).
+// Une fois le rendez-vous pris, la description du commerce, sa pastille
+// d'ouverture et son planning n'ont plus rien à faire au-dessus du numéro.
+verifier('l’écran de confirmation n’affiche plus la carte du commerce',
+  /\{etape !== 4 && \(/.test(srcTunnel))
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

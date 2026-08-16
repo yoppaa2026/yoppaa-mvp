@@ -22,6 +22,7 @@ import {
   formuleVendableEnLigne, seancesVenduesEnLigne, resumeFormulePublique,
   contratDepuisFormule, libelleValidite, formatDateCourte,
   etapesApresAbonnement, contratQuiVientDEtreAchete,
+  contratDepuisEtat, peutPoserSeance, abonnementsPourPrestation, expliquerRefusSeance,
   resumeAbonnementClient, detailValidite, detailUtilisation, partConsommee,
   phraseApercuFormule, expliquerApercuFormule,
 } from '../lib/abonnements.js'
@@ -1235,6 +1236,238 @@ verifier('et la date d’achat', /acheteLe: contrat\.created_at/.test(srcRouteAb
 // formule, elle, l'a toujours eu. Sans ce repli, ils resteraient muets.
 verifier('un contrat ancien retrouve son cours via sa formule',
   /contrat\.prestation_id \?\? formule\?\.prestation_id/.test(srcRouteAbo))
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// POSER UNE SÉANCE SUR SON ABONNEMENT (Alex, 17/08)
+//
+// « Il est impossible de procéder à une réservation d'une séance de
+// l'abonnement côté Yopper. Ça doit être hyper fluide. »
+//
+// ⚠️ C'ÉTAIT LE MAILLON MANQUANT DU MODULE. La règle de réservation existe
+// depuis le premier jour, vérifiée sous toutes les coutures juste au-dessus
+// dans ce banc, et PERSONNE NE L'APPELAIT. Une cliente pouvait acheter
+// trente-six séances sans avoir aucun moyen d'en poser une seule : elle payait,
+// puis devait téléphoner.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// L'écran reçoit des ÉTATS (ce que rend /api/yopper/abonnements), la règle de
+// réservation attend un CONTRAT. La traduction vit dans le module et pas dans
+// l'écran, sinon l'un des deux finit par apprendre une colonne que l'autre
+// ignore : c'est ce qui a fait afficher « 2/12 » sur un cours complet le 16/08.
+const ETAT_YOGA = {
+  id: 'abo-1', statut: 'actif', mode: 'credit',
+  debut: '2026-09-01', fin: '2027-06-30',
+  total: 36, consommees: 4, solde: 32, seancesParSemaine: 1,
+  dates: ['2026-09-07', '2026-09-14', '2026-09-21', '2026-09-28'],
+  prestationId: 'presta-yoga', commercant: { id: 'c1' }, formule: { id: 'f1' },
+}
+
+const traduit = contratDepuisEtat(ETAT_YOGA)
+egal('la période traverse la traduction', [traduit.date_debut, traduit.date_fin], ['2026-09-01', '2027-06-30'])
+egal('le nombre de séances aussi', traduit.seances_total, 36)
+// ⚠️ LE PLAFOND HEBDOMADAIRE EST LE PLUS FACILE À PERDRE : il change de nom en
+// route (seancesParSemaine côté écran, seances_par_semaine en base). Perdu, il
+// retombe à 1 et refuse une cliente qui a payé deux séances par semaine.
+egal('et le plafond hebdomadaire, qui change de nom en route', traduit.seances_par_semaine, 1)
+egal('un plafond de 2 traverse aussi',
+  contratDepuisEtat({ ...ETAT_YOGA, seancesParSemaine: 2 }).seances_par_semaine, 2)
+egal('sans état, aucun contrat', contratDepuisEtat(null), null)
+
+// La question de l'étape 3, posée sur un état complet.
+egal('une date libre sur une semaine libre est acceptée',
+  peutPoserSeance(ETAT_YOGA, { date: '2026-10-05' }).ok, true)
+// ⚠️ ET LE DÉCOMPTE VIENT DE L'ÉTAT, pas d'un compteur que l'écran tiendrait
+// lui-même : c'est la base qui a compté les séances déjà posées.
+egal('le solde annoncé est celui du contrat',
+  peutPoserSeance(ETAT_YOGA, { date: '2026-10-05' }).solde, 32)
+// Le 14 septembre est déjà pris et le plafond vaut 1 : toute la semaine est
+// fermée, pas seulement ce jour-là.
+egal('une semaine déjà servie est refusée, en le nommant',
+  peutPoserSeance(ETAT_YOGA, { date: '2026-09-16' }).raison, 'plafond_semaine')
+egal('hors période, on le dit',
+  peutPoserSeance(ETAT_YOGA, { date: '2027-08-01' }).raison, 'hors_periode')
+egal('un contrat résilié ne pose plus rien',
+  peutPoserSeance({ ...ETAT_YOGA, statut: 'resilie' }, { date: '2026-10-05' }).raison, 'resilie')
+egal('et un solde épuisé non plus',
+  peutPoserSeance({ ...ETAT_YOGA, consommees: 36, dates: [] }, { date: '2026-10-05' }).raison, 'solde_epuise')
+
+// ⚠️ UN ABONNEMENT COUVRE UN COURS, celui de sa formule. Le yoga du lundi ne
+// paie pas la séance de pilates : proposer l'inverse promettrait une gratuité
+// que le commerçant n'a jamais vendue.
+egal('l’abonnement se propose sur SON cours',
+  abonnementsPourPrestation([ETAT_YOGA], { commercantId: 'c1', prestationId: 'presta-yoga' }).length, 1)
+egal('et sur aucun autre',
+  abonnementsPourPrestation([ETAT_YOGA], { commercantId: 'c1', prestationId: 'presta-pilates' }).length, 0)
+egal('ni chez un autre commerçant',
+  abonnementsPourPrestation([ETAT_YOGA], { commercantId: 'c2', prestationId: 'presta-yoga' }).length, 0)
+// Un contrat résilié ne se propose pas : le refus doit venir AVANT que le
+// client ait choisi sa date, pas après.
+egal('un contrat résilié ne se propose pas',
+  abonnementsPourPrestation([{ ...ETAT_YOGA, statut: 'resilie' }], { commercantId: 'c1', prestationId: 'presta-yoga' }).length, 0)
+// Sans cours identifié, on ne propose rien plutôt que de proposer au hasard.
+egal('sans cours demandé, rien n’est proposé',
+  abonnementsPourPrestation([ETAT_YOGA], { commercantId: 'c1' }).length, 0)
+
+// ⚠️ ON DIT POURQUOI, JAMAIS « INDISPONIBLE ». Les cinq refus n'appellent pas
+// la même réaction : une semaine prise se règle en changeant de date, un solde
+// épuisé en rachetant, une période finie en renouvelant. Un refus muet, lui,
+// envoie tout le monde au téléphone.
+verifier('le refus hebdomadaire dit quoi faire',
+  /autre semaine/.test(expliquerRefusSeance('plafond_semaine', ETAT_YOGA)))
+verifier('et il s’accorde quand la formule donne deux séances',
+  /2 séances/.test(expliquerRefusSeance('plafond_semaine', ETAT_YOGA, { plafond: 2 })))
+// Hors période, on NOMME les bornes : « cette date n'est pas couverte » laisse
+// chercher laquelle conviendrait.
+//
+// ⚠️ AVEC L'ANNÉE, ET C'EST TOUT LE SUJET ICI. Le format court du module dit
+// « du 1er septembre au 30 juin », ce qui est parfait sur une preuve d'achat et
+// trompeur sur un refus : un abonnement scolaire traverse deux années, et
+// quelqu'un qui essaie le 1er septembre SUIVANT relirait la phrase, y verrait
+// sa date, et ne comprendrait pas le refus. Trouvé en écrivant ce test.
+verifier('hors période, les deux bornes sont nommées',
+  /1er septembre 2026/.test(expliquerRefusSeance('hors_periode', ETAT_YOGA))
+  && /30 juin 2027/.test(expliquerRefusSeance('hors_periode', ETAT_YOGA)))
+// Et le format court reste court partout ailleurs : l'année est une option
+// qu'on demande, pas un changement imposé aux quatre autres écrans.
+egal('le format court reste sans année par défaut', formatDateCourte('2026-09-01'), '1er septembre')
+verifier('sans dates connues, la phrase tient quand même',
+  expliquerRefusSeance('hors_periode', { debut: null, fin: null }).length > 10)
+verifier('le solde épuisé se dit', /toutes les séances/i.test(expliquerRefusSeance('solde_epuise')))
+verifier('la résiliation aussi', /résilié/.test(expliquerRefusSeance('resilie')))
+// ⚠️ ET UNE RAISON INCONNUE NE REND PAS UNE PHRASE VIDE : un écran muet devant
+// un refus est exactement ce qu'on cherche à éviter.
+verifier('une raison inconnue rend tout de même une phrase',
+  expliquerRefusSeance('quelque_chose_de_neuf').length > 10)
+
+// ─── LA ROUTE, PARCE QU'ELLE ACCORDE UN DROIT ─────────────────────────────
+//
+// ⚠️ POURQUOI UNE ROUTE, ALORS QUE LE TUNNEL ORDINAIRE ÉCRIT DIRECTEMENT EN
+// BASE : le solde vit dans des tables fermées, l'écran a pu rester ouvert vingt
+// minutes, et sans contrôle serveur il suffirait d'envoyer l'identifiant d'un
+// contrat pour consommer les séances de quelqu'un d'autre.
+const srcReserverAbo = sansCommentSrc(lire('app/api/rdv/reserver-abonnement/route.js'))
+
+verifier('l’identité doit être PROUVÉE, le cookie ne suffit pas',
+  /identiteProuvee\(request\)/.test(srcReserverAbo))
+verifier('et sans elle, 401', /error: 'non_authentifie' \}, \{ status: 401 \}/.test(srcReserverAbo))
+// ⚠️ LE CONTRAT DOIT ÊTRE LE SIEN. Sans cette comparaison, l'identifiant d'un
+// contrat suffirait à consommer l'abonnement d'une autre cliente.
+verifier('le contrat doit porter l’email de l’appelant',
+  /client_email \|\| ''\)\.trim\(\)\.toLowerCase\(\) !== yopper\.email/.test(srcReserverAbo))
+// ⚠️ « Pas à toi » et « n'existe pas » rendent la MÊME réponse : les distinguer
+// permettrait d'apprendre quels identifiants de contrats existent.
+verifier('un contrat étranger et un contrat absent se répondent pareil',
+  (srcReserverAbo.match(/error: 'abonnement_introuvable'/g) || []).length === 1)
+// ⚠️ LA PRESTATION VIENT DU CONTRAT, JAMAIS DU CORPS DE LA REQUÊTE. Sinon un
+// abonnement de yoga paierait la séance de pilates.
+verifier('le cours vient du contrat, pas de la requête',
+  /let prestationId = contrat\.prestation_id/.test(srcReserverAbo))
+verifier('et le corps de la requête ne porte aucune prestation',
+  !/prestation_id:\s*(corps|body)/.test(srcReserverAbo))
+// Le repli sur la formule couvre les contrats vendus avant le 17/08.
+verifier('un contrat ancien retrouve son cours par sa formule',
+  /from\('abonnement_formules'\)[\s\S]{0,120}prestation_id/.test(srcReserverAbo))
+
+// ⚠️ LE DROIT SE REVÉRIFIE ICI, ET AVANT D'ÉCRIRE. L'écran a pu rester ouvert
+// vingt minutes : le solde qu'il affichait n'engage personne.
+verifier('la règle du module est appelée, pas réécrite',
+  /peutReserverSurAbonnement\(contrat, \{/.test(srcReserverAbo))
+const iVerdictAbo = srcReserverAbo.indexOf('peutReserverSurAbonnement(contrat')
+const iRefusAbo = srcReserverAbo.indexOf("error: 'refus'")
+const iInsertAbo = srcReserverAbo.indexOf('.insert(payload)')
+verifier('rien n’est écrit avant que le droit soit vérifié',
+  iVerdictAbo > 0 && iInsertAbo > 0 && iVerdictAbo < iInsertAbo,
+  `verdict ${iVerdictAbo}, insert ${iInsertAbo}`)
+verifier('et le refus sort AVANT l’écriture',
+  iRefusAbo > 0 && iRefusAbo < iInsertAbo, `refus ${iRefusAbo}, insert ${iInsertAbo}`)
+// ⚠️ ON REND LA RAISON, pas un refus muet : l'écran ne doit pas avoir à deviner
+// laquelle des cinq afficher.
+verifier('la raison du refus remonte à l’écran',
+  /raison: verdict\.raison/.test(srcReserverAbo))
+
+// ⚠️ LE DÉCOMPTE SE COMPTE, il ne se décrémente pas : un compteur stocké dérive
+// au premier accident et plus personne ne sait quel chiffre est bon.
+verifier('les séances consommées sont comptées en base',
+  /seancesConsommees\(posees \|\| \[\]/.test(srcReserverAbo))
+verifier('et les dates déjà prises aussi, pour le plafond',
+  /datesConsommees\(posees \|\| \[\]/.test(srcReserverAbo))
+
+// Ce que la séance porte, et c'est tout le sujet du module.
+//
+// ⚠️ ON LIT LE PAYLOAD, PAS LE FICHIER. Ces deux champs figurent aussi dans la
+// RÉPONSE rendue à l'écran : chercher leur nom n'importe où laissait le banc
+// vert alors que la ligne écrite en base avait disparu. Mesuré en mutation, et
+// c'est la même leçon que le select voisin de ce matin.
+const payloadSeance = (() => {
+  const i = srcReserverAbo.indexOf('const payload = {')
+  return i < 0 ? '' : srcReserverAbo.slice(i, srcReserverAbo.indexOf('\n  }', i))
+})()
+verifier('la séance écrite en base porte le contrat qui la paie',
+  /abonnement_id: contrat\.id/.test(payloadSeance), payloadSeance ? '' : 'payload introuvable')
+// ⚠️ ZÉRO PARCE QUE C'EST DÉJÀ PAYÉ. Le prix vit sur le CONTRAT : compter le
+// tarif plein ici multiplierait le chiffre d'affaires du commerçant par 36.
+verifier('et un prix nul, le prix vivant sur le contrat', /prix_estime: 0/.test(payloadSeance))
+verifier('aucun acompte n’est réclamé', /acompte_montant: null/.test(srcReserverAbo))
+// ⚠️ LA PREMIÈRE PLACE LIBRE, pas « inscrits + 1 » : une annulation libère une
+// place AU MILIEU, et compter en redonnerait une déjà prise.
+verifier('la place est la première libre', /premierePlaceLibre\(prestation/.test(srcReserverAbo))
+verifier('la capacité est gravée comme partout', /capacite_creneau: capacite/.test(srcReserverAbo))
+// ⚠️ LE LIEU EST GRAVÉ ICI AUSSI. C'est le quatrième chemin qui crée un
+// rendez-vous : sans lui, la confirmation annonce le siège social, donc le
+// DOMICILE d'une commerçante inscrite chez elle mais qui donne cours en salle.
+verifier('le lieu est gravé, comme sur les trois autres chemins',
+  /champsLieuPour\(db, commercant/.test(srcReserverAbo))
+// Le double-booking reste rattrapé par la base, atomiquement.
+verifier('le double-booking est rattrapé par la base',
+  /error\.code === '23505' \|\| error\.code === '23P01'/.test(srcReserverAbo))
+
+// ─── L'ÉCRAN ──────────────────────────────────────────────────────────────
+const srcTunnelAbo = sansCommentSrc(lire('app/commander/rdv/[slug]/page.js'))
+
+// ⚠️ LE CHOIX EST À L'ÉTAPE 3 ET PAS AU CHOIX DU COURS : il a besoin de LA
+// DATE, dont dépendent la période, le plafond de la semaine et le solde.
+verifier('le verdict n’est calculé qu’une fois la date connue',
+  /\(aboDuCours && dateChoisie\)/.test(srcTunnelAbo))
+verifier('la fiche propose l’abonnement du cours choisi',
+  /abonnementsPourPrestation\(mesAbos/.test(srcTunnelAbo))
+// ⚠️ COCHÉ PAR DÉFAUT : il a payé son abonnement, lui faire payer deux fois la
+// même séance parce qu'il n'a pas vu une case serait indéfendable.
+verifier('la case est cochée par défaut',
+  /setPayerAvecAbo\] = useState\(true\)/.test(srcTunnelAbo))
+verifier('la séance part par la route serveur, pas par un insert direct',
+  /fetchYopper\('\/api\/rdv\/reserver-abonnement'/.test(srcTunnelAbo))
+// ⚠️ LE PRIX SUIT LE MOYEN DE PAIEMENT. Annoncer le tarif plein sur une séance
+// déjà payée est un mensonge, et « 0 € » en est un autre : ce n'est pas
+// gratuit, c'est compris.
+//
+// ⚠️ AUX DEUX ENDROITS OÙ LE PRIX S'ÉCRIT : le rendez-vous verrouillé en tête
+// d'étape 3, ET la ligne du récapitulatif juste avant le bouton. Le premier
+// test n'en exigeait qu'un, et casser l'autre ne faisait rougir personne.
+egal('le prix dit « compris » aux DEUX endroits de l’étape 3',
+  (srcTunnelAbo.match(/seanceSurAbo \? 'Compris dans ton abonnement'/g) || []).length, 2)
+verifier('l’écran de confirmation le dit aussi, via le module',
+  /libellePrixSeance\(rdvCree\)/.test(srcTunnelAbo))
+// ⚠️ ET AUCUN ACOMPTE N'EST RÉCLAMÉ : sans ce garde-fou le bouton annonçait
+// « Payer 12,50 € et confirmer » devant une séance qui ne coûte rien.
+verifier('aucun acompte n’est réclamé sur une séance d’abonnement',
+  /const acompteEnLigne = !seanceSurAbo/.test(srcTunnelAbo))
+verifier('et la ligne d’acompte du récapitulatif disparaît',
+  /acompte_pourcent > 0 && !seanceSurAbo/.test(srcTunnelAbo))
+// ⚠️ LIMITE ASSUMÉE, ET DITE. Une séance d'abonnement ne passe par aucun
+// paiement, les produits en exigent un : poser la séance aurait PERDU LE PANIER
+// EN SILENCE, ce qui est la pire des sorties. Une friction nommée vaut mieux.
+//
+// ⚠️ ET ON VÉRIFIE CE QU'IL CALCULE, pas seulement qu'il existe : le premier
+// test se contentait du nom de la variable, donc la mettre à `false` ne faisait
+// rougir personne, et le panier repartait se perdre en silence.
+verifier('un panier de produits suspend le choix au lieu de le perdre',
+  /const aboBloqueParPanier = !!\(lignesPanier\.length > 0 && produitsAchetables\)/.test(srcTunnelAbo)
+  && /payerAvecAbo && !aboBloqueParPanier/.test(srcTunnelAbo))
+// Le solde a bougé : sans relecture, la fiche continuerait d'annoncer le
+// nombre de séances d'avant la réservation.
+verifier('le solde est relu après la réservation',
+  /setMesAbos\(a\.abonnements/.test(srcTunnelAbo))
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

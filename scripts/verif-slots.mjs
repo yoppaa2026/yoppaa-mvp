@@ -310,8 +310,13 @@ verifier('au moins un mercredi ouvert sur 14 jours', jours.some(j => j.ouvert))
 // abonnements a ajouté un quatrième chemin d'écriture dans ConfigDashboard, et
 // le banc a rougi AVANT que quiconque teste l'écran : « aucun chemin d'écriture
 // n'échappe à la liste ». C'est exactement le rôle qu'on lui demande.
+// ⚠️ ET ELLE A RESERVI LE 17/08 : la route qui pose une séance sur un
+// abonnement est le cinquième chemin d'écriture, et le banc a rougi AVANT
+// qu'Alex ait pu tester quoi que ce soit. Deuxième fois que cette liste attrape
+// un chemin le jour même où il est écrit.
 const CHEMINS_ECRITURE = [
   'app/api/stripe/webhook/route.js',
+  'app/api/rdv/reserver-abonnement/route.js',
   'app/commander/rdv/[slug]/page.js',
   'app/dashboard/ModalNouveauRdv.js',
   'app/dashboard/ConfigDashboard.js',

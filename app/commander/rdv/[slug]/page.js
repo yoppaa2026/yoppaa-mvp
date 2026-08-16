@@ -55,7 +55,8 @@ import BonCadeauModal from '../../BonCadeauModal'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 import BlocAbonnements from './BlocAbonnements'
 import ConfirmationAbonnement from './ConfirmationAbonnement'
-import { formuleVendableEnLigne, messageRetourAbonnement, cleAchatAbonnement, contratQuiVientDEtreAchete } from '@/lib/abonnements'
+import { formuleVendableEnLigne, messageRetourAbonnement, cleAchatAbonnement, contratQuiVientDEtreAchete,
+  abonnementsPourPrestation, peutPoserSeance, expliquerRefusSeance, libellePrixSeance } from '@/lib/abonnements'
 import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { jourLocalISO } from '@/lib/timezone'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
@@ -293,6 +294,8 @@ export default function CommanderRdvSlug() {
   const [abonnementRetour, setAbonnementRetour] = useState(null)  // idem, achat d'abonnement
   const [contratAchete, setContratAchete] = useState(null)  // le contrat relu en base après paiement
   const [aboEnAttente, setAboEnAttente] = useState(false)   // on interroge encore, le webhook n'a pas fini
+  const [mesAbos, setMesAbos] = useState([])                // les abonnements du client chez CE commerçant
+  const [payerAvecAbo, setPayerAvecAbo] = useState(true)    // son choix à l'étape 3
   const [loading, setLoading] = useState(true)
   const [erreur, setErreur] = useState(null)
 
@@ -1075,6 +1078,48 @@ export default function CommanderRdvSlug() {
   }, [])
 
   const yopperConnecte = !!(client.email && clientId)
+
+  // ⚠️ LES ABONNEMENTS DU CLIENT, POUR QU'IL PUISSE ENFIN S'EN SERVIR (Alex,
+  // 17/08). Ils ne se lisent qu'avec une identité PROUVÉE : le solde vit dans
+  // une table fermée, et c'est l'email vérifié qui relie un contrat à son
+  // propriétaire. Sans compte, la séance reste payable à l'unité, et c'est
+  // structurel, pas une limitation qu'on lèvera.
+  useEffect(() => {
+    if (!commercant?.id) return
+    let vivant = true
+    fetchYopper('/api/yopper/abonnements')
+      .then(r => r.json())
+      .then(j => { if (vivant) setMesAbos(j?.ok ? (j.abonnements || []) : []) })
+      // Un visiteur sans compte reçoit 401 : ce n'est pas une panne, c'est la
+      // réponse normale. Rien à afficher, et surtout rien à dire.
+      .catch(() => {})
+    return () => { vivant = false }
+  }, [commercant?.id])
+
+  // Le contrat qui couvre le cours en cours de réservation. ⚠️ La règle vit
+  // dans le module, pas ici : un abonnement couvre LE cours de sa formule, et
+  // le yoga du lundi ne paie pas la séance de pilates.
+  const aboDuCours = abonnementsPourPrestation(mesAbos, {
+    commercantId: commercant?.id || null,
+    prestationId: prestationChoisie?.id || null,
+  })[0] || null
+
+  // ⚠️ ET LA RÉPONSE DEMANDE LA DATE. La période de validité, le plafond de la
+  // semaine et le solde en dépendent tous les trois : c'est précisément pour
+  // ça que le choix se pose à l'étape 3 et pas au choix du cours.
+  const verdictAbo = (aboDuCours && dateChoisie)
+    ? peutPoserSeance(aboDuCours, { date: isoDate(dateChoisie) })
+    : null
+
+  // ⚠️ LIMITE ASSUMÉE : PAS DE PRODUITS DANS LE MÊME GESTE. Une séance
+  // d'abonnement ne passe par aucun paiement, les produits en exigent un, et
+  // les deux chemins ne se rejoignent pas. Laisser la case cochée aurait posé
+  // la séance et PERDU LE PANIER EN SILENCE, ce qui est la pire des sorties.
+  // On le dit, et le client tranche : une friction nommée vaut mieux qu'une
+  // disparition muette.
+  const aboBloqueParPanier = !!(lignesPanier.length > 0 && produitsAchetables)
+  const seanceSurAbo = !!(verdictAbo?.ok && payerAvecAbo && !aboBloqueParPanier)
+
   const formValide = !!(prestationChoisie && dateChoisie && heureChoisie
     && client.prenom.trim() && client.nom.trim()
     && client.email.trim() && client.telephone.trim()
@@ -1254,6 +1299,97 @@ export default function CommanderRdvSlug() {
         && commercant.stripe_account_charges_enabled
         && acompteMontant && acompteMontant >= 0.5
       )
+
+      // ─── LA SÉANCE EST PRISE SUR L'ABONNEMENT ──────────────────────────────
+      //
+      // ⚠️ ELLE PASSE AVANT TOUT LE RESTE, et elle ne paie rien : ni acompte,
+      // ni prix. Elle a été payée le jour de l'achat du contrat.
+      //
+      // ⚠️ ET ELLE PASSE PAR LE SERVEUR, contrairement au tunnel ordinaire qui
+      // écrit directement en base. Ce geste accorde un DROIT : le solde vit
+      // dans une table fermée, l'écran a pu rester ouvert vingt minutes, et
+      // sans contrôle serveur il suffirait d'envoyer l'identifiant d'un contrat
+      // pour consommer les séances de quelqu'un d'autre.
+      if (seanceSurAbo && aboDuCours?.id) {
+        try {
+          const res = await fetchYopper('/api/rdv/reserver-abonnement', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              abonnement_id: aboDuCours.id,
+              date_rdv: dateStr,
+              heure_debut: heureChoisie,
+              notes_client: client.notes.trim() || null,
+              lieu_id: (creneauxFiltres || []).find(c =>
+                c.lieu_id && c.heure_debut?.slice(0, 5) <= heureChoisie && c.heure_fin?.slice(0, 5) > heureChoisie
+              )?.lieu_id || null,
+            }),
+          })
+          const j = await res.json().catch(() => ({}))
+
+          if (!j?.ok) {
+            // ⚠️ ON REND LA RAISON DU SERVEUR, pas un message d'erreur
+            // technique : « tu as déjà ta séance de la semaine » et « ton
+            // abonnement a expiré » n'appellent pas la même réaction.
+            if (j?.error === 'refus') {
+              setSubmitError(expliquerRefusSeance(j.raison, aboDuCours, { plafond: j.plafond }))
+            } else if (j?.error === 'place_prise') {
+              setSubmitError(j.collectif
+                ? 'La dernière place vient d’être prise. Choisis un autre horaire.'
+                : 'Ce créneau vient d’être pris. Choisis-en un autre.')
+              setHeureChoisie(null)
+              setSubmitting(false)
+              setTimeout(() => allerEtape(2), 1200)
+              return
+            } else if (j?.error === 'non_authentifie') {
+              setSubmitError('Reconnecte-toi pour utiliser ton abonnement, ou décoche la case pour payer cette séance.')
+            } else {
+              setSubmitError('Ta séance n’a pas pu être posée sur ton abonnement. Réessaie, ou décoche la case pour la payer.')
+            }
+            setSubmitting(false)
+            return
+          }
+
+          // Le même chemin que le tunnel ordinaire ensuite : le rappel, l'écran,
+          // puis l'email. Un rendez-vous d'abonnement est un rendez-vous.
+          const rdv = j.rdv || {}
+          fetch('/api/rdv/schedule-rappel', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rdv_id: rdv.id }),
+          }).catch(e => console.warn('[rdv abo] schedule-rappel KO', e?.message))
+
+          setRdvCree({
+            ...rdv,
+            commercant_id: commercant.id,
+            client_email: email, client_prenom: prenom, client_nom: nom,
+            duree_minutes: prestationChoisie.duree_minutes,
+            statut: 'confirme',
+            _surAbonnement: true,
+          })
+          setSubmitting(false)
+          setEtape(4)
+          setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
+          promptPushOneSignal()
+
+          fetch('/api/emails/rdv-confirme', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rdv_id: rdv.id }),
+          }).catch(e => console.warn('[rdv abo] email KO', e?.message))
+
+          // Le solde a bougé : on le relit, sinon la fiche continuerait
+          // d'annoncer le nombre de séances d'avant la réservation.
+          fetchYopper('/api/yopper/abonnements')
+            .then(r => r.json())
+            .then(a => { if (a?.ok) setMesAbos(a.abonnements || []) })
+            .catch(() => {})
+          return
+        } catch (e) {
+          console.error('[rdv abo] exception', e)
+          setSubmitError(`Ta séance n’a pas pu être posée : ${e?.message || 'réessaie'}.`)
+          setSubmitting(false)
+          return
+        }
+      }
 
       // TUNNEL UNIQUE (04/08) : des produits dans le panier changent la route.
       // Acompte et produits partent dans UN SEUL paiement, et la prestation
@@ -2124,6 +2260,29 @@ export default function CommanderRdvSlug() {
                                     Acompte {p.acompte_pourcent}% {acompteEnLigneDispo ? 'en ligne' : 'sur place'}
                                   </span>
                                 )}
+                                {/* ⚠️ ICI ON INFORME, ON NE DÉCIDE PAS. Le choix
+                                    de payer avec l'abonnement se pose à l'étape
+                                    3, quand la date est connue : la période, le
+                                    plafond de la semaine et le solde en
+                                    dépendent tous les trois. Cette pastille, en
+                                    revanche, est vraie sans la date, et c'est
+                                    elle qui fait comprendre au client que son
+                                    abonnement sert à quelque chose. */}
+                                {(() => {
+                                  const abo = abonnementsPourPrestation(mesAbos, { commercantId: commercant.id, prestationId: p.id })[0]
+                                  if (!abo) return null
+                                  const reste = Number.isFinite(Number(abo.solde)) ? Number(abo.solde) : null
+                                  return (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.62rem', fontWeight: 800, color: '#fff', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M5 12l5 5L20 7"/>
+                                      </svg>
+                                      {reste !== null && reste > 0
+                                        ? `Ton abonnement · ${reste} séance${reste > 1 ? 's' : ''}`
+                                        : 'Ton abonnement'}
+                                    </span>
+                                  )
+                                })()}
                               </div>
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 800, color: '#fff', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, padding: '6px 14px', borderRadius: 100, boxShadow: `0 4px 14px ${T.main}33` }}>
                                 Réserver
@@ -2513,7 +2672,16 @@ export default function CommanderRdvSlug() {
                           <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 600, lineHeight: 1.45 }}>
                             {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} · {heureChoisie}<br/>
                             <span style={{ color: T.muted, fontWeight: 500 }}>
-                              {formatDuree(prestationChoisie.duree_minutes)} · <span style={{ color: T.main, fontWeight: 800 }}>{formatPrix(prestationChoisie)}</span>
+                              {formatDuree(prestationChoisie.duree_minutes)} ·{' '}
+                              {/* ⚠️ LE PRIX SUIT LE MOYEN DE PAIEMENT. Annoncer
+                                  le tarif plein à quelqu'un qui pose une séance
+                                  déjà payée est un mensonge, et « 0 € » en est
+                                  un autre : ce n'est pas gratuit, c'est compris.
+                                  La phrase vient du module, la même que dans
+                                  « Mes rendez-vous ». */}
+                              <span style={{ color: T.main, fontWeight: 800 }}>
+                                {seanceSurAbo ? 'Compris dans ton abonnement' : formatPrix(prestationChoisie)}
+                              </span>
                             </span>
                           </p>
                         </div>
@@ -2525,7 +2693,11 @@ export default function CommanderRdvSlug() {
                       {/* L'acompte se lit DÈS ICI, pas seulement au moment de
                           payer. Alex : « il faut que les infos soient affichées
                           partout pendant la procédure de vente ». */}
-                      {prestationChoisie.acompte_pourcent > 0 && (
+                      {/* ⚠️ PAS D'ACOMPTE SUR UNE SÉANCE D'ABONNEMENT : elle est
+                          payée depuis le jour de l'achat du contrat. Laisser
+                          cette ligne annoncerait un prélèvement qui n'aura
+                          jamais lieu. */}
+                      {prestationChoisie.acompte_pourcent > 0 && !seanceSurAbo && (
                         <p style={{ margin: 0, fontSize: '0.74rem', color: T.deep, fontWeight: 700, background: T.pale, borderRadius: 8, padding: '6px 10px' }}>
                           Acompte {prestationChoisie.acompte_pourcent}% {acompteEnLigneDispo ? 'à payer en ligne maintenant' : 'à régler sur place'}
                           {(() => {
@@ -2536,6 +2708,66 @@ export default function CommanderRdvSlug() {
                       )}
                     </div>
                   </div>
+
+                  {/* ─── PAYER CETTE SÉANCE, OU LA PRENDRE SUR SON ABONNEMENT ───
+                      Demande d'Alex du 17/08. Le choix est ici, et pas au choix
+                      du cours, parce qu'il a besoin de LA DATE : la période de
+                      validité, le plafond de la semaine et le solde en
+                      dépendent tous les trois. */}
+                  {aboDuCours && (
+                    <div style={{ background: verdictAbo?.ok ? '#F5F3FF' : '#FFFBEB', border: `1.5px solid ${verdictAbo?.ok ? T.light : '#FCD34D'}`, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: 14 }}>
+                      <p style={{ margin: '0 0 8px', fontSize: '0.62rem', fontWeight: 800, color: verdictAbo?.ok ? T.main : '#92400E', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                        Ton abonnement
+                      </p>
+
+                      {aboBloqueParPanier ? (
+                        // ⚠️ Une séance d'abonnement ne passe par aucun
+                        // paiement, les produits en exigent un : les deux
+                        // chemins ne se rejoignent pas encore. On le DIT,
+                        // plutôt que de poser la séance et de perdre le panier.
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: '#78350F', lineHeight: 1.5, fontWeight: 600 }}>
+                          Tu as des produits dans ton panier : ils demandent un paiement, ta séance non.
+                          <span style={{ display: 'block', marginTop: 4, fontWeight: 500, color: '#92400E' }}>
+                            Retire-les pour utiliser ton abonnement, ou garde-les et paie l’ensemble.
+                          </span>
+                        </p>
+                      ) : verdictAbo?.ok ? (
+                        <>
+                          {/* ⚠️ COCHÉ PAR DÉFAUT. Il a payé son abonnement : lui
+                              faire payer une deuxième fois la même séance parce
+                              qu'il n'a pas vu une case serait indéfendable. */}
+                          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={payerAvecAbo} onChange={e => setPayerAvecAbo(e.target.checked)}
+                              style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', flexShrink: 0, marginTop: 1 }}/>
+                            <span style={{ fontSize: '0.85rem', color: T.deep, lineHeight: 1.5 }}>
+                              <strong style={{ color: T.ink }}>J’utilise une séance de mon abonnement.</strong><br/>
+                              <span style={{ color: T.muted, fontSize: '0.78rem' }}>
+                                {verdictAbo.solde === 1
+                                  ? 'Il te restera 0 séance après celle-ci.'
+                                  : `Il te restera ${Math.max(0, Number(verdictAbo.solde) - 1)} séances après celle-ci.`}
+                              </span>
+                            </span>
+                          </label>
+                          {!payerAvecAbo && (
+                            <p style={{ margin: '8px 0 0', fontSize: '0.76rem', color: T.muted, lineHeight: 1.5 }}>
+                              Tu paieras cette séance au tarif normal, et ton abonnement gardera ses {verdictAbo.solde} séances.
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        // ⚠️ ON DIT POURQUOI. « Indisponible » enverrait au
+                        // téléphone quelqu'un qui n'avait qu'à changer de
+                        // semaine. La phrase vient du module, une seule
+                        // écriture pour tous les écrans.
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: '#78350F', lineHeight: 1.5, fontWeight: 600 }}>
+                          {expliquerRefusSeance(verdictAbo?.raison, aboDuCours, { plafond: verdictAbo?.plafond })}
+                          <span style={{ display: 'block', marginTop: 4, fontWeight: 500, color: '#92400E' }}>
+                            Tu peux réserver cette séance en la payant normalement.
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Les produits restent atteignables jusqu'au bout : le client
                       se décide souvent en voyant le total. Placés SOUS le
@@ -2640,7 +2872,11 @@ export default function CommanderRdvSlug() {
 
                   {/* Bouton Confirmer - wording adapté si paiement en ligne requis */}
                   {(() => {
-                    const acompteEnLigne = !!(commercant?.rdv_acompte_en_ligne_actif && commercant?.stripe_account_charges_enabled && prestationChoisie?.acompte_pourcent > 0)
+                    // ⚠️ AUCUN ACOMPTE SUR UNE SÉANCE D'ABONNEMENT : elle est
+                    // payée depuis l'achat du contrat. Sans ce garde-fou, le
+                    // bouton aurait annoncé « Payer 12,50 € et confirmer »
+                    // devant une séance qui ne coûte rien.
+                    const acompteEnLigne = !seanceSurAbo && !!(commercant?.rdv_acompte_en_ligne_actif && commercant?.stripe_account_charges_enabled && prestationChoisie?.acompte_pourcent > 0)
                     const prixBase = prestationChoisie?.prix != null ? Number(prestationChoisie.prix) : (prestationChoisie?.prix_min != null ? Number(prestationChoisie.prix_min) : null)
                     const acompteMnt = (prixBase != null && prestationChoisie?.acompte_pourcent > 0)
                       ? Math.round(prixBase * prestationChoisie.acompte_pourcent) / 100
@@ -2652,9 +2888,11 @@ export default function CommanderRdvSlug() {
                     const aPayerMaintenant = (acompteEnLigne && acompteMnt ? acompteMnt : 0) + totalProduits
                     // Reste à régler sur place : le solde de la prestation, plus
                     // rien pour les produits, qui sont payés en entier.
-                    const surPlace = prixBase != null
+                    // Et rien à régler sur place non plus : le prix vit sur le
+                    // contrat, pas sur la séance.
+                    const surPlace = seanceSurAbo ? null : (prixBase != null
                       ? prixBase - (acompteEnLigne && acompteMnt ? acompteMnt : 0)
-                      : null
+                      : null)
                     return (
                       <>
                         {/* LE PANIER COMPLET, prestation comprise.
@@ -2673,7 +2911,9 @@ export default function CommanderRdvSlug() {
                                 {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} · {heureChoisie}
                               </p>
                             </div>
-                            <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.ink }}>{formatPrix(prestationChoisie)}</span>
+                            <span style={{ fontSize: seanceSurAbo ? '0.72rem' : '0.85rem', fontWeight: seanceSurAbo ? 800 : 900, color: seanceSurAbo ? T.main : T.ink, textAlign: 'right', flexShrink: 0 }}>
+                              {seanceSurAbo ? 'Compris dans ton abonnement' : formatPrix(prestationChoisie)}
+                            </span>
                           </div>
                           {lignesPanier.map(l => (
                             <div key={l.article.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
@@ -2866,8 +3106,16 @@ export default function CommanderRdvSlug() {
                       <span style={{ fontSize: '0.85rem', fontWeight: 800, color: T.ink }}>{formatDuree(prestationChoisie.duree_minutes)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: rdvCree.acompte_montant ? 8 : 0, paddingBottom: rdvCree.acompte_montant ? 8 : 0, borderBottom: rdvCree.acompte_montant ? `1px solid ${T.pale}` : 'none' }}>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Prix estimé</span>
-                      <span style={{ fontSize: '0.95rem', fontWeight: 900, color: T.main }}>{formatPrix(prestationChoisie)}</span>
+                      {/* ⚠️ « PRIX ESTIMÉ : 45 € » SUR UNE SÉANCE DÉJÀ PAYÉE
+                          ferait croire à un second paiement, et « 0 € » ferait
+                          croire à un cadeau. La phrase vient du module, la même
+                          que dans « Mes rendez-vous ». */}
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        {rdvCree.abonnement_id ? 'Paiement' : 'Prix estimé'}
+                      </span>
+                      <span style={{ fontSize: rdvCree.abonnement_id ? '0.8rem' : '0.95rem', fontWeight: rdvCree.abonnement_id ? 800 : 900, color: T.main, textAlign: 'right' }}>
+                        {libellePrixSeance(rdvCree) || formatPrix(prestationChoisie)}
+                      </span>
                     </div>
                     {rdvCree.acompte_montant && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

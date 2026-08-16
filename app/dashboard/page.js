@@ -1658,7 +1658,16 @@ export default function Dashboard() {
     duJour:     rdvsDuJour.length,
     confirmes:  rdvsDuJour.filter(r => r.statut === 'confirme').length,
     honores:    rdvsDuJour.filter(r => r.statut === 'honore').length,
-    annules:    rdvsDuJour.filter(r => r.statut === 'annule').length,
+    // ⚠️ LE COMPTEUR DES ANNULATIONS A ÉTÉ RETIRÉ ICI, ET IL FAUT DIRE POURQUOI
+    // plutôt que de laisser quelqu'un le réécrire dans six mois. Il comptait
+    // les rendez-vous de statut `'annule'`, une valeur qui N'EXISTE PAS : la
+    // base n'accepte que `annule_client` et `annule_commercant`. Il valait donc
+    // zéro même avec dix annulations, et personne ne s'en apercevait puisqu'il
+    // n'était affiché nulle part.
+    //
+    // ⚠️ Un calcul faux qu'on ne montre pas est un piège en attente : le jour
+    // où on l'affiche, il ment avec l'autorité d'un chiffre. Si le besoin
+    // revient, la bonne écriture est `r.statut.startsWith('annule')`.
     noShow:     rdvsDuJour.filter(r => r.statut === 'no_show').length,
     caEstime:   rdvsDuJour.filter(r => r.statut === 'honore').reduce((acc, r) => acc + Number(r.prix_estime || 0), 0),
   }

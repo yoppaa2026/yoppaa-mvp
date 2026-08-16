@@ -13,7 +13,7 @@ import {
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
 import { peutActiverRdv, messageActivationRdv, etatActivationRdv } from '../lib/activation-rdv.js'
 import { nomClient, quandRdv, questionRdv, confirmationRdv, statutDepuisChoix } from '../lib/confirmation-rdv.js'
-import { capacitePrestation } from '../lib/cours-collectifs.js'
+import { capacitePrestation, blocsAgenda, regrouperEnSeances } from '../lib/cours-collectifs.js'
 import {
   creneauAcceptable, creneauxDuJour, deplacementUtile, champsDuDeplacement,
   heureDeFin, minutesDeLHeure,
@@ -1228,6 +1228,94 @@ verifier('et il n’est plus collé en haut du bandeau',
   retraitMobile >= (hauteurMobile - recouvrement) * 0.3
   && retraitBureau >= (hauteurBureau - recouvrement) * 0.3,
   `${retraitMobile} · ${retraitBureau}`)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ DEUX BLOCS À LA MÊME HEURE NE DOIVENT PAS SE CACHER (Alex, 16/08)
+//
+// Le regroupement des cours réglait le cas de DOUZE INSCRITS AU MÊME COURS. Il
+// ne réglait ni celui de deux SÉANCES différentes au même horaire, ni celui
+// d'un cours et d'un rendez-vous individuel : chaque bloc était posé en
+// `left: 2, right: 2`, donc au même endroit au pixel près.
+//
+// ⚠️ CE DÉFAUT NE RESSEMBLE PAS À UN DÉFAUT. La journée a l'air correcte, il
+// manque simplement des gens. Alex l'a trouvé sur un cours annoncé « 2/12 »
+// alors qu'il l'avait rempli.
+// ═══════════════════════════════════════════════════════════════════════════
+const srcAgendaBlocs = sansCommentaires(readFileSync(new URL('../app/dashboard/AgendaRdv.js', import.meta.url), 'utf8'))
+
+// La liste est calculée UNE fois : c'est elle qui donne l'indice de colonne, et
+// deux appels séparés à `blocsAgenda` rendraient des indices incomparables.
+verifier('les blocs d’une cellule sont calculés une seule fois',
+  /const blocsIci = blocsAgenda\(rdvsCommencantIci\)/.test(srcAgendaBlocs))
+egal('et plus aucun appel séparé ne subsiste',
+  (srcAgendaBlocs.match(/blocsAgenda\(/g) || []).length, 1)
+
+// ⚠️ ANCRÉ SUR L'ABSENCE DE `right`, PAS SUR LA PRÉSENCE DE `left`. Une largeur
+// calculée qui cohabiterait avec `right: 2` serait ignorée en silence.
+verifier('aucun bloc ne s’étale plus sur toute la cellule',
+  !/top: 1, left: 2, right: 2/.test(srcAgendaBlocs))
+verifier('les séances prennent leur colonne',
+  /top: 1, \.\.\.colonneSeance/.test(srcAgendaBlocs))
+verifier('les rendez-vous individuels aussi',
+  /top: 1, \.\.\.colonneRdv/.test(srcAgendaBlocs))
+
+// La largeur se partage entre TOUS les blocs de la cellule, séances et
+// rendez-vous confondus : compter les séances seules laisserait un cours et une
+// coupe l'un sur l'autre.
+verifier('la largeur se partage entre tous les blocs de la cellule',
+  /const nbColonnes = Math\.max\(1, blocsIci\.length\)/.test(srcAgendaBlocs))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ UN COURS EST UN COURS, QUEL QUE SOIT LE PRATICIEN (Alex, 16/08)
+//
+// Son cours de douze s'affichait « 2/12 » alors qu'il était PLEIN : dix
+// inscrites portaient la praticienne, deux avaient réservé « sans préférence »,
+// et l'agenda en faisait deux séances.
+//
+// ⚠️ CE N'ÉTAIT PAS UN DÉFAUT D'AFFICHAGE, C'ÉTAIT DEUX DÉFINITIONS DE LA MÊME
+// CHOSE. La capacité est portée par la PRESTATION, et le garde-fou de
+// réservation compte donc sur date + heure + prestation : c'est lui qui a
+// correctement refusé la treizième. L'agenda ajoutait le praticien, il ne
+// pouvait pas tomber sur le même nombre.
+//
+// On EXÉCUTE la règle sur le cas réel, relevé en base ce jour-là.
+// ═══════════════════════════════════════════════════════════════════════════
+const COURS_D_ALEX = [
+  ...Array.from({ length: 10 }, (_, i) => ({
+    id: `p${i}`, date_rdv: '2026-08-17', heure_debut: '10:00', heure_fin: '11:00',
+    prestation_id: 'yoga', praticien_id: 'pr-emily', capacite_creneau: 12, place_no: i + 1,
+  })),
+  ...Array.from({ length: 2 }, (_, i) => ({
+    id: `n${i}`, date_rdv: '2026-08-17', heure_debut: '10:00', heure_fin: '11:00',
+    prestation_id: 'yoga', praticien_id: null, capacite_creneau: 12, place_no: 11 + i,
+  })),
+]
+const blocsDuCours = blocsAgenda(COURS_D_ALEX)
+egal('les douze inscrites tiennent en UNE seule séance', blocsDuCours.length, 1)
+egal('et le cours s’annonce plein', blocsDuCours[0]?.inscrits.length, 12)
+egal('la capacité reste celle de la prestation', blocsDuCours[0]?.capacite, 12)
+
+// ⚠️ CE QUI NE DOIT PAS AVOIR CHANGÉ. Deux prestations différentes au même
+// horaire restent deux séances : c'est le seul découpage qui ait un sens, la
+// capacité étant portée par la prestation.
+egal('deux cours différents au même horaire font toujours deux séances',
+  blocsAgenda([
+    { id: 'a', date_rdv: '2026-08-17', heure_debut: '10:00', prestation_id: 'yoga', capacite_creneau: 12, place_no: 1 },
+    { id: 'b', date_rdv: '2026-08-17', heure_debut: '10:00', prestation_id: 'pilates', capacite_creneau: 8, place_no: 1 },
+  ]).length, 2)
+// Et un rendez-vous individuel ne devient jamais une séance, quel que soit le
+// praticien : c'est ce qui protège tous les métiers en tête-à-tête.
+egal('une coupe reste un rendez-vous',
+  blocsAgenda([{ id: 'c', date_rdv: '2026-08-17', heure_debut: '10:00', prestation_id: 'coupe', capacite_creneau: 1, place_no: 1 }])[0]?.type,
+  'rdv')
+
+// ⚠️ LES DEUX REGROUPEMENTS DOIVENT DIRE LA MÊME CHOSE. `regrouperEnSeances`
+// portait la même clé, praticien compris : la laisser diverger, c'est rouvrir
+// le défaut qu'on vient de fermer, avec deux définitions dans un seul fichier.
+egal('l’autre regroupement suit la même règle',
+  regrouperEnSeances(COURS_D_ALEX).length, 1)
+egal('et compte les mêmes inscrites',
+  regrouperEnSeances(COURS_D_ALEX)[0]?.inscrits.length, 12)
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

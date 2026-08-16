@@ -430,6 +430,32 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
 
                 const peutCreer = state === 'libre' && !couvert && rdvsCommencantIci.length === 0
 
+                // ⚠️ DEUX BLOCS À LA MÊME HEURE SE CACHAIENT L'UN L'AUTRE (trouvé
+                // par Alex le 16/08). Le regroupement des cours réglait le cas de
+                // DOUZE INSCRITS AU MÊME COURS ; il ne réglait pas celui de deux
+                // SÉANCES DIFFÉRENTES au même horaire, ni celui d'un cours et
+                // d'un rendez-vous individuel. Chaque bloc était posé en
+                // `left: 2, right: 2`, donc à la même place au pixel près : le
+                // commerçant voyait le premier, et rien ne lui disait que les
+                // autres existaient.
+                //
+                // ⚠️ C'est le défaut le plus sournois de cet écran, parce qu'il
+                // ne ressemble pas à un défaut : la journée a l'air correcte, il
+                // manque simplement des gens. Alex l'a vu à un cours annoncé
+                // 2/12 alors qu'il l'avait rempli.
+                //
+                // Les blocs se partagent donc la largeur de la cellule. Trois
+                // colonnes étroites valent mieux qu'une seule qui ment.
+                const blocsIci = blocsAgenda(rdvsCommencantIci)
+                const nbColonnes = Math.max(1, blocsIci.length)
+                function colonne(index) {
+                  const largeur = 100 / nbColonnes
+                  return {
+                    left: `calc(${index * largeur}% + 2px)`,
+                    width: `calc(${largeur}% - 4px)`,
+                  }
+                }
+
                 const bgCellule = state === 'ferme'
                   ? '#F3F4F6'
                   : state === 'pause'
@@ -459,7 +485,8 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                         n'aurait vu qu'un seul nom, celui du dernier rendu.
                         Le regroupement se lit sur `capacite_creneau`, gravé
                         dans la réservation : aucune jointure nécessaire. */}
-                    {blocsAgenda(rdvsCommencantIci).filter(b => b.type === 'seance').map(seance => {
+                    {blocsIci.filter(b => b.type === 'seance').map(seance => {
+                      const colonneSeance = colonne(blocsIci.indexOf(seance))
                       const dureeM = (timeToMinutes(seance.heure_fin) - timeToMinutes(seance.heure_debut)) || PAS_MINUTES
                       const hauteur = (dureeM / PAS_MINUTES) * HAUTEUR_CELLULE - 2
                       const premier = seance.inscrits[0]
@@ -474,7 +501,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                           onClick={(e) => { e.stopPropagation(); setSeanceOuverte({ ...seance, jourDate: j.date }) }}
                           title={`${seance.heure_debut?.slice(0, 5)}–${seance.heure_fin?.slice(0, 5)} · ${nom} · ${seance.inscrits.length} inscrit${seance.inscrits.length > 1 ? 's' : ''} sur ${seance.capacite}`}
                           style={{
-                            position: 'absolute', top: 1, left: 2, right: 2, height: hauteur,
+                            position: 'absolute', top: 1, ...colonneSeance, height: hauteur,
                             background: couleurs.bg, color: couleurs.text,
                             borderRadius: 6, padding: '3px 5px', fontSize: 10, fontWeight: 700,
                             cursor: 'pointer', overflow: 'hidden',
@@ -499,7 +526,9 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                     })}
 
                     {/* Render RDV blocks sur la cellule de depart uniquement */}
-                    {blocsAgenda(rdvsCommencantIci).filter(b => b.type === 'rdv').map(b => b.rdv).map(r => {
+                    {blocsIci.filter(b => b.type === 'rdv').map(b => {
+                      const colonneRdv = colonne(blocsIci.indexOf(b))
+                      const r = b.rdv
                       const dureeM = (timeToMinutes(r.heure_fin) - timeToMinutes(r.heure_debut)) || PAS_MINUTES
                       const hauteur = (dureeM / PAS_MINUTES) * HAUTEUR_CELLULE - 2  // -2 pour respiration
                       const couleurs = couleurRdv({ statut: r.statut, couleurPraticien: r.praticien?.couleur_hex })
@@ -511,7 +540,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                           onClick={(e) => { e.stopPropagation(); if (onSelectRdv) onSelectRdv(r) }}
                           style={{
                             position: 'absolute',
-                            top: 1, left: 2, right: 2,
+                            top: 1, ...colonneRdv,
                             height: hauteur,
                             background: couleurs.bg,
                             color: couleurs.text,

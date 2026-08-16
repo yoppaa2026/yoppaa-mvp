@@ -20,6 +20,7 @@ import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
 import { libelleOptions } from '@/lib/options-ligne'
 import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '@/lib/bons-vendus'
 import { peutMarquerNonRetire, ancienneteCommande } from '@/lib/rappels-retrait'
+import { libellePeriodeStats } from '@/lib/agenda-bloc'
 
 const T = {
   bg:      '#F8F6FF',
@@ -1678,6 +1679,15 @@ export default function Dashboard() {
     { label: 'CA honoré',   value: `${statsRdv.caEstime.toFixed(0)}€`,    color: T.main,    bg: T.pale,   border: `${T.main}18`,   pulse: false },
   ]
 
+  // ⚠️ DE QUEL JOUR PARLENT CES CHIFFRES (défaut trouvé par Alex, 16/08). Il
+  // annule un rendez-vous, en honore un autre, et les compteurs restent à zéro.
+  // Le calcul était juste : les quatre cartes ne décrivent QU'UN SEUL JOUR,
+  // celui du sélecteur, alors que l'agenda juste dessous montre la SEMAINE. Il
+  // agissait sur lundi pendant que les compteurs parlaient de samedi, et rien à
+  // l'écran ne le disait. Un compteur qui ne nomme pas sa période ment par
+  // omission. Le même intitulé sert aux deux onglets, qui ont le même schéma.
+  const periodeStats = libellePeriodeStats({ jour: jourActif, aujourdhui: todayKey, historique: modeHistorique })
+
   // ─── Sélecteur commerce ───────────────────────────────────────────────────
   if (listeCommercants.length > 0 && !commercant) return (
     <div style={{ minHeight: '100vh', background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #3D1580 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: '"DM Sans", sans-serif', position: 'relative', overflow: 'hidden' }}>
@@ -2253,6 +2263,11 @@ export default function Dashboard() {
           {/* Sticky header — RDV : stats compactes uniquement (la grille AgendaRdv a sa propre nav) */}
           {ongletPrincipal === 'rdv' && (
             <div className="sticky-header">
+              {periodeStats && (
+                <p style={{ margin: '0 0 6px', fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                  {periodeStats}
+                </p>
+              )}
               <div className="stats-grid">
                 {statsCardsRdv.map((s, i) => (
                   <div key={i} style={{ background: s.bg, borderRadius: 12, padding: '0.5rem 0.75rem', border: `1.5px solid ${s.border}` }}>
@@ -2271,6 +2286,11 @@ export default function Dashboard() {
           {ongletPrincipal === 'commandes' && (
             <div className="sticky-header">
               {/* Stats */}
+              {periodeStats && (
+                <p style={{ margin: '0 0 6px', fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                  {periodeStats}
+                </p>
+              )}
               <div className="stats-grid">
                 {statsCards.map((s, i) => (
                   <div key={i} style={{ background: s.bg, borderRadius: 12, padding: '0.5rem 0.75rem', border: `1.5px solid ${s.border}` }}>

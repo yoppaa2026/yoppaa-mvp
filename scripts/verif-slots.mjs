@@ -1318,6 +1318,66 @@ egal('et compte les mêmes inscrites',
   regrouperEnSeances(COURS_D_ALEX)[0]?.inscrits.length, 12)
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LES COMPTEURS NOMMENT LEUR JOUR (Alex, 16/08)
+//
+// Il annule un rendez-vous, en honore un autre, et « À venir » comme
+// « Honorés » restent à zéro. Le calcul était JUSTE, et c'est bien ça le
+// problème : les quatre cartes ne décrivent qu'UN SEUL JOUR, celui du
+// sélecteur, alors que l'agenda juste dessous montre la SEMAINE ENTIÈRE. Il
+// agissait sur lundi pendant que les compteurs parlaient de samedi.
+//
+// ⚠️ Un compteur qui ne nomme pas sa période ment par omission, et c'est la
+// pire forme : il a l'autorité d'un chiffre.
+// ═══════════════════════════════════════════════════════════════════════════
+const { libellePeriodeStats } = await import('../lib/agenda-bloc.js')
+
+// Le cas exact d'Alex : on est samedi, ses rendez-vous sont lundi.
+egal('le jour du jour se nomme, ET porte sa date',
+  libellePeriodeStats({ jour: '2026-08-16', aujourdhui: '2026-08-16' }),
+  'Aujourd’hui · dimanche 16 août')
+// ⚠️ La date DERRIÈRE « Aujourd'hui » n'est pas décorative : elle permet au
+// commerçant qui revient après une nuit de vérifier d'un regard que l'écran ne
+// lui montre pas la veille.
+verifier('« Aujourd’hui » ne reste jamais seul',
+  /\d/.test(libellePeriodeStats({ jour: '2026-08-16', aujourdhui: '2026-08-16' })))
+
+egal('demain se nomme aussi',
+  libellePeriodeStats({ jour: '2026-08-17', aujourdhui: '2026-08-16' }),
+  'Demain · lundi 17 août')
+// ⚠️ Le passage d'un mois à l'autre est le cas où un calcul de « demain » se
+// trompe le plus souvent, et il n'arrive qu'une fois par mois : personne ne le
+// verrait avant longtemps.
+egal('demain traverse la fin du mois',
+  libellePeriodeStats({ jour: '2026-09-01', aujourdhui: '2026-08-31' }),
+  'Demain · mardi 1 septembre')
+
+egal('un autre jour porte son nom en toutes lettres',
+  libellePeriodeStats({ jour: '2026-08-20', aujourdhui: '2026-08-16' }),
+  'Jeudi 20 août')
+egal('l’historique le dit',
+  libellePeriodeStats({ jour: '2026-08-16', aujourdhui: '2026-08-16', historique: true }),
+  'Historique')
+
+// Rendre une chaîne vide permet à l'écran de masquer la ligne entière plutôt
+// que d'afficher un intitulé qui pend.
+egal('sans jour, aucun intitulé', libellePeriodeStats({ jour: null, aujourdhui: '2026-08-16' }), '')
+egal('et rien du tout ne casse rien', libellePeriodeStats(), '')
+
+// ⚠️ AUCUNE HORLOGE DANS CETTE FONCTION. Un banc qui dépend du calendrier finit
+// toujours par mentir : celui-ci a déjà pourri une fois, le 05/08.
+const srcBloc = readFileSync(new URL('../lib/agenda-bloc.js', import.meta.url), 'utf8')
+verifier('le libellé ne lit jamais l’heure de la machine',
+  !/new Date\(\)/.test(srcBloc))
+
+// Les deux onglets l'affichent : ils ont le même schéma, un compteur d'un jour
+// au-dessus d'une vue plus large.
+const srcTableauStats = sansCommentaires(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+egal('les deux onglets nomment leur période',
+  (srcTableauStats.match(/\{periodeStats && \(/g) || []).length, 2)
+verifier('et l’intitulé vient bien du jour actif',
+  /libellePeriodeStats\(\{ jour: jourActif, aujourdhui: todayKey, historique: modeHistorique \}\)/.test(srcTableauStats))
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

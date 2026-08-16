@@ -5,8 +5,12 @@
 // Flow :
 // 1. Demande géoloc → reverse geocoding Nominatim → trouve la commune par code postal
 // 2. Si trouvée : "Tu es à Mettet ? [Oui c'est ma commune] [Choisir autre]"
-// 3. Si refus géoloc ou commune non détectée : liste déroulante des communes actives
+// 3. Si refus géoloc ou commune non détectée : liste déroulante de TOUTES les communes
 // 4. À la validation : UPDATE clients.commune_id
+//
+// ⚠️ ELLE NE BLOQUE JAMAIS L'ACCÈS À L'APPLICATION, dans aucun de ses deux
+// modes. Choisir sa commune sert au Good Morning Yoppers ; ce n'est pas une
+// condition pour consulter ce qu'on a déjà commandé.
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -35,7 +39,8 @@ function IconLocation({ size = 18, color = T.main }) {
 }
 
 export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClose, onSet }) {
-  // mode = 'first' (première détection, non fermable) | 'change' (changement, fermable)
+  // mode = 'first' (première détection) | 'change' (changement depuis le profil).
+  // Les deux se ferment ; seuls les textes changent.
   const [step, setStep] = useState('detecting') // 'detecting' | 'confirm' | 'choose'
   const [detected, setDetected] = useState(null)
   const [communes, setCommunes] = useState([])
@@ -43,10 +48,19 @@ export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClo
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
-  // Charge la liste des communes actives (pour le mode "choose" + fallback)
+  // ⚠️ TOUTES LES COMMUNES, PLUS SEULEMENT LES « ACTIVES » (Alex, 16/08).
+  //
+  // « Je pense qu'il faut ouvrir toutes les communes, trop de complexité avec ce
+  // système. Qui veut venir, vient et on avance. Il ne peut pas y avoir de frein
+  // à l'enregistrement d'un commerçant ou d'un Yopper. »
+  //
+  // Le filtre `active` enfermait un Yopper HORS DE SES PROPRES COMMANDES : Alex
+  // a commandé, s'est connecté par lien magique pour retrouver sa commande, et
+  // cette modale s'est ouverte sur une liste VIDE dont le seul bouton renvoyait
+  // à la landing. Il n'y avait aucun chemin vers sa commande.
   useEffect(() => {
     let annule = false
-    supabase.from('communes').select('id, nom, codes_postaux, province').eq('active', true).order('nom')
+    supabase.from('communes').select('id, nom, codes_postaux, province').order('nom')
       .then(({ data }) => { if (!annule) setCommunes(data || []) })
     return () => { annule = true }
   }, [])
@@ -74,11 +88,12 @@ export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClo
             return
           }
           // Cherche la commune qui contient ce code postal
+          // Plus de filtre sur `active` ici non plus : détecter la bonne commune
+          // et refuser de la proposer serait la pire des sorties.
           const { data: communeMatch } = await supabase
             .from('communes')
             .select('*')
             .contains('codes_postaux', [codePostal])
-            .eq('active', true)
             .maybeSingle()
           if (communeMatch) {
             setDetected(communeMatch)
@@ -111,11 +126,24 @@ export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClo
     onClose?.()
   }
 
-  const fermable = mode === 'change'
+  // ⚠️ ELLE SE FERME TOUJOURS, MÊME À LA PREMIÈRE FOIS (Alex, 16/08).
+  //
+  // En mode `first` cette modale était NON FERMABLE, et c'est ce qui a enfermé
+  // Alex hors de ses propres commandes : connecté par lien magique pour
+  // retrouver sa commande, il tombait sur une liste vide dont le seul bouton
+  // menait à la landing. Aucune sortie.
+  //
+  // ⚠️ ET LE VERROU ÉTAIT INJUSTIFIÉ MÊME QUAND LA LISTE EST PLEINE. Choisir sa
+  // commune sert au Good Morning Yoppers, un service qu'on rend ; ce n'est pas
+  // une condition pour consulter ce qu'on a déjà commandé et payé. On demande,
+  // on ne barre pas.
+  //
+  // Il n'y a donc plus de variable `fermable` : une condition qui ne peut plus
+  // être fausse ment sur ce qui est possible.
 
   return (
     <div
-      onClick={fermable ? onClose : undefined}
+      onClick={onClose}
       style={{
         position: 'fixed', inset: 0,
         background: 'rgba(26,8,64,0.55)',
@@ -144,13 +172,11 @@ export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClo
         {/* Barre dégradée fine en haut - signature design system */}
         <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
 
-        {/* Bouton fermer si mode change */}
-        {fermable && (
-          <button onClick={onClose} aria-label="Fermer"
-            style={{ position: 'absolute', top: 14, right: 14, width: 28, height: 28, border: 'none', background: T.bgPage, borderRadius: '50%', color: T.muted, cursor: 'pointer', fontSize: 18, lineHeight: 1, fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            ×
-          </button>
-        )}
+        {/* La croix est là dans les deux modes : c'est la sortie visible. */}
+        <button onClick={onClose} aria-label="Fermer"
+          style={{ position: 'absolute', top: 14, right: 14, width: 28, height: 28, border: 'none', background: T.bgPage, borderRadius: '50%', color: T.muted, cursor: 'pointer', fontSize: 18, lineHeight: 1, fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          ×
+        </button>
 
         <div style={{ padding: '24px 24px 20px' }}>
 
@@ -223,27 +249,22 @@ export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClo
                   : 'Choisis la commune que tu veux suivre dans ton Good Morning Yoppers.'}
               </p>
 
-              {/* Aucune commune ouverte : le déroulant était VIDE, sans un mot.
-                  Le Yopper croyait à une panne alors qu'une commune s'ouvre
-                  quand assez de commerçants s'y inscrivent. On le dit, et on
-                  lui donne le moyen d'agir plutôt que de le laisser devant une
-                  liste morte. */}
+              {/* ⚠️ CE BLOC DISAIT « TA COMMUNE N'EST PAS ENCORE OUVERTE », et
+                  proposait pour seule issue de retourner sur la landing. Depuis
+                  que toutes les communes sont sélectionnables, une liste vide ne
+                  veut plus dire ça : elle veut dire que le chargement a échoué.
+                  Continuer à annoncer une fermeture serait mentir, et renvoyer
+                  vers la landing enfermerait à nouveau quelqu'un qui voulait
+                  juste voir sa commande. */}
               {communes.length === 0 ? (
-                <div style={{ background: '#F5F0FF', border: `1.5px solid ${T.main}33`, borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
-                  <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 800, color: T.ink }}>
-                    Ta commune n&rsquo;est pas encore ouverte
+                <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+                  <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 800, color: '#78350F' }}>
+                    La liste des communes n&rsquo;a pas pu se charger
                   </p>
-                  <p style={{ margin: '0 0 10px', fontSize: 12.5, color: T.deep, lineHeight: 1.55 }}>
-                    Yoppaa ouvre une commune quand assez de commerçants s&rsquo;y sont inscrits. Laisse ton code postal :
-                    on te prévient dès que la tienne est prête, et chaque inscription fait avancer la jauge.
+                  <p style={{ margin: 0, fontSize: 12.5, color: '#92400E', lineHeight: 1.55 }}>
+                    Ce n&rsquo;est pas bloquant : ferme cette fenêtre, tu peux continuer et choisir ta commune plus tard
+                    depuis ton profil.
                   </p>
-                  <a href="https://www.yoppaa.app" target="_blank" rel="noopener noreferrer"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 12.5, textDecoration: 'none' }}>
-                    J&rsquo;aide ma commune à ouvrir
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
-                    </svg>
-                  </a>
                 </div>
               ) : (
               <>
@@ -271,14 +292,16 @@ export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClo
               )}
 
               <div style={{ display: 'flex', gap: 8 }}>
-                {fermable && (
-                  <button onClick={onClose} disabled={saving}
-                    style={{ flex: 1, padding: '11px 18px', border: `1.5px solid ${T.hairline}`, borderRadius: 100, background: '#fff', color: T.muted, fontWeight: 700, fontSize: 13, cursor: saving ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
-                    Annuler
-                  </button>
-                )}
+                {/* ⚠️ LE VERBE DIT LE GESTE. « Annuler » convient quand on
+                    change de commune ; à la première fois, il n'y a rien à
+                    annuler, on remet juste à plus tard. Et cette sortie DOIT
+                    exister : c'est elle qui rend la fenêtre franchissable. */}
+                <button onClick={onClose} disabled={saving}
+                  style={{ flex: 1, padding: '11px 18px', border: `1.5px solid ${T.hairline}`, borderRadius: 100, background: '#fff', color: T.muted, fontWeight: 700, fontSize: 13, cursor: saving ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+                  {mode === 'change' ? 'Annuler' : 'Plus tard'}
+                </button>
                 <button onClick={() => valider(selectedId)} disabled={!selectedId || saving}
-                  style={{ flex: fermable ? 2 : 1, padding: '13px 18px', border: 'none', borderRadius: 100, background: (!selectedId || saving) ? '#D1D5DB' : `linear-gradient(135deg, ${T.ink}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 14, cursor: (!selectedId || saving) ? 'not-allowed' : 'pointer', fontFamily: 'inherit', boxShadow: (!selectedId || saving) ? 'none' : `0 6px 20px ${T.main}40` }}>
+                  style={{ flex: 2, padding: '13px 18px', border: 'none', borderRadius: 100, background: (!selectedId || saving) ? '#D1D5DB' : `linear-gradient(135deg, ${T.ink}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 14, cursor: (!selectedId || saving) ? 'not-allowed' : 'pointer', fontFamily: 'inherit', boxShadow: (!selectedId || saving) ? 'none' : `0 6px 20px ${T.main}40` }}>
                   {saving ? 'Enregistrement…' : 'Valider'}
                 </button>
               </div>

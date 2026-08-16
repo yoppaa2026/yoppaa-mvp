@@ -515,6 +515,78 @@ verifier('la page rappelle qu\'on peut refuser la géolocalisation',
   }
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ RIEN NE DOIT ENFERMER UN YOPPER HORS DE SES PROPRES COMMANDES (Alex, 16/08)
+//
+// Il a commandé, s'est connecté par lien magique pour retrouver sa commande, et
+// la modale de commune s'est ouverte : NON FERMABLE, sur une liste VIDE parce
+// que sa commune n'était pas « active », avec pour seul bouton un lien vers la
+// landing. Aucun chemin vers sa commande.
+//
+// « Il ne peut pas y avoir de frein à l'enregistrement d'un commerçant ou d'un
+// Yopper. »
+//
+// Deux verrous se superposaient, et il faut les tenir tous les deux :
+//   1. le filtre `active` sur la liste des communes ;
+//   2. la modale elle-même, qui ne se fermait pas.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Le commentaire de ce fichier PARLE de `active` pour expliquer qu'on ne
+// filtre plus dessus : sans retirer les commentaires, ce banc se lirait
+// lui-même. Piège maison, cinq fois vécu.
+const srcCommune = lire('app/commander/ConfirmCommune.js')
+  .split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+
+verifier('la liste des communes ne filtre plus sur « active »',
+  !/from\('communes'\)[\s\S]{0,200}?\.eq\('active'/.test(srcCommune))
+// La détection par géolocalisation avait le MÊME filtre : reconnaître la bonne
+// commune puis refuser de la proposer serait la pire des sorties.
+verifier('la détection par code postal non plus',
+  !/contains\('codes_postaux'[\s\S]{0,120}?\.eq\('active'/.test(srcCommune))
+
+// ⚠️ ET LA FENÊTRE SE FERME TOUJOURS. C'est le verrou le plus grave des deux :
+// même avec toutes les communes ouvertes, une modale sans sortie transforme un
+// service rendu en péage.
+//
+// ⚠️ ON VÉRIFIE LA FERMETURE, PAS LE NOM DE LA VARIABLE QUI LA GOUVERNAIT. Le
+// premier test interdisait `const fermable` : réintroduire le verrou sous la
+// forme `mode === 'change' ? onClose : undefined` ne le faisait pas rougir.
+// C'est la règle qui compte, pas la forme d'hier.
+verifier('le fond se ferme au clic, sans condition de mode',
+  /onClick=\{onClose\}/.test(srcCommune))
+verifier('et aucune fermeture n’est conditionnée au mode',
+  !/mode === 'change' \? onClose/.test(srcCommune))
+verifier('plus aucune condition ne rend la fenêtre non fermable',
+  !/const fermable/.test(srcCommune))
+verifier('la croix de fermeture est toujours montée',
+  /aria-label="Fermer"/.test(srcCommune))
+// La sortie textuelle compte autant que la croix : sur mobile, une croix de
+// 28 px se rate, un bouton pleine largeur non.
+verifier('et une sortie « Plus tard » existe en toutes lettres',
+  /Plus tard/.test(srcCommune))
+
+// ⚠️ ET ON N'ANNONCE PLUS UNE FERMETURE QUI N'EXISTE PLUS. Le message « ta
+// commune n'est pas encore ouverte » ne pouvait mener qu'à la landing : le
+// garder après cette bascule serait mentir ET réenfermer.
+verifier('le message de commune fermée a disparu',
+  !/pas encore ouverte/.test(srcCommune))
+verifier('et il ne reste aucun renvoi vers la landing',
+  !/yoppaa\.app/.test(srcCommune))
+
+// La migration qui ouvre tout : elle doit exister, porter son contrôle, et ne
+// réécrire que ce qui change.
+const migrationCommunes = lire('migrations/MIGRATION_TOUTES_COMMUNES_OUVERTES.sql')
+verifier('la migration ouvre les communes fermées',
+  /UPDATE communes[\s\S]{0,120}SET active = true[\s\S]{0,60}WHERE NOT active/.test(migrationCommunes))
+// ⚠️ DEUX COMPTAGES, AVANT ET APRÈS, et on les COMPTE au lieu de les chercher :
+// le motif existe des deux côtés, en casser un laissait l'autre satisfaire le
+// test. Sixième fois aujourd'hui que l'homonyme voisin rend une garde muette.
+// Et un état lu seulement APRÈS ne prouve rien : c'est l'écart entre les deux
+// qui dit ce que la migration a fait.
+egal('elle compte les communes fermées AVANT et APRÈS',
+  (migrationCommunes.match(/count\(\*\) FILTER \(WHERE NOT active\)/g) || []).length, 2)
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

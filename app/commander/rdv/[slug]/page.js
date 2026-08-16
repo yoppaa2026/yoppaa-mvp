@@ -1564,9 +1564,17 @@ export default function CommanderRdvSlug() {
               // Etape 1 : sortir du wizard vers l'accueil / la fiche
               // Etape 2 : revenir a etape 1 (choix prestation), reset date+heure
               // Etape 3 : revenir a etape 2 (choix creneau), garder les choix
-              if (etape === 1) { router.push('/commander') }
-              else if (etape === 2) { setPrestationChoisie(null); allerEtape(1); setDateChoisie(null); setHeureChoisie(null) }
+              if (etape === 2) { setPrestationChoisie(null); allerEtape(1); setDateChoisie(null); setHeureChoisie(null) }
               else if (etape === 3) { allerEtape(2) }
+              // ⚠️ L'ÉTAPE 4 N'AVAIT AUCUNE BRANCHE, donc le bouton NE FAISAIT
+              // RIEN sur l'écran de confirmation (trouvé par Alex, 16/08). Une
+              // suite de `else if` sans sortie finale, c'est une impasse qui
+              // s'ouvre toute seule dès qu'une étape s'ajoute.
+              //
+              // ⚠️ Et le rendez-vous EST créé : revenir au choix du créneau
+              // n'aurait aucun sens, on quitte. Le `else` final couvre l'étape 1
+              // comme la 4, et toute étape qu'on ajouterait demain.
+              else { router.push('/commander') }
             }}
             aria-label="Retour"
             style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.45rem 0.7rem 0.45rem 0.6rem', fontWeight: 700, fontSize: '0.82rem', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -1690,7 +1698,12 @@ export default function CommanderRdvSlug() {
 
           {!loading && commercant && !commercant._nonPublie && (
             <>
-              {/* ─── HERO PHOTO ─── */}
+              {/* ─── HERO PHOTO ───
+                  ⚠️ ABSENT DE L'ÉCRAN DE CONFIRMATION (Alex, 16/08). La carte
+                  d'identité en avait déjà disparu ; le bandeau restait, et il
+                  n'était plus qu'un grand aplat mauve avec un nom que le client
+                  vient justement de choisir. Il sait chez qui il a réservé. */}
+              {etape !== 4 && (
               <div className="fiche-hero" style={{ position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 3 }}/>
                 {/* Même bannière que sur une fiche boutique : deux fiches
@@ -1702,7 +1715,7 @@ export default function CommanderRdvSlug() {
                 {/* Partager + Favori, même pattern que la fiche boutique */}
                 <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 5, display: 'flex', gap: 8 }}>
                   <button onClick={partagerFiche} aria-label="Partager la fiche"
-                    style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.22)', fontFamily: 'inherit' }}>
+                    style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.22)', fontFamily: 'inherit' }}>
                     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/>
                       <polyline points="16 6 12 2 8 6"/>
@@ -1711,7 +1724,7 @@ export default function CommanderRdvSlug() {
                   </button>
                   <button onClick={toggleFavori} disabled={favoriLoading}
                     aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                    style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', border: 'none', cursor: favoriLoading ? 'wait' : 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.22)', fontFamily: 'inherit' }}>
+                    style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', border: 'none', cursor: favoriLoading ? 'wait' : 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.22)', fontFamily: 'inherit' }}>
                     <svg width="19" height="19" viewBox="0 0 24 24"
                       fill={estFavori ? '#DC2626' : 'none'}
                       stroke={estFavori ? '#DC2626' : T.deep}
@@ -1721,6 +1734,7 @@ export default function CommanderRdvSlug() {
                   </button>
                 </div>
               </div>
+              )}
 
               {/* ─── CARD INFOS COMMERÇANT (chevauche le hero photo) ───
                   ⚠️ ABSENTE DE L'ÉCRAN DE CONFIRMATION (Alex, 16/08). Une fois

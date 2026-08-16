@@ -273,8 +273,18 @@ input, textarea, select {
   .fiche-hero {
     height: 360px !important;
   }
+  /* ⚠️ 84 → 122 LE 16/08, MÊME CALCUL QU'EN MOBILE, AVEC LES MESURES DU
+     BUREAU : bandeau 360, moins 36 de recouvrement par la carte, donne 324 de
+     bande visible ; le nom à 2,6 rem plus sa signature pèsent ~81. Le centre de
+     la bande visible tombe donc à (324 − 81) / 2 ≈ 122.
+     ⚠️ Et jamais le centre du bandeau ENTIER : à 140 px, un nom sur deux lignes
+     repasserait derrière la carte blanche, le défaut du 09/08.
+     ⚠️ LE COMMENTAIRE RESTE DEHORS, et ce n'est pas cosmétique : deux tests du
+     banc lisent cette règle avec `\{\s*padding-top`, donc tout ce qui s'insère
+     entre l'accolade et la propriété les rend AVEUGLES. Ils sont tombés en NaN
+     la première fois que ce commentaire était à l'intérieur. */
   .banniere-commerce {
-    padding-top: 84px !important;
+    padding-top: 122px !important;
   }
   .banniere-nom {
     /* ⚠️ L'ÉCHELLE MULTIPLIE, ELLE NE REMPLACE PAS. Le nom garde sa taille de

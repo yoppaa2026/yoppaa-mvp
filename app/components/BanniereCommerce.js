@@ -51,7 +51,22 @@ function empreinte(nom) {
 // En pixels, la position ne dépend plus que de la hauteur du bandeau, qui est
 // la seule chose qui compte ici. Le PC agrandit ensuite le nom et descend un
 // peu le retrait, via `.banniere-commerce` dans globals.css.
-const RETRAIT_HAUT = 54
+//
+// ⚠️ 54 → 68 LE 16/08 : « il est trop haut » (Alex). Le nom est maintenant
+// CENTRÉ, mais centré dans la BANDE VISIBLE, pas dans le bandeau entier, et
+// c'est toute la nuance :
+//
+//   hauteur du bandeau            220 px
+//   − recouvrement de la carte     36 px   (elle remonte de -36 px sur le hero)
+//   = bande réellement visible    184 px
+//   contenu : nom ~29 px + 10 d'écart + 11 de signature ≈ 50 px
+//   retrait = (184 − 50) / 2 ≈ 67 px
+//
+// ⚠️ CENTRER DANS LE BANDEAU ENTIER RAMÈNERAIT LE DÉFAUT DE MAI ET DU 09/08 :
+// le nom passerait à 85 px et irait se cacher derrière la carte blanche. Deux
+// signalements d'Alex, capture à l'appui, sont partis de là. La bande visible
+// est la seule mesure qui ait un sens tant que la carte chevauche le bandeau.
+const RETRAIT_HAUT = 68
 
 // ⚠️ `compact` EXISTE PARCE QU'UNE MINIATURE N'EST PAS UNE PETITE VERSION DU
 // GRAND ÉCRAN. L'aperçu du signup tient dans 150 px de haut ; au-delà de

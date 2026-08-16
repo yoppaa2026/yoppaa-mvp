@@ -2974,7 +2974,7 @@ export default function CommanderSlug() {
                     <button onClick={partagerFiche} aria-label="Partager la fiche"
                       style={{
                         width: 42, height: 42, borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)',
+                        background: 'rgba(255,255,255,0.95)',
                         border: 'none', cursor: 'pointer', flexShrink: 0,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         boxShadow: '0 4px 14px rgba(0,0,0,0.22)',
@@ -2990,7 +2990,7 @@ export default function CommanderSlug() {
                       aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                       style={{
                         width: 42, height: 42, borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)',
+                        background: 'rgba(255,255,255,0.95)',
                         border: 'none', cursor: favoriLoading ? 'wait' : 'pointer', flexShrink: 0,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         boxShadow: '0 4px 14px rgba(0,0,0,0.22)',

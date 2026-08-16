@@ -1165,8 +1165,69 @@ verifier('la fiche boutique aussi',
 // ⚠️ L'ÉCRAN DE CONFIRMATION NE PORTE PLUS LA FICHE AU-DESSUS (Alex, 16/08).
 // Une fois le rendez-vous pris, la description du commerce, sa pastille
 // d'ouverture et son planning n'ont plus rien à faire au-dessus du numéro.
-verifier('l’écran de confirmation n’affiche plus la carte du commerce',
-  /\{etape !== 4 && \(/.test(srcTunnel))
+// ⚠️ DEUX BLOCS, PAS UN : la carte d'identité ET le bandeau du haut. Le premier
+// correctif n'avait retiré que la carte, et le bandeau restait seul, grand aplat
+// mauve portant le nom d'un commerce que le client vient de choisir.
+egal('l’écran de confirmation n’affiche ni la carte ni le bandeau',
+  (srcTunnel.match(/\{etape !== 4 && \(/g) || []).length, 2)
+
+// ⚠️ LE BOUTON RETOUR NE FAISAIT RIEN À L'ÉTAPE 4 (trouvé par Alex, 16/08) :
+// une suite de `else if` sans sortie finale, donc une impasse qui s'ouvre toute
+// seule dès qu'une étape s'ajoute. On exige une sortie par DÉFAUT, pas une
+// branche de plus, sans quoi l'étape 5 rouvrirait le trou.
+verifier('le bouton Retour a une sortie par défaut',
+  /else \{ router\.push\('\/commander'\) \}/.test(srcTunnel))
+verifier('et plus de branche sur la seule étape 1',
+  !/if \(etape === 1\) \{ router\.push/.test(srcTunnel))
+
+// ⚠️ PAS DE FLOU SUR CE QUI DÉFILE. `backdrop-filter` repeint le flou à chaque
+// image sur iOS, et c'est l'une des trois causes confirmées du scroll qui gèle
+// sur iPhone (diagnostic du 16/07, consigné en mémoire). Les deux boutons du
+// bandeau ont un fond opaque à 95 % : le flou ne se voyait pas, il coûtait.
+verifier('les boutons du bandeau ne floutent plus le fond',
+  !/rgba\(255,255,255,0\.95\)', backdropFilter/.test(srcTunnel)
+  && !/rgba\(255,255,255,0\.95\)', backdropFilter/.test(srcFicheBoutique))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LE NOM NE DOIT JAMAIS REPASSER DERRIÈRE LA CARTE BLANCHE
+//
+// Ce défaut est revenu DEUX FOIS, en mai puis le 09/08, par deux portes
+// différentes : d'abord un retrait en pourcentage calculé sur la largeur, puis
+// le passage du bureau à 1200 px. Les deux fois, Alex l'a vu avant le banc.
+//
+// On ne vérifie donc plus qu'une valeur « a l'air raisonnable » : on REFAIT LE
+// CALCUL avec les mesures lues dans le code, et on exige que le bloc du nom
+// tienne entièrement dans la bande que la carte ne recouvre pas.
+// ═══════════════════════════════════════════════════════════════════════════
+const srcBanniere = readFileSync(new URL('../lib/../app/components/BanniereCommerce.js', import.meta.url), 'utf8')
+const srcCss = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8')
+
+const retraitMobile = Number(/const RETRAIT_HAUT = (\d+)/.exec(srcBanniere)?.[1])
+const retraitBureau = Number(/\.banniere-commerce \{[\s\S]{0,600}?padding-top: (\d+)px !important/.exec(srcCss)?.[1])
+const hauteurMobile = Number(/\.fiche-hero \{ height: (\d+)px; \}/.exec(srcTunnel)?.[1])
+const hauteurBureau = Number(/\.fiche-hero \{\s*height: (\d+)px !important/.exec(srcCss)?.[1])
+const recouvrement = Number(/margin: '-(\d+)px 12px 0'/.exec(srcTunnel)?.[1])
+
+verifier('les mesures du bandeau sont bien relues dans le code',
+  [retraitMobile, retraitBureau, hauteurMobile, hauteurBureau, recouvrement].every(n => Number.isFinite(n) && n > 0),
+  `${retraitMobile} · ${retraitBureau} · ${hauteurMobile} · ${hauteurBureau} · ${recouvrement}`)
+
+// Le bloc du nom : une ligne de texte plus l'écart et la signature à points.
+// Deux lignes sur les noms longs, et c'est le cas qu'il faut tenir.
+const blocMobile = 29 * 2 + 10 + 11        // nom 1,5 rem sur deux lignes
+const blocBureau = 50 * 2 + 10 + 11        // nom 2,6 rem sur deux lignes
+verifier('sur téléphone, un nom sur deux lignes reste au-dessus de la carte',
+  retraitMobile + blocMobile <= hauteurMobile - recouvrement,
+  `${retraitMobile} + ${blocMobile} contre ${hauteurMobile - recouvrement}`)
+verifier('sur ordinateur aussi',
+  retraitBureau + blocBureau <= hauteurBureau - recouvrement,
+  `${retraitBureau} + ${blocBureau} contre ${hauteurBureau - recouvrement}`)
+// ⚠️ ET IL NE DOIT PAS NON PLUS COLLER AU HAUT : c'est la demande d'Alex du
+// 16/08. Le nom se place dans la moitié basse de la bande visible.
+verifier('et il n’est plus collé en haut du bandeau',
+  retraitMobile >= (hauteurMobile - recouvrement) * 0.3
+  && retraitBureau >= (hauteurBureau - recouvrement) * 0.3,
+  `${retraitMobile} · ${retraitBureau}`)
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

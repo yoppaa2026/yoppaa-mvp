@@ -242,9 +242,22 @@ const remBureauNom = Number(/\.banniere-nom\s*\{[^}]*font-size:[^;]*?([\d.]+)rem
 const remMobileNom = Number(/taillePolice = '([\d.]+)rem'/.exec(lire('app/components/BanniereCommerce.js'))?.[1])
 verifier('le nom du commerce est agrandi sur PC',
   remBureauNom > remMobileNom, `bureau ${remBureauNom} / mobile ${remMobileNom}`)
-verifier('le nom reste dans le tiers haut du bandeau',
-  /\.banniere-commerce\s*\{[^}]*padding-top:\s*(\d+)px/.test(phase2)
-  && Number(/\.banniere-commerce\s*\{[^}]*padding-top:\s*(\d+)px/.exec(phase2)[1]) < 360 / 3)
+// ⚠️ « LE TIERS HAUT » N'ÉTAIT PAS LA RÈGLE, C'ÉTAIT UNE CONSÉQUENCE. Ce test
+// exigeait un retrait inférieur à 360/3, et il a rougi le 16/08 au moment où le
+// nom descendait à la demande d'Alex, qui le trouvait collé en haut.
+//
+// La vraie règle tient en deux bornes, et elle dépend de la CARTE BLANCHE qui
+// chevauche le bas du bandeau : le nom doit rester au-dessus d'elle, et ne pas
+// coller au bord supérieur. Un tiers arbitraire ne dit ni l'un ni l'autre, et
+// se périme au premier changement de hauteur.
+//
+// ⚠️ Le calcul complet, avec les mesures relues dans le code et le cas du nom
+// sur DEUX lignes, vit dans `verif-slots.mjs`. Ici on garde la borne haute,
+// celle qui a déjà lâché deux fois : le nom derrière la carte.
+const retraitBandeauPc = Number(/\.banniere-commerce\s*\{\s*padding-top:\s*(\d+)px/.exec(phase2)?.[1])
+verifier('le nom du bandeau ne passe pas derrière la carte blanche sur PC',
+  retraitBandeauPc > 0 && retraitBandeauPc + 121 <= 360 - 36,
+  `retrait ${retraitBandeauPc}, bande visible ${360 - 36}`)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 8. AUCUN CADRE NE DOIT REMPLACER L'APPLICATION SUR PC

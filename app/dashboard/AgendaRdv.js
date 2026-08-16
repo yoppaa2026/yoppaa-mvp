@@ -79,7 +79,7 @@ function jourIdxLun(d) { return (d.getDay() + 6) % 7 }
 // La logique est sortie d'ici pour être testable : le calcul du contraste du
 // texte, en particulier, décide de la lisibilité de tout l'écran.
 
-export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDetail, onSelectRdv, onNouveauRdv }) {
+export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDetail, onSelectRdv, onNouveauRdv, onFenetreChange }) {
   // Filtre praticien : 'all' = tous les praticiens, ou un praticien_id specifique.
   // Sess 5f : le commercant multi-prat peut isoler l'agenda d'un praticien pour
   // voir uniquement les RDV pris avec lui/elle.
@@ -157,6 +157,25 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
     max = Math.ceil(max / PAS_MINUTES) * PAS_MINUTES
     return { heureMin: min, heureMax: max }
   }, [joursAffiches, horairesDetail])
+
+  // ⚠️ L'AGENDA ANNONCE CE QU'IL MONTRE (défaut trouvé par Alex le 16/08).
+  // Les compteurs du tableau de bord lisaient la date d'un sélecteur de jours
+  // qui n'est affiché QUE dans l'onglet Commandes : dans l'onglet Rendez-vous,
+  // cette date ne pouvait donc jamais changer, et les compteurs restaient
+  // bloqués sur aujourd'hui à vie. L'agenda naviguait de son côté, la page du
+  // sien, et les deux ne se parlaient pas.
+  //
+  // ⚠️ ON REMONTE LA FENÊTRE ENTIÈRE, pas seulement le premier jour : en vue
+  // semaine l'agenda montre sept jours, et un compteur qui n'en décrirait qu'un
+  // recréerait le malentendu qu'on corrige.
+  useEffect(() => {
+    if (!onFenetreChange || joursAffiches.length === 0) return
+    onFenetreChange({
+      debut: joursAffiches[0].iso,
+      fin: joursAffiches[joursAffiches.length - 1].iso,
+      historique,
+    })
+  }, [joursAffiches, historique, onFenetreChange])
 
   // Lignes de slots 30min
   const slotsTimes = useMemo(() => {
@@ -259,8 +278,20 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
       })()
     : `${joursAffiches[0].labelLong} ${joursAffiches[0].numero} ${MOIS_CRT[joursAffiches[0].mois]}`
 
+  // ⚠️ `overflow: hidden` RETIRÉ DE LA CARTE (16/08). Il arrondissait les coins,
+  // et il PIÉGEAIT `position: sticky` : une boîte dont l'`overflow` n'est pas
+  // `visible` devient le conteneur de référence d'un enfant collant. Tant que la
+  // grille avait son propre défilement, l'en-tête des jours se collait à ELLE et
+  // tout allait bien. En passant au défilement unique, il se serait collé à
+  // cette carte, qui ne défile jamais : il aurait donc cessé de coller, SANS
+  // erreur ni avertissement, et les noms de jours auraient disparu dès qu'on
+  // descend dans la journée.
+  //
+  // ⚠️ Et ce commentaire est AU-DESSUS du `return`, pas dedans : un `//` glissé
+  // après la parenthèse ouvrante est une erreur de syntaxe JSX. Troisième fois
+  // que ce piège se présente sur ce projet.
   return (
-    <div style={{ background: '#fff', borderRadius: 12, border: `1px solid ${T.pale}`, overflow: 'hidden', fontFamily: '"DM Sans", sans-serif' }}>
+    <div style={{ background: '#fff', borderRadius: 12, border: `1px solid ${T.pale}`, fontFamily: '"DM Sans", sans-serif' }}>
 
       {/* Header navigation */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0.875rem', borderBottom: `1px solid ${T.pale}`, gap: 8 }}>
@@ -345,9 +376,23 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
       </button>
 
       {/* L'historique : une liste, pas une grille. On ne cherche pas un horaire
-          libre dans le passé, on cherche un rendez-vous. */}
+          libre dans le passé, on cherche un rendez-vous.
+
+          ⚠️ PLUS DE HAUTEUR MAXIMALE ICI NON PLUS. Cette liste avait le même
+          conteneur que la grille, donc le même défilement imbriqué : c'est la
+          page qui défile, partout dans cet écran.
+
+          ⚠️ Et ce commentaire est ICI, au-dessus de la condition, jamais entre
+          elle et le div : un commentaire JSX en position d'EXPRESSION est une
+          erreur de syntaxe. `npm run verif:undef` vient de l'attraper deux fois
+          de suite, ce pour quoi il a été posé le 12/08.
+
+          ⚠️ Et il ne CITE PAS les délimiteurs d'un commentaire, parce que la
+          séquence de fermeture le refermerait au milieu de la phrase. Troisième
+          forme du même piège sur ce projet : un commentaire qui parle de ce
+          qu'il est. */}
       {historique && (
-        <div style={{ maxHeight: '70svh', overflowY: 'auto', padding: '0.625rem 0.875rem' }}>
+        <div style={{ padding: '0.625rem 0.875rem' }}>
           {rdvsPasses.length === 0 && (
             <p style={{ textAlign: 'center', color: T.muted, fontSize: '0.82rem', padding: '2rem 0', margin: 0 }}>
               Aucun rendez-vous passé pour le moment.
@@ -407,8 +452,23 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
           deux ennuis : il PIÈGE `position: fixed` à l'intérieur du conteneur
           (défaut corrigé le 12/08 sur la modale, documenté plus bas dans ce
           fichier), et il fabrique une zone de défilement dont le geste ne
-          s'enchaîne pas avec celui de la page. */}
-      <div style={{ display: historique ? 'none' : undefined, maxHeight: '70svh', overflowY: 'auto', overflowX: scrollH ? 'auto' : 'hidden' }}>
+          s'enchaîne pas avec celui de la page.
+
+          ⚠️ ET FINALEMENT, PLUS DE HAUTEUR DU TOUT (demande d'Alex, 16/08).
+          `svh` avait supprimé le débordement sous la barre d'adresse, mais la
+          cause de fond restait : DEUX ZONES DE DÉFILEMENT IMBRIQUÉES, la page
+          et la grille. Le doigt ne sait jamais laquelle il pilote, et à la
+          frontière le geste se perd. Un agenda se déroule d'un seul geste, du
+          haut de la journée jusqu'à sa fin.
+
+          ⚠️ LE DÉFILEMENT HORIZONTAL RESTE, et il ne recrée PAS de zone
+          imbriquée. En CSS, mettre un axe en `auto` sort l'autre de `visible` :
+          l'axe vertical redevient donc techniquement défilable. Mais SANS
+          hauteur maximale, le conteneur mesure exactement son contenu — il n'a
+          rien à faire défiler, et le geste vertical traverse jusqu'à la page.
+          C'est la même règle que celle écrite sur `.scroll-zone`, prise par
+          l'autre bout. */}
+      <div style={{ display: historique ? 'none' : undefined, overflowX: scrollH ? 'auto' : undefined }}>
         <div style={{ display: 'grid', gridTemplateColumns: `${LARGEUR_HEURES}px repeat(${nbJours}, ${scrollH ? 'minmax(96px, 1fr)' : '1fr'})`, position: 'relative', minWidth: scrollH ? LARGEUR_HEURES + 7 * 96 : undefined }}>
 
           {/* Header jours (sticky top dans le scroll) */}

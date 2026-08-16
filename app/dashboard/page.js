@@ -855,6 +855,22 @@ export default function Dashboard() {
   const [tournees, setTournees] = useState({})
   const [tourneeLoading, setTourneeLoading] = useState(null)   // id du créneau en cours de calcul
   const [jourSelectionne, setJourSelectionne] = useState(null) // null = aujourd'hui par défaut
+  // ⚠️ CE QUE L'AGENDA MONTRE, remonté par lui (Alex, 16/08). Sans cet état, les
+  // compteurs de l'onglet Rendez-vous lisaient un sélecteur de jours qui n'y est
+  // pas affiché : ils étaient bloqués sur aujourd'hui à vie. `null` tant que
+  // l'agenda n'a rien annoncé, et on retombe alors sur le jour actif.
+  const [fenetreAgenda, setFenetreAgenda] = useState(null)  // { debut, fin } en ISO
+  // ⚠️ STABLE, ET QUI NE RÉÉCRIT QUE SI ÇA A CHANGÉ. Les deux comptent :
+  // l'agenda annonce sa fenêtre dans un effet qui dépend de cette fonction, donc
+  // une fonction recréée à chaque rendu relancerait l'effet à chaque rendu ; et
+  // poser un objet neuf à valeur identique provoquerait un rendu de plus, qui
+  // relancerait l'effet. Dans les deux cas, boucle infinie et écran figé.
+  const majFenetreAgenda = useCallback((f) => {
+    if (!f?.debut || !f?.fin) return
+    setFenetreAgenda(prev => (prev && prev.debut === f.debut && prev.fin === f.fin)
+      ? prev
+      : { debut: f.debut, fin: f.fin })
+  }, [])
   const [modeHistorique, setModeHistorique] = useState(false)
   const [notificationsActives, setNotificationsActives] = useState(false)
   const [nouvelleCommande, setNouvelleCommande] = useState(false)
@@ -1651,9 +1667,23 @@ export default function Dashboard() {
 
   // ─── RDVs : calculs derives ────────────────────────────────────────────────
   // Tous les filtres sur 'rdvs' qui alimentent l'onglet RDV (similaire a stats commandes).
+  //
+  // ⚠️ LES COMPTEURS SUIVENT L'AGENDA, ET C'EST TOUT NOUVEAU (Alex, 16/08). Ils
+  // lisaient `jourActif`, la date du sélecteur de jours… qui n'est affiché QUE
+  // dans l'onglet Commandes. Dans l'onglet Rendez-vous, cette date ne pouvait
+  // donc JAMAIS changer : les compteurs étaient bloqués sur aujourd'hui à vie,
+  // pendant que l'agenda naviguait de son côté avec sa propre date.
+  //
+  // ⚠️ L'intitulé posé le matin même n'a rien cassé, il a RÉVÉLÉ ce défaut :
+  // Alex a vu « Aujourd'hui · dimanche 16 août » au-dessus d'un agenda ouvert
+  // sur lundi 17. C'est exactement à ça que sert de nommer sa période.
+  //
+  // La règle est maintenant : LES COMPTEURS DÉCRIVENT CE QUE L'AGENDA MONTRE.
+  // Une fenêtre, pas un jour, parce qu'en vue semaine l'agenda en montre sept.
+  const fenetreRdv = fenetreAgenda || { debut: jourActif, fin: jourActif }
   const rdvsDuJour = modeHistorique
     ? rdvs.filter(r => new Date(r.date_rdv) < new Date(dateKey(new Date())))  // historique = passes
-    : rdvs.filter(r => r.date_rdv === jourActif)
+    : rdvs.filter(r => r.date_rdv >= fenetreRdv.debut && r.date_rdv <= fenetreRdv.fin)
   const statsRdv = {
     aujourdhui: rdvs.filter(r => r.date_rdv === dateKey(new Date()) && r.statut === 'confirme').length,
     duJour:     rdvsDuJour.length,
@@ -1686,7 +1716,14 @@ export default function Dashboard() {
   // agissait sur lundi pendant que les compteurs parlaient de samedi, et rien à
   // l'écran ne le disait. Un compteur qui ne nomme pas sa période ment par
   // omission. Le même intitulé sert aux deux onglets, qui ont le même schéma.
-  const periodeStats = libellePeriodeStats({ jour: jourActif, aujourdhui: todayKey, historique: modeHistorique })
+  //
+  // ⚠️ DEUX SOURCES, ET C'EST VOULU : l'onglet Rendez-vous suit la fenêtre de
+  // l'agenda, l'onglet Commandes garde son sélecteur de jours, qui lui EST
+  // affiché. Chacun nomme ce qu'il montre vraiment, et c'est la seule règle qui
+  // vaille — c'est en la violant qu'on a fabriqué le défaut d'aujourd'hui.
+  const periodeStats = ongletPrincipal === 'rdv'
+    ? libellePeriodeStats({ jour: fenetreRdv.debut, fin: fenetreRdv.fin, aujourdhui: todayKey, historique: modeHistorique })
+    : libellePeriodeStats({ jour: jourActif, aujourdhui: todayKey, historique: modeHistorique })
 
   // ─── Sélecteur commerce ───────────────────────────────────────────────────
   if (listeCommercants.length > 0 && !commercant) return (
@@ -2576,6 +2613,7 @@ export default function Dashboard() {
                     horairesDetail={commercant?.horaires_detail}
                     onSelectRdv={(r) => setRdvSelectionne(r)}
                     onNouveauRdv={(date, heure) => setNouveauRdvSlot({ date, heure })}
+                    onFenetreChange={majFenetreAgenda}
                   />
                 )}
                 {/* Modale 'Nouveau RDV manuel' — saisie rapide pour les RDV pris au telephone */}

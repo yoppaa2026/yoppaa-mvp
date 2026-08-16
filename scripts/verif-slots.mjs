@@ -1394,13 +1394,84 @@ verifier('et l’intitulé vient bien du jour actif',
 //     l'inertie, native depuis. Il PIÈGE `position: fixed` à l'intérieur du
 //     conteneur, défaut déjà corrigé le 12/08 sur la modale de détail.
 // ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ ET FINALEMENT, PLUS AUCUNE HAUTEUR (demande d'Alex, 16/08). `svh` avait
+// supprimé le débordement sous la barre d'adresse, mais la cause de fond
+// restait : DEUX ZONES DE DÉFILEMENT IMBRIQUÉES, la page et la grille. Le doigt
+// ne sait jamais laquelle il pilote, et à la frontière le geste se perd. Un
+// agenda se déroule d'un seul geste.
 const srcAgendaScroll = readFileSync(new URL('../app/dashboard/AgendaRdv.js', import.meta.url), 'utf8')
-verifier('aucune hauteur en `vh` dans l’agenda',
-  !/maxHeight: '\d+vh'/.test(srcAgendaScroll))
-egal('les deux zones qui défilent sont bornées en `svh`',
-  (srcAgendaScroll.match(/maxHeight: '\d+svh'/g) || []).length, 3)
-verifier('et plus de défilement tactile hérité d’avant iOS 13',
+verifier('la grille et l’historique n’ont plus de hauteur maximale',
+  !/maxHeight: '70s?vh'/.test(srcAgendaScroll))
+// ⚠️ LA MODALE GARDE SON PROPRE DÉFILEMENT, ET C'EST NORMAL. C'est une couche
+// en `position: fixed` par-dessus la page, pas un morceau de son flux : la
+// règle du défilement unique vaut pour ce qui vit DANS la page. Mes deux
+// premiers tests l'avaient oublié et rougissaient sur du code correct.
+egal('une seule zone garde un défilement interne',
+  (srcAgendaScroll.match(/overflowY: 'auto'/g) || []).length, 1)
+verifier('et c’est la modale, pas la grille',
+  /maxHeight: '80svh', overflowY: 'auto'/.test(srcAgendaScroll))
+verifier('plus de défilement tactile hérité d’avant iOS 13',
   !/WebkitOverflowScrolling/.test(srcAgendaScroll))
+// ⚠️ LE DÉFILEMENT HORIZONTAL RESTE : sept colonnes ne tiennent pas dans 375 px.
+// Il ne recrée pas de zone imbriquée, le conteneur mesurant exactement son
+// contenu en hauteur — il n'a rien à faire défiler verticalement.
+verifier('mais la semaine défile toujours horizontalement sur petit écran',
+  /overflowX: scrollH \? 'auto' : undefined/.test(srcAgendaScroll))
+// ⚠️ `overflow: hidden` SUR LA CARTE PIÉGEAIT `position: sticky`. Une boîte dont
+// l'`overflow` n'est pas `visible` devient le conteneur de référence d'un enfant
+// collant : l'en-tête des jours aurait cessé de coller, sans erreur ni
+// avertissement, et les noms de jours auraient disparu dès qu'on descend.
+verifier('la carte ne piège plus l’en-tête collant',
+  !/borderRadius: 12, border: `1px solid \$\{T\.pale\}`, overflow: 'hidden'/.test(srcAgendaScroll))
+verifier('et l’en-tête des jours colle toujours',
+  /position: 'sticky', top: 0/.test(srcAgendaScroll))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LES COMPTEURS SUIVENT CE QUE L'AGENDA MONTRE (Alex, 16/08)
+//
+// L'intitulé posé le matin même a révélé pire que ce qu'il corrigeait : dans
+// l'onglet Rendez-vous, la date des compteurs NE POUVAIT PAS CHANGER. Le
+// sélecteur de jours n'y est pas affiché, l'agenda a sa propre navigation, et
+// les deux ne se parlaient pas. Les compteurs étaient bloqués sur aujourd'hui
+// à vie, et personne ne pouvait s'en apercevoir avant qu'ils nomment leur jour.
+// ═══════════════════════════════════════════════════════════════════════════
+verifier('l’agenda annonce la fenêtre qu’il affiche',
+  /onFenetreChange\(\{[\s\S]{0,160}?debut: joursAffiches\[0\]\.iso/.test(srcAgendaScroll))
+// ⚠️ ANCRÉ SUR LA GARDE, ET PAS SEULEMENT SUR L'APPEL. Mesuré par mutation :
+// remplacer la condition de sortie par un `return` inconditionnel rendait
+// l'appel INATTEIGNABLE sans le supprimer, et le test restait vert. Un banc qui
+// lit du code ne voit pas du code mort ; on vérifie donc que la seule raison de
+// ne rien annoncer reste « il n'y a rien à annoncer ».
+verifier('et il ne se tait que s’il n’a rien à dire',
+  /if \(!onFenetreChange \|\| joursAffiches\.length === 0\) return/.test(srcAgendaScroll))
+verifier('et il annonce sa FIN, pas seulement son premier jour',
+  /fin: joursAffiches\[joursAffiches\.length - 1\]\.iso/.test(srcAgendaScroll))
+verifier('les compteurs des rendez-vous lisent cette fenêtre',
+  /r\.date_rdv >= fenetreRdv\.debut && r\.date_rdv <= fenetreRdv\.fin/.test(srcTableauStats))
+// ⚠️ LA FONCTION QUI REÇOIT LA FENÊTRE DOIT ÊTRE STABLE ET NE RIEN RÉÉCRIRE À
+// VALEUR ÉGALE. L'agenda l'annonce dans un effet qui en dépend : une fonction
+// recréée à chaque rendu relancerait l'effet à chaque rendu, et poser un objet
+// neuf à valeur identique provoquerait un rendu de plus. Boucle infinie, écran
+// figé, et rien dans le code ne ressemblerait à une erreur.
+verifier('la page reçoit la fenêtre par une fonction stable',
+  /const majFenetreAgenda = useCallback\(/.test(srcTableauStats))
+verifier('et ne réécrit pas la fenêtre à valeur égale',
+  /prev\.debut === f\.debut && prev\.fin === f\.fin/.test(srcTableauStats))
+
+// Une fenêtre de plusieurs jours se nomme comme telle : au singulier, on
+// recréerait le malentendu qu'on vient de corriger.
+egal('une semaine se nomme comme une semaine',
+  libellePeriodeStats({ jour: '2026-08-17', fin: '2026-08-23', aujourdhui: '2026-08-16' }),
+  'Semaine du 17 au 23 août')
+// ⚠️ Le mois qui tourne au milieu de la semaine : il faut alors les DEUX mois,
+// et ce cas ne se présente qu'une fois par mois.
+egal('et une semaine à cheval sur deux mois porte les deux',
+  libellePeriodeStats({ jour: '2026-08-30', fin: '2026-09-05', aujourdhui: '2026-08-16' }),
+  'Semaine du 30 août au 5 septembre')
+// Une fenêtre d'un seul jour reste un jour : c'est la vue Jour de l'agenda.
+egal('une fenêtre d’un seul jour garde son nom de jour',
+  libellePeriodeStats({ jour: '2026-08-16', fin: '2026-08-16', aujourdhui: '2026-08-16' }),
+  'Aujourd’hui · dimanche 16 août')
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

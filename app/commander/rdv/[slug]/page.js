@@ -557,7 +557,7 @@ export default function CommanderRdvSlug() {
   // ⚠️ Le paramètre est nettoyé de l'URL comme pour le bon cadeau, sans quoi un
   // rafraîchissement rejouerait la confirmation d'un achat déjà fait.
   //
-  // ⚠️ ET « OK » OUVRE UN ÉCRAN, PAS UN ENCADRÉ (Alex, 17/08). La confirmation
+  // ⚠️ ET « OK » OUVRE UN ÉCRAN, PAS UN ENCADRÉ (Alex, 16/08). La confirmation
   // vivait au milieu de la fiche, entre les deals et les horaires, quand une
   // commande et un rendez-vous ouvrent chacun leur écran. Sur le montant le
   // plus élevé du catalogue, c'était la plus discrète des trois.
@@ -1080,7 +1080,7 @@ export default function CommanderRdvSlug() {
   const yopperConnecte = !!(client.email && clientId)
 
   // ⚠️ LES ABONNEMENTS DU CLIENT, POUR QU'IL PUISSE ENFIN S'EN SERVIR (Alex,
-  // 17/08). Ils ne se lisent qu'avec une identité PROUVÉE : le solde vit dans
+  // 16/08). Ils ne se lisent qu'avec une identité PROUVÉE : le solde vit dans
   // une table fermée, et c'est l'email vérifié qui relie un contrat à son
   // propriétaire. Sans compte, la séance reste payable à l'unité, et c'est
   // structurel, pas une limitation qu'on lèvera.
@@ -2100,7 +2100,7 @@ export default function CommanderRdvSlug() {
                     Rien n'a été acheté, il n'y a donc rien à confirmer, et cet
                     encadré garde le client à portée du bouton qui lui permet de
                     réessayer. Le cas « payé » ouvre l'écran de l'étape 5 depuis
-                    le 17/08, comme toute autre transaction de Yoppaa.
+                    le 16/08, comme toute autre transaction de Yoppaa.
                     ⚠️ Le texte vient de la MÊME fonction dans les deux cas :
                     deux écritures d'un même message finissent toujours par se
                     contredire. */}
@@ -2710,7 +2710,7 @@ export default function CommanderRdvSlug() {
                   </div>
 
                   {/* ─── PAYER CETTE SÉANCE, OU LA PRENDRE SUR SON ABONNEMENT ───
-                      Demande d'Alex du 17/08. Le choix est ici, et pas au choix
+                      Demande d'Alex du 16/08. Le choix est ici, et pas au choix
                       du cours, parce qu'il a besoin de LA DATE : la période de
                       validité, le plafond de la semaine et le solde en
                       dépendent tous les trois. */}
@@ -3180,7 +3180,7 @@ export default function CommanderRdvSlug() {
               )}
 
               {/* ─── ÉTAPE 5 - CONFIRMATION D'UN ABONNEMENT ACHETÉ EN LIGNE ───
-                  ⚠️ « Le client doit garder ses repères » (Alex, 17/08) : c'est
+                  ⚠️ « Le client doit garder ses repères » (Alex, 16/08) : c'est
                   un écran, comme la commande et comme le rendez-vous, et non
                   plus un encadré posé au milieu de la fiche. */}
               {etape === 5 && (

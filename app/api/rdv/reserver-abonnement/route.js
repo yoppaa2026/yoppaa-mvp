@@ -90,7 +90,7 @@ export async function POST(request) {
   // c'est-à-dire une gratuité que le commerçant n'a jamais vendue.
   //
   // Le repli sur la formule couvre les contrats vendus en ligne avant le
-  // 17/08 : leur colonne est vide, celle de leur formule ne l'a jamais été.
+  // 16/08 : leur colonne est vide, celle de leur formule ne l'a jamais été.
   let prestationId = contrat.prestation_id
   if (!prestationId && contrat.formule_id) {
     const { data: formule } = await db

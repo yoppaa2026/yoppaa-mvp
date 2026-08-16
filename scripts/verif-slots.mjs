@@ -310,7 +310,7 @@ verifier('au moins un mercredi ouvert sur 14 jours', jours.some(j => j.ouvert))
 // abonnements a ajouté un quatrième chemin d'écriture dans ConfigDashboard, et
 // le banc a rougi AVANT que quiconque teste l'écran : « aucun chemin d'écriture
 // n'échappe à la liste ». C'est exactement le rôle qu'on lui demande.
-// ⚠️ ET ELLE A RESERVI LE 17/08 : la route qui pose une séance sur un
+// ⚠️ ET ELLE A RESERVI LE 16/08 : la route qui pose une séance sur un
 // abonnement est le cinquième chemin d'écriture, et le banc a rougi AVANT
 // qu'Alex ait pu tester quoi que ce soit. Deuxième fois que cette liste attrape
 // un chemin le jour même où il est écrit.
@@ -1176,7 +1176,7 @@ verifier('la fiche boutique aussi',
 //
 // ⚠️ ET LA CONDITION DIT « AVANT LA CONFIRMATION », PAS « SAUF L'ÉTAPE 4 ».
 // Ce test exigeait `etape !== 4` : le jour où l'étape 5 est arrivée (l'écran de
-// confirmation d'un abonnement, 17/08), cette forme a fait RÉAPPARAÎTRE le
+// confirmation d'un abonnement, 16/08), cette forme a fait RÉAPPARAÎTRE le
 // bandeau et la carte sur le nouvel écran, sans que rien ne prévienne. Une
 // exception nommée ne protège que les étapes qu'on connaissait au moment de
 // l'écrire ; un seuil couvre aussi celles d'après.

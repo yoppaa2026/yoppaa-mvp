@@ -775,7 +775,7 @@ verifier('et rien ne vient du corps de la requête', !/request\.json\(\)/.test(s
 // en silence : sans `seances_total`, la route annoncerait « solde inconnu » à
 // une cliente qui a pourtant payé 36 séances. Cinq occurrences sur ce projet.
 const selectAbo = /from\('abonnements'\)[\s\S]{0,400}?\.select\('([^']+)'\)/.exec(srcRouteAbo)?.[1] || ''
-// ⚠️ `formule_id`, `prestation_id` et `created_at` sont arrivés le 17/08 pour
+// ⚠️ `formule_id`, `prestation_id` et `created_at` sont arrivés le 16/08 pour
 // l'écran de confirmation d'achat : le cours couvert, le nom de la formule et
 // la date d'achat. Ils vivent DANS CETTE LISTE et pas dans un test à part,
 // parce qu'une deuxième vérification écrite plus bas s'était laissée tromper
@@ -1071,7 +1071,7 @@ verifier('l’avertissement nomme l’adresse qui recevra l’abonnement',
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// L'ÉCRAN DE CONFIRMATION D'UN ABONNEMENT (Alex, 17/08)
+// L'ÉCRAN DE CONFIRMATION D'UN ABONNEMENT (Alex, 16/08)
 //
 // « C'est une fenêtre qui s'ouvre sur la fiche et pas un écran de confirmation
 // comme pour toutes les autres transactions, il faut modifier et faire comme
@@ -1232,14 +1232,14 @@ verifier('et l’attente se dit au lieu de laisser un blanc',
 verifier('la route rend le cours couvert', /prestationId:/.test(srcRouteAbo))
 verifier('le nom de la formule', /libelle: formule\.libelle/.test(srcRouteAbo))
 verifier('et la date d’achat', /acheteLe: contrat\.created_at/.test(srcRouteAbo))
-// ⚠️ LES CONTRATS VENDUS AVANT LE 17/08 N'ONT PAS DE prestation_id : leur
+// ⚠️ LES CONTRATS VENDUS AVANT LE 16/08 N'ONT PAS DE prestation_id : leur
 // formule, elle, l'a toujours eu. Sans ce repli, ils resteraient muets.
 verifier('un contrat ancien retrouve son cours via sa formule',
   /contrat\.prestation_id \?\? formule\?\.prestation_id/.test(srcRouteAbo))
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// POSER UNE SÉANCE SUR SON ABONNEMENT (Alex, 17/08)
+// POSER UNE SÉANCE SUR SON ABONNEMENT (Alex, 16/08)
 //
 // « Il est impossible de procéder à une réservation d'une séance de
 // l'abonnement côté Yopper. Ça doit être hyper fluide. »
@@ -1365,7 +1365,7 @@ verifier('le cours vient du contrat, pas de la requête',
   /let prestationId = contrat\.prestation_id/.test(srcReserverAbo))
 verifier('et le corps de la requête ne porte aucune prestation',
   !/prestation_id:\s*(corps|body)/.test(srcReserverAbo))
-// Le repli sur la formule couvre les contrats vendus avant le 17/08.
+// Le repli sur la formule couvre les contrats vendus avant le 16/08.
 verifier('un contrat ancien retrouve son cours par sa formule',
   /from\('abonnement_formules'\)[\s\S]{0,120}prestation_id/.test(srcReserverAbo))
 

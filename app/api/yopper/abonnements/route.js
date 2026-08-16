@@ -103,7 +103,7 @@ export async function GET(request) {
       ...etat,
       seancesParSemaine: contrat.seances_par_semaine ?? null,
       // ⚠️ LE COURS COUVERT PEUT VENIR DE LA FORMULE. Les contrats vendus en
-      // ligne avant le 17/08 n'ont pas de `prestation_id` : leur formule, elle,
+      // ligne avant le 16/08 n'ont pas de `prestation_id` : leur formule, elle,
       // l'a toujours eu. Prendre le contrat d'abord garde le choix figé à la
       // signature, et le repli sur la formule évite de rendre muets les
       // contrats déjà vendus.

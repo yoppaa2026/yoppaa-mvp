@@ -2,7 +2,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // L'ÉCRAN DE CONFIRMATION D'UN ABONNEMENT ACHETÉ EN LIGNE
 //
-// ⚠️ POURQUOI UN ÉCRAN, ET PAS UN ENCADRÉ. Alex, 17/08 : « c'est une fenêtre
+// ⚠️ POURQUOI UN ÉCRAN, ET PAS UN ENCADRÉ. Alex, 16/08 : « c'est une fenêtre
 // qui s'ouvre sur la fiche et pas un écran de confirmation comme pour toutes
 // les autres transactions, le client doit garder ses repères ». Une commande
 // ouvre un écran, un rendez-vous ouvre un écran, et l'abonnement — le montant

@@ -15,6 +15,7 @@
 import { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { fetchYopper } from '@/lib/fetch-yopper'
 // Icônes Lucide React (charte Yoppaa, charte durcie 17/06 : pas d'emoji
 // décoratif, même comme illustration de type de commerce).
 import {
@@ -669,8 +670,12 @@ export default function GoodMorningYoppersPage() {
       const clientId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_client_id') : null
       let principale = null
       if (clientId) {
-        // Commune du Yopper côté serveur (RLS clients verrouillé), autorisé par le cookie.
-        const res = await fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-own' }) })
+        // ⚠️ AVEC LE JETON. Trouvé le 16/08 par la garde du banc une fois qu'elle
+        // a cessé de ne lire qu'un seul fichier : cet appel partait nu, la route
+        // exige une identité prouvée depuis le 03/08, et le Good Morning ne
+        // connaissait donc JAMAIS la commune choisie par le Yopper. Il retombait
+        // sur son repli sans que rien ne le signale.
+        const res = await fetchYopper('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-own' }) })
         const j = await res.json().catch(() => ({}))
         if (j?.client?.commune) principale = j.client.commune
       }

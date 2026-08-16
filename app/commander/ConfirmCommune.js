@@ -14,6 +14,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchYopper } from '@/lib/fetch-yopper'
 
 // Tokens design system canonique
 const T = {
@@ -114,8 +115,16 @@ export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClo
     if (!communeId) return
     setSaving(true)
     setError(null)
-    // Enregistrement commune côté serveur (RLS clients verrouillé), autorisé par le cookie Yopper.
-    const res = await fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-commune', commune_id: communeId }) })
+    // ⚠️ AVEC LE JETON, PAS UN `fetch` NU (Alex, 16/08 : « session_yopper_manquante »
+    // en rouge sous le sélecteur). Le commentaire d'origine disait « autorisé par
+    // le cookie Yopper » : c'était vrai avant le durcissement du 03/08, et faux
+    // depuis. La route exige une identité PROUVÉE, ne trouvait personne, et
+    // refusait d'enregistrer la commune que le Yopper venait de choisir.
+    //
+    // ⚠️ Troisième fois que ce défaut exact revient sur ce projet, toujours pour
+    // la même raison : un `fetch` ordinaire n'emporte aucun jeton, et l'échec
+    // ressemble à un refus de droits.
+    const res = await fetchYopper('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-commune', commune_id: communeId }) })
     const j = await res.json().catch(() => ({}))
     setSaving(false)
     if (!j.ok) {

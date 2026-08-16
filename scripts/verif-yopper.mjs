@@ -505,14 +505,59 @@ verifier('la page rappelle qu\'on peut refuser la géolocalisation',
   //
   // ⚠️ `get-or-create`, lui, est VOLONTAIREMENT ouvert : il sert au passage à
   // la caisse d'un visiteur pas encore authentifié, et la route le traite avant
-  // son contrôle d'identité. L'interdire ferait échouer toute première
-  // commande. On ne vise donc que les deux actions protégées.
-  const blocsNus = src.split("await fetch('/api/yopper/client'").slice(1)
-  for (const action of ['get-own', 'update-own']) {
-    const fautif = blocsNus.find(b => b.slice(0, 250).includes(action))
-    verifier(`aucun appel nu pour l'action ${action}`, !fautif,
-      fautif ? fautif.slice(0, 130).replace(/\s+/g, ' ') : '')
+  // son contrôle d'identité. L'interdire ferait échouer toute première commande.
+  //
+  // ⚠️ ET LA LISTE DES ACTIONS PROTÉGÉES SE LIT DANS LA ROUTE, elle ne s'écrit
+  // plus ici. Ce test ne visait que `get-own` et `update-own` : `set-commune`,
+  // protégée exactement pareil, n'y figurait pas, et l'écran de choix de commune
+  // l'appelait sans jeton depuis des semaines. Alex l'a vu le 16/08, en rouge
+  // sous le sélecteur : « session_yopper_manquante ». Une liste écrite à la main
+  // ne protège que les cas qu'on connaissait le jour où on l'a écrite.
+  const ACTIONS_OUVERTES = ['get-or-create']
+  const actionsProtegees = [...new Set(
+    [...lire('app/api/yopper/client/route.js').matchAll(/action === '([a-z-]+)'/g)].map(m => m[1])
+  )].filter(a => !ACTIONS_OUVERTES.includes(a))
+
+  verifier('les actions protégées de la route ont bien été trouvées',
+    actionsProtegees.length >= 3, actionsProtegees.join(', ') || 'aucune')
+
+  // ⚠️ ET ON BALAIE TOUS LES APPELANTS, pas un seul fichier. Cette garde ne
+  // lisait que `app/commander/page.js` : l'appel fautif vivait dans
+  // `ConfirmCommune.js`, qu'elle n'a jamais ouvert. Le motif était juste, le
+  // PÉRIMÈTRE était faux, et c'est aussi efficace qu'un test absent.
+  const appelants = []
+  const explorer = (url, prefixe) => {
+    for (const e of readdirSync(url, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name.startsWith('.')) continue
+      const sousUrl = new URL(`${e.name}${e.isDirectory() ? '/' : ''}`, url)
+      if (e.isDirectory()) explorer(sousUrl, `${prefixe}${e.name}/`)
+      else if (e.name.endsWith('.js')) {
+        const contenu = readFileSync(sousUrl, 'utf8')
+        if (contenu.includes('/api/yopper/client')) appelants.push([`${prefixe}${e.name}`, contenu])
+      }
+    }
   }
+  explorer(new URL('../app/', import.meta.url), 'app/')
+
+  verifier('les appelants de la route ont bien été trouvés', appelants.length >= 2,
+    appelants.map(([n]) => n).join(', ') || 'aucun')
+
+  for (const [nom, contenu] of appelants) {
+    const blocsNus = contenu.split("fetch('/api/yopper/client'").slice(1)
+    for (const action of actionsProtegees) {
+      const fautif = blocsNus.find(b => b.slice(0, 250).includes(action))
+      verifier(`${nom} : aucun appel nu pour l'action ${action}`, !fautif,
+        fautif ? fautif.slice(0, 130).replace(/\s+/g, ' ') : '')
+    }
+  }
+  // ⚠️ CE QUE CE BANC NE TIENT PAS, ET IL VAUT MIEUX L'ÉCRIRE : rien ne vérifie
+  // qu'une action ENVOYÉE par un écran existe encore côté route. La renommer
+  // sur le serveur ne casse ni le build ni le lint, et l'écran continue
+  // d'afficher son formulaire devant une route qui répond « action inconnue ».
+  // Une première tentative de garde a été écrite le 16/08 puis RETIRÉE : elle
+  // lisait toutes les actions du fichier, y compris celles destinées à d'autres
+  // routes, et accusait `/api/yopper/commandes` de ne pas exister ici. Une garde
+  // mal ancrée qui rougit sur du code juste coûte plus cher que pas de garde.
 }
 
 

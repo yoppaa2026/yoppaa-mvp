@@ -914,6 +914,96 @@ verifier('une formule exige toujours une prestation',
   /if \(!form\.prestation_id\) return toast/.test(srcAbo))
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ APRÈS LE PAIEMENT, L'APPLICATION SE TAISAIT SUR TOUTE LA LIGNE
+//
+// Trouvé par Alex le 16/08 en payant réellement 400 € : aucun écran de
+// confirmation, aucun email, et l'abonnement invisible dans son espace. Le
+// contrat existait en base, le commerçant le voyait dans ses Abonnés, et
+// l'acheteur n'avait RIEN. « 400 € dans le vent », selon ses mots.
+//
+// ⚠️ POUR UN MONTANT À TROIS CHIFFRES, UNE PREUVE D'ACHAT N'EST PAS UN CONFORT.
+// C'est la première chose qu'on cherche quand ça se passe mal, et son absence
+// est indéfendable devant un client comme devant un juge.
+// ═══════════════════════════════════════════════════════════════════════════
+const { messageRetourAbonnement, resumeContratAchete } = await import('../lib/abonnements.js')
+
+// ⚠️ LES COMMENTAIRES SONT RETIRÉS AVANT TOUTE LECTURE DE SOURCE, et ce n'est
+// pas un raffinement : les commentaires que je viens d'écrire CITENT les noms
+// de fonctions qu'on vérifie ici. Sans ce nettoyage, retirer l'appel réel
+// laisserait le test vert, le nom survivant dans l'explication d'à côté. Ce
+// piège s'est présenté trois fois sur ce projet.
+const sansCommentaires = (src) => String(src)
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/^\s*\/\/.*$/gm, '')
+
+const retourOk = messageRetourAbonnement('ok', { nomCommerce: 'Centre Respire' })
+verifier('le retour de paiement se félicite', /Yopp/.test(retourOk?.titre || ''), retourOk?.titre)
+verifier('et il nomme le commerce', /Centre Respire/.test(retourOk?.message || ''))
+verifier('il annonce l’email qui arrive', /email/.test(retourOk?.message || ''))
+// ⚠️ LA PHRASE QUI ÉVITE UNE ATTENTE VAINE. Un abonnement en mode crédit ne
+// pose AUCUNE séance à l'agenda : sans elle, le client attend un planning qui
+// n'arrivera jamais, et il appellera le commerçant pour le lui demander.
+verifier('et il dit que les séances ne sont pas encore réservées',
+  /pas encore réservées/.test(retourOk?.suite || ''), retourOk?.suite)
+
+const retourAnnule = messageRetourAbonnement('annule')
+verifier('un paiement annulé le dit', /annulé/i.test(retourAnnule?.titre || ''))
+verifier('et rassure sur le débit', /débité/.test(retourAnnule?.message || ''))
+
+// ⚠️ UN PARAMÈTRE INCONNU NE FABRIQUE PAS DE CONFIRMATION. Sans cette garde,
+// n'importe qui déclencherait « ton abonnement est actif » depuis la barre
+// d'adresse, sans avoir rien payé.
+egal('un paramètre inconnu ne dit rien', messageRetourAbonnement('bidon'), null)
+egal('et rien du tout non plus', messageRetourAbonnement(), null)
+
+// Le résumé, celui que lisent L'ÉCRAN ET L'EMAIL. Une seule écriture : un email
+// qui annonce autre chose que l'écran est pire que pas d'email du tout.
+const resumeAchat = resumeContratAchete(
+  { seances_total: 45, date_debut: '2026-08-15', date_fin: '2027-07-01', prix_paye: 400, mode: 'credit' },
+  { nomCommerce: 'Centre Respire', nomFormule: 'Abonnement annuel Yoga' },
+)
+egal('le résumé compte les séances', resumeAchat.seances, '45 séances')
+egal('il borne la validité', resumeAchat.validite, 'Du 15 août au 1er juillet')
+egal('il porte le montant payé', resumeAchat.prix, '400.00 €')
+// ⚠️ CE QUE LE CLIENT A À FAIRE dépend du MODE, et c'est l'information la plus
+// utile des cinq : en crédit il doit réserver, personne ne le lui dira sinon.
+verifier('en crédit, il dit qu’il faut réserver soi-même',
+  /réserves tes séances toi-même/.test(resumeAchat.aFaire), resumeAchat.aFaire)
+egal('en place fixe, il dit qu’il n’y a rien à faire',
+  resumeContratAchete({ seances_total: 10, mode: 'place_fixe' }).aFaire,
+  'Tes séances sont déjà réservées, tu n’as rien à faire.')
+egal('sans contrat, aucun résumé', resumeContratAchete(null), null)
+
+// ─── LES TROIS SURFACES SONT BRANCHÉES ────────────────────────────────────
+const srcFicheAbo = sansCommentaires(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+// ⚠️ Stripe renvoie sur `?abonnement=ok` et AUCUNE ligne de cette page ne lisait
+// ce paramètre : le client atterrissait sur la fiche ordinaire, comme s'il
+// n'avait rien fait.
+verifier('la fiche lit le retour de paiement',
+  /new URLSearchParams\(window\.location\.search\)\.get\('abonnement'\)/.test(srcFicheAbo))
+verifier('et elle affiche le message qui va avec',
+  /messageRetourAbonnement\(abonnementRetour, \{ nomCommerce: commercant\.nom \}\)/.test(srcFicheAbo))
+// Le paramètre est nettoyé, sans quoi un rafraîchissement rejouerait la
+// confirmation d'un achat déjà fait.
+verifier('le paramètre est retiré de l’adresse',
+  /url\.searchParams\.delete\('abonnement'\)/.test(srcFicheAbo))
+
+const srcWebhookAbo = sansCommentaires(readFileSync(new URL('../app/api/stripe/webhook/route.js', import.meta.url), 'utf8'))
+verifier('le webhook envoie la confirmation au client',
+  /emailAbonnementConfirme\(\{/.test(srcWebhookAbo))
+verifier('et prévient le commerçant de la vente',
+  /emailAbonnementVenduCommercant\(\{/.test(srcWebhookAbo))
+// ⚠️ L'ENVOI NE DOIT JAMAIS FAIRE ÉCHOUER LE WEBHOOK. Une erreur remontée ferait
+// répondre 500 à Stripe, qui rejouerait l'événement : le contrat étant déjà
+// créé, on fabriquerait des doublons pour un email qui n'est pas parti.
+verifier('un email en échec ne rejoue pas le paiement',
+  /catch \(e\) \{\s*console\.error\('\[stripe\/webhook\] emails abonnement KO'/.test(srcWebhookAbo))
+
+const srcResendAbo = readFileSync(new URL('../lib/resend.js', import.meta.url), 'utf8')
+verifier('l’email dit qu’il est la preuve d’achat',
+  /preuve d'achat/.test(srcResendAbo))
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

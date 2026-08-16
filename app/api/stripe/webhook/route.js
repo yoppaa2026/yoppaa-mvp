@@ -22,7 +22,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
-import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant } from '@/lib/resend'
+import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant, emailAbonnementConfirme, emailAbonnementVenduCommercant } from '@/lib/resend'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { debiterBon, recrediterBon } from '@/lib/bons-cadeaux-server'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
@@ -31,7 +31,7 @@ import { programmerRappelRdv } from '@/lib/rappels'
 import { recupererFraisStripe, ventilerFrais } from '@/lib/stripe-frais'
 import { crediterFidelite } from '@/lib/fidelite-server'
 import { canDo } from '@/lib/plans'
-import { contratDepuisFormule } from '@/lib/abonnements'
+import { contratDepuisFormule, resumeContratAchete } from '@/lib/abonnements'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { normaliserEmail } from '@/lib/email-normalise'
@@ -440,6 +440,59 @@ async function handleAbonnementSucceeded(paymentIntent, supabase) {
     return
   }
   console.info('[stripe/webhook] abonnement créé', { id: cree?.id, formuleId, seances: contrat.seances_total })
+
+  // ⚠️ L'EMAIL MANQUAIT, ET C'ÉTAIT LE PLUS GRAVE DES TROIS SILENCES trouvés
+  // par Alex le 16/08 en payant réellement 400 €. Le contrat se créait, le
+  // commerçant le voyait dans ses Abonnés, et l'acheteur ne recevait RIEN.
+  //
+  // ⚠️ POUR UN MONTANT À TROIS CHIFFRES, UNE PREUVE D'ACHAT N'EST PAS UN
+  // CONFORT. C'est la première chose qu'on cherche quand ça se passe mal.
+  //
+  // ⚠️ ET L'ENVOI NE DOIT JAMAIS FAIRE ÉCHOUER LE WEBHOOK. Une erreur d'envoi
+  // remontée ferait répondre 500 à Stripe, qui rejouerait l'événement : le
+  // contrat est déjà créé, on fabriquerait donc des doublons pour un email qui
+  // n'est pas parti. L'abonnement existe, c'est ce qui compte ; l'email se
+  // rattrape, un contrat en double se paie.
+  try {
+    const { data: com } = await supabase
+      .from('commercants').select('nom, slug').eq('id', formule.commercant_id).maybeSingle()
+    const resume = resumeContratAchete(
+      { ...contrat, prix_paye: formule.prix },
+      { nomCommerce: com?.nom || '', nomFormule: formule.libelle || '' },
+    )
+    if (contrat.client_email) {
+      await envoyerAuCommercant({
+        to: contrat.client_email,
+        subject: `Ton abonnement chez ${com?.nom || 'ton commerçant'} est actif`,
+        html: emailAbonnementConfirme({
+          yopper_prenom: contrat.client_prenom || '',
+          commercant_nom: com?.nom || '',
+          resume,
+          mes_abonnements_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.yoppaa.app'}/commander`,
+        }),
+      })
+    }
+    // Le commerçant est prévenu comme pour un bon cadeau vendu : c'est une
+    // rentrée d'argent, et la plus grosse de son catalogue.
+    if (com?.nom) {
+      const { data: comEmail } = await supabase
+        .from('commercants').select('email, notif_mode').eq('id', formule.commercant_id).maybeSingle()
+      if (comEmail?.notif_mode === 'chaque' && comEmail?.email) {
+        await envoyerAuCommercant({
+          to: comEmail.email,
+          subject: `Abonnement vendu · ${Number(formule.prix).toFixed(2)} €`,
+          html: emailAbonnementVenduCommercant({
+            nom_commercant: com.nom,
+            client_prenom: contrat.client_prenom || '',
+            client_nom: contrat.client_nom || '',
+            resume,
+          }),
+        })
+      }
+    }
+  } catch (e) {
+    console.error('[stripe/webhook] emails abonnement KO', e?.message)
+  }
 }
 
 // ─── Bon cadeau : paiement OK → activation + emails ─────────────────────────

@@ -46,7 +46,7 @@ import CarteFideliteFiche from '../../CarteFideliteFiche'
 import BonCadeauModal from '../../BonCadeauModal'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 import BlocAbonnements from './BlocAbonnements'
-import { formuleVendableEnLigne } from '@/lib/abonnements'
+import { formuleVendableEnLigne, messageRetourAbonnement } from '@/lib/abonnements'
 import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { jourLocalISO } from '@/lib/timezone'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
@@ -281,6 +281,7 @@ export default function CommanderRdvSlug() {
   const [bonsCfg, setBonsCfg] = useState(null)              // config bons cadeaux (bouton Offrir)
   const [bonModalOuvert, setBonModalOuvert] = useState(false)
   const [bonRetour, setBonRetour] = useState(null)          // 'ok' | 'annule' après retour Stripe achat de bon
+  const [abonnementRetour, setAbonnementRetour] = useState(null)  // idem, achat d'abonnement
   const [loading, setLoading] = useState(true)
   const [erreur, setErreur] = useState(null)
 
@@ -527,6 +528,28 @@ export default function CommanderRdvSlug() {
         setBonRetour(p)
         const url = new URL(window.location.href)
         url.searchParams.delete('bon')
+        window.history.replaceState({}, '', url.toString())
+      }
+    } catch { /* ignore */ }
+  }, [])
+
+  // ⚠️ LE RETOUR D'UN ACHAT D'ABONNEMENT N'ÉTAIT LU PAR PERSONNE (défaut trouvé
+  // par Alex le 16/08, en payant réellement 400 €). Stripe renvoie bien sur
+  // `?abonnement=ok`, et AUCUNE ligne de cette page ne regardait ce paramètre :
+  // le client atterrissait sur la fiche ordinaire, comme s'il n'avait rien
+  // fait. Le contrat existait en base, le commerçant le voyait, et l'acheteur
+  // n'avait ni écran, ni email, ni trace dans son espace.
+  //
+  // ⚠️ Le paramètre est nettoyé de l'URL comme pour le bon cadeau, sans quoi un
+  // rafraîchissement rejouerait la confirmation d'un achat déjà fait.
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search).get('abonnement')
+      if (p === 'ok' || p === 'annule') {
+        setAbonnementRetour(p)
+        const url = new URL(window.location.href)
+        url.searchParams.delete('abonnement')
+        url.searchParams.delete('session_id')
         window.history.replaceState({}, '', url.toString())
       }
     } catch { /* ignore */ }
@@ -1867,6 +1890,31 @@ export default function CommanderRdvSlug() {
                     se contentait de la couverture en bandeau. Pour un salon,
                     c'est pourtant ce qui donne envie de pousser la porte. */}
                 {etape === 1 && <GalerieCommerce photos={photosFiche} nomCommerce={commercant.nom} />}
+
+                {/* ⚠️ RETOUR D'ACHAT D'UN ABONNEMENT. Il passe AVANT le bon
+                    cadeau et il est plus haut, plus grand, parce que c'est le
+                    montant le plus élevé que le client puisse engager sur
+                    Yoppaa. Avant le 16/08, il n'y avait rien du tout. */}
+                {etape === 1 && abonnementRetour && (() => {
+                  const m = messageRetourAbonnement(abonnementRetour, { nomCommerce: commercant.nom })
+                  if (!m) return null
+                  const ok = m.ton === 'ok'
+                  return (
+                    <div style={{ marginTop: 12, background: ok ? '#F0FDF4' : '#FFFBEB', border: `1.5px solid ${ok ? '#86EFAC' : '#FCD34D'}`, borderRadius: 14, padding: '14px 16px' }}>
+                      <p style={{ margin: 0, fontSize: '1rem', fontWeight: 900, color: ok ? '#065F46' : '#78350F', lineHeight: 1.35 }}>
+                        {m.titre}
+                      </p>
+                      <p style={{ margin: '6px 0 0', fontSize: '0.82rem', fontWeight: 600, color: ok ? '#065F46' : '#78350F', lineHeight: 1.55 }}>
+                        {m.message}
+                      </p>
+                      {m.suite && (
+                        <p style={{ margin: '8px 0 0', fontSize: '0.78rem', color: ok ? '#047857' : '#92400E', lineHeight: 1.5 }}>
+                          {m.suite}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Retour d'achat d'un bon cadeau (Stripe success/cancel) */}
                 {etape === 1 && bonRetour && (

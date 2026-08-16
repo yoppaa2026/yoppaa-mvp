@@ -2073,7 +2073,7 @@ export default function CommanderRdvSlug() {
                   dans la boutique : un abonnement porte une durée, un solde et
                   des règles, qui n'ont aucune place sur une fiche produit. */}
               {etape === 1 && formulesAbo.length > 0 && (
-                <BlocAbonnements commercant={commercant} formules={formulesAbo} prestations={prestations}/>
+                <BlocAbonnements commercant={commercant} formules={formulesAbo} prestations={prestations} client={client}/>
               )}
 
               {etape === 1 && produits.length > 0 && renderProduits()}

@@ -1004,6 +1004,64 @@ const srcResendAbo = readFileSync(new URL('../lib/resend.js', import.meta.url), 
 verifier('l’email dit qu’il est la preuve d’achat',
   /preuve d'achat/.test(srcResendAbo))
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ L'EMAIL D'ACHAT NE SE RETAPE PAS QUAND ON LE CONNAÎT DÉJÀ
+//
+// Le formulaire d'achat démarrait ENTIÈREMENT VIDE, même pour un Yopper
+// connecté. Il devait retaper son email, et la moindre différence — une faute,
+// une autre adresse, une autocomplétion du navigateur — rattachait le contrat
+// à CET email-là.
+//
+// ⚠️ ET LE CONTRAT DISPARAÎT ALORS POUR TOUJOURS de son espace : c'est l'email
+// qui le relie à son propriétaire. Alex l'a vécu sur un abonnement de 400 €,
+// et la requête l'a prouvé, « email_correspond » valait false.
+//
+// ⚠️ Le commentaire posé sous ce champ disait DÉJÀ que cet email était la clé.
+// Savoir qu'une saisie est critique et la laisser vide, c'est la même faute
+// que de ne pas le savoir.
+// ═══════════════════════════════════════════════════════════════════════════
+const srcBlocAbo = sansCommentaires(readFileSync(new URL('../app/commander/rdv/[slug]/BlocAbonnements.js', import.meta.url), 'utf8'))
+verifier('le bloc d’achat reçoit l’identité du client',
+  /client = null \}\) \{/.test(srcBlocAbo))
+verifier('et il préremplit ce qu’on connaît déjà',
+  /email: p\.email \|\| client\.email \|\| ''/.test(srcBlocAbo))
+// ⚠️ ON NE PIÉTINE PAS UNE SAISIE EN COURS. Garder ce que le client a commencé
+// à taper est le point délicat : préremplir par écrasement effacerait sa
+// correction dès que l'identité arrive, un instant plus tard.
+verifier('sans jamais écraser ce que le client a déjà tapé',
+  /prenom: p\.prenom \|\| client\.prenom/.test(srcBlocAbo))
+const srcFicheBloc = sansCommentaires(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+verifier('et la fiche la lui passe vraiment',
+  /<BlocAbonnements[^>]*client=\{client\}/.test(srcFicheBloc))
+
+// ⚠️ ACHETER SOUS UNE AUTRE ADRESSE QUE CELLE DE SON COMPTE : ON AVERTIT.
+//
+// Alex l'a fait volontairement pour tester, avec une adresse en « +abotest »,
+// et RIEN ne le lui a dit. Son abonnement était donc introuvable dans son
+// espace, et le système avait pourtant raison : le contrat portait bien
+// l'adresse saisie.
+//
+// ⚠️ Un vrai client qui met son adresse professionnelle par réflexe perdrait
+// l'accès à son abonnement sans jamais comprendre pourquoi : le contrat
+// existerait, le commerçant le verrait, et son espace resterait vide.
+//
+// ⚠️ ON AVERTIT, ON NE BLOQUE PAS. Offrir un abonnement est légitime, et
+// refuser une adresse au moment de payer ferait perdre la vente pour un cas
+// qui se règle par une phrase.
+verifier('un email différent de celui du compte est signalé',
+  /const emailDifferent = !!emailCompte && emailSaisi\.includes/.test(srcBlocAbo))
+// La comparaison se fait en minuscules et sans espaces, comme partout où cet
+// email sert de clé : sinon une majuscule de trop crierait sur deux adresses
+// identiques.
+verifier('et la comparaison ignore la casse et les espaces',
+  /const emailCompte = String\(client\?\.email \|\| ''\)\.trim\(\)\.toLowerCase\(\)/.test(srcBlocAbo))
+// ⚠️ On ne dit rien tant que l’email n’est pas complet : signaler une
+// différence pendant la frappe reviendrait à crier à chaque lettre.
+verifier('rien n’est dit pendant la frappe',
+  /emailSaisi\.includes\('@'\) && emailSaisi !== emailCompte/.test(srcBlocAbo))
+verifier('l’avertissement nomme l’adresse qui recevra l’abonnement',
+  /Ton abonnement sera rattaché à <strong>\{form\.email\.trim\(\)\}<\/strong>/.test(srcBlocAbo))
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

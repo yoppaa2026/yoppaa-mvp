@@ -11,7 +11,7 @@
 // non un planning déjà posé. Un bouton « 150 € » tout seul se conteste, et se
 // conteste avec raison.
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { resumeFormulePublique } from '@/lib/abonnements'
 
 const T = {
@@ -23,15 +23,47 @@ const T = {
   muted: '#6B7280',
 }
 
-export default function BlocAbonnements({ commercant, formules = [], prestations = [] }) {
+// ⚠️ `client` EST ARRIVÉ LE 16/08, ET SON ABSENCE A COÛTÉ UN ABONNEMENT DE
+// 400 €. Ce formulaire démarrait entièrement vide, même pour un Yopper
+// connecté : il devait retaper son email, et la moindre différence — une
+// faute, une autre adresse, une autocomplétion du navigateur — rattachait le
+// contrat à CET email-là.
+//
+// ⚠️ ET LE CONTRAT DISPARAÎT ALORS POUR TOUJOURS. C'est l'email qui le relie à
+// son propriétaire : avec un autre, l'abonnement existe, le commerçant le voit,
+// et l'acheteur ne le retrouvera jamais dans son espace. Alex l'a vécu, et le
+// commentaire posé sous ce champ disait déjà que cet email était la clé.
+export default function BlocAbonnements({ commercant, formules = [], prestations = [], client = null }) {
   const [choisie, setChoisie] = useState(null)
   const [form, setForm] = useState({ prenom: '', nom: '', email: '', telephone: '' })
+  // Zéro friction : ce qu'on connaît déjà, on ne le redemande pas. Et ce qu'on
+  // ne redemande pas ne peut pas être mal retapé.
+  useEffect(() => {
+    if (!client?.email) return
+    setForm(p => ({
+      prenom: p.prenom || client.prenom || '',
+      nom: p.nom || client.nom || '',
+      email: p.email || client.email || '',
+      telephone: p.telephone || client.telephone || '',
+    }))
+  }, [client?.email, client?.prenom, client?.nom, client?.telephone])
   const [envoi, setEnvoi] = useState(false)
   const [erreur, setErreur] = useState(null)
 
   if (!formules.length) return null
 
   const valide = !!(form.prenom.trim() && form.nom.trim() && form.email.trim().includes('@'))
+
+  // ⚠️ ACHÈTE-T-IL SOUS UNE AUTRE ADRESSE QUE CELLE DE SON COMPTE ? La
+  // comparaison se fait en minuscules et sans espaces, comme partout où cet
+  // email sert de clé : sinon une majuscule de trop déclencherait un
+  // avertissement pour deux adresses identiques.
+  //
+  // ⚠️ Et on ne dit rien tant qu'il n'a pas écrit un email complet : signaler
+  // une différence pendant la frappe reviendrait à crier à chaque lettre.
+  const emailSaisi = form.email.trim().toLowerCase()
+  const emailCompte = String(client?.email || '').trim().toLowerCase()
+  const emailDifferent = !!emailCompte && emailSaisi.includes('@') && emailSaisi !== emailCompte
 
   async function payer() {
     if (!valide || envoi || !choisie) return
@@ -170,6 +202,24 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
                 <p style={{ fontSize: '0.68rem', color: T.muted, marginTop: 3, lineHeight: 1.45 }}>
                   C&apos;est avec cet email que tu retrouveras ton solde de séances.
                 </p>
+                {/* ⚠️ ACHETER SOUS UNE AUTRE ADRESSE QUE CELLE DE SON COMPTE.
+                    Alex l'a fait volontairement pour tester, et rien ne le lui a
+                    dit. Un vrai client qui met son adresse professionnelle par
+                    réflexe perdrait l'accès à son abonnement sans jamais
+                    comprendre pourquoi : le contrat existerait, le commerçant le
+                    verrait, et son espace resterait vide.
+
+                    ⚠️ ON AVERTIT, ON NE BLOQUE PAS. Offrir un abonnement à
+                    quelqu'un est légitime, et refuser une adresse au moment de
+                    payer ferait perdre la vente pour un cas qui se règle par
+                    une phrase. */}
+                {emailDifferent && (
+                  <p style={{ fontSize: '0.7rem', color: '#92400E', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '7px 9px', marginTop: 6, lineHeight: 1.5 }}>
+                    Attention, cette adresse n’est pas celle de ton compte Yoppaa.
+                    Ton abonnement sera rattaché à <strong>{form.email.trim()}</strong>,
+                    et c’est avec elle qu’il faudra te connecter pour le retrouver.
+                  </p>
+                )}
               </div>
               <div style={{ marginBottom: 12 }}>
                 <label style={labelSt}>Téléphone</label>

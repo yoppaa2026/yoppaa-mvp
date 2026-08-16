@@ -27,7 +27,8 @@ async function requireAdmin(request) {
     { global: { headers: { Authorization: `Bearer ${accessToken}` } } }
   )
   const { data: { user } } = await authClient.auth.getUser()
-  if (!user || user.email !== ADMIN_EMAIL) return { error: 'accès refusé', status: 403 }
+  if (!user) return { error: 'session expirée, reconnecte-toi', status: 401 }
+  if (user.email !== ADMIN_EMAIL) return { error: 'accès refusé', status: 403 }
 
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,

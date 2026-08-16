@@ -6,7 +6,7 @@
 // Aucun de ces défauts ne produit d'erreur, ni au build, ni au lint, ni dans
 // les journaux : seul un test qui interroge l'INTENTION les attrape.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { heureDecente } from '../lib/fidelite-sms.js'
 import {
   extraireCodePostal,
@@ -586,6 +586,52 @@ verifier('la migration ouvre les communes fermées',
 // qui dit ce que la migration a fait.
 egal('elle compte les communes fermées AVANT et APRÈS',
   (migrationCommunes.match(/count\(\*\) FILTER \(WHERE NOT active\)/g) || []).length, 2)
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ « ACCÈS REFUSÉ » NE DOIT PAS ÊTRE LE MESSAGE D'UNE SESSION EXPIRÉE
+//
+// Alex, 16/08, en essayant d'ouvrir une commune depuis /admin : la lecture de
+// la page avait fonctionné, l'enregistrement a répondu « Erreur : accès
+// refusé ». Il a cherché un problème de droits qui n'existait pas.
+//
+// Les DIX routes admin portaient la même ligne, recopiée à l'identique :
+//
+//     if (!user || user.email !== ADMIN_EMAIL) → 403 « accès refusé »
+//
+// `getUser()` rend `null` quand le jeton n'est plus valide : un jeton expiré
+// tombait donc dans la branche des droits. ⚠️ Un message qui nomme la mauvaise
+// cause coûte plus cher que pas de message : il envoie chercher ailleurs, avec
+// l'autorité d'une réponse.
+//
+// ⚠️ ON BALAIE LE DOSSIER, ON NE LISTE PAS LES ROUTES. Vérifier les dix connues
+// laisserait passer la onzième, écrite dans six mois par quelqu'un qui aura
+// recopié l'ancienne forme. Le banc trouve les routes lui-même.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const routesAdmin = readdirSync(new URL('../app/api/admin', import.meta.url), { withFileTypes: true })
+  .filter(e => e.isDirectory())
+  .map(e => `app/api/admin/${e.name}/route.js`)
+  .filter(p => { try { lire(p); return true } catch { return false } })
+
+verifier('des routes admin ont bien été trouvées', routesAdmin.length >= 10,
+  `${routesAdmin.length} trouvée(s)`)
+
+for (const chemin of routesAdmin) {
+  const src = lire(chemin)
+  if (!/ADMIN_EMAIL/.test(src)) continue   // route sans contrôle d'email : hors sujet
+  const court = chemin.replace('app/api/admin/', '').replace('/route.js', '')
+
+  // La forme fautive, celle qui confond les deux causes.
+  verifier(`${court} ne confond plus session morte et droits manquants`,
+    !/!user \|\| user\.email !== ADMIN_EMAIL/.test(src))
+  // Et la distinction est réellement écrite : un jeton mort rend 401, pas 403.
+  verifier(`${court} rend 401 sur une session expirée`,
+    /if \(!user\)[\s\S]{0,180}?session expirée/.test(src)
+    && /session expirée[\s\S]{0,120}?401/.test(src))
+  verifier(`${court} garde 403 pour un compte qui n’est pas admin`,
+    /user\.email !== ADMIN_EMAIL[\s\S]{0,180}?403/.test(src))
+}
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

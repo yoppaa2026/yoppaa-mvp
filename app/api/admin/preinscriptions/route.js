@@ -20,7 +20,10 @@ export async function GET(request) {
       { global: { headers: { Authorization: `Bearer ${accessToken}` } } }
     )
     const { data: { user } } = await authClient.auth.getUser()
-    if (!user || user.email !== ADMIN_EMAIL) {
+    if (!user) {
+      return NextResponse.json({ ok: false, error: 'session expirée, reconnecte-toi' }, { status: 401 })
+    }
+    if (user.email !== ADMIN_EMAIL) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
 

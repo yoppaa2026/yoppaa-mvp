@@ -3129,6 +3129,74 @@ verifier('le banc a bien trouvé les deux listes de champs',
   chargees.size > 10 && enregistrees.size > 10, `${chargees.size} chargés, ${enregistrees.size} enregistrés`)
 
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ « PAYÉ OU PAS ? » — LA SEULE QUESTION DU COMPTOIR (Alex, 17/08)
+//
+// « Rien n'indique au commerçant si payé ou pas, pas très clair tout ça. »
+//
+// L'agenda affichait un MONTANT NU, qui ne répond pas à la question, et qui
+// mentait deux fois : « 0€ » sur une séance d'abonnement, et le PRIX COMPLET
+// sur un rendez-vous dont l'acompte était déjà versé — donc de quoi encaisser
+// deux fois l'acompte.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const { etatPaiementRdv } = await import('../lib/rdv-paiement.js')
+
+// ⚠️ LE CONTRAT PASSE AVANT TOUT CALCUL. Une séance d'abonnement porte
+// `prix_estime: 0` pour ne pas multiplier le chiffre d'affaires par trente-six.
+// Interroger le NOMBRE ferait afficher « 0 € » ; on interroge l'ABSENCE de
+// contrat. Quatrième fois que ce piège se présente sur ce projet.
+const SEANCE_ABO = { abonnement_id: 'abo-1', prix_estime: 0, acompte_montant: null }
+egal('une séance d’abonnement ne demande rien', etatPaiementRdv(SEANCE_ABO).ton, 'paye')
+verifier('et elle ne dit JAMAIS 0 €', !/0[,.]00/.test(etatPaiementRdv(SEANCE_ABO).libelle))
+verifier('elle nomme le contrat', /Abonnement/.test(etatPaiementRdv(SEANCE_ABO).libelle))
+
+// ⚠️ ACOMPTE PAYÉ : on annonce le SOLDE, pas le prix. Un commerçant qui lit
+// « 35 € » sur un rendez-vous dont l'acompte est déjà versé encaisse 8,75 € de
+// trop, et c'est le client qui s'en aperçoit.
+const AVEC_ACOMPTE = { prix_estime: 35, acompte_montant: 8.75, acompte_paye: true }
+verifier('acompte payé : on annonce le solde', /26,25/.test(etatPaiementRdv(AVEC_ACOMPTE).libelle))
+verifier('et jamais le prix complet', !/35,00/.test(etatPaiementRdv(AVEC_ACOMPTE).libelle))
+verifier('le détail rappelle ce qui a déjà été payé',
+  /8,75/.test(etatPaiementRdv(AVEC_ACOMPTE).detail))
+
+// Acompte NON payé : le tout reste dû, l'acompte n'est jamais arrivé.
+const ACOMPTE_EN_ATTENTE = { prix_estime: 35, acompte_montant: 8.75, acompte_paye: false }
+verifier('acompte non payé : tout reste dû', /35,00/.test(etatPaiementRdv(ACOMPTE_EN_ATTENTE).libelle))
+egal('et le ton l’annonce comme une attente', etatPaiementRdv(ACOMPTE_EN_ATTENTE).ton, 'attente')
+// ⚠️ ET ON DIT QUE L ACOMPTE N EST PAS ARRIVÉ. Sans cette phrase, le commerçant
+// lit le même libellé que sur un rendez-vous sans acompte et ne sait pas qu un
+// paiement en ligne a échoué. Mesuré en mutation : sans elle, tout restait vert.
+verifier('et le détail dit que l’acompte n’a pas été payé',
+  /n’a pas été payé/.test(etatPaiementRdv(ACOMPTE_EN_ATTENTE).detail || ''))
+
+// Le cas ordinaire : ni contrat, ni acompte.
+egal('sans acompte, le prix est à encaisser',
+  etatPaiementRdv({ prix_estime: 15 }).libelle, '15,00 € à encaisser')
+
+// ⚠️ SANS PRIX CONNU (prestation sur devis), on ne FABRIQUE PAS un montant.
+// Annoncer « 0,00 € à encaisser » sur un devis serait pire que de ne rien dire.
+verifier('sans prix connu, aucun montant inventé',
+  !/[0-9]/.test(etatPaiementRdv({ prix_estime: null }).libelle))
+verifier('mais on dit quand même qu’il y a à encaisser',
+  /encaisser/.test(etatPaiementRdv({ prix_estime: null }).libelle))
+
+egal('sans rendez-vous, rien', etatPaiementRdv(null), null)
+
+// ─── L'AGENDA L'AFFICHE ───────────────────────────────────────────────────
+const srcDashPaiement = sansCommentaires(
+  readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+// ⚠️ ON COMPTE : la règle sert DEUX fois, pour la pastille et pour le détail.
+// Chercher son nom laissait le second usage satisfaire le test. Huitième fois
+// cette semaine que l'homonyme voisin rend une garde muette.
+egal('le tableau de bord passe par la règle du module, aux deux endroits',
+  (srcDashPaiement.match(/etatPaiementRdv\(rdv\)/g) || []).length, 2)
+// ⚠️ L'ancien affichage ne doit plus exister : il affichait `prix_estime` nu,
+// donc « 0€ » sur un abonnement et le prix complet malgré un acompte versé.
+verifier('le montant nu a disparu',
+  !/\{Number\(rdv\.prix_estime\)\.toFixed\(0\)\}€/.test(srcDashPaiement))
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

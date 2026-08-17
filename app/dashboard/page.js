@@ -9,6 +9,7 @@ import ModaleConfirmation from './ModaleConfirmation'
 import PosteConfirmation, { confirme } from './PosteConfirmation'
 import { questionRdv, confirmationRdv, statutDepuisChoix } from '@/lib/confirmation-rdv'
 import { confirmationSimple } from '@/lib/confirmations'
+import { etatPaiementRdv } from '@/lib/rdv-paiement'
 import ModalDeplacerRdv from './ModalDeplacerRdv'
 import { Reply, ClipboardList } from 'lucide-react'
 import { canDo } from '@/lib/plans'
@@ -667,17 +668,31 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
             <p style={{ fontSize: '0.85rem', fontWeight: 700, color: T.ink, margin: 0, lineHeight: 1.3, flex: 1, minWidth: 0 }}>
               {rdv.prestation?.nom || 'Prestation'}
             </p>
-            {rdv.prix_estime != null && (
-              <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px', flexShrink: 0 }}>
-                {Number(rdv.prix_estime).toFixed(0)}€
-              </span>
-            )}
+            {/* ⚠️ LE MONTANT NU NE RÉPONDAIT PAS À LA SEULE QUESTION DU
+                COMPTOIR : « je lui demande de l'argent, ou pas ? » (Alex,
+                17/08). Et il mentait deux fois : « 0€ » sur une séance
+                d'abonnement, et le PRIX COMPLET sur un rendez-vous dont
+                l'acompte était déjà versé, ce qui fait encaisser trop.
+                La règle vit dans le module, une seule écriture. */}
+            {(() => {
+              const p = etatPaiementRdv(rdv)
+              if (!p) return null
+              const couleurs = { paye: ['#065F46', '#D1FAE5'], partiel: ['#78350F', '#FEF3C7'], attente: [T.main, T.pale] }
+              const [texte, fond] = couleurs[p.ton] || couleurs.attente
+              return (
+                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: texte, background: fond, padding: '3px 9px', borderRadius: 100, letterSpacing: '-0.2px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                  {p.libelle}
+                </span>
+              )
+            })()}
           </div>
-          {rdv.acompte_montant != null && rdv.acompte_montant > 0 && (
-            <p style={{ fontSize: '0.7rem', color: T.muted, marginTop: 3, fontWeight: 600 }}>
-              Acompte : {Number(rdv.acompte_montant).toFixed(2)}€ {rdv.acompte_paye ? '✓ payé' : '· en attente'}
-            </p>
-          )}
+          {(() => {
+            const p = etatPaiementRdv(rdv)
+            if (!p?.detail) return null
+            return (
+              <p style={{ fontSize: '0.7rem', color: T.muted, marginTop: 3, fontWeight: 600 }}>{p.detail}</p>
+            )
+          })()}
         </div>
 
         {/* Produits achetés dans le même paiement que le rendez-vous. À

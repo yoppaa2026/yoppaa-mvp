@@ -79,6 +79,27 @@ export async function GET(request) {
       .lte('date_rdv', au)
       .is('deleted_at', null)
 
+    // ⚠️ LES ABONNEMENTS, QUI NE FIGURAIENT DANS AUCUN DOCUMENT (Alex, 17/08).
+    // Leur vente n'écrit que dans `abonnements`, jamais une commande.
+    //
+    // ⚠️ LE FILTRE DE DATES SE FAIT ICI, EN JAVASCRIPT, ET C'EST VOULU :
+    // `paye_le` reçoit une date nue par la vente en ligne et un horodatage
+    // complet par l'inscription à la main. Comparer ces deux formes en SQL
+    // dépend du type exact de la colonne, et une borne qui échoue rendrait un
+    // journal incomplet SANS erreur. On tronque à la journée, ce qui est vrai
+    // dans les deux cas. Un commerce a des abonnements par dizaines, jamais par
+    // milliers : le coût est nul.
+    //
+    // Aucune coordonnée client n'est lue : ce sont des colonnes comptables.
+    const { data: abonnementsTous } = await admin
+      .from('abonnements')
+      .select('id, statut, prix, paye, paye_le, mode_paiement, tva_taux, stripe_frais, stripe_net')
+      .eq('commercant_id', commercantId)
+    const abonnements = (abonnementsTous || []).filter(a => {
+      const jour = String(a?.paye_le || '').slice(0, 10)
+      return jour >= du && jour <= au
+    })
+
     // Taux actuels du catalogue : filet pour les commandes antérieures à la
     // migration, dont les lignes n'ont pas de taux figé.
     const { data: articles } = await admin
@@ -96,6 +117,7 @@ export async function GET(request) {
     const lignes = construireLignes({
       commandes: commandes || [],
       rdvs: rdvs || [],
+      abonnements,
       tauxDefaut,
       articlesParId,
     })

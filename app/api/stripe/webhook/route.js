@@ -354,7 +354,11 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
   }
 
   if (kind === PAYMENT_KIND.ABONNEMENT) {
-    await handleAbonnementSucceeded(paymentIntent, supabase)
+    // ⚠️ `eventAccount` VOYAGE JUSQU'ICI, comme pour les commandes et les
+    // rendez-vous : en Direct Charge, le relevé des frais Stripe vit sur le
+    // COMPTE CONNECTÉ du commerçant, et le chercher sur le compte de la
+    // plateforme ne rend rien, sans la moindre erreur.
+    await handleAbonnementSucceeded(paymentIntent, supabase, eventAccount)
     return
   }
 
@@ -372,7 +376,7 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
 // documenté. Sans ce garde-fou, une cliente qui paie une fois se retrouverait
 // avec deux contrats, donc le double de séances, et personne ne saurait
 // lequel est le bon. On reconnaît un rejeu à la référence du paiement.
-async function handleAbonnementSucceeded(paymentIntent, supabase) {
+async function handleAbonnementSucceeded(paymentIntent, supabase, eventAccount = null) {
   const meta = paymentIntent.metadata || {}
   const formuleId = meta.formule_id
   if (!formuleId) {
@@ -429,9 +433,47 @@ async function handleAbonnementSucceeded(paymentIntent, supabase) {
     contrat.seances_total = seancesPayees
   }
 
+  // ⚠️ LA VENTE D'UN ABONNEMENT N'EXISTAIT DANS AUCUN DOCUMENT COMPTABLE (Alex,
+  // 17/08). Elle n'écrit que dans `abonnements`, jamais une commande, et
+  // l'export ne lisait que les commandes et les rendez-vous. Deux colonnes
+  // manquaient donc à l'appel, et ce sont exactement celles d'un rendez-vous.
+  //
+  // TVA FIGÉE À LA VENTE, reprise de la prestation que l'abonnement paie. Le
+  // taux est lu maintenant et ne sera plus jamais recalculé : un changement de
+  // taux l'an prochain ne doit pas réécrire un contrat déjà vendu.
+  let tvaTaux = null
+  if (formule.prestation_id) {
+    const { data: presta } = await supabase
+      .from('rdv_prestations')
+      .select('tva_taux')
+      .eq('id', formule.prestation_id)
+      .maybeSingle()
+    tvaTaux = presta?.tva_taux ?? null
+  }
+
+  // FRAIS STRIPE : ils n'étaient nulle part. La commission d'un abonnement à
+  // trois chiffres n'est pas une broutille, et le commerçant la découvrait sur
+  // son relevé Stripe sans jamais la voir dans sa Comptabilité.
+  //
+  // ⚠️ Aucune ventilation ici, contrairement au tunnel unique : un abonnement
+  // se paie SEUL, son paiement ne porte ni produits ni acompte. La totalité des
+  // frais lui revient donc, et il n'y a aucun double comptage possible.
+  let fraisAbo = null
+  try {
+    fraisAbo = await recupererFraisStripe(paymentIntent.id, eventAccount || paymentIntent.on_behalf_of || null)
+  } catch (e) {
+    console.warn('[stripe/webhook] frais Stripe abonnement non enregistrés (non bloquant)', e?.message)
+  }
+
   const { data: cree, error } = await supabase
     .from('abonnements')
-    .insert({ ...contrat, stripe_payment_intent_id: paymentIntent.id })
+    .insert({
+      ...contrat,
+      stripe_payment_intent_id: paymentIntent.id,
+      tva_taux: tvaTaux,
+      stripe_frais: fraisAbo ? fraisAbo.frais : null,
+      stripe_net: fraisAbo ? fraisAbo.net : null,
+    })
     .select('id')
     .single()
 

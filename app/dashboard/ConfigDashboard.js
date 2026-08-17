@@ -11,6 +11,7 @@ import { avantLancement, libelleLancement } from '@/lib/lancement'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
 import { capacitePrestation } from '@/lib/cours-collectifs'
+import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 import { datesDeSeances, exclusionsQuiSeChevauchent, placerLaSerie, resumeDeLaSerie, seancesDeLaFormule, fenetreDeValidite, phraseApercuFormule, expliquerApercuFormule } from '@/lib/abonnements'
 import { lieuALHeure } from '@/lib/lieux-activite'
 import { champsLieu } from '@/lib/lieu-fige'
@@ -735,12 +736,17 @@ function TabMenu({ commercantId, commercant, toast }) {
               livraison de biens à emporter et de la restauration servie en
               salle, ce qui n'est pas le même régime. */}
           <div>
+            {/* ⚠️ LES EXEMPLES SONT CEUX DU MÉTIER (Alex, 17/08 : « ils parlent
+                de boissons, boissons alcoolisées, sur place, emporté. Pas top
+                quand on est coiffeur, prof de yoga ou boutique de vêtements »).
+                Aucun taux n'est masqué ni présélectionné : on nomme seulement
+                celui qui est le plus courant chez lui. */}
             <label style={s.label}>TVA{estAlimentaire ? ' à emporter' : ''}</label>
             <select value={form.tva_taux ?? ''} onChange={e => setForm(p => ({ ...p, tva_taux: e.target.value }))}
               style={{ ...s.input, cursor: 'pointer' }}>
               <option value="">— À définir —</option>
-              {tvaRefs.map(t => (
-                <option key={t.taux} value={t.taux}>{t.libelle}{t.aide ? ` · ${t.aide}` : ''}</option>
+              {optionsTaux(tvaRefs, commercant?.categorie).map(t => (
+                <option key={t.taux} value={t.taux}>{t.texte}</option>
               ))}
             </select>
             {estAlimentaire && (
@@ -749,8 +755,8 @@ function TabMenu({ commercantId, commercant, toast }) {
                 <select value={form.tva_taux_sur_place ?? ''} onChange={e => setForm(p => ({ ...p, tva_taux_sur_place: e.target.value }))}
                   style={{ ...s.input, cursor: 'pointer' }}>
                   <option value="">— Même taux qu&rsquo;à emporter —</option>
-                  {tvaRefs.map(t => (
-                    <option key={t.taux} value={t.taux}>{t.libelle}{t.aide ? ` · ${t.aide}` : ''}</option>
+                  {optionsTaux(tvaRefs, commercant?.categorie).map(t => (
+                    <option key={t.taux} value={t.taux}>{t.texte}</option>
                   ))}
                 </select>
               </div>
@@ -7004,8 +7010,12 @@ function TabRdvPrestations({ commercantId, toast }) {
               <select value={form.tva_taux ?? ''} onChange={e => setForm({ ...form, tva_taux: e.target.value })}
                 style={{ ...s.input, cursor: 'pointer' }}>
                 <option value="">— À définir —</option>
-                {tvaRefs.map(t => (
-                  <option key={t.taux} value={t.taux}>{t.libelle}{t.aide ? ` · ${t.aide}` : ''}</option>
+                {/* ⚠️ TOUJOURS LES EXEMPLES DU SERVICE ICI, quelle que soit la
+                    catégorie du commerce : une PRESTATION est une prestation de
+                    services par nature, et c'est la nature de l'opération qui
+                    commande le taux en Belgique, jamais le rayon du magasin. */}
+                {optionsTaux(tvaRefs, CAT_SERVICE).map(t => (
+                  <option key={t.taux} value={t.taux}>{t.texte}</option>
                 ))}
               </select>
               <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.5 }}>
@@ -7235,6 +7245,12 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
       paye: !!insc.paye,
       paye_le: insc.paye ? new Date().toISOString() : null,
       mode_paiement: insc.paye ? (insc.mode_paiement || 'sur_place') : null,
+      // ⚠️ TVA FIGÉE À LA SIGNATURE, comme le prix juste au-dessus et comme le
+      // fait un rendez-vous. Sans elle, l'abonnement entrait en Comptabilité
+      // sans taux, et un contrat vendu cette année serait ventilé l'an prochain
+      // au taux de l'an prochain. Le champ est bien dans le select des
+      // prestations, ligne « id, nom, capacite, duree_minutes, tva_taux ».
+      tva_taux: presta.tva_taux ?? null,
     }
 
     setInscrivant(true)
@@ -9040,12 +9056,22 @@ function TabStatistiques({ commercantId, toast }) {
                 <span style={{ color: T.light }}> par rapport aux {jours} jours précédents</span>
               </p>
             )}
-            {(a.ca_produits > 0 || a.ca_prestations > 0) && (
-              <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+            {/* ⚠️ LA TROISIÈME PART MANQUAIT, ET AVEC ELLE TOUT UN MÉTIER
+                (Alex, 17/08). Les abonnements n'entraient dans aucun chiffre :
+                une professeure de yoga qui vend surtout des abonnements voyait
+                un tableau de bord à zéro.
+
+                Une part ne s'affiche que si elle existe, et la répartition
+                entière disparaît s'il n'en reste qu'une : elle répéterait
+                alors le grand chiffre juste au-dessus. Personne n'a besoin de
+                lire « Abonnements 0 € » dans une boulangerie. */}
+            {[a.ca_produits, a.ca_prestations, a.ca_abonnements].filter(v => v > 0).length >= 2 && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
                 {[
                   { label: 'Produits', valeur: a.ca_produits },
                   { label: 'Prestations', valeur: a.ca_prestations },
-                ].map(part => (
+                  { label: 'Abonnements', valeur: a.ca_abonnements },
+                ].filter(part => part.valeur > 0).map(part => (
                   <div key={part.label} style={{ flex: 1, background: 'rgba(255,255,255,0.09)', borderRadius: 12, padding: '9px 12px' }}>
                     <p style={{ margin: 0, fontSize: 10.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{part.label}</p>
                     <p style={{ margin: '3px 0 0', fontSize: 16, fontWeight: 800, lineHeight: 1.1 }}>{euros(part.valeur)}</p>

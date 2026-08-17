@@ -72,7 +72,7 @@ export async function GET(request) {
     // dans `data`, qui vaut null avec head:true. Se tromper ici ferait croire
     // qu'un commerçant n'a aucun article, et lui servirait le mauvais message
     // d'accueil.
-    const [{ data: commandes }, { data: rdvs }, { data: avis }, { data: deals }, { count: nbArticles }] =
+    const [{ data: commandes }, { data: rdvs }, { data: avis }, { data: deals }, { count: nbArticles }, { data: abonnements }] =
       await Promise.all([
         supabase.from('commandes')
           .select('id, total, statut, created_at')
@@ -95,6 +95,17 @@ export async function GET(request) {
           .gte('created_at', depuis),
         supabase.from('articles')
           .select('id', { count: 'exact', head: true })
+          .eq('commercant_id', commercantId),
+        // ⚠️ LES ABONNEMENTS NE COMPTAIENT NULLE PART (Alex, 17/08). Leur vente
+        // n'écrit que dans `abonnements`, jamais une commande : une professeure
+        // de yoga qui vend surtout des abonnements voyait un tableau de bord à
+        // zéro. Aucune coordonnée client n'est lue.
+        //
+        // ⚠️ ON DÉCOUPE SUR `paye_le`, LE JOUR DE L'ENCAISSEMENT, et non sur
+        // `created_at` : c'est la date retenue en Comptabilité (décision
+        // d'Alex, 17/08), et les deux écrans doivent raconter la même histoire.
+        supabase.from('abonnements')
+          .select('id, prix, paye, paye_le, mode_paiement')
           .eq('commercant_id', commercantId),
       ])
 
@@ -132,8 +143,27 @@ export async function GET(request) {
       for (const p of data || []) nomsPrestations[String(p.id)] = p.nom
     }
 
-    const caActuel = chiffreAffaires(cmdActuelles, rdvActuels)
-    const caPrecedent = chiffreAffaires(cmdPrecedentes, rdvPrecedents)
+    // ⚠️ LA FENÊTRE SE LIT SUR `paye_le`, jamais sur `created_at` : un contrat
+    // inscrit à la main lundi et payé vendredi appartient au vendredi, sinon la
+    // Comptabilité et le tableau de bord tomberaient sur deux semaines
+    // différentes pour le même argent.
+    //
+    // ⚠️ ET LA PÉRIODE PRÉCÉDENTE EST BORNÉE DES DEUX CÔTÉS. Les autres tables
+    // sont déjà coupées à `debutPrecedent` par leur requête ; celle-ci ne l'est
+    // pas, parce qu'on filtre en mémoire sur `paye_le`. Sans la borne basse, la
+    // comparaison opposerait trente jours à TOUT L'HISTORIQUE, et l'évolution
+    // afficherait une chute vertigineuse sur un commerce en pleine forme.
+    const abosPayes = (abonnements || []).filter(a => a?.paye && a?.paye_le)
+    const jourDebut = f.debut.toISOString().slice(0, 10)
+    const jourDebutPrecedent = f.debutPrecedent.toISOString().slice(0, 10)
+    const aboActuels = abosPayes.filter(a => String(a.paye_le).slice(0, 10) >= jourDebut)
+    const aboPrecedents = abosPayes.filter(a => {
+      const jour = String(a.paye_le).slice(0, 10)
+      return jour >= jourDebutPrecedent && jour < jourDebut
+    })
+
+    const caActuel = chiffreAffaires(cmdActuelles, rdvActuels, aboActuels)
+    const caPrecedent = chiffreAffaires(cmdPrecedentes, rdvPrecedents, aboPrecedents)
     const ventesActuelles = cmdActuelles.filter(commandeEncaissee).length
     const ventesPrecedentes = cmdPrecedentes.filter(commandeEncaissee).length
 
@@ -179,6 +209,8 @@ export async function GET(request) {
         chiffre_affaires: caActuel.total,
         ca_produits: caActuel.produits,
         ca_prestations: caActuel.prestations,
+        ca_abonnements: caActuel.abonnements,
+        abonnements_vendus: caActuel.nb_abonnements,
         encaisse_en_ligne: caActuel.encaisse_en_ligne,
         au_comptoir: caActuel.au_comptoir,
         evolution_ca: evolution(caActuel.total, caPrecedent.total),

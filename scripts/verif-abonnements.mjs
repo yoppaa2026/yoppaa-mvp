@@ -599,7 +599,205 @@ verifier('un rejeu de webhook est reconnu',
 // commande. Retirer la trace du contrat d'abonnement ne le faisait donc pas
 // rougir. On ancre sur l'insertion du contrat elle-même.
 verifier('et la trace du paiement est écrite SUR LE CONTRAT',
-  /\.insert\(\{ \.\.\.contrat, stripe_payment_intent_id: paymentIntent\.id \}\)/.test(srcWebhook))
+  /\.insert\(\{\s*\.\.\.contrat,\s*stripe_payment_intent_id: paymentIntent\.id,/.test(srcWebhook))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA VENTE D'UN ABONNEMENT EST UNE LIGNE COMPTABLE COMME UNE AUTRE
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ ELLE N'EXISTAIT DANS AUCUN DOCUMENT (Alex, 17/08). L'achat n'écrit que
+// dans `abonnements`, jamais une commande, et l'export ne lisait que les
+// commandes et les rendez-vous. Un contrat de 540 € encaissé par Stripe ne
+// figurait ni au journal du comptable, ni au chiffre d'affaires, et ses frais
+// Stripe n'étaient même pas enregistrés.
+
+// TVA FIGÉE À LA VENTE, reprise de la prestation payée : un changement de taux
+// l'an prochain ne doit pas réécrire un contrat déjà vendu.
+verifier('le contrat fige son taux de TVA à la vente',
+  /tva_taux: tvaTaux/.test(srcWebhook))
+verifier('et ce taux vient de la prestation que l’abonnement paie',
+  /\.eq\('id', formule\.prestation_id\)/.test(srcWebhook))
+// ⚠️ AUCUNE VENTILATION DES FRAIS ICI, contrairement au tunnel unique : un
+// abonnement se paie SEUL, la totalité des frais lui revient.
+verifier('les frais Stripe de l’abonnement sont enregistrés',
+  /stripe_frais: fraisAbo \? fraisAbo\.frais : null/.test(srcWebhook))
+// ⚠️ EN DIRECT CHARGE, LE RELEVÉ VIT SUR LE COMPTE CONNECTÉ. Le chercher sur
+// celui de la plateforme ne rend rien, sans la moindre erreur.
+verifier('et ils sont cherchés sur le compte du commerçant',
+  /recupererFraisStripe\(paymentIntent\.id, eventAccount \|\| paymentIntent\.on_behalf_of \|\| null\)/.test(srcWebhook)
+  && /handleAbonnementSucceeded\(paymentIntent, supabase, eventAccount\)/.test(srcWebhook))
+
+// L'inscription À LA MAIN fige le même taux : deux chemins vers la même table,
+// et c'est en n'en traitant qu'un seul qu'on a laissé `prestation_id` vide
+// pendant des semaines.
+// ⚠️ `sansComm` ET NON `sansCommentaires` : le second est déclaré 480 lignes
+// plus bas dans ce même fichier, et un `const` ne remonte pas. C'est la ZONE
+// MORTE TEMPORELLE, le défaut qui a mis l'accueil en écran blanc le 12/08 ;
+// ici elle fait simplement exploser le banc, ce qui est la bonne nouvelle.
+const srcConfigAbo = sansComm(
+  readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+// ⚠️ ON COMPTE, ET C'EST LA NEUVIÈME FOIS QUE L'HOMONYME VOISIN REND UNE GARDE
+// MUETTE. Chercher `tva_taux: presta.tva_taux` était satisfait par la création
+// de rendez-vous juste en dessous, qui fige le sien depuis toujours : supprimer
+// celui du CONTRAT ne faisait donc rien rougir. Deux endroits, deux gestes,
+// et le compte le dit.
+egal('les deux écritures figent le taux : le contrat ET la séance',
+  (srcConfigAbo.match(/tva_taux: presta\.tva_taux \?\? null/g) || []).length, 2)
+verifier('et la colonne arrive bien jusqu’à l’écran',
+  /select\('id, nom, capacite, duree_minutes, tva_taux'\)/.test(srcConfigAbo))
+
+// ─── L'EXPORT COMPTABLE ───────────────────────────────────────────────────
+const { construireLignes } = await import('../lib/export-comptable.js')
+
+const ABO_EN_LIGNE = {
+  id: 'abo-1111-2222', statut: 'actif', prix: 540, paye: true,
+  paye_le: '2026-08-15', mode_paiement: 'en_ligne', tva_taux: 21,
+  stripe_frais: 8.1, stripe_net: 531.9,
+}
+const [ligneAbo] = construireLignes({ abonnements: [ABO_EN_LIGNE] })
+egal('un abonnement payé devient une ligne', ligneAbo?.type, 'Abonnement')
+// ⚠️ LA DATE EST CELLE DE L'ENCAISSEMENT (décision d'Alex, 17/08), jamais celle
+// de la première séance ni un étalement sur la durée du contrat.
+egal('datée du jour de l’encaissement', ligneAbo.date, '2026-08-15')
+egal('pour le prix payé', ligneAbo.total, 540)
+egal('ventilée au taux figé', ligneAbo.parTaux['21'] ?? ligneAbo.parTaux[21], 540)
+egal('encaissée en ligne', ligneAbo.enLigne, 540)
+egal('donc rien au comptoir', ligneAbo.comptoir, 0)
+egal('et ses frais Stripe suivent', ligneAbo.fraisStripe, 8.1)
+
+// Inscrit à la main et réglé sur place : le même contrat, l'autre colonne.
+const [ligneComptoir] = construireLignes({
+  abonnements: [{ ...ABO_EN_LIGNE, mode_paiement: 'sur_place', stripe_frais: null, stripe_net: null }],
+})
+egal('un abonnement réglé sur place va au comptoir', ligneComptoir.comptoir, 540)
+egal('et rien en ligne', ligneComptoir.enLigne, 0)
+egal('sans frais Stripe inventés', ligneComptoir.netStripe, null)
+
+// ⚠️ ON N'ÉCRIT QUE CE QUI A ÉTÉ ENCAISSÉ. Un contrat non payé est une
+// promesse, pas une recette, et une ligne sans date d'encaissement se
+// rattacherait au mauvais mois.
+egal('un contrat non payé n’entre pas au journal',
+  construireLignes({ abonnements: [{ ...ABO_EN_LIGNE, paye: false }] }).length, 0)
+egal('ni un contrat sans date d’encaissement',
+  construireLignes({ abonnements: [{ ...ABO_EN_LIGNE, paye_le: null }] }).length, 0)
+egal('ni un contrat à prix nul',
+  construireLignes({ abonnements: [{ ...ABO_EN_LIGNE, prix: 0 }] }).length, 0)
+
+// ⚠️ SANS TAUX FIGÉ, ON RETOMBE SUR CELUI DU COMMERCE, PUIS SUR « NON
+// RENSEIGNÉ ». Jamais sur un taux inventé, qui passerait inaperçu dans une
+// déclaration : c'est la règle de tout le module fiscal.
+const [ligneRepli] = construireLignes({
+  abonnements: [{ ...ABO_EN_LIGNE, tva_taux: null }], tauxDefaut: 6,
+})
+egal('sans taux figé, le taux du commerce s’applique', ligneRepli.parTaux[6], 540)
+const [ligneNR] = construireLignes({ abonnements: [{ ...ABO_EN_LIGNE, tva_taux: null }] })
+egal('et sans taux du tout, la colonne « non renseigné »', ligneNR.parTaux.NR, 540)
+
+// La route doit les charger, et les découper sur la date d'ENCAISSEMENT.
+const srcExportRoute = sansComm(
+  readFileSync(new URL('../app/api/dashboard/export-comptable/route.js', import.meta.url), 'utf8'))
+verifier('l’export charge les abonnements', /from\('abonnements'\)/.test(srcExportRoute))
+verifier('et les passe au calcul', /abonnements,/.test(srcExportRoute))
+verifier('en les découpant sur paye_le', /paye_le \|\| ''\)\.slice\(0, 10\)/.test(srcExportRoute))
+// ⚠️ GARDE NÉE MUETTE, MESURÉE EN MUTATION : la ligne ci-dessus lit bien
+// `paye_le`, mais rien ne vérifiait qu'on s'en SERVAIT pour borner la période.
+// Un filtre qui rend toujours vrai livrerait au comptable un journal contenant
+// TOUT L'HISTORIQUE des abonnements, sur un document qu'il signe.
+verifier('et en les bornant vraiment aux deux dates demandées',
+  /jour >= du && jour <= au/.test(srcExportRoute))
+
+// La même borne côté tableau de bord, et des DEUX côtés pour la période
+// précédente : sans borne basse, la comparaison opposerait trente jours à tout
+// l'historique et annoncerait un effondrement à un commerce en pleine forme.
+const srcStatsRoute = sansComm(
+  readFileSync(new URL('../app/api/dashboard/statistiques/route.js', import.meta.url), 'utf8'))
+verifier('le tableau de bord découpe lui aussi sur la date d’encaissement',
+  /String\(a\.paye_le\)\.slice\(0, 10\) >= jourDebut/.test(srcStatsRoute))
+verifier('et sa période précédente est bornée des deux côtés',
+  /jour >= jourDebutPrecedent && jour < jourDebut/.test(srcStatsRoute))
+
+// ─── LE CHIFFRE D'AFFAIRES DU TABLEAU DE BORD ─────────────────────────────
+const { chiffreAffaires: caStats } = await import('../lib/statistiques.js')
+
+const CA_ABO = caStats([], [], [
+  { prix: 540, paye: true, mode_paiement: 'en_ligne' },
+  { prix: 300, paye: true, mode_paiement: 'sur_place' },
+  { prix: 200, paye: false, mode_paiement: 'en_ligne' },
+])
+egal('les abonnements payés entrent au chiffre d’affaires', CA_ABO.abonnements, 840)
+egal('et pas ceux qui ne le sont pas', CA_ABO.nb_abonnements, 2)
+egal('la vente en ligne se retrouve dans l’encaissé en ligne', CA_ABO.encaisse_en_ligne, 540)
+egal('et celle réglée sur place au comptoir', CA_ABO.au_comptoir, 300)
+egal('le total les additionne au reste', CA_ABO.total, 840)
+// ⚠️ ET UN ABONNEMENT NE COMPTE QU'UNE FOIS. Les séances posées dessus portent
+// `prix_estime: 0` précisément pour ça : sans quoi un contrat de trente-six
+// séances entrerait trente-sept fois au chiffre d'affaires.
+const CA_DOUBLE = caStats([], [
+  { statut: 'honore', prix_estime: 0, abonnement_id: 'abo-1' },
+  { statut: 'honore', prix_estime: 0, abonnement_id: 'abo-1' },
+], [{ prix: 540, paye: true, mode_paiement: 'en_ligne' }])
+egal('les séances d’un abonnement ne le recomptent pas', CA_DOUBLE.total, 540)
+// Les appelants d'avant continuent de fonctionner : le paramètre est ajouté.
+egal('sans abonnements, rien ne change', caStats([], []).abonnements, 0)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LES EXEMPLES DE TVA PARLENT LE MÉTIER DE CELUI QUI LES LIT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ « ILS PARLENT DE BOISSONS, BOISSONS ALCOOLISÉES, SUR PLACE, EMPORTÉ. Pas
+// top quand on est coiffeur, prof de yoga ou boutique de vêtements » (Alex).
+
+const { aideTaux, optionsTaux, familleCommerce, tauxLePlusCourant, CAT_SERVICE: SERVICE, CAT_DETAIL: DETAIL } =
+  await import('../lib/tva-aide.js')
+
+egal('une vitrine est un service', familleCommerce('vitrine'), 'vitrine')
+egal('une boutique est du détail', familleCommerce('detail'), 'detail')
+egal('tout le reste est alimentaire', familleCommerce('boulangerie'), 'alimentaire')
+egal('et une catégorie absente aussi', familleCommerce(null), 'alimentaire')
+
+// ⚠️ AUCUNE MENTION DE NOURRITURE CHEZ UN COIFFEUR OU UNE PROF DE YOGA.
+const REFS = [
+  { taux: 0, libelle: 'Exonéré', aide: 'texte générique de la base' },
+  { taux: 6, libelle: '6 %', aide: 'Denrées alimentaires et boissons non alcoolisées.' },
+  { taux: 12, libelle: '12 %', aide: 'Nourriture servie et consommée sur place.' },
+  { taux: 21, libelle: '21 %', aide: 'Boissons alcoolisées, boissons servies sur place.' },
+]
+const POUR_SERVICE = optionsTaux(REFS, SERVICE).map(o => o.texte).join(' | ')
+verifier('un service ne lit plus un mot de nourriture ni de boisson',
+  !/boisson|alcool|denrée|nourriture/i.test(POUR_SERVICE))
+const POUR_DETAIL = optionsTaux(REFS, DETAIL).map(o => o.texte).join(' | ')
+verifier('une boutique non plus',
+  !/boisson|alcool|denrée|nourriture/i.test(POUR_DETAIL))
+verifier('mais une friterie garde ses exemples',
+  /boissons non alcoolisées/i.test(optionsTaux(REFS, 'alimentaire').map(o => o.texte).join(' ')))
+
+// ⚠️ ON NE CACHE AUCUN TAUX : ce serait décider de la fiscalité de quelqu'un à
+// sa place. Une boutique de vêtements peut vendre un livre à 6 %.
+egal('tous les taux restent proposés à un service', optionsTaux(REFS, SERVICE).length, 4)
+egal('et à une boutique', optionsTaux(REFS, DETAIL).length, 4)
+// On se contente de NOMMER le plus courant, sans jamais le présélectionner.
+egal('le taux courant d’un service est le taux normal', tauxLePlusCourant('vitrine'), 21)
+egal('celui d’un commerce alimentaire est le réduit', tauxLePlusCourant('boulangerie'), 6)
+verifier('et il est signalé dans la liste',
+  optionsTaux(REFS, SERVICE).filter(o => o.courant).length === 1
+  && /le plus courant chez toi/.test(optionsTaux(REFS, SERVICE).find(o => o.courant).texte))
+
+// ⚠️ NE RIEN AFFICHER EST LA PIRE DES SORTIES : le jour où un taux apparaît en
+// base sans passer par ce fichier, le commerçant doit continuer à lire quelque
+// chose, sinon il choisit à l'aveugle.
+egal('un taux inconnu retombe sur l’exemple de la base',
+  aideTaux(9, SERVICE, 'exemple venu de la base'), 'exemple venu de la base')
+egal('et sans rien du tout, on ne fabrique pas de phrase',
+  aideTaux(9, SERVICE, null), null)
+
+// Les deux écrans de saisie passent par le module.
+verifier('la fiche article prend les exemples du métier du commerce',
+  (srcConfigAbo.match(/optionsTaux\(tvaRefs, commercant\?\.categorie\)/g) || []).length === 2)
+// ⚠️ UNE PRESTATION EST UNE PRESTATION DE SERVICES, quelle que soit la
+// catégorie du commerce : en Belgique c'est la NATURE DE L'OPÉRATION qui
+// commande le taux, jamais le rayon du magasin.
+verifier('et la fiche prestation prend toujours celles du service',
+  /optionsTaux\(tvaRefs, CAT_SERVICE\)/.test(srcConfigAbo))
 
 // ⚠️ LA DATE D'ACHAT VIENT DE STRIPE, pas de notre horloge : un webhook rejoué
 // trois jours plus tard fabriquerait une fenêtre de validité décalée d'autant.

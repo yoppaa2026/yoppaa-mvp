@@ -20,7 +20,7 @@ import BandeDefilante from '@/app/components/BandeDefilante'
 import { couleurRdv, COULEUR_DEFAUT } from '@/lib/agenda-couleurs'
 import { blocsAgenda } from '@/lib/cours-collectifs'
 import { contenuBlocRdv } from '@/lib/agenda-bloc'
-import { statutRdv, resumeSeance, texteResumeSeance } from '@/lib/rdv-statut'
+import { statutRdv, resumeSeance, texteResumeSeance, estAClore, compterAClore } from '@/lib/rdv-statut'
 import { etatPaiementRdv, couleurPaiement } from '@/lib/rdv-paiement'
 
 const T = {
@@ -235,11 +235,17 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
   // REMONTENT EN PREMIER. Ce sont les seuls sur lesquels il reste un geste à
   // faire : marquer honoré, ou constater l'absence. Les trier par date les
   // noierait au milieu de tout le reste.
+  // ⚠️ AUJOURD'HUI EN FAIT PARTIE DÈS QUE L'HEURE EST PASSÉE (Alex, 17/08 :
+  // « aucune indication ne dit s'il y a des choses à traiter »). La borne était
+  // `date_rdv < aujourd'hui`, strictement : une professeure qui terminait ses
+  // six cours à 19h ne voyait aucun chiffre avant le lendemain matin, c'est-à-
+  // dire précisément quand elle n'en avait plus besoin.
   const rdvsPasses = useMemo(() => {
     const aujourdhuiIso = isoDate(today)
+    const maintenant = new Date()
     const rang = r => (r.statut === 'confirme' ? 0 : 1)
     return (rdvs || [])
-      .filter(r => r.date_rdv && r.date_rdv < aujourdhuiIso)
+      .filter(r => r.date_rdv && (r.date_rdv < aujourdhuiIso || estAClore(r, maintenant)))
       .filter(r => praticienFiltre === 'all' || r.praticien_id === praticienFiltre)
       .sort((a, b) =>
         rang(a) - rang(b)
@@ -247,7 +253,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
         || String(b.heure_debut || '').localeCompare(String(a.heure_debut || '')))
   }, [rdvs, praticienFiltre, today])
 
-  const aClore = rdvsPasses.filter(r => r.statut === 'confirme').length
+  const aClore = compterAClore(rdvsPasses)
 
   // Navigation
   //
@@ -610,6 +616,22 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                             </svg>
                             {seance.inscrits.length}/{seance.capacite}{complet ? ' · complet' : ''}
                           </div>
+                          {/* ⚠️ CE QUI ATTEND UN GESTE, SANS AVOIR À OUVRIR LE
+                              COURS (Alex, 17/08). La jauge dit « 3/12 » et rien
+                              d'autre : trois personnes pouvaient attendre d'être
+                              clôturées depuis ce matin sans que rien ne le
+                              montre. La pastille ne s'affiche qu'après l'heure
+                              de fin, sinon elle crierait sur un cours qui n'a
+                              pas encore eu lieu. */}
+                          {(() => {
+                            const n = compterAClore(seance.inscrits)
+                            if (n === 0) return null
+                            return (
+                              <span style={{ position: 'absolute', top: 2, right: 2, background: '#DC2626', color: '#fff', fontSize: 9, fontWeight: 900, lineHeight: 1, padding: '2px 5px', borderRadius: 100, boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }}>
+                                {n} à clôturer
+                              </span>
+                            )
+                          })()}
                         </div>
                       )
                     })}
@@ -646,7 +668,13 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                             flexDirection: 'column',
                             gap: 1,
                           }}
-                          title={`${heureD}–${heureF} · ${r.client_prenom || ''} ${r.client_nom || ''} · ${r.prestation?.nom || ''}${r.praticien ? ' · avec ' + r.praticien.prenom : ''}${(r.commande?.commande_articles || []).length > 0 ? ' · produits à préparer' : ''}`}>
+                          title={`${heureD}–${heureF} · ${r.client_prenom || ''} ${r.client_nom || ''} · ${r.prestation?.nom || ''}${r.praticien ? ' · avec ' + r.praticien.prenom : ''}${(r.commande?.commande_articles || []).length > 0 ? ' · produits à préparer' : ''}${estAClore(r) ? ' · à clôturer' : ''}`}>
+                          {/* Le même point rouge que sur un cours, en plus
+                              discret : un rendez-vous individuel n'a qu'une
+                              personne à clôturer, le nombre n'apprendrait rien. */}
+                          {estAClore(r) && (
+                            <span style={{ position: 'absolute', top: 3, right: 3, width: 7, height: 7, borderRadius: '50%', background: '#DC2626', boxShadow: '0 0 0 1.5px #fff' }}/>
+                          )}
                           {/* Initiale de la praticienne, en haut à droite.
                               ⚠️ ELLE NE PEUT PLUS ÊTRE UNE PASTILLE DE SA COULEUR :
                               le bloc porte déjà cette couleur, la pastille s'y

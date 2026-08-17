@@ -22,6 +22,7 @@ import { libelleOptions } from '@/lib/options-ligne'
 import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '@/lib/bons-vendus'
 import { peutMarquerNonRetire, ancienneteCommande } from '@/lib/rappels-retrait'
 import { libellePeriodeStats } from '@/lib/agenda-bloc'
+import { compterAClore } from '@/lib/rdv-statut'
 
 const T = {
   bg:      '#F8F6FF',
@@ -1848,6 +1849,12 @@ export default function Dashboard() {
     // où on l'affiche, il ment avec l'autorité d'un chiffre. Si le besoin
     // revient, la bonne écriture est `r.statut.startsWith('annule')`.
     noShow:     rdvsDuJour.filter(r => r.statut === 'no_show').length,
+    // ⚠️ LE SEUL CHIFFRE QUI APPELLE UN GESTE, ET IL N'ÉTAIT NULLE PART (Alex,
+    // 17/08). Quatre cartes annonçaient À venir, Honorés, No-show et le CA :
+    // aucune ne disait ce qui restait à faire. Il faut être passé par la bande
+    // Historique pour l'apprendre, et elle-même ne comptait qu'à partir du
+    // lendemain.
+    aClore:     compterAClore(rdvsDuJour),
     // ⚠️ « LE 21 À 15 €, ELLE N'APPARAÎT PAS DANS LE CA » (Alex, 16 puis
     // 17/08). Le calcul était JUSTE : la carte s'appelle « CA honoré » et ne
     // compte que les rendez-vous honorés, donc un rendez-vous à venir n'y entre
@@ -1861,7 +1868,13 @@ export default function Dashboard() {
   const statsCardsRdv = [
     { label: 'À venir',     value: statsRdv.confirmes,                    color: T.main,    bg: T.pale,   border: `${T.main}18`,   pulse: statsRdv.confirmes > 0 },
     { label: 'Honorés',     value: statsRdv.honores,                       color: '#10B981', bg: '#F0FDF4', border: '#10B98118',     pulse: false },
-    { label: 'No-show',     value: statsRdv.noShow,                        color: '#6B7280', bg: '#F9FAFB', border: '#9CA3AF22',     pulse: false },
+    // ⚠️ « À CLÔTURER » PREND LA PLACE DE « NO-SHOW » DÈS QU'IL Y A QUELQUE
+    // CHOSE À FAIRE. Une carte qui vaut zéro n'apprend rien, et le nombre de
+    // séances en attente est la seule des cinq qui demande une action : elle
+    // mérite la place, et le rouge.
+    statsRdv.aClore > 0
+      ? { label: 'À clôturer', value: statsRdv.aClore,                     color: '#DC2626', bg: '#FFF0F0', border: '#DC262622',     pulse: true }
+      : { label: 'No-show',    value: statsRdv.noShow,                     color: '#6B7280', bg: '#F9FAFB', border: '#9CA3AF22',     pulse: false },
     {
       label: 'CA honoré',
       value: `${statsRdv.ca.encaisse.toFixed(0)}€`,

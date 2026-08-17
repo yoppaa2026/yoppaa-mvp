@@ -3354,6 +3354,65 @@ egal('les deux annulations se lisent pareil',
 verifier('un statut inconnu se montre quand même', !!statutRdv({ statut: 'bizarre' }).label)
 verifier('et il garde une couleur lisible', !!statutRdv({ statut: 'bizarre' }).fond)
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CE QUI ATTEND UN GESTE SE VOIT SANS OUVRIR QUOI QUE CE SOIT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ « AUCUNE INDICATION NE DIT S'IL Y A DES CHOSES À TRAITER DANS L'AGENDA si
+// le commerçant ne clique pas sur son créneau » (Alex, 17/08). La pastille du
+// 12/08 existait, mais elle comptait `date_rdv < aujourd'hui`, STRICTEMENT :
+// une professeure qui terminait ses six cours à 19h ne voyait aucun chiffre
+// avant le lendemain matin.
+const { estAClore, compterAClore } = await import('../lib/rdv-statut.js')
+const MIDI = new Date('2026-08-17T12:00:00')
+
+// ⚠️ AUJOURD'HUI EN FAIT PARTIE DÈS QUE L'HEURE DE FIN EST PASSÉE. C'est un
+// SEUIL, pas une exception : la même leçon que le `etape < 4` de la veille.
+verifier('un cours de ce matin, déjà fini, est à clôturer',
+  estAClore({ statut: 'confirme', date_rdv: '2026-08-17', heure_fin: '11:00' }, MIDI))
+verifier('un cours de cet après-midi ne l’est pas encore',
+  !estAClore({ statut: 'confirme', date_rdv: '2026-08-17', heure_fin: '18:00' }, MIDI))
+verifier('un rendez-vous d’hier l’est toujours',
+  estAClore({ statut: 'confirme', date_rdv: '2026-08-16', heure_fin: '18:00' }, MIDI))
+verifier('un rendez-vous de demain, jamais',
+  !estAClore({ statut: 'confirme', date_rdv: '2026-08-18', heure_fin: '09:00' }, MIDI))
+// ⚠️ SEUL UN CONFIRMÉ ATTEND UN GESTE. Un honoré, un absent ou un annulé sont
+// déjà clôturés : les compter ferait clignoter un chiffre que rien ne fait
+// descendre.
+verifier('un honoré n’attend plus rien',
+  !estAClore({ statut: 'honore', date_rdv: '2026-08-16', heure_fin: '18:00' }, MIDI))
+verifier('un absent non plus',
+  !estAClore({ statut: 'no_show', date_rdv: '2026-08-16', heure_fin: '18:00' }, MIDI))
+verifier('un annulé non plus',
+  !estAClore({ statut: 'annule_client', date_rdv: '2026-08-16', heure_fin: '18:00' }, MIDI))
+// ⚠️ UNE HEURE DE FIN ABSENTE NE DOIT PAS DÉCLARER LE RENDEZ-VOUS À CLÔTURER
+// DÈS MINUIT : on retombe sur la fin de journée, jamais sur son début.
+verifier('sans heure de fin, on attend la fin de la journée',
+  !estAClore({ statut: 'confirme', date_rdv: '2026-08-17' }, MIDI))
+verifier('une date absente ne compte pas',
+  !estAClore({ statut: 'confirme', date_rdv: null, heure_fin: '10:00' }, MIDI))
+egal('et on sait les compter',
+  compterAClore([
+    { statut: 'confirme', date_rdv: '2026-08-17', heure_fin: '11:00' },
+    { statut: 'confirme', date_rdv: '2026-08-17', heure_fin: '18:00' },
+    { statut: 'honore', date_rdv: '2026-08-16', heure_fin: '11:00' },
+  ], MIDI), 1)
+egal('une liste vide vaut zéro', compterAClore([], MIDI), 0)
+
+// ─── ET ÇA SE VOIT AUX TROIS ENDROITS ─────────────────────────────────────
+verifier('la bande Historique compte en temps réel',
+  /const aClore = compterAClore\(rdvsPasses\)/.test(srcAgenda))
+verifier('et elle remonte les rendez-vous d’aujourd’hui déjà finis',
+  /r\.date_rdv < aujourdhuiIso \|\| estAClore\(r, maintenant\)/.test(srcAgenda))
+verifier('un cours porte son nombre à clôturer sur la grille',
+  /compterAClore\(seance\.inscrits\)/.test(srcAgenda))
+verifier('et un rendez-vous individuel son point rouge',
+  /estAClore\(r\) && \(/.test(srcAgenda))
+// ⚠️ LA CARTE PREND LA PLACE DE « NO-SHOW » : une carte qui vaut zéro n'apprend
+// rien, et « à clôturer » est la seule des cinq qui demande une action.
+verifier('les compteurs du haut annoncent ce qui reste à faire',
+  /statsRdv\.aClore > 0/.test(srcDashPaiement) && /label: 'À clôturer'/.test(srcDashPaiement))
+
 const COURS = [
   { id: 'a', statut: 'honore' },
   { id: 'b', statut: 'honore' },

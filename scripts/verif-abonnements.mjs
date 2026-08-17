@@ -1569,6 +1569,25 @@ verifier('la pastille du cours cumule les soldes',
 verifier('l’onglet nomme aussi les abonnements',
   /Commandes, rendez-vous et abonnements/.test(sansCommentSrc(lire('app/commander/page.js'))))
 
+
+// ⚠️ LES CONTRATS ÉCARTÉS SE DISENT AUSSI (Alex, 17/08).
+//
+// L'écran ne montrait que le contrat RETENU et se taisait sur les autres. Alex,
+// qui savait avoir deux abonnements, ne pouvait qu'en conclure que le second
+// était cassé. Or il fonctionnait : son plafond d'une séance par semaine était
+// simplement atteint, il avait servi la veille.
+//
+// ⚠️ CE REFUS N'ÉTAIT PAS MUET, IL ÉTAIT INVISIBLE, et c'est pire : un refus
+// muet laisse au moins voir qu'il y a un refus. Ici il n'y avait rien à lire,
+// donc rien à comprendre, et la seule explication possible était la panne.
+verifier('les contrats écartés sont nommés avec leur raison',
+  /triAbos\.refuses\.map\(\(\{ abonnement, verdict \}\)/.test(srcMultiAbo))
+// ⚠️ ON COMPTE, ON NE CHERCHE PAS : ce libellé sert AUSSI dans le sélecteur
+// juste au-dessus, et chercher son nom laissait ce second usage satisfaire le
+// test. Septième fois cette semaine que l'homonyme voisin rend une garde muette.
+egal('le libellé nomme le contrat AUX DEUX endroits, sélecteur et refus',
+  (srcMultiAbo.match(/libelleChoixAbonnement\(abonnement\)/g) || []).length, 2)
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

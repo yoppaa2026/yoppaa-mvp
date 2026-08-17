@@ -2797,6 +2797,22 @@ export default function CommanderRdvSlug() {
                               Tu paieras cette séance au tarif normal, et ton abonnement gardera ses {verdictAbo.solde} séances.
                             </p>
                           )}
+
+                          {/* ⚠️ ON DIT AUSSI POURQUOI LES AUTRES NE SERVENT PAS
+                              (Alex, 17/08). L'écran ne montrait que le contrat
+                              retenu et se taisait sur les écartés : quelqu'un
+                              qui sait avoir deux abonnements ne pouvait qu'en
+                              conclure que le second était cassé. Le refus
+                              n'était pas muet, il était INVISIBLE, ce qui est
+                              pire : il n'y avait rien à lire, donc rien à
+                              comprendre. */}
+                          {triAbos.refuses.map(({ abonnement, verdict }) => (
+                            <p key={abonnement.id} style={{ margin: '8px 0 0', fontSize: '0.74rem', color: T.muted, lineHeight: 1.5 }}>
+                              <strong style={{ color: T.deep }}>{libelleChoixAbonnement(abonnement)}</strong>
+                              {' : '}
+                              {expliquerRefusSeance(verdict.raison, abonnement, { plafond: verdict.plafond })}
+                            </p>
+                          ))}
                         </>
                       ) : (
                         // ⚠️ ON DIT POURQUOI. « Indisponible » enverrait au

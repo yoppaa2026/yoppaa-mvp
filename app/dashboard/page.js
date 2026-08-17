@@ -9,7 +9,7 @@ import ModaleConfirmation from './ModaleConfirmation'
 import PosteConfirmation, { confirme } from './PosteConfirmation'
 import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree, confirmationEncaissement, questionEncaissement, nomClient } from '@/lib/confirmation-rdv'
 import { confirmationSimple } from '@/lib/confirmations'
-import { etatPaiementRdv, couleurPaiement, caDesRdvs, resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
+import { etatPaiementRdv, etatPaiementCommande, couleurPaiement, caDesRdvs, resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
 import ModalDeplacerRdv from './ModalDeplacerRdv'
 import { Reply, ClipboardList } from 'lucide-react'
 import { canDo } from '@/lib/plans'
@@ -45,7 +45,13 @@ const T = {
 const STATUTS = {
   'en_attente':              { label: 'Nouvelle',           couleur: T.rouge,  icon: '●', next: 'en_preparation', nextLabel: 'Démarrer la prépa' },
   'en_preparation':          { label: 'En prépa',           couleur: T.orange, icon: '●', next: 'pret',            nextLabel: 'Marquer prête' },
-  'pret':                    { label: 'Prête',              couleur: T.vert,   icon: '●', next: null,              nextLabel: null },
+  // ⚠️ LE CLICK AND COLLECT S'ARRÊTAIT ICI, EN CUL-DE-SAC (Alex, 17/08 : « je
+  // ne sais pas la mettre en récupérée »). La livraison enchaînait « Partir en
+  // livraison → Livrée », l'expédition « Marquer expédiée », et le retrait en
+  // boutique n'avait RIEN : une commande prête le restait indéfiniment, avec
+  // pour seule sortie « Non retiré ». Le geste le plus banal du comptoir,
+  // remettre le paquet, n'existait pas.
+  'pret':                    { label: 'Prête',              couleur: T.vert,   icon: '●', next: 'recupere',        nextLabel: 'Remettre au client' },
   'recupere':                { label: 'Récupérée',          couleur: T.bleu,   icon: '🔵', next: null,              nextLabel: null },
   'non_retire':              { label: 'Non retiré',         couleur: T.gris,   icon: '⚫', next: null, nextLabel: null },
   'annulee_client_refund':   { label: 'Annulée par client', couleur: T.rouge,  icon: '✕', next: null, nextLabel: null },
@@ -400,8 +406,31 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
             <span style={{ background: badge.couleur.badge, color: '#fff', fontSize: '0.65rem', fontWeight: 800, padding: '3px 9px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.3px', whiteSpace: 'nowrap', display: 'inline-block' }}>
               {badge.icon} {badge.label}
             </span>
+            {/* ⚠️ UN TOTAL N'EST PAS UN ÉTAT (Alex, 17/08 : « rien n'indique le
+                montant à payer quel que soit le statut »). Le chiffre au-dessus
+                dit ce que vaut la commande, pas si le commerçant doit tendre la
+                main. Le rendez-vous portait cette pastille depuis le matin, la
+                commande non : même défaut, même code couleur, même module. */}
+            {(() => {
+              const p = etatPaiementCommande(commande)
+              if (!p) return null
+              const c = couleurPaiement(p)
+              return (
+                <span style={{ display: 'block', marginTop: 4, fontSize: '0.65rem', fontWeight: 900, color: c.texte, background: c.fond, border: `1px solid ${c.bord}`, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.3px', whiteSpace: 'nowrap' }}>
+                  {p.libelle}
+                </span>
+              )
+            })()}
           </div>
         </div>
+        {/* Ce que la pastille ne peut pas contenir : le bon cadeau déduit, le
+            moyen déclaré. Une ligne, sous l'entête, et seulement s'il y a
+            quelque chose à dire. */}
+        {(() => {
+          const p = etatPaiementCommande(commande)
+          if (!p?.detail) return null
+          return <p style={{ fontSize: '0.7rem', color: T.muted, fontWeight: 600, margin: '0 0 8px' }}>{p.detail}</p>
+        })()}
         {/* ⚠️ CETTE COMMANDE N'EST PEUT-ÊTRE PAS À PRÉPARER POUR LE COMPTOIR, et
             rien ne le disait. Les produits achetés dans le tunnel de rendez-vous
             créent une commande ORDINAIRE, qui atterrit dans cette liste au
@@ -521,7 +550,11 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
             Marquer expédiée →
           </button>
         )}
-        {statut.next && !(estExpedition && commande.statut === 'pret') && (
+        {/* ⚠️ LIVRAISON ET EXPÉDITION ONT LEUR PROPRE SORTIE depuis « Prête »,
+            juste en dessous. Sans cette exclusion, « Remettre au client »
+            s'afficherait à côté de « Partir en livraison », et le commerçant
+            aurait deux boutons pour un seul geste. */}
+        {statut.next && !((estExpedition || estLivraison) && commande.statut === 'pret') && (
           <button onClick={() => onChangerStatut(commande.id, statut.next)}
             style={{ width: '100%', padding: '0.625rem', background: `linear-gradient(135deg, ${couleur.border}, ${couleur.border}cc)`, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: '0.82rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${couleur.border}44`, transition: 'opacity 0.15s, transform 0.1s', letterSpacing: '-0.2px' }}
             onMouseOver={e => { e.currentTarget.style.opacity = '0.88'; e.currentTarget.style.transform = 'scale(0.99)' }}

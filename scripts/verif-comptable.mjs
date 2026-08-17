@@ -466,6 +466,65 @@ verifier('l’inscription d’un abonnement demande le moyen, plus « sur place 
 verifier('et l’écran isole les trois seaux',
   /Dont virement/.test(srcComptaEcran))
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LE CLICK AND COLLECT AVAIT UN CUL-DE-SAC, ET SA CARTE NE DISAIT PAS L'ARGENT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ Alex, 17/08 : « rien n'indique le montant à payer quel que soit le statut,
+// je ne sais pas la mettre en récupérée ». Deux défauts d'un coup :
+//   • `STATUTS.pret.next` valait `null` : la livraison enchaînait, l'expédition
+//     enchaînait, et le retrait en boutique n'avait AUCUNE sortie. Le geste le
+//     plus banal du comptoir, remettre le paquet, n'existait pas.
+//   • la carte affichait le TOTAL, qui n'est pas un état : elle ne disait pas
+//     s'il fallait tendre la main.
+
+const { etatPaiementCommande } = await import('../lib/rdv-paiement.js')
+
+const CMD_SUR_PLACE = { total: 11.5, paye_en_ligne: false }
+egal('une commande payée sur place reste à payer', etatPaiementCommande(CMD_SUR_PLACE).cle, 'du')
+verifier('et le montant est écrit', /11,50/.test(etatPaiementCommande(CMD_SUR_PLACE).libelle))
+egal('une commande payée en ligne est payée',
+  etatPaiementCommande({ total: 11.5, paye_en_ligne: true }).cle, 'paye')
+verifier('et elle le dit sans réclamer un centime',
+  !/à payer/i.test(etatPaiementCommande({ total: 11.5, paye_en_ligne: true }).libelle))
+
+// ⚠️ LE BON CADEAU SE DÉDUIT ET SE DIT. Sans la phrase, le commerçant réclame
+// le total affiché en haut de la carte, et c'est le client qui s'en aperçoit.
+const CMD_BON = { total: 24.5, bon_cadeau_montant: 10, paye_en_ligne: false }
+verifier('un bon cadeau réduit ce qu’il reste à payer', /14,50/.test(etatPaiementCommande(CMD_BON).libelle))
+verifier('et la ligne explique pourquoi', /bon cadeau/.test(etatPaiementCommande(CMD_BON).detail || ''))
+// ⚠️ UN BON QUI COUVRE TOUT N'EST PAS « RIEN À PAYER » : c'est payé, à l'achat
+// du bon. Les confondre ferait croire à une vente perdue.
+egal('un bon qui couvre tout se lit comme payé',
+  etatPaiementCommande({ total: 10, bon_cadeau_montant: 10, paye_en_ligne: false }).cle, 'paye')
+
+// Une fois encaissée, elle dit combien et par quel moyen.
+const CMD_ENCAISSEE = { total: 11.5, paye_en_ligne: false, encaisse_mode: 'especes', encaisse_montant: 11.5 }
+egal('une commande encaissée est verte', etatPaiementCommande(CMD_ENCAISSEE).cle, 'paye')
+verifier('et elle nomme le moyen', /espèces/.test(etatPaiementCommande(CMD_ENCAISSEE).detail || ''))
+// Remise sans être payée : la dette se voit, comme sur un rendez-vous.
+const CMD_IMPAYEE = { total: 11.5, paye_en_ligne: false, encaisse_mode: 'rien', encaisse_montant: 0 }
+egal('remise sans être payée reste due', etatPaiementCommande(CMD_IMPAYEE).cle, 'du')
+// ⚠️ GARDE NÉE MUETTE, MESURÉE EN MUTATION : le `cle` ne distingue pas une
+// commande jamais encaissée d'une commande REMISE sans être payée. Les deux
+// sont orange ; seule la phrase dit que le paquet est parti.
+verifier('et la ligne dit que le paquet est déjà parti',
+  /sans être payée/.test(etatPaiementCommande(CMD_IMPAYEE).detail || ''))
+
+// ─── LE GESTE QUI MANQUAIT ────────────────────────────────────────────────
+verifier('« Prête » mène enfin quelque part',
+  /'pret':\s+\{ label: 'Prête',\s+couleur: T\.vert,\s+icon: '●', next: 'recupere',\s+nextLabel: 'Remettre au client' \}/.test(srcDashCmd))
+// ⚠️ ET PAS DEUX BOUTONS POUR UN SEUL GESTE : la livraison et l'expédition ont
+// leur propre sortie depuis « Prête », juste en dessous.
+verifier('la livraison et l’expédition gardent la leur',
+  /!\(\(estExpedition \|\| estLivraison\) && commande\.statut === 'pret'\)/.test(srcDashCmd))
+// ⚠️ ON COMPTE, ET C'EST LA DIXIÈME FOIS QUE L'HOMONYME VOISIN REND UNE GARDE
+// MUETTE. La règle sert DEUX fois sur la carte, pour la pastille et pour la
+// ligne de détail : chercher son nom laissait le second usage satisfaire le
+// test, et retirer la pastille ne faisait rien rougir.
+egal('la carte passe par la règle du paiement aux deux endroits',
+  (srcDashCmd.match(/etatPaiementCommande\(commande\)/g) || []).length, 2)
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

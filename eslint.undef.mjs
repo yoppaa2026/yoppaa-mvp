@@ -2,6 +2,28 @@
 // typescript-eslint la désactive. C'est elle, et elle seule, qui voit un
 // identifiant utilisé sans être importé — invisible au build comme au banc.
 // Lancée par `npm run verif:undef`.
+//
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ CE QU'ELLE NE COUVRE PAS, ET IL FAUT LE SAVOIR : LA ZONE MORTE TEMPORELLE
+//
+// Le défaut du 12/08 qui a cassé l'accueil EN PRODUCTION avait DEUX moitiés :
+// un import oublié, et un `const` inséré TROP HAUT, lu pendant le rendu avant
+// sa déclaration. Cette config n'attrape que la première.
+//
+// ⚠️ Et le 17/08 j'ai reproduit la seconde en écrivant un `useEffect` cent
+// lignes au-dessus du `useState` dont son tableau de dépendances dépend. Écran
+// blanc garanti, et `verif:undef` est resté vert.
+//
+// `no-use-before-define` a été essayée le 17/08 pour combler ce trou. Elle
+// rend 21 erreurs, et TOUTES sont du code juste : elle ne distingue pas le
+// CORPS du composant, exécuté immédiatement, d'un CALLBACK appelé plus tard,
+// où lire une variable déclarée plus bas est parfaitement légal. Une garde qui
+// rougit sur du code correct coûte plus cher que pas de garde : on l'a retirée.
+//
+// ⚠️ IL N'Y A DONC AUCUN FILET SUR CE CAS. La seule protection est de RELIRE
+// l'ordre des déclarations quand on insère un hook, et de se méfier dès qu'on
+// écrit du code loin de l'endroit où vivent ses dépendances.
+// ═══════════════════════════════════════════════════════════════════════════
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 const NAVIGATEUR = {

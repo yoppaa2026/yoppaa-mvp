@@ -1291,8 +1291,23 @@ export default function Commander() {
   const [fidConnecte, setFidConnecte] = useState(true)
   const [clientRdvs, setClientRdvs] = useState([])
   // Les abonnements de la cliente. Vide pour l'immense majorité des Yoppers,
-  // et c'est justement pour ça que ça vit ICI et pas dans un onglet dédié.
+  // et c'est pour ça que leur onglet n'existe QUE s'il y en a au moins un.
   const [clientAbonnements, setClientAbonnements] = useState([])
+
+  // ⚠️ L'ONGLET DES ABONNEMENTS PEUT DISPARAÎTRE SOUS LES PIEDS : il n'existe
+  // que tant qu'il reste un contrat. Une résiliation, une déconnexion ou une
+  // lecture qui échoue, et le Yopper se retrouverait devant un écran vide sans
+  // aucun onglet actif, sans rien pour lui dire où il est. On le ramène.
+  //
+  // ⚠️ ET CE BLOC EST ICI, APRÈS LA DÉCLARATION, PAS PLUS HAUT. Je l'avais
+  // d'abord écrit à côté de `sousOngletCmd`, cent lignes au-dessus : le tableau
+  // de dépendances lit `clientAbonnements` pendant le rendu, donc AVANT son
+  // `const`, et c'est un ÉCRAN BLANC que ni le lint, ni le build, ni le banc
+  // n'attrapent. Exactement le défaut qui a cassé l'accueil en production le
+  // 12/08.
+  useEffect(() => {
+    if (sousOngletCmd === 'abos' && clientAbonnements.length === 0) setSousOngletCmd('rdvs')
+  }, [sousOngletCmd, clientAbonnements.length])
   // Commune du Yopper (référentiel `communes` joint via clients.commune_id)
   // commune = null  : pas encore chargé ou client pas connecté
   // commune = false : client connecté mais aucune commune setée → modale ConfirmCommune
@@ -2827,23 +2842,41 @@ export default function Commander() {
                     // RDVs actifs = a venir (statut=confirme && date >= aujourd'hui).
                     { key: 'alimentaires', label: 'Commandes',    count: commandesASwiper.length + commandesEnLivraison.length + commandesEnCours.length },
                     { key: 'rdvs',          label: 'Rendez-vous', count: rdvsAVenir.length },
+                    // ⚠️ CET ONGLET N'EXISTE QUE POUR QUI A UN ABONNEMENT
+                    // (Alex, 17/08). Le premier réflexe avait été de refuser un
+                    // onglet à part, parce qu'il resterait vide à vie pour la
+                    // quasi totalité des Yoppers, et cet argument reste juste.
+                    // Il ne vaut simplement pas contre un onglet CONDITIONNEL :
+                    // celui qui n'a pas d'abonnement ne voit rien, celui qui en
+                    // a un ne cherche plus. Même règle que partout ici, rien ne
+                    // s'affiche quand il n'y a rien à montrer.
+                    ...(clientAbonnements.length > 0
+                      ? [{ key: 'abos', label: 'Abonnements', count: clientAbonnements.length }]
+                      : []),
                   ].map(tab => {
                     const actif = sousOngletCmd === tab.key
                     // Couleur identite : violet pour Commandes (alimentaire), vert pour Rendez-vous (vitrine).
                     const couleurId = tab.key === 'rdvs' ? '#10B981' : T.main
+                    // ⚠️ À TROIS ONGLETS, LE TEXTE DOIT TENIR. « Abonnements »
+                    // est le plus long des trois, et une pastille tronquée en
+                    // silence est un défaut déjà relevé ailleurs dans ce
+                    // projet : on resserre plutôt que de laisser couper.
+                    const troisOnglets = clientAbonnements.length > 0
                     return (
                       <button key={tab.key} onClick={() => setSousOngletCmd(tab.key)}
                         style={{
-                          flex: 1, padding: '0.625rem 0.5rem',
+                          flex: 1, minWidth: 0,
+                          padding: troisOnglets ? '0.625rem 0.25rem' : '0.625rem 0.5rem',
                           border: 'none', borderRadius: 9,
                           background: actif ? '#fff' : 'transparent',
                           color: actif ? couleurId : T.muted,
-                          fontWeight: 800, fontSize: '0.85rem',
+                          fontWeight: 800, fontSize: troisOnglets ? '0.78rem' : '0.85rem',
                           fontFamily: '"DM Sans", sans-serif',
                           cursor: 'pointer', transition: 'all 0.15s',
                           boxShadow: actif ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                          letterSpacing: '-0.2px',
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          gap: troisOnglets ? 4 : 6,
+                          letterSpacing: '-0.2px', whiteSpace: 'nowrap',
                         }}>
                         {tab.label}
                         {tab.count > 0 && (
@@ -3062,24 +3095,23 @@ export default function Commander() {
               )}
               </div>
 
+              {/* ─── SOUS-ONGLET 'ABONNEMENTS' ────────────────────────────────
+                  ⚠️ SON PROPRE ONGLET DEPUIS LE 17/08, à la demande d'Alex.
+                  Les cartes vivaient au-dessus des rendez-vous, ce qui les
+                  rendait introuvables pour qui ne défilait pas : un abonnement
+                  à trois chiffres ne se range pas sous un titre qui ne le
+                  nomme pas.
+                  ⚠️ L'onglet n'existe QUE s'il y a un abonnement, sans quoi il
+                  resterait vide à vie pour la quasi totalité des Yoppers. */}
+              <div style={{ padding: '1rem', display: sousOngletCmd === 'abos' ? 'block' : 'none' }}>
+                {clientAbonnements.map(a => <CarteAbonnement key={a.id} abonnement={a} />)}
+                <p style={{ margin: '10px 2px 0', fontSize: '0.78rem', color: T.muted, lineHeight: 1.5 }}>
+                  Tes séances réservées apparaissent dans <strong style={{ color: T.deep }}>Rendez-vous</strong>.
+                </p>
+              </div>
+
               {/* ─── SOUS-ONGLET 'RENDEZ-VOUS' ─── */}
               <div style={{ padding: '1rem 1rem 1rem', display: sousOngletCmd === 'rdvs' ? 'block' : 'none' }}>
-                {/* ─── MES ABONNEMENTS ──────────────────────────────────────
-                    ⚠️ AU-DESSUS DES RENDEZ-VOUS, ET PAS DANS UN ONGLET À PART.
-                    Un onglet « Abonnements » resterait vide à vie pour la quasi
-                    totalité des Yoppers ; ici, la cliente qui en a un lit son
-                    solde au moment exact où elle regarde ses séances.
-                    Rien ne s'affiche quand il n'y en a pas. */}
-                {clientAbonnements.length > 0 && (
-                  <div style={{ marginBottom: '1.25rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                      <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>Mes abonnements</span>
-                      <span style={{ background: T.main, color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{clientAbonnements.length}</span>
-                    </div>
-                    {clientAbonnements.map(a => <CarteAbonnement key={a.id} abonnement={a} />)}
-                  </div>
-                )}
-
                 {/* RDVs a venir */}
                 {rdvsAVenir.length > 0 && (
                   <>

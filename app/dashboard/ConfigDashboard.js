@@ -7854,9 +7854,19 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
                 <Toggle value={insc.paye} onChange={v => setInsc({ ...insc, paye: v })} label="Déjà payé"/>
               </div>
               {insc.paye && (
+                // ⚠️ « SUR PLACE » NE DIT PAS PAR QUEL MOYEN, et c'est le même
+                // défaut que sur les rendez-vous : la Comptabilité recevait un
+                // montant au comptoir sans savoir s'il fallait le chercher dans
+                // le tiroir ou sur le relevé du terminal. Règle d'Alex du
+                // 17/08 : une amélioration qui touche d'autres endroits de
+                // l'application s'y applique aussi.
+                // Le virement reste, contrairement aux rendez-vous : un contrat
+                // à trois chiffres se règle couramment ainsi.
                 <select value={insc.mode_paiement} onChange={e => setInsc({ ...insc, mode_paiement: e.target.value })}
                   style={{ ...s.input, marginBottom: 12 }}>
-                  <option value="sur_place">Sur place</option>
+                  <option value="">— Comment as-tu été payé ? —</option>
+                  <option value="terminal">Terminal (Bancontact, carte)</option>
+                  <option value="especes">Espèces</option>
                   <option value="virement">Virement</option>
                 </select>
               )}
@@ -9789,10 +9799,11 @@ function TabComptabilite({ commercantId, toast }) {
     comptoir: acc.comptoir + j.comptoir,
     terminal: acc.terminal + (j.terminal || 0),
     especes: acc.especes + (j.especes || 0),
+    virement: acc.virement + (j.virement || 0),
     bonCadeau: acc.bonCadeau + j.bonCadeau,
     fraisStripe: acc.fraisStripe + (j.fraisStripe || 0),
     netStripe: acc.netStripe + (j.netStripe || 0),
-  }), { nb: 0, total: 0, enLigne: 0, comptoir: 0, terminal: 0, especes: 0, bonCadeau: 0, fraisStripe: 0, netStripe: 0 })
+  }), { nb: 0, total: 0, enLigne: 0, comptoir: 0, terminal: 0, especes: 0, virement: 0, bonCadeau: 0, fraisStripe: 0, netStripe: 0 })
 
   // Ventilation cumulée par taux, pour l'aperçu à l'écran.
   const parTaux = {}
@@ -9880,6 +9891,7 @@ function TabComptabilite({ commercantId, toast }) {
               // besoin de lire deux zéros de plus.
               ...(totaux.terminal > 0 ? [{ l: 'Dont terminal', v: eur(totaux.terminal) }] : []),
               ...(totaux.especes > 0 ? [{ l: 'Dont espèces', v: eur(totaux.especes) }] : []),
+              ...(totaux.virement > 0 ? [{ l: 'Dont virement', v: eur(totaux.virement) }] : []),
               { l: 'Bons cadeaux', v: eur(totaux.bonCadeau) },
               // ⚠️ CE QUE L'ENCAISSEMENT EN LIGNE COÛTE. Le montant existait
               // depuis toujours dans le fichier ; il n'était simplement affiché

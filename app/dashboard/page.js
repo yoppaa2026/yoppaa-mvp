@@ -7,9 +7,9 @@ import AgendaRdv from './AgendaRdv'
 import ModalNouveauRdv from './ModalNouveauRdv'
 import ModaleConfirmation from './ModaleConfirmation'
 import PosteConfirmation, { confirme } from './PosteConfirmation'
-import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree, confirmationEncaissement, nomClient } from '@/lib/confirmation-rdv'
+import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree, confirmationEncaissement, questionEncaissement, nomClient } from '@/lib/confirmation-rdv'
 import { confirmationSimple } from '@/lib/confirmations'
-import { etatPaiementRdv, couleurPaiement, caDesRdvs, resteAEncaisser } from '@/lib/rdv-paiement'
+import { etatPaiementRdv, couleurPaiement, caDesRdvs, resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
 import ModalDeplacerRdv from './ModalDeplacerRdv'
 import { Reply, ClipboardList } from 'lucide-react'
 import { canDo } from '@/lib/plans'
@@ -845,6 +845,10 @@ export default function Dashboard() {
   // phrase qui dira combien ont été enregistrés.
   const [seanceAHonorer, setSeanceAHonorer] = useState(null)  // tableau de rdvs
   const [confirmationSeanceTexte, setConfirmationSeanceTexte] = useState(null)
+  // La commande payée sur place qu'on est en train de remettre : par quel moyen
+  // le commerçant vient-il d'être payé ?
+  const [commandeAEncaisser, setCommandeAEncaisser] = useState(null)
+  const [confirmationCommandeTexte, setConfirmationCommandeTexte] = useState(null)
   // Mode impersonation : admin Yoppaa connecte en tant qu'un commercant pour le support.
   // Detecte via localStorage yoppaa_admin_impersonating (set depuis /admin "Voir Dashboard").
   // Affiche un banner sticky en haut + bouton Quitter qui revient sur /admin.
@@ -1302,7 +1306,22 @@ export default function Dashboard() {
     return true
   }
 
-  async function changerStatut(commandeId, statut) {
+  async function changerStatut(commandeId, statut, { champs = null } = {}) {
+    // ⚠️ LE MÊME GESTE QUE SUR UN RENDEZ-VOUS, ET POUR LA MÊME RAISON. Une
+    // commande payée sur place partait au comptoir sans son moyen : un Click
+    // and Collect réglé en liquide et un autre au terminal se ressemblaient
+    // comme deux gouttes d'eau dans le journal. Règle d'Alex du 17/08, une
+    // amélioration qui touche d'autres endroits s'y applique aussi.
+    //
+    // La question ne se pose qu'une fois, et seulement s'il reste de l'argent :
+    // une commande déjà payée en ligne passe en récupérée d'un seul tap.
+    if (statut === 'recupere' && !champs) {
+      const c = commandes.find(x => x.id === commandeId)
+      if (c && !c.encaisse_mode && resteAEncaisserCommande(c) > 0) {
+        setCommandeAEncaisser(c)
+        return
+      }
+    }
     // ⚠️ « NON RETIRÉ » PASSE PAR UNE ROUTE SERVEUR, et lui seul. Les articles à
     // versions sont décrémentés en dur à la commande : sans restitution, chaque
     // commande déclarée non retirée retirait DÉFINITIVEMENT une pièce des
@@ -1325,8 +1344,9 @@ export default function Dashboard() {
       return
     }
 
-    await supabase.from('commandes').update({ statut }).eq('id', commandeId)
-    setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, statut } : c))
+    const payloadCmd = { statut, ...(champs || {}) }
+    await supabase.from('commandes').update(payloadCmd).eq('id', commandeId)
+    setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...payloadCmd } : c))
 
     // Statut final : la commande récupérée remplit la carte de fidélité
     if (statut === 'recupere') crediterFideliteCommande(commandeId)
@@ -1585,6 +1605,36 @@ export default function Dashboard() {
   function fermerSeance() {
     setSeanceAHonorer(null)
     setConfirmationSeanceTexte(null)
+  }
+
+  // ⚠️ LE MÊME TRIO DE RÉPONSES QUE SUR UN RENDEZ-VOUS : terminal, espèces, ou
+  // « rien encaissé », qui remet quand même la commande. Un client peut repartir
+  // avec son paquet en promettant de payer, et le commerçant doit pouvoir le
+  // noter au lieu de mentir sur le moyen de paiement.
+  async function repondreCommande(choix) {
+    if (!commandeAEncaisser) return
+    const MODES = { terminal: 'terminal', especes: 'especes', sans_paiement: 'rien' }
+    const mode = MODES[choix]
+    if (!mode) { setCommandeAEncaisser(null); return }
+    const montant = mode === 'rien' ? 0 : (resteAEncaisserCommande(commandeAEncaisser) ?? 0)
+    setActionEnCours(true)
+    await changerStatut(commandeAEncaisser.id, 'recupere', {
+      champs: {
+        encaisse_mode: mode,
+        encaisse_montant: montant,
+        encaisse_le: new Date().toISOString(),
+      },
+    })
+    setActionEnCours(false)
+    setConfirmationCommandeTexte(confirmationEncaissement(mode, {
+      montant,
+      nom: `La commande ${referenceCommande(commandeAEncaisser) ? `#${referenceCommande(commandeAEncaisser)}` : ''}`.trim(),
+    }))
+  }
+
+  function fermerCommandeEncaissement() {
+    setCommandeAEncaisser(null)
+    setConfirmationCommandeTexte(null)
   }
 
   async function seDeconnecter() {
@@ -2840,6 +2890,21 @@ export default function Dashboard() {
         confirmation={confirmationSeanceTexte}
         onChoix={repondreSeance}
         onFermer={fermerSeance}
+      />
+
+      {/* ─── ENCAISSER UNE COMMANDE PAYÉE SUR PLACE ───────────────────────── */}
+      <ModaleConfirmation
+        ouverte={!!commandeAEncaisser}
+        {...(commandeAEncaisser && !confirmationCommandeTexte
+          ? (questionEncaissement({
+              montant: resteAEncaisserCommande(commandeAEncaisser),
+              nom: referenceCommande(commandeAEncaisser) ? `Commande #${referenceCommande(commandeAEncaisser)}` : null,
+            }) || {})
+          : {})}
+        enCours={actionEnCours}
+        confirmation={confirmationCommandeTexte}
+        onChoix={repondreCommande}
+        onFermer={fermerCommandeEncaissement}
       />
     </div>
   )

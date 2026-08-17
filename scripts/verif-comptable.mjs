@@ -380,6 +380,92 @@ const csvEnc = csvJournal({
 verifier('le journal exporté détaille terminal et espèces',
   /Dont terminal;Dont especes/.test(csvEnc))
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LE MÊME GESTE AUX DEUX AUTRES ENDROITS OÙ L'ON ENCAISSE AU COMPTOIR
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ RÈGLE POSÉE PAR ALEX LE 17/08, désormais non négociable : « si une
+// amélioration touche d'autres endroits de l'app, il faut aussi l'appliquer ».
+// Le geste d'encaissement n'existait que sur les rendez-vous ; les commandes
+// payées sur place et les abonnements inscrits à la main partaient au comptoir
+// SANS LEUR MOYEN. C'est lui qui l'a vu, pas moi.
+
+const { resteAEncaisserCommande, MODES_ENCAISSEMENT } = await import('../lib/rdv-paiement.js')
+
+egal('une commande payée sur place reste à encaisser en entier',
+  resteAEncaisserCommande({ total: 24.5, paye_en_ligne: false }), 24.5)
+// Un bon cadeau a été payé en ligne à son achat : il ne se réencaisse pas.
+egal('le bon cadeau se déduit de ce qui reste dû',
+  resteAEncaisserCommande({ total: 24.5, bon_cadeau_montant: 10, paye_en_ligne: false }), 14.5)
+egal('une commande déjà payée en ligne ne demande rien',
+  resteAEncaisserCommande({ total: 24.5, paye_en_ligne: true }), 0)
+egal('un bon cadeau plus gros que la commande ne rend jamais négatif',
+  resteAEncaisserCommande({ total: 10, bon_cadeau_montant: 25, paye_en_ligne: false }), 0)
+egal('sans commande, rien', resteAEncaisserCommande(null), null)
+
+// Le moyen voyage jusqu'au journal, et JAMAIS sur une vente en ligne.
+const [ligneCmdComptoir] = construireLignes({
+  commandes: [{ id: 'c-enc', numero_commande: 12, statut: 'recupere', total: 24.5, mode_retrait: 'boutique',
+    paye_en_ligne: false, encaisse_mode: 'especes', commande_articles: [] }],
+  tauxDefaut: 21,
+})
+egal('une commande payée sur place porte son moyen', ligneCmdComptoir.modeEncaissement, 'especes')
+egal('et son montant va bien au comptoir', ligneCmdComptoir.comptoir, 24.5)
+const [ligneCmdEnLigne] = construireLignes({
+  commandes: [{ id: 'c-web', numero_commande: 13, statut: 'recupere', total: 24.5, mode_retrait: 'boutique',
+    paye_en_ligne: true, encaisse_mode: 'especes', commande_articles: [] }],
+  tauxDefaut: 21,
+})
+// ⚠️ UNE VENTE EN LIGNE N'A PAS DE MOYEN AU COMPTOIR, même si une valeur traîne
+// en base : sans cette garde, un montant payé par Stripe se retrouverait dans
+// le comptage de caisse du commerçant.
+egal('une vente en ligne n’emporte aucun moyen de comptoir', ligneCmdEnLigne.modeEncaissement, null)
+
+// Les abonnements inscrits à la main : `mode_paiement` porte désormais le moyen.
+const [ligneAboEspeces] = construireLignes({
+  abonnements: [{ id: 'a-esp', prix: 300, paye: true, paye_le: '2026-08-17', mode_paiement: 'especes', tva_taux: 21 }],
+})
+egal('un abonnement réglé en espèces le dit', ligneAboEspeces.modeEncaissement, 'especes')
+egal('et il va au comptoir', ligneAboEspeces.comptoir, 300)
+const [ligneAboLigne] = construireLignes({
+  abonnements: [{ id: 'a-web', prix: 400, paye: true, paye_le: '2026-08-17', mode_paiement: 'en_ligne', tva_taux: 21 }],
+})
+egal('un abonnement vendu en ligne n’a pas de moyen de comptoir', ligneAboLigne.modeEncaissement, null)
+
+// ⚠️ TROIS SEAUX POUR LA RÉCONCILIATION. Un virement n'est ni dans le tiroir ni
+// sur le relevé du terminal : le noyer dans « au comptoir » ferait chercher un
+// montant qui ne se recoupe avec rien.
+verifier('le virement est un moyen déclaré', !!MODES_ENCAISSEMENT.virement)
+const jourTroisSeaux = journalParJour(construireLignes({
+  abonnements: [
+    { id: 'a1', prix: 300, paye: true, paye_le: '2026-08-17', mode_paiement: 'especes', tva_taux: 21 },
+    { id: 'a2', prix: 540, paye: true, paye_le: '2026-08-17', mode_paiement: 'virement', tva_taux: 21 },
+    { id: 'a3', prix: 100, paye: true, paye_le: '2026-08-17', mode_paiement: 'terminal', tva_taux: 21 },
+  ],
+}))[0]
+egal('les espèces dans leur seau', jourTroisSeaux.especes, 300)
+egal('le virement dans le sien', jourTroisSeaux.virement, 540)
+egal('le terminal dans le sien', jourTroisSeaux.terminal, 100)
+egal('et leur somme fait tout le comptoir', jourTroisSeaux.comptoir, 940)
+
+// ⚠️ LES COLONNES DOIVENT ARRIVER JUSQU'AU CALCUL, ici comme pour les
+// rendez-vous : LE défaut le plus fréquent de ce projet.
+verifier('la route charge l’encaissement des commandes',
+  /encaisse_mode, encaisse_montant, encaisse_le, commande_articles/.test(srcExportCompta))
+
+// Le geste, côté écran.
+const srcDashCmd = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+verifier('remettre une commande payée sur place demande le moyen',
+  /setCommandeAEncaisser\(c\)/.test(srcDashCmd))
+verifier('et seulement s’il reste quelque chose à encaisser',
+  /!c\.encaisse_mode && resteAEncaisserCommande\(c\) > 0/.test(srcDashCmd))
+verifier('le moyen part dans la même écriture que le statut',
+  /const payloadCmd = \{ statut, \.\.\.\(champs \|\| \{\}\) \}/.test(srcDashCmd))
+verifier('l’inscription d’un abonnement demande le moyen, plus « sur place »',
+  /<option value="terminal">/.test(srcComptaEcran) && /<option value="especes">/.test(srcComptaEcran))
+verifier('et l’écran isole les trois seaux',
+  /Dont virement/.test(srcComptaEcran))
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

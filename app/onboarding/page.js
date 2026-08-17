@@ -92,7 +92,7 @@ function VisuelYoppaa() {
           { nom: 'Le 9-15',      type: 'Sandwicherie',  statut: 'Ouvert',                                                 Icon: Sandwich  },
         ].map((c, i) => (
           <div key={i} style={{
-            background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)',
+            background: 'rgba(255,255,255,0.08)',
             borderRadius: 14, padding: '0.75rem 1rem',
             border: '1px solid rgba(255,255,255,0.12)',
             display: 'flex', alignItems: 'center', gap: 10,
@@ -127,7 +127,7 @@ function VisuelNotifs() {
   return (
     <div style={{ width: '100%', maxWidth: 300 }}>
       {/* Téléphone mockup */}
-      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 24, padding: '1rem', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(12px)' }}>
+      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 24, padding: '1rem', border: '1px solid rgba(255,255,255,0.1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: T.light, animation: 'pulse 2s infinite' }}/>
           <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'rgba(255,255,255,0.5)', flex: 1 }}>Centre de notifications</span>
@@ -164,7 +164,7 @@ function VisuelMaps() {
   return (
     <div style={{ width: '100%', maxWidth: 300, position: 'relative' }}>
       {/* Carte simulée */}
-      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 20, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', aspectRatio: '4/3', position: 'relative', backdropFilter: 'blur(12px)' }}>
+      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 20, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', aspectRatio: '4/3', position: 'relative' }}>
         {/* Grille carte */}
         <div style={{ position: 'absolute', inset: 0 }}>
           {[...Array(6)].map((_, i) => (

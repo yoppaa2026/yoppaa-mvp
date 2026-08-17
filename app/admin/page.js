@@ -412,7 +412,7 @@ function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
 function CenteredMsg({ children, variant }) {
   return (
     <div style={{ minHeight: '100vh', background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.ink} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans", sans-serif' }}>
-      <div style={{ background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(20px)', borderRadius: 18, padding: '28px 32px', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', textAlign: 'center', maxWidth: 420 }}>
+      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 18, padding: '28px 32px', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', textAlign: 'center', maxWidth: 420 }}>
         {variant === 'error' && <Lock size={38} strokeWidth={1.6} color="#DC2626" style={{ margin: '0 auto 8px', display: 'block' }}/>}
         <div style={{ color: '#fff', fontSize: 15, lineHeight: 1.6 }}>{children}</div>
       </div>

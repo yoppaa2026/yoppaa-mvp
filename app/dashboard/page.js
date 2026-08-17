@@ -1968,7 +1968,7 @@ export default function Dashboard() {
               localStorage.setItem('yoppaa_dashboard_commercant_id', c.id)
               chargerCommandes(c.id)
             }}
-              style={{ padding: '1rem 1.25rem', borderRadius: 14, border: `1.5px solid ${T.main}44`, background: 'rgba(255,255,255,0.06)', color: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '1rem', textAlign: 'left', transition: 'all 0.15s', backdropFilter: 'blur(8px)' }}
+              style={{ padding: '1rem 1.25rem', borderRadius: 14, border: `1.5px solid ${T.main}44`, background: 'rgba(255,255,255,0.06)', color: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '1rem', textAlign: 'left', transition: 'all 0.15s' }}
               onMouseOver={e => { e.currentTarget.style.background = `${T.main}44`; e.currentTarget.style.borderColor = T.main }}
               onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = `${T.main}44` }}>
               <p style={{ margin: '0 0 4px' }}>{c.nom}</p>
@@ -2441,7 +2441,7 @@ export default function Dashboard() {
                   hors de l'écran. On garde donc le mot là où il sert, pour dire
                   où l'on est, et les autres se contentent de leur icône, qui
                   reste nommée pour les lecteurs d'écran et au survol. */}
-              <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 3, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 3, border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
                 {[
                   { key: 'commandes', label: 'Cmd',    titre: 'Commandes',   Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(commercant?.plan, 'commande') },
                   { key: 'rdv',       label: 'RDV',    titre: 'Rendez-vous', Icon: IconRdv,       visible: !!commercant?.rdv_actif || (commercant?.categorie === 'vitrine' && canDo(commercant?.plan, 'rdv')) },
@@ -2464,7 +2464,7 @@ export default function Dashboard() {
 
               <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
                 <button onClick={activerNotifications}
-                  style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: `1px solid ${notificationsActives ? T.main : 'rgba(255,255,255,0.15)'}`, background: notificationsActives ? `${T.main}44` : 'rgba(255,255,255,0.08)', cursor: 'pointer', backdropFilter: 'blur(8px)', transition: 'all 0.15s', flexShrink: 0 }}>
+                  style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: `1px solid ${notificationsActives ? T.main : 'rgba(255,255,255,0.15)'}`, background: notificationsActives ? `${T.main}44` : 'rgba(255,255,255,0.08)', cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}>
                   <IconBell size={15} color={notificationsActives ? '#fff' : T.light} active={notificationsActives}/>
                 </button>
                 <button onClick={seDeconnecter}
@@ -2881,7 +2881,7 @@ export default function Dashboard() {
           05/08 : « rendu HORS de page-wrap ». Même piège, même remède. */}
       {rdvSelectionne && (
         <div onClick={() => setRdvSelectionne(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(26,8,64,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9998, padding: '1rem', backdropFilter: 'blur(4px)' }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(26,8,64,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9998, padding: '1rem' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '85dvh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <CarteRdv rdv={rdvSelectionne}
               onChangerStatut={(id, st, raison) => { changerStatutRdv(id, st, raison); setRdvSelectionne(null) }}

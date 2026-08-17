@@ -61,7 +61,7 @@ function CarteCommune({ c, rang }) {
   const medal = medalColor(rang)
 
   return (
-    <div style={{ position: 'relative', background: 'rgba(255,255,255,0.06)', border: `1px solid ${prete ? T.green + '66' : medal ? medal + '55' : 'rgba(255,255,255,0.12)'}`, borderRadius: 18, padding: '1rem 1.1rem', backdropFilter: 'blur(12px)', boxShadow: medal ? `0 6px 26px ${medal}22` : 'none' }}>
+    <div style={{ position: 'relative', background: 'rgba(255,255,255,0.06)', border: `1px solid ${prete ? T.green + '66' : medal ? medal + '55' : 'rgba(255,255,255,0.12)'}`, borderRadius: 18, padding: '1rem 1.1rem', boxShadow: medal ? `0 6px 26px ${medal}22` : 'none' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 12, background: medal ? `linear-gradient(135deg, ${medal}, ${medal}bb)` : 'rgba(255,255,255,0.10)', color: medal ? T.ink : '#fff', fontWeight: 900, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: medal ? `0 3px 12px ${medal}66` : 'none' }}>
           {rang + 1}

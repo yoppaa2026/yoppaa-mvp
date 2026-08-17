@@ -1204,13 +1204,38 @@ verifier('le bouton Retour a une sortie par défaut',
 verifier('et plus de branche sur la seule étape 1',
   !/if \(etape === 1\) \{ router\.push/.test(srcTunnel))
 
-// ⚠️ PAS DE FLOU SUR CE QUI DÉFILE. `backdrop-filter` repeint le flou à chaque
-// image sur iOS, et c'est l'une des trois causes confirmées du scroll qui gèle
-// sur iPhone (diagnostic du 16/07, consigné en mémoire). Les deux boutons du
-// bandeau ont un fond opaque à 95 % : le flou ne se voyait pas, il coûtait.
-verifier('les boutons du bandeau ne floutent plus le fond',
-  !/rgba\(255,255,255,0\.95\)', backdropFilter/.test(srcTunnel)
-  && !/rgba\(255,255,255,0\.95\)', backdropFilter/.test(srcFicheBoutique))
+// ⚠️ PAS DE FLOU SUR CE QUI DÉFILE, ET PLUS NULLE PART. `backdrop-filter`
+// oblige le compositeur iOS à relire et refloutrer le fond À CHAQUE IMAGE tant
+// que l'élément est à l'écran : c'est l'une des trois causes confirmées du
+// défilement qui gèle sur iPhone (diagnostic du 16/07, consigné en mémoire).
+//
+// ⚠️ ET LA GARDE POSÉE EN JUILLET NE CONNAISSAIT QUE DEUX BOUTONS. Elle testait
+// la chaîne exacte `rgba(255,255,255,0.95)', backdropFilter`, c'est-à-dire les
+// deux endroits corrigés ce jour-là. Trente-huit autres flous ont donc pu vivre
+// sous son nez, dont DEUX EN PERMANENCE sur la fiche dont Alex se plaignait le
+// 17/08 : le bouton Retour du bandeau, et la pastille d'ouverture, qui vit dans
+// un COMPOSANT et échappait à toute lecture de la page.
+//
+// C'est la troisième fois sur ce projet qu'une garde nommée d'après un défaut
+// ne surveille en réalité qu'un seul de ses exemplaires. On interdit donc la
+// PROPRIÉTÉ, partout, en comptant les fichiers plutôt qu'en cherchant un mot.
+{
+  const flous = []
+  const parcourir = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      // `app/demo-mettet` est un jeu de diapositives projeté, jamais défilé au
+      // doigt : le flou y est un effet assumé, et il est DIT ici plutôt que
+      // toléré en silence.
+      if (e.isDirectory()) { if (e.name !== 'demo-mettet') parcourir(`${dir}/${e.name}`); continue }
+      if (!e.name.endsWith('.js')) continue
+      const chemin = `${dir}/${e.name}`
+      const n = (readFileSync(chemin, 'utf8').match(/backdropFilter|backdrop-filter/g) || []).length
+      if (n > 0) flous.push(`${chemin} (${n})`)
+    }
+  }
+  parcourir('app')
+  verifier('aucun flou de fond dans les écrans', flous.length === 0, flous.join(', '))
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ⚠️ LE NOM NE DOIT JAMAIS REPASSER DERRIÈRE LA CARTE BLANCHE

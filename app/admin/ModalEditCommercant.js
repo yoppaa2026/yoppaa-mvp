@@ -191,7 +191,7 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
 
   return createPortal(
     <div onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.7)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 9999, padding: '1rem', backdropFilter: 'blur(4px)', overflowY: 'auto' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.7)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 9999, padding: '1rem', overflowY: 'auto' }}>
       <div onClick={e => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 560, background: '#fff', borderRadius: 18, overflow: 'hidden', marginTop: '2rem', marginBottom: '2rem', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 20px 60px rgba(22,6,54,0.4)' }}>
 

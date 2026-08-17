@@ -805,7 +805,7 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
   return (
     <div role="dialog" aria-modal="true"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
-      style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(22,6,54,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(22,6,54,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 520, maxHeight: '90dvh', overflowY: 'auto', animation: 'fadeUp 0.25s ease' }}>
 
         {/* Header façon post : avatar + nom du commerçant + fermer */}
@@ -2614,7 +2614,7 @@ export default function CommanderSlug() {
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(22,6,54,0.35) 0%, transparent 30%, transparent 65%, rgba(22,6,54,0.55) 100%)' }}/>
                 {/* Badge Deal + Bonne affaire en haut à gauche */}
                 <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '1.2px', background: 'rgba(22,6,54,0.65)', padding: '4px 10px', borderRadius: 100, backdropFilter: 'blur(8px)', display: 'inline-flex', alignItems: 'center', gap: 4, width: 'fit-content' }}>
+                  <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '1.2px', background: 'rgba(22,6,54,0.65)', padding: '4px 10px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4, width: 'fit-content' }}>
                     <Flame size={11} strokeWidth={2.2}/> Deal
                   </span>
                   {dealDetailOuvert.est_bonne_affaire && (
@@ -2625,7 +2625,7 @@ export default function CommanderSlug() {
                 </div>
                 {/* Bouton fermer en haut à droite */}
                 <button onClick={() => setDealDetailOuvert(null)} aria-label="Fermer"
-                  style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(22,6,54,0.65)', backdropFilter: 'blur(8px)', border: 'none', borderRadius: '50%', width: 34, height: 34, color: '#fff', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                  style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(22,6,54,0.65)', border: 'none', borderRadius: '50%', width: 34, height: 34, color: '#fff', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
                 {/* Titre + prix en overlay bas */}
                 <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '16px 20px', color: '#fff' }}>
                   <h2 style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.2, margin: 0, textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>
@@ -2750,12 +2750,12 @@ export default function CommanderSlug() {
                     style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}/>
                   <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(22,6,54,0.35) 0%, transparent 30%, transparent 60%, rgba(22,6,54,0.7) 100%)' }}/>
                   <div style={{ position: 'absolute', top: 12, left: 12 }}>
-                    <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '1.2px', background: isAlerte ? 'rgba(220,38,38,0.9)' : 'rgba(22,6,54,0.65)', padding: '4px 10px', borderRadius: 100, backdropFilter: 'blur(8px)' }}>
+                    <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '1.2px', background: isAlerte ? 'rgba(220,38,38,0.9)' : 'rgba(22,6,54,0.65)', padding: '4px 10px', borderRadius: 100 }}>
                       {isAlerte ? 'Alerte' : 'Actualité'}
                     </span>
                   </div>
                   <button onClick={() => setActuDetailOuverte(null)} aria-label="Fermer"
-                    style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(22,6,54,0.65)', backdropFilter: 'blur(8px)', border: 'none', borderRadius: '50%', width: 34, height: 34, color: '#fff', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                    style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(22,6,54,0.65)', border: 'none', borderRadius: '50%', width: 34, height: 34, color: '#fff', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
                   <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '16px 20px', color: '#fff' }}>
                     <h2 style={{ fontWeight: 900, fontSize: '1.35rem', color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.2, margin: 0, textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>
                       {actuDetailOuverte.titre}
@@ -2849,7 +2849,7 @@ export default function CommanderSlug() {
               else { router.push('/commander') }
             }}
             aria-label="Retour"
-            style={{ background: `rgba(255,255,255,0.1)`, border: `1px solid rgba(255,255,255,0.15)`, color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.45rem 0.7rem 0.45rem 0.6rem', fontWeight: 700, fontSize: '0.82rem', flexShrink: 0, backdropFilter: 'blur(8px)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            style={{ background: `rgba(255,255,255,0.1)`, border: `1px solid rgba(255,255,255,0.15)`, color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.45rem 0.7rem 0.45rem 0.6rem', fontWeight: 700, fontSize: '0.82rem', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M15 18l-6-6 6-6"/>
             </svg>

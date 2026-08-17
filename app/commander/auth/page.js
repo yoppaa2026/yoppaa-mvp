@@ -189,7 +189,6 @@ function AuthForm() {
     boxSizing: 'border-box', outline: 'none',
     color: '#fff', background: 'rgba(255,255,255,0.08)',
     display: 'block', marginBottom: 10,
-    backdropFilter: 'blur(8px)',
   }
 
   const btnPrimary = {

@@ -134,7 +134,7 @@ export default function DefinirMdpPage() {
           <p style={{ color: T.light, fontSize: '0.8rem', fontWeight: 600, letterSpacing: '2px', textTransform: 'uppercase' }}>Mot de passe</p>
         </div>
 
-        <div style={{ background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(20px)', borderRadius: 20, padding: '2rem', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 20, padding: '2rem', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
 
           {phase === 'loading' && (
             <p style={{ color: T.light, textAlign: 'center', fontWeight: 600 }}>Chargement…</p>

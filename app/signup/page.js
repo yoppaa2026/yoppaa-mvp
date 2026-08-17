@@ -351,8 +351,13 @@ function RecapHeader({ commercant, etatSauvegarde }) {
   const nomAffiche = commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : null
   if (!nomAffiche) return null
   const ville = extractVille(commercant.adresse)
+  // ⚠️ FOND OPAQUE, ET C'EST LA SEULE CONSÉQUENCE VISIBLE DU RETRAIT DES FLOUS.
+  // Cet en-tête est COLLANT au-dessus d'un formulaire qui défile : c'était le
+  // seul endroit de l'application où le flou servait à quelque chose, en
+  // brouillant le texte qui passait dessous. Sans lui, les 8 % de transparence
+  // laisseraient voir le contenu en fantôme. On rend donc le fond plein.
   return (
-    <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(248,246,255,0.92)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', borderBottom: `1px solid ${T.hairline}` }}>
+    <div style={{ position: 'sticky', top: 0, zIndex: 50, background: '#F8F6FF', borderBottom: `1px solid ${T.hairline}` }}>
       <div style={{ maxWidth: 720, margin: '0 auto', padding: '0.625rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <p style={{ fontSize: '0.85rem', fontWeight: 800, color: T.deep, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
           {nomAffiche}

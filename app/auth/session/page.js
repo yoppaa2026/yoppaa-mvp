@@ -80,7 +80,7 @@ export default function SessionPage() {
 
         {phase === 'open-pwa' && (
           <div style={{ animation: 'fadeUp 0.4s ease' }}>
-            <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 16, padding: '1.25rem', marginBottom: 20, border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)' }}>
+            <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 16, padding: '1.25rem', marginBottom: 20, border: '1px solid rgba(255,255,255,0.12)' }}>
               <p style={{ fontWeight: 800, color: '#fff', fontSize: '0.95rem', marginBottom: 6, letterSpacing: '-0.3px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><CheckCircle size={16} strokeWidth={2.2} color="#10B981"/> Connexion réussie !</p>
               <p style={{ fontSize: '0.8rem', color: '#C4A0F4', opacity: 0.8, lineHeight: 1.5 }}>
                 Ouvre l'app <strong style={{ color: '#fff' }}>Yoppaa Pro</strong> depuis ton écran d'accueil pour continuer.

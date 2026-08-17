@@ -1370,8 +1370,14 @@ verifier('la carte nomme le lieu quand il diffère du siège',
 // mangeait la droite, donc la cloche et la déconnexion.
 verifier('l’identité du commerce est le bloc qui cède',
   /flexShrink: 1, minWidth: 0, overflow: 'hidden'/.test(srcDashboard))
+// ⚠️ CE TEST S'ANCRAIT SUR UN FLOU, ET C'ÉTAIT UN CONTRESENS. Il vérifiait
+// `backdropFilter: 'blur(8px)', border: …, flexShrink: 0` : le jour où le flou
+// est parti (17/08, chasse au scroll qui gèle), le test a rougi sans que rien
+// de ce qu'il PRÉTEND garder ait bougé. Un test se mesure sur le défaut qu'il
+// interdit, ici « la rangée d'onglets ne se laisse pas écraser », pas sur le
+// voisinage de code qui se trouvait là ce jour-là.
 verifier('les onglets ne rétrécissent pas',
-  /backdropFilter: 'blur\(8px\)', border: '1px solid rgba\(255,255,255,0\.1\)', flexShrink: 0/.test(srcDashboard))
+  /borderRadius: 10, padding: 3, border: '1px solid rgba\(255,255,255,0\.1\)', flexShrink: 0/.test(srcDashboard))
 // ⚠️ `[\s\S]*?` acceptait un `gap` trouvé DANS UNE AUTRE RÈGLE, plus bas dans la
 // feuille : le test restait vert alors que la rangée n'avait plus d'espacement.
 // `[^}]*?` s'arrête à l'accolade fermante, donc à l'intérieur de la règle.

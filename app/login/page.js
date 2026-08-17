@@ -122,7 +122,7 @@ function Login() {
         </div>
 
         {/* Card */}
-        <div style={{ background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(20px)', borderRadius: 20, padding: '2rem', border: `1px solid rgba(255,255,255,0.12)`, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 20, padding: '2rem', border: `1px solid rgba(255,255,255,0.12)`, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
 
           {!sent ? (
             <>

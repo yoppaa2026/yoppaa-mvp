@@ -129,7 +129,6 @@ export default function PillStatutOuverture({ horaires, compact = false, dark = 
       display: 'inline-flex', alignItems: 'center', gap: 6,
       padding: compact ? '3px 9px 3px 7px' : '4px 12px 4px 9px',
       borderRadius: 100, background: bg, border: `1px solid ${borderColor}`,
-      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
       fontSize: compact ? 10 : 11, fontWeight: 700, color: fgColor,
       letterSpacing: '0.2px', maxWidth: '100%',
     }}>

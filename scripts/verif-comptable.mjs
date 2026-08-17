@@ -525,6 +525,39 @@ verifier('la livraison et l’expédition gardent la leur',
 egal('la carte passe par la règle du paiement aux deux endroits',
   (srcDashCmd.match(/etatPaiementCommande\(commande\)/g) || []).length, 2)
 
+// ─── LE SWIPE NE VAUT QUE S'IL N'Y A PLUS RIEN À PAYER ────────────────────
+//
+// ⚠️ Alex, 17/08 : « le swipe est uniquement valable s'il n'y a pas de solde à
+// payer ? » Il ne l'était pas. Le geste du client écrivait `statut='recupere'`
+// côté serveur SANS regarder le solde : une commande payée sur place devenait
+// récupérée sans que personne n'ait encaissé, et le commerçant n'avait plus
+// aucun bouton pour le noter.
+//
+// Vérifié dans le même mouvement : ce swipe N'EXISTE PAS pour les rendez-vous.
+// `SwipeRetrait` n'a qu'un usage, dans `PickupScreen`, monté pour les seules
+// commandes. Un rendez-vous ne peut être honoré que par le commerçant.
+const srcClient = readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8')
+verifier('l’écran client refuse le geste quand il reste à payer',
+  /resteAEncaisserCommande\(commande\) > 0 \?/.test(srcClient))
+// ⚠️ ON NE CACHE PAS LE GESTE, ON DIT POURQUOI IL N'EST PAS LÀ : ne rien
+// afficher est la pire des sorties, le client croirait à une panne.
+verifier('et il dit combien, et qui confirmera',
+  /à régler sur place/.test(srcClient) && /confirmera la remise/.test(srcClient))
+
+// ⚠️ ET LE SERVEUR TRANCHE, PAS LE NAVIGATEUR. L'écran peut être ouvert depuis
+// vingt minutes, ou l'appel fabriqué à la main.
+const srcRouteYopper = readFileSync(new URL('../app/api/yopper/commandes/route.js', import.meta.url), 'utf8')
+verifier('le serveur refuse aussi, et nomme sa raison',
+  /resteAEncaisserCommande\(cmd\) > 0/.test(srcRouteYopper) && /solde_a_regler/.test(srcRouteYopper))
+// ⚠️ LES COLONNES DOIVENT ARRIVER JUSQU'À LA GARDE. Sans elles le solde vaut
+// null, la garde laisse tout passer, et elle le fait EN SILENCE.
+verifier('et il charge de quoi calculer ce solde',
+  /select\('id, mode_retrait, client_email, total, paye_en_ligne, bon_cadeau_montant'\)/.test(srcRouteYopper))
+
+// La porte de secours du commerçant, pour les commandes déjà remises.
+verifier('une commande remise sans moyen garde son rattrapage',
+  /commande\.statut === 'recupere' && !commande\.encaisse_mode && resteAEncaisserCommande\(commande\) > 0/.test(srcDashCmd))
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

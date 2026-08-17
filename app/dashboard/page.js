@@ -562,6 +562,19 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
             {statut.nextLabel} →
           </button>
         )}
+        {/* ⚠️ LA PORTE DE SECOURS, quand la commande est déjà remise sans que
+            l'encaissement ait été noté : les 66 commandes antérieures à ce
+            geste, et tout ce qui dérivera. Sans elle, un montant réellement
+            encaissé resterait à jamais absent du journal comptable, et le
+            commerçant n'aurait aucun moyen de le rattraper.
+            Elle rappelle simplement le même passage en « récupérée », qui
+            rouvre la question du moyen. */}
+        {commande.statut === 'recupere' && !commande.encaisse_mode && resteAEncaisserCommande(commande) > 0 && (
+          <button onClick={() => onChangerStatut(commande.id, 'recupere')}
+            style={{ width: '100%', padding: '0.5rem', background: '#fff', color: '#9A3412', border: '1.5px solid #EA580C55', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: '0.78rem', fontFamily: '"DM Sans", sans-serif', marginTop: 6 }}>
+            Noter l&rsquo;encaissement
+          </button>
+        )}
         {/* Flux livraison : une fois « Prête », le commerçant enchaîne Partir en livraison → Livrée */}
         {estLivraison && commande.statut === 'pret' && statutLiv !== 'en_livraison' && (
           <button onClick={() => onLivraisonStatut(commande.id, 'en_livraison')}

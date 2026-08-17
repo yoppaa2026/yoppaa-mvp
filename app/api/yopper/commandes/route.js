@@ -27,6 +27,7 @@ import { identiteProuvee } from '@/lib/yopper-auth'
 import { createClient } from '@supabase/supabase-js'
 import { crediterFideliteCommande } from '@/lib/fidelite-server'
 import { referenceCommande } from '@/lib/numero-commande'
+import { resteAEncaisserCommande } from '@/lib/rdv-paiement'
 
 function admin() {
   return createClient(
@@ -144,9 +145,26 @@ export async function POST(request) {
       if (!id) return NextResponse.json({ ok: false, error: 'commande_id requis' }, { status: 400 })
       // Vérifie l'appartenance : la commande doit être à l'email du cookie.
       const { data: cmd } = await supabase
-        .from('commandes').select('id, mode_retrait, client_email').eq('id', id).maybeSingle()
+        .from('commandes')
+        // ⚠️ `total`, `paye_en_ligne` ET `bon_cadeau_montant` SONT INDISPENSABLES :
+        // sans eux, le solde ne peut pas être calculé, la garde ci-dessous
+        // laisserait tout passer, et elle le ferait EN SILENCE.
+        .select('id, mode_retrait, client_email, total, paye_en_ligne, bon_cadeau_montant')
+        .eq('id', id).maybeSingle()
       if (!cmd || cmd.client_email?.toLowerCase() !== yopper.email) {
         return NextResponse.json({ ok: false, error: 'commande_introuvable' }, { status: 404 })
+      }
+      // ⚠️ UN DROIT NE SE DÉCIDE JAMAIS DANS LE NAVIGATEUR. L'écran client
+      // n'affiche plus le geste quand il reste à payer, mais l'écran peut être
+      // ouvert depuis vingt minutes, ou l'appel être fabriqué à la main.
+      //
+      // Le swipe promet « tu skips la file » : une confirmation en libre-
+      // service. Dès qu'il faut sortir sa carte, le commerçant est forcément
+      // là, et c'est lui qui valide — sans quoi la commande passait récupérée
+      // sans que personne n'ait encaissé, et il ne restait aucun bouton pour
+      // le noter (Alex, 17/08).
+      if (resteAEncaisserCommande(cmd) > 0) {
+        return NextResponse.json({ ok: false, error: 'solde_a_regler' }, { status: 409 })
       }
       // Livraison : le Yopper confirme la RÉCEPTION → statut_livraison='livree'
       // en plus de statut='recupere' (aligné sur le flux commerçant).

@@ -6,6 +6,7 @@ import { fetchYopper, estSessionPerdue } from '@/lib/fetch-yopper'
 import CarteAbonnement from './CarteAbonnement'
 import { libelleRetrait } from '@/lib/libelle-retrait'
 import { referenceCommande } from '@/lib/numero-commande'
+import { resteAEncaisserCommande } from '@/lib/rdv-paiement'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
 import { libelleOptions } from '@/lib/options-ligne'
 import IconeRetrait from '@/app/components/IconeRetrait'
@@ -637,7 +638,26 @@ function PickupScreen({ commande, clientPrenom, onConfirm, onFermer }) {
           par le commerçant en fin de prestation : le client a les mains prises,
           on ne lui demande rien. */}
       <div style={{ position: 'relative', zIndex: 2, width: '100%', animation: 'pu-fadein 0.6s ease 0.3s both' }}>
-        {textes.avecGeste ? (
+        {/* ⚠️ LE SWIPE NE VAUT QUE S'IL N'Y A PLUS RIEN À PAYER (Alex, 17/08 :
+            « le swipe est uniquement valable s'il n'y a pas de solde à payer ? »).
+            Sa promesse est « tu skips la file » : une confirmation en
+            libre-service. Or il écrivait `statut = 'recupere'` côté serveur SANS
+            regarder le solde, donc une commande payée sur place devenait
+            récupérée sans que personne n'ait encaissé quoi que ce soit, et le
+            commerçant n'avait plus aucun bouton pour le noter.
+            ⚠️ ON NE CACHE PAS LE GESTE, ON DIT POURQUOI IL N'EST PAS LÀ : ne
+            rien afficher est la pire des sorties, le client croirait à une
+            panne. */}
+        {resteAEncaisserCommande(commande) > 0 ? (
+          <div style={{ width: '100%', background: 'rgba(255,255,255,0.1)', border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: 16, padding: '14px 18px' }}>
+            <p style={{ fontWeight: 900, fontSize: '0.95rem', color: '#fff', marginBottom: 4 }}>
+              Il te reste {resteAEncaisserCommande(commande).toFixed(2).replace('.', ',')} € à régler sur place
+            </p>
+            <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>
+              Montre ce numéro à ton commerçant : c&rsquo;est lui qui confirmera la remise au moment du paiement.
+            </p>
+          </div>
+        ) : textes.avecGeste ? (
           <SwipeRetrait clientPrenom={clientPrenom} onConfirm={onConfirm}
             libelle={textes.libelleGeste}
             sousTexteSucces={textes.sousTexteSucces}/>

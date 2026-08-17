@@ -652,6 +652,67 @@ for (const m of srcBureau.matchAll(/\.([a-z-]+) *\{[^}]*overflow-x: *auto/g)) {
   verifier(`la classe défilante « ${classe} » est portée par une BandeDefilante`, utilisee)
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LE SCROLL QUI ACCROCHE, BALAYÉ PARTOUT CETTE FOIS (Alex, 17/08)
+//
+// « Le scroll bloque beaucoup, il faut refaire un check pour ces histoires de
+// scroll qui bloque, trop pénible à l'utilisation. »
+//
+// Le 16/08, l'agenda du tableau de bord avait été corrigé et validé. Mais les
+// deux causes vivaient AUSSI sur tout le parcours client, et personne n'était
+// allé voir : six déclarations `-webkit-overflow-scrolling: touch` et trois
+// modales en `90vh`.
+//
+// ⚠️ CORRIGER L'ENDROIT SIGNALÉ N'EST PAS CORRIGER LE DÉFAUT. C'est la
+// troisième fois de la semaine qu'un correctif juste reste local : la règle du
+// conflit, la garde des appels nus, et maintenant le défilement.
+//
+// Les deux causes, rappelées :
+//   • `-webkit-overflow-scrolling: touch` était utile avant iOS 13 pour
+//     l'inertie, native depuis. Il PIÈGE `position: fixed` dans le conteneur,
+//     donc la barre de panier et les modales se figent pendant le geste.
+//   • `vh` vaut le GRAND viewport, barre d'adresse RÉTRACTÉE : une modale à
+//     90vh dépasse le bas de l'écran tant que la barre est là, et se recalcule
+//     quand elle se rétracte, ce qui provoque un reflow AU MILIEU du geste.
+//     `svh` est stable.
+//
+// ⚠️ ON BALAIE `app/` ENTIER. Lister les fichiers connus laisserait passer la
+// prochaine page, écrite dans six mois par quelqu'un qui aura recopié un
+// ancien bloc de style.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const fichiersEcrans = []
+const explorerEcrans = (url, prefixe) => {
+  for (const e of readdirSync(url, { withFileTypes: true })) {
+    if (e.name === 'node_modules' || e.name.startsWith('.')) continue
+    const sous = new URL(`${e.name}${e.isDirectory() ? '/' : ''}`, url)
+    if (e.isDirectory()) explorerEcrans(sous, `${prefixe}${e.name}/`)
+    else if (e.name.endsWith('.js') || e.name.endsWith('.css')) {
+      fichiersEcrans.push([`${prefixe}${e.name}`, readFileSync(sous, 'utf8')])
+    }
+  }
+}
+explorerEcrans(new URL('../app/', import.meta.url), 'app/')
+
+verifier('des écrans ont bien été trouvés', fichiersEcrans.length > 20,
+  `${fichiersEcrans.length} fichier(s)`)
+
+// ⚠️ La DÉCLARATION, pas le mot : les commentaires qui expliquent pourquoi on
+// l'a retirée citent forcément son nom, et un test qui cherche le nom
+// rougirait sur la mémoire du défaut. Piège maison, vécu six fois cette
+// semaine.
+const coupables = fichiersEcrans
+  .filter(([, src]) => /-webkit-overflow-scrolling:\s*touch\s*;/.test(src))
+  .map(([nom]) => nom)
+egal('plus aucun -webkit-overflow-scrolling dans app/', coupables, [])
+
+// Les hauteurs de modales : `svh` ou rien, jamais `vh`.
+const enVh = fichiersEcrans
+  .filter(([, src]) => /(maxHeight|height):\s*'[0-9]+vh'/.test(src))
+  .map(([nom]) => nom)
+egal('plus aucune hauteur d’écran en vh dans app/', enVh, [])
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

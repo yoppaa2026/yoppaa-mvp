@@ -56,7 +56,8 @@ import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 import BlocAbonnements from './BlocAbonnements'
 import ConfirmationAbonnement from './ConfirmationAbonnement'
 import { formuleVendableEnLigne, messageRetourAbonnement, cleAchatAbonnement, contratQuiVientDEtreAchete,
-  abonnementsPourPrestation, peutPoserSeance, expliquerRefusSeance, libellePrixSeance } from '@/lib/abonnements'
+  abonnementsPourPrestation, expliquerRefusSeance, libellePrixSeance,
+  trierAbonnementsPourSeance, libelleChoixAbonnement } from '@/lib/abonnements'
 import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { jourLocalISO } from '@/lib/timezone'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
@@ -296,6 +297,7 @@ export default function CommanderRdvSlug() {
   const [aboEnAttente, setAboEnAttente] = useState(false)   // on interroge encore, le webhook n'a pas fini
   const [mesAbos, setMesAbos] = useState([])                // les abonnements du client chez CE commerçant
   const [payerAvecAbo, setPayerAvecAbo] = useState(true)    // son choix à l'étape 3
+  const [aboChoisiId, setAboChoisiId] = useState(null)      // lequel, quand il en a plusieurs
   const [loading, setLoading] = useState(true)
   const [erreur, setErreur] = useState(null)
 
@@ -1096,20 +1098,30 @@ export default function CommanderRdvSlug() {
     return () => { vivant = false }
   }, [commercant?.id])
 
-  // Le contrat qui couvre le cours en cours de réservation. ⚠️ La règle vit
-  // dans le module, pas ici : un abonnement couvre LE cours de sa formule, et
-  // le yoga du lundi ne paie pas la séance de pilates.
-  const aboDuCours = abonnementsPourPrestation(mesAbos, {
+  // ⚠️ TOUS LES CONTRATS QUI COUVRENT CE COURS, PAS LE PREMIER (Alex, 17/08).
+  // Il a souscrit un DEUXIÈME abonnement et ne pouvait toujours pas poser deux
+  // séances la même semaine : l'écran ne consultait que le premier, dont le
+  // plafond hebdomadaire disait non, et n'ouvrait jamais le second. Le plafond
+  // appartient au CONTRAT, pas au client : deux contrats donnent deux séances.
+  const abosDuCours = abonnementsPourPrestation(mesAbos, {
     commercantId: commercant?.id || null,
     prestationId: prestationChoisie?.id || null,
-  })[0] || null
+  })
 
   // ⚠️ ET LA RÉPONSE DEMANDE LA DATE. La période de validité, le plafond de la
   // semaine et le solde en dépendent tous les trois : c'est précisément pour
   // ça que le choix se pose à l'étape 3 et pas au choix du cours.
-  const verdictAbo = (aboDuCours && dateChoisie)
-    ? peutPoserSeance(aboDuCours, { date: isoDate(dateChoisie) })
-    : null
+  const triAbos = dateChoisie
+    ? trierAbonnementsPourSeance(abosDuCours, { date: isoDate(dateChoisie) })
+    : { utilisables: [], refuses: [] }
+
+  // Celui qu'on propose : son choix explicite s'il en a fait un, sinon le
+  // premier utilisable, c'est-à-dire celui qui périme le plus tôt.
+  const aboRetenu = triAbos.utilisables.find(u => u.abonnement.id === aboChoisiId)
+    || triAbos.utilisables[0]
+    || null
+  const aboDuCours = aboRetenu?.abonnement || triAbos.refuses[0]?.abonnement || null
+  const verdictAbo = aboRetenu?.verdict || triAbos.refuses[0]?.verdict || null
 
   // ⚠️ LIMITE ASSUMÉE : PAS DE PRODUITS DANS LE MÊME GESTE. Une séance
   // d'abonnement ne passe par aucun paiement, les produits en exigent un, et
@@ -1755,7 +1767,7 @@ export default function CommanderRdvSlug() {
         html, body { height: 100%; overflow-x: hidden; max-width: 100vw; }
         body { font-family: "DM Sans", sans-serif; background: ${T.bg}; color: ${T.ink}; position: relative; }
         .page-wrap { display: flex; flex-direction: column; min-height: 100dvh; max-width: 760px; margin: 0 auto; background: ${T.bg}; overflow-x: hidden; width: 100%; }
-        .scroll-body { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+        .scroll-body { flex: 1; overflow-y: auto; overflow-x: hidden; touch-action: pan-y; }
         .topbar-rdv { overflow: hidden; max-width: 100%; }
         .step-label { display: inline; }
         @media (max-width: 479px) {
@@ -2269,9 +2281,16 @@ export default function CommanderRdvSlug() {
                                     elle qui fait comprendre au client que son
                                     abonnement sert à quelque chose. */}
                                 {(() => {
-                                  const abo = abonnementsPourPrestation(mesAbos, { commercantId: commercant.id, prestationId: p.id })[0]
+                                  // ⚠️ LE SOLDE SE CUMULE SUR TOUS LES CONTRATS.
+                                  // Deux abonnements pour le même cours, c'est le
+                                  // cas prévu par le modèle : n'afficher que le
+                                  // premier annonçait 44 séances à quelqu'un qui
+                                  // en a 89 (Alex, 17/08).
+                                  const abos = abonnementsPourPrestation(mesAbos, { commercantId: commercant.id, prestationId: p.id })
+                                  const abo = abos[0]
                                   if (!abo) return null
-                                  const reste = Number.isFinite(Number(abo.solde)) ? Number(abo.solde) : null
+                                  const soldes = abos.map(a => Number(a.solde)).filter(Number.isFinite)
+                                  const reste = soldes.length ? soldes.reduce((s, n) => s + n, 0) : null
                                   return (
                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.62rem', fontWeight: 800, color: '#fff', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                                       <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -2717,8 +2736,33 @@ export default function CommanderRdvSlug() {
                   {aboDuCours && (
                     <div style={{ background: verdictAbo?.ok ? '#F5F3FF' : '#FFFBEB', border: `1.5px solid ${verdictAbo?.ok ? T.light : '#FCD34D'}`, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: 14 }}>
                       <p style={{ margin: '0 0 8px', fontSize: '0.62rem', fontWeight: 800, color: verdictAbo?.ok ? T.main : '#92400E', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                        Ton abonnement
+                        {abosDuCours.length > 1 ? 'Tes abonnements' : 'Ton abonnement'}
                       </p>
+
+                      {/* ⚠️ QUAND PLUSIEURS CONTRATS PASSENT, IL CHOISIT LEQUEL
+                          (Alex, 17/08 : « il doit laisser le choix de
+                          l'abonnement »). Le premier proposé est celui qui
+                          PÉRIME LE PLUS TÔT : entamer une année qui court
+                          jusqu'en juillet pendant qu'un carnet expire en mars,
+                          c'est laisser mourir des séances payées.
+                          ⚠️ Le libellé porte le solde ET la date de fin : deux
+                          abonnements annuels identiques ont le même nom, et
+                          leur nom seul ne dit pas lequel on désigne. */}
+                      {!aboBloqueParPanier && triAbos.utilisables.length > 1 && (
+                        <div style={{ marginBottom: 10 }}>
+                          <label style={{ fontSize: '0.62rem', fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: 4 }}>
+                            Lequel utiliser
+                          </label>
+                          <select value={aboRetenu?.abonnement?.id || ''} onChange={e => setAboChoisiId(e.target.value)}
+                            style={{ width: '100%', padding: '0.6rem 0.7rem', borderRadius: 10, border: `1.5px solid ${T.pale}`, fontSize: '0.85rem', fontFamily: '"DM Sans", sans-serif', color: T.ink, background: '#fff', cursor: 'pointer', outline: 'none', boxSizing: 'border-box' }}>
+                            {triAbos.utilisables.map(({ abonnement }) => (
+                              <option key={abonnement.id} value={abonnement.id}>
+                                {libelleChoixAbonnement(abonnement)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
                       {aboBloqueParPanier ? (
                         // ⚠️ Une séance d'abonnement ne passe par aucun
@@ -3211,7 +3255,7 @@ export default function CommanderRdvSlug() {
         <div onClick={() => setDealDetailOuvert(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeUp 0.2s ease' }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 22, maxWidth: 440, width: '100%', boxShadow: '0 24px 48px rgba(0,0,0,0.35)', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            style={{ background: '#fff', borderRadius: 22, maxWidth: 440, width: '100%', boxShadow: '0 24px 48px rgba(0,0,0,0.35)', overflow: 'hidden', maxHeight: '90svh', display: 'flex', flexDirection: 'column' }}>
 
             {/* Photo hero enrichie si dispo, sinon en-tête violet fallback */}
             {dealDetailOuvert.photo_url ? (

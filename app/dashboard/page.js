@@ -1912,7 +1912,6 @@ export default function Dashboard() {
              page qui se trouve derrière. */
           overscroll-behavior-x: contain;
           padding: 1rem;
-          -webkit-overflow-scrolling: touch;
         }
 
         /* ⚠️ MASQUER NE SUFFIT PAS, IL FAUT QUE LE CONTENU S'ADAPTE. Sans ce

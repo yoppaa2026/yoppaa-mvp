@@ -2542,11 +2542,11 @@ export default function CommanderSlug() {
         html, body { height: 100%; width: 100%; overflow: hidden; }
         body { background: ${T.bg}; font-family: "DM Sans", sans-serif; font-size: 16px; -webkit-text-size-adjust: 100%; }
         .page-wrap { display: flex; flex-direction: column; height: 100dvh; max-width: 760px; margin: 0 auto; background: ${T.bg}; overflow: hidden; width: 100%; position: relative; }
-        .scroll-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+        .scroll-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
         .grid3 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         @media (min-width: 480px) { .grid3 { grid-template-columns: 1fr 1fr 1fr; } }
         input, textarea, button, select { font-family: "DM Sans", sans-serif; }
-        .cat-bar { display: flex; gap: 0; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; background: #fff; border-bottom: 1px solid ${T.pale}; }
+        .cat-bar { display: flex; gap: 0; overflow-x: auto; scrollbar-width: none; background: #fff; border-bottom: 1px solid ${T.pale}; }
         .cat-bar::-webkit-scrollbar { display: none; }
         .cat-pill { flex-shrink: 0; padding: 0.75rem 1rem; border: none; background: transparent; font-family: "DM Sans", sans-serif; font-weight: 700; font-size: 0.82rem; cursor: pointer; color: ${T.muted}; border-bottom: 2px solid transparent; transition: all 0.15s; white-space: nowrap; }
         .cat-pill.active { color: ${T.main}; border-bottom-color: ${T.main}; }
@@ -2603,7 +2603,7 @@ export default function CommanderSlug() {
         <div onClick={() => setDealDetailOuvert(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeUp 0.2s ease' }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 22, maxWidth: 440, width: '100%', boxShadow: '0 24px 48px rgba(0,0,0,0.35)', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            style={{ background: '#fff', borderRadius: 22, maxWidth: 440, width: '100%', boxShadow: '0 24px 48px rgba(0,0,0,0.35)', overflow: 'hidden', maxHeight: '90svh', display: 'flex', flexDirection: 'column' }}>
 
             {/* Photo hero enrichie si dispo, sinon en-tête violet fallback */}
             {dealDetailOuvert.photo_url ? (
@@ -2742,7 +2742,7 @@ export default function CommanderSlug() {
           <div onClick={() => setActuDetailOuverte(null)}
             style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.7)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeUp 0.2s ease' }}>
             <div onClick={e => e.stopPropagation()}
-              style={{ background: '#fff', borderRadius: 22, maxWidth: 440, width: '100%', boxShadow: '0 24px 48px rgba(0,0,0,0.35)', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+              style={{ background: '#fff', borderRadius: 22, maxWidth: 440, width: '100%', boxShadow: '0 24px 48px rgba(0,0,0,0.35)', overflow: 'hidden', maxHeight: '90svh', display: 'flex', flexDirection: 'column' }}>
 
               {actuDetailOuverte.photo_url ? (
                 <div style={{ position: 'relative', width: '100%', paddingTop: '58%', background: T.pale, flexShrink: 0 }}>

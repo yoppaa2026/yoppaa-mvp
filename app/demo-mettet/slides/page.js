@@ -574,7 +574,7 @@ export default function PresentationSlides() {
   const SlideComponent = SLIDES[current]
 
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
+    <div style={{ width: '100vw', height: '100svh', overflow: 'hidden', position: 'relative', background: '#000' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&family=Playfair+Display:wght@400;700;800&display=swap" rel="stylesheet"/>
 
       <div key={current} style={{ animation: 'slideFade 0.4s ease' }}>

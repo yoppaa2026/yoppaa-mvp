@@ -23,6 +23,7 @@ import {
   contratDepuisFormule, libelleValidite, formatDateCourte,
   etapesApresAbonnement, contratQuiVientDEtreAchete,
   contratDepuisEtat, peutPoserSeance, abonnementsPourPrestation, expliquerRefusSeance,
+  trierAbonnementsPourSeance, libelleChoixAbonnement,
   resumeAbonnementClient, detailValidite, detailUtilisation, partConsommee,
   phraseApercuFormule, expliquerApercuFormule,
 } from '../lib/abonnements.js'
@@ -1427,8 +1428,12 @@ const srcTunnelAbo = sansCommentSrc(lire('app/commander/rdv/[slug]/page.js'))
 
 // ⚠️ LE CHOIX EST À L'ÉTAPE 3 ET PAS AU CHOIX DU COURS : il a besoin de LA
 // DATE, dont dépendent la période, le plafond de la semaine et le solde.
+// ⚠️ Ancré sur la CONDITION, pas sur la forme exacte de l'expression : la
+// première écriture exigeait `(aboDuCours && dateChoisie)`, et passer d'un
+// contrat à une LISTE de contrats l'a fait rougir sur du code juste. Ce qui
+// compte est qu'aucun verdict ne se calcule sans date.
 verifier('le verdict n’est calculé qu’une fois la date connue',
-  /\(aboDuCours && dateChoisie\)/.test(srcTunnelAbo))
+  /const triAbos = dateChoisie/.test(srcTunnelAbo))
 verifier('la fiche propose l’abonnement du cours choisi',
   /abonnementsPourPrestation\(mesAbos/.test(srcTunnelAbo))
 // ⚠️ COCHÉ PAR DÉFAUT : il a payé son abonnement, lui faire payer deux fois la
@@ -1468,6 +1473,101 @@ verifier('un panier de produits suspend le choix au lieu de le perdre',
 // nombre de séances d'avant la réservation.
 verifier('le solde est relu après la réservation',
   /setMesAbos\(a\.abonnements/.test(srcTunnelAbo))
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ PLUSIEURS ABONNEMENTS SUR LE MÊME COURS (Alex, 17/08)
+//
+// Il a souscrit un DEUXIÈME abonnement, les deux s'affichaient partout, et il
+// ne pouvait toujours pas poser deux séances la même semaine : l'écran ne
+// consultait que le PREMIER contrat, dont le plafond hebdomadaire disait non,
+// et n'ouvrait jamais le second.
+//
+// ⚠️ CE CAS ÉTAIT ÉCRIT DANS LE MODÈLE DEPUIS LE PREMIER JOUR : chez Emily,
+// « deux séances par semaine, c'est un SECOND ABONNEMENT avec réduction ». Le
+// plafond appartient au CONTRAT, pas au client. C'est l'écran qui n'avait pas
+// suivi, pas la règle.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const ABO_A = {
+  id: 'a', statut: 'actif', mode: 'credit', debut: '2026-09-01', fin: '2027-06-30',
+  total: 45, consommees: 1, solde: 44, seancesParSemaine: 1, dates: ['2026-10-05'],
+  prestationId: 'p-yoga', commercant: { id: 'c1' }, formule: { id: 'f1', libelle: 'Abonnement annuel Yoga' },
+}
+const ABO_B = {
+  ...ABO_A, id: 'b', consommees: 0, solde: 45, dates: [],
+  formule: { id: 'f1', libelle: 'Abonnement annuel Yoga' },
+}
+
+// Le 5 octobre est déjà pris sur A, dont le plafond vaut 1 : A refuse cette
+// semaine-là. B, lui, n'a rien posé.
+const triLundi = trierAbonnementsPourSeance([ABO_A, ABO_B], { date: '2026-10-07' })
+egal('un second contrat rend la semaine à nouveau réservable',
+  triLundi.utilisables.map(u => u.abonnement.id), ['b'])
+egal('et le premier est refusé pour la bonne raison',
+  triLundi.refuses.map(r => r.verdict.raison), ['plafond_semaine'])
+
+// Une autre semaine : les deux passent, et il doit pouvoir choisir.
+const triLibre = trierAbonnementsPourSeance([ABO_A, ABO_B], { date: '2026-10-12' })
+egal('sur une semaine libre, les deux sont utilisables', triLibre.utilisables.length, 2)
+
+// ⚠️ ON PROPOSE CELUI QUI PÉRIME LE PLUS TÔT. Entamer une année qui court
+// jusqu'en juillet pendant qu'un carnet expire en mars, c'est laisser mourir
+// des séances payées.
+const CARNET_COURT = { ...ABO_B, id: 'court', fin: '2027-03-01' }
+egal('le contrat qui périme le plus tôt est proposé en premier',
+  trierAbonnementsPourSeance([ABO_B, CARNET_COURT], { date: '2026-10-12' })
+    .utilisables[0].abonnement.id, 'court')
+egal('et l’ordre de la liste n’y change rien',
+  trierAbonnementsPourSeance([CARNET_COURT, ABO_B], { date: '2026-10-12' })
+    .utilisables[0].abonnement.id, 'court')
+
+// ⚠️ QUAND AUCUN NE PASSE, ON MONTRE LE REFUS LE PLUS ACTIONNABLE. « Tu as déjà
+// ta séance cette semaine » se règle en changeant de date ; « cet abonnement est
+// résilié » n'appelle aucun geste. Afficher le second devant quelqu'un qui
+// pouvait agir, c'est le renvoyer au téléphone pour rien.
+const RESILIE = { ...ABO_A, id: 'r', statut: 'resilie' }
+egal('le refus actionnable passe devant le refus définitif',
+  trierAbonnementsPourSeance([RESILIE, ABO_A], { date: '2026-10-07' })
+    .refuses[0].verdict.raison, 'plafond_semaine')
+
+egal('sans contrat, rien des deux côtés',
+  trierAbonnementsPourSeance([], { date: '2026-10-12' }),
+  { utilisables: [], refuses: [] })
+
+// ⚠️ LE LIBELLÉ DOIT LES DISTINGUER. Deux abonnements annuels portent le MÊME
+// nom de formule : le nom seul ne dit pas lequel on désigne. Le solde et la
+// date de fin, eux, les séparent toujours.
+verifier('le choix affiche le solde', /44 séances/.test(libelleChoixAbonnement(ABO_A)))
+verifier('et la date de fin', /30 juin/.test(libelleChoixAbonnement(ABO_A)))
+verifier('deux contrats de même formule ne portent pas le même libellé',
+  libelleChoixAbonnement(ABO_A) !== libelleChoixAbonnement(ABO_B))
+egal('sans contrat, aucun libellé', libelleChoixAbonnement(null), '')
+
+// ─── L'ÉCRAN ──────────────────────────────────────────────────────────────
+const srcMultiAbo = sansCommentSrc(lire('app/commander/rdv/[slug]/page.js'))
+verifier('la fiche consulte TOUS les contrats, pas le premier',
+  /const abosDuCours = abonnementsPourPrestation/.test(srcMultiAbo)
+  && !/abonnementsPourPrestation\([^)]*\)\[0\]/.test(srcMultiAbo))
+verifier('elle les trie par la règle du module',
+  /trierAbonnementsPourSeance\(abosDuCours/.test(srcMultiAbo))
+verifier('et propose un choix quand plusieurs passent',
+  /triAbos\.utilisables\.length > 1 && \(/.test(srcMultiAbo))
+// ⚠️ Le contrat envoyé au serveur est CELUI QU'IL A CHOISI. Poser la séance sur
+// un autre que celui affiché serait le pire des silences : il verrait son solde
+// baisser au mauvais endroit.
+verifier('le contrat retenu suit son choix explicite',
+  /triAbos\.utilisables\.find\(u => u\.abonnement\.id === aboChoisiId\)/.test(srcMultiAbo))
+// ⚠️ LA PASTILLE DE L'ÉTAPE 1 CUMULE LES SOLDES : n'afficher que le premier
+// annonçait 44 séances à quelqu'un qui en a 89.
+verifier('la pastille du cours cumule les soldes',
+  /soldes\.reduce\(\(s, n\) => s \+ n, 0\)/.test(srcMultiAbo))
+
+// Le titre de l'onglet nomme les trois choses qu'on y trouve : un abonnement de
+// 400 € rangé sous un titre qui ne le mentionne pas, c'est demander à quelqu'un
+// de deviner où est son argent.
+verifier('l’onglet nomme aussi les abonnements',
+  /Commandes, rendez-vous et abonnements/.test(sansCommentSrc(lire('app/commander/page.js'))))
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

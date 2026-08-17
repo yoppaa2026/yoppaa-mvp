@@ -2502,7 +2502,6 @@ export default function Commander() {
           flex: 1;
           overflow-y: auto;
           overflow-x: hidden;
-          -webkit-overflow-scrolling: touch;
           /* Bloque la propagation du scroll vers la page (rubber-banding) + pan-x interdit */
           overscroll-behavior: contain;
           touch-action: pan-y;
@@ -2534,7 +2533,7 @@ export default function Commander() {
           padding-right: max(env(safe-area-inset-right, 0px), 16px);
           box-sizing: border-box;
         }
-        .cats { display: flex; gap: 6px; overflow-x: auto; padding: 0 1rem 0.875rem; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+        .cats { display: flex; gap: 6px; overflow-x: auto; padding: 0 1rem 0.875rem; scrollbar-width: none; }
         .cats::-webkit-scrollbar { display: none; }
         .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         input, textarea, button, select { font-family: "DM Sans", sans-serif; }
@@ -2799,8 +2798,13 @@ export default function Commander() {
                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4, position: 'relative' }}>
                   <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '2px', margin: 0, opacity: 0.85 }}>Yoppers</p>
                 </div>
+                {/* ⚠️ LE TITRE NOMME LES TROIS CHOSES QU'ON TROUVE ICI (Alex,
+                    17/08 : « il faudrait adapter pour que le Yopper ne cherche
+                    pas »). Un abonnement de 400 € rangé sous un titre qui ne le
+                    mentionne pas, c'est demander à quelqu'un de deviner où est
+                    son argent. Un titre est un panneau, pas une décoration. */}
                 <h2 style={{ fontWeight: 900, fontSize: '1.4rem', letterSpacing: '-0.6px', margin: 0, position: 'relative', lineHeight: 1.1, color: '#fff' }}>
-                  Commandes et rendez-vous
+                  Commandes, rendez-vous et abonnements
                 </h2>
                 {badgeCommandes > 0 && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(4px)', borderRadius: 100, padding: '4px 12px', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', position: 'relative' }}>

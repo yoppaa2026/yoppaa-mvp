@@ -77,7 +77,7 @@ export default function ModalAvis({ commercant, clientId, commandeId = null, onC
     <div onClick={onClose}
       style={{ position: 'fixed', inset: 0, background: 'rgba(26,8,64,0.55)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans", sans-serif' }}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: 22, maxWidth: 440, width: '100%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 24px 48px rgba(26,8,64,0.3)', position: 'relative' }}>
+        style={{ background: '#fff', borderRadius: 22, maxWidth: 440, width: '100%', maxHeight: '90svh', overflow: 'auto', boxShadow: '0 24px 48px rgba(26,8,64,0.3)', position: 'relative' }}>
 
         <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
 

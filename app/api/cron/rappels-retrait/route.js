@@ -63,6 +63,7 @@ export async function GET(request) {
       .from('commandes')
       .select(`
         id, numero_commande, numero_prefixe, pret_at, rappel_retrait_nb,
+        total, paye_en_ligne, bon_cadeau_montant, encaisse_mode, encaisse_montant,
         client_email, client_prenom, client_nom, mode_retrait, rdv_reservation_id,
         lieu_id, lieu_libelle, lieu_adresse,
         commercant:commercants(nom, adresse, categorie),
@@ -142,6 +143,10 @@ export async function GET(request) {
               numero_commande: reference,
               palier: decision.palier,
               texte: texte.corps,
+              // Les colonnes de l'argent voyagent avec la commande : un rappel
+              // qui redit « viens la chercher » sans redire « et prends de quoi
+              // payer » renvoie la personne au même oubli, trois jours de suite.
+              paiement: cmd,
             }),
           })
         } catch (e) {

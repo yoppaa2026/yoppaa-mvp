@@ -542,7 +542,107 @@ verifier('l’écran client refuse le geste quand il reste à payer',
 // ⚠️ ON NE CACHE PAS LE GESTE, ON DIT POURQUOI IL N'EST PAS LÀ : ne rien
 // afficher est la pire des sorties, le client croirait à une panne.
 verifier('et il dit combien, et qui confirmera',
-  /à régler sur place/.test(srcClient) && /confirmera la remise/.test(srcClient))
+  /À régler sur place/.test(srcClient) && /qui confirme la remise/.test(srcClient))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// J'AVAIS ENFERMÉ LE CLIENT DANS SON ÉCRAN DE RETRAIT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ Alex, 17/08 : « il faut mettre une croix sur tous les écrans de swipe si
+// le client veut sortir de cet écran et y revenir plus tard ». Le défaut était
+// pire que ça : `PickupScreen` occupe TOUT le téléphone, par-dessus la
+// navigation, et n'a jamais eu de croix. Tant que le geste de glissement était
+// là, on pouvait au moins glisser ; le jour où je l'ai remplacé par un encadré
+// explicatif — un `div` sans le moindre bouton — la seule sortie a disparu.
+// Le Yopper devait tuer l'application.
+//
+// La croix appelle `onFermer`, la même sortie que le bouton « J'ai compris »,
+// et elle est posée HORS des trois branches : ouvrir son numéro n'engage à rien.
+verifier('l’écran de retrait a une croix',
+  /aria-label="Fermer et revenir à mes commandes"/.test(srcClient))
+// ⚠️ MESURÉ EN MUTATION : une croix qui n'appelle rien laisse le client dedans.
+// On exige donc le geste, pas seulement le dessin.
+verifier('et cette croix referme vraiment l’écran',
+  /<button onClick=\{onFermer\} aria-label="Fermer et revenir à mes commandes"/.test(srcClient))
+// ⚠️ ET ELLE EST AU-DESSUS DES TROIS BRANCHES, pas dans l'une d'elles : c'est
+// exactement l'erreur d'origine, une sortie qui n'existait que dans un cas.
+verifier('la croix est posée avant le partage des trois cas',
+  srcClient.indexOf('aria-label="Fermer et revenir à mes commandes"')
+    < srcClient.indexOf('resteAEncaisserCommande(commande) > 0 ?'))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE CLIENT NE SAVAIT PAS S'IL DEVAIT EMPORTER DE QUOI PAYER
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ Alex, 17/08 : « dans les mails, rien ne dit payé ou pas payé, ou
+// partiellement. Dans les statuts de commande non plus. » La pastille du
+// commerçant existait depuis le matin ; celle de la personne qui PAIE, non.
+//
+// ⚠️ ET ON NE LUI SERT PAS LES MOTS DU COMMERÇANT. « Encaissé au terminal »,
+// « remise au client sans être payée » : ce sont les mots de sa caisse à lui.
+const { etatPaiementClient } = await import('../lib/rdv-paiement.js')
+
+egal('une commande à payer au comptoir le dit au client',
+  etatPaiementClient({ total: 15, paye_en_ligne: false }).cle, 'du')
+verifier('avec le mot d’état EN TÊTE, puis le montant',
+  /^À régler sur place 15,00 €$/.test(etatPaiementClient({ total: 15, paye_en_ligne: false }).libelle))
+egal('une commande payée en ligne est verte',
+  etatPaiementClient({ total: 15, paye_en_ligne: true }).cle, 'paye')
+verifier('et elle promet qu’il n’y a rien à sortir',
+  /rien à sortir/i.test(etatPaiementClient({ total: 15, paye_en_ligne: true }).detail || ''))
+// ⚠️ LES MOTS DU COMMERÇANT NE DOIVENT PAS FUIR CÔTÉ CLIENT. Garde née muette
+// à la première écriture : je testais la clé, qui vaut « paye » des deux côtés.
+verifier('le client ne lit jamais le vocabulaire de la caisse',
+  !/encaiss/i.test(JSON.stringify(etatPaiementClient({ total: 15, paye_en_ligne: false, encaisse_mode: 'especes', encaisse_montant: 15 }))))
+// Un bon cadeau qui couvre tout : payé à l'achat du bon, jamais « gratuit ».
+egal('un bon qui couvre tout se lit comme payé, côté client aussi',
+  etatPaiementClient({ total: 10, bon_cadeau_montant: 10 }).cle, 'paye')
+// ⚠️ ET LE BON PARTIEL SE DÉDUIT AVANT D'ÊTRE ANNONCÉ, sinon le client prépare
+// le total qu'il voit en haut de sa carte.
+verifier('un bon partiel ne réclame que le solde',
+  /14,50/.test(etatPaiementClient({ total: 24.5, bon_cadeau_montant: 10 }).libelle))
+
+// ─── LA MÊME PHRASE DANS LES EMAILS ───────────────────────────────────────
+const { blocPaiementYopper } = await import('../lib/resend.js')
+verifier('l’email d’une commande à payer sur place le dit',
+  /À régler sur place 15,00 €/.test(blocPaiementYopper({ total: 15, paye_en_ligne: false })))
+verifier('l’email d’une commande payée en ligne le dit aussi',
+  /Payé en ligne/.test(blocPaiementYopper({ total: 15, paye_en_ligne: true })))
+// ⚠️ LE DÉFAUT D'ORIGINE, EN UNE LIGNE : les deux emails étaient RIGOUREUSEMENT
+// identiques. On compare les deux rendus, on n'inspecte pas un mot.
+verifier('et les deux emails ne se ressemblent plus',
+  blocPaiementYopper({ total: 15, paye_en_ligne: false })
+    !== blocPaiementYopper({ total: 15, paye_en_ligne: true }))
+// ⚠️ ON TESTE L'ABSENCE, PAS LE NOMBRE. Sans total ni moyen déclaré, on ne sait
+// rien : inventer « À régler sur place » serait pire que se taire.
+egal('sans rien de connu, l’email se tait', blocPaiementYopper({}), '')
+egal('et il se tait aussi sans commande', blocPaiementYopper(null), '')
+
+// ⚠️ LES COLONNES DOIVENT ARRIVER JUSQU'AUX GABARITS. C'est LE défaut le plus
+// fréquent de ce projet : le select oublie une colonne, le repli est silencieux,
+// et la fonctionnalité meurt sans lever la moindre erreur. Les TROIS emails que
+// le client lit avant de se déplacer sont vérifiés, pas seulement celui qu'Alex
+// a montré en capture.
+for (const [nom, chemin] of [
+  ['le ticket de confirmation', '../lib/commande-notifs.js'],
+  ['l’email « ta commande est prête »', '../app/api/emails/commande-prete/route.js'],
+  ['le rappel de retrait', '../app/api/cron/rappels-retrait/route.js'],
+]) {
+  const src = readFileSync(new URL(chemin, import.meta.url), 'utf8')
+  verifier(`${nom} charge de quoi parler d’argent`, /paye_en_ligne/.test(src) && /encaisse_mode/.test(src))
+  verifier(`${nom} passe la commande au bloc de paiement`, /paiement:\s*\w*cmd/.test(src))
+}
+
+// ─── ET LA MÊME PASTILLE DANS LE SUIVI DU CLIENT ──────────────────────────
+//
+// ⚠️ ON COMPTE, ONZIÈME FOIS DE L'HOMONYME VOISIN. Le suivi a QUATRE listes —
+// en livraison, prêtes à retirer, en cours, historique — et chercher le nom du
+// composant laissait trois d'entre elles muettes sans rien faire rougir.
+egal('les quatre listes du suivi portent la pastille de paiement',
+  (srcClient.match(/<PillPaiementClient commande=\{c\}/g) || []).length, 4)
+// L'écran de retrait la porte aussi : c'est là que les deux la regardent.
+verifier('l’écran de retrait la porte également',
+  /<PillPaiementClient commande=\{commande\}\/>/.test(srcClient))
 
 // ⚠️ ET LE SERVEUR TRANCHE, PAS LE NAVIGATEUR. L'écran peut être ouvert depuis
 // vingt minutes, ou l'appel fabriqué à la main.

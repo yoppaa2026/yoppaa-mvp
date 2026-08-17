@@ -24,12 +24,18 @@ export async function POST(request) {
       { auth: { persistSession: false } }
     )
 
+    // ⚠️ LES CINQ COLONNES DE L'ARGENT SONT DANS CE SELECT, et elles doivent y
+    // rester. Sans elles, `blocPaiementYopper` ne sait rien et se tait : l'email
+    // « ta commande est prête », celui qu'on lit en enfilant sa veste,
+    // repartirait muet sur le paiement. La colonne absente d'un select est LE
+    // défaut le plus fréquent de ce projet, et il ne lève aucune erreur.
     const { data: cmd, error } = await supabase
       .from('commandes')
       .select(`
         id, numero_commande, numero_prefixe, client_email, client_prenom, mode_retrait,
         lieu_id, lieu_libelle, lieu_adresse,
         adresse_livraison,
+        total, paye_en_ligne, bon_cadeau_montant, encaisse_mode, encaisse_montant,
         commercant:commercants(nom, slug, adresse),
         creneau:creneaux(heure_debut, heure_fin),
         creneau_livraison:livraison_creneaux(heure_debut, heure_fin)
@@ -65,6 +71,7 @@ export async function POST(request) {
         heure_fin:         creneau?.heure_fin,
         est_livraison:     estLivraison,
         adresse_livraison: cmd.adresse_livraison,
+        paiement:          cmd,
       })
 
       await envoyerAuCommercant({

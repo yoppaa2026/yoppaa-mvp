@@ -6,7 +6,7 @@ import { fetchYopper, estSessionPerdue } from '@/lib/fetch-yopper'
 import CarteAbonnement from './CarteAbonnement'
 import { libelleRetrait } from '@/lib/libelle-retrait'
 import { referenceCommande } from '@/lib/numero-commande'
-import { resteAEncaisserCommande } from '@/lib/rdv-paiement'
+import { resteAEncaisserCommande, etatPaiementClient, couleurPaiement } from '@/lib/rdv-paiement'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
 import { libelleOptions } from '@/lib/options-ligne'
 import IconeRetrait from '@/app/components/IconeRetrait'
@@ -530,6 +530,23 @@ function PickupScreen({ commande, clientPrenom, onConfirm, onFermer }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'linear-gradient(160deg, #1A0840 0%, #2D0F6B 40%, #6B35C4 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '2.5rem 1.75rem calc(2.5rem + env(safe-area-inset-bottom, 0px))', overflow: 'hidden' }}>
       {/* Bande 3px canonique YOPPAA */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #1A0840 0%, #6B35C4 60%, #C4A0F4 100%)', zIndex: 3 }}/>
+
+      {/* ⚠️ LA CROIX, ET ELLE MANQUAIT DEPUIS TOUJOURS (Alex, 17/08 : « il faut
+          mettre une croix sur tous les écrans de swipe si le client veut sortir
+          de cet écran et y revenir plus tard »).
+          Cet écran occupe TOUT le téléphone, par-dessus la navigation. Sans
+          elle, le Yopper qui ouvre son numéro dans la file, se ravise et veut
+          revoir sa commande devait TUER l'application. Et depuis que l'encadré
+          du solde a remplacé le swipe, il n'y avait plus une seule sortie à
+          l'écran : je l'avais enfermé.
+          Elle est là dans les TROIS cas, y compris quand le geste existe :
+          ouvrir son numéro n'engage à rien. */}
+      <button onClick={onFermer} aria-label="Fermer et revenir à mes commandes"
+        style={{ position: 'absolute', top: 'calc(14px + env(safe-area-inset-top, 0px))', right: 14, zIndex: 4, width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.28)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: '"DM Sans", sans-serif', padding: 0 }}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+          <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+      </button>
       <style>{`
         @keyframes pu-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.7} }
         @keyframes pu-fadein { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
@@ -632,6 +649,14 @@ function PickupScreen({ commande, clientPrenom, onConfirm, onFermer }) {
         <div style={{ marginTop: 18, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 16, padding: '11px 22px', display: 'inline-block' }}>
           <p style={{ fontWeight: 900, fontSize: '0.92rem', color: '#fff', letterSpacing: '-0.2px' }}>{textes.badge} 🟣</p>
         </div>
+
+        {/* Et l'état du paiement, LÀ OÙ LES DEUX LE REGARDENT. Cet écran est
+            tendu par-dessus le comptoir : le commerçant y lit le numéro, il
+            doit y lire aussi s'il tend la main. Le mot d'état est le même que
+            sur la carte de suivi et dans l'email, jamais un troisième. */}
+        <div style={{ marginTop: 10 }}>
+          <PillPaiementClient commande={commande}/>
+        </div>
       </div>
 
       {/* Le geste, quand il y en a un. Les produits d'un rendez-vous sont remis
@@ -651,10 +676,13 @@ function PickupScreen({ commande, clientPrenom, onConfirm, onFermer }) {
         {resteAEncaisserCommande(commande) > 0 ? (
           <div style={{ width: '100%', background: 'rgba(255,255,255,0.1)', border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: 16, padding: '14px 18px' }}>
             <p style={{ fontWeight: 900, fontSize: '0.95rem', color: '#fff', marginBottom: 4 }}>
-              Il te reste {resteAEncaisserCommande(commande).toFixed(2).replace('.', ',')} € à régler sur place
+              C&rsquo;est ton commerçant qui confirme la remise
             </p>
+            {/* ⚠️ LE MONTANT N'EST PLUS RÉPÉTÉ ICI : la pastille au-dessus le
+                dit déjà. Deux fois le même chiffre à dix lignes d'écart, et on
+                se demande s'il y a deux sommes à payer. */}
             <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>
-              Montre ce numéro à ton commerçant : c&rsquo;est lui qui confirmera la remise au moment du paiement.
+              Montre-lui ce numéro : il valide au moment où tu règles. Le geste en libre-service est réservé aux commandes déjà payées.
             </p>
           </div>
         ) : textes.avecGeste ? (
@@ -761,6 +789,38 @@ function BadgeTypeCommande({ mode, categorie = null }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: 100, background: cfg.bg, color: cfg.fg, border: `1px solid ${cfg.fg}22` }}>
       {cfg.icon}
       {cfg.label}
+    </span>
+  )
+}
+
+// ─── EST-CE QUE JE DOIS SORTIR DE QUOI PAYER ? ───────────────────────────────
+//
+// ⚠️ RIEN NE LE DISAIT AU CLIENT (Alex, 17/08). La carte annonçait « 6,00 € » et
+// « 15,00 € » côte à côte : l'une était réglée en ligne, l'autre attendait au
+// comptoir, et rien à l'écran ne les distinguait. Le commerçant avait sa
+// pastille depuis le matin, la personne qui paie n'avait rien.
+//
+// Un total n'est pas un état. Le mot d'état vient donc en tête, ici comme dans
+// l'agenda du commerçant : « À régler sur place 15,00 € », jamais l'inverse.
+function PillPaiementClient({ commande, taille = 'normal' }) {
+  const etat = etatPaiementClient(commande)
+  if (!etat) return null
+  const c = couleurPaiement(etat)
+  const petit = taille === 'petit'
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      fontSize: petit ? '0.62rem' : '0.68rem', fontWeight: 800,
+      padding: petit ? '2px 7px' : '3px 9px', borderRadius: 100,
+      background: c.fond, color: c.texte, border: `1px solid ${c.bord}`,
+      letterSpacing: '-0.1px', whiteSpace: 'nowrap',
+    }}>
+      {etat.cle === 'paye' ? (
+        <svg width={petit ? 9 : 10} height={petit ? 9 : 10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      ) : (
+        <svg width={petit ? 9 : 10} height={petit ? 9 : 10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+      )}
+      {etat.libelle}
     </span>
   )
 }
@@ -920,7 +980,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
         aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
         style={{
           position: 'absolute', top: 32, right: 10, zIndex: 2,
-          background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)',
+          background: 'rgba(255,255,255,0.92)',
           border: 'none',
           cursor: 'pointer', padding: 6,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1042,7 +1102,7 @@ function CategoriesScroll({ familleActive, setFamilleActive, metierActif, setMet
       <div ref={scrollRef} className="cats">
         {FAMILLES.map(f => (
           <button key={f.key} onClick={() => { setFamilleActive(f.key); setMetierActif(null) }}
-            style={{ flexShrink: 0, padding: '0.45rem 1rem', borderRadius: 100, border: familleActive===f.key ? 'none' : `1px solid ${T.light}33`, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', whiteSpace: 'nowrap', background: familleActive===f.key ? '#fff' : 'rgba(255,255,255,0.08)', color: familleActive===f.key ? T.main : '#fff', backdropFilter: 'blur(4px)', transition: 'all 0.15s', boxShadow: familleActive===f.key ? `0 4px 14px rgba(255,255,255,0.25)` : 'none', letterSpacing: '-0.2px' }}>
+            style={{ flexShrink: 0, padding: '0.45rem 1rem', borderRadius: 100, border: familleActive===f.key ? 'none' : `1px solid ${T.light}33`, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', whiteSpace: 'nowrap', background: familleActive===f.key ? '#fff' : 'rgba(255,255,255,0.08)', color: familleActive===f.key ? T.main : '#fff', transition: 'all 0.15s', boxShadow: familleActive===f.key ? `0 4px 14px rgba(255,255,255,0.25)` : 'none', letterSpacing: '-0.2px' }}>
             {f.label}
           </button>
         ))}
@@ -1050,7 +1110,7 @@ function CategoriesScroll({ familleActive, setFamilleActive, metierActif, setMet
       {/* Fade + chevron CLIQUABLE a gauche (quand scrolle) */}
       <button aria-label="Categories precedentes" onClick={() => scrollBy(-1)}
         style={{ position: 'absolute', top: 0, left: 0, bottom: '0.875rem', width: 42, padding: 0, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: 6, background: `linear-gradient(to left, transparent, ${T.bgPanel} 70%)`, cursor: 'pointer', opacity: canScrollLeft ? 1 : 0, pointerEvents: canScrollLeft ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(4px)' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: 'rgba(255,255,255,0.15)' }}>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 6l-6 6 6 6"/>
           </svg>
@@ -1059,7 +1119,7 @@ function CategoriesScroll({ familleActive, setFamilleActive, metierActif, setMet
       {/* Fade + chevron CLIQUABLE a droite (quand il en reste) */}
       <button aria-label="Categories suivantes" onClick={() => scrollBy(1)}
         style={{ position: 'absolute', top: 0, right: 0, bottom: '0.875rem', width: 42, padding: 0, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 6, background: `linear-gradient(to right, transparent, ${T.bgPanel} 70%)`, cursor: 'pointer', opacity: canScrollRight ? 1 : 0, pointerEvents: canScrollRight ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(4px)', animation: 'cats-chev-pulse 1.4s ease-in-out infinite' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', animation: 'cats-chev-pulse 1.4s ease-in-out infinite' }}>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 6l6 6-6 6"/>
           </svg>
@@ -1139,7 +1199,6 @@ function BoutonGoodMorning({ onClick, nonVu }) {
         background: nonVu
           ? 'linear-gradient(135deg, #FDBA74 0%, #FB923C 45%, #C4A0F4 100%)'
           : 'rgba(255,255,255,0.12)',
-        backdropFilter: 'blur(12px)',
         border: `1px solid ${nonVu ? 'rgba(253,186,116,0.9)' : 'rgba(255,255,255,0.18)'}`,
         boxShadow: nonVu ? '0 0 0 3px rgba(251,146,60,0.22), 0 6px 20px rgba(251,146,60,0.45)' : 'none',
         color: '#fff', cursor: 'pointer', flexShrink: 0,
@@ -2640,7 +2699,7 @@ export default function Commander() {
                 onPointerLeave={() => clearTimeout(minuteurAppuiRef.current)}
                 onContextMenu={e => e.preventDefault()}
                 title="Appui long pour rafraîchir ta position"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(12px)', border: `1px solid ${T.light}33`, borderRadius: 100, padding: '0.45rem 0.875rem 0.45rem 0.75rem', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', transition: 'all 0.2s', letterSpacing: '-0.2px' }}>
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,255,255,0.12)', border: `1px solid ${T.light}33`, borderRadius: 100, padding: '0.45rem 0.875rem 0.45rem 0.75rem', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', transition: 'all 0.2s', letterSpacing: '-0.2px' }}>
                 {geoLoading
                   ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="9" stroke="white" strokeWidth="2.5" strokeDasharray="30 10" strokeLinecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></circle></svg>
                   : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.light} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -2675,7 +2734,7 @@ export default function Commander() {
                   onChange={e => setLocManuelle(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && locManuelle.trim()) { geocoderAdresseManuelle(locManuelle.trim()) } }}
                   autoFocus
-                  style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.5rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', backdropFilter: 'blur(8px)', outline: 'none' }}
+                  style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.5rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', outline: 'none' }}
                 />
                 {locManuelle && (
                   <button onClick={() => { if (locManuelle.trim()) geocoderAdresseManuelle(locManuelle.trim()) }}
@@ -2709,7 +2768,7 @@ export default function Commander() {
                   placeholder="Rechercher un commerce…"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  style={{ width: '100%', padding: '0.4rem 1rem 0.4rem 2.1rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: '0.82rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', backdropFilter: 'blur(8px)' }}
+                  style={{ width: '100%', padding: '0.4rem 1rem 0.4rem 2.1rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: '0.82rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box' }}
                 />
                 {searchQuery && (
                   <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.18)', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', color: '#fff', fontSize: '0.65rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
@@ -2842,7 +2901,7 @@ export default function Commander() {
                   Commandes, rendez-vous et abonnements
                 </h2>
                 {badgeCommandes > 0 && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(4px)', borderRadius: 100, padding: '4px 12px', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', position: 'relative' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.12)', borderRadius: 100, padding: '4px 12px', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', position: 'relative' }}>
                     {/* Point violet pale (T.light) au lieu de vert : le vert est reserve aux RDVs
                         et au statut 'Prete a retirer'. Ici on cumule commandes + RDVs, neutre marque. */}
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.light, border: '1.5px solid #fff', boxShadow: `0 0 0 1.5px ${T.light}33, 0 0 8px ${T.light}99`, animation: 'yoppa-live-pulse 1s ease-in-out infinite' }}/>
@@ -2935,7 +2994,7 @@ export default function Commander() {
                               <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#4F46E5' }}>En route vers toi{c.date_commande ? ` · ${new Date(c.date_commande + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'short', day: 'numeric', month: 'short' })}` : ''}{cren ? ` · ${cren.heure_debut.slice(0,5)}–${cren.heure_fin.slice(0,5)}` : ''}</span>
                             </span>
                           </div>
-                          <div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /></div><p style={{ fontWeight: 900, color: '#4F46E5', fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p></div>
+                          <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /><p style={{ fontWeight: 900, color: '#4F46E5', fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p><PillPaiementClient commande={c}/></div>
                         </div>
                         <button onClick={() => setPickupCommande(c)}
                           style={{ width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.95rem', background: 'linear-gradient(135deg, #4F46E5, #6366F1)', color: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 16px #4F46E544', letterSpacing: '-0.3px' }}>
@@ -2977,7 +3036,7 @@ export default function Commander() {
                             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.main }}>{libelleRetrait(c, cren, { court: true })}</span>
                           </span>
                         </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /></div><p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p></div>
+                        <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /><p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p><PillPaiementClient commande={c}/></div>
                       </div>
                       {ok ? (
                         <button onClick={() => setPickupCommande(c)}
@@ -3037,6 +3096,7 @@ export default function Commander() {
                             <div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /></div>
                             <p style={{ fontWeight: 900, color: T.main, marginBottom: 4, fontSize: '0.95rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
                             <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '3px 8px', borderRadius: 100, background: sc.bg, color: sc.color }}>{sc.label}</span>
+                            <div style={{ marginTop: 4 }}><PillPaiementClient commande={c} taille="petit"/></div>
                           </div>
                         </div>
                         {sousTexte && (
@@ -3099,6 +3159,10 @@ export default function Commander() {
                         <div style={{ textAlign: 'right' }}>
                           <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(c.total).toFixed(2)}€</p>
                           <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: sc.bg, color: sc.color }}>{sc.label}</span>
+                          {/* ⚠️ L'HISTORIQUE AUSSI. Une commande récupérée dont
+                              rien n'a été encaissé reste une dette : c'est
+                              justement là qu'on la cherche des semaines après. */}
+                          <div style={{ marginTop: 3 }}><PillPaiementClient commande={c} taille="petit"/></div>
                         </div>
                       </div>
                     )
@@ -3311,7 +3375,7 @@ export default function Commander() {
                 </p>
                 {/* Pastille tribu locale : rend la communauté tangible (données déjà chargées) */}
                 {commercants.length > 0 && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12, padding: '5px 14px', borderRadius: 100, background: 'rgba(255,255,255,0.12)', border: `1px solid ${T.light}33`, backdropFilter: 'blur(8px)', fontSize: '0.72rem', fontWeight: 700, color: '#fff' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12, padding: '5px 14px', borderRadius: 100, background: 'rgba(255,255,255,0.12)', border: `1px solid ${T.light}33`, fontSize: '0.72rem', fontWeight: 700, color: '#fff' }}>
                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B98199' }}/>
                     {commercants.length} commerce{commercants.length > 1 ? 's' : ''} près de toi
                   </span>
@@ -3425,7 +3489,7 @@ export default function Commander() {
                             <span style={{ color: T.mid }}> 🟣</span>
                           </p>
                           <button onClick={() => router.push('/commander/auth?redirect=/commander')}
-                            style={{ padding: '0.625rem 1.25rem', background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(4px)', border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: 100, color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                            style={{ padding: '0.625rem 1.25rem', background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: 100, color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                             Se connecter →
                           </button>
                         </div>
@@ -3783,7 +3847,7 @@ export default function Commander() {
         {confirmModal && (
           <div role="dialog" aria-modal="true"
             onClick={(e) => { if (e.target === e.currentTarget) setConfirmModal(null) }}
-            style={{ position: 'fixed', inset: 0, zIndex: 1300, background: 'rgba(22,6,54,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+            style={{ position: 'fixed', inset: 0, zIndex: 1300, background: 'rgba(22,6,54,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
             <div style={{ background: '#fff', borderRadius: 20, maxWidth: 380, width: '100%', padding: '1.75rem 1.5rem 1.25rem', boxShadow: '0 30px 80px rgba(0,0,0,0.45)', animation: 'modal-in 0.22s cubic-bezier(0.34,1.56,0.64,1)' }}>
               <h2 style={{ fontWeight: 900, fontSize: '1.2rem', color: T.ink, marginBottom: 8, letterSpacing: '-0.3px', textAlign: 'center' }}>
                 {confirmModal.title}

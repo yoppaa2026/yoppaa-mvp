@@ -73,7 +73,12 @@ export async function GET(request) {
 
     const { data: rdvs } = await admin
       .from('rdv_reservations')
-      .select('id, numero_rdv, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, tva_taux, stripe_frais, stripe_net, date_rdv')
+      // ⚠️ `encaisse_*` EST INDISPENSABLE, et son absence serait SILENCIEUSE :
+      // le journal perdrait tout ce qui a été encaissé au comptoir sans la
+      // moindre erreur, et le commerçant relirait « 0,00 € au comptoir » sur un
+      // document destiné à son comptable. C'est LE défaut le plus fréquent de
+      // ce projet : une colonne oubliée dans un select.
+      .select('id, numero_rdv, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, tva_taux, stripe_frais, stripe_net, date_rdv, encaisse_mode, encaisse_montant, encaisse_le')
       .eq('commercant_id', commercantId)
       .gte('date_rdv', du)
       .lte('date_rdv', au)

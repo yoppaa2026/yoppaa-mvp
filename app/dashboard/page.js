@@ -7,9 +7,9 @@ import AgendaRdv from './AgendaRdv'
 import ModalNouveauRdv from './ModalNouveauRdv'
 import ModaleConfirmation from './ModaleConfirmation'
 import PosteConfirmation, { confirme } from './PosteConfirmation'
-import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree } from '@/lib/confirmation-rdv'
+import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree, confirmationEncaissement, nomClient } from '@/lib/confirmation-rdv'
 import { confirmationSimple } from '@/lib/confirmations'
-import { etatPaiementRdv, couleurPaiement, caDesRdvs } from '@/lib/rdv-paiement'
+import { etatPaiementRdv, couleurPaiement, caDesRdvs, resteAEncaisser } from '@/lib/rdv-paiement'
 import ModalDeplacerRdv from './ModalDeplacerRdv'
 import { Reply, ClipboardList } from 'lucide-react'
 import { canDo } from '@/lib/plans'
@@ -787,8 +787,15 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
                 // phrase de ce qu'il fait, et qui confirme ensuite ce qui a été
                 // fait. « Honoré » reste immédiat : le faire confirmer douze
                 // fois par jour en ferait un réflexe, donc rien du tout.
+                // ⚠️ « HONORÉ » DEMANDE MAINTENANT COMMENT L'ARGENT EST ENTRÉ
+                // (Alex, 17/08 : « le RDV passe en payé mais il ne clique sur
+                // rien »). Ce n'est toujours pas une confirmation, c'est
+                // l'information qui manquait. Et elle ne se demande QUE s'il y
+                // a quelque chose à encaisser : sur une séance d'abonnement,
+                // déjà payée à l'achat, le bouton reste immédiat.
                 <button key={action} onClick={() => {
-                  if (action === 'honore' || !onDemanderAction) { onChangerStatut(rdv.id, action, 'commercant'); return }
+                  const sansArgent = action === 'honore' && !(resteAEncaisser(rdv) > 0)
+                  if (sansArgent || !onDemanderAction) { onChangerStatut(rdv.id, action, 'commercant'); return }
                   onDemanderAction(rdv, action)
                 }}
                   style={{
@@ -1440,14 +1447,19 @@ export default function Dashboard() {
   // écritures qui échouent ne doivent pas empiler douze fenêtres d'alerte les
   // unes derrière les autres. L'appelant COMPTE les échecs et les annonce en une
   // phrase. Sans ce drapeau, rien ne change pour les appelants d'avant.
-  async function changerStatutRdv(rdvId, statut, raison = 'commercant', { silencieux = false } = {}) {
-    const { error } = await supabase.from('rdv_reservations').update({ statut }).eq('id', rdvId)
+  // ⚠️ `champs` PORTE L'ENCAISSEMENT, ET IL PART DANS LA MÊME ÉCRITURE que le
+  // statut. Deux `update` séparés laisseraient une fenêtre où le rendez-vous
+  // est honoré sans son encaissement, et c'est exactement l'état qu'on cherche
+  // à faire disparaître.
+  async function changerStatutRdv(rdvId, statut, raison = 'commercant', { silencieux = false, champs = null } = {}) {
+    const payload = { statut, ...(champs || {}) }
+    const { error } = await supabase.from('rdv_reservations').update(payload).eq('id', rdvId)
     if (error) {
       console.error('[dashboard] changerStatutRdv', error)
       if (!silencieux) alert(`Erreur : ${error.message}`)
       return false
     }
-    setRdvs(prev => prev.map(r => r.id === rdvId ? { ...r, statut } : r))
+    setRdvs(prev => prev.map(r => r.id === rdvId ? { ...r, ...payload } : r))
 
     // Si statut change → emails contextuels (non-bloquant, fire-and-forget)
     if (statut === 'annule_commercant') {
@@ -1502,11 +1514,29 @@ export default function Dashboard() {
     // et surtout sans rien écrire.
     if (!decision) { setActionRdv(null); return }
     setActionEnCours(true)
-    const ok = await changerStatutRdv(actionRdv.rdv.id, decision.statut, decision.raison)
+    // ⚠️ LE MONTANT EST FIGÉ À L'ENCAISSEMENT, comme le prix l'est à la
+    // réservation. Le tarif d'une prestation change ; ce qui est entré en
+    // caisse ce jour-là, non. Le recalculer plus tard donnerait un autre
+    // chiffre au comptable que celui compté dans le tiroir.
+    const champs = decision.encaisse
+      ? {
+          encaisse_mode: decision.encaisse,
+          encaisse_montant: decision.encaisse === 'rien' ? 0 : (resteAEncaisser(actionRdv.rdv) ?? 0),
+          encaisse_le: new Date().toISOString(),
+        }
+      : null
+    const ok = await changerStatutRdv(actionRdv.rdv.id, decision.statut, decision.raison, { champs })
     setActionEnCours(false)
     // ⚠️ ON NE CONFIRME QUE CE QUI A EU LIEU. Annoncer « c'est annulé » après un
     // échec ferait croire au commerçant que son client est prévenu.
     if (!ok) { setActionRdv(null); return }
+    if (decision.encaisse) {
+      setConfirmationRdvTexte(confirmationEncaissement(decision.encaisse, {
+        montant: champs.encaisse_montant,
+        nom: nomClient(actionRdv.rdv),
+      }))
+      return
+    }
     setConfirmationRdvTexte(confirmationRdv(actionRdv.action, { rdv: actionRdv.rdv, raison: decision.raison }))
   }
 
@@ -1525,12 +1555,26 @@ export default function Dashboard() {
   // de l'ordre, et un échec au milieu qu'on ne saurait plus attribuer.
   async function repondreSeance(choix) {
     if (!seanceAHonorer) return
-    if (choix !== 'honore') { setSeanceAHonorer(null); return }
+    // ⚠️ QUATRE RÉPONSES POSSIBLES, ET UNE SEULE NE FAIT RIEN. `honore` clôture
+    // un cours sans argent à encaisser ; `terminal`, `especes` et
+    // `sans_paiement` clôturent ET notent l'encaissement ; `rien` referme.
+    const MODES = { terminal: 'terminal', especes: 'especes', sans_paiement: 'rien' }
+    if (choix !== 'honore' && !MODES[choix]) { setSeanceAHonorer(null); return }
+    const mode = MODES[choix] || null
     setActionEnCours(true)
     let faits = 0
     let echecs = 0
     for (const rdv of seanceAHonorer) {
-      const ok = await changerStatutRdv(rdv.id, 'honore', 'commercant', { silencieux: true })
+      // Le montant est celui de CHAQUE personne, pas le total du cours : une
+      // ligne par inscrit, chacune avec ce qu'elle a réellement versé.
+      const champs = mode
+        ? {
+            encaisse_mode: mode,
+            encaisse_montant: mode === 'rien' ? 0 : (resteAEncaisser(rdv) ?? 0),
+            encaisse_le: new Date().toISOString(),
+          }
+        : null
+      const ok = await changerStatutRdv(rdv.id, 'honore', 'commercant', { silencieux: true, champs })
       if (ok) faits++
       else echecs++
     }
@@ -2784,7 +2828,14 @@ export default function Dashboard() {
       {/* ─── CLÔTURER UN COURS ENTIER ─────────────────────────────────────── */}
       <ModaleConfirmation
         ouverte={!!seanceAHonorer}
-        {...(seanceAHonorer && !confirmationSeanceTexte ? (questionSeanceHonoree(seanceAHonorer.length) || {}) : {})}
+        {...(seanceAHonorer && !confirmationSeanceTexte
+          ? (questionSeanceHonoree(seanceAHonorer.length, {
+              // Le total qui reste à encaisser sur tout le cours. Les abonnées
+              // pèsent zéro : si elles sont seules, la question du moyen de
+              // paiement ne se pose même pas.
+              montant: seanceAHonorer.reduce((somme, r) => somme + (resteAEncaisser(r) || 0), 0),
+            }) || {})
+          : {})}
         enCours={actionEnCours}
         confirmation={confirmationSeanceTexte}
         onChoix={repondreSeance}

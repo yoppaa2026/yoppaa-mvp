@@ -263,6 +263,123 @@ const cutoff = new Date(rdvHiver.getTime() - 24 * 3600 * 1000)
 egal('cutoff 24h en hiver', cutoff.toISOString(), '2026-01-14T08:00:00.000Z')
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// CE QUI A ÉTÉ ENCAISSÉ AU COMPTOIR ENTRE ENFIN AU JOURNAL
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ IL MANQUAIT LA MOITIÉ DU DOCUMENT (Alex, 17/08). L'export annonçait
+// « 1600 € en ligne, 0,00 € au comptoir » à un centre qui avait encaissé treize
+// séances à 15 € au terminal et en espèces : aucune réconciliation n'était
+// possible, et « honoré » valait « payé » sans que personne n'ait rien dit.
+
+const { resteAEncaisser, MODES_QUI_ENCAISSENT } = await import('../lib/rdv-paiement.js')
+
+// Ce qui reste dû au comptoir : le solde si un acompte est déjà payé en ligne.
+egal('sans acompte, tout le prix reste à encaisser', resteAEncaisser({ prix_estime: 35 }), 35)
+egal('avec acompte payé, seulement le solde',
+  resteAEncaisser({ prix_estime: 35, acompte_montant: 8.75, acompte_paye: true }), 26.25)
+// ⚠️ UN ACOMPTE NON PAYÉ N'EST PAS UN ACOMPTE : le tout reste dû.
+egal('un acompte jamais payé ne réduit rien',
+  resteAEncaisser({ prix_estime: 35, acompte_montant: 8.75, acompte_paye: false }), 35)
+// ⚠️ UNE SÉANCE D'ABONNEMENT EST DÉJÀ PAYÉE : zéro, et la question du moyen de
+// paiement ne se posera même pas.
+egal('une séance d’abonnement ne demande rien', resteAEncaisser({ abonnement_id: 'a', prix_estime: 0 }), 0)
+// ⚠️ GARDE NÉE MUETTE, MESURÉE EN MUTATION : la ligne ci-dessus passait même
+// sans la règle du contrat, puisqu'une séance d'abonnement porte déjà
+// `prix_estime: 0`. C'est LE CONTRAT qui décide, pas le nombre — et le jour où
+// un prix traîne sur une séance d'abonnement, on ne doit pas le réclamer.
+egal('et le contrat l’emporte même si un prix traîne dessus',
+  resteAEncaisser({ abonnement_id: 'a', prix_estime: 40 }), 0)
+// ⚠️ `null` VEUT DIRE « ON NE SAIT PAS », ET CE N'EST PAS ZÉRO. Un devis sans
+// prix ne doit pas se transformer en « rien à payer ».
+egal('un prix inconnu reste inconnu', resteAEncaisser({ prix_estime: null }), null)
+egal('sans rendez-vous, rien', resteAEncaisser(null), null)
+
+const RDV_ENCAISSE = {
+  id: 'r-enc-1', numero_rdv: 19, statut: 'honore', date_rdv: '2026-08-21',
+  prix_estime: 15, tva_taux: 21,
+  encaisse_mode: 'terminal', encaisse_montant: 15, encaisse_le: '2026-08-21T11:05:00.000Z',
+}
+const [ligneComptoir] = construireLignes({ rdvs: [RDV_ENCAISSE] })
+egal('un encaissement déclaré devient une ligne', ligneComptoir?.type, 'Solde RDV')
+egal('datée du jour de l’encaissement', ligneComptoir.date, '2026-08-21')
+egal('comptée au comptoir', ligneComptoir.comptoir, 15)
+egal('et jamais en ligne', ligneComptoir.enLigne, 0)
+// ⚠️ STRIPE N'A RIEN VU PASSER : lui attribuer des frais fabriquerait une
+// dépense qui n'existe pas.
+egal('sans frais Stripe, puisque Stripe n’y est pour rien', ligneComptoir.fraisStripe, 0)
+egal('le moyen déclaré voyage avec la ligne', ligneComptoir.modeEncaissement, 'terminal')
+egal('ventilée au taux du rendez-vous', ligneComptoir.parTaux[21], 15)
+
+// ⚠️ ON N'ÉCRIT QUE CE QUI A ÉTÉ DÉCLARÉ. Un rendez-vous honoré sans
+// encaissement noté ne produit AUCUNE ligne : supposer qu'il a été payé
+// mettrait dans un document comptable de l'argent que personne n'a vu passer.
+egal('un honoré sans encaissement noté n’écrit rien',
+  construireLignes({ rdvs: [{ ...RDV_ENCAISSE, encaisse_mode: null, encaisse_montant: null }] }).length, 0)
+// « Rien encaissé » est une réponse, pas un encaissement.
+egal('« rien encaissé » n’écrit rien non plus',
+  construireLignes({ rdvs: [{ ...RDV_ENCAISSE, encaisse_mode: 'rien', encaisse_montant: 0 }] }).length, 0)
+verifier('et « rien » n’est pas un moyen qui encaisse',
+  !MODES_QUI_ENCAISSENT.includes('rien'))
+// ⚠️ GARDE NÉE MUETTE, MESURÉE EN MUTATION : les deux cas ci-dessus portaient
+// un montant nul, si bien que retirer le test du MOYEN ne changeait rien. C'est
+// le MOYEN qui décide qu'un encaissement a eu lieu, jamais le montant : le jour
+// où un montant traîne sur une réponse « rien encaissé », il ne doit pas entrer
+// dans un document comptable.
+egal('un montant qui traîne sur « rien encaissé » n’entre pas au journal',
+  construireLignes({ rdvs: [{ ...RDV_ENCAISSE, encaisse_mode: 'rien', encaisse_montant: 26.25 }] }).length, 0)
+egal('ni sur un moyen absent',
+  construireLignes({ rdvs: [{ ...RDV_ENCAISSE, encaisse_mode: null, encaisse_montant: 26.25 }] }).length, 0)
+
+// ⚠️ AUCUN DOUBLE COMPTAGE AVEC L'ACOMPTE. Le montant encaissé est le SOLDE,
+// figé au moment où le commerçant a répondu : les deux lignes réunies font le
+// prix, jamais plus.
+const RDV_ACOMPTE_PUIS_SOLDE = {
+  id: 'r-enc-2', numero_rdv: 20, statut: 'honore', date_rdv: '2026-08-21',
+  prix_estime: 35, tva_taux: 21,
+  acompte_montant: 8.75, acompte_paye: true, acompte_paye_en_ligne: true,
+  encaisse_mode: 'especes', encaisse_montant: 26.25, encaisse_le: '2026-08-21T11:05:00.000Z',
+}
+const deuxLignes = construireLignes({ rdvs: [RDV_ACOMPTE_PUIS_SOLDE] })
+egal('acompte et solde font deux lignes', deuxLignes.length, 2)
+egal('et leur somme fait le prix, pas davantage',
+  deuxLignes.reduce((s, l) => s + l.total, 0), 35)
+
+// La réconciliation : le relevé du terminal d'un côté, le tiroir de l'autre.
+const jourEnc = journalParJour(construireLignes({
+  rdvs: [RDV_ENCAISSE, { ...RDV_ACOMPTE_PUIS_SOLDE, date_rdv: '2026-08-21', encaisse_le: '2026-08-21T12:00:00.000Z' }],
+}))[0]
+egal('le terminal est isolé', jourEnc.terminal, 15)
+egal('les espèces aussi', jourEnc.especes, 26.25)
+verifier('et leur somme ne dépasse pas le comptoir du jour',
+  jourEnc.terminal + jourEnc.especes <= jourEnc.comptoir + 0.001)
+
+// ⚠️ LA COLONNE DOIT ARRIVER JUSQU'AU CALCUL. Un encaissement absent du
+// `select` viderait le comptoir du journal SANS la moindre erreur : c'est LE
+// défaut le plus fréquent de ce projet.
+const srcExportCompta = readFileSync(new URL('../app/api/dashboard/export-comptable/route.js', import.meta.url), 'utf8')
+verifier('la route charge bien l’encaissement du comptoir',
+  /encaisse_mode, encaisse_montant, encaisse_le/.test(srcExportCompta))
+
+// ⚠️ ET LES FRAIS STRIPE, QUI ÉTAIENT CALCULÉS, EXPORTÉS, ET JETÉS À
+// L'AFFICHAGE. Un commerçant qui ne voit pas ses frais croit que son chiffre
+// TTC est ce qu'il touche.
+const srcComptaEcran = readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8')
+verifier('l’écran totalise enfin les frais Stripe',
+  /fraisStripe: acc\.fraisStripe \+ \(j\.fraisStripe \|\| 0\)/.test(srcComptaEcran))
+verifier('et les affiche',
+  /'Frais Stripe', v: eur\(totaux\.fraisStripe\)/.test(srcComptaEcran))
+verifier('le détail du comptoir est là pour la réconciliation',
+  /Dont terminal/.test(srcComptaEcran) && /Dont espèces/.test(srcComptaEcran))
+
+// Le CSV porte les mêmes colonnes que l'écran.
+const csvEnc = csvJournal({
+  lignes: construireLignes({ rdvs: [RDV_ENCAISSE] }),
+  commercant: { nom: 'Centre Test' }, du: '2026-08-01', au: '2026-08-31',
+})
+verifier('le journal exporté détaille terminal et espèces',
+  /Dont terminal;Dont especes/.test(csvEnc))
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

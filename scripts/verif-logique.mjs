@@ -3442,6 +3442,112 @@ verifier('les échecs sont NOMMÉS, pas avalés',
 verifier('un échec total ne se déguise pas en réussite',
   /Rien n’a pu être enregistré/.test(confirmationSeanceHonoree({ faits: 0, echecs: 3 })))
 
+// ═══════════════════════════════════════════════════════════════════════════
+// « HONORÉ » ET « PAYÉ » N'ÉTAIENT QU'UN SEUL CLIC
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ Alex, 17/08 : « lorsque le commerçant clique sur honoré, le RDV passe en
+// payé mais il ne clique sur rien, il devrait cocher quelque chose, cash,
+// Bancontact, Payconiq ». Venir n'est pas payer, et la pastille affirmait le
+// second sur la foi du premier.
+
+const { questionEncaissement, confirmationEncaissement, questionRdv: questionRdvEnc, statutDepuisChoix } =
+  await import('../lib/confirmation-rdv.js')
+
+// ⚠️ LA QUESTION NE SE POSE QUE S'IL Y A DE L'ARGENT EN JEU. Sur une séance
+// d'abonnement, déjà payée à l'achat, la poser serait absurde.
+egal('rien à encaisser, aucune question', questionEncaissement({ montant: 0 }), null)
+egal('ni sur un montant inconnu', questionEncaissement({ montant: null }), null)
+
+const Q_ENC = questionEncaissement({ montant: 15, nom: 'Alexandre' })
+verifier('la question porte le montant, pas une case à cocher vide', /15,00 €/.test(Q_ENC.titre))
+verifier('elle dit que Yoppaa n’encaisse rien, il enregistre',
+  /ne traite pas ce paiement/.test(Q_ENC.message))
+verifier('et à quoi ça sert : recouper la caisse et le terminal',
+  /recouper/.test(Q_ENC.message))
+// ⚠️ DEUX MOYENS, PAS TROIS : pas de chèque, ça n'existe plus en Belgique.
+verifier('aucun chèque nulle part', !/chèque|cheque/i.test(JSON.stringify(Q_ENC)))
+egal('quatre sorties : deux moyens, une dette, un abandon', Q_ENC.actions.length, 4)
+egal('le terminal en premier', Q_ENC.actions[0].valeur, 'terminal')
+egal('les espèces ensuite', Q_ENC.actions[1].valeur, 'especes')
+// ⚠️ `sans_paiement` HONORE QUAND MÊME, et sa valeur n'est SURTOUT PAS `rien`,
+// qui veut dire « ne rien faire » partout ailleurs dans ce module. Deux sorties
+// voisines qui portent le même mot finissent par être confondues, et l'une des
+// deux écrit en base quand l'autre referme la fenêtre.
+egal('la dette a sa propre valeur', Q_ENC.actions[2].valeur, 'sans_paiement')
+egal('et la sortie sans effet reste la dernière', Q_ENC.actions[3].valeur, 'rien')
+
+// Ce que la fenêtre écrit vraiment.
+egal('le terminal écrit le mode terminal',
+  statutDepuisChoix('honore', 'terminal'), { statut: 'honore', raison: 'commercant', encaisse: 'terminal' })
+egal('les espèces écrivent le mode espèces',
+  statutDepuisChoix('honore', 'especes'), { statut: 'honore', raison: 'commercant', encaisse: 'especes' })
+// ⚠️ ELLE HONORE, ET ELLE NOTE QUE RIEN N'EST ENTRÉ. Sans cette réponse, le
+// commerçant devrait mentir sur le moyen de paiement pour pouvoir clôturer.
+egal('« il n’a rien payé » honore quand même',
+  statutDepuisChoix('honore', 'sans_paiement'), { statut: 'honore', raison: 'commercant', encaisse: 'rien' })
+egal('et « ne rien faire » n’écrit rien', statutDepuisChoix('honore', 'rien'), null)
+
+// La question n'apparaît que quand elle a un objet.
+verifier('honorer un rendez-vous payant demande comment',
+  !!questionRdvEnc('honore', { prix_estime: 15, client_prenom: 'Alexandre' }))
+verifier('honorer une séance d’abonnement ne demande rien',
+  questionRdvEnc('honore', { abonnement_id: 'a', prix_estime: 0 }) === null)
+
+// La confirmation dit ce qui vient d'être noté, jamais « c'est fait ».
+verifier('la confirmation nomme le terminal',
+  /terminal/.test(confirmationEncaissement('terminal', { montant: 15, nom: 'Alexandre' })))
+verifier('elle nomme les espèces',
+  /espèces/.test(confirmationEncaissement('especes', { montant: 15 })))
+// ⚠️ ET ELLE DIT OÙ RETROUVER LA DETTE. Sans cette phrase, le commerçant
+// referme en croyant que la séance est réglée.
+verifier('une dette est annoncée comme telle',
+  /reste dû/.test(confirmationEncaissement('rien', { montant: 15 })))
+
+// ─── LA PASTILLE LIT CE QUI A ÉTÉ DÉCLARÉ ─────────────────────────────────
+const HONORE_TERMINAL = { statut: 'honore', prix_estime: 15, encaisse_mode: 'terminal', encaisse_montant: 15 }
+egal('encaissé au terminal, la pastille est verte', etatPaiementRdv(HONORE_TERMINAL).cle, 'paye')
+verifier('et elle nomme le moyen',
+  /terminal/.test(etatPaiementRdv(HONORE_TERMINAL).detail || ''))
+// ⚠️ LE CLIENT EST VENU ET N'A PAS PAYÉ : c'est une DETTE, pas un encaissement,
+// et la ligne doit rester orange pour qu'il la retrouve.
+const HONORE_IMPAYE = { statut: 'honore', prix_estime: 15, encaisse_mode: 'rien', encaisse_montant: 0 }
+egal('rien encaissé reste dû', etatPaiementRdv(HONORE_IMPAYE).cle, 'du')
+verifier('et la ligne dit pourquoi',
+  /rien n’a été encaissé/.test(etatPaiementRdv(HONORE_IMPAYE).detail || ''))
+// ⚠️ ET LES ANCIENS, HONORÉS AVANT QUE LA QUESTION EXISTE. Le montant compte au
+// chiffre d'affaires, mais la réconciliation est incomplète : le taire la
+// rendrait fausse sans prévenir.
+verifier('un honoré sans moyen noté le dit',
+  /non noté/.test(etatPaiementRdv({ statut: 'honore', prix_estime: 15 }).detail || ''))
+
+// ─── LE COURS ENTIER DEMANDE AUSSI, MAIS UNE SEULE FOIS ───────────────────
+egal('un cours sans argent garde ses deux boutons',
+  questionSeanceHonoree(12, { montant: 0 }).actions.length, 2)
+const Q_SEANCE_ARGENT = questionSeanceHonoree(12, { montant: 45 })
+egal('un cours avec argent en propose quatre', Q_SEANCE_ARGENT.actions.length, 4)
+verifier('il annonce le total à encaisser', /45,00 €/.test(Q_SEANCE_ARGENT.message))
+// ⚠️ UN SEUL MOYEN POUR TOUT LE COURS, ET C'EST ÉCRIT. Douze personnes peuvent
+// payer de douze façons : le taire ferait découvrir la simplification après
+// coup, sur un chiffre faux.
+verifier('et il dit que le moyen vaut pour tout le monde',
+  /vaut pour tout le cours/.test(Q_SEANCE_ARGENT.message))
+verifier('en disant comment corriger', /ligne par ligne/.test(Q_SEANCE_ARGENT.message))
+
+// ─── LE TABLEAU DE BORD ÉCRIT LES DEUX EN UNE SEULE FOIS ──────────────────
+// ⚠️ DEUX `update` SÉPARÉS laisseraient une fenêtre où le rendez-vous est
+// honoré sans son encaissement : exactement l'état qu'on fait disparaître.
+verifier('le statut et l’encaissement partent ensemble',
+  /const payload = \{ statut, \.\.\.\(champs \|\| \{\}\) \}/.test(srcDashPaiement))
+verifier('le montant est figé, pas recalculé plus tard',
+  /encaisse_montant: decision\.encaisse === 'rien' \? 0 : \(resteAEncaisser\(actionRdv\.rdv\) \?\? 0\)/.test(srcDashPaiement))
+// ⚠️ ET LE BOUTON RESTE IMMÉDIAT QUAND IL N'Y A RIEN À ENCAISSER.
+verifier('honorer une séance d’abonnement reste un seul tap',
+  /const sansArgent = action === 'honore' && !\(resteAEncaisser\(rdv\) > 0\)/.test(srcDashPaiement))
+// La clôture groupée note le montant de CHAQUE personne, pas le total du cours.
+verifier('la clôture groupée note ligne par ligne',
+  /encaisse_montant: mode === 'rien' \? 0 : \(resteAEncaisser\(rdv\) \?\? 0\)/.test(srcDashPaiement))
+
 // ─── LE TABLEAU DE BORD EXÉCUTE VRAIMENT LA CLÔTURE GROUPÉE ───────────────
 verifier('la liste d’un cours peut clôturer la séance',
   /onHonorerSeance/.test(srcAgenda))

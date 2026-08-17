@@ -9774,13 +9774,25 @@ function TabComptabilite({ commercantId, toast }) {
   }
 
   const eur = (n) => `${(Number(n) || 0).toFixed(2).replace('.', ',')} €`
+  // ⚠️ LES FRAIS STRIPE ÉTAIENT CALCULÉS, EXPORTÉS DANS LE CSV, ET JETÉS À
+  // L'AFFICHAGE (Alex, 17/08 : « les frais Stripe qui ne sont pas
+  // comptabilisés »). Le commerçant lisait son chiffre TTC sans jamais voir ce
+  // que l'encaissement lui coûte, alors que la donnée arrivait jusqu'à l'écran.
+  //
+  // Et la réconciliation demande le DÉTAIL du comptoir : le relevé du terminal
+  // d'un côté, le comptage de caisse de l'autre. Un total qui mélange les deux
+  // ne se recoupe avec rien.
   const totaux = (apercu?.journal || []).reduce((acc, j) => ({
     nb: acc.nb + j.nb,
     total: acc.total + j.total,
     enLigne: acc.enLigne + j.enLigne,
     comptoir: acc.comptoir + j.comptoir,
+    terminal: acc.terminal + (j.terminal || 0),
+    especes: acc.especes + (j.especes || 0),
     bonCadeau: acc.bonCadeau + j.bonCadeau,
-  }), { nb: 0, total: 0, enLigne: 0, comptoir: 0, bonCadeau: 0 })
+    fraisStripe: acc.fraisStripe + (j.fraisStripe || 0),
+    netStripe: acc.netStripe + (j.netStripe || 0),
+  }), { nb: 0, total: 0, enLigne: 0, comptoir: 0, terminal: 0, especes: 0, bonCadeau: 0, fraisStripe: 0, netStripe: 0 })
 
   // Ventilation cumulée par taux, pour l'aperçu à l'écran.
   const parTaux = {}
@@ -9862,7 +9874,19 @@ function TabComptabilite({ commercantId, toast }) {
               { l: 'Chiffre TTC', v: eur(totaux.total) },
               { l: 'En ligne', v: eur(totaux.enLigne) },
               { l: 'Au comptoir', v: eur(totaux.comptoir) },
+              // Le détail du comptoir, pour recouper le relevé du terminal et
+              // le comptage de caisse. Ils n'apparaissent que s'il y a quelque
+              // chose à recouper : une boulangerie 100 % en ligne n'a pas
+              // besoin de lire deux zéros de plus.
+              ...(totaux.terminal > 0 ? [{ l: 'Dont terminal', v: eur(totaux.terminal) }] : []),
+              ...(totaux.especes > 0 ? [{ l: 'Dont espèces', v: eur(totaux.especes) }] : []),
               { l: 'Bons cadeaux', v: eur(totaux.bonCadeau) },
+              // ⚠️ CE QUE L'ENCAISSEMENT EN LIGNE COÛTE. Le montant existait
+              // depuis toujours dans le fichier ; il n'était simplement affiché
+              // nulle part, et un commerçant qui ne voit pas ses frais croit
+              // que son chiffre TTC est ce qu'il touche.
+              { l: 'Frais Stripe', v: eur(totaux.fraisStripe) },
+              { l: 'Net Stripe reçu', v: eur(totaux.netStripe) },
             ].map(c => (
               <div key={c.l} style={{ background: T.bg, borderRadius: 10, padding: '10px 12px' }}>
                 <p style={{ margin: 0, fontSize: 15, fontWeight: 900, color: T.ink }}>{c.v}</p>
@@ -9909,6 +9933,9 @@ function TabComptabilite({ commercantId, toast }) {
                     <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>TTC</th>
                     <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>En ligne</th>
                     <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>Comptoir</th>
+                    {/* Le coût de l'encaissement en ligne, jour par jour. Il
+                        était calculé et exporté, mais nulle part à l'écran. */}
+                    <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>Frais</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -9919,6 +9946,7 @@ function TabComptabilite({ commercantId, toast }) {
                       <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 800, color: T.ink }}>{eur(j.total)}</td>
                       <td style={{ padding: '6px 8px', textAlign: 'right', color: T.muted }}>{eur(j.enLigne)}</td>
                       <td style={{ padding: '6px 8px', textAlign: 'right', color: T.muted }}>{eur(j.comptoir)}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', color: T.muted }}>{eur(j.fraisStripe)}</td>
                     </tr>
                   ))}
                 </tbody>

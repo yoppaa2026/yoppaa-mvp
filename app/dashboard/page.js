@@ -7,9 +7,9 @@ import AgendaRdv from './AgendaRdv'
 import ModalNouveauRdv from './ModalNouveauRdv'
 import ModaleConfirmation from './ModaleConfirmation'
 import PosteConfirmation, { confirme } from './PosteConfirmation'
-import { questionRdv, confirmationRdv, statutDepuisChoix } from '@/lib/confirmation-rdv'
+import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree } from '@/lib/confirmation-rdv'
 import { confirmationSimple } from '@/lib/confirmations'
-import { etatPaiementRdv } from '@/lib/rdv-paiement'
+import { etatPaiementRdv, couleurPaiement, caDesRdvs } from '@/lib/rdv-paiement'
 import ModalDeplacerRdv from './ModalDeplacerRdv'
 import { Reply, ClipboardList } from 'lucide-react'
 import { canDo } from '@/lib/plans'
@@ -677,10 +677,13 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
             {(() => {
               const p = etatPaiementRdv(rdv)
               if (!p) return null
-              const couleurs = { paye: ['#065F46', '#D1FAE5'], partiel: ['#78350F', '#FEF3C7'], attente: [T.main, T.pale] }
-              const [texte, fond] = couleurs[p.ton] || couleurs.attente
+              // ⚠️ LE MÊME CODE COULEUR QUE DANS LES LISTES, ET IL VIT DANS LE
+              // MODULE. Une teinte recopiée à la main dérive au premier
+              // changement, et c'est alors le même état qui se montre vert ici
+              // et violet ailleurs.
+              const c = couleurPaiement(p)
               return (
-                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: texte, background: fond, padding: '3px 9px', borderRadius: 100, letterSpacing: '-0.2px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 900, color: c.texte, background: c.fond, border: `1px solid ${c.bord}`, padding: '3px 9px', borderRadius: 100, letterSpacing: '0.3px', textTransform: 'uppercase', flexShrink: 0, whiteSpace: 'nowrap' }}>
                   {p.libelle}
                 </span>
               )
@@ -831,6 +834,10 @@ export default function Dashboard() {
   const [actionRdv, setActionRdv] = useState(null)            // { rdv, action }
   const [confirmationRdvTexte, setConfirmationRdvTexte] = useState(null)
   const [actionEnCours, setActionEnCours] = useState(false)
+  // Clôturer un COURS ENTIER : la liste des inscrits encore à honorer, et la
+  // phrase qui dira combien ont été enregistrés.
+  const [seanceAHonorer, setSeanceAHonorer] = useState(null)  // tableau de rdvs
+  const [confirmationSeanceTexte, setConfirmationSeanceTexte] = useState(null)
   // Mode impersonation : admin Yoppaa connecte en tant qu'un commercant pour le support.
   // Detecte via localStorage yoppaa_admin_impersonating (set depuis /admin "Voir Dashboard").
   // Affiche un banner sticky en haut + bouton Quitter qui revient sur /admin.
@@ -1429,11 +1436,15 @@ export default function Dashboard() {
   // réseau ferait croire au commerçant que son client est prévenu alors que
   // rien n'a bougé. Les appelants qui ignorent ce retour se comportent comme
   // avant.
-  async function changerStatutRdv(rdvId, statut, raison = 'commercant') {
+  // ⚠️ `silencieux` sert à la clôture d'un cours entier, et à elle seule : douze
+  // écritures qui échouent ne doivent pas empiler douze fenêtres d'alerte les
+  // unes derrière les autres. L'appelant COMPTE les échecs et les annonce en une
+  // phrase. Sans ce drapeau, rien ne change pour les appelants d'avant.
+  async function changerStatutRdv(rdvId, statut, raison = 'commercant', { silencieux = false } = {}) {
     const { error } = await supabase.from('rdv_reservations').update({ statut }).eq('id', rdvId)
     if (error) {
       console.error('[dashboard] changerStatutRdv', error)
-      alert(`Erreur : ${error.message}`)
+      if (!silencieux) alert(`Erreur : ${error.message}`)
       return false
     }
     setRdvs(prev => prev.map(r => r.id === rdvId ? { ...r, statut } : r))
@@ -1502,6 +1513,34 @@ export default function Dashboard() {
   function fermerActionRdv() {
     setActionRdv(null)
     setConfirmationRdvTexte(null)
+  }
+
+  // ⚠️ UNE SEULE QUESTION POUR TOUT UN COURS, MAIS UNE ÉCRITURE PAR PERSONNE.
+  // La base garde la vérité individuelle : chacun est venu ou non, reçoit son
+  // email, et son montant entre au chiffre d'affaires pour ce qu'il vaut. C'est
+  // seulement le GESTE qui est mutualisé.
+  // Les écritures partent EN SÉRIE et non en parallèle : chacune déclenche un
+  // email et, pour un rendez-vous qui porte des produits, le passage de sa
+  // commande en récupérée. Douze d'un coup, c'est la file d'attente qui décide
+  // de l'ordre, et un échec au milieu qu'on ne saurait plus attribuer.
+  async function repondreSeance(choix) {
+    if (!seanceAHonorer) return
+    if (choix !== 'honore') { setSeanceAHonorer(null); return }
+    setActionEnCours(true)
+    let faits = 0
+    let echecs = 0
+    for (const rdv of seanceAHonorer) {
+      const ok = await changerStatutRdv(rdv.id, 'honore', 'commercant', { silencieux: true })
+      if (ok) faits++
+      else echecs++
+    }
+    setActionEnCours(false)
+    setConfirmationSeanceTexte(confirmationSeanceHonoree({ faits, echecs }))
+  }
+
+  function fermerSeance() {
+    setSeanceAHonorer(null)
+    setConfirmationSeanceTexte(null)
   }
 
   async function seDeconnecter() {
@@ -1715,13 +1754,26 @@ export default function Dashboard() {
     // où on l'affiche, il ment avec l'autorité d'un chiffre. Si le besoin
     // revient, la bonne écriture est `r.statut.startsWith('annule')`.
     noShow:     rdvsDuJour.filter(r => r.statut === 'no_show').length,
-    caEstime:   rdvsDuJour.filter(r => r.statut === 'honore').reduce((acc, r) => acc + Number(r.prix_estime || 0), 0),
+    // ⚠️ « LE 21 À 15 €, ELLE N'APPARAÎT PAS DANS LE CA » (Alex, 16 puis
+    // 17/08). Le calcul était JUSTE : la carte s'appelle « CA honoré » et ne
+    // compte que les rendez-vous honorés, donc un rendez-vous à venir n'y entre
+    // pas, et rien à l'écran ne disait où était passé son montant. Un compteur
+    // qui a raison mais qui laisse chercher a tort quand même : on rend
+    // maintenant LES DEUX, ce qui est en caisse et ce qui est attendu.
+    // Le calcul vit dans `lib/rdv-paiement.js`, avec sa règle : une séance
+    // d'abonnement, déjà payée à l'achat, n'entre pas une deuxième fois.
+    ca: caDesRdvs(rdvsDuJour),
   }
   const statsCardsRdv = [
     { label: 'À venir',     value: statsRdv.confirmes,                    color: T.main,    bg: T.pale,   border: `${T.main}18`,   pulse: statsRdv.confirmes > 0 },
     { label: 'Honorés',     value: statsRdv.honores,                       color: '#10B981', bg: '#F0FDF4', border: '#10B98118',     pulse: false },
     { label: 'No-show',     value: statsRdv.noShow,                        color: '#6B7280', bg: '#F9FAFB', border: '#9CA3AF22',     pulse: false },
-    { label: 'CA honoré',   value: `${statsRdv.caEstime.toFixed(0)}€`,    color: T.main,    bg: T.pale,   border: `${T.main}18`,   pulse: false },
+    {
+      label: 'CA honoré',
+      value: `${statsRdv.ca.encaisse.toFixed(0)}€`,
+      sous: statsRdv.ca.attendu > 0 ? `+ ${statsRdv.ca.attendu.toFixed(0)}€ à venir` : null,
+      color: T.main, bg: T.pale, border: `${T.main}18`, pulse: false,
+    },
   ]
 
   // ⚠️ DE QUEL JOUR PARLENT CES CHIFFRES (défaut trouvé par Alex, 16/08). Il
@@ -2327,6 +2379,12 @@ export default function Dashboard() {
                       <p style={{ fontSize: '0.58rem', color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{s.label}</p>
                     </div>
                     <p style={{ fontSize: '1.4rem', fontWeight: 900, color: s.color, letterSpacing: '-1px', lineHeight: 1 }}>{s.value}</p>
+                    {/* Ce qui n'est pas encore encaissé se lit SOUS le chiffre,
+                        et jamais à sa place : la carte annonce le CA honoré, et
+                        montre en petit ce qui l'attend. */}
+                    {s.sous && (
+                      <p style={{ fontSize: '0.6rem', fontWeight: 800, color: T.muted, marginTop: 3, lineHeight: 1 }}>{s.sous}</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2627,6 +2685,7 @@ export default function Dashboard() {
                     horairesDetail={commercant?.horaires_detail}
                     onSelectRdv={(r) => setRdvSelectionne(r)}
                     onNouveauRdv={(date, heure) => setNouveauRdvSlot({ date, heure })}
+                    onHonorerSeance={(inscrits) => setSeanceAHonorer(inscrits)}
                     onFenetreChange={majFenetreAgenda}
                   />
                 )}
@@ -2720,6 +2779,16 @@ export default function Dashboard() {
         confirmation={confirmationRdvTexte}
         onChoix={repondreActionRdv}
         onFermer={fermerActionRdv}
+      />
+
+      {/* ─── CLÔTURER UN COURS ENTIER ─────────────────────────────────────── */}
+      <ModaleConfirmation
+        ouverte={!!seanceAHonorer}
+        {...(seanceAHonorer && !confirmationSeanceTexte ? (questionSeanceHonoree(seanceAHonorer.length) || {}) : {})}
+        enCours={actionEnCours}
+        confirmation={confirmationSeanceTexte}
+        onChoix={repondreSeance}
+        onFermer={fermerSeance}
       />
     </div>
   )

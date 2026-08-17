@@ -3164,6 +3164,12 @@ verifier('le détail rappelle ce qui a déjà été payé',
 // Acompte NON payé : le tout reste dû, l'acompte n'est jamais arrivé.
 const ACOMPTE_EN_ATTENTE = { prix_estime: 35, acompte_montant: 8.75, acompte_paye: false }
 verifier('acompte non payé : tout reste dû', /35,00/.test(etatPaiementRdv(ACOMPTE_EN_ATTENTE).libelle))
+// ⚠️ GARDE NÉE MUETTE, MESURÉE EN MUTATION : le test ci-dessus ne regardait que
+// le MONTANT, si bien que cette branche pouvait retomber sur l'ancien « 35,00 €
+// à encaisser » sans que rien ne rougisse. Le mot d'état vient en tête PARTOUT,
+// sinon la seconde d'Alex redevient une lecture sur une ligne au hasard.
+verifier('et son libellé commence lui aussi par le geste attendu',
+  etatPaiementRdv(ACOMPTE_EN_ATTENTE).libelle.startsWith('À payer'))
 egal('et le ton l’annonce comme une attente', etatPaiementRdv(ACOMPTE_EN_ATTENTE).ton, 'attente')
 // ⚠️ ET ON DIT QUE L ACOMPTE N EST PAS ARRIVÉ. Sans cette phrase, le commerçant
 // lit le même libellé que sur un rendez-vous sans acompte et ne sait pas qu un
@@ -3172,15 +3178,15 @@ verifier('et le détail dit que l’acompte n’a pas été payé',
   /n’a pas été payé/.test(etatPaiementRdv(ACOMPTE_EN_ATTENTE).detail || ''))
 
 // Le cas ordinaire : ni contrat, ni acompte.
-egal('sans acompte, le prix est à encaisser',
-  etatPaiementRdv({ prix_estime: 15 }).libelle, '15,00 € à encaisser')
+egal('sans acompte, le prix est à payer',
+  etatPaiementRdv({ prix_estime: 15 }).libelle, 'À payer 15,00 €')
 
 // ⚠️ SANS PRIX CONNU (prestation sur devis), on ne FABRIQUE PAS un montant.
 // Annoncer « 0,00 € à encaisser » sur un devis serait pire que de ne rien dire.
 verifier('sans prix connu, aucun montant inventé',
   !/[0-9]/.test(etatPaiementRdv({ prix_estime: null }).libelle))
-verifier('mais on dit quand même qu’il y a à encaisser',
-  /encaisser/.test(etatPaiementRdv({ prix_estime: null }).libelle))
+verifier('mais on dit quand même qu’il y a à payer',
+  /À payer/.test(etatPaiementRdv({ prix_estime: null }).libelle))
 
 egal('sans rendez-vous, rien', etatPaiementRdv(null), null)
 
@@ -3196,6 +3202,262 @@ egal('le tableau de bord passe par la règle du module, aux deux endroits',
 // donc « 0€ » sur un abonnement et le prix complet malgré un acompte versé.
 verifier('le montant nu a disparu',
   !/\{Number\(rdv\.prix_estime\)\.toFixed\(0\)\}€/.test(srcDashPaiement))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE PAIEMENT SE LIT EN UNE SECONDE, ET IL CONNAÎT LE TEMPS DU RENDEZ-VOUS
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ DEUX DEMANDES D'ALEX LE MÊME JOUR, ET C'EST LE MÊME DÉFAUT :
+//   « on ne voit pas dans la liste qui est honoré ou pas, qui doit payer ou
+//     pas, le statut, abo ou à l'unité »
+//   « il faut distinguer du premier coup d'œil qui est en abo et qui doit
+//     payer, idem pour un coiffeur : payé, à payer ou partiellement payé. Ça
+//     doit lui prendre 1 seconde, Odoo mind »
+//
+// Le module ne lisait QUE l'argent, jamais le statut : il réclamait « 15,00 € à
+// encaisser » sur un rendez-vous marqué « ✓ Honoré » (capture d'Alex) et sur un
+// rendez-vous ANNULÉ. Une phrase juste hier devient fausse demain si elle
+// ignore le temps.
+
+const { tempsDuRdv, caDesRdvs, couleurPaiement, COULEURS_PAIEMENT } =
+  await import('../lib/rdv-paiement.js')
+
+// ⚠️ `annule` TOUT COURT N'EXISTE PAS EN BASE : le CHECK n'accepte que
+// `annule_client` et `annule_commercant`. On teste le PRÉFIXE. Un compteur écrit
+// sur l'égalité valait zéro avec dix annulations, et personne ne le voyait.
+egal('un rendez-vous confirmé est à venir', tempsDuRdv({ statut: 'confirme' }), 'a_venir')
+egal('un rendez-vous honoré est fait', tempsDuRdv({ statut: 'honore' }), 'fait')
+egal('un no-show est sans suite', tempsDuRdv({ statut: 'no_show' }), 'sans_suite')
+egal('une annulation client est sans suite', tempsDuRdv({ statut: 'annule_client' }), 'sans_suite')
+egal('une annulation commerçant aussi', tempsDuRdv({ statut: 'annule_commercant' }), 'sans_suite')
+egal('sans statut, on suppose le rendez-vous à venir', tempsDuRdv({}), 'a_venir')
+
+// ⚠️ LE MOT D'ÉTAT EN TÊTE, c'est toute la demande d'Alex. « 15,00 € à
+// encaisser » oblige à lire jusqu'au bout ; « À payer 15,00 € » se comprend au
+// premier mot, et c'est le seul qu'on lit quand on balaie douze lignes.
+const HONORE_15 = { statut: 'honore', prix_estime: 15 }
+const CONFIRME_15 = { statut: 'confirme', prix_estime: 15 }
+verifier('à venir : le libellé commence par le geste attendu',
+  etatPaiementRdv(CONFIRME_15).libelle.startsWith('À payer'))
+verifier('honoré : le libellé commence par l’état constaté',
+  etatPaiementRdv(HONORE_15).libelle.startsWith('Payé'))
+verifier('acompte versé : le libellé commence par « Partiel »',
+  etatPaiementRdv(AVEC_ACOMPTE).libelle.startsWith('Partiel'))
+verifier('abonnement : le libellé commence par le contrat',
+  etatPaiementRdv(SEANCE_ABO).libelle.startsWith('Abonnement'))
+
+// ⚠️ LE DÉFAUT DE LA CAPTURE : « ✓ Honoré » et « 15,00 € à encaisser » sur la
+// même ligne. Le commerçant relançait un client qui avait déjà payé.
+verifier('un rendez-vous honoré ne réclame plus d’argent',
+  !/à payer|encaisser/i.test(etatPaiementRdv(HONORE_15).libelle))
+egal('et il se lit comme payé', etatPaiementRdv(HONORE_15).cle, 'paye')
+// ⚠️ ET IL DIT OÙ VA L'ARGENT. C'est la réponse à « le 21 à 15 €, elle
+// n'apparaît pas dans le CA » : honorer, c'est faire entrer le montant.
+verifier('honoré : le détail relie le montant au chiffre d’affaires',
+  /chiffre d’affaires/.test(etatPaiementRdv(HONORE_15).detail || ''))
+
+// Une prestation sur devis honorée n'entre PAS au chiffre d'affaires, faute de
+// prix connu. Le taire ferait chercher un montant qui n'existe pas.
+verifier('un devis honoré dit qu’il n’entre pas au chiffre d’affaires',
+  /n’entre pas/.test(etatPaiementRdv({ statut: 'honore', prix_estime: null }).detail || ''))
+
+// ⚠️ IL RÉCLAMAIT DE L'ARGENT SUR UN RENDEZ-VOUS ANNULÉ.
+const ANNULE = { statut: 'annule_client', prix_estime: 15 }
+egal('un rendez-vous annulé ne demande rien', etatPaiementRdv(ANNULE).cle, 'rien')
+verifier('et il ne montre aucun montant', !/15,00/.test(etatPaiementRdv(ANNULE).libelle))
+
+// Le no-show et l'annulation ne se ressemblent pas : sur le premier l'acompte
+// reste acquis (c'est ce que dit déjà l'email au client), sur la seconde il est
+// remboursé. Deux gestes opposés pour la même somme.
+const NO_SHOW_ACOMPTE = { statut: 'no_show', prix_estime: 35, acompte_montant: 8.75, acompte_paye: true }
+const ANNULE_ACOMPTE = { statut: 'annule_commercant', prix_estime: 35, acompte_montant: 8.75, acompte_paye: true }
+verifier('no-show : l’acompte encaissé reste acquis',
+  /acquis/.test(etatPaiementRdv(NO_SHOW_ACOMPTE).detail || ''))
+verifier('annulation : l’acompte est à rembourser',
+  /rembourser/.test(etatPaiementRdv(ANNULE_ACOMPTE).detail || ''))
+verifier('et aucun des deux ne réclame le solde',
+  !/à payer/i.test(etatPaiementRdv(NO_SHOW_ACOMPTE).libelle)
+  && !/à payer/i.test(etatPaiementRdv(ANNULE_ACOMPTE).libelle))
+
+// Une séance d'abonnement annulée ne se lit plus comme un contrat actif : il
+// n'y a plus de séance, donc plus rien à ne pas encaisser.
+egal('une séance d’abonnement annulée retombe sur « rien »',
+  etatPaiementRdv({ statut: 'annule_client', abonnement_id: 'abo-1', prix_estime: 0 }).cle, 'rien')
+
+// ⚠️ CHAQUE ÉTAT A SA COULEUR, ET ELLES SONT TOUTES DIFFÉRENTES. Deux états qui
+// partagent une teinte, c'est la seconde d'Alex qui redevient une lecture.
+const CLES_PAIEMENT = ['abonnement', 'paye', 'partiel', 'du', 'rien']
+egal('cinq états de paiement, pas un de plus', Object.keys(COULEURS_PAIEMENT).length, 5)
+egal('et cinq teintes distinctes',
+  new Set(CLES_PAIEMENT.map(c => COULEURS_PAIEMENT[c].fond)).size, 5)
+verifier('chaque état porte texte, fond et bord',
+  CLES_PAIEMENT.every(c => COULEURS_PAIEMENT[c].texte && COULEURS_PAIEMENT[c].fond && COULEURS_PAIEMENT[c].bord))
+// ⚠️ AUCUN ROUGE : sur ce projet il est réservé à ce qui détruit. Un client qui
+// doit payer n'est pas un incident.
+verifier('aucun état de paiement n’est rouge',
+  !CLES_PAIEMENT.some(c => /^#(DC2626|EF4444|B91C1C)$/i.test(COULEURS_PAIEMENT[c].texte)))
+// Un état inconnu ne doit pas rendre `undefined` : la pastille disparaîtrait.
+verifier('une couleur est toujours rendue', !!couleurPaiement({ cle: 'inexistant' }).fond)
+egal('et l’abonnement est violet', couleurPaiement(etatPaiementRdv(SEANCE_ABO)).texte, '#6B35C4')
+
+// ─── LE CHIFFRE D'AFFAIRES : CE QUI EST EN CAISSE, ET CE QUI EST ATTENDU ───
+//
+// ⚠️ « J'EN AI PRIS UNE LE 21 À 15 € ET ELLE N'APPARAÎT PAS DANS LE CA » (Alex,
+// deux jours de suite). Le calcul avait raison : la carte s'appelle « CA
+// honoré » et un rendez-vous à venir n'y entre pas. Mais un compteur qui a
+// raison et qui laisse chercher a tort quand même.
+const JOURNEE = [
+  { statut: 'honore', prix_estime: 15 },
+  { statut: 'honore', prix_estime: 35 },
+  { statut: 'confirme', prix_estime: 15 },
+  { statut: 'annule_client', prix_estime: 50 },
+  { statut: 'no_show', prix_estime: 50 },
+  { statut: 'confirme', abonnement_id: 'abo-1', prix_estime: 0 },
+  { statut: 'honore', abonnement_id: 'abo-1', prix_estime: 0 },
+  { statut: 'honore', prix_estime: null },
+]
+const CA = caDesRdvs(JOURNEE)
+egal('le CA honoré additionne les rendez-vous honorés', CA.encaisse, 50)
+egal('et le montant attendu porte ceux qui viennent', CA.attendu, 15)
+// ⚠️ UNE SÉANCE D'ABONNEMENT A DÉJÀ ÉTÉ PAYÉE À L'ACHAT DU CONTRAT : la compter
+// ici la ferait entrer DEUX FOIS dans le chiffre d'affaires du commerçant.
+verifier('un abonnement n’entre dans aucun des deux',
+  caDesRdvs([{ statut: 'honore', abonnement_id: 'a', prix_estime: 40 }]).encaisse === 0)
+verifier('un rendez-vous annulé n’entre dans aucun des deux',
+  caDesRdvs([ANNULE]).encaisse === 0 && caDesRdvs([ANNULE]).attendu === 0)
+verifier('un prix inconnu n’invente aucun montant',
+  caDesRdvs([{ statut: 'honore', prix_estime: null }]).encaisse === 0)
+egal('une journée vide vaut zéro, pas NaN', caDesRdvs([]).encaisse, 0)
+egal('et une liste absente ne casse rien', caDesRdvs(null).attendu, 0)
+
+// ⚠️ LA CARTE MONTRE LES DEUX. On COMPTE l'usage : chercher le nom du module
+// dans la page laissait l'import satisfaire le test, et l'homonyme voisin a
+// rendu huit gardes muettes cette semaine.
+verifier('la carte du CA calcule par le module',
+  /ca:\s*caDesRdvs\(rdvsDuJour\)/.test(srcDashPaiement))
+verifier('et elle annonce ce qui est attendu sous le chiffre',
+  /statsRdv\.ca\.attendu\s*>\s*0/.test(srcDashPaiement) && /à venir/.test(srcDashPaiement))
+verifier('l’ancien calcul, aveugle au contrat et aux abonnements, a disparu',
+  !/filter\(r => r\.statut === 'honore'\)\.reduce/.test(srcDashPaiement))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA LISTE D'UN COURS DIT TOUT, SANS OUVRIR DOUZE FICHES
+// ═══════════════════════════════════════════════════════════════════════════
+
+const { statutRdv, resumeSeance, texteResumeSeance } = await import('../lib/rdv-statut.js')
+
+egal('un statut connu porte son mot', statutRdv({ statut: 'honore' }).label, 'Honoré')
+egal('les deux annulations se lisent pareil',
+  statutRdv({ statut: 'annule_client' }).label, statutRdv({ statut: 'annule_commercant' }).label)
+// ⚠️ NE RIEN AFFICHER EST LA PIRE DES SORTIES : une ligne sans état se lit comme
+// un rendez-vous ordinaire. Un statut inconnu se montre tel quel.
+verifier('un statut inconnu se montre quand même', !!statutRdv({ statut: 'bizarre' }).label)
+verifier('et il garde une couleur lisible', !!statutRdv({ statut: 'bizarre' }).fond)
+
+const COURS = [
+  { id: 'a', statut: 'honore' },
+  { id: 'b', statut: 'honore' },
+  { id: 'c', statut: 'confirme' },
+  { id: 'd', statut: 'no_show' },
+  { id: 'e', statut: 'annule_client' },
+]
+const RES = resumeSeance(COURS)
+egal('les annulés ne sont plus des inscrits', RES.presents, 4)
+egal('on compte les honorés', RES.honores, 2)
+egal('on compte les absents', RES.absents, 1)
+egal('et ceux qui restent à clôturer', RES.aVenir, 1)
+egal('la clôture groupée ne vise QUE ceux qui restent', RES.aCloturer.join(','), 'c')
+
+// ⚠️ UN ÉLÉMENT ÉCARTÉ SE MONTRE AVEC SA RAISON (règle du 17/08). Le résumé
+// nomme chaque catégorie : sans cela, « 4 inscrits » sur une liste de 5 lignes
+// fait compter les têtes à la main.
+const TEXTE = texteResumeSeance(COURS, 12)
+verifier('le résumé dit combien sont inscrits', /4 inscrits sur 12/.test(TEXTE))
+verifier('il nomme les honorés', /2 honorés/.test(TEXTE))
+verifier('il nomme les absents', /1 pas venu/.test(TEXTE))
+verifier('il nomme les annulés', /1 annulé/.test(TEXTE))
+verifier('et il dit ce qui reste à clôturer', /1 à clôturer/.test(TEXTE))
+verifier('un cours plein le dit', /complet/.test(texteResumeSeance([{ id: 'a', statut: 'confirme' }], 1)))
+verifier('un cours qui n’est pas plein ne le dit pas',
+  !/complet/.test(texteResumeSeance([{ id: 'a', statut: 'confirme' }], 12)))
+verifier('sans capacité connue, on n’invente pas de dénominateur',
+  !/ sur /.test(texteResumeSeance([{ id: 'a', statut: 'confirme' }], null)))
+
+// ─── CE QUE L'ÉCRAN AFFICHE VRAIMENT ──────────────────────────────────────
+// `srcAgenda` est lu plus haut dans ce banc : une seule lecture du fichier.
+// ⚠️ ON COMPTE : la règle du paiement sert DEUX fois dans ce fichier, la liste
+// d'un cours et la bande Historique. Chercher son nom laissait l'import, ou le
+// premier usage, satisfaire la garde.
+egal('l’agenda passe par la règle du paiement aux deux endroits',
+  (srcAgenda.match(/etatPaiementRdv\(/g) || []).length, 2)
+verifier('la ligne d’un inscrit porte son statut', /statutRdv\(i\)/.test(srcAgenda))
+verifier('et le résumé du cours remplace le comptage à la main',
+  /texteResumeSeance\(seanceOuverte\.inscrits/.test(srcAgenda))
+verifier('la pastille de paiement prend sa couleur dans le module',
+  /couleurPaiement\(pai\)/.test(srcAgenda))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CLÔTURER UN COURS ENTIER : UNE SEULE QUESTION, DOUZE ÉCRITURES
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ « DANS LA BASE IL FAUT HONORER CHAQUE RDV SÉPARÉMENT, OK OU PAS ? » (Alex).
+// En base oui, et il ne faut pas y toucher : un absent doit rester un absent.
+// Mais le GESTE n'a aucune raison de se répéter douze fois.
+
+const { questionSeanceHonoree, confirmationSeanceHonoree } =
+  await import('../lib/confirmation-rdv.js')
+
+egal('sans personne à clôturer, aucune question', questionSeanceHonoree(0), null)
+egal('ni sur une entrée absurde', questionSeanceHonoree(null), null)
+verifier('une seule personne se demande au singulier',
+  /cette personne/.test(questionSeanceHonoree(1).titre))
+verifier('douze se demandent au pluriel, avec leur nombre',
+  /ces 12 personnes/.test(questionSeanceHonoree(12).titre))
+// ⚠️ HONORER NE SE DÉFAIT PAS (`STATUTS_RDV.honore` n'ouvre aucune action de
+// retour). Douze d'un coup n'est plus un réflexe : ça se dit avant.
+verifier('la question prévient que le geste ne se défait pas',
+  /ne se défait pas/.test(questionSeanceHonoree(12).message))
+verifier('elle prévient aussi que chacun reçoit son email',
+  /email/.test(questionSeanceHonoree(12).message))
+// Et elle ouvre la porte du cas particulier plutôt que de le laisser deviner.
+verifier('elle dit quoi faire si quelqu’un manquait',
+  /absence/.test(questionSeanceHonoree(12).details || ''))
+// ⚠️ LA SORTIE SANS EFFET TOUJOURS EN DERNIER, et aucun bouton nommé « OK ».
+const ACT_SEANCE = questionSeanceHonoree(12).actions
+egal('la sortie sans effet vient en dernier', ACT_SEANCE[ACT_SEANCE.length - 1].valeur, 'rien')
+verifier('aucun bouton ne s’appelle OK ni Annuler',
+  !ACT_SEANCE.some(a => /^(ok|annuler)$/i.test(a.label)))
+
+// ⚠️ ON NE CONFIRME QUE CE QUI A EU LIEU, ET ON COMPTE. Sur douze écritures,
+// deux peuvent échouer : annoncer « c'est fait » ferait fermer l'écran à
+// quelqu'un dont deux lignes attendent encore.
+verifier('la confirmation compte les personnes enregistrées',
+  /12 personnes/.test(confirmationSeanceHonoree({ faits: 12 })))
+verifier('une seule se dit au singulier',
+  /1 personne est/.test(confirmationSeanceHonoree({ faits: 1 })))
+verifier('elle relie le geste au chiffre d’affaires',
+  /chiffre d’affaires/.test(confirmationSeanceHonoree({ faits: 12 })))
+verifier('les échecs sont NOMMÉS, pas avalés',
+  /2 lignes n’ont pas pu/.test(confirmationSeanceHonoree({ faits: 10, echecs: 2 })))
+verifier('un échec total ne se déguise pas en réussite',
+  /Rien n’a pu être enregistré/.test(confirmationSeanceHonoree({ faits: 0, echecs: 3 })))
+
+// ─── LE TABLEAU DE BORD EXÉCUTE VRAIMENT LA CLÔTURE GROUPÉE ───────────────
+verifier('la liste d’un cours peut clôturer la séance',
+  /onHonorerSeance/.test(srcAgenda))
+verifier('et elle ne propose le geste que s’il reste quelqu’un',
+  /resumeSeance\(seanceOuverte\.inscrits\)\.aCloturer\.length > 0/.test(srcAgenda))
+verifier('le tableau de bord écrit une ligne par personne',
+  /for \(const rdv of seanceAHonorer\)/.test(srcDashPaiement))
+// ⚠️ EN SÉRIE ET NON EN PARALLÈLE : chaque écriture déclenche un email et le
+// passage de la commande liée en récupérée. Douze d'un coup, c'est la file
+// d'attente qui décide de l'ordre et un échec au milieu qu'on n'attribue plus.
+verifier('les écritures partent l’une après l’autre',
+  !/Promise\.all\(seanceAHonorer/.test(srcDashPaiement))
+// ⚠️ ET SANS DOUZE FENÊTRES D'ALERTE EMPILÉES : l'appelant compte les échecs et
+// les annonce en une phrase.
+verifier('les échecs sont comptés, pas alertés douze fois',
+  /silencieux: true/.test(srcDashPaiement))
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

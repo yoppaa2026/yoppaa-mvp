@@ -403,9 +403,19 @@ verifier('une séance d’abonnement ne porte pas le prix du contrat',
 // Sur une liste de douze noms, rien ne disait qui avait déjà réglé son année et
 // qui devait payer en arrivant. Le lien existait dans la réservation depuis la
 // migration, il ne manquait qu'à l'afficher.
+// ⚠️ LA PASTILLE « ABONNÉE » A ÉTÉ REMPLACÉE, PAS SUPPRIMÉE (17/08). Elle ne
+// disait qu'une chose sur deux : qui est abonnée, jamais combien doit payer
+// l'autre. Alex : « il faut distinguer du premier coup d'œil qui est en abo et
+// qui doit payer, idem pour un coiffeur : payé, à payer ou partiellement payé.
+// Ça doit lui prendre 1 seconde. » C'est le même module qui répond aux deux, et
+// il est EXÉCUTÉ ici plutôt que cherché dans le JSX.
 const srcAgenda = sansCommentaires(readFileSync(new URL('../app/dashboard/AgendaRdv.js', import.meta.url), 'utf8'))
+const { etatPaiementRdv: etatPaiementAgenda } = await import('../lib/rdv-paiement.js')
 verifier('l’agenda distingue une abonnée d’une séance à l’unité',
-  /i\.abonnement_id &&/.test(srcAgenda))
+  etatPaiementAgenda({ abonnement_id: 'abo-1', prix_estime: 0 }).cle === 'abonnement'
+  && etatPaiementAgenda({ prix_estime: 15 }).cle === 'du')
+verifier('et la ligne d’un inscrit porte bien cet état',
+  /const pai = etatPaiementRdv\(i\)/.test(srcAgenda))
 
 // ⚠️ ET LA COLONNE DOIT ARRIVER JUSQU'À L'ÉCRAN. Un badge conditionné à un
 // champ absent du `select` ne s'affiche JAMAIS, sans la moindre erreur : c'est

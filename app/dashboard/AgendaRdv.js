@@ -20,6 +20,8 @@ import BandeDefilante from '@/app/components/BandeDefilante'
 import { couleurRdv, COULEUR_DEFAUT } from '@/lib/agenda-couleurs'
 import { blocsAgenda } from '@/lib/cours-collectifs'
 import { contenuBlocRdv } from '@/lib/agenda-bloc'
+import { statutRdv, resumeSeance, texteResumeSeance } from '@/lib/rdv-statut'
+import { etatPaiementRdv, couleurPaiement } from '@/lib/rdv-paiement'
 
 const T = {
   bg:      '#F8F6FF',
@@ -37,17 +39,11 @@ const JOURS_CRT  = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 const JOURS_LONG = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
 const MOIS_CRT   = ['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc']
 
-// Ce qu'on écrit sur la pastille d'un rendez-vous passé. Les libellés du
-// tableau de bord vivent dans `page.js` avec leurs couleurs et leurs actions :
-// ici on n'a besoin que du mot, et le recopier évite d'exporter une structure
-// entière pour trois caractères.
-const LIBELLES_STATUT = {
-  confirme: 'Confirmé',
-  honore: 'Honoré',
-  no_show: 'No-show',
-  annule_client: 'Annulé par le client',
-  annule_commercant: 'Annulé',
-}
+// Les libellés de statut vivent désormais dans `lib/rdv-statut.js`, avec leurs
+// couleurs : la liste d'un cours et la bande Historique disent la même chose du
+// même statut, et le banc peut les EXÉCUTER au lieu de chercher des mots dans
+// du JSX. `page.js` garde sa table `STATUTS_RDV`, qui y attache en plus les
+// ACTIONS possibles, lesquelles n'ont rien à faire dans une liste en lecture.
 
 const PAS_MINUTES = 30      // granularité grille
 const HAUTEUR_CELLULE = 32  // hauteur d'une cellule 30min en pixels
@@ -79,7 +75,7 @@ function jourIdxLun(d) { return (d.getDay() + 6) % 7 }
 // La logique est sortie d'ici pour être testable : le calcul du contraste du
 // texte, en particulier, décide de la lisibilité de tout l'écran.
 
-export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDetail, onSelectRdv, onNouveauRdv, onFenetreChange }) {
+export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDetail, onSelectRdv, onNouveauRdv, onHonorerSeance, onFenetreChange }) {
   // Filtre praticien : 'all' = tous les praticiens, ou un praticien_id specifique.
   // Sess 5f : le commercant multi-prat peut isoler l'agenda d'un praticien pour
   // voir uniquement les RDV pris avec lui/elle.
@@ -422,10 +418,25 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                     {JOURS_CRT[jourIdxLun(d)]} {d.getDate()} {MOIS_CRT[d.getMonth()]}
                     {r.heure_debut ? ` · ${r.heure_debut.slice(0, 5)}` : ''}
                     {r.praticien?.prenom ? ` · ${r.praticien.prenom}` : ''}
+                    {/* ⚠️ L'ARGENT AUSSI DANS L'HISTORIQUE. C'est la liste des
+                        rendez-vous à clôturer : demander au commerçant de se
+                        souvenir de qui doit encore payer, ou de rouvrir chaque
+                        fiche, c'est le défaut relevé sur la liste d'un cours,
+                        au même endroit du même écran. */}
+                    {(() => {
+                      const p = etatPaiementRdv(r)
+                      if (!p) return null
+                      const c = couleurPaiement(p)
+                      return (
+                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 900, color: c.texte, background: c.fond, border: `1px solid ${c.bord}`, borderRadius: 100, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '0.3px', whiteSpace: 'nowrap' }}>
+                          {p.libelle}
+                        </span>
+                      )
+                    })()}
                   </span>
                 </span>
                 <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '3px 8px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0, background: aFaire ? '#DC2626' : T.bg, color: aFaire ? '#fff' : T.muted }}>
-                  {aFaire ? 'À clôturer' : (LIBELLES_STATUT[r.statut] || r.statut)}
+                  {aFaire ? 'À clôturer' : statutRdv(r).label}
                 </span>
               </button>
             )
@@ -745,44 +756,91 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
             <p style={{ margin: '0 0 2px', fontSize: 15, fontWeight: 900, color: T.ink }}>
               {seanceOuverte.inscrits[0]?.prestation?.nom || 'Cours'}
             </p>
+            {/* ⚠️ CE QUE LA SÉANCE PÈSE, PAS SEULEMENT COMBIEN ILS SONT. Trois
+                inscrits sur douze ne dit rien de l'essentiel un quart d'heure
+                après le cours : qui reste à clôturer. Chaque catégorie est
+                nommée, y compris les absents et les annulés. */}
             <p style={{ margin: '0 0 14px', fontSize: 12.5, color: T.muted, fontWeight: 600 }}>
               {seanceOuverte.heure_debut?.slice(0, 5)}–{seanceOuverte.heure_fin?.slice(0, 5)}
-              {' · '}{seanceOuverte.inscrits.length} inscrit{seanceOuverte.inscrits.length > 1 ? 's' : ''} sur {seanceOuverte.capacite}
-              {seanceOuverte.inscrits.length >= seanceOuverte.capacite ? ' · complet' : ''}
+              {' · '}{texteResumeSeance(seanceOuverte.inscrits, seanceOuverte.capacite)}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {seanceOuverte.inscrits.map(i => (
+              {seanceOuverte.inscrits.map(i => {
+                // ⚠️ TOUTE LA LIGNE, ET PAS SEULEMENT UN NOM (Alex, 17/08 : « on
+                // ne voit pas dans la liste qui est honoré ou pas, qui doit
+                // payer ou pas, le statut, abo ou à l'unité »). Ouvrir douze
+                // fiches pour savoir où en est un cours, c'est exactement ce
+                // que la règle du jour interdit.
+                const st = statutRdv(i)
+                const pai = etatPaiementRdv(i)
+                const passe = st.cle !== 'confirme'
+                return (
                 <button key={i.id}
                   onClick={() => { setSeanceOuverte(null); if (onSelectRdv) onSelectRdv(i) }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 12, padding: '10px 12px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: T.pale, color: T.main, fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: '#fff', border: `1px solid ${passe ? '#F3F4F6' : T.pale}`, borderRadius: 12, padding: '10px 12px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: st.fond, color: st.texte, fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {i.place_no || 1}
                   </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {[i.client_prenom, i.client_nom].filter(Boolean).join(' ') || 'Client'}
-                      {/* ⚠️ DISTINGUER L'ABONNÉE DE CELLE QUI PAIE À LA SÉANCE.
-                          Sur une liste de douze noms identiques, le commerçant
-                          n'a aucun moyen de savoir qui a déjà réglé son année
-                          et qui doit payer en arrivant. Le lien existe déjà
-                          dans la réservation, il ne manquait qu'à le dire. */}
-                      {i.abonnement_id && (
-                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 900, color: T.main, background: T.pale, borderRadius: 100, padding: '1px 7px', verticalAlign: 'middle' }}>
-                          abonnée
-                        </span>
-                      )}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {[i.client_prenom, i.client_nom].filter(Boolean).join(' ') || 'Client'}
+                      </span>
+                      <span style={{ fontSize: 10, fontWeight: 900, color: st.texte, background: st.fond, border: `1px solid ${st.bord}`, borderRadius: 100, padding: '1px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        {st.icone} {st.label}
+                      </span>
                     </span>
+                    {/* ⚠️ DISTINGUER L'ABONNÉE DE CELLE QUI PAIE À LA SÉANCE.
+                        Sur une liste de douze noms identiques, le commerçant
+                        n'a aucun moyen de savoir qui a déjà réglé son année et
+                        qui doit payer en arrivant. Le lien existe déjà dans la
+                        réservation, il ne manquait qu'à le dire. La pastille
+                        de paiement le dit maintenant pour les deux cas, et
+                        avec le montant. */}
+                    {pai && (
+                      <span style={{ display: 'inline-block', marginTop: 3, fontSize: 10.5, fontWeight: 900, color: couleurPaiement(pai).texte, background: couleurPaiement(pai).fond, border: `1px solid ${couleurPaiement(pai).bord}`, borderRadius: 100, padding: '1px 8px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                        {pai.libelle}
+                      </span>
+                    )}
                     {i.client_telephone && (
-                      <span style={{ display: 'block', fontSize: 11.5, color: T.muted, fontWeight: 600 }}>{i.client_telephone}</span>
+                      <span style={{ display: 'block', fontSize: 11.5, color: T.muted, fontWeight: 600, marginTop: 2 }}>{i.client_telephone}</span>
                     )}
                   </span>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                     <path d="M9 18l6-6-6-6"/>
                   </svg>
                 </button>
-              ))}
+                )
+              })}
             </div>
+
+            {/* ─── CLÔTURER LA SÉANCE ENTIÈRE ────────────────────────────────
+                ⚠️ « IL FAUT HONORER CHAQUE RDV SÉPARÉMENT (OK OU PAS ?) »
+                (Alex, 17/08). En base, oui : chacun est venu ou non, et un
+                absent doit rester un absent. Mais LE GESTE, lui, n'a aucune
+                raison de se répéter douze fois en douze fenêtres. On garde donc
+                la vérité individuelle et on offre le geste collectif : une
+                seule question pour tout un cours, et chaque ligne reste
+                cliquable pour celui qui manquait.
+                La question EST posée, contrairement au geste unitaire : honorer
+                ne se défait pas, et douze personnes d'un coup n'est plus un
+                réflexe de fin de rendez-vous. */}
+            {onHonorerSeance && resumeSeance(seanceOuverte.inscrits).aCloturer.length > 0 && (
+              <button
+                onClick={() => {
+                  const aCloturer = resumeSeance(seanceOuverte.inscrits).aCloturer
+                  const inscrits = seanceOuverte.inscrits.filter(i => aCloturer.includes(i.id))
+                  setSeanceOuverte(null)
+                  onHonorerSeance(inscrits)
+                }}
+                style={{ width: '100%', marginTop: 12, padding: '12px 14px', borderRadius: 100, border: 'none', background: 'linear-gradient(135deg, #059669, #10B981)', color: '#fff', fontWeight: 800, fontSize: 13.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, boxShadow: '0 3px 12px rgba(16,185,129,0.35)' }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17l-5-5"/>
+                </svg>
+                Tout le monde était là ({resumeSeance(seanceOuverte.inscrits).aCloturer.length})
+              </button>
+            )}
 
             {/* ─── INSCRIRE QUELQU'UN DE PLUS ────────────────────────────────
                 ⚠️ CE BOUTON N'EXISTAIT PAS, ET C'ÉTAIT UNE IMPASSE. Relevé par

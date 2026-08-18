@@ -52,10 +52,30 @@ input, textarea, select {
   font-size: max(16px, 1rem);
 }
 
-/* Conteneurs internes avec scroll horizontal (catégories, jours dispos…) :
-   ils gardent leur scroll-x interne mais ne propagent pas le geste au body. */
+/* Conteneurs internes avec scroll horizontal (catégories, jours dispos, photos
+   du commerce…) : ils gardent leur scroll-x interne mais ne propagent pas le
+   geste au body.
+
+   ⚠️ CES BANDES ONT ÉTÉ DES ZONES MORTES, ET ÇA A COÛTÉ TROIS JOURS.
+   Elles portaient `touch-action: pan-x`, qui ne dit PAS « cette bande défile
+   aussi horizontalement » : ça dit « sur cette zone, le doigt ne peut faire QUE
+   de l'horizontal ». Le défilement vertical y était donc supprimé, et le geste
+   n'était même pas rendu à la page : on posait le doigt sur la galerie ou sur
+   la barre de catégories, on tirait vers le haut, et RIEN ne bougeait.
+
+   ⚠️ ET ÇA RESSEMBLAIT À DE LA LENTEUR. Alex l'a d'abord décrit comme « des
+   blocages, une ou deux secondes puis ça repart » : on tire, rien ne se passe,
+   on recommence ailleurs, ça repart. Trois causes de ralentissement ont été
+   trouvées et corrigées avant celle-ci, toutes réelles, aucune suffisante.
+   C'est une capture d'écran avec la zone entourée qui a tranché.
+
+   ⚠️ CE QUI EMPÊCHE LA PROPAGATION, C'EST `overscroll-behavior-x`, pas
+   `touch-action`. Le premier fait le travail voulu ; le second interdisait un
+   geste que personne n'avait demandé d'interdire. On nomme donc les deux axes
+   explicitement plutôt que de laisser `auto` : le `body` restreint déjà le
+   sien, et une valeur écrite noir sur blanc se relit. */
 .cat-bar, .jours-wrap, .filtres-wrap, .cats, [data-scroll-x] {
-  touch-action: pan-x;
+  touch-action: pan-x pan-y pinch-zoom;
   overscroll-behavior-x: contain;
 }
 

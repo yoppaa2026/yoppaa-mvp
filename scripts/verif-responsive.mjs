@@ -714,6 +714,76 @@ const enVh = fichiersEcrans
 egal('plus aucune hauteur d’écran en vh dans app/', enVh, [])
 
 // ═══════════════════════════════════════════════════════════════════════════
+// AUCUNE BANDE NE DOIT AVALER LE DÉFILEMENT VERTICAL
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ CE DÉFAUT A COÛTÉ TROIS JOURS ET DES DÉMOS RATÉES CHEZ DES COMMERÇANTS.
+// Les bandes horizontales portaient `touch-action: pan-x`. Ça ne dit pas
+// « cette bande défile aussi horizontalement », ça dit « ici le doigt ne peut
+// faire QUE de l'horizontal » : le geste vertical y était supprimé ET non rendu
+// à la page. Poser le doigt sur la galerie ou sur la barre de catégories et
+// tirer vers le haut ne faisait RIEN.
+//
+// ⚠️ ET ÇA SE DÉGUISAIT EN LENTEUR. Le symptôme rapporté était « des blocages,
+// une ou deux secondes puis ça repart » : on tire, rien ne bouge, on recommence
+// ailleurs, ça repart. Trois causes de ralentissement ont été trouvées et
+// corrigées avant celle-ci. Toutes réelles. Aucune suffisante.
+//
+// La garde porte sur la PROPRIÉTÉ, pas sur un fichier : elle compte, dans tout
+// `app`, les déclarations qui autorisent l'horizontal sans autoriser le
+// vertical. C'est la leçon des flous du 18/08, une garde étroite ne garde rien.
+{
+  const zonesMortes = []
+  let slidersDedies = 0
+  const parcourirStyles = (dossier) => {
+    for (const entree of readdirSync(dossier, { withFileTypes: true })) {
+      const chemin = `${dossier}/${entree.name}`
+      if (entree.isDirectory()) { parcourirStyles(chemin); continue }
+      if (!/\.(css|js)$/.test(entree.name)) continue
+      // ⚠️ SANS LES COMMENTAIRES. La garde a d'abord rougi sur l'explication
+      // du défaut, écrite juste au-dessus du correctif : un banc qui lit de la
+      // prose n'est pas un banc. Le `//` précédé de deux points est épargné,
+      // sinon une adresse « https:// » amputerait sa propre ligne.
+      const source = readFileSync(chemin, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1')
+      // `touch-action: …` en CSS et `touchAction: '…'` en JavaScript.
+      const declarations = [
+        ...source.matchAll(/touch-action:\s*([a-z0-9 -]+)/g),
+        ...source.matchAll(/touchAction:\s*['"]([a-z0-9 -]+)['"]/g),
+      ]
+      for (const [, brut] of declarations) {
+        const valeur = brut.replace(/!important/, '').trim()
+        if (valeur === 'none') { slidersDedies++; continue }
+        const horizontal = /\bpan-x\b/.test(valeur)
+        const vertical = /\bpan-y\b/.test(valeur)
+        if (horizontal && !vertical) zonesMortes.push(`${chemin} → « ${valeur} »`)
+      }
+    }
+  }
+  parcourirStyles('app')
+  verifier('aucune bande n’interdit le défilement vertical',
+    zonesMortes.length === 0, zonesMortes.join(', '))
+  // ⚠️ `none` supprime AUSSI le défilement vertical sous le doigt. C'est
+  // légitime pour un curseur qu'on fait glisser, qui gère son propre geste, et
+  // pour rien d'autre. On le COMPTE donc : un second apparaîtrait en silence.
+  verifier('un seul geste s’approprie le doigt, le curseur de retrait',
+    slidersDedies === 1, `${slidersDedies} trouvés`)
+
+  // ⚠️ ET LA SYMÉTRIE, révélée par une mutation muette : la garde ci-dessus
+  // n'attrape que la perte du vertical. Une bande réduite à `pan-y` perdrait
+  // son défilement horizontal, donc ses photos de droite, tout aussi
+  // silencieusement. La règle qui gouverne ces bandes doit nommer LES DEUX.
+  const styles = readFileSync('app/globals.css', 'utf8')
+  const regle = styles.match(/\[data-scroll-x\]\s*\{[^}]*\}/)
+  verifier('la règle des bandes horizontales existe toujours', !!regle)
+  verifier('elle autorise les deux axes, nommément',
+    !!regle && /pan-x/.test(regle[0]) && /pan-y/.test(regle[0]), regle ? regle[0] : '')
+  verifier('et elle empêche toujours le geste de fuir vers la page',
+    !!regle && /overscroll-behavior-x:\s*contain/.test(regle[0]))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // LA BARRE DE CATÉGORIES : LA DÉCISION, ET L'ENDROIT OÙ ELLE VIT
 // ═══════════════════════════════════════════════════════════════════════════
 //

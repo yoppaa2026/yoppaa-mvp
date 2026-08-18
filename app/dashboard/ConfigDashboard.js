@@ -16,7 +16,7 @@ import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // ne pose plus une seule séance, il crée le contrat. Le placement d'une série et
 // la gravure du lieu n'ont pas été supprimés du projet, c'est le geste d'agenda
 // qui les reprend.
-import { exclusionsQuiSeChevauchent, seancesDeLaFormule, fenetreDeValidite, phraseApercuFormule, expliquerApercuFormule } from '@/lib/abonnements'
+import { exclusionsQuiSeChevauchent, seancesDeLaFormule, fenetreDeValidite, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement } from '@/lib/abonnements'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
@@ -7185,6 +7185,11 @@ function TabRdvAbonnements({ commercantId, toast }) {
   }
   const [form, setForm] = useState(initialForm)
   const [exclu, setExclu] = useState({ debut: '', fin: '', libelle: '' })
+  // Les séances déjà posées sur les contrats, pour montrer un SOLDE et non un
+  // total figé. Et l'encaissement au comptoir, ouvert une carte à la fois.
+  const [reservationsAbo, setReservationsAbo] = useState([])
+  const [encaisseOuvert, setEncaisseOuvert] = useState(null)
+  const [encaissantId, setEncaissantId] = useState(null)
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchAll() }, [commercantId])
@@ -7195,7 +7200,16 @@ function TabRdvAbonnements({ commercantId, toast }) {
     // servait qu'à graver l'endroit sur chaque séance générée d'avance : plus
     // aucune séance ne naît dans cet écran, la requête partait pour rien à
     // chaque ouverture de l'onglet.
-    const [{ data: f }, { data: p }, { data: a }] = await Promise.all([
+    // ⚠️ LA QUATRIÈME REQUÊTE EST REVENUE, POUR UNE TOUT AUTRE RAISON (19/08).
+    // Cet écran affichait `seances_total` et rien d'autre : une abonnée qui
+    // avait déjà consommé douze de ses trente-huit séances lisait « 38 séances »
+    // pour toujours. La commerçante devait ouvrir l'agenda et compter à la main
+    // pour savoir où elle en était. Alex : « il ne décompte pas les séances ».
+    //
+    // ⚠️ ON COMPTE LES RÉSERVATIONS, ON NE LIT PAS UN COMPTEUR. C'est la règle
+    // du module (voir `seancesConsommees`) : un compteur stocké dérive au
+    // premier accident, et personne ne sait plus quel chiffre croire.
+    const [{ data: f }, { data: p }, { data: a }, { data: r }] = await Promise.all([
       supabase.from('abonnement_formules').select('*')
         .eq('commercant_id', commercantId).is('deleted_at', null)
         .order('ordre', { ascending: true }).order('created_at', { ascending: true }),
@@ -7205,11 +7219,39 @@ function TabRdvAbonnements({ commercantId, toast }) {
       supabase.from('abonnements').select('*')
         .eq('commercant_id', commercantId).is('deleted_at', null)
         .order('created_at', { ascending: false }),
+      supabase.from('rdv_reservations').select('abonnement_id, statut, date_rdv')
+        .eq('commercant_id', commercantId).not('abonnement_id', 'is', null)
+        .is('deleted_at', null),
     ])
     setFormules(f || [])
     setPrestations(p || [])
     setAbonnes(a || [])
+    setReservationsAbo(r || [])
     setLoading(false)
+  }
+
+  // ═══ L'ARGENT DU COMPTOIR ══════════════════════════════════════════════
+  //
+  // ⚠️ CET ÉCRAN ÉTAIT UN CUL-DE-SAC (Alex, 19/08). Une inscription enregistrée
+  // sans paiement affichait « Paiement en attente »… et la carte ne proposait
+  // que « Résilier ». La commerçante encaissait les 400 € le lendemain et
+  // n'avait AUCUN geste pour le dire. Résilier le contrat d'une cliente qui
+  // vient de payer est la seule porte qu'on lui laissait ouverte.
+  //
+  // ⚠️ ET LE MOYEN EST OBLIGATOIRE, comme à l'inscription : « payé » sans dire
+  // par quel moyen renvoie en Comptabilité un montant qu'on ne sait plus aller
+  // chercher, dans le tiroir ou sur le relevé du terminal. Trois boutons, un
+  // geste chacun, plutôt qu'une liste déroulante suivie d'une validation.
+  async function encaisser(a, mode) {
+    setEncaissantId(a.id)
+    const { error } = await supabase.from('abonnements')
+      .update({ paye: true, paye_le: new Date().toISOString(), mode_paiement: mode })
+      .eq('id', a.id)
+    setEncaissantId(null)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    setEncaisseOuvert(null)
+    toast(`Abonnement de ${a.client_prenom} encaissé`)
+    fetchAll()
   }
 
   // ═══ LA SOUSCRIPTION ═══════════════════════════════════════════════════
@@ -7817,6 +7859,10 @@ function TabRdvAbonnements({ commercantId, toast }) {
               {abonnes.map(a => {
                 const f = formules.find(x => x.id === a.formule_id)
                 const resilie = a.statut === 'resilie'
+                // Le solde se COMPTE sur les réservations, il ne se lit pas.
+                const posees = seancesConsommees(reservationsAbo, { abonnementId: a.id })
+                const restantes = soldeAbonnement(a, posees)
+                const moyen = libelleMoyenEncaissement(a.mode_paiement)
                 return (
                   <div key={a.id} style={{ background: '#fff', borderRadius: 12, padding: 14, border: `1px solid ${T.hairline}`, opacity: resilie ? 0.5 : 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
@@ -7826,7 +7872,18 @@ function TabRdvAbonnements({ commercantId, toast }) {
                           {resilie && <span style={{ ...s.tag, background: '#FEE2E2', color: '#B91C1C', marginLeft: 8 }}>Résilié</span>}
                         </p>
                         <p style={{ fontSize: 12, color: T.muted, marginTop: 3, overflowWrap: 'anywhere' }}>
-                          {f ? `${f.libelle} · ` : ''}{a.seances_total} séance{a.seances_total > 1 ? 's' : ''}
+                          {/* ⚠️ LE SOLDE, PAS LE TOTAL. Cette ligne annonçait
+                              « 38 séances » à vie, même à une abonnée qui en
+                              avait déjà consommé douze : la commerçante devait
+                              ouvrir l'agenda et compter à la main. Le total
+                              reste dit, parce qu'un solde seul ne se situe pas.
+                              ⚠️ `restantes` peut valoir null quand le contrat ne
+                              dit pas combien il accordait : on n'affiche alors
+                              PAS « 0 restantes », qui serait un mensonge. */}
+                          {f ? `${f.libelle} · ` : ''}
+                          {restantes === null
+                            ? `${a.seances_total} séance${a.seances_total > 1 ? 's' : ''}`
+                            : `${restantes} séance${restantes > 1 ? 's' : ''} restante${restantes > 1 ? 's' : ''} sur ${a.seances_total}`}
                           {/* ⚠️ CETTE LIGNE ANNONÇAIT « elle réserve elle-même »
                               sur la seule foi du mode, et c'était faux dès qu'une
                               abonnée n'avait pas d'email : personne ne réservait
@@ -7838,15 +7895,51 @@ function TabRdvAbonnements({ commercantId, toast }) {
                         <p style={{ fontSize: 11.5, color: T.muted, marginTop: 3 }}>
                           Du {dateCourte(a.date_debut)} au {dateCourte(a.date_fin)}
                           {' · '}
+                          {/* ⚠️ « PAYÉ » NE SUFFIT PAS, le moyen se dit aussi :
+                              c'est lui qui indique où retrouver l'argent, dans
+                              le tiroir ou sur le relevé du terminal. */}
                           {a.paye
-                            ? <span style={{ color: '#15803D', fontWeight: 700 }}>Payé</span>
+                            ? <span style={{ color: '#15803D', fontWeight: 700 }}>Payé{moyen ? ` · ${moyen}` : ''}</span>
                             : <span style={{ color: '#B45309', fontWeight: 700 }}>Paiement en attente</span>}
                         </p>
                       </div>
                       {!resilie && (
-                        <button onClick={() => resilier(a)} style={{ ...s.btn, ...s.btnDanger, padding: '7px 12px', fontSize: 12, flexShrink: 0 }}>Résilier</button>
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                          {/* ⚠️ LE GESTE QUI MANQUAIT. Sans lui, la seule action
+                              offerte sur un contrat impayé était « Résilier » :
+                              on encaissait 400 € au comptoir et l'écran n'avait
+                              aucune porte pour le dire. */}
+                          {!a.paye && (
+                            <button onClick={() => setEncaisseOuvert(encaisseOuvert === a.id ? null : a.id)}
+                              style={{ ...s.btn, ...s.btnPrimary, padding: '7px 12px', fontSize: 12 }}>
+                              {encaisseOuvert === a.id ? 'Fermer' : 'Encaisser'}
+                            </button>
+                          )}
+                          <button onClick={() => resilier(a)} style={{ ...s.btn, ...s.btnDanger, padding: '7px 12px', fontSize: 12 }}>Résilier</button>
+                        </div>
                       )}
                     </div>
+
+                    {/* ⚠️ UN BOUTON PAR MOYEN, pas une liste déroulante suivie
+                        d'une validation : encaisser est un geste de comptoir, il
+                        se fait en deux touches, la cliente devant soi. */}
+                    {!resilie && !a.paye && encaisseOuvert === a.id && (
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.hairline}` }}>
+                        <p style={{ fontSize: 12, fontWeight: 700, color: T.ink, marginBottom: 8 }}>
+                          Comment {a.client_prenom} a-t-elle payé ses {Number(a.prix).toFixed(2)} € ?
+                        </p>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {MOYENS_ENCAISSEMENT.map(m => (
+                            <button key={m.cle} disabled={encaissantId === a.id}
+                              onClick={() => encaisser(a, m.cle)}
+                              style={{ ...s.btn, ...s.btnGhost, padding: '8px 12px', fontSize: 12, textAlign: 'left', opacity: encaissantId === a.id ? 0.6 : 1 }}>
+                              <span style={{ fontWeight: 800 }}>{m.libelle}</span>
+                              <span style={{ color: T.muted, fontWeight: 600 }}> · {m.detail}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}

@@ -1948,6 +1948,89 @@ egal('et le lieu est résolu date par date',
 verifier('la sortie « hors abonnement » existe et est écrite',
   /hors abonnement/.test(srcModale))
 
+// ═══════════════════════════════════════════════════════════════════════════
+// L'ARGENT DU COMPTOIR ET LE SOLDE, DEUX TROUS TROUVÉS PAR ALEX LE 19/08
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ LE CUL-DE-SAC : une inscription enregistrée sans paiement affichait
+// « Paiement en attente », et la carte ne proposait que « Résilier ». La
+// commerçante encaissait les 400 € le lendemain et n'avait AUCUN geste pour le
+// dire. Résilier le contrat d'une cliente qui vient de payer était la seule
+// porte ouverte. C'est exactement « quand quelqu'un se trompe de porte, on
+// OUVRE LA BONNE », sauf qu'ici il n'y avait pas de bonne porte.
+//
+// ⚠️ LE SECOND : cet écran affichait `seances_total` et rien d'autre. Une
+// abonnée ayant consommé douze de ses trente-huit séances lisait « 38 séances »
+// à vie. Alex : « il ne décompte pas les séances ». Côté Yopper le solde était
+// juste depuis le début : les deux chemins ne se croisaient jamais à l'écran,
+// exactement comme les deux comptes du 18/08.
+{
+  const { MOYENS_ENCAISSEMENT, libelleMoyenEncaissement } = await import('../lib/abonnements.js')
+
+  egal('trois moyens d’encaissement, pas un de plus',
+    MOYENS_ENCAISSEMENT.map(m => m.cle), ['terminal', 'especes', 'virement'])
+  // ⚠️ ALEX A ÉCARTÉ LE LIEN DE PAIEMENT STRIPE le 18/08. Le banc le retient,
+  // pour qu'il ne revienne pas par la petite porte d'un écran voisin.
+  verifier('le lien de paiement Stripe reste écarté',
+    !MOYENS_ENCAISSEMENT.some(m => /stripe|lien/i.test(m.cle + m.libelle)))
+  verifier('chaque moyen dit AUSSI où retrouver l’argent',
+    MOYENS_ENCAISSEMENT.every(m => typeof m.detail === 'string' && m.detail.length > 0))
+
+  egal('terminal se dit en toutes lettres', libelleMoyenEncaissement('terminal'), 'terminal')
+  egal('especes se dit avec son accent', libelleMoyenEncaissement('especes'), 'espèces')
+  egal('virement se dit', libelleMoyenEncaissement('virement'), 'virement')
+  // ⚠️ UN MOYEN INCONNU SE NOMME plutôt que de disparaître : un contrat payé
+  // par un moyen qu'on ne sait plus lire reste payé, et le taire ferait croire
+  // à un impayé. `sur_place` vient des inscriptions d'avant le 17/08.
+  egal('l’ancien « sur_place » reste lisible', libelleMoyenEncaissement('sur_place'), 'au comptoir')
+  egal('l’achat en ligne se dit aussi', libelleMoyenEncaissement('en_ligne'), 'en ligne')
+  egal('un moyen inattendu se dit quand même', libelleMoyenEncaissement('cheque_barre'), 'cheque barre')
+  egal('aucun moyen ne rend rien du tout', libelleMoyenEncaissement(null), null)
+  egal('une chaîne vide non plus', libelleMoyenEncaissement(''), null)
+}
+
+{
+  const srcConfig = lire('app/dashboard/ConfigDashboard.js')
+
+  // ── Le geste d'encaissement existe et écrit les TROIS champs ─────────────
+  // ⚠️ LES TROIS, PAS UN. `paye` seul laisse la Comptabilité sans date et sans
+  // moyen : le montant devient introuvable au moment de rapprocher la caisse.
+  verifier('l’encaissement au comptoir existe', /async function encaisser\(/.test(srcConfig))
+  const majEncaisse = srcConfig.match(/\.update\(\{ paye: true[^}]*\}\)/)
+  verifier('il marque le contrat payé', !!majEncaisse)
+  verifier('… en horodatant', !!majEncaisse && /paye_le:/.test(majEncaisse[0]))
+  verifier('… et en disant par quel moyen', !!majEncaisse && /mode_paiement: mode/.test(majEncaisse[0]))
+  // Le bouton bascule entre « Encaisser » et « Fermer » : on cherche donc le
+  // libellé, pas une balise qui le suivrait.
+  verifier('le bouton dit le GESTE, pas l’état', /'Encaisser'/.test(srcConfig))
+  verifier('les trois moyens viennent de la source unique',
+    /MOYENS_ENCAISSEMENT\.map/.test(srcConfig))
+
+  // ── Le solde se compte, il ne se lit pas ─────────────────────────────────
+  // ⚠️ LA GARDE PORTE SUR LE CONTENU DU `select`, PAS SUR SON VOISINAGE.
+  // Première écriture, elle cherchait `abonnement_id` dans les 160 caractères
+  // qui suivent la table : le `.not('abonnement_id', 'is', null)` de la ligne
+  // suivante la satisfaisait, et retirer la colonne du `select` ne rougissait
+  // pas. C'est LE défaut le plus fréquent du projet, la colonne absente d'un
+  // select : aucune erreur, un repli silencieux, et chaque abonnée réaffiche
+  // son solde plein. Mesuré muet, puis resserré.
+  const selectResa = srcConfig.match(/from\('rdv_reservations'\)\s*\.select\('([^']*)'\)/)
+  verifier('la liste des abonnés charge les séances déjà posées', !!selectResa)
+  verifier('… avec le contrat auquel chaque séance appartient',
+    !!selectResa && /\babonnement_id\b/.test(selectResa[1]), selectResa ? selectResa[1] : '')
+  verifier('… et le statut, sans lequel rien ne se compte',
+    !!selectResa && /\bstatut\b/.test(selectResa[1]), selectResa ? selectResa[1] : '')
+  verifier('elle compte les réservations', /seancesConsommees\(reservationsAbo/.test(srcConfig))
+  verifier('et en tire un solde', /soldeAbonnement\(a, posees\)/.test(srcConfig))
+  // ⚠️ LE PIÈGE DU ZÉRO, déjà vécu deux fois : `restantes` vaut null quand le
+  // contrat ne dit pas combien il accordait. Afficher « 0 restantes » serait un
+  // mensonge, et ferait croire à un abonnement épuisé.
+  verifier('un solde inconnu n’est pas affiché comme zéro',
+    /restantes === null/.test(srcConfig))
+  verifier('le total reste dit, sinon le solde ne se situe pas',
+    /sur \$\{a\.seances_total\}/.test(srcConfig))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

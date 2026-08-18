@@ -1849,6 +1849,105 @@ verifier('les contrats écartés sont nommés avec leur raison',
 egal('le libellé nomme le contrat AUX DEUX endroits, sélecteur et refus',
   (srcMultiAbo.match(/libelleChoixAbonnement\(abonnement\)/g) || []).length, 2)
 
+// ═══════════════════════════════════════════════════════════════════════════
+// POSER UNE SÉANCE DEPUIS L'ABONNEMENT, ET LA RÉPÉTER (18/08)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ CE GESTE N'EXISTAIT PAS, ET SON ABSENCE ÉTAIT UN TROU : un abonnement
+// obligeait la CLIENTE à réserver depuis l'application. Une abonnée sans
+// téléphone intelligent ne pouvait pas être inscrite du tout. Depuis que le jour
+// fixe a disparu, plus aucune séance ne se pose toute seule : sans ce geste, un
+// contrat de 38 séances reste à 38 au compteur et à zéro dans l'agenda.
+//
+// ⚠️ ET LE BOUTON D'ALEX EST CE QUI REMPLACE LE JOUR FIXE, pas un confort :
+// « ajouter un bouton pour copier un rdv d'une semaine sur d'autres semaines,
+// pour faciliter les choses ».
+const { semainesSuivantes, expliquerRefusCommercant } = await import('../lib/abonnements.js')
+
+// Le cas simple : huit semaines à partir d'un lundi.
+const huit = semainesSuivantes('2026-09-07', { nombre: 8 })
+egal('huit semaines donnent huit dates', huit.length, 8)
+egal('la première est la semaine SUIVANTE, pas le jour même', huit[0], '2026-09-14')
+egal('et elles sont espacées de sept jours', huit[7], '2026-11-02')
+
+// ⚠️ TROIS BORNES, ET CHACUNE EST MESURÉE SÉPARÉMENT. Ensemble elles passeraient
+// pour une seule règle, et retirer l'une des trois ne ferait rien rougir.
+egal('la fin du contrat arrête la série',
+  semainesSuivantes('2026-09-07', { nombre: 8, jusqua: '2026-10-05' }).length, 4)
+egal('le solde restant l’arrête aussi',
+  semainesSuivantes('2026-09-07', { nombre: 8, soldeRestant: 3 }).length, 3)
+// ⚠️ ON TESTE L'ABSENCE : un solde INCONNU ne vaut pas zéro, il ne borne rien.
+// Le piège du zéro, cinquième fois sur ce projet.
+egal('un solde inconnu ne borne rien',
+  semainesSuivantes('2026-09-07', { nombre: 8, soldeRestant: null }).length, 8)
+egal('un solde à zéro, lui, arrête tout',
+  semainesSuivantes('2026-09-07', { nombre: 8, soldeRestant: 0 }).length, 0)
+
+// ⚠️ UNE SEMAINE DÉJÀ PRISE EST SAUTÉE, PAS REFUSÉE. La commerçante a demandé
+// « les quatre semaines suivantes », pas « quatre lignes quoi qu'il arrive » :
+// s'arrêter à la première collision lui ferait poser une seule séance sur quatre.
+const avecTrou = semainesSuivantes('2026-09-07', {
+  nombre: 4, datesDejaPrises: ['2026-09-21'],
+})
+egal('une semaine déjà prise est sautée', avecTrou.length, 3)
+verifier('et c’est bien celle-là qui manque', !avecTrou.includes('2026-09-21'), avecTrou.join(' '))
+// ⚠️ MESURÉ : le saut se fait sur la SEMAINE, pas sur la date. Une séance posée
+// le mercredi bloque le lundi de la même semaine, sinon le plafond hebdomadaire
+// refuserait une à une les séances qu'on vient de poser.
+egal('un autre jour de la même semaine bloque aussi',
+  semainesSuivantes('2026-09-07', { nombre: 2, datesDejaPrises: ['2026-09-16'] }).length, 1)
+
+// Les saisies impossibles ne fabriquent rien plutôt que d'inventer.
+egal('sans date de départ, aucune série', semainesSuivantes(null, { nombre: 4 }).length, 0)
+egal('un nombre nul ne pose rien', semainesSuivantes('2026-09-07', { nombre: 0 }).length, 0)
+egal('un nombre négatif non plus', semainesSuivantes('2026-09-07', { nombre: -3 }).length, 0)
+
+// ─── LE REFUS, DIT AU COMMERÇANT ──────────────────────────────────────────
+//
+// ⚠️ DEUX PUBLICS, DEUX VOIX, UNE SEULE RÈGLE. `expliquerRefusSeance` tutoie la
+// cliente : servi tel quel à Emily, il lui parle d'elle alors qu'il parle de
+// Sophie. C'est le même défaut que le vocabulaire de caisse servi au client.
+const refusPlafond = expliquerRefusCommercant('plafond_semaine',
+  { seances_par_semaine: 1 }, { prenom: 'Sophie' })
+verifier('le refus nomme la personne', /Sophie/.test(refusPlafond), refusPlafond)
+verifier('et il ne tutoie pas la commerçante', !/\btu as déjà\b/i.test(refusPlafond), refusPlafond)
+// ⚠️ ET IL OFFRE LA SORTIE, sans quoi la commerçante est bloquée par son propre
+// plafond et rappelle Alex.
+verifier('il propose de poser la séance hors abonnement',
+  /hors abonnement/.test(refusPlafond), refusPlafond)
+verifier('un solde épuisé propose aussi une suite',
+  /hors abonnement/.test(expliquerRefusCommercant('solde_epuise', null, { prenom: 'Sophie' })))
+// Sans prénom, la phrase reste une phrase française.
+verifier('sans prénom, la phrase tient debout',
+  /^Cette personne a déjà sa séance/.test(expliquerRefusCommercant('plafond_semaine', null, {})))
+// ⚠️ AUCUN REFUS MUET : une raison inconnue dit quand même quelque chose.
+verifier('une raison inconnue ne rend jamais une phrase vide',
+  expliquerRefusCommercant('nimporte_quoi', null, {}).length > 10)
+
+// ─── ET L'ÉCRAN APPELLE BIEN LES RÈGLES ───────────────────────────────────
+const srcModale = readFileSync(new URL('../app/dashboard/ModalNouveauRdv.js', import.meta.url), 'utf8')
+verifier('la modale interroge la règle de l’abonnement',
+  /peutReserverSurAbonnement\(/.test(srcModale))
+verifier('elle lie la séance au contrat',
+  /abonnement_id: surAbonnement \? aboChoisi\.contrat\.id : null/.test(srcModale))
+// ⚠️ LE PRIX NE SE RECOPIE PAS SUR UNE SÉANCE D'ABONNEMENT : trente-six séances
+// à 15 € multiplieraient le chiffre d'affaires par trente-six.
+verifier('une séance d’abonnement part à zéro',
+  /prix_estime: surAbonnement \? 0 : prixEstime/.test(srcModale))
+verifier('et elle ne réclame aucun acompte',
+  /acompte_montant: surAbonnement \? null : acompteMontant/.test(srcModale))
+// ⚠️ LA PLACE SE CALCULE POUR CHAQUE DATE. Recopier celle du premier jour ferait
+// rejeter la moitié de la série par l'index unique, sur un cours à plusieurs.
+verifier('chaque date de la série a SA place',
+  /place_no: placeParDate\[d\]/.test(srcModale))
+// ⚠️ ET SON LIEU : le module LIEUX autorise un endroit différent d'une semaine à
+// l'autre. Recopier le lieu du premier jour enverrait l'abonnée au mauvais
+// endroit six semaines plus tard.
+egal('et le lieu est résolu date par date',
+  (srcModale.match(/champsLieuPour\(supabase, commercant/g) || []).length, 2)
+verifier('la sortie « hors abonnement » existe et est écrite',
+  /hors abonnement/.test(srcModale))
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

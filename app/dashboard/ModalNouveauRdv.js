@@ -12,6 +12,15 @@ import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
 import { capacitePrestation, premierePlaceLibre } from '@/lib/cours-collectifs'
 import { creneauAcceptable, creneauxDuJour } from '@/lib/deplacement-rdv'
+// ⚠️ LES RÈGLES DE L'ABONNEMENT NE SONT PAS RÉÉCRITES ICI, elles sont APPELÉES.
+// Le solde, le plafond hebdomadaire, la fenêtre de validité et l'ordre de
+// consommation vivent dans `lib/abonnements.js` depuis le premier jour, éprouvés
+// par 455 vérifications. Les recopier aurait garanti qu'un jour la cliente et la
+// commerçante obtiennent deux réponses différentes sur la même séance.
+import {
+  peutReserverSurAbonnement, seancesConsommees, datesConsommees, soldeAbonnement,
+  semainesSuivantes, expliquerRefusCommercant, formatDateCourte,
+} from '@/lib/abonnements'
 
 const T = {
   main:    '#6B35C4',
@@ -56,6 +65,61 @@ export default function ModalNouveauRdv({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
 
+  // ─── LES ABONNÉS DE CE COURS ────────────────────────────────────────────
+  //
+  // ⚠️ CE BLOC COMBLE UN TROU, PAS UN CONFORT. Jusqu'au 18/08, un abonnement
+  // obligeait la CLIENTE à réserver depuis l'application : cette modale ne
+  // connaissait même pas le mot « abonnement ». Une abonnée de 70 ans qui
+  // téléphone ne pouvait tout simplement pas être inscrite, et depuis que le
+  // jour fixe a disparu, plus aucune séance ne se pose toute seule.
+  //
+  // ⚠️ ON PART DE LA PERSONNE, PAS DU FORMULAIRE. La commerçante pense « la
+  // séance de Sophie », jamais « un rendez-vous qui se trouve être sur un
+  // abonnement ». Choisir l'abonnée remplit son identité ET attache le contrat.
+  const [abonnes, setAbonnes] = useState([])
+  const [aboChoisiId, setAboChoisiId] = useState(null)
+  const [repeter, setRepeter] = useState(0)
+
+  useEffect(() => {
+    let annule = false
+    setAboChoisiId(null); setRepeter(0)
+    if (!prestationId) { setAbonnes([]); return }
+    ;(async () => {
+      const { data: contrats } = await supabase
+        .from('abonnements')
+        .select('id, client_prenom, client_nom, client_telephone, client_email, statut, date_debut, date_fin, seances_total, seances_par_semaine, formule:abonnement_formules(libelle)')
+        .eq('commercant_id', commercant.id)
+        .eq('prestation_id', prestationId)
+        .eq('statut', 'actif')
+        .is('deleted_at', null)
+      if (annule) return
+      const ids = (contrats || []).map(c => c.id)
+      // ⚠️ LE DÉCOMPTE SE LIT EN BASE, JAMAIS DANS L'ÉTAT DE L'ÉCRAN. L'agenda
+      // ouvert depuis vingt minutes ne sait pas que la cliente a réservé entre
+      // temps depuis son téléphone, et le solde afficherait une séance de trop.
+      let reservations = []
+      if (ids.length > 0) {
+        const { data } = await supabase
+          .from('rdv_reservations')
+          .select('abonnement_id, date_rdv, statut')
+          .in('abonnement_id', ids)
+          .is('deleted_at', null)
+        reservations = data || []
+      }
+      if (annule) return
+      setAbonnes((contrats || []).map(c => {
+        const consommees = seancesConsommees(reservations, { abonnementId: c.id })
+        return {
+          contrat: c,
+          consommees,
+          solde: soldeAbonnement(c, consommees),
+          datesPrises: datesConsommees(reservations, { abonnementId: c.id }),
+        }
+      }))
+    })().catch(e => console.warn('[ModalNouveauRdv] abonnés KO', e?.message))
+    return () => { annule = true }
+  }, [prestationId, commercant.id])
+
   // Focus auto sur le select prestation à l'ouverture
   useEffect(() => {
     const el = document.getElementById('mn-rdv-presta')
@@ -81,7 +145,37 @@ export default function ModalNouveauRdv({
     ? (presta.prix != null ? Number(presta.prix) : (presta.prix_min != null ? Number(presta.prix_min) : null))
     : null
 
-  const formValide = !!(prestationId && prenom.trim() && nom.trim() && tel.trim())
+  // ⚠️ LE VERDICT EST CALCULÉ ICI ET RÉUTILISÉ PARTOUT : l'encadré, le libellé du
+  // bouton et l'écriture posent la MÊME question. Deux calculs auraient fini par
+  // proposer un geste que l'enregistrement refuse.
+  const dateChoisie = isoDate(dateInit)
+  const aboChoisi = abonnes.find(a => a.contrat.id === aboChoisiId) || null
+  const verdictAbo = aboChoisi
+    ? peutReserverSurAbonnement(aboChoisi.contrat, {
+        date: dateChoisie,
+        seancesUtilisees: aboChoisi.consommees,
+        datesDejaPrises: aboChoisi.datesPrises,
+      })
+    : null
+  const surAbonnement = !!(aboChoisi && verdictAbo?.ok)
+
+  // Les dates que le bouton « répéter » poserait vraiment, bornes comprises.
+  const datesRepetees = surAbonnement && repeter > 0
+    ? semainesSuivantes(dateChoisie, {
+        nombre: repeter,
+        jusqua: aboChoisi.contrat.date_fin,
+        datesDejaPrises: aboChoisi.datesPrises,
+        // ⚠️ Moins un : la séance du jour consomme déjà une unité du solde.
+        soldeRestant: aboChoisi.solde === null ? null : Math.max(0, aboChoisi.solde - 1),
+      })
+    : []
+
+  // ⚠️ L'IDENTITÉ VIENT DU CONTRAT quand on pose sur un abonnement : le nom et
+  // le téléphone sont ceux de la souscription, et le formulaire n'a plus à être
+  // rempli. Un abonné sans téléphone existe, la garde ne doit donc pas l'exiger.
+  const formValide = !!(prestationId && (
+    aboChoisi ? true : (prenom.trim() && nom.trim() && tel.trim())
+  ))
 
   async function valider() {
     if (!formValide || submitting) return
@@ -139,26 +233,49 @@ export default function ModalNouveauRdv({
       // ⚠️ LES PLACES SE LISENT EN BASE, JAMAIS DANS L'ÉTAT DE L'ÉCRAN. L'agenda
       // peut avoir quelques minutes de retard, et une place attribuée deux fois
       // serait rejetée par l'index unique avec un message incompréhensible.
-      let placeNo = 1
+      //
+      // ⚠️ ET LA PLACE SE CALCULE POUR CHAQUE DATE, pas une fois pour toutes.
+      // Répéter une séance sur huit semaines, c'est huit cours différents, avec
+      // huit remplissages différents : recopier la place du premier ferait
+      // rejeter la moitié de la série par l'index unique.
+      const toutesLesDates = [dateStr, ...datesRepetees]
+      const placeParDate = {}
       if (capacite > 1) {
         const { data: dejaLa } = await supabase
           .from('rdv_reservations')
-          .select('place_no')
+          .select('date_rdv, place_no')
           .eq('commercant_id', commercant.id)
           .eq('prestation_id', presta.id)
-          .eq('date_rdv', dateStr)
+          .in('date_rdv', toutesLesDates)
           .eq('heure_debut', heureInit)
           .in('statut', ['confirme', 'honore'])
           .is('deleted_at', null)
-        const prises = (dejaLa || []).map(r => r.place_no)
-        const libre = premierePlaceLibre(presta, prises)
-        if (libre === null) {
+        const prisesParDate = {}
+        for (const r of dejaLa || []) {
+          (prisesParDate[r.date_rdv] = prisesParDate[r.date_rdv] || []).push(r.place_no)
+        }
+        const completes = []
+        for (const d of toutesLesDates) {
+          const libre = premierePlaceLibre(presta, prisesParDate[d] || [])
+          if (libre === null) { completes.push(d); continue }
+          placeParDate[d] = libre
+        }
+        // ⚠️ ON NE CACHE JAMAIS UN TROU dans une série, et on ne refuse pas tout
+        // pour autant : huit semaines dont une complète, ce sont sept séances à
+        // poser et UNE à nommer. Sur la séance seule, en revanche, il n'y a rien
+        // à sauver, on dit simplement que le cours est complet.
+        if (completes.includes(dateStr)) {
           setError(`Ce cours est complet (${capacite} personne${capacite > 1 ? 's' : ''}).`)
           setSubmitting(false)
           return
         }
-        placeNo = libre
+        if (completes.length > 0) {
+          setError(`${completes.length} semaine${completes.length > 1 ? 's' : ''} déjà complète${completes.length > 1 ? 's' : ''} : ${completes.map(d => formatDateCourte(d)).join(', ')}. Les autres séances vont être posées.`)
+        }
+      } else {
+        for (const d of toutesLesDates) placeParDate[d] = 1
       }
+      const datesAPoser = toutesLesDates.filter(d => placeParDate[d] != null)
 
       // 2) Acompte (figé selon prestation ou pourcent global)
       const acomptePct = presta.acompte_pourcent || commercant.rdv_acompte_global || 0
@@ -167,22 +284,44 @@ export default function ModalNouveauRdv({
         : null
 
       // 3) Insert
+      //
+      // ⚠️ L'IDENTITÉ VIENT DU CONTRAT quand la séance est posée dessus. Laisser
+      // la commerçante retaper le nom, c'est laisser « Sophie Dubois » devenir
+      // « sophie dubois » sur une séance et pas sur les autres, et l'abonnée se
+      // retrouve en deux personnes dans son propre historique.
+      const identite = aboChoisi
+        ? {
+            client_prenom: aboChoisi.contrat.client_prenom || prenom.trim() || 'Abonné',
+            client_nom: aboChoisi.contrat.client_nom || nom.trim() || null,
+            client_telephone: aboChoisi.contrat.client_telephone || tel.trim() || null,
+            client_email: aboChoisi.contrat.client_email || email.trim() || null,
+          }
+        : {
+            client_prenom: prenom.trim(),
+            client_nom: nom.trim(),
+            client_telephone: tel.trim(),
+            client_email: email.trim() || null,
+          }
       const rdvId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null
       const payload = {
         ...(rdvId ? { id: rdvId } : {}),
         commercant_id: commercant.id,
         client_id: null,                    // saisie manuelle, pas de lien clients (decision Alex)
         prestation_id: presta.id,
-        client_email: email.trim() || null,
-        client_prenom: prenom.trim(),
-        client_nom: nom.trim(),
-        client_telephone: tel.trim(),
+        ...identite,
         date_rdv: dateStr,
         heure_debut: heureInit,
         heure_fin: heureFin,
         duree_minutes: dureeMin,
-        prix_estime: prixEstime,
-        acompte_montant: acompteMontant,
+        // ⚠️ LE LIEN AVEC LE CONTRAT, sans lequel le solde ne descend jamais et
+        // la séance réclame de l'argent au comptoir alors qu'elle est payée.
+        abonnement_id: surAbonnement ? aboChoisi.contrat.id : null,
+        // ⚠️ PRIX ZÉRO SUR UNE SÉANCE D'ABONNEMENT, le montant vit sur le
+        // contrat. Le recopier trente-six fois multiplierait le chiffre
+        // d'affaires par trente-six, et c'est le piège du zéro à l'envers :
+        // ici le zéro est la bonne réponse, pas une absence.
+        prix_estime: surAbonnement ? 0 : prixEstime,
+        acompte_montant: surAbonnement ? null : acompteMontant,
         acompte_paye: false,
         statut: 'confirme',
         // TVA figée à la réservation : recalculer plus tard depuis la
@@ -196,13 +335,30 @@ export default function ModalNouveauRdv({
         // renvoyait « ce créneau vient d'être pris » devant un cours vide. Sans
         // `capacite_creneau`, la contrainte d'exclusion, active quand elle vaut
         // 1, bloquait le deuxième inscrit dès qu'un praticien était nommé.
-        place_no: placeNo,
+        place_no: placeParDate[dateStr],
         capacite_creneau: capacite,
       }
       // ⚠️ LE LIEU EST GRAVÉ À LA RÉSERVATION, ici aussi. Un rendez-vous pris
       // au comptoir par le commerçant doit dire où aller comme les autres.
       Object.assign(payload, await champsLieuPour(supabase, commercant, { jour: dateStr, heure: heureInit }))
-      const { error: errInsert } = await supabase.from('rdv_reservations').insert(payload)
+
+      // ⚠️ LES SEMAINES RÉPÉTÉES SONT DES SÉANCES À PART ENTIÈRE, pas des copies.
+      // Chacune a SA place, calculée plus haut, et SON lieu : le module LIEUX
+      // autorise un endroit différent d'une semaine à l'autre, un marché de Noël
+      // qui remplace la salle habituelle. Recopier le lieu du premier jour ferait
+      // envoyer l'abonnée au mauvais endroit six semaines plus tard.
+      const lignes = [payload]
+      for (const d of datesAPoser) {
+        if (d === dateStr) continue
+        lignes.push({
+          ...payload,
+          id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : undefined,
+          date_rdv: d,
+          place_no: placeParDate[d],
+          ...(await champsLieuPour(supabase, commercant, { jour: d, heure: heureInit })),
+        })
+      }
+      const { error: errInsert } = await supabase.from('rdv_reservations').insert(lignes)
       if (errInsert) {
         if (errInsert.code === '23505') {
           // ⚠️ SUR UN COURS, CE MESSAGE MENTAIT. La place calculée juste avant
@@ -302,6 +458,105 @@ export default function ModalNouveauRdv({
               </p>
             )}
           </div>
+
+          {/* ─── L'ABONNÉE, S'IL Y EN A UNE ────────────────────────────────
+              ⚠️ CE BLOC N'APPARAÎT QUE S'IL A QUELQUE CHOSE À DIRE : un cours
+              sans abonné ne doit pas encombrer la saisie la plus fréquente,
+              celle d'un rendez-vous ordinaire. */}
+          {abonnes.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <span style={labelSt}>Séance d&rsquo;abonnement</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {abonnes.map(a => {
+                  const choisi = a.contrat.id === aboChoisiId
+                  const v = peutReserverSurAbonnement(a.contrat, {
+                    date: dateChoisie,
+                    seancesUtilisees: a.consommees,
+                    datesDejaPrises: a.datesPrises,
+                  })
+                  const nomComplet = `${a.contrat.client_prenom || ''} ${a.contrat.client_nom || ''}`.trim()
+                  return (
+                    <button key={a.contrat.id} type="button"
+                      onClick={() => { setAboChoisiId(choisi ? null : a.contrat.id); setRepeter(0); setError(null) }}
+                      style={{
+                        textAlign: 'left', padding: '9px 11px', borderRadius: 10, cursor: 'pointer',
+                        background: choisi ? `${T.main}12` : '#fff',
+                        border: `1.5px solid ${choisi ? T.main : T.pale}`,
+                        fontFamily: '"DM Sans", sans-serif',
+                      }}>
+                      <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: choisi ? T.main : T.ink }}>
+                        {nomComplet || 'Abonné'}
+                      </span>
+                      <span style={{ display: 'block', fontSize: '0.72rem', color: T.muted, marginTop: 2 }}>
+                        {a.contrat.formule?.libelle || 'Abonnement'}
+                        {a.solde !== null ? ` · ${a.solde} séance${a.solde > 1 ? 's' : ''} restante${a.solde > 1 ? 's' : ''}` : ''}
+                        {a.contrat.date_fin ? ` · jusqu’au ${formatDateCourte(a.contrat.date_fin)}` : ''}
+                      </span>
+                      {/* ⚠️ LE REFUS EST NOMMÉ, ET IL EST NOMMÉ ICI, sur la ligne
+                          concernée. Griser la ligne sans dire pourquoi renvoie la
+                          commerçante au téléphone : « tu as déjà ta séance cette
+                          semaine » se règle en changeant de date, « solde épuisé »
+                          en vendant un nouveau contrat. */}
+                      {!v.ok && (
+                        <span style={{ display: 'block', fontSize: '0.72rem', color: '#9A3412', marginTop: 4, lineHeight: 1.45 }}>
+                          {expliquerRefusCommercant(v.raison, a.contrat, { plafond: v.plafond, prenom: a.contrat.client_prenom })}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* ⚠️ ON LAISSE PASSER OUTRE, ET C'EST INDISPENSABLE. Sans cette
+                  sortie, la commerçante est bloquée par son PROPRE plafond : une
+                  abonnée qui vient une fois de plus dans la semaine ne peut plus
+                  être inscrite du tout, et Emily rappelle Alex. La séance est
+                  alors posée au tarif normal, hors contrat, et le solde ne bouge
+                  pas : c'est une vente, pas un passe-droit. */}
+              {aboChoisi && !verdictAbo?.ok && (
+                <p style={{ fontSize: '0.72rem', color: T.muted, marginTop: 8, lineHeight: 1.5 }}>
+                  Tu peux quand même poser cette séance : elle sera enregistrée <strong>hors abonnement</strong>, au tarif normal
+                  {prixEstime != null ? ` de ${prixEstime.toFixed(2)} €` : ''}, et le solde ne bougera pas.
+                </p>
+              )}
+
+              {/* ─── LE BOUTON D'ALEX : répéter sur les semaines suivantes ─── */}
+              {surAbonnement && (
+                <div style={{ marginTop: 10, padding: '10px 12px', background: `${T.main}0D`, border: `1px solid ${T.main}33`, borderRadius: 10 }}>
+                  <span style={{ ...labelSt, marginBottom: 6 }}>Répéter les semaines suivantes</span>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {[0, 4, 8, 12, 52].map(n => (
+                      <button key={n} type="button" onClick={() => setRepeter(n)}
+                        style={{
+                          padding: '5px 12px', borderRadius: 100, cursor: 'pointer',
+                          fontFamily: '"DM Sans", sans-serif', fontSize: '0.75rem', fontWeight: 800,
+                          background: repeter === n ? T.main : '#fff',
+                          color: repeter === n ? '#fff' : T.deep,
+                          border: `1.5px solid ${repeter === n ? T.main : T.pale}`,
+                        }}>
+                        {n === 0 ? 'Cette séance' : n === 52 ? 'Tout le contrat' : `+ ${n}`}
+                      </button>
+                    ))}
+                  </div>
+                  {/* ⚠️ ON ANNONCE CE QUI VA VRAIMENT SE POSER, pas ce qui a été
+                      demandé. Les trois bornes — fin du contrat, solde restant,
+                      semaines déjà prises — rabotent la série en silence, et une
+                      commerçante qui clique « + 52 » sur un contrat qui finit en
+                      juin doit lire le vrai nombre AVANT d'enregistrer. */}
+                  <p style={{ fontSize: '0.75rem', color: T.deep, fontWeight: 700, margin: '8px 0 0', lineHeight: 1.5 }}>
+                    {repeter === 0
+                      ? 'Une seule séance sera posée.'
+                      : `${datesRepetees.length + 1} séances au total, jusqu’au ${formatDateCourte(datesRepetees[datesRepetees.length - 1] || dateChoisie)}.`}
+                  </p>
+                  {repeter > 0 && datesRepetees.length + 1 < repeter + 1 && (
+                    <p style={{ fontSize: '0.72rem', color: T.muted, margin: '4px 0 0', lineHeight: 1.5 }}>
+                      Moins que demandé : le contrat s’arrête, le solde ne suffit plus, ou ces semaines ont déjà leur séance.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Identite client : 2 colonnes */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>

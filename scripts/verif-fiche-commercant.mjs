@@ -1123,6 +1123,124 @@ verifier('la clé porte le slug du commerce', CLES.rdv('ciseaux').includes('cise
 verifier('le dépôt ne survit pas à la journée', DUREE_PARTAGE_MS <= 60 * 60 * 1000)
 
 // ═══════════════════════════════════════════════════════════════════════════
+// LES RELEVÉS DE FOND, ET LES BLOCAGES D'ÉCRAN QU'ILS FABRIQUAIENT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ CE QU'ALEX A VÉCU LE 18/08, DEUX FOIS PLUTÔT QU'UNE. La fiche relevait
+// tout toutes les cinq secondes, l'écran caché ou non, et reposait quatre
+// états avec des objets neufs : le défilement gelait une à deux secondes. Le
+// même relevé dormait dans la configuration du tableau de bord.
+//
+// ⚠️ ET C'ÉTAIT DÉJÀ LA LEÇON DU 11/08 sur l'accueil client, où un relevé de
+// cinq secondes non conditionné à la visibilité effaçait la session. Le banc
+// ne surveillait alors qu'UN fichier. Il compte maintenant, dans tout `app`.
+
+{
+  const { signature, poserSiChange, ecranRegarde } = await import('../lib/rafraichissement.js')
+
+  // ── La signature ignore l'ordre des CLÉS, jamais celui des tableaux ───────
+  // Une requête sans `ORDER BY` ne promet aucun ordre de lignes : sans ce tri,
+  // deux relevés identiques donneraient deux textes différents et le silence
+  // n'arriverait jamais. À l'inverse, l'ordre des articles EST l'affichage.
+  verifier('deux dictionnaires aux clés inversées ont la même signature',
+    signature({ a: 1, b: 2 }) === signature({ b: 2, a: 1 }))
+  verifier('le tri descend dans les objets imbriqués',
+    signature({ x: { p: 1, q: 2 } }) === signature({ x: { q: 2, p: 1 } }))
+  verifier('deux tableaux dans un autre ordre diffèrent',
+    signature([1, 2]) !== signature([2, 1]))
+  verifier('un contenu différent donne une signature différente',
+    signature({ a: 1 }) !== signature({ a: 2 }))
+  {
+    const boucle = { nom: 'x' }; boucle.soi = boucle
+    verifier('une valeur incomparable rend null', signature(boucle) === null)
+  }
+  verifier('undefined rend null, pas la chaîne "undefined"', signature(undefined) === null)
+
+  // ── Le silence quand rien n'a bougé ──────────────────────────────────────
+  {
+    const memoire = { current: null }
+    let poses = 0, dernier = null
+    const poser = v => { poses++; dernier = v }
+
+    verifier('le premier relevé pose', poserSiChange(memoire, { a: 1 }, poser) === true)
+    verifier('… et il a bien posé la valeur', poses === 1 && dernier.a === 1)
+
+    verifier('le relevé identique se tait', poserSiChange(memoire, { a: 1 }, poser) === false)
+    verifier('… et n a rien reposé', poses === 1)
+
+    // ⚠️ LE CŒUR DU REMÈDE : le même contenu écrit dans un autre ordre de clés
+    // doit rester silencieux. C'est le cas réel, une requête sans ORDER BY.
+    verifier('le même contenu aux clés inversées se tait',
+      poserSiChange(memoire, { a: 1 }, poser) === false)
+
+    verifier('un contenu qui change repose', poserSiChange(memoire, { a: 2 }, poser) === true)
+    verifier('… avec la nouvelle valeur', poses === 2 && dernier.a === 2)
+
+    // ⚠️ INCOMPARABLE NE VEUT PAS DIRE INCHANGÉ. Se taire sur une valeur qu'on
+    // n'a pas su lire figerait l'écran sur des données périmées, en silence.
+    const boucle = { a: 3 }; boucle.soi = boucle
+    verifier('une valeur incomparable est posée quand même',
+      poserSiChange(memoire, boucle, poser) === true)
+    // ⚠️ ET LA MÉMOIRE DOIT AVOIR ÉTÉ OUBLIÉE. On repose ici EXACTEMENT le
+    // contenu d'avant l'incomparable : si la mémoire l'avait gardé, le relevé
+    // se tairait alors que l'écran affiche depuis une valeur qu'on n'a pas su
+    // lire. Un test qui reposerait un contenu NEUF ne verrait rien, la
+    // signature suffisant à le distinguer. Mesuré muet, puis réarmé.
+    verifier('… et le contenu d avant l incomparable est reposé, pas ignoré',
+      poserSiChange(memoire, { a: 2 }, poser) === true)
+  }
+  {
+    // Deux dictionnaires bâtis dans un ordre d'insertion différent : c'est
+    // exactement ce que rendent deux appels à la même requête non ordonnée.
+    const memoire = { current: null }
+    const premier = {}; premier.b = { stock: 2 }; premier.a = { stock: 1 }
+    const second = {}; second.a = { stock: 1 }; second.b = { stock: 2 }
+    poserSiChange(memoire, premier, () => {})
+    verifier('deux relevés non ordonnés identiques restent silencieux',
+      poserSiChange(memoire, second, () => {}) === false)
+  }
+
+  // ── L'écran regardé ──────────────────────────────────────────────────────
+  verifier('écran visible : on relève', ecranRegarde({ visibilityState: 'visible' }) === true)
+  verifier('écran caché : on saute le tour', ecranRegarde({ visibilityState: 'hidden' }) === false)
+  verifier('onglet en arrière-plan : on saute le tour', ecranRegarde({ visibilityState: 'prerender' }) === false)
+  // ⚠️ SANS DOCUMENT, ON RELÈVE. Un rendu serveur ou un banc ne doit pas
+  // éteindre un rafraîchissement pour une raison qui n'existe pas chez lui.
+  verifier('hors navigateur : on ne bloque rien', ecranRegarde(null) === true)
+  verifier('document sans visibilité : on ne bloque rien', ecranRegarde({}) === true)
+}
+
+// ── LA GARDE QUI COMPTE, DANS TOUT `app` ───────────────────────────────────
+// ⚠️ UNE GARDE ÉTROITE N'EST PAS UNE GARDE (leçon du 18/08 sur les flous). On
+// n'interdit donc pas un fichier, on interdit la PRATIQUE : aucun relevé plus
+// rapide que quinze secondes ne doit tourner sans regarder si quelqu'un est là.
+{
+  const rapides = []
+  const parcourir = (dossier) => {
+    for (const entree of readdirSync(dossier, { withFileTypes: true })) {
+      const chemin = `${dossier}/${entree.name}`
+      if (entree.isDirectory()) { parcourir(chemin); continue }
+      if (!entree.name.endsWith('.js')) continue
+      const source = readFileSync(chemin, 'utf8')
+      // setInterval(…, N) : on ne retient que le délai, dernier argument.
+      const appels = source.match(/setInterval\([\s\S]{0,600}?,\s*(\d+)\s*\)/g) || []
+      for (const appel of appels) {
+        const delai = Number((appel.match(/,\s*(\d+)\s*\)$/) || [])[1])
+        if (!Number.isFinite(delai) || delai >= 15000) continue
+        // Trois écritures équivalentes et toutes trois correctes. Refuser
+        // `document.hidden` reviendrait à exiger une formulation, pas un
+        // comportement : le compteur du reveal se protège ainsi depuis le 16/07.
+        const regardeAvant = /ecranRegarde\(\)|visibilityState|document\.hidden/.test(appel)
+        if (!regardeAvant) rapides.push(`${chemin} (${delai} ms)`)
+      }
+    }
+  }
+  parcourir('app')
+  verifier('aucun relevé rapide ne tourne devant un écran éteint',
+    rapides.length === 0, rapides.join(', '))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

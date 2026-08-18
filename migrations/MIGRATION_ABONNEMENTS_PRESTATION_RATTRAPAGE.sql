@@ -16,6 +16,13 @@
 -- non celui qui a été acheté. Il n'y a pas de meilleure source : le contrat est
 -- vide, la formule est la seule information qui reste. C'est exactement le
 -- choix que le code fait déjà à chaque lecture, rendu explicite et figé.
+--
+-- ⚠️ PASSÉE LE 18/08. Contrôle rendu par Alex : avec_cours = 4, orphelins = 0.
+-- ⚠️ ET UNE CONSÉQUENCE QUI N'ÉTAIT PAS ÉCRITE ICI : la modale de l'agenda du
+-- commerçant filtre les abonnés EN DUR sur `abonnements.prestation_id`, sans le
+-- repli que font les deux autres chemins. Tant que cette migration n'était pas
+-- passée, une abonnée ayant payé en ligne avant le 16/08 n'apparaissait sous
+-- AUCUN cours, et la commerçante ne pouvait pas lui poser ses séances.
 -- ═══════════════════════════════════════════════════════════════════════════
 
 

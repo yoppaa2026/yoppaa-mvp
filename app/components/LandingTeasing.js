@@ -14,6 +14,7 @@ import { Lock } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import Link from 'next/link'
 import PartageMobilisation from './PartageMobilisation'
+import { ecranRegarde } from '@/lib/rafraichissement'
 
 const T = {
   ink:     '#1A0840',
@@ -466,7 +467,11 @@ function Compteur() {
   const [t, setT] = useState(calculerEtatTemps)
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const id = setInterval(() => setT(calculerEtatTemps()), 1000)
+    // ⚠️ UN COMPTEUR CACHÉ NE COMPTE POUR PERSONNE. Sans cette garde, ce tick
+    // redessinait le compte à rebours une fois par seconde dans un onglet que
+    // plus personne ne regardait. Son frère du reveal se protège depuis le
+    // 16/07 ; celui-ci avait été oublié, comme les relevés de la fiche.
+    const id = setInterval(() => { if (ecranRegarde()) setT(calculerEtatTemps()) }, 1000)
     return () => clearInterval(id)
   }, [])
   return (

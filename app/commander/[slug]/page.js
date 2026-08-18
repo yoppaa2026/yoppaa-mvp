@@ -12,6 +12,7 @@ import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-
 import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
 import { joursRetraitBoutique } from '@/lib/ouverture'
+import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
 // ⚠️ `estFoodTruck` n'est plus importé ici depuis le 12/08 : le MÉTIER ne dit
 // pas si un commerce bouge. C'est `estItinerant`, qui lit les lieux déclarés,
 // qui décide, et une professeure de yoga en profite comme un food truck.
@@ -1724,6 +1725,15 @@ export default function CommanderSlug() {
   // Récupère les quantités déjà commandées par article pour le jour sélectionné
   // (exclut les commandes "non_retire") afin que le stock disponible affiché côté
   // client soit cohérent avec ce que voit le commerçant sur son dashboard.
+  // ⚠️ LA MÉMOIRE DES RELEVÉS DE FOND. Sans elle, un relevé qui rend exactement
+  // les mêmes données repose quand même quatre états avec des objets neufs, et
+  // la fiche entière se redessine. C'est ce qui fabriquait les blocages d'écran
+  // d'une à deux secondes signalés par Alex le 18/08. Voir lib/rafraichissement.
+  const memoireCommandes = useRef(null)
+  const memoireArticles = useRef(null)
+  const memoireStocks = useRef(null)
+  const memoireOptions = useRef(null)
+
   const chargerCommandesJour = useCallback(async () => {
     if (!commercant) return
     // ⚠️ EN BOUTIQUE, LE STOCK SE LISAIT AU MAUVAIS JOUR. Le sélecteur affiché
@@ -1745,7 +1755,7 @@ export default function CommanderSlug() {
     ;(lignes || []).forEach(r => {
       map[r.article_id] = Number(r.quantite) || 0
     })
-    setCommandesParArticleJour(map)
+    poserSiChange(memoireCommandes, map, setCommandesParArticleJour)
   }, [commercant, joursDispos, jourSelectionne, estDetail, jourRetraitBoutique])
 
   // Recharge à chaque changement de jour ou de commerçant
@@ -1764,7 +1774,7 @@ export default function CommanderSlug() {
       .eq('commercant_id', commercant.id)
       .eq('actif', true)
       .order('categorie').order('nom')
-    if (arts) setArticles(arts)
+    if (arts) poserSiChange(memoireArticles, arts, setArticles)
     const artIds = (arts || []).map(a => a.id)
     if (artIds.length > 0) {
       const [{ data: stocksData }, { data: groupesData }] = await Promise.all([
@@ -1784,13 +1794,13 @@ export default function CommanderSlug() {
         if (!stocksMap[s.article_id]) stocksMap[s.article_id] = {}
         stocksMap[s.article_id][s.jour_semaine] = { stock: s.stock, actif: s.actif }
       })
-      setStocksJour(stocksMap)
+      poserSiChange(memoireStocks, stocksMap, setStocksJour)
       const optsMap = {}
       ;(groupesData || []).forEach(g => {
         if (!optsMap[g.article_id]) optsMap[g.article_id] = []
         optsMap[g.article_id].push(g)
       })
-      setOptionsParArticle(optsMap)
+      poserSiChange(memoireOptions, optsMap, setOptionsParArticle)
     }
   }, [commercant])
 
@@ -1798,15 +1808,34 @@ export default function CommanderSlug() {
     if (commercant) rafraichirArticlesEtStocks()
   }, [commercant, rafraichirArticlesEtStocks])
 
-  // Polling toutes les 5s + Realtime Supabase pour sync temps réel avec le dashboard
+  // ─── LE RELEVÉ DE FOND, ET LE TEMPS RÉEL QUI FAIT LE VRAI TRAVAIL ─────────
+  //
+  // ⚠️ CE RELEVÉ TOURNAIT TOUTES LES CINQ SECONDES, SANS JAMAIS REGARDER SI
+  // QUELQU'UN AVAIT LES YEUX SUR L'ÉCRAN, et il reposait quatre états avec des
+  // objets neufs à chaque passage : quatre requêtes, dont une jointure, puis un
+  // rendu complet du plus gros composant de l'application. Douze fois par
+  // minute, indéfiniment. C'est ce qui gelait le défilement pendant une à deux
+  // secondes, « surtout quand je vais plus vite » (Alex, 18/08), et pourquoi
+  // « la fiche ouverte depuis un certain temps » n'y changeait rien.
+  //
+  // ⚠️ MÊME DÉFAUT QUE LE 11/08 SUR L'ACCUEIL CLIENT, où un relevé de cinq
+  // secondes non conditionné à la visibilité effaçait la session. J'avais
+  // corrigé là-bas sans chercher les frères. Ils étaient deux.
+  //
+  // ⚠️ CE N'EST PAS LE RELEVÉ QUI TIENT LA FICHE À JOUR, c'est l'abonnement
+  // temps réel juste en dessous : il écoute les commandes, les articles, les
+  // stocks du jour et les options. Le relevé n'est qu'une ceinture pour le cas
+  // où le temps réel serait coupé sur ces tables, et une ceinture n'a pas
+  // besoin de se resserrer toutes les cinq secondes.
   const articlesRef = useRef(articles)
   useEffect(() => { articlesRef.current = articles }, [articles])
   useEffect(() => {
     if (!commercant) return
     const intervalId = setInterval(() => {
+      if (!ecranRegarde()) return
       chargerCommandesJour()
       rafraichirArticlesEtStocks()
-    }, 5000)
+    }, 30000)
     const channel = supabase
       .channel(`stock-sync-${commercant.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'commandes', filter: `commercant_id=eq.${commercant.id}` }, () => chargerCommandesJour())
@@ -1827,7 +1856,7 @@ export default function CommanderSlug() {
           if (!map[s.article_id]) map[s.article_id] = {}
           map[s.article_id][s.jour_semaine] = { stock: s.stock, actif: s.actif }
         })
-        setStocksJour(map)
+        poserSiChange(memoireStocks, map, setStocksJour)
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'article_options_groupes' }, () => rafraichirArticlesEtStocks())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'article_options_valeurs' }, () => rafraichirArticlesEtStocks())

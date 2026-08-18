@@ -36,6 +36,7 @@ import BandeDefilante from '@/app/components/BandeDefilante'
 // section a cessé d'être conditionnée au métier le 12/08, et son dernier usage,
 // un titre qui changeait selon la catégorie, est parti le 13/08.
 import { jourLocalISO, jourSemaineLocal } from '@/lib/timezone'
+import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
 import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
 import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '@/lib/fidelite'
@@ -341,6 +342,8 @@ function TabMenu({ commercantId, commercant, toast }) {
 
   // FIX STOCK : afficher le stock restant côté commerçant
   const [commandesParArticleJour, setCommandesParArticleJour] = useState({})
+  // La mémoire du relevé de fond : rien n'est reposé quand rien n'a bougé.
+  const memoireCommandesJour = useRef(null)
   // STOCK PAR JOUR : { articleId: { lundi: { stock, actif }, mardi: ... } }
   const [stockParJourMap, setStockParJourMap] = useState({})
 
@@ -431,7 +434,7 @@ function TabMenu({ commercantId, commercant, toast }) {
       .eq('commercant_id', commercantId)
       .in('date_commande', jours)
       .neq('statut', 'non_retire')
-    if (!cmds || cmds.length === 0) { setCommandesParArticleJour({}); return }
+    if (!cmds || cmds.length === 0) { poserSiChange(memoireCommandesJour, {}, setCommandesParArticleJour); return }
     const jourParCmd = Object.fromEntries(cmds.map(c => [c.id, jourKeyParDate[String(c.date_commande).slice(0, 10)]]))
     const { data: lignes } = await supabase
       .from('commande_articles')
@@ -444,13 +447,22 @@ function TabMenu({ commercantId, commercant, toast }) {
       if (!map[r.article_id]) map[r.article_id] = {}
       map[r.article_id][jk] = (map[r.article_id][jk] || 0) + r.quantite
     })
-    setCommandesParArticleJour(map)
+    poserSiChange(memoireCommandesJour, map, setCommandesParArticleJour)
   }, [commercantId])
 
+  // ⚠️ MÊME DÉFAUT QUE SUR LA FICHE CLIENT, TROUVÉ EN CHERCHANT SES FRÈRES.
+  // Ce relevé tournait toutes les cinq secondes, sans regarder si le commerçant
+  // avait les yeux sur l'écran, et reposait la carte des quantités avec un
+  // objet neuf à chaque passage : l'onglet entier se redessinait pendant qu'il
+  // tapait un prix. Deux requêtes douze fois par minute, pour des chiffres qui
+  // ne bougent qu'au rythme des commandes.
   useEffect(() => {
     if (!commercantId) return
     chargerCommandesAujourdhui()
-    const id = setInterval(chargerCommandesAujourdhui, 5000)
+    const id = setInterval(() => {
+      if (!ecranRegarde()) return
+      chargerCommandesAujourdhui()
+    }, 30000)
     return () => clearInterval(id)
   }, [commercantId, chargerCommandesAujourdhui])
 

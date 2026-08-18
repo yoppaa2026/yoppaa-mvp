@@ -58,7 +58,7 @@ export default function ConfirmationAbonnement({
         { nomCommerce: commercant?.nom || '', nomFormule: contrat.formule?.libelle || '' },
       )
     : null
-  const etapes = etapesApresAbonnement({ mode: contrat?.mode || 'credit', nomCommerce: commercant?.nom || '' })
+  const etapes = etapesApresAbonnement({ nomCommerce: commercant?.nom || '' })
   const seances = Number.isFinite(Number(contrat?.total)) && Number(contrat?.total) > 0
     ? Number(contrat.total) : null
 
@@ -165,21 +165,23 @@ export default function ConfirmationAbonnement({
         </div>
       )}
 
-      {/* ⚠️ LE GESTE QUI SUIT EST DE RÉSERVER, PAS DE RENTRER CHEZ SOI. En mode
-          crédit, aucune séance n'est posée : le bouton principal le dit et
-          ramène au choix du cours. Le retour à l'accueil, qui ne fait rien
-          avancer, passe en second. */}
-      {contrat?.mode !== 'place_fixe' && (
-        <button onClick={onReserver}
-          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 6px 24px ${T.main}55`, marginBottom: 10 }}>
-          Réserver ma première séance
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
-          </svg>
-        </button>
-      )}
+      {/* ⚠️ LE GESTE QUI SUIT EST DE RÉSERVER, PAS DE RENTRER CHEZ SOI. Aucune
+          séance n'est posée à l'achat : le bouton principal le dit et ramène au
+          choix du cours. Le retour à l'accueil, qui ne fait rien avancer, passe
+          en second.
+          ⚠️ CE BOUTON ÉTAIT CONDITIONNÉ AU MODE, et il disparaissait donc pour
+          une place fixe. Le jour fixe n'existe plus depuis le 18/08, et cette
+          condition n'a de toute façon jamais pu être vraie ici : cet écran suit
+          un paiement en ligne, où personne n'a posé la moindre séance. */}
+      <button onClick={onReserver}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 6px 24px ${T.main}55`, marginBottom: 10 }}>
+        Réserver ma première séance
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+        </svg>
+      </button>
       <button onClick={onAccueil}
-        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '0.875rem', background: contrat?.mode === 'place_fixe' ? `linear-gradient(135deg, ${T.bgPanel}, ${T.main})` : 'transparent', color: contrat?.mode === 'place_fixe' ? '#fff' : T.main, border: contrat?.mode === 'place_fixe' ? 'none' : `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: contrat?.mode === 'place_fixe' ? 800 : 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif', boxShadow: contrat?.mode === 'place_fixe' ? `0 6px 24px ${T.main}55` : 'none' }}>
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif' }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
         </svg>

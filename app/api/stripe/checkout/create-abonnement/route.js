@@ -20,7 +20,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
-import { formuleVendableEnLigne, resumeFormulePublique, seancesVenduesEnLigne } from '@/lib/abonnements'
+import { formuleVendableEnLigne, resumeFormulePublique, seancesDeLaFormule } from '@/lib/abonnements'
 
 export async function POST(request) {
   try {
@@ -82,7 +82,7 @@ export async function POST(request) {
     }
 
     const resume = resumeFormulePublique(formule)
-    const seances = seancesVenduesEnLigne(formule)
+    const seances = seancesDeLaFormule(formule)
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',

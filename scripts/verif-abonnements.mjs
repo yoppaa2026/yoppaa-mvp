@@ -19,7 +19,7 @@ import {
   peutReserverSurAbonnement, libelleSolde, placerLaSerie, resumeDeLaSerie,
   libellePrixSeance, STATUTS_CONSOMMENT_SEANCE, seancesConsommees, datesConsommees,
   etatAbonnement, joursEntre,
-  formuleVendableEnLigne, seancesVenduesEnLigne, resumeFormulePublique,
+  formuleVendableEnLigne, resumeFormulePublique,
   contratDepuisFormule, libelleValidite, formatDateCourte,
   etapesApresAbonnement, contratQuiVientDEtreAchete,
   contratDepuisEtat, peutPoserSeance, abonnementsPourPrestation, expliquerRefusSeance,
@@ -190,12 +190,53 @@ const FORMULE_ANNEE = {
 }
 const FORMULE_CARNET = { type: 'carnet', libelle: 'Carnet de 10', seances_carnet: 10, validite_jours: 180 }
 
-verifier('la période compte ses lundis',
-  seancesDeLaFormule(FORMULE_ANNEE, { jourSemaine: 'lundi' }) === 36)
+// ⚠️ LA PÉRIODE COMPTE SES SEMAINES DEPUIS LE 18/08, plus ses lundis.
+//
+// ⚠️ ET LES CHIFFRES VIENNENT DU CALENDRIER, PAS DU CODE. Du 01/09/2026 (mardi)
+// au 03/07/2027 (samedi), le premier lundi concerné est le 31/08 et le dernier
+// le 28/06 : 44 semaines sont touchées. Les congés d'Emily ferment quatre
+// blocs ENTIERS, du lundi au dimanche — automne 1, hiver 2, détente 1,
+// printemps 2 — soit 6 semaines. La Pentecôte ne ferme qu'un lundi et laisse
+// sa semaine ouverte. Reste 38.
+//
+// ⚠️ ET C'EST DEUX SÉANCES DE PLUS QU'AVANT, gagnées sur un vrai défaut. Le
+// compte par lundis en donnait 36 : il perdait le lundi de la Pentecôte, dont
+// la semaine était pourtant grande ouverte, et la première semaine, entamée un
+// mardi. L'abonnée les garde maintenant, posées un autre jour.
+egal('la période compte ses semaines', seancesDeLaFormule(FORMULE_ANNEE), 38)
+egal('et sans congés, elle en compte 44',
+  seancesDeLaFormule({ ...FORMULE_ANNEE, periodes_exclues: [] }), 44)
+// ⚠️ SEULES LES SEMAINES ENTIÈREMENT FERMÉES DISPARAISSENT. La Pentecôte, un
+// lundi isolé, ne doit rien retirer : mesuré en retirant ce congé seul.
+egal('un congé d’un seul jour ne retire aucune semaine',
+  seancesDeLaFormule({ ...FORMULE_ANNEE, periodes_exclues: CONGES_TEST.filter(c => c.libelle !== 'Pentecôte') }), 38)
+// ⚠️ LE PLAFOND HEBDOMADAIRE MULTIPLIE, et c'est la correction d'un écart réel :
+// l'aperçu du commerçant l'ignorait quand la vente en ligne le comptait. Une
+// même formule annonçait 36 d'un côté et en vendait 72 de l'autre.
+egal('deux séances par semaine doublent le contrat',
+  seancesDeLaFormule({ ...FORMULE_ANNEE, seances_par_semaine: 2 }), 76)
 verifier('le carnet annonce simplement son nombre',
   seancesDeLaFormule(FORMULE_CARNET) === 10)
-verifier('un carnet ne dépend d’aucun jour de la semaine',
-  seancesDeLaFormule(FORMULE_CARNET) === seancesDeLaFormule(FORMULE_CARNET, { jourSemaine: 'jeudi' }))
+// ⚠️ UNE SEMAINE COMPTE DÈS QU'ELLE A UN JOUR LIBRE. Une période d'un seul jour
+// vaut une semaine, et une période entièrement en congé n'en vaut aucune.
+egal('un seul jour ouvre une semaine',
+  seancesDeLaFormule({ type: 'periode', date_debut: '2026-09-08', date_fin: '2026-09-08' }), 1)
+egal('une période entièrement en congé n’accorde rien',
+  seancesDeLaFormule({
+    type: 'periode', date_debut: '2026-09-07', date_fin: '2026-09-13',
+    periodes_exclues: [{ debut: '2026-09-01', fin: '2026-09-30' }],
+  }), 0)
+// ⚠️ ON TESTE L'ABSENCE : sans dates, on n'accorde rien plutôt que d'inventer.
+egal('une période sans dates n’accorde rien',
+  seancesDeLaFormule({ type: 'periode', date_debut: null, date_fin: '2027-07-03' }), 0)
+// ⚠️ MESURÉ, ET LA MESURE A D'ABORD SEMBLÉ DIRE QUE CE TEST ÉTAIT MUET : retirer
+// le `if (dateFin < dateDebut) return []` de `semainesDeLaPeriode` ne fait rien
+// rougir. Ce n'est pas la garde qui est faible, c'est la protection qui est
+// DOUBLE : la condition de la boucle refuse déjà d'avancer. Cassée, elle, huit
+// vérifications tombent. Le test protège donc bien le comportement, et la
+// ceinture reste en plus des bretelles.
+egal('et des bornes à l’envers non plus',
+  seancesDeLaFormule({ type: 'periode', date_debut: '2027-07-03', date_fin: '2026-09-01' }), 0)
 
 // La fenêtre de validité : bornes écrites pour une période, calculée depuis
 // l'achat pour un carnet. Après quoi les deux se ressemblent, et c'est ce qui
@@ -482,24 +523,27 @@ egal('une formule supprimée non plus',
 egal('un prix à zéro n’est pas une vente', formuleVendableEnLigne({ ...CARNET_VITRINE, prix: 0 }), false)
 egal('un carnet vide non plus', formuleVendableEnLigne({ ...CARNET_VITRINE, seances_carnet: 0 }), false)
 
-// ⚠️ LE TEST QUI VALIDE LA RÈGLE DU JOUR LE MOINS FAVORABLE.
+// ⚠️ LA RÈGLE DU JOUR LE MOINS FAVORABLE A DISPARU LE 18/08, avec le jour fixe.
 //
-// Le compte d'une période dépend du jour choisi : l'année commence un mardi et
-// finit un vendredi. La cliente qui achète en ligne n'en choisit aucun, donc on
-// vend le minimum : lui vendre le maximum lui laisserait réclamer une séance de
-// plus que ce que la commerçante avait prévu.
+// Elle existait parce que le compte dépendait du jour : l'année commence un
+// mardi et finit un vendredi, donc un lundi n'y tombe pas autant de fois qu'un
+// mardi. La cliente qui achetait en ligne n'en choisissait aucun, on lui vendait
+// donc le minimum pour ne jamais promettre une séance de trop.
 //
-// Et ce minimum tombe sur **36**, le chiffre qu'Emily annonce elle-même. Ce
-// n'est pas le code qui se confirme tout seul, c'est une source extérieure.
-egal('le lundi est le jour le moins favorable', seancesDeLaFormule(ANNEE_VITRINE, { jourSemaine: 'lundi' }), 36)
-egal('le mardi en offrirait 38', seancesDeLaFormule(ANNEE_VITRINE, { jourSemaine: 'mardi' }), 38)
-egal('EN LIGNE, ON VEND LE MINIMUM : 36', seancesVenduesEnLigne(ANNEE_VITRINE), 36)
-egal('un carnet vend simplement son nombre', seancesVenduesEnLigne(CARNET_VITRINE), 20)
-// Deux séances par semaine doublent ce qui est vendu sur une période.
+// Le jour ne joue plus aucun rôle : le compte est celui des SEMAINES, et il est
+// exact. Il n'y a plus deux fonctions, plus de minimum, plus de prudence à
+// expliquer au commerçant.
+//
+// ⚠️ ET IL N'Y A PLUS QU'UN SEUL CHIFFRE PARTOUT. C'est ce que ce test vérifie,
+// parce que l'écart d'hier n'était visible nulle part : les deux chemins ne se
+// croisaient jamais à l'écran.
+egal('la vitrine et l’aperçu du commerçant comptent pareil',
+  seancesDeLaFormule(ANNEE_VITRINE), 38)
+egal('un carnet vend simplement son nombre', seancesDeLaFormule(CARNET_VITRINE), 20)
 egal('le rythme multiplie ce qui est vendu',
-  seancesVenduesEnLigne({ ...ANNEE_VITRINE, seances_par_semaine: 2 }), 72)
+  seancesDeLaFormule({ ...ANNEE_VITRINE, seances_par_semaine: 2 }), 76)
 egal('une période sans dates ne vend rien',
-  seancesVenduesEnLigne({ ...ANNEE_VITRINE, date_debut: null }), 0)
+  seancesDeLaFormule({ ...ANNEE_VITRINE, date_debut: null }), 0)
 
 // ─── CE QUE LA VITRINE ANNONCE ─────────────────────────────────────────────
 const vitrineCarnet = resumeFormulePublique(CARNET_VITRINE, { achatLe: '2026-09-15' })
@@ -641,8 +685,12 @@ const srcConfigAbo = sansComm(
 // de rendez-vous juste en dessous, qui fige le sien depuis toujours : supprimer
 // celui du CONTRAT ne faisait donc rien rougir. Deux endroits, deux gestes,
 // et le compte le dit.
-egal('les deux écritures figent le taux : le contrat ET la séance',
-  (srcConfigAbo.match(/tva_taux: presta\.tva_taux \?\? null/g) || []).length, 2)
+// ⚠️ UNE SEULE ÉCRITURE DEPUIS LE 18/08, et le compte le dit toujours. La
+// seconde figeait le taux sur chaque SÉANCE générée d'avance : cette génération
+// a disparu avec le jour fixe. Le contrat, lui, doit continuer de figer le sien,
+// et c'est exactement ce que ce compte protège.
+egal('le contrat fige son taux à la signature',
+  (srcConfigAbo.match(/tva_taux: presta\.tva_taux \?\? null/g) || []).length, 1)
 verifier('et la colonne arrive bien jusqu’à l’écran',
   /select\('id, nom, capacite, duree_minutes, tva_taux'\)/.test(srcConfigAbo))
 
@@ -1033,39 +1081,50 @@ const phrase = phraseApercuFormule(FORMULE_APERCU)
 verifier('l’aperçu d’une période annonce un nombre', /\d+ séances/.test(phrase), phrase)
 // ⚠️ LE MOT QUI ENGAGE. « 46 séances » se lit comme une promesse ferme ;
 // « au minimum » dit la vérité, et c'est la vérité qu'on tiendra.
-verifier('et il dit que c’est un MINIMUM', /au minimum/.test(phrase), phrase)
+// ⚠️ « AU MINIMUM » A DISPARU LE 18/08, et c'est un progrès : le nombre n'est
+// plus une prudence, c'est le compte exact des semaines. Promettre moins que ce
+// qu'on donne était le prix à payer pour un jour figé qui n'existe plus.
+verifier('et il ne se couvre plus derrière un minimum', !/minimum/.test(phrase), phrase)
 verifier('la période est rappelée en clair',
   /du 7 septembre au 21 décembre/.test(phrase), phrase)
 
-// Le nombre annoncé est celui du jour le MOINS favorable, celui que la vente en
-// ligne utilise déjà. Aucun client ne peut donc recevoir moins que promis.
-const minimum = Math.min(...JOURS_SEMAINE_FR.map(j => datesDeSeances({
+// ⚠️ LE NOMBRE ANNONCÉ EST CELUI DES SEMAINES, et il est SUPÉRIEUR au compte
+// par jour le moins favorable qu'on annonçait avant. C'est bien le sens du
+// changement : l'abonnée récupère les semaines qu'un jour malchanceux lui
+// faisait perdre. Le test compare aux DEUX anciens repères, sinon il ne
+// prouverait rien sur une formule où tous les jours se valent.
+const parJour = JOURS_SEMAINE_FR.map(j => datesDeSeances({
   dateDebut: FORMULE_APERCU.date_debut, dateFin: FORMULE_APERCU.date_fin,
   jourSemaine: j, periodesExclues: FORMULE_APERCU.periodes_exclues,
-}).length))
-verifier('le nombre annoncé est celui du jour le moins favorable',
-  phrase.startsWith(`${minimum} séance`), `${phrase} / minimum calculé ${minimum}`)
-// ⚠️ ET IL EST BIEN INFÉRIEUR AU MEILLEUR JOUR : sans cet écart, le test ne
-// prouverait rien, il pourrait passer sur une formule où tous les jours sont
-// équivalents. Mesuré ici, sur une vraie semaine de congé.
-const maximum = Math.max(...JOURS_SEMAINE_FR.map(j => datesDeSeances({
-  dateDebut: FORMULE_APERCU.date_debut, dateFin: FORMULE_APERCU.date_fin,
-  jourSemaine: j, periodesExclues: FORMULE_APERCU.periodes_exclues,
-}).length))
+}).length)
+const minimum = Math.min(...parJour)
+const maximum = Math.max(...parJour)
+const annonce = seancesDeLaFormule(FORMULE_APERCU)
+verifier('le nombre annoncé est celui des semaines',
+  phrase.startsWith(`${annonce} séance`), `${phrase} / semaines ${annonce}`)
+verifier('et il ne lèse plus le client du jour malchanceux', annonce >= maximum,
+  `annoncé ${annonce}, meilleur jour ${maximum}, pire jour ${minimum}`)
+// ⚠️ ET LE CAS DE TEST PORTE BIEN UN ÉCART ENTRE LES JOURS, sans quoi la ligne
+// au-dessus passerait sur n'importe quoi. Mesuré sur une vraie semaine de congé.
 verifier('et le cas de test porte bien un écart entre les jours', maximum > minimum,
   `min ${minimum}, max ${maximum}`)
 
-// L'explication accompagne toujours le nombre : sans elle, le commerçant croit
-// à une erreur de calcul et va chercher son jour manquant.
+// L'explication accompagne toujours le nombre : sans elle, le commerçant se
+// demande quel jour Yoppaa a bien pu choisir à sa place.
 verifier('l’explication dit que le client choisit son jour',
-  /choisit lui-même son jour/.test(expliquerApercuFormule(FORMULE_APERCU)))
-verifier('et pourquoi le nombre est un minimum',
-  /moins favorable/.test(expliquerApercuFormule(FORMULE_APERCU)))
+  /choisit son jour/.test(expliquerApercuFormule(FORMULE_APERCU)))
+verifier('et qu’il peut en changer d’une semaine à l’autre',
+  /changer d’une semaine à l’autre/.test(expliquerApercuFormule(FORMULE_APERCU)))
+// ⚠️ ET LE PLAFOND SE DIT QUAND IL VAUT PLUS DE UN, sinon le commerçant ne sait
+// pas ce qui empêche une abonnée de tout consommer en trois semaines.
+verifier('au-delà d’une par semaine, le plafond est nommé',
+  /sans jamais dépasser 2 sur la même semaine/.test(
+    expliquerApercuFormule({ ...FORMULE_APERCU, seances_par_semaine: 2 })))
 
 // Deux séances par semaine doublent le compte annoncé.
-verifier('le rythme hebdomadaire multiplie le minimum',
+verifier('le rythme hebdomadaire multiplie le nombre annoncé',
   phraseApercuFormule({ ...FORMULE_APERCU, seances_par_semaine: 2 })
-    .startsWith(`${minimum * 2} séance`))
+    .startsWith(`${annonce * 2} séance`))
 
 // Le carnet ne parle pas de jour du tout : il n'en a jamais eu.
 const carnet = phraseApercuFormule({ type: 'carnet', seances_carnet: 10, validite_jours: 180 })
@@ -1176,9 +1235,13 @@ egal('il porte le montant payé', resumeAchat.prix, '400.00 €')
 // utile des cinq : en crédit il doit réserver, personne ne le lui dira sinon.
 verifier('en crédit, il dit qu’il faut réserver soi-même',
   /réserves tes séances toi-même/.test(resumeAchat.aFaire), resumeAchat.aFaire)
-egal('en place fixe, il dit qu’il n’y a rien à faire',
-  resumeContratAchete({ seances_total: 10, mode: 'place_fixe' }).aFaire,
-  'Tes séances sont déjà réservées, tu n’as rien à faire.')
+// ⚠️ ET IL LE DIT MÊME SUR UN VIEUX CONTRAT À PLACE FIXE. Cette phrase se lisait
+// autrefois sur `mode` ; elle n'en dépend plus depuis le 18/08, et elle n'aurait
+// jamais dû : ce résumé ne suit qu'un ACHAT EN LIGNE, où personne n'a posé la
+// moindre séance, le commerçant n'étant pas devant son écran à cet instant.
+verifier('et il le dit aussi sur un contrat d’avant la suppression du jour fixe',
+  /réserves tes séances toi-même/.test(
+    resumeContratAchete({ seances_total: 10, mode: 'place_fixe' }).aFaire))
 egal('sans contrat, aucun résumé', resumeContratAchete(null), null)
 
 // ─── LES TROIS SURFACES SONT BRANCHÉES ────────────────────────────────────
@@ -1298,13 +1361,13 @@ verifier('en crédit, on dit que rien n’est encore réservé',
   /pas encore réservées/.test(etapesCredit[1]))
 verifier('et on dit où il choisira ses dates',
   /Centre Respire/.test(etapesCredit[1]))
-// Le contraire exactement quand les séances SONT posées : lui dire de réserver
-// l'enverrait chercher un geste qui n'existe pas.
+// ⚠️ LA BRANCHE « PLACE FIXE » A DISPARU LE 18/08. Elle annonçait « tes séances
+// sont déjà réservées », ce qui n'a jamais pu être vrai ici : ces trois lignes
+// suivent un PAIEMENT EN LIGNE. Un mode oublié dans l'appel ne doit donc plus
+// changer un seul mot, et c'est ce que ce test mesure.
 const etapesFixe = etapesApresAbonnement({ mode: 'place_fixe', nomCommerce: 'Centre Respire' })
-verifier('en place fixe, on dit qu’elles sont déjà réservées',
-  /déjà réservées/.test(etapesFixe[1]))
-verifier('et surtout PAS qu’il lui reste à les poser',
-  !etapesFixe.some(e => /pas encore réservées/.test(e)))
+verifier('un vieux mode passé par erreur ne change plus rien',
+  JSON.stringify(etapesFixe) === JSON.stringify(etapesCredit))
 // Sans nom de commerce, la phrase reste une phrase française.
 verifier('sans nom de commerce, la phrase tient debout',
   !/ de ,|depuis la fiche de\./.test(etapesApresAbonnement({ mode: 'credit' })[1]))

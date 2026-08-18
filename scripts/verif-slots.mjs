@@ -314,12 +314,17 @@ verifier('au moins un mercredi ouvert sur 14 jours', jours.some(j => j.ouvert))
 // abonnement est le cinquième chemin d'écriture, et le banc a rougi AVANT
 // qu'Alex ait pu tester quoi que ce soit. Deuxième fois que cette liste attrape
 // un chemin le jour même où il est écrit.
+// ⚠️ `ConfigDashboard.js` A QUITTÉ CETTE LISTE LE 18/08, et c'est un rétrécissement
+// VOULU : l'inscription d'un abonné générait toute la série de ses séances sur
+// un jour fixe de la semaine. Le jour fixe supprimé, elle n'écrit plus une seule
+// réservation, elle crée le contrat et rien d'autre.
+// ⚠️ Poser les séances redevient un geste d'agenda, donc `ModalNouveauRdv.js`,
+// qui est déjà dans la liste et déjà surveillé. Rien n'est sorti du filet.
 const CHEMINS_ECRITURE = [
   'app/api/stripe/webhook/route.js',
   'app/api/rdv/reserver-abonnement/route.js',
   'app/commander/rdv/[slug]/page.js',
   'app/dashboard/ModalNouveauRdv.js',
-  'app/dashboard/ConfigDashboard.js',
 ]
 
 const CHAINE_INSERT = /from\('rdv_reservations'\)\s*\n?\s*\.insert\(/g
@@ -396,8 +401,21 @@ verifier('la résiliation ne touche que les séances à venir',
   /\.gte\('date_rdv', aujourdhui\)/.test(srcConfig))
 // ⚠️ LE PRIX VIT SUR LE CONTRAT, PAS SUR CHAQUE SÉANCE. Le recopier trente-six
 // fois multiplierait le chiffre d'affaires par trente-six.
+//
+// ⚠️ CETTE GARDE A CHANGÉ DE FICHIER LE 18/08, ELLE N'A PAS DISPARU. Elle
+// surveillait `ConfigDashboard`, qui générait la série des séances d'un
+// abonnement ; ce chemin n'existe plus depuis la suppression du jour fixe. La
+// séance d'abonnement naît désormais dans la route de réservation, et le zéro
+// doit y être. Retirer la garde avec le code aurait rouvert le défaut le jour
+// où quelqu'un recopie le prix par réflexe.
+const srcReserverAbo = sansCommentaires(
+  readFileSync(new URL('../app/api/rdv/reserver-abonnement/route.js', import.meta.url), 'utf8'))
 verifier('une séance d’abonnement ne porte pas le prix du contrat',
-  /prix_estime: 0,/.test(srcConfig))
+  /prix_estime: 0,/.test(srcReserverAbo))
+// ⚠️ ON COMPTE : cette route pose une séance ET, sur un autre chemin, la
+// remplace. Chercher le mot laissait l'un des deux satisfaire le test.
+egal('et aucune de ses deux écritures ne le recopie',
+  (srcReserverAbo.match(/prix_estime: 0,/g) || []).length, 2)
 
 // ─── L'ABONNÉE SE RECONNAÎT DANS L'AGENDA ──────────────────────────────────
 // Sur une liste de douze noms, rien ne disait qui avait déjà réglé son année et

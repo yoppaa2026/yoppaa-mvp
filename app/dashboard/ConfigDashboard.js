@@ -12,9 +12,11 @@ import { classerProduitsParCategorie, produitParType } from '@/lib/produits-bout
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
 import { capacitePrestation } from '@/lib/cours-collectifs'
 import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
-import { datesDeSeances, exclusionsQuiSeChevauchent, placerLaSerie, resumeDeLaSerie, seancesDeLaFormule, fenetreDeValidite, phraseApercuFormule, expliquerApercuFormule } from '@/lib/abonnements'
-import { lieuALHeure } from '@/lib/lieux-activite'
-import { champsLieu } from '@/lib/lieu-fige'
+// ⚠️ Trois fonctions de moins depuis le 18/08, et le lieu avec elles : cet écran
+// ne pose plus une seule séance, il crée le contrat. Le placement d'une série et
+// la gravure du lieu n'ont pas été supprimés du projet, c'est le geste d'agenda
+// qui les reprend.
+import { exclusionsQuiSeChevauchent, seancesDeLaFormule, fenetreDeValidite, phraseApercuFormule, expliquerApercuFormule } from '@/lib/abonnements'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
@@ -7115,7 +7117,7 @@ function TabRdvPrestations({ commercantId, toast }) {
 // semaines : la SEULE protection contre une saisie de travers est qu'il lise
 // le nombre de séances obtenu avant de confirmer. Emily attend 36, elle lit
 // 36, ou elle voit tout de suite qu'elle s'est trompée.
-const JOURS_APERCU = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+// ⚠️ La liste des jours a disparu le 18/08 : plus personne n'en choisit un.
 
 function dateCourte(iso) {
   if (!iso) return ''
@@ -7133,26 +7135,24 @@ function dureeParlante(jours) {
   return n === 1 ? '1 jour' : `${n} jours`
 }
 
-// L'heure de fin d'une séance, à partir de son début et de sa durée.
-function heurePlusMinutes(hhmm, minutes) {
-  const [h, m] = String(hhmm || '00:00').slice(0, 5).split(':').map(Number)
-  const total = h * 60 + m + (Number(minutes) || 0)
-  const hh = String(Math.floor(total / 60) % 24).padStart(2, '0')
-  const mm = String(total % 60).padStart(2, '0')
-  return `${hh}:${mm}`
-}
+// ⚠️ L'heure de fin d'une séance se calculait ici pour générer la série. Plus
+// aucune séance ne naît dans cet écran : la fonction est partie avec elle.
 
-function TabRdvAbonnements({ commercantId, commercant, toast }) {
+function TabRdvAbonnements({ commercantId, toast }) {
   const [formules, setFormules] = useState([])
   const [prestations, setPrestations] = useState([])
   const [abonnes, setAbonnes] = useState([])
-  const [lieux, setLieux] = useState([])
+  // ⚠️ La liste des lieux ne servait qu'à graver l'endroit sur chaque séance
+  // générée d'avance. Le lieu se grave désormais quand la séance est posée,
+  // dans l'agenda, exactement comme pour tout autre rendez-vous.
   const [showInscription, setShowInscription] = useState(false)
   const [inscrivant, setInscrivant] = useState(false)
+  // ⚠️ NI MODE, NI JOUR, NI HEURE depuis le 18/08 : un contrat accorde N
+  // séances sur une période, et chacune se pose ensuite où elle veut dans la
+  // semaine. Voir MIGRATION_ABONNEMENTS_SANS_JOUR_FIXE.
   const initialInscription = {
-    formule_id: '', mode: 'place_fixe',
+    formule_id: '',
     client_prenom: '', client_nom: '', client_telephone: '', client_email: '',
-    jour_semaine: 'lundi', heure_debut: '10:00',
     paye: false, mode_paiement: '',
   }
   const [insc, setInsc] = useState(initialInscription)
@@ -7179,7 +7179,11 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: f }, { data: p }, { data: a }, { data: l }] = await Promise.all([
+    // ⚠️ LES LIEUX NE SONT PLUS CHARGÉS ICI (18/08). Cette quatrième requête ne
+    // servait qu'à graver l'endroit sur chaque séance générée d'avance : plus
+    // aucune séance ne naît dans cet écran, la requête partait pour rien à
+    // chaque ouverture de l'onglet.
+    const [{ data: f }, { data: p }, { data: a }] = await Promise.all([
       supabase.from('abonnement_formules').select('*')
         .eq('commercant_id', commercantId).is('deleted_at', null)
         .order('ordre', { ascending: true }).order('created_at', { ascending: true }),
@@ -7189,13 +7193,10 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
       supabase.from('abonnements').select('*')
         .eq('commercant_id', commercantId).is('deleted_at', null)
         .order('created_at', { ascending: false }),
-      supabase.from('commercant_lieux').select('*')
-        .eq('commercant_id', commercantId).is('deleted_at', null),
     ])
     setFormules(f || [])
     setPrestations(p || [])
     setAbonnes(a || [])
-    setLieux(l || [])
     setLoading(false)
   }
 
@@ -7207,11 +7208,12 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
     const formule = formules.find(f => f.id === insc.formule_id)
     if (!formule) return toast('Choisis une formule', 'error')
     if (!insc.client_prenom.trim()) return toast('Le prénom est obligatoire', 'error')
-    // ⚠️ En mode crédit, l'email n'est pas un confort : c'est la clé qui relie
-    // la réservation en ligne à l'abonnement. La base le refuse aussi.
-    if (insc.mode === 'credit' && !insc.client_email.trim()) {
-      return toast('Un abonnement à réserver soi-même exige un email', 'error')
-    }
+    // ⚠️ L'EMAIL N'EST PLUS EXIGÉ, ET C'EST UN GAIN (18/08). Il l'était en mode
+    // crédit parce que la cliente était la SEULE à pouvoir poser ses séances,
+    // et l'email est la clé qui relie une réservation à son Yopper. La
+    // commerçante pose désormais les séances elle-même : une abonnée de 70 ans
+    // sans adresse email a le droit d'exister. L'écran le DIT au lieu de
+    // l'interdire, et la contrainte de la base est tombée avec la migration.
     const presta = prestations.find(p => p.id === formule.prestation_id)
     if (!presta) return toast('Le cours de cette formule n’existe plus', 'error')
 
@@ -7219,8 +7221,8 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
     const fenetre = fenetreDeValidite(formule, { achatLe: aujourdhui })
     if (!fenetre) return toast('Cette formule est incomplète, corrige-la d’abord', 'error')
 
-    const total = seancesDeLaFormule(formule, { jourSemaine: insc.jour_semaine })
-    if (total <= 0) return toast('Cette formule ne contient aucune séance ce jour-là', 'error')
+    const total = seancesDeLaFormule(formule)
+    if (total <= 0) return toast('Cette formule n’accorde aucune séance, corrige-la d’abord', 'error')
 
     const contrat = {
       commercant_id: commercantId,
@@ -7232,10 +7234,12 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
       // Email NORMALISÉ : c'est la clé de rattachement partout dans le projet,
       // et une majuscule a déjà fait disparaître des commandes ici.
       client_email: insc.client_email.trim().toLowerCase() || null,
-      mode: insc.mode,
+      // ⚠️ `mode`, `jour_semaine` et `heure_debut` SONT DE L'HISTOIRE depuis le
+      // 18/08 : le jour fixe n'existe plus, chaque séance se pose où elle veut
+      // dans la semaine. On écrit `credit` pour rester cohérent avec la
+      // colonne, et plus aucun jour.
+      mode: 'credit',
       type: formule.type,
-      jour_semaine: insc.mode === 'place_fixe' ? insc.jour_semaine : null,
-      heure_debut: insc.mode === 'place_fixe' ? insc.heure_debut : null,
       date_debut: fenetre.debut,
       date_fin: fenetre.fin,
       prix: Number(formule.prix) || 0,
@@ -7253,111 +7257,23 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
       tva_taux: presta.tva_taux ?? null,
     }
 
+    // ⚠️ UNE SEULE ÉCRITURE DEPUIS LE 18/08, ET UNE BRANCHE ENTIÈRE A DISPARU.
+    //
+    // L’inscription générait AUSSI toute la série des séances quand la
+    // commerçante avait choisi « je bloque sa place » : trente-six lignes posées
+    // le même jour de la semaine, d’un coup, à l’aveugle sur toute l’année. Le
+    // jour fixe n’existe plus, cette génération non plus.
+    //
+    // ⚠️ ET CE N’EST PAS UNE PERTE, C’EST UN DÉPLACEMENT. Poser les séances est
+    // devenu un GESTE D’AGENDA : la commerçante pose la première où elle veut,
+    // la répète sur les semaines suivantes, et corrige celles qui ne vont pas.
+    // Le code qui plaçait une série en respectant les places déjà prises n’a pas
+    // été jeté : c’est lui que ce geste réutilise.
     setInscrivant(true)
-
-    // ─── Mode crédit : aucune séance générée, la cliente choisira ───────────
-    if (insc.mode === 'credit') {
-      const { error } = await supabase.from('abonnements').insert(contrat)
-      setInscrivant(false)
-      if (error) return toast(`Erreur : ${error.message}`, 'error')
-      toast(`${contrat.client_prenom} a ${total} séances à réserver`)
-      setShowInscription(false); setInsc(initialInscription)
-      return fetchAll()
-    }
-
-    // ─── Mode place fixe : on réserve toutes les séances d'un coup ──────────
-    const dates = datesDeSeances({
-      dateDebut: fenetre.debut, dateFin: fenetre.fin,
-      jourSemaine: insc.jour_semaine, periodesExclues: formule.periodes_exclues,
-    })
-
-    // Les places déjà prises, lues EN BASE pour toutes les dates à la fois.
-    const { data: dejaLa, error: errLecture } = await supabase
-      .from('rdv_reservations')
-      .select('date_rdv, place_no')
-      .eq('commercant_id', commercantId)
-      .eq('prestation_id', presta.id)
-      .eq('heure_debut', insc.heure_debut)
-      .in('date_rdv', dates)
-      .in('statut', ['confirme', 'honore'])
-      .is('deleted_at', null)
-    if (errLecture) { setInscrivant(false); return toast(`Erreur : ${errLecture.message}`, 'error') }
-
-    const occupeesParDate = {}
-    for (const r of dejaLa || []) {
-      (occupeesParDate[r.date_rdv] = occupeesParDate[r.date_rdv] || []).push(r.place_no)
-    }
-    const serie = placerLaSerie({
-      dates, capacite: capacitePrestation(presta), occupeesParDate,
-    })
-
-    // ⚠️ ON NE CACHE JAMAIS UN TROU. Une cliente qui paie 36 séances et n'en
-    // reçoit que 33 sans que personne ne le remarque, c'est le défaut le plus
-    // cher de tous. Les dates complètes sont nommées, et le commerçant tranche.
-    if (serie.completes.length > 0) {
-      const suite = await confirme(confirmationSimple({ titre: 'Toutes les séances n’ont pas trouvé de place', message: resumeDeLaSerie(serie), action: 'Créer avec les séances disponibles', ton: 'principal' }))
-      if (!suite) { setInscrivant(false); return }
-    }
-    if (serie.placees.length === 0) {
-      setInscrivant(false)
-      return toast('Aucune séance disponible sur cette période', 'error')
-    }
-
-    const { data: cree, error: errContrat } = await supabase
-      .from('abonnements').insert(contrat).select('id').single()
-    if (errContrat || !cree) {
-      setInscrivant(false)
-      return toast(`Erreur : ${errContrat?.message || 'échec'}`, 'error')
-    }
-
-    const duree = presta.duree_minutes || 60
-    // ⚠️ La place est réaffectée explicitement plus bas plutôt qu'en raccourci
-    // d'objet : le banc exige de voir une ÉCRITURE, et `place_no,` tout seul
-    // ressemble trop à une colonne qu'on lit dans un `select`.
-    const lignes = serie.placees.map(({ date, place_no: place }) => {
-      // ⚠️ LE LIEU EST GRAVÉ SÉANCE PAR SÉANCE, et il peut changer d'une
-      // semaine à l'autre : un marché de Noël remplace la salle habituelle.
-      // La règle est celle du module LIEUX, lue en mémoire et non en base :
-      // trente-six requêtes pour une inscription seraient absurdes.
-      const lieu = lieuALHeure({ commercant, lieux, jour: date, heure: insc.heure_debut })
-      return {
-        commercant_id: commercantId,
-        client_id: null,
-        prestation_id: presta.id,
-        abonnement_id: cree.id,
-        client_prenom: contrat.client_prenom,
-        client_nom: contrat.client_nom,
-        client_telephone: contrat.client_telephone,
-        client_email: contrat.client_email,
-        date_rdv: date,
-        heure_debut: insc.heure_debut,
-        heure_fin: heurePlusMinutes(insc.heure_debut, duree),
-        duree_minutes: duree,
-        // ⚠️ PRIX ZÉRO SUR LA SÉANCE, le montant vit sur le contrat. Le
-        // recopier trente-six fois multiplierait le chiffre d'affaires par
-        // trente-six dans les statistiques.
-        prix_estime: 0,
-        acompte_paye: false,
-        statut: 'confirme',
-        tva_taux: presta.tva_taux ?? null,
-        rgpd_marketing: false,
-        source: 'commercant',
-        place_no: place,
-        capacite_creneau: capacitePrestation(presta),
-        ...champsLieu(lieu),
-      }
-    })
-
-    const { error: errSeances } = await supabase.from('rdv_reservations').insert(lignes)
+    const { error } = await supabase.from('abonnements').insert(contrat)
     setInscrivant(false)
-    if (errSeances) {
-      // Le contrat existe, les séances non : on le dit franchement plutôt que
-      // de laisser un abonnement fantôme sans expliquer pourquoi.
-      return toast(errSeances.code === '23505'
-        ? 'Des places viennent d’être prises pendant l’inscription. Le contrat est créé, relance la génération.'
-        : `Contrat créé, mais les séances ont échoué : ${errSeances.message}`, 'error')
-    }
-    toast(`${contrat.client_prenom} est inscrite, ${lignes.length} séances réservées`)
+    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    toast(`${contrat.client_prenom} a ${total} séance${total > 1 ? 's' : ''} à poser`)
     setShowInscription(false); setInsc(initialInscription)
     fetchAll()
   }
@@ -7790,22 +7706,13 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
                 ))}
               </select>
 
-              {/* ⚠️ LA QUESTION QUI SÉPARE LES DEUX POPULATIONS. Une même
-                  formule, au même prix, se consomme de deux façons selon la
-                  personne : certaines ne toucheront jamais l'application. */}
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 6 }}>Qui réserve les séances ?</label>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-                {[
-                  { id: 'place_fixe', titre: 'Je bloque sa place', desc: 'Toutes les semaines, elle n’a rien à faire' },
-                  { id: 'credit',     titre: 'Elle réserve',        desc: 'Chaque séance se déduit de son solde' },
-                ].map(o => (
-                  <button key={o.id} onClick={() => setInsc({ ...insc, mode: o.id })}
-                    style={{ flex: '1 1 150px', minWidth: 0, textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', background: insc.mode === o.id ? `${T.main}12` : '#fff', border: `1.5px solid ${insc.mode === o.id ? T.main : T.hairline}`, fontFamily: '"DM Sans", sans-serif' }}>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: insc.mode === o.id ? T.main : T.ink }}>{o.titre}</span>
-                    <span style={{ display: 'block', fontSize: 11, color: T.muted, marginTop: 2 }}>{o.desc}</span>
-                  </button>
-                ))}
-              </div>
+              {/* ⚠️ LA QUESTION « QUI RÉSERVE LES SÉANCES ? » A DISPARU LE 18/08,
+                  avec le jour fixe. Elle séparait deux populations, mais elle
+                  obligeait surtout à trancher AU MOMENT DE L'INSCRIPTION ce qui
+                  ne se décide qu'au fil de l'année : une abonnée peut réserver
+                  deux séances toute seule puis téléphoner pour la troisième.
+                  Les deux chemins restent ouverts en permanence, sans choix
+                  préalable. */}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
                 <div>
@@ -7823,32 +7730,22 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
                   <Input value={insc.client_telephone} onChange={e => setInsc({ ...insc, client_telephone: e.target.value })}/>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>
-                    Email {insc.mode === 'credit' ? '*' : ''}
-                  </label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Email</label>
                   <Input type="email" value={insc.client_email} onChange={e => setInsc({ ...insc, client_email: e.target.value })}/>
                 </div>
               </div>
-              {insc.mode === 'credit' && (
-                <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.55, margin: '-6px 0 12px' }}>
-                  L’email est indispensable ici : c’est lui qui relie ses réservations à son abonnement.
-                </p>
-              )}
-
-              {insc.mode === 'place_fixe' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Son jour *</label>
-                    <select value={insc.jour_semaine} onChange={e => setInsc({ ...insc, jour_semaine: e.target.value })} style={s.input}>
-                      {JOURS_APERCU.map(j => <option key={j} value={j}>{j}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Son heure *</label>
-                    <Input type="time" value={insc.heure_debut} onChange={e => setInsc({ ...insc, heure_debut: e.target.value })}/>
-                  </div>
-                </div>
-              )}
+              {/* ⚠️ L'EMAIL N'EST PLUS OBLIGATOIRE, ET ON DIT CE QUE SON ABSENCE
+                  COÛTE plutôt que de la refuser. Il était exigé parce que la
+                  cliente était la seule à pouvoir poser ses séances, et c'est
+                  l'email qui relie une réservation à son Yopper. Maintenant que
+                  la commerçante les pose aussi, une abonnée de 70 ans sans
+                  adresse email a le droit d'exister. Interdire l'aurait
+                  simplement empêchée d'être inscrite. */}
+              <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.55, margin: '-6px 0 12px' }}>
+                {insc.client_email.trim()
+                  ? 'Avec son email, elle pourra réserver ses séances elle-même depuis l’application.'
+                  : 'Sans email, c’est toi qui poseras toutes ses séances : elle ne pourra pas réserver depuis l’application.'}
+              </p>
 
               <div style={{ marginBottom: 12 }}>
                 <Toggle value={insc.paye} onChange={v => setInsc({ ...insc, paye: v })} label="Déjà payé"/>
@@ -7875,14 +7772,18 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
               {(() => {
                 const f = formules.find(x => x.id === insc.formule_id)
                 if (!f) return null
-                const n = seancesDeLaFormule(f, { jourSemaine: insc.jour_semaine })
+                const n = seancesDeLaFormule(f)
                 return (
                   <div style={{ background: `${T.main}0D`, border: `1px solid ${T.main}33`, borderRadius: 10, padding: 12, marginBottom: 14 }}>
                     <p style={{ fontSize: 13, fontWeight: 800, color: T.main, margin: 0 }}>
-                      {n} séance{n > 1 ? 's' : ''}
-                      {insc.mode === 'place_fixe'
-                        ? ` seront réservées le ${insc.jour_semaine} à ${insc.heure_debut}.`
-                        : ' à réserver quand elle le souhaite.'}
+                      {n} séance{n > 1 ? 's' : ''} à poser, à n’importe quel jour de la semaine.
+                    </p>
+                    {/* ⚠️ ON DIT OÙ SE FAIT LE GESTE SUIVANT. Sans cette ligne,
+                        la commerçante enregistre et cherche un planning qui
+                        n'arrivera pas : c'est elle qui pose les séances
+                        maintenant, et elle doit savoir où. */}
+                    <p style={{ fontSize: 11.5, color: T.muted, margin: '4px 0 0', lineHeight: 1.5 }}>
+                      Tu les poseras depuis ton agenda, une par une ou en répétant la première sur les semaines suivantes.
                     </p>
                   </div>
                 )
@@ -7914,7 +7815,13 @@ function TabRdvAbonnements({ commercantId, commercant, toast }) {
                         </p>
                         <p style={{ fontSize: 12, color: T.muted, marginTop: 3, overflowWrap: 'anywhere' }}>
                           {f ? `${f.libelle} · ` : ''}{a.seances_total} séance{a.seances_total > 1 ? 's' : ''}
-                          {a.mode === 'place_fixe' ? ` · ${a.jour_semaine} à ${String(a.heure_debut || '').slice(0, 5)}` : ' · elle réserve elle-même'}
+                          {/* ⚠️ CETTE LIGNE ANNONÇAIT « elle réserve elle-même »
+                              sur la seule foi du mode, et c'était faux dès qu'une
+                              abonnée n'avait pas d'email : personne ne réservait
+                              rien. On lit désormais ce qui est VRAI, la présence
+                              d'un email, qui est exactement ce qui lui ouvre
+                              l'application. */}
+                          {a.client_email ? ' · elle peut réserver elle-même' : ' · c’est toi qui poses ses séances'}
                         </p>
                         <p style={{ fontSize: 11.5, color: T.muted, marginTop: 3 }}>
                           Du {dateCourte(a.date_debut)} au {dateCourte(a.date_fin)}
@@ -10033,7 +9940,10 @@ function TabCatalogue({ commercantId, commercant, toast }) {
       </BandeDefilante>
 
       {sousOnglet === 'produits' && <TabMenu commercantId={commercantId} commercant={commercant} toast={toast} />}
-      {sousOnglet === 'abonnements' && <TabRdvAbonnements commercantId={commercantId} commercant={commercant} toast={toast} />}
+      {/* ⚠️ `commercant` n'est plus passé : il ne servait qu'à résoudre le lieu
+          des séances générées d'avance, et cette génération a disparu avec le
+          jour fixe le 18/08. */}
+      {sousOnglet === 'abonnements' && <TabRdvAbonnements commercantId={commercantId} toast={toast} />}
     </div>
   )
 }

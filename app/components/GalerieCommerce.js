@@ -36,7 +36,7 @@ export default function GalerieCommerce({ photos = [], nomCommerce = '', titre =
         {liste.map((p, i) => (
           <figure key={p.id || i} style={{ flexShrink: 0, width: 200, margin: 0 }}>
             <div style={{ width: 200, height: 140, borderRadius: 14, overflow: 'hidden', boxShadow: '0 4px 16px rgba(22,6,54,0.12)', border: `1px solid ${T.pale}` }}>
-              <img src={p.url} alt={p.legende || `${nomCommerce}, photo ${i + 1}`} loading="lazy"
+              <img decoding="async" src={p.url} alt={p.legende || `${nomCommerce}, photo ${i + 1}`} loading="lazy"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
             </div>
             {p.legende && (

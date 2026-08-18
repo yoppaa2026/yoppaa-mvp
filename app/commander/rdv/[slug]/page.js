@@ -1712,7 +1712,7 @@ export default function CommanderRdvSlug() {
               <a href={`/commander/${commercant.slug}?article=${p.id}`} onClick={emporterPanierVersBoutique} style={{ display: 'block', textDecoration: 'none' }}>
                 {commercant.photos_catalogue_actif !== false && p.photo_url ? (
                   <div style={{ width: '100%', aspectRatio: '1', background: T.pale }}>
-                    <img src={p.photo_url} alt={p.nom} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
+                    <img decoding="async" src={p.photo_url} alt={p.nom} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
                   </div>
                 ) : (
                   <div style={{ width: '100%', aspectRatio: '1', background: `linear-gradient(135deg, ${T.pale}, #fff)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1988,7 +1988,7 @@ export default function CommanderRdvSlug() {
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
                   <div style={{ width: 64, height: 64, borderRadius: 16, background: commercant.logo_url ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, border: '3px solid #fff', boxShadow: '0 6px 20px rgba(22,6,54,0.22)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: -28 }}>
                     {commercant.logo_url
-                      ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                      ? <img decoding="async" loading="lazy" src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                       : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2l2 4h8l2-4"/><path d="M6 22l-2-9h16l-2 9"/><path d="M9 12v4M15 12v4M12 12v4"/></svg>
                     }
                   </div>
@@ -2421,7 +2421,7 @@ export default function CommanderRdvSlug() {
                               }}>
                               <div style={{ width: 44, height: 44, borderRadius: '50%', background: p.couleur_hex || T.main, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 14, overflow: 'hidden' }}>
                                 {p.photo_url ? (
-                                  <img src={p.photo_url} alt={p.prenom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                                  <img decoding="async" loading="lazy" src={p.photo_url} alt={p.prenom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                                 ) : (
                                   <span>{initiales || '?'}</span>
                                 )}
@@ -3276,7 +3276,7 @@ export default function CommanderRdvSlug() {
             {/* Photo hero enrichie si dispo, sinon en-tête violet fallback */}
             {dealDetailOuvert.photo_url ? (
               <div style={{ position: 'relative', width: '100%', paddingTop: '62%', background: T.pale, flexShrink: 0 }}>
-                <img src={dealDetailOuvert.photo_url} alt={dealDetailOuvert.titre}
+                <img decoding="async" loading="lazy" src={dealDetailOuvert.photo_url} alt={dealDetailOuvert.titre}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}/>
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(22,6,54,0.35) 0%, transparent 30%, transparent 65%, rgba(22,6,54,0.55) 100%)' }}/>
                 <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>

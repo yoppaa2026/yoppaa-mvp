@@ -1557,7 +1557,7 @@ function GalerieMini({ photos, max, uploading, onFile, onSupprimer }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10 }}>
         {photos.map(p => (
           <div key={p.id} style={{ position: 'relative', aspectRatio: '4/3', borderRadius: 12, overflow: 'hidden', border: `1px solid ${T.hairline}` }}>
-            <img src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            <img decoding="async" loading="lazy" src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
             <button type="button" onClick={() => onSupprimer(p)} aria-label="Supprimer"
               style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(22,6,54,0.85)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, lineHeight: 1, padding: 0 }}>
               <span style={{ marginTop: -1 }}>×</span>
@@ -1592,7 +1592,7 @@ function UploadZone({ url, uploading, aspect, minHeight, label, onFile, maxWidth
       <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
         style={{ width: '100%', minHeight, aspectRatio: aspect, borderRadius: 14, border: `2px dashed ${url ? T.bgPanel : T.hairline}`, background: url ? '#fff' : '#FAFAFA', cursor: uploading ? 'wait' : 'pointer', overflow: 'hidden', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: '"DM Sans", sans-serif', padding: 0 }}>
         {url ? (
-          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+          <img decoding="async" loading="lazy" src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
         ) : (
           <div style={{ textAlign: 'center', padding: 16 }}>
             <Camera size={26} strokeWidth={1.8} color={T.main} style={{ marginBottom: 6 }}/>

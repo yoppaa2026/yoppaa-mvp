@@ -778,7 +778,7 @@ function TabMenu({ commercantId, commercant, toast }) {
               <div style={{ width: 72, height: 72, borderRadius: 12, overflow: 'hidden', background: T.hairline, flexShrink: 0, position: 'relative', border: `1px solid ${T.hairline}` }}>
                 {form.photo_url ? (
                   <>
-                    <img src={form.photo_url} alt="Couverture" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                    <img decoding="async" loading="lazy" src={form.photo_url} alt="Couverture" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                     <button type="button" onClick={() => setForm(f => ({ ...f, photo_url: '' }))}
                       style={{ position: 'absolute', top: 2, right: 2, width: 20, height: 20, borderRadius: 100, border: 'none', background: 'rgba(0,0,0,0.55)', color: '#fff', cursor: 'pointer', fontSize: 13, lineHeight: '20px', padding: 0 }} title="Retirer">×</button>
                   </>
@@ -803,7 +803,7 @@ function TabMenu({ commercantId, commercant, toast }) {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {galerie.map(p => (
                   <div key={p.id} style={{ width: 60, height: 60, borderRadius: 10, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}` }}>
-                    <img src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                    <img decoding="async" loading="lazy" src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                     <button type="button" onClick={() => deleteGaleriePhoto(p.id)}
                       style={{ position: 'absolute', top: 1, right: 1, width: 18, height: 18, borderRadius: 100, border: 'none', background: 'rgba(0,0,0,0.55)', color: '#fff', cursor: 'pointer', fontSize: 12, lineHeight: '18px', padding: 0 }} title="Supprimer">×</button>
                   </div>
@@ -1463,7 +1463,7 @@ function VariantesArticle({ article, toast }) {
               {variantes.map(v => (
                 <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: v.actif ? '#fff' : '#F9FAFB', borderRadius: 10, padding: 8, border: `1px solid ${T.hairline}`, opacity: v.actif ? 1 : 0.65 }}>
                   <label style={{ width: 40, height: 40, borderRadius: 8, overflow: 'hidden', flexShrink: 0, border: `1px solid ${T.hairline}`, cursor: 'pointer', position: 'relative', background: T.hairline, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {v.photo_url ? <img src={v.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : (uploadId === v.id ? <span style={{ fontSize: 10 }}>…</span> : <Camera size={15} strokeWidth={1.6} color={T.muted}/>)}
+                    {v.photo_url ? <img decoding="async" loading="lazy" src={v.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : (uploadId === v.id ? <span style={{ fontSize: 10 }}>…</span> : <Camera size={15} strokeWidth={1.6} color={T.muted}/>)}
                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadVariantePhoto(e.target.files?.[0], v.id)}/>
                   </label>
                   <span style={{ fontWeight: 700, fontSize: 12.5, color: T.ink, minWidth: 80, flex: 1 }}>
@@ -1569,7 +1569,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         {a.photo_url && (
           <div style={{ width: 48, height: 48, borderRadius: 10, overflow: 'hidden', flexShrink: 0, border: `1px solid ${T.hairline}` }}>
-            <img src={a.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            <img decoding="async" loading="lazy" src={a.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -2070,7 +2070,7 @@ function TabDeals({ commercantId, commercant, toast }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 {form.photo_url ? (
                   <div style={{ position: 'relative', width: 88, height: 88, borderRadius: 12, overflow: 'hidden', border: `1.5px solid ${T.pale}`, flexShrink: 0 }}>
-                    <img src={form.photo_url} alt="Photo deal" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                    <img decoding="async" loading="lazy" src={form.photo_url} alt="Photo deal" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                     <button type="button" onClick={() => setForm(f => ({ ...f, photo_url: '' }))}
                       style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       title="Retirer la photo">×</button>
@@ -2575,7 +2575,7 @@ function TabActus({ commercantId, commercant, toast }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 {form.photo_url ? (
                   <div style={{ position: 'relative', width: 88, height: 88, borderRadius: 12, overflow: 'hidden', border: `1.5px solid ${T.pale}`, flexShrink: 0 }}>
-                    <img src={form.photo_url} alt="Photo actu" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                    <img decoding="async" loading="lazy" src={form.photo_url} alt="Photo actu" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                     <button type="button" onClick={() => setForm(f => ({ ...f, photo_url: '' }))}
                       style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       title="Retirer la photo">×</button>
@@ -5251,7 +5251,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
         <p style={{ fontSize: 12, color: T.muted, marginBottom: 14 }}>Format carré conseillé · JPG ou PNG · compressé automatiquement</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ width: 88, height: 88, borderRadius: 14, background: T.pale, border: `2px dashed ${logoPreview ? T.main : T.light}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
-            {logoPreview ? <img src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <Store size={28} strokeWidth={1.6} color={T.muted}/>}
+            {logoPreview ? <img decoding="async" loading="lazy" src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <Store size={28} strokeWidth={1.6} color={T.muted}/>}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <label style={{ ...s.btn, ...s.btnPrimary, cursor: uploadingLogo ? 'wait' : 'pointer' }}>
@@ -5289,7 +5289,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
         <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 8px', lineHeight: 1.5 }}>{conseilPhoto(1, metierFiche).aide}</p>
         <label style={{ display: 'block', width: '100%', maxWidth: 420, aspectRatio: '16/9', borderRadius: 14, border: `2px dashed ${couvertureUrl ? T.main : T.light}`, background: T.pale, overflow: 'hidden', cursor: uploadingCouv ? 'wait' : 'pointer', position: 'relative' }}>
           {couvertureUrl ? (
-            <img src={couvertureUrl} alt="Couverture" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            <img decoding="async" loading="lazy" src={couvertureUrl} alt="Couverture" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
           ) : (
             <span style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: T.muted, fontSize: 12, fontWeight: 700 }}>
               <Camera size={22} strokeWidth={1.8} color={T.main}/>
@@ -5315,7 +5315,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
             return (
               <div key={p.id} style={{ display: 'flex', gap: 12, alignItems: 'center', background: T.bg, borderRadius: 12, padding: 8 }}>
                 <div style={{ width: 96, aspectRatio: '4/3', borderRadius: 10, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}`, flexShrink: 0 }}>
-                  <img src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                  <img decoding="async" loading="lazy" src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>
@@ -6194,7 +6194,7 @@ function QRCodeSection({ commercantId, toast }) {
     display:flex;align-items:center;justify-content:center;}
   img{width:${imgW};height:auto;display:block;}
 </style></head>
-<body><img src="${imgUrl}"/></body>
+<body><img decoding="async" loading="lazy" src="${imgUrl}"/></body>
 <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></html>`
   }
 
@@ -6268,7 +6268,7 @@ function QRCodeSection({ commercantId, toast }) {
 
         {/* QR */}
         {qrDataUrl
-          ? <img src={qrDataUrl} alt="QR Code" style={{ width: 196, height: 196, borderRadius: 12, display: 'block', margin: '0 auto', background: '#fff', padding: 8, boxShadow: '0 8px 32px rgba(107,53,196,0.5)' }}/>
+          ? <img decoding="async" loading="lazy" src={qrDataUrl} alt="QR Code" style={{ width: 196, height: 196, borderRadius: 12, display: 'block', margin: '0 auto', background: '#fff', padding: 8, boxShadow: '0 8px 32px rgba(107,53,196,0.5)' }}/>
           : <div style={{ width: 196, height: 196, background: '#2D0F6B', borderRadius: 12, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C4A0F4', fontSize: 12 }}>Génération...</div>
         }
 
@@ -7063,7 +7063,7 @@ function TabRdvPrestations({ commercantId, toast }) {
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px 6px 6px', border: `1.5px solid ${checked ? p.couleur_hex || T.main : T.hairline}`, background: checked ? `${p.couleur_hex || T.main}15` : '#fff', borderRadius: 100, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                         <span style={{ width: 22, height: 22, borderRadius: '50%', background: p.couleur_hex || T.main, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 10, overflow: 'hidden' }}>
                           {p.photo_url ? (
-                            <img src={p.photo_url} alt={p.prenom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                            <img decoding="async" loading="lazy" src={p.photo_url} alt={p.prenom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                           ) : (
                             <span>{initiales || '?'}</span>
                           )}
@@ -7973,7 +7973,7 @@ function TabRdvPraticiens({ commercantId, toast }) {
               {/* Avatar circulaire avec photo ou initiales */}
               <div style={{ flexShrink: 0, width: 44, height: 44, borderRadius: '50%', background: p.couleur_hex || '#6B35C4', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, border: `2px solid ${p.couleur_hex || '#6B35C4'}33`, overflow: 'hidden' }}>
                 {p.photo_url ? (
-                  <img src={p.photo_url} alt={p.prenom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                  <img decoding="async" loading="lazy" src={p.photo_url} alt={p.prenom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                 ) : (
                   <span>{(p.prenom?.[0] || '?').toUpperCase()}{(p.nom?.[0] || '').toUpperCase()}</span>
                 )}
@@ -8016,7 +8016,7 @@ function TabRdvPraticiens({ commercantId, toast }) {
               <div style={{ position: 'relative', flexShrink: 0 }}>
                 <div style={{ width: 70, height: 70, borderRadius: '50%', background: form.couleur_hex, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 24, overflow: 'hidden', border: `3px solid ${form.couleur_hex}55` }}>
                   {form.photo_url ? (
-                    <img src={form.photo_url} alt="Praticien" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                    <img decoding="async" loading="lazy" src={form.photo_url} alt="Praticien" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                   ) : (
                     <span>{(form.prenom?.[0] || '?').toUpperCase()}{(form.nom?.[0] || '').toUpperCase()}</span>
                   )}

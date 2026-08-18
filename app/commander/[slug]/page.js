@@ -487,7 +487,7 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
             (décision placeholders : les listes restent texte-only sans photo) */}
         {photoUrl && (
           <div onClick={onOpenDetail || undefined} style={{ width: 64, height: 64, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: T.pale, border: `1px solid ${T.pale}`, cursor: onOpenDetail ? 'pointer' : 'default' }}>
-            <img src={photoUrl} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            <img decoding="async" src={photoUrl} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
           </div>
         )}
         <div onClick={onOpenDetail || undefined} style={{ flex: 1, cursor: onOpenDetail ? 'pointer' : 'default' }}>
@@ -765,7 +765,7 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
   function renderMosaique() {
     if (photos.length === 0) return null
     if (photos.length === 1) {
-      return <img src={photos[0].url} alt={article.nom} onClick={() => setPhotoIdx(0)}
+      return <img decoding="async" loading="lazy" src={photos[0].url} alt={article.nom} onClick={() => setPhotoIdx(0)}
         style={{ ...imgBase, aspectRatio: '4/5', height: 'auto' }}/>
     }
     if (photos.length === 2) {
@@ -773,7 +773,7 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
       return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, aspectRatio: '8/5' }}>
           {photos.map(p => (
-            <img key={p.id} src={p.url} alt={article.nom} onClick={() => setPhotoIdx(photos.indexOf(p))} style={imgBase}/>
+            <img decoding="async" loading="lazy" key={p.id} src={p.url} alt={article.nom} onClick={() => setPhotoIdx(photos.indexOf(p))} style={imgBase}/>
           ))}
         </div>
       )
@@ -782,12 +782,12 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
     const reste = photos.length - 3
     return (
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 2, aspectRatio: '6/5' }}>
-        <img src={photos[0].url} alt={article.nom} onClick={() => setPhotoIdx(0)}
+        <img decoding="async" loading="lazy" src={photos[0].url} alt={article.nom} onClick={() => setPhotoIdx(0)}
           style={{ ...imgBase, minHeight: 0 }}/>
         <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: 2, minHeight: 0 }}>
-          <img src={photos[1].url} alt={article.nom} onClick={() => setPhotoIdx(1)} style={{ ...imgBase, minHeight: 0 }}/>
+          <img decoding="async" loading="lazy" src={photos[1].url} alt={article.nom} onClick={() => setPhotoIdx(1)} style={{ ...imgBase, minHeight: 0 }}/>
           <div style={{ position: 'relative', minHeight: 0 }}>
-            <img src={photos[2].url} alt={article.nom} onClick={() => setPhotoIdx(2)} style={{ ...imgBase, height: '100%' }}/>
+            <img decoding="async" loading="lazy" src={photos[2].url} alt={article.nom} onClick={() => setPhotoIdx(2)} style={{ ...imgBase, height: '100%' }}/>
             {reste > 0 && (
               <button onClick={() => setPhotoIdx(2)}
                 style={{ position: 'absolute', inset: 0, border: 'none', background: 'rgba(22,6,54,0.55)', color: '#fff', fontWeight: 900, fontSize: '1.1rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
@@ -812,7 +812,7 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.8rem 1rem' }}>
           <div style={{ width: 38, height: 38, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {commercant?.logo_url
-              ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+              ? <img decoding="async" loading="lazy" src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
               : <span style={{ color: '#fff', fontWeight: 900, fontSize: '1rem' }}>{(commercant?.nom || 'Y').charAt(0).toUpperCase()}</span>}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -891,7 +891,7 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
               else if (delta < -45) suivante()
             }}
             style={{ position: 'fixed', inset: 0, zIndex: 1300, background: 'rgba(10,3,24,0.94)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
-            <img src={photos[photoIdx].url} alt={article.nom} style={{ maxWidth: '100%', maxHeight: '92dvh', objectFit: 'contain', borderRadius: 10 }}/>
+            <img decoding="async" loading="lazy" src={photos[photoIdx].url} alt={article.nom} style={{ maxWidth: '100%', maxHeight: '92dvh', objectFit: 'contain', borderRadius: 10 }}/>
             <button onClick={e => { e.stopPropagation(); setPhotoIdx(null) }} aria-label="Fermer la photo"
               style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.16)', color: '#fff', cursor: 'pointer', fontSize: 16, fontWeight: 800, zIndex: 2 }}>✕</button>
             {photos.length > 1 && (
@@ -2608,7 +2608,7 @@ export default function CommanderSlug() {
             {/* Photo hero enrichie si dispo, sinon en-tête violet fallback */}
             {dealDetailOuvert.photo_url ? (
               <div style={{ position: 'relative', width: '100%', paddingTop: '62%', background: T.pale, flexShrink: 0 }}>
-                <img src={dealDetailOuvert.photo_url} alt={dealDetailOuvert.titre}
+                <img decoding="async" loading="lazy" src={dealDetailOuvert.photo_url} alt={dealDetailOuvert.titre}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}/>
                 {/* Overlay gradient bas pour la lisibilité des badges */}
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(22,6,54,0.35) 0%, transparent 30%, transparent 65%, rgba(22,6,54,0.55) 100%)' }}/>
@@ -2746,7 +2746,7 @@ export default function CommanderSlug() {
 
               {actuDetailOuverte.photo_url ? (
                 <div style={{ position: 'relative', width: '100%', paddingTop: '58%', background: T.pale, flexShrink: 0 }}>
-                  <img src={actuDetailOuverte.photo_url} alt={actuDetailOuverte.titre}
+                  <img decoding="async" loading="lazy" src={actuDetailOuverte.photo_url} alt={actuDetailOuverte.titre}
                     style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}/>
                   <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(22,6,54,0.35) 0%, transparent 30%, transparent 60%, rgba(22,6,54,0.7) 100%)' }}/>
                   <div style={{ position: 'absolute', top: 12, left: 12 }}>
@@ -3014,7 +3014,7 @@ export default function CommanderSlug() {
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
                     <div style={{ width: 64, height: 64, borderRadius: 16, background: commercant.logo_url ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, border: '3px solid #fff', boxShadow: `0 6px 20px rgba(22,6,54,0.22)`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: -28 }}>
                       {commercant.logo_url
-                        ? <img src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                        ? <img decoding="async" loading="lazy" src={commercant.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                         : <Store size={32} strokeWidth={1.6} color={T.muted}/>
                       }
                     </div>

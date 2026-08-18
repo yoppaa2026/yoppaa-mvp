@@ -1040,7 +1040,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
 
           <div style={{ width: 68, height: 68, borderRadius: 14, background: c.logo_url ? '#fff' : T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 3px 10px rgba(26,8,64,0.10)', border: c.logo_url ? `1px solid ${T.pale}` : 'none', flexShrink: 0 }}>
             {c.logo_url
-              ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+              ? <img decoding="async" loading="lazy" src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
               : <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 9 4 5h16l1 4v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0Z"/>
                   <path d="M5 11v10h14V11"/>
@@ -3663,7 +3663,7 @@ export default function Commander() {
                             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${recompense ? '#10B98155' : T.pale}`, background: recompense ? '#F0FDF4' : '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left', width: '100%' }}>
                             <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               {com.logo_url
-                                ? <img src={com.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                                ? <img decoding="async" loading="lazy" src={com.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                                 : <span style={{ color: '#fff', fontWeight: 900, fontSize: '0.95rem' }}>{(com.nom || 'Y').charAt(0).toUpperCase()}</span>}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>

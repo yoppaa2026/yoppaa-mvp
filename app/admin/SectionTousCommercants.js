@@ -173,7 +173,7 @@ export default function SectionTousCommercants({ toast }) {
                 {/* Logo / avatar */}
                 <div style={{ width: 44, height: 44, borderRadius: 10, background: c.logo_url ? '#fff' : T.pale, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: c.logo_url ? `1px solid ${T.hairline}` : 'none' }}>
                   {c.logo_url
-                    ? <img src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                    ? <img decoding="async" loading="lazy" src={c.logo_url} alt={c.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                     : <span style={{ fontSize: 18, fontWeight: 800, color: T.main }}>{c.nom?.[0]?.toUpperCase() || '?'}</span>}
                 </div>
 

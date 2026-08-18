@@ -458,7 +458,7 @@ function AvatarPost({ logo, Icon, alerte = false, size = 40 }) {
   return (
     <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: alerte ? '#FEE2E2' : T.bgPage, display: 'flex', alignItems: 'center', justifyContent: 'center', color: alerte ? '#DC2626' : T.main, border: `1px solid ${alerte ? '#FECACA' : T.hairline}` }}>
       {logo
-        ? <img src={logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+        ? <img decoding="async" loading="lazy" src={logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
         : (Icon ? <Icon size={Math.round(size / 2)} strokeWidth={1.8}/> : null)}
     </div>
   )
@@ -487,7 +487,7 @@ function DealCard({ d, shown, delay, onOpen }) {
         {/* Visuel du deal (photo M4) si présent */}
         {d.photo && (
           <div style={{ borderRadius: 12, overflow: 'hidden', marginBottom: 10, aspectRatio: '16/9', background: T.bgPage }}>
-            <img src={d.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            <img decoding="async" loading="lazy" src={d.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
           </div>
         )}
         {/* Titre + description */}
@@ -568,7 +568,7 @@ function ActuCard({ d, shown, delay, onOpen }) {
         {/* Visuel de l'actu (photo M4) si présent */}
         {d.photo && (
           <div style={{ borderRadius: 12, overflow: 'hidden', marginBottom: 10, aspectRatio: '16/9', background: T.bgPage }}>
-            <img src={d.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            <img decoding="async" loading="lazy" src={d.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
           </div>
         )}
         {/* Titre en Playfair Display (signature morning, élégant) */}

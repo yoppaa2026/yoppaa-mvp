@@ -120,7 +120,7 @@ export default function KitClient({ slug, kit, lien, qr }) {
             { }
             {/* display block + marges auto : un reset global qui passe les
                 images en block les collerait à gauche malgré le text-align. */}
-            <img src={qr} alt="QR code Yoppaa" style={{ width: 200, height: 200, borderRadius: 12, background: '#fff', padding: 8, display: 'block', margin: '0 auto' }}/>
+            <img decoding="async" loading="lazy" src={qr} alt="QR code Yoppaa" style={{ width: 200, height: 200, borderRadius: 12, background: '#fff', padding: 8, display: 'block', margin: '0 auto' }}/>
             <p style={{ margin: '10px 0 0', fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
               {preLancement
                 ? 'Affiche-le en vitrine : chaque scan inscrit un habitant et te l’attribue.'

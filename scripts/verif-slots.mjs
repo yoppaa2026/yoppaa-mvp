@@ -1255,6 +1255,44 @@ verifier('et plus de branche sur la seule étape 1',
   verifier('aucun flou de fond dans les écrans', flous.length === 0, flous.join(', '))
 }
 
+// ⚠️ AUCUNE IMAGE NE SE DÉCODE SUR LE FIL PRINCIPAL (Alex, 18/08 : « j'ai
+// toujours des blocages d'écran côté Yopper, surtout quand je vais plus vite,
+// 1 ou 2 sec d'attente et ça débloque. J'ai fait des démos chez des commerçants
+// et c'était dérangeant et pas très pro »).
+//
+// ⚠️ ET CE N'ÉTAIT PAS LE FLOU. Le matin même j'avais retiré 40 `backdrop-filter`
+// en croyant tenir la cause : un flou fait SACCADER le défilement, il ne fait
+// jamais attendre deux secondes. Je m'étais arrêté au premier suspect
+// documenté, et Alex a dû redire trois fois que ça bloquait encore.
+//
+// Par défaut, un navigateur décode une image SUR LE FIL PRINCIPAL au moment de
+// la peindre. Une photo de 1200×675 coûte plusieurs dizaines de millisecondes ;
+// sur iPhone, plusieurs qui entrent à l'écran en même temps se décodent à la
+// suite et gèlent tout, y compris les touchers. Puis ça repart tout seul : le
+// symptôme exact. `decoding="async"` sort ce travail du fil principal,
+// `loading="lazy"` évite de décoder ce qui n'est pas encore à l'écran.
+//
+// ⚠️ ON COMPTE LES BALISES NUES, on ne cherche pas un mot. Une seule image
+// oubliée sur la fiche suffit à rendre le gel, et c'est la fiche qui portait
+// onze des quarante-cinq.
+{
+  const nues = []
+  const parcourir = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) { parcourir(`${dir}/${e.name}`); continue }
+      if (!e.name.endsWith('.js')) continue
+      const src = readFileSync(`${dir}/${e.name}`, 'utf8')
+      let n = 0
+      for (const m of src.matchAll(/<img\s[^>]*>/g)) {
+        if (!/\bdecoding=/.test(m[0]) || !/\bloading=/.test(m[0])) n++
+      }
+      if (n > 0) nues.push(`${dir}/${e.name} (${n})`)
+    }
+  }
+  parcourir('app')
+  verifier('aucune image ne bloque le fil principal', nues.length === 0, nues.join(', '))
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ⚠️ LE NOM NE DOIT JAMAIS REPASSER DERRIÈRE LA CARTE BLANCHE
 //

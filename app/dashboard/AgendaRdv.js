@@ -345,7 +345,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
               <button key={p.id} onClick={() => setPraticienFiltre(p.id)}
                 style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px 4px 4px', borderRadius: 100, border: `1.5px solid ${actif ? (p.couleur_hex || T.main) : T.pale}`, background: actif ? `${p.couleur_hex || T.main}18` : '#fff', color: actif ? T.ink : T.muted, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                 <span style={{ width: 20, height: 20, borderRadius: '50%', background: p.couleur_hex || T.main, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 9, overflow: 'hidden' }}>
-                  {p.photo_url ? <img src={p.photo_url} alt={p.prenom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : (initiales || '?')}
+                  {p.photo_url ? <img decoding="async" loading="lazy" src={p.photo_url} alt={p.prenom} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : (initiales || '?')}
                 </span>
                 {p.prenom}
               </button>

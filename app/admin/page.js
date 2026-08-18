@@ -335,7 +335,7 @@ function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
         {/* Logo */}
         <div style={{ width: 64, height: 64, borderRadius: 14, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
           {c.logo_url
-            ? <img src={c.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            ? <img decoding="async" loading="lazy" src={c.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
             : <Store size={26} strokeWidth={1.6}/>}
         </div>
 

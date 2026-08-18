@@ -467,7 +467,7 @@ function PageRecap() {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
         <div style={{ padding: 12, background: '#fff', borderRadius: 18, boxShadow: '0 8px 28px rgba(26,8,64,0.18)', border: `2px solid ${T.main}` }}>
           { }
-          <img src={QR_URL} alt="QR code vers la présentation en ligne" style={{ display: 'block', width: 220, height: 220 }}/>
+          <img decoding="async" loading="lazy" src={QR_URL} alt="QR code vers la présentation en ligne" style={{ display: 'block', width: 220, height: 220 }}/>
         </div>
         <p style={{ margin: 0, fontSize: 10, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
           Scannez avec votre téléphone

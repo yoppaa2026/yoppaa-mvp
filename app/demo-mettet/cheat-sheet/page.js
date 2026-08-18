@@ -229,7 +229,7 @@ export default function CheatSheet() {
             </div>
             <div style={{ flexShrink: 0, padding: 6, background: '#fff', border: `2px solid ${T.main}`, borderRadius: 8 }}>
               { }
-              <img src={QR_URL} alt="QR code slides live" style={{ display: 'block', width: 80, height: 80 }}/>
+              <img decoding="async" loading="lazy" src={QR_URL} alt="QR code slides live" style={{ display: 'block', width: 80, height: 80 }}/>
             </div>
           </div>
 

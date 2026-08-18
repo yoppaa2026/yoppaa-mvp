@@ -92,7 +92,7 @@ export default async function AffichettePage({ params }) {
         <div style={{ height: 6, borderRadius: 100, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, marginBottom: 26 }}/>
 
         {com.logo_url && (
-          <img src={com.logo_url} alt={com.nom} style={{ width: 76, height: 76, borderRadius: 18, objectFit: 'cover', marginBottom: 14 }}/>
+          <img decoding="async" loading="lazy" src={com.logo_url} alt={com.nom} style={{ width: 76, height: 76, borderRadius: 18, objectFit: 'cover', marginBottom: 14 }}/>
         )}
 
         <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '1.6px' }}>
@@ -139,7 +139,7 @@ export default async function AffichettePage({ params }) {
             {/* display block + marges auto : un reset global qui passe les
                 images en block les collerait sinon à gauche malgré le
                 text-align du parent. */}
-            <img src={qr} alt="QR code" style={{ width: 136, height: 136, display: 'block', margin: '0 auto' }}/>
+            <img decoding="async" loading="lazy" src={qr} alt="QR code" style={{ width: 136, height: 136, display: 'block', margin: '0 auto' }}/>
             <p style={{ margin: '8px 0 0', fontSize: 12.5, color: T.deep, fontWeight: 700 }}>
               Scanne pour découvrir {com.nom} sur Yoppaa
             </p>

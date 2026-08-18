@@ -713,6 +713,79 @@ const enVh = fichiersEcrans
   .map(([nom]) => nom)
 egal('plus aucune hauteur d’écran en vh dans app/', enVh, [])
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LA BARRE DE CATÉGORIES : LA DÉCISION, ET L'ENDROIT OÙ ELLE VIT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ CETTE BARRE A GELÉ L'ÉCRAN D'ALEX PENDANT TROIS JOURS. Son onglet actif se
+// recalcule à chaque défilement ; tant que cet état vivait dans le composant de
+// PAGE, franchir un titre de catégorie redessinait la fiche ENTIÈRE, toutes ses
+// cartes d'articles comprises, au milieu du geste. D'où « surtout quand je vais
+// plus vite » (plusieurs titres franchis d'un coup) et « c'est une fiche plus
+// ancienne » (beaucoup plus de cartes à redessiner).
+{
+  const { categorieAtteinte, barreDetachee, MARGE_LECTURE } = await import('../lib/responsive.js')
+
+  const ancres = [
+    { cat: 'Entrées', offsetTop: 400 },
+    { cat: 'Plats', offsetTop: 1200 },
+    { cat: 'Desserts', offsetTop: 2000 },
+  ]
+  const entete = 300
+
+  // Ligne de lecture : une catégorie s'allume quand son titre passe à
+  // MARGE_LECTURE pixels sous le bas de l'en-tête.
+  egal('en haut de page, la première catégorie', categorieAtteinte({ scrollTop: 0, hauteurEntete: entete, ancres }), 'Entrées')
+  egal('juste avant le seuil des Plats, on lit encore Entrées',
+    categorieAtteinte({ scrollTop: 1200 - entete - MARGE_LECTURE - 1, hauteurEntete: entete, ancres }), 'Entrées')
+  egal('pile au seuil, on bascule sur Plats',
+    categorieAtteinte({ scrollTop: 1200 - entete - MARGE_LECTURE, hauteurEntete: entete, ancres }), 'Plats')
+  egal('tout en bas, la dernière catégorie',
+    categorieAtteinte({ scrollTop: 99999, hauteurEntete: entete, ancres }), 'Desserts')
+
+  // ⚠️ UNE ANCRE PAS ENCORE MONTÉE N'EST PAS UNE ANCRE EN HAUT DE PAGE. La
+  // compter à zéro allumerait le dernier onglet dès le premier pixel. C'est le
+  // piège du zéro, déjà vécu deux fois sur ce projet.
+  egal('une ancre sans position est ignorée',
+    categorieAtteinte({ scrollTop: 0, hauteurEntete: entete,
+      ancres: [{ cat: 'Entrées', offsetTop: 400 }, { cat: 'Fantôme', offsetTop: null }] }), 'Entrées')
+  egal('une ancre sans position ne vole pas la place en bas',
+    categorieAtteinte({ scrollTop: 99999, hauteurEntete: entete,
+      ancres: [{ cat: 'Entrées', offsetTop: 400 }, { cat: 'Fantôme', offsetTop: undefined }] }), 'Entrées')
+
+  egal('aucune catégorie, aucune réponse', categorieAtteinte({ scrollTop: 0, ancres: [] }), null)
+  egal('sans argument, aucune réponse', categorieAtteinte(), null)
+
+  // L'ombre de la barre
+  verifier('en haut, la barre ne porte pas d’ombre', barreDetachee({ scrollTop: 0, hauteurEntete: entete }) === false)
+  verifier('une fois l’en-tête dépassé, l’ombre apparaît', barreDetachee({ scrollTop: entete, hauteurEntete: entete }) === true)
+}
+
+// ── L'ÉCOUTE DU DÉFILEMENT NE REMONTE PAS DANS LA PAGE ─────────────────────
+// ⚠️ LA GARDE PORTE SUR L'ENDROIT, pas sur le calcul : le calcul ci-dessus
+// resterait juste si on le rebranchait dans le composant de page, et l'écran
+// regèlerait exactement comme avant. Ce qui compte est que l'écoute vive dans
+// `BarreCategories`, donc APRÈS sa déclaration et jamais avant.
+{
+  const fiche = readFileSync('app/commander/[slug]/page.js', 'utf8')
+  const declaration = fiche.indexOf('function BarreCategories')
+  const page = fiche.indexOf('export default function CommanderSlug')
+  verifier('la barre de catégories est un composant à part', declaration > -1)
+  verifier('elle est déclarée avant le composant de page', declaration > -1 && declaration < page)
+  const ecoutes = []
+  let i = fiche.indexOf("addEventListener('scroll'")
+  while (i > -1) { ecoutes.push(i); i = fiche.indexOf("addEventListener('scroll'", i + 1) }
+  verifier('la fiche écoute le défilement une seule fois', ecoutes.length === 1, `${ecoutes.length} écoutes`)
+  // ⚠️ ENTRE LES DEUX BORNES, pas seulement « après la barre ». La barre étant
+  // déclarée AVANT la page, un simple « après » laisserait revenir l'écoute
+  // dans le composant de page sans que rien ne rougisse : la garde aurait eu
+  // l'air de garder. C'est encadré des deux côtés, donc c'est gardé.
+  verifier('et cette écoute vit DANS la barre, jamais dans la page',
+    declaration > -1 && page > -1 && ecoutes.every(pos => pos > declaration && pos < page))
+  verifier('aucun état de défilement ne subsiste dans la page',
+    !fiche.includes('setCategorieActive') && !fiche.includes('setCatBarVisible'))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

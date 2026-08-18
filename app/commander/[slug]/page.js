@@ -13,6 +13,7 @@ import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
 import { joursRetraitBoutique } from '@/lib/ouverture'
 import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
+import { categorieAtteinte, barreDetachee } from '@/lib/responsive'
 // ⚠️ `estFoodTruck` n'est plus importé ici depuis le 12/08 : le MÉTIER ne dit
 // pas si un commerce bouge. C'est `estItinerant`, qui lit les lieux déclarés,
 // qui décide, et une professeure de yoga en profite comme un food truck.
@@ -916,6 +917,61 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
 }
 
 // ─── Composant principal ──────────────────────────────────────────────────────
+// ─── LA BARRE DE CATÉGORIES, ET POURQUOI ELLE VIT SEULE ─────────────────────
+//
+// ⚠️ ELLE ÉTAIT LA CAUSE D'UN GEL D'ÉCRAN, ET C'EST CONTRE-INTUITIF. Son onglet
+// actif se recalcule à chaque défilement, et cet état vivait dans le composant
+// de PAGE. Chaque fois qu'on franchissait un titre de catégorie en défilant,
+// c'est donc la fiche ENTIÈRE qui se redessinait, toutes ses cartes d'articles
+// comprises, au beau milieu du geste.
+//
+// D'où les deux mots d'Alex qui semblaient sans rapport (18/08) : « surtout
+// quand je vais plus vite », parce qu'on franchit alors plusieurs titres dans
+// un seul geste ; et « c'est une fiche plus ancienne », parce qu'elle porte
+// bien plus d'articles, donc bien plus de cartes à redessiner à chaque fois.
+//
+// ⚠️ SORTIR L'ÉTAT PLUTÔT QUE MÉMOÏSER LES CARTES. On aurait pu envelopper
+// `ArticleRow` dans un `memo`, mais il aurait fallu stabiliser huit props dont
+// des fonctions et des objets recalculés à chaque rendu : beaucoup de surface,
+// et une seule oubliée aurait rendu le remède muet. Ici, la page ne se
+// redessine tout simplement PLUS pendant qu'on défile.
+//
+// Elle reçoit les repères du parent : le conteneur qui défile, l'en-tête dont
+// la hauteur sert d'origine, et le carnet d'ancres des catégories.
+function BarreCategories({ categories, scrollRef, headerRef, catRefs, onChoisir }) {
+  const [active, setActive] = useState(null)
+  const [ombre, setOmbre] = useState(false)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const auDefilement = () => {
+      if (!headerRef.current) return
+      const scrollTop = el.scrollTop
+      const hauteurEntete = headerRef.current.offsetHeight
+      const ancres = Object.entries(catRefs.current)
+        .map(([cat, noeud]) => ({ cat, offsetTop: noeud ? noeud.offsetTop : null }))
+      setOmbre(barreDetachee({ scrollTop, hauteurEntete }))
+      setActive(categorieAtteinte({ scrollTop, hauteurEntete, ancres }))
+    }
+    auDefilement()
+    el.addEventListener('scroll', auDefilement, { passive: true })
+    return () => el.removeEventListener('scroll', auDefilement)
+  }, [scrollRef, headerRef, catRefs])
+
+  return (
+    <div style={{ position: 'sticky', top: 0, zIndex: 20, boxShadow: ombre ? '0 2px 12px rgba(0,0,0,0.08)' : 'none' }}>
+      <div className="cat-bar">
+        {categories.map(cat => (
+          <button key={cat} className={`cat-pill ${active === cat ? 'active' : ''}`} onClick={() => onChoisir(cat)}>
+            {cat === '__autres__' ? 'Autres' : cat}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function CommanderSlug() {
   const { slug } = useParams()
   const router = useRouter()
@@ -1184,8 +1240,7 @@ export default function CommanderSlug() {
     : null
   const retraitAujourdhui = jourRetraitBoutique === jourLocalISO(new Date())
 
-  const [categorieActive, setCategorieActive] = useState(null)
-  const [catBarVisible, setCatBarVisible] = useState(false)
+  // (l'onglet actif et l'ombre de la barre vivent dans `BarreCategories`)
 
   // Favoris + partage : 2 boutons en overlay sur le hero photo (pattern TGTG)
   const [estFavori, setEstFavori] = useState(false)
@@ -1867,36 +1922,20 @@ export default function CommanderSlug() {
     }
   }, [commercant, chargerCommandesJour, rafraichirArticlesEtStocks])
 
-  const handleScroll = useCallback(() => {
-    if (!scrollRef.current || !headerRef.current) return
-    const scrollTop = scrollRef.current.scrollTop
-    const headerH = headerRef.current.offsetHeight
-    setCatBarVisible(scrollTop > headerH - 60)
-    const cats = Object.keys(catRefs.current)
-    let active = cats[0]
-    for (const cat of cats) {
-      const el = catRefs.current[cat]
-      if (!el) continue
-      const top = el.offsetTop - headerH - 80
-      if (scrollTop >= top) active = cat
-    }
-    setCategorieActive(active)
-  }, [])
-
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    el.addEventListener('scroll', handleScroll, { passive: true })
-    return () => el.removeEventListener('scroll', handleScroll)
-  }, [handleScroll, etape])
-
+  // ⚠️ L'ÉCOUTE DU DÉFILEMENT A DÉMÉNAGÉ dans `BarreCategories`, avec l'état
+  // qu'elle pilote. Tant qu'elle vivait ici, franchir un titre de catégorie
+  // redessinait toute la fiche au milieu du geste. Voir le commentaire du
+  // composant, en tête de fichier.
+  //
+  // ⚠️ CE GESTE-CI RESTE, parce qu'il ne vient pas du défilement : un clic sur
+  // une offre saute vers sa catégorie. Il ne touche aucun état, seulement des
+  // repères ; la barre reconnaîtra l'endroit toute seule en voyant défiler.
   function scrollToCategorie(cat) {
     const el = catRefs.current[cat]
     const scroll = scrollRef.current
     const header = headerRef.current
     if (!el || !scroll || !header) return
     scroll.scrollTo({ top: el.offsetTop - header.offsetHeight - 56, behavior: 'smooth' })
-    setCategorieActive(cat)
   }
 
   function ajouterAuPanier(article, options = null, variante = null) {
@@ -3429,15 +3468,8 @@ export default function CommanderSlug() {
               )}
 
               {toutesLesCats.length > 1 && (
-                <div style={{ position: 'sticky', top: 0, zIndex: 20, boxShadow: catBarVisible ? '0 2px 12px rgba(0,0,0,0.08)' : 'none' }}>
-                  <div className="cat-bar">
-                    {toutesLesCats.map(cat => (
-                      <button key={cat} className={`cat-pill ${categorieActive === cat ? 'active' : ''}`} onClick={() => scrollToCategorie(cat)}>
-                        {cat === '__autres__' ? 'Autres' : cat}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <BarreCategories categories={toutesLesCats} scrollRef={scrollRef}
+                  headerRef={headerRef} catRefs={catRefs} onChoisir={scrollToCategorie}/>
               )}
 
               <div style={{ padding: '0.875rem 1rem 0' }}>

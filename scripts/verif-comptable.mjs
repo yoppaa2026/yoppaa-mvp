@@ -866,6 +866,36 @@ verifier('une commande remise sans moyen garde son rattrapage',
   verifier('un contrat non numéroté garde un repère',
     (construireLignes({ abonnements: [abo], tauxDefaut: 21 })[0]?.reference || '').length > 0)
 
+  // ── ⚠️ LE CANAL NE CONTREDIT PLUS LA RÉFÉRENCE ───────────────────────────
+  // Question d'Alex, 19/08 : « ça s'applique aussi au C&C, RE, et à tout le
+  // reste ? ». En exécutant l'export avec une ligne de chaque sorte, une ligne
+  // annonçait « Click & Collect » avec la référence `RE12` juste à droite.
+  //
+  // Deux fautes : `mode_retrait` ne distingue PAS le Click and Collect du
+  // retrait en magasin (les deux valent `retrait`, c'est le CRÉNEAU qui les
+  // sépare), et la branche « boutique » était MORTE, la contrainte de la base
+  // n'acceptant que retrait, livraison et expedition.
+  const canalDe = (c) => construireLignes({ commandes: [{ ...cmde, ...c }], tauxDefaut: 21 })[0]?.canal
+  egal('le préfixe CC donne Click & Collect', canalDe({ numero_prefixe: 'CC' }), 'Click & Collect')
+  egal('le préfixe RE donne Retrait en magasin', canalDe({ numero_prefixe: 'RE' }), 'Retrait en magasin')
+  egal('le préfixe LI donne Livraison', canalDe({ numero_prefixe: 'LI' }), 'Livraison')
+  egal('le préfixe EX donne Expédition', canalDe({ numero_prefixe: 'EX' }), 'Expédition')
+  // ⚠️ ET LES COMMANDES D'AVANT LA NUMÉROTATION retombent sur la MÊME règle que
+  // le déclencheur : le créneau, jamais le mode de retrait.
+  egal('sans préfixe, un créneau fait le Click & Collect',
+    canalDe({ numero_prefixe: null, mode_retrait: 'retrait', creneau_id: 'k1' }), 'Click & Collect')
+  egal('sans préfixe et sans créneau, c’est un retrait en magasin',
+    canalDe({ numero_prefixe: null, mode_retrait: 'retrait', creneau_id: null }), 'Retrait en magasin')
+  egal('sans préfixe, la livraison reste reconnue',
+    canalDe({ numero_prefixe: null, mode_retrait: 'livraison' }), 'Livraison')
+  // ⚠️ ET `creneau_id` DOIT ARRIVER JUSQU'ICI, sinon le repli classerait toutes
+  // les anciennes commandes en retrait en magasin, sans la moindre erreur.
+  {
+    const srcRoute = readFileSync(new URL('../app/api/dashboard/export-comptable/route.js', import.meta.url), 'utf8')
+    const selectCmd = srcRoute.match(/from\('commandes'\)\s*(?:\/\/[^\n]*\n\s*)*\.select\('([^']*)'\)/)?.[1] || ''
+    verifier('le créneau arrive jusqu’au calcul du canal', /\bcreneau_id\b/.test(selectCmd), selectCmd)
+  }
+
   // ── Les colonnes sortent bien dans le fichier, et dans le bon ordre ──────
   const csv = csvDetail({ lignes, commercant: { nom: 'Test' }, du: '2026-08-01', au: '2026-08-31' })
   const enTete = csv.split('\r\n').find(l => l.startsWith('Date'))

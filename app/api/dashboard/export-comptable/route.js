@@ -70,7 +70,7 @@ export async function GET(request) {
       // ⚠️ `encaisse_mode` EST INDISPENSABLE, et son absence serait SILENCIEUSE :
       // le journal perdrait le moyen de chaque commande payée sur place, et la
       // réconciliation redeviendrait impossible sans la moindre erreur.
-      .select('id, numero_commande, numero_prefixe, numero_semaine, statut, total, frais_livraison, tva_taux_livraison, mode_retrait, regime_tva, paye_en_ligne, bon_cadeau_montant, stripe_frais, stripe_net, date_commande, created_at, encaisse_mode, encaisse_montant, encaisse_le, client_nom, commande_articles(article_id, quantite, prix_unitaire, tva_taux)')
+      .select('id, numero_commande, numero_prefixe, numero_semaine, statut, total, frais_livraison, tva_taux_livraison, mode_retrait, creneau_id, regime_tva, paye_en_ligne, bon_cadeau_montant, stripe_frais, stripe_net, date_commande, created_at, encaisse_mode, encaisse_montant, encaisse_le, client_nom, commande_articles(article_id, quantite, prix_unitaire, tva_taux)')
       .eq('commercant_id', commercantId)
       .gte('created_at', `${du}T00:00:00.000Z`)
       .lte('created_at', auFin)

@@ -70,7 +70,7 @@ export async function GET(request) {
       // ⚠️ `encaisse_mode` EST INDISPENSABLE, et son absence serait SILENCIEUSE :
       // le journal perdrait le moyen de chaque commande payée sur place, et la
       // réconciliation redeviendrait impossible sans la moindre erreur.
-      .select('id, numero_commande, statut, total, frais_livraison, tva_taux_livraison, mode_retrait, regime_tva, paye_en_ligne, bon_cadeau_montant, stripe_frais, stripe_net, date_commande, created_at, encaisse_mode, encaisse_montant, encaisse_le, client_nom, commande_articles(article_id, quantite, prix_unitaire, tva_taux)')
+      .select('id, numero_commande, numero_prefixe, numero_semaine, statut, total, frais_livraison, tva_taux_livraison, mode_retrait, regime_tva, paye_en_ligne, bon_cadeau_montant, stripe_frais, stripe_net, date_commande, created_at, encaisse_mode, encaisse_montant, encaisse_le, client_nom, commande_articles(article_id, quantite, prix_unitaire, tva_taux)')
       .eq('commercant_id', commercantId)
       .gte('created_at', `${du}T00:00:00.000Z`)
       .lte('created_at', auFin)
@@ -82,7 +82,7 @@ export async function GET(request) {
       // moindre erreur, et le commerçant relirait « 0,00 € au comptoir » sur un
       // document destiné à son comptable. C'est LE défaut le plus fréquent de
       // ce projet : une colonne oubliée dans un select.
-      .select('id, numero_rdv, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, tva_taux, stripe_frais, stripe_net, date_rdv, encaisse_mode, encaisse_montant, encaisse_le, acompte_paye_date, created_at, client_prenom, client_nom')
+      .select('id, numero_rdv, numero_prefixe, numero_semaine, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, tva_taux, stripe_frais, stripe_net, date_rdv, encaisse_mode, encaisse_montant, encaisse_le, acompte_paye_date, created_at, client_prenom, client_nom')
       .eq('commercant_id', commercantId)
       .gte('date_rdv', du)
       .lte('date_rdv', au)

@@ -810,6 +810,31 @@ verifier('une commande remise sans moyen garde son rattrapage',
   egal('une date sans heure laisse la case VIDE',
     construireLignes({ abonnements: [{ ...abo, paye_le: '2026-08-18' }], tauxDefaut: 21 })[0]?.heure, '')
 
+  // ── ⚠️ UN JOUR RANGÉ DANS UNE COLONNE D'HORODATAGE N'EST PAS UNE HEURE ───
+  // Alex, 19/08 : ses abonnements vendus en ligne affichaient tous « 02:00 ».
+  // Le webhook n'écrivait qu'un JOUR dans `paye_le`, rangé à minuit universel,
+  // et minuit UTC vaut 02:00 chez nous en été. Une heure inventée dans un
+  // document comptable. Une case vide s'interprète, une fausse heure se croit.
+  egal('un minuit universel ne devient pas 02:00',
+    construireLignes({ abonnements: [{ ...abo, paye_le: '2026-08-16T00:00:00+00:00' }], tauxDefaut: 21 })[0]?.heure, '')
+  egal('… quelle que soit son écriture',
+    construireLignes({ abonnements: [{ ...abo, paye_le: '2026-08-16T00:00:00.000Z' }], tauxDefaut: 21 })[0]?.heure, '')
+  // ⚠️ ET UNE VRAIE HEURE PROCHE DE MINUIT RESTE LISIBLE : on écarte l'instant
+  // pile, pas la tranche de nuit. Sinon on effacerait les encaissements réels
+  // de 00h28, ceux-là mêmes qui ont fait découvrir toute cette histoire.
+  egal('une vente à 00h01 universel garde son heure',
+    construireLignes({ abonnements: [{ ...abo, paye_le: '2026-08-16T00:01:00.000Z' }], tauxDefaut: 21 })[0]?.heure, '02:01')
+
+  // ── ⚠️ LES RÉFÉRENCES PORTENT LEUR PRÉFIXE ───────────────────────────────
+  // La colonne rendait « 23 » là où le client, ses emails et le tableau de bord
+  // lisent tous « RV23 » : aucun rapprochement n'était possible. Même défaut
+  // que l'écran de confirmation corrigé le 11/08, jamais porté jusqu'ici.
+  egal('un rendez-vous porte sa référence complète',
+    construireLignes({ rdvs: [{ ...rdv, numero_rdv: 23, numero_prefixe: 'RV' }], tauxDefaut: 21 })
+      .find(l => l.type === 'Solde RDV')?.reference, 'RV23')
+  egal('une commande aussi',
+    construireLignes({ commandes: [{ ...cmde, numero_commande: 4, numero_prefixe: 'CC' }], tauxDefaut: 21 })[0]?.reference, 'CC4')
+
   // ── Les colonnes sortent bien dans le fichier, et dans le bon ordre ──────
   const csv = csvDetail({ lignes, commercant: { nom: 'Test' }, du: '2026-08-01', au: '2026-08-31' })
   const enTete = csv.split('\r\n').find(l => l.startsWith('Date'))
@@ -840,7 +865,33 @@ verifier('une commande remise sans moyen garde son rattrapage',
     /\bacompte_paye_date\b/.test(selectDe('rdv_reservations')))
   verifier('les abonnements lisent prénom et nom',
     /\bclient_prenom\b/.test(selectDe('abonnements')) && /\bclient_nom\b/.test(selectDe('abonnements')))
+  // ⚠️ ET LE PRÉFIXE DE NUMÉROTATION, sans lequel `referenceCommande` rendrait
+  // le numéro NU : la correction serait muette, et la colonne afficherait
+  // toujours « 23 » au lieu de « RV23 ».
+  for (const table of ['commandes', 'rdv_reservations']) {
+    verifier(`${table} lit le préfixe de numérotation`,
+      /\bnumero_prefixe\b/.test(selectDe(table)), selectDe(table))
+  }
+}
 
+// ── L'INSTANT DU PAIEMENT EST ÉCRIT, PAS SEULEMENT LE JOUR ─────────────────
+{
+  const srcWebhookInstant = readFileSync(new URL('../app/api/stripe/webhook/route.js', import.meta.url), 'utf8')
+  verifier('le webhook grave l’instant du paiement sur le contrat',
+    /payeA: new Date\(\(paymentIntent\.created/.test(srcWebhookInstant))
+  const { contratDepuisFormule } = await import('../lib/abonnements.js')
+  const contratInstant = contratDepuisFormule(
+    { id: 'f1', type: 'carnet', seances_carnet: 10, validite_jours: 180, prix: 400 },
+    { achatLe: '2026-08-19', payeA: '2026-08-19T08:30:00.000Z' })
+  egal('et le contrat garde cet instant', contratInstant?.paye_le, '2026-08-19T08:30:00.000Z')
+  // Sans instant fourni, on retombe sur le jour : c'est le cas des inscriptions
+  // à la main d'avant, et il ne doit pas casser.
+  const contratJour = contratDepuisFormule(
+    { id: 'f1', type: 'carnet', seances_carnet: 10, validite_jours: 180, prix: 400 },
+    { achatLe: '2026-08-19' })
+  egal('sans instant, le jour fait foi', contratJour?.paye_le, '2026-08-19')
+
+  const srcExport = readFileSync(new URL('../app/api/dashboard/export-comptable/route.js', import.meta.url), 'utf8')
   // ⚠️ ET LE FILTRE DES ABONNEMENTS SE FAIT EN HEURE BELGE. Il découpait
   // l'instant en temps universel : un abonnement encaissé à 00h28 le 19 était
   // classé au 18, donc un export du 19 au 19 ne le contenait PAS DU TOUT. Une

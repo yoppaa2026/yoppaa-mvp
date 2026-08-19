@@ -417,6 +417,10 @@ async function handleAbonnementSucceeded(paymentIntent, supabase, eventAccount =
 
   const contrat = contratDepuisFormule(formule, {
     achatLe,
+    // ⚠️ L'INSTANT, en plus du jour : c'est lui qui donne son heure à la ligne
+    // comptable. Sans lui, `paye_le` recevait un jour nu, rangé à minuit
+    // universel, et l'export affichait « 02:00 » pour toutes les ventes.
+    payeA: new Date((paymentIntent.created || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
     commercantId: formule.commercant_id,
     client: {
       email: meta.client_email,

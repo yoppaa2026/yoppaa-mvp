@@ -107,7 +107,7 @@ export async function GET(request) {
     // dans un fichier qui sort de l'application.
     const { data: abonnementsTous } = await admin
       .from('abonnements')
-      .select('id, statut, prix, paye, paye_le, mode_paiement, tva_taux, stripe_frais, stripe_net, client_prenom, client_nom')
+      .select('id, statut, prix, paye, paye_le, mode_paiement, tva_taux, stripe_frais, stripe_net, client_prenom, client_nom, numero_abonnement, numero_prefixe')
       .eq('commercant_id', commercantId)
     const abonnements = (abonnementsTous || []).filter(a => {
       // ⚠️ EN HEURE BELGE. Ce filtre decoupait l instant en temps universel :

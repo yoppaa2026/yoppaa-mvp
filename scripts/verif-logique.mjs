@@ -1685,6 +1685,38 @@ for (const [chemin, ecran] of [
   // qui lit les commentaires condamne la documentation du correctif.
   const mig = readFileSync(new URL('../migrations/MIGRATION_NUMERO_COMMANDE.sql', import.meta.url), 'utf8')
     .split(/\r?\n/).map(l => l.replace(/(^|\s)--.*/, '$1')).join('\n')
+  // ── LA NUMÉROTATION DES ABONNEMENTS (19/08) ──────────────────────────────
+  //
+  // ⚠️ SÉRIE CONTINUE, et c'est la différence de fond avec les commandes. Un
+  // abonnement n'est pas une transaction de la semaine, c'est un CONTRAT : il
+  // vit douze mois, on le cite des mois après sa souscription. Un numéro qui
+  // repart à 1 chaque semaine serait inutilisable (décision d'Alex).
+  {
+    const migAbo = readFileSync(new URL('../migrations/MIGRATION_NUMERO_ABONNEMENT.sql', import.meta.url), 'utf8')
+      .split(/\r?\n/).map(l => l.replace(/(^|\s)--.*/, '$1')).join('\n')
+    verifier('les abonnements passent par le compteur SOUS VERROU',
+      /prochain_numero\(NEW\.commercant_id, 'continu', 'ABT'\)/.test(migAbo))
+    // ⚠️ ET JAMAIS PAR UN MAX + 1, le défaut corrigé le 10/08 sur les commandes.
+    verifier('et jamais par un MAX + 1', !/max\(numero_abonnement\)\s*\+\s*1/i.test(migAbo))
+    verifier('la série ne se réinitialise jamais', !/IYYY-IW/.test(migAbo))
+    verifier('le doublon est rendu impossible par un index unique',
+      /CREATE UNIQUE INDEX[\s\S]{0,160}?commercant_id, numero_prefixe, numero_abonnement/.test(migAbo))
+    verifier('un numéro déjà posé n’est jamais recalculé',
+      /IF NEW\.numero_abonnement IS NOT NULL THEN[\s\S]{0,60}?RETURN NEW/.test(migAbo))
+    // ⚠️ LES CONTRATS EXISTANTS SONT NUMÉROTÉS, contrairement aux commandes :
+    // ils n'ont JAMAIS eu de numéro, il n'y a donc aucune vérité à contredire.
+    verifier('les contrats déjà signés sont rattrapés',
+      /row_number\(\) OVER \(PARTITION BY commercant_id ORDER BY created_at/.test(migAbo))
+    // ⚠️ ET LE COMPTEUR EST MIS À NIVEAU APRÈS LE RATTRAPAGE. Sans cela, la
+    // prochaine souscription repartirait de 1 et l'index unique la refuserait :
+    // la vente échouerait, en production, sans que rien ne l'ait annoncé.
+    verifier('le compteur est mis à niveau après le rattrapage',
+      /INSERT INTO compteurs_commande[\s\S]{0,320}?GREATEST\(compteurs_commande\.dernier, EXCLUDED\.dernier\)/.test(migAbo))
+    // Le contrôle final doit interroger l'ÉTAT RÉEL, jamais une tautologie.
+    verifier('le contrôle lit l’état réel de la base',
+      /information_schema\.columns/.test(migAbo) && /pg_trigger/.test(migAbo))
+  }
+
   verifier('le compteur est incrémenté sous verrou de ligne',
     /UPDATE compteurs_commande[\s\S]{0,200}?SET dernier = dernier \+ 1[\s\S]{0,200}?RETURNING dernier/.test(mig))
   verifier('et surtout plus par MAX + 1', !/MAX\(numero_commande\)/.test(mig))

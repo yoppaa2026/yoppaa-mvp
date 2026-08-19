@@ -835,6 +835,37 @@ verifier('une commande remise sans moyen garde son rattrapage',
   egal('une commande aussi',
     construireLignes({ commandes: [{ ...cmde, numero_commande: 4, numero_prefixe: 'CC' }], tauxDefaut: 21 })[0]?.reference, 'CC4')
 
+  // ── ⚠️ ET LA RÉFÉRENCE EST QUALIFIÉE QUAND ELLE SORT DE SA SEMAINE ───────
+  // Remarque d'Alex, 19/08 : les compteurs des commandes et des rendez-vous
+  // repartent à 1 CHAQUE SEMAINE, donc deux `RV23` peuvent apparaître dans un
+  // export d'un mois. Ce n'est pas ambigu pour qui lit la ligne entière, qui
+  // porte sa date ; ça le devient dès qu'on trie par référence, ce que fait
+  // n'importe quel comptable.
+  egal('un rendez-vous qualifie sa référence par sa semaine',
+    construireLignes({ rdvs: [{ ...rdv, numero_rdv: 23, numero_prefixe: 'RV', numero_semaine: '2026-34' }], tauxDefaut: 21 })
+      .find(l => l.type === 'Solde RDV')?.reference, 'RV23-2026-S34')
+  // ⚠️ LA SEMAINE SE LIT SUR DEUX CHIFFRES, sinon un tri alphabétique range la
+  // semaine 5 après la 40, et c'est exactement le tri que fait un tableur.
+  egal('une semaine à un chiffre est complétée',
+    construireLignes({ commandes: [{ ...cmde, numero_commande: 4, numero_prefixe: 'CC', numero_semaine: '2026-5' }], tauxDefaut: 21 })[0]?.reference,
+    'CC4-2026-S05')
+
+  // ── ⚠️ LES ABONNEMENTS, SÉRIE CONTINUE ET SANS SEMAINE ───────────────────
+  // Un contrat vit douze mois : sa référence doit se suffire à elle-même, et
+  // lui coller une semaine n'aurait aucun sens.
+  egal('un abonnement porte son numéro de contrat',
+    construireLignes({ abonnements: [{ ...abo, numero_abonnement: 7, numero_prefixe: 'ABT' }], tauxDefaut: 21 })[0]?.reference, 'ABT7')
+  // ⚠️ ET LE PRÉFIXE SE RETROUVE MÊME S'IL MANQUE EN BASE. Mon premier test
+  // fournissait toujours `numero_prefixe`, donc le repli n'était jamais
+  // éprouvé : mesuré muet, puis réarmé. Un numéro nu se lirait « 7 », qui ne
+  // veut rien dire dans un document où cohabitent CC, RV et ABT.
+  egal('un contrat sans préfixe stocké se lit quand même ABT',
+    construireLignes({ abonnements: [{ ...abo, numero_abonnement: 7, numero_prefixe: null }], tauxDefaut: 21 })[0]?.reference, 'ABT7')
+  // ⚠️ ET SANS NUMÉRO, on retombe sur le fragment d'identifiant plutôt que sur
+  // une case vide : c'est le cas des contrats d'avant la migration.
+  verifier('un contrat non numéroté garde un repère',
+    (construireLignes({ abonnements: [abo], tauxDefaut: 21 })[0]?.reference || '').length > 0)
+
   // ── Les colonnes sortent bien dans le fichier, et dans le bon ordre ──────
   const csv = csvDetail({ lignes, commercant: { nom: 'Test' }, du: '2026-08-01', au: '2026-08-31' })
   const enTete = csv.split('\r\n').find(l => l.startsWith('Date'))

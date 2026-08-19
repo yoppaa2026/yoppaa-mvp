@@ -14,7 +14,7 @@
 
 import { readFileSync, readdirSync } from 'node:fs'
 import { ventiler, tauxFraisLivraison, cleTaux, libelleTaux, tauxPourArticle, TAUX_NON_RENSEIGNE, REGIME_EMPORTER } from '../lib/tva.js'
-import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal, csvDetail } from '../lib/export-comptable.js'
+import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal, csvDetail, montantStripe, sommeStripe } from '../lib/export-comptable.js'
 import { calculerRemiseBon, normaliserCodeBon, genererCodeBon, bonExpire, BON_MONTANT_MIN, BON_MONTANT_MAX } from '../lib/bons-cadeaux.js'
 import { brusselsInstant } from '../lib/timezone.js'
 
@@ -365,10 +365,89 @@ verifier('la route charge bien l’encaissement du comptoir',
 // L'AFFICHAGE. Un commerçant qui ne voit pas ses frais croit que son chiffre
 // TTC est ce qu'il touche.
 const srcComptaEcran = readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8')
-verifier('l’écran totalise enfin les frais Stripe',
-  /fraisStripe: acc\.fraisStripe \+ \(j\.fraisStripe \|\| 0\)/.test(srcComptaEcran))
-verifier('et les affiche',
-  /'Frais Stripe', v: eur\(totaux\.fraisStripe\)/.test(srcComptaEcran))
+// ⚠️ CES DEUX GARDES VERROUILLAIENT LE DÉFAUT, et c'est la troisième fois sur
+// ce projet. Elles exigeaient la présence LITTÉRALE de
+// `acc.fraisStripe + (j.fraisStripe || 0)`, c'est-à-dire du `|| 0` qui écrase
+// « jamais relevé » en « zéro » : corriger le bug les faisait rougir. Elles
+// disent maintenant l'INTENTION, et surtout elles INTERDISENT le piège au lieu
+// d'exiger une écriture correcte particulière.
+verifier('l’écran n’écrase plus un frais Stripe inconnu en zéro',
+  !/(?:frais|net)Stripe[^\n]*\|\|\s*0\)/i.test(srcComptaEcran))
+// ⚠️ GARDE NÉE MUETTE, MESURÉE EN MUTATION. Premier jet : un simple
+// `/Non relevé/`. Casser la carte des FRAIS la laissait verte, celle du NET
+// portant encore les mots. L'homonyme voisin : on exige les DEUX.
+verifier('et il NOMME l’ignorance plutôt que d’écrire 0,00',
+  /totaux\.fraisStripe == null \? 'Non relevé'/.test(srcComptaEcran)
+  && /totaux\.netStripe == null \? 'Non relevé'/.test(srcComptaEcran))
+verifier('avec la raison, sinon « Non relevé » se lit comme une panne',
+  /ne veut pas dire zéro/.test(srcComptaEcran))
+
+// ─── ET LA MÊME RÈGLE, EXÉCUTÉE ───────────────────────────────────────────
+// ⚠️ EXÉCUTER, JAMAIS RELIRE. Les trois lignes ci-dessus lisent une source
+// faute de pouvoir exécuter du JSX ; la règle elle-même, elle, se mesure.
+egal('rien n’est passé par Stripe : le frais vaut zéro', montantStripe(0, null), 0)
+egal('même quand le brut est absent', montantStripe(0, undefined), 0)
+egal('de l’argent y est passé sans frais relevé : on ne sait pas', montantStripe(400, null), null)
+egal('et un frais relevé se rend tel quel', montantStripe(400, 6.46), 6.46)
+// ⚠️ ADDITIONNER EN GARDANT L'IGNORANCE : un total partiel se lirait comme un
+// total complet, ce qui est exactement le mensonge qu'on vient de corriger.
+egal('une seule ligne inconnue rend le total inconnu', sommeStripe(3, null), null)
+egal('et l’inconnu ne se répare pas plus loin', sommeStripe(null, 3), null)
+egal('deux frais connus s’additionnent', sommeStripe(3, 6.46), 9.46)
+
+// Le cas exact d'Alex (19/08) : trois abonnements vendus en ligne AVANT que la
+// colonne des frais existe, et cinq encaissés au comptoir le même mois.
+const [jourEnLigneInconnu] = journalParJour(construireLignes({
+  abonnements: [{ id: 'a1', prix: 400, paye: true, paye_le: '2026-08-16T09:00:00.000Z',
+    mode_paiement: 'en_ligne', tva_taux: 21, statut: 'actif' }],
+}))
+egal('un abonnement vendu en ligne sans frais relevé laisse la journée inconnue',
+  jourEnLigneInconnu?.fraisStripe, null)
+const [jourComptoir] = journalParJour(construireLignes({
+  abonnements: [{ id: 'a2', prix: 400, paye: true, paye_le: '2026-08-19T09:00:00.000Z',
+    mode_paiement: 'terminal', tva_taux: 21, statut: 'actif' }],
+}))
+egal('une journée sans le moindre paiement en ligne coûte zéro, et le dit',
+  jourComptoir?.fraisStripe, 0)
+// Et le CSV laisse la case VIDE, il n'écrit pas 0,00 dans un document comptable.
+const csvInconnu = csvJournal({
+  lignes: construireLignes({ abonnements: [{ id: 'a3', prix: 400, paye: true,
+    paye_le: '2026-08-16T09:00:00.000Z', mode_paiement: 'en_ligne', tva_taux: 21, statut: 'actif' }] }),
+  commercant: { nom: 'Centre Test' }, du: '2026-08-01', au: '2026-08-31',
+})
+// ⚠️ ON LIT LES CELLULES, PAS LE TEXTE. Première écriture de cette garde : une
+// regex qui cherchait `;0,00;0,00` en fin de ligne — elle accrochait « Dont
+// espèces » et « Dont virement », légitimement à zéro, et rougissait sur un
+// export correct. Découper au point-virgule ne se trompe pas de colonne.
+const cellules16 = (csvInconnu.split(/\r?\n/).find(l => l.startsWith('2026-08-16;')) || '').split(';')
+egal('la case Frais Stripe reste vide dans le journal exporté', cellules16.at(-2), '')
+egal('et la case Net Stripe aussi', cellules16.at(-1), '')
+const cellulesTotal = (csvInconnu.split(/\r?\n/).find(l => l.startsWith('TOTAL;')) || '').split(';')
+egal('le TOTAL n’invente pas davantage un frais nul', cellulesTotal.at(-2), '')
+
+// ⚠️ ET LA MÊME RÈGLE SUR TOUTES LES FAMILLES DE LIGNES (rappel d'Alex, 19/08 :
+// « ça doit valoir pour le C&C et tout le reste »). On EXÉCUTE une ligne de
+// chaque sorte plutôt que de relire la source : c'est ce geste-là qui avait
+// débusqué le canal faux sur les retraits, quand mon inspection du source avait
+// rendu un faux négatif sur toute la ligne.
+const FAMILLES = [
+  ['Click & Collect payé en ligne', { commandes: [{ id: 'c1', total: 24, statut: 'recupere', paye_en_ligne: true, creneau_id: 'k1', created_at: '2026-08-16T09:00:00.000Z' }] }, null],
+  ['retrait en magasin payé au comptoir', { commandes: [{ id: 'c2', total: 24, statut: 'recupere', paye_en_ligne: false, encaisse_mode: 'especes', created_at: '2026-08-16T09:00:00.000Z' }] }, 0],
+  ['livraison payée en ligne', { commandes: [{ id: 'c3', total: 30, statut: 'recupere', paye_en_ligne: true, mode_retrait: 'livraison', created_at: '2026-08-16T09:00:00.000Z' }] }, null],
+  ['expédition payée en ligne', { commandes: [{ id: 'c4', total: 30, statut: 'recupere', paye_en_ligne: true, mode_retrait: 'expedition', created_at: '2026-08-16T09:00:00.000Z' }] }, null],
+  ['acompte de rendez-vous payé en ligne', { rdvs: [{ id: 'r1', statut: 'honore', date_rdv: '2026-08-16', prix_estime: 60, acompte_montant: 15, acompte_paye: true, acompte_paye_en_ligne: true, tva_taux: 21 }] }, null],
+  ['solde de rendez-vous encaissé au comptoir', { rdvs: [RDV_ENCAISSE] }, 0],
+  ['abonnement vendu en ligne', { abonnements: [{ id: 'a4', prix: 400, paye: true, paye_le: '2026-08-16T09:00:00.000Z', mode_paiement: 'en_ligne', tva_taux: 21, statut: 'actif' }] }, null],
+  ['abonnement réglé au comptoir', { abonnements: [{ id: 'a5', prix: 400, paye: true, paye_le: '2026-08-16T09:00:00.000Z', mode_paiement: 'terminal', tva_taux: 21, statut: 'actif' }] }, 0],
+]
+for (const [quoi, source, attendu] of FAMILLES) {
+  const lignes = construireLignes(source).filter(l => l.enLigne > 0 || l.comptoir > 0)
+  verifier(`une ligne existe pour : ${quoi}`, lignes.length > 0)
+  for (const l of lignes) {
+    egal(`${quoi} → frais ${attendu === null ? 'inconnu, jamais zéro' : 'nul, et il le dit'}`, l.fraisStripe, attendu)
+    egal(`${quoi} → net ${attendu === null ? 'inconnu' : 'nul'}`, l.netStripe, attendu)
+  }
+}
 verifier('le détail du comptoir est là pour la réconciliation',
   /Dont terminal/.test(srcComptaEcran) && /Dont espèces/.test(srcComptaEcran))
 

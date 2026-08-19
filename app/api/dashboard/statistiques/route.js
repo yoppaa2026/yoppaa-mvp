@@ -83,8 +83,16 @@ export async function GET(request) {
         // compte au tableau de bord pour son prix complet, pas pour son
         // acompte. L'oublier ramènerait le chiffre à ce qui est encaissé en
         // ligne, ce qui était justement le reproche d'Alex.
+        // ⚠️ `encaisse_mode`, `acompte_paye` ET `abonnement_id` SONT LÀ POUR
+        // `seancesNonDeclarees`, et leur absence ne produisait AUCUNE erreur.
+        // La garde « cette séance est déjà déclarée » lisait `undefined`, qui
+        // ne figure dans aucun moyen d'encaissement : les séances déjà
+        // encaissées au comptoir étaient recomptées comme non déclarées, et la
+        // ligne sous le chiffre d'affaires annonçait 300 € sur 20 séances là où
+        // la réalité était 270 € sur 18 (Alex, 19/08). Septième fois que ce
+        // défaut se présente sur ce projet.
         supabase.from('rdv_reservations')
-          .select('id, statut, acompte_montant, prix_estime, prestation_id, created_at')
+          .select('id, statut, acompte_montant, acompte_paye, prix_estime, prestation_id, encaisse_mode, abonnement_id, created_at')
           .eq('commercant_id', commercantId)
           .gte('created_at', depuis),
         supabase.from('avis')
@@ -237,7 +245,7 @@ export async function GET(request) {
       },
       // La courbe : un point par jour, journées vides comprises, sinon deux
       // ventes espacées de trois semaines donnent un trait plat mensonger.
-      courbe: serieJournaliere(cmdActuelles, rdvActuels, aboActuels, { debut: f.debut, jours }),
+      courbe: serieJournaliere(cmdActuelles, rdvActuels, aboActuels, { debut: f.debut, fin: f.fin, jours }),
       // Quand les gens commandent et réservent — le moment de la DEMANDE, en
       // heure belge. Le moment du retrait vit déjà dans l'agenda.
       moments: momentsDePointe(cmdActuelles, rdvActuels),

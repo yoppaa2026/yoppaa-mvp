@@ -719,7 +719,13 @@ const [ligneComptoir] = construireLignes({
 })
 egal('un abonnement réglé sur place va au comptoir', ligneComptoir.comptoir, 540)
 egal('et rien en ligne', ligneComptoir.enLigne, 0)
-egal('sans frais Stripe inventés', ligneComptoir.netStripe, null)
+// ⚠️ LA CONVENTION A CHANGÉ LE 19/08, ET CETTE GARDE DÉFENDAIT L'ANCIENNE.
+// `null` voulait dire « aucun frais » ; il veut désormais dire « frais jamais
+// relevé », parce que le journal annonçait « 0,00 € de frais Stripe » sur
+// 1600 € encaissés en ligne. Un abonnement réglé sur place n'a pas un frais
+// INCONNU : il en a ZÉRO, et l'écrire est une information, pas une invention.
+egal('un règlement sur place ne coûte rien à Stripe, et le dit', ligneComptoir.netStripe, 0)
+egal('frais compris', ligneComptoir.fraisStripe, 0)
 
 // ⚠️ ON N'ÉCRIT QUE CE QUI A ÉTÉ ENCAISSÉ. Un contrat non payé est une
 // promesse, pas une recette, et une ligne sans date d'encaissement se

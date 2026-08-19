@@ -9838,8 +9838,13 @@ function TabComptabilite({ commercantId, toast }) {
     especes: acc.especes + (j.especes || 0),
     virement: acc.virement + (j.virement || 0),
     bonCadeau: acc.bonCadeau + j.bonCadeau,
-    fraisStripe: acc.fraisStripe + (j.fraisStripe || 0),
-    netStripe: acc.netStripe + (j.netStripe || 0),
+    // ⚠️ `null` VEUT DIRE « JAMAIS RELEVÉ », ET `|| 0` L'ÉCRASAIT EN ZÉRO. La
+    // carte annonçait « 0,00 € de frais Stripe » sur 1600 € encaissés en ligne,
+    // ce qui se lit « Stripe ne t'a rien coûté » (Alex, 19/08). Une seule
+    // journée inconnue rend le total inconnu : un total partiel se lirait comme
+    // un total complet.
+    fraisStripe: acc.fraisStripe == null || j.fraisStripe == null ? null : acc.fraisStripe + j.fraisStripe,
+    netStripe: acc.netStripe == null || j.netStripe == null ? null : acc.netStripe + j.netStripe,
   }), { nb: 0, total: 0, enLigne: 0, comptoir: 0, terminal: 0, especes: 0, virement: 0, bonCadeau: 0, fraisStripe: 0, netStripe: 0 })
 
   // Ventilation cumulée par taux, pour l'aperçu à l'écran.
@@ -9934,8 +9939,8 @@ function TabComptabilite({ commercantId, toast }) {
               // depuis toujours dans le fichier ; il n'était simplement affiché
               // nulle part, et un commerçant qui ne voit pas ses frais croit
               // que son chiffre TTC est ce qu'il touche.
-              { l: 'Frais Stripe', v: eur(totaux.fraisStripe) },
-              { l: 'Net Stripe reçu', v: eur(totaux.netStripe) },
+              { l: 'Frais Stripe', v: totaux.fraisStripe == null ? 'Non relevé' : eur(totaux.fraisStripe) },
+              { l: 'Net Stripe reçu', v: totaux.netStripe == null ? 'Non relevé' : eur(totaux.netStripe) },
             ].map(c => (
               <div key={c.l} style={{ background: T.bg, borderRadius: 10, padding: '10px 12px' }}>
                 <p style={{ margin: 0, fontSize: 15, fontWeight: 900, color: T.ink }}>{c.v}</p>
@@ -9943,6 +9948,16 @@ function TabComptabilite({ commercantId, toast }) {
               </div>
             ))}
           </div>
+
+          {/* ⚠️ UN ÉLÉMENT ÉCARTÉ SE MONTRE AVEC SA RAISON. « Non relevé » sans
+              explication laisse croire à une panne. */}
+          {(totaux.fraisStripe == null || totaux.netStripe == null) && (
+            <p style={{ fontSize: 12, color: T.muted, margin: '0 0 12px', lineHeight: 1.5 }}>
+              <strong style={{ color: T.ink }}>Non relevé</strong> ne veut pas dire zéro : ces ventes sont
+              bien passées par Stripe, mais leurs frais n{'’'}ont pas été enregistrés au moment du
+              paiement. Les ventes suivantes les portent.
+            </p>
+          )}
 
           {Object.keys(parTaux).length > 0 && (
             <>
@@ -9995,7 +10010,7 @@ function TabComptabilite({ commercantId, toast }) {
                       <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 800, color: T.ink }}>{eur(j.total)}</td>
                       <td style={{ padding: '6px 8px', textAlign: 'right', color: T.muted }}>{eur(j.enLigne)}</td>
                       <td style={{ padding: '6px 8px', textAlign: 'right', color: T.muted }}>{eur(j.comptoir)}</td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', color: T.muted }}>{eur(j.fraisStripe)}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', color: T.muted }}>{j.fraisStripe == null ? '—' : eur(j.fraisStripe)}</td>
                     </tr>
                   ))}
                 </tbody>

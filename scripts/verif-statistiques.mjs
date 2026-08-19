@@ -324,6 +324,23 @@ egal('le 12 reste vide', courbe.find(j => j.jour === '2026-07-12').montant, 0)
 egal('sans début, pas de courbe', serieJournaliere([], [], [], {}), [])
 egal('sans options du tout non plus', serieJournaliere([], [], []), [])
 
+// ⚠️ ET LA COURBE S'ARRÊTAIT LA VEILLE. Trente cases posées depuis le jour de
+// `debut` couvrent bien trente jours, mais PAS LA JOURNÉE EN COURS, que le
+// chiffre d'affaires comptait pourtant : les deux écrans se contredisaient.
+// Alex a vendu 2000 € d'abonnements le matin du 19/08, et la courbe lui
+// annonçait « ta meilleure journée : le 16/8, 1365 € ».
+const courbeAujourdhui = serieJournaliere(
+  [], [],
+  [{ paye: true, prix: 2000, paye_le: '2026-08-19T08:13:00Z' }],
+  { debut: new Date('2026-07-20T15:00:00Z'), fin: new Date('2026-08-19T15:30:00Z'), jours: 30 },
+)
+egal('la courbe va jusqu’au jour en cours', courbeAujourdhui.at(-1).jour, '2026-08-19')
+egal('et la vente du matin même y est', courbeAujourdhui.at(-1).montant, 2000)
+egal('sans perdre le premier jour de la fenêtre', courbeAujourdhui[0].jour, '2026-07-20')
+// Sans `fin`, l'ancien décompte reste : c'est ce qui rend la garde utile.
+egal('sans fin, on pose exactement le nombre de cases demandé',
+  serieJournaliere([], [], [], { debut: new Date('2026-07-20T15:00:00Z'), jours: 30 }).length, 30)
+
 // ─── Les moments de pointe ─────────────────────────────────────────────────
 // Sous le seuil : les barres existent, la conclusion se tait.
 const peu = momentsDePointe(
@@ -370,6 +387,33 @@ verifier('le comptage des articles lit bien count', /\{ count: nbArticles \}/.te
 // l'acompte : le reproche d'Alex du 09/08, à l'identique.
 verifier('la route charge le prix complet des prestations', /prix_estime/.test(routeCode))
 verifier('la route charge la prestation pour la nommer', /prestation_id/.test(routeCode))
+
+// ⚠️ LE DÉFAUT LE PLUS FRÉQUENT DU PROJET, SEPTIÈME FOIS (Alex, 19/08).
+// `seancesNonDeclarees` écarte une séance déjà encaissée au comptoir en lisant
+// `encaisse_mode` — colonne que le select ne demandait pas. La garde comparait
+// `undefined`, qui ne figure dans aucun moyen de paiement : les deux séances
+// déjà déclarées étaient recomptées comme non déclarées, et la ligne sous le
+// chiffre d'affaires annonçait 300 € sur 20 séances au lieu de 270 € sur 18.
+// Aucune erreur, aucun signal, juste un repli silencieux.
+//
+// ⚠️ ON DÉCOUPE LA LISTE, on ne cherche pas un mot dedans : `acompte` est
+// contenu dans `acompte_montant`, et une garde par sous-chaîne se serait crue
+// satisfaite par la colonne voisine. C'est l'homonyme voisin, déjà rencontré.
+// ⚠️ LA COURBE ET LE TOTAL DOIVENT COUVRIR LA MÊME PÉRIODE. Sans borne de fin,
+// la courbe s'arrête la veille et cache la journée en cours, que le chiffre
+// d'affaires compte pourtant : deux écrans, deux histoires.
+// ⚠️ GARDE NÉE MUETTE, MESURÉE EN MUTATION. Premier jet : `/fin: f\.fin/`.
+// Elle restait verte une fois la borne retirée, parce que `periode: { …, fin:
+// f.fin.toISOString() }` porte la même sous-chaîne vingt lignes plus haut.
+// L'HOMONYME VOISIN, encore. On ancre sur l'APPEL.
+verifier('la route borne la courbe sur maintenant',
+  /serieJournaliere\([^)]*fin: f\.fin/.test(routeCode))
+
+const selectRdv = (/from\('rdv_reservations'\)\s*\n?\s*\.select\('([^']+)'\)/.exec(routeCode) || [])[1] || ''
+const colonnesRdv = selectRdv.split(',').map(c => c.trim())
+for (const colonne of ['statut', 'prix_estime', 'acompte_montant', 'acompte_paye', 'encaisse_mode', 'abonnement_id', 'created_at']) {
+  verifier(`le select des rendez-vous demande ${colonne}`, colonnesRdv.includes(colonne))
+}
 
 // La route des vues : elle ne doit RIEN enregistrer sur le visiteur.
 const routeVue = lire('app/api/fiche/vue/route.js')

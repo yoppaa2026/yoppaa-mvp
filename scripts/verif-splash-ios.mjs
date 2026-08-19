@@ -26,6 +26,7 @@ import {
   FOND, ligneDegrade, svgSplash, nomFichier, requeteMedia, table,
 } from './generer-splash-ios.mjs'
 import { SPLASH_IOS } from '../lib/splash-ios.js'
+import { ENCRE, svgIcone } from './generer-icones.mjs'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -248,6 +249,19 @@ function dimensionsPng(chemin) {
     manifeste.background_color.toUpperCase() === '#1A0840',
     `${manifeste.background_color} — l'encre canonique de la marque`)
   const layout = lire('app/layout.tsx')
+  // ⚠️ LE FOND DE L'ICÔNE ET CELUI DU MANIFESTE SONT LA MÊME COULEUR.
+  // Android peint l'icône, centrée, sur `background_color`. Tant que l'icône
+  // portait un dégradé plus clair que ce fond, un CARRÉ ARRONDI se détachait
+  // au lancement, et on lisait deux écrans au lieu d'un enchaînement. Les deux
+  // valeurs vivent dans deux fichiers sans lien mécanique : les séparer fait
+  // revenir le carré en silence.
+  verifier("le fond de l'icône est celui du manifeste, sinon le carré revient",
+    ENCRE.toUpperCase() === manifeste.background_color.toUpperCase(),
+    `icône ${ENCRE}, manifeste ${manifeste.background_color}`)
+  verifier("l'icône générée est bien un APLAT, sans dégradé",
+    !/linearGradient|radialGradient/.test(svgIcone(512)),
+    'un dégradé plus clair que le fond redessine le carré')
+
   const teinte = layout.match(/themeColor:\s*["'](#[0-9A-Fa-f]{6})["']/)
   verifier('le layout déclare une teinte de thème', Boolean(teinte))
   verifier('et le manifeste annonce la MÊME teinte que le layout',

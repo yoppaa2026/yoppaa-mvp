@@ -292,14 +292,18 @@ function SplashScreen({ onDone }) {
   const [phase, setPhase] = useState(0)
   useEffect(() => {
     // Sequence canonique : wordmark, 5 dots V2-B, slogan.
-    const t1 = setTimeout(() => setPhase(1), 400)  // wordmark in
-    const t2 = setTimeout(() => setPhase(2), 1200) // 5 dots V2-B pop cascade
-    const t3 = setTimeout(() => setPhase(3), 2200) // slogan in
-    const t4 = setTimeout(() => setPhase(4), 3800) // debut fadeOut
+    // ⚠️ SÉQUENCE RESSERRÉE LE 19/08 : elle durait 4,3 s À CHAQUE SESSION, et
+    // Alex l'a dite agaçante. L'écran système qui la précède, lui, n'est pas
+    // supprimable tant qu'on est en PWA ; la seule durée qu'on maîtrise est
+    // celle-ci. 2,4 s au total, la séquence canonique reste entière.
+    const t1 = setTimeout(() => setPhase(1), 150)  // wordmark in
+    const t2 = setTimeout(() => setPhase(2), 600)  // 5 dots V2-B pop cascade
+    const t3 = setTimeout(() => setPhase(3), 1100) // slogan in
+    const t4 = setTimeout(() => setPhase(4), 1900) // debut fadeOut
     // ⚠️ t5 SUIT LA DURÉE DE `splash-out`, ils ne se règlent pas séparément.
-    // 3800 + 500 : démonter plus tôt ferait disparaître le splash d'un coup,
+    // 1900 + 500 : démonter plus tôt ferait disparaître le splash d'un coup,
     // plus tard laisserait un écran déjà invisible bloquer le doigt.
-    const t5 = setTimeout(() => onDone(),    4300) // fin
+    const t5 = setTimeout(() => onDone(),    2400) // fin
     return () => [t1,t2,t3,t4,t5].forEach(clearTimeout)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [])

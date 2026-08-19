@@ -34,7 +34,12 @@
 // layout ET par le banc).
 // ════════════════════════════════════════════════════════════════════
 
-import sharp from 'sharp'
+// ⚠️ `sharp` N'EST PAS IMPORTÉ EN TÊTE DE FICHIER, ET C'EST VOLONTAIRE.
+// Le banc importe ce module pour sa table d'écrans et sa géométrie, et il
+// tourne sur la CI, où `sharp` n'est PAS une dépendance déclarée : il n'existe
+// que parce que Next l'installe pour lui-même. Un import en tête ferait
+// échouer le banc sur une dépendance de hasard, très loin de ce qu'il
+// vérifie. Il est donc chargé À L'EXÉCUTION seulement.
 import { mkdirSync, writeFileSync, readdirSync, rmSync, existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -137,6 +142,7 @@ const lanceDirectement = Boolean(process.argv[1]) &&
   process.argv[1].replace(/\\/g, '/').endsWith('scripts/generer-splash-ios.mjs')
 
 if (lanceDirectement) {
+  const sharp = (await import('sharp')).default
   const dossier = join(process.cwd(), 'public', 'splash')
   mkdirSync(dossier, { recursive: true })
 

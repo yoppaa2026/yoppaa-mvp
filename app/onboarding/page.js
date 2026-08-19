@@ -239,7 +239,7 @@ function VisuelConnexion() {
       </div>
 
       {/* Avantages compte — la liste défile si l'écran est court, elle ne se fait PAS couper */}
-      <div style={{ maxHeight: '46vh', overflowY: 'auto' }}>
+      <div style={{ maxHeight: '46dvh', overflowY: 'auto' }}>
       {[
         // On annonce ce que Yoppaa sait faire, ce qui est la vraie raison de
         // créer un compte. ⚠️ Rien qui n'existe pas : fidélité, bons cadeaux

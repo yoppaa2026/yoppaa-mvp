@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Bell, MapPin, Croissant, Sandwich, Pizza, Flame, Package, Star, History, Gift,
+  Scissors, Truck, CalendarCheck, Repeat, Sunrise, Ticket,
 } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 
@@ -24,8 +25,8 @@ const ECRANS = [
     emoji: null,
     visuel: 'yoppaa',
     titre: 'Ton quartier,\ndans ta poche.',
-    sousTitre: 'Vois qui est ouvert autour de toi, commande avant de sortir, et passe simplement prendre.',
-    cta: 'Commencer →',
+    sousTitre: 'Commande, réserve un rendez-vous, fais-toi livrer. Tes commerçants et leurs bons plans, tous au même endroit.',
+    cta: 'Commencer',
     skip: false,
   },
   {
@@ -42,7 +43,7 @@ const ECRANS = [
     // seuls. C'est d'ailleurs plus fort qu'un plafond, parce que c'est lui qui
     // tient la liste.
     sousTitre: 'Marque tes commerçants préférés et reçois leurs deals et leurs actus. Eux seuls, et rien d’autre.',
-    cta: 'Activer les notifications',
+    cta: 'Me prévenir',
     ctaSecondaire: 'Pas maintenant',
     skip: true,
   },
@@ -52,7 +53,7 @@ const ECRANS = [
     visuel: 'maps',
     titre: 'Les commerçants\nprès de chez toi.',
     sousTitre: 'Ta position sert à une seule chose : te montrer ce qui est ouvert, maintenant, à deux pas de toi.',
-    cta: 'Autoriser la localisation',
+    cta: 'Utiliser ma position',
     ctaSecondaire: 'Pas maintenant',
     skip: true,
   },
@@ -63,7 +64,7 @@ const ECRANS = [
     visuel: 'connexion',
     titre: 'Rejoins\nles Yoppers.',
     sousTitre: 'Un compte, et tu retrouves tes commandes, tes favoris et ton historique sur tous tes appareils.',
-    cta: 'Se connecter',
+    cta: 'Rejoindre les Yoppers',
     ctaSecondaire: 'Continuer sans compte',
     skip: true,
   },
@@ -87,9 +88,12 @@ function VisuelYoppaa() {
         {[
           // Mêmes noms imaginaires que l'écran des notifications : un client
           // qui enchaîne les deux écrans doit retrouver le même quartier.
-          { nom: 'La Mie de Rien',       type: 'Boulangerie',  statut: 'Ouvert', deal: 'Deal : tarte -20 %', DealIcon: Flame, Icon: Croissant },
-          { nom: 'Chez Ginette',         type: 'Snack',        statut: 'Ouvert',                                              Icon: Sandwich  },
-          { nom: 'Le Comptoir d’à Côté', type: 'Sandwicherie', statut: 'Ouvert',                                              Icon: Sandwich  },
+          // ⚠️ Les trois cartes faisaient TOUTES la même chose : commander.
+          // Un nouveau client en concluait que Yoppaa ne sert qu'à ça. Trois
+          // métiers, trois usages, dès le premier écran.
+          { nom: 'La Mie de Rien',       type: 'Boulangerie', statut: 'Ouvert', deal: 'Tarte du jour -20 %',    DealIcon: Flame,         Icon: Croissant },
+          { nom: 'Coupe & Compagnie',    type: 'Coiffeur',    statut: 'Ouvert', deal: 'Rendez-vous en 2 clics', DealIcon: CalendarCheck, Icon: Scissors  },
+          { nom: 'Trois Fois Rien',      type: 'Déco',        statut: 'Ouvert', deal: 'Livré chez toi',         DealIcon: Truck,         Icon: Package   },
         ].map((c, i) => (
           <div key={i} style={{
             background: 'rgba(255,255,255,0.08)',
@@ -126,9 +130,9 @@ function VisuelNotifs() {
   // existant, sans qu'il ait rien demandé. Les noms ci-dessous sont chaleureux
   // et manifestement imaginaires, et ils le restent.
   const notifs = [
-    { commerce: 'La Mie de Rien',       Icon: Flame,    message: 'Tarte au riz -20 % jusqu’à 11 h', time: 'maintenant', color: T.main },
-    { commerce: 'Chez Ginette',         Icon: Sandwich, message: 'Le menu de midi est prêt, 8,50 €', time: '5 min',      color: T.mid  },
-    { commerce: 'Le Comptoir d’à Côté', Icon: Package,  message: 'Il reste trois parts de quiche',   time: '12 min',     color: T.deep },
+    { commerce: 'La Mie de Rien',    Icon: Flame,         message: 'Tarte au riz -20 % jusqu’à 11 h',  time: 'maintenant', color: T.main },
+    { commerce: 'Coupe & Compagnie', Icon: CalendarCheck, message: 'Une place s’est libérée à 15 h',    time: '5 min',      color: T.mid  },
+    { commerce: 'Trois Fois Rien',   Icon: Truck,         message: 'Ta commande part demain matin',    time: '12 min',     color: T.deep },
   ]
   return (
     <div style={{ width: '100%', maxWidth: 300 }}>
@@ -230,20 +234,29 @@ function VisuelConnexion() {
             publie. L'emoji tombait en plus sous la règle du SVG seul, et son
             dessin change d'un téléphone à l'autre. */}
         <div style={{ width: 64, height: 64, borderRadius: '50%', background: T.main, margin: '0 auto 12px', boxShadow: `0 8px 32px ${T.main}66` }}/>
-        <p style={{ fontWeight: 900, fontSize: '0.9rem', color: '#fff', letterSpacing: '-0.3px' }}>ICI ON EST YOPPERS</p>
+        <p style={{ fontWeight: 900, fontSize: '0.9rem', color: '#fff', letterSpacing: '-0.3px' }}>Ici, on est Yoppers</p>
         <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>Rejoins la tribu du commerce local</p>
       </div>
 
-      {/* Avantages compte */}
+      {/* Avantages compte — la liste défile si l'écran est court, elle ne se fait PAS couper */}
+      <div style={{ maxHeight: '46vh', overflowY: 'auto' }}>
       {[
-        { Icon: Package, label: 'Suis tes commandes en temps réel' },
-        { Icon: Star,    label: 'Accède à tes commerçants favoris' },
-        { Icon: History, label: 'Retrouve ton historique partout' },
-        { Icon: Gift,    label: 'Accède aux offres exclusives Yoppers' },
+        // On annonce ce que Yoppaa sait faire, ce qui est la vraie raison de
+        // créer un compte. ⚠️ Rien qui n'existe pas : fidélité, bons cadeaux
+        // et abonnements sont livrés et éprouvés.
+        { Icon: Package,       label: 'Commande et récupère sans faire la file' },
+        { Icon: Truck,         label: 'Fais-toi livrer chez toi' },
+        { Icon: CalendarCheck, label: 'Réserve tes rendez-vous' },
+        { Icon: Repeat,        label: 'Prends un abonnement à tes séances' },
+        { Icon: Star,          label: 'Cumule ta fidélité, sans carte' },
+        { Icon: Gift,          label: 'Offre un bon cadeau' },
+        { Icon: Ticket,        label: 'Attrape les deals du quartier' },
+        { Icon: Sunrise,       label: 'Ouvre ton Good Morning Yoppers' },
+        { Icon: History,       label: 'Retrouve tout, d’un appareil à l’autre' },
       ].map((a, i) => (
         <div key={i} style={{
           display: 'flex', alignItems: 'center', gap: 10,
-          background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '0.625rem 0.875rem', marginBottom: 6,
+          background: 'rgba(255,255,255,0.06)', borderRadius: 10, padding: '0.5rem 0.75rem', marginBottom: 5,
           border: '1px solid rgba(255,255,255,0.1)',
           animation: `slideUp 0.4s ease ${0.1 + i * 0.1}s both`,
         }}>
@@ -251,6 +264,7 @@ function VisuelConnexion() {
           <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{a.label}</span>
         </div>
       ))}
+      </div>
     </div>
   )
 }

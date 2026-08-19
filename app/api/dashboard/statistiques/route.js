@@ -17,7 +17,7 @@ import { createClient } from '@supabase/supabase-js'
 import {
   fenetres, chiffreAffaires, panierMoyen, evolution, topArticles,
   nonRecuperees, tauxAnnulation, noteMoyenne, performanceDeals,
-  commandeEncaissee, messageVide, topPrestations, serieJournaliere,
+  commandeEncaissee, messageVide, topPrestations, serieJournaliere, seancesNonDeclarees,
   momentsDePointe, rdvHonore,
 } from '@/lib/statistiques'
 import { canDo } from '@/lib/plans'
@@ -215,6 +215,9 @@ export async function GET(request) {
         ca_produits: caActuel.produits,
         ca_prestations: caActuel.prestations,
         ca_abonnements: caActuel.abonnements,
+        // ⚠️ DE QUOI EXPLIQUER L ECART avec la Comptabilite, plutot que de
+        // laisser deux chiffres se contredire en silence (Alex, 19/08).
+        seances_non_declarees: seancesNonDeclarees(rdvActuels),
         abonnements_vendus: caActuel.nb_abonnements,
         encaisse_en_ligne: caActuel.encaisse_en_ligne,
         au_comptoir: caActuel.au_comptoir,

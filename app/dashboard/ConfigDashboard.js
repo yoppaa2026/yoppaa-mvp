@@ -9110,6 +9110,27 @@ function TabStatistiques({ commercantId, toast }) {
               {a.au_comptoir > 0 && <> et <strong style={{ color: '#fff' }}>{euros(a.au_comptoir)}</strong> à régler chez toi</>}.
               Le détail, la TVA et les frais sont dans Comptabilité.
             </p>
+
+            {/* ⚠️ L'ÉCART ENTRE CE CHIFFRE ET LA COMPTABILITÉ, DIT EN TOUTES
+                LETTRES. Alex, 19/08 : « d'où viennent les 270 € de
+                différence ? ». Son tableau de bord annonçait 3900 €, sa
+                Comptabilité 3630 €, et les deux avaient raison : ici on compte
+                chaque séance honorée à son prix, là-bas on n'écrit que ce qui
+                a été DÉCLARÉ encaissé.
+                ⚠️ Deux chiffres qui se contredisent sans raison visible
+                finissent en appel téléphonique. Et ce n'est pas qu'une
+                explication : c'est le rappel du geste qui remplit sa
+                comptabilité, séance par séance. */}
+            {a.seances_non_declarees?.montant > 0 && (
+              <p style={{ margin: '8px 0 0', fontSize: 11.5, color: T.light, lineHeight: 1.5 }}>
+                Dont <strong style={{ color: '#fff' }}>{euros(a.seances_non_declarees.montant)}</strong> sur{' '}
+                <strong style={{ color: '#fff' }}>
+                  {a.seances_non_declarees.nombre} séance{a.seances_non_declarees.nombre > 1 ? 's' : ''}
+                </strong>{' '}
+                dont tu n’as pas encore noté l’encaissement : ce montant compte ici, mais pas
+                encore en Comptabilité.
+              </p>
+            )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 12 }}>

@@ -1027,6 +1027,27 @@ verifier('une commande remise sans moyen garde son rattrapage',
     (srcConfigDates.match(/const aujourdhui = jourBruxelles\(\)/g) || []).length, 2)
 }
 
+// ⚠️ UN FRAIS INCONNU RESTE VIDE, JAMAIS 0,00 (Alex, 19/08). Ses quatre
+// abonnements vendus en ligne affichaient « 0,00 € de frais », ce qui AFFIRME
+// qu'il n'y en a pas eu, alors qu'ils n'ont jamais été relevés : la colonne a
+// été ajoutée le 17/08, ils datent des 16 et 17. Piège du zéro, `arrondi(null)`
+// rendant 0. Sa voisine Net Stripe disait déjà « rien » correctement.
+{
+  const aboSansFrais = {
+    id: 'x', paye: true, prix: 400, tva_taux: 21, statut: 'actif',
+    paye_le: '2026-08-16T09:00:00.000Z', mode_paiement: 'en_ligne',
+  }
+  const sansFrais = construireLignes({ abonnements: [aboSansFrais], tauxDefaut: 21 })[0]
+  egal('un frais jamais relevé vaut « on ne sait pas »', sansFrais?.fraisStripe, null)
+  const csvVide = csvDetail({ lignes: [sansFrais], commercant: { nom: 'T' }, du: '2026-08-01', au: '2026-08-31' })
+  const ligneVide = csvVide.split('\r\n').find(l => l.startsWith('2026-08-16')) || ''
+  verifier('et sa case reste VIDE dans le fichier', /;;$/.test(ligneVide), ligneVide)
+  // ⚠️ ET UN FRAIS RÉELLEMENT NUL S'ÉCRIT, lui : zéro connu et zéro inconnu ne
+  // sont pas la même chose, c'est toute la raison de ce correctif.
+  egal('un frais réellement nul reste un zéro',
+    construireLignes({ abonnements: [{ ...aboSansFrais, stripe_frais: 0 }], tauxDefaut: 21 })[0]?.fraisStripe, 0)
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

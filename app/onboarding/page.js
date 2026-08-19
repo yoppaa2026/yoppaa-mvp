@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import OneSignalInit, { activerNotifications } from '@/app/components/OneSignalInit'
+import { memoriserPosition, marquerDemandee } from '@/lib/geoloc'
 
 const T = {
   bg:      '#F8F6FF',
@@ -325,13 +326,17 @@ export default function OnboardingPage() {
         setNote(null)
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            // ⚠️ La position était demandée puis JETÉE : les deux branches
-            // passaient à l'écran suivant sans rien retenir. On la garde, avec
-            // sa date, pour que l'accueil sache d'où regarder.
+            // ⚠️ ON ÉCRIT DANS LA MÉMOIRE DE L'APPLICATION, PAS À CÔTÉ.
+            // La position était demandée puis JETÉE. Ma première correction
+            // inventait une clé `yoppaa_position` que PERSONNE n'aurait relue :
+            // exactement le défaut du drapeau d'onboarding, reproduit le soir
+            // même où je le dénonçais. `lib/geoloc.js` tient déjà cette
+            // mémoire, et l'accueil la relit par `lirePositionMemorisee`.
             try {
-              localStorage.setItem('yoppaa_position', JSON.stringify({
-                lat: pos.coords.latitude, lon: pos.coords.longitude, le: Date.now(),
-              }))
+              memoriserPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+              // Et on note que la question a été posée, sinon l'accueil
+              // rouvrirait la fenêtre du navigateur juste après.
+              marquerDemandee()
             } catch { /* stockage refusé : on n'empêche pas d'avancer pour autant */ }
             allerEcranSuivant()
           },

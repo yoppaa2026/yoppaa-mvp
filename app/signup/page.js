@@ -822,7 +822,7 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
       // découvrir sur son premier versement, c'est exactement le reproche qu'on
       // ne veut pas s'attirer. La page /legal les chiffre déjà, le signup doit
       // dire la même chose.
-      desc: 'Ton client paie son acompte ou sa commande depuis ta fiche, et l’argent arrive sur ton compte bancaire sous quelques jours. Yoppaa ne prend aucune commission. Seuls les frais de Stripe, notre prestataire de paiement, s’appliquent : environ 1,4 % + 0,25 € par transaction pour une carte européenne.',
+      desc: 'Ton client paie son acompte ou sa commande depuis ta fiche, et l’argent arrive sur ton compte bancaire sous quelques jours. Yoppaa ne prend aucune commission. Seuls les frais de Stripe, notre prestataire de paiement, s’appliquent : à partir de 1,5 % + 0,25 € par transaction pour une carte européenne standard, davantage pour une carte premium ou étrangère.',
       plan: 'vendre',
     },
     {

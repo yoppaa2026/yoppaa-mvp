@@ -87,7 +87,8 @@ export async function POST(request) {
 
     // Crée la Checkout Session en DIRECT CHARGE (cf. memory project-paiement-stripe).
     // Le paiement est cree DANS le compte du connected account (pas la plateforme),
-    // donc les frais Stripe sont preleves sur le commercant (1.4% + 0.25€) et le
+    // donc les frais Stripe sont preleves sur le commercant (1.5% + 0.25€ sur
+    // une carte europeenne standard, 2.8% sur une premium) et le
     // montant net arrive direct sur son IBAN. Yoppaa = zero commission, zero frais.
     //
     // Difference vs Destination Charge : on passe { stripeAccount } comme 2eme arg

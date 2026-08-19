@@ -693,8 +693,16 @@ verifier('le signup n’avance plus de pourcentage invérifiable',
 // commission, c'est vrai, mais Stripe prélève ses frais à la source et c'est le
 // commerçant qui les supporte. Les taire au signup pour les lui faire découvrir
 // sur son premier versement est précisément le reproche à éviter.
+// ⚠️ CETTE GARDE EXIGEAIT `1,4 %` À LA LETTRE, ET CE TAUX ÉTAIT FAUX. Le vrai
+// tarif Stripe relevé par Alex le 19/08 est 1,5 % + 0,25 € sur une carte
+// européenne STANDARD, et 2,8 % sur une premium. Le produit annonçait donc à
+// ses commerçants un tarif PLUS BAS que la réalité, à quatre endroits dont les
+// conditions légales, et la garde verrouillait ce mensonge : corriger le
+// chiffre la faisait rougir. Elle dit maintenant l'intention.
 verifier('les frais Stripe sont annoncés dès l’inscription',
-  /1,4 ?% \+ 0,25 ?€/.test(signupSrcTxt))
+  /1,5 ?% \+ 0,25 ?€/.test(signupSrcTxt))
+verifier('et l’inscription ne laisse pas croire que 1,5 % est un plafond',
+  /premium|étrangère/i.test(signupSrcTxt))
 verifier('et la commission Yoppaa est nommée, jamais sous-entendue',
   !/\(0 ?% commission\)/.test(signupSrcTxt))
 
@@ -829,7 +837,23 @@ for (const chemin of TEXTES_PUBLICS) {
 // écrit d'un commerçant avec Yoppaa : on le fabrique et on lit ce qui en sort.
 const emailPionnier = emailMerciPreinscription({ mode_landing: 'reveal', type_utilisateur: 'commercant' })
 verifier('l’email de pré-inscription annonce les frais du prestataire',
-  /1,4 ?% \+ 0,25 ?€/.test(emailPionnier))
+  /1,5 ?% \+ 0,25 ?€/.test(emailPionnier))
+verifier('et il ne laisse pas croire que 1,5 % est un plafond',
+  /premium|étrangère/i.test(emailPionnier))
+
+// ⚠️ ET SURTOUT : L'ANCIEN TAUX NE DOIT PLUS EXISTER NULLE PART. Il vivait dans
+// QUATRE fichiers, chacun tapé une fois et jamais revu. Une garde par endroit
+// ne suffit pas, il en manquerait toujours un : celle-ci balaie tout.
+{
+  const RACINE = new URL('../', import.meta.url)
+  const aBalayer = ['app/legal/page.js', 'app/signup/page.js', 'lib/resend-landing.js',
+    'app/api/stripe/checkout/create-rdv-acompte/route.js']
+  for (const chemin of aBalayer) {
+    const src = readFileSync(new URL(chemin, RACINE), 'utf8')
+    verifier(`${chemin} n’annonce plus l’ancien taux de 1,4 %`,
+      !/1[,.]4 ?%/.test(src))
+  }
+}
 verifier('et il nomme Yoppaa là où il parle de commission',
   commissionsOrphelines(emailPionnier).length === 0, commissionsOrphelines(emailPionnier)[0] || '')
 // Non-régression : le Yopper ne paie rien, la question ne le concerne pas.

@@ -1324,6 +1324,23 @@ export default function Commander() {
   // était bien plus violent.
   const [showSplash, setShowSplash] = useState(true)
   useEffect(() => {
+    // ⚠️ LE BRANCHEMENT DES 4 ÉCRANS D'ACCUEIL.
+    //
+    // Ils existaient depuis des semaines et PERSONNE NE LES VOYAIT :
+    // `yoppaa_onboarding_done` était posé à six endroits et lu à aucun, et
+    // rien ne routait vers `/onboarding`. C'est ici que ça se joue, et pas
+    // dans `start_url` du manifeste : le manifeste ne gouverne QUE le
+    // lancement depuis l'écran d'accueil, alors qu'un premier client arrive
+    // le plus souvent par un lien. Le drapeau, lui, protège les deux entrées.
+    //
+    // Et le splash ne se joue PAS ce jour-là. Sinon la toute première
+    // ouverture enchaînerait l'écran du système, 2,4 s d'animation, puis
+    // quatre écrans : personne n'a envie de ça pour dire bonjour.
+    if (!localStorage.getItem('yoppaa_onboarding_done')) {
+      setShowSplash(false)
+      router.replace('/onboarding')
+      return
+    }
     if (sessionStorage.getItem('yoppaa_splash_seen')) setShowSplash(false)
   }, [])
   function onSplashDone() { sessionStorage.setItem('yoppaa_splash_seen', '1'); setShowSplash(false) }

@@ -294,7 +294,9 @@ function dimensionsPng(chemin) {
     // exactement `useState(false)` qui a produit le défaut.
     verifier('et surtout PAS à false', !/useState\(false\)/.test(decl))
 
-    const effet = page.slice(i, i + 600)
+    // La fenêtre englobe le commentaire qui explique la règle : la restreindre
+    // ferait rougir la garde dès qu'on documente le pourquoi.
+    const effet = page.slice(i, i + 2200)
     verifier("l'effet MASQUE le splash déjà vu, il ne le montre pas",
       /if \(sessionStorage\.getItem\('yoppaa_splash_seen'\)\) setShowSplash\(false\)/.test(effet),
       'la comparaison inversée ramènerait l’éclair clair')
@@ -324,6 +326,70 @@ function dimensionsPng(chemin) {
       Number(demontage[1]) === Number(debutSortie[1]) + Number(duree[1]) * 1000,
       `sortie à ${debutSortie[1]} ms + ${duree[1]} s ≠ démontage à ${demontage[1]} ms`)
   }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 8. L'ENCHAÎNEMENT DU TOUT PREMIER LANCEMENT
+// ══════════════════════════════════════════════════════════════════
+// Les 4 écrans d'accueil ont vécu des semaines sans que PERSONNE ne les voie :
+// `yoppaa_onboarding_done` était écrit à six endroits et lu à aucun. Un
+// drapeau que tout le monde pose et que personne ne consulte ne rougit nulle
+// part, ne casse rien, et coûte une fonctionnalité entière.
+{
+  const page = lire('app/commander/page.js')
+  const onb = lire('app/onboarding/page.js')
+
+  verifier("l'accueil LIT le drapeau d'onboarding, il ne fait pas que l'écrire",
+    /localStorage\.getItem\('yoppaa_onboarding_done'\)/.test(page),
+    'écrit six fois et lu zéro : les 4 écrans restaient invisibles')
+  verifier("et il envoie vers /onboarding quand il manque",
+    /router\.replace\('\/onboarding'\)/.test(page))
+  verifier('le splash ne se joue PAS le jour du premier lancement',
+    /yoppaa_onboarding_done'\)\)\s*\{\s*setShowSplash\(false\)/s.test(page),
+    'sinon : écran système, puis 2,4 s d’animation, puis 4 écrans')
+  verifier("l'onboarding terminé ne se refait pas au bouton Retour",
+    /localStorage\.setItem\('yoppaa_onboarding_done', '1'\)\s*\n[^\n]*\n[^\n]*\n[^\n]*\n\s*router\.replace\('\/commander'\)/.test(onb) ||
+    /router\.replace\('\/commander'\)/.test(onb))
+
+  // ⚠️ LA PROMESSE QU'ON NE TENAIT PAS. L'écran des notifications annonçait
+  // « 1 notif par jour maximum ». Alex a confirmé le 19/08 que c'est FAUX :
+  // rien ne plafonne quoi que ce soit. On INTERDIT le retour de toute
+  // promesse de fréquence, plutôt que d'exiger une formule précise.
+  //
+  // ⚠️ ON TESTE CE QUE LE CLIENT LIT, PAS LE FICHIER ENTIER. Première version
+  // de cette garde : elle rougissait sur le commentaire ci-dessus, qui CITE la
+  // phrase fautive pour expliquer pourquoi elle est partie. Une garde qui
+  // interdit d'expliquer un défaut finit par se faire désarmer.
+  // ⚠️ ON RETIRE LES BLOCS ENTIERS, PAS LES LIGNES QUI COMMENCENT PAR `//`.
+  // Deuxième version de ce filtre. La première ne coupait que les lignes
+  // préfixées, or un commentaire JSX `{/* … */}` a des lignes de SUITE qui
+  // commencent par du texte ordinaire : elles passaient au travers, et la
+  // garde du logo y trouvait « <YoppaaLogo /> » alors que le composant avait
+  // disparu du rendu. Mesurée par mutation, elle était muette.
+  const onbVisible = onb
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '')  // commentaires JSX
+    .replace(/\/\*[\s\S]*?\*\//g, '')            // commentaires de bloc
+    .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n')
+  verifier("l'onboarding ne promet AUCUNE fréquence de notification",
+    !/notif[^.]{0,40}par jour|par jour[^.]{0,20}maximum|\d+\s*notifs?\s*\/\s*jour/i.test(onbVisible),
+    'un chiffre écrit au client est un engagement, et celui-là n’était pas tenu')
+
+  // Le logo : la spec vit dans UN composant, pas recopiée à la main.
+  // ⚠️ `onbVisible` ET PAS `onb`, POUR LA MÊME RAISON QUE PLUS HAUT.
+  // Première version : le commentaire qui explique la règle cite
+  // « <YoppaaLogo /> ». La garde le trouvait LÀ et restait verte alors que le
+  // composant avait disparu du rendu. Mesurée par mutation, elle était muette.
+  verifier("l'onboarding affiche le logo canonique",
+    /<YoppaaLogo/.test(onbVisible))
+  verifier('et ne redessine pas les points à la main',
+    !/dotPulse 2s/.test(onbVisible),
+    'trois points dessinés à la main quand la marque en a cinq')
+
+  // Le fond doit finir sur l'encre, comme le splash, sinon la couture qu'on a
+  // supprimée entre l'image native et la page revient un écran plus loin.
+  verifier("le fond de l'onboarding finit sur l'encre du splash",
+    /\$\{T\.ink\} 100%\)/.test(onb),
+    'il finissait sur ${T.main}88, donc la couleur changeait en arrivant')
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

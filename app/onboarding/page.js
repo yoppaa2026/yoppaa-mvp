@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import {
   Bell, MapPin, Croissant, Sandwich, Pizza, Flame, Package, Star, History, Gift,
 } from 'lucide-react'
+import YoppaaLogo from '@/app/components/YoppaaLogo'
 
 const T = {
   bg:      '#F8F6FF',
@@ -32,7 +33,15 @@ const ECRANS = [
     Icon: Bell,
     visuel: 'notifs',
     titre: 'Mets en favori,\nrate plus rien.',
-    sousTitre: 'Marque tes commerçants préférés et tu recevras leurs deals et actus. 1 notif par jour maximum, jamais de spam.',
+    // ⚠️ NE JAMAIS PROMETTRE UNE FRÉQUENCE ICI.
+    // Cet écran disait « 1 notif par jour maximum ». Alex a confirmé le 19/08
+    // que c'est FAUX : rien dans le code des push ne plafonne quoi que ce
+    // soit. Un chiffre écrit au client est un engagement, et celui-là, on ne
+    // le tenait pas. Ce qui est vrai, en revanche, c'est QUI déclenche une
+    // notification : les commerçants qu'il a lui-même mis en favori, et eux
+    // seuls. C'est d'ailleurs plus fort qu'un plafond, parce que c'est lui qui
+    // tient la liste.
+    sousTitre: 'Marque tes commerçants préférés et reçois leurs deals et leurs actus. Eux seuls, et rien d’autre.',
     cta: 'Activer les notifications',
     ctaSecondaire: 'Pas maintenant',
     skip: true,
@@ -64,25 +73,14 @@ const ECRANS = [
 function VisuelYoppaa() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
-      {/* 3 points yo·pp·aa animés */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        {[
-          { c: 'rgba(255,255,255,0.5)', s: 10, delay: '0s' },
-          { c: T.light, s: 16, delay: '0.2s' },
-          { c: T.mid, s: 10, delay: '0.4s' },
-        ].map((d, i) => (
-          <div key={i} style={{
-            width: d.s, height: d.s, borderRadius: '50%', background: d.c,
-            animation: `dotPulse 2s ease-in-out ${d.delay} infinite`,
-            boxShadow: `0 0 20px ${d.c}88`,
-          }}/>
-        ))}
-      </div>
-
-      {/* Wordmark */}
-      <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '3.5rem', color: '#fff', letterSpacing: '-0.05em', lineHeight: 1 }}>
-        yoppaa
-      </p>
+      {/* ⚠️ LE LOGO CANONIQUE, PAS UNE RECOPIE.
+          Cet écran dessinait TROIS points à la main, et un wordmark blanc uni,
+          alors que la marque en a CINQ et que le wordmark est tricolore. On
+          venait de refaire l'icône ET le splash sur les 5 points : l'onboarding
+          était le dernier endroit qui racontait une autre histoire, et c'est le
+          PREMIER que voit un nouveau client. `<YoppaaLogo />` porte la spec,
+          donc elle ne peut plus diverger ici sans diverger partout. */}
+      <YoppaaLogo size={56} mode="dark" />
 
       {/* Cards commerçants simulées */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 280 }}>
@@ -264,7 +262,10 @@ export default function OnboardingPage() {
 
   function terminer() {
     localStorage.setItem('yoppaa_onboarding_done', '1')
-    router.push('/commander')
+    // ⚠️ `replace`, jamais `push` : l'onboarding ne se refait pas. Avec `push`,
+    // le bouton Retour du téléphone ramenait dans un accueil déjà terminé, et
+    // le client s'y retrouvait coincé à devoir le repasser.
+    router.replace('/commander')
   }
 
   function gererCta() {
@@ -345,7 +346,12 @@ export default function OnboardingPage() {
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 
-      <div className="wrap" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.main}88 100%)` }}>
+      {/* ⚠️ CE DÉGRADÉ EST CELUI DU SPLASH, ARRÊT POUR ARRÊT.
+          Il finissait sur `${T.main}88` là où le splash finit sur l'encre : en
+          passant de l'un à l'autre, le fond changeait de couleur. C'est
+          exactement la couture qu'on a passé la soirée à supprimer entre
+          l'image native et la page, et elle réapparaissait un écran plus loin. */}
+      <div className="wrap" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.ink} 100%)` }}>
 
         {/* Barre de progression */}
         <div style={{ padding: '1rem 1.25rem 0', flexShrink: 0 }}>

@@ -6,6 +6,7 @@ import {
   Scissors, Truck, CalendarCheck, Repeat, Sunrise, Ticket,
 } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
+import OneSignalInit, { activerNotifications } from '@/app/components/OneSignalInit'
 
 const T = {
   bg:      '#F8F6FF',
@@ -17,6 +18,14 @@ const T = {
   ink:     '#1A0840',
   deep:    '#2D0F6B',
   muted:   '#6B7280',
+}
+
+// Chaque refus possible a sa phrase. « Ça n'a pas marché » n'aide personne.
+const RAISONS_PUSH = {
+  refuse_os:    'Les notifications sont bloquées pour Yoppaa dans les réglages de ton téléphone. Tu peux les rouvrir là-bas quand tu veux.',
+  non_supporte: 'Ton navigateur ne gère pas les notifications. Tout le reste de Yoppaa fonctionne normalement.',
+  sdk_absent:   'Les notifications n’ont pas pu démarrer. Réessaie depuis ton profil, ça n’empêche rien d’autre.',
+  defaut:       'Les notifications n’ont pas été activées. Tu pourras le faire depuis ton profil.',
 }
 
 const ECRANS = [
@@ -274,6 +283,7 @@ export default function OnboardingPage() {
   const router = useRouter()
   const [ecranIdx, setEcranIdx] = useState(0)
   const [sortie, setSortie] = useState(false)
+  const [note, setNote] = useState(null)
 
   const ecran = ECRANS[ecranIdx]
 
@@ -294,20 +304,38 @@ export default function OnboardingPage() {
     router.replace('/commander')
   }
 
-  function gererCta() {
+  async function gererCta() {
     if (ecran.id === 'notifications') {
-      // Demander permission notifications
-      if ('Notification' in window) {
-        Notification.requestPermission().then(() => allerEcranSuivant())
-      } else {
-        allerEcranSuivant()
-      }
+      // ⚠️ `activerNotifications()` ET SURTOUT PAS `Notification.requestPermission()`.
+      // Nos push passent par OneSignal : demander la permission en direct la
+      // faisait accorder SANS créer le moindre abonnement. Le client disait
+      // oui, ne recevait jamais rien, et RIEN ne le signalait, ni erreur ni
+      // journal. La fonction porte aussi le correctif iOS du 18/07 : le prompt
+      // natif doit partir DANS le geste de clic, sinon iOS perd le geste et le
+      // bouton reste figé. D'où l'appel direct ici, sans await préalable.
+      setNote(null)
+      const r = await activerNotifications()
+      if (r?.ok) { allerEcranSuivant(); return }
+      // ⚠️ Un refus se NOMME. Passer à l'écran suivant en silence laisserait
+      // croire que c'est activé, et le client attendrait des notifications qui
+      // ne viendraient jamais.
+      setNote(RAISONS_PUSH[r?.raison] || RAISONS_PUSH.defaut)
     } else if (ecran.id === 'localisation') {
-      // Demander permission géolocalisation
       if ('geolocation' in navigator) {
+        setNote(null)
         navigator.geolocation.getCurrentPosition(
-          () => allerEcranSuivant(),
-          () => allerEcranSuivant()
+          (pos) => {
+            // ⚠️ La position était demandée puis JETÉE : les deux branches
+            // passaient à l'écran suivant sans rien retenir. On la garde, avec
+            // sa date, pour que l'accueil sache d'où regarder.
+            try {
+              localStorage.setItem('yoppaa_position', JSON.stringify({
+                lat: pos.coords.latitude, lon: pos.coords.longitude, le: Date.now(),
+              }))
+            } catch { /* stockage refusé : on n'empêche pas d'avancer pour autant */ }
+            allerEcranSuivant()
+          },
+          () => setNote('La position n’a pas été autorisée. Tu peux continuer, et indiquer ta commune toi-même.'),
         )
       } else {
         allerEcranSuivant()
@@ -377,6 +405,12 @@ export default function OnboardingPage() {
           passant de l'un à l'autre, le fond changeait de couleur. C'est
           exactement la couture qu'on a passé la soirée à supprimer entre
           l'image native et la page, et elle réapparaissait un écran plus loin. */}
+      {/* ⚠️ SANS CE MONTAGE, `activerNotifications()` rend `sdk_absent` et ne
+          fait RIEN : le SDK n’était initialisé que sur /commander. Sans compte
+          à ce stade, l’abonnement est anonyme, et `login()` le recolle au
+          Yopper à la connexion. */}
+      <OneSignalInit />
+
       <div className="wrap" style={{ background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 50%, ${T.ink} 100%)` }}>
 
         {/* Barre de progression */}
@@ -442,6 +476,11 @@ export default function OnboardingPage() {
 
             {/* CTA principal */}
             <div style={{ animation: 'slideUp 0.4s ease 0.25s both' }}>
+              {note && (
+                <p style={{ fontSize: '0.78rem', lineHeight: 1.4, color: T.light, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, padding: '0.625rem 0.875rem', marginBottom: 10 }}>
+                  {note}
+                </p>
+              )}
               <button className="btn-primary" onClick={gererCta}>
                 {ecran.cta}
               </button>

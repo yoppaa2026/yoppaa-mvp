@@ -27,8 +27,25 @@ export default function PillsStatut({ commercant, dealActif = false, actuActive 
   const padding  = size === 'lg' ? '5px 12px' : xs ? '3.5px 9px' : '4px 10px'
   const gap      = xs ? 4 : 5
 
+  // ⚠️ ELLES SE COUPAIENT EN SILENCE (Alex, 19/08). En `xs`, seule taille
+  // utilisée sur la carte du listing, la rangée était en `nowrap` avec
+  // `overflow: hidden` : tout ce qui dépassait la largeur de la carte
+  // disparaissait sans le moindre signe. Or `Fidélité` et `Bons cadeaux` sont
+  // empilées EN DERNIER par `getPillsStatut` : ce sont précisément elles qui
+  // tombaient. Des commerçants paient pour ces deux fonctions, et personne ne
+  // voyait qu'ils les avaient.
+  //
+  // On revient à la ligne plutôt que de faire défiler. Une information ne se
+  // mérite pas au doigt, et une carte dans une liste verticale est justement
+  // l'endroit où un geste horizontal fabrique une zone morte : voir
+  // `reference_zone_morte_touch_action`, trois jours perdus. Quelques pixels de
+  // hauteur coûtent moins cher qu'une capacité invisible.
+  //
+  // ⚠️ ET `overflow: hidden` ROGNAIT LE POINT QUI PULSE, posé en négatif hors
+  // de la pastille : le signal « ça se passe maintenant » était amputé sur la
+  // carte, là où il sert le plus.
   return (
-    <div style={{ display: 'flex', flexWrap: xs ? 'nowrap' : 'wrap', gap, overflow: xs ? 'hidden' : 'visible', minWidth: 0 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap, overflow: 'visible', minWidth: 0 }}>
       {pills.map(p => (
         <span key={p.key}
           style={{

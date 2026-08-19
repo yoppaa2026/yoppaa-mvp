@@ -13,7 +13,7 @@
 
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, extname } from 'node:path'
-import { PLAN_FEATURES, canDo, canDoAvecCategorie, resolvePlan } from '../lib/plans.js'
+import { PLAN_FEATURES, canDo, canDoAvecCategorie, resolvePlan, getPillsStatut } from '../lib/plans.js'
 
 const racine = process.cwd()
 const DOSSIERS = ['app', 'lib']
@@ -166,6 +166,44 @@ verifier('le RDV passe chez une vitrine', canDoAvecCategorie('vendre', 'rdv', 'v
   // Et elle décrit ce qui existe VRAIMENT pour le détail.
   verifier('elle annonce le retrait en magasin et l\'expédition',
     /retrait en magasin ou expédition/i.test(signup))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LES PASTILLES DE CAPACITÉS — ce qu'un commerçant PAIE doit se voir
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ AUCUN BANC NE LES COUVRAIT, et elles se coupaient en silence depuis le
+// 10/08 (Alex, 19/08). Sur la carte du listing, la rangée était en `nowrap`
+// avec `overflow: hidden` : `Fidélité` et `Bons cadeaux`, empilées EN DERNIER
+// par `getPillsStatut`, tombaient hors de la carte sans le moindre signe.
+{
+  const COMMERCE_COMPLET = {
+    plan: 'vendre', categorie: 'alimentaire',
+    fidelite_actif: true, bons_cadeaux_actif: true, livraison_actif: true,
+  }
+  const cles = getPillsStatut(COMMERCE_COMPLET, { dealActif: true, actuActive: true }).map(p => p.key)
+  verifier('un commerce qui a tout activé annonce sa fidélité', cles.includes('fidelite'))
+  verifier('et ses bons cadeaux', cles.includes('bons'))
+  // ⚠️ ELLES SONT LES DERNIÈRES DE LA LISTE, et c'est ce qui les rendait
+  // vulnérables. Si un jour l'ordre change, cette garde le dira.
+  verifier('et ce sont bien les deux dernières, donc les plus exposées',
+    cles.slice(-2).join(',') === 'fidelite,bons')
+  // Une capacité éteinte ne s'annonce pas : une pastille barrée vaut moins
+  // qu'une carte sobre (refonte du 03/08).
+  const eteintes = getPillsStatut({ ...COMMERCE_COMPLET, fidelite_actif: false, bons_cadeaux_actif: false }).map(p => p.key)
+  verifier('une fidélité coupée ne s’annonce pas', !eteintes.includes('fidelite'))
+  verifier('des bons cadeaux coupés non plus', !eteintes.includes('bons'))
+
+  // ⚠️ ON INTERDIT LE PIÈGE plutôt que d'exiger une écriture correcte
+  // particulière : c'est la leçon des gardes qui verrouillaient le défaut.
+  const srcPills = readFileSync(new URL('../app/commander/PillsStatut.js', import.meta.url), 'utf8')
+  verifier('la rangée de pastilles ne coupe plus ce qui dépasse',
+    !/overflow:\s*xs\s*\?\s*'hidden'/.test(srcPills) && !/flexWrap:\s*xs\s*\?\s*'nowrap'/.test(srcPills))
+  // Le point qui pulse est posé en NÉGATIF hors de la pastille : un parent qui
+  // masque le débordement l'ampute, et le signal « ça se passe maintenant »
+  // est justement celui qu'on veut voir sur la carte.
+  verifier('et le point qui pulse n’est plus rogné',
+    /overflow:\s*'visible'/.test(srcPills))
 }
 
 if (clesDynamiques.length > 0) {

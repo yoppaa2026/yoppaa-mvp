@@ -5,6 +5,9 @@ import { supabase } from '@/lib/supabase'
 import { fetchYopper, estSessionPerdue } from '@/lib/fetch-yopper'
 import CarteAbonnement from './CarteAbonnement'
 import { libelleRetrait } from '@/lib/libelle-retrait'
+// La décision « reste-t-il quelque chose à gauche, à droite » vit en fonction
+// pure et testée : un voile éteint au mauvais moment cache du contenu.
+import { bordsDefilement } from '@/lib/responsive'
 import { referenceCommande } from '@/lib/numero-commande'
 import { resteAEncaisserCommande, etatPaiementClient, couleurPaiement } from '@/lib/rdv-paiement'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
@@ -1058,85 +1061,118 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
   )
 }
 
-// Barre de categories scrollable horizontalement avec indicateurs gauche/droite cliquables.
-// Sur PC : molette verticale = scroll horizontal (la scrollbar est masquee pour le design).
-function CategoriesScroll({ familleActive, setFamilleActive, metierActif, setMetierActif, metiersZone }) {
-  const scrollRef = useRef(null)
-  const [canScrollLeft, setCanScrollLeft]   = useState(false)
-  const [canScrollRight, setCanScrollRight] = useState(false)
+// Une bande de pastilles qui défile, et qui DIT qu'elle continue.
+//
+// ⚠️ UNE BARRE PLUS LARGE QUE L'ÉCRAN DOIT L'ANNONCER (règle d'Alex). La rangée
+// des familles portait bien son voile et ses chevrons ; la rangée des MÉTIERS,
+// juste en dessous, défilait en SILENCE (Alex, 19/08). Le client ne voyait
+// qu'une partie des métiers présents dans sa zone, et n'avait aucune raison
+// d'aller chercher les autres.
+//
+// ⚠️ ET ON NE DUPLIQUE PAS LA PREMIÈRE RANGÉE, ON LA FACTORISE. La copier
+// aurait copié son défaut : elle ne mesurait ses bords QU'AU MONTAGE. Ses
+// familles étant fixes, ça passait ; les métiers, eux, changent à chaque
+// famille choisie, et les chevrons seraient restés sur l'état précédent, à
+// promettre ou à cacher du contenu au hasard. Un observateur de taille règle
+// les deux cas d'un coup.
+//
+// ⚠️ UN MASQUE, JAMAIS UN FLOU : un dégradé vers la couleur du panneau. Le flou
+// gelait le défilement sur iPhone, voir `reference_scroll_jank_ios`.
+function BandeCategories({ enfants, libelle, couleurFond, pulse = false, style }) {
+  const piste = useRef(null)
+  const [bords, setBords] = useState({ gauche: false, droite: false })
 
   useEffect(() => {
-    const el = scrollRef.current
+    const el = piste.current
     if (!el) return
-    function check() {
-      setCanScrollLeft(el.scrollLeft > 2)
-      setCanScrollRight(el.scrollLeft + el.clientWidth + 2 < el.scrollWidth)
+    const mesurer = () => {
+      const b = bordsDefilement(el)
+      setBords(prec => (prec.gauche === b.gauche && prec.droite === b.droite) ? prec : b)
     }
-    check()
-    el.addEventListener('scroll', check, { passive: true })
-    window.addEventListener('resize', check)
-    // Molette verticale -> scroll horizontal sur PC (non-touchpad). On garde le scroll natif touchpad horizontal.
+    mesurer()
+    el.addEventListener('scroll', mesurer, { passive: true })
+    window.addEventListener('resize', mesurer)
+    // Molette verticale -> défilement horizontal sur PC. Le geste horizontal
+    // natif du pavé tactile reste intact.
     function onWheel(e) {
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        el.scrollLeft += e.deltaY
-        e.preventDefault()
-      }
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { el.scrollLeft += e.deltaY; e.preventDefault() }
     }
     el.addEventListener('wheel', onWheel, { passive: false })
+    const obs = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(mesurer) : null
+    if (obs) { obs.observe(el); for (const enfant of el.children) obs.observe(enfant) }
     return () => {
-      el.removeEventListener('scroll', check)
+      el.removeEventListener('scroll', mesurer)
       el.removeEventListener('wheel', onWheel)
-      window.removeEventListener('resize', check)
+      window.removeEventListener('resize', mesurer)
+      obs?.disconnect()
     }
-  }, [])
+  }, [enfants])
 
-  function scrollBy(dir) {
-    const el = scrollRef.current
-    if (!el) return
-    el.scrollBy({ left: dir * Math.max(180, el.clientWidth * 0.7), behavior: 'smooth' })
+  const glisser = (sens) => {
+    const el = piste.current
+    if (el) el.scrollBy({ left: sens * Math.max(180, el.clientWidth * 0.7), behavior: 'smooth' })
+  }
+
+  const bouton = (cote, actif) => {
+    const gauche = cote === 'gauche'
+    return (
+      <button type="button" onClick={() => glisser(gauche ? -1 : 1)}
+        aria-label={`${libelle} ${gauche ? 'précédents' : 'suivants'}`}
+        aria-hidden={!actif} tabIndex={actif ? 0 : -1}
+        style={{
+          position: 'absolute', top: 0, bottom: '0.875rem', width: 42, padding: 0, border: 'none',
+          [gauche ? 'left' : 'right']: 0,
+          [gauche ? 'paddingLeft' : 'paddingRight']: 6,
+          display: 'flex', alignItems: 'center', justifyContent: gauche ? 'flex-start' : 'flex-end',
+          background: `linear-gradient(to ${gauche ? 'left' : 'right'}, transparent, ${couleurFond} 70%)`,
+          cursor: 'pointer', opacity: actif ? 1 : 0,
+          pointerEvents: actif ? 'auto' : 'none', transition: 'opacity 0.2s',
+        }}>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 18, height: 18, borderRadius: '50%', background: 'rgba(255,255,255,0.15)',
+          animation: (pulse && !gauche) ? 'cats-chev-pulse 1.4s ease-in-out infinite' : 'none',
+        }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <path d={gauche ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'}/>
+          </svg>
+        </span>
+      </button>
+    )
   }
 
   return (
-    <div>
     <div style={{ position: 'relative' }}>
-      <div ref={scrollRef} className="cats">
-        {FAMILLES.map(f => (
-          <button key={f.key} onClick={() => { setFamilleActive(f.key); setMetierActif(null) }}
-            style={{ flexShrink: 0, padding: '0.45rem 1rem', borderRadius: 100, border: familleActive===f.key ? 'none' : `1px solid ${T.light}33`, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', whiteSpace: 'nowrap', background: familleActive===f.key ? '#fff' : 'rgba(255,255,255,0.08)', color: familleActive===f.key ? T.main : '#fff', transition: 'all 0.15s', boxShadow: familleActive===f.key ? `0 4px 14px rgba(255,255,255,0.25)` : 'none', letterSpacing: '-0.2px' }}>
-            {f.label}
-          </button>
-        ))}
-      </div>
-      {/* Fade + chevron CLIQUABLE a gauche (quand scrolle) */}
-      <button aria-label="Categories precedentes" onClick={() => scrollBy(-1)}
-        style={{ position: 'absolute', top: 0, left: 0, bottom: '0.875rem', width: 42, padding: 0, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: 6, background: `linear-gradient(to left, transparent, ${T.bgPanel} 70%)`, cursor: 'pointer', opacity: canScrollLeft ? 1 : 0, pointerEvents: canScrollLeft ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: 'rgba(255,255,255,0.15)' }}>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 6l-6 6 6 6"/>
-          </svg>
-        </span>
-      </button>
-      {/* Fade + chevron CLIQUABLE a droite (quand il en reste) */}
-      <button aria-label="Categories suivantes" onClick={() => scrollBy(1)}
-        style={{ position: 'absolute', top: 0, right: 0, bottom: '0.875rem', width: 42, padding: 0, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 6, background: `linear-gradient(to right, transparent, ${T.bgPanel} 70%)`, cursor: 'pointer', opacity: canScrollRight ? 1 : 0, pointerEvents: canScrollRight ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', animation: 'cats-chev-pulse 1.4s ease-in-out infinite' }}>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 6l6 6-6 6"/>
-          </svg>
-        </span>
-      </button>
-      <style>{`
-        @keyframes cats-chev-pulse {
-          0%, 100% { transform: translateX(0);   opacity: 1; }
-          50%      { transform: translateX(3px); opacity: 0.6; }
-        }
-      `}</style>
+      <div ref={piste} className="cats" style={style}>{enfants}</div>
+      {bouton('gauche', bords.gauche)}
+      {bouton('droite', bords.droite)}
     </div>
+  )
+}
+
+// Les deux rangées de catégories de l'accueil : les familles, puis les métiers
+// présents dans la zone pour la famille choisie.
+function CategoriesScroll({ familleActive, setFamilleActive, metierActif, setMetierActif, metiersZone }) {
+  return (
+    <div>
+    {/* Rangée 1 : les familles. Le chevron de droite pulse, c'est la première
+        invitation au geste que voit un visiteur qui arrive. */}
+    <BandeCategories libelle="Catégories" couleurFond={T.bgPanel} pulse enfants={
+      FAMILLES.map(f => (
+        <button key={f.key} onClick={() => { setFamilleActive(f.key); setMetierActif(null) }}
+          style={{ flexShrink: 0, padding: '0.45rem 1rem', borderRadius: 100, border: familleActive===f.key ? 'none' : `1px solid ${T.light}33`, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', whiteSpace: 'nowrap', background: familleActive===f.key ? '#fff' : 'rgba(255,255,255,0.08)', color: familleActive===f.key ? T.main : '#fff', transition: 'all 0.15s', boxShadow: familleActive===f.key ? `0 4px 14px rgba(255,255,255,0.25)` : 'none', letterSpacing: '-0.2px' }}>
+          {f.label}
+        </button>
+      ))
+    }/>
     {/* Rangée 2 : métiers présents dans la zone pour la famille choisie
-        (avec compteur). Toggle : retaper le métier actif revient à la famille. */}
+        (avec compteur). Toggle : retaper le métier actif revient à la famille.
+        ⚠️ Elle défilait SANS RIEN DIRE jusqu'au 19/08 : voile et chevrons
+        s'arrêtaient à la rangée du dessus. Pas de pulsation ici, un seul
+        clignotement à l'écran suffit à dire « ça continue ». */}
     {familleActive !== 'tous' && metiersZone.length > 0 && (
-      <div className="cats" style={{ marginTop: '-0.25rem' }}>
-        {metiersZone.map(([metier, n]) => {
+      <BandeCategories libelle="Métiers" couleurFond={T.bgPanel} style={{ marginTop: '-0.25rem' }} enfants={
+        metiersZone.map(([metier, n]) => {
           const actif = metierActif === metier
           return (
             <button key={metier} onClick={() => setMetierActif(actif ? null : metier)}
@@ -1144,9 +1180,18 @@ function CategoriesScroll({ familleActive, setFamilleActive, metierActif, setMet
               {metier}<span style={{ marginLeft: 5, opacity: 0.6, fontWeight: 800 }}>{n}</span>
             </button>
           )
-        })}
-      </div>
+        })
+      }/>
     )}
+    <style>{`
+      @keyframes cats-chev-pulse {
+        0%, 100% { transform: translateX(0);   opacity: 1; }
+        50%      { transform: translateX(3px); opacity: 0.6; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        @keyframes cats-chev-pulse { 0%, 100% { transform: none; opacity: 1; } }
+      }
+    `}</style>
     </div>
   )
 }

@@ -35,7 +35,7 @@ import BandeDefilante from '@/app/components/BandeDefilante'
 // et un food truck n'ont pas le même métier et ont le même besoin. Cette
 // section a cessé d'être conditionnée au métier le 12/08, et son dernier usage,
 // un titre qui changeait selon la catégorie, est parti le 13/08.
-import { jourLocalISO, jourSemaineLocal } from '@/lib/timezone'
+import { jourLocalISO, jourSemaineLocal, jourBruxelles } from '@/lib/timezone'
 import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
 import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
@@ -7271,7 +7271,9 @@ function TabRdvAbonnements({ commercantId, toast }) {
     const presta = prestations.find(p => p.id === formule.prestation_id)
     if (!presta) return toast('Le cours de cette formule n’existe plus', 'error')
 
-    const aujourdhui = new Date().toISOString().slice(0, 10)
+    // ⚠️ EN HEURE BELGE. `toISOString()` rend le jour de Greenwich : une
+    // inscription prise à 00h30 aurait fait démarrer le contrat la VEILLE.
+    const aujourdhui = jourBruxelles()
     const fenetre = fenetreDeValidite(formule, { achatLe: aujourdhui })
     if (!fenetre) return toast('Cette formule est incomplète, corrige-la d’abord', 'error')
 
@@ -7334,7 +7336,9 @@ function TabRdvAbonnements({ commercantId, toast }) {
 
   async function resilier(a) {
     if (!await confirme(confirmationSimple({ titre: `Résilier l’abonnement de ${a.client_prenom} ?`, message: 'Ses séances à venir seront annulées. Celles déjà passées restent dans ton historique.', action: 'Oui, résilier l’abonnement' }))) return
-    const aujourdhui = new Date().toISOString().slice(0, 10)
+    // ⚠️ EN HEURE BELGE, sinon une résiliation prononcée à 00h30 travaillerait
+    // sur la journée de la VEILLE et emporterait les séances d'aujourd'hui.
+    const aujourdhui = jourBruxelles()
     const { error } = await supabase.from('abonnements')
       .update({ statut: 'resilie' }).eq('id', a.id)
     if (error) return toast(`Erreur : ${error.message}`, 'error')

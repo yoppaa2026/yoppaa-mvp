@@ -31,6 +31,7 @@ import { programmerRappelRdv } from '@/lib/rappels'
 import { recupererFraisStripe, ventilerFrais } from '@/lib/stripe-frais'
 import { crediterFidelite } from '@/lib/fidelite-server'
 import { canDo } from '@/lib/plans'
+import { jourBruxelles } from '@/lib/timezone'
 import { contratDepuisFormule, resumeContratAchete } from '@/lib/abonnements'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
@@ -407,8 +408,12 @@ async function handleAbonnementSucceeded(paymentIntent, supabase, eventAccount =
   // ⚠️ LA DATE D'ACHAT VIENT DE STRIPE, pas de notre horloge. Un webhook rejoué
   // trois jours plus tard fabriquerait sinon une fenêtre de validité décalée de
   // trois jours, et un carnet de six mois n'aurait pas la durée vendue.
-  const achatLe = new Date((paymentIntent.created || Math.floor(Date.now() / 1000)) * 1000)
-    .toISOString().slice(0, 10)
+  //
+  // ⚠️ ET EN HEURE BELGE, PAS EN TEMPS UNIVERSEL. Découper l'instant en UTC
+  // rend le jour de Greenwich : un abonnement acheté à 00h30 chez nous serait
+  // daté de la VEILLE, et une année de yoga commencerait un jour trop tôt.
+  // Même défaut que celui trouvé par Alex le 19/08 sur le journal comptable.
+  const achatLe = jourBruxelles(new Date((paymentIntent.created || Math.floor(Date.now() / 1000)) * 1000))
 
   const contrat = contratDepuisFormule(formule, {
     achatLe,

@@ -658,6 +658,101 @@ verifier('et il charge de quoi calculer ce solde',
 verifier('une commande remise sans moyen garde son rattrapage',
   /commande\.statut === 'recupere' && !commande\.encaisse_mode && resteAEncaisserCommande\(commande\) > 0/.test(srcDashCmd))
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LE JOUR COMPTABLE D'UNE ÉCRITURE, ET LA NUIT QUI LE FAISAIT GLISSER
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ DÉFAUT VU PAR ALEX LE 19/08 À 00h28 : un abonnement encaissé cette nuit-là
+// est arrivé daté du 18 dans l'export. `paye_le` est un INSTANT, et le découper
+// en temps universel rend le jour de Greenwich. Minuit à Bruxelles, c'est 22h
+// (été) ou 23h (hiver) la VEILLE en UTC.
+//
+// ⚠️ CE N'EST PAS COSMÉTIQUE : en fin de mois, toutes les ventes de la première
+// heure de la nuit basculent dans le mois précédent ; au 1er janvier, dans
+// l'exercice précédent. C'est un document remis à un comptable.
+{
+  // ── En ÉTÉ, Bruxelles est à UTC+2 ────────────────────────────────────────
+  // 22h28 UTC le 18 = 00h28 le 19 chez nous. Le jour comptable est le 19.
+  const aboNuitEte = {
+    id: 'abo-nuit-ete', paye: true, prix: 400, tva_taux: 21,
+    paye_le: '2026-08-18T22:28:00.000Z', mode_paiement: 'especes', statut: 'actif',
+  }
+  const lignesNuitEte = construireLignes({ abonnements: [aboNuitEte], tauxDefaut: 21 })
+  egal('un abonnement encaissé à 00h28 en été est daté du jour même',
+    lignesNuitEte[0]?.date, '2026-08-19')
+
+  // ── En HIVER, Bruxelles est à UTC+1 ──────────────────────────────────────
+  // ⚠️ LES DEUX SAISONS SE TESTENT. Un correctif écrit avec « +2 » en dur
+  // serait faux d'une heure six mois par an, et le banc ne le verrait pas s'il
+  // ne travaillait qu'en août. Ce projet a déjà payé cette erreur sur les
+  // délais d'annulation.
+  const aboNuitHiver = {
+    id: 'abo-nuit-hiver', paye: true, prix: 400, tva_taux: 21,
+    paye_le: '2026-01-14T23:15:00.000Z', mode_paiement: 'virement', statut: 'actif',
+  }
+  egal('… et en hiver aussi, avec un décalage d’une heure seulement',
+    construireLignes({ abonnements: [aboNuitHiver], tauxDefaut: 21 })[0]?.date, '2026-01-15')
+
+  // ── En pleine journée, rien ne bouge ─────────────────────────────────────
+  const aboMidi = {
+    id: 'abo-midi', paye: true, prix: 400, tva_taux: 21,
+    paye_le: '2026-08-18T12:00:00.000Z', mode_paiement: 'terminal', statut: 'actif',
+  }
+  egal('un encaissement de plein jour garde son jour',
+    construireLignes({ abonnements: [aboMidi], tauxDefaut: 21 })[0]?.date, '2026-08-18')
+
+  // ── Les frères : le solde d'un rendez-vous, et la commande sans date ─────
+  // ⚠️ ILS ÉTAIENT TROIS, PAS UN. Corriger le seul endroit signalé n'est pas
+  // corriger le défaut : c'est la règle du 17/08, vérifiée ici.
+  const rdvNuit = {
+    id: 'rdv-nuit', statut: 'honore', tva_taux: 21,
+    encaisse_montant: 15, encaisse_mode: 'especes',
+    encaisse_le: '2026-08-18T22:40:00.000Z', date_rdv: '2026-08-18',
+    prix_estime: 15, acompte_montant: 0,
+  }
+  const ligneRdvNuit = construireLignes({ rdvs: [rdvNuit], tauxDefaut: 21 })
+    .find(l => l.type === 'Solde RDV')
+  egal('un solde de rendez-vous encaissé après minuit est daté du jour même',
+    ligneRdvNuit?.date, '2026-08-19')
+
+  const cmdeNuit = {
+    id: 'cmd-nuit', statut: 'recupere', total: 20, paye_en_ligne: true,
+    date_commande: null, created_at: '2026-08-18T22:50:00.000Z',
+    commande_articles: [{ article_id: 'a1', prix_unitaire: 20, quantite: 1, tva_taux: 6 }],
+  }
+  egal('une commande sans date de retrait retombe sur le bon jour',
+    construireLignes({ commandes: [cmdeNuit], tauxDefaut: 21 })[0]?.date, '2026-08-19')
+
+  // ── Une colonne DATE ne porte aucun fuseau ───────────────────────────────
+  // ⚠️ ET NE DOIT SURTOUT PAS ÊTRE CONVERTIE. `date_commande` est déjà le jour
+  // civil voulu ; le faire passer par un fuseau le décalerait pour de bon.
+  const cmdeJour = {
+    id: 'cmd-jour', statut: 'recupere', total: 20, paye_en_ligne: true,
+    date_commande: '2026-08-19', created_at: '2026-08-18T22:50:00.000Z',
+    commande_articles: [{ article_id: 'a1', prix_unitaire: 20, quantite: 1, tva_taux: 6 }],
+  }
+  egal('une date de retrait est prise telle quelle',
+    construireLignes({ commandes: [cmdeJour], tauxDefaut: 21 })[0]?.date, '2026-08-19')
+
+  // ── Et le journal range bien la nuit dans le bon jour ────────────────────
+  const journalNuit = journalParJour(lignesNuitEte)
+  egal('le journal ouvre la journée du 19', journalNuit[0]?.date, '2026-08-19')
+  egal('… avec les 400 € dans le seau des espèces', journalNuit[0]?.especes, 400)
+}
+
+// ── LES FRÈRES QUI ÉCRIVENT LA DATE, ET NON PLUS SEULEMENT CELUI QUI LA LIT ─
+{
+  const srcWebhookAbo = readFileSync(new URL('../app/api/stripe/webhook/route.js', import.meta.url), 'utf8')
+  verifier('la date d’achat d’un abonnement en ligne est belge',
+    /const achatLe = jourBruxelles\(/.test(srcWebhookAbo))
+  const srcConfigDates = readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8')
+  // ⚠️ DEUX, PAS UN : l'inscription qui ouvre le contrat, et la résiliation qui
+  // décide quelles séances sont « à venir ». À 00h30, la seconde travaillerait
+  // sur la veille et emporterait les séances d'aujourd'hui.
+  egal('l’inscription et la résiliation datent en heure belge',
+    (srcConfigDates.match(/const aujourdhui = jourBruxelles\(\)/g) || []).length, 2)
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

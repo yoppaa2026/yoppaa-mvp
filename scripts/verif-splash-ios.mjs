@@ -19,9 +19,9 @@
 //      est OUVERT, on ne se contente pas de voir un nom de fichier) ;
 //   3. le fond du générateur est celui du composant, arrêt par arrêt.
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, openSync, readSync, closeSync } from 'node:fs'
 import { join } from 'node:path'
-import sharp from 'sharp'
+import { fileURLToPath } from 'node:url'
 import {
   FOND, ligneDegrade, svgSplash, nomFichier, requeteMedia, table,
 } from './generer-splash-ios.mjs'
@@ -36,6 +36,27 @@ const verifier = (nom, cond, detail = '') => {
   ko++; echecs.push(`${nom}${detail ? ` → ${detail}` : ''}`)
 }
 const presque = (a, b, tol = 0.01) => Math.abs(a - b) <= tol
+
+// ────────── LIRE LES DIMENSIONS D'UN PNG SANS AUCUNE DÉPENDANCE ──────────
+// Le banc tournait sur `sharp`, qui n'est déclaré NULLE PART dans le
+// package.json : il n'existe que parce que Next l'installe pour lui-même. Un
+// banc de vérification ne peut pas reposer sur une dépendance de hasard.
+//
+// L'en-tête PNG suffit et se lit en 24 octets : signature (8), longueur du
+// premier bloc (4), type `IHDR` (4), largeur et hauteur en gros-boutiste.
+// On OUVRE donc bien le fichier, ce qui est tout l'intérêt de la garde.
+const SIGNATURE_PNG = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+function dimensionsPng(chemin) {
+  const fd = openSync(chemin, 'r')
+  try {
+    const tete = Buffer.alloc(24)
+    const lus = readSync(fd, tete, 0, 24, 0)
+    if (lus < 24) return null
+    if (!tete.subarray(0, 8).equals(SIGNATURE_PNG)) return null
+    if (tete.subarray(12, 16).toString('latin1') !== 'IHDR') return null
+    return { largeur: tete.readUInt32BE(16), hauteur: tete.readUInt32BE(20) }
+  } finally { closeSync(fd) }
+}
 
 // ══════════════════════════════════════════════════════════════════
 // 1. LA GÉOMÉTRIE DU DÉGRADÉ, FONCTION EXÉCUTÉE
@@ -77,8 +98,12 @@ const presque = (a, b, tol = 0.01) => Math.abs(a - b) <= tol
 // encodé en 828×1792 satisferait n'importe quelle garde qui se contente de
 // lire des noms, et iOS l'étirerait sans rien dire.
 {
-  const dossier = new URL('../public/splash/', import.meta.url)
-  const chemin = (n) => join(dossier.pathname.replace(/^\//, ''), n)
+  // ⚠️ `fileURLToPath`, JAMAIS `url.pathname`. Sous Windows `pathname` vaut
+  // `/C:/Users/…` et retirer la barre de tête donne un chemin correct ; sous
+  // Linux il vaut `/home/runner/…` et la même opération le rend RELATIF. Le
+  // banc passait chez moi et déclarait les 19 images absentes sur la CI.
+  const dossier = fileURLToPath(new URL('../public/splash/', import.meta.url))
+  const chemin = (n) => join(dossier, n)
 
   verifier('la table déclare au moins les iPhone en service', table.length >= 12, `${table.length} écrans`)
 
@@ -88,10 +113,13 @@ const presque = (a, b, tol = 0.01) => Math.abs(a - b) <= tol
     attendus.add(nom)
     const p = chemin(nom)
     if (!existsSync(p)) { verifier(`${nom} existe`, false, 'fichier absent'); continue }
-    const meta = await sharp(p).metadata()
-    verifier(`${nom} fait bien ${e.largeur}×${e.hauteur}`,
-      meta.width === e.largeur && meta.height === e.hauteur,
-      `${meta.width}×${meta.height}`)
+    const meta = dimensionsPng(p)
+    verifier(`${nom} est bien un PNG lisible`, Boolean(meta), 'en-tête illisible')
+    if (meta) {
+      verifier(`${nom} fait bien ${e.largeur}×${e.hauteur}`,
+        meta.largeur === e.largeur && meta.hauteur === e.hauteur,
+        `${meta.largeur}×${meta.hauteur}`)
+    }
   }
 
   // Le sens inverse : une image orpheline est une image que plus aucune balise
@@ -211,6 +239,40 @@ const presque = (a, b, tol = 0.01) => Math.abs(a - b) <= tol
   verifier('et le manifeste annonce la MÊME teinte que le layout',
     Boolean(teinte) && manifeste.theme_color.toUpperCase() === teinte[1].toUpperCase(),
     `manifeste ${manifeste.theme_color}, layout ${teinte ? teinte[1] : '?'}`)
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 7. LE PREMIER JET DE LA PAGE EST DÉJÀ LE SPLASH
+// ══════════════════════════════════════════════════════════════════
+// L'image native peut être parfaite, si la page peint l'accueil EN CLAIR avant
+// de monter le splash, le lancement montre deux arrivées de suite : le dégradé
+// natif, un éclair d'app claire, puis l'animation. Alex l'a vu le 19/08 et l'a
+// décrit comme « deux animations ».
+//
+// La cause tenait dans une seule valeur : `useState(false)`. La contrainte qui
+// l'avait dictée (serveur et client d'accord, sinon mismatch d'hydration) est
+// tout aussi bien servie par `true`. C'est le sens de la comparaison qui doit
+// suivre, et c'est là que ça se recassera.
+{
+  const page = lire('app/commander/page.js')
+  const i = page.indexOf('const [showSplash, setShowSplash]')
+  verifier('la page déclare toujours showSplash', i > -1)
+  if (i > -1) {
+    const decl = page.slice(i, i + 200)
+    verifier('le splash est monté DÈS LE PREMIER RENDU, serveur compris',
+      /useState\(true\)/.test(decl),
+      'à false, la page peint l’accueil en clair entre l’image native et le splash')
+    // ⚠️ On INTERDIT le piège plutôt que d'exiger la formule juste : c'est
+    // exactement `useState(false)` qui a produit le défaut.
+    verifier('et surtout PAS à false', !/useState\(false\)/.test(decl))
+
+    const effet = page.slice(i, i + 600)
+    verifier("l'effet MASQUE le splash déjà vu, il ne le montre pas",
+      /if \(sessionStorage\.getItem\('yoppaa_splash_seen'\)\) setShowSplash\(false\)/.test(effet),
+      'la comparaison inversée ramènerait l’éclair clair')
+    verifier('la condition n’est pas niée',
+      !/if \(!sessionStorage\.getItem\('yoppaa_splash_seen'\)\) setShowSplash\(true\)/.test(effet))
+  }
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

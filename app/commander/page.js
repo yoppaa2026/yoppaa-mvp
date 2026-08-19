@@ -1293,13 +1293,31 @@ export default function Commander() {
     setGmPasOuvert(!localStorage.getItem(`yoppaa_gm_seen_${today}`))
   }, [])
 
-  // showSplash DOIT s'initialiser à false (valeur identique serveur + 1er rendu
-  // client), sinon le SSR rend sans splash et le client rend avec -> mismatch
-  // d'hydration React #418 (mur d'erreurs postMessage constaté 03/07). On lit
-  // sessionStorage seulement APRÈS montage, dans l'effet ci-dessous.
-  const [showSplash, setShowSplash] = useState(false)
+  // ⚠️ showSplash S'INITIALISE À `true`, ET SÛREMENT PAS À `false`.
+  //
+  // La contrainte d'origine tient toujours : serveur et premier rendu client
+  // doivent donner la MÊME valeur, sinon mismatch d'hydration React #418 (mur
+  // d'erreurs postMessage constaté le 03/07). Mais `true` la respecte tout
+  // autant que `false` : ce qui compte, c'est que les deux côtés s'accordent,
+  // pas la valeur choisie. On lit sessionStorage après montage, comme avant.
+  //
+  // Et `false` fabriquait un défaut visible, signalé par Alex le 19/08 : la
+  // page peignait l'ACCUEIL EN CLAIR, logo de l'en-tête compris, avant que
+  // l'effet ne monte le splash violet. Au lancement d'une PWA iOS ça donnait
+  // DEUX arrivées de suite : l'image native sombre, un éclair d'app claire,
+  // puis le splash animé. « Deux animations », mot pour mot.
+  //
+  // Avec `true`, le HTML du tout premier jet EST le dégradé du splash, donc
+  // exactement ce que l'image `apple-touch-startup-image` vient de peindre.
+  // Le relais est invisible.
+  //
+  // Contrepartie assumée : celui qui a DÉJÀ vu le splash dans sa session voit
+  // une image de dégradé avant que l'effet ne le retire. C'est une trame,
+  // sombre, sur une app dont le splash est sombre. L'éclair blanc d'avant
+  // était bien plus violent.
+  const [showSplash, setShowSplash] = useState(true)
   useEffect(() => {
-    if (!sessionStorage.getItem('yoppaa_splash_seen')) setShowSplash(true)
+    if (sessionStorage.getItem('yoppaa_splash_seen')) setShowSplash(false)
   }, [])
   function onSplashDone() { sessionStorage.setItem('yoppaa_splash_seen', '1'); setShowSplash(false) }
 

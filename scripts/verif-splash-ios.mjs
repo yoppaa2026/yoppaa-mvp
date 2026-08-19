@@ -215,11 +215,25 @@ function dimensionsPng(chemin) {
     /SPLASH_IOS\.map/.test(layout),
     '19 balises écrites à la main, ce sont 19 occasions de se tromper en silence')
   verifier('le manifeste reste déclaré pour Android', layout.includes('/manifest.json'))
-  // Sans `appleWebApp.capable`, iOS n'ouvre pas la PWA en mode autonome, et
-  // sans mode autonome il n'y a PAS d'écran de lancement du tout : les 19
-  // images ne seraient jamais peintes.
-  verifier('appleWebApp reste capable, sinon aucune image ne sera peinte',
+  verifier('appleWebApp reste capable',
     /appleWebApp:\s*\{[^}]*capable:\s*true/s.test(layout))
+
+  // ⚠️ ET SURTOUT LA BALISE HISTORIQUE, ÉCRITE À LA MAIN.
+  //
+  // Cette garde est née d'un banc vert sur un défaut bien réel. Elle regardait
+  // `appleWebApp: { capable: true }`, le trouvait, et concluait. Or Next
+  // n'émet à partir de là QUE le nom standardisé `mobile-web-app-capable`,
+  // alors que Safari conditionne les écrans de lancement au nom HISTORIQUE
+  // `apple-mobile-web-app-capable`. Résultat : 19 images servies, valides,
+  // et purement ignorées par iOS. Flash blanc intact.
+  //
+  // Vérifier la source d'une intention ne dit RIEN de ce qui sort. Ici on ne
+  // peut pas relire le HTML produit (le banc de la CI ne construit pas), donc
+  // on exige la balise explicite, celle dont on a vérifié à la main qu'elle
+  // apparaît bien dans le document servi.
+  verifier('la balise apple-mobile-web-app-capable est écrite explicitement',
+    /name="apple-mobile-web-app-capable"\s+content="yes"/.test(layout),
+    'sans elle, iOS ignore les 19 images et le flash blanc revient')
 }
 
 // ══════════════════════════════════════════════════════════════════

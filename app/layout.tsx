@@ -89,6 +89,15 @@ export default function RootLayout({
       <head>
         {/* theme-color, viewport, apple-web-app sont gérés par les exports metadata + viewport de Next.js */}
         <link rel="apple-touch-icon" href="/icon-192.png" />
+        {/* ⚠️ CETTE BALISE EST ÉCRITE À LA MAIN, ET IL LE FAUT.
+            `appleWebApp: { capable: true }` dans metadata n'émet QUE le nom
+            standardisé `mobile-web-app-capable`. Safari, lui, conditionne les
+            écrans de lancement au nom HISTORIQUE `apple-mobile-web-app-capable`.
+            Sans elle, les 19 images sont servies, valides, et purement ignorées :
+            flash blanc au lancement, constaté par Alex le 19/08 APRÈS
+            réinstallation. Le banc regardait la source et voyait `capable: true`,
+            donc il était vert sur un défaut bien réel. */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
         {/* Écrans de lancement iOS. Safari IGNORE le manifeste : sans ces
             images, la PWA installée sur l'écran d'accueil s'ouvre sur un flash
             BLANC avant que la page n'ait peint. Elles ne portent que le dégradé

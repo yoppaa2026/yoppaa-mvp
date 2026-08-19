@@ -7,6 +7,7 @@ import AgendaRdv from './AgendaRdv'
 import ModalNouveauRdv from './ModalNouveauRdv'
 import ModaleConfirmation from './ModaleConfirmation'
 import PosteConfirmation, { confirme } from './PosteConfirmation'
+import { jourBruxelles } from '@/lib/timezone'
 import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree, confirmationEncaissement, questionEncaissement, nomClient } from '@/lib/confirmation-rdv'
 import { confirmationSimple } from '@/lib/confirmations'
 import { etatPaiementRdv, etatPaiementCommande, couleurPaiement, caDesRdvs, resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
@@ -72,11 +73,11 @@ function dateKey(date) {
   if (!date) return ''
   // String date SQL pure YYYY-MM-DD → retourner directement
   if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date
-  // Timestamp avec timezone → convertir en heure locale Belgique
-  const d = new Date(date)
-  const offset = d.getTimezoneOffset() * 60000
-  const local = new Date(d.getTime() - offset)
-  return local.toISOString().slice(0, 10)
+  // ⚠️ Timestamp → jour civil BELGE, et pas le fuseau de la machine.
+  // L ancien calcul soustrayait `getTimezoneOffset()`, donc le fuseau du
+  // navigateur : juste depuis Mettet, faux depuis un serveur en UTC ou depuis
+  // un commerçant en vacances. Le fuseau se nomme, il ne se devine pas.
+  return jourBruxelles(date)
 }
 
 function getJoursDispos(horizon = 1) {

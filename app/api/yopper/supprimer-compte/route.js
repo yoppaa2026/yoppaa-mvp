@@ -21,6 +21,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { normaliserTelephone } from '@/lib/fidelite'
+import { jourBruxelles } from '@/lib/timezone'
 
 // Statuts qui signifient « le commerçant attend encore quelque chose de moi ».
 const COMMANDES_EN_COURS = ['paiement_en_attente', 'en_attente', 'en_preparation', 'pret']
@@ -75,7 +76,7 @@ export async function POST(request) {
         : 'Une commande est encore en cours chez un commerçant.')
     }
 
-    const aujourdhui = new Date().toISOString().slice(0, 10)
+    const aujourdhui = jourBruxelles()
     let requeteRdv = admin
       .from('rdv_reservations')
       .select('id', { count: 'exact', head: true })

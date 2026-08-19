@@ -13,7 +13,7 @@ import IconeRetrait from '@/app/components/IconeRetrait'
 import { canDo, bandeauCategorie } from '@/lib/plans'
 import { STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
 import { statutCreneaux, pastilleCreneaux, jourPlus } from '@/lib/statut-commerce'
-import { jourLocalISO } from '@/lib/timezone'
+import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
 import { lieuxDuJour } from '@/lib/lieux-activite'
 import { morningADuContenu } from '@/lib/morning-contenu'
 import { libellePrixSeance } from '@/lib/abonnements'
@@ -2443,9 +2443,12 @@ export default function Commander() {
   function peutRetirer(commande) {
     if (!commande?.creneau?.heure_debut) return true
     const dateRef = commande.date_commande || commande.created_at
+    // Une date nue est déjà le bon jour. Un instant, lui, se lit en heure
+    // BELGE : sinon une commande créée après minuit désigne le créneau de la
+    // VEILLE, et le client peut swiper « récupérée » un jour trop tôt.
     const dateStr = typeof dateRef === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateRef)
       ? dateRef
-      : new Date(dateRef).toISOString().slice(0, 10)
+      : jourBruxelles(dateRef)
     const [h, m] = commande.creneau.heure_debut.slice(0,5).split(':').map(Number)
     const target = new Date(dateStr + 'T00:00:00')
     target.setHours(h, m, 0, 0)
@@ -2456,9 +2459,12 @@ export default function Commander() {
   function minutesAvantCreneau(commande) {
     if (!commande?.creneau?.heure_debut) return 0
     const dateRef = commande.date_commande || commande.created_at
+    // Une date nue est déjà le bon jour. Un instant, lui, se lit en heure
+    // BELGE : sinon une commande créée après minuit désigne le créneau de la
+    // VEILLE, et le client peut swiper « récupérée » un jour trop tôt.
     const dateStr = typeof dateRef === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateRef)
       ? dateRef
-      : new Date(dateRef).toISOString().slice(0, 10)
+      : jourBruxelles(dateRef)
     const [h, m] = commande.creneau.heure_debut.slice(0,5).split(':').map(Number)
     const target = new Date(dateStr + 'T00:00:00')
     target.setHours(h, m, 0, 0)

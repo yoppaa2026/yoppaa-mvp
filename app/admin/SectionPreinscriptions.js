@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Users, Store, TrendingUp, MapPin, RefreshCw } from 'lucide-react'
+import { jourBruxelles } from '@/lib/timezone'
 
 const T = {
   bg: '#F8F6FF', main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF',
@@ -60,7 +61,7 @@ export default function SectionPreinscriptions() {
     const base = new Date()
     for (let i = 13; i >= 0; i--) {
       const d = new Date(base); d.setDate(base.getDate() - i)
-      const iso = d.toISOString().slice(0, 10)
+      const iso = jourBruxelles(d)
       out.push({ jour: iso, n: map[iso] || 0 })
     }
     return out

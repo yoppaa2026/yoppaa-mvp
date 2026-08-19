@@ -26,6 +26,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo } from '@/lib/plans'
+import { jourBruxelles } from '@/lib/timezone'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -58,7 +59,7 @@ async function handle(req) {
   }
 
   const supabase = getSupabaseAdmin()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = jourBruxelles()
 
   // 1. Deals du jour pending
   const { data: dealsPending, error: dealsErr } = await supabase

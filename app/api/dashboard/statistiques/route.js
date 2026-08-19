@@ -21,6 +21,7 @@ import {
   momentsDePointe, rdvHonore,
 } from '@/lib/statistiques'
 import { canDo } from '@/lib/plans'
+import { jourBruxelles } from '@/lib/timezone'
 
 function admin() {
   return createClient(
@@ -154,8 +155,8 @@ export async function GET(request) {
     // comparaison opposerait trente jours à TOUT L'HISTORIQUE, et l'évolution
     // afficherait une chute vertigineuse sur un commerce en pleine forme.
     const abosPayes = (abonnements || []).filter(a => a?.paye && a?.paye_le)
-    const jourDebut = f.debut.toISOString().slice(0, 10)
-    const jourDebutPrecedent = f.debutPrecedent.toISOString().slice(0, 10)
+    const jourDebut = jourBruxelles(f.debut)
+    const jourDebutPrecedent = jourBruxelles(f.debutPrecedent)
     const aboActuels = abosPayes.filter(a => String(a.paye_le).slice(0, 10) >= jourDebut)
     const aboPrecedents = abosPayes.filter(a => {
       const jour = String(a.paye_le).slice(0, 10)
@@ -183,10 +184,10 @@ export async function GET(request) {
         .from('fiche_vues')
         .select('jour, vues')
         .eq('commercant_id', commercantId)
-        .gte('jour', f.debutPrecedent.toISOString().slice(0, 10))
+        .gte('jour', jourBruxelles(f.debutPrecedent))
       if (!error) {
         vuesParJour = data || []
-        const debutJour = f.debut.toISOString().slice(0, 10)
+        const debutJour = jourBruxelles(f.debut)
         const actuelles = vuesParJour.filter(v => v.jour >= debutJour)
         const precedentes = vuesParJour.filter(v => v.jour < debutJour)
         const somme = (l) => l.reduce((s, v) => s + Number(v.vues || 0), 0)

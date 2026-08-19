@@ -12,7 +12,7 @@
 // pas le chiffre d'affaires est un journal faux, quelle que soit sa jolie mise
 // en forme.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { ventiler, tauxFraisLivraison, cleTaux, libelleTaux, tauxPourArticle, TAUX_NON_RENSEIGNE, REGIME_EMPORTER } from '../lib/tva.js'
 import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal } from '../lib/export-comptable.js'
 import { calculerRemiseBon, normaliserCodeBon, genererCodeBon, bonExpire, BON_MONTANT_MIN, BON_MONTANT_MAX } from '../lib/bons-cadeaux.js'
@@ -738,6 +738,56 @@ verifier('une commande remise sans moyen garde son rattrapage',
   const journalNuit = journalParJour(lignesNuitEte)
   egal('le journal ouvre la journée du 19', journalNuit[0]?.date, '2026-08-19')
   egal('… avec les 400 € dans le seau des espèces', journalNuit[0]?.especes, 400)
+}
+
+// ── AUCUN JOUR CIVIL NE SE DÉDUIT PLUS D'UN INSTANT EN TEMPS UNIVERSEL ─────
+//
+// ⚠️ LA GARDE PORTE SUR LA PRATIQUE, DANS TOUT `app` ET TOUT `lib`, et pas sur
+// les endroits déjà corrigés : c'est la leçon des flous et des relevés du
+// 18/08, une garde étroite ne garde rien. Elle compte les `toISOString()`
+// suivis d'une découpe à dix caractères.
+//
+// ⚠️ TROIS FAMILLES, UNE SEULE FAUTIVE. Les instants stockés tels quels
+// (`updated_at`, `deleted_at`, `expires_at`…) sont JUSTES : une colonne
+// timestamp mérite l'instant universel, et on n'y touche pas — ils n'ont pas de
+// `.slice(0, 10)`. Ceux ancrés à midi UTC (`T12:00:00Z` puis n jours) sont
+// justes par construction : douze heures de marge de chaque côté, aucun fuseau
+// ne les fait changer de jour. Reste la famille fautive, celle qui prend
+// l'instant du moment.
+{
+  const anchesAutorisees = [
+    // Ancrage à midi UTC : l'arithmétique de jours ne peut pas déraper.
+    'lib/abonnements.js',
+    'lib/statistiques.js',
+    'lib/statut-commerce.js',
+  ]
+  const coupables = []
+  const parcourirSources = (dossier) => {
+    for (const entree of readdirSync(dossier, { withFileTypes: true })) {
+      const chemin = `${dossier}/${entree.name}`
+      if (entree.isDirectory()) { parcourirSources(chemin); continue }
+      if (!entree.name.endsWith('.js')) continue
+      if (anchesAutorisees.includes(chemin)) continue
+      const source = readFileSync(chemin, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1')
+      const n = (source.match(/toISOString\(\)\s*\.?\s*slice\(0,\s*10\)/g) || []).length
+      if (n > 0) coupables.push(`${chemin} (${n})`)
+    }
+  }
+  parcourirSources('app')
+  parcourirSources('lib')
+  verifier('aucun jour civil n’est déduit d’un instant en temps universel',
+    coupables.length === 0, coupables.join(', '))
+
+  // ⚠️ ET LES TROIS EXCEPTIONS DOIVENT RESTER ANCRÉES À MIDI. Sans cette
+  // vérification, la liste ci-dessus deviendrait un passe-droit permanent : il
+  // suffirait qu'un de ces fichiers change de méthode pour que le défaut y
+  // revienne sans que rien ne rougisse.
+  for (const chemin of anchesAutorisees) {
+    verifier(`${chemin} garde son ancrage à midi UTC`,
+      /T12:00:00Z/.test(readFileSync(chemin, 'utf8')))
+  }
 }
 
 // ── LES FRÈRES QUI ÉCRIVENT LA DATE, ET NON PLUS SEULEMENT CELUI QUI LA LIT ─

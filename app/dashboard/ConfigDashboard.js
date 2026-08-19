@@ -1761,7 +1761,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
 //   - Si on coche inclus_morning sur deal A, on décoche les autres deals
 //     du même commerçant pour la même date_deal
 function TabDeals({ commercantId, commercant, toast }) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = jourBruxelles()
   const [deals, setDeals] = useState([])
   const [articles, setArticles] = useState([])
   const [loading, setLoading] = useState(true)
@@ -2378,7 +2378,7 @@ function DealRow({ d, today, onEdit, onToggle, onDelete, passe = false }) {
 
 // ─── Onglet ACTUS / ALERTES ───────────────────────────────────────────────────
 function TabActus({ commercantId, commercant, toast }) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = jourBruxelles()
   const [actus, setActus] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -2477,8 +2477,8 @@ function TabActus({ commercantId, commercant, toast }) {
         .select('id, titre, date_debut')
         .eq('commercant_id', commercantId)
         .eq('inclus_gmy', true)
-        .gte('date_debut', lundi.toISOString().slice(0, 10))
-        .lte('date_debut', dimanche.toISOString().slice(0, 10))
+        .gte('date_debut', jourBruxelles(lundi))
+        .lte('date_debut', jourBruxelles(dimanche))
 
       const conflit = (dejaGmy || []).find(a => a.id !== editId)
       if (conflit) {
@@ -8690,7 +8690,7 @@ function TabRdvFermetures({ commercantId, toast }) {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = jourBruxelles()
   const initialForm = { praticien_id: 'tous', date_debut: today, date_fin: today, motif: '' }
   const [form, setForm] = useState(initialForm)
 

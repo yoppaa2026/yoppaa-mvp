@@ -59,7 +59,7 @@ import { formuleVendableEnLigne, messageRetourAbonnement, cleAchatAbonnement, co
   abonnementsPourPrestation, expliquerRefusSeance, libellePrixSeance,
   trierAbonnementsPourSeance, libelleChoixAbonnement } from '@/lib/abonnements'
 import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
-import { jourLocalISO } from '@/lib/timezone'
+import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Lock, Flame, Star, Phone, Calendar } from 'lucide-react'
 
@@ -765,7 +765,7 @@ export default function CommanderRdvSlug() {
           .eq('commercant_id', c.id)
           .eq('actif', true)
         if (errDeals) console.warn('[rdv fiche] fetch deals KO', errDeals.message)
-        const auj = new Date().toISOString().slice(0, 10)
+        const auj = jourBruxelles()
         if (annule) return
         // Même règle de fenêtre que partout ailleurs, tenue dans lib/deals.js
         setDeals((dealsData || []).filter(d => dealActifCeJour(d, auj)))
@@ -822,7 +822,7 @@ export default function CommanderRdvSlug() {
       setCommercant(c)
 
       // 2. Fetch prestations + créneaux config + praticiens + junction + fermetures en parallèle
-      const todayISO = new Date().toISOString().slice(0, 10)
+      const todayISO = jourBruxelles()
       const [{ data: prest }, { data: cren }, { data: prat }, { data: junction }, { data: ferm }, { data: photosData }] = await Promise.all([
         supabase
           .from('rdv_prestations')

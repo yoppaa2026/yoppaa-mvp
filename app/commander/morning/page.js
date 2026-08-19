@@ -27,6 +27,7 @@ import {
   commercantEligibleDeal as eligibleDeal,
   commercantEligibleActu as eligibleActu,
 } from '@/lib/morning-eligibilite'
+import { jourBruxelles } from '@/lib/timezone'
 
 // ─── Tokens design system (canoniques) ─────────────────────────────
 const T = {
@@ -94,7 +95,7 @@ const LAUNCH_DATE = new Date(2026, 0, 1) // 1er janvier 2026
 // Les deals restent réservés aux commerçants ayant accès au morning.
 async function fetchMorningData(commune) {
   if (!commune?.codes_postaux?.length) return { deals: [], actus: [] }
-  const today = new Date().toISOString().slice(0, 10)
+  const today = jourBruxelles()
   const cpDeLaCommune = new Set(commune.codes_postaux)
 
   const [{ data: dealsRaw }, { data: actusCommercantRaw }] = await Promise.all([
@@ -748,7 +749,7 @@ export default function GoodMorningYoppersPage() {
   // Marque le morning comme vu aujourd'hui (logique "1 fois/jour")
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const today = new Date().toISOString().slice(0, 10)
+    const today = jourBruxelles()
     localStorage.setItem('morning_last_shown', today)
   }, [])
 

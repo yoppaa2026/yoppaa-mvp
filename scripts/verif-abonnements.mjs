@@ -765,8 +765,14 @@ verifier('et en les bornant vraiment aux deux dates demandées',
 // l'historique et annoncerait un effondrement à un commerce en pleine forme.
 const srcStatsRoute = sansComm(
   readFileSync(new URL('../app/api/dashboard/statistiques/route.js', import.meta.url), 'utf8'))
+// ⚠️ ENCORE UNE GARDE QUI VERROUILLAIT LE DÉFAUT, la troisième du 19/08. Elle
+// exigeait `String(a.paye_le).slice(0, 10)`, c'est-à-dire le découpage en temps
+// universel : corriger le fuseau la faisait rougir. On demande maintenant ce
+// qu'on veut obtenir, pas la façon dont c'était écrit hier.
 verifier('le tableau de bord découpe lui aussi sur la date d’encaissement',
-  /String\(a\.paye_le\)\.slice\(0, 10\) >= jourDebut/.test(srcStatsRoute))
+  /jourBruxelles\(a\.paye_le\) >= jourDebut/.test(srcStatsRoute))
+verifier('… et en heure belge, pas en temps universel',
+  !/paye_le\)\.slice\(0, 10\)/.test(srcStatsRoute))
 verifier('et sa période précédente est bornée des deux côtés',
   /jour >= jourDebutPrecedent && jour < jourDebut/.test(srcStatsRoute))
 

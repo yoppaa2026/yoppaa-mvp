@@ -287,18 +287,42 @@ const courbe = serieJournaliere(
     { statut: 'recupere', total: 7, created_at: '2026-07-12T22:30:00Z' },
   ],
   [{ statut: 'confirme', prix_estime: 35, created_at: '2026-07-11T10:00:00Z' }],
+  // ⚠️ LES ABONNEMENTS ENTRENT DANS LA COURBE DEPUIS LE 19/08. Sans eux, Alex
+  // lisait « ta meilleure journée : 165 € » un jour qui lui avait rapporté
+  // 1200 € : le TOTAL les comptait depuis le 17/08, la COURBE jamais.
+  [
+    { paye: true, prix: 400, paye_le: '2026-07-10T08:00:00Z' },
+    // ⚠️ LA DATE EST `paye_le`, JAMAIS `created_at` : un contrat inscrit lundi
+    // et encaissé vendredi appartient au vendredi, comme en Comptabilité.
+    { paye: true, prix: 100, paye_le: '2026-07-11T08:00:00Z', created_at: '2026-07-10T08:00:00Z' },
+    // Un contrat non payé n'est pas une vente.
+    { paye: false, prix: 999, paye_le: '2026-07-11T08:00:00Z' },
+  ],
   { debut: debutCourbe, jours: 5 }
 )
 egal('un point par jour, journées vides comprises', courbe.length, 5)
 egal('la courbe démarre au bon jour', courbe[0].jour, '2026-07-10')
-egal('deux ventes du même jour s\'additionnent', courbe[0].montant, 25)
+// 20 + 5 de commandes, plus un abonnement de 400 le même jour.
+egal('deux ventes du même jour s\'additionnent', courbe[0].montant, 425)
+egal('un abonnement monte la courbe comme le reste',
+  courbe[0].montant - 25, 400)
+// 35 de rendez-vous, plus l'abonnement daté sur son ENCAISSEMENT. La commande
+// annulée ne compte pas, et le contrat impayé non plus.
 egal('une commande annulée ne monte pas la courbe',
-  courbe.find(j => j.jour === '2026-07-11').montant, 35)
+  courbe.find(j => j.jour === '2026-07-11').montant, 135)
+egal('un contrat impayé ne monte pas la courbe',
+  courbe.find(j => j.jour === '2026-07-11').montant < 999, true)
 // LE TEST QUI ATTRAPE LE FUSEAU : sur l'heure UTC, ces 7 € tomberaient le 12.
 egal('une vente de fin de soirée tombe dans le bon jour',
   courbe.find(j => j.jour === '2026-07-13').montant, 7)
 egal('le 12 reste vide', courbe.find(j => j.jour === '2026-07-12').montant, 0)
-egal('sans début, pas de courbe', serieJournaliere([], [], {}), [])
+// ⚠️ TROISIÈME ARGUMENT DEPUIS LE 19/08. Écrit `serieJournaliere([], [], {})`,
+// ce test restait vert POUR LA MAUVAISE RAISON : le `{}` était pris pour les
+// abonnements, les options devenaient `undefined`, et l'absence de `debut`
+// rendait `[]` sans rien prouver. Changer une signature ne se voit ni au lint,
+// ni au build, ni au banc : il faut relire CHAQUE appelant.
+egal('sans début, pas de courbe', serieJournaliere([], [], [], {}), [])
+egal('sans options du tout non plus', serieJournaliere([], [], []), [])
 
 // ─── Les moments de pointe ─────────────────────────────────────────────────
 // Sous le seuil : les barres existent, la conclusion se tait.

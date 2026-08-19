@@ -157,9 +157,13 @@ export async function GET(request) {
     const abosPayes = (abonnements || []).filter(a => a?.paye && a?.paye_le)
     const jourDebut = jourBruxelles(f.debut)
     const jourDebutPrecedent = jourBruxelles(f.debutPrecedent)
-    const aboActuels = abosPayes.filter(a => String(a.paye_le).slice(0, 10) >= jourDebut)
+    // ⚠️ EN HEURE BELGE. Ces deux bornes decoupaient encore l instant en temps
+    // universel, DEUX LIGNES sous celles corrigees le matin meme : ma garde ne
+    // cherchait que `toISOString()` et n a pas vu cette ecriture-ci. Un contrat
+    // encaisse a 00h28 basculait donc dans la periode precedente.
+    const aboActuels = abosPayes.filter(a => jourBruxelles(a.paye_le) >= jourDebut)
     const aboPrecedents = abosPayes.filter(a => {
-      const jour = String(a.paye_le).slice(0, 10)
+      const jour = jourBruxelles(a.paye_le)
       return jour >= jourDebutPrecedent && jour < jourDebut
     })
 
@@ -230,7 +234,7 @@ export async function GET(request) {
       },
       // La courbe : un point par jour, journées vides comprises, sinon deux
       // ventes espacées de trois semaines donnent un trait plat mensonger.
-      courbe: serieJournaliere(cmdActuelles, rdvActuels, { debut: f.debut, jours }),
+      courbe: serieJournaliere(cmdActuelles, rdvActuels, aboActuels, { debut: f.debut, jours }),
       // Quand les gens commandent et réservent — le moment de la DEMANDE, en
       // heure belge. Le moment du retrait vit déjà dans l'agenda.
       moments: momentsDePointe(cmdActuelles, rdvActuels),

@@ -287,6 +287,29 @@ function dimensionsPng(chemin) {
     verifier('la condition n’est pas niée',
       !/if \(!sessionStorage\.getItem\('yoppaa_splash_seen'\)\) setShowSplash\(true\)/.test(effet))
   }
+
+  // La sortie du splash : opaque d'abord, effacée ensuite. Une dissolution qui
+  // part de 0 % laisse lire l'accueil À TRAVERS le wordmark pendant toute sa
+  // durée. C'est ce qu'Alex a vu sur Android.
+  const sortie = page.match(/@keyframes splash-out \{([^}]*\})*[^}]*\}/)
+  verifier('la sortie du splash est toujours définie', Boolean(sortie))
+  if (sortie) {
+    verifier('le fond du splash reste OPAQUE avant de s’effacer',
+      /0%,\s*\d+%\s*\{\s*opacity:\s*1/.test(sortie[0]),
+      'sans palier, on lit l’accueil à travers le splash pendant toute la dissolution')
+  }
+  // Et la durée de l'animation doit rester celle du démontage, sinon le splash
+  // saute ou bloque le doigt après être devenu invisible.
+  const duree = page.match(/'splash-out ([\d.]+)s/)
+  const demontage = page.match(/setTimeout\(\(\) => onDone\(\),\s*(\d+)\)/)
+  const debutSortie = page.match(/setPhase\(4\), (\d+)\)/)
+  verifier('la durée de sortie et le démontage sont lisibles',
+    Boolean(duree && demontage && debutSortie))
+  if (duree && demontage && debutSortie) {
+    verifier('le splash est démonté quand son effacement se termine',
+      Number(demontage[1]) === Number(debutSortie[1]) + Number(duree[1]) * 1000,
+      `sortie à ${debutSortie[1]} ms + ${duree[1]} s ≠ démontage à ${demontage[1]} ms`)
+  }
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

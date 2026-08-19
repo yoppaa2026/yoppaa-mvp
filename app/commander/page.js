@@ -296,14 +296,17 @@ function SplashScreen({ onDone }) {
     const t2 = setTimeout(() => setPhase(2), 1200) // 5 dots V2-B pop cascade
     const t3 = setTimeout(() => setPhase(3), 2200) // slogan in
     const t4 = setTimeout(() => setPhase(4), 3800) // debut fadeOut
-    const t5 = setTimeout(() => onDone(),    4600) // fin
+    // ⚠️ t5 SUIT LA DURÉE DE `splash-out`, ils ne se règlent pas séparément.
+    // 3800 + 500 : démonter plus tôt ferait disparaître le splash d'un coup,
+    // plus tard laisserait un écran déjà invisible bloquer le doigt.
+    const t5 = setTimeout(() => onDone(),    4300) // fin
     return () => [t1,t2,t3,t4,t5].forEach(clearTimeout)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [])
   // Dimensions des 5 dots V2-B (spec : grand 18, mini 10, gap 10, offset 7.2)
   const dotBase = 18, dotMini = 10, dotOffset = 7.2
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: `linear-gradient(160deg, #160636 0%, #2D0F6B 50%, #1A0840 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', animation: phase === 4 ? 'splash-out 0.8s ease-in forwards' : 'none', overflow: 'hidden' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: `linear-gradient(160deg, #160636 0%, #2D0F6B 50%, #1A0840 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', animation: phase === 4 ? 'splash-out 0.5s ease-in forwards' : 'none', overflow: 'hidden' }}>
       {/* Signature canonique YOPPAA : bande degradee 3px Ink → Main → Light en haut */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, #1A0840 0%, #6B35C4 60%, #C4A0F4 100%)` }}/>
 
@@ -2713,7 +2716,14 @@ export default function Commander() {
         @keyframes dot-pop { 0% { opacity:0; transform:scale(0) translateY(8px); } 70% { transform:scale(1.3) translateY(-4px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
         @keyframes wordmark-in { 0% { opacity:0; letter-spacing: 8px; } 100% { opacity:1; letter-spacing: -2px; } }
         @keyframes tagline-in { 0% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
-        @keyframes splash-out { 0% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(1.05); } }
+        /* ⚠️ LE PALIER À 45 % N'EST PAS UN DÉTAIL DE GOÛT.
+           Une dissolution qui commence à 0 % rend le splash translucide
+           pendant TOUTE sa durée : on lit la liste des commerces à travers le
+           wordmark, et le lancement donne l'impression de montrer deux écrans
+           en même temps (constaté par Alex sur Android le 19/08).
+           Le fond reste donc OPAQUE la première moitié, et ne s'efface qu'à la
+           fin, vite. */
+        @keyframes splash-out { 0%, 45% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(1.03); } }
         @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
         .search-input:focus { border-color: rgba(255,255,255,0.6) !important; outline: none; }
       `}</style>

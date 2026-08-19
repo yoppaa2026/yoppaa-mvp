@@ -24,7 +24,7 @@ const ECRANS = [
     emoji: null,
     visuel: 'yoppaa',
     titre: 'Ton quartier,\ndans ta poche.',
-    sousTitre: 'Découvre les commerçants autour de toi. Commande en avance. Récupère sans attendre.',
+    sousTitre: 'Vois qui est ouvert autour de toi, commande avant de sortir, et passe simplement prendre.',
     cta: 'Commencer →',
     skip: false,
   },
@@ -51,7 +51,7 @@ const ECRANS = [
     Icon: MapPin,
     visuel: 'maps',
     titre: 'Les commerçants\nprès de chez toi.',
-    sousTitre: 'Yoppaa utilise ta position pour te montrer ce qui est ouvert autour de toi en ce moment.',
+    sousTitre: 'Ta position sert à une seule chose : te montrer ce qui est ouvert, maintenant, à deux pas de toi.',
     cta: 'Autoriser la localisation',
     ctaSecondaire: 'Pas maintenant',
     skip: true,
@@ -62,7 +62,7 @@ const ECRANS = [
 
     visuel: 'connexion',
     titre: 'Rejoins\nles Yoppers.',
-    sousTitre: 'Connecte-toi pour commander, suivre tes commandes et accéder à ton historique sur tous tes appareils.',
+    sousTitre: 'Un compte, et tu retrouves tes commandes, tes favoris et ton historique sur tous tes appareils.',
     cta: 'Se connecter',
     ctaSecondaire: 'Continuer sans compte',
     skip: true,
@@ -85,9 +85,11 @@ function VisuelYoppaa() {
       {/* Cards commerçants simulées */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 280 }}>
         {[
-          { nom: 'Au Pain Doré', type: 'Boulangerie',   statut: 'Ouvert', deal: 'Deal : Tarte -20%', DealIcon: Flame,   Icon: Croissant },
-          { nom: 'Kebabistro',   type: 'Snack',         statut: 'Ouvert',                                                 Icon: Sandwich  },
-          { nom: 'Le 9-15',      type: 'Sandwicherie',  statut: 'Ouvert',                                                 Icon: Sandwich  },
+          // Mêmes noms imaginaires que l'écran des notifications : un client
+          // qui enchaîne les deux écrans doit retrouver le même quartier.
+          { nom: 'La Mie de Rien',       type: 'Boulangerie',  statut: 'Ouvert', deal: 'Deal : tarte -20 %', DealIcon: Flame, Icon: Croissant },
+          { nom: 'Chez Ginette',         type: 'Snack',        statut: 'Ouvert',                                              Icon: Sandwich  },
+          { nom: 'Le Comptoir d’à Côté', type: 'Sandwicherie', statut: 'Ouvert',                                              Icon: Sandwich  },
         ].map((c, i) => (
           <div key={i} style={{
             background: 'rgba(255,255,255,0.08)',
@@ -117,10 +119,16 @@ function VisuelYoppaa() {
 
 // ── Visuel écran 2 — Notifications ───────────────────────────────────────────
 function VisuelNotifs() {
+  // ⚠️ AUCUN NOM DE COMMERCE RÉEL DANS UNE DÉMONSTRATION.
+  // Cet écran montrait « Kebabistro » et « Le 9-15 », qui sont de VRAIS
+  // commerces de la base. Un client le lit comme une vitrine, pas comme un
+  // exemple : on afficherait les promotions inventées d'un commerçant
+  // existant, sans qu'il ait rien demandé. Les noms ci-dessous sont chaleureux
+  // et manifestement imaginaires, et ils le restent.
   const notifs = [
-    { commerce: 'Au Pain Doré', Icon: Flame,    message: 'Tarte au riz -20% jusqu\'à 11h !',    time: 'maintenant', color: T.main },
-    { commerce: 'Kebabistro',   Icon: Sandwich, message: 'Menu midi disponible, 8,50€',       time: '5 min',      color: T.mid  },
-    { commerce: 'Le 9-15',      Icon: Package,  message: 'Plus que 3 sandwichs au thon !',     time: '12 min',     color: T.deep },
+    { commerce: 'La Mie de Rien',       Icon: Flame,    message: 'Tarte au riz -20 % jusqu’à 11 h', time: 'maintenant', color: T.main },
+    { commerce: 'Chez Ginette',         Icon: Sandwich, message: 'Le menu de midi est prêt, 8,50 €', time: '5 min',      color: T.mid  },
+    { commerce: 'Le Comptoir d’à Côté', Icon: Package,  message: 'Il reste trois parts de quiche',   time: '12 min',     color: T.deep },
   ]
   return (
     <div style={{ width: '100%', maxWidth: 300 }}>
@@ -141,7 +149,7 @@ function VisuelNotifs() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <div style={{ width: 16, height: 16, borderRadius: 5, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <div style={{ display: 'flex', gap: 1.5 }}>
-                    {[3,5,3].map((s,j) => <div key={j} style={{width:s,height:s,borderRadius:'50%',background:'rgba(255,255,255,0.7)'}}/>)}
+                    {[3,2,3,2,3].map((s,j) => <div key={j} style={{width:s,height:s,borderRadius:'50%',background:'rgba(255,255,255,0.7)'}}/>)}
                   </div>
                 </div>
                 <span style={{ fontSize: '0.68rem', fontWeight: 800, color: 'rgba(255,255,255,0.8)' }}>yoppaa</span>
@@ -215,9 +223,13 @@ function VisuelConnexion() {
     <div style={{ width: '100%', maxWidth: 280 }}>
       {/* Avatar Yopper */}
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
-        <div style={{ width: 80, height: 80, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', boxShadow: `0 8px 32px ${T.main}66, 0 0 0 4px rgba(255,255,255,0.1)` }}>
-          🟣
-        </div>
+        {/* ⚠️ UN SEUL POINT MAUVE, comme dans la communication habituelle.
+            Il y en avait DEUX, l'un dans l'autre : un emoji 🟣 posé au centre
+            d'un disque violet en dégradé. Deux ronds concentriques de la même
+            couleur, ça ne veut rien dire et ça ne ressemble à rien de ce qu'on
+            publie. L'emoji tombait en plus sous la règle du SVG seul, et son
+            dessin change d'un téléphone à l'autre. */}
+        <div style={{ width: 64, height: 64, borderRadius: '50%', background: T.main, margin: '0 auto 12px', boxShadow: `0 8px 32px ${T.main}66` }}/>
         <p style={{ fontWeight: 900, fontSize: '0.9rem', color: '#fff', letterSpacing: '-0.3px' }}>ICI ON EST YOPPERS</p>
         <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>Rejoins la tribu du commerce local</p>
       </div>

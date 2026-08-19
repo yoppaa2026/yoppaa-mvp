@@ -14,7 +14,7 @@
 
 import { readFileSync, readdirSync } from 'node:fs'
 import { ventiler, tauxFraisLivraison, cleTaux, libelleTaux, tauxPourArticle, TAUX_NON_RENSEIGNE, REGIME_EMPORTER } from '../lib/tva.js'
-import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal } from '../lib/export-comptable.js'
+import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal, csvDetail } from '../lib/export-comptable.js'
 import { calculerRemiseBon, normaliserCodeBon, genererCodeBon, bonExpire, BON_MONTANT_MIN, BON_MONTANT_MAX } from '../lib/bons-cadeaux.js'
 import { brusselsInstant } from '../lib/timezone.js'
 
@@ -450,8 +450,17 @@ egal('et leur somme fait tout le comptoir', jourTroisSeaux.comptoir, 940)
 
 // ⚠️ LES COLONNES DOIVENT ARRIVER JUSQU'AU CALCUL, ici comme pour les
 // rendez-vous : LE défaut le plus fréquent de ce projet.
-verifier('la route charge l’encaissement des commandes',
-  /encaisse_mode, encaisse_montant, encaisse_le, commande_articles/.test(srcExportCompta))
+// ⚠️ CETTE GARDE ÉTAIT ANCRÉE SUR L'ADJACENCE des colonnes, et non sur leur
+// présence : glisser une colonne entre `encaisse_le` et `commande_articles` la
+// faisait rougir alors que rien n'était cassé. Une garde doit tenir à ce qui
+// compte, pas à l'ordre des mots. Corrigée le 19/08 en ajoutant `client_nom`.
+{
+  const selectCommandes = srcExportCompta.match(/from\('commandes'\)\s*(?:\/\/[^\n]*\n\s*)*\.select\('([^']*)'\)/)?.[1] || ''
+  for (const colonne of ['encaisse_mode', 'encaisse_montant', 'encaisse_le', 'commande_articles']) {
+    verifier(`la route charge ${colonne} sur les commandes`,
+      new RegExp(`\\b${colonne}\\b`).test(selectCommandes), selectCommandes)
+  }
+}
 
 // Le geste, côté écran.
 const srcDashCmd = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
@@ -738,6 +747,109 @@ verifier('une commande remise sans moyen garde son rattrapage',
   const journalNuit = journalParJour(lignesNuitEte)
   egal('le journal ouvre la journée du 19', journalNuit[0]?.date, '2026-08-19')
   egal('… avec les 400 € dans le seau des espèces', journalNuit[0]?.especes, 400)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE CLIENT ET L'HEURE DANS LE DÉTAIL (demande d'Alex, 19/08)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// « Il faut faire l'export le plus complet possible » : sans nom, un
+// encaissement de 400 € au comptoir ne se rapproche de rien ; sans heure, il
+// est introuvable dans le relevé du terminal, où tout est horodaté.
+{
+  const abo = {
+    id: 'abo-nom', paye: true, prix: 400, tva_taux: 21, statut: 'actif',
+    paye_le: '2026-08-18T22:28:00.000Z', mode_paiement: 'especes',
+    client_prenom: 'Émilie', client_nom: 'Dupont',
+  }
+  const rdv = {
+    id: 'rdv-nom', statut: 'honore', tva_taux: 21,
+    encaisse_montant: 15, encaisse_mode: 'terminal',
+    encaisse_le: '2026-08-19T09:05:00.000Z', date_rdv: '2026-08-19',
+    prix_estime: 15, acompte_montant: 0,
+    client_prenom: 'Jean', client_nom: 'Martin',
+  }
+  const cmde = {
+    id: 'cmd-nom', statut: 'recupere', total: 20, paye_en_ligne: true,
+    date_commande: '2026-08-19', created_at: '2026-08-19T07:12:00.000Z',
+    client_nom: 'Sophie Leroy',
+    commande_articles: [{ article_id: 'a1', prix_unitaire: 20, quantite: 1, tva_taux: 6 }],
+  }
+
+  const lignes = construireLignes({ commandes: [cmde], rdvs: [rdv], abonnements: [abo], tauxDefaut: 21 })
+  const ligneAbo = lignes.find(l => l.type === 'Abonnement')
+  const ligneRdv = lignes.find(l => l.type === 'Solde RDV')
+  const ligneCmd = lignes.find(l => l.type === 'Commande')
+
+  // ── Le nom, assemblé selon la table ──────────────────────────────────────
+  // `commandes` porte un nom complet, les deux autres séparent prénom et nom.
+  egal('l’abonnement porte prénom et nom', ligneAbo?.client, 'Émilie Dupont')
+  egal('le rendez-vous porte prénom et nom', ligneRdv?.client, 'Jean Martin')
+  egal('la commande porte son nom complet', ligneCmd?.client, 'Sophie Leroy')
+  // ⚠️ UN NOM ABSENT NE DOIT PAS ÉCRIRE « undefined » dans un document
+  // comptable. Une commande anonyme existe : un visiteur qui paie sans compte.
+  egal('un client sans nom laisse la case VIDE',
+    construireLignes({ commandes: [{ ...cmde, client_nom: null }], tauxDefaut: 21 })[0]?.client, '')
+  // ⚠️ ET UN PRÉNOM MANQUANT NE LAISSE PAS D'ESPACE DEVANT LE NOM. Ce cas-là
+  // discrimine vraiment : un simple `join(' ')` passe le test précédent mais
+  // rend « ␣Dupont » ici. Mesuré muet, puis réarmé.
+  egal('un prénom manquant ne décale pas le nom',
+    construireLignes({ abonnements: [{ ...abo, client_prenom: null }], tauxDefaut: 21 })[0]?.client, 'Dupont')
+  egal('les espaces autour d’un nom sont rognés',
+    construireLignes({ abonnements: [{ ...abo, client_prenom: '  Émilie  ', client_nom: ' Dupont ' }], tauxDefaut: 21 })[0]?.client,
+    'Émilie Dupont')
+
+  // ── L'heure, en heure belge ──────────────────────────────────────────────
+  // ⚠️ 22h28 UTC = 00h28 chez nous. C'est cette heure-là qu'Alex a vue sur sa
+  // pendule, et c'est elle qu'il retrouvera sur le relevé du terminal.
+  egal('l’encaissement de 00h28 s’écrit bien 00:28', ligneAbo?.heure, '00:28')
+  egal('un solde de rendez-vous porte l’heure de son encaissement', ligneRdv?.heure, '11:05')
+  egal('une commande payée en ligne porte l’heure du paiement', ligneCmd?.heure, '09:12')
+  // ⚠️ UNE DATE NUE NE PORTE AUCUNE HEURE : on ne l'invente pas, et surtout on
+  // n'écrit pas « 00:00 », qui se lirait comme un encaissement de minuit.
+  egal('une date sans heure laisse la case VIDE',
+    construireLignes({ abonnements: [{ ...abo, paye_le: '2026-08-18' }], tauxDefaut: 21 })[0]?.heure, '')
+
+  // ── Les colonnes sortent bien dans le fichier, et dans le bon ordre ──────
+  const csv = csvDetail({ lignes, commercant: { nom: 'Test' }, du: '2026-08-01', au: '2026-08-31' })
+  const enTete = csv.split('\r\n').find(l => l.startsWith('Date'))
+  verifier('le détail annonce l’heure et le client', /^Date;Heure;Client;Type/.test(enTete || ''), enTete || '')
+  verifier('et le nom apparaît vraiment dans le fichier', csv.includes('Émilie Dupont'))
+  verifier('et l’heure aussi', csv.includes('00:28'))
+
+  // ⚠️ LE JOURNAL AGRÈGE PAR JOUR : une heure et un nom n'y voudraient rien
+  // dire, et les y mettre laisserait croire à un document nominatif.
+  const journal = csvJournal({ lignes, commercant: { nom: 'Test' }, du: '2026-08-01', au: '2026-08-31' })
+  verifier('le journal ne nomme personne', !journal.includes('Émilie Dupont'))
+}
+
+// ── LE SELECT DE LA ROUTE PORTE CE QUE L'EXPORT AFFICHE ────────────────────
+// ⚠️ C'EST LE DÉFAUT LE PLUS FRÉQUENT DU PROJET, et il serait ici SILENCIEUX :
+// sans la colonne, la case « Client » sortirait vide sur toutes les lignes,
+// sans la moindre erreur, et personne ne saurait si c'est un bug ou des ventes
+// anonymes. La garde lit le CONTENU de chaque `select`, jamais son voisinage.
+{
+  const srcExport = readFileSync(new URL('../app/api/dashboard/export-comptable/route.js', import.meta.url), 'utf8')
+  const selects = [...srcExport.matchAll(/from\('(\w+)'\)\s*(?:\/\/[^\n]*\n\s*)*\.select\('([^']*)'\)/g)]
+  const selectDe = (table) => selects.find(([, t]) => t === table)?.[2] || ''
+
+  verifier('les commandes lisent le nom du client', /\bclient_nom\b/.test(selectDe('commandes')), selectDe('commandes'))
+  verifier('les rendez-vous lisent prénom et nom',
+    /\bclient_prenom\b/.test(selectDe('rdv_reservations')) && /\bclient_nom\b/.test(selectDe('rdv_reservations')))
+  verifier('… et de quoi dater l’acompte payé en ligne',
+    /\bacompte_paye_date\b/.test(selectDe('rdv_reservations')))
+  verifier('les abonnements lisent prénom et nom',
+    /\bclient_prenom\b/.test(selectDe('abonnements')) && /\bclient_nom\b/.test(selectDe('abonnements')))
+
+  // ⚠️ ET LE FILTRE DES ABONNEMENTS SE FAIT EN HEURE BELGE. Il découpait
+  // l'instant en temps universel : un abonnement encaissé à 00h28 le 19 était
+  // classé au 18, donc un export du 19 au 19 ne le contenait PAS DU TOUT. Une
+  // ligne ABSENTE, et non décalée. Écriture différente du même défaut, que la
+  // garde générale ne voyait pas : elle ne cherchait que `toISOString()`.
+  verifier('le filtre des abonnements date en heure belge',
+    /const jour = jourBruxelles\(a\?\.paye_le\)/.test(srcExport))
+  verifier('… et plus aucun découpage d’instant ne subsiste dans la route',
+    !/String\(a\?\.paye_le[^)]*\)\.slice\(0, 10\)/.test(srcExport))
 }
 
 // ── AUCUN JOUR CIVIL NE SE DÉDUIT PLUS D'UN INSTANT EN TEMPS UNIVERSEL ─────

@@ -746,7 +746,13 @@ const srcExportRoute = sansComm(
   readFileSync(new URL('../app/api/dashboard/export-comptable/route.js', import.meta.url), 'utf8'))
 verifier('l’export charge les abonnements', /from\('abonnements'\)/.test(srcExportRoute))
 verifier('et les passe au calcul', /abonnements,/.test(srcExportRoute))
-verifier('en les découpant sur paye_le', /paye_le \|\| ''\)\.slice\(0, 10\)/.test(srcExportRoute))
+// ⚠️ CETTE GARDE VERROUILLAIT LE DÉFAUT. Elle exigeait la présence EXACTE de
+// `paye_le || '').slice(0, 10)`, c'est-à-dire du découpage en temps universel :
+// corriger le bug la faisait rougir. Une garde doit dire ce qu'on veut obtenir,
+// jamais comment c'était écrit hier. Réécrite le 19/08 sur l'intention.
+verifier('en les découpant sur paye_le', /jourBruxelles\(a\?\.paye_le\)/.test(srcExportRoute))
+verifier('et en heure belge, pas en temps universel',
+  !/paye_le[^)]*\)\.slice\(0, 10\)/.test(srcExportRoute))
 // ⚠️ GARDE NÉE MUETTE, MESURÉE EN MUTATION : la ligne ci-dessus lit bien
 // `paye_le`, mais rien ne vérifiait qu'on s'en SERVAIT pour borner la période.
 // Un filtre qui rend toujours vrai livrerait au comptable un journal contenant

@@ -14,6 +14,7 @@ import { createClient } from '@supabase/supabase-js'
 import { canDo } from '@/lib/plans'
 import { construireLignes, csvJournal, csvDetail, journalParJour } from '@/lib/export-comptable'
 import { normaliser } from '@/lib/tva'
+import { jourBruxelles } from '@/lib/timezone'
 
 export async function GET(request) {
   try {
@@ -69,7 +70,7 @@ export async function GET(request) {
       // ⚠️ `encaisse_mode` EST INDISPENSABLE, et son absence serait SILENCIEUSE :
       // le journal perdrait le moyen de chaque commande payée sur place, et la
       // réconciliation redeviendrait impossible sans la moindre erreur.
-      .select('id, numero_commande, statut, total, frais_livraison, tva_taux_livraison, mode_retrait, regime_tva, paye_en_ligne, bon_cadeau_montant, stripe_frais, stripe_net, date_commande, created_at, encaisse_mode, encaisse_montant, encaisse_le, commande_articles(article_id, quantite, prix_unitaire, tva_taux)')
+      .select('id, numero_commande, statut, total, frais_livraison, tva_taux_livraison, mode_retrait, regime_tva, paye_en_ligne, bon_cadeau_montant, stripe_frais, stripe_net, date_commande, created_at, encaisse_mode, encaisse_montant, encaisse_le, client_nom, commande_articles(article_id, quantite, prix_unitaire, tva_taux)')
       .eq('commercant_id', commercantId)
       .gte('created_at', `${du}T00:00:00.000Z`)
       .lte('created_at', auFin)
@@ -81,7 +82,7 @@ export async function GET(request) {
       // moindre erreur, et le commerçant relirait « 0,00 € au comptoir » sur un
       // document destiné à son comptable. C'est LE défaut le plus fréquent de
       // ce projet : une colonne oubliée dans un select.
-      .select('id, numero_rdv, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, tva_taux, stripe_frais, stripe_net, date_rdv, encaisse_mode, encaisse_montant, encaisse_le')
+      .select('id, numero_rdv, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, tva_taux, stripe_frais, stripe_net, date_rdv, encaisse_mode, encaisse_montant, encaisse_le, acompte_paye_date, created_at, client_prenom, client_nom')
       .eq('commercant_id', commercantId)
       .gte('date_rdv', du)
       .lte('date_rdv', au)
@@ -98,13 +99,23 @@ export async function GET(request) {
     // dans les deux cas. Un commerce a des abonnements par dizaines, jamais par
     // milliers : le coût est nul.
     //
-    // Aucune coordonnée client n'est lue : ce sont des colonnes comptables.
+    // ⚠️ LE NOM DU CLIENT EST LU DEPUIS LE 19/08, et cette phrase disait le
+    // contraire jusque-là. Alex : « il faut faire l'export le plus complet
+    // possible ». Sans nom, un encaissement de 400 € au comptoir ne se
+    // rapproche de rien. On lit le NOM SEUL : ni email, ni téléphone, ni
+    // adresse, qui ne servent à rien en comptabilité et n'ont donc rien à faire
+    // dans un fichier qui sort de l'application.
     const { data: abonnementsTous } = await admin
       .from('abonnements')
-      .select('id, statut, prix, paye, paye_le, mode_paiement, tva_taux, stripe_frais, stripe_net')
+      .select('id, statut, prix, paye, paye_le, mode_paiement, tva_taux, stripe_frais, stripe_net, client_prenom, client_nom')
       .eq('commercant_id', commercantId)
     const abonnements = (abonnementsTous || []).filter(a => {
-      const jour = String(a?.paye_le || '').slice(0, 10)
+      // ⚠️ EN HEURE BELGE. Ce filtre decoupait l instant en temps universel :
+      // un abonnement encaisse a 00h28 le 19 etait classe au 18, donc un export
+      // du 19 au 19 ne le contenait PAS DU TOUT. Une ligne absente, et non
+      // decalee. Ecriture differente du meme defaut, que la garde du banc ne
+      // voyait pas : elle ne cherchait que `toISOString()`.
+      const jour = jourBruxelles(a?.paye_le)
       return jour >= du && jour <= au
     })
 

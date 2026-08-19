@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { SPLASH_IOS } from "@/lib/splash-ios";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -88,6 +89,14 @@ export default function RootLayout({
       <head>
         {/* theme-color, viewport, apple-web-app sont gérés par les exports metadata + viewport de Next.js */}
         <link rel="apple-touch-icon" href="/icon-192.png" />
+        {/* Écrans de lancement iOS. Safari IGNORE le manifeste : sans ces
+            images, la PWA installée sur l'écran d'accueil s'ouvre sur un flash
+            BLANC avant que la page n'ait peint. Elles ne portent que le dégradé
+            du SplashScreen, dont l'animation prend le relais sans couture.
+            Table générée par scripts/generer-splash-ios.mjs. */}
+        {SPLASH_IOS.map((s) => (
+          <link key={s.href} rel="apple-touch-startup-image" media={s.media} href={s.href} />
+        ))}
       </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

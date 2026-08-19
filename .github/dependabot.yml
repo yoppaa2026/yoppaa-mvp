@@ -1,0 +1,54 @@
+# Surveillance des dépendances.
+#
+# CE QUE CE FICHIER N'EST PAS : un robot qui met tout à jour tout seul. Une
+# montée majeure casse des choses, et aucun robot ne peut trancher ça. Ce
+# fichier organise la PROPOSITION ; c'est le banc qui juge, et c'est Alex qui
+# décide.
+#
+# ⚠️ LE VRAI RISQUE N'EST PAS DE RATER UNE ALERTE, C'EST D'EN RECEVOIR VINGT PAR
+# SEMAINE ET DE TOUTES LES IGNORER. D'où trois choix délibérés :
+#   - les correctifs de SÉCURITÉ arrivent tout seuls et immédiatement, mais ils
+#     ne se règlent pas ici : c'est une case à cocher dans les réglages du
+#     dépôt (Settings > Code security > Dependabot security updates) ;
+#   - les montées ordinaires sont REGROUPÉES en une seule proposition par mois,
+#     parce que rester trois versions en arrière rend chaque montée plus
+#     douloureuse que la précédente ;
+#   - les versions MAJEURES ne sont jamais proposées automatiquement. Next 16
+#     vers 17 se lit, se teste et se décide, il ne se clique pas.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+      day: monday
+      time: "07:00"
+      timezone: Europe/Brussels
+    # Une seule proposition à la fois : deux montées en parallèle rendent
+    # impossible de savoir laquelle a cassé quoi.
+    open-pull-requests-limit: 1
+    groups:
+      # Tout ce qui est mineur ou correctif tient dans UNE proposition, que le
+      # banc valide ou refuse en bloc.
+      montees-mineures:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+      # Les correctifs de sécurité aussi, mais dans leur propre proposition :
+      # on ne mélange pas ce qui est urgent et ce qui ne l'est pas.
+      securite:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    ignore:
+      # ⚠️ AUCUNE MAJEURE EN AUTOMATIQUE. Le socle se monte à la main, guide de
+      # migration ouvert, comme le 19/08 pour Next 16.2.6 vers 16.3.1.
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependances

@@ -1,0 +1,52 @@
+# Le banc, exécuté par GitHub à chaque proposition de modification.
+#
+# POURQUOI. Une proposition de Dependabot qui arrive sans avoir été vérifiée ne
+# vaut rien : soit Alex la fusionne à l'aveugle, soit il déroule tout le banc à
+# la main, et dans les deux cas l'automatisation n'a rien fait gagner. Ici, la
+# proposition arrive DÉJÀ JUGÉE : 3486 vérifications et la garde de l'écran
+# blanc.
+#
+# ⚠️ PAS DE BUILD ICI, ET C'EST DÉLIBÉRÉ. Le build a besoin des variables
+# Supabase et Stripe, qui n'ont rien à faire dans un dépôt ; il faudrait les
+# recopier en secrets GitHub, donc les dupliquer, donc en oublier une le jour où
+# elles changent. Vercel construit déjà chaque branche avec le VRAI
+# environnement, au même moment. Deux builds ne valent pas mieux qu'un, et
+# celui-ci serait rouge pour une mauvaise raison.
+#
+# ⚠️ `verif:undef` EST LE PREMIER, ET CE N'EST PAS UN HASARD. La règle `no-undef`
+# est éteinte dans la configuration principale : une variable oubliée passe le
+# lint, passe le build, et rend un ÉCRAN BLANC en production. C'est la seule
+# garde qui attrape ça.
+#
+# Ce fichier ne déploie rien. Vercel s'en charge de son côté ; ici on juge.
+name: Vérification
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  banc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      # `npm ci` et non `npm install` : on installe EXACTEMENT ce que le
+      # verrou décrit. Installer autre chose que ce qui partira en production
+      # ferait juger une application qui n'existe pas.
+      - run: npm ci
+
+      - name: Le banc complet
+        run: npm run verif
+
+      # ⚠️ SEULES LES DÉPENDANCES DE PRODUCTION COMPTENT ICI. Une faille dans un
+      # outil de développement ne part jamais chez un commerçant, et la
+      # confondre avec le reste fabrique le bruit qui fait tout ignorer.
+      - name: Aucune faille en production
+        run: npm audit --omit=dev --audit-level=moderate

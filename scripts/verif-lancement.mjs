@@ -33,6 +33,7 @@ import { jsonLdLanding, jsonLdLandingString, echapperJsonLd, SITE_URL } from '..
 import { getPrixPlan } from '../lib/plans.js'
 import robots from '../app/robots.js'
 import { FACEBOOK_URL } from '../lib/reseaux.js'
+import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '../lib/libelles-audience.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -481,16 +482,58 @@ function sansCommentaires(src) {
     /\{joursOffertsAuLancement\(\)\} jours offerts/.test(hero))
   verifier("le hero rattache les 100 jours à la date d'ouverture",
     /à partir du \{libelleLancement\(\)\}/.test(hero))
-  verifier("le hero présente l'avance comme un supplément",
-    /joursAvance\(\)/.test(hero))
+  verifier("le hero présente l'avance comme un bonus, en mots",
+    /est en bonus/.test(hero))
   verifier("le hero ne chiffre PAS le total avec l'avance",
     !/\{joursOfferts\(\)\}/.test(hero),
     'un seul chiffre sur la page : 100')
 
-  // Et nulle part ailleurs sur la landing.
-  verifier("aucun total chiffré ne subsiste sur la landing",
-    !/joursOfferts\(\)/.test(reveal),
-    'le total réel reste plus généreux que la promesse, mais on ne l\'affiche pas')
+  // ⚠️ AUCUN SECOND NOMBRE, NULLE PART.
+  // J'avais retiré le total (142) mais laissé « + 42 jours d'avance » dans la
+  // pastille du hero : c'était toujours un second chiffre, et Alex l'a vu à
+  // l'écran avant moi. La garde couvre donc les DEUX formes d'affichage, la
+  // JSX `{…}` et l'interpolation `${…}` d'un gabarit.
+  for (const [quoi, motif] of [
+    ['le total', /\{joursOfferts\(\)\}|\$\{joursOfferts\(\)\}/],
+    ["l'avance", /\{joursAvance\(\)\}|\$\{joursAvance\(\)\}|\{avance\}|\$\{avance\}/],
+  ]) {
+    verifier(`${quoi} n'est affiché nulle part sur la landing`,
+      !motif.test(reveal),
+      'un seul chiffre sur la page, et c\'est 100')
+  }
+  verifier("mais l'avance reste dite en toutes lettres",
+    /est en bonus/.test(reveal))
+
+  // ⚠️ LES DEUX PUBLICS, NOMMÉS D'UNE SEULE FAÇON.
+  // La même personne était appelée « Devenir Yopper », « Je suis habitant » et
+  // « Je suis curieux » sur la même page : trois occasions de se demander si
+  // on est au bon endroit. Les libellés vivent maintenant dans un seul fichier.
+  for (const [nom, chemin] of [
+    ['la landing dévoilée', 'app/components/LandingReveal.js'],
+    ['la landing de teasing', 'app/components/LandingTeasing.js'],
+  ]) {
+    const src = lire(chemin)
+    verifier(`${nom} lit les libellés de public`,
+      /from '@\/lib\/libelles-audience'/.test(src))
+    const visible = sansCommentaires(src)
+    verifier(`${nom} n'écrit plus « Je suis curieux »`,
+      !/Je suis curieux/.test(visible))
+    verifier(`${nom} n'écrit plus les libellés en dur`,
+      !/'Je suis commerçant'|>Je suis habitant</.test(visible))
+  }
+  verifier("le libellé commerçant énonce le métier sans article",
+    LIBELLE_COMMERCANT === 'Je suis commerçant', LIBELLE_COMMERCANT)
+  verifier("le libellé habitant explique le mot Yopper",
+    /futur Yopper/.test(LIBELLE_HABITANT), LIBELLE_HABITANT)
+
+  // Le drapeau belge est collé au mot suivant s'il n'a pas de marge à droite.
+  // ⚠️ Corrigé DANS le composant, donc partout où il est utilisé, plutôt qu'à
+  // l'endroit signalé par la capture. Voir feedback_appliquer_partout.
+  for (const chemin of ['app/components/LandingReveal.js', 'app/components/LandingTeasing.js']) {
+    verifier(`le drapeau belge respire des deux côtés (${chemin.split('/').pop()})`,
+      /margin: '0 5px 0 4px', borderRadius: 2/.test(lire(chemin)),
+      'sans marge à droite, il se colle au mot suivant')
+  }
   // ⚠️ On découpe LE BLOC avant d'y chercher, exactement comme pour le hero.
   // Sans ce découpage, la garde trouvait `joursOffertsAuLancement()` ailleurs
   // dans le fichier et restait verte alors que l'addition avait disparu du

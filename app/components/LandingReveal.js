@@ -25,6 +25,7 @@ import {
   estRegimeLancement, ESSAI_JOURS_MINIMUM,
 } from '@/lib/lancement'
 import { FACEBOOK_URL, RESEAUX } from '@/lib/reseaux'
+import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '@/lib/libelles-audience'
 import PartageMobilisation from './PartageMobilisation'
 
 const T = {
@@ -63,7 +64,7 @@ function calculerTemps() {
 function DrapeauBelge({ size = 20 }) {
   return (
     <svg width={size} height={size * 0.7} viewBox="0 0 30 20" aria-label="Belgique"
-      style={{ display: 'inline-block', verticalAlign: '-0.15em', marginLeft: 4, borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+      style={{ display: 'inline-block', verticalAlign: '-0.15em', margin: '0 5px 0 4px', borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
       <rect width="10" height="20" fill="#000000"/>
       <rect x="10" width="10" height="20" fill="#FAE042"/>
       <rect x="20" width="10" height="20" fill="#ED2939"/>
@@ -1219,25 +1220,25 @@ export default function LandingReveal({ referent = null }) {
               padding: '12px 22px', borderRadius: 100, marginBottom: 26,
               background: 'rgba(196,160,244,0.16)', border: '1.5px solid rgba(196,160,244,0.45)',
             }}>
-              {/* ⚠️ On annonce D'ABORD les 100 jours, la promesse publique, et
-                  l'avance ENSUITE, comme un supplément. L'inverse ferait lire
-                  « 142 » comme une exagération, alors que c'est une addition
-                  vérifiable. Le détail est posé ligne par ligne plus bas. */}
+              {/* ⚠️ UN SEUL CHIFFRE, ET C'EST 100.
+                  J'avais retiré le total mais laissé « + 42 jours d'avance » :
+                  c'était toujours un second nombre, et Alex l'a vu à l'écran
+                  avant moi. L'avance se dit en mots, jamais en chiffres. */}
               <span style={{ fontSize: 'clamp(1.15rem, 3.4vw, 1.5rem)', fontWeight: 900, letterSpacing: '-0.8px', color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
                 {joursOffertsAuLancement()} jours offerts
               </span>
               <span style={{ fontSize: 13.5, fontWeight: 700, color: T.light }}>
                 à partir du {libelleLancement()}, quel que soit le forfait
-                {joursAvance() > 0 && ` · + ${joursAvance()} jours d'avance si tu arrives maintenant`}
+                {joursAvance() > 0 && ' · et tout le temps d’ici là est en bonus'}
               </span>
             </div>
           )}
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 40 }}>
-            <button onClick={() => allerAuForm('commercant')} style={btnPrimaire}>Je rejoins Yoppaa</button>
+            <button onClick={() => allerAuForm('commercant')} style={btnPrimaire}>{LIBELLE_COMMERCANT}</button>
             <button onClick={() => allerAuForm('yopper')}
               style={{ ...btnPrimaire, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,0.4)', boxShadow: 'none' }}>
-              Je suis habitant
+              {LIBELLE_HABITANT}
             </button>
           </div>
 
@@ -1641,8 +1642,8 @@ export default function LandingReveal({ referent = null }) {
 
               <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                 {[
-                  { val: 'yopper', label: 'Je suis curieux' },
-                  { val: 'commercant', label: 'Je suis commerçant' },
+                  { val: 'yopper', label: LIBELLE_HABITANT },
+                  { val: 'commercant', label: LIBELLE_COMMERCANT },
                 ].map(opt => {
                   const actif = form.type_utilisateur === opt.val
                   return (

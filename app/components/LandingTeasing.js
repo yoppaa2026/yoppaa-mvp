@@ -13,6 +13,7 @@ import Script from 'next/script'
 import { Lock } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import { LAUNCH_DATE_ISO, libelleLancement } from '@/lib/lancement'
+import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '@/lib/libelles-audience'
 import Link from 'next/link'
 import PartageMobilisation from './PartageMobilisation'
 import { ecranRegarde } from '@/lib/rafraichissement'
@@ -380,7 +381,7 @@ export default function LandingTeasing({ referent = null }) {
 function DrapeauBelge() {
   return (
     <svg width="20" height="14" viewBox="0 0 30 20" aria-label="Belgique"
-      style={{ display: 'inline-block', verticalAlign: '-0.15em', marginLeft: 4, borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+      style={{ display: 'inline-block', verticalAlign: '-0.15em', margin: '0 5px 0 4px', borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
       <rect width="10" height="20" fill="#000000"/>
       <rect x="10" width="10" height="20" fill="#FAE042"/>
       <rect x="20" width="10" height="20" fill="#ED2939"/>
@@ -584,8 +585,8 @@ function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey,
 
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
             {[
-              { val: 'yopper',     label: 'Je suis curieux' },
-              { val: 'commercant', label: 'Je suis commerçant' },
+              { val: 'yopper',     label: LIBELLE_HABITANT },
+              { val: 'commercant', label: LIBELLE_COMMERCANT },
             ].map(opt => {
               const actif = form.type_utilisateur === opt.val
               return (

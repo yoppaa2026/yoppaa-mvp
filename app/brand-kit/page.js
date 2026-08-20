@@ -572,7 +572,7 @@ export default function BrandKit() {
       sub: 'serie lancement 2/6 · annonce officielle',
       options: {
         titre: "L'app belge du commerce local arrive.",
-        sousTitre: 'Zero commission Yoppaa sur tes ventes.',
+        sousTitre: 'Zéro commission Yoppaa sur tes ventes.',
         showFooter: true, bigDotsSignature: true,
       },
     },
@@ -594,18 +594,44 @@ export default function BrandKit() {
       sub: 'serie lancement 4/6 · communaute',
       options: {
         titre: 'Rejoins la tribu Yoppaa',
-        sousTitre: 'Tu commences ici. Avec ceux d\'a cote.',
+        sousTitre: 'Tu commences ici. Avec ceux d\'à côté.',
         showFooter: true, bigDotsSignature: true,
       },
     },
     {
-      title: 'Post FB · Commercants',
+      title: 'Post FB · Commerçants',
       dims: { w: 1080, h: 1080 },
       filename: 'yoppaa-post-fb-commercants-1080',
-      sub: 'serie lancement 5/6 · CTA commercants',
+      sub: 'série lancement 5/6 · appel aux commerçants',
       options: {
-        titre: 'Tu es commercant ?',
-        sousTitre: 'Cree ta fiche Yoppaa en 5 minutes sur www.yoppaa.app',
+        // ⚠️ ACCENTS RÉTABLIS. Ce texte part sur Facebook tel quel : « Tu es
+        // commercant ? » sans cédille est une faute PUBLIÉE, sur un visuel qui
+        // sert justement à convaincre des commerçants.
+        titre: 'Tu es commerçant ?',
+        sousTitre: 'Crée ta fiche Yoppaa en 5 minutes sur www.yoppaa.app',
+        showFooter: true, bigDotsSignature: true,
+      },
+    },
+    {
+      // Demandé par Alex le 20/08 : inviter les commerçants et annoncer
+      // l'offre de lancement.
+      // ⚠️ « quel que soit le forfait » est la promesse exacte : les 90 jours
+      // valent aussi pour Exister, qui est déjà gratuit. C'est donc bien
+      // 90 jours offerts sur Communiquer et sur Vendre, et il ne faut pas
+      // laisser croire qu'un palier en serait exclu.
+      // ⚠️ Et JAMAIS « 100 % te revient » : la formule vraie est qu'il n'y a
+      // aucune commission, l'abonnement étant notre seul revenu. Les frais
+      // bancaires, eux, restent ceux de la banque.
+      title: 'Post FB · 90 jours offerts',
+      dims: { w: 1080, h: 1080 },
+      filename: 'yoppaa-post-fb-90-jours-1080',
+      sub: 'offre de lancement · appel aux commerçants',
+      options: {
+        titre: '90 jours offerts.',
+        // ⚠️ « Yoppaa ne prend » ET PAS « aucune commission » tout court : sans
+        // sujet, la phrase se lit « aucun frais du tout », et c'est FAUX, les
+        // frais bancaires restent ceux de la banque. Le banc l'a attrapée.
+        sousTitre: 'Quel que soit le forfait. Yoppaa ne prend aucune commission sur tes ventes.',
         showFooter: true, bigDotsSignature: true,
       },
     },
@@ -616,7 +642,7 @@ export default function BrandKit() {
       sub: 'serie lancement 6/6 · CTA citoyens',
       options: {
         titre: 'Deviens Yopper.',
-        sousTitre: 'Ton quartier dans ta poche. Telecharge gratuitement.',
+        sousTitre: 'Ton quartier dans ta poche. Télécharge gratuitement.',
         showFooter: true, bigDotsSignature: true,
       },
     },

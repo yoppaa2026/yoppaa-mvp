@@ -24,6 +24,8 @@ import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '@/lib/bons-vendus'
 import { peutMarquerNonRetire, ancienneteCommande } from '@/lib/rappels-retrait'
 import { libellePeriodeStats } from '@/lib/agenda-bloc'
 import { compterAClore } from '@/lib/rdv-statut'
+import { accesDashboard } from '@/lib/statut-commercant'
+import EcranValidation from './EcranValidation'
 
 const T = {
   bg:      '#F8F6FF',
@@ -907,6 +909,9 @@ export default function Dashboard() {
   const [configTab, setConfigTab] = useState('menu')
   function ouvrirConfig(tab) { setConfigTab(tab); setOngletPrincipal('config') }
   const [commercant, setCommercant] = useState(null)
+  // Verdict d'accès au tableau de bord. `null` tant qu'on n'a rien décidé,
+  // sinon `{ raison, motif, nom }` et on montre l'écran d'attente à la place.
+  const [refusAcces, setRefusAcces] = useState(null)
   const [loading, setLoading] = useState(true)
   const [listeCommercants, setListeCommercants] = useState([])
   const [ongletPrincipal, setOngletPrincipal] = useState('commandes')
@@ -1090,6 +1095,21 @@ export default function Dashboard() {
         // Sinon /login (cas où une session traîne sans onboarding finalisé).
         if (user.email === adminEmail) router.push('/admin')
         else router.push('/login')
+        return
+      }
+
+      // ⚠️ LA PORTE. Avant le 20/08, il suffisait d'avoir une ligne
+      // `commercants` pour entrer : quelqu'un qui venait de terminer son
+      // inscription ouvrait un espace complet alors que Yoppaa n'avait rien
+      // validé, et rien ne lui disait d'attendre.
+      //
+      // On tranche sur la PREMIÈRE fiche : elles appartiennent au même compte
+      // et sont validées ensemble. Le mode impersonation, lui, est sorti bien
+      // plus haut et n'arrive jamais ici : l'admin doit pouvoir regarder un
+      // dossier en attente, c'est même tout l'intérêt.
+      const verdict = accesDashboard(data[0])
+      if (!verdict.autorise) {
+        setRefusAcces({ raison: verdict.raison, motif: verdict.motif, nom: data[0].nom })
         return
       }
 
@@ -1982,6 +2002,19 @@ export default function Dashboard() {
         </button>
       </div>
     </div>
+  )
+
+  // ⚠️ Le refus se rend AVANT tout le reste, et il remplace l'écran au lieu de
+  // rediriger : une redirection vers /login ferait croire à un problème de mot
+  // de passe alors que le compte est parfaitement valide, juste pas encore
+  // ouvert. La personne doit lire POURQUOI.
+  if (refusAcces) return (
+    <EcranValidation
+      raison={refusAcces.raison}
+      motif={refusAcces.motif}
+      nomCommerce={refusAcces.nom}
+      onDeconnexion={seDeconnecter}
+    />
   )
 
   return (

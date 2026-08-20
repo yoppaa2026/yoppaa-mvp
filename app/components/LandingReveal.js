@@ -717,7 +717,7 @@ function EncartOffreLancement({ onRejoindre }) {
             quel que soit le forfait que tu choisis.
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-            {['Sans carte de paiement', 'Sans engagement', 'Résiliable en deux clics'].map(m => (
+            {['Zéro contrat', 'Zéro engagement', 'Sans carte de paiement', 'Résiliable en deux clics'].map(m => (
               <span key={m} style={{ fontSize: 11.5, fontWeight: 800, padding: '5px 11px', borderRadius: 100, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.22)', color: '#fff' }}>
                 {m}
               </span>
@@ -751,6 +751,106 @@ function EncartOffreLancement({ onRejoindre }) {
             Je prends mes {garantis} jours
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── LA FENÊTRE « TRIBU » ────────────────────────────────────────────────────
+// Demandée par Alex le 20/08. Elle répond aux trois objections d'un commerçant
+// qui hésite, dans l'ordre où elles lui viennent :
+//   1. « combien ça me coûte pour essayer »  → 100 jours offerts
+//   2. « et après, je suis coincé »          → zéro contrat, zéro engagement
+//   3. « et si je veux juste être visible »  → Exister, gratuit à vie
+//
+// ⚠️ Alex avait d'abord demandé une fenêtre « un peu fake » annonçant X
+// commerçants préinscrits aujourd'hui. Refusé : un chiffre fabriqué montré à
+// quelqu'un qui décide de s'abonner est une affirmation fausse sur un fait
+// vérifiable, et la page promet trois écrans plus haut que tout est écrit noir
+// sur blanc. Le chiffre affiché ici est donc le VRAI, et c'est le seul de la
+// page : 100.
+//
+// ⚠️ Trois précautions apprises à nos dépens :
+//   • aucun `blur` ni ombre animée : ils font geler le défilement sur iPhone
+//     (voir reference_scroll_jank_ios) ;
+//   • une VRAIE croix de fermeture, et le refus est retenu pour la session :
+//     une fenêtre qui revient à chaque écran se fait fermer sans être lue ;
+//   • `dvh` jamais `vh`, et un décalage bas généreux pour ne pas couvrir les
+//     boutons sur mobile.
+function FenetreTribu({ onRejoindre, masquer }) {
+  const [visible, setVisible] = useState(false)
+  const [ferme, setFerme] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try { if (sessionStorage.getItem('yoppaa_tribu_fermee')) return } catch { /* mode privé */ }
+    // Elle attend que la personne ait vraiment commencé à lire : surgir à la
+    // première seconde, c'est se faire fermer avant d'être lue.
+    const id = setTimeout(() => setVisible(true), 9000)
+    return () => clearTimeout(id)
+  }, [])
+
+  const fermer = () => {
+    setFerme(true)
+    try { sessionStorage.setItem('yoppaa_tribu_fermee', '1') } catch { /* mode privé */ }
+  }
+
+  if (!visible || ferme || masquer) return null
+
+  return (
+    <div style={{
+      position: 'fixed', zIndex: 60,
+      left: 'max(12px, env(safe-area-inset-left))',
+      right: 'max(12px, env(safe-area-inset-right))',
+      bottom: 'calc(16px + env(safe-area-inset-bottom))',
+      maxWidth: 380, marginLeft: 'auto',
+      background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`,
+      color: '#fff', borderRadius: 20, overflow: 'hidden',
+      border: '1px solid rgba(196,160,244,0.35)',
+      boxShadow: '0 16px 40px rgba(22,6,54,0.45)',
+    }}>
+      <Bande3px/>
+      <div style={{ padding: '16px 18px 18px', position: 'relative' }}>
+        <button onClick={fermer} aria-label="Fermer"
+          style={{
+            position: 'absolute', top: 10, right: 10, width: 30, height: 30,
+            borderRadius: 100, border: '1px solid rgba(255,255,255,0.22)',
+            background: 'rgba(255,255,255,0.08)', color: '#fff',
+            fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+          }}>
+          ✕
+        </button>
+
+        {estRegimeLancement() && (
+          <p style={{ margin: '0 0 6px', fontSize: 'clamp(1.35rem, 5vw, 1.65rem)', fontWeight: 900, letterSpacing: '-1px', lineHeight: 1.1, color: '#fff', paddingRight: 34 }}>
+            {joursOffertsAuLancement()} jours offerts.
+          </p>
+        )}
+        <p style={{ margin: '0 0 12px', fontSize: 15.5, fontWeight: 800, color: T.light, lineHeight: 1.35, paddingRight: 34 }}>
+          Tu rejoins la tribu ?
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+          {[
+            'Zéro contrat, zéro engagement',
+            'Sans carte de paiement',
+            'Et si tu veux juste rester visible, Exister est gratuit à vie',
+          ].map(l => (
+            <div key={l} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <span style={{ marginTop: 3, flexShrink: 0, color: T.light }}><IconCheck size={12}/></span>
+              <span style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.45, color: 'rgba(255,255,255,0.92)' }}>{l}</span>
+            </div>
+          ))}
+        </div>
+
+        <button onClick={() => { fermer(); onRejoindre() }} style={{
+          width: '100%', padding: '13px', borderRadius: 100, border: 'none',
+          background: 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: T.ink,
+          fontWeight: 900, fontSize: 14, letterSpacing: 0.3, textTransform: 'uppercase',
+          cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+        }}>
+          Je rejoins la tribu
+        </button>
       </div>
     </div>
   )
@@ -1623,6 +1723,14 @@ export default function LandingReveal({ referent = null }) {
           </footer>
         </div>
       </section>
+
+      {/* ⚠️ `masquer` quand le formulaire est déjà envoyé : proposer de
+          rejoindre la tribu à quelqu'un qui vient de le faire, c'est lui dire
+          qu'on ne l'a pas vu. */}
+      <FenetreTribu
+        masquer={statut.envoi === 'ok'}
+        onRejoindre={() => allerAuForm('commercant')}
+      />
 
       <style>{`
         @media (prefers-reduced-motion: reduce) {

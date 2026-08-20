@@ -569,6 +569,42 @@ function sansCommentaires(src) {
   verifier('et le dit sans ambiguïté sur ce qui a disparu',
     /pas de seuil à atteindre/.test(reveal))
 
+  // c ter) LA FENÊTRE « TRIBU » (demandée par Alex le 20/08).
+  // Elle répond aux trois objections d'un commerçant qui hésite. Écrite mais
+  // jamais montée, elle serait exactement le défaut de l'onboarding : du code
+  // vivant que personne ne voit.
+  const tribu = brut.slice(brut.indexOf('function FenetreTribu'),
+    brut.indexOf('// Incitant mobilisation'))
+  verifier('la fenêtre tribu est bien découpée', tribu.length > 800, `${tribu.length} caractères`)
+  verifier('la fenêtre tribu est MONTÉE dans la page',
+    /<FenetreTribu[\s/>]/.test(reveal))
+  verifier("elle pose la question de la tribu",
+    /Tu rejoins la tribu \?/.test(tribu))
+  verifier("elle annonce les 100 jours, et pas un autre chiffre",
+    /\{joursOffertsAuLancement\(\)\} jours offerts/.test(tribu) && !/joursOfferts\(\)/.test(tribu))
+  verifier('elle répond « zéro contrat, zéro engagement »',
+    /Zéro contrat, zéro engagement/.test(tribu))
+  verifier("elle rappelle qu'Exister est gratuit à vie",
+    /Exister est gratuit à vie/.test(tribu),
+    "c'est la réponse à « et si je veux juste rester visible »")
+  verifier("elle a une VRAIE croix de fermeture",
+    /aria-label="Fermer"/.test(tribu))
+  verifier('et le refus est retenu pour la session',
+    /sessionStorage\.setItem\('yoppaa_tribu_fermee'/.test(tribu),
+    'une fenêtre qui revient à chaque écran se fait fermer sans être lue')
+  verifier("le drapeau écrit est bien celui qui est LU",
+    /sessionStorage\.getItem\('yoppaa_tribu_fermee'\)/.test(tribu),
+    'écrire une valeur que personne ne relit est du code mort qui a l\'air vivant')
+  verifier("elle ne surgit pas dès la première seconde",
+    /setTimeout\(\(\) => setVisible\(true\), 9000\)/.test(tribu))
+  verifier("elle se tait quand le formulaire est déjà envoyé",
+    /masquer=\{statut\.envoi === 'ok'\}/.test(reveal),
+    'la proposer à quelqu\'un qui vient de s\'inscrire, c\'est lui dire qu\'on ne l\'a pas vu')
+  verifier("elle n'utilise aucun flou, qui gèle le défilement iPhone",
+    !/blur\(/.test(tribu))
+  verifier("elle mesure en dvh, jamais en vh",
+    !/[^d]vh\b/.test(tribu))
+
   // d) Les réseaux sociaux, une seule source pour trois surfaces.
   verifier("l'adresse Facebook est celle de la page Yoppaa",
     FACEBOOK_URL === 'https://www.facebook.com/yoppaaapp/', FACEBOOK_URL)

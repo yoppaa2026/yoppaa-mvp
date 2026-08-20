@@ -346,11 +346,22 @@ function generateMarketingSvg(width, height, options = {}) {
     const dotGap = dotBase * 0.55
     const dotOffset = dotBase * 0.4
     const dotsTotalW = 3 * dotBase + 2 * dotMini + 4 * dotGap
-    const dotsY = height - 90
+    // ⚠️ LE WORDMARK MANQUAIT : la signature ne portait QUE les points.
+    // Les 5 points seuls suffisent à un favicon, pas à une publication : sur
+    // Facebook, quelqu'un qui ne connaît pas encore la marque voit cinq ronds
+    // et ne retient aucun nom. Le bloc est aussi remonté, il touchait presque
+    // le bord bas.
+    const wordmarkSize = dotBase * 1.9
+    const hautBloc = height - 200
+    const wordmarkY = hautBloc + wordmarkSize
+    const dotsY = wordmarkY + dotBase * 0.5
     const dotsStartX = contentCenterX - dotsTotalW / 2
-    const sloganY = dotsY + dotBase + dotOffset + dotBase * 1.6
+    const sloganY = dotsY + dotBase + dotOffset + dotBase * 1.5
     const sloganSize = dotBase * 0.95
     footerSVG = `
+      <text x="${contentCenterX}" y="${wordmarkY}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="800" font-size="${wordmarkSize}" letter-spacing="${-0.05 * wordmarkSize}" text-anchor="middle">
+        <tspan fill="#FFFFFF">yo</tspan><tspan fill="${T.light}">pp</tspan><tspan fill="${T.mid}">aa</tspan>
+      </text>
       ${renderDotsV2B(dotsStartX, dotsY, dotBase, ['#FFFFFF', T.light, T.light, T.mid, T.mid])}
       <text x="${contentCenterX}" y="${sloganY}" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="600" font-size="${sloganSize}" letter-spacing="0.3" text-anchor="middle" fill="${T.light}" opacity="0.9">Ton quartier dans ta poche</text>
     `

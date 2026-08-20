@@ -17,7 +17,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { PLAN_LABEL } from '@/lib/plans'
-import { estRegimeLancement, libelleFinEssaiLancement, ESSAI_JOURS_MINIMUM } from '@/lib/lancement'
+import { estRegimeLancement, libelleDernierJourGratuit, ESSAI_JOURS_MINIMUM } from '@/lib/lancement'
 
 const T = {
   ink:    '#1A0840',
@@ -55,7 +55,7 @@ function libelleFinEssaiReelle(iso) {
 function phraseEssaiTarif(tarif) {
   const suite = `puis ${tarif.toFixed(2).replace('.', ',')}€/mois sans engagement`
   return estRegimeLancement()
-    ? `Offert jusqu'au ${libelleFinEssaiLancement()}, ${suite}`
+    ? `Offert jusqu'au ${libelleDernierJourGratuit()} inclus, ${suite}`
     : `${ESSAI_JOURS_MINIMUM} jours gratuits, ${suite}`
 }
 

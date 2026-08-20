@@ -23,8 +23,9 @@
 
 import { readFileSync } from 'node:fs'
 import {
-  finEssai, joursOfferts, joursOffertsAuLancement, estRegimeLancement, phraseEssai,
-  libelleLancement, libelleFinEssaiLancement,
+  finEssai, joursOfferts, joursOffertsAuLancement, joursAvance, estRegimeLancement, phraseEssai,
+  libelleLancement, libelleFinEssaiLancement, libelleDernierJourGratuit,
+  progressionVersLancement,
   LAUNCH_DATE_ISO, FIN_ESSAI_LANCEMENT_ISO, ESSAI_JOURS_MINIMUM,
 } from '../lib/lancement.js'
 import { calculerTrialEnd, isTrialDiffereActif } from '../lib/stripe-billing.js'
@@ -62,8 +63,9 @@ function sansCommentaires(src) {
 
   // Le tableau qu'Alex a validé, cas par cas, et rien d'autre.
   const TABLE = [
-    { nom: 'inscrit en août 2026',   le: '2026-08-20T10:00:00+02:00', fin: '2027-01-08', jours: 141, lancement: true },
-    { nom: 'inscrit le 1er nov.',    le: '2026-11-01T14:00:00+01:00', fin: '2027-01-08', jours: 68,  lancement: true },
+    { nom: 'inscrit en août 2026',   le: '2026-08-20T10:00:00+02:00', fin: '2027-01-09', jours: 142, lancement: true },
+    { nom: "inscrit le jour de l'ouverture", le: '2026-10-01T10:00:00+02:00', fin: '2027-01-09', jours: 100, lancement: true },
+    { nom: 'inscrit le 1er nov.',    le: '2026-11-01T14:00:00+01:00', fin: '2027-01-09', jours: 69,  lancement: true },
     { nom: 'inscrit le 20 déc.',     le: '2026-12-20T09:00:00+01:00', fin: '2027-01-19', jours: 30,  lancement: false },
     { nom: 'inscrit le 15 mars 27',  le: '2027-03-15T09:00:00+01:00', fin: '2027-04-14', jours: 30,  lancement: false },
   ]
@@ -115,8 +117,8 @@ function sansCommentaires(src) {
   verifier("le libellé de lancement dit « 1er octobre 2026 »",
     libelleLancement({ avecAnnee: true }) === '1er octobre 2026',
     libelleLancement({ avecAnnee: true }))
-  verifier("le libellé de fin d'essai dit « 8 janvier 2027 »",
-    libelleFinEssaiLancement() === '8 janvier 2027',
+  verifier("le libellé de facturation dit « 9 janvier 2027 »",
+    libelleFinEssaiLancement() === '9 janvier 2027',
     libelleFinEssaiLancement())
   verifier('la phrase de vente nomme la date, pas seulement une durée',
     phraseEssai(jour('2026-08-20T10:00:00+02:00')).includes('8 janvier 2027'),
@@ -128,8 +130,30 @@ function sansCommentaires(src) {
   // Les deux constantes elles-mêmes.
   verifier("l'ouverture publique est bien au 1er octobre 2026",
     LAUNCH_DATE_ISO.startsWith('2026-10-01'), LAUNCH_DATE_ISO)
-  verifier("la gratuité de lancement s'arrête bien au 8 janvier 2027",
-    FIN_ESSAI_LANCEMENT_ISO.startsWith('2027-01-08'), FIN_ESSAI_LANCEMENT_ISO)
+  verifier('la première facture de lancement tombe bien le 9 janvier 2027',
+    FIN_ESSAI_LANCEMENT_ISO.startsWith('2027-01-09'), FIN_ESSAI_LANCEMENT_ISO)
+
+  // ⚠️ LA PROMESSE PUBLIQUE, REFAITE PAR L'ADDITION.
+  // « 100 jours à partir du 1er octobre » n'est écrit nulle part : il découle
+  // des deux dates. Si l'une bouge sans l'autre, ce nombre devient 97 ou 103 et
+  // toute la communication ment sans que rien ne le signale.
+  verifier("les 100 jours promis tombent juste depuis les deux dates",
+    joursOffertsAuLancement() === 100, `${joursOffertsAuLancement()} jours`)
+  verifier('le dernier jour gratuit est la veille de la facture',
+    libelleDernierJourGratuit() === '8 janvier 2027', libelleDernierJourGratuit())
+  verifier('les deux libellés ne se confondent pas',
+    libelleDernierJourGratuit() !== libelleFinEssaiLancement(),
+    'écrire « offert jusqu\'au 9 janvier » serait faux d\'une journée')
+
+  // L'avance, et l'addition qui la rend crédible : 42 + 100 = 142.
+  const aout = jour('2026-08-20T10:00:00+02:00')
+  verifier("l'avance plus les 100 jours donne bien le total annoncé",
+    joursAvance(aout) + joursOffertsAuLancement() === joursOfferts(aout),
+    `${joursAvance(aout)} + ${joursOffertsAuLancement()} ≠ ${joursOfferts(aout)}`)
+  verifier("l'avance est nulle une fois l'ouverture passée",
+    joursAvance(jour('2026-11-01T14:00:00+01:00')) === 0)
+  verifier("l'avance ne compte pas les jours d'une date invalide",
+    joursAvance(new Date('pas une date')) === 0)
 }
 
 // ═══ 2. CE QUE STRIPE RECEVRA ════════════════════════════════════════════
@@ -196,8 +220,11 @@ function sansCommentaires(src) {
 
   // La landing doit dire la date de fin de gratuité : c'est l'argument.
   const reveal = sansCommentaires(lire('app/components/LandingReveal.js'))
-  verifier('la landing annonce la fin de gratuité',
-    /libelleFinEssaiLancement\(\)/.test(reveal))
+  verifier('la landing annonce le dernier jour gratuit',
+    /libelleDernierJourGratuit\(\)/.test(reveal))
+  verifier("la landing n'annonce PAS la date de facturation comme une gratuité",
+    !/offertes? jusqu&rsquo;au \{libelleFinEssaiLancement/.test(reveal),
+    'ce serait faux d\'une journée')
   verifier("la landing annonce la date d'ouverture",
     /libelleLancement\(\)/.test(reveal))
 
@@ -225,8 +252,22 @@ function sansCommentaires(src) {
 // FAIT, avec sa convention de décompte, sinon un litige se tranche contre nous.
 {
   const cgu = sansCommentaires(lire('app/legal/page.js'))
-  verifier('les CGU nomment la date de fin de gratuité',
-    /8 janvier 2027/.test(cgu))
+  // ⚠️ On COMPTE : les CGU énoncent la gratuité à deux endroits, la règle
+  // générale et le cas de celui qui arrive après l'ouverture. N'en contrôler
+  // qu'une laissait l'autre virer au 9 janvier sans que rien ne bouge.
+  // Mesurée par mutation : MUETTE.
+  const finsGratuites = (cgu.match(/8 janvier 2027 inclus/g) || []).length
+  verifier('les CGU nomment le dernier jour gratuit aux deux endroits',
+    finsGratuites >= 2, `${finsGratuites} mention(s)`)
+  verifier("les CGU ne présentent jamais le 9 janvier comme un jour gratuit",
+    !/gratuité jusqu&rsquo;au 9 janvier|offert jusqu&rsquo;au 9 janvier/.test(cgu))
+  verifier('les CGU nomment la date de la première facture',
+    /9 janvier 2027/.test(cgu))
+  verifier('les CGU annoncent les cent jours',
+    /cent \(100\) jours/.test(cgu))
+  verifier("les CGU disent ce que touche celui qui arrive avant l'ouverture",
+    /ainsi que des journées séparant sa création/.test(cgu),
+    "sans ça, « 100 jours » et « 142 jours » se contredisent noir sur blanc")
   verifier('les CGU énoncent la règle des deux dates',
     /plus tardive/.test(cgu))
   verifier('les CGU nomment le plancher de trente jours',
@@ -235,7 +276,7 @@ function sansCommentaires(src) {
     /veille de la date de fin/.test(cgu),
     'sans elle, 68 ou 69 jours est indécidable et le contrat est muet')
   verifier('les CGU donnent un exemple chiffré vérifiable',
-    /68 journées/.test(cgu))
+    /69 journées/.test(cgu))
   verifier("les CGU ne promettent plus un essai qui démarre au 1er septembre",
     !/1er septembre 2026/.test(cgu))
   verifier("les CGU disent qu'aucune carte n'est exigée",
@@ -273,6 +314,15 @@ function sansCommentaires(src) {
   verifier("l'éditeur nomme la société qui édite",
     parType.Organization?.legalName === 'Avcotech SRL')
 
+  // ⚠️ Le balisage doit dire la MÊME chose que la page. « commune par commune »
+  // y avait survécu alors que la landing ne le disait plus : trouvé en relisant
+  // la page SERVIE, pas la source. Google lit ce texte, les gens aussi.
+  const textesBalisage = JSON.stringify(graphe)
+  verifier("le balisage ne parle plus d'ouverture commune par commune",
+    !/commune par commune/.test(textesBalisage))
+  verifier('le balisage dit que la Wallonie est couverte',
+    /en Wallonie/.test(textesBalisage))
+
   // ⚠️ LE POINT QUI COMPTE : les prix balisés doivent être ceux des cartes
   // affichées. Un prix recopié dérive au premier changement de tarif, et
   // Google se met alors à annoncer un tarif que la page ne pratique plus.
@@ -296,9 +346,14 @@ function sansCommentaires(src) {
   const payantes = offres.filter(o => parseFloat(o.price) > 0)
   for (const o of payantes) {
     verifier(`${o.name} annonce la gratuité de lancement`,
-      /8 janvier 2027/.test(o.description))
-    verifier(`${o.name} borne la validité du prix`,
-      o.priceValidUntil === '2027-01-08')
+      /8 janvier 2027 inclus/.test(o.description))
+    // ⚠️ `priceValidUntil` NE DOIT PAS être posé ici. Je l'y avais mis pour
+    // exprimer la fin de la gratuité : contresens. Ce champ dit quand LE PRIX
+    // ANNONCÉ expire, or 19,90 €/mois n'expire pas le 9 janvier, il commence.
+    // Google aurait affiché une expiration de tarif inexistante.
+    verifier(`${o.name} ne prétend pas que son prix expire`,
+      o.priceValidUntil === undefined,
+      'le prix mensuel ne cesse pas à la fin de l\'essai, il démarre')
   }
   const gratuite = offres.find(o => parseFloat(o.price) === 0)
   verifier("la formule gratuite ne parle pas d'une gratuité de lancement",
@@ -415,13 +470,30 @@ function sansCommentaires(src) {
   verifier("et ce bloc est MONTÉ dans la page",
     /<EncartOffreLancement[\s/>]/.test(reveal),
     'un composant jamais monté est du code mort qui a l\'air vivant')
-  verifier("l'offre apparaît DANS LE HERO, pas seulement en bas de page",
-    /\{joursOfferts\(\)\} jours offerts/.test(hero))
-  verifier('et le hero nomme la date de fin de gratuité',
-    /libelleFinEssaiLancement\(\)/.test(hero))
-  verifier("le bloc compare avec ce qu'on toucherait en attendant",
-    /joursOffertsAuLancement\(\)/.test(reveal),
-    'sans la comparaison, « dépêche-toi » n\'est qu\'une injonction')
+  // ⚠️ LE HERO ANNONCE D'ABORD LES 100 JOURS, la promesse publique, et l'avance
+  // ensuite comme un supplément. L'inverse ferait lire « 142 » comme une
+  // exagération, ce qu'Alex a signalé le 20/08 : « ça peut être interprété
+  // comme mensonger ». Une offre qu'on soupçonne ne convainc personne.
+  verifier("le hero annonce les 100 jours garantis, pas le total brut",
+    /\{joursOffertsAuLancement\(\)\} jours offerts/.test(hero))
+  verifier("le hero rattache les 100 jours à la date d'ouverture",
+    /à partir du \{libelleLancement\(\)\}/.test(hero))
+  verifier("le hero présente l'avance comme un supplément",
+    /joursAvance\(\)/.test(hero))
+  // ⚠️ On découpe LE BLOC avant d'y chercher, exactement comme pour le hero.
+  // Sans ce découpage, la garde trouvait `joursOffertsAuLancement()` ailleurs
+  // dans le fichier et restait verte alors que l'addition avait disparu du
+  // bloc. Mesurée par mutation : MUETTE.
+  const encart = brut.slice(brut.indexOf('function EncartOffreLancement'),
+    brut.indexOf('// Incitant mobilisation'))
+  verifier("le bloc de l'offre est bien découpé", encart.length > 800, `${encart.length} caractères`)
+  verifier("le bloc pose les 100 jours garantis",
+    /joursOffertsAuLancement\(\)/.test(encart))
+  verifier("le bloc montre l'ADDITION, ligne par ligne",
+    /\{avance > 0 && \(/.test(encart) && /= \{jours\} j/.test(encart),
+    'sans l\'addition posée, « 142 jours » se lit comme une exagération')
+  verifier("le bloc nomme la raison de chaque ligne",
+    /parce que tu arrives maintenant/.test(encart) && /pour tout le monde/.test(encart))
 
   // La comparaison, EXÉCUTÉE. C'est elle qui porte l'urgence.
   const auLancement = joursOffertsAuLancement()
@@ -429,6 +501,51 @@ function sansCommentaires(src) {
     auLancement < joursOfferts(), `${joursOfferts()} aujourd'hui contre ${auLancement} au lancement`)
   verifier('et même en attendant, le plancher reste tenu',
     auLancement >= ESSAI_JOURS_MINIMUM, `${auLancement} jours`)
+
+  // c bis) ⚠️ LA WALLONIE EST OUVERTE (décision Alex du 20/08).
+  // Il n'y a plus de seuil de déblocage ni d'activation commune par commune.
+  // L'ancien discours demandait au commerçant d'attendre ses voisins pour
+  // exister : devenu faux, et décourageant pour rien.
+  verifier("la landing n'annonce plus d'ouverture commune par commune",
+    !/commune par commune/.test(reveal))
+  verifier('la landing ne parle plus de seuil à atteindre',
+    !/seuil_preinscrits|pour activer <strong>/.test(reveal))
+  verifier("la landing n'affiche plus de jauge de déblocage",
+    !/const barre = \(pct\)/.test(reveal),
+    'une barre de progression fait croire à une attente qui n\'existe plus')
+  verifier('la landing ne fait plus dépendre la préinscription d\'une activation',
+    !/fait avancer ta commune|commune s&rsquo;active|vers son activation/.test(reveal))
+  verifier('la landing dit que toute la Wallonie est ouverte',
+    /Toute la Wallonie/.test(reveal))
+
+  // ⚠️ PLUS AUCUN COMPTE AFFICHÉ. De petits nombres racontent un démarrage, pas
+  // un mouvement, et découragent celui qu'ils devraient entraîner.
+  verifier("la landing n'affiche plus le nombre de commerçants",
+    !/\{com\}<\/strong> commerce|nb_commercants \|\| 0/.test(reveal))
+  verifier("la landing n'affiche plus le nombre de curieux",
+    !/\{hab\}<\/strong> habitant|nb_yoppers \|\| 0/.test(reveal))
+
+  // Mais le bloc ne reste pas vide : la barre montre le chemin vers
+  // l'ouverture. Elle avance seule et se vérifie sur un calendrier.
+  verifier('la landing montre la progression vers l\'ouverture',
+    /progressionVersLancement\(\)/.test(reveal))
+  verifier('et annonce le nombre de jours restants',
+    /joursAvantLancement\(\)/.test(reveal) && /J-\{restant\}/.test(reveal))
+
+  // La progression, EXÉCUTÉE : c'est une mesure, pas une décoration.
+  const pDebut = progressionVersLancement(new Date('2026-08-01T10:00:00+02:00'))
+  const pMilieu = progressionVersLancement(new Date('2026-09-01T12:00:00+02:00'))
+  const pVeille = progressionVersLancement(new Date('2026-09-30T12:00:00+02:00'))
+  const pApres = progressionVersLancement(new Date('2026-11-01T12:00:00+01:00'))
+  verifier('la barre part de zéro le jour de l\'annonce', pDebut === 0, `${pDebut}%`)
+  verifier('elle avance vraiment entre l\'annonce et l\'ouverture',
+    pDebut < pMilieu && pMilieu < pVeille, `${pDebut} puis ${pMilieu} puis ${pVeille}`)
+  verifier('elle est pleine une fois l\'ouverture passée', pApres === 100, `${pApres}%`)
+  verifier('elle ne dépasse jamais cent', pApres <= 100 && pVeille <= 100)
+  verifier('elle avance assez pour se voir bouger d\'un jour à l\'autre',
+    pVeille - pMilieu >= 30, `${pVeille - pMilieu} points sur le dernier mois`)
+  verifier('et le dit sans ambiguïté sur ce qui a disparu',
+    /pas de seuil à atteindre/.test(reveal))
 
   // d) Les réseaux sociaux, une seule source pour trois surfaces.
   verifier("l'adresse Facebook est celle de la page Yoppaa",

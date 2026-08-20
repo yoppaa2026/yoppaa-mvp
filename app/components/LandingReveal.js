@@ -19,8 +19,10 @@ import Link from 'next/link'
 import { Lock } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import {
-  LAUNCH_DATE_ISO, libelleLancement, libelleFinEssaiLancement,
-  joursOfferts, joursOffertsAuLancement, estRegimeLancement, ESSAI_JOURS_MINIMUM,
+  LAUNCH_DATE_ISO, libelleLancement, libelleDernierJourGratuit,
+  joursOfferts, joursOffertsAuLancement, joursAvance,
+  progressionVersLancement, joursAvantLancement,
+  estRegimeLancement, ESSAI_JOURS_MINIMUM,
 } from '@/lib/lancement'
 import { FACEBOOK_URL, RESEAUX } from '@/lib/reseaux'
 import PartageMobilisation from './PartageMobilisation'
@@ -674,8 +676,8 @@ function CompteurLancement() {
 function EncartOffreLancement({ onRejoindre }) {
   if (!estRegimeLancement()) return null
   const jours = joursOfferts()
-  const siAttente = joursOffertsAuLancement()
-  const perdus = jours - siAttente
+  const garantis = joursOffertsAuLancement()   // 100, calculés depuis les deux dates
+  const avance = joursAvance()                  // ce que l'avance ajoute, et qui fond
 
   return (
     <div style={{
@@ -703,7 +705,7 @@ function EncartOffreLancement({ onRejoindre }) {
         <div style={{ flex: '1 1 340px', minWidth: 280 }}>
           <p style={{ margin: '0 0 14px', fontSize: '1.02rem', fontWeight: 700, lineHeight: 1.6, color: '#fff' }}>
             <strong style={{ color: T.light }}>Communiquer</strong> et <strong style={{ color: T.light }}>Vendre</strong> te
-            sont offertes jusqu&rsquo;au <strong style={{ color: T.light }}>{libelleFinEssaiLancement()}</strong>,
+            sont offertes jusqu&rsquo;au <strong style={{ color: T.light }}>{libelleDernierJourGratuit()}</strong> inclus,
             quel que soit le forfait que tu choisis.
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
@@ -714,14 +716,45 @@ function EncartOffreLancement({ onRejoindre }) {
             ))}
           </div>
           <div style={{ height: 1, background: 'rgba(255,255,255,0.16)', margin: '0 0 16px' }}/>
+
+          {/* ⚠️ L'ADDITION EST MONTRÉE, LIGNE PAR LIGNE.
+              Annoncer « 142 jours » quand l'offre publique dit « 100 jours »
+              se lit comme une exagération, et une offre qu'on soupçonne ne
+              convainc personne. Posée en trois lignes, avec la raison de
+              chacune, elle se vérifie sur un calendrier en dix secondes. */}
+          {avance > 0 && (
+            <div style={{ margin: '0 0 16px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {[
+                { n: garantis, quoi: `offerts à partir du ${libelleLancement()}`, pourquoi: 'pour tout le monde', signe: '' },
+                { n: avance, quoi: `d'avance d'ici le ${libelleLancement()}`, pourquoi: 'parce que tu arrives maintenant', signe: '+' },
+              ].map(l => (
+                <div key={l.quoi} style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <span style={{ minWidth: 62, fontSize: 17, fontWeight: 900, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
+                    {l.signe}{l.n} j
+                  </span>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.5, color: 'rgba(255,255,255,0.9)' }}>
+                    {l.quoi} <span style={{ color: T.light }}>· {l.pourquoi}</span>
+                  </span>
+                </div>
+              ))}
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.22)', margin: '2px 0' }}/>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                <span style={{ minWidth: 62, fontSize: 17, fontWeight: 900, color: T.light, fontVariantNumeric: 'tabular-nums' }}>
+                  = {jours} j
+                </span>
+                <span style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.5, color: '#fff' }}>
+                  jusqu&rsquo;au {libelleDernierJourGratuit()} inclus
+                </span>
+              </div>
+            </div>
+          )}
+
           <p style={{ margin: '0 0 18px', fontSize: 14, fontWeight: 600, lineHeight: 1.65, color: 'rgba(255,255,255,0.92)' }}>
             Le {libelleLancement()} est la date du lancement <strong style={{ color: '#fff' }}>officiel</strong>,
-            pas celle du départ. Ta page part en ligne dès qu&rsquo;elle est validée, tes premiers
-            clients commandent avant tout le monde, et la fin de la gratuité, elle, ne bouge pas.
-            En t&rsquo;inscrivant aujourd&rsquo;hui tu as <strong style={{ color: '#fff' }}>{jours} jours</strong> ;
-            en attendant le {libelleLancement()}, il n&rsquo;en restera
-            que <strong style={{ color: '#fff' }}>{siAttente}</strong>.
-            {perdus > 0 && <> Soit <strong style={{ color: T.light }}>{perdus} jours</strong> qui ne reviendront pas.</>}
+            pas celle du départ. Ta page part en ligne dès qu&rsquo;elle est validée et tes premiers
+            clients commandent avant tout le monde.
+            {avance > 0 && <> Ces <strong style={{ color: '#fff' }}>{avance} jours d&rsquo;avance</strong> ne
+              te coûtent rien, et il y en a un de moins chaque jour.</>}
           </p>
           {/* ⚠️ Style écrit ici, PAS `btnPrimaire` : celui-ci vit DANS le
               composant principal, donc l'appeler d'ici serait une variable
@@ -743,67 +776,65 @@ function EncartOffreLancement({ onRejoindre }) {
 }
 
 // Incitant mobilisation (repris de LandingTeasing, mêmes règles)
+// ⚠️ RÉÉCRIT LE 20/08 : IL N'Y A PLUS DE SEUIL DE DÉBLOCAGE.
+//
+// Ce bloc affichait une jauge « 3 commerçants sur 10 pour activer Mettet », et
+// tout le discours de la landing en découlait. La Wallonie est ouverte : cette
+// jauge ne mesure plus rien, et laisser une barre de progression à l'écran
+// ferait croire à une attente qui n'existe plus.
+//
+// Ce qui reste vrai et utile, c'est le NOMBRE. Il ne conditionne rien, il
+// rassure : on ne rejoint pas une place vide. Un chiffre trop petit se tait de
+// lui-même plutôt que d'annoncer « 1 commerçant », qui découragerait.
 function IncitantMobilisation({ communeStats, globalStats }) {
   const boxSt = { margin: '0 0 14px', padding: '12px 14px', borderRadius: 12, background: 'rgba(150,96,224,0.14)', border: '1px solid rgba(196,160,244,0.35)' }
   const ligneSt = { margin: 0, fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.45 }
   const sousSt = { margin: 0, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.92)' }
-  const barre = (pct) => (
-    <div style={{ height: 7, borderRadius: 100, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', margin: '8px 0 6px' }}>
-      <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: 'linear-gradient(90deg, #9660E0, #C4A0F4)', transition: 'width 0.4s' }}/>
-    </div>
-  )
+
+  // ⚠️ PLUS AUCUN COMPTE AFFICHÉ (décision Alex, 20/08).
+  // « 3 commerçants, 11 curieux » décourage au lieu d'entraîner : de petits
+  // nombres racontent un démarrage, pas un mouvement. Mais retirer le chiffre
+  // sans rien mettre à la place laisse un bloc mort.
+  //
+  // La barre montre donc le chemin parcouru entre l'annonce publique et
+  // l'ouverture. Elle avance toute seule chaque jour, elle donne le sentiment
+  // que ça bouge, et surtout ELLE NE MENT PAS : elle mesure du temps réel, que
+  // n'importe qui peut recompter sur un calendrier. Une jauge de
+  // « préparation » inventée aurait été un mensonge déguisé en pourcentage.
+  const pct = progressionVersLancement()
+  const restant = joursAvantLancement()
+  const barreLancement = restant > 0 ? (
+    <>
+      <div style={{ height: 7, borderRadius: 100, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', margin: '8px 0 6px' }}>
+        <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: 'linear-gradient(90deg, #9660E0, #C4A0F4)', transition: 'width 0.4s' }}/>
+      </div>
+      <p style={sousSt}>
+        Ouverture officielle le {libelleLancement()} · <strong>J-{restant}</strong>
+      </p>
+    </>
+  ) : null
 
   if (communeStats?.horsZone) {
     return (
       <div style={boxSt}>
-        <p style={ligneSt}>Yoppaa arrive région par région 🟣</p>
-        <p style={{ ...sousSt, marginTop: 6 }}>Laisse ton email : on te prévient dès que Yoppaa arrive dans ta commune.</p>
+        <p style={ligneSt}>Yoppaa démarre en Wallonie 🟣</p>
+        <p style={{ ...sousSt, marginTop: 6 }}>Laisse ton email : on te prévient dès que Yoppaa arrive chez toi.</p>
       </div>
     )
   }
   if (communeStats) {
-    const com = communeStats.nb_commercants || 0
-    const seuil = Math.max(1, communeStats.seuil_preinscrits || 10)
-    const hab = communeStats.nb_yoppers || 0
-    const pct = Math.min(100, Math.round((com / seuil) * 100))
-    const atteint = com >= seuil
-    if (communeStats.active) {
-      return (
-        <div style={boxSt}>
-          <p style={ligneSt}>Yoppaa est disponible à <strong>{communeStats.nom}</strong> 🟣</p>
-          {barre(100)}
-          <p style={sousSt}>{hab > 0 ? `${hab} habitant${hab > 1 ? 's' : ''} sont déjà Yoppers` : 'Deviens Yopper !'}</p>
-        </div>
-      )
-    }
     return (
       <div style={boxSt}>
-        <p style={ligneSt}>
-          {atteint
-            ? <>Ça y est, {communeStats.nom} a ses {seuil} commerçants ! Rejoins les Yoppers : plus on est nombreux, plus notre quartier revit 🟣</>
-            : <>Déjà <strong>{com}</strong> commerçant{com > 1 ? 's' : ''} sur <strong>{seuil}</strong> pour activer <strong>{communeStats.nom}</strong> 🟣</>}
-        </p>
-        {barre(pct)}
-        <p style={sousSt}>
-          {hab > 0
-            ? `${hab} habitant${hab > 1 ? 's' : ''} ${hab > 1 ? 'attendent' : 'attend'} déjà. Parles-en autour de toi.`
-            : 'Sois le premier habitant à te mobiliser.'}
-        </p>
+        <p style={ligneSt}>Yoppaa est ouvert à <strong>{communeStats.nom}</strong> 🟣</p>
+        {barreLancement || <p style={{ ...sousSt, marginTop: 6 }}>Ta page peut être en ligne cette semaine.</p>}
       </div>
     )
   }
   if (globalStats) {
-    const com = globalStats.total_commercants || 0
-    const hab = globalStats.total_yoppers || 0
-    const petit = (com + hab) < 5
     return (
       <div style={boxSt}>
-        <p style={ligneSt}>
-          {petit
-            ? <>Sois parmi les tout premiers à faire venir Yoppaa dans ta commune 🟣</>
-            : <>Déjà <strong>{com}</strong> commerçant{com > 1 ? 's' : ''} et <strong>{hab}</strong> curieux mobilisés 🟣</>}
-        </p>
-        <p style={{ ...sousSt, marginTop: 6 }}>Entre ton code postal pour voir où en est ta commune.</p>
+        <p style={ligneSt}>Yoppaa est ouvert dans toute la Wallonie 🟣</p>
+        {barreLancement || <p style={{ ...sousSt, marginTop: 6 }}>Entre ton code postal : ta commune est déjà ouverte.</p>}
       </div>
     )
   }
@@ -1107,11 +1138,16 @@ export default function LandingReveal({ referent = null }) {
               padding: '12px 22px', borderRadius: 100, marginBottom: 26,
               background: 'rgba(196,160,244,0.16)', border: '1.5px solid rgba(196,160,244,0.45)',
             }}>
+              {/* ⚠️ On annonce D'ABORD les 100 jours, la promesse publique, et
+                  l'avance ENSUITE, comme un supplément. L'inverse ferait lire
+                  « 142 » comme une exagération, alors que c'est une addition
+                  vérifiable. Le détail est posé ligne par ligne plus bas. */}
               <span style={{ fontSize: 'clamp(1.15rem, 3.4vw, 1.5rem)', fontWeight: 900, letterSpacing: '-0.8px', color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
-                {joursOfferts()} jours offerts
+                {joursOffertsAuLancement()} jours offerts
               </span>
               <span style={{ fontSize: 13.5, fontWeight: 700, color: T.light }}>
-                jusqu&rsquo;au {libelleFinEssaiLancement()}, quel que soit le forfait
+                à partir du {libelleLancement()}, quel que soit le forfait
+                {joursAvance() > 0 && ` · + ${joursAvance()} jours d'avance si tu arrives maintenant`}
               </span>
             </div>
           )}
@@ -1264,7 +1300,7 @@ export default function LandingReveal({ referent = null }) {
             {[
               { chiffre: '0%', label: 'de commission Yoppaa sur tes ventes' },
               estRegimeLancement()
-                ? { chiffre: `${joursOfferts()} jours`, label: `offerts, jusqu'au ${libelleFinEssaiLancement()}, sans carte de paiement` }
+                ? { chiffre: `${joursOfferts()} jours`, label: `offerts, jusqu'au ${libelleDernierJourGratuit()}, sans carte de paiement` }
                 : { chiffre: `${ESSAI_JOURS_MINIMUM} jours`, label: "d'essai gratuit, sans carte de paiement" },
               { chiffre: '10 min', label: 'pour mettre ta page en ligne' },
               { chiffre: '0€', label: 'la formule Exister, pour toujours' },
@@ -1428,17 +1464,22 @@ export default function LandingReveal({ referent = null }) {
 
       {/* ═══ 6. LA ZONE : commune par commune ═══ */}
       <section style={{ maxWidth: 760, margin: '0 auto', padding: '64px 20px 8px', textAlign: 'center' }}>
+        {/* ⚠️ Réécrit le 20/08 : il n'y a PLUS de seuil de déblocage et plus
+            d'activation commune par commune. Toute la Wallonie est ouverte.
+            L'ancien discours demandait au commerçant d'attendre ses voisins
+            pour exister, ce qui est devenu faux, et décourageant pour rien. */}
         <SectionEyebrow>Où ça se passe</SectionEyebrow>
         <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.1rem)', fontWeight: 900, letterSpacing: '-1px', margin: '0 0 14px', color: T.ink }}>
-          On démarre en Wallonie, commune par commune.
+          Toute la Wallonie, dès aujourd&rsquo;hui.
         </h2>
-        <p style={{ fontSize: '1rem', color: T.muted, lineHeight: 1.7, maxWidth: 600, margin: '0 auto 18px', fontWeight: 500 }}>
-          Yoppaa ne s&rsquo;ouvre pas partout à moitié : chaque commune s&rsquo;active quand suffisamment
-          de commerçants l&rsquo;ont rejointe. C&rsquo;est donc toi qui fais venir Yoppaa chez toi,
-          en te préinscrivant et en en parlant autour de toi.
+        <p style={{ fontSize: '1rem', color: T.muted, lineHeight: 1.7, maxWidth: 620, margin: '0 auto 18px', fontWeight: 500 }}>
+          Pas de liste d&rsquo;attente, pas de seuil à atteindre, pas de commune à débloquer :
+          où que soit ton commerce en Wallonie, tu peux ouvrir ta page maintenant et prendre
+          tes premières commandes.
         </p>
         <p style={{ fontSize: '0.95rem', fontWeight: 800, color: T.main, margin: 0 }}>
-          Entre ton code postal dans le formulaire : tu verras où en est ta commune.
+          Et plus vous êtes nombreux dans une commune, plus ses habitants ont de raisons
+          d&rsquo;ouvrir l&rsquo;app chaque matin.
         </p>
       </section>
 
@@ -1473,12 +1514,14 @@ export default function LandingReveal({ referent = null }) {
               : <>Rejoins ton quartier.</>}
           </h2>
           <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)', margin: '0 0 32px', lineHeight: 1.65, fontWeight: 500, maxWidth: 460 }}>
-            <strong style={{ color: '#fff' }}>Commerçant ?</strong> Ta page peut être en ligne cette semaine,
-            et ta préinscription fait avancer ta commune vers son activation.
+            {/* ⚠️ Plus d'« activation de commune » : la Wallonie est ouverte,
+                et faire dépendre l'inscription d'un seuil serait faux. */}
+            <strong style={{ color: '#fff' }}>Commerçant ?</strong> Ta commune est déjà ouverte
+            et ta page peut être en ligne cette semaine.
             {estRegimeLancement() && <> Tes <strong style={{ color: T.light }}>{joursOfferts()} jours offerts</strong> commencent dès maintenant.</>}
             <br/>
-            <strong style={{ color: '#fff' }}>Habitant ?</strong> Laisse ton email : on te prévient dès que
-            ta commune s&rsquo;active, et tu seras parmi les premiers à télécharger l&rsquo;app.
+            <strong style={{ color: '#fff' }}>Habitant ?</strong> Laisse ton email : tu seras parmi les
+            premiers à télécharger l&rsquo;app, et on te prévient dès qu&rsquo;elle est disponible.
           </p>
 
           {statut.envoi === 'ok' ? (
@@ -1492,7 +1535,7 @@ export default function LandingReveal({ referent = null }) {
                 <div style={{ marginTop: 16, padding: '18px 16px', borderRadius: 16, background: 'rgba(150,96,224,0.16)', border: '1px solid rgba(196,160,244,0.4)', textAlign: 'center' }}>
                   <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 800, color: '#fff' }}>Ton kit de partage est prêt 🟣</p>
                   <p style={{ margin: '0 0 14px', fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.9)', lineHeight: 1.5 }}>
-                    Un lien perso et un QR code à partager. Chaque inscription via ton lien fait avancer ta commune.
+                    Un lien perso et un QR code à partager. Chaque inscription via ton lien t&rsquo;est attribuée.
                   </p>
                   <Link href={`/kit/${kitSlug}`} style={{ display: 'inline-block', padding: '12px 26px', borderRadius: 100, background: 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: '#1A0840', fontWeight: 900, fontSize: 13.5, letterSpacing: 0.3, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}>
                     Ouvrir mon kit de partage

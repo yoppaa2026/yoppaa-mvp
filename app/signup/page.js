@@ -33,7 +33,7 @@ import SelecteurTypes from '@/app/components/SelecteurTypes'
 import { estFoodTruck } from '@/lib/types-commerce'
 import {
   avantLancement, estRegimeLancement, joursOfferts,
-  libelleLancement, libelleFinEssaiLancement, ESSAI_JOURS_MINIMUM,
+  libelleLancement, libelleFinEssaiLancement, libelleDernierJourGratuit, ESSAI_JOURS_MINIMUM,
 } from '@/lib/lancement'
 
 // ─── SKIP-LOGIC (esprit ODOO : adaptive selon plan + categorie) ────────────────
@@ -546,7 +546,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
               <>
                 La formule <span style={{ color: T.light }}>Exister</span> est gratuite à vie.
                 {' '}<span style={{ color: T.light }}>Communiquer</span> et <span style={{ color: T.light }}>Vendre</span> te sont
-                offertes jusqu&apos;au <span style={{ color: T.light }}>{libelleFinEssaiLancement()}</span>, soit {joursOfferts()} jours.
+                offertes jusqu&apos;au <span style={{ color: T.light }}>{libelleDernierJourGratuit()}</span>, soit {joursOfferts()} jours.
               </>
             ) : (
               <>
@@ -1943,7 +1943,7 @@ function BandeauRecapPlan({ plan }) {
         <p style={{ fontSize: 13, fontWeight: 800, color: T.deep, margin: 0 }}>
           Plan <span style={{ color: T.main }}>{PLAN_LABEL[plan]}</span> &middot;{' '}
           {estRegimeLancement()
-            ? `offert jusqu'au ${libelleFinEssaiLancement()}`
+            ? `offert jusqu'au ${libelleDernierJourGratuit()}`
             : `essai ${ESSAI_JOURS_MINIMUM} jours gratuit`}
         </p>
       </div>
@@ -2920,7 +2920,7 @@ function CardPlan({ plan, categorie, actif, onClick }) {
           padding: '4px 9px', borderRadius: 100, display: 'inline-block',
           margin: '0 0 10px', letterSpacing: '0.3px',
         }}>{estRegimeLancement()
-          ? `Offert jusqu'au ${libelleFinEssaiLancement()}`
+          ? `Offert jusqu'au ${libelleDernierJourGratuit()}`
           : `${ESSAI_JOURS_MINIMUM} jours d'essai gratuit`}</p>
       )}
 

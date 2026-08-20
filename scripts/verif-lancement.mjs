@@ -23,7 +23,7 @@
 
 import { readFileSync } from 'node:fs'
 import {
-  finEssai, joursOfferts, estRegimeLancement, phraseEssai,
+  finEssai, joursOfferts, joursOffertsAuLancement, estRegimeLancement, phraseEssai,
   libelleLancement, libelleFinEssaiLancement,
   LAUNCH_DATE_ISO, FIN_ESSAI_LANCEMENT_ISO, ESSAI_JOURS_MINIMUM,
 } from '../lib/lancement.js'
@@ -31,6 +31,7 @@ import { calculerTrialEnd, isTrialDiffereActif } from '../lib/stripe-billing.js'
 import { jsonLdLanding, jsonLdLandingString, echapperJsonLd, SITE_URL } from '../lib/seo-landing.js'
 import { getPrixPlan } from '../lib/plans.js'
 import robots from '../app/robots.js'
+import { FACEBOOK_URL } from '../lib/reseaux.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -365,6 +366,81 @@ function sansCommentaires(src) {
     "l'image d'une Organization non téléchargeable est ignorée par Google")
   verifier('le robots.txt annonce le sitemap',
     robots().sitemap === `${SITE_URL}/sitemap.xml`)
+}
+
+// ═══ 6. CE QUE LA LANDING PROMET, ET À QUI ═══════════════════════════════
+// Trois demandes d'Alex du 20/08, et chacune corrige un contresens réel.
+{
+  const brut = lire('app/components/LandingReveal.js')
+  const reveal = sansCommentaires(brut)
+
+  // ⚠️ On DÉCOUPE le hero avant d'y chercher quoi que ce soit.
+  // Première version : la garde « l'offre apparaît dès le hero » cherchait la
+  // phrase dans TOUT le fichier. Mesurée par mutation, elle était MUETTE : la
+  // même phrase existe dans l'appel final, tout en bas de page, et suffisait à
+  // la satisfaire. Chercher au bon endroit, pas seulement chercher.
+  // Le découpage se fait sur le SOURCE BRUT : les repères de section sont des
+  // commentaires JSX, que `sansCommentaires` efface.
+  const hero = sansCommentaires(
+    brut.slice(brut.indexOf('1. HERO REVEAL'), brut.indexOf('2. MANIFESTO')))
+  verifier('le repère du hero est bien trouvé dans le source',
+    hero.length > 500, `${hero.length} caractères découpés`)
+
+  // a) Le hero parle aux COMMERÇANTS. Les habitants arrivent par leur
+  //    commerçant : c'est lui qu'il faut accrocher en trois secondes.
+  verifier('le titre du hero s\'adresse au commerçant',
+    /Ton commerce,<br\/>dans la poche de ton quartier/.test(reveal),
+    'il disait « Ton quartier dans ta poche », donc il parlait à l\'habitant')
+  verifier('le premier bouton du hero est celui du commerçant',
+    reveal.indexOf("allerAuForm('commercant')") < reveal.indexOf("allerAuForm('yopper')"),
+    'le bouton Yopper passait devant')
+
+  // b) ⚠️ LE CONTRESENS LE PLUS COÛTEUX : la page invitait à ATTENDRE le
+  //    1er octobre, alors qu'arriver tôt est tout l'intérêt de l'offre.
+  verifier('le hero dit que le lancement est OFFICIEL, pas le départ',
+    /Lancement officiel le \{libelleLancement\(\)\}/.test(reveal))
+  verifier("le hero dit qu'on n'a pas à attendre pour commencer",
+    /Pas besoin de l&rsquo;attendre pour commencer/.test(reveal))
+  verifier("l'appel final n'invite plus à attendre",
+    !/Rendez-vous le \{libelleLancement\(\)\}\./.test(reveal),
+    '« Rendez-vous le 1er octobre » disait le contraire de tout le reste')
+
+  // c) L'offre est VISIBLE : un bloc à elle, et monté pour de bon. Écrire un
+  //    composant que personne n'affiche est le défaut de l'onboarding, vivant
+  //    et jamais vu par quiconque.
+  verifier("l'offre a son propre bloc",
+    /function EncartOffreLancement/.test(reveal))
+  // ⚠️ `[\s/>]` et pas seulement le nom : sans la frontière, un composant
+  // renommé « EncartOffreLancementAutreChose » satisfaisait la garde.
+  verifier("et ce bloc est MONTÉ dans la page",
+    /<EncartOffreLancement[\s/>]/.test(reveal),
+    'un composant jamais monté est du code mort qui a l\'air vivant')
+  verifier("l'offre apparaît DANS LE HERO, pas seulement en bas de page",
+    /\{joursOfferts\(\)\} jours offerts/.test(hero))
+  verifier('et le hero nomme la date de fin de gratuité',
+    /libelleFinEssaiLancement\(\)/.test(hero))
+  verifier("le bloc compare avec ce qu'on toucherait en attendant",
+    /joursOffertsAuLancement\(\)/.test(reveal),
+    'sans la comparaison, « dépêche-toi » n\'est qu\'une injonction')
+
+  // La comparaison, EXÉCUTÉE. C'est elle qui porte l'urgence.
+  const auLancement = joursOffertsAuLancement()
+  verifier("attendre le lancement coûte vraiment des jours",
+    auLancement < joursOfferts(), `${joursOfferts()} aujourd'hui contre ${auLancement} au lancement`)
+  verifier('et même en attendant, le plancher reste tenu',
+    auLancement >= ESSAI_JOURS_MINIMUM, `${auLancement} jours`)
+
+  // d) Les réseaux sociaux, une seule source pour trois surfaces.
+  verifier("l'adresse Facebook est celle de la page Yoppaa",
+    FACEBOOK_URL === 'https://www.facebook.com/yoppaaapp/', FACEBOOK_URL)
+  verifier('la landing affiche le lien Facebook',
+    /FACEBOOK_URL/.test(reveal) && /RESEAUX\.map/.test(reveal))
+  verifier("le balisage relie la page Facebook à l'entreprise",
+    (jsonLdLanding()['@graph'].find(n => n['@type'] === 'Organization').sameAs || []).includes(FACEBOOK_URL),
+    'sans `sameAs`, Google voit deux entités qui ne se connaissent pas')
+  verifier("aucune adresse de réseau n'est recopiée dans la landing",
+    !/facebook\.com/.test(reveal),
+    'elle doit venir de lib/reseaux, sinon une des copies pointera un jour dans le vide')
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

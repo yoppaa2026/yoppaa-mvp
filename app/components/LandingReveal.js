@@ -20,8 +20,9 @@ import { Lock } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import {
   LAUNCH_DATE_ISO, libelleLancement, libelleFinEssaiLancement,
-  joursOfferts, estRegimeLancement, ESSAI_JOURS_MINIMUM,
+  joursOfferts, joursOffertsAuLancement, estRegimeLancement, ESSAI_JOURS_MINIMUM,
 } from '@/lib/lancement'
+import { FACEBOOK_URL, RESEAUX } from '@/lib/reseaux'
 import PartageMobilisation from './PartageMobilisation'
 
 const T = {
@@ -658,6 +659,89 @@ function CompteurLancement() {
   )
 }
 
+// ─── L'OFFRE DE LANCEMENT, en grand ─────────────────────────────────────────
+// ⚠️ Elle vivait en petit texte gris sous les formules, et personne ne la
+// voyait : une offre qu'il faut chercher n'est pas une offre.
+//
+// Elle dit maintenant sa MÉCANIQUE plutôt que de crier fort. La date de fin ne
+// bouge pas, donc attendre coûte des jours, et ce coût SE CHIFFRE : c'est bien
+// plus convaincant qu'un « dépêche-toi ». Les deux nombres sont calculés, pas
+// écrits : ils fondent tout seuls, jour après jour.
+//
+// ⚠️ Et elle corrige un contresens : le 1er octobre est la date du lancement
+// OFFICIEL, pas celle du départ. Un commerçant peut être en ligne bien avant,
+// et c'est même tout son intérêt.
+function EncartOffreLancement({ onRejoindre }) {
+  if (!estRegimeLancement()) return null
+  const jours = joursOfferts()
+  const siAttente = joursOffertsAuLancement()
+  const perdus = jours - siAttente
+
+  return (
+    <div style={{
+      background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 58%, ${T.main} 130%)`,
+      borderRadius: 24, overflow: 'hidden', color: '#fff',
+      boxShadow: `0 14px 34px ${T.ink}3A`, margin: '0 0 40px',
+    }}>
+      <Bande3px/>
+      <div style={{ padding: 'clamp(24px, 5vw, 38px)', display: 'flex', gap: 'clamp(20px, 4vw, 44px)', flexWrap: 'wrap', alignItems: 'center' }}>
+
+        {/* Le chiffre, et rien d'autre autour de lui */}
+        <div style={{ flex: '1 1 240px', minWidth: 220 }}>
+          <p style={{ margin: '0 0 10px', fontSize: 11.5, fontWeight: 900, color: T.light, textTransform: 'uppercase', letterSpacing: '1.4px' }}>
+            Offre de lancement
+          </p>
+          <p style={{ margin: 0, fontSize: 'clamp(2.6rem, 8vw, 4rem)', fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
+            {jours} jours
+          </p>
+          <p style={{ margin: '2px 0 0', fontSize: 'clamp(1.3rem, 4vw, 1.8rem)', fontWeight: 900, letterSpacing: '-1px', color: T.light }}>
+            offerts.
+          </p>
+        </div>
+
+        {/* Ce que ça veut dire, concrètement */}
+        <div style={{ flex: '1 1 340px', minWidth: 280 }}>
+          <p style={{ margin: '0 0 14px', fontSize: '1.02rem', fontWeight: 700, lineHeight: 1.6, color: '#fff' }}>
+            <strong style={{ color: T.light }}>Communiquer</strong> et <strong style={{ color: T.light }}>Vendre</strong> te
+            sont offertes jusqu&rsquo;au <strong style={{ color: T.light }}>{libelleFinEssaiLancement()}</strong>,
+            quel que soit le forfait que tu choisis.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+            {['Sans carte de paiement', 'Sans engagement', 'Résiliable en deux clics'].map(m => (
+              <span key={m} style={{ fontSize: 11.5, fontWeight: 800, padding: '5px 11px', borderRadius: 100, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.22)', color: '#fff' }}>
+                {m}
+              </span>
+            ))}
+          </div>
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.16)', margin: '0 0 16px' }}/>
+          <p style={{ margin: '0 0 18px', fontSize: 14, fontWeight: 600, lineHeight: 1.65, color: 'rgba(255,255,255,0.92)' }}>
+            Le {libelleLancement()} est la date du lancement <strong style={{ color: '#fff' }}>officiel</strong>,
+            pas celle du départ. Ta page part en ligne dès qu&rsquo;elle est validée, tes premiers
+            clients commandent avant tout le monde, et la fin de la gratuité, elle, ne bouge pas.
+            En t&rsquo;inscrivant aujourd&rsquo;hui tu as <strong style={{ color: '#fff' }}>{jours} jours</strong> ;
+            en attendant le {libelleLancement()}, il n&rsquo;en restera
+            que <strong style={{ color: '#fff' }}>{siAttente}</strong>.
+            {perdus > 0 && <> Soit <strong style={{ color: T.light }}>{perdus} jours</strong> qui ne reviendront pas.</>}
+          </p>
+          {/* ⚠️ Style écrit ici, PAS `btnPrimaire` : celui-ci vit DANS le
+              composant principal, donc l'appeler d'ici serait une variable
+              libre. Aucune erreur au lint ni au build, et un écran blanc à
+              l'exécution. Voir reference_eslint_no_undef_eteint. */}
+          <button onClick={onRejoindre} style={{
+            display: 'inline-block', padding: '15px 32px', borderRadius: 100, border: 'none',
+            background: '#fff', color: T.deep,
+            fontWeight: 900, fontSize: 14.5, letterSpacing: 0.4, textTransform: 'uppercase',
+            cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+            boxShadow: '0 8px 22px rgba(0,0,0,0.28)',
+          }}>
+            Je prends mes {jours} jours
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Incitant mobilisation (repris de LandingTeasing, mêmes règles)
 function IncitantMobilisation({ communeStats, globalStats }) {
   const boxSt = { margin: '0 0 14px', padding: '12px 14px', borderRadius: 12, background: 'rgba(150,96,224,0.14)', border: '1px solid rgba(196,160,244,0.35)' }
@@ -997,26 +1081,68 @@ export default function LandingReveal({ referent = null }) {
           <div style={{ marginBottom: 36 }}>
             <YoppaaLogo size={58} mode="dark"/>
           </div>
-          <h1 style={{ fontSize: 'clamp(2.3rem, 6.5vw, 3.8rem)', fontWeight: 900, letterSpacing: '-2px', lineHeight: 1.06, margin: '0 auto 18px', maxWidth: 700, color: '#fff' }}>
-            Ton quartier<br/>dans ta poche.
+          {/* ⚠️ LE HERO PARLE AUX COMMERÇANTS D'ABORD (décision Alex, 20/08).
+              Les habitants, eux, arrivent par leur commerçant : c'est lui qu'il
+              faut convaincre en trois secondes. Le titre garde la mélodie de la
+              marque, « ton quartier dans ta poche », mais la retourne de son
+              côté à lui. Le versant Yopper reste entier plus bas, section 3. */}
+          <h1 style={{ fontSize: 'clamp(2.1rem, 6vw, 3.5rem)', fontWeight: 900, letterSpacing: '-2px', lineHeight: 1.06, margin: '0 auto 18px', maxWidth: 760, color: '#fff' }}>
+            Ton commerce,<br/>dans la poche de ton quartier.
           </h1>
-          <p style={{ fontSize: 'clamp(1.02rem, 2.6vw, 1.2rem)', color: 'rgba(255,255,255,0.92)', lineHeight: 1.65, maxWidth: 580, margin: '0 auto 26px', fontWeight: 500 }}>
-            Voici Yoppaa, l&rsquo;app belge <DrapeauBelge/> qui rapproche les habitants de leurs commerçants.
-            Tu commandes chez ton boulanger, tu réserves chez ton coiffeur et tu suis la vie de ta commune,
-            le tout dans une seule app. Et sur leurs ventes, nous ne prenons
-            <strong style={{ color: '#fff' }}> aucune commission</strong>.
+          <p style={{ fontSize: 'clamp(1.02rem, 2.6vw, 1.2rem)', color: 'rgba(255,255,255,0.92)', lineHeight: 1.65, maxWidth: 620, margin: '0 auto 24px', fontWeight: 500 }}>
+            Yoppaa est l&rsquo;app belge <DrapeauBelge/> qui met ton commerce dans le téléphone des
+            habitants de ta commune. Commandes à emporter, rendez-vous en ligne, deals du jour,
+            carte de fidélité : les outils des grandes enseignes.
+            {/* ⚠️ « Yoppaa ne prend » ET PAS « aucune commission » tout court :
+                sans sujet, la phrase se lit « aucun frais du tout », et c'est
+                FAUX, les frais bancaires restent ceux de la banque. Le banc l'a
+                attrapée ici même, sur ma propre réécriture du hero. */}
+            {' '}Et <strong style={{ color: '#fff' }}>Yoppaa ne prend aucune commission sur tes ventes</strong>.
           </p>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 44 }}>
-            <button onClick={() => allerAuForm('yopper')} style={btnPrimaire}>Devenir Yopper</button>
-            <button onClick={() => allerAuForm('commercant')}
+
+          {/* L'offre, dès la première seconde et pas en petit gris tout en bas. */}
+          {estRegimeLancement() && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', justifyContent: 'center',
+              padding: '12px 22px', borderRadius: 100, marginBottom: 26,
+              background: 'rgba(196,160,244,0.16)', border: '1.5px solid rgba(196,160,244,0.45)',
+            }}>
+              <span style={{ fontSize: 'clamp(1.15rem, 3.4vw, 1.5rem)', fontWeight: 900, letterSpacing: '-0.8px', color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
+                {joursOfferts()} jours offerts
+              </span>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: T.light }}>
+                jusqu&rsquo;au {libelleFinEssaiLancement()}, quel que soit le forfait
+              </span>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 40 }}>
+            <button onClick={() => allerAuForm('commercant')} style={btnPrimaire}>Je rejoins Yoppaa</button>
+            <button onClick={() => allerAuForm('yopper')}
               style={{ ...btnPrimaire, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,0.4)', boxShadow: 'none' }}>
-              Je suis commerçant
+              Je suis habitant
             </button>
           </div>
+
+          {/* ⚠️ « OFFICIEL », et la phrase qui suit, parce que le compteur seul
+              disait exactement le contraire de la vérité : il laissait croire
+              qu'il ne se passe rien avant, alors qu'arriver tôt est justement
+              tout l'intérêt. */}
           <p style={{ margin: '0 0 14px', fontSize: 12, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.6px' }}>
-            Lancement de l&rsquo;app le {libelleLancement()}
+            Lancement officiel le {libelleLancement()}
           </p>
           <CompteurLancement/>
+          <p style={{ margin: '18px auto 0', maxWidth: 520, fontSize: 14, fontWeight: 600, lineHeight: 1.6, color: 'rgba(255,255,255,0.82)' }}>
+            Pas besoin de l&rsquo;attendre pour commencer : ta page part en ligne dès qu&rsquo;elle est
+            validée, et tes premiers clients commandent avant tout le monde.
+          </p>
+          <p style={{ margin: '20px 0 0', fontSize: 13.5, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>
+            Suis-nous sur{' '}
+            <a href={FACEBOOK_URL} target="_blank" rel="noopener noreferrer"
+              style={{ color: T.light, fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+              notre page Facebook
+            </a>
+          </p>
         </div>
       </section>
 
@@ -1237,6 +1363,10 @@ export default function LandingReveal({ referent = null }) {
             sans engagement, et résiliable en deux clics.
           </p>
         </div>
+        {/* L'offre de lancement, en grand, AVANT les cartes : c'est elle qui
+            fait lire la grille tarifaire, pas l'inverse. */}
+        <EncartOffreLancement onRejoindre={() => allerAuForm('commercant')}/>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: 18, alignItems: 'stretch' }}>
           {FORMULES.map(f => (
             <div key={f.nom} style={{
@@ -1287,11 +1417,12 @@ export default function LandingReveal({ referent = null }) {
           ))}
         </div>
         <p style={{ margin: '22px auto 0', fontSize: 13, fontWeight: 700, color: T.muted, textAlign: 'center', maxWidth: 560, lineHeight: 1.6 }}>
-          {estRegimeLancement()
-            ? <>Les formules payantes te sont offertes jusqu&rsquo;au <strong style={{ color: T.main }}>{libelleFinEssaiLancement()}</strong>, quel que
-               soit le forfait, sans carte de paiement. Chaque jour d&rsquo;attente est un jour de gratuité en moins.</>
-            : <>{ESSAI_JOURS_MINIMUM} jours d&rsquo;essai gratuit sur les formules payantes, sans carte de paiement.</>}
-          {' '}Ensuite, paiement mensuel par Bancontact ou carte, et tu restes libre de partir quand tu veux.
+          {/* L'offre est dite en grand juste au-dessus : ici on ne répète pas,
+              on répond à la question suivante, « et après, ça se passe
+              comment ». Voir feedback_information_complete. */}
+          {!estRegimeLancement() && <>{ESSAI_JOURS_MINIMUM} jours d&rsquo;essai gratuit sur les formules payantes, sans carte de paiement. </>}
+          Ensuite, paiement mensuel par Bancontact ou carte, aucune augmentation en cours d&rsquo;année,
+          et tu restes libre de partir quand tu veux.
         </p>
       </section>
 
@@ -1335,12 +1466,19 @@ export default function LandingReveal({ referent = null }) {
         <Bande3px/>
         <div style={{ maxWidth: 560, margin: '0 auto', padding: '60px 20px 64px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
           <h2 style={{ fontSize: 'clamp(1.6rem, 4.5vw, 2.2rem)', fontWeight: 900, letterSpacing: '-1.2px', margin: '0 0 10px', color: '#fff' }}>
-            Rendez-vous le {libelleLancement()}.
+            {/* ⚠️ « Rendez-vous le 1er octobre » disait exactement le contraire
+                du reste de la page : c'était une invitation à attendre. */}
+            {estRegimeLancement()
+              ? <>N&rsquo;attends pas le {libelleLancement()}.</>
+              : <>Rejoins ton quartier.</>}
           </h2>
-          <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)', margin: '0 0 32px', lineHeight: 1.65, fontWeight: 500, maxWidth: 440 }}>
-            Laisse ton email et tu seras parmi les premiers à télécharger l&rsquo;app.
-            Commerçant ? Ta préinscription fait avancer ta commune vers son activation.
-            {estRegimeLancement() && ` Et elle te réserve la gratuité jusqu'au ${libelleFinEssaiLancement()}.`}
+          <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)', margin: '0 0 32px', lineHeight: 1.65, fontWeight: 500, maxWidth: 460 }}>
+            <strong style={{ color: '#fff' }}>Commerçant ?</strong> Ta page peut être en ligne cette semaine,
+            et ta préinscription fait avancer ta commune vers son activation.
+            {estRegimeLancement() && <> Tes <strong style={{ color: T.light }}>{joursOfferts()} jours offerts</strong> commencent dès maintenant.</>}
+            <br/>
+            <strong style={{ color: '#fff' }}>Habitant ?</strong> Laisse ton email : on te prévient dès que
+            ta commune s&rsquo;active, et tu seras parmi les premiers à télécharger l&rsquo;app.
           </p>
 
           {statut.envoi === 'ok' ? (
@@ -1447,6 +1585,15 @@ export default function LandingReveal({ referent = null }) {
             <p style={{ margin: '6px 0 0' }}>
               <a href="mailto:hello@yoppaa.app" style={{ color: 'inherit', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.25)' }}>hello@yoppaa.app</a>
               {' · '}
+              {/* ⚠️ La liste vient de lib/reseaux : ajouter Instagram ou LinkedIn
+                  là-bas les fera apparaître ici ET dans le balisage Google. */}
+              {RESEAUX.map(r => (
+                <span key={r.nom}>
+                  <a href={r.url} target="_blank" rel="noopener noreferrer"
+                    style={{ color: 'inherit', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.25)' }}>{r.nom}</a>
+                  {' · '}
+                </span>
+              ))}
               <Link href="/legal" style={{ color: 'inherit', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.25)' }}>Mentions légales</Link>
             </p>
           </footer>

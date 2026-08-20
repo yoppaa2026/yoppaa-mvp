@@ -27,19 +27,19 @@
     "splash:generer": "node scripts/generer-splash-ios.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.112.3",
-    "@stripe/stripe-js": "^9.2.0",
-    "@supabase/supabase-js": "^2.103.3",
+    "@anthropic-ai/sdk": "^0.117.1",
+    "@stripe/stripe-js": "^9.13.0",
+    "@supabase/supabase-js": "^2.112.3",
     "@upstash/ratelimit": "^2.0.8",
-    "@upstash/redis": "^1.38.0",
+    "@upstash/redis": "^1.38.2",
     "jspdf": "^4.2.1",
-    "lucide-react": "^1.20.0",
+    "lucide-react": "^1.31.0",
     "next": "16.3.1",
     "qrcode": "^1.5.4",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "resend": "^6.12.4",
-    "stripe": "^22.0.2"
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "resend": "^6.20.0",
+    "stripe": "^22.5.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -47,7 +47,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.4",
+    "eslint-config-next": "16.3.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

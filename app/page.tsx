@@ -1,5 +1,7 @@
 import { getLandingMode } from '@/lib/landing-mode'
 import { resolveReferentNom } from '@/lib/kit-resolve'
+import { libelleLancement } from '@/lib/lancement'
+import { jsonLdLandingString } from '@/lib/seo-landing'
 import LandingTeasing from './components/LandingTeasing'
 import LandingReveal from './components/LandingReveal'
 
@@ -17,7 +19,7 @@ export async function generateMetadata() {
   if (mode === 'reveal') {
     return {
       title: 'Yoppaa — Ton quartier dans ta poche',
-      description: "L'app belge des commerces de quartier : Click & Collect, rendez-vous en ligne, deals du jour. 0% de commission Yoppaa pour les commerçants. Lancement le 1er septembre 2026.",
+      description: `L'app belge des commerces de quartier : Click & Collect, rendez-vous en ligne, deals du jour. 0% de commission Yoppaa pour les commerçants. Lancement le ${libelleLancement({ avecAnnee: true })}.`,
       // Le layout racine met tout le site en noindex tant que
       // NEXT_PUBLIC_SEO_INDEX n'est pas 'true', parce que les fiches
       // contiennent encore des commerçants de test. La landing dévoilée, elle,
@@ -27,7 +29,7 @@ export async function generateMetadata() {
       alternates: { canonical: 'https://www.yoppaa.app' },
       openGraph: {
         title: 'Yoppaa — Ton quartier dans ta poche',
-        description: "L'app belge des commerces de quartier. 0% de commission Yoppaa pour les commerçants. Lancement le 1er septembre 2026.",
+        description: `L'app belge des commerces de quartier. 0% de commission Yoppaa pour les commerçants. Lancement le ${libelleLancement({ avecAnnee: true })}.`,
         type: 'website',
         locale: 'fr_BE',
         images: [{ url: '/og-share.png', width: 640, height: 640, alt: 'Yoppaa' }],
@@ -64,7 +66,20 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ [
   const mode = sp?.apercu === 'reveal-2026' ? 'reveal' : getLandingMode()
   const refBrut = Array.isArray(sp?.ref) ? sp.ref[0] : sp?.ref
   const referent = refBrut ? await resolveReferentNom(refBrut) : null
-  return mode === 'reveal'
-    ? <LandingReveal referent={referent} />
-    : <LandingTeasing referent={referent} />
+
+  // Données structurées : elles ne sont posées QUE sur la landing dévoilée,
+  // parce que le balisage doit décrire ce que la page montre. Le mode teasing
+  // n'affiche ni formules ni tarifs : les baliser serait faux, et Google
+  // sanctionne un balisage qui promet ce que l'écran ne contient pas.
+  if (mode !== 'reveal') return <LandingTeasing referent={referent} />
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdLandingString() }}
+      />
+      <LandingReveal referent={referent} />
+    </>
+  )
 }

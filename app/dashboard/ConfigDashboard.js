@@ -5976,9 +5976,9 @@ function QRCodeSection({ commercantId, toast }) {
     setEnvoiKit(false)
   }
 
-  // AVANT l'ouverture publique (1er août → 31 août), le QR ne doit pas envoyer
+  // AVANT l'ouverture publique, le QR ne doit pas envoyer
   // vers une fiche qui n'accepte pas encore de clients : il inscrit, et chaque
-  // inscription est attribuée au commerçant (?ref=). À partir du 1er septembre
+  // inscription est attribuée au commerçant (?ref=). Au lancement
   // il pointe sur la fiche. Le commerçant ne réimprime rien : même affiche,
   // c'est la destination et le discours qui changent avant/après.
   const preLancement = avantLancement()
@@ -6299,7 +6299,7 @@ function QRCodeSection({ commercantId, toast }) {
       {preLancement && (
         <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
           <p style={{ margin: 0, fontSize: 11.5, color: '#78350F', fontWeight: 600, lineHeight: 1.55 }}>
-            <strong>Avant le 1er septembre</strong>, ton QR inscrit tes clients et chaque inscription t&rsquo;est attribuée.
+            <strong>Avant le {libelleLancement()}</strong>, ton QR inscrit tes clients et chaque inscription t&rsquo;est attribuée.
             Le jour du lancement, il ouvrira ta page : tu n&rsquo;as rien à réimprimer.
           </p>
         </div>

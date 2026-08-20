@@ -31,6 +31,10 @@ import TurnstileWidget from '@/app/components/TurnstileWidget'
 // double métier max 2, champ libre « Autre… »). Sélection via SelecteurTypes.
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import { estFoodTruck } from '@/lib/types-commerce'
+import {
+  avantLancement, estRegimeLancement, joursOfferts,
+  libelleLancement, libelleFinEssaiLancement, ESSAI_JOURS_MINIMUM,
+} from '@/lib/lancement'
 
 // ─── SKIP-LOGIC (esprit ODOO : adaptive selon plan + categorie) ────────────────
 // La structure 5 etapes reste constante, mais le CONTENU et les contraintes
@@ -530,15 +534,31 @@ function Etape1Compte({ session, commercant, onCompte }) {
         Crée ton compte et choisis ta formule. Le reste se remplit en quelques minutes, et tout se modifie ensuite depuis ton tableau de bord.
       </p>
 
-      {/* Bandeau d'accroche : rassure sur la gratuité du plan Exister + essai 30j sur Communiquer/Vendre */}
+      {/* Bandeau d'accroche : l'offre de lancement, en clair. On annonce la DATE
+          de fin de gratuité plutôt qu'une durée, parce qu'elle se vérifie sur un
+          calendrier et qu'elle ne vieillit pas. Le nombre de jours, lui, est
+          calculé pour AUJOURD'HUI : plus on attend, plus il fond. */}
       <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, color: '#fff', borderRadius: 14, padding: '14px 18px', marginBottom: 22, display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ fontSize: 22, flexShrink: 0 }}>🟣</span>
         <div>
           <p style={{ fontWeight: 900, fontSize: 14, margin: 0, letterSpacing: '-0.3px' }}>
-            La formule <span style={{ color: T.light }}>Exister</span> est gratuite à vie. <span style={{ color: T.light }}>Communiquer</span> et <span style={{ color: T.light }}>Vendre</span> incluent 30 jours d&apos;essai gratuit.
+            {estRegimeLancement() ? (
+              <>
+                La formule <span style={{ color: T.light }}>Exister</span> est gratuite à vie.
+                {' '}<span style={{ color: T.light }}>Communiquer</span> et <span style={{ color: T.light }}>Vendre</span> te sont
+                offertes jusqu&apos;au <span style={{ color: T.light }}>{libelleFinEssaiLancement()}</span>, soit {joursOfferts()} jours.
+              </>
+            ) : (
+              <>
+                La formule <span style={{ color: T.light }}>Exister</span> est gratuite à vie.
+                {' '}<span style={{ color: T.light }}>Communiquer</span> et <span style={{ color: T.light }}>Vendre</span> incluent
+                {' '}{ESSAI_JOURS_MINIMUM} jours d&apos;essai gratuit.
+              </>
+            )}
           </p>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', margin: '3px 0 0', lineHeight: 1.4 }}>
-            Sans engagement. Tu peux changer de formule ou résilier à tout moment depuis ton tableau de bord.
+            Sans carte de paiement, sans engagement, résiliable à tout moment.
+            {avantLancement() && ` L'app s'ouvre officiellement au public le ${libelleLancement()} : ta page sera prête ce jour-là.`}
           </p>
         </div>
       </div>
@@ -1880,7 +1900,8 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
 // les prix ne divergent jamais entre les surfaces.
 
 // Bandeau recap adapte au plan choisi affiche en tete de l'etape 5.
-// Resume ce qui se passe a la soumission : essai 30j si paye, gratuit si Exister.
+// Resume ce qui se passe a la soumission : essai gratuit si paye (offre de
+// lancement, cf. lib/lancement.js), gratuit a vie si Exister.
 function BandeauRecapPlan({ plan }) {
   const tarif = getPrixPlan(plan)
   if (plan === 'exister') {
@@ -1920,11 +1941,17 @@ function BandeauRecapPlan({ plan }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
         <Sparkles size={18} strokeWidth={2.2} color={T.main}/>
         <p style={{ fontSize: 13, fontWeight: 800, color: T.deep, margin: 0 }}>
-          Plan <span style={{ color: T.main }}>{PLAN_LABEL[plan]}</span> &middot; essai 30 jours gratuit
+          Plan <span style={{ color: T.main }}>{PLAN_LABEL[plan]}</span> &middot;{' '}
+          {estRegimeLancement()
+            ? `offert jusqu'au ${libelleFinEssaiLancement()}`
+            : `essai ${ESSAI_JOURS_MINIMUM} jours gratuit`}
         </p>
       </div>
       <p style={{ fontSize: 12.5, color: T.deep, margin: 0, lineHeight: 1.5 }}>
-        Aucun prélèvement pendant 30 jours. Après, <strong>{tarifFormate}&euro; HTVA / mois</strong>,
+        {estRegimeLancement()
+          ? <>Aucun prélèvement avant le <strong>{libelleFinEssaiLancement()}</strong>, soit {joursOfferts()} jours offerts. </>
+          : <>Aucun prélèvement pendant {ESSAI_JOURS_MINIMUM} jours. </>}
+        Ensuite, <strong>{tarifFormate}&euro; HTVA / mois</strong>,
         sans engagement, résiliable à tout moment. Tu seras invité(e) à renseigner tes
         informations de paiement après validation de ta fiche par l&rsquo;équipe Yoppaa.
       </p>
@@ -2588,7 +2615,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
             {submitting ? 'Envoi…' : (
               getPlanActif(commercant, onboarding) === 'exister' || getPlanActif(commercant, onboarding) === 'public'
                 ? 'Envoyer ma demande d’activation →'
-                : 'Démarrer mon essai 30 jours gratuit →'
+                : 'Démarrer mon essai gratuit →'
             )}
           </button>
         </div>
@@ -2892,7 +2919,9 @@ function CardPlan({ plan, categorie, actif, onClick }) {
           background: actif ? 'rgba(255,255,255,0.12)' : '#ECFDF5',
           padding: '4px 9px', borderRadius: 100, display: 'inline-block',
           margin: '0 0 10px', letterSpacing: '0.3px',
-        }}>30 jours d&apos;essai gratuit</p>
+        }}>{estRegimeLancement()
+          ? `Offert jusqu'au ${libelleFinEssaiLancement()}`
+          : `${ESSAI_JOURS_MINIMUM} jours d'essai gratuit`}</p>
       )}
 
       <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>

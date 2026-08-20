@@ -626,23 +626,25 @@ export default function BrandKit() {
     {
       // Demandé par Alex le 20/08 : inviter les commerçants et annoncer
       // l'offre de lancement.
-      // ⚠️ « quel que soit le forfait » est la promesse exacte : les 90 jours
-      // valent aussi pour Exister, qui est déjà gratuit. C'est donc bien
-      // 90 jours offerts sur Communiquer et sur Vendre, et il ne faut pas
-      // laisser croire qu'un palier en serait exclu.
+      // ⚠️ Mis à jour le 20/08 : l'offre n'est plus une DURÉE mais une DATE.
+      // On annonce le 8 janvier 2027, parce qu'une date se vérifie sur un
+      // calendrier, ne vieillit pas dans un fil Facebook, et crée d'elle-même
+      // l'urgence : chaque jour d'attente est un jour de gratuité en moins.
+      // ⚠️ « quel que soit le forfait » est la promesse exacte : la gratuité
+      // vaut sur Communiquer comme sur Vendre, aucun palier n'en est exclu.
       // ⚠️ Et JAMAIS « 100 % te revient » : la formule vraie est qu'il n'y a
       // aucune commission, l'abonnement étant notre seul revenu. Les frais
       // bancaires, eux, restent ceux de la banque.
-      title: 'Post FB · 90 jours offerts',
+      title: 'Post FB · Offert jusqu\'au 8 janvier',
       dims: { w: 1080, h: 1080 },
-      filename: 'yoppaa-post-fb-90-jours-1080',
+      filename: 'yoppaa-post-fb-offert-8-janvier-1080',
       sub: 'offre de lancement · appel aux commerçants',
       options: {
-        titre: '90 jours offerts.',
+        titre: 'Gratuit jusqu\'au 8 janvier 2027.',
         // ⚠️ « Yoppaa ne prend » ET PAS « aucune commission » tout court : sans
         // sujet, la phrase se lit « aucun frais du tout », et c'est FAUX, les
         // frais bancaires restent ceux de la banque. Le banc l'a attrapée.
-        sousTitre: 'Quel que soit le forfait. Yoppaa ne prend aucune commission sur tes ventes.',
+        sousTitre: 'Quel que soit le forfait, sans carte de paiement. Yoppaa ne prend aucune commission sur tes ventes.',
         showFooter: true, bigDotsSignature: true,
       },
     },

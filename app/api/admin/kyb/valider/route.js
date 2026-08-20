@@ -62,10 +62,12 @@ export async function POST(request) {
       validated_by_email: user.email,
     })
 
-    // 3) S6 trial differe (regle d'or retroplanning) : si le commercant est sur
-    //    un plan payant (communiquer ou vendre) ET qu'il n'a pas deja une
-    //    subscription Stripe, on la cree maintenant avec trial_end = LAUNCH_DATE
-    //    + 30j. Non bloquant : on log et on continue meme si Stripe rate (Alex
+    // 3) Offre de lancement : si le commercant est sur un plan payant
+    //    (communiquer ou vendre) ET qu'il n'a pas deja une subscription Stripe,
+    //    on la cree maintenant avec trial_end = finEssai(), soit au plus tard
+    //    entre le 8 janvier 2027 et 30 jours apres l'inscription (lib/lancement.js).
+    //    `trialDays: 30` ci-dessous est le PLANCHER, pas la duree.
+    //    Non bloquant : on log et on continue meme si Stripe rate (Alex
     //    peut reessayer manuellement depuis le dashboard).
     let stripeResult = { ok: false, reason: 'skip (plan gratuit)' }
     const planPayant = commercant.plan === 'communiquer' || commercant.plan === 'vendre'

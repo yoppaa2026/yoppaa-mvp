@@ -4,7 +4,7 @@
 //
 // Onglet "Abonnement" du dashboard commerçant.
 // Affiche le plan actuel + permet de souscrire à Communiquer / Vendre via
-// Stripe Checkout (essai 30j inclus).
+// Stripe Checkout (essai gratuit inclus, cf. lib/lancement.js).
 //
 // État subscription :
 //   - exister + pas de stripe_subscription_id  → boutons Upgrade visibles
@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { PLAN_LABEL } from '@/lib/plans'
+import { estRegimeLancement, libelleFinEssaiLancement, ESSAI_JOURS_MINIMUM } from '@/lib/lancement'
 
 const T = {
   ink:    '#1A0840',
@@ -32,14 +33,31 @@ const T = {
 const TARIF_COMMUNIQUER = parseFloat(process.env.NEXT_PUBLIC_TARIF_COMMUNIQUER || '19.90')
 const TARIF_VENDRE      = parseFloat(process.env.NEXT_PUBLIC_TARIF_VENDRE      || '49.90')
 
-// Date de lancement client (sync avec landing + stripe-billing).
-// Tant que now < LAUNCH_DATE, on est en "trial differe" : l'essai 30j ne
-// demarre pas a l'inscription mais le 1er septembre, jour ou les premiers
-// clients arrivent sur l'app. Regle d'or retroplanning 21/06.
-const LAUNCH_DATE = new Date(
-  process.env.NEXT_PUBLIC_LAUNCH_DATE
-  || '2026-09-01T10:00:00+02:00'
-)
+// Offre de lancement : l'essai se termine au plus tard entre le 8 janvier 2027
+// et 30 jours après l'inscription (voir lib/lancement.js). Le bandeau ci-dessous
+// n'annonce donc AUCUNE date de son cru : il lit `subscription_trial_end`, le
+// miroir de ce que Stripe prélèvera. Un texte qui devine sa date finit toujours
+// par contredire la facture.
+const DATE_LONGUE = new Intl.DateTimeFormat('fr-FR', {
+  day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Brussels',
+})
+
+function libelleFinEssaiReelle(iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return DATE_LONGUE.format(d).replace(/^1 /, '1er ')
+}
+
+// Ce que touche un commerçant qui souscrit MAINTENANT, sous la carte de
+// formule. Pendant le régime de lancement on annonce la DATE, qui vaut mieux
+// qu'une durée : elle se vérifie d'un coup d'œil sur un calendrier.
+function phraseEssaiTarif(tarif) {
+  const suite = `puis ${tarif.toFixed(2).replace('.', ',')}€/mois sans engagement`
+  return estRegimeLancement()
+    ? `Offert jusqu'au ${libelleFinEssaiLancement()}, ${suite}`
+    : `${ESSAI_JOURS_MINIMUM} jours gratuits, ${suite}`
+}
 
 export default function AbonnementPage() {
   const router = useRouter()
@@ -236,16 +254,17 @@ export default function AbonnementPage() {
           )}
           {hasActiveSub && (
             <>
-              {/* S6 trial differe : bandeau pedagogique si on est avant le 01/09
-                  (= avant le lancement client). Le commercant doit comprendre que
-                  son essai 30j ne demarre pas a l'inscription mais a l'arrivee
-                  des clients (regle d'or retroplanning). */}
-              {commercant.subscription_status === 'trialing' && new Date() < LAUNCH_DATE && (
+              {/* Essai en cours : dire LA date, pas une durée. Le commerçant se
+                  demande « jusqu'à quand c'est gratuit, et combien après » :
+                  les deux réponses sont ici, et la date vient de Stripe. */}
+              {commercant.subscription_status === 'trialing' && libelleFinEssaiReelle(commercant.subscription_trial_end) && (
                 <div style={{ background: T.pale, borderRadius: 10, padding: '14px 16px', marginTop: 14, marginBottom: 14, borderLeft: `3px solid ${T.main}` }}>
                   <p style={{ fontSize: 13, color: T.deep, margin: 0, lineHeight: 1.55, fontWeight: 600 }}>
-                    Ton essai 30 jours démarre quand les clients arrivent :
-                    le <strong>1<sup style={{ fontSize: '0.7em' }}>er</sup> septembre 2026</strong>.
-                    D&rsquo;ici là, c&rsquo;est offert. 🟣
+                    C&rsquo;est offert jusqu&rsquo;au <strong>{libelleFinEssaiReelle(commercant.subscription_trial_end)}</strong>.
+                    Ta première facture sera émise ce jour-là, et pas avant. 🟣
+                  </p>
+                  <p style={{ fontSize: 12.5, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+                    Aucune carte n&rsquo;est demandée d&rsquo;ici là, et tu peux partir quand tu veux.
                   </p>
                 </div>
               )}
@@ -292,8 +311,8 @@ export default function AbonnementPage() {
                   'IA bridée (reformulation + suggestions)',
                   'Mise en avant Bonnes affaires',
                 ]}
-                cta="Démarrer l'essai 30 jours"
-                trial="30 jours gratuits, puis 19,90€/mois sans engagement"
+                cta="Démarrer mon essai gratuit"
+                trial={phraseEssaiTarif(TARIF_COMMUNIQUER)}
                 loading={actionPlan === 'communiquer'}
                 onClick={() => handleUpgrade('communiquer')}
                 accent={false}
@@ -311,8 +330,8 @@ export default function AbonnementPage() {
                   'IA avancée (rédaction, segmentation, benchmarking)',
                   'Export comptable',
                 ]}
-                cta="Démarrer l'essai 30 jours"
-                trial="30 jours gratuits, puis 49,90€/mois sans engagement"
+                cta="Démarrer mon essai gratuit"
+                trial={phraseEssaiTarif(TARIF_VENDRE)}
                 loading={actionPlan === 'vendre'}
                 onClick={() => handleUpgrade('vendre')}
                 accent={true}

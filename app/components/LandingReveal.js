@@ -18,6 +18,10 @@ import Script from 'next/script'
 import Link from 'next/link'
 import { Lock } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
+import {
+  LAUNCH_DATE_ISO, libelleLancement, libelleFinEssaiLancement,
+  joursOfferts, estRegimeLancement, ESSAI_JOURS_MINIMUM,
+} from '@/lib/lancement'
 import PartageMobilisation from './PartageMobilisation'
 
 const T = {
@@ -32,10 +36,10 @@ const T = {
   muted:   '#6B7280',
 }
 
-const LAUNCH_DATE = new Date(
-  process.env.NEXT_PUBLIC_LAUNCH_DATE
-  || '2026-09-01T10:00:00+02:00'
-)
+// ⚠️ La date d'ouverture et l'offre de lancement viennent de lib/lancement.js,
+// et de nulle part ailleurs : une landing qui promet une date et une facture
+// qui en applique une autre, c'est le pire défaut possible.
+const LAUNCH_DATE = new Date(LAUNCH_DATE_ISO)
 
 function pad(n) { return String(n).padStart(2, '0') }
 
@@ -351,7 +355,7 @@ function MockRdv() {
             <span key={p.n} style={{ padding: '4px 9px', borderRadius: 100, fontSize: 8, fontWeight: 800, background: p.actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: p.actif ? '#fff' : T.deep, border: p.actif ? 'none' : `1px solid ${T.pale}` }}>{p.n}</span>
           ))}
         </div>
-        <p style={{ margin: '10px 0 6px', fontSize: 7.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Jeudi 3 septembre</p>
+        <p style={{ margin: '10px 0 6px', fontSize: 7.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Jeudi 8 octobre</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
           {[
             { h: '09:00', pris: false, actif: false },
@@ -621,7 +625,7 @@ function MockOnboarding() {
   )
 }
 
-// ─── Compteur vers le 1er septembre (isolé : tick sans re-render la page) ────
+// ─── Compteur vers l'ouverture publique (isolé : tick sans re-render la page) ─
 // Perf scroll : le repaint du tick chaque seconde est CONFINÉ à sa propre boîte
 // (contain layout/paint) pour que la reprise du scroll ne le paie jamais, le
 // tick est suspendu quand l'onglet est caché, et pas de text-shadow (coûteux à
@@ -878,7 +882,7 @@ export default function LandingReveal({ referent = null }) {
         setStatut({ envoi: 'ko', message: j.error || 'Une erreur est survenue, réessaie' })
         return
       }
-      setStatut({ envoi: 'ok', message: 'Bien reçu 🟣 Rendez-vous le 1er septembre. À très vite !' })
+      setStatut({ envoi: 'ok', message: `Bien reçu 🟣 Rendez-vous le ${libelleLancement()}. À très vite !` })
       if (j.slug_kit) setKitSlug(j.slug_kit)
       if (typeof window !== 'undefined' && window.turnstile && turnstileRef.current) {
         try { window.turnstile.reset(turnstileRef.current) } catch (_) {}
@@ -1010,7 +1014,7 @@ export default function LandingReveal({ referent = null }) {
             </button>
           </div>
           <p style={{ margin: '0 0 14px', fontSize: 12, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.6px' }}>
-            Lancement de l&rsquo;app le 1<sup>er</sup> septembre
+            Lancement de l&rsquo;app le {libelleLancement()}
           </p>
           <CompteurLancement/>
         </div>
@@ -1133,7 +1137,9 @@ export default function LandingReveal({ referent = null }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14, maxWidth: 760, margin: '0 auto 48px' }}>
             {[
               { chiffre: '0%', label: 'de commission Yoppaa sur tes ventes' },
-              { chiffre: '30 jours', label: "d'essai gratuit, sans carte de paiement" },
+              estRegimeLancement()
+                ? { chiffre: `${joursOfferts()} jours`, label: `offerts, jusqu'au ${libelleFinEssaiLancement()}, sans carte de paiement` }
+                : { chiffre: `${ESSAI_JOURS_MINIMUM} jours`, label: "d'essai gratuit, sans carte de paiement" },
               { chiffre: '10 min', label: 'pour mettre ta page en ligne' },
               { chiffre: '0€', label: 'la formule Exister, pour toujours' },
             ].map(s => (
@@ -1281,8 +1287,11 @@ export default function LandingReveal({ referent = null }) {
           ))}
         </div>
         <p style={{ margin: '22px auto 0', fontSize: 13, fontWeight: 700, color: T.muted, textAlign: 'center', maxWidth: 560, lineHeight: 1.6 }}>
-          30 jours d&rsquo;essai gratuit sur les formules payantes, sans carte de paiement.
-          Ensuite, paiement mensuel par Bancontact ou carte, et tu restes libre de partir quand tu veux.
+          {estRegimeLancement()
+            ? <>Les formules payantes te sont offertes jusqu&rsquo;au <strong style={{ color: T.main }}>{libelleFinEssaiLancement()}</strong>, quel que
+               soit le forfait, sans carte de paiement. Chaque jour d&rsquo;attente est un jour de gratuité en moins.</>
+            : <>{ESSAI_JOURS_MINIMUM} jours d&rsquo;essai gratuit sur les formules payantes, sans carte de paiement.</>}
+          {' '}Ensuite, paiement mensuel par Bancontact ou carte, et tu restes libre de partir quand tu veux.
         </p>
       </section>
 
@@ -1326,11 +1335,12 @@ export default function LandingReveal({ referent = null }) {
         <Bande3px/>
         <div style={{ maxWidth: 560, margin: '0 auto', padding: '60px 20px 64px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
           <h2 style={{ fontSize: 'clamp(1.6rem, 4.5vw, 2.2rem)', fontWeight: 900, letterSpacing: '-1.2px', margin: '0 0 10px', color: '#fff' }}>
-            Rendez-vous le 1<sup>er</sup> septembre.
+            Rendez-vous le {libelleLancement()}.
           </h2>
           <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)', margin: '0 0 32px', lineHeight: 1.65, fontWeight: 500, maxWidth: 440 }}>
             Laisse ton email et tu seras parmi les premiers à télécharger l&rsquo;app.
             Commerçant ? Ta préinscription fait avancer ta commune vers son activation.
+            {estRegimeLancement() && ` Et elle te réserve la gratuité jusqu'au ${libelleFinEssaiLancement()}.`}
           </p>
 
           {statut.envoi === 'ok' ? (

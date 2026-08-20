@@ -12,6 +12,7 @@ import { useState, useEffect, useRef } from 'react'
 import Script from 'next/script'
 import { Lock } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
+import { LAUNCH_DATE_ISO, libelleLancement } from '@/lib/lancement'
 import Link from 'next/link'
 import PartageMobilisation from './PartageMobilisation'
 import { ecranRegarde } from '@/lib/rafraichissement'
@@ -51,10 +52,11 @@ const REVEAL_DATE = new Date(
   || process.env.NEXT_PUBLIC_LANDING_REVEAL_DATE
   || '2026-08-01T10:00:00+02:00'
 )
-const LAUNCH_DATE = new Date(
-  process.env.NEXT_PUBLIC_LAUNCH_DATE
-  || '2026-09-01T10:00:00+02:00'
-)
+// ⚠️ La date d'ouverture vient de lib/lancement.js, source unique partagée avec
+// la landing dévoilée, le signup et la facturation Stripe.
+const LAUNCH_DATE = new Date(LAUNCH_DATE_ISO)
+const LAUNCH_LABEL = libelleLancement()
+const LAUNCH_LABEL_ANNEE = libelleLancement({ avecAnnee: true })
 
 // Libelle FR de la date d'annonce, DERIVE de REVEAL_DATE (le texte suit toujours la
 // date, plus jamais de derive en dur). Ex : "1er aout" / "1er aout 2026".
@@ -204,7 +206,7 @@ export default function LandingTeasing({ referent = null }) {
   // Texte du sous-bloc formulaire : different selon la phase (avant dev. on
   // promet la decouverte ; entre dev. et lancement on promet le telechargement)
   const sousTexteForm = phase === 'devoile'
-    ? 'Laisse-nous ton email, et le 1er septembre tu seras parmi les premiers à télécharger Yoppaa.'
+    ? `Laisse-nous ton email, et le ${LAUNCH_LABEL} tu seras parmi les premiers à télécharger Yoppaa.`
     : `Laisse-nous ton email, et le ${REVEAL_LABEL} tu seras parmi les premiers à découvrir Yoppaa.`
 
   return (
@@ -293,11 +295,11 @@ export default function LandingTeasing({ referent = null }) {
             <h1 style={{ fontSize: 'clamp(2.2rem, 6vw, 3.4rem)', fontWeight: 900, letterSpacing: '-1.8px', lineHeight: 1.1, margin: '0 0 14px', maxWidth: 620 }}>
               Yoppaa, c&rsquo;est <span style={{ color: T.light }}>dévoilé</span>. 🟣
               <span style={{ display: 'block', marginTop: 14, fontSize: '0.62em', fontWeight: 700, opacity: 0.88, letterSpacing: '-0.8px' }}>
-                Lancement complet le 1<sup style={{ fontSize: '0.6em' }}>er</sup> septembre.
+                Lancement complet le {LAUNCH_LABEL}.
               </span>
             </h1>
             <p style={{ fontSize: '1.05rem', color: T.light, lineHeight: 1.6, maxWidth: 520, margin: '0 0 36px', opacity: 0.92 }}>
-              L&rsquo;app belge de ton quartier arrive le <strong style={{ color: '#fff' }}>1<sup style={{ fontSize: '0.7em' }}>er</sup> septembre 2026</strong>.<br/>
+              L&rsquo;app belge de ton quartier arrive le <strong style={{ color: '#fff' }}>{LAUNCH_LABEL_ANNEE}</strong>.<br/>
               D&rsquo;ici là, regarde ton quartier rejoindre Yoppaa tout l&rsquo;été. <DrapeauBelge/> 🟣
             </p>
             <CompteurEtForm

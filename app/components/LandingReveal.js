@@ -675,7 +675,6 @@ function CompteurLancement() {
 // et c'est même tout son intérêt.
 function EncartOffreLancement({ onRejoindre }) {
   if (!estRegimeLancement()) return null
-  const jours = joursOfferts()
   const garantis = joursOffertsAuLancement()   // 100, calculés depuis les deux dates
   const avance = joursAvance()                  // ce que l'avance ajoute, et qui fond
 
@@ -688,16 +687,25 @@ function EncartOffreLancement({ onRejoindre }) {
       <Bande3px/>
       <div style={{ padding: 'clamp(24px, 5vw, 38px)', display: 'flex', gap: 'clamp(20px, 4vw, 44px)', flexWrap: 'wrap', alignItems: 'center' }}>
 
-        {/* Le chiffre, et rien d'autre autour de lui */}
+        {/* ⚠️ UN SEUL CHIFFRE SUR TOUTE LA PAGE : 100.
+            Décision d'Alex, 20/08 : « je ne veux pas qu'on annonce un chiffre
+            en plus des 100 jours, tu es là plus tôt, génial et c'est bonus ».
+            Un deuxième nombre oblige à expliquer une addition, et une offre
+            qu'il faut expliquer se fait relire de travers. L'avance est donc
+            dite en toutes lettres, jamais chiffrée. Ce qui est reçu reste
+            évidemment plus généreux que ce qui est promis. */}
         <div style={{ flex: '1 1 240px', minWidth: 220 }}>
           <p style={{ margin: '0 0 10px', fontSize: 11.5, fontWeight: 900, color: T.light, textTransform: 'uppercase', letterSpacing: '1.4px' }}>
             Offre de lancement
           </p>
           <p style={{ margin: 0, fontSize: 'clamp(2.6rem, 8vw, 4rem)', fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
-            {jours} jours
+            {garantis} jours
           </p>
           <p style={{ margin: '2px 0 0', fontSize: 'clamp(1.3rem, 4vw, 1.8rem)', fontWeight: 900, letterSpacing: '-1px', color: T.light }}>
             offerts.
+          </p>
+          <p style={{ margin: '10px 0 0', fontSize: 13.5, fontWeight: 700, lineHeight: 1.5, color: 'rgba(255,255,255,0.86)' }}>
+            À partir du {libelleLancement()}.
           </p>
         </div>
 
@@ -717,44 +725,17 @@ function EncartOffreLancement({ onRejoindre }) {
           </div>
           <div style={{ height: 1, background: 'rgba(255,255,255,0.16)', margin: '0 0 16px' }}/>
 
-          {/* ⚠️ L'ADDITION EST MONTRÉE, LIGNE PAR LIGNE.
-              Annoncer « 142 jours » quand l'offre publique dit « 100 jours »
-              se lit comme une exagération, et une offre qu'on soupçonne ne
-              convainc personne. Posée en trois lignes, avec la raison de
-              chacune, elle se vérifie sur un calendrier en dix secondes. */}
-          {avance > 0 && (
-            <div style={{ margin: '0 0 16px', display: 'flex', flexDirection: 'column', gap: 7 }}>
-              {[
-                { n: garantis, quoi: `offerts à partir du ${libelleLancement()}`, pourquoi: 'pour tout le monde', signe: '' },
-                { n: avance, quoi: `d'avance d'ici le ${libelleLancement()}`, pourquoi: 'parce que tu arrives maintenant', signe: '+' },
-              ].map(l => (
-                <div key={l.quoi} style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                  <span style={{ minWidth: 62, fontSize: 17, fontWeight: 900, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
-                    {l.signe}{l.n} j
-                  </span>
-                  <span style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.5, color: 'rgba(255,255,255,0.9)' }}>
-                    {l.quoi} <span style={{ color: T.light }}>· {l.pourquoi}</span>
-                  </span>
-                </div>
-              ))}
-              <div style={{ height: 1, background: 'rgba(255,255,255,0.22)', margin: '2px 0' }}/>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                <span style={{ minWidth: 62, fontSize: 17, fontWeight: 900, color: T.light, fontVariantNumeric: 'tabular-nums' }}>
-                  = {jours} j
-                </span>
-                <span style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.5, color: '#fff' }}>
-                  jusqu&rsquo;au {libelleDernierJourGratuit()} inclus
-                </span>
-              </div>
-            </div>
-          )}
-
+          {/* ⚠️ L'AVANCE EST DITE EN TOUTES LETTRES, JAMAIS CHIFFRÉE.
+              Le bonus ne se compte pas, il se raconte : « tout ce qui précède
+              est en plus ». Un second nombre obligerait à poser une addition,
+              et une offre qu'il faut expliquer se fait relire de travers. */}
           <p style={{ margin: '0 0 18px', fontSize: 14, fontWeight: 600, lineHeight: 1.65, color: 'rgba(255,255,255,0.92)' }}>
             Le {libelleLancement()} est la date du lancement <strong style={{ color: '#fff' }}>officiel</strong>,
             pas celle du départ. Ta page part en ligne dès qu&rsquo;elle est validée et tes premiers
             clients commandent avant tout le monde.
-            {avance > 0 && <> Ces <strong style={{ color: '#fff' }}>{avance} jours d&rsquo;avance</strong> ne
-              te coûtent rien, et il y en a un de moins chaque jour.</>}
+            {avance > 0 && <> Et <strong style={{ color: '#fff' }}>tout le temps d&rsquo;ici
+              le {libelleLancement()} est en bonus</strong> : il ne compte pas dans tes {garantis} jours,
+              et il fond un peu chaque jour.</>}
           </p>
           {/* ⚠️ Style écrit ici, PAS `btnPrimaire` : celui-ci vit DANS le
               composant principal, donc l'appeler d'ici serait une variable
@@ -767,7 +748,7 @@ function EncartOffreLancement({ onRejoindre }) {
             cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
             boxShadow: '0 8px 22px rgba(0,0,0,0.28)',
           }}>
-            Je prends mes {jours} jours
+            Je prends mes {garantis} jours
           </button>
         </div>
       </div>
@@ -1300,7 +1281,7 @@ export default function LandingReveal({ referent = null }) {
             {[
               { chiffre: '0%', label: 'de commission Yoppaa sur tes ventes' },
               estRegimeLancement()
-                ? { chiffre: `${joursOfferts()} jours`, label: `offerts, jusqu'au ${libelleDernierJourGratuit()}, sans carte de paiement` }
+                ? { chiffre: `${joursOffertsAuLancement()} jours`, label: `offerts à partir du ${libelleLancement()}, sans carte de paiement` }
                 : { chiffre: `${ESSAI_JOURS_MINIMUM} jours`, label: "d'essai gratuit, sans carte de paiement" },
               { chiffre: '10 min', label: 'pour mettre ta page en ligne' },
               { chiffre: '0€', label: 'la formule Exister, pour toujours' },
@@ -1518,7 +1499,7 @@ export default function LandingReveal({ referent = null }) {
                 et faire dépendre l'inscription d'un seuil serait faux. */}
             <strong style={{ color: '#fff' }}>Commerçant ?</strong> Ta commune est déjà ouverte
             et ta page peut être en ligne cette semaine.
-            {estRegimeLancement() && <> Tes <strong style={{ color: T.light }}>{joursOfferts()} jours offerts</strong> commencent dès maintenant.</>}
+            {estRegimeLancement() && <> Tes <strong style={{ color: T.light }}>{joursOffertsAuLancement()} jours offerts</strong> t’attendent, et tout le temps d’ici là est en bonus.</>}
             <br/>
             <strong style={{ color: '#fff' }}>Habitant ?</strong> Laisse ton email : tu seras parmi les
             premiers à télécharger l&rsquo;app, et on te prévient dès qu&rsquo;elle est disponible.

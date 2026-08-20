@@ -120,9 +120,11 @@ function sansCommentaires(src) {
   verifier("le libellé de facturation dit « 9 janvier 2027 »",
     libelleFinEssaiLancement() === '9 janvier 2027',
     libelleFinEssaiLancement())
-  verifier('la phrase de vente nomme la date, pas seulement une durée',
-    phraseEssai(jour('2026-08-20T10:00:00+02:00')).includes('8 janvier 2027'),
+  verifier('la phrase de vente annonce les 100 jours et leur point de départ',
+    phraseEssai(jour('2026-08-20T10:00:00+02:00')) === '100 jours offerts à partir du 1er octobre',
     phraseEssai(jour('2026-08-20T10:00:00+02:00')))
+  verifier('et ne chiffre jamais le total avec l\'avance',
+    !/14[0-9] jours/.test(phraseEssai(jour('2026-08-20T10:00:00+02:00'))))
   verifier("et hors régime de lancement elle retombe sur l'essai normal",
     phraseEssai(jour('2027-06-01T10:00:00+02:00')) === "30 jours d'essai gratuit",
     phraseEssai(jour('2027-06-01T10:00:00+02:00')))
@@ -237,10 +239,11 @@ function sansCommentaires(src) {
   // d'accueil la laissait verte, parce que le récapitulatif de la dernière
   // étape en gardait un. Trouver un mot ne prouve rien sur les FRÈRES.
   const signup = sansCommentaires(lire('app/signup/page.js'))
-  const compteJours = (signup.match(/joursOfferts\(\)/g) || []).length
-  verifier("l'inscription chiffre les jours offerts aux deux endroits",
-    compteJours >= 2,
-    `${compteJours} endroit(s) : il en faut un au bandeau d'accueil ET un au récapitulatif`)
+  verifier("l'inscription annonce les 100 jours",
+    /joursOffertsAuLancement\(\)/.test(signup))
+  verifier("et ne chiffre pas non plus le total avec l'avance",
+    !/joursOfferts\(\)/.test(signup),
+    'un seul chiffre partout : 100')
   const compteRegime = (signup.match(/estRegimeLancement\(\)/g) || []).length
   verifier("les trois blocs de l'inscription basculent avec le régime",
     compteRegime >= 3,
@@ -480,6 +483,14 @@ function sansCommentaires(src) {
     /à partir du \{libelleLancement\(\)\}/.test(hero))
   verifier("le hero présente l'avance comme un supplément",
     /joursAvance\(\)/.test(hero))
+  verifier("le hero ne chiffre PAS le total avec l'avance",
+    !/\{joursOfferts\(\)\}/.test(hero),
+    'un seul chiffre sur la page : 100')
+
+  // Et nulle part ailleurs sur la landing.
+  verifier("aucun total chiffré ne subsiste sur la landing",
+    !/joursOfferts\(\)/.test(reveal),
+    'le total réel reste plus généreux que la promesse, mais on ne l\'affiche pas')
   // ⚠️ On découpe LE BLOC avant d'y chercher, exactement comme pour le hero.
   // Sans ce découpage, la garde trouvait `joursOffertsAuLancement()` ailleurs
   // dans le fichier et restait verte alors que l'addition avait disparu du
@@ -489,11 +500,22 @@ function sansCommentaires(src) {
   verifier("le bloc de l'offre est bien découpé", encart.length > 800, `${encart.length} caractères`)
   verifier("le bloc pose les 100 jours garantis",
     /joursOffertsAuLancement\(\)/.test(encart))
-  verifier("le bloc montre l'ADDITION, ligne par ligne",
-    /\{avance > 0 && \(/.test(encart) && /= \{jours\} j/.test(encart),
-    'sans l\'addition posée, « 142 jours » se lit comme une exagération')
-  verifier("le bloc nomme la raison de chaque ligne",
-    /parce que tu arrives maintenant/.test(encart) && /pour tout le monde/.test(encart))
+
+  // ⚠️ UN SEUL CHIFFRE SUR TOUTE LA PAGE (décision Alex, 20/08) :
+  // « je ne veux pas qu'on annonce un chiffre en plus des 100 jours, tu es là
+  //   plus tôt, génial et c'est bonus ».
+  // Un second nombre oblige à poser une addition, et une offre qu'il faut
+  // expliquer se fait relire de travers. L'avance se dit en toutes lettres.
+  //
+  // ⚠️ Cette garde INTERDIT ce que la version précédente EXIGEAIT. C'est
+  // volontaire : elle empêche le total chiffré de revenir par mégarde.
+  verifier("le bloc ne chiffre PAS le total avec l'avance",
+    !/joursOfferts\(\)/.test(encart),
+    'le bonus se raconte, il ne se compte pas')
+  verifier("le bloc dit quand même que l'avance est un bonus",
+    /est en bonus/.test(encart))
+  verifier("et qu'elle fond",
+    /fond un peu chaque jour/.test(encart))
 
   // La comparaison, EXÉCUTÉE. C'est elle qui porte l'urgence.
   const auLancement = joursOffertsAuLancement()

@@ -32,7 +32,7 @@ import TurnstileWidget from '@/app/components/TurnstileWidget'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import { estFoodTruck } from '@/lib/types-commerce'
 import {
-  avantLancement, estRegimeLancement, joursOfferts,
+  avantLancement, estRegimeLancement, joursOffertsAuLancement,
   libelleLancement, libelleFinEssaiLancement, libelleDernierJourGratuit, ESSAI_JOURS_MINIMUM,
 } from '@/lib/lancement'
 
@@ -546,7 +546,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
               <>
                 La formule <span style={{ color: T.light }}>Exister</span> est gratuite à vie.
                 {' '}<span style={{ color: T.light }}>Communiquer</span> et <span style={{ color: T.light }}>Vendre</span> te sont
-                offertes jusqu&apos;au <span style={{ color: T.light }}>{libelleDernierJourGratuit()}</span>, soit {joursOfferts()} jours.
+                offertes <span style={{ color: T.light }}>{joursOffertsAuLancement()} jours</span> à partir du {libelleLancement()}, et tout le temps d’ici là est en bonus.
               </>
             ) : (
               <>
@@ -1949,7 +1949,7 @@ function BandeauRecapPlan({ plan }) {
       </div>
       <p style={{ fontSize: 12.5, color: T.deep, margin: 0, lineHeight: 1.5 }}>
         {estRegimeLancement()
-          ? <>Aucun prélèvement avant le <strong>{libelleFinEssaiLancement()}</strong>, soit {joursOfferts()} jours offerts. </>
+          ? <>Aucun prélèvement avant le <strong>{libelleFinEssaiLancement()}</strong>. </>
           : <>Aucun prélèvement pendant {ESSAI_JOURS_MINIMUM} jours. </>}
         Ensuite, <strong>{tarifFormate}&euro; HTVA / mois</strong>,
         sans engagement, résiliable à tout moment. Tu seras invité(e) à renseigner tes

@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { postPro } from '@/lib/fetch-pro'
 import { supabase } from '@/lib/supabase'
 import { canDo, getIaConfig } from '@/lib/plans'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
@@ -2011,11 +2012,7 @@ function TabDeals({ commercantId, commercant, toast }) {
     // d'un deal actif (pas a chaque edit, evite spam). Fire-and-forget non
     // bloquant. Gating cote route API (plan Communiquer/Vendre + publie).
     if (!editId && payload.actif && data[0]?.id) {
-      fetch('/api/deals/notify-favoris', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deal_id: data[0].id }),
-      }).catch(e => console.warn('[deals/notify-favoris] envoi echoue', e?.message))
+      postPro('/api/deals/notify-favoris', { deal_id: data[0].id }).catch(e => console.warn('[deals/notify-favoris] envoi echoue', e?.message))
     }
 
     setShowForm(false); fetchDeals()
@@ -2510,11 +2507,7 @@ function TabActus({ commercantId, commercant, toast }) {
     // Push OneSignal aux favoris a la CREATION d'une actu active. Anti-spam :
     // pas d'envoi a l'edition. Alerte = high_priority cote route.
     if (!editId && payload.actif && data?.[0]?.id) {
-      fetch('/api/actus/notify-favoris', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actu_id: data[0].id }),
-      }).catch(e => console.warn('[actus/notify-favoris] envoi echoue', e?.message))
+      postPro('/api/actus/notify-favoris', { actu_id: data[0].id }).catch(e => console.warn('[actus/notify-favoris] envoi echoue', e?.message))
     }
 
     setShowForm(false); fetchActus()

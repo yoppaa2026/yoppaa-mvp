@@ -17,6 +17,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo } from '@/lib/plans'
 
@@ -37,6 +38,16 @@ export async function POST(req) {
   }
 
   const supabase = getSupabaseAdmin()
+
+  // ⚠️ GARDE D AUTORISATION, POSEE LE 21/08. Cette route ne lisait AUCUN
+  // en-tete : ni jeton, ni cookie, ni secret interne. Les identifiants sont
+  // publics (la fiche du commerce les expose en clair sous la cle anon), donc
+  // n importe qui declenchait une notification vers TOUS les abonnes d un
+  // commercant, autant de fois qu il voulait, en priorite maximale s il
+  // choisissait une alerte. Le commercant en portait la responsabilite.
+  const verdict = await gardeSurLigne(req, supabase, 'yoppaa_deals', deal_id)
+  const nonAutorise = refus(verdict, NextResponse)
+  if (nonAutorise) return nonAutorise
   const { data: deal, error: dealErr } = await supabase
     .from('yoppaa_deals')
     .select(`

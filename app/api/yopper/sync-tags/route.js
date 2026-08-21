@@ -15,7 +15,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { setYopperTags } from '@/lib/onesignal'
-import { identiteYopper } from '@/lib/yopper-auth'
+import { identiteProuvee } from '@/lib/yopper-auth'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -25,24 +25,29 @@ function getSupabaseAdmin() {
   )
 }
 
-// external_id OneSignal = clients.id. Le cookie contient client_id la plupart du
-// temps, mais on retombe sur une résolution par email si absent (le cookie a pu
-// être posé avant que le client_id soit connu).
-// ⚠️ Lisait encore l'ANCIEN cookie non signé (durcissement du 03/08) : les tags
-// OneSignal ne se posaient donc plus, et les notifications ciblées avec.
-// L'identité déclarée suffit ici : on ne fait que poser des étiquettes de
-// préférence, il n'y a rien à lire.
+// external_id OneSignal = clients.id, tiré d'une session Supabase vérifiée.
+// ⚠️ L'IDENTITÉ DÉCLARÉE NE SUFFISAIT PAS, ET LE COMMENTAIRE QUI LE JUSTIFIAIT
+// ÉTAIT FAUX. Il disait : « on ne fait que poser des étiquettes de préférence,
+// il n'y a rien à lire ». C'est vrai pour la lecture, et hors sujet pour
+// l'écriture : ce sont les préférences DE QUELQU'UN D'AUTRE qu'on écrivait.
+//
+// `POST /api/yopper/session` fabrique et signe un cookie d'identité à partir du
+// seul corps de la requête, sans jamais vérifier que l'appelant possède cette
+// adresse. La signature prouve que le serveur a émis le cookie, PAS que celui
+// qui le présente est la bonne personne — `lib/yopper-session.js` le dit
+// noir sur blanc. C'est précisément pourquoi `identiteProuvee` existe.
+//
+// L'attaque tenait en deux requêtes, sans aucun compte : on réclamait un cookie
+// au nom d'une adresse email, puis on réécrivait le code postal de la personne
+// (donc sa zone de ciblage Good Morning Yoppers) et on la désabonnait en
+// silence des commerces qu'elle suit, une chaîne vide retirant une étiquette.
+//
+// ⚠️ ET LE REPLI PAR EMAIL EST PARTI AVEC. Il transformait une adresse connue,
+// donc devinable, en identifiant de compte. Le `client_id` vient maintenant
+// d'une session Supabase vérifiée, et de nulle part ailleurs.
 async function getYopperClientId(request) {
-  const identity = await identiteYopper(request)
-  if (!identity) return null
-  if (identity?.client_id) return identity.client_id
-  if (!identity?.email) return null
-  const { data } = await getSupabaseAdmin()
-    .from('clients')
-    .select('id')
-    .eq('email', identity.email)
-    .single()
-  return data?.id || null
+  const identity = await identiteProuvee(request)
+  return identity?.client_id || null
 }
 
 export async function POST(req) {

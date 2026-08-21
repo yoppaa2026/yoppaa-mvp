@@ -9,6 +9,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerAuCommercant, emailRdvAnnule } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { annulerPush } from '@/lib/onesignal'
@@ -25,6 +26,17 @@ export async function POST(request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY,
       { auth: { persistSession: false } }
     )
+
+    // ⚠️ GARDE D'AUTORISATION, POSÉE LE 21/08. Cette route n'en avait AUCUNE :
+    // ni jeton, ni cookie, ni secret. Elle prenait un identifiant dans le corps
+    // de la requête, chargeait la ligne avec la CLÉ DE SERVICE — qui ignore la
+    // RLS — et faisait partir l'email. Le client qui possède le numéro de sa
+    // propre commande pouvait donc déclencher n'importe lequel de ces envois,
+    // vers le commerçant comme vers lui-même, autant de fois qu'il voulait.
+    // La règle vit dans lib/api-auth.js, pour les dix routes à la fois.
+    const verdict = await gardeSurLigne(request, supabase, 'rdv_reservations', rdv_id)
+    const nonAutorise = refus(verdict, NextResponse)
+    if (nonAutorise) return nonAutorise
 
     const { data: rdv } = await supabase
       .from('rdv_reservations')

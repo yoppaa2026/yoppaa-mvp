@@ -7,6 +7,7 @@
 // Validations server-side : overlap RDV existants + horaires shop + pause.
 
 import { useState, useEffect } from 'react'
+import { postPro } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
@@ -377,11 +378,7 @@ export default function ModalNouveauRdv({
       // 4) Email de confirmation au Yopper (non-bloquant, fire-and-forget).
       //    Pas d'email commercant (c'est lui qui cree le RDV, il sait deja).
       if (rdvId && (email.trim() || null)) {
-        fetch('/api/emails/rdv-confirme', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rdv_id: rdvId }),
-        }).catch(e => console.warn('[ModalNouveauRdv] emails fire-and-forget KO', e))
+        postPro('/api/emails/rdv-confirme', { rdv_id: rdvId }).catch(e => console.warn('[ModalNouveauRdv] emails fire-and-forget KO', e))
       }
 
       // 5) Success : callback + close

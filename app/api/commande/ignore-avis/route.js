@@ -27,10 +27,21 @@ function getSupabaseAdmin() {
 // ⚠️ Lisait encore l'ANCIEN cookie non signé (durcissement du 03/08) : masquer
 // une demande d'avis échouait donc toujours en silence.
 //
-// Ici l'identité DÉCLARÉE suffit, et c'est délibéré : le geste consiste à
-// masquer une invitation sur SA propre commande, souvent passée en invité juste
-// avant. Exiger la connexion casserait le geste pour protéger une donnée qui
-// n'en est pas une. La commande est de toute façon revérifiée par l'email.
+// ⚠️ ICI L'IDENTITÉ DÉCLARÉE SUFFIT, ET CETTE ROUTE EST LA SEULE DANS CE CAS.
+// Elle a été réexaminée le 21/08, en même temps que `sync-tags`, qui utilisait
+// le même helper faible et a dû passer à `identiteProuvee`.
+//
+// La différence tient au FILTRE de la mise à jour, plus bas : elle exige
+// `id = commande_id` ET `client_email = email`. Un cookie forgé au nom d'une
+// adresse ne sert donc à rien sans l'identifiant de la commande, qui est un
+// UUID que seul son auteur possède. C'est l'UUID qui garde, pas le cookie.
+//
+// Et le geste consiste à masquer une invitation sur SA propre commande, souvent
+// passée en invité juste avant : exiger la connexion le casserait pour protéger
+// une donnée qui n'en est pas une.
+//
+// ⚠️ SI CE FILTRE PERD SON `.eq('client_email', …)`, cette route devient le
+// défaut de `sync-tags`. Les deux lignes se lisent ensemble.
 async function getYopperEmail(request) {
   const id = await identiteYopper(request)
   return id?.email || null

@@ -72,16 +72,28 @@ export async function POST(request) {
         return NextResponse.json({ ok: true, created: true, client: inserted })
       }
 
-      // Existant : update uniquement si des champs non vides ont changé (comme
-      // l'ancien getOuCreerClient). On ne renvoie jamais les autres colonnes.
-      const patch = {}
-      if (telephone && ex.telephone !== telephone) patch.telephone = telephone
-      if (prenom && ex.prenom !== prenom) patch.prenom = prenom
-      if (nom && ex.nom !== nom) patch.nom = nom
-      if (Object.keys(patch).length > 0) {
-        await supabase.from('clients').update(patch).eq('id', ex.id)
-      }
-      return NextResponse.json({ ok: true, created: false, client: { ...ex, ...patch } })
+      // ⚠️ FICHE EXISTANTE : ON NE TOUCHE À RIEN, ET ON NE RACONTE RIEN.
+      //
+      // Cette branche s'exécute AVANT toute vérification d'identité — c'est
+      // voulu, la commande sans compte en dépend. Mais elle faisait deux choses
+      // qu'un appelant anonyme n'aurait jamais dû pouvoir faire :
+      //
+      //   1. ELLE ÉCRIVAIT. `patch` était construit avec le téléphone, le
+      //      prénom et le nom fournis dans le corps de la requête, et poussé
+      //      sur la ligne d'un INCONNU. Une seule requête, sans authentification
+      //      d'aucune sorte, réécrivait durablement le nom et le numéro que le
+      //      commerçant voit sur les commandes de cette personne. Rien, nulle
+      //      part, ne documentait cette écriture.
+      //
+      //   2. ELLE RENDAIT LA FICHE. Prénom, nom et téléphone d'un inconnu
+      //      contre la seule connaissance de son adresse email, et un oracle
+      //      d'existence de compte par-dessus (`created: true` ou `false`).
+      //
+      // ⚠️ CONSÉQUENCE VISIBLE, ET C'EST UN ARBITRAGE À ASSUMER : un client de
+      // passage qui revient ne verra plus son nom et son téléphone
+      // pré-remplis tant qu'il n'est pas connecté. Le pré-remplissage
+      // subsiste pour un Yopper identifié, par `get-own`.
+      return NextResponse.json({ ok: true, created: false, client: { id: ex.id } })
     }
 
     // ─── opérations "own" : identité prouvée uniquement ────────────────────

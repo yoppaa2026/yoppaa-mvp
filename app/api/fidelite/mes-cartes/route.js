@@ -45,7 +45,25 @@ async function yopperCourant(request) {
   return { email: String(id.email).toLowerCase(), client_id: id.client_id || null }
 }
 
-// Numéros de téléphone prouvés du Yopper : ceux de ses commandes + sa fiche client
+// Numéros de téléphone PROUVÉS du Yopper : ceux qu'il a réellement utilisés
+// dans une commande ou un rendez-vous.
+//
+// ⚠️ ET `clients.telephone` N'EN FAIT PLUS PARTIE, C'ÉTAIT LA FAILLE.
+// L'en-tête de ce fichier posait pourtant la règle : « jamais par saisie libre
+// d'un numéro, sinon n'importe qui pourrait espionner les cartes d'autrui ».
+// Or `clients.telephone` EST une saisie libre : l'action `update-own` le laisse
+// écrire ce qu'on veut, sans le moindre contrôle par SMS — aucun flux de
+// vérification téléphonique n'existe dans le projet.
+//
+// L'attaque tenait en deux requêtes. On s'inscrit comme Yopper ordinaire, on
+// pose le numéro de GSM de quelqu'un d'autre dans son profil, on demande ses
+// cartes : on reçoit sa cagnotte en euros, la liste des commerces qu'il
+// fréquente, et le JETON de chaque carte. Ce jeton ouvre `/carte/<token>` sans
+// aucune connexion, et il n'expire jamais.
+//
+// ⚠️ Le contrôle `identiteProuvee` ne protégeait rien ici : l'identité de
+// l'attaquant est parfaitement prouvée. C'est le NUMÉRO qui sélectionne les
+// lignes, et c'est lui qui était auto-déclaré.
 async function telephonesDuYopper(supabase, yopper) {
   const tels = new Set()
   const { data: cmds } = await supabase
@@ -66,11 +84,6 @@ async function telephonesDuYopper(supabase, yopper) {
     const t = normaliserTelephone(r.client_telephone)
     if (t) tels.add(t)
   })
-  if (yopper.client_id && RE_UUID.test(String(yopper.client_id))) {
-    const { data: cli } = await supabase.from('clients').select('telephone').eq('id', yopper.client_id).maybeSingle()
-    const t = normaliserTelephone(cli?.telephone)
-    if (t) tels.add(t)
-  }
   return [...tels]
 }
 

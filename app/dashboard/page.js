@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { postPro } from '@/lib/fetch-pro'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
@@ -1432,11 +1433,7 @@ export default function Dashboard() {
     // Si on passe a 'pret' : email au Yopper pour le prevenir
     // (non-bloquant, fire-and-forget — l'UI commercant est deja a jour)
     if (statut === 'pret') {
-      fetch('/api/emails/commande-prete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commande_id: commandeId }),
-      }).catch(e => console.warn('[dashboard] email commande-prete KO', e))
+      postPro('/api/emails/commande-prete', { commande_id: commandeId }).catch(e => console.warn('[dashboard] email commande-prete KO', e))
     }
   }
 
@@ -1458,11 +1455,7 @@ export default function Dashboard() {
     // un colis n'apprenait rien. Le numéro de suivi restait dans ce tableau de
     // bord. Envoyé APRÈS la mise à jour en base, pour que la route relise le
     // numéro qui vient d'être enregistré. Non bloquant : l'écran est déjà à jour.
-    fetch('/api/emails/commande-expediee', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ commande_id: commandeId }),
-    }).catch(e => console.warn('[dashboard] email commande-expediee KO', e))
+    postPro('/api/emails/commande-expediee', { commande_id: commandeId }).catch(e => console.warn('[dashboard] email commande-expediee KO', e))
   }
 
   async function changerStatutLivraison(commandeId, statutLivraison) {
@@ -1553,17 +1546,9 @@ export default function Dashboard() {
     if (statut === 'annule_commercant') {
       // TODO Sess 4/8 suite : refund Stripe acompte côté commerçant.
       // Pour l'instant on notifie juste le Yopper, le commerçant refund manuellement via Stripe Dashboard.
-      fetch('/api/emails/rdv-annule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rdv_id: rdvId, raison_annulation: raison }),
-      }).catch(e => console.warn('[dashboard] email rdv-annule KO', e))
+      postPro('/api/emails/rdv-annule', { rdv_id: rdvId, raison_annulation: raison }).catch(e => console.warn('[dashboard] email rdv-annule KO', e))
     } else if (statut === 'honore') {
-      fetch('/api/emails/rdv-honore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rdv_id: rdvId }),
-      }).catch(e => console.warn('[dashboard] email rdv-honore KO', e))
+      postPro('/api/emails/rdv-honore', { rdv_id: rdvId }).catch(e => console.warn('[dashboard] email rdv-honore KO', e))
 
       // ⚠️ LE RENDEZ-VOUS HONORÉ EMPORTE SES PRODUITS. C'est le moment exact où
       // le commerçant tend le sachet : lui demander un second geste dans un
@@ -1576,11 +1561,7 @@ export default function Dashboard() {
     } else if (statut === 'no_show') {
       // Notif Yopper qu'il a été marqué absent (transparence + permet contestation).
       // L'acompte n'est PAS refundé (le commerçant a bloqué le créneau pour rien).
-      fetch('/api/emails/rdv-no-show', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rdv_id: rdvId }),
-      }).catch(e => console.warn('[dashboard] email rdv-no-show KO', e))
+      postPro('/api/emails/rdv-no-show', { rdv_id: rdvId }).catch(e => console.warn('[dashboard] email rdv-no-show KO', e))
     }
     return true
   }

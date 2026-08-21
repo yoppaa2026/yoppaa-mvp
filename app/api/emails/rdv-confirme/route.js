@@ -15,6 +15,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { gardeSurLigne } from '@/lib/api-auth'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { referenceRdv } from '@/lib/numero-commande'
@@ -24,7 +25,7 @@ export async function POST(request) {
   try {
     // `deplace` : le rendez-vous existait déjà et vient d'être décalé par le
     // commerçant. Mêmes informations, mais annoncées comme un CHANGEMENT.
-    const { rdv_id, deplace = false, ancienne_date = null, ancienne_heure = null } = await request.json()
+    const { rdv_id, deplace: deplaceDemande = false, ancienne_date: ancienneDateDemandee = null, ancienne_heure: ancienneHeureDemandee = null } = await request.json()
     if (!rdv_id) {
       return NextResponse.json({ ok: false, error: 'rdv_id requis' }, { status: 400 })
     }
@@ -35,6 +36,22 @@ export async function POST(request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY,
       { auth: { persistSession: false } }
     )
+
+    // ⚠️ GARDE PARTIELLE, ET C'EST DÉLIBÉRÉ. Cette route est la seule des huit
+    // que le CLIENT appelle, juste après avoir réservé, et le plus souvent SANS
+    // COMPTE : exiger un jeton couperait la confirmation de tout rendez-vous
+    // pris sans s'inscrire. Ce qu'il possède, c'est l'identifiant du
+    // rendez-vous, un UUID que seul celui qui vient de le créer connaît.
+    //
+    // ⚠️ MAIS DÉPLACER UN RENDEZ-VOUS N'APPARTIENT QU'AU COMMERÇANT. Ces trois
+    // champs venaient du corps de la requête sans aucune preuve : n'importe qui
+    // pouvait faire annoncer AUX DEUX PARTIES un changement d'horaire qui n'a
+    // jamais eu lieu, dans un email signé par notre domaine. Sans preuve, ils
+    // sont désormais ignorés, et le message redevient une simple confirmation.
+    const verdictPro = await gardeSurLigne(request, supabase, 'rdv_reservations', rdv_id)
+    const deplace = deplaceDemande === true && verdictPro.ok
+    const ancienne_date = deplace ? ancienneDateDemandee : null
+    const ancienne_heure = deplace ? ancienneHeureDemandee : null
 
     // Fetch RDV + jointures
     const { data: rdv, error: errRdv } = await supabase

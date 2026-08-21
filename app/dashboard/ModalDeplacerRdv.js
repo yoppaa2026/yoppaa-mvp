@@ -22,6 +22,7 @@
 // pure et partagée avec la création manuelle : deux copies auraient divergé.
 
 import { useState, useEffect, useMemo } from 'react'
+import { postPro } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
@@ -194,16 +195,12 @@ export default function ModalDeplacerRdv({
       // supérieur, ce qui DÉPLACE l'événement déjà présent chez le client au
       // lieu d'en créer un second.
       if (prevenir && rdv.client_email) {
-        fetch('/api/emails/rdv-confirme', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        postPro('/api/emails/rdv-confirme', {
             rdv_id: rdv.id,
             deplace: true,
             ancienne_date: ancienneDate,
             ancienne_heure: ancienneHeure,
-          }),
-        }).catch(e => console.warn('[ModalDeplacerRdv] email de déplacement KO', e))
+          }).catch(e => console.warn('[ModalDeplacerRdv] email de déplacement KO', e))
       }
 
       if (onDeplace) onDeplace({ ...rdv, ...maj })

@@ -258,6 +258,42 @@ const PHASE = avantLancement()
   verifier('et elle la passe aux DEUX emails', passages === 2, `${passages} passage(s)`)
 }
 
+// ═══ 7. LE GABARIT SUPABASE SERT LES DEUX PUBLICS ════════════════════════
+// ⚠️ `app/signup` (commerçant) et `app/commander/auth` (Yopper) appellent TOUS
+// LES DEUX `supabase.auth.signUp`, et Supabase n'a qu'un seul gabarit « Confirm
+// signup ». Un habitant qui crée son compte pour commander reçoit donc
+// EXACTEMENT le même email qu'un commerçant : tout mot qui ne vaut que pour l'un
+// est faux pour l'autre une fois sur deux.
+//
+// Ce gabarit vit dans le tableau de bord Supabase, hors du dépôt. On garde donc
+// ce qu'on peut garder : le texte de référence, à la racine.
+{
+  const doc = lire('EMAIL_CONFIRMATION_SUPABASE.md')
+
+  // ⚠️ ON DÉCOUPE LE BLOC HTML. Le document EXPLIQUE quels mots sont bannis, et
+  // les cite : chercher dans le fichier entier trouverait « facture » dans mon
+  // propre avertissement et rougirait sur un gabarit parfaitement sain.
+  const d = doc.indexOf('```html')
+  const f = doc.indexOf('```', d + 7)
+  const gabarit = d > -1 && f > d ? doc.slice(d + 7, f) : ''
+  verifier('le gabarit Supabase est bien dans le document', gabarit.length > 500)
+
+  const RESERVES_COMMERCANT = /facture|ta fiche|notre équipe|ton commerce|tableau de bord|commerçant/i
+  verifier('le gabarit ne parle à AUCUN des deux publics en particulier',
+    !RESERVES_COMMERCANT.test(gabarit),
+    'un Yopper recevrait un email de commerçant')
+
+  verifier('le lien se construit depuis .RedirectTo',
+    gabarit.includes('{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=signup'),
+    'un lien en dur renverrait TOUT LE MONDE sur le tableau de bord commerçant')
+  verifier('et jamais depuis .SiteURL',
+    !/\{\{ \.SiteURL \}\}/.test(gabarit))
+  verifier('le gabarit est en français', /Confirmer mon adresse/.test(gabarit))
+  verifier('aucun « undefined » dans le gabarit', !gabarit.includes('undefined'))
+  verifier('le document dit où le coller',
+    /Authentication → Emails → Templates → Confirm signup/.test(doc))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 console.log(`Phase lue : ${PHASE ? 'avant' : 'après'} l'ouverture du ${OUVERTURE}.`)
 if (ko > 0) {

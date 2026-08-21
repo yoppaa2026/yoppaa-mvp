@@ -11,6 +11,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { crediterFideliteCommande } from '@/lib/fidelite-server'
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -28,6 +29,14 @@ export async function POST(request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY,
       { auth: { persistSession: false } }
     )
+
+    // ⚠️ GARDE D AUTORISATION, POSEE LE 21/08 avec les dix autres. Cette route
+    // n est appelee que par le tableau de bord : les trois mentions trouvees
+    // ailleurs dans le code sont des COMMENTAIRES, pas des appels. Elle peut
+    // donc exiger le jeton du commercant sans rien casser.
+    const verdict = await gardeSurLigne(request, supabase, 'commandes', commandeId)
+    const nonAutorise = refus(verdict, NextResponse)
+    if (nonAutorise) return nonAutorise
 
     // Le seul contrôle propre à cette route : on ne crédite que du définitif.
     const { data: cmd, error: errCmd } = await supabase

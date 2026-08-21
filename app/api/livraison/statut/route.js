@@ -14,6 +14,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerPushParExternalId } from '@/lib/onesignal'
 import { envoyerAuCommercant, emailCommandeEnLivraison } from '@/lib/resend'
 import { referenceCommande } from '@/lib/numero-commande'
@@ -30,6 +31,14 @@ export async function POST(request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY,
       { auth: { persistSession: false } }
     )
+
+    // ⚠️ GARDE D AUTORISATION, POSEE LE 21/08 avec les dix autres. Cette route
+    // n est appelee que par le tableau de bord : les trois mentions trouvees
+    // ailleurs dans le code sont des COMMENTAIRES, pas des appels. Elle peut
+    // donc exiger le jeton du commercant sans rien casser.
+    const verdict = await gardeSurLigne(request, supabase, 'commandes', commande_id)
+    const nonAutorise = refus(verdict, NextResponse)
+    if (nonAutorise) return nonAutorise
 
     const { data: cmd, error } = await supabase
       .from('commandes')

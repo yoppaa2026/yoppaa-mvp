@@ -1342,11 +1342,7 @@ export default function Dashboard() {
   // Crédit fidélité automatique (Vendre) au statut final. Fire-and-forget,
   // idempotent côté serveur (index unique par commande).
   function crediterFideliteCommande(commandeId) {
-    fetch('/api/fidelite/crediter', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ commande_id: commandeId }),
-    }).catch(e => console.warn('[dashboard] credit fidelite KO', e))
+    postPro('/api/fidelite/crediter', { commande_id: commandeId }).catch(e => console.warn('[dashboard] credit fidelite KO', e))
   }
 
   // ─── Les produits d'un rendez-vous viennent d'être remis ─────────────────
@@ -1423,11 +1419,7 @@ export default function Dashboard() {
     // Push OneSignal au Yopper à chaque transition (en préparation, prête),
     // contenu actionnable + clic vers l'onglet Commandes. Fire-and-forget.
     if (statut === 'en_preparation' || statut === 'pret') {
-      fetch('/api/commande/push-statut', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commande_id: commandeId, statut }),
-      }).catch(e => console.warn('[dashboard] push-statut KO', e))
+      postPro('/api/commande/push-statut', { commande_id: commandeId, statut }).catch(e => console.warn('[dashboard] push-statut KO', e))
     }
 
     // Si on passe a 'pret' : email au Yopper pour le prevenir
@@ -1471,11 +1463,7 @@ export default function Dashboard() {
     if (statutLivraison === 'livree') crediterFideliteCommande(commandeId)
 
     // Push OneSignal au Yopper (en route / livrée). Non-bloquant : l'UI est déjà à jour.
-    fetch('/api/livraison/statut', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ commande_id: commandeId, statut_livraison: statutLivraison }),
-    }).catch(e => console.warn('[dashboard] push livraison KO', e))
+    postPro('/api/livraison/statut', { commande_id: commandeId, statut_livraison: statutLivraison }).catch(e => console.warn('[dashboard] push livraison KO', e))
   }
 
   // Optimise l'ordre de passage des livraisons actives du jour et récupère un

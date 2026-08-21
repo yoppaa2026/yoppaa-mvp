@@ -42,3 +42,7 @@ next-env.d.ts
 
 # claude code local config
 .claude/
+
+# Configuration MCP locale : inerte sans ses variables d environnement,
+# et branchee sur une base de PRODUCTION. Ne se partage pas.
+.mcp.json

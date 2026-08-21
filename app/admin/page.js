@@ -12,7 +12,8 @@ import SectionDiagnosticBrevo from './SectionDiagnosticBrevo'
 import SectionCommunes from './SectionCommunes'
 import SectionSuggestions from './SectionSuggestions'
 import SectionDiagnosticRatelimit from './SectionDiagnosticRatelimit'
-import { Sparkles, Store, Scissors, Croissant, ShoppingBag, Phone, Eye, Lock } from 'lucide-react'
+import { Sparkles, Store, Scissors, Croissant, ShoppingBag, Phone, Eye, Lock, AlertTriangle } from 'lucide-react'
+import { TAILLE_CONSEILLEE, avertissementTaille, bilanTaillesImages } from '@/lib/image-qualite'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
@@ -34,6 +35,9 @@ export default function AdminPage() {
   const [session, setSession] = useState(null)
   const [checking, setChecking] = useState(true)
   const [aValider, setAValider] = useState([])
+  // Photos des commerçants en attente, par commercant_id, lues via l'API admin.
+  const [photos, setPhotos] = useState({})
+  const [photosKo, setPhotosKo] = useState(null)
   const [historique, setHistorique] = useState([])
   const [loading, setLoading] = useState(true)
   const [actionEnCours, setActionEnCours] = useState(null) // commercant_id en cours d'action
@@ -72,6 +76,27 @@ export default function AdminPage() {
       .eq('statut_publication', 'en_attente')
       .order('created_at', { ascending: false })
     setAValider(cs || [])
+
+    // ⚠️ LES PHOTOS PASSENT PAR L'API, PAS PAR SUPABASE DIRECTEMENT. Depuis le
+    // 21/08, `commercant_photos` ne se lit qu'à deux conditions : commerce
+    // publié, ou le mien. Un commerçant en attente n'est ni l'un ni l'autre, et
+    // une requête directe rendrait une liste vide SANS ERREUR.
+    //
+    // ⚠️ ET SI ELLE ÉCHOUE, ON LE DIT. Une console de validation qui affiche
+    // « aucune photo » alors qu'elle n'a pas pu les lire ferait valider une
+    // fiche sur une information fausse.
+    try {
+      const resP = await fetch('/api/admin/commercants', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const jsonP = await resP.json()
+      if (!resP.ok || !jsonP.ok) throw new Error(jsonP.error || 'lecture impossible')
+      setPhotos(jsonP.photos || {})
+      setPhotosKo(null)
+    } catch (e) {
+      setPhotos({})
+      setPhotosKo(e.message || String(e))
+    }
 
     // Historique (50 dernières actions)
     const { data: hs } = await supabase
@@ -225,10 +250,17 @@ export default function AdminPage() {
             </div>
           )}
 
+          {photosKo && aValider.length > 0 && (
+            <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, color: '#7F1D1D', fontSize: 13, fontWeight: 700 }}>
+              Les photos n&apos;ont pas pu être lues ({photosKo}). Les fiches s&apos;affichent sans elles : ne conclus pas qu&apos;il n&apos;y en a pas.
+            </div>
+          )}
+
           <div style={{ display: 'grid', gap: 14 }}>
             {aValider.map(c => (
               <CarteAValider key={c.id}
                 commercant={c}
+                photos={photos[c.id] || []}
                 onValider={() => valider(c.id)}
                 onRejeter={() => ouvrirRejet(c)}
                 disabled={actionEnCours === c.id}
@@ -322,12 +354,33 @@ export default function AdminPage() {
 }
 
 // ─── Carte d'un commerçant à valider ──────────────────────────────────────
-function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
+function CarteAValider({ commercant: c, photos = [], onValider, onRejeter, disabled }) {
   const ob = Array.isArray(c.onboarding_commercants) ? c.onboarding_commercants[0] : c.onboarding_commercants
   const score = ob?.validation_auto_score ?? null
   const successPack = ob?.success_pack_choisi
   const dateSoumission = ob?.completed_at || c.created_at
   const couleurScore = score == null ? T.muted : score >= 80 ? '#10B981' : score >= 60 ? '#EA580C' : '#DC2626'
+
+  // ⚠️ ARBITRAGE D'ALEX, 21/08 : une image trop petite ne bloque plus le
+  // commerçant, c'est ICI qu'on la voit, et c'est ici qu'on demande la reprise
+  // avant de publier. Encore faut-il que l'information arrive : cette carte
+  // n'affichait AUCUNE photo de galerie, et un logo rendu en 64 px paraît net
+  // quelle que soit sa définition réelle.
+  //
+  // On mesure au chargement (`naturalWidth`), donc sans colonne en base et sans
+  // migration : la compression ne fait que réduire, l'image stockée porte la
+  // définition de la source.
+  const [dims, setDims] = useState({})
+  const mesurer = (cle, e) => {
+    const w = e?.currentTarget?.naturalWidth
+    const h = e?.currentTarget?.naturalHeight
+    if (!w || !h) return
+    setDims(prev => (prev[cle] ? prev : { ...prev, [cle]: { w, h } }))
+  }
+  const bilan = bilanTaillesImages([
+    ...(c.logo_url ? [{ libelle: 'le logo', dims: dims.logo, quoi: 'logo' }] : []),
+    ...photos.map((p, i) => ({ libelle: `la photo ${i + 1}`, dims: dims[p.id], quoi: 'photo' })),
+  ])
 
   return (
     <div style={{ background: '#fff', borderRadius: 16, border: `1px solid ${T.hairline}`, overflow: 'hidden', boxShadow: '0 2px 12px rgba(22,6,54,0.05)', opacity: disabled ? 0.5 : 1 }}>
@@ -335,7 +388,9 @@ function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
         {/* Logo */}
         <div style={{ width: 64, height: 64, borderRadius: 14, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
           {c.logo_url
-            ? <img decoding="async" loading="lazy" src={c.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            ? <img decoding="async" loading="lazy" src={c.logo_url} alt=""
+                onLoad={e => mesurer('logo', e)}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
             : <Store size={26} strokeWidth={1.6}/>}
         </div>
 
@@ -385,6 +440,48 @@ function CarteAValider({ commercant: c, onValider, onRejeter, disabled }) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* ⚠️ LES PHOTOS DE LA FICHE, QUI NE S'AFFICHAIENT NULLE PART ICI.
+          Valider une fiche sans voir ses images, c'est publier ce qu'on n'a pas
+          regardé. Chacune porte sa définition réelle quand elle est courte. */}
+      <div style={{ borderTop: `1px solid ${T.hairline}`, padding: '12px 18px', background: '#FCFCFD' }}>
+        <p style={{ fontSize: 10.5, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.6px', margin: '0 0 8px' }}>
+          Sa fiche en images · {photos.length}
+        </p>
+        {photos.length === 0 ? (
+          <p style={{ fontSize: 12.5, color: '#B45309', fontWeight: 700, margin: 0 }}>
+            Aucune photo. Sa fiche n&apos;aura que sa bannière et son logo.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+            {photos.map((p, i) => {
+              const av = avertissementTaille(dims[p.id], TAILLE_CONSEILLEE.photo, 'photo')
+              return (
+                <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer"
+                  title={av ? `${av.titre}. ${av.detail}` : 'Ouvrir en grand'}
+                  style={{ position: 'relative', width: 108, flexShrink: 0, aspectRatio: '4/3', borderRadius: 10, overflow: 'hidden', border: `1px solid ${av ? '#FDBA74' : T.hairline}`, display: 'block' }}>
+                  <img decoding="async" loading="lazy" src={p.url} alt={`Photo ${i + 1}`}
+                    onLoad={e => mesurer(p.id, e)}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                  {av && (
+                    <span style={{ position: 'absolute', left: 4, bottom: 4, background: 'rgba(124,45,18,0.92)', color: '#fff', fontSize: 9.5, fontWeight: 800, padding: '2px 6px', borderRadius: 100 }}>
+                      {av.grandCote} px
+                    </span>
+                  )}
+                </a>
+              )
+            })}
+          </div>
+        )}
+        {/* ⚠️ IL COMPTE ET IL NOMME. « Une image est petite » sur une fiche qui
+            en porte six ne dit pas s'il faut en reprendre une ou six. */}
+        {bilan && (
+          <p style={{ display: 'flex', gap: 6, alignItems: 'flex-start', margin: '10px 0 0', fontSize: 12, fontWeight: 700, color: '#9A3412', lineHeight: 1.45 }}>
+            <span style={{ flexShrink: 0, marginTop: 1 }}><AlertTriangle size={13} strokeWidth={2.2}/></span>
+            <span>{bilan.texte} À demander avant de publier.</span>
+          </p>
+        )}
       </div>
 
       {/* Actions */}

@@ -6,6 +6,7 @@ import BanniereCommerce from '@/app/components/BanniereCommerce'
 import { useRouter } from 'next/navigation'
 import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
 import { compresserImage } from '@/lib/compress-image'
+import { TAILLE_CONSEILLEE, avertissementTaille, refusFichierImage, mesurerFichierImage } from '@/lib/image-qualite'
 import { logoProvisoireSvg, propositionsLogo } from '@/lib/logo-provisoire'
 import { scoreOnboarding, SEUIL_SOUMISSION } from '@/lib/score-onboarding'
 import { conseilPhoto, MAX_PHOTOS } from '@/lib/guide-photos'
@@ -1272,7 +1273,17 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
   const [galerie, setGalerie] = useState([])
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingGalerie, setUploadingGalerie] = useState(false)
-  const [error, setError] = useState('')
+  // ⚠️ UN MESSAGE PAR CARTE, ET C'EST LE CORRECTIF PRINCIPAL (Alex, 21/08).
+  // Un état `error` UNIQUE, rendu tout en bas de l'étape, faisait s'afficher le
+  // refus d'une photo de GALERIE sous la carte du LOGO, collé au bouton
+  // « Continuer ». Alex a cru que son logo venait d'être refusé : le message
+  // accusait le mauvais bloc, à deux cartes du geste.
+  // Un message se lit LÀ OÙ LE GESTE A EU LIEU.
+  const [msgLogo, setMsgLogo] = useState(null)      // { ton, titre, detail }
+  const [msgGalerie, setMsgGalerie] = useState(null)
+  // Tailles mesurées des images, pour que l'avertissement RESTE visible sur la
+  // vignette au lieu de disparaître avec le message.
+  const [dimsImages, setDimsImages] = useState({})  // { logo | <id photo> : { w, h } }
   const [saving, setSaving] = useState(false)
   // La couverture compte pour une : neuf de plus font dix photos en tout.
   const MAX_GALERIE = MAX_PHOTOS - 1
@@ -1291,62 +1302,69 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     return () => { annule = true }
   }, [commercant.id])
 
-  // Retourne { error, dims }. Erreur bloque l'upload. Dims permet de générer un warning a posteriori.
-  // minPx : 800 par défaut (photos de couverture/galerie), abaissé pour le logo
-  // qui est recompressé en 400x400 de toute façon (beaucoup de vrais logos font < 800 px).
-  async function validerFichier(file, { minPx = 800 } = {}) {
-    if (!file) return { error: 'Aucun fichier', dims: null }
-    const okType = /image\/(jpeg|jpg|png|webp)/.test(file.type)
-    if (!okType) return { error: 'Format invalide. Utilise JPG, PNG ou WEBP.', dims: null }
-    if (file.size > 8 * 1024 * 1024) return { error: 'Fichier trop lourd. Max 8 Mo.', dims: null }
-    const dims = await new Promise(resolve => {
-      const img = new Image()
-      img.onload = () => resolve({ w: img.width, h: img.height })
-      img.onerror = () => resolve(null)
-      img.src = URL.createObjectURL(file)
-    })
-    if (!dims) return { error: 'Fichier corrompu ou illisible.', dims: null }
-    if (Math.max(dims.w, dims.h) < minPx) return { error: `Image trop petite. Min ${minPx} px sur le plus grand côté.`, dims }
-    return { error: null, dims }
+  // ⚠️ LA TAILLE EN PIXELS NE BLOQUE PLUS (arbitrage d'Alex, 21/08). Ce qui
+  // bloque encore : un fichier qui n'est pas une image, trop lourd, ou que le
+  // navigateur ne sait pas décoder. La règle et ses textes vivent dans
+  // `lib/image-qualite`, une seule fois, pour le signup ET le tableau de bord.
+  // Retourne les dimensions si le fichier passe, null sinon.
+  async function controlerImage(file, poser) {
+    poser(null)
+    const refus = refusFichierImage(file)
+    if (refus) { poser({ ton: 'erreur', titre: refus }); return null }
+    const dims = await mesurerFichierImage(file)
+    if (!dims) {
+      poser({ ton: 'erreur', titre: 'Cette image ne s\'ouvre pas.',
+        detail: 'Le fichier est peut-être abîmé, ou dans un format que ton navigateur ne lit pas. Réessaie avec une autre image.' })
+      return null
+    }
+    return dims
   }
 
   async function uploadLogo(file) {
-    setError('')
-    const { error: err } = await validerFichier(file, { minPx: 256 })
-    if (err) { setError(err); return }
+    const dims = await controlerImage(file, setMsgLogo)
+    if (!dims) return
     setUploadingLogo(true)
     // Compression client automatique (feedback_zero_friction)
     const compressed = await compresserImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.85 })
     const fileName = `logo-${commercant.id}-${Date.now()}.jpg`
     const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
-    if (upErr) { setError(`Upload échoué : ${upErr.message}`); setUploadingLogo(false); return }
+    if (upErr) { setMsgLogo({ ton: 'erreur', titre: `Upload échoué : ${upErr.message}` }); setUploadingLogo(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
     const url = urlData.publicUrl
     const { data: c } = await supabase.from('commercants').update({ logo_url: url }).eq('id', commercant.id).select().single()
     if (c) onUpdate(c)
     setLogoUrl(url)
+    setDimsImages(prev => ({ ...prev, logo: dims }))
+    // ⚠️ L'AVERTISSEMENT ARRIVE APRÈS LE SUCCÈS, PAS À LA PLACE. Le logo est
+    // en ligne : on le dit d'abord en le montrant, et on signale ensuite ce
+    // qu'il gagnerait à devenir. Un avertissement n'est pas un refus.
+    const av = avertissementTaille(dims, TAILLE_CONSEILLEE.logo, 'logo')
+    setMsgLogo(av ? { ton: 'avertissement', titre: av.titre, detail: av.detail } : null)
     setUploadingLogo(false)
   }
 
   // Fallback "Genere-moi" : produit un cercle violet avec initiale du nom
   // dans la charte Yoppaa. Pas de friction, propre, identitaire.
   async function genererLogoAuto(choix = null) {
-    setError('')
+    setMsgLogo(null)
     setUploadingLogo(true)
     onSaving?.('saving')
     try {
       const nom = commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Y'
       const canvas = await logoProvisoireCanvas(nom, commercant.type, choix)
       const blob = await canvasVersBlob(canvas)
-      if (!blob) { setError('Génération du logo impossible.'); return }
+      if (!blob) { setMsgLogo({ ton: 'erreur', titre: 'Génération du logo impossible.' }); return }
       const fileName = `logo-${commercant.id}-${Date.now()}.png`
       const { error: upErr } = await supabase.storage.from('logos').upload(fileName, blob, { upsert: true, contentType: 'image/png' })
-      if (upErr) { setError(`Upload échoué : ${upErr.message}`); return }
+      if (upErr) { setMsgLogo({ ton: 'erreur', titre: `Upload échoué : ${upErr.message}` }); return }
       const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
       const url = urlData.publicUrl
       const { data: c } = await supabase.from('commercants').update({ logo_url: url }).eq('id', commercant.id).select().single()
       if (c) onUpdate(c)
       setLogoUrl(url)
+      // Le logo provisoire est dessiné en 512 px : jamais d'avertissement ici,
+      // et surtout pas celui d'une image précédente resté à l'écran.
+      setDimsImages(prev => ({ ...prev, logo: { w: canvas.width, h: canvas.height } }))
       onSaving?.('saved')
     } finally {
       setUploadingLogo(false)
@@ -1359,19 +1377,18 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
   // pour preserver l'ordre d'affichage du carousel cote fiche client.
   async function uploadPhotoGalerie(file) {
     if (galerie.length >= MAX_GALERIE) {
-      setError(`Maximum ${MAX_GALERIE} photos supplémentaires.`)
+      setMsgGalerie({ ton: 'erreur', titre: `Maximum ${MAX_GALERIE} photos supplémentaires.` })
       return
     }
-    setError('')
-    const { error: err } = await validerFichier(file)
-    if (err) { setError(err); return }
+    const dims = await controlerImage(file, setMsgGalerie)
+    if (!dims) return
     setUploadingGalerie(true)
     onSaving?.('saving')
     // Compression client automatique (feedback_zero_friction) — galerie carousel
     const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
     const fileName = `gal-${commercant.id}-${Date.now()}.jpg`
     const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
-    if (upErr) { setError(`Upload échoué : ${upErr.message}`); setUploadingGalerie(false); return }
+    if (upErr) { setMsgGalerie({ ton: 'erreur', titre: `Upload échoué : ${upErr.message}` }); setUploadingGalerie(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
     const url = urlData.publicUrl
     const ordreSuivant = galerie.length > 0 ? Math.max(...galerie.map(p => p.ordre || 0)) + 1 : 1
@@ -1381,8 +1398,11 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
       url,
       ordre: ordreSuivant,
     }).select().single()
-    if (insErr) { setError(`Enregistrement échoué : ${insErr.message}`); setUploadingGalerie(false); return }
+    if (insErr) { setMsgGalerie({ ton: 'erreur', titre: `Enregistrement échoué : ${insErr.message}` }); setUploadingGalerie(false); return }
     setGalerie(prev => [...prev, row])
+    if (row?.id) setDimsImages(prev => ({ ...prev, [row.id]: dims }))
+    const av = avertissementTaille(dims, TAILLE_CONSEILLEE.photo, 'photo')
+    setMsgGalerie(av ? { ton: 'avertissement', titre: av.titre, detail: av.detail } : null)
     setUploadingGalerie(false)
     onSaving?.('saved')
   }
@@ -1462,8 +1482,12 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
             </ul>
           </div>
         </div>
+        {/* ⚠️ « MINIMUM » EST DEVENU « CONSEILLÉ », ET C'EST MAINTENANT VRAI :
+            une photo plus petite passe, on te dit simplement ce qu'elle vaudra.
+            Annoncer un minimum qu'on n'applique plus serait pire que de ne rien
+            annoncer du tout. */}
         <p style={{ fontSize: 10.5, color: T.muted, margin: '10px 0 0', fontWeight: 600, lineHeight: 1.4 }}>
-          Format accepté : JPG, PNG, WEBP · 800 px minimum sur le grand côté · 8 Mo max
+          Format accepté : JPG, PNG, WEBP · 800 px conseillés sur le grand côté · 15 Mo max
         </p>
       </div>
 
@@ -1509,7 +1533,10 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
           uploading={uploadingGalerie}
           onFile={uploadPhotoGalerie}
           onSupprimer={supprimerPhotoGalerie}
+          dims={dimsImages}
+          onMesure={(id, d) => setDimsImages(prev => (prev[id] ? prev : { ...prev, [id]: d }))}
         />
+        <MessageImage msg={msgGalerie}/>
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
           Format paysage idéal, mais tous les ratios passent. Compression automatique.
         </div>
@@ -1530,7 +1557,12 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
           label="Ajouter le logo"
           onFile={uploadLogo}
           maxWidth={140}
+          dims={dimsImages.logo}
+          onMesure={d => setDimsImages(prev => (prev.logo ? prev : { ...prev, logo: d }))}
+          minPx={TAILLE_CONSEILLEE.logo}
+          quoi="logo"
         />
+        <MessageImage msg={msgLogo}/>
         {/* ⚠️ ON PROPOSE, ON N'IMPOSE PAS (Alex, 14/08). Un logo qu'on choisit
             devient le sien ; un logo imposé reste « celui de Yoppaa », et le
             commerçant s'en détache au lieu de se l'approprier. Le premier de
@@ -1590,11 +1622,9 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
         </div>
       </Card>
 
-      {error && (
-        <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, color: '#7F1D1D', fontSize: 13, fontWeight: 600 }}>
-          {error}
-        </div>
-      )}
+      {/* ⚠️ PLUS AUCUN BANDEAU D'ERREUR ICI. C'est ce bandeau, rendu après les
+          deux cartes, qui affichait le refus d'une photo de galerie juste sous
+          la carte du logo. Chaque message est désormais dans SA carte. */}
 
       <NavEtape
         retour={retour}
@@ -1607,9 +1637,51 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
   )
 }
 
+// ⚠️ UN MESSAGE SE LIT LÀ OÙ LE GESTE A EU LIEU. Rendu DANS la carte concernée,
+// jamais en pied d'étape. Deux tons, et ils ne disent pas la même chose :
+//   • erreur         → rien n'a été enregistré, il faut recommencer.
+//   • avertissement  → c'est enregistré, et voilà ce que ça vaudra.
+// Le rouge est réservé à ce qui a échoué (feedback_boutons_qui_disent_le_geste).
+function MessageImage({ msg }) {
+  if (!msg) return null
+  const erreur = msg.ton === 'erreur'
+  const couleurs = erreur
+    ? { fond: '#FEE2E2', bord: '#FCA5A5', texte: '#7F1D1D', doux: '#991B1B' }
+    : { fond: '#FFF7ED', bord: '#FED7AA', texte: '#7C2D12', doux: '#9A3412' }
+  return (
+    <div role={erreur ? 'alert' : 'status'}
+      style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: couleurs.fond, border: `1px solid ${couleurs.bord}`, borderRadius: 10, padding: '10px 13px', marginTop: 12 }}>
+      <span style={{ flexShrink: 0, marginTop: 1, color: couleurs.texte }}>
+        <AlertTriangle size={15} strokeWidth={2}/>
+      </span>
+      <div style={{ minWidth: 0 }}>
+        <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: couleurs.texte, lineHeight: 1.45 }}>{msg.titre}</p>
+        {msg.detail && (
+          <p style={{ margin: '3px 0 0', fontSize: 11.5, fontWeight: 500, color: couleurs.doux, lineHeight: 1.5 }}>{msg.detail}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Pastille posée sur une vignette quand l'image est sous sa taille conseillée.
+// ⚠️ ELLE SURVIT AU MESSAGE. Le texte d'avertissement disparaît au téléversement
+// suivant ; la pastille, elle, est encore là au retour sur l'étape, et c'est ce
+// qui permet de savoir LAQUELLE des six photos reprendre.
+function PastilleTaille({ dims, minPx, quoi = 'photo' }) {
+  const av = avertissementTaille(dims, minPx, quoi)
+  if (!av) return null
+  return (
+    <span title={`${av.titre}. ${av.detail}`}
+      style={{ position: 'absolute', left: 4, bottom: 4, background: 'rgba(124,45,18,0.92)', color: '#fff', fontSize: 9.5, fontWeight: 800, padding: '2px 6px', borderRadius: 100, letterSpacing: '0.2px', pointerEvents: 'none' }}>
+      {av.grandCote} px
+    </span>
+  )
+}
+
 // Grille de thumbs galerie + bouton "+" pour ajouter une photo (max atteint).
 // Affiche une croix sur chaque thumb pour supprimer.
-function GalerieMini({ photos, max, uploading, onFile, onSupprimer }) {
+function GalerieMini({ photos, max, uploading, onFile, onSupprimer, dims = {}, onMesure }) {
   const inputRef = useRef(null)
   const peutAjouter = photos.length < max
   return (
@@ -1617,7 +1689,15 @@ function GalerieMini({ photos, max, uploading, onFile, onSupprimer }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10 }}>
         {photos.map(p => (
           <div key={p.id} style={{ position: 'relative', aspectRatio: '4/3', borderRadius: 12, overflow: 'hidden', border: `1px solid ${T.hairline}` }}>
-            <img decoding="async" loading="lazy" src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            {/* ⚠️ ON MESURE L'IMAGE EN LIGNE, PAS SEULEMENT LE FICHIER TÉLÉVERSÉ.
+                La compression ne fait que RÉDUIRE : une source de 640 px reste
+                à 640 px une fois stockée. La mesure au chargement donne donc la
+                même réponse, et elle vaut aussi pour les photos déjà en place
+                avant aujourd'hui. Aucune migration, aucune colonne à remplir. */}
+            <img decoding="async" loading="lazy" src={p.url} alt=""
+              onLoad={e => onMesure?.(p.id, { w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            <PastilleTaille dims={dims[p.id]} minPx={TAILLE_CONSEILLEE.photo}/>
             <button type="button" onClick={() => onSupprimer(p)} aria-label="Supprimer"
               style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(22,6,54,0.85)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, lineHeight: 1, padding: 0 }}>
               <span style={{ marginTop: -1 }}>×</span>
@@ -1638,35 +1718,48 @@ function GalerieMini({ photos, max, uploading, onFile, onSupprimer }) {
           </button>
         )}
       </div>
-      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp"
+      {/* ⚠️ `image/*` ET NON UNE LISTE DE TROIS FORMATS. Un iPhone propose ses
+          photos en HEIC : la liste étroite les grisait dans le sélecteur, alors
+          que le tableau de bord les accepte. Safari sait les décoder, la
+          compression les ressort en JPEG, et ce qui ne se décode pas est
+          attrapé par la mesure avec un message clair. */}
+      <input ref={inputRef} type="file" accept="image/*"
         onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = '' }}
         style={{ display: 'none' }}/>
     </div>
   )
 }
 
-function UploadZone({ url, uploading, aspect, minHeight, label, onFile, maxWidth }) {
+function UploadZone({ url, uploading, aspect, minHeight, label, onFile, maxWidth, dims, onMesure, minPx, quoi }) {
   const inputRef = useRef(null)
   return (
     <div style={{ maxWidth }}>
       <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
         style={{ width: '100%', minHeight, aspectRatio: aspect, borderRadius: 14, border: `2px dashed ${url ? T.bgPanel : T.hairline}`, background: url ? '#fff' : '#FAFAFA', cursor: uploading ? 'wait' : 'pointer', overflow: 'hidden', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: '"DM Sans", sans-serif', padding: 0 }}>
         {url ? (
-          <img decoding="async" loading="lazy" src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+          <img decoding="async" loading="lazy" src={url} alt=""
+            onLoad={e => onMesure?.({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
         ) : (
           <div style={{ textAlign: 'center', padding: 16 }}>
             <Camera size={26} strokeWidth={1.8} color={T.main} style={{ marginBottom: 6 }}/>
             <p style={{ fontSize: 13, color: T.muted, fontWeight: 700 }}>{label}</p>
-            <p style={{ fontSize: 11, color: T.muted, fontWeight: 500, marginTop: 4 }}>JPG, PNG ou WEBP · 8 Mo max</p>
+            <p style={{ fontSize: 11, color: T.muted, fontWeight: 500, marginTop: 4 }}>JPG, PNG ou WEBP · 15 Mo max</p>
           </div>
         )}
+        {url && minPx ? <PastilleTaille dims={dims} minPx={minPx} quoi={quoi}/> : null}
         {uploading && (
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: T.bgPanel }}>
             Upload en cours…
           </div>
         )}
       </button>
-      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp"
+      {/* ⚠️ `image/*` ET NON UNE LISTE DE TROIS FORMATS. Un iPhone propose ses
+          photos en HEIC : la liste étroite les grisait dans le sélecteur, alors
+          que le tableau de bord les accepte. Safari sait les décoder, la
+          compression les ressort en JPEG, et ce qui ne se décode pas est
+          attrapé par la mesure avec un message clair. */}
+      <input ref={inputRef} type="file" accept="image/*"
         onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = '' }}
         style={{ display: 'none' }}/>
       {url && (

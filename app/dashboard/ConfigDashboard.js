@@ -40,6 +40,7 @@ import { jourLocalISO, jourSemaineLocal, jourBruxelles } from '@/lib/timezone'
 import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
 import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
+import { TAILLE_CONSEILLEE, avertissementTaille } from '@/lib/image-qualite'
 import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '@/lib/fidelite'
 import { libelleEnvie, phraseHorsOuverture } from '@/lib/signaux'
 import { MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '@/lib/guide-photos'
@@ -4988,6 +4989,24 @@ function ChoixLieuUnique({ commercantId, valeur, onChange, toast }) {
   )
 }
 
+// Avertissement de définition insuffisante, posé SOUS l'image concernée.
+//
+// ⚠️ NI UN TOAST, NI UN BANDEAU. Un toast dure trois secondes et disparaît :
+// il ne peut pas servir un défaut qu'on répare plus tard. Un bandeau global,
+// lui, ne dit pas LAQUELLE des dix photos est en cause — c'est exactement le
+// défaut d'affichage relevé au signup le 21/08. Celui-ci vit à côté de son
+// image, et il est encore là au retour sur l'onglet.
+function AvertissementTaille({ dims, quoi = 'photo' }) {
+  const av = avertissementTaille(dims, TAILLE_CONSEILLEE[quoi] || TAILLE_CONSEILLEE.photo, quoi)
+  if (!av) return null
+  return (
+    <p style={{ display: 'flex', gap: 5, alignItems: 'flex-start', margin: '5px 0 0', fontSize: 10.5, color: '#9A3412', fontWeight: 700, lineHeight: 1.45 }}>
+      <span style={{ flexShrink: 0, marginTop: 1 }}><AlertTriangle size={11} strokeWidth={2.2}/></span>
+      <span><span style={{ fontWeight: 800 }}>{av.grandCote} px.</span> {av.detail}</span>
+    </p>
+  )
+}
+
 const SOUS_ONGLETS_PROFIL = [
   { id: 'fiche',    label: 'Ma fiche' },
   { id: 'contact',  label: 'Mes coordonnées' },
@@ -5021,6 +5040,20 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
   const [galerie, setGalerie] = useState([])
   const [uploadingCouv, setUploadingCouv] = useState(false)
   const [uploadingGal, setUploadingGal] = useState(false)
+  // ⚠️ MÊME RÈGLE QU'AU SIGNUP, ET C'EST BIEN LE PROBLÈME QUI L'A AMENÉE ICI.
+  // Le signup refusait toute image sous 800 px, le tableau de bord n'a JAMAIS
+  // eu ce contrôle : la même photo, dans la même galerie, dans la même table,
+  // était refusée le premier jour et acceptée le lendemain. On avertit
+  // désormais des deux côtés, avec la même fonction et les mêmes mots.
+  // Mesuré au chargement de l'image, donc valable AUSSI pour les photos déjà
+  // en place : aucune colonne à ajouter, aucune migration.
+  const [dimsImages, setDimsImages] = useState({}) // { logo | couverture | <id> : { w, h } }
+  const mesurerImage = useCallback((cle, e) => {
+    const w = e?.currentTarget?.naturalWidth
+    const h = e?.currentTarget?.naturalHeight
+    if (!w || !h) return
+    setDimsImages(prev => (prev[cle] ? prev : { ...prev, [cle]: { w, h } }))
+  }, [])
   // Dix photos en tout : la principale (couverture) plus neuf. Le carrousel
   // « Mon commerce en images » est devenu le seul endroit où les photos vivent,
   // le haut de fiche portant désormais une bannière au nom du commerce.
@@ -5256,7 +5289,11 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
         <p style={{ fontSize: 12, color: T.muted, marginBottom: 14 }}>Format carré conseillé · JPG ou PNG · compressé automatiquement</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ width: 88, height: 88, borderRadius: 14, background: T.pale, border: `2px dashed ${logoPreview ? T.main : T.light}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
-            {logoPreview ? <img decoding="async" loading="lazy" src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <Store size={28} strokeWidth={1.6} color={T.muted}/>}
+            {logoPreview
+              ? <img decoding="async" loading="lazy" src={logoPreview} alt="Logo"
+                  onLoad={e => mesurerImage('logo', e)}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+              : <Store size={28} strokeWidth={1.6} color={T.muted}/>}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <label style={{ ...s.btn, ...s.btnPrimary, cursor: uploadingLogo ? 'wait' : 'pointer' }}>
@@ -5266,6 +5303,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
             {logoPreview && <button style={{ ...s.btn, ...s.btnDanger, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={supprimerLogo}><Trash2 size={13} strokeWidth={1.8}/> Supprimer</button>}
           </div>
         </div>
+        {logoPreview && <AvertissementTaille dims={dimsImages.logo} quoi="logo"/>}
       </div>
 
       {/* Photos de la fiche : la principale + neuf autres, ordonnées.
@@ -5294,7 +5332,9 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
         <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 8px', lineHeight: 1.5 }}>{conseilPhoto(1, metierFiche).aide}</p>
         <label style={{ display: 'block', width: '100%', maxWidth: 420, aspectRatio: '16/9', borderRadius: 14, border: `2px dashed ${couvertureUrl ? T.main : T.light}`, background: T.pale, overflow: 'hidden', cursor: uploadingCouv ? 'wait' : 'pointer', position: 'relative' }}>
           {couvertureUrl ? (
-            <img decoding="async" loading="lazy" src={couvertureUrl} alt="Couverture" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            <img decoding="async" loading="lazy" src={couvertureUrl} alt="Couverture"
+              onLoad={e => mesurerImage('couverture', e)}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
           ) : (
             <span style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: T.muted, fontSize: 12, fontWeight: 700 }}>
               <Camera size={22} strokeWidth={1.8} color={T.main}/>
@@ -5307,6 +5347,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
           <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) uploadCouverture(e.target.files[0]); e.target.value = '' }} disabled={uploadingCouv}/>
         </label>
         <p style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>Format paysage 16:9 idéal. Clique pour {couvertureUrl ? 'remplacer' : 'ajouter'}. Compressée automatiquement.</p>
+        {couvertureUrl && <AvertissementTaille dims={dimsImages.couverture}/>}
 
         {/* Les suivantes, dans l'ordre où elles défileront. Chacune porte le
             conseil de SA place : « ajoute des photos » ne dit rien, « celle-ci
@@ -5320,13 +5361,16 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
             return (
               <div key={p.id} style={{ display: 'flex', gap: 12, alignItems: 'center', background: T.bg, borderRadius: 12, padding: 8 }}>
                 <div style={{ width: 96, aspectRatio: '4/3', borderRadius: 10, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}`, flexShrink: 0 }}>
-                  <img decoding="async" loading="lazy" src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                  <img decoding="async" loading="lazy" src={p.url} alt=""
+                    onLoad={e => mesurerImage(p.id, e)}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>
                     Photo {i + 2} · {conseil.titre}
                   </p>
                   <p style={{ fontSize: 11, color: T.muted, margin: 0, lineHeight: 1.45 }}>{conseil.aide}</p>
+                  <AvertissementTaille dims={dimsImages[p.id]}/>
                 </div>
                 {/* Flèches plutôt que glisser-déposer : sur un téléphone, au
                     comptoir, une flèche se vise et ne rate pas. */}

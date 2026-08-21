@@ -38,6 +38,49 @@ async function requireAdmin(request) {
   return { admin }
 }
 
+// GET -> les PHOTOS des commerçants en attente de validation.
+//
+// ⚠️ POURQUOI UNE ROUTE, ET PAS UNE REQUÊTE DEPUIS LA PAGE ADMIN. Depuis le
+// 21/08, `commercant_photos` ne se lit qu'à deux conditions : le commerce est
+// PUBLIÉ, ou c'est le mien. Un commerçant en attente ne remplit ni l'une ni
+// l'autre, y compris pour l'administrateur : une requête directe rendrait une
+// liste VIDE, sans erreur — exactement le genre de silence qu'on ne diagnostique
+// plus. On passe donc par la clé de service, derrière la garde admin.
+//
+// ⚠️ LA LISTE DES COMMERÇANTS EST CALCULÉE ICI, jamais reçue de l'appelant :
+// on ne lit que ce qui est réellement `en_attente`, sans faire confiance à des
+// identifiants venus du navigateur.
+export async function GET(request) {
+  try {
+    const { admin, error, status } = await requireAdmin(request)
+    if (error) return NextResponse.json({ ok: false, error }, { status })
+
+    const { data: cs } = await admin
+      .from('commercants')
+      .select('id')
+      .eq('statut_publication', 'en_attente')
+    const ids = (cs || []).map(c => c.id)
+    if (ids.length === 0) return NextResponse.json({ ok: true, photos: {} })
+
+    const { data: ps, error: psErr } = await admin
+      .from('commercant_photos')
+      .select('id, commercant_id, url, type, ordre')
+      .in('commercant_id', ids)
+      .order('ordre')
+    if (psErr) return NextResponse.json({ ok: false, error: psErr.message }, { status: 500 })
+
+    const photos = {}
+    for (const p of ps || []) {
+      if (!p.url) continue
+      ;(photos[p.commercant_id] = photos[p.commercant_id] || []).push(p)
+    }
+    return NextResponse.json({ ok: true, photos })
+  } catch (e) {
+    console.error('[admin/commercants GET]', e?.message)
+    return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })
+  }
+}
+
 export async function DELETE(request) {
   try {
     const { admin, error, status } = await requireAdmin(request)

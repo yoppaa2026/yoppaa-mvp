@@ -58,8 +58,9 @@ export default async function KitPage({ params }) {
   const { slug } = await params
   const kit = await getKit(slug)
   // Avant l'ouverture publique : lien de préinscription tracké (?ref=), qui
-  // attribue chaque inscrit au commerçant. À partir du 1er septembre : sa
-  // fiche, où l'on commande. Le QR suit automatiquement.
+  // attribue chaque inscrit au commerçant. À partir de l'ouverture : sa fiche,
+  // où l'on commande. Le QR suit automatiquement, et la date de bascule vit
+  // dans `lib/lancement.js`, jamais dans un commentaire.
   const lien = avantLancement()
     ? `${BASE}/?ref=${encodeURIComponent(slug)}`
     : `${BASE}/commander/${encodeURIComponent(slug)}`

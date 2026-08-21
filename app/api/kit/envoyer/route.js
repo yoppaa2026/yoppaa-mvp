@@ -5,9 +5,10 @@
 //   • à la demande, depuis son dashboard (bouton « Recevoir mon kit »)
 //   • automatiquement à la validation de son inscription (appel interne)
 //
-// Le contenu s'adapte à la phase : avant le 1er septembre, le kit sert à
+// Le contenu s'adapte à la phase : avant l'ouverture publique, le kit sert à
 // recruter des préinscrits (lien ?ref= attribué au commerçant) ; après, il
-// envoie commander sur la fiche.
+// envoie commander sur la fiche. ⚠️ La date de bascule vit dans
+// `lib/lancement.js` et NULLE PART AILLEURS, surtout pas dans un commentaire.
 //
 // Body : { commercant_id }
 

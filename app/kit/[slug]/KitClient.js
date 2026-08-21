@@ -4,7 +4,7 @@
 // inscription au commerçant (widget d'impact).
 
 import { useState } from 'react'
-import { avantLancement } from '@/lib/lancement'
+import { avantLancement, libelleLancement } from '@/lib/lancement'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 
 const T = {
@@ -12,13 +12,17 @@ const T = {
   main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', green: '#10B981', greenLight: '#6EE7B7',
 }
 
-// Textes de partage (3 tons), déclinés par phase. AVANT l'ouverture publique
-// (1er août → 31 août) on recrute des préinscrits ; À PARTIR du 1er septembre
-// la fiche accepte les commandes, le discours devient transactionnel.
-const TEXTES_AVANT = [
-  { cle: 'clients', label: 'Pour tes clients', texte: 'Bientôt, notre quartier tient dans ta poche. Je fais partie de l’aventure Yoppaa, viens t’inscrire :' },
+// Textes de partage (3 tons), déclinés par phase. AVANT l'ouverture publique on
+// recrute des préinscrits ; À PARTIR de l'ouverture le discours devient
+// transactionnel.
+//
+// ⚠️ AUCUNE DATE ÉCRITE EN DUR ICI. Elle vient de `libelleLancement()`, et le
+// commentaire non plus n'en porte pas : celui-ci annonçait « 1er août → 31 août »
+// et « 1er septembre » longtemps après que l'ouverture soit passée au 1er octobre.
+const textesAvant = (ouverture) => [
+  { cle: 'clients', label: 'Pour tes clients', texte: `Le ${ouverture}, notre quartier tient dans ta poche. Je fais partie de l’aventure Yoppaa, viens t’inscrire :` },
   { cle: 'commercant', label: 'Pour un autre commerçant', texte: 'Une app belge pour le commerce de proximité arrive, sans commission Yoppaa sur tes ventes. Réserve ta place de commerçant :' },
-  { cle: 'court', label: 'Version courte', texte: 'Notre quartier dans ta poche, ça arrive. Inscris-toi :' },
+  { cle: 'court', label: 'Version courte', texte: `Notre quartier dans ta poche, c’est pour le ${ouverture}. Inscris-toi :` },
 ]
 const TEXTES_APRES = [
   { cle: 'clients', label: 'Pour tes clients', texte: 'On est sur Yoppaa 🟣 Commandez chez nous en ligne, c’est prêt quand vous arrivez :' },
@@ -73,7 +77,8 @@ export default function KitClient({ slug, kit, lien, qr }) {
 
   const btnBase = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 14px', borderRadius: 100, fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', border: 'none' }
   const preLancement = avantLancement()
-  const TEXTES = preLancement ? TEXTES_AVANT : TEXTES_APRES
+  const ouverture = libelleLancement()
+  const TEXTES = preLancement ? textesAvant(ouverture) : TEXTES_APRES
 
   return (
     <div style={wrap}>
@@ -91,13 +96,34 @@ export default function KitClient({ slug, kit, lien, qr }) {
         </div>
 
         {/* Impact : le compteur d'inscrits n'a de sens que pendant la phase de
-            recrutement. Après le lancement, il devient un chiffre orphelin. */}
+            recrutement. Après le lancement, il devient un chiffre orphelin.
+
+            ⚠️ ET UN ZÉRO N'EST PAS UN COMPTEUR, C'EST UN REPROCHE. « 0 personne
+            inscrite grâce à toi » est la première chose que voit un commerçant
+            qui ouvre son kit pour la toute première fois, c'est-à-dire AVANT
+            d'avoir pu partager quoi que ce soit. Même raisonnement que sur la
+            landing le 20/08, où les petits comptes ont cédé la place à quelque
+            chose qui avance : on ne ment pas, on ne montre simplement pas un
+            zéro là où il n'y a encore rien à compter. */}
         {preLancement && (
           <div style={{ textAlign: 'center', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 18, padding: '18px', marginBottom: 16, boxShadow: `0 8px 26px ${T.main}55` }}>
-            <p style={{ margin: 0, fontSize: '2.6rem', fontWeight: 900, color: '#fff', letterSpacing: '-1.5px', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{kit.impact}</p>
-            <p style={{ margin: '6px 0 0', fontSize: '0.88rem', fontWeight: 700, color: 'rgba(255,255,255,0.95)' }}>
-              {kit.impact <= 1 ? 'personne inscrite grâce à toi 🟣' : 'personnes inscrites grâce à toi 🟣'}
-            </p>
+            {kit.impact > 0 ? (
+              <>
+                <p style={{ margin: 0, fontSize: '2.6rem', fontWeight: 900, color: '#fff', letterSpacing: '-1.5px', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{kit.impact}</p>
+                <p style={{ margin: '6px 0 0', fontSize: '0.88rem', fontWeight: 700, color: 'rgba(255,255,255,0.95)' }}>
+                  {kit.impact === 1 ? 'personne inscrite grâce à toi 🟣' : 'personnes inscrites grâce à toi 🟣'}
+                </p>
+              </>
+            ) : (
+              <>
+                <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900, color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.3 }}>
+                  Ton lien est prêt 🟣
+                </p>
+                <p style={{ margin: '6px 0 0', fontSize: '0.85rem', fontWeight: 600, color: 'rgba(255,255,255,0.9)', lineHeight: 1.5 }}>
+                  Chaque personne qui s&apos;inscrit par ce lien apparaîtra ici.
+                </p>
+              </>
+            )}
           </div>
         )}
 
@@ -153,8 +179,15 @@ export default function KitClient({ slug, kit, lien, qr }) {
           ))}
         </div>
 
+        {/* ⚠️ CETTE PHRASE PROMETTAIT UN SEUIL QUI N'EXISTE PLUS. « Ta commune
+            atteint son objectif et se lance » date du démarrage commune par
+            commune, abandonné le 16/08 : les 260 communes wallonnes sont
+            ouvertes, aucune n'a de palier à franchir. Voir
+            project_wallonie_ouverte. */}
         <p style={{ margin: '1.6rem 0 0', textAlign: 'center', fontSize: '0.76rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
-          Plus tu partages, plus vite ta commune atteint son objectif et se lance sur Yoppaa. 🟣
+          {preLancement
+            ? `Le ${ouverture}, tu ouvres avec une clientèle déjà prête. Tout ce que tu partages d’ici là compte. 🟣`
+            : 'Une phrase au comptoir vaut dix publications. 🟣'}
         </p>
       </div>
     </div>

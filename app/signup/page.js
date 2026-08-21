@@ -427,6 +427,12 @@ function Etape1Compte({ session, commercant, onCompte }) {
   const [plan, setPlan] = useState(commercant?.plan || 'exister')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // ⚠️ UNE RÉUSSITE PASSAIT PAR LE CANAL DES ERREURS. « Compte créé ! » sortait
+  // dans le bandeau ROUGE, celui des refus : le commerçant venait de franchir sa
+  // première étape et l'écran lui répondait avec la couleur d'un échec.
+  // Deux canaux, donc, et deux couleurs. Le côté Yopper le fait déjà
+  // (`app/commander/auth/page.js` porte un `{ type: 'success' }`).
+  const [compteCree, setCompteCree] = useState(false)
   const turnstileRef = useRef(null)
 
   const dejaConnecte = !!session
@@ -443,6 +449,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
 
   async function creerCompte() {
     setError('')
+    setCompteCree(false)
     if (!email.trim() || !password.trim()) return setError('Email et mot de passe obligatoires')
     if (!isPasswordStrong(password)) return setError('Ton mot de passe doit faire au moins 8 caractères et contenir 1 minuscule, 1 majuscule, 1 chiffre et 1 caractère spécial.')
     setLoading(true)
@@ -476,7 +483,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
       if (signInData?.session) { s = signInData.session; userId = signInData.user?.id }
     }
     if (!userId) {
-      setError('Compte créé ! Vérifie ta boîte mail pour confirmer ton adresse, puis reviens sur cette page pour finaliser ton inscription.')
+      setCompteCree(true)
       setLoading(false)
       return
     }
@@ -488,7 +495,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
     // n'est pas confirmé. On ne peut pas créer le commerçant (RLS exige auth.uid). On
     // invite à confirmer ; le commerçant sera créé au retour (init détecte la session).
     if (!s) {
-      setError('Compte créé ! Vérifie ta boîte mail pour confirmer ton adresse, puis reviens sur cette page pour finaliser ton inscription.')
+      setCompteCree(true)
       setLoading(false)
       return
     }
@@ -502,6 +509,28 @@ function Etape1Compte({ session, commercant, onCompte }) {
     }
     try { localStorage.removeItem('yoppaa_pending_commercant') } catch (e) {}
     setLoading(false)
+    onCompte(s, res.commercant, res.onboarding)
+  }
+
+  // ⚠️ LE BOUTON MENAIT À UN MUR. Le lien de confirmation s'ouvre depuis la boîte
+  // mail, souvent sur un autre appareil : cet onglet-ci ne se remonte jamais, son
+  // `init()` ne repasse pas, et « Créer mon compte » ne pouvait plus rendre qu'un
+  // « User already registered ». Le bouton dit donc désormais le geste du moment,
+  // et il relit la session au lieu d'en créer une seconde.
+  async function reprendreApresConfirmation() {
+    setError('')
+    setLoading(true)
+    const { data: { session: s } } = await supabase.auth.getSession()
+    if (!s?.user?.id) {
+      setLoading(false)
+      setError('Ton email n’est pas encore confirmé. Ouvre le lien qu’on vient de t’envoyer, puis reviens cliquer ici.')
+      return
+    }
+    const res = await creerCommercantEtOnboarding(s.user.id, s.user.email, categorie, plan)
+    setLoading(false)
+    if (res.error) return setError(res.error)
+    try { localStorage.removeItem('yoppaa_pending_commercant') } catch (e) {}
+    setCompteCree(false)
     onCompte(s, res.commercant, res.onboarding)
   }
 
@@ -622,15 +651,32 @@ function Etape1Compte({ session, commercant, onCompte }) {
       {/* Mini-glossaire des fonctionnalités — contextuel selon la catégorie choisie */}
       <GlossaireFeatures categorie={categorie}/>
 
+      {/* Compte créé : c'est une VICTOIRE, pas un incident. Vert, et le geste
+          suivant nommé, parce qu'à cet instant la seule question est
+          « et maintenant, je fais quoi ? ». */}
+      {compteCree && (
+        <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: '14px 16px', marginBottom: 14, display: 'flex', gap: 11, alignItems: 'flex-start' }}>
+          <CheckCircle size={19} strokeWidth={2.2} color="#059669" style={{ flexShrink: 0, marginTop: 1 }}/>
+          <div>
+            <p style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: '#065F46', lineHeight: 1.45 }}>
+              Première étape franchie, ton compte est créé.
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: 12.5, color: '#047857', lineHeight: 1.55 }}>
+              On vient de t’envoyer un email de confirmation. Ouvre-le, clique sur le lien, et reviens ici : la suite se remplit en quelques minutes.
+            </p>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, color: '#7F1D1D', fontSize: 13, fontWeight: 600 }}>
           {error}
         </div>
       )}
 
-      <button onClick={dejaConnecte ? mettreAJourPlan : creerCompte} disabled={loading}
+      <button onClick={compteCree ? reprendreApresConfirmation : (dejaConnecte ? mettreAJourPlan : creerCompte)} disabled={loading}
         style={{ width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: loading ? `${T.main}88` : `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: '1rem', cursor: loading ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 8px 24px ${T.main}55` }}>
-        {loading ? 'En cours…' : (dejaConnecte ? 'Continuer →' : 'Créer mon compte →')}
+        {loading ? 'En cours…' : (compteCree ? 'J’ai confirmé mon email →' : (dejaConnecte ? 'Continuer →' : 'Créer mon compte →'))}
       </button>
 
       {/* Anti-bot Cloudflare Turnstile (invisible) */}
@@ -640,18 +686,12 @@ function Etape1Compte({ session, commercant, onCompte }) {
         Déjà inscrit ? <a href="/login" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>Se connecter</a>
       </p>
 
-      {/* Lien discret pour les administrations communales : redirige vers une page
-          de contact où ils peuvent demander à être contactés par Yoppaa pour un
-          onboarding manuel (plan Public, gratuit à vie, dédié au secteur public). */}
-      <div style={{ marginTop: 28, padding: '14px 16px', background: T.pale, borderRadius: 12, border: `1px solid ${T.main}22`, textAlign: 'center' }}>
-        <p style={{ fontSize: 12, color: T.deep, margin: 0, lineHeight: 1.5 }}>
-          Vous représentez une <strong>administration communale ou un service public</strong> ?
-          <br />
-          <a href="/administrations" style={{ color: T.main, fontWeight: 800, textDecoration: 'none' }}>
-            Demander un contact Yoppaa →
-          </a>
-        </p>
-      </div>
+      {/* ⚠️ LE BLOC « ADMINISTRATION COMMUNALE » A ÉTÉ RETIRÉ (demande d'Alex,
+          21/08), et il pointait de toute façon vers `/administrations`, une page
+          qui N'EXISTE PAS dans `app/` : le seul lien de tout le site menait donc
+          à un 404, en production, sous le bouton principal de l'inscription.
+          Le secteur public se contacte de la main à la main, pas par un
+          formulaire greffé sur le tunnel des commerçants. */}
     </div>
   )
 }

@@ -114,17 +114,28 @@ export async function POST(request) {
     })
 
     // 4) Email au commerçant (non bloquant)
+    //
+    // ⚠️ CES DEUX ENVOIS ARRIVENT À LA SECONDE PRÈS dans la même boîte. Ils
+    // doivent donc porter des objets DIFFÉRENTS et raconter la même histoire :
+    // le premier ouvre la porte, le second donne les outils. La phase de
+    // lancement leur est passée à TOUS LES DEUX, sinon l'un annonce une
+    // ouverture à venir pendant que l'autre la déclare déjà faite.
+    const phaseAvantLancement = avantLancement()
     let emailResult = { ok: false, error: 'pas d\'email destinataire' }
     if (commercant.email) {
       emailResult = await envoyerAuCommercant({
         to: commercant.email,
         subject: `Ta page Yoppaa est en ligne, ${commercant.nom} 🎉`,
-        html: emailValidationCommercant({ nom: commercant.nom, slug: commercant.slug }),
+        html: emailValidationCommercant({
+          nom: commercant.nom,
+          slug: commercant.slug,
+          avant_lancement: phaseAvantLancement,
+        }),
       })
 
       // 5) Kit de bienvenue dans la foulée : c'est le moment où le commerçant
       // est le plus motivé. Contenu adapté à la phase (recrutement de
-      // préinscrits avant le 1er septembre, commande après). Non bloquant.
+      // préinscrits avant l'ouverture publique, commande après). Non bloquant.
       try {
         await envoyerAuCommercant({
           to: commercant.email,
@@ -132,7 +143,7 @@ export async function POST(request) {
           html: emailKitBienvenue({
             nom_commercant: commercant.nom,
             slug: commercant.slug,
-            avant_lancement: avantLancement(),
+            avant_lancement: phaseAvantLancement,
           }),
         })
       } catch (e) {

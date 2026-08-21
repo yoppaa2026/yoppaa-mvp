@@ -152,17 +152,37 @@ SELECT c.relname AS vue,
  ORDER BY 1;
 
 
--- ─── 8) LES DROITS DE TABLE ACCORDÉS À anon ────────────────────────────────
--- Dernière ceinture. Une policy est inutile si le droit de table manque, et
--- inversement : `GRANT` sans policy ne donne rien, mais `GRANT` + une policy
--- ajoutée par distraction demain rouvre tout.
+-- ─── 8) LES TABLES FERMÉES À anon ──────────────────────────────────────────
 --
--- ATTENDU : que du SELECT, et uniquement sur des tables de catalogue public.
--- ⚠️ Tout INSERT, UPDATE ou DELETE accordé à `anon` se justifie ligne par ligne
--- (aujourd'hui : `clients` et `rdv_reservations` pour la commande sans compte).
-SELECT table_name, string_agg(DISTINCT privilege_type, ', ' ORDER BY privilege_type) AS droits
-  FROM information_schema.role_table_grants
- WHERE table_schema = 'public' AND grantee = 'anon'
- GROUP BY table_name
- HAVING string_agg(DISTINCT privilege_type, ', ') <> 'SELECT'
+-- ⚠️ CE BLOC SE LIT À L'ENVERS DES SEPT AUTRES, et j'ai commencé par me
+-- tromper dessus : j'avais écrit « attendu : que du SELECT ». C'est faux.
+--
+-- SUPABASE ACCORDE `ALL` À `anon` SUR TOUT LE SCHÉMA public, PAR DÉFAUT, à la
+-- création de chaque table. Lister les tables où `anon` a plus que SELECT rend
+-- donc les 55 tables, à chaque exécution, sans rien signaler du tout. Une garde
+-- qui crie au loup en permanence ne sert à rien, et suivre cette fausse alerte
+-- en révoquant les droits éteindrait l'application entière.
+--
+-- ⚠️ CE QU'IL FAUT EN RETENIR : LA RLS EST LA SEULE BARRIÈRE. Il n'y a aucune
+-- seconde ligne de défense au niveau des droits. C'est ce qui donne tout leur
+-- poids aux blocs 1 à 4.
+--
+-- (`TRUNCATE` et `REFERENCES` figurent dans ces droits mais PostgREST ne les
+-- expose pas : avec la clé anon on n'atteint que SELECT, INSERT, UPDATE et
+-- DELETE, et ces quatre-là passent par la RLS.)
+--
+-- On regarde donc L'EXCEPTION : les tables dont on a délibérément retiré les
+-- droits. Elles doivent le rester.
+--
+-- ATTENDU : au minimum `client_preferences` (révoquée le 21/08),
+-- `compteurs_commande` et `fiche_vues` (clé de service uniquement).
+-- ⚠️ Si l'une de ces trois DISPARAÎT de la liste, quelqu'un lui a rendu ses
+-- droits, et le trou du 21/08 est rouvert.
+SELECT c.relname AS table_fermee_a_anon
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+ WHERE n.nspname = 'public' AND c.relkind = 'r'
+   AND NOT EXISTS (
+     SELECT 1 FROM information_schema.role_table_grants g
+      WHERE g.table_schema = 'public' AND g.table_name = c.relname
+        AND g.grantee = 'anon')
  ORDER BY 1;

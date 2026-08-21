@@ -2398,16 +2398,21 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
     // 4) Email à Yoppaa via API route Resend (à implémenter — pour le MVP
     //    on log juste un avertissement console + on continue. Quand l'API
     //    /api/notify-yoppaa sera prête, on l'appelle ici.)
+    // ⚠️ LE JETON EST OBLIGATOIRE DEPUIS LE 21/08. Sans lui, `/api/notify-yoppaa`
+    // était un relais de courrier ouvert : n'importe qui choisissait le
+    // destinataire ET le texte d'un email signé par notre domaine. Le nom, le
+    // plan et l'adresse ne sont plus envoyés du tout, la route les relit en base.
     try {
+      const { data: { session: s } } = await supabase.auth.getSession()
       await fetch('/api/notify-yoppaa', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${s?.access_token || ''}`,
+        },
         body: JSON.stringify({
           commercant_id: commercant.id,
-          nom: commercant.nom,
           type: commercant.type,
-          email: commercant.email,
-          plan: commercant.plan,
           // Même raison qu'au-dessus : on annonce un pourcentage, pas un bilan.
           score: score.pourcentage,
           success_pack: shopChoices.has('success_pack') ? 'success_pack' : null,

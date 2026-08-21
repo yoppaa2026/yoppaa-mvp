@@ -7,6 +7,7 @@
 
 import { cache } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { echapperJsonLd } from '@/lib/seo-landing'
 
 const BASE_URL = 'https://www.yoppaa.app'
 const OG_FALLBACK = `${BASE_URL}/icon-512.png`
@@ -111,8 +112,25 @@ export default async function CommercantLayout({ children, params }) {
   return (
     <>
       {children}
+      {/* ⚠️ `echapperJsonLd`, JAMAIS `JSON.stringify` NU, ET C'EST UNE FAILLE
+          RÉELLE QUI DORMAIT ICI. `JSON.stringify` n'échappe pas le « < » : un
+          commerçant qui écrit « </script><script>… » dans le NOM ou la
+          DESCRIPTION de sa fiche ferme ce bloc et exécute son script sur
+          l'origine yoppaa.app, chez CHAQUE visiteur de sa page. La CSP autorise
+          `unsafe-inline`, le jeton Supabase et l'identité Yopper vivent dans le
+          localStorage de cette origine.
+
+          Le remède existait DÉJÀ dans le dépôt, avec sa garde au banc, et il
+          n'était posé que sur la landing, dont le graphe ne contient aucun texte
+          saisi par qui que ce soit. La seule page réellement exposée était la
+          seule à ne pas l'avoir. Voir feedback_appliquer_partout.
+
+          ⚠️ Et la validation admin n'est PAS une barrière : elle porte sur le
+          dossier, une seule fois, alors que le nom et la description restent
+          librement modifiables ensuite depuis le tableau de bord. Le déclencheur
+          `commercants_colonnes_reservees` ne protège ni l'un ni l'autre. */}
       {jsonLd && (
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: echapperJsonLd(jsonLd) }} />
       )}
     </>
   )

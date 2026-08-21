@@ -19,7 +19,7 @@
 import { readFileSync } from 'node:fs'
 import { libelleLancement, avantLancement } from '../lib/lancement.js'
 import {
-  C, emailKitBienvenue, emailValidationCommercant, emailRejetCommercant,
+  C, echapperHtml, emailKitBienvenue, emailValidationCommercant, emailRejetCommercant,
   emailDemandeRecue, emailNouveauCommercantAValider,
 } from '../lib/resend.js'
 
@@ -292,6 +292,73 @@ const PHASE = avantLancement()
   verifier('aucun « undefined » dans le gabarit', !gabarit.includes('undefined'))
   verifier('le document dit où le coller',
     /Authentication → Emails → Templates → Confirm signup/.test(doc))
+}
+
+// ═══ 8. CE QUI VIENT DU DEHORS N'EST PAS DU HTML ═════════════════════════
+// ⚠️ Trois défauts réels de l'audit du 21/08, et le même motif dans les trois :
+// un texte écrit par quelqu'un est recraché tel quel dans un document que lit
+// quelqu'un d'autre.
+{
+  // a) LES EMAILS. Le texte libre d'une partie arrive dans la boîte d'une
+  // autre : la note du client chez le commerçant, le mot du bon cadeau chez un
+  // destinataire que l'ACHETEUR choisit librement. Les clients mail retirent
+  // les <script>, mais les ancres et les styles survivent, dans un message
+  // signé DKIM par notre domaine. On EXÉCUTE le gabarit sur une charge qui
+  // contient vraiment une balise.
+  const CHARGE = '</p><a href="https://evil.tld">Reconfigure ton compte</a><p>'
+
+  verifier('echapperHtml neutralise une balise',
+    echapperHtml(CHARGE) === '&lt;/p&gt;&lt;a href=&quot;https://evil.tld&quot;&gt;Reconfigure ton compte&lt;/a&gt;&lt;p&gt;',
+    echapperHtml(CHARGE))
+  verifier('echapperHtml rend une chaîne vide sur une absence',
+    echapperHtml(null) === '' && echapperHtml(undefined) === '')
+
+  const recu = emailDemandeRecue({ nom: CHARGE, plan: 'vendre' })
+  verifier("l'accusé de réception n'ouvre pas de balise venue du dehors",
+    !recu.includes('<a href="https://evil.tld"'),
+    'un nom peut contenir n\'importe quoi')
+  verifier('et il affiche quand même le texte, échappé',
+    recu.includes('&lt;a href=&quot;https://evil.tld&quot;&gt;'))
+
+  const admin = emailNouveauCommercantAValider({ nom: CHARGE, type: CHARGE, plan: 'vendre', score: 0, commercant_id: 'x' })
+  verifier("l'email d'admin non plus",
+    !admin.includes('<a href="https://evil.tld"'))
+
+  // b) LE BALISAGE DE LA FICHE COMMERÇANT. `JSON.stringify` n'échappe PAS le
+  // « < » : un nom ou une description contenant « </script> » fermait le bloc
+  // et exécutait du script sur l'origine yoppaa.app, chez chaque visiteur.
+  const layout = sansCommentaires(lire('app/commander/[slug]/layout.js'))
+  verifier('la fiche commerçant échappe son balisage',
+    /echapperJsonLd\(jsonLd\)/.test(layout))
+  verifier('et plus aucun JSON.stringify nu dans un script injecté',
+    !/dangerouslySetInnerHTML=\{\{ __html: JSON\.stringify/.test(layout),
+    'le remède existait déjà dans le dépôt, il n\'était pas posé ici')
+
+  // c) LE RELAIS DE COURRIER OUVERT. `/api/notify-yoppaa` n'avait AUCUNE
+  // authentification, et l'appelant choisissait le destinataire ET le texte.
+  const notify = sansCommentaires(lire('app/api/notify-yoppaa/route.js'))
+  // ⚠️ ON CHERCHE LE REFUS, PAS LE MOT. Une première version de cette garde
+  // testait la présence de « authorization » : elle est restée VERTE alors que
+  // le refus venait d'être supprimé, parce que le mot figure encore deux lignes
+  // plus haut, dans la lecture de l'en-tête. Chercher au bon endroit, toujours.
+  verifier('notify-yoppaa REFUSE sans jeton',
+    /if \(!token\)[\s\S]{0,140}status: 401/.test(notify),
+    'lire l\'en-tête ne sert à rien si on n\'en fait rien')
+  verifier('notify-yoppaa refuse une session invalide',
+    /if \(!user\)[\s\S]{0,140}status: 401/.test(notify))
+  verifier('notify-yoppaa vérifie la session', /auth\.getUser\(\)/.test(notify))
+  verifier('notify-yoppaa vérifie que la fiche appartient à l\'appelant',
+    /com\.auth_user_id !== user\.id/.test(notify))
+  verifier('le destinataire vient de la BASE, jamais du corps',
+    /to: com\.email/.test(notify) && !/const \{[^}]*\bemail\b[^}]*\} = body/.test(notify),
+    'sinon un compte authentifié écrit encore l\'adresse de quelqu\'un d\'autre')
+  verifier('le nom aussi vient de la base',
+    /const nom = com\.nom/.test(notify))
+
+  // Et l'appelant envoie bien le jeton, sinon la soumission casse en silence.
+  const signup = sansCommentaires(lire('app/signup/page.js'))
+  verifier("l'inscription envoie son jeton à notify-yoppaa",
+    /Authorization: `Bearer \$\{s\?\.access_token/.test(signup))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

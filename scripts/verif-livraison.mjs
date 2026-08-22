@@ -16,6 +16,11 @@ import {
   libelleSuiviLivraison,
 } from '../lib/livraison.js'
 import { emailCommandePrete, emailCommandeEnLivraison } from '../lib/resend.js'
+import {
+  composerAdresseLivraison, requeteGeocodage, coordonneesPlausibles,
+  champsAdressePourAPI, NOTE_MAX,
+} from '../lib/adresse-livraison.js'
+import { etatPaiementClient } from '../lib/rdv-paiement.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -341,6 +346,144 @@ verifier('le serveur lit le créneau dans la bonne table',
 verifier('et range la commande du bon côté',
   /creneau_id: \(estLivraison \|\| estBoutique\) \? null : creneau\.id/.test(route)
   && /creneau_livraison_id: estLivraison \? creneau\.id : null/.test(route))
+
+// ═══ 22/08 — L'ADRESSE QUI RAPPORTE ENFIN SES COORDONNÉES ═════════════════
+//
+// ⚠️ LE DÉFAUT : « Aucune adresse géolocalisée dans cette tournée » sur des
+// adresses parfaitement valides. Ni le géocodeur ni les colonnes n'étaient en
+// cause. C'est CE QU'ON LUI DONNAIT qui ne pouvait pas marcher : la chaîne
+// d'AFFICHAGE, complément compris, avec le code postal recollé par-dessus.
+{
+  // ─── Les deux chaînes, EXÉCUTÉES ────────────────────────────────────────
+  const a = { rue: 'Rue de Prée 9', complement: 'Boîte 3', code_postal: '5640', ville: 'Biesme', note: 'Portail bleu' }
+
+  verifier('l\'adresse affichée porte le complément',
+    composerAdresseLivraison(a) === 'Rue de Prée 9, Boîte 3, 5640 Biesme',
+    composerAdresseLivraison(a))
+
+  // ⚠️ LE CŒUR DU CORRECTIF. Le complément est une information de PORTE, pas de
+  // RUE : aucun géocodeur ne sait quoi en faire, et avec `limit=1` il ne rend
+  // rien du tout. Il ne doit JAMAIS entrer dans la requête.
+  verifier('la requête de géocodage EXCLUT le complément',
+    !requeteGeocodage(a).includes('Boîte'), requeteGeocodage(a))
+  verifier('et ne répète pas le code postal',
+    (requeteGeocodage(a).match(/5640/g) || []).length === 1, requeteGeocodage(a))
+  verifier('la requête de géocodage est bien formée',
+    requeteGeocodage(a) === 'Rue de Prée 9, 5640, Biesme', requeteGeocodage(a))
+
+  // ⚠️ SANS RUE, AUCUNE REQUÊTE. Géocoder « 5640 Biesme » rendrait le centre du
+  // village : une coordonnée fausse mais plausible, sur laquelle une tournée
+  // entière se construirait sans que rien ne le dise.
+  verifier('sans rue, on ne géocode pas du tout',
+    requeteGeocodage({ code_postal: '5640', ville: 'Biesme' }) === '')
+  verifier('une rue faite d\'espaces ne compte pas',
+    requeteGeocodage({ rue: '   ', code_postal: '5640' }) === '')
+
+  // ─── Les coordonnées venues du navigateur ───────────────────────────────
+  verifier('une coordonnée belge passe', coordonneesPlausibles(50.33, 4.55) === true)
+  verifier('Paris est refusé', coordonneesPlausibles(48.85, 2.35) === false)
+  // ⚠️ `Number(null)` VAUT 0, et le point 0/0 tombe au large du golfe de Guinée :
+  // un test écrit à l'envers l'accepterait comme une coordonnée valide.
+  verifier('null est refusé', coordonneesPlausibles(null, null) === false)
+  verifier('undefined est refusé', coordonneesPlausibles(undefined, undefined) === false)
+  verifier('le point zéro est refusé', coordonneesPlausibles(0, 0) === false)
+  verifier('une chaîne vide est refusée', coordonneesPlausibles('', '') === false)
+  verifier('NaN est refusé', coordonneesPlausibles(NaN, NaN) === false)
+
+  // ─── Le paquet envoyé à l'API ───────────────────────────────────────────
+  const payload = champsAdressePourAPI({ ...a, lat: 50.33, lng: 4.55 })
+  verifier('le paquet porte des coordonnées quand elles sont plausibles',
+    payload.livraison_lat === 50.33 && payload.livraison_lng === 4.55)
+  verifier('et rien quand elles ne le sont pas',
+    champsAdressePourAPI({ ...a, lat: 48.85, lng: 2.35 }).livraison_lat === null)
+  verifier('le paquet porte la requête propre',
+    payload.adresse_geocodage === 'Rue de Prée 9, 5640, Biesme')
+  verifier('la note voyage', payload.note_livraison === 'Portail bleu')
+  verifier('une note vide devient null',
+    champsAdressePourAPI({ ...a, note: '   ' }).note_livraison === null)
+  // ⚠️ TRONQUÉE, et pas seulement à l'écran : rien n'oblige un appelant à
+  // passer par le champ du navigateur.
+  verifier('une note trop longue est tronquée',
+    champsAdressePourAPI({ ...a, note: 'x'.repeat(500) }).note_livraison.length === NOTE_MAX)
+
+  // ─── « Sur place » ne veut rien dire quand on se fait livrer ────────────
+  const duLivraison = etatPaiementClient({ mode_retrait: 'livraison', total: 20, paye_en_ligne: false })
+  const duRetrait = etatPaiementClient({ mode_retrait: 'retrait', total: 20, paye_en_ligne: false })
+  verifier('en livraison, le Yopper règle AU LIVREUR',
+    /livreur/.test(duLivraison?.libelle || ''), duLivraison?.libelle)
+  verifier('et il sait qu\'il doit préparer de quoi payer',
+    /Prépare de quoi payer/.test(duLivraison?.detail || ''), duLivraison?.detail)
+  verifier('en retrait, le texte ne parle PAS de livreur',
+    !/livreur/.test(`${duRetrait?.libelle} ${duRetrait?.detail}`), duRetrait?.libelle)
+
+  // ─── Le branchement des écrans ──────────────────────────────────────────
+  // ⚠️ ON DÉCOUPE LE BLOC D'ADRESSE, jamais le fichier entier : la fiche fait
+  // plus de 4000 lignes et le mot « adresse » y vit à vingt endroits.
+  const debutLiv = fiche.indexOf('Adresse de livraison</p>')
+  const blocLiv = debutLiv === -1 ? '' : fiche.slice(debutLiv, debutLiv + 2200)
+  verifier('le bloc d\'adresse de livraison se découpe', blocLiv.length > 500)
+  // ⚠️ LA BALISE EN ENTIER, PAS SON DÉBUT. Mesuré par mutation : renommer le
+  // composant en `<NoteLivraisonRetiree` laissait la garde VERTE, parce que
+  // `<NoteLivraison` en est un préfixe. Un motif qui n'exige pas la fin d'un
+  // nom accepte tous ses homonymes plus longs.
+  verifier('l\'adresse de livraison se choisit dans des suggestions',
+    /<ChampAdresse\s/.test(blocLiv))
+  verifier('et la note est juste en dessous', /<NoteLivraison\s/.test(blocLiv))
+
+  const debutExp = fiche.indexOf('Adresse d&rsquo;expédition</p>')
+  const blocExp = debutExp === -1 ? '' : fiche.slice(debutExp, debutExp + 2200)
+  verifier('le bloc d\'adresse d\'expédition se découpe', blocExp.length > 500)
+  // ⚠️ LA MÊME SAISIE DES DEUX CÔTÉS. Deux champs d'adresse différents dans le
+  // même tunnel finiraient par diverger (feedback_appliquer_partout).
+  verifier('l\'expédition a la MÊME saisie d\'adresse', /<ChampAdresse\s/.test(blocExp))
+  // ⚠️ ON COMPTE LES DEUX, ON N'EN VÉRIFIE PAS UN. Mesuré : la note est posée
+  // à DEUX endroits, et l'expédition vient AVANT la livraison dans le fichier.
+  // Une garde qui n'inspectait que le bloc livraison restait verte quand celle
+  // de l'expédition disparaissait. C'est le défaut « chercher au lieu de
+  // compter » (reference_tests_faussement_verts).
+  verifier('et sa propre note', /<NoteLivraison\s/.test(blocExp))
+  verifier('la note est posée aux DEUX endroits, pas un',
+    (fiche.match(/<NoteLivraison\s/g) || []).length === 2,
+    `trouvé ${(fiche.match(/<NoteLivraison\s/g) || []).length}`)
+
+  // ⚠️ UNE RETOUCHE À LA MAIN INVALIDE LES COORDONNÉES. Sans ça, éditer la rue
+  // après avoir choisi une suggestion enverrait le livreur à l'adresse d'avant,
+  // en silence. Mieux vaut aucune coordonnée qu'une fausse.
+  verifier('toute saisie manuelle efface les coordonnées',
+    /function majAdresse\(champs\) \{\s*\n\s*setAdresseLivraison\(p => \(\{ \.\.\.p, \.\.\.champs, lat: null, lng: null \}\)\)/.test(fiche))
+
+  // ─── Le serveur ─────────────────────────────────────────────────────────
+  verifier('le serveur préfère les coordonnées du navigateur',
+    /coordonneesPlausibles\(livraison_lat, livraison_lng\)/.test(route))
+  verifier('et se rabat sur une requête PROPRE',
+    /geocoderAdresse\(adresse_geocodage/.test(route))
+  // ⚠️ IL NE DOIT PLUS JAMAIS GÉOCODER LA CHAÎNE D'AFFICHAGE : c'est la forme
+  // exacte du défaut du 22/08.
+  verifier('il ne géocode plus la chaîne d\'affichage',
+    !/geocoderAdresse\(adresse_livraison, code_postal_livraison\)/.test(route))
+  verifier('la note est enregistrée', /note_livraison: \(estLivraison \|\| estExpedition\)/.test(route))
+
+  // ─── L'ARGENT DE LA LIVRAISON, LE SEUL QUI N'ÉTAIT PAS RELEVÉ ───────────
+  //
+  // ⚠️ `changerStatutLivraison` posait `statut: 'recupere'` EN DUR, sautant la
+  // question que `changerStatut` pose depuis le 17/08. Une livraison réglée au
+  // livreur devenait une commande récupérée sans moyen de paiement, invisible
+  // dans le journal. Et c'est le cas où la trace manque le plus : le livreur
+  // encaisse loin du comptoir, souvent en liquide.
+  const dash = lire('app/dashboard/page.js')
+  const debutCSL = dash.indexOf('async function changerStatutLivraison')
+  const corpsCSL = debutCSL === -1 ? '' : dash.slice(debutCSL, dash.indexOf('\n  }', debutCSL))
+  verifier('le corps de changerStatutLivraison se découpe', corpsCSL.length > 200)
+  verifier('une livraison demande son encaissement avant de se clore',
+    /resteAEncaisserCommande\(c\) > 0/.test(corpsCSL) && /setCommandeAEncaisser\(/.test(corpsCSL))
+  // ⚠️ ET LA RÈGLE EST RÉUTILISÉE, PAS RECOPIÉE : deux copies finiraient par
+  // diverger, et l'une des deux mentirait sur l'argent.
+  verifier('la réponse d\'encaissement sait clore une LIVRAISON',
+    /_viaLivraison/.test(dash) && /changerStatutLivraison\(commandeAEncaisser\.id, 'livree', \{ champs \}\)/.test(dash))
+  verifier('la note du Yopper s\'affiche sur la carte du commerçant',
+    /commande\.note_livraison && \(/.test(dash))
+  verifier('et une adresse non localisée est annoncée', /non localisée/.test(dash))
+}
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

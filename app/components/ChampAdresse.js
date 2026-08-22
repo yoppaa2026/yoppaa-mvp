@@ -72,7 +72,20 @@ export default function ChampAdresse({
       ? `${rue}${num ? ` ${num}` : ''}${(cp || localite) ? `, ${[cp, localite].filter(Boolean).join(' ')}` : ''}`
       : s.display_name.split(',').slice(0, 3).join(', ')
     setSuggestions([])
-    onChoisir({ adresse, latitude: parseFloat(s.lat), longitude: parseFloat(s.lon), code_postal: cp || null })
+    // ⚠️ `rue` ET `ville` S'AJOUTENT AU RETOUR, ils ne le remplacent pas. Le
+    // tunnel de commande a trois champs séparés (rue, code postal, ville) et ne
+    // peut rien faire d'une chaîne déjà recollée. Les deux appelants existants
+    // (inscription, éditeur de lieux) lisent `adresse` et ignorent le reste :
+    // ajouter des clés ne casse aucun contrat, en retirer en casserait deux.
+    // Voir reference_changement_type_retour.
+    onChoisir({
+      adresse,
+      rue: rue ? `${rue}${num ? ` ${num}` : ''}` : null,
+      ville: localite || null,
+      latitude: parseFloat(s.lat),
+      longitude: parseFloat(s.lon),
+      code_postal: cp || null,
+    })
   }
 
   return (

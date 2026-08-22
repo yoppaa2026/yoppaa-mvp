@@ -32,6 +32,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { geocoderAdresse } from '@/lib/geocode'
+import { coordonneesPlausibles, requeteGeocodage, NOTE_MAX } from '@/lib/adresse-livraison'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
@@ -59,6 +60,10 @@ export async function POST(request) {
       client_email, client_prenom, client_nom, client_telephone,
       rgpd_marketing,
       mode_retrait, creneau_livraison_id, adresse_livraison, code_postal_livraison,
+      // Envoyés depuis le 22/08 : la requête de géocodage PROPRE (sans le
+      // complément), les coordonnées quand le Yopper a choisi son adresse dans
+      // les suggestions, et son mot au livreur.
+      adresse_geocodage, livraison_lat, livraison_lng, note_livraison,
       paiement_mode, bon_cadeau_code,
     } = body
     const estLivraison = mode_retrait === 'livraison'
@@ -489,11 +494,37 @@ export async function POST(request) {
     const consoParArticle = verifStock.consoParArticle || {}
     const jourSemaine = verifStock.jourSemaine
 
-    // Géocodage adresse livraison (best-effort, non bloquant, timeout 4s) pour la
-    // tournée optimisée. Retrait ou échec géocodage -> coords null.
-    const coordsLivraison = estLivraison
-      ? await geocoderAdresse(adresse_livraison, code_postal_livraison)
-      : null
+    // ─── Coordonnées de livraison, pour la tournée optimisée ───────────────
+    //
+    // ⚠️ CE BLOC NE TROUVAIT JAMAIS RIEN, ET C'EST LE DÉFAUT DU 22/08. Il
+    // géocodait la chaîne D'AFFICHAGE, celle qui contient déjà le complément
+    // (« Boîte 3 ») ET la ligne du code postal, en lui rajoutant le code postal
+    // une seconde fois. Nominatim, avec `limit=1`, ne rendait rien.
+    //
+    // ⚠️ CE COMMENTAIRE NE RECOPIE PLUS L'APPEL FAUTIF, ET C'EST VOLONTAIRE :
+    // le banc interdit cette forme d'écriture et la trouvait ici, dans le texte
+    // qui l'explique. Un commentaire n'a pas besoin de citer ce qu'il proscrit.
+    //
+    // Deux changements, dans cet ordre de préférence :
+    //   1. le navigateur envoie des coordonnées quand le Yopper a CHOISI son
+    //      adresse dans les suggestions. C'est la source la plus sûre : elle
+    //      vient du même moteur, mais avec un humain qui a validé le résultat.
+    //   2. sinon, on géocode une requête PROPRE (`adresse_geocodage`), sans
+    //      complément et sans répétition.
+    //
+    // ⚠️ LES COORDONNÉES DU NAVIGATEUR SONT REVALIDÉES ICI. Elles viennent de
+    // l'extérieur : un Yopper ne peut fausser que sa propre livraison, mais une
+    // coordonnée absurde ferait diverger l'itinéraire de toute la tournée.
+    //
+    // ⚠️ ET RIEN DE TOUT CECI NE BLOQUE LA VENTE. Une rue neuve que le moteur
+    // ne connaît pas ne doit pas coûter une commande : la tournée annonce déjà
+    // les arrêts sans coordonnées au lieu de les taire.
+    let coordsLivraison = null
+    if (estLivraison) {
+      coordsLivraison = coordonneesPlausibles(livraison_lat, livraison_lng)
+        ? { lat: Number(livraison_lat), lng: Number(livraison_lng) }
+        : await geocoderAdresse(adresse_geocodage || requeteGeocodage({ rue: adresse_livraison, code_postal: code_postal_livraison }))
+    }
 
     // ─── 6) INSERT commande avec statut='paiement_en_attente' ──────────────
     const nomComplet = `${client_prenom} ${client_nom}`.trim()
@@ -514,6 +545,11 @@ export async function POST(request) {
         adresse_livraison: (estLivraison || estExpedition) ? adresse_livraison : null,
         livraison_lat: coordsLivraison?.lat ?? null,
         livraison_lng: coordsLivraison?.lng ?? null,
+        // ⚠️ TRONQUÉE ICI AUSSI, pas seulement à l'écran. Le champ du navigateur
+        // limite déjà, mais rien n'oblige un appelant à passer par lui.
+        note_livraison: (estLivraison || estExpedition)
+          ? (String(note_livraison ?? '').trim().slice(0, NOTE_MAX) || null)
+          : null,
         frais_livraison: fraisLivraisonEUR,
         client_nom: nomComplet,
         // ⚠️ NORMALISÉ, sans quoi le client perd ses commandes en se connectant.

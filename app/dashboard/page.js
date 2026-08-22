@@ -391,7 +391,30 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
               {(estLivraison || estExpedition) && commande.adresse_livraison && (
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4, marginTop: 3 }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" stroke="#4F46E5" strokeWidth="2"/><circle cx="12" cy="10" r="3" stroke="#4F46E5" strokeWidth="2"/></svg>
-                  <span style={{ fontSize: '0.72rem', color: '#4F46E5', fontWeight: 700, lineHeight: 1.3 }}>{commande.adresse_livraison}</span>
+                  <span style={{ fontSize: '0.72rem', color: '#4F46E5', fontWeight: 700, lineHeight: 1.3 }}>
+                    {commande.adresse_livraison}
+                    {/* ⚠️ UNE ADRESSE NON LOCALISÉE SE DIT, elle ne se devine
+                        pas. Elle sortira de l'itinéraire optimisé : le
+                        commerçant doit le savoir en préparant sa tournée, pas
+                        en cherchant pourquoi il lui reste un sac. */}
+                    {estLivraison && !(typeof commande.livraison_lat === 'number') && (
+                      <span style={{ display: 'inline-block', marginLeft: 6, background: '#FFF7ED', border: '1px solid #FED7AA', color: '#9A3412', fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: 100, verticalAlign: 'middle' }}>
+                        non localisée
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
+              {/* ⚠️ LE MOT DU YOPPER, ET IL SAUTE AUX YEUX (Alex, 22/08 : « le
+                  commerçant doit voir facilement cette note car elle est
+                  importante »). Depuis que l'adresse est normalisée par le
+                  géocodeur, c'est ici que vivent « portail bleu » et « sonner
+                  chez le voisin » : sans mise en évidence, on aurait gagné la
+                  tournée et perdu la porte. */}
+              {(estLivraison || estExpedition) && commande.note_livraison && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginTop: 5, background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '5px 8px' }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 2 }}><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" stroke="#B45309" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <span style={{ fontSize: '0.72rem', color: '#92400E', fontWeight: 700, lineHeight: 1.4 }}>{commande.note_livraison}</span>
                 </div>
               )}
               {estExpedition && commande.expedition_suivi && (
@@ -1451,8 +1474,28 @@ export default function Dashboard() {
     postPro('/api/emails/commande-expediee', { commande_id: commandeId }).catch(e => console.warn('[dashboard] email commande-expediee KO', e))
   }
 
-  async function changerStatutLivraison(commandeId, statutLivraison) {
-    const patch = { statut_livraison: statutLivraison }
+  async function changerStatutLivraison(commandeId, statutLivraison, { champs = null } = {}) {
+    // ⚠️ LA LIVRAISON ÉTAIT LE SEUL ENDROIT SANS RELEVÉ D'ARGENT (Alex, 22/08),
+    // et c'est le plus gênant des trois : le livreur encaisse LOIN du comptoir,
+    // souvent en liquide, et c'est justement là qu'une trace manque le plus.
+    //
+    // Cette fonction posait `statut: 'recupere'` en dur, court-circuitant la
+    // question que `changerStatut` pose depuis le 17/08 pour un retrait et un
+    // rendez-vous. Une livraison réglée au livreur devenait donc une commande
+    // « récupérée » sans moyen de paiement, invisible dans le journal.
+    //
+    // ⚠️ ON NE DUPLIQUE PAS LA RÈGLE, ON LA RÉUTILISE : `commandeAEncaisser`
+    // ouvre la même fenêtre, et `repondreCommande` sait maintenant qu'une
+    // livraison doit aussi passer en « livrée ». Deux copies de cette règle
+    // finiraient par diverger, et l'une des deux mentirait sur l'argent.
+    if (statutLivraison === 'livree' && !champs) {
+      const c = commandes.find(x => x.id === commandeId)
+      if (c && !c.encaisse_mode && resteAEncaisserCommande(c) > 0) {
+        setCommandeAEncaisser({ ...c, _viaLivraison: true })
+        return
+      }
+    }
+    const patch = { statut_livraison: statutLivraison, ...(champs || {}) }
     if (statutLivraison === 'livree') patch.statut = 'recupere'
     const { error } = await supabase.from('commandes').update(patch).eq('id', commandeId)
     if (error) {
@@ -1655,14 +1698,21 @@ export default function Dashboard() {
     const mode = MODES[choix]
     if (!mode) { setCommandeAEncaisser(null); return }
     const montant = mode === 'rien' ? 0 : (resteAEncaisserCommande(commandeAEncaisser) ?? 0)
+    const champs = {
+      encaisse_mode: mode,
+      encaisse_montant: montant,
+      encaisse_le: new Date().toISOString(),
+    }
     setActionEnCours(true)
-    await changerStatut(commandeAEncaisser.id, 'recupere', {
-      champs: {
-        encaisse_mode: mode,
-        encaisse_montant: montant,
-        encaisse_le: new Date().toISOString(),
-      },
-    })
+    // ⚠️ UNE LIVRAISON NE SE TERMINE PAS COMME UN RETRAIT. Elle doit poser
+    // `statut_livraison: 'livree'` en plus du statut de commande, sans quoi la
+    // course resterait éternellement « en livraison » dans la tournée et le
+    // Yopper ne recevrait jamais sa notification d'arrivée.
+    if (commandeAEncaisser._viaLivraison) {
+      await changerStatutLivraison(commandeAEncaisser.id, 'livree', { champs })
+    } else {
+      await changerStatut(commandeAEncaisser.id, 'recupere', { champs })
+    }
     setActionEnCours(false)
     setConfirmationCommandeTexte(confirmationEncaissement(mode, {
       montant,

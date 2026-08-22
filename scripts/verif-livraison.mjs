@@ -235,9 +235,20 @@ verifier('un lieu non géolocalisable renvoie vers la bonne section',
   /Où me trouver/.test(tourneeCode))
 
 // Une commande déjà livrée n'a rien à faire dans une tournée.
-verifier('les livrées sont exclues', /\.neq\('statut_livraison', 'livree'\)/.test(tourneeCode))
+//
+// ⚠️ CETTE GARDE VERROUILLAIT LE DÉFAUT, et c'est la quatrième fois sur ce
+// projet. Elle exigeait la présence LITTÉRALE de `.neq('statut_livraison',
+// 'livree')`, c'est-à-dire l'écriture exacte qui vidait la tournée : corriger
+// le bug la faisait rougir. Elle dit maintenant l'INTENTION — les livrées
+// sortent — sans imposer la façon (reference_tests_faussement_verts).
+verifier('les livrées sont exclues', /statut_livraison\.neq\.livree/.test(tourneeCode))
+// ⚠️ ANCRÉE SUR L'USAGE, PAS SUR LE MOT. Écrite `/STATUTS_OCCUPENT_CRENEAU/`,
+// elle trouvait la constante dans la LIGNE D'IMPORT : remplacer le filtre par
+// une liste écrite à la main la laissait parfaitement verte, et la tournée
+// aurait oublié les commandes en préparation. Mesurée par mutation le 23/08.
 verifier('les statuts occupants viennent du module partagé',
-  /STATUTS_OCCUPENT_CRENEAU/.test(tourneeCode))
+  /\.in\('statut', STATUTS_OCCUPENT_CRENEAU\)/.test(tourneeCode),
+  'une liste écrite à la main divergerait du reste de l\'application')
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 6 bis. LES MESSAGES AU YOPPER, SELON LE MODE
@@ -483,6 +494,60 @@ verifier('et range la commande du bon côté',
   verifier('la note du Yopper s\'affiche sur la carte du commerçant',
     /commande\.note_livraison && \(/.test(dash))
   verifier('et une adresse non localisée est annoncée', /non localisée/.test(dash))
+}
+
+// ═══ 🔴 LA TOURNÉE QUI NE TROUVAIT AUCUNE LIVRAISON ═══════════════════════
+//
+// ⚠️ Alex, 23/08 : deux livraisons à l'écran, « Tournée 18:00–19:00 ·
+// 2 livraisons », et le calcul répondait « Aucune livraison à faire sur ce
+// créneau ». La cause n'était pas dans les statuts : NULL N'EST NI ÉGAL NI
+// DIFFÉRENT. Un `.neq('statut_livraison', 'livree')` s'évalue à NULL pour toute
+// commande dont la livraison n'a pas commencé, et un prédicat NULL n'est pas
+// vrai : la requête les écartait TOUTES.
+//
+// ⚠️ ET L'ÉCRAN DISAIT VRAI : il écrit la même règle en JavaScript, où
+// `null !== 'livree'` vaut bien true. Deux règles recopiées dans deux langages,
+// et l'absence ne s'y comporte pas pareil (reference_deux_formes_absence).
+{
+  const route = lire('app/api/livraison/tournee-optimisee/route.js')
+  verifier('🔴 la tournée garde les livraisons pas encore parties',
+    /statut_livraison\.is\.null/.test(route),
+    'les commandes fraîches seraient toutes écartées')
+  verifier('et elle écarte bien celles déjà livrées',
+    /statut_livraison\.neq\.livree/.test(route))
+
+  // ⚠️ LA GARDE QUI EMPÊCHE LA RÉCIDIVE, ET ELLE VAUT POUR PLUSIEURS FICHIERS.
+  // `statut_livraison` est nullable (MIGRATION_LIVRAISON), donc aucun `.neq()`
+  // ne peut l'interroger sans perdre les lignes vides. `mode_retrait`, lui, est
+  // `NOT NULL DEFAULT 'retrait'`, d'où sa présence légitime ailleurs.
+  //
+  // ⚠️ ET ELLE LIT LE CODE SANS SES COMMENTAIRES — CINQUIÈME FOIS EN TROIS
+  // JOURS que je cherche un mot et que je le trouve dans MA PROPRE PROSE : le
+  // commentaire qui explique ce piège contient forcément l'écriture fautive.
+  // Retirer le commentaire serait perdre l'explication ; on dépouille donc le
+  // texte avant de chercher, une fois pour toutes.
+  const sansCommentaires = (src) => src
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/^[ \t]*\/\/.*$/gm, ' ')
+  for (const chemin of ['app/api/livraison/tournee-optimisee/route.js', 'app/dashboard/page.js',
+    'app/api/livraison/statut/route.js', 'app/api/cron/rappels-retrait/route.js']) {
+    verifier(`${chemin} n'interroge pas statut_livraison avec .neq()`,
+      !/\.neq\(\s*['"]statut_livraison['"]/.test(sansCommentaires(lire(chemin))),
+      'NULL n\'est ni égal ni différent : les lignes vides disparaîtraient')
+  }
+
+  // ⚠️ LE REFUS DIT CE QUI RESTE POSSIBLE. Sans coordonnées, seul le CALCUL de
+  // l'itinéraire est impossible : les adresses sont sur les cartes et la
+  // tournée se fait à la main. Répondre « aucune adresse géolocalisée » posait
+  // un mur au moment précis où le commerçant doit partir livrer.
+  verifier('le refus sans coordonnées dit que la tournée reste faisable',
+    /à faire à la main/.test(route))
+  verifier('et il nomme les commandes concernées',
+    /sansCoords\.map\(s => `#\$\{s\.numero\}`\)/.test(route))
+  // ⚠️ ET IL NE FAIT PAS SORTIR LES ADRESSES DANS LE MESSAGE : elles voyagent
+  // déjà dans `sans_coords`, réservé au propriétaire authentifié.
+  verifier('le message de refus ne recopie aucune adresse',
+    !/\$\{s\.adresse/.test(route))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

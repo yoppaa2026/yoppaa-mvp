@@ -167,6 +167,19 @@ export async function POST(request) {
     // Les commandes de CE créneau, CE jour, chez CE commerçant. Les statuts
     // retenus sont ceux d'une commande encore à livrer : les livrées et les
     // annulées n'ont rien à faire dans une tournée.
+    //
+    // ⚠️ 🔴 `NULL` N'EST NI ÉGAL NI DIFFÉRENT, ET ÇA VIDAIT LA TOURNÉE ENTIÈRE.
+    // Écrit `.neq('statut_livraison', 'livree')`, PostgreSQL évalue
+    // `statut_livraison <> 'livree'` à NULL pour toute commande dont la
+    // livraison n'a pas encore commencé — c'est-à-dire TOUTES les commandes
+    // fraîches. Un prédicat NULL n'est pas vrai : elles étaient toutes écartées.
+    //
+    // ⚠️ ET L'ÉCRAN, LUI, DISAIT VRAI : il écrit la même règle en JavaScript,
+    // où `null !== 'livree'` vaut bien `true`. Alex voyait donc « Tournée
+    // 18:00-19:00 · 2 livraisons » juste au-dessus d'un « Aucune livraison à
+    // faire sur ce créneau ». Deux règles recopiées dans deux langages, et
+    // l'absence ne se comporte pas pareil dans les deux
+    // (reference_deux_formes_absence).
     const { data: commandes, error } = await supabase
       .from('commandes')
       .select('id, numero_commande, adresse_livraison, livraison_lat, livraison_lng')
@@ -175,7 +188,7 @@ export async function POST(request) {
       .eq('creneau_livraison_id', creneau_livraison_id)
       .eq('date_commande', date)
       .in('statut', STATUTS_OCCUPENT_CRENEAU)
-      .neq('statut_livraison', 'livree')
+      .or('statut_livraison.is.null,statut_livraison.neq.livree')
 
     if (error) {
       console.error('[tournee] lecture commandes KO', error)
@@ -198,8 +211,18 @@ export async function POST(request) {
       }
     }
 
+    // ⚠️ LE REFUS DIT CE QUI RESTE POSSIBLE, ET NOMME LES COMMANDES. « Aucune
+    // adresse géolocalisée » laissait le commerçant devant un mur au moment
+    // précis où il doit partir livrer — alors que les adresses sont écrites sur
+    // ses cartes et que la tournée reste parfaitement faisable à la main. Seul
+    // le CALCUL de l'itinéraire est impossible (feedback_information_complete).
     if (avecCoords.length === 0) {
-      return NextResponse.json({ ok: false, error: 'Aucune adresse géolocalisée dans cette tournée.', sans_coords: sansCoords }, { status: 422 })
+      const nums = sansCoords.map(s => `#${s.numero}`).join(', ')
+      return NextResponse.json({
+        ok: false,
+        error: `Aucune adresse de cette tournée n’est géolocalisée : l’itinéraire ne peut pas être calculé. Les adresses restent sur tes cartes, la tournée est à faire à la main${nums ? ` (${nums})` : ''}.`,
+        sans_coords: sansCoords,
+      }, { status: 422 })
     }
 
     // ⚠️ LE DÉPART VIENT DE LA FICHE, PAS D'UN GÉOCODAGE À CHAQUE CLIC.

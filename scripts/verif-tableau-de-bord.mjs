@@ -53,13 +53,45 @@ const verifie = (nom, cond, detail = '') => {
   verifie('aucun argument ne casse rien', retourArriereAutorise() === null)
   verifie('une commande absente non plus', retourArriereAutorise(null) === null)
 
-  // ⚠️ ET LA RÈGLE NE DIT JAMAIS D'EFFACER L'ENCAISSEMENT. Si l'argent est
-  // entré, la trace comptable reste : on ne supprime pas une écriture pour
-  // réparer un clic. Le banc l'exige, parce que c'est le genre de champ qu'on
-  // ajoute « pour faire propre » sans mesurer ce qu'on efface.
-  const clefs = Object.keys(r || {})
-  verifie('la règle ne touche jamais à l\'encaissement',
-    !clefs.some(k => /encaisse/i.test(k)), clefs.join(', '))
+  // ⚠️ 🔴 LE RELEVÉ DU COMPTOIR S'EFFACE, ET J'AVAIS TRANCHÉ L'INVERSE.
+  // Alex l'a vu à l'essai le 23/08 : la commande revenait dans la liste « à
+  // remettre » en restant marquée PAYÉE. Il n'y a qu'UN clic — la fenêtre
+  // d'encaissement s'ouvre AU MOMENT de la remise depuis le 17/08 — donc un
+  // clic raté emporte forcément une réponse ratée sur le paiement.
+  verifie('🔴 un relevé au comptoir s\'efface avec la remise',
+    retourArriereAutorise({ statut: 'recupere', mode_retrait: 'retrait', encaisse_mode: 'especes' })
+      ?.effaceEncaissement === true)
+  verifie('🔴 un paiement par terminal aussi',
+    retourArriereAutorise({ statut: 'recupere', mode_retrait: 'retrait', encaisse_mode: 'terminal' })
+      ?.effaceEncaissement === true)
+  // ⚠️ `'rien'` EST UNE RÉPONSE, PAS UNE ABSENCE : c'est l'impayé assumé. Elle
+  // a été donnée sur le même clic raté, elle part avec.
+  verifie('un impayé assumé s\'efface aussi',
+    retourArriereAutorise({ statut: 'recupere', mode_retrait: 'retrait', encaisse_mode: 'rien' })
+      ?.effaceEncaissement === true)
+  verifie('sans relevé, il n\'y a rien à effacer', r?.effaceEncaissement === false)
+  // ⚠️ ET UNE LIVRAISON RÉGLÉE AU LIVREUR SUIT LA MÊME RÈGLE, sans quoi le cas
+  // le plus exposé — le liquide, loin du comptoir — serait le seul oublié.
+  verifie('une livraison encaissée au livreur s\'efface aussi',
+    retourArriereAutorise({ statut: 'recupere', mode_retrait: 'livraison', encaisse_mode: 'especes' })
+      ?.effaceEncaissement === true)
+
+  // ⚠️ ET L'AIDE DIT CE QUE ÇA EFFACE. Une conséquence sur l'argent ne se
+  // découvre pas après coup (feedback_information_complete). Mais elle ne
+  // s'affiche pas quand il n'y a rien à effacer : elle inquiéterait pour rien.
+  const aideAvec = retourArriereAutorise({ statut: 'recupere', mode_retrait: 'retrait', encaisse_mode: 'especes' })?.aide || ''
+  verifie('l\'aide annonce ce que le retour efface', /relevé au comptoir est effacé/.test(aideAvec), aideAvec)
+  verifie('et elle dit que la question se reposera', /se reposera/.test(aideAvec))
+  verifie('sans relevé, l\'aide ne parle pas d\'argent', !/comptoir/.test(r?.aide || ''), r?.aide)
+
+  // ⚠️ 🔴 LE PAIEMENT EN LIGNE N'EST JAMAIS TOUCHÉ. L'argent est chez Stripe,
+  // il ne doit rien à ce clic. La règle ne doit même pas nommer ce champ.
+  verifie('🔴 la règle ne parle JAMAIS du paiement en ligne',
+    !Object.keys(r || {}).some(k => /ligne|stripe/i.test(k)),
+    Object.keys(r || {}).join(', '))
+  verifie('🔴 et une commande payée en ligne sans relevé n\'efface rien',
+    retourArriereAutorise({ statut: 'recupere', mode_retrait: 'retrait', paye_en_ligne: true })
+      ?.effaceEncaissement === false)
 }
 
 // ═══ 2) « TU AS DU TAF DE L'AUTRE CÔTÉ » ══════════════════════════════════
@@ -144,8 +176,24 @@ const verifie = (nom, cond, detail = '') => {
     /\.eq\('statut', 'recupere'\)/.test(corps), 'un double tap pourrait rejouer l\'annulation')
   verifie('et une écriture sans effet ne touche pas l\'écran',
     /if \(!data \|\| data\.length === 0\) return/.test(corps))
-  // L'encaissement n'est jamais effacé, même ici.
-  verifie('l\'annulation n\'efface pas l\'encaissement', !/encaisse_mode: null/.test(corps))
+  // ⚠️ LES TROIS COLONNES DU RELEVÉ PARTENT ENSEMBLE. En laisser une seule
+  // suffirait à mentir : un montant sans moyen, ou une date sans montant, et
+  // le journal comptable garde une vente qui n'a pas eu lieu.
+  verifie('🔴 le moyen relevé au comptoir est effacé', /patch\.encaisse_mode = null/.test(corps))
+  verifie('🔴 le montant aussi', /patch\.encaisse_montant = null/.test(corps))
+  verifie('🔴 et la date aussi', /patch\.encaisse_le = null/.test(corps))
+  verifie('mais seulement quand la règle le dit', /if \(regle\.effaceEncaissement\) \{/.test(corps),
+    'l\'effacement s\'appliquerait même sans relevé')
+  // ⚠️ 🔴 ET JAMAIS LE PAIEMENT EN LIGNE : l'argent est chez Stripe, il ne doit
+  // rien à ce clic. Ce champ ne doit pas être ÉCRIT ici.
+  //
+  // ⚠️ ANCRÉE SUR L'AFFECTATION, PAS SUR LE MOT — QUATRIÈME FOIS EN TROIS
+  // JOURS. Écrite `!/paye_en_ligne/`, cette garde rougissait sur le COMMENTAIRE
+  // qui explique précisément cette règle. La parade n'est jamais de retirer le
+  // commentaire, c'est d'exiger une forme que la prose ne produit pas : une
+  // affectation ou une clé d'objet (reference_tests_faussement_verts).
+  verifie('🔴 le paiement en ligne n\'est JAMAIS écrit ici',
+    !/paye_en_ligne\s*[:=]/.test(corps), 'une écriture toucherait à l\'argent de Stripe')
 
   // Le bouton ne vit que dans le filtre « Récupérées ».
   verifie('le retour arrière n\'apparaît que dans les récupérées',

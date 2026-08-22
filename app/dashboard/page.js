@@ -1560,6 +1560,15 @@ export default function Dashboard() {
     if (!regle) return
     const patch = { statut: regle.versStatut }
     if (regle.effaceStatutLivraison) patch.statut_livraison = null
+    // ⚠️ LES TROIS COLONNES DU RELEVÉ PARTENT ENSEMBLE. En laisser une seule
+    // suffirait à mentir : un montant sans moyen, ou une date sans montant, et
+    // le journal comptable garde une vente qui n'a pas eu lieu.
+    // ⚠️ `paye_en_ligne` N'EST PAS DANS LA LISTE, et ne doit jamais y entrer.
+    if (regle.effaceEncaissement) {
+      patch.encaisse_mode = null
+      patch.encaisse_montant = null
+      patch.encaisse_le = null
+    }
 
     const { data, error } = await supabase
       .from('commandes')

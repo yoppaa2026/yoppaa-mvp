@@ -6117,6 +6117,30 @@ function QRCodeSection({ commercantId, toast }) {
     const descente = m.fontBoundingBoxDescent || m.actualBoundingBoxDescent || WM * 0.24
     const montee = m.fontBoundingBoxAscent || WM * 0.78
 
+    // ⚠️ 🔴 AUCUN TEXTE N'ÉTAIT CONTRAINT À LA LARGEUR DE L'AFFICHE, et
+    // `fillText` ne replie ni ne rétrécit : il déborde, et le canvas coupe.
+    // « TOUS LES COMMERCES DE TA COMMUNE » en 54 px mesure plus large que la
+    // page : centrée, elle se faisait rogner DES DEUX CÔTÉS et sortait
+    // « US LES COMMERCES DE TA COMMU ». Alex l'a vu sur son PDF.
+    //
+    // ⚠️ ET CE N'ÉTAIT PAS QUE L'ACCROCHE : le nom du commerce, le slogan et le
+    // pied avaient le même défaut, silencieux tant que les textes restaient
+    // courts. « La Boulangerie du Coin de la Rue » aurait été tronquée pareil,
+    // sur l'affiche que le commerçant colle dans sa vitrine.
+    //
+    // La taille demandée est un MAXIMUM : on la réduit jusqu'à ce que le texte
+    // tienne, plutôt que de le couper.
+    const LARGEUR_UTILE = W - PAD * 2
+    const taillePourTenir = (texte, taille, poids, famille = 'DM Sans') => {
+      let t = taille
+      const mesurer = (px) => {
+        mesure.font = `${poids} ${px}px "${famille}", Arial, sans-serif`
+        return mesure.measureText(String(texte || '')).width
+      }
+      while (t > 12 && mesurer(t) > LARGEUR_UTILE) t -= 1
+      return t
+    }
+
     // Les hauteurs, empilées de haut en bas.
     const yWmBaseline = PAD + montee
     const yDots       = yWmBaseline + descente + L.wordmarkToDots
@@ -6166,7 +6190,7 @@ function QRCodeSection({ commercantId, toast }) {
 
     // ── Slogan ──
     ctx.textAlign = 'center'
-    ctx.font = police(600, Math.round(L.sloganSize))
+    ctx.font = police(600, taillePourTenir(LOGO.slogan, Math.round(L.sloganSize), 600, 'Plus Jakarta Sans'))
     ctx.fillStyle = P.slogan
     ctx.fillText(LOGO.slogan, W / 2, ySlogan)
 
@@ -6175,12 +6199,17 @@ function QRCodeSection({ commercantId, toast }) {
     ctx.beginPath(); ctx.moveTo(PAD * 2, yFilet); ctx.lineTo(W - PAD * 2, yFilet); ctx.stroke()
 
     // ── Nom du commerce ──
-    ctx.font = '700 42px "DM Sans", Arial, sans-serif'
+    ctx.font = `700 ${taillePourTenir(nomCommerce, 42, 700)}px "DM Sans", Arial, sans-serif`
     ctx.fillStyle = P.nom
     ctx.fillText(nomCommerce, W / 2, yNom)
 
     // ── Cadre du QR, sans ombre portée ──
-    const qrX = PAD
+    //
+    // ⚠️ 🔴 IL ÉTAIT DÉCENTRÉ DE 32 PIXELS, et c'est arithmétique : le cadre
+    // mesure `QR + 32` mais était posé à `PAD`, si bien qu'il restait 56 px à
+    // gauche et 24 à droite. Personne ne l'aurait mesuré à l'œil, mais Alex l'a
+    // vu. On centre sur la largeur au lieu de partir de la marge.
+    const qrX = Math.round((W - qrSz) / 2)
     const rr = 28
     const cadre = () => {
       ctx.beginPath()
@@ -6205,13 +6234,21 @@ function QRCodeSection({ commercantId, toast }) {
     ctx.drawImage(qrImg, qrX + 16, qrY + 16, QR, QR)
 
     // ── L'accroche, sur deux lignes, en aplat ──
-    ctx.font = '900 54px "DM Sans", Arial, sans-serif'
+    //
+    // ⚠️ LES DEUX LIGNES PARTAGENT UNE SEULE TAILLE, celle de la plus longue :
+    // les régler séparément donnerait deux corps différents pour une seule
+    // phrase, ce qui se voit immédiatement et fait bricolé.
+    const tailleAccroche = Math.min(
+      taillePourTenir(TXT_QR.accroche, 54, 900),
+      taillePourTenir(TXT_QR.accrocheSuite, 54, 900),
+    )
+    ctx.font = `900 ${tailleAccroche}px "DM Sans", Arial, sans-serif`
     ctx.fillStyle = P.accroche
     ctx.fillText(TXT_QR.accroche, W / 2, yAccroche1)
     ctx.fillText(TXT_QR.accrocheSuite, W / 2, yAccroche2)
 
     // ── Pied ──
-    ctx.font = '600 28px "DM Sans", Arial, sans-serif'
+    ctx.font = `600 ${taillePourTenir(TXT_QR.pied, 28, 600)}px "DM Sans", Arial, sans-serif`
     ctx.fillStyle = P.pied
     ctx.fillText(TXT_QR.pied, W / 2, yPied)
 

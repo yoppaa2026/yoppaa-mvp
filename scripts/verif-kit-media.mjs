@@ -135,6 +135,52 @@ const egal = (nom, obtenu, attendu) =>
   // de garantir qu'un téléphone le lise du premier coup.
   verifie('🔴 le QR garde son cadre blanc', /ctx\.fillStyle = '#FFFFFF'; cadre\(\); ctx\.fill\(\)/.test(bloc))
 
+  // ⚠️ 🔴 LE QR ÉTAIT DÉCENTRÉ DE 32 PIXELS, et c'est de l'arithmétique pure :
+  // le cadre mesure `QR + 32` et était posé à `PAD`, donc 56 px de marge à
+  // gauche contre 24 à droite. Alex l'a vu sur son PNG. Une garde sur la
+  // formule vaut mieux qu'un œil sur une capture.
+  verifie('🔴 le cadre du QR est centré sur la largeur',
+    /const qrX = Math\.round\(\(W - qrSz\) \/ 2\)/.test(bloc),
+    'il repartait de la marge et débordait à droite')
+
+  // ⚠️ 🔴 AUCUN TEXTE NE DOIT POUVOIR DÉBORDER. `fillText` ne replie ni ne
+  // rétrécit : il déborde, et le canvas coupe. « TOUS LES COMMERCES DE TA
+  // COMMUNE » en 54 px sortait « US LES COMMERCES DE TA COMMU », rognée DES
+  // DEUX CÔTÉS parce qu'elle est centrée.
+  verifie('🔴 une taille de texte se calcule pour tenir dans la page',
+    /const taillePourTenir = \(texte, taille, poids/.test(bloc))
+  verifie('et elle se mesure sur la largeur utile',
+    /const LARGEUR_UTILE = W - PAD \* 2/.test(bloc))
+
+  // ⚠️ ET SUR TOUS LES TEXTES, pas seulement celui qu'Alex a vu déborder. Le
+  // nom du commerce était le plus exposé : « La Boulangerie du Coin de la Rue »
+  // aurait été tronquée sur l'affiche collée en vitrine.
+  for (const [quoi, motif] of [
+    ['le nom du commerce', /taillePourTenir\(nomCommerce, 42, 700\)/],
+    ['la première ligne de l\'accroche', /taillePourTenir\(TXT_QR\.accroche, 54, 900\)/],
+    ['la seconde ligne', /taillePourTenir\(TXT_QR\.accrocheSuite, 54, 900\)/],
+    ['le slogan', /taillePourTenir\(LOGO\.slogan/],
+    ['le pied', /taillePourTenir\(TXT_QR\.pied, 28, 600\)/],
+  ]) {
+    verifie(`${quoi} est contraint à la largeur`, motif.test(bloc), 'il déborderait en silence')
+  }
+  // ⚠️ LES DEUX LIGNES DE L'ACCROCHE PARTAGENT UNE SEULE TAILLE : réglées
+  // séparément, une même phrase sortirait en deux corps différents.
+  verifie('les deux lignes de l\'accroche gardent le même corps',
+    /Math\.min\(\s*taillePourTenir\(TXT_QR\.accroche/.test(bloc))
+
+  // ⚠️ ET LA TAILLE CALCULÉE EST RÉELLEMENT UTILISÉE. Mesuré : en remettant un
+  // corps fixe sur l'accroche, les gardes ci-dessus restaient vertes — le
+  // calcul était toujours écrit, son résultat n'allait simplement plus nulle
+  // part. C'est « l'appel existe, son résultat ne sert pas », déjà rencontré le
+  // 22/08 sur la barrière serveur des créneaux.
+  verifie('🔴 et l\'accroche est vraiment dessinée à cette taille',
+    /900 \$\{tailleAccroche\}px/.test(bloc),
+    'la taille serait calculée puis jetée')
+  verifie('aucun corps fixe ne subsiste sur les textes de l\'affiche',
+    !/ctx\.font = '\d00 \d+px "DM Sans"/.test(bloc),
+    'un corps écrit en dur ne s\'adapte à aucun texte')
+
   // Deux fonds, et le clair doit exister : c'est celui qu'on imprime chez soi.
   verifie('deux palettes de fond existent', /function paletteAffiche\(clair\)/.test(dash))
   verifie('dont une blanche', /fond: '#FFFFFF'/.test(dash))

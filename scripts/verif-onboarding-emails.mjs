@@ -232,8 +232,24 @@ const PHASE = avantLancement()
   const enDur = (src.match(DATE_EN_DUR) || [])
   verifier('aucune date française écrite à la main dans la page du kit',
     enDur.length === 0, enDur.join(' · '))
-  verifier('les textes de partage dérivent la date',
-    /textesAvant\(ouverture\)/.test(src))
+  // ⚠️ CETTE GARDE EXIGEAIT L'INVERSE, et elle avait raison jusqu'au 22/08 :
+  // les textes devaient DÉRIVER la date d'ouverture plutôt que de l'écrire en
+  // dur. Alex a tranché autrement — « des textes génériques, rien de plus ».
+  // Un message collé sur une page Facebook y reste des mois : mieux vaut qu'il
+  // ne parle d'aucune date que d'une date bien calculée qui vieillit.
+  //
+  // ⚠️ ET ELLE NE PORTE QUE SUR LES MESSAGES À PARTAGER, découpés. La page dit
+  // par ailleurs au commerçant ce qu'il gagne à partager AVANT l'ouverture :
+  // cette phrase-là est une information d'écran, elle vit dans l'application,
+  // se met à jour toute seule et doit garder sa date. Une garde posée sur tout
+  // le fichier confondait les deux.
+  const iTextes = src.indexOf('const TEXTES = [')
+  const blocTextes = iTextes === -1 ? '' : src.slice(iTextes, src.indexOf(']', iTextes))
+  verifier('le bloc des messages se découpe', blocTextes.length > 200, String(blocTextes.length))
+  verifier('🔴 aucun message à partager ne parle d\'une date',
+    !/textesAvant|\$\{ouverture\}/.test(blocTextes), 'un message partagé vieillit tout seul')
+  verifier('et les trois messages existent toujours',
+    (blocTextes.match(/cle: '/g) || []).length === 3)
 
   // ⚠️ UN ZÉRO N'EST PAS UN COMPTEUR, C'EST UN REPROCHE. « 0 personne inscrite
   // grâce à toi » est la première chose que voit un commerçant qui ouvre son

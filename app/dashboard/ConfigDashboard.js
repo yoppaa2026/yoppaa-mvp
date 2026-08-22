@@ -9,6 +9,7 @@ import { normaliserCodeBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-
 import { estRemiseSurProduit } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement } from '@/lib/lancement'
+import { LOGO, proportionsLogo, pointsLogo, largeurPoints } from '@/lib/logo'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
 import { capacitePrestation } from '@/lib/cours-collectifs'
@@ -19,6 +20,7 @@ import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // qui les reprend.
 import { exclusionsQuiSeChevauchent, seancesDeLaFormule, fenetreDeValidite, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement } from '@/lib/abonnements'
 import ChampAdresse from '@/app/components/ChampAdresse'
+import YoppaaLogo from '@/app/components/YoppaaLogo'
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import { champsModifies } from '@/lib/formulaire-modifie'
@@ -5993,6 +5995,10 @@ function QRCodeSection({ commercantId, toast }) {
   const [loading, setLoading]     = useState(true)
   const [qrDataUrl, setQrDataUrl] = useState(null)
   const [envoiKit, setEnvoiKit]   = useState(false)
+  // ⚠️ LE BLANC PAR DÉFAUT, et c'est un choix. Un aplat violet en A4 vide une
+  // cartouche par affiche et sort strié sur la plupart des imprimantes de
+  // commerce ; le violet reste à un clic pour qui fait imprimer en boutique.
+  const [fondClair, setFondClair] = useState(true)
 
   async function envoyerKit() {
     if (envoiKit) return
@@ -6022,22 +6028,19 @@ function QRCodeSection({ commercantId, toast }) {
   const url = slug
     ? (preLancement ? `https://www.yoppaa.app/?ref=${slug}` : `https://www.yoppaa.app/commander/${slug}`)
     : null
-  // L'affiche est lue par des gens qui ne connaissent pas encore Yoppaa :
-  // `explication` dit en une ligne ce qu'ils gagnent à scanner. La date
-  // d'ouverture est dérivée, jamais écrite en dur.
-  const TXT_QR = preLancement
-    ? {
-        tagline: 'Scanne : tu sauras dès qu’on ouvre',
-        accroche: `ON ARRIVE LE ${libelleLancement().toUpperCase()}`,
-        explication: 'Commande, réserve et cumule tes points chez tes commerçants',
-        pied: 'Inscris-toi sur yoppaa.app',
-      }
-    : {
-        tagline: 'Commande en avance, passe en priorité',
-        accroche: 'ICI ON EST YOPPERS',
-        explication: 'Commande, réserve et cumule tes points chez tes commerçants',
-        pied: 'Rejoins la tribu sur yoppaa.app',
-      }
+  // ⚠️ TEXTES GÉNÉRIQUES, PLUS AUCUNE DATE (Alex, 22/08). L'affiche annonçait
+  // « ON ARRIVE LE 1ER OCTOBRE » : une affiche imprimée en septembre et encore
+  // collée en vitrine en décembre disait alors quelque chose de faux, et
+  // personne ne serait allé la décoller. Une affiche qu'on n'a pas à surveiller
+  // vaut mieux qu'une affiche d'actualité.
+  //
+  // ⚠️ ELLE DIT CE QUE LE SCAN APPORTE, pas ce que Yoppaa est. Elle est lue par
+  // des gens qui ne connaissent pas la marque, debout devant une vitrine.
+  const TXT_QR = {
+    accroche: 'TOUS LES COMMERCES DE TA COMMUNE',
+    accrocheSuite: 'DANS UNE SEULE APP',
+    pied: 'yoppaa.app',
+  }
 
   useEffect(() => {
     async function fetchSlug() {
@@ -6066,218 +6069,196 @@ function QRCodeSection({ commercantId, toast }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [url])
 
-  // ─── Canvas composé — style tribu hype ───────────────────────────────────
-  async function buildCompositeCanvas() {
-    const QR   = 820   // taille QR rendu dans le canvas
-    const PAD  = 56
-    const W    = QR + PAD * 2
+  // ─── L'AFFICHE, EN APLATS ────────────────────────────────────────────────
+  //
+  // ⚠️ PLUS UN SEUL DÉGRADÉ (Alex, 22/08 : « cela pose problème à
+  // l'impression »). Il y en avait CINQ, pas un : le fond, un halo radial
+  // derrière le QR, deux filets décoratifs et le texte de l'accroche lui-même.
+  // Une imprimante de commerce rend ces transitions en bandes, et le halo
+  // ressortait en auréole grise autour du QR.
+  //
+  // ⚠️ DEUX FONDS AU CHOIX, arbitrage d'Alex du 23/08 : le violet pour la
+  // vitrine, le blanc pour l'imprimante. Un aplat violet en A4 vide une
+  // cartouche par affiche ; ne proposer que celui-là revenait à choisir à la
+  // place du commerçant.
+  //
+  // ⚠️ ET LES PROPORTIONS DU LOGO VIENNENT DE `lib/logo.js`, comme celles du
+  // composant : ce canvas les recopiait, et deux copies finissent par diverger.
+  function paletteAffiche(clair) {
+    return clair
+      ? { fond: '#FFFFFF', wm: ['#1A0840', '#6B35C4', '#9660E0'], slogan: '#6B35C4',
+          filet: '#E2D8F4', nom: '#1A0840', accroche: '#1A0840', pied: '#9585AE', cadreQR: '#EEE9F7' }
+      : { fond: '#201044', wm: ['#FFFFFF', '#C4A0F4', '#9660E0'], slogan: '#C4A0F4',
+          filet: '#4B3178', nom: '#FFFFFF', accroche: '#FFFFFF', pied: '#A78FD0', cadreQR: null }
+  }
 
-    // Zones verticales
-    const TOP_H    = 250  // wordmark tricolore + 5 dots V2-B + slogan + nom
-    const QR_H     = QR + 32
-    const MIDDLE_H = 80   // tagline sous QR
-    const BOT_H    = 150  // accroche + ce que c'est + pied
-    const H = TOP_H + QR_H + MIDDLE_H + BOT_H + PAD * 2
+  async function buildCompositeCanvas(clair = fondClair) {
+    const QR  = 820
+    const PAD = 56
+    const W   = QR + PAD * 2
+    const P   = paletteAffiche(clair)
+
+    // 110 px de corps : le mot occupe environ 39 % de la largeur. Assez pour
+    // être la première chose vue en vitrine, sans écraser le QR, qui est ce
+    // qu'on vient scanner.
+    const WM = 110
+    const L  = proportionsLogo(WM)
 
     const canvas = document.createElement('canvas')
+    const mesure = canvas.getContext('2d')
+    const police = (poids, taille) => `${poids} ${taille}px "Plus Jakarta Sans", system-ui, Arial, sans-serif`
+
+    // ⚠️ LA DESCENDANTE SE MESURE, ELLE NE SE DEVINE PAS. Le composant place les
+    // points à 0,28 em sous la BOÎTE DE LIGNE ; en canvas, `fillText` pose la
+    // BASELINE. Sans cette mesure, l'écart dépendait de la police réellement
+    // chargée et changeait d'un poste à l'autre.
+    mesure.font = police(800, WM)
+    const m = mesure.measureText('yoppaa')
+    const descente = m.fontBoundingBoxDescent || m.actualBoundingBoxDescent || WM * 0.24
+    const montee = m.fontBoundingBoxAscent || WM * 0.78
+
+    // Les hauteurs, empilées de haut en bas.
+    const yWmBaseline = PAD + montee
+    const yDots       = yWmBaseline + descente + L.wordmarkToDots
+    const ySlogan     = yDots + L.dotBase + L.dotOffset + L.dotsToSlogan + L.sloganSize * 0.78
+    const yFilet      = ySlogan + 34
+    const yNom        = yFilet + 54
+    const qrY         = yNom + 34
+    const qrSz        = QR + 32
+    const yAccroche1  = qrY + qrSz + 74
+    const yAccroche2  = yAccroche1 + 62
+    const yPied       = yAccroche2 + 54
+    const H           = yPied + PAD
+
     canvas.width = W; canvas.height = H
     const ctx = canvas.getContext('2d')
 
-    // ── Fond dégradé ink ──
-    const bg = ctx.createLinearGradient(0, 0, W * 0.3, H)
-    bg.addColorStop(0,   '#160636')
-    bg.addColorStop(0.45,'#2D0F6B')
-    bg.addColorStop(1,   '#1A0840')
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
+    // ── Fond UNI ──
+    ctx.fillStyle = P.fond
+    ctx.fillRect(0, 0, W, H)
 
-    // ── Halo décoratif derrière le QR ──
-    const haloY = PAD + TOP_H + QR_H / 2
-    const halo = ctx.createRadialGradient(W/2, haloY, 0, W/2, haloY, QR * 0.75)
-    halo.addColorStop(0,   'rgba(107,53,196,0.22)')
-    halo.addColorStop(0.6, 'rgba(107,53,196,0.06)')
-    halo.addColorStop(1,   'rgba(0,0,0,0)')
-    ctx.fillStyle = halo; ctx.fillRect(0, 0, W, H)
-
-    // ── Ligne déco top ──
-    const lineGrad = ctx.createLinearGradient(0, 0, W, 0)
-    lineGrad.addColorStop(0,   'rgba(196,160,244,0)')
-    lineGrad.addColorStop(0.5, 'rgba(196,160,244,0.5)')
-    lineGrad.addColorStop(1,   'rgba(196,160,244,0)')
-    ctx.strokeStyle = lineGrad; ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(PAD, PAD + 2); ctx.lineTo(W - PAD, PAD + 2); ctx.stroke()
-
-    // ── Wordmark tricolore « yoppaa » (fond foncé : blanc + light + mid) ──
-    // fillText ne gère pas la couleur par segment : on dessine les trois
-    // paires l'une après l'autre en mesurant, pour garder le tracking -0,05em.
-    const WM = 80
-    const wmFont = `800 ${WM}px "Plus Jakarta Sans", system-ui, Arial, sans-serif`
+    // ── Wordmark : trois paires de couleurs, mesurées une à une pour garder le
+    //    tracking -0,05 em du fichier de marque. ──
     ctx.textAlign = 'left'
-    try { ctx.letterSpacing = `${-0.05 * WM}px` } catch { /* Safari < 17 */ }
-    ctx.font = wmFont
-    const segments = [['yo', '#FFFFFF'], ['pp', '#C4A0F4'], ['aa', '#9660E0']]
+    try { ctx.letterSpacing = `${L.tracking}px` } catch { /* Safari < 17 */ }
+    ctx.font = police(800, WM)
+    const segments = [['yo', P.wm[0]], ['pp', P.wm[1]], ['aa', P.wm[2]]]
     const largeurWm = segments.reduce((w, [t]) => w + ctx.measureText(t).width, 0)
     let wx = W / 2 - largeurWm / 2
-    const wmBaseline = PAD + 96
     for (const [txt, couleur] of segments) {
       ctx.fillStyle = couleur
-      ctx.fillText(txt, wx, wmBaseline)
+      ctx.fillText(txt, wx, yWmBaseline)
       wx += ctx.measureText(txt).width
     }
     try { ctx.letterSpacing = '0px' } catch { /* idem */ }
 
-    // ── 5 dots V2-B (spec canonique : mini 0,55 · gap 0,55 · décalage 0,4) ──
-    const dotBase = WM * 0.254
-    const dotMini = dotBase * 0.55
-    const dotGap  = dotBase * 0.55
-    const dotOff  = dotBase * 0.4
-    const dotsTop = PAD + 116
-    const dots = [
-      { d: dotBase, c: '#FFFFFF', o: 0 },
-      { d: dotMini, c: '#C4A0F4', o: dotOff },
-      { d: dotBase, c: '#C4A0F4', o: dotOff },
-      { d: dotMini, c: '#9660E0', o: dotOff },
-      { d: dotBase, c: '#9660E0', o: 0 },
-    ]
-    const largeurDots = dots.reduce((a, x) => a + x.d, 0) + dotGap * 4
-    let dx = W / 2 - largeurDots / 2
-    for (const p of dots) {
-      const r = p.d / 2
-      ctx.beginPath(); ctx.arc(dx + r, dotsTop + p.o + r, r, 0, Math.PI * 2)
-      ctx.fillStyle = p.c; ctx.fill()
-      dx += p.d + dotGap
-    }
+    // ── Les cinq points V2-B, avec LEUR décalage : il porte sur les points 2,
+    //    3 et 4, et c'est lui qui creuse le sourire. ──
+    let dx = W / 2 - largeurPoints(WM) / 2
+    pointsLogo(WM).forEach((p, i) => {
+      const r = p.diametre / 2
+      ctx.beginPath()
+      ctx.arc(dx + r, yDots + p.decalage + r, r, 0, Math.PI * 2)
+      ctx.fillStyle = P.wm[i < 1 ? 0 : i < 3 ? 1 : 2]
+      ctx.fill()
+      dx += p.diametre + L.dotGap
+    })
 
     // ── Slogan ──
     ctx.textAlign = 'center'
-    ctx.font = `600 ${Math.round(WM * 0.236)}px "Plus Jakarta Sans", system-ui, Arial, sans-serif`
-    ctx.fillStyle = '#C4A0F4'
-    ctx.fillText('Ton quartier dans ta poche', W / 2, PAD + 176)
+    ctx.font = police(600, Math.round(L.sloganSize))
+    ctx.fillStyle = P.slogan
+    ctx.fillText(LOGO.slogan, W / 2, ySlogan)
 
-    // ── Séparateur subtil ──
-    const sep = ctx.createLinearGradient(PAD * 2, 0, W - PAD * 2, 0)
-    sep.addColorStop(0,   'rgba(196,160,244,0)')
-    sep.addColorStop(0.5, 'rgba(196,160,244,0.3)')
-    sep.addColorStop(1,   'rgba(196,160,244,0)')
-    ctx.strokeStyle = sep; ctx.lineWidth = 0.8
-    ctx.beginPath(); ctx.moveTo(PAD * 2, PAD + 196); ctx.lineTo(W - PAD * 2, PAD + 196); ctx.stroke()
+    // ── Filet plein ──
+    ctx.strokeStyle = P.filet; ctx.lineWidth = 1.5
+    ctx.beginPath(); ctx.moveTo(PAD * 2, yFilet); ctx.lineTo(W - PAD * 2, yFilet); ctx.stroke()
 
-    // ── Nom du commerce — bien visible ──
-    ctx.font = '700 38px "DM Sans", Arial, sans-serif'
-    ctx.fillStyle = '#FFFFFF'
-    ctx.fillText(nomCommerce, W / 2, PAD + 236)
+    // ── Nom du commerce ──
+    ctx.font = '700 42px "DM Sans", Arial, sans-serif'
+    ctx.fillStyle = P.nom
+    ctx.fillText(nomCommerce, W / 2, yNom)
 
-    // ── Fond blanc arrondi pour QR ──
-    const qrX = PAD; const qrY = PAD + TOP_H
-    const qrSz = QR + 32
+    // ── Cadre du QR, sans ombre portée ──
+    const qrX = PAD
     const rr = 28
-    ctx.fillStyle = '#FFFFFF'
-    ctx.shadowColor = 'rgba(107,53,196,0.4)'
-    ctx.shadowBlur = 40
-    ctx.beginPath()
-    ctx.moveTo(qrX + rr, qrY)
-    ctx.lineTo(qrX + qrSz - rr, qrY)
-    ctx.quadraticCurveTo(qrX + qrSz, qrY, qrX + qrSz, qrY + rr)
-    ctx.lineTo(qrX + qrSz, qrY + qrSz - rr)
-    ctx.quadraticCurveTo(qrX + qrSz, qrY + qrSz, qrX + qrSz - rr, qrY + qrSz)
-    ctx.lineTo(qrX + rr, qrY + qrSz)
-    ctx.quadraticCurveTo(qrX, qrY + qrSz, qrX, qrY + qrSz - rr)
-    ctx.lineTo(qrX, qrY + rr)
-    ctx.quadraticCurveTo(qrX, qrY, qrX + rr, qrY)
-    ctx.closePath(); ctx.fill()
-    ctx.shadowBlur = 0
+    const cadre = () => {
+      ctx.beginPath()
+      ctx.moveTo(qrX + rr, qrY)
+      ctx.lineTo(qrX + qrSz - rr, qrY)
+      ctx.quadraticCurveTo(qrX + qrSz, qrY, qrX + qrSz, qrY + rr)
+      ctx.lineTo(qrX + qrSz, qrY + qrSz - rr)
+      ctx.quadraticCurveTo(qrX + qrSz, qrY + qrSz, qrX + qrSz - rr, qrY + qrSz)
+      ctx.lineTo(qrX + rr, qrY + qrSz)
+      ctx.quadraticCurveTo(qrX, qrY + qrSz, qrX, qrY + qrSz - rr)
+      ctx.lineTo(qrX, qrY + rr)
+      ctx.quadraticCurveTo(qrX, qrY, qrX + rr, qrY)
+      ctx.closePath()
+    }
+    // ⚠️ LE QR RESTE NOIR SUR BLANC quel que soit le fond : c'est la seule façon
+    // de garantir qu'un téléphone le lise du premier coup.
+    ctx.fillStyle = '#FFFFFF'; cadre(); ctx.fill()
+    if (P.cadreQR) { ctx.strokeStyle = P.cadreQR; ctx.lineWidth = 1.5; cadre(); ctx.stroke() }
 
-    // ── QR image dans le fond blanc ──
     const qrImg = new window.Image()
     await new Promise(resolve => { qrImg.onload = resolve; qrImg.src = qrDataUrl })
     ctx.drawImage(qrImg, qrX + 16, qrY + 16, QR, QR)
 
-    // ── "Commande en avance, passe en priorité" ──
-    const midY = PAD + TOP_H + QR_H
-    ctx.font = '600 30px "DM Sans", Arial, sans-serif'
-    ctx.fillStyle = 'rgba(196,160,244,0.85)'
-    ctx.fillText(TXT_QR.tagline, W / 2, midY + 46)
+    // ── L'accroche, sur deux lignes, en aplat ──
+    ctx.font = '900 54px "DM Sans", Arial, sans-serif'
+    ctx.fillStyle = P.accroche
+    ctx.fillText(TXT_QR.accroche, W / 2, yAccroche1)
+    ctx.fillText(TXT_QR.accrocheSuite, W / 2, yAccroche2)
 
-    // ── "ICI ON EST YOPPERS" — grande accroche ──
-    const botY = PAD + TOP_H + QR_H + MIDDLE_H
-    ctx.font = '900 52px "DM Sans", Arial, sans-serif'
-    // Dégradé blanc → light sur le texte
-    const txtGrad = ctx.createLinearGradient(PAD, 0, W - PAD, 0)
-    txtGrad.addColorStop(0, '#FFFFFF')
-    txtGrad.addColorStop(0.5, '#EDE0FF')
-    txtGrad.addColorStop(1, '#C4A0F4')
-    ctx.fillStyle = txtGrad
-    ctx.fillText(TXT_QR.accroche, W / 2, botY + 50)
-
-    // ── Ligne déco bottom ──
-    ctx.strokeStyle = sep; ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(PAD, botY + 68); ctx.lineTo(W - PAD, botY + 68); ctx.stroke()
-
-    // ── Ce que c'est, pour celui qui découvre l'affiche en vitrine ──
-    ctx.font = '600 26px "DM Sans", Arial, sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.9)'
-    ctx.fillText(TXT_QR.explication, W / 2, botY + 104)
-
-    // ── "Rejoins la tribu — yoppaa.app" ──
-    ctx.font = '500 24px "DM Sans", Arial, sans-serif'
-    ctx.fillStyle = 'rgba(196,160,244,0.6)'
-    ctx.fillText(TXT_QR.pied, W / 2, botY + 138)
+    // ── Pied ──
+    ctx.font = '600 28px "DM Sans", Arial, sans-serif'
+    ctx.fillStyle = P.pied
+    ctx.fillText(TXT_QR.pied, W / 2, yPied)
 
     return canvas
   }
 
-  // ─── HTML impression 1 page stricte ──────────────────────────────────────
-  async function buildPrintHTML(format) {
-    const canvas  = await buildCompositeCanvas()
-    const imgUrl  = canvas.toDataURL('image/png')
-    const isA4    = format === 'A4'
-    const pw      = isA4 ? '210mm' : '148mm'
-    const ph      = isA4 ? '297mm' : '210mm'
-    const imgW    = isA4 ? '194mm' : '136mm'
-    return `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>Yoppaa QR · ${nomCommerce}</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box;}
-  @page{size:${format} portrait;margin:0;}
-  html,body{width:${pw};height:${ph};overflow:hidden;background:#160636!important;
-    -webkit-print-color-adjust:exact;print-color-adjust:exact;
-    display:flex;align-items:center;justify-content:center;}
-  img{width:${imgW};height:auto;display:block;}
-</style></head>
-<body><img decoding="async" loading="lazy" src="${imgUrl}"/></body>
-<script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></html>`
-  }
-
-  async function printQR(format) {
-    if (!qrDataUrl) return toast('QR pas encore prêt', 'error')
-    const html = await buildPrintHTML(format)
-    const win  = window.open('', '_blank')
-    win.document.open(); win.document.write(html); win.document.close()
-  }
-
-  async function downloadPNG() {
+  // ⚠️ L'IMPRESSION DIRECTE EST SUPPRIMÉE (Alex, 22/08 : « le print ne
+  // fonctionne pas »). Elle ouvrait un onglet peint par `document.write`, dont
+  // le rendu dépendait entièrement des réglages d'impression du poste : marges,
+  // mise à l'échelle, impression des fonds. Le commerçant obtenait une affiche
+  // rognée ou blanche sans comprendre pourquoi, et n'avait aucune prise dessus.
+  //
+  // ⚠️ ET ELLE INTERPOLAIT LE NOM DU COMMERCE DANS DU HTML BRUT, dans le
+  // `<title>` d'un document écrit à la volée : un nom contenant du balisage s'y
+  // exécutait. La portée était limitée au commerçant lui-même, mais c'était bien
+  // une injection, et elle disparaît avec la fonctionnalité.
+  //
+  // Un PNG et un PDF se contrôlent avant d'aller sur le papier, et se
+  // réimpriment sans repasser par l'application.
+  async function downloadPNG(clair) {
     if (!qrDataUrl) return
-    const canvas = await buildCompositeCanvas()
+    const canvas = await buildCompositeCanvas(clair)
     const a = document.createElement('a')
-    a.download = `yoppaa-qr-${slug}.png`
+    a.download = `yoppaa-affiche-${slug}-${clair ? 'blanc' : 'violet'}.png`
     a.href = canvas.toDataURL('image/png')
     a.click(); toast('PNG téléchargé')
   }
 
-  async function downloadPDF(format) {
+  async function downloadPDF(format, clair) {
     if (!qrDataUrl) return
     try {
       const { jsPDF } = await import('jspdf')
-      const canvas  = await buildCompositeCanvas()
+      const canvas  = await buildCompositeCanvas(clair)
       const imgData = canvas.toDataURL('image/png')
       const isA4    = format === 'A4'
       const pdf     = new jsPDF({ orientation: 'portrait', unit: 'mm', format: format.toLowerCase() })
       const W = pdf.internal.pageSize.getWidth()
       const H = pdf.internal.pageSize.getHeight()
-      pdf.setFillColor(22, 6, 54); pdf.rect(0, 0, W, H, 'F')
+      // ⚠️ LE FOND DE LA PAGE SUIT CELUI DE L'AFFICHE. Il était peint en violet
+      // en dur : un PDF choisi en blanc sortait avec une bordure violette tout
+      // autour, et le commerçant n'avait aucun moyen de la retirer.
+      if (clair) { pdf.setFillColor(255, 255, 255) } else { pdf.setFillColor(32, 16, 68) }
+      pdf.rect(0, 0, W, H, 'F')
       const imgW = isA4 ? 184 : 130
       const imgH = imgW * (canvas.height / canvas.width)
       pdf.addImage(imgData, 'PNG', (W - imgW) / 2, (H - imgH) / 2, imgW, imgH)
-      pdf.save(`yoppaa-qr-${slug}-${format}.pdf`)
+      pdf.save(`yoppaa-affiche-${slug}-${format}-${clair ? 'blanc' : 'violet'}.pdf`)
       toast(`PDF ${format} téléchargé`)
     } catch (e) { console.error(e); toast('Erreur PDF', 'error') }
   }
@@ -6291,48 +6272,64 @@ function QRCodeSection({ commercantId, toast }) {
 
   return (
     <div style={{ ...s.card, marginTop: 12 }}>
-      <h2 style={{ ...s.h2, marginBottom: 4 }}>QR Code</h2>
-      <p style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>Vitrine, sacs, flyers : partout !</p>
+      {/* ⚠️ UNE SEULE ENTRÉE, ET C'EST TOUT LE PROPOS (Alex, 22/08 : « il ne
+          doit apparaître qu'une seule fois dans le profil »). Il y en avait
+          DEUX qui ne se parlaient pas : cette section, qui fabriquait l'affiche,
+          et un bloc « Mon kit de démarrage » juste en dessous, qui renvoyait
+          vers une page portant le MÊME QR et les mêmes textes. Le commerçant ne
+          savait pas laquelle faisait foi. */}
+      <h2 style={{ ...s.h2, marginBottom: 4 }}>Mon kit média</h2>
+      <p style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>Ton affiche pour la vitrine, ton lien, tes messages prêts à partager.</p>
 
-      {/* ── Preview tribu hype ── */}
-      <div style={{ background: 'linear-gradient(160deg, #160636 0%, #2D0F6B 50%, #1A0840 100%)', borderRadius: 18, padding: '22px 20px 20px', textAlign: 'center', marginBottom: 16, position: 'relative', overflow: 'hidden' }}>
-        {/* Halo déco */}
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 260, height: 260, borderRadius: '50%', background: 'radial-gradient(circle, rgba(107,53,196,0.2) 0%, transparent 70%)', pointerEvents: 'none' }}/>
-
-        {/* 3 points */}
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 10, alignItems: 'center' }}>
-          <div style={{ width: 8,  height: 8,  borderRadius: '50%', background: 'rgba(255,255,255,0.5)' }}/>
-          <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#C4A0F4', boxShadow: '0 0 12px rgba(196,160,244,0.6)' }}/>
-          <div style={{ width: 8,  height: 8,  borderRadius: '50%', background: '#9660E0' }}/>
+      {/* ── Aperçu : le MÊME fond que le fichier téléchargé, sinon l'aperçu
+          ment sur ce qui sortira de l'imprimante. ── */}
+      <div style={{ background: fondClair ? '#FFFFFF' : '#201044', border: `1.5px solid ${fondClair ? T.hairline : '#201044'}`, borderRadius: 18, padding: '22px 20px 20px', textAlign: 'center', marginBottom: 12 }}>
+        {/* ⚠️ LE LOGO VIENT DU COMPOSANT, il n'est plus redessiné à la main :
+            cet aperçu en avait sa propre version, avec TROIS points au lieu de
+            cinq et sans le décalage V2-B. */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+          <YoppaaLogo size={34} mode={fondClair ? 'light' : 'dark'} withSlogan/>
         </div>
 
-        {/* yoppaa wordmark */}
-        <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.9rem', color: '#fff', letterSpacing: '-0.05em', lineHeight: 1, marginBottom: 2 }}>yoppaa</p>
+        <div style={{ width: 60, height: 1.5, background: fondClair ? '#E2D8F4' : '#4B3178', margin: '14px auto' }}/>
 
-        {/* Séparateur */}
-        <div style={{ width: 40, height: 1, background: 'rgba(196,160,244,0.3)', margin: '8px auto' }}/>
+        <p style={{ fontSize: 15, fontWeight: 800, color: fondClair ? '#1A0840' : '#FFFFFF', marginBottom: 14, letterSpacing: '-0.3px' }}>{nomCommerce}</p>
 
-        {/* Nom commerce */}
-        <p style={{ fontSize: 15, fontWeight: 700, color: '#C4A0F4', marginBottom: 14, letterSpacing: '-0.3px' }}>{nomCommerce}</p>
-
-        {/* QR */}
         {qrDataUrl
-          ? <img decoding="async" loading="lazy" src={qrDataUrl} alt="QR Code" style={{ width: 196, height: 196, borderRadius: 12, display: 'block', margin: '0 auto', background: '#fff', padding: 8, boxShadow: '0 8px 32px rgba(107,53,196,0.5)' }}/>
-          : <div style={{ width: 196, height: 196, background: '#2D0F6B', borderRadius: 12, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C4A0F4', fontSize: 12 }}>Génération...</div>
+          ? <img decoding="async" loading="lazy" src={qrDataUrl} alt="Ton QR code" style={{ width: 180, height: 180, borderRadius: 12, display: 'block', margin: '0 auto', background: '#fff', padding: 8, border: fondClair ? `1px solid ${T.hairline}` : 'none' }}/>
+          : <div style={{ width: 180, height: 180, background: fondClair ? T.pale : '#2D0F6B', borderRadius: 12, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted, fontSize: 12 }}>Génération…</div>
         }
 
-        {/* Tagline */}
-        <p style={{ fontSize: 11, color: 'rgba(196,160,244,0.7)', marginTop: 10, marginBottom: 6 }}>{TXT_QR.tagline}</p>
-
-        {/* Accroche tribu */}
-        <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '1.05rem', color: '#fff', letterSpacing: '-0.3px', marginBottom: 4 }}>{TXT_QR.accroche} 🟣</p>
-
-        {/* URL */}
-        <p style={{ fontSize: 9, color: 'rgba(196,160,244,0.5)', marginTop: 2 }}>{TXT_QR.pied}</p>
+        <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 900, fontSize: '0.95rem', lineHeight: 1.25, color: fondClair ? '#1A0840' : '#FFFFFF', letterSpacing: '-0.3px', margin: '16px 0 0' }}>
+          {TXT_QR.accroche}<br/>{TXT_QR.accrocheSuite}
+        </p>
+        <p style={{ fontSize: 11, fontWeight: 600, color: fondClair ? '#9585AE' : '#A78FD0', marginTop: 10 }}>{TXT_QR.pied}</p>
       </div>
 
+      {/* ── Le fond, au choix ── */}
+      <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Fond de l&rsquo;affiche</p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+        {[
+          { clair: true,  label: 'Blanc', aide: 'Le moins gourmand en encre' },
+          { clair: false, label: 'Violet', aide: 'Se remarque de loin en vitrine' },
+        ].map(o => (
+          <button key={o.label} onClick={() => setFondClair(o.clair)}
+            style={{ ...s.btn, ...(fondClair === o.clair ? s.btnPrimary : s.btnGhost), flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            {fondClair === o.clair && <Check size={13} strokeWidth={2.2}/>} {o.label}
+          </button>
+        ))}
+      </div>
+      <p style={{ fontSize: 10.5, color: T.muted, marginBottom: 16, lineHeight: 1.5 }}>
+        {fondClair
+          ? 'Seuls le logo, le QR et le texte consomment de l’encre : c’est la version à imprimer toi-même.'
+          : 'Un aplat violet plein format vide une cartouche par affiche. À réserver à une impression en boutique.'}
+      </p>
+
       {/* Rappel de phase : le commerçant doit comprendre POURQUOI son QR
-          n'envoie pas encore sur sa fiche, sinon il croit à une erreur. */}
+          n'envoie pas encore sur sa fiche, sinon il croit à une erreur.
+          ⚠️ Cette information vit ICI, pas sur l'affiche : elle concerne le
+          commerçant, elle change avec le temps, et l'affiche doit rester vraie
+          une fois collée. */}
       {preLancement && (
         <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
           <p style={{ margin: 0, fontSize: 11.5, color: '#78350F', fontWeight: 600, lineHeight: 1.55 }}>
@@ -6349,42 +6346,31 @@ function QRCodeSection({ commercantId, toast }) {
           onClick={() => { navigator.clipboard.writeText(url); toast('URL copiée') }} aria-label="Copier l'URL"><Copy size={13} strokeWidth={1.8}/></button>
       </div>
 
-      {/* PNG */}
-      <button style={{ ...s.btn, ...s.btnGhost, width: '100%', justifyContent: 'center', marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={downloadPNG} disabled={!qrDataUrl}>
-        <Download size={14} strokeWidth={1.8}/> Télécharger PNG
+      {/* ── Télécharger. PNG et PDF, rien d'autre. ── */}
+      <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Télécharger l&rsquo;affiche</p>
+      <button style={{ ...s.btn, ...s.btnGhost, width: '100%', justifyContent: 'center', marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => downloadPNG(fondClair)} disabled={!qrDataUrl}>
+        <Download size={14} strokeWidth={1.8}/> PNG (écran, réseaux sociaux)
       </button>
-
-      {/* PDF */}
-      <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>PDF</p>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-        <button style={{ ...s.btn, ...s.btnGhost, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => downloadPDF('A5')} disabled={!qrDataUrl}><FileText size={13} strokeWidth={1.8}/> A5</button>
-        <button style={{ ...s.btn, ...s.btnGhost, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => downloadPDF('A4')} disabled={!qrDataUrl}><FileText size={13} strokeWidth={1.8}/> A4</button>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => downloadPDF('A5', fondClair)} disabled={!qrDataUrl}><FileText size={13} strokeWidth={1.8}/> PDF A5</button>
+        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => downloadPDF('A4', fondClair)} disabled={!qrDataUrl}><FileText size={13} strokeWidth={1.8}/> PDF A4</button>
       </div>
+      <p style={{ fontSize: 10.5, color: T.muted, marginBottom: 16, lineHeight: 1.5 }}>
+        Le PDF garde ses dimensions à l&rsquo;impression. Ouvre-le, puis imprime depuis ton lecteur habituel.
+      </p>
 
-      {/* Impression */}
-      <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Impression</p>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => printQR('A5')} disabled={!qrDataUrl}><Printer size={13} strokeWidth={1.8}/> A5</button>
-        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => printQR('A4')} disabled={!qrDataUrl}><Printer size={13} strokeWidth={1.8}/> A4</button>
-      </div>
-
-      {/* Kit complet : lien, messages prêts à coller, affichette. Le même
-          contenu que l'email de bienvenue, consultable et renvoyable. */}
+      {/* Le reste du kit : lien tracké, messages prêts à coller. */}
       <div style={{ borderTop: `1px solid ${T.hairline}`, paddingTop: 14 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mon kit de démarrage</p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <a href={`/kit/${slug}`} target="_blank" rel="noopener noreferrer"
             style={{ ...s.btn, ...s.btnGhost, flex: '1 1 150px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5, textDecoration: 'none' }}>
-            <Eye size={13} strokeWidth={1.8}/> Ouvrir mon kit
+            <Eye size={13} strokeWidth={1.8}/> Mes messages à partager
           </a>
           <button style={{ ...s.btn, ...s.btnGhost, flex: '1 1 150px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }}
             onClick={envoyerKit} disabled={envoiKit}>
             <MessageCircle size={13} strokeWidth={1.8}/> {envoiKit ? 'Envoi…' : 'Me l’envoyer par email'}
           </button>
         </div>
-        <p style={{ fontSize: 10, color: T.muted, marginTop: 6, lineHeight: 1.5 }}>
-          Ton lien, tes messages prêts à coller et ton affichette de comptoir. Tu l&rsquo;as déjà reçu à ton inscription.
-        </p>
       </div>
     </div>
   )

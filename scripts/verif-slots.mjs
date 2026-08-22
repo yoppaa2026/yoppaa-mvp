@@ -1247,7 +1247,16 @@ verifier('et plus de branche sur la seule étape 1',
       if (e.isDirectory()) { if (e.name !== 'demo-mettet') parcourir(`${dir}/${e.name}`); continue }
       if (!e.name.endsWith('.js')) continue
       const chemin = `${dir}/${e.name}`
-      const n = (readFileSync(chemin, 'utf8').match(/backdropFilter|backdrop-filter/g) || []).length
+      // ⚠️ ON LIT LE CODE SANS SA PROSE, et c'est la SEPTIÈME fois en trois
+      // jours que ce piège se referme sur moi : le commentaire qui explique
+      // POURQUOI le flou a été retiré contient forcément le mot « flou ».
+      // Cette garde a rougi sur un correctif qui la respectait. Retirer le
+      // commentaire serait perdre l'explication, la seule chose qui empêche
+      // quelqu'un de remettre le flou dans six mois.
+      const code = readFileSync(chemin, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/^[ \t]*\/\/.*$/gm, ' ')
+      const n = (code.match(/backdropFilter|backdrop-filter/g) || []).length
       if (n > 0) flous.push(`${chemin} (${n})`)
     }
   }

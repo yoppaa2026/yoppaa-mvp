@@ -17,6 +17,8 @@
 // via next/font/google (variable CSS --font-jakarta).
 // ════════════════════════════════════════════════════════════════════
 
+import { LOGO, proportionsLogo, pointsLogo } from '@/lib/logo'
+
 const T = {
   ink:   '#1A0840',
   main:  '#6B35C4',
@@ -38,16 +40,12 @@ const FONT_STACK = 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, -apple-
 export default function YoppaaLogo({ size = 48, mode = 'dark', withSlogan = false, style = {} }) {
   const palette = PALETTES[mode] || PALETTES.dark
 
-  // Calculs proportionnels au font-size du wordmark (110 unités dans la spec SVG)
-  const dotBase = size * 0.254       // 28/110 dans la spec
-  const dotMini = dotBase * 0.55
-  const dotGap = dotBase * 0.55
-  const dotOffset = dotBase * 0.4
-  // Jakarta 800 a des descenders importants (y/p ~22% de l'em).
-  // wordmarkToDots doit donc être ≥ 0.25*size pour éviter le chevauchement.
-  const wordmarkToDots = size * 0.28
-  const dotsToSlogan = size * 0.25
-  const sloganSize = size * 0.236     // 26/110 dans la spec
+  // ⚠️ LES PROPORTIONS VIENNENT DE `lib/logo.js`, elles ne sont plus écrites
+  // ici : l'affiche du kit est dessinée en canvas et ne peut pas réutiliser ce
+  // composant, elle recopiait donc les mêmes nombres de son côté. Un seul
+  // logo, un seul jeu de mesures.
+  const { dotBase, dotMini, dotGap, dotOffset, wordmarkToDots, dotsToSlogan, sloganSize } = proportionsLogo(size)
+  const points = pointsLogo(size)
 
   return (
     <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', ...style }}>
@@ -56,7 +54,7 @@ export default function YoppaaLogo({ size = 48, mode = 'dark', withSlogan = fals
         fontFamily: FONT_STACK,
         fontSize: size,
         fontWeight: 800,
-        letterSpacing: '-0.05em',
+        letterSpacing: `${LOGO.tracking}em`,
         lineHeight: 1,
         whiteSpace: 'nowrap',
       }}>
@@ -73,11 +71,12 @@ export default function YoppaaLogo({ size = 48, mode = 'dark', withSlogan = fals
         gap: dotGap,
         height: dotBase + dotOffset,
       }}>
-        <span style={{ width: dotBase, height: dotBase, borderRadius: '50%', background: palette.d1, display: 'block' }}/>
-        <span style={{ width: dotMini, height: dotMini, borderRadius: '50%', background: palette.d2, marginTop: dotOffset, display: 'block' }}/>
-        <span style={{ width: dotBase, height: dotBase, borderRadius: '50%', background: palette.d3, marginTop: dotOffset, display: 'block' }}/>
-        <span style={{ width: dotMini, height: dotMini, borderRadius: '50%', background: palette.d4, marginTop: dotOffset, display: 'block' }}/>
-        <span style={{ width: dotBase, height: dotBase, borderRadius: '50%', background: palette.d5, display: 'block' }}/>
+        {points.map(p => (
+          <span key={p.rang} style={{
+            width: p.diametre, height: p.diametre, borderRadius: '50%',
+            background: palette[`d${p.rang}`], marginTop: p.decalage, display: 'block',
+          }}/>
+        ))}
       </div>
 
       {/* SLOGAN */}
@@ -91,7 +90,7 @@ export default function YoppaaLogo({ size = 48, mode = 'dark', withSlogan = fals
           color: palette.slogan,
           lineHeight: 1.2,
           whiteSpace: 'nowrap',
-        }}>Ton quartier dans ta poche</p>
+        }}>{LOGO.slogan}</p>
       )}
     </div>
   )
@@ -99,18 +98,21 @@ export default function YoppaaLogo({ size = 48, mode = 'dark', withSlogan = fals
 
 // Composant complémentaire : juste les dots, sans wordmark
 // Pour favicon, watermark, signature email compact
+// ⚠️ Ici `size` est le diamètre du GROS POINT, pas le corps du wordmark : on
+// remonte donc au corps équivalent pour réutiliser la même règle de décalage,
+// plutôt que de la réécrire une troisième fois.
 export function YoppaaDots({ size = 16, mode = 'dark', style = {} }) {
   const palette = PALETTES[mode] || PALETTES.dark
-  const mini = size * 0.55
-  const gap = size * 0.55
-  const offset = size * 0.4
+  const corps = size / LOGO.dotBase
+  const { dotGap, dotOffset } = proportionsLogo(corps)
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap, height: size + offset, ...style }}>
-      <span style={{ width: size, height: size, borderRadius: '50%', background: palette.d1, display: 'block' }}/>
-      <span style={{ width: mini, height: mini, borderRadius: '50%', background: palette.d2, marginTop: offset, display: 'block' }}/>
-      <span style={{ width: size, height: size, borderRadius: '50%', background: palette.d3, marginTop: offset, display: 'block' }}/>
-      <span style={{ width: mini, height: mini, borderRadius: '50%', background: palette.d4, marginTop: offset, display: 'block' }}/>
-      <span style={{ width: size, height: size, borderRadius: '50%', background: palette.d5, display: 'block' }}/>
+    <div style={{ display: 'inline-flex', alignItems: 'flex-start', gap: dotGap, height: size + dotOffset, ...style }}>
+      {pointsLogo(corps).map(p => (
+        <span key={p.rang} style={{
+          width: p.diametre, height: p.diametre, borderRadius: '50%',
+          background: palette[`d${p.rang}`], marginTop: p.decalage, display: 'block',
+        }}/>
+      ))}
     </div>
   )
 }

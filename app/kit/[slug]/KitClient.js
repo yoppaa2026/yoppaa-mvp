@@ -12,23 +12,67 @@ const T = {
   main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', green: '#10B981', greenLight: '#6EE7B7',
 }
 
-// Textes de partage (3 tons), déclinés par phase. AVANT l'ouverture publique on
-// recrute des préinscrits ; À PARTIR de l'ouverture le discours devient
-// transactionnel.
+// Textes de partage, trois tons.
 //
-// ⚠️ AUCUNE DATE ÉCRITE EN DUR ICI. Elle vient de `libelleLancement()`, et le
-// commentaire non plus n'en porte pas : celui-ci annonçait « 1er août → 31 août »
-// et « 1er septembre » longtemps après que l'ouverture soit passée au 1er octobre.
-const textesAvant = (ouverture) => [
-  { cle: 'clients', label: 'Pour tes clients', texte: `Le ${ouverture}, notre quartier tient dans ta poche. Je fais partie de l’aventure Yoppaa, viens t’inscrire :` },
-  { cle: 'commercant', label: 'Pour un autre commerçant', texte: 'Une app belge pour le commerce de proximité arrive, sans commission Yoppaa sur tes ventes. Réserve ta place de commerçant :' },
-  { cle: 'court', label: 'Version courte', texte: `Notre quartier dans ta poche, c’est pour le ${ouverture}. Inscris-toi :` },
+// ⚠️ ILS NE SE DÉCLINENT PLUS PAR PHASE. Il y en avait deux jeux, un avant
+// l'ouverture et un après, et le premier portait la date. Un message part
+// dans une conversation ou sur une page Facebook : il n'est pas rattrapable.
+//
+// ⚠️ TEXTES GÉNÉRIQUES, PLUS AUCUNE DATE (Alex, 22/08 : « il ne faut pas parler
+// du 1er octobre, il faut des textes génériques pour inviter les autres
+// commerçants et les Yoppers à rejoindre la tribu, rien de plus »).
+//
+// Un message collé sur une page Facebook y reste des mois. « Le 1er octobre,
+// notre quartier tient dans ta poche » devenait faux le 2 octobre, et le
+// commerçant n'allait pas repasser derrière ses publications pour les corriger.
+//
+// ⚠️ ET JAMAIS « AUCUNE COMMISSION » SANS SON SUJET : Yoppaa ne prend pas de
+// commission sur les ventes, ce qui ne dit rien des frais du prestataire de
+// paiement. La phrase doit nommer Yoppaa, sinon elle promet à sa place.
+const TEXTES = [
+  { cle: 'clients', label: 'Pour tes clients',
+    texte: 'On est sur Yoppaa 🟣 Commande chez nous depuis l’app, c’est prêt quand tu arrives :' },
+  { cle: 'commercant', label: 'Pour un autre commerçant',
+    texte: 'On est sur Yoppaa, l’app de notre commune : Yoppaa ne prend aucune commission sur nos ventes. Jette un œil :' },
+  { cle: 'court', label: 'Version courte',
+    texte: 'Tous les commerces de ta commune dans une seule app. Retrouve-nous sur Yoppaa :' },
 ]
-const TEXTES_APRES = [
-  { cle: 'clients', label: 'Pour tes clients', texte: 'On est sur Yoppaa 🟣 Commandez chez nous en ligne, c’est prêt quand vous arrivez :' },
-  { cle: 'commercant', label: 'Pour un autre commerçant', texte: 'On vend sur Yoppaa, l’app de notre commune : zéro commission Yoppaa sur nos ventes. Jette un œil :' },
-  { cle: 'court', label: 'Version courte', texte: 'Retrouve-nous sur Yoppaa, l’app de notre commune :' },
-]
+
+// ⚠️ LA PAGE N'AVAIT AUCUNE SORTIE (Alex, 22/08 : « quand tu ouvres le kit il
+// n'y a pas de bouton pour quitter cette page »). Elle s'ouvre depuis le
+// tableau de bord dans un onglet neuf, donc sans historique : le bouton
+// « précédent » du navigateur était grisé, et sur une application installée il
+// n'y a même pas de barre d'adresse. Le commerçant était enfermé.
+//
+// ⚠️ ELLE FERME L'ONGLET SI ELLE PEUT, sinon elle ramène au tableau de bord.
+// `window.close()` n'aboutit que sur un onglet ouvert par script : ouvert à la
+// main ou restauré au démarrage, il ne fait rien du tout, et un bouton qui ne
+// fait rien est pire que pas de bouton.
+function CroixSortie() {
+  function sortir() {
+    const ouvertParYoppaa = typeof window !== 'undefined' && window.opener
+    if (ouvertParYoppaa) { window.close(); return }
+    window.location.href = '/dashboard'
+  }
+  return (
+    <button onClick={sortir} aria-label="Fermer le kit"
+      style={{
+        position: 'fixed', top: 'max(14px, env(safe-area-inset-top))', right: 14, zIndex: 20,
+        width: 40, height: 40, borderRadius: '50%', border: `1px solid ${T.main}`,
+        // ⚠️ AUCUN FLOU DE FOND, et c'est le banc qui me l'a rappelé. Sur iOS,
+        // `backdrop-filter` sur un élément fixe fait recalculer le fond à chaque
+        // image du défilement : c'est exactement ce qui gelait l'application, et
+        // ce qui a été purgé le 22/08. Un aplat opaque fait le même travail.
+        background: T.deep, color: '#fff', cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.35)',
+      }}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+        <path d="M6 6l12 12M18 6L6 18"/>
+      </svg>
+    </button>
+  )
+}
 
 function IconShare() {
   return (
@@ -76,13 +120,15 @@ export default function KitClient({ slug, kit, lien, qr }) {
   }
 
   const btnBase = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 14px', borderRadius: 100, fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', border: 'none' }
+  // La phase ne pilote plus les TEXTES, seulement ce que la page dit au
+  // commerçant sur sa destination : les messages, eux, valent en tout temps.
   const preLancement = avantLancement()
   const ouverture = libelleLancement()
-  const TEXTES = preLancement ? textesAvant(ouverture) : TEXTES_APRES
 
   return (
     <div style={wrap}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
+      <CroixSortie/>
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
 
         {/* En-tête : logo canonique (wordmark + 5 dots V2-B + slogan) */}

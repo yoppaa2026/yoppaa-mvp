@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { postPro } from '@/lib/fetch-pro'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
+import { retourArriereAutorise, alerteAutreOnglet } from '@/lib/tableau-de-bord'
 import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
@@ -266,7 +267,7 @@ const ACTIONS_RDV_LABEL = {
 }
 
 // ─── Carte commande ───────────────────────────────────────────────────────────
-function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, onExpedier, onProduitsRemis, modeHistorique = false }) {
+function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, onExpedier, onProduitsRemis, onRetourArriere, filtreCourant, modeHistorique = false }) {
   const statut = STATUTS[commande.statut] || STATUTS['en_attente']
   const { couleur } = statut
   const estLivraison = commande.mode_retrait === 'livraison'
@@ -601,6 +602,23 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
           <button onClick={() => onChangerStatut(commande.id, 'recupere')}
             style={{ width: '100%', padding: '0.5rem', background: '#fff', color: '#9A3412', border: '1.5px solid #EA580C55', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: '0.78rem', fontFamily: '"DM Sans", sans-serif', marginTop: 6 }}>
             Noter l&rsquo;encaissement
+          </button>
+        )}
+        {/* ⚠️ LE SEUL RETOUR ARRIÈRE DE L'APPLICATION, et il a été réduit à un
+            seul cas EXPRÈS. Alex a demandé si c'était nécessaire avant que je
+            code : sur les quatre transitions, trois ne méritent pas de bouton.
+            Revenir de « prête » ne rappelle pas l'email déjà parti, et revenir
+            de « non retirée » rendrait le stock une seconde fois.
+            La règle et ses raisons vivent dans `lib/tableau-de-bord`.
+
+            ⚠️ IL N'APPARAÎT QUE DANS LE FILTRE « RÉCUPÉRÉES ». Au comptoir, un
+            bouton « Annuler » posé à côté de « Remettre au client » deviendrait
+            à son tour une source de clics ratés. */}
+        {filtreCourant === 'recupere' && retourArriereAutorise(commande) && (
+          <button onClick={() => onRetourArriere(commande)}
+            title={retourArriereAutorise(commande).aide}
+            style={{ width: '100%', padding: '0.5rem', background: '#fff', color: T.muted, border: `1.5px solid ${T.pale}`, borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: '0.76rem', fontFamily: '"DM Sans", sans-serif', marginTop: 6 }}>
+            ↩ {retourArriereAutorise(commande).libelle}
           </button>
         )}
         {/* Flux livraison : une fois « Prête », le commerçant enchaîne Partir en livraison → Livrée */}
@@ -1472,6 +1490,37 @@ export default function Dashboard() {
     // bord. Envoyé APRÈS la mise à jour en base, pour que la route relise le
     // numéro qui vient d'être enregistré. Non bloquant : l'écran est déjà à jour.
     postPro('/api/emails/commande-expediee', { commande_id: commandeId }).catch(e => console.warn('[dashboard] email commande-expediee KO', e))
+  }
+
+  // ⚠️ LE RETOUR ARRIÈRE, ET SES TROIS PRÉCAUTIONS.
+  //
+  // 1. Il RELIT la règle au lieu de la refaire : `retourArriereAutorise` sait
+  //    seule quels statuts se défont, et pourquoi les autres ne se défont pas.
+  //    Une seconde copie de cette règle finirait par autoriser le retour depuis
+  //    « non retirée », qui rendrait le stock une seconde fois.
+  // 2. Il n'efface JAMAIS `encaisse_mode`. Si l'argent est entré, la trace
+  //    comptable reste : on ne supprime pas une écriture pour réparer un clic.
+  // 3. ⚠️ L'ÉCRITURE EST FILTRÉE SUR L'ANCIEN STATUT (`.eq('statut', 'recupere')`).
+  //    Deux taps rapides, ou deux onglets ouverts, ne peuvent donc pas la
+  //    rejouer : la seconde ne trouve plus de ligne. C'est la même précaution
+  //    que la route « non retiré », et c'est ce qui manque presque toujours
+  //    quand une action a un effet de bord.
+  async function annulerRemise(commande) {
+    const regle = retourArriereAutorise(commande)
+    if (!regle) return
+    const patch = { statut: regle.versStatut }
+    if (regle.effaceStatutLivraison) patch.statut_livraison = null
+
+    const { data, error } = await supabase
+      .from('commandes')
+      .update(patch)
+      .eq('id', commande.id)
+      .eq('statut', 'recupere')
+      .select('id')
+    if (error) { alert(`Erreur : ${error.message}`); return }
+    if (!data || data.length === 0) return  // déjà annulée entre-temps
+
+    setCommandes(prev => prev.map(c => c.id === commande.id ? { ...c, ...patch } : c))
   }
 
   async function changerStatutLivraison(commandeId, statutLivraison, { champs = null } = {}) {
@@ -2623,21 +2672,51 @@ export default function Dashboard() {
               </div>
 
               {/* Bascule Retrait / Livraison (si le commerce livre) */}
-              {livraisonActive && (
-                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                  {[
-                    { v: 'retrait', label: 'Retrait', n: commandesDuJourTous.filter(c => c.mode_retrait !== 'livraison').length },
-                    { v: 'livraison', label: 'Livraison', n: commandesDuJourTous.filter(c => c.mode_retrait === 'livraison').length },
-                  ].map(m => (
-                    <button key={m.v} onClick={() => { setVueMode(m.v); setFiltreStatut('actives') }}
-                      /* T.hairline n'existe pas dans la palette de cet écran : le bouton
-                         inactif rendait « 2px solid undefined », donc AUCUN contour. */
-                      style={{ flex: 1, padding: '9px', borderRadius: 10, border: `2px solid ${vueMode === m.v ? T.main : T.pale}`, background: vueMode === m.v ? T.main : '#fff', color: vueMode === m.v ? '#fff' : T.ink, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                      {m.label}{m.n > 0 ? ` · ${m.n}` : ''}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {livraisonActive && (() => {
+                // ⚠️ LE COMPTEUR EXISTANT N'EST PAS UNE ALERTE. Il affiche le
+                // TOTAL du jour, commandes déjà traitées comprises, et il ne
+                // bouge pas d'un pixel quand une nouvelle tombe. Un « 4 »
+                // affiché toute la journée finit par ne plus être lu.
+                // Ce qui compte, c'est le nombre de GESTES QUI ATTENDENT, et la
+                // règle vit dans `lib/tableau-de-bord` (demande d'Alex, 22/08).
+                const alerte = alerteAutreOnglet(commandesDuJourTous, vueMode)
+                return (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {[
+                        { v: 'retrait', label: 'Retrait', n: commandesDuJourTous.filter(c => c.mode_retrait !== 'livraison').length },
+                        { v: 'livraison', label: 'Livraison', n: commandesDuJourTous.filter(c => c.mode_retrait === 'livraison').length },
+                      ].map(m => (
+                        <button key={m.v} onClick={() => { setVueMode(m.v); setFiltreStatut('actives') }}
+                          /* T.hairline n'existe pas dans la palette de cet écran : le bouton
+                             inactif rendait « 2px solid undefined », donc AUCUN contour. */
+                          style={{ position: 'relative', flex: 1, padding: '9px', borderRadius: 10, border: `2px solid ${vueMode === m.v ? T.main : T.pale}`, background: vueMode === m.v ? T.main : '#fff', color: vueMode === m.v ? '#fff' : T.ink, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                          {m.label}{m.n > 0 ? ` · ${m.n}` : ''}
+                          {/* La pastille ne vit QUE sur l'onglet qu'il ne
+                              regarde pas : une alerte sur la vue courante
+                              apprend à ignorer les alertes. */}
+                          {alerte?.mode === m.v && (
+                            <span aria-hidden="true" style={{ position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 100, background: '#DC2626', color: '#fff', fontSize: 10.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', lineHeight: 1 }}>
+                              {alerte.nb}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    {/* ⚠️ ET LE TEXTE DIT LE CÔTÉ ET LE NOMBRE. Une pastille
+                        seule fait basculer pour voir ; la phrase lui permet de
+                        décider d'y aller ou non sans quitter son écran
+                        (feedback_information_complete). */}
+                    {alerte && (
+                      <button type="button" onClick={() => { setVueMode(alerte.mode); setFiltreStatut('actives') }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', marginTop: 6, padding: '7px 10px', borderRadius: 9, border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#991B1B', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#DC2626', flexShrink: 0 }}/>
+                        {alerte.texte} · appuie pour y aller
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Sélecteur jours */}
               {joursDispos.length > 0 && (
@@ -2852,6 +2931,8 @@ export default function Dashboard() {
                         onLivraisonStatut={changerStatutLivraison}
                         onExpedier={expedierCommande}
                         onProduitsRemis={produitsRemis}
+                        onRetourArriere={annulerRemise}
+                        filtreCourant={filtreStatut}
                         modeHistorique={modeHistorique}
                       />
                     )

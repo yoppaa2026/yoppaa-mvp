@@ -468,8 +468,26 @@ verifier('la page rappelle qu\'on peut refuser la géolocalisation',
     /visibilityState !== 'visible'\) return\s*\n\s*const email/.test(src))
   verifier('et il a cessé de battre toutes les 5 secondes',
     !/\}, 5000\)/.test(src), (src.match(/.*\}, 5000\).*/) || [])[0])
-  verifier('la déconnexion est écoutée', /event === 'SIGNED_OUT'/.test(src))
-  verifier('le renouvellement réussi lève l\'alerte', /event === 'TOKEN_REFRESHED'/.test(src))
+  // ⚠️ CES DEUX GARDES ONT ROUGI LE 22/08 SUR UN CODE AMÉLIORÉ, et c'est le
+  // test qu'il a fallu relire, pas le code (reference_tests_faussement_verts,
+  // « le test qui verrouille une forme »).
+  //
+  // Elles cherchaient `event === 'SIGNED_OUT'` DANS L'ÉCRAN. L'écoute existe
+  // toujours, elle a déménagé dans `lib/session-permanente.js` où elle sert
+  // les cinq écrans au lieu d'un seul. Ce qu'on veut obtenir n'a pas changé :
+  // l'application doit réagir à une session tombée. Ce qui a changé, c'est
+  // qu'elle tente d'abord de la REPOSER, et ne prévient qu'en dernier recours.
+  //
+  // Elles jugent donc désormais l'intention, là où elle vit.
+  const perm = lire('lib/session-permanente.js')
+  verifier('la déconnexion est écoutée', /event === 'SIGNED_OUT'/.test(perm))
+  verifier('le renouvellement réussi lève l\'alerte', /event === 'TOKEN_REFRESHED'/.test(perm))
+  verifier('l\'écran est branché sur cette écoute', /brancherSessionPermanente\(/.test(src))
+  // ⚠️ ET LE BANDEAU NE S'ALLUME PLUS TOUT SEUL SUR UN `SIGNED_OUT` : une
+  // session perdue dans une course de renouvellement est récupérable, et
+  // déranger le Yopper pour ça était le défaut à corriger.
+  verifier('le bandeau ne s\'allume plus directement sur SIGNED_OUT',
+    !/if \(event === 'SIGNED_OUT'\) setSessionPerdue\(true\)/.test(src))
   verifier('le bandeau de session expirée existe', /Session expirée/.test(src))
   verifier('il propose de se reconnecter', /Se reconnecter/.test(src))
   // ⚠️ ON VISE L'INTÉRIEUR DE LA FONCTION, pas le fichier entier : la même

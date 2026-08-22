@@ -20,10 +20,12 @@ import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
 import { lieuxDuJour } from '@/lib/lieux-activite'
 import { morningADuContenu } from '@/lib/morning-contenu'
 import { libellePrixSeance } from '@/lib/abonnements'
-import { lirePositionMemorisee, memoriserPosition, marquerDemandee, dejaDemandee, decisionGeoloc, etatAutorisation } from '@/lib/geoloc'
+import { lirePositionMemorisee, memoriserPosition, marquerDemandee, dejaDemandee, decisionGeoloc, etatAutorisation,
+  lectureReussieDansCetteSession, marquerLectureDeCetteSession, demandeFaiteDansCetteSession, marquerDemandeDeCetteSession } from '@/lib/geoloc'
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
+import { brancherSessionPermanente, marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import OneSignalInit, { taggerFavoriOneSignal, syncYopperTags } from '@/app/components/OneSignalInit'
 import CarteNotifications from './CarteNotifications'
 import SupprimerCompte from './SupprimerCompte'
@@ -1657,10 +1659,20 @@ export default function Commander() {
     // c'est là qu'il faut l'attraper, pas cinq secondes plus tard sur un 401.
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       check(session?.user)
-      if (event === 'SIGNED_OUT') setSessionPerdue(true)
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') setSessionPerdue(false)
     })
-    return () => { try { sub?.subscription?.unsubscribe() } catch (e) {} }
+
+    // ⚠️ LE BANDEAU « SESSION EXPIRÉE » NE S'ALLUME PLUS QU'EN DERNIER RECOURS.
+    // Il s'affichait dès le `SIGNED_OUT`, c'est-à-dire au moment exact où la
+    // bibliothèque effaçait une session perdue dans une course de
+    // renouvellement. Or cette session est RÉCUPÉRABLE : on en garde une copie,
+    // et on la repose avant de déranger qui que ce soit.
+    // Alex, 22/08 : la déconnexion n'appartient qu'au Yopper.
+    const debrancher = brancherSessionPermanente(perdue => setSessionPerdue(perdue))
+
+    return () => {
+      try { sub?.subscription?.unsubscribe() } catch (e) {}
+      debrancher()
+    }
   }, [])
 
   // ─── Polling client 5s ─────────────────────────────────────────────────────
@@ -1773,9 +1785,19 @@ export default function Commander() {
       if (memo.rue) setRue(memo.rue)
     }
 
-    const decision = decisionGeoloc({ etat: await etatAutorisation(), dejaDemande: dejaDemandee() })
+    // ⚠️ LES DEUX MÉMOIRES DE SESSION SONT CE QUI DÉGÈLE LA POSITION SUR
+    // IPHONE. Sans elles, `dejaDemande` répondait « jamais » pour la vie du
+    // navigateur et la rue affichée restait celle du premier jour. Voir le
+    // commentaire de `decisionGeoloc`.
+    const decision = decisionGeoloc({
+      etat: await etatAutorisation(),
+      dejaDemande: dejaDemandee(),
+      lectureReussieSession: lectureReussieDansCetteSession(),
+      demandeFaiteSession: demandeFaiteDansCetteSession(),
+      positionDejaObtenue: !!memo,
+    })
     if (decision === 'jamais') return
-    if (decision === 'demander') marquerDemandee()
+    if (decision === 'demander') { marquerDemandee(); marquerDemandeDeCetteSession() }
 
     // ⚠️ ON LIT TOUJOURS QUAND C'EST POSSIBLE (Alex, 09/08 : « la localisation
     // ne s'actualise plus »). Le raccourci « position fraîche = rien à
@@ -1803,6 +1825,10 @@ export default function Commander() {
     navigator.geolocation.getCurrentPosition(
       async pos => {
         const { latitude: lat, longitude: lng } = pos.coords
+        // ⚠️ LA PREUVE QUE L'AUTORISATION EST VIVANTE, et la seule dont on
+        // dispose sur iPhone. À partir d'ici, relire la position ne peut plus
+        // ouvrir de fenêtre : elle vient de ne pas s'ouvrir.
+        marquerLectureDeCetteSession()
         setPosition({ lat, lng })
         // Clé cache : position arrondie à 3 décimales (~100m de précision)
         const cacheKey = `yoppaa_geo_${lat.toFixed(3)}_${lng.toFixed(3)}`
@@ -3869,6 +3895,10 @@ export default function Commander() {
 
                 {client.email && (
                   <button onClick={async () => {
+                    // ⚠️ AVANT LE `signOut`, JAMAIS APRÈS. C'est ce marqueur qui
+                    // distingue « il s'en va » de « la session est tombée ».
+                    // Sans lui, la restauration le reconnecterait aussitôt.
+                    marquerDeconnexionVoulue()
                     await supabase.auth.signOut()
                     ;['yoppaa_email','yoppaa_nom','yoppaa_prenom','yoppaa_telephone','yoppaa_client_id','yoppaa_onglet'].forEach(k => localStorage.removeItem(k))
                     // Efface aussi le cookie serveur (vrai logout : get-own ne doit plus rien renvoyer).

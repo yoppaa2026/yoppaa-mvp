@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import { useRouter } from 'next/navigation'
@@ -260,7 +261,7 @@ export default function Signup() {
             <span style={{ fontSize: '0.6rem', fontWeight: 800, color: T.light, background: `${T.main}55`, padding: '3px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '1px', border: `1px solid ${T.light}44` }}>Inscription pro</span>
           </div>
           {session && (
-            <button onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
+            <button onClick={async () => { marquerDeconnexionVoulue(); await supabase.auth.signOut(); window.location.href = '/login' }}
               style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.4rem 0.875rem', fontWeight: 700, fontSize: '0.75rem', fontFamily: '"DM Sans", sans-serif' }}>
               Se déconnecter
             </button>

@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { postPro } from '@/lib/fetch-pro'
 import { supabase } from '@/lib/supabase'
+import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
@@ -1676,6 +1677,9 @@ export default function Dashboard() {
 
   async function seDeconnecter() {
     localStorage.removeItem('yoppaa_dashboard_commercant_id')
+    // ⚠️ Le commerçant et le Yopper partagent le même stockage de session sur
+    // un même navigateur : le marqueur de départ voulu se pose ici aussi.
+    marquerDeconnexionVoulue()
     await supabase.auth.signOut()
     router.push('/login')
   }

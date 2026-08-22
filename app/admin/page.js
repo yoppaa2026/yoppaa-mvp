@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import SectionTousCommercants from './SectionTousCommercants'
 import SectionKYBAValider from './SectionKYBAValider'
 import SectionPreinscriptions from './SectionPreinscriptions'
@@ -181,7 +182,7 @@ export default function AdminPage() {
     return <CenteredMsg variant="error">
       <strong>Accès refusé.</strong><br/>
       Cette page est réservée à l&apos;équipe Yoppaa.<br/>
-      <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
+      <button onClick={async () => { marquerDeconnexionVoulue(); await supabase.auth.signOut(); router.push('/login') }}
         style={{ marginTop: 16, padding: '10px 22px', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
         Se déconnecter
       </button>
@@ -205,7 +206,7 @@ export default function AdminPage() {
             <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 24, letterSpacing: '-0.05em', color: '#fff', margin: 0, lineHeight: 1 }}>yoppaa</p>
             <span style={{ fontSize: 11, fontWeight: 800, color: T.light, background: `${T.main}55`, padding: '4px 10px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '1px', border: `1px solid ${T.light}44` }}>Admin</span>
           </div>
-          <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
+          <button onClick={async () => { marquerDeconnexionVoulue(); await supabase.auth.signOut(); router.push('/login') }}
             style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.5rem 1rem', fontWeight: 700, fontSize: 13, fontFamily: '"DM Sans", sans-serif' }}>
             Déconnexion
           </button>

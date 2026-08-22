@@ -12,6 +12,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 
 const T = { main: '#6B35C4', ink: '#1A0840', deep: '#2D0F6B', pale: '#EDE0FF', muted: '#6B7280' }
 const ROUGE = '#DC2626'
@@ -39,6 +40,10 @@ export default function SupprimerCompte({ email, onSupprime }) {
       if (j?.ok) {
         setFait(true)
         // Le compte n'existe plus côté serveur : on ferme la session locale.
+        // ⚠️ Départ VOULU, et le plus définitif de tous : sans ce marqueur, la
+        // restauration de session tenterait de reposer les jetons d'un compte
+        // qui vient d'être supprimé.
+        marquerDeconnexionVoulue()
         await supabase.auth.signOut().catch(() => {})
         fetch('/api/yopper/session', { method: 'DELETE' }).catch(() => {})
         onSupprime?.()

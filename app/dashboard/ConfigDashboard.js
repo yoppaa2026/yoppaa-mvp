@@ -6019,15 +6019,24 @@ function QRCodeSection({ commercantId, toast }) {
     setEnvoiKit(false)
   }
 
-  // AVANT l'ouverture publique, le QR ne doit pas envoyer
-  // vers une fiche qui n'accepte pas encore de clients : il inscrit, et chaque
-  // inscription est attribuée au commerçant (?ref=). Au lancement
-  // il pointe sur la fiche. Le commerçant ne réimprime rien : même affiche,
-  // c'est la destination et le discours qui changent avant/après.
+  // ⚠️ 🔴 LE QR MÈNE À LA FICHE, TOUJOURS, ET SANS PLUS AUCUNE BASCULE DE DATE
+  // (Alex, 23/08 : « ceux qui recevront ou imprimeront le QR seront actifs,
+  // donc ça doit diriger directement vers la fiche dès maintenant »).
+  //
+  // Il envoyait vers la page d'accueil avec un `?ref=` tant qu'on était avant
+  // le 1er octobre, pour recruter des préinscrits attribués au commerçant. Deux
+  // choses ont rendu ça faux :
+  //   • l'ouverture SILENCIEUSE est le 1er septembre, un mois avant la bascule.
+  //     Pendant tout septembre, les fiches auraient accepté des commandes
+  //     pendant que les QR collés en vitrine envoyaient encore s'inscrire ;
+  //   • l'affiche ne porte plus aucune date. Rien n'y prépare le visiteur à
+  //     atterrir ailleurs que chez le commerce dont il lit l'affiche.
+  //
+  // ⚠️ ET UN QR EST IMPRIMÉ. Une destination qui change toute seule à une date
+  // donnée est une promesse qu'on ne peut plus tenir une fois le papier collé :
+  // le seul comportement sûr est celui qui ne dépend d'aucun calendrier.
   const preLancement = avantLancement()
-  const url = slug
-    ? (preLancement ? `https://www.yoppaa.app/?ref=${slug}` : `https://www.yoppaa.app/commander/${slug}`)
-    : null
+  const url = slug ? `https://www.yoppaa.app/commander/${slug}` : null
   // ⚠️ TEXTES GÉNÉRIQUES, PLUS AUCUNE DATE (Alex, 22/08). L'affiche annonçait
   // « ON ARRIVE LE 1ER OCTOBRE » : une affiche imprimée en septembre et encore
   // collée en vitrine en décembre disait alors quelque chose de faux, et
@@ -6362,19 +6371,19 @@ function QRCodeSection({ commercantId, toast }) {
           : 'Un aplat violet plein format vide une cartouche par affiche. À réserver à une impression en boutique.'}
       </p>
 
-      {/* Rappel de phase : le commerçant doit comprendre POURQUOI son QR
-          n'envoie pas encore sur sa fiche, sinon il croit à une erreur.
-          ⚠️ Cette information vit ICI, pas sur l'affiche : elle concerne le
-          commerçant, elle change avec le temps, et l'affiche doit rester vraie
-          une fois collée. */}
-      {preLancement && (
-        <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
-          <p style={{ margin: 0, fontSize: 11.5, color: '#78350F', fontWeight: 600, lineHeight: 1.55 }}>
-            <strong>Avant le {libelleLancement()}</strong>, ton QR inscrit tes clients et chaque inscription t&rsquo;est attribuée.
-            Le jour du lancement, il ouvrira ta page : tu n&rsquo;as rien à réimprimer.
-          </p>
-        </div>
-      )}
+      {/* ⚠️ CE BANDEAU ANNONÇAIT UNE BASCULE QUI N'EXISTE PLUS. Il disait
+          « avant le 1er octobre, ton QR inscrit tes clients ; le jour du
+          lancement il ouvrira ta page ». Depuis le 23/08 le QR ouvre la fiche
+          en toutes circonstances : laisser cette phrase aurait fait attendre au
+          commerçant un changement qui n'arrivera jamais.
+
+          À la place, on dit ce que le QR fait VRAIMENT, une bonne fois. */}
+      <div style={{ background: T.pale, border: `1px solid ${T.main}22`, borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
+        <p style={{ margin: 0, fontSize: 11.5, color: T.deep, fontWeight: 600, lineHeight: 1.55 }}>
+          Ce QR ouvre <strong>ta page</strong> : on scanne devant ta vitrine, on arrive chez toi et on commande.
+          Il ne changera jamais de destination, tu peux l&rsquo;imprimer tranquille.
+        </p>
+      </div>
 
       {/* URL copiable */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.pale, borderRadius: 10, padding: '8px 12px', marginBottom: 16 }}>

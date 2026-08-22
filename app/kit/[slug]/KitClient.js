@@ -165,8 +165,14 @@ export default function KitClient({ slug, kit, lien, qr }) {
                 <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900, color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.3 }}>
                   Ton lien est prêt 🟣
                 </p>
+                {/* ⚠️ CETTE PHRASE PROMETTAIT UNE ATTRIBUTION QUI N'EXISTE PLUS.
+                    Elle disait « chaque personne qui s'inscrit par ce lien
+                    apparaîtra ici » : vrai tant que le lien menait à la page
+                    d'inscription, faux depuis qu'il ouvre la fiche (23/08). Le
+                    compteur au-dessus, lui, reste vrai — il totalise ce qui a
+                    été attribué jusqu'ici, et il ne s'affiche qu'à partir de 1. */}
                 <p style={{ margin: '6px 0 0', fontSize: '0.85rem', fontWeight: 600, color: 'rgba(255,255,255,0.9)', lineHeight: 1.5 }}>
-                  Chaque personne qui s&apos;inscrit par ce lien apparaîtra ici.
+                  Partage-le : il ouvre ta page, là où l&apos;on commande chez toi.
                 </p>
               </>
             )}
@@ -182,7 +188,9 @@ export default function KitClient({ slug, kit, lien, qr }) {
               <IconCopy/> {copie === 'lien' ? 'Copié !' : 'Copier'}
             </button>
           </div>
-          <p style={{ margin: '8px 0 0', fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)' }}>Chaque inscription via ce lien t&apos;est attribuée.</p>
+          {/* ⚠️ « Chaque inscription via ce lien t'est attribuée » n'est plus
+              vrai : le lien ouvre la fiche, pas la page d'inscription. */}
+          <p style={{ margin: '8px 0 0', fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)' }}>Il ouvre ta page, là où l&apos;on commande chez toi.</p>
         </div>
 
         {/* QR code */}
@@ -193,10 +201,12 @@ export default function KitClient({ slug, kit, lien, qr }) {
             {/* display block + marges auto : un reset global qui passe les
                 images en block les collerait à gauche malgré le text-align. */}
             <img decoding="async" loading="lazy" src={qr} alt="QR code Yoppaa" style={{ width: 200, height: 200, borderRadius: 12, background: '#fff', padding: 8, display: 'block', margin: '0 auto' }}/>
+            {/* ⚠️ PLUS DE PHRASE À DEUX VERSIONS : le scan fait la même chose
+                aujourd'hui et dans six mois, et un QR imprimé ne se rattrape
+                pas. Il disait « chaque scan inscrit un habitant » tant qu'on
+                était avant le 1er octobre. */}
             <p style={{ margin: '10px 0 0', fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
-              {preLancement
-                ? 'Affiche-le en vitrine : chaque scan inscrit un habitant et te l’attribue.'
-                : 'Affiche-le en vitrine : un scan et le client arrive sur ta fiche.'}
+              Affiche-le en vitrine : un scan et le client arrive sur ta page, prêt à commander.
             </p>
             <div style={{ marginTop: 12 }}>
               <a href={qr} download={`yoppaa-qr-${slug}.png`} style={{ ...btnBase, background: 'rgba(255,255,255,0.12)', color: '#fff', textDecoration: 'none' }}>

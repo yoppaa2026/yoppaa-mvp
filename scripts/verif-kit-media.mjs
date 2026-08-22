@@ -210,11 +210,36 @@ const egal = (nom, obtenu, attendu) =>
   verifie('l\'accroche est celle qu\'Alex a choisie',
     /TOUS LES COMMERCES DE TA COMMUNE/.test(bloc) && /DANS UNE SEULE APP/.test(bloc))
 
-  // ⚠️ L'INFORMATION DE PHASE RESTE, MAIS À L'ÉCRAN, pas sur le papier : elle
-  // concerne le commerçant, elle change avec le temps, et lui doit comprendre
-  // pourquoi son QR n'ouvre pas encore sa fiche.
-  verifie('le rappel de phase reste dans le tableau de bord',
-    /Avant le \{libelleLancement\(\)\}/.test(dash))
+  // ⚠️ 🔴 ET LA DESTINATION DU QR NE DÉPEND PLUS D'AUCUNE DATE (Alex, 23/08 :
+  // « ceux qui recevront ou imprimeront le QR seront actifs, donc ça doit
+  // diriger directement vers la fiche dès maintenant »).
+  //
+  // Il basculait sur le 1er octobre : page d'inscription avant, fiche après.
+  // Or l'ouverture SILENCIEUSE est le 1er septembre — un mois pendant lequel
+  // les fiches auraient pris des commandes pendant que les QR collés en vitrine
+  // envoyaient encore s'inscrire. Et un QR est IMPRIMÉ : une destination qui
+  // change toute seule est une promesse qu'on ne peut plus tenir.
+  verifie('🔴 le QR du tableau de bord mène toujours à la fiche',
+    /const url = slug \? `https:\/\/www\.yoppaa\.app\/commander\/\$\{slug\}` : null/.test(dash),
+    'la destination redeviendrait dépendante du calendrier')
+  const kitPage = lire('app/kit/[slug]/page.js')
+  verifie('🔴 et le lien de la page kit aussi, son frère',
+    /const lien = `\$\{BASE\}\/commander\/\$\{encodeURIComponent\(slug\)\}`/.test(kitPage),
+    'un QR vers la fiche et un lien vers l\'inscription, sur la même page')
+  // ⚠️ AUCUN DES DEUX NE DOIT REPASSER PAR `avantLancement` POUR SA
+  // DESTINATION. Une garde sur la seule forme de l'URL laisserait revenir un
+  // ternaire posé juste à côté.
+  verifie('la page kit ne fait plus dépendre sa destination du lancement',
+    !/avantLancement\(\)\s*\n?\s*\?/.test(lireCode('app/kit/[slug]/page.js')))
+
+  // ⚠️ ET LE TABLEAU DE BORD N'ANNONCE PLUS DE BASCULE. Il promettait « le jour
+  // du lancement, il ouvrira ta page » : le commerçant aurait attendu un
+  // changement qui n'arrivera jamais.
+  verifie('🔴 le tableau de bord n\'annonce plus de bascule de destination',
+    !/Avant le \{libelleLancement\(\)\}/.test(dash),
+    'il ferait attendre un changement qui n\'aura pas lieu')
+  verifie('et il dit ce que le QR fait vraiment',
+    /Il ne changera jamais de destination/.test(dash))
 }
 
 // ═══ 5) 🔴 PNG ET PDF, PLUS D'IMPRESSION DIRECTE ══════════════════════════

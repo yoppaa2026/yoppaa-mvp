@@ -57,13 +57,17 @@ async function getKit(slug) {
 export default async function KitPage({ params }) {
   const { slug } = await params
   const kit = await getKit(slug)
-  // Avant l'ouverture publique : lien de préinscription tracké (?ref=), qui
-  // attribue chaque inscrit au commerçant. À partir de l'ouverture : sa fiche,
-  // où l'on commande. Le QR suit automatiquement, et la date de bascule vit
-  // dans `lib/lancement.js`, jamais dans un commentaire.
-  const lien = avantLancement()
-    ? `${BASE}/?ref=${encodeURIComponent(slug)}`
-    : `${BASE}/commander/${encodeURIComponent(slug)}`
+  // ⚠️ 🔴 LE LIEN MÈNE À LA FICHE, TOUJOURS (Alex, 23/08). Il basculait sur la
+  // date d'ouverture : préinscription trackée avant, fiche après.
+  //
+  // ⚠️ ET C'EST LE FRÈRE DU QR DU TABLEAU DE BORD : les deux portaient la même
+  // bascule, écrite deux fois. Corriger l'un sans l'autre aurait donné un QR
+  // qui ouvre la fiche et un lien, sur la même page de kit, qui envoie
+  // s'inscrire — l'incohérence la plus visible possible pour le commerçant.
+  //
+  // Les messages à partager disent maintenant « commande chez nous » : ils
+  // doivent mener là où l'on commande, sans quoi ils mentent.
+  const lien = `${BASE}/commander/${encodeURIComponent(slug)}`
 
   let qr = null
   try {

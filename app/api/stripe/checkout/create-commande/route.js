@@ -400,6 +400,42 @@ export async function POST(request) {
       }
     }
 
+    // ─── 4.6) LE CRÉNEAU FERMÉ À LA VOLÉE, CÔTÉ SERVEUR ────────────────────
+    //
+    // ⚠️ CETTE GARDE EST LA RAISON D'ÊTRE DE LA FONCTIONNALITÉ, PAS SON
+    // ACCESSOIRE. Le commerçant ferme un créneau parce qu'il est débordé au
+    // comptoir. Si seule la fiche cachait le créneau, un onglet resté ouvert
+    // depuis dix minutes, ou une requête fabriquée, ferait tomber exactement la
+    // commande qu'il vient de refuser — et il l'apprendrait en la découvrant.
+    // Une garde d'écran n'est jamais une réponse (feedback_securite_dabord).
+    //
+    // ⚠️ ELLE NE TOUCHE PAS AUX COMMANDES DÉJÀ PRISES : elle ne s'applique qu'à
+    // celle qu'on est en train de créer. C'est la règle d'Alex, « ce qui est
+    // vendu reste vendu ».
+    //
+    // ⚠️ ELLE NE VAUT QUE POUR LE RETRAIT. `creneaux_blocages.creneau_id` pointe
+    // `creneaux` ; les tournées de livraison vivent dans `livraison_creneaux` et
+    // ne sont donc PAS couvertes. Ce n'est pas un oubli, c'est nommé : fermer
+    // une tournée demande une colonne de plus dans la table de blocage, donc
+    // une seconde migration. Inscrit dans la todo.
+    if (creneau && !estBoutique && !estLivraison) {
+      const { data: blocage } = await supabase
+        .from('creneaux_blocages')
+        .select('id')
+        .eq('creneau_id', creneau.id)
+        .eq('date_blocage', date_commande)
+        .maybeSingle()
+      if (blocage) {
+        return NextResponse.json({
+          ok: false,
+          // Le commerçant n'a pas à se justifier auprès du client, et son motif
+          // est une note interne : on dit le fait, pas la raison.
+          error: `${commercant.nom} ne prend plus de commande sur ce créneau. Choisis-en un autre.`,
+          creneau_indisponible: true,
+        }, { status: 409 })
+      }
+    }
+
     // ─── 4.7) Vérif CAPACITÉ du créneau, côté SERVEUR ──────────────────────
     //
     // ⚠️ ELLE N'EXISTAIT NULLE PART AILLEURS QUE DANS LE NAVIGATEUR (trouvé le

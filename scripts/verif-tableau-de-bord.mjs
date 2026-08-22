@@ -6,7 +6,7 @@
 //   npm run verif:bord
 
 import { readFileSync } from 'node:fs'
-import { retourArriereAutorise, alerteAutreOnglet, travailEnAttente } from '../lib/tableau-de-bord.js'
+import { retourArriereAutorise, alerteAutreOnglet, travailEnAttente, indexBlocages, appliquerBlocage, etatCreneau } from '../lib/tableau-de-bord.js'
 
 let ok = 0
 const echecs = []
@@ -155,6 +155,110 @@ const verifie = (nom, cond, detail = '') => {
     /alerteAutreOnglet\(commandesDuJourTous, vueMode\)/.test(src))
   verifie('la pastille ne s\'affiche que sur l\'AUTRE onglet',
     /alerte\?\.mode === m\.v &&/.test(src))
+}
+
+// ═══ 4) LE CRÉNEAU FERMÉ À LA VOLÉE ══════════════════════════════════════
+{
+  const blocages = [
+    { creneau_id: 'A', date_blocage: '2026-08-22' },
+    { creneau_id: 'B', date_blocage: '2026-08-23' },
+  ]
+  const idx = indexBlocages(blocages.filter(b => b.date_blocage === '2026-08-22'))
+  verifie('le créneau fermé ce jour-là est reconnu', idx.has('A'))
+  // ⚠️ UN BLOCAGE VAUT POUR UN JOUR, PAS POUR LE MODÈLE. `creneaux` décrit une
+  // SEMAINE TYPE : sans ce filtrage par date, fermer « vendredi 16 h 15 » le
+  // fermerait tous les vendredis, et le commerçant ne le découvrirait que la
+  // semaine suivante.
+  verifie('celui d\'un autre jour ne l\'est pas', !idx.has('B'))
+  verifie('liste vide → aucun blocage', indexBlocages([]).size === 0)
+  verifie('liste absente → aucun blocage', indexBlocages(null).size === 0)
+  verifie('une entrée sans créneau est ignorée', indexBlocages([{ date_blocage: 'x' }]).size === 0)
+
+  const libre = { capacite: 5, utilise: 2, utiliseEff: 2, complet: false, places: 3, bientot: false, presque: true }
+  const ferme = appliquerBlocage(libre, true)
+  // ⚠️ LA RÈGLE D'ALEX : « si des commandes sont déjà présentes, elles restent,
+  // il bloque la capacité restante ». Le blocage NE TOUCHE PAS au réalisé.
+  verifie('🔴 les commandes déjà prises restent comptées', ferme.utiliseEff === 2, String(ferme.utiliseEff))
+  verifie('🔴 et la capacité affichée ne change pas', ferme.capacite === 5, String(ferme.capacite))
+  verifie('mais il ne reste plus une place', ferme.places === 0, String(ferme.places))
+  verifie('le créneau est clos pour la suite', ferme.complet === true)
+  // Les états intermédiaires n'ont plus de sens sur un créneau fermé.
+  verifie('« presque plein » s\'efface', ferme.presque === false)
+  verifie('« bientôt plein » aussi', ferme.bientot === false)
+
+  const ouvert = appliquerBlocage(libre, false)
+  verifie('sans blocage, rien ne bouge', ouvert.complet === false && ouvert.places === 3)
+  verifie('et le drapeau est explicitement faux', ouvert.bloque === false)
+  verifie('une capacité absente ne casse rien', appliquerBlocage(null, true) === null)
+
+  // ⚠️ « FERMÉ » ET « COMPLET » NE DISENT PAS LA MÊME CHOSE. Complet veut dire
+  // que ses clients ont rempli, fermé qu'il a fermé LUI-MÊME. Les confondre,
+  // c'est lui faire chercher des commandes qui n'existent pas.
+  verifie('un créneau fermé le dit', etatCreneau(ferme) === 'Fermé par toi', etatCreneau(ferme))
+  verifie('un créneau plein dit autre chose',
+    etatCreneau({ complet: true, utiliseEff: 5 }) === 'Complet')
+  verifie('les deux libellés diffèrent',
+    etatCreneau(ferme) !== etatCreneau({ complet: true, utiliseEff: 5 }))
+  verifie('un créneau vide est « Libre »', etatCreneau({ utiliseEff: 0 }) === 'Libre')
+  verifie('un créneau entamé a « De la place »', etatCreneau({ utiliseEff: 1 }) === 'De la place')
+}
+
+// ═══ 5) 🔴 LA BARRIÈRE EST SERVEUR, PAS ÉCRAN ════════════════════════════
+//
+// ⚠️ C'EST LA RAISON D'ÊTRE DE LA FONCTIONNALITÉ. Le commerçant ferme parce
+// qu'il est débordé. Si seule la fiche cachait le créneau, un onglet ouvert
+// depuis dix minutes ferait tomber exactement la commande qu'il vient de
+// refuser. Une garde d'écran n'est jamais une réponse.
+{
+  const route = readFileSync(new URL('../app/api/stripe/checkout/create-commande/route.js', import.meta.url), 'utf8')
+  const debut = route.indexOf('4.6) LE CRÉNEAU FERMÉ')
+  const bloc = debut === -1 ? '' : route.slice(debut, route.indexOf('4.7)', debut))
+  verifie('la garde serveur se découpe', bloc.length > 300)
+  verifie('🔴 le serveur interroge les blocages', /from\('creneaux_blocages'\)/.test(bloc))
+  verifie('🔴 pour CE créneau et CE jour',
+    /\.eq\('creneau_id', creneau\.id\)/.test(bloc) && /\.eq\('date_blocage', date_commande\)/.test(bloc))
+  verifie('🔴 et il refuse la commande', /status: 409/.test(bloc))
+  // ⚠️ MESURÉ : les gardes ci-dessus jugeaient la REQUÊTE et le CODE DE REFUS,
+  // pas la CONDITION entre les deux. En neutralisant le `if`, le serveur
+  // laissait passer et le banc restait vert : la requête partait toujours, le
+  // 409 était toujours écrit, il n'était simplement plus jamais atteint.
+  // C'est « l'appel est écrit, son résultat ne sert pas ».
+  verifie('🔴 et le refus est réellement déclenché par le blocage',
+    /if \(blocage\) \{/.test(bloc), 'la condition de refus a disparu')
+  // ⚠️ La note interne du commerçant ne doit pas partir au client : il n'a pas
+  // à se justifier, on dit le fait, pas la raison.
+  //
+  // ⚠️ ANCRÉ SUR L'INTERPOLATION, PAS SUR LE MOT. Une garde qui cherchait le
+  // mot seul rougissait sur le COMMENTAIRE qui explique cette règle — le même
+  // piège que ce matin dans `create-commande`, et la troisième fois de la
+  // journée. Un `${blocage…}` ne peut apparaître que dans du code.
+  verifie('le refus ne renvoie rien de la ligne de blocage', !/\$\{blocage/.test(bloc))
+  verifie('et il ne lit que l\'existence du blocage', /\.select\('id'\)/.test(bloc))
+
+  const fiche = readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8')
+  verifie('la fiche ne propose plus un créneau fermé', /!fermesCeJour\.has\(cr\.id\)/.test(fiche))
+  verifie('et elle le filtre PAR JOUR', /=== jourISO/.test(fiche))
+
+  const dash = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+  const bascule = dash.slice(dash.indexOf('async function basculerBlocageCreneau'), dash.indexOf('async function annulerRemise'))
+  verifie('le geste de bascule se découpe', bascule.length > 300)
+  // ⚠️ AUCUNE COMMANDE N'EST TOUCHÉE PAR CE GESTE : il n'écrit que dans la
+  // table des blocages. C'est la règle d'Alex, et le banc l'exige.
+  verifie('🔴 le blocage ne touche AUCUNE commande', !/from\('commandes'\)/.test(bascule))
+  verifie('il n\'écrit que dans la table des blocages', /from\('creneaux_blocages'\)/.test(bascule))
+  // Deux taps rapides, ou deux appareils : la contrainte d'unicité renvoie
+  // 23505, et ce n'est pas une erreur à montrer.
+  verifie('un double tap n\'affiche pas d\'erreur', /error\.code !== '23505'/.test(bascule))
+  verifie('l\'état se relit en base après écriture', /chargerBlocages\(commercant\.id\)/.test(bascule))
+
+  // ⚠️ CES DEUX GARDES MANQUAIENT, ET LA MUTATION LES A RÉCLAMÉES. Sans elles,
+  // le blocage pouvait valoir pour TOUS LES JOURS, ou n'être plus appliqué du
+  // tout au remplissage, sans que rien ne rougisse.
+  verifie('🔴 le blocage est filtré sur LE JOUR AFFICHÉ',
+    /indexBlocages\(blocages\.filter\(b => b\.date_blocage === jourActif\)\)/.test(dash),
+    'un blocage vaudrait pour tous les jours')
+  verifie('et il est bien appliqué au remplissage',
+    /appliquerBlocage\(c, blocagesDuJour\.has\(c\.creneau\?\.id\)\)/.test(dash))
 }
 
 console.log(`\nTableau de bord : ${ok} vérifications`)

@@ -17,7 +17,7 @@ import { categorieAtteinte, barreDetachee } from '@/lib/responsive'
 // ⚠️ `estFoodTruck` n'est plus importé ici depuis le 12/08 : le MÉTIER ne dit
 // pas si un commerce bouge. C'est `estItinerant`, qui lit les lieux déclarés,
 // qui décide, et une professeure de yoga en profite comme un food truck.
-import { jourLocalISO } from '@/lib/timezone'
+import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
 import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
 import { lieuxDuJour, estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { champsAdressePourAPI, NOTE_MAX } from '@/lib/adresse-livraison'
@@ -1035,6 +1035,9 @@ export default function CommanderSlug() {
   // livraison n'est construit qu'une fois, à l'hydratation, sa charge lui est
   // donc passée directement.
   const [chargeCreneaux, setChargeCreneaux] = useState({})
+  // Créneaux fermés à la volée par le commerçant, par jour. Voyagent à part des
+  // créneaux : ceux-ci sont une grille hebdomadaire, un blocage vaut pour UN jour.
+  const [blocagesCreneaux, setBlocagesCreneaux] = useState([])
   const [avisCommerce, setAvisCommerce] = useState([])
   const [notesInfo, setNotesInfo] = useState({ moyenne: 0, count: 0 })
   const [panier, setPanier] = useState({})
@@ -1566,6 +1569,7 @@ export default function CommanderSlug() {
       { data: livCren },
       { data: livCmd },
       { data: ftEmps },
+      { data: blocagesCren },
     ] = await Promise.all([
       supabase.from('articles').select('*').eq('commercant_id', c.id).eq('actif', true).order('categorie').order('nom'),
       supabase.from('creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
@@ -1591,6 +1595,11 @@ export default function CommanderSlug() {
       // M5 food truck : emplacements (ponctuels + tournée hebdo) pour remplacer
       // l'adresse affichée par l'emplacement du jour
       supabase.from('commercant_lieux').select('*').eq('commercant_id', c.id).eq('actif', true),
+      // ⚠️ LES CRÉNEAUX QUE LE COMMERÇANT A FERMÉS À LA VOLÉE, par jour. On ne
+      // lit QUE d'aujourd'hui vers l'avant : un blocage passé ne concerne plus
+      // personne, et le calendrier ne propose jamais la veille.
+      supabase.from('creneaux_blocages').select('creneau_id, date_blocage')
+        .eq('commercant_id', c.id).gte('date_blocage', jourBruxelles()),
     ])
 
     const notesInfo = avisNotes?.length > 0
@@ -1707,6 +1716,10 @@ export default function CommanderSlug() {
       commercant: c,
       articles: arts || [],
       creneaux: creneauxAvecCount,
+      // ⚠️ LES BLOCAGES VOYAGENT AVEC LA CHARGE, ET POUR LA MÊME RAISON : un
+      // créneau est une grille HEBDOMADAIRE, un blocage vaut pour UN JOUR. Les
+      // coller sur la ligne de créneau fermerait tous les vendredis.
+      blocagesCreneaux: blocagesCren || [],
       // La charge voyage à part des créneaux : un créneau est une grille
       // hebdomadaire, sa charge dépend du jour affiché.
       chargeCreneaux: chargeParJour,
@@ -1753,7 +1766,11 @@ export default function CommanderSlug() {
   // choisi exprès, jamais par défaut, sans quoi un commerce devient
   // injoignable dès son dernier créneau passé.
   const HORIZON_DEFAUT = 2
-  function construireJoursDispos(c, creneauxAvecCount, fermeturesData, chargeParJour = {}) {
+  // ⚠️ `blocages` PAR DÉFAUT VIDE, ET C'EST VOULU : les tournées de livraison
+  // appellent cette même fonction et ne connaissent pas les blocages, qui ne
+  // valent que pour les créneaux de retrait. Une valeur par défaut vide les
+  // laisse passer sans rien filtrer.
+  function construireJoursDispos(c, creneauxAvecCount, fermeturesData, chargeParJour = {}, blocagesCren = []) {
     const horizonBrut = Number(c.horizon_commande)
     const horizon = Number.isFinite(horizonBrut) && horizonBrut >= 1 ? horizonBrut : HORIZON_DEFAUT
     const now = maintenant()
@@ -1777,8 +1794,24 @@ export default function CommanderSlug() {
       const nomJour = JOURS[jourIdx(date)]
       const jourISO = jourLocalISO(date)
       const duJour = chargeParJour[jourISO] || {}
+      // ⚠️ LES CRÉNEAUX FERMÉS À LA VOLÉE NE SONT PLUS PROPOSÉS, ET C'EST LE
+      // SEUL ENDROIT OÙ LE FILTRE SE POSE : tout le calendrier de la fiche
+      // passe par ici. Un créneau fermé DISPARAÎT plutôt que de s'afficher
+      // grisé — le commerçant a fermé parce qu'il est débordé, pas parce que
+      // ses clients ont rempli, et proposer une case morte fait cliquer dessus.
+      //
+      // ⚠️ CE FILTRE N'EST PAS UNE PROTECTION. Il est calculé AU CHARGEMENT de
+      // la fiche : un onglet ouvert depuis dix minutes ne verra pas le blocage
+      // qui vient d'être posé. C'est `create-commande` qui refuse réellement,
+      // côté serveur. Une garde d'écran n'est jamais une réponse.
+      const fermesCeJour = new Set(
+        (blocagesCren || [])
+          .filter(b => String(b.date_blocage || '').slice(0, 10) === jourISO)
+          .map(b => b.creneau_id)
+      )
       return creneauxAvecCount
         .filter(cr => cr.jour_semaine === nomJour || cr.jour_semaine === null)
+        .filter(cr => !fermesCeJour.has(cr.id))
         .map(cr => ({
           ...cr,
           count: duJour[cr.id]?.count || 0,
@@ -1810,8 +1843,8 @@ export default function CommanderSlug() {
   }
 
   // Wrapper : construit + pose l'état des jours de RETRAIT.
-  function buildJoursDispos(c, creneauxAvecCount, fermeturesData, charge = chargeCreneaux) {
-    setJoursDispos(construireJoursDispos(c, creneauxAvecCount, fermeturesData, charge))
+  function buildJoursDispos(c, creneauxAvecCount, fermeturesData, charge = chargeCreneaux, blocagesCren = blocagesCreneaux) {
+    setJoursDispos(construireJoursDispos(c, creneauxAvecCount, fermeturesData, charge, blocagesCren))
     setJourSelectionne(0)
   }
 
@@ -1843,7 +1876,7 @@ export default function CommanderSlug() {
 
   useEffect(() => {
     if (commercant && creneaux.length > 0) {
-      buildJoursDispos(commercant, creneaux, fermetures, chargeCreneaux)
+      buildJoursDispos(commercant, creneaux, fermetures, chargeCreneaux, blocagesCreneaux)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [commercant, creneaux, fermetures, chargeCreneaux])

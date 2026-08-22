@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { postPro } from '@/lib/fetch-pro'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
-import { retourArriereAutorise, alerteAutreOnglet } from '@/lib/tableau-de-bord'
+import { retourArriereAutorise, alerteAutreOnglet, indexBlocages, appliquerBlocage, etatCreneau } from '@/lib/tableau-de-bord'
 import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
@@ -978,6 +978,8 @@ export default function Dashboard() {
   }, [commercant?.id])
   const [filtreStatut, setFiltreStatut] = useState('actives')
   const [vueMode, setVueMode] = useState('retrait')  // vue Commandes : 'retrait' | 'livraison'
+  // Créneaux fermés à la volée par le commerçant débordé. Table `creneaux_blocages`.
+  const [blocages, setBlocages] = useState([])
   // Une tournée PAR CRÉNEAU : un commerçant qui livre à midi et le soir fait
   // deux tournées distinctes, et mélanger les deux donne un itinéraire absurde.
   // Indexées par identifiant de créneau de livraison.
@@ -1019,6 +1021,19 @@ export default function Dashboard() {
   const [nouveauBon, setNouveauBon] = useState(null)
   const bonsConnusRef = useRef(null)
   const pollingRef = useRef(null)
+
+  // ⚠️ LES BLOCAGES SE RELISENT DEPUIS LA BASE APRÈS CHAQUE ÉCRITURE, jamais
+  // devinés côté écran. Le commerçant a souvent son tableau de bord ouvert sur
+  // deux appareils, le comptoir et l'arrière-boutique : un état local
+  // divergerait, et il croirait avoir fermé un créneau resté ouvert.
+  const chargerBlocages = useCallback(async (id) => {
+    if (!id) return
+    const { data } = await supabase
+      .from('creneaux_blocages')
+      .select('id, creneau_id, date_blocage')
+      .eq('commercant_id', id)
+    setBlocages(data || [])
+  }, [])
 
   const trierCommandes = (data) =>
     (data || []).sort((a, b) => {
@@ -1123,7 +1138,7 @@ export default function Dashboard() {
           setCommercant(c)
           setImpersonating(true)
           setImpersonationId(localStorage.getItem('yoppaa_admin_impersonation_session_id'))
-          chargerCommandes(c.id); chargerRdvs(c.id)
+          chargerCommandes(c.id); chargerRdvs(c.id); chargerBlocages(c.id)
           return
         } else {
           // Le commercant impersonne n'existe plus. On nettoie et retombe sur le flow normal.
@@ -1159,7 +1174,7 @@ export default function Dashboard() {
       if (data.length === 1) {
         setCommercant(data[0])
         localStorage.setItem('yoppaa_dashboard_commercant_id', data[0].id)
-        chargerCommandes(data[0].id); chargerRdvs(data[0].id)
+        chargerCommandes(data[0].id); chargerRdvs(data[0].id); chargerBlocages(data[0].id)
       } else {
         // Multi-commerces — restaurer depuis localStorage
         const savedId = localStorage.getItem('yoppaa_dashboard_commercant_id')
@@ -1167,7 +1182,7 @@ export default function Dashboard() {
           const found = data.find(c => c.id === savedId)
           if (found) {
             setCommercant(found)
-            chargerCommandes(found.id); chargerRdvs(found.id)
+            chargerCommandes(found.id); chargerRdvs(found.id); chargerBlocages(found.id)
             return
           }
         }
@@ -1505,6 +1520,41 @@ export default function Dashboard() {
   //    rejouer : la seconde ne trouve plus de ligne. C'est la même précaution
   //    que la route « non retiré », et c'est ce qui manque presque toujours
   //    quand une action a un effet de bord.
+  // ⚠️ FERMER OU ROUVRIR UN CRÉNEAU, POUR LE JOUR AFFICHÉ SEULEMENT.
+  //
+  // ⚠️ AUCUNE COMMANDE N'EST TOUCHÉE, et c'est la règle d'Alex : « si des
+  // commandes sont déjà présentes, elles restent, il bloque la capacité
+  // restante ». Ce geste n'écrit que dans `creneaux_blocages`.
+  //
+  // ⚠️ ET LA VRAIE BARRIÈRE EST AILLEURS : `create-commande` refuse un créneau
+  // bloqué côté serveur. Ici, on ne fait que cacher et informer. Un onglet
+  // client resté ouvert depuis dix minutes ne verra pas ce blocage, et c'est
+  // exactement pour lui que la garde serveur existe.
+  async function basculerBlocageCreneau(creneauId, estBloque) {
+    if (!commercant?.id || !creneauId) return
+    if (estBloque) {
+      const { error } = await supabase
+        .from('creneaux_blocages')
+        .delete()
+        .eq('creneau_id', creneauId)
+        .eq('date_blocage', jourActif)
+      // ⚠️ `alert` ET NON `toast` : ce fichier n'a pas de toast, et `verif:undef`
+      // l'a attrapé. Sans lui, la fonction aurait planté au premier clic, sans
+      // que le lint ni le build ne disent quoi que ce soit (`no-undef` est
+      // éteint dans ce projet). Voir reference_eslint_no_undef_eteint.
+      if (error) { alert(`Erreur : ${error.message}`); return }
+    } else {
+      const { error } = await supabase
+        .from('creneaux_blocages')
+        .insert({ commercant_id: commercant.id, creneau_id: creneauId, date_blocage: jourActif })
+      // ⚠️ 23505 = la contrainte d'unicité. Deux taps rapides, ou deux
+      // appareils, et le second arrive après le premier : ce n'est pas une
+      // erreur à montrer, le créneau est fermé, c'est ce qu'il voulait.
+      if (error && error.code !== '23505') { alert(`Erreur : ${error.message}`); return }
+    }
+    chargerBlocages(commercant.id)
+  }
+
   async function annulerRemise(commande) {
     const regle = retourArriereAutorise(commande)
     if (!regle) return
@@ -1863,6 +1913,9 @@ export default function Dashboard() {
     ? commandesDuJourTous.filter(c => vueMode === 'livraison' ? c.mode_retrait === 'livraison' : c.mode_retrait !== 'livraison')
     : commandesDuJourTous
 
+  // Les créneaux que le commerçant a fermés lui-même, POUR LE JOUR AFFICHÉ.
+  const blocagesDuJour = indexBlocages(blocages.filter(b => b.date_blocage === jourActif))
+
   // Livraisons du jour encore à livrer, GROUPÉES PAR CRÉNEAU.
   //
   // ⚠️ UNE TOURNÉE = UN CRÉNEAU. Avant, toutes les livraisons du jour partaient
@@ -1904,13 +1957,16 @@ export default function Dashboard() {
   // statuts que le serveur.
   //
   // En historique, il n'y a pas de jour à remplir : on n'affiche rien.
-  const creneauxRemplis = modeHistorique ? [] : remplissageCreneaux({
+  // ⚠️ LE BLOCAGE S'AJOUTE AU REMPLISSAGE, IL NE LE REMPLACE PAS.
+  // `remplissageCreneaux` reste seul juge des commandes déjà prises : fermer un
+  // créneau ne change pas ce qui est vendu, il met à zéro ce qui reste.
+  const creneauxRemplis = (modeHistorique ? [] : remplissageCreneaux({
     creneaux: vueMode === 'livraison' ? creneauxLivraison : creneauxRetrait,
     commandes,
     jour: jourActif,
     modeCapaciteDefaut: commercant?.mode_capacite,
     champCreneau: vueMode === 'livraison' ? 'creneau_livraison_id' : 'creneau_id',
-  })
+  })).map(c => ({ ...c, ...appliquerBlocage(c, blocagesDuJour.has(c.creneau?.id)) }))
 
   const stats = {
     nouvelles:  commandesDuJour.filter(c => c.statut === 'en_attente').length,
@@ -2802,12 +2858,21 @@ export default function Dashboard() {
                       <span style={{ fontSize: '0.62rem', fontWeight: 700, color: T.main }}>{dateLabel(jourActif + 'T00:00:00')}</span>
                     </div>
                     <BandeDefilante libelle="les créneaux" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
-                      {creneauxRemplis.map(({ creneau, modeTemps, capacite, utiliseEff, complet, bientot, presque }) => {
-                        const couleur = complet ? T.rouge.badge : bientot ? T.orange.badge : presque ? '#CA8A04' : T.vert.badge
+                      {creneauxRemplis.map((rempli) => {
+                        const { creneau, modeTemps, capacite, utiliseEff, complet, bientot, presque, bloque } = rempli
+                        // ⚠️ « FERMÉ » A SA PROPRE COULEUR, DISTINCTE DE
+                        // « COMPLET ». Les confondre ferait chercher au
+                        // commerçant des commandes qui n'existent pas : complet
+                        // veut dire que ses clients ont rempli, fermé qu'il a
+                        // fermé lui-même.
+                        const couleur = bloque ? '#6B7280' : complet ? T.rouge.badge : bientot ? T.orange.badge : presque ? '#CA8A04' : T.vert.badge
                         const ratio = capacite > 0 ? Math.min(1, utiliseEff / capacite) : 0
-                        const etat = complet ? 'Complet' : bientot ? 'Bientôt plein' : presque ? 'Presque plein' : utiliseEff === 0 ? 'Libre' : 'De la place'
+                        const etat = etatCreneau(rempli)
+                        // Le blocage ne concerne que les créneaux de RETRAIT :
+                        // les tournées vivent dans une autre table.
+                        const peutBloquer = vueMode !== 'livraison' && !modeHistorique
                         return (
-                          <div key={creneau.id} style={{ minWidth: 98, flexShrink: 0, borderRadius: 10, padding: '8px 10px', background: complet ? T.rouge.cardBg : '#FBFAFF', border: `1.5px solid ${couleur}33` }}>
+                          <div key={creneau.id} style={{ minWidth: 98, flexShrink: 0, borderRadius: 10, padding: '8px 10px', background: bloque ? '#F3F4F6' : complet ? T.rouge.cardBg : '#FBFAFF', border: `1.5px solid ${couleur}33` }}>
                             <p style={{ fontSize: '0.72rem', fontWeight: 800, color: T.ink, letterSpacing: '-0.2px' }}>
                               {String(creneau.heure_debut || '').slice(0, 5)}–{String(creneau.heure_fin || '').slice(0, 5)}
                             </p>
@@ -2819,6 +2884,25 @@ export default function Dashboard() {
                               <div style={{ width: `${ratio * 100}%`, height: '100%', background: couleur, borderRadius: 100 }}/>
                             </div>
                             <p style={{ fontSize: '0.56rem', fontWeight: 800, color: couleur, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.3px' }}>{etat}</p>
+                            {/* ⚠️ LE GESTE EST LÀ OÙ IL REGARDE. Le commerçant
+                                débordé n'ira pas dans sa configuration des
+                                créneaux : il a les mains dans la farine et
+                                trente secondes. Le bouton vit donc sur la bande
+                                qu'il consulte déjà (demande relayée par Alex).
+
+                                ⚠️ PAS DE ROUGE POUR FERMER : rien n'est détruit,
+                                et les commandes déjà prises restent
+                                (feedback_boutons_qui_disent_le_geste). */}
+                            {peutBloquer && (
+                              <button type="button"
+                                onClick={() => basculerBlocageCreneau(creneau.id, bloque)}
+                                title={bloque
+                                  ? 'Rouvrir ce créneau aux commandes Yoppaa'
+                                  : 'Ne plus accepter de commande sur ce créneau. Celles déjà prises restent.'}
+                                style={{ width: '100%', marginTop: 6, padding: '4px 0', borderRadius: 7, border: `1px solid ${bloque ? T.vert.badge + '55' : T.pale}`, background: bloque ? '#F0FDF4' : '#fff', color: bloque ? T.vert.badge : T.muted, fontWeight: 800, fontSize: '0.58rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.2px' }}>
+                                {bloque ? 'Rouvrir' : 'Fermer'}
+                              </button>
+                            )}
                           </div>
                         )
                       })}

@@ -1524,7 +1524,17 @@ export default function CommanderSlug() {
     // rétablit les compteurs. Le serveur, lui, refuse de toute façon un
     // créneau complet.
     setChargeCreneaux(data.chargeCreneaux || {})
-    buildJoursDispos(data.commercant, data.creneaux, data.fermetures, data.chargeCreneaux || {})
+    // ⚠️ LE MAILLON QUI MANQUAIT, ET IL RENDAIT TOUT LE RESTE INERTE. Les
+    // blocages étaient lus en base, rangés dans le cache, et l'état ne les
+    // recevait JAMAIS : `blocagesCreneaux` restait le tableau vide du premier
+    // rendu, le calendrier ne fermait donc rien du tout. Aucune erreur, aucun
+    // avertissement — le défaut le plus fréquent de ce projet, dans sa version
+    // React (reference_colonne_absente_du_select).
+    setBlocagesCreneaux(data.blocagesCreneaux || [])
+    // ⚠️ ET ON LES PASSE ICI EN CLAIR, sans compter sur l'état. `setState` ne
+    // change rien avant le rendu suivant : la valeur par défaut du paramètre
+    // lirait l'ancienne, c'est-à-dire vide.
+    buildJoursDispos(data.commercant, data.creneaux, data.fermetures, data.chargeCreneaux || {}, data.blocagesCreneaux || [])
     setLivraisonConfig(data.livraisonConfig || null)
     setJoursDisposLivraison(construireJoursDispos(data.commercant, data.livraisonCreneaux || [], data.fermetures, data.chargeLivraison || {}))
     setFoodtruckEmps(data.foodtruckEmps || [])
@@ -1794,16 +1804,23 @@ export default function CommanderSlug() {
       const nomJour = JOURS[jourIdx(date)]
       const jourISO = jourLocalISO(date)
       const duJour = chargeParJour[jourISO] || {}
-      // ⚠️ LES CRÉNEAUX FERMÉS À LA VOLÉE NE SONT PLUS PROPOSÉS, ET C'EST LE
-      // SEUL ENDROIT OÙ LE FILTRE SE POSE : tout le calendrier de la fiche
-      // passe par ici. Un créneau fermé DISPARAÎT plutôt que de s'afficher
-      // grisé — le commerçant a fermé parce qu'il est débordé, pas parce que
-      // ses clients ont rempli, et proposer une case morte fait cliquer dessus.
+      // ⚠️ UN CRÉNEAU FERMÉ S'AFFICHE COMPLET, IL NE DISPARAÎT PAS.
+      // Arbitrage d'Alex, 23/08, après essai : un créneau retiré de la grille
+      // est indiscernable d'un créneau qui n'a jamais existé, et le client
+      // conclut que le commerce n'ouvre pas à cette heure-là. Barré et marqué
+      // « Complet », il dit la vérité utile : le créneau existe, il n'y a plus
+      // de place. C'est d'ailleurs le mot que le commerçant a employé en le
+      // demandant — « mettre en complet ».
       //
-      // ⚠️ CE FILTRE N'EST PAS UNE PROTECTION. Il est calculé AU CHARGEMENT de
-      // la fiche : un onglet ouvert depuis dix minutes ne verra pas le blocage
-      // qui vient d'être posé. C'est `create-commande` qui refuse réellement,
-      // côté serveur. Une garde d'écran n'est jamais une réponse.
+      // ⚠️ ET LE YOPPER N'A PAS À SAVOIR QUE LE COMMERÇANT A FERMÉ LUI-MÊME.
+      // « Fermé par toi » est un mot du tableau de bord, pour celui qui a
+      // cliqué. Côté client, un créneau fermé se comporte comme un créneau
+      // plein : même case grise, même barré, même impossibilité de le choisir.
+      //
+      // ⚠️ CE MARQUAGE N'EST PAS UNE PROTECTION. Il est calculé AU CHARGEMENT
+      // de la fiche : un onglet ouvert depuis dix minutes ne verra pas le
+      // blocage qui vient d'être posé. C'est `create-commande` qui refuse
+      // réellement, côté serveur. Une garde d'écran n'est jamais une réponse.
       const fermesCeJour = new Set(
         (blocagesCren || [])
           .filter(b => String(b.date_blocage || '').slice(0, 10) === jourISO)
@@ -1811,9 +1828,11 @@ export default function CommanderSlug() {
       )
       return creneauxAvecCount
         .filter(cr => cr.jour_semaine === nomJour || cr.jour_semaine === null)
-        .filter(cr => !fermesCeJour.has(cr.id))
         .map(cr => ({
           ...cr,
+          // Lu par `calculerCapaciteCreneau`, qui met la capacité restante à
+          // zéro sans toucher aux commandes déjà prises.
+          bloque: fermesCeJour.has(cr.id),
           count: duJour[cr.id]?.count || 0,
           temps_cumul: duJour[cr.id]?.temps || 0,
         }))
@@ -1878,8 +1897,11 @@ export default function CommanderSlug() {
     if (commercant && creneaux.length > 0) {
       buildJoursDispos(commercant, creneaux, fermetures, chargeCreneaux, blocagesCreneaux)
     }
+  // ⚠️ `blocagesCreneaux` EST DANS LES DÉPENDANCES, et il doit y rester : sans
+  // lui, le calendrier gardait son calcul d'avant et ignorait les créneaux
+  // fermés arrivés entre-temps. Troisième maillon de la même chaîne.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
-  }, [commercant, creneaux, fermetures, chargeCreneaux])
+  }, [commercant, creneaux, fermetures, chargeCreneaux, blocagesCreneaux])
 
   // ─── FIX STOCK SYNC : charger les commandes du jour sélectionné ─────────────
   // Récupère les quantités déjà commandées par article pour le jour sélectionné

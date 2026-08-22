@@ -7,6 +7,7 @@
 
 import { readFileSync } from 'node:fs'
 import { retourArriereAutorise, alerteAutreOnglet, travailEnAttente, indexBlocages, appliquerBlocage, etatCreneau } from '../lib/tableau-de-bord.js'
+import { calculerCapaciteCreneau } from '../lib/creneaux.js'
 
 let ok = 0
 const echecs = []
@@ -201,6 +202,31 @@ const verifie = (nom, cond, detail = '') => {
     etatCreneau(ferme) !== etatCreneau({ complet: true, utiliseEff: 5 }))
   verifie('un créneau vide est « Libre »', etatCreneau({ utiliseEff: 0 }) === 'Libre')
   verifie('un créneau entamé a « De la place »', etatCreneau({ utiliseEff: 1 }) === 'De la place')
+
+  // ⚠️ CÔTÉ YOPPER, UN CRÉNEAU FERMÉ EST UN CRÉNEAU COMPLET (Alex, 23/08).
+  // La règle descend dans le calcul de capacité : la fiche n'a rien à savoir
+  // des blocages, elle lit `complet` comme pour n'importe quel créneau plein.
+  // C'est aussi ce qui garantit que les deux écrans ne divergeront pas.
+  const capFermee = calculerCapaciteCreneau({ max_commandes: 5, count: 2, bloque: true })
+  verifie('🔴 un créneau fermé se rend COMPLET au client', capFermee.complet === true)
+  verifie('🔴 sans effacer les commandes déjà prises', capFermee.utiliseEff === 2, String(capFermee.utiliseEff))
+  verifie('et sans laisser une seule place', capFermee.places === 0, String(capFermee.places))
+  verifie('« dernière place » ne s\'affiche pas dessus',
+    capFermee.bientot === false && capFermee.presque === false)
+
+  const capOuverte = calculerCapaciteCreneau({ max_commandes: 5, count: 2 })
+  verifie('un créneau sans drapeau reste ouvert',
+    capOuverte.complet === false && capOuverte.bloque === false)
+  // ⚠️ LE DÉFAUT DOIT ÊTRE SÛR : les tournées de livraison passent par la même
+  // fonction sans jamais connaître les blocages, qui ne valent que pour le
+  // retrait. Une absence, ou toute valeur qui n'est pas exactement `true`, ne
+  // doit fermer rien du tout (reference_deux_formes_absence).
+  verifie('un drapeau absent ne ferme rien',
+    calculerCapaciteCreneau({ max_commandes: 5, count: 0, bloque: undefined }).complet === false)
+  verifie('un drapeau nul non plus',
+    calculerCapaciteCreneau({ max_commandes: 5, count: 0, bloque: null }).complet === false)
+  verifie('et une valeur qui n\'est pas `true` non plus',
+    calculerCapaciteCreneau({ max_commandes: 5, count: 0, bloque: 'non' }).complet === false)
 }
 
 // ═══ 5) 🔴 LA BARRIÈRE EST SERVEUR, PAS ÉCRAN ════════════════════════════
@@ -236,8 +262,36 @@ const verifie = (nom, cond, detail = '') => {
   verifie('et il ne lit que l\'existence du blocage', /\.select\('id'\)/.test(bloc))
 
   const fiche = readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8')
-  verifie('la fiche ne propose plus un créneau fermé', /!fermesCeJour\.has\(cr\.id\)/.test(fiche))
-  verifie('et elle le filtre PAR JOUR', /=== jourISO/.test(fiche))
+  // ⚠️ IL S'AFFICHE COMPLET, IL NE DISPARAÎT PLUS (Alex, 23/08, après essai) :
+  // un créneau retiré de la grille est indiscernable d'un créneau qui n'a
+  // jamais existé, et le client en conclut que le commerce n'ouvre pas.
+  verifie('la fiche MARQUE le créneau fermé', /bloque: fermesCeJour\.has\(cr\.id\)/.test(fiche))
+  verifie('🔴 et elle ne le retire plus de la grille',
+    !/filter\(cr => !fermesCeJour\.has/.test(fiche), 'le créneau redisparaîtrait')
+  verifie('et elle le marque PAR JOUR', /=== jourISO/.test(fiche))
+
+  // ⚠️ LES TROIS MAILLONS DU BRANCHEMENT, ET C'EST LÀ QUE LE DÉFAUT VIVAIT.
+  // Le filtre était juste, testé, et parfaitement INERTE : les blocages étaient
+  // lus en base, rangés dans le cache, et l'état ne les recevait jamais. La
+  // garde d'avant vérifiait la PIÈCE, pas son BRANCHEMENT — c'est Alex qui l'a
+  // vu à l'écran (reference_colonne_absente_du_select).
+  verifie('🔴 les blocages lus en base arrivent dans l\'état',
+    /setBlocagesCreneaux\(data\.blocagesCreneaux \|\| \[\]\)/.test(fiche),
+    'l\'état resterait vide, le marquage serait inerte')
+  verifie('🔴 et ils sont passés EN CLAIR au premier calcul',
+    /buildJoursDispos\(data\.commercant, data\.creneaux, data\.fermetures, data\.chargeCreneaux \|\| \{\}, data\.blocagesCreneaux \|\| \[\]\)/.test(fiche),
+    'setState ne vaut qu\'au rendu suivant, le calcul lirait l\'ancien tableau vide')
+  verifie('🔴 et le calendrier se recalcule quand ils changent',
+    /\}, \[commercant, creneaux, fermetures, chargeCreneaux, blocagesCreneaux\]\)/.test(fiche),
+    'le calendrier garderait son calcul d\'avant')
+
+  // ⚠️ SÉCURITÉ : `creneaux_blocages` est lisible par `anon` (la policy large
+  // est la seule qui marche pour la fiche publique). Le `motif` est une note
+  // que le commerçant écrit POUR LUI — « je suis débordé », « je pars tôt ».
+  // La fiche ne doit demander que ce dont elle a besoin.
+  verifie('la fiche ne rapatrie PAS le motif interne du commerçant',
+    /from\('creneaux_blocages'\)\.select\('creneau_id, date_blocage'\)/.test(fiche),
+    'le motif partirait dans le navigateur du client')
 
   const dash = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
   const bascule = dash.slice(dash.indexOf('async function basculerBlocageCreneau'), dash.indexOf('async function annulerRemise'))

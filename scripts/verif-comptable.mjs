@@ -14,7 +14,7 @@
 
 import { readFileSync, readdirSync } from 'node:fs'
 import { ventiler, tauxFraisLivraison, cleTaux, libelleTaux, tauxPourArticle, TAUX_NON_RENSEIGNE, REGIME_EMPORTER } from '../lib/tva.js'
-import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal, csvDetail, montantStripe, sommeStripe } from '../lib/export-comptable.js'
+import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal, csvDetail, montantStripe, sommeStripe, arrondi } from '../lib/export-comptable.js'
 import { calculerRemiseBon, normaliserCodeBon, genererCodeBon, bonExpire, BON_MONTANT_MIN, BON_MONTANT_MAX } from '../lib/bons-cadeaux.js'
 import { brusselsInstant } from '../lib/timezone.js'
 
@@ -499,6 +499,114 @@ const [ligneCmdEnLigne] = construireLignes({
 // en base : sans cette garde, un montant payé par Stripe se retrouverait dans
 // le comptage de caisse du commerçant.
 egal('une vente en ligne n’emporte aucun moyen de comptoir', ligneCmdEnLigne.modeEncaissement, null)
+
+// ═══ CE QUI EST EN CAISSE, ET CE QUI NE L'EST PAS ═════════════════════════
+//
+// ⚠️ 🔴 QUESTION D'ALEX, 23/08 : « est-ce que la transaction se met à jour dans
+// la compta ? » Non. « Encaisse au comptoir » portait le total de TOUTE
+// commande non payée en ligne, quel que soit son statut — en préparation,
+// prête, et même JAMAIS RETIRÉE. Le journal affirmait un encaissement qui
+// n'avait pas eu lieu.
+//
+// ⚠️ ET LE BANC N'A RIEN VU PARCE QUE TOUS SES JEUX D'ESSAI PORTAIENT UN
+// MOYEN. Le cas « pas encore encaissée » n'était couvert nulle part : c'est
+// exactement pour ça que le défaut a vécu (reference_tests_faussement_verts).
+{
+  const cmd = (extra) => ({ id: 'x', numero_commande: 1, statut: 'recupere', total: 24.5,
+    mode_retrait: 'boutique', commande_articles: [], ...extra })
+
+  const [pasEncaissee] = construireLignes({ commandes: [cmd({ paye_en_ligne: false })], tauxDefaut: 21 })
+  egal('🔴 une commande pas encore encaissée n’est PAS dans la caisse', pasEncaissee.comptoir, 0)
+  egal('🔴 son montant passe en « reste à encaisser »', pasEncaissee.resteAEncaisser, 24.5)
+  egal('mais elle reste au journal, la vente existe', pasEncaissee.total, 24.5)
+
+  const [encaissee] = construireLignes({ commandes: [cmd({ paye_en_ligne: false, encaisse_mode: 'terminal' })], tauxDefaut: 21 })
+  egal('une commande encaissée entre bien en caisse', encaissee.comptoir, 24.5)
+  egal('et il ne reste rien dessus', encaissee.resteAEncaisser, 0)
+
+  // ⚠️ `rien` EST UNE RÉPONSE, PAS UN MOYEN : le client est venu et n'a pas
+  // payé. L'argent n'est pas entré, la caisse ne doit pas le prétendre.
+  const [impayee] = construireLignes({ commandes: [cmd({ paye_en_ligne: false, encaisse_mode: 'rien' })], tauxDefaut: 21 })
+  egal('🔴 un impayé assumé n’entre pas en caisse', impayee.comptoir, 0)
+  egal('et il reste dû', impayee.resteAEncaisser, 24.5)
+
+  // ⚠️ UNE COMMANDE JAMAIS RETIRÉE COMPTAIT COMME DE L'ARGENT DANS LE TIROIR.
+  const [jamaisRetiree] = construireLignes({ commandes: [cmd({ statut: 'non_retire', paye_en_ligne: false })], tauxDefaut: 21 })
+  egal('🔴 une commande jamais retirée n’est pas de l’argent encaissé', jamaisRetiree.comptoir, 0)
+  // ⚠️ MAIS SI ELLE ÉTAIT PAYÉE EN LIGNE, L'ARGENT EST BIEN CHEZ STRIPE : on ne
+  // la retire pas du journal, sans quoi un encaissement RÉEL disparaîtrait.
+  const [nonRetireeWeb] = construireLignes({ commandes: [cmd({ statut: 'non_retire', paye_en_ligne: true })], tauxDefaut: 21 })
+  egal('une non retirée payée en ligne garde son encaissement', nonRetireeWeb.enLigne, 24.5)
+  egal('et rien ne reste à encaisser dessus', nonRetireeWeb.resteAEncaisser, 0)
+
+  // Un bon cadeau a déjà été payé à son achat : il ne reste pas dû.
+  const [avecBon] = construireLignes({
+    commandes: [cmd({ total: 30, bon_cadeau_montant: 10, paye_en_ligne: false })], tauxDefaut: 21 })
+  egal('le bon cadeau se déduit de ce qui reste dû', avecBon.resteAEncaisser, 20)
+
+  // ⚠️ L'ÉQUATION QUI FERME LE COMPTE, et la raison d'être de la colonne
+  // (arbitrage d'Alex) : sans elle, le CA ne s'expliquerait plus par ses
+  // colonnes de règlement et l'écart ne serait dit NULLE PART.
+  const jourMele = journalParJour(construireLignes({
+    commandes: [
+      cmd({ id: 'a', paye_en_ligne: true, total: 24 }),
+      cmd({ id: 'b', paye_en_ligne: false, encaisse_mode: 'especes', total: 16 }),
+      cmd({ id: 'c', paye_en_ligne: false, total: 24 }),
+      cmd({ id: 'd', paye_en_ligne: false, total: 30, bon_cadeau_montant: 30 }),
+    ],
+    tauxDefaut: 21,
+  }))[0]
+  egal('🔴 CA = en ligne + comptoir + bon cadeau + reste à encaisser',
+    arrondi(jourMele.enLigne + jourMele.comptoir + jourMele.bonCadeau + jourMele.resteAEncaisser),
+    jourMele.total)
+  egal('le reste à encaisser du jour se cumule', jourMele.resteAEncaisser, 24)
+
+  // ⚠️ CHAQUE LIGNE DOIT PORTER LE CHAMP. Le regroupement replie une absence
+  // sur zéro pour ne jamais écrire `NaN` dans un document comptable : c'est
+  // donc au BANC d'attraper l'oubli, pas au comptable.
+  const toutesLignes = construireLignes({
+    commandes: [cmd({ paye_en_ligne: false })],
+    rdvs: [
+      { id: 'r1', statut: 'honore', date_rdv: '2026-08-20', tva_taux: 21,
+        encaisse_mode: 'especes', encaisse_montant: 15, encaisse_le: '2026-08-20T11:05:00.000Z' },
+      { id: 'r2', statut: 'honore', date_rdv: '2026-08-20', tva_taux: 21,
+        acompte_montant: 10, acompte_paye: true, acompte_paye_en_ligne: true },
+    ],
+    abonnements: [{ id: 'a1', prix: 300, paye: true, paye_le: '2026-08-20', mode_paiement: 'especes', tva_taux: 21 }],
+    tauxDefaut: 21,
+  })
+  verifier('les quatre sortes de lignes sont bien produites', toutesLignes.length === 4, String(toutesLignes.length))
+  verifier('🔴 chaque ligne du journal porte « reste à encaisser »',
+    toutesLignes.every(l => typeof l.resteAEncaisser === 'number'),
+    toutesLignes.map(l => `${l.type}:${l.resteAEncaisser}`).join(' · '))
+
+  // Et la colonne arrive jusqu'aux deux fichiers, en-tête ET total.
+  const cs = { commercant: { nom: 'X' }, du: '2026-08-01', au: '2026-08-31' }
+  const journalCsv = csvJournal({ jours: journalParJour(toutesLignes), lignes: toutesLignes, ...cs })
+  verifier('le journal annonce la colonne', /Reste a encaisser/.test(journalCsv))
+  verifier('le journal la remplit jusqu\'au TOTAL',
+    journalCsv.split('\r\n').some(l => l.startsWith('TOTAL') && /24,50/.test(l)), 'le total ne porte pas le reste dû')
+  const detailCsv = csvDetail({ lignes: toutesLignes, ...cs })
+  verifier('le détail annonce la colonne', /Reste a encaisser/.test(detailCsv))
+  verifier('et il la remplit ligne à ligne', /24,50/.test(detailCsv))
+
+  // ⚠️ ET L'ÉCRAN AVEC, SINON IL MENTIRAIT LÀ OÙ LE FICHIER DIT VRAI. C'est
+  // l'erreur exacte commise le matin même sur les créneaux fermés : la règle
+  // juste, testée, et JAMAIS BRANCHÉE à l'écran. L'aperçu de Comptabilité
+  // recalcule ses propres totaux à partir du journal.
+  const ecran = readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8')
+  verifier('🔴 l’aperçu Comptabilité cumule le reste à encaisser',
+    /resteAEncaisser: acc\.resteAEncaisser \+ \(j\.resteAEncaisser \|\| 0\)/.test(ecran),
+    'l’écran perdrait la part non encaissée')
+  verifier('et son cumul part de zéro', /comptoir: 0, resteAEncaisser: 0,/.test(ecran))
+  verifier('🔴 et il l’AFFICHE au commerçant',
+    /l: 'Reste à encaisser', v: eur\(totaux\.resteAEncaisser\)/.test(ecran),
+    'le chiffre serait calculé puis jeté, comme les frais Stripe avant le 19/08')
+  // Elle ne s'affiche que s'il y a quelque chose à dire : un commerce 100 % en
+  // ligne n'a pas besoin de lire un zéro de plus.
+  verifier('mais seulement s’il reste vraiment quelque chose',
+    /totaux\.resteAEncaisser > 0 \?/.test(ecran))
+}
 
 // Les abonnements inscrits à la main : `mode_paiement` porte désormais le moyen.
 const [ligneAboEspeces] = construireLignes({

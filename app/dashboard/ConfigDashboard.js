@@ -9871,6 +9871,11 @@ function TabComptabilite({ commercantId, toast }) {
     total: acc.total + j.total,
     enLigne: acc.enLigne + j.enLigne,
     comptoir: acc.comptoir + j.comptoir,
+    // ⚠️ SANS LUI, L'ÉCRAN AURAIT MENTI LÀ OÙ LE FICHIER DIT VRAI. Depuis que
+    // « au comptoir » ne porte que ce qui a été RÉELLEMENT relevé, le chiffre
+    // TTC ne s'explique plus par ses colonnes de règlement : il manquerait
+    // toujours la part pas encore encaissée, sans que rien ne le dise.
+    resteAEncaisser: acc.resteAEncaisser + (j.resteAEncaisser || 0),
     terminal: acc.terminal + (j.terminal || 0),
     especes: acc.especes + (j.especes || 0),
     virement: acc.virement + (j.virement || 0),
@@ -9882,7 +9887,7 @@ function TabComptabilite({ commercantId, toast }) {
     // un total complet.
     fraisStripe: acc.fraisStripe == null || j.fraisStripe == null ? null : acc.fraisStripe + j.fraisStripe,
     netStripe: acc.netStripe == null || j.netStripe == null ? null : acc.netStripe + j.netStripe,
-  }), { nb: 0, total: 0, enLigne: 0, comptoir: 0, terminal: 0, especes: 0, virement: 0, bonCadeau: 0, fraisStripe: 0, netStripe: 0 })
+  }), { nb: 0, total: 0, enLigne: 0, comptoir: 0, resteAEncaisser: 0, terminal: 0, especes: 0, virement: 0, bonCadeau: 0, fraisStripe: 0, netStripe: 0 })
 
   // Ventilation cumulée par taux, pour l'aperçu à l'écran.
   const parTaux = {}
@@ -9972,6 +9977,12 @@ function TabComptabilite({ commercantId, toast }) {
               ...(totaux.especes > 0 ? [{ l: 'Dont espèces', v: eur(totaux.especes) }] : []),
               ...(totaux.virement > 0 ? [{ l: 'Dont virement', v: eur(totaux.virement) }] : []),
               { l: 'Bons cadeaux', v: eur(totaux.bonCadeau) },
+              // ⚠️ CE QUI N'EST PAS ENCORE RENTRÉ, et ce n'est pas une colonne
+              // de plus « pour faire complet » : c'est elle qui ferme le compte.
+              // Chiffre TTC = en ligne + au comptoir + bons cadeaux + celle-ci.
+              // Sans elle, le commerçant chercherait un écart que rien
+              // n'expliquerait. Affichée seulement s'il y a quelque chose à dire.
+              ...(totaux.resteAEncaisser > 0 ? [{ l: 'Reste à encaisser', v: eur(totaux.resteAEncaisser) }] : []),
               // ⚠️ CE QUE L'ENCAISSEMENT EN LIGNE COÛTE. Le montant existait
               // depuis toujours dans le fichier ; il n'était simplement affiché
               // nulle part, et un commerçant qui ne voit pas ses frais croit

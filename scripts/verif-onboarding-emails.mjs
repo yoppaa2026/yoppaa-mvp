@@ -361,6 +361,100 @@ const PHASE = avantLancement()
     /Authorization: `Bearer \$\{s\?\.access_token/.test(signup))
 }
 
+// ═══ 🔴 AUCUN TEXTE TIERS N'ENTRE BRUT DANS UN EMAIL (22/08) ══════════════
+//
+// ⚠️ LA FAILLE : 73 interpolations de texte écrit par QUELQU'UN D'AUTRE
+// entraient brutes dans le HTML des emails. Un email se construit par
+// CONCATÉNATION DE CHAÎNES : React ne protège rien ici, contrairement aux
+// écrans. Et le destinataire est souvent l'autre partie.
+//
+//   • `commercant_nom` (33 fois) : écrit par le commerçant, lu par le Yopper.
+//     Un commerce nommé `<a href="…">Cliquez ici</a>` faisait partir un lien
+//     depuis un email Yoppaa authentique, signé DKIM et SPF, vers TOUS ses
+//     clients. Même famille que le relais de courrier ouvert du 21/08.
+//   • `yopper_prenom` (22 fois) : écrit par le client, lu par le commerçant.
+//
+// ⚠️ ET LE REMÈDE EXISTAIT DÉJÀ DANS CE FICHIER depuis le 21/08. Je l'avais
+// posé sur SIX points, ceux où l'audit m'avait mené, sans chercher les frères.
+// C'est la règle du 20/08 appliquée à moitié : une amélioration s'applique
+// PARTOUT (feedback_appliquer_partout).
+//
+// ⚠️ CETTE GARDE COMPTE, ELLE NE CHERCHE PAS. Vérifier « echapperHtml est
+// utilisé » resterait vert avec soixante-douze trous à côté. Elle recense
+// TOUTES les interpolations de champs tiers et exige ZÉRO non échappée, hors
+// les exceptions NOMMÉES ci-dessous. Une nouvelle la fait rougir.
+{
+  const brut = readFileSync(new URL('../lib/resend.js', import.meta.url), 'utf8')
+  const lignes = brut.split(/\r?\n/)
+
+  // Champs remplis hors de notre contrôle : un client, un commerçant, un admin.
+  const TIERS = [
+    'adresse_livraison', 'note_livraison', 'client_nom', 'client_prenom',
+    'yopper_prenom', 'yopper_nom', 'commercant_nom', 'commercant_adresse',
+    'expedition_suivi', 'article_nom', 'nom_client', 'notes_client',
+    'client_email', 'motif', 'commune', 'message',
+  ]
+
+  // ⚠️ CHAQUE EXCEPTION PORTE SA RAISON. Sans raison écrite, elle n'a rien à
+  // faire ici : c'est ainsi qu'une liste d'exceptions devient une passoire.
+  const ASSUMEES = [
+    {
+      motif: /encodeURIComponent\(/,
+      raison: 'déjà encodé pour une URL Google Maps ; encodeURIComponent échappe les guillemets et les chevrons, on ne peut pas sortir de l\'attribut href. L\'échapper en plus casserait le lien.',
+    },
+    {
+      motif: /^\$\{[a-z_.]+ \?/,
+      raison: 'condition d\'un ternaire : elle ne produit aucune sortie, seule la branche compte, et la branche est échappée.',
+    },
+    {
+      motif: /blocBonCadeau\(\{/,
+      raison: 'passage d\'objet à une fonction, pas une interpolation HTML ; `blocBonCadeau` échappe `commercant_nom` chez lui.',
+    },
+  ]
+
+  const nus = []
+  const excusees = []
+  lignes.forEach((ligne, i) => {
+    const nu = ligne.trim()
+    if (nu.startsWith('//') || nu.startsWith('*') || nu.startsWith('/*')) return
+    for (const bout of ligne.match(/\$\{[^}]*\}/g) || []) {
+      if (bout.includes('echapperHtml')) continue
+      if (!TIERS.some(c => new RegExp('\\b' + c + '\\b').test(bout))) continue
+      if (ASSUMEES.some(a => a.motif.test(bout))) { excusees.push(`ligne ${i + 1} : ${bout}`); continue }
+      nus.push(`ligne ${i + 1} : ${bout}`)
+    }
+  })
+
+  verifier('aucun texte tiers n\'entre brut dans le HTML d\'un email',
+    nus.length === 0, nus.join(' | '))
+
+  // ⚠️ ET ON COMPTE LES EXCUSÉES, MESURÉ PAR MUTATION. En élargissant une
+  // exception à `/./`, TOUTES les interpolations devenaient excusées et la
+  // garde ci-dessus restait VERTE sur un fichier entièrement rouvert. Une
+  // liste d'exceptions non comptée est une passoire, et c'est exactement la
+  // raison pour laquelle `sonde-gardes-api` exige une RAISON ÉCRITE par route.
+  //
+  // Quatre, et on sait lesquelles : deux `encodeURIComponent` pour Google Maps,
+  // une condition de ternaire, un passage d'objet à `blocBonCadeau`.
+  verifier('exactement quatre exceptions, et pas une de plus',
+    excusees.length === 4, `${excusees.length} : ${excusees.join(' | ')}`)
+
+  // ⚠️ ET LA GARDE ELLE-MÊME DOIT AVOIR QUELQUE CHOSE À COMPTER. Si le recensement
+  // ne trouve plus AUCUNE interpolation de champ tiers, c'est que le motif ne
+  // reconnaît plus rien, et le zéro ci-dessus ne prouverait plus rien du tout.
+  const total = lignes.reduce((n, l) => n + (l.match(/\$\{[^}]*\}/g) || [])
+    .filter(b => TIERS.some(c => new RegExp('\\b' + c + '\\b').test(b))).length, 0)
+  verifier('le recensement trouve bien des champs tiers à juger', total >= 50, `${total} trouvés`)
+
+  // La fonction d'échappement fait ce qu'elle dit, EXÉCUTÉE.
+  verifier('les chevrons sont neutralisés', echapperHtml('<a href="x">') === '&lt;a href=&quot;x&quot;&gt;')
+  verifier('l\'esperluette d\'abord', echapperHtml('&lt;') === '&amp;lt;')
+  verifier('l\'apostrophe aussi', echapperHtml("l'ami") === 'l&#39;ami')
+  // ⚠️ Rend '' et non 'null' : c'est ce qui permet `${echapperHtml(x) || '—'}`
+  // de garder son repli.
+  verifier('une absence rend une chaîne vide', echapperHtml(null) === '' && echapperHtml(undefined) === '')
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 console.log(`Phase lue : ${PHASE ? 'avant' : 'après'} l'ouverture du ${OUVERTURE}.`)
 if (ko > 0) {

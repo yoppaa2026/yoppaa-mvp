@@ -14,7 +14,7 @@
 
 import { readFileSync, readdirSync } from 'node:fs'
 import { ventiler, tauxFraisLivraison, cleTaux, libelleTaux, tauxPourArticle, TAUX_NON_RENSEIGNE, REGIME_EMPORTER } from '../lib/tva.js'
-import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal, csvDetail, montantStripe, sommeStripe, arrondi } from '../lib/export-comptable.js'
+import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal, csvDetail, montantStripe, sommeStripe, arrondi, referencesNonQualifiees } from '../lib/export-comptable.js'
 import { calculerRemiseBon, normaliserCodeBon, genererCodeBon, bonExpire, BON_MONTANT_MIN, BON_MONTANT_MAX } from '../lib/bons-cadeaux.js'
 import { brusselsInstant } from '../lib/timezone.js'
 
@@ -629,6 +629,55 @@ egal('une vente en ligne n’emporte aucun moyen de comptoir', ligneCmdEnLigne.m
     verifier('une ligne sans heure passe en dernier dans sa journée',
       (avecVide[0].heure || '') !== '' && (avecVide[1].heure || '') === '',
       avecVide.map(l => `${l.type}:${l.heure || '—'}`).join(' · '))
+  }
+
+  // ⚠️ 🔴 UNE RÉFÉRENCE SANS SA SEMAINE PEUT SE RÉPÉTER, ET LE FICHIER LE DIT.
+  // Alex, 23/08 : sur son export, la référence « 1 » figure DEUX FOIS. Le
+  // compteur repart à 1 chaque semaine, et une commande d'avant la
+  // numérotation qualifiée n'a ni préfixe ni semaine pour la distinguer.
+  //
+  // ⚠️ ON NE RÉÉCRIT PAS CES RÉFÉRENCES : inventer une forme dans un document
+  // comptable serait pire que le problème. On COMPTE et on NOMME, comme
+  // l'export le fait déjà pour les taux manquants.
+  {
+    const cmd = (extra) => ({ id: 'abcdef1234', statut: 'recupere', total: 10, mode_retrait: 'boutique',
+      paye_en_ligne: true, commande_articles: [], date_commande: '2026-08-10', ...extra })
+    const [vieille] = construireLignes({ commandes: [cmd({ numero_commande: 1 })], tauxDefaut: 21 })
+    verifier('🔴 une référence sans semaine est marquée incomplète', vieille.referenceIncomplete === true)
+    const [neuve] = construireLignes({
+      commandes: [cmd({ numero_commande: 4, numero_prefixe: 'CC', numero_semaine: '2026-33' })], tauxDefaut: 21 })
+    verifier('une référence qualifiée ne l’est pas', neuve.referenceIncomplete === false, neuve.reference)
+    egal('et elle porte bien sa semaine', neuve.reference, 'CC4-2026-S33')
+
+    // ⚠️ UN PRÉFIXE SANS SEMAINE NE SUFFIT PAS : « CC4 » se répète lui aussi
+    // d'une semaine à l'autre. C'est la SEMAINE qui lève l'ambiguïté.
+    const [prefixeSeul] = construireLignes({
+      commandes: [cmd({ numero_commande: 4, numero_prefixe: 'CC' })], tauxDefaut: 21 })
+    verifier('🔴 un préfixe sans semaine reste incomplet', prefixeSeul.referenceIncomplete === true, prefixeSeul.reference)
+
+    const lignesMelees = construireLignes({
+      commandes: [cmd({ numero_commande: 1 }), cmd({ id: 'x', numero_commande: 4, numero_prefixe: 'CC', numero_semaine: '2026-33' })],
+      tauxDefaut: 21,
+    })
+    egal('le compte des références incomplètes est juste', referencesNonQualifiees(lignesMelees), 1)
+    verifier('aucune ligne, aucun compte', referencesNonQualifiees([]) === 0)
+
+    // ⚠️ ET L'AVERTISSEMENT SORT DANS LES DEUX FICHIERS, avec son NOMBRE : un
+    // « attention » sans chiffre ne dit pas s'il faut regarder une ligne ou
+    // cinquante (feedback_tout_traiter_jamais_amateur).
+    const cs = { commercant: { nom: 'X' }, du: '2026-08-01', au: '2026-08-31' }
+    for (const [nom, csv] of [
+      ['le journal', csvJournal({ jours: journalParJour(lignesMelees), lignes: lignesMelees, ...cs })],
+      ['le détail', csvDetail({ lignes: lignesMelees, ...cs })],
+    ]) {
+      verifier(`${nom} annonce les références incomplètes`, /1 transaction anterieure/.test(csv))
+    }
+    // Rien à signaler quand tout est qualifié : un avertissement permanent ne
+    // se lit plus.
+    const propres = construireLignes({
+      commandes: [cmd({ numero_commande: 4, numero_prefixe: 'CC', numero_semaine: '2026-33' })], tauxDefaut: 21 })
+    verifier('et il se tait quand tout est qualifié',
+      !/transaction anterieure/.test(csvDetail({ lignes: propres, ...cs })))
   }
 
   // ⚠️ ET L'ÉCRAN AVEC, SINON IL MENTIRAIT LÀ OÙ LE FICHIER DIT VRAI. C'est

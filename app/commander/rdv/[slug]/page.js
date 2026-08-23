@@ -52,6 +52,7 @@ import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import HorairesSection from '../../HorairesSection'
 import CarteFideliteFiche from '../../CarteFideliteFiche'
 import BonCadeauModal from '../../BonCadeauModal'
+import BandeAutourDeToi from '@/app/components/BandeAutourDeToi'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 import BlocAbonnements from './BlocAbonnements'
 import ConfirmationAbonnement from './ConfirmationAbonnement'
@@ -2350,6 +2351,14 @@ export default function CommanderRdvSlug() {
                   </button>
                 </div>
               )}
+
+              {/* ⚠️ LE FRÈRE DE LA FICHE BOUTIQUE. Un coiffeur, un kiné ou un
+                  club de yoga sont des commerces VITRINE : leur fiche, c'est
+                  CELLE-CI. Poser la bande d'un seul côté aurait laissé la
+                  moitié des Yoppers sans jamais découvrir la commune entière.
+                  Étape 1 uniquement : pendant le choix d'un créneau, on ne
+                  propose pas de partir ailleurs. */}
+              {etape === 1 && <BandeAutourDeToi onVoir={() => router.push('/commander')}/>}
 
               {/* ─── ÉTAPE 2 - CALENDRIER + SLOTS CRÉNEAUX ─── */}
               {etape === 2 && prestationChoisie && (

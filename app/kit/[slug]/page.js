@@ -7,6 +7,7 @@ import QRCode from 'qrcode'
 import { createClient } from '@supabase/supabase-js'
 import KitClient from './KitClient'
 import { avantLancement } from '@/lib/lancement'
+import { consigneGoogle } from '@/lib/action-google'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,11 +26,16 @@ async function getKit(slug) {
 
   let nom = null
   let commune = null
+  // Le geste que Google pourra proposer : il dépend de la formule ET de la
+  // catégorie, donc les deux colonnes doivent être ici. ⚠️ Une colonne absente
+  // d'un select ne lève aucune erreur : la consigne disparaîtrait en silence.
+  let consigne = null
 
   // 1) Commerçant onboardé (commercants.slug) — cas au lancement + tests (ex. kebabistro).
-  const { data: com } = await supabase.from('commercants').select('nom').eq('slug', slug).maybeSingle()
+  const { data: com } = await supabase.from('commercants').select('nom, slug, plan, categorie').eq('slug', slug).maybeSingle()
   if (com) {
     nom = com.nom
+    consigne = consigneGoogle(com)
   } else {
     // 2) Commerçant préinscrit (pre_inscriptions.slug_kit) — phase teasing.
     const { data: pi } = await supabase
@@ -51,7 +57,7 @@ async function getKit(slug) {
     .select('id', { count: 'exact', head: true })
     .eq('ref_commercant', slug)
 
-  return { nom, commune, impact: count || 0 }
+  return { nom, commune, impact: count || 0, consigne }
 }
 
 export default async function KitPage({ params }) {
@@ -74,5 +80,5 @@ export default async function KitPage({ params }) {
     qr = await QRCode.toDataURL(lien, { margin: 1, width: 520, color: { dark: '#1A0840', light: '#FFFFFF' } })
   } catch { qr = null }
 
-  return <KitClient slug={slug} kit={kit} lien={lien} qr={qr} />
+  return <KitClient slug={slug} kit={kit} lien={lien} qr={qr} consigne={kit?.consigne || null} />
 }

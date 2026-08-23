@@ -8,6 +8,8 @@
 import { cache } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { echapperJsonLd } from '@/lib/seo-landing'
+import { AVIS_MINIMUM_POUR_MOYENNE } from '@/lib/avis-affichage'
+import { potentialActionJsonLd } from '@/lib/action-google'
 
 const BASE_URL = 'https://www.yoppaa.app'
 const OG_FALLBACK = `${BASE_URL}/icon-512.png`
@@ -25,7 +27,11 @@ const getCommercant = cache(async (slug) => {
     )
     const { data } = await supabase
       .from('commercants_public')
-      .select('id, nom, description, logo_url, adresse, slug, type, categorie, telephone, latitude, longitude')
+      // ⚠️ `plan` EST INDISPENSABLE au balisage : sans lui, on déclarerait
+      // « on commande ici » pour un commerce du palier Exister, qui n'a pas de
+      // panier. Une colonne absente d'un select ne lève aucune erreur, elle
+      // fait juste mentir la page.
+      .select('id, nom, description, logo_url, adresse, slug, type, categorie, telephone, latitude, longitude, plan')
       .eq('slug', slug)
       .maybeSingle()
     return data
@@ -46,6 +52,11 @@ const getAvisAgg = cache(async (commercantId) => {
     )
     const { data } = await supabase.from('avis_public').select('note').eq('commercant_id', commercantId)
     if (!data || data.length === 0) return null
+    // ⚠️ MÊME SEUIL QUE L'ÉCRAN (lib/avis-affichage.js). Sans lui, la fiche
+    // affichait « 1 avis » sans moyenne pendant que le balisage annonçait
+    // « 4,0 sur 5 » à Google : deux vérités pour le même commerce, et c'est la
+    // version Google qui finit dans les résultats de recherche.
+    if (data.length < AVIS_MINIMUM_POUR_MOYENNE) return null
     const moyenne = data.reduce((acc, a) => acc + (a.note || 0), 0) / data.length
     return { moyenne: Math.round(moyenne * 10) / 10, count: data.length }
   } catch {
@@ -108,6 +119,10 @@ export default async function CommercantLayout({ children, params }) {
     ...(c.adresse ? { address: { '@type': 'PostalAddress', streetAddress: c.adresse, addressCountry: 'BE' } } : {}),
     ...(c.latitude && c.longitude ? { geo: { '@type': 'GeoCoordinates', latitude: c.latitude, longitude: c.longitude } } : {}),
     ...(avis ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: avis.moyenne, reviewCount: avis.count, bestRating: 5, worstRating: 1 } } : {}),
+    // Le geste transactionnel déclaré aux moteurs : « on commande ici », ou
+    // « on prend rendez-vous ici », et RIEN si le commerçant ne peut ni l'un ni
+    // l'autre. C'est ce que Google lit pour proposer un bouton d'action.
+    ...potentialActionJsonLd(c),
   } : null
   return (
     <>

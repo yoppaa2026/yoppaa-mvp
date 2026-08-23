@@ -10,6 +10,8 @@ import { estRemiseSurProduit } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement } from '@/lib/lancement'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
+import { consigneGoogle } from '@/lib/action-google'
+import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
 import { capacitePrestation } from '@/lib/cours-collectifs'
@@ -2385,10 +2387,11 @@ function TabActus({ commercantId, commercant, toast }) {
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({
     titre: '', contenu: '', contenu_long: '', type: 'actu', date_debut: today, date_fin: '', actif: true,
-    photo_url: '', inclus_gmy: false,
+    photo_url: '', inclus_gmy: false, article_id: '',
   })
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [articlesLiables, setArticlesLiables] = useState([])
   // Propositions IA pour l'accroche : le commerçant choisit puis peut modifier
   const [propsIa, setPropsIa] = useState([])
   const firstLoadRef = useRef(true)
@@ -2414,6 +2417,25 @@ function TabActus({ commercantId, commercant, toast }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchActus() }, [commercantId])
 
+  // Les articles qu'une actualité peut désigner (bloc E, 24/08).
+  //
+  // ⚠️ ON NE PROPOSE QUE LES SIENS, ET QUE LES ACTIFS. La base refuse de toute
+  // façon l'article d'un autre commerçant (déclencheur
+  // `trg_actualite_article_meme_commercant`), mais un écran qui laisse choisir
+  // ce qui va être refusé fabrique une erreur incompréhensible : la garde de
+  // base protège, elle n'explique pas.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- même politique que fetchActus juste au-dessus
+  useEffect(() => { fetchArticlesLiables() }, [commercantId])
+
+  async function fetchArticlesLiables() {
+    const { data } = await supabase.from('articles')
+      .select('id, nom, actif, est_vitrine')
+      .eq('commercant_id', commercantId)
+      .eq('actif', true)
+      .order('nom')
+    setArticlesLiables(data || [])
+  }
+
   async function fetchActus() {
     if (firstLoadRef.current) setLoading(true)
     const { data } = await supabase.from('actualites')
@@ -2426,7 +2448,7 @@ function TabActus({ commercantId, commercant, toast }) {
 
   function openNew() {
     setForm({ titre: '', contenu: '', contenu_long: '', type: 'actu', date_debut: today, date_fin: '', actif: true,
-      photo_url: '', inclus_gmy: false })
+      photo_url: '', inclus_gmy: false, article_id: '' })
     setPropsIa([])
     setEditId(null); setShowForm(true)
   }
@@ -2441,6 +2463,7 @@ function TabActus({ commercantId, commercant, toast }) {
       actif: a.actif !== false,
       photo_url: a.photo_url || '',
       inclus_gmy: !!a.inclus_gmy,
+      article_id: a.article_id || '',
     })
     setPropsIa([])
     setEditId(a.id); setShowForm(true)
@@ -2499,6 +2522,10 @@ function TabActus({ commercantId, commercant, toast }) {
       actif: !!form.actif,
       photo_url: form.photo_url || null,
       inclus_gmy: !!form.inclus_gmy,
+      // Chaine vide = AUCUN article. ⚠️ Une chaine vide n'est PAS null pour
+      // Postgres : envoyee telle quelle sur une colonne uuid, elle leve une
+      // erreur de syntaxe. Les deux formes de l'absence, encore.
+      article_id: form.article_id || null,
     }
     const { data, error } = editId
       ? await supabase.from('actualites').update(payload).eq('id', editId).select()
@@ -2633,6 +2660,32 @@ function TabActus({ commercantId, commercant, toast }) {
               <div style={{ minWidth: 0 }}><label style={s.label}>Date fin</label><Input type="date" value={form.date_fin} min={form.date_debut} onChange={e => setForm(p => ({ ...p, date_fin: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' }}/></div>
             </div>
             <p style={{ fontSize: 10, color: T.muted, margin: '4px 0 0' }}>Date fin vide = pas d&rsquo;échéance (l&rsquo;actu reste affichée jusqu&rsquo;à désactivation).</p>
+
+            {/* ─── L'ARTICLE DONT PARLE L'ACTUALITÉ ────────────────────────
+                ⚠️ C'EST CE CHAÎNON QUI REND LE FIL ACHETABLE. Sans lui, tu
+                annonces tes nouvelles pralines et le client qui en veut doit
+                refermer ton actu, rouvrir ton catalogue et les retrouver.
+
+                Le champ ne s'affiche QUE si le commerçant a des articles
+                actifs : proposer une liste vide serait annoncer une
+                fonctionnalité qu'on ne peut pas rendre. */}
+            {articlesLiables.length > 0 && (
+              <div>
+                <label style={s.label}>Article concerné (facultatif)</label>
+                <select value={form.article_id}
+                  onChange={e => setForm(p => ({ ...p, article_id: e.target.value }))}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.ink, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+                  <option value="">Aucun article</option>
+                  {articlesLiables.map(a => (
+                    <option key={a.id} value={a.id}>{a.nom}</option>
+                  ))}
+                </select>
+                <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
+                  Un bouton &laquo;&nbsp;Voir&nbsp;&raquo; apparaît sous ton actualité et mène droit à l&rsquo;article.
+                  Si tu le désactives plus tard, le bouton disparaît tout seul&nbsp;: ton actualité, elle, reste.
+                </p>
+              </div>
+            )}
 
             {/* Inclure dans Good Morning Yoppers. Exister limite a 1/semaine
                 calendaire. Communiquer / Vendre : illimite cote UI. */}
@@ -5994,6 +6047,9 @@ function QRCodeSection({ commercantId, toast }) {
   const [nomCommerce, setNomCommerce] = useState('')
   const [loading, setLoading]     = useState(true)
   const [qrDataUrl, setQrDataUrl] = useState(null)
+  // Ce que le commerçant doit coller dans sa fiche Google, ou null s’il n’a
+  // aucun geste transactionnel à proposer (palier Exister).
+  const [consigneG, setConsigneG] = useState(null)
   const [envoiKit, setEnvoiKit]   = useState(false)
   // ⚠️ LE BLANC PAR DÉFAUT, et c'est un choix. Un aplat violet en A4 vide une
   // cartouche par affiche et sort strié sur la plupart des imprimantes de
@@ -6044,8 +6100,12 @@ function QRCodeSection({ commercantId, toast }) {
   useEffect(() => {
     async function fetchSlug() {
       setLoading(true)
-      const { data } = await supabase.from('commercants').select('slug, nom').eq('id', commercantId).single()
-      if (data) { setSlug(data.slug); setNomCommerce(data.nom || '') }
+      // ⚠️ `plan` ET `categorie` SONT INDISPENSABLES : la consigne Google dépend
+      // des deux (commander ou prendre rendez-vous, et seulement si la formule
+      // l'autorise). Une colonne absente d'un select ne lève aucune erreur : la
+      // consigne aurait simplement disparu sans un mot.
+      const { data } = await supabase.from('commercants').select('slug, nom, plan, categorie').eq('id', commercantId).single()
+      if (data) { setSlug(data.slug); setNomCommerce(data.nom || ''); setConsigneG(consigneGoogle(data)) }
       setLoading(false)
     }
     fetchSlug()
@@ -6186,6 +6246,21 @@ function QRCodeSection({ commercantId, toast }) {
       <p style={{ fontSize: 10.5, color: T.muted, marginBottom: 16, lineHeight: 1.5 }}>
         Le PDF garde ses dimensions à l&rsquo;impression. Ouvre-le, puis imprime depuis ton lecteur habituel.
       </p>
+
+      {/* ─── LA FICHE GOOGLE ──────────────────────────────────────
+          ⚠️ DEMANDE D'ALEX (24/08). L'affiche touche ceux qui passent devant la
+          vitrine ; la fiche Google touche ceux qui CHERCHENT. Coller ce lien
+          dans son profil Google lui donne un bouton de commande dans la
+          Recherche et dans Maps, en deux minutes et sans nous.
+
+          ⚠️ ET C'EST LE FRÈRE DE LA PAGE DE KIT : le MÊME composant des deux
+          côtés, comme l'affiche depuis le 23/08. Deux consignes recopiées
+          auraient divergé au premier changement de libellé chez Google. */}
+      {consigneG && (
+        <div style={{ marginBottom: 16 }}>
+          <ConsigneGoogle consigne={consigneG}/>
+        </div>
+      )}
 
       {/* Le reste du kit : lien tracké, messages prêts à coller. */}
       <div style={{ borderTop: `1px solid ${T.hairline}`, paddingTop: 14 }}>

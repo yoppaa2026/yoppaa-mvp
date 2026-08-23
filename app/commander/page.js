@@ -14,6 +14,9 @@ import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@
 import { libelleOptions } from '@/lib/options-ligne'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import { canDo, bandeauCategorie } from '@/lib/plans'
+// Une note sans son nombre d'avis ne dit rien, et cinq étoiles vides se lisent
+// comme un zéro. La règle vit en fonction pure et testée.
+import { resumeAvis } from '@/lib/avis-affichage'
 import { STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
 import { statutCreneaux, pastilleCreneaux, jourPlus } from '@/lib/statut-commerce'
 import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
@@ -837,9 +840,13 @@ function PillPaiementClient({ commande, taille = 'normal' }) {
   )
 }
 
-function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetures, dealsActifs, actusActives, bonnesAffairesActives, onSelect, onToggleFavori }) {
+function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetures, dealsActifs, actusActives, bonnesAffairesActives, onSelect, onToggleFavori, onPartager }) {
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
+  // ⚠️ Sous 3 avis on ne montre PAS de moyenne : « 5,0 » sur un seul avis se lit
+  // comme une réputation alors que c'est du bruit, et cinq étoiles vides à côté
+  // de « Pas encore d'avis » se lisaient comme un ZÉRO pour un commerce neuf.
+  const resumeNote = resumeAvis(noteInfo || {})
   const info = statutsCommerce[c.id]
   const fermeturesDuCommerce = fermetures?.[c.id] || []
   const bonneAffaire = bonnesAffairesActives?.has(c.id) || false
@@ -985,6 +992,34 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
         )}
       </div>
 
+      {/* Partage du commerce, à GAUCHE du cœur. Un Yopper qui trouve son
+          boucher n'a aujourd'hui aucun moyen de l'envoyer à quelqu'un sans
+          ouvrir la fiche : le geste est le même que celui du cœur, il doit
+          être au même endroit. ⚠️ stopPropagation, sinon la carte s'ouvre. */}
+      <button onClick={e => onPartager?.(c, e)}
+        aria-label={`Partager ${c.nom}`}
+        style={{
+          position: 'absolute', top: 32, right: 44, zIndex: 2,
+          background: 'rgba(255,255,255,0.92)',
+          border: 'none',
+          cursor: 'pointer', padding: 6,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'transform 0.15s, box-shadow 0.15s',
+          borderRadius: '50%',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.10)',
+        }}
+        onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,8,64,0.22)' }}
+        onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.10)' }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.deep}
+          strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="18" cy="5" r="3"/>
+          <circle cx="6" cy="12" r="3"/>
+          <circle cx="18" cy="19" r="3"/>
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+        </svg>
+      </button>
+
       {/* Bouton favori en absolute coin haut droit de la vignette photo.
           Pattern UX standard TGTG/Airbnb : cœur outline → rempli rouge si favori.
           Cohérent avec la fiche détail commerçant (memo UX 2026-06-12). */}
@@ -1017,9 +1052,14 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
               <p style={{ fontWeight: 900, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.3px', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 32 }}>{c.nom}</p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <Etoiles note={noteInfo?.moyenne || 0} taille={11}/>
-              <span style={{ fontSize: '0.68rem', color: noteInfo?.count > 0 ? T.muted : '#D1D5DB' }}>
-                {noteInfo?.count > 0 ? `${noteInfo.count} avis` : 'Pas encore d\'avis'}
+              {resumeNote.montreMoyenne && (
+                <>
+                  <Etoiles note={noteInfo?.moyenne || 0} taille={11}/>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: T.ink }}>{resumeNote.moyenne}</span>
+                </>
+              )}
+              <span style={{ fontSize: '0.68rem', color: resumeNote.aDesAvis ? T.muted : '#D1D5DB' }}>
+                {resumeNote.libelleNombre}
               </span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6, alignItems: 'center' }}>
@@ -1394,6 +1434,27 @@ export default function Commander() {
     const texte = 'Découvre Yoppaa, ton quartier dans ta poche : commande et réserve chez tes commerçants locaux.'
     try {
       if (navigator.share) { await navigator.share({ title: 'Yoppaa', text: texte, url }); return }
+      await navigator.clipboard.writeText(url)
+      showToast({ type: 'success', msg: 'Lien copié, partage-le autour de toi !' })
+    } catch { /* partage annulé par l'utilisateur : silencieux */ }
+  }
+
+  // Partage d'UN commerce depuis sa carte d'accueil. Même mécanique que le
+  // partage de l'app : Web Share natif, repli sur la copie du lien.
+  //
+  // ⚠️ LE LIEN PASSE TOUJOURS PAR /commander/<slug>, jamais par /commander/rdv/.
+  // Vérifié : la fiche redirige elle-même un commerce vitrine vers sa page RDV
+  // (app/commander/[slug]/page.js, `router.replace` sur categorie === 'vitrine').
+  // Une seule forme de lien à maintenir, et c'est EXACTEMENT celle que le QR du
+  // kit média imprime déjà : un lien partagé et un lien imprimé qui divergent,
+  // c'est deux règles à corriger le jour où la route change.
+  async function partagerCommerce(c, e) {
+    e?.stopPropagation?.()
+    if (!c?.slug) return
+    const url = `https://www.yoppaa.app/commander/${encodeURIComponent(c.slug)}`
+    const texte = `${c.nom} est sur Yoppaa, ton quartier dans ta poche.`
+    try {
+      if (navigator.share) { await navigator.share({ title: c.nom, text: texte, url }); return }
       await navigator.clipboard.writeText(url)
       showToast({ type: 'success', msg: 'Lien copié, partage-le autour de toi !' })
     } catch { /* partage annulé par l'utilisateur : silencieux */ }
@@ -3001,7 +3062,7 @@ export default function Commander() {
                 </div>
               ) : (
                 <div className="commerces-grid">
-                  {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
+                  {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} onPartager={partagerCommerce}/>)}
                 </div>
               )}
 
@@ -3837,7 +3898,7 @@ export default function Commander() {
                       </p>
                     ) : (
                       <div className="commerces-grid" style={{ marginTop: 4 }}>
-                        {commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori}/>)}
+                        {commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} onPartager={partagerCommerce}/>)}
                       </div>
                     )}
                   </div>

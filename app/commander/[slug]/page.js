@@ -87,6 +87,10 @@ import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 import CTAUpgrade from '../CTAUpgrade'
 import ModalSignalement from '../ModalSignalement'
 import HorairesSection from '../HorairesSection'
+import BandeAutourDeToi from '@/app/components/BandeAutourDeToi'
+// ⚠️ DEMANDE D'ALEX : les avis se consultent, ils ne s'imposent pas. Une note
+// globale, et le Yopper choisit s'il veut lire. La règle vit en fonction pure.
+import { resumeAvis, libelleBascule } from '@/lib/avis-affichage'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Star, Flame, Calendar, Store, Check, Phone, Heart, Share2 } from 'lucide-react'
 
@@ -1040,6 +1044,10 @@ export default function CommanderSlug() {
   const [blocagesCreneaux, setBlocagesCreneaux] = useState([])
   const [avisCommerce, setAvisCommerce] = useState([])
   const [notesInfo, setNotesInfo] = useState({ moyenne: 0, count: 0 })
+  // Les avis restent REPLIÉS par défaut : seize avis dépliés poussaient le
+  // panier et les créneaux hors de l'écran, et un commerce qui a bien travaillé
+  // se retrouvait puni par son propre succès.
+  const [avisDeplies, setAvisDeplies] = useState(false)
   const [panier, setPanier] = useState({})
   const [creneauChoisi, setCreneauChoisi] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -1278,6 +1286,9 @@ export default function CommanderSlug() {
   // évaluée AVANT sa déclaration : zone morte temporelle, et page blanche au
   // rendu. Le défaut est invisible au lint comme au build (vécu le 09/08).
   const estDetail = commercant?.categorie === 'detail' || commercant?.categorie === 'vitrine'
+  // Ce qu'on ose dire des avis : la moyenne seulement si elle repose sur assez
+  // d'avis, le nombre TOUJOURS (une note sans son nombre ne veut rien dire).
+  const resumeNotes = resumeAvis(notesInfo)
   const boutiqueModes = estDetail
     ? (commercant?.boutique_mode_vente === 'les_deux' ? ['retrait', 'expedition'] : [commercant?.boutique_mode_vente || 'retrait'])
     : []
@@ -2988,8 +2999,38 @@ export default function CommanderSlug() {
                     }
                   </p>
                 )}
+                {/* ─── L'ARTICLE DÉSIGNÉ PAR L'ACTUALITÉ ────────────────────
+                    ⚠️ CE BOUTON EST TOUTE LA RAISON D'ÊTRE DU FIL. Sans lui,
+                    le commerçant annonce « nos nouvelles pralines sont
+                    arrivées » et le Yopper qui a envie d'en acheter doit
+                    refermer l'actualité, rouvrir le catalogue et retrouver
+                    l'article à la main. Presque personne ne le fait.
+
+                    ⚠️ ET ON NE L'AFFICHE QUE SI L'ARTICLE EST RÉELLEMENT LÀ.
+                    Le commerçant a pu le désactiver depuis, ou le retirer de la
+                    vente : un bouton qui ne mène à rien est pire que pas de
+                    bouton. On cherche donc dans le catalogue CHARGÉ, jamais sur
+                    la seule foi de l'identifiant. */}
+                {(() => {
+                  const cible = actuDetailOuverte.article_id
+                    ? (articles || []).find(a => a.id === actuDetailOuverte.article_id)
+                    : null
+                  if (!cible) return null
+                  return (
+                    <button onClick={() => { setActuDetailOuverte(null); setArticleDetail(cible) }}
+                      style={{ width: '100%', marginTop: 14, padding: '0.8rem 1rem', borderRadius: 14, border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, fontWeight: 800, fontSize: '0.88rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, textAlign: 'left' }}>
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        Voir&nbsp;: {cible.nom}
+                      </span>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <path d="M9 6l6 6-6 6"/>
+                      </svg>
+                    </button>
+                  )
+                })()}
+
                 <button onClick={() => setActuDetailOuverte(null)}
-                  style={{ width: '100%', marginTop: 14, padding: '0.875rem', border: 'none', borderRadius: 100, background: isAlerte ? 'linear-gradient(135deg, #DC2626, #B91C1C)' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: isAlerte ? '0 4px 16px rgba(220,38,38,0.55)' : `0 4px 16px ${T.main}55` }}>
+                  style={{ width: '100%', marginTop: 10, padding: '0.875rem', border: 'none', borderRadius: 100, background: isAlerte ? 'linear-gradient(135deg, #DC2626, #B91C1C)' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: isAlerte ? '0 4px 16px rgba(220,38,38,0.55)' : `0 4px 16px ${T.main}55` }}>
                   Compris
                 </button>
               </div>
@@ -3227,13 +3268,21 @@ export default function CommanderSlug() {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                    {/* ⚠️ Sous 3 avis, PAS de moyenne : « 5,0 » sur un seul avis
+                        se lit comme une réputation alors que c'est du bruit, et
+                        cinq étoiles vides à côté de « Pas encore d'avis » se
+                        lisaient comme un ZÉRO sur une fiche toute neuve. */}
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Etoiles note={notesInfo.moyenne} taille={13}/>
-                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: T.ink }}>
-                        {notesInfo.moyenne > 0 ? notesInfo.moyenne.toFixed(1) : '-'}
-                      </span>
+                      {resumeNotes.montreMoyenne && (
+                        <>
+                          <Etoiles note={notesInfo.moyenne} taille={13}/>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: T.ink }}>
+                            {resumeNotes.moyenne}
+                          </span>
+                        </>
+                      )}
                       <span style={{ fontSize: '0.72rem', color: T.muted }}>
-                        {notesInfo.count > 0 ? `· ${notesInfo.count} avis` : '· Pas encore d\'avis'}
+                        {resumeNotes.montreMoyenne ? `· ${resumeNotes.libelleNombre}` : resumeNotes.libelleNombre}
                       </span>
                     </div>
                     {/* Statut d'ouverture en TEMPS RÉEL (même logique que les cards
@@ -3676,13 +3725,47 @@ export default function CommanderSlug() {
 
                 {avisCommerce.length > 0 && (
                   <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: `1px solid ${T.pale}` }}>
-                    <h3 style={{ fontWeight: 800, fontSize: '1rem', color: T.deep, marginBottom: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/>
-                      </svg>
-                      Avis clients
-                    </h3>
-                    {avisCommerce.map(a => <CarteAvis key={a.id} a={a}/>)}
+                    {/* ⚠️ REPLIÉ PAR DÉFAUT (demande d'Alex) : la note globale
+                        tient sur une ligne, et le Yopper décide s'il veut lire.
+                        Le bouton dit le GESTE (« Lire les 12 avis », « Masquer »),
+                        jamais l'état. */}
+                    <button onClick={() => setAvisDeplies(d => !d)}
+                      aria-expanded={avisDeplies}
+                      style={{
+                        width: '100%', background: 'none', border: 'none', padding: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        gap: 10, cursor: 'pointer', textAlign: 'left',
+                      }}>
+                      <span style={{ fontWeight: 800, fontSize: '1rem', color: T.deep, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/>
+                        </svg>
+                        Avis clients
+                        {resumeNotes.montreMoyenne && (
+                          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: T.main }}>{resumeNotes.moyenne}</span>
+                        )}
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.78rem', fontWeight: 700, color: T.main, flexShrink: 0 }}>
+                        {libelleBascule(resumeNotes, avisDeplies)}
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"
+                          style={{ transition: 'transform 0.2s', transform: avisDeplies ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                          <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                      </span>
+                    </button>
+                    {avisDeplies && (
+                      <div style={{ marginTop: '0.75rem' }}>
+                        {avisCommerce.map(a => <CarteAvis key={a.id} a={a}/>)}
+                        {/* Un élément écarté se montre AVEC SA RAISON : la fiche
+                            ne charge que les 10 derniers avis, il faut le dire
+                            plutôt que de laisser croire qu'il n'y a que ça. */}
+                        {notesInfo.count > avisCommerce.length && (
+                          <p style={{ fontSize: '0.72rem', color: T.muted, margin: '4px 2px 0' }}>
+                            Les {avisCommerce.length} avis les plus récents, sur {notesInfo.count} au total.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -3761,6 +3844,15 @@ export default function CommanderSlug() {
                     </button>
                   </div>
                 )}
+
+                {/* ─── « Tous les commerces autour de toi » ──────────────────
+                    Beaucoup de Yoppers arrivent ici SANS passer par l'accueil :
+                    un QR sur une vitrine, un lien reçu par message. Ils voient
+                    un commerce et repartent, sans jamais apprendre que Yoppaa
+                    porte toute la commune. La bande dit le concept là où il a
+                    de la valeur, à la fin de la fiche, une fois la commande
+                    faite ou le catalogue lu, jamais avant le panier. */}
+                <BandeAutourDeToi onVoir={() => router.push('/commander')}/>
 
                 {/* Lien discret de signalement en bas de fiche */}
                 <div style={{ marginTop: 28, padding: '0 0 12px', textAlign: 'center' }}>

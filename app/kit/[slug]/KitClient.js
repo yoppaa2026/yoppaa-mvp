@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { avantLancement, libelleLancement } from '@/lib/lancement'
 import { telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
+import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 
 const T = {
   bgTop: '#160636', deep: '#2D0F6B', ink: '#1A0840',
@@ -90,7 +91,7 @@ function IconCopy() {
   )
 }
 
-export default function KitClient({ slug, kit, lien, qr }) {
+export default function KitClient({ slug, kit, lien, qr, consigne = null }) {
   const [copie, setCopie] = useState(null)
   // Le blanc par défaut : c'est celui qu'un commerçant imprime lui-même sans
   // vider une cartouche par affiche.
@@ -272,6 +273,18 @@ export default function KitClient({ slug, kit, lien, qr }) {
             {erreurTelechargement && (
               <p style={{ margin: '10px 0 0', fontSize: '0.72rem', color: '#FCA5A5', fontWeight: 600 }}>{erreurTelechargement}</p>
             )}
+          </div>
+        )}
+
+        {/* ─── LA FICHE GOOGLE ────────────────────────────────────────────
+            ⚠️ DEMANDE D'ALEX (24/08). L'affiche touche ceux qui passent devant
+            la vitrine ; la fiche Google touche ceux qui CHERCHENT. Coller ce
+            lien dans son profil Google lui donne un bouton de commande dans la
+            Recherche et dans Maps, en deux minutes et sans nous. Le seul
+            obstacle, c'etait que personne ne le lui avait dit. */}
+        {consigne && (
+          <div style={{ marginBottom: 16 }}>
+            <ConsigneGoogle consigne={consigne} sombre/>
           </div>
         )}
 

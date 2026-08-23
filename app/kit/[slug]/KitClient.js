@@ -5,6 +5,7 @@
 
 import { useState } from 'react'
 import { avantLancement, libelleLancement } from '@/lib/lancement'
+import { telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 
 const T = {
@@ -91,6 +92,30 @@ function IconCopy() {
 
 export default function KitClient({ slug, kit, lien, qr }) {
   const [copie, setCopie] = useState(null)
+  // Le blanc par défaut : c'est celui qu'un commerçant imprime lui-même sans
+  // vider une cartouche par affiche.
+  const [fondClair, setFondClair] = useState(true)
+  const [enCours, setEnCours] = useState(null)
+  const [erreurTelechargement, setErreurTelechargement] = useState(null)
+
+  // ⚠️ UN ÉCHEC SE DIT. Le téléchargement compose un canvas et charge une
+  // police : si quelque chose casse, un bouton qui ne fait rien laisse le
+  // commerçant cliquer trois fois sans comprendre.
+  async function telecharger(quoi) {
+    if (enCours) return
+    setEnCours(quoi); setErreurTelechargement(null)
+    try {
+      const commun = { qrDataUrl: qr, nomCommerce: kit?.nom || '', clair: fondClair, slug }
+      const fait = quoi === 'png'
+        ? await telechargerAffichePng(commun)
+        : await telechargerAffichePdf({ ...commun, format: quoi })
+      if (!fait) setErreurTelechargement('Le QR n’est pas prêt, recharge la page.')
+    } catch (e) {
+      console.error('[kit] téléchargement affiche', e)
+      setErreurTelechargement('Téléchargement impossible, réessaie.')
+    }
+    setEnCours(null)
+  }
 
   async function copier(texte, cle) {
     try { await navigator.clipboard.writeText(texte); setCopie(cle); setTimeout(() => setCopie(null), 2200) } catch { /* clipboard indispo */ }
@@ -193,26 +218,60 @@ export default function KitClient({ slug, kit, lien, qr }) {
           <p style={{ margin: '8px 0 0', fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)' }}>Il ouvre ta page, là où l&apos;on commande chez toi.</p>
         </div>
 
-        {/* QR code */}
+        {/* ⚠️ 🔴 C'EST L'AFFICHE QUI SE TÉLÉCHARGE, PLUS LE QR NU (Alex, 23/08 :
+            « il faut juste mettre le même visuel à télécharger dans le kit, pas
+            le QR en solo comme maintenant »).
+
+            Cette page ne proposait qu'un carré noir et blanc, sans logo, sans
+            nom de commerce et sans accroche. Le commerçant le collait tel quel
+            en vitrine : rien n'y disait ce qu'on scanne, ni chez qui.
+
+            ⚠️ ET C'EST LE MÊME DESSIN QUE LE TABLEAU DE BORD, pas une copie :
+            `lib/affiche-kit.js` le produit pour les deux. Deux visuels destinés
+            au même mur auraient divergé au premier réglage. */}
         {qr && (
           <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: 16, marginBottom: 16, textAlign: 'center' }}>
-            <p style={{ margin: '0 0 12px', fontSize: '0.8rem', fontWeight: 800, color: '#fff' }}>Ton QR code (à mettre en vitrine)</p>
-            { }
+            <p style={{ margin: '0 0 12px', fontSize: '0.8rem', fontWeight: 800, color: '#fff' }}>Ton affiche de vitrine</p>
+
             {/* display block + marges auto : un reset global qui passe les
                 images en block les collerait à gauche malgré le text-align. */}
-            <img decoding="async" loading="lazy" src={qr} alt="QR code Yoppaa" style={{ width: 200, height: 200, borderRadius: 12, background: '#fff', padding: 8, display: 'block', margin: '0 auto' }}/>
+            <img decoding="async" loading="lazy" src={qr} alt="QR code Yoppaa" style={{ width: 170, height: 170, borderRadius: 12, background: '#fff', padding: 8, display: 'block', margin: '0 auto' }}/>
             {/* ⚠️ PLUS DE PHRASE À DEUX VERSIONS : le scan fait la même chose
                 aujourd'hui et dans six mois, et un QR imprimé ne se rattrape
                 pas. Il disait « chaque scan inscrit un habitant » tant qu'on
                 était avant le 1er octobre. */}
-            <p style={{ margin: '10px 0 0', fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
-              Affiche-le en vitrine : un scan et le client arrive sur ta page, prêt à commander.
+            <p style={{ margin: '10px 0 14px', fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
+              Affiche-la en vitrine : un scan et le client arrive sur ta page, prêt à commander.
             </p>
-            <div style={{ marginTop: 12 }}>
-              <a href={qr} download={`yoppaa-qr-${slug}.png`} style={{ ...btnBase, background: 'rgba(255,255,255,0.12)', color: '#fff', textDecoration: 'none' }}>
-                Télécharger le QR
-              </a>
+
+            {/* Le fond, au choix : le blanc s'imprime chez soi sans vider une
+                cartouche, le violet se remarque de loin. */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              {[{ clair: true, label: 'Fond blanc' }, { clair: false, label: 'Fond violet' }].map(o => (
+                <button key={o.label} onClick={() => setFondClair(o.clair)}
+                  style={{ ...btnBase, flex: 1, background: fondClair === o.clair ? '#fff' : 'rgba(255,255,255,0.10)', color: fondClair === o.clair ? T.main : '#fff' }}>
+                  {o.label}
+                </button>
+              ))}
             </div>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => telecharger('png')} disabled={!!enCours}
+                style={{ ...btnBase, flex: '1 1 100%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff' }}>
+                {enCours === 'png' ? 'Préparation…' : 'Télécharger en PNG'}
+              </button>
+              <button onClick={() => telecharger('A5')} disabled={!!enCours}
+                style={{ ...btnBase, flex: 1, background: 'rgba(255,255,255,0.12)', color: '#fff' }}>
+                {enCours === 'A5' ? '…' : 'PDF A5'}
+              </button>
+              <button onClick={() => telecharger('A4')} disabled={!!enCours}
+                style={{ ...btnBase, flex: 1, background: 'rgba(255,255,255,0.12)', color: '#fff' }}>
+                {enCours === 'A4' ? '…' : 'PDF A4'}
+              </button>
+            </div>
+            {erreurTelechargement && (
+              <p style={{ margin: '10px 0 0', fontSize: '0.72rem', color: '#FCA5A5', fontWeight: 600 }}>{erreurTelechargement}</p>
+            )}
           </div>
         )}
 

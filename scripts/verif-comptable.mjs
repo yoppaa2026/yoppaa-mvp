@@ -590,6 +590,47 @@ egal('une vente en ligne n’emporte aucun moyen de comptoir', ligneCmdEnLigne.m
   verifier('le détail annonce la colonne', /Reste a encaisser/.test(detailCsv))
   verifier('et il la remplit ligne à ligne', /24,50/.test(detailCsv))
 
+  // ⚠️ 🔴 LE DÉTAIL SE TRIE PAR DATE **ET PAR HEURE**, ET RIEN NE LE VÉRIFIAIT.
+  // Alex l'a vu sur son export du 23/08 : 15:29, 15:30, 15:34, puis 14:55 dans
+  // la même journée. Le tri s'arrêtait à la date.
+  //
+  // ⚠️ ET CE N'EST PAS COSMÉTIQUE : un comptable qui recoupe le relevé d'un
+  // terminal — horodaté à la minute — remonte les lignes une à une. Un ordre
+  // approximatif lui fait refaire le travail à la main.
+  {
+    const aHeure = (h, id) => ({ id, numero_commande: 1, statut: 'recupere', total: 10,
+      mode_retrait: 'boutique', paye_en_ligne: true, commande_articles: [],
+      date_commande: '2026-08-10', created_at: `2026-08-10T${h}:00.000Z` })
+    const ordre = construireLignes({
+      commandes: [aHeure('15:29', 'a'), aHeure('12:55', 'b'), aHeure('15:34', 'c'), aHeure('09:05', 'd')],
+      tauxDefaut: 21,
+    }).map(l => l.heure)
+    verifier('🔴 le détail est trié par heure dans la journée',
+      ordre.join(' ') === [...ordre].sort().join(' '), ordre.join(' · '))
+
+    // Les jours restent premiers : l'heure ne trie qu'à l'intérieur d'un jour.
+    const jours = construireLignes({
+      commandes: [
+        { ...aHeure('08:00', 'x'), date_commande: '2026-08-12' },
+        { ...aHeure('23:00', 'y'), date_commande: '2026-08-11' },
+      ],
+      tauxDefaut: 21,
+    }).map(l => l.date)
+    verifier('et la date passe avant l’heure', jours.join(' ') === '2026-08-11 2026-08-12', jours.join(' · '))
+
+    // ⚠️ UNE HEURE PEUT MANQUER — une ligne d'abonnement n'en a pas. Les vides
+    // passent en DERNIER dans la journée plutôt que de remonter en tête par
+    // hasard, ce qui les mettrait avant des écritures réellement horodatées.
+    const avecVide = construireLignes({
+      commandes: [aHeure('14:00', 'p')],
+      abonnements: [{ id: 'a1', prix: 50, paye: true, paye_le: '2026-08-10', mode_paiement: 'especes', tva_taux: 21 }],
+      tauxDefaut: 21,
+    })
+    verifier('une ligne sans heure passe en dernier dans sa journée',
+      (avecVide[0].heure || '') !== '' && (avecVide[1].heure || '') === '',
+      avecVide.map(l => `${l.type}:${l.heure || '—'}`).join(' · '))
+  }
+
   // ⚠️ ET L'ÉCRAN AVEC, SINON IL MENTIRAIT LÀ OÙ LE FICHIER DIT VRAI. C'est
   // l'erreur exacte commise le matin même sur les créneaux fermés : la règle
   // juste, testée, et JAMAIS BRANCHÉE à l'écran. L'aperçu de Comptabilité

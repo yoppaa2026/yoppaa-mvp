@@ -9,7 +9,7 @@ import { normaliserCodeBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-
 import { estRemiseSurProduit } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement } from '@/lib/lancement'
-import { LOGO, proportionsLogo, pointsLogo, largeurPoints } from '@/lib/logo'
+import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
 import { capacitePrestation } from '@/lib/cours-collectifs'
@@ -6037,19 +6037,9 @@ function QRCodeSection({ commercantId, toast }) {
   // le seul comportement sûr est celui qui ne dépend d'aucun calendrier.
   const preLancement = avantLancement()
   const url = slug ? `https://www.yoppaa.app/commander/${slug}` : null
-  // ⚠️ TEXTES GÉNÉRIQUES, PLUS AUCUNE DATE (Alex, 22/08). L'affiche annonçait
-  // « ON ARRIVE LE 1ER OCTOBRE » : une affiche imprimée en septembre et encore
-  // collée en vitrine en décembre disait alors quelque chose de faux, et
-  // personne ne serait allé la décoller. Une affiche qu'on n'a pas à surveiller
-  // vaut mieux qu'une affiche d'actualité.
-  //
-  // ⚠️ ELLE DIT CE QUE LE SCAN APPORTE, pas ce que Yoppaa est. Elle est lue par
-  // des gens qui ne connaissent pas la marque, debout devant une vitrine.
-  const TXT_QR = {
-    accroche: 'TOUS LES COMMERCES DE TA COMMUNE',
-    accrocheSuite: 'DANS UNE SEULE APP',
-    pied: 'yoppaa.app',
-  }
+  // Les textes de l'affiche vivent avec elle, dans `lib/affiche-kit.js`.
+  const TXT_QR = TEXTES_AFFICHE
+
 
   useEffect(() => {
     async function fetchSlug() {
@@ -6078,234 +6068,26 @@ function QRCodeSection({ commercantId, toast }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [url])
 
-  // ─── L'AFFICHE, EN APLATS ────────────────────────────────────────────────
+  // ⚠️ L'AFFICHE EST DESSINÉE PAR `lib/affiche-kit.js`, ET PLUS ICI. Alex la
+  // voulait aussi dans la page du kit (23/08 : « le même visuel à télécharger
+  // dans le kit, pas le QR en solo ») : la recopier là-bas aurait donné deux
+  // visuels destinés au même mur, qui divergeraient au premier réglage. C'est
+  // exactement ce qui venait d'arriver au logo.
   //
-  // ⚠️ PLUS UN SEUL DÉGRADÉ (Alex, 22/08 : « cela pose problème à
-  // l'impression »). Il y en avait CINQ, pas un : le fond, un halo radial
-  // derrière le QR, deux filets décoratifs et le texte de l'accroche lui-même.
-  // Une imprimante de commerce rend ces transitions en bandes, et le halo
-  // ressortait en auréole grise autour du QR.
-  //
-  // ⚠️ DEUX FONDS AU CHOIX, arbitrage d'Alex du 23/08 : le violet pour la
-  // vitrine, le blanc pour l'imprimante. Un aplat violet en A4 vide une
-  // cartouche par affiche ; ne proposer que celui-là revenait à choisir à la
-  // place du commerçant.
-  //
-  // ⚠️ ET LES PROPORTIONS DU LOGO VIENNENT DE `lib/logo.js`, comme celles du
-  // composant : ce canvas les recopiait, et deux copies finissent par diverger.
-  function paletteAffiche(clair) {
-    return clair
-      ? { fond: '#FFFFFF', wm: ['#1A0840', '#6B35C4', '#9660E0'], slogan: '#6B35C4',
-          filet: '#E2D8F4', nom: '#1A0840', accroche: '#1A0840', pied: '#9585AE', cadreQR: '#EEE9F7' }
-      : { fond: '#201044', wm: ['#FFFFFF', '#C4A0F4', '#9660E0'], slogan: '#C4A0F4',
-          filet: '#4B3178', nom: '#FFFFFF', accroche: '#FFFFFF', pied: '#A78FD0', cadreQR: null }
-  }
-
-  async function buildCompositeCanvas(clair = fondClair) {
-    const QR  = 820
-    const PAD = 56
-    const W   = QR + PAD * 2
-    const P   = paletteAffiche(clair)
-
-    // 110 px de corps : le mot occupe environ 39 % de la largeur. Assez pour
-    // être la première chose vue en vitrine, sans écraser le QR, qui est ce
-    // qu'on vient scanner.
-    const WM = 110
-    const L  = proportionsLogo(WM)
-
-    const canvas = document.createElement('canvas')
-    const mesure = canvas.getContext('2d')
-    const police = (poids, taille) => `${poids} ${taille}px "Plus Jakarta Sans", system-ui, Arial, sans-serif`
-
-    // ⚠️ LA DESCENDANTE SE MESURE, ELLE NE SE DEVINE PAS. Le composant place les
-    // points à 0,28 em sous la BOÎTE DE LIGNE ; en canvas, `fillText` pose la
-    // BASELINE. Sans cette mesure, l'écart dépendait de la police réellement
-    // chargée et changeait d'un poste à l'autre.
-    mesure.font = police(800, WM)
-    const m = mesure.measureText('yoppaa')
-    const descente = m.fontBoundingBoxDescent || m.actualBoundingBoxDescent || WM * 0.24
-    const montee = m.fontBoundingBoxAscent || WM * 0.78
-
-    // ⚠️ 🔴 AUCUN TEXTE N'ÉTAIT CONTRAINT À LA LARGEUR DE L'AFFICHE, et
-    // `fillText` ne replie ni ne rétrécit : il déborde, et le canvas coupe.
-    // « TOUS LES COMMERCES DE TA COMMUNE » en 54 px mesure plus large que la
-    // page : centrée, elle se faisait rogner DES DEUX CÔTÉS et sortait
-    // « US LES COMMERCES DE TA COMMU ». Alex l'a vu sur son PDF.
-    //
-    // ⚠️ ET CE N'ÉTAIT PAS QUE L'ACCROCHE : le nom du commerce, le slogan et le
-    // pied avaient le même défaut, silencieux tant que les textes restaient
-    // courts. « La Boulangerie du Coin de la Rue » aurait été tronquée pareil,
-    // sur l'affiche que le commerçant colle dans sa vitrine.
-    //
-    // La taille demandée est un MAXIMUM : on la réduit jusqu'à ce que le texte
-    // tienne, plutôt que de le couper.
-    const LARGEUR_UTILE = W - PAD * 2
-    const taillePourTenir = (texte, taille, poids, famille = 'DM Sans') => {
-      let t = taille
-      const mesurer = (px) => {
-        mesure.font = `${poids} ${px}px "${famille}", Arial, sans-serif`
-        return mesure.measureText(String(texte || '')).width
-      }
-      while (t > 12 && mesurer(t) > LARGEUR_UTILE) t -= 1
-      return t
-    }
-
-    // Les hauteurs, empilées de haut en bas.
-    const yWmBaseline = PAD + montee
-    const yDots       = yWmBaseline + descente + L.wordmarkToDots
-    const ySlogan     = yDots + L.dotBase + L.dotOffset + L.dotsToSlogan + L.sloganSize * 0.78
-    const yFilet      = ySlogan + 34
-    const yNom        = yFilet + 54
-    const qrY         = yNom + 34
-    const qrSz        = QR + 32
-    const yAccroche1  = qrY + qrSz + 74
-    const yAccroche2  = yAccroche1 + 62
-    const yPied       = yAccroche2 + 54
-    const H           = yPied + PAD
-
-    canvas.width = W; canvas.height = H
-    const ctx = canvas.getContext('2d')
-
-    // ── Fond UNI ──
-    ctx.fillStyle = P.fond
-    ctx.fillRect(0, 0, W, H)
-
-    // ── Wordmark : trois paires de couleurs, mesurées une à une pour garder le
-    //    tracking -0,05 em du fichier de marque. ──
-    ctx.textAlign = 'left'
-    try { ctx.letterSpacing = `${L.tracking}px` } catch { /* Safari < 17 */ }
-    ctx.font = police(800, WM)
-    const segments = [['yo', P.wm[0]], ['pp', P.wm[1]], ['aa', P.wm[2]]]
-    const largeurWm = segments.reduce((w, [t]) => w + ctx.measureText(t).width, 0)
-    let wx = W / 2 - largeurWm / 2
-    for (const [txt, couleur] of segments) {
-      ctx.fillStyle = couleur
-      ctx.fillText(txt, wx, yWmBaseline)
-      wx += ctx.measureText(txt).width
-    }
-    try { ctx.letterSpacing = '0px' } catch { /* idem */ }
-
-    // ── Les cinq points V2-B, avec LEUR décalage : il porte sur les points 2,
-    //    3 et 4, et c'est lui qui creuse le sourire. ──
-    let dx = W / 2 - largeurPoints(WM) / 2
-    pointsLogo(WM).forEach((p, i) => {
-      const r = p.diametre / 2
-      ctx.beginPath()
-      ctx.arc(dx + r, yDots + p.decalage + r, r, 0, Math.PI * 2)
-      ctx.fillStyle = P.wm[i < 1 ? 0 : i < 3 ? 1 : 2]
-      ctx.fill()
-      dx += p.diametre + L.dotGap
-    })
-
-    // ── Slogan ──
-    ctx.textAlign = 'center'
-    ctx.font = police(600, taillePourTenir(LOGO.slogan, Math.round(L.sloganSize), 600, 'Plus Jakarta Sans'))
-    ctx.fillStyle = P.slogan
-    ctx.fillText(LOGO.slogan, W / 2, ySlogan)
-
-    // ── Filet plein ──
-    ctx.strokeStyle = P.filet; ctx.lineWidth = 1.5
-    ctx.beginPath(); ctx.moveTo(PAD * 2, yFilet); ctx.lineTo(W - PAD * 2, yFilet); ctx.stroke()
-
-    // ── Nom du commerce ──
-    ctx.font = `700 ${taillePourTenir(nomCommerce, 42, 700)}px "DM Sans", Arial, sans-serif`
-    ctx.fillStyle = P.nom
-    ctx.fillText(nomCommerce, W / 2, yNom)
-
-    // ── Cadre du QR, sans ombre portée ──
-    //
-    // ⚠️ 🔴 IL ÉTAIT DÉCENTRÉ DE 32 PIXELS, et c'est arithmétique : le cadre
-    // mesure `QR + 32` mais était posé à `PAD`, si bien qu'il restait 56 px à
-    // gauche et 24 à droite. Personne ne l'aurait mesuré à l'œil, mais Alex l'a
-    // vu. On centre sur la largeur au lieu de partir de la marge.
-    const qrX = Math.round((W - qrSz) / 2)
-    const rr = 28
-    const cadre = () => {
-      ctx.beginPath()
-      ctx.moveTo(qrX + rr, qrY)
-      ctx.lineTo(qrX + qrSz - rr, qrY)
-      ctx.quadraticCurveTo(qrX + qrSz, qrY, qrX + qrSz, qrY + rr)
-      ctx.lineTo(qrX + qrSz, qrY + qrSz - rr)
-      ctx.quadraticCurveTo(qrX + qrSz, qrY + qrSz, qrX + qrSz - rr, qrY + qrSz)
-      ctx.lineTo(qrX + rr, qrY + qrSz)
-      ctx.quadraticCurveTo(qrX, qrY + qrSz, qrX, qrY + qrSz - rr)
-      ctx.lineTo(qrX, qrY + rr)
-      ctx.quadraticCurveTo(qrX, qrY, qrX + rr, qrY)
-      ctx.closePath()
-    }
-    // ⚠️ LE QR RESTE NOIR SUR BLANC quel que soit le fond : c'est la seule façon
-    // de garantir qu'un téléphone le lise du premier coup.
-    ctx.fillStyle = '#FFFFFF'; cadre(); ctx.fill()
-    if (P.cadreQR) { ctx.strokeStyle = P.cadreQR; ctx.lineWidth = 1.5; cadre(); ctx.stroke() }
-
-    const qrImg = new window.Image()
-    await new Promise(resolve => { qrImg.onload = resolve; qrImg.src = qrDataUrl })
-    ctx.drawImage(qrImg, qrX + 16, qrY + 16, QR, QR)
-
-    // ── L'accroche, sur deux lignes, en aplat ──
-    //
-    // ⚠️ LES DEUX LIGNES PARTAGENT UNE SEULE TAILLE, celle de la plus longue :
-    // les régler séparément donnerait deux corps différents pour une seule
-    // phrase, ce qui se voit immédiatement et fait bricolé.
-    const tailleAccroche = Math.min(
-      taillePourTenir(TXT_QR.accroche, 54, 900),
-      taillePourTenir(TXT_QR.accrocheSuite, 54, 900),
-    )
-    ctx.font = `900 ${tailleAccroche}px "DM Sans", Arial, sans-serif`
-    ctx.fillStyle = P.accroche
-    ctx.fillText(TXT_QR.accroche, W / 2, yAccroche1)
-    ctx.fillText(TXT_QR.accrocheSuite, W / 2, yAccroche2)
-
-    // ── Pied ──
-    ctx.font = `600 ${taillePourTenir(TXT_QR.pied, 28, 600)}px "DM Sans", Arial, sans-serif`
-    ctx.fillStyle = P.pied
-    ctx.fillText(TXT_QR.pied, W / 2, yPied)
-
-    return canvas
-  }
-
-  // ⚠️ L'IMPRESSION DIRECTE EST SUPPRIMÉE (Alex, 22/08 : « le print ne
+  // ⚠️ L'IMPRESSION DIRECTE RESTE SUPPRIMÉE (Alex, 22/08 : « le print ne
   // fonctionne pas »). Elle ouvrait un onglet peint par `document.write`, dont
-  // le rendu dépendait entièrement des réglages d'impression du poste : marges,
-  // mise à l'échelle, impression des fonds. Le commerçant obtenait une affiche
-  // rognée ou blanche sans comprendre pourquoi, et n'avait aucune prise dessus.
-  //
-  // ⚠️ ET ELLE INTERPOLAIT LE NOM DU COMMERCE DANS DU HTML BRUT, dans le
-  // `<title>` d'un document écrit à la volée : un nom contenant du balisage s'y
-  // exécutait. La portée était limitée au commerçant lui-même, mais c'était bien
-  // une injection, et elle disparaît avec la fonctionnalité.
-  //
-  // Un PNG et un PDF se contrôlent avant d'aller sur le papier, et se
-  // réimpriment sans repasser par l'application.
+  // le rendu dépendait entièrement des réglages du poste. Et elle interpolait le
+  // nom du commerce dans du HTML brut : une injection, limitée au commerçant
+  // lui-même, disparue avec la fonctionnalité.
   async function downloadPNG(clair) {
-    if (!qrDataUrl) return
-    const canvas = await buildCompositeCanvas(clair)
-    const a = document.createElement('a')
-    a.download = `yoppaa-affiche-${slug}-${clair ? 'blanc' : 'violet'}.png`
-    a.href = canvas.toDataURL('image/png')
-    a.click(); toast('PNG téléchargé')
+    const fait = await telechargerAffichePng({ qrDataUrl, nomCommerce, clair, slug })
+    toast(fait ? 'PNG téléchargé' : 'QR pas encore prêt', fait ? 'success' : 'error')
   }
 
   async function downloadPDF(format, clair) {
-    if (!qrDataUrl) return
     try {
-      const { jsPDF } = await import('jspdf')
-      const canvas  = await buildCompositeCanvas(clair)
-      const imgData = canvas.toDataURL('image/png')
-      const isA4    = format === 'A4'
-      const pdf     = new jsPDF({ orientation: 'portrait', unit: 'mm', format: format.toLowerCase() })
-      const W = pdf.internal.pageSize.getWidth()
-      const H = pdf.internal.pageSize.getHeight()
-      // ⚠️ LE FOND DE LA PAGE SUIT CELUI DE L'AFFICHE. Il était peint en violet
-      // en dur : un PDF choisi en blanc sortait avec une bordure violette tout
-      // autour, et le commerçant n'avait aucun moyen de la retirer.
-      if (clair) { pdf.setFillColor(255, 255, 255) } else { pdf.setFillColor(32, 16, 68) }
-      pdf.rect(0, 0, W, H, 'F')
-      const imgW = isA4 ? 184 : 130
-      const imgH = imgW * (canvas.height / canvas.width)
-      pdf.addImage(imgData, 'PNG', (W - imgW) / 2, (H - imgH) / 2, imgW, imgH)
-      pdf.save(`yoppaa-affiche-${slug}-${format}-${clair ? 'blanc' : 'violet'}.pdf`)
-      toast(`PDF ${format} téléchargé`)
+      const fait = await telechargerAffichePdf({ qrDataUrl, nomCommerce, clair, slug, format })
+      toast(fait ? `PDF ${format} téléchargé` : 'QR pas encore prêt', fait ? 'success' : 'error')
     } catch (e) { console.error(e); toast('Erreur PDF', 'error') }
   }
 

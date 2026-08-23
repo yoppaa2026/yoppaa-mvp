@@ -91,18 +91,21 @@ const egal = (nom, obtenu, attendu) =>
 // personne ne s'en aperçoit puisque les deux ne sont jamais côte à côte.
 {
   const composant = lire('app/components/YoppaaLogo.js')
-  const dash = lire('app/dashboard/ConfigDashboard.js')
+  // ⚠️ L'AFFICHE EST DANS SON MODULE DEPUIS LE 23/08 : ces gardes lisaient
+  // `ConfigDashboard`, où le canvas vivait. Repointées quand l'affiche a
+  // déménagé pour servir aussi la page du kit.
+  const affiche = lire('lib/affiche-kit.js')
 
   verifie('🔴 le composant lit les proportions partagées',
     /from '@\/lib\/logo'/.test(composant) && /proportionsLogo\(size\)/.test(composant))
   verifie('🔴 l\'affiche aussi',
-    /from '@\/lib\/logo'/.test(dash) && /proportionsLogo\(WM\)/.test(dash))
+    /from '\.\/logo'/.test(affiche) && /proportionsLogo\(WM\)/.test(affiche))
   verifie('et les deux posent leurs points par la même fonction',
-    /pointsLogo\(/.test(composant) && /pointsLogo\(WM\)/.test(dash))
+    /pointsLogo\(/.test(composant) && /pointsLogo\(WM\)/.test(affiche))
 
   // ⚠️ AUCUN DES DEUX NE REDÉCLARE LES RATIOS. Une garde qui vérifierait juste
   // l'import laisserait passer une recopie posée juste à côté.
-  for (const [nom, src] of [['le composant', composant], ['l\'affiche', dash]]) {
+  for (const [nom, src] of [['le composant', composant], ['l\'affiche', affiche]]) {
     verifie(`${nom} ne recalcule pas 0,254 dans son coin`,
       !/\*\s*0\.254/.test(src), 'un ratio recopié divergera')
   }
@@ -111,20 +114,23 @@ const egal = (nom, obtenu, attendu) =>
   // Sans mesurer la descendante, l'écart wordmark/points dépend de la police
   // réellement chargée et change d'un poste à l'autre.
   verifie('🔴 l\'affiche mesure la descendante au lieu de la deviner',
-    /fontBoundingBoxDescent/.test(dash), 'l\'écart varierait selon la police chargée')
+    /fontBoundingBoxDescent/.test(affiche), 'l\'écart varierait selon la police chargée')
 }
 
-// ═══ 3) 🔴 L'AFFICHE : APLATS, ET RIEN QUE DES APLATS ═════════════════════
+// ═══ 3) 🔴 L'AFFICHE : APLATS, LARGEUR TENUE, ET UNE SEULE VERSION ════════
 //
 // ⚠️ Alex, 22/08 : « Le fond doit être uni, pas de dégradé, cela pose problème
 // à l'impression. » Il y en avait CINQ : le fond, un halo radial derrière le
 // QR, deux filets et le texte de l'accroche lui-même.
+//
+// ⚠️ ET ELLE EST DESSINÉE UNE SEULE FOIS, dans `lib/affiche-kit.js`. Alex la
+// voulait aussi dans la page du kit (23/08) : la recopier là-bas aurait donné
+// deux visuels destinés au même mur, qui divergeraient au premier réglage.
 {
+  const bloc = lire('lib/affiche-kit.js')
   const dash = lire('app/dashboard/ConfigDashboard.js')
-  const i = dash.indexOf("async function buildCompositeCanvas")
-  const j = dash.indexOf('async function downloadPNG')
-  const bloc = i === -1 || j === -1 ? '' : dash.slice(i, j)
-  verifie('l\'affiche se découpe', bloc.length > 1500, String(bloc.length))
+  const kit = lire('app/kit/[slug]/KitClient.js')
+  verifie('l\'affiche vit dans son module', bloc.length > 1500, String(bloc.length))
 
   verifie('🔴 aucun dégradé linéaire dans l\'affiche', !/createLinearGradient/.test(bloc))
   verifie('🔴 aucun dégradé radial non plus', !/createRadialGradient/.test(bloc))
@@ -137,8 +143,7 @@ const egal = (nom, obtenu, attendu) =>
 
   // ⚠️ 🔴 LE QR ÉTAIT DÉCENTRÉ DE 32 PIXELS, et c'est de l'arithmétique pure :
   // le cadre mesure `QR + 32` et était posé à `PAD`, donc 56 px de marge à
-  // gauche contre 24 à droite. Alex l'a vu sur son PNG. Une garde sur la
-  // formule vaut mieux qu'un œil sur une capture.
+  // gauche contre 24 à droite. Alex l'a vu sur son PNG.
   verifie('🔴 le cadre du QR est centré sur la largeur',
     /const qrX = Math\.round\(\(W - qrSz\) \/ 2\)/.test(bloc),
     'il repartait de la marge et débordait à droite')
@@ -157,41 +162,67 @@ const egal = (nom, obtenu, attendu) =>
   // aurait été tronquée sur l'affiche collée en vitrine.
   for (const [quoi, motif] of [
     ['le nom du commerce', /taillePourTenir\(nomCommerce, 42, 700\)/],
-    ['la première ligne de l\'accroche', /taillePourTenir\(TXT_QR\.accroche, 54, 900\)/],
-    ['la seconde ligne', /taillePourTenir\(TXT_QR\.accrocheSuite, 54, 900\)/],
+    ['la première ligne de l\'accroche', /taillePourTenir\(TEXTES_AFFICHE\.accroche, 54, 900\)/],
+    ['la seconde ligne', /taillePourTenir\(TEXTES_AFFICHE\.accrocheSuite, 54, 900\)/],
     ['le slogan', /taillePourTenir\(LOGO\.slogan/],
-    ['le pied', /taillePourTenir\(TXT_QR\.pied, 28, 600\)/],
+    ['le pied', /taillePourTenir\(TEXTES_AFFICHE\.pied, 28, 600\)/],
   ]) {
     verifie(`${quoi} est contraint à la largeur`, motif.test(bloc), 'il déborderait en silence')
   }
   // ⚠️ LES DEUX LIGNES DE L'ACCROCHE PARTAGENT UNE SEULE TAILLE : réglées
   // séparément, une même phrase sortirait en deux corps différents.
   verifie('les deux lignes de l\'accroche gardent le même corps',
-    /Math\.min\(\s*taillePourTenir\(TXT_QR\.accroche/.test(bloc))
-
+    /Math\.min\(\s*taillePourTenir\(TEXTES_AFFICHE\.accroche/.test(bloc))
   // ⚠️ ET LA TAILLE CALCULÉE EST RÉELLEMENT UTILISÉE. Mesuré : en remettant un
   // corps fixe sur l'accroche, les gardes ci-dessus restaient vertes — le
   // calcul était toujours écrit, son résultat n'allait simplement plus nulle
-  // part. C'est « l'appel existe, son résultat ne sert pas », déjà rencontré le
-  // 22/08 sur la barrière serveur des créneaux.
+  // part. C'est « l'appel existe, son résultat ne sert pas ».
   verifie('🔴 et l\'accroche est vraiment dessinée à cette taille',
-    /900 \$\{tailleAccroche\}px/.test(bloc),
-    'la taille serait calculée puis jetée')
+    /900 \${tailleAccroche}px/.test(bloc), 'la taille serait calculée puis jetée')
   verifie('aucun corps fixe ne subsiste sur les textes de l\'affiche',
     !/ctx\.font = '\d00 \d+px "DM Sans"/.test(bloc),
     'un corps écrit en dur ne s\'adapte à aucun texte')
 
   // Deux fonds, et le clair doit exister : c'est celui qu'on imprime chez soi.
-  verifie('deux palettes de fond existent', /function paletteAffiche\(clair\)/.test(dash))
-  verifie('dont une blanche', /fond: '#FFFFFF'/.test(dash))
-  verifie('et une violette unie', /fond: '#201044'/.test(dash))
-  verifie('🔴 le fond par défaut est le blanc',
-    /useState\(true\)[\s\S]{0,80}?/.test(dash) && /const \[fondClair, setFondClair\] = useState\(true\)/.test(dash),
-    'un aplat violet A4 vide une cartouche par affiche')
+  verifie('deux palettes de fond existent', /export function paletteAffiche\(clair\)/.test(bloc))
+  verifie('dont une blanche', /fond: '#FFFFFF'/.test(bloc))
+  verifie('et une violette unie', /fond: '#201044'/.test(bloc))
   // ⚠️ LE PDF SUIT LE FOND CHOISI. Il peignait sa page en violet EN DUR : un
   // PDF blanc sortait cerné de violet, sans aucun moyen de l'enlever.
   verifie('🔴 le fond du PDF suit celui de l\'affiche',
-    /if \(clair\) \{ pdf\.setFillColor\(255, 255, 255\) \}/.test(dash))
+    /export function fondPdf\(clair\)/.test(bloc) && /clair \? \[255, 255, 255\]/.test(bloc))
+  // Le nom du fichier dit le fond : deux téléchargements ne s'écrasent pas.
+  verifie('🔴 le nom du fichier porte le fond',
+    /clair \? 'blanc' : 'violet'/.test(bloc))
+
+  // ⚠️ 🔴 LES DEUX ÉCRANS DESSINENT LA MÊME AFFICHE, ET NE LA REDESSINENT PAS.
+  // La page du kit ne proposait qu'un QR nu : un carré noir et blanc sans logo,
+  // sans nom de commerce et sans accroche, collé tel quel en vitrine.
+  verifie('🔴 le tableau de bord passe par le module partagé',
+    /telechargerAffichePng\(\{ qrDataUrl, nomCommerce, clair, slug \}\)/.test(dash))
+  verifie('🔴 la page du kit aussi',
+    /from '@\/lib\/affiche-kit'/.test(kit) && /telechargerAffichePng\(commun\)/.test(kit))
+  verifie('🔴 et le kit propose bien l\'AFFICHE, plus le QR nu',
+    !/Télécharger le QR/.test(kit) && /Ton affiche de vitrine/.test(kit),
+    'le commerçant collerait un carré noir et blanc en vitrine')
+  verifie('le kit propose les deux fonds', /setFondClair\(o\.clair\)/.test(kit))
+  verifie('et les trois formats', /telecharger\('png'\)/.test(kit)
+    && /telecharger\('A5'\)/.test(kit) && /telecharger\('A4'\)/.test(kit))
+  // ⚠️ UN ÉCHEC SE DIT : un bouton qui ne fait rien laisse cliquer trois fois.
+  //
+  // ⚠️ ANCRÉE SUR L'AFFICHAGE, PAS SUR LE NOM. Écrite `/erreurTelechargement/`,
+  // elle trouvait l'état et son setter : neutraliser le rendu du message la
+  // laissait verte. Mesuré par mutation. C'est la même famille que « l'appel
+  // existe, son résultat ne sert pas ».
+  verifie('un téléchargement raté est annoncé',
+    /\{erreurTelechargement && \(/.test(kit), 'le message serait calculé puis jamais rendu')
+  verifie('et le message est bien celui qu\'on lit', /Téléchargement impossible/.test(kit))
+
+  // ⚠️ AUCUN DES DEUX N'A GARDÉ SA COPIE DU CANVAS.
+  for (const [nom, src] of [['le tableau de bord', dash], ['la page du kit', kit]]) {
+    verifie(`${nom} ne dessine plus l'affiche lui-même`,
+      !/buildCompositeCanvas/.test(src), 'une seconde affiche divergerait')
+  }
 }
 
 // ═══ 4) 🔴 PLUS AUCUNE DATE SUR L'AFFICHE ═════════════════════════════════
@@ -200,8 +231,9 @@ const egal = (nom, obtenu, attendu) =>
 // « ON ARRIVE LE 1ER OCTOBRE ». Personne ne serait allé la décoller.
 {
   const dash = lire('app/dashboard/ConfigDashboard.js')
-  const i = dash.indexOf('const TXT_QR = ')
-  const bloc = i === -1 ? '' : dash.slice(i, dash.indexOf('}', i) + 1)
+  const affiche = lire('lib/affiche-kit.js')
+  const i = affiche.indexOf('export const TEXTES_AFFICHE = ')
+  const bloc = i === -1 ? '' : affiche.slice(i, affiche.indexOf('}', i) + 1)
   verifie('les textes de l\'affiche se découpent', bloc.length > 80, String(bloc.length))
   verifie('🔴 l\'affiche ne dérive plus la date d\'ouverture',
     !/libelleLancement/.test(bloc), 'une affiche datée devient fausse toute seule')
@@ -262,15 +294,20 @@ const egal = (nom, obtenu, attendu) =>
   verifie('le PNG se télécharge', /async function downloadPNG\(clair\)/.test(dash))
   verifie('le PDF aussi, dans les deux formats',
     /downloadPDF\('A5', fondClair\)/.test(dash) && /downloadPDF\('A4', fondClair\)/.test(dash))
-  // Le nom du fichier dit le fond : deux téléchargements ne s'écrasent pas.
-  //
-  // ⚠️ ELLE COMPTE LES DEUX, ET LA MUTATION L'A EXIGÉ. Écrite en simple
-  // présence, elle restait verte quand le PNG perdait la mention : l'occurrence
-  // du PDF suffisait à la satisfaire. Un fichier sur deux serait sorti sans son
-  // fond dans le nom, et deux téléchargements se seraient écrasés en silence.
-  verifie('🔴 le PNG et le PDF portent tous deux le fond dans leur nom',
-    (dash.match(/clair \? 'blanc' : 'violet'/g) || []).length === 2,
-    String((dash.match(/clair \? 'blanc' : 'violet'/g) || []).length))
+  // ⚠️ LE NOM DE FICHIER EST DÉSORMAIS COMPOSÉ AU MÊME ENDROIT POUR LES DEUX
+  // FORMATS. La garde comptait deux occurrences dans le tableau de bord — une
+  // par téléchargement — parce que le PNG et le PDF le composaient chacun de
+  // leur côté ; l'une pouvait perdre la mention du fond sans que l'autre le
+  // dise. `nomFichierAffiche` supprime le problème plutôt que de le surveiller.
+  const moduleAffiche = lire('lib/affiche-kit.js')
+  verifie('🔴 le nom de fichier se compose à un seul endroit',
+    /export function nomFichierAffiche\(slug, clair, extension/.test(moduleAffiche))
+  // ⚠️ ON COMPTE LES APPELS, PAS LA DÉCLARATION : la première écriture en
+  // trouvait trois, dont la signature de la fonction elle-même. L'extension
+  // littérale ne peut apparaître que dans un appel.
+  verifie('et les deux téléchargements y passent',
+    (moduleAffiche.match(/nomFichierAffiche\(slug, clair, '/g) || []).length === 2,
+    String((moduleAffiche.match(/nomFichierAffiche\(slug, clair, '/g) || []).length))
 }
 
 // ═══ 6) UNE SEULE ENTRÉE DANS LE PROFIL ═══════════════════════════════════

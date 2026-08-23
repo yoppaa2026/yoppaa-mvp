@@ -996,21 +996,27 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
           de l'envoyer à quelqu'un sans ouvrir la fiche : le geste est le même
           que celui du cœur, il doit être au même endroit.
 
-          ⚠️ CORRECTION D'ALEX SUR CAPTURE (24/08) : « il cache trop le logo ».
-          Il était posé à `right: 44`, c'est-à-dire en PLEIN MILIEU du logo, qui
-          fait 68 de large et commence à `right: 14`. Les deux boutons mordent
-          désormais les COINS HAUTS du logo, un de chaque côté, et ils en
-          débordent : ce que le commerçant a choisi comme image reste lisible.
-          C'est son enseigne, pas un fond d'écran.
+          ⚠️ CORRECTION D'ALEX SUR CAPTURE, DEUX FOIS LE 24/08. D'abord « il
+          cache trop le logo » : il était posé à `right: 44`, c'est-à-dire en
+          PLEIN MILIEU du logo, qui fait 68 de large et commence à `right: 14`.
+          Puis, une fois déplacé : « le logo du commerçant ne doit pas être
+          mangé ». Les deux boutons sont donc allés jusqu'au bout de leur coin
+          et ont MAIGRI : ils débordent vers l'extérieur de la vignette et ne
+          lui prennent plus qu'une pointe. C'est l'enseigne du commerçant, la
+          seule image par laquelle son client le reconnaît d'un coup d'œil.
+
+          ⚠️ Et le dessin est VIOLET, pas noir (charte, Alex 24/08). `T.deep`
+          reste du violet sur le papier, mais à 15 px sur du blanc l'œil n'y
+          voit que du noir : c'est `T.main` qui se lit comme du Yoppaa.
 
           ⚠️ stopPropagation, sinon la carte entière s'ouvre sous le doigt. */}
       <button onClick={e => onPartager?.(c, e)}
         aria-label={`Partager ${c.nom}`}
         style={{
-          position: 'absolute', top: 26, right: 68, zIndex: 2,
-          background: 'rgba(255,255,255,0.92)',
+          position: 'absolute', top: 22, right: 74, zIndex: 2,
+          background: 'rgba(255,255,255,0.95)',
           border: 'none',
-          cursor: 'pointer', padding: 6,
+          cursor: 'pointer', padding: 5,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'transform 0.15s, box-shadow 0.15s',
           borderRadius: '50%',
@@ -1018,8 +1024,8 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
         }}
         onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,8,64,0.22)' }}
         onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.10)' }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.deep}
-          strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.main}
+          strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="18" cy="5" r="3"/>
           <circle cx="6" cy="12" r="3"/>
           <circle cx="18" cy="19" r="3"/>
@@ -1034,12 +1040,12 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
       <button onClick={e => onToggleFavori(c.id, e)}
         aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
         style={{
-          // Poussé dans le coin (Alex, 24/08 : « il peut aller encore un peu
-          // plus sur le coin supérieur droit du logo »).
-          position: 'absolute', top: 26, right: 6, zIndex: 2,
-          background: 'rgba(255,255,255,0.92)',
+          // Poussé jusqu'au bout du coin, et rétréci avec son voisin de partage
+          // (Alex, 24/08 : « le logo du commerçant ne doit pas être mangé »).
+          position: 'absolute', top: 22, right: 2, zIndex: 2,
+          background: 'rgba(255,255,255,0.95)',
           border: 'none',
-          cursor: 'pointer', padding: 6,
+          cursor: 'pointer', padding: 5,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'transform 0.15s, box-shadow 0.15s',
           borderRadius: '50%',
@@ -1047,10 +1053,11 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
         }}
         onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,8,64,0.22)' }}
         onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = estFavori ? '0 3px 10px rgba(220,38,38,0.25)' : '0 1px 3px rgba(0,0,0,0.10)' }}>
-        <svg width="17" height="17" viewBox="0 0 24 24"
+        {/* Le cœur vide suit le partage : violet de la charte, pas du noir. */}
+        <svg width="15" height="15" viewBox="0 0 24 24"
           fill={estFavori ? '#DC2626' : 'none'}
-          stroke={estFavori ? '#DC2626' : T.deep}
-          strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          stroke={estFavori ? '#DC2626' : T.main}
+          strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
           <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
         </svg>
       </button>

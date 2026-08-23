@@ -11,6 +11,7 @@
 import { readFileSync } from 'node:fs'
 import { AVIS_MINIMUM_POUR_MOYENNE, resumeAvis, libelleBascule } from '../lib/avis-affichage.js'
 import { actionCommerce, potentialActionJsonLd, consigneGoogle } from '../lib/action-google.js'
+import { pointsLogo } from '../lib/logo.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -161,12 +162,30 @@ const egal = (nom, obtenu, attendu) =>
   verifie('la bande porte le titre demandé', /Tous les commerces autour de toi/.test(bandeCode))
   verifie('sans destination, elle ne s\'affiche pas', /typeof onVoir !== 'function'\) return null/.test(bandeCode))
 
-  // ⚠️ ELLE NE PROMET PAS CE QU'ON NE TIENT PAS. Le jour où un Yopper n'y
-  // trouve pas sa boulangerie, une promesse exagérée se retourne contre nous.
-  verifie('🔴 elle ne promet pas « tous les commerces » dans le texte',
+  // ⚠️ ELLE N'EXPLIQUE PLUS, ELLE PROPOSE UN GESTE (Alex sur capture, 24/08 :
+  // « le message est trop long, il est aussi vu par des Yoppers actifs tous les
+  // jours »). Expliquer ce qu'est Yoppaa à quelqu'un qui l'ouvre chaque matin,
+  // ce n'est pas de la pédagogie, c'est du bruit. UNE ligne, un chevron.
+  const texteAffiche = (bandeCode.match(/>\s*\{?titre\}?\s*<|Tous les commerces autour de toi/g) || [])
+  verifie('🔴 le titre est le SEUL texte de la bande', texteAffiche.length >= 1)
+  verifie('🔴 plus aucun paragraphe explicatif',
+    !/réunit les commerçants|dans la même application|Boulangerie, coiffeur/i.test(bandeCode))
+  verifie('🔴 et toujours aucune promesse de « tous les commerces » en corps de texte',
     !/tous les commerces de/i.test(bandeCode))
-  verifie('elle dit ce qui est vrai : les commerçants de la commune',
-    /réunit les commerçants de ta commune/.test(bandeCode))
+
+  // ⚠️ LES POINTS VIENNENT DE LA SPEC, ILS NE SE REDESSINENT PAS. Alex,
+  // 24/08 : « 3 dots visibles, le logo en a 5 ». Troisième fois que je peins un
+  // logo à la main au lieu de le prendre où il est écrit (19/08 la maquette,
+  // 23/08 l'aperçu du kit). La garde interdit maintenant le geste lui-même.
+  verifie('🔴 la bande PREND les points de la spec', /import \{ pointsLogo, proportionsLogo \} from '@\/lib\/logo'/.test(bandeCode))
+  verifie('🔴 et elle les parcourt vraiment', /pointsLogo\(CORPS\)/.test(bandeCode))
+  verifie('🔴 aucune rangée de points écrite à la main',
+    !/\[\{ c: |\{ c: T\.light/.test(bandeCode))
+  // Le contrôle qui compte : la spec en rend CINQ, et trois d'entre eux sont
+  // décalés. Si un jour la bande n'en dessine que trois, ceci rougit.
+  verifie('🔴 la spec rend bien CINQ points', pointsLogo(24).length === 5)
+  verifie('🔴 dont les rangs 2, 3 et 4 décalés',
+    pointsLogo(24).filter(p => p.decalage > 0).map(p => p.rang).join(',') === '2,3,4')
 
   // ⚠️ LES DEUX FICHES, PAS UNE. Un coiffeur, un kiné, un club de yoga sont des
   // commerces VITRINE : leur fiche est celle du module RDV. Poser la bande d'un

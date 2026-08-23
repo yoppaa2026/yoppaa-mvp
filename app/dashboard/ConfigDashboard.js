@@ -45,7 +45,11 @@ import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
 import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
 import { TAILLE_CONSEILLEE, avertissementTaille } from '@/lib/image-qualite'
-import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '@/lib/fidelite'
+// ⚠️ `appliquerCredit` A QUITTÉ CET IMPORT LE 24/08, et c'est le cœur du
+// correctif : le calcul d'une carte de fidélité n'a plus rien à faire dans un
+// navigateur. Il vit dans /api/fidelite/mouvement, qui relit la configuration
+// du commerçant en base au lieu de faire confiance à ce que l'écran a chargé.
+import { normaliserTelephone, afficherTelephone, libelleRecompense, presetFidelite } from '@/lib/fidelite'
 import { libelleEnvie, phraseHorsOuverture } from '@/lib/signaux'
 import { MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '@/lib/guide-photos'
 import { LARGEUR_CHAMP, LARGEUR_TEXTE_LONG } from '@/lib/responsive'
@@ -3907,48 +3911,66 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
     // SMS de bienvenue : branché à l'étape 6 (Brevo)
   }
 
+  // ⚠️ LE NAVIGATEUR NE CALCULE PLUS RIEN, ET N'ÉCRIT PLUS RIEN (audit 24/08).
+  // Il calculait la carte ici puis écrivait passages, cagnotte et récompenses
+  // EN VALEUR BRUTE, avec le journal dans un second appel non transactionnel.
+  // Tout se passe désormais dans /api/fidelite/mouvement, qui relit la config
+  // du commerçant en base, calcule, écrit le mouvement PUIS la carte — et qui
+  // envoie enfin le SMS de récompense, lequel ne partait JAMAIS du comptoir.
+  async function appelMouvement(corps) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { toast('Session expirée, reconnecte-toi.', 'error'); return null }
+    const res = await fetch('/api/fidelite/mouvement', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ commercant_id: commercantId, ...corps }),
+    })
+    const j = await res.json().catch(() => null)
+    if (!res.ok || !j?.ok) { toast(j?.error || 'Erreur, réessaie.', 'error'); return null }
+    return j
+  }
+
+  // La clé d'anti-doublon naît AU CLIC, pas à l'envoi : si la requête part deux
+  // fois (doigt qui tremble, réseau qui rejoue), elle porte la même clé et le
+  // serveur ne crédite qu'une fois.
+  function cleRequete() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+    return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
+  }
+
   async function crediter() {
     if (!carte) return
-    const credit = commercant.fidelite_mecanique === 'cagnotte'
-      ? { montant: parseFloat(String(montantInput).replace(',', '.')) || 0 }
-      : { passages: 1 }
-    if (commercant.fidelite_mecanique === 'cagnotte' && credit.montant <= 0) {
-      toast('Indique le montant de l’achat', 'error'); return
-    }
+    const estCagnotte = commercant.fidelite_mecanique === 'cagnotte'
+    const montant = estCagnotte ? parseFloat(String(montantInput).replace(',', '.')) || 0 : null
+    if (estCagnotte && montant <= 0) { toast('Indique le montant de l’achat', 'error'); return }
     setBusy(true)
-    const { patch, debloquees } = appliquerCredit(commercant, carte, credit)
-    const { data, error } = await supabase.from('fidelite_cartes').update(patch).eq('id', carte.id).select().single()
-    if (error) { setBusy(false); toast(`Erreur : ${error.message}`, 'error'); return }
-    const mvts = [{ carte_id: carte.id, type: commercant.fidelite_mecanique === 'cagnotte' ? 'cagnotte' : 'passage', valeur: commercant.fidelite_mecanique === 'cagnotte' ? credit.montant : 1, source: 'comptoir' }]
-    for (let i = 0; i < debloquees; i++) mvts.push({ carte_id: carte.id, type: 'recompense_debloquee', valeur: null, source: 'comptoir' })
-    const { error: errMvt } = await supabase.from('fidelite_mouvements').insert(mvts)
-    if (errMvt) console.warn('[fidelite] mouvement KO', errMvt.message)
+    const j = await appelMouvement({ action: 'crediter', carte_id: carte.id, cle: cleRequete(), ...(estCagnotte ? { montant } : {}) })
     setBusy(false)
-    setCarte(data)
+    if (!j) return
+    setCarte(j.carte)
     setMontantInput('')
-    toast(debloquees > 0 ? `Carte pleine ! ${libelleRecompense(commercant)} 🟣` : 'C’est noté')
-    // SMS carte pleine : branché à l'étape 6 (Brevo)
+    if (j.deja) { toast('Déjà enregistré'); return }
+    toast(j.debloquees > 0 ? `Carte pleine ! ${libelleRecompense(commercant)} 🟣` : 'C’est noté')
   }
 
   async function utiliserRecompense() {
     if (!carte || (carte.recompenses_disponibles || 0) < 1) return
     if (!await confirme(confirmationSimple({ titre: 'Utiliser la récompense maintenant ?', details: libelleRecompense(commercant), action: 'Oui, utiliser la récompense', ton: 'principal' }))) return
     setBusy(true)
-    const { data, error } = await supabase.from('fidelite_cartes')
-      .update({ recompenses_disponibles: carte.recompenses_disponibles - 1, updated_at: new Date().toISOString() })
-      .eq('id', carte.id).select().single()
-    if (!error) await supabase.from('fidelite_mouvements').insert({ carte_id: carte.id, type: 'recompense_utilisee', source: 'comptoir' })
+    const j = await appelMouvement({ action: 'utiliser_recompense', carte_id: carte.id, cle: cleRequete() })
     setBusy(false)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
-    setCarte(data)
-    toast('Récompense utilisée, bien joué 🟣')
+    if (!j) return
+    setCarte(j.carte)
+    toast(j.deja ? 'Déjà enregistré' : 'Récompense utilisée, bien joué 🟣')
   }
 
   async function supprimerCarte() {
     if (!carte) return
     if (!await confirme(confirmationSimple({ titre: 'Supprimer cette carte de fidélité ?', message: 'À faire en cas de numéro mal tapé, ou si le client le demande.', details: afficherTelephone(carte.telephone), action: 'Oui, supprimer la carte' }))) return
-    const { error } = await supabase.from('fidelite_cartes').delete().eq('id', carte.id)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    setBusy(true)
+    const j = await appelMouvement({ action: 'supprimer', carte_id: carte.id })
+    setBusy(false)
+    if (!j) return
     setCarte(null)
     toast('Carte supprimée')
   }

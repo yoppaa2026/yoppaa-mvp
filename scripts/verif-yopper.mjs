@@ -90,7 +90,14 @@ verifier('les deux SMS portent la signature',
 verifier('la garde horaire est branchée sur l\'envoi', /if \(!heureDecente\(\)\) return/.test(smsCode))
 // Quelqu'un qui a un compte a déjà sa carte dans l'application : lui envoyer un
 // SMS payé par le commerçant ne lui apprend rien.
-verifier('pas de SMS de bienvenue à qui a un compte', /aUnCompte\(supabase, clientEmail\)/.test(smsCode))
+// ⚠️ LA SIGNATURE A CHANGÉ LE 24/08, ET CETTE GARDE L'A VU. Elle exigeait
+// `aUnCompte(supabase, clientEmail)` : la fonction prend désormais un
+// `clientId` en secours, parce qu'au comptoir il n'y a PAS d'email et que la
+// garde ne vérifiait donc personne. Changer une signature, c'est changer un
+// contrat — et ici c'est un banc, pas un appelant, qui portait le contrat.
+verifier('pas de SMS de bienvenue à qui a un compte', /aUnCompte\(supabase, clientEmail, clientId\)/.test(smsCode))
+verifier('🔴 et la garde sait aussi travailler sans email (comptoir)',
+  /async function aUnCompte\(supabase, email, clientId = null\)/.test(smsCode))
 // Celui de récompense part quand même : le push web n'arrive pas partout.
 const blocRecompense = smsCode.slice(smsCode.indexOf('smsRecompenseDebloquee'))
 verifier('le SMS de récompense n\'est PAS filtré par le compte', !/aUnCompte/.test(blocRecompense))

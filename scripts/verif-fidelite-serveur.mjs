@@ -134,7 +134,16 @@ const egal = (nom, obtenu, attendu) =>
   verifie('🔴 le mouvement s\'écrit AVANT la carte', iMvt !== -1 && iCarte !== -1 && iMvt < iCarte,
     `mouvement ${iMvt}, carte ${iCarte}`)
 
-  verifie('un rejeu ne consomme rien de plus', /errMvt\.code === '23505'/.test(route))
+  // ⚠️ LES DEUX BRANCHES, COMPTÉES. Le mot `23505` apparaît dans l'usage d'une
+  // récompense ET dans le crédit : chercher le mot laissait la garde verte
+  // grâce à l'AUTRE branche, celle qu'on n'avait pas cassée. Mesuré à la
+  // mutation le 24/08. On compte, et on ancre le rejeu du crédit sur ce qu'il
+  // est seul à rendre.
+  verifie('🔴 les DEUX branches savent absorber un rejeu',
+    (route.match(/errMvt\.code === '23505'/g) || []).length === 2,
+    `${(route.match(/errMvt\.code === '23505'/g) || []).length} branche(s) au lieu de 2`)
+  verifie('🔴 et un crédit rejoué ne débloque rien de plus',
+    /carte: relue, deja: true, debloquees: 0/.test(route))
   verifie('une récompense inexistante est refusée', /dispo < 1/.test(route))
 
   // ⚠️ LE SMS QUI NE PARTAIT JAMAIS DU COMPTOIR.
@@ -169,11 +178,20 @@ const egal = (nom, obtenu, attendu) =>
 // l'autre sans s'en apercevoir.
 {
   const serveur = lireCode('lib/fidelite-server.js')
-  verifie('la commande récupérée crédite toujours', /crediterFideliteCommande/.test(serveur))
+  // ⚠️ LA PARENTHÈSE FAIT TOUT LE TRAVAIL. Sans elle, la garde restait verte
+  // après un renommage en `crediterFideliteCommandeX` : le mot cherché est un
+  // PRÉFIXE de son propre remplaçant. Mesuré à la mutation le 24/08.
+  verifie('la commande récupérée crédite toujours',
+    /export async function crediterFideliteCommande\(/.test(serveur))
   verifie('le mouvement y précède aussi la carte',
     serveur.indexOf("from('fidelite_mouvements').insert({") < serveur.indexOf("from('fidelite_cartes').update(patch)"))
   verifie('le SMS automatique est intact', /smsRecompenseDebloquee\(supabase, commercant, carte\)/.test(serveur))
-  verifie('la part payée par bon cadeau ne compte pas deux fois', /montantFidelisable/.test(serveur))
+  // ⚠️ ANCRÉ SUR L'APPEL, PAS SUR LE NOM. La garde était verte grâce à la
+  // LIGNE D'IMPORT : on pouvait remplacer l'appel par `cmd.total` — donc
+  // recompter la part payée par un bon cadeau, déjà créditée à l'achat du bon
+  // — sans que rien ne rougisse. Mesuré à la mutation le 24/08.
+  verifie('🔴 la part payée par bon cadeau ne compte pas deux fois',
+    /\{ montant: montantFidelisable\(cmd\) \}/.test(serveur))
 }
 
 console.log(`\nFidélité serveur : ${ok} vérifications`)

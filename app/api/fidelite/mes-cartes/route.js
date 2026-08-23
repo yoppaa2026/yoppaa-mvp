@@ -16,7 +16,12 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { normaliserTelephone } from '@/lib/fidelite'
+// ⚠️ LA RÈGLE DES NUMÉROS PROUVÉS A QUITTÉ CE FICHIER LE 24/08. Le tunnel de
+// commande en a besoin lui aussi pour proposer une récompense de fidélité : la
+// recopier aurait donné deux règles de sécurité qui divergent au premier
+// durcissement. Elle vit désormais dans lib/yopper-telephones.js, avec toute
+// l'explication de la faille qu'elle ferme.
+import { telephonesProuves } from '@/lib/yopper-telephones'
 import { identiteProuvee } from '@/lib/yopper-auth'
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -45,48 +50,6 @@ async function yopperCourant(request) {
   return { email: String(id.email).toLowerCase(), client_id: id.client_id || null }
 }
 
-// Numéros de téléphone PROUVÉS du Yopper : ceux qu'il a réellement utilisés
-// dans une commande ou un rendez-vous.
-//
-// ⚠️ ET `clients.telephone` N'EN FAIT PLUS PARTIE, C'ÉTAIT LA FAILLE.
-// L'en-tête de ce fichier posait pourtant la règle : « jamais par saisie libre
-// d'un numéro, sinon n'importe qui pourrait espionner les cartes d'autrui ».
-// Or `clients.telephone` EST une saisie libre : l'action `update-own` le laisse
-// écrire ce qu'on veut, sans le moindre contrôle par SMS — aucun flux de
-// vérification téléphonique n'existe dans le projet.
-//
-// L'attaque tenait en deux requêtes. On s'inscrit comme Yopper ordinaire, on
-// pose le numéro de GSM de quelqu'un d'autre dans son profil, on demande ses
-// cartes : on reçoit sa cagnotte en euros, la liste des commerces qu'il
-// fréquente, et le JETON de chaque carte. Ce jeton ouvre `/carte/<token>` sans
-// aucune connexion, et il n'expire jamais.
-//
-// ⚠️ Le contrôle `identiteProuvee` ne protégeait rien ici : l'identité de
-// l'attaquant est parfaitement prouvée. C'est le NUMÉRO qui sélectionne les
-// lignes, et c'est lui qui était auto-déclaré.
-async function telephonesDuYopper(supabase, yopper) {
-  const tels = new Set()
-  const { data: cmds } = await supabase
-    .from('commandes').select('client_telephone')
-    .eq('client_email', yopper.email)
-    .not('client_telephone', 'is', null)
-    .limit(200)
-  ;(cmds || []).forEach(c => {
-    const t = normaliserTelephone(c.client_telephone)
-    if (t) tels.add(t)
-  })
-  const { data: rdvs } = await supabase
-    .from('rdv_reservations').select('client_telephone')
-    .ilike('client_email', yopper.email)
-    .not('client_telephone', 'is', null)
-    .limit(200)
-  ;(rdvs || []).forEach(r => {
-    const t = normaliserTelephone(r.client_telephone)
-    if (t) tels.add(t)
-  })
-  return [...tels]
-}
-
 // Champs SÛRS exposés au Yopper (jamais le token d'une carte d'autrui : ici ce
 // sont SES cartes, le token permet le lien de partage vers /carte/[token])
 const CHAMPS_CARTE = 'id, commercant_id, telephone, passages, cagnotte, recompenses_disponibles, token, updated_at'
@@ -104,7 +67,7 @@ export async function POST(request) {
     const action = body?.action || 'list'
     const supabase = admin()
 
-    const tels = await telephonesDuYopper(supabase, yopper)
+    const tels = await telephonesProuves(supabase, yopper.email)
     if (tels.length === 0) return NextResponse.json({ ok: true, connecte: true, cartes: [], carte: null })
 
     if (action === 'une') {

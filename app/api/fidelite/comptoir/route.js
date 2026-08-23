@@ -99,7 +99,11 @@ export async function POST(request) {
       // SMS de bienvenue avec le lien de sa carte : sans lui, le client
       // repart du comptoir sans trace de sa carte. Best-effort.
       let sms = null
-      try { sms = await smsCarteCreee(admin, com, nouvelle) } catch { /* non bloquant */ }
+      // ⚠️ `client?.id` EST INDISPENSABLE ICI (24/08). Sans lui, le SMS partait
+      // même à quelqu'un qui a l'application : le comptoir n'a pas d'email, et
+      // la garde « a déjà un compte » ne pouvait donc vérifier personne. Le
+      // client venait pourtant d'être identifié dix lignes plus haut.
+      try { sms = await smsCarteCreee(admin, com, nouvelle, null, client?.id || null) } catch { /* non bloquant */ }
       return NextResponse.json({ ok: true, telephone: tel, carte: nouvelle, client, sms })
     }
 

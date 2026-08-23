@@ -194,6 +194,55 @@ const egal = (nom, obtenu, attendu) =>
     /\{ montant: montantFidelisable\(cmd\) \}/.test(serveur))
 }
 
+// ═══ 6) DEUX SMS, PAS UN DE PLUS, ET CHACUN SON PUBLIC ════════════════════
+//
+// ⚠️ CADRAGE D'ALEX (24/08) : « un SMS à la création du compte fidélité,
+// UNIQUEMENT pour un non-utilisateur de l'app · un second quand la fidélité
+// est pleine · le reste se passe intra-app ». Chaque SMS est payé par le
+// commerçant : un envoi de trop, c'est son argent.
+{
+  const sms = lireCode('lib/fidelite-sms.js')
+  const comptoir = lireCode('app/api/fidelite/comptoir/route.js')
+
+  const envois = (sms.match(/export async function sms[A-Za-z]+/g) || [])
+  verifie('🔴 il existe EXACTEMENT deux SMS de fidélité',
+    envois.length === 2, envois.join(' · '))
+
+  // ── SMS 1 : la carte vient d'être créée ────────────────────────────────
+  verifie('le SMS de création ne part qu\'une fois', /carte\.sms_creation_envoye/.test(sms))
+  verifie('🔴 et jamais à qui a déjà l\'application', /if \(await aUnCompte\(supabase, clientEmail, clientId\)\)/.test(sms))
+
+  // ⚠️ LE TROU DU COMPTOIR. L'email n'existe que sur le chemin des commandes :
+  // au comptoir il n'y a qu'un numéro, donc la garde ne vérifiait personne.
+  verifie('🔴 la garde sait travailler SANS email', /async function aUnCompte\(supabase, email, clientId = null\)/.test(sms))
+  verifie('🔴 et le comptoir lui passe le client qu\'il vient d\'identifier',
+    /smsCarteCreee\(admin, com, nouvelle, null, client\?\.id \|\| null\)/.test(comptoir))
+  verifie('une carte déjà rattachée à un compte suffit aussi',
+    /carte\.client_id && await aUnCompte\(supabase, null, carte\.client_id\)/.test(sms))
+
+  // ── SMS 2 : la récompense ──────────────────────────────────────────────
+  // ⚠️ Celui-là part MÊME à qui a un compte, et c'est délibéré : la
+  // notification web n'arrive pas partout (Chrome sur iPhone ne la supporte
+  // pas), et rater l'annonce d'une récompense, c'est rater une visite.
+  verifie('le SMS de récompense ne filtre PAS sur le compte',
+    !/smsRecompenseDebloquee[\s\S]{0,400}aUnCompte/.test(sms))
+
+  // ── Les gardes communes, qui protègent l'argent du commerçant ──────────
+  verifie('🔴 aucun SMS sans crédit décompté', /rpc\('consommer_sms_credit'/.test(sms))
+  verifie('🔴 et le crédit est RENDU si l\'envoi échoue', /rpc\('rendre_sms_credit'/.test(sms))
+  verifie('rien ne part la nuit', /return h >= 8 && h < 21/.test(sms))
+  verifie('ni si le commerçant a coupé les SMS', /commercant\?\.fidelite_sms_actif/.test(sms))
+
+  // ⚠️ PAS D'EMOJI DANS UN SMS : le 🟣 arrivait en « ? » chez l'opérateur, sur
+  // le canal où l'on se méfie le plus des liens.
+  const textes = sms.match(/const contenu = `[^`]*`/g) || []
+  verifie('deux textes de SMS, pas plus', textes.length === 2, String(textes.length))
+  for (const t of textes) {
+    verifie('🔴 aucun emoji dans un SMS',
+      !/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(t), t.slice(0, 60))
+  }
+}
+
 console.log(`\nFidélité serveur : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

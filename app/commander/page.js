@@ -992,14 +992,22 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
         )}
       </div>
 
-      {/* Partage du commerce, à GAUCHE du cœur. Un Yopper qui trouve son
-          boucher n'a aujourd'hui aucun moyen de l'envoyer à quelqu'un sans
-          ouvrir la fiche : le geste est le même que celui du cœur, il doit
-          être au même endroit. ⚠️ stopPropagation, sinon la carte s'ouvre. */}
+      {/* Partage du commerce. Un Yopper qui trouve son boucher n'a aucun moyen
+          de l'envoyer à quelqu'un sans ouvrir la fiche : le geste est le même
+          que celui du cœur, il doit être au même endroit.
+
+          ⚠️ CORRECTION D'ALEX SUR CAPTURE (24/08) : « il cache trop le logo ».
+          Il était posé à `right: 44`, c'est-à-dire en PLEIN MILIEU du logo, qui
+          fait 68 de large et commence à `right: 14`. Les deux boutons mordent
+          désormais les COINS HAUTS du logo, un de chaque côté, et ils en
+          débordent : ce que le commerçant a choisi comme image reste lisible.
+          C'est son enseigne, pas un fond d'écran.
+
+          ⚠️ stopPropagation, sinon la carte entière s'ouvre sous le doigt. */}
       <button onClick={e => onPartager?.(c, e)}
         aria-label={`Partager ${c.nom}`}
         style={{
-          position: 'absolute', top: 32, right: 44, zIndex: 2,
+          position: 'absolute', top: 26, right: 68, zIndex: 2,
           background: 'rgba(255,255,255,0.92)',
           border: 'none',
           cursor: 'pointer', padding: 6,
@@ -1026,7 +1034,9 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
       <button onClick={e => onToggleFavori(c.id, e)}
         aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
         style={{
-          position: 'absolute', top: 32, right: 10, zIndex: 2,
+          // Poussé dans le coin (Alex, 24/08 : « il peut aller encore un peu
+          // plus sur le coin supérieur droit du logo »).
+          position: 'absolute', top: 26, right: 6, zIndex: 2,
           background: 'rgba(255,255,255,0.92)',
           border: 'none',
           cursor: 'pointer', padding: 6,

@@ -5981,7 +5981,26 @@ function TabAccompagnement({ commercantId, commercant, toast }) {
               </span>
             </div>
             <p style={{ fontSize: 12, color: T.muted, margin: '6px 0 0', lineHeight: 1.55 }}>{p.desc}</p>
-            {secondaire && p.mention && (
+            {/* ⚠️ CE QU'IL Y A DANS LA BOÎTE, ÉNUMÉRÉ. La phrase de résumé
+                donne envie, elle ne fait jamais décider : « imprimante +
+                rouleaux » ne dit ni combien de rouleaux, ni pour combien de
+                temps, ni ce qui est préparé avant l'envoi. */}
+            {Array.isArray(p.contenu) && p.contenu.length > 0 && (
+              <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: 4 }}>
+                {p.contenu.map((ligne, i) => (
+                  <li key={i} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', fontSize: 11.5, lineHeight: 1.5, color: T.ink }}>
+                    <span style={{ flexShrink: 0, marginTop: 2 }}><Icon name="check" size={11} color={p.badgeColor}/></span>
+                    <span>{ligne}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {/* ⚠️ LA MENTION NE S'AFFICHAIT QUE SUR LES PRODUITS SECONDAIRES.
+                Elle porte désormais le rayon de 30 km, l'exigence d'un Kit
+                Yoppaa et la porte de sortie si le réseau ne permet pas la
+                visio : cachée sur un produit principal, elle laissait acheter
+                une prestation sans en connaître les limites. */}
+            {p.mention && (
               <p style={{ fontSize: 11, color: '#B45309', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '6px 10px', margin: '8px 0 0', lineHeight: 1.5 }}>{p.mention}</p>
             )}
           </div>

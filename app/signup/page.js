@@ -11,7 +11,7 @@ import { TAILLE_CONSEILLEE, avertissementTaille, refusFichierImage, mesurerFichi
 import { logoProvisoireSvg, propositionsLogo } from '@/lib/logo-provisoire'
 import { scoreOnboarding, SEUIL_SOUMISSION } from '@/lib/score-onboarding'
 import { conseilPhoto, MAX_PHOTOS } from '@/lib/guide-photos'
-import { SHOP_PRODUCTS, classerProduitsParCategorie } from '@/lib/produits-boutique'
+import { SHOP_PRODUCTS, classerProduitsParCategorie, prixProduitTexte } from '@/lib/produits-boutique'
 // Icônes Lucide React : SVG inline alignés sur la charte canonique Yoppaa.
 // Convention : stroke-width 1.8, currentColor pour hériter de la palette parent.
 // Aucun emoji dans l'UI (règle Master), sauf exceptions soleil GMY + 🟣 signature.
@@ -910,12 +910,19 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
   const featuresHardware = [
     {
       Icon: Smartphone, titre: 'Compatibilité Android & iOS',
-      desc: 'Ton tableau de bord Yoppaa fonctionne sur n\'importe quel téléphone, tablette ou ordinateur. Android, iPhone, iPad, Mac, PC : pas besoin de matériel spécifique pour démarrer.',
+      // ⚠️ « N'IMPORTE QUEL APPAREIL » ÉTAIT VRAI DU TABLEAU DE BORD ET FAUX
+      // DE L'IMPRESSION, et l'argument ne faisait pas la différence. Un
+      // commerçant qui lit cette phrase, achète une imprimante ailleurs et
+      // n'arrive pas à imprimer aura été trompé par une omission.
+      desc: 'Ton tableau de bord Yoppaa fonctionne sur n\'importe quel téléphone, tablette ou ordinateur. Android, iPhone, iPad, Mac, PC : pas besoin de matériel spécifique pour démarrer. L\'impression d\'étiquettes, en revanche, n\'est garantie qu\'avec le modèle Brother fourni par Yoppaa.',
       plan: 'exister',
     },
     {
       Icon: Printer, titre: 'Kit Yoppaa hardware',
-      desc: 'Optionnel et disponible à tout moment depuis ton tableau de bord : Kit Yoppaa Pro (tablette + imprimante thermique, 399€ HTVA) ou Kit Yoppaa Light (imprimante seule, 179€ HTVA). Surtout utile en alimentaire (Click & Collect avec gestion comptoir). Les commerces de service ou de détail peuvent gérer leur activité sans hardware spécifique.',
+      // ⚠️ LES PRIX SE LISENT DANS LE CATALOGUE, ILS NE SE RECOPIENT PLUS.
+      // Cette phrase a porté 399€ et 179€ en dur pendant que
+      // lib/produits-boutique.js faisait foi partout ailleurs.
+      desc: `Optionnel et disponible à tout moment depuis ton tableau de bord : Kit Yoppaa Pro (tablette, imprimante d'étiquettes, support de comptoir et 8 rouleaux, ${prixProduitTexte('kit_pro')} HTVA) ou Kit Yoppaa Light (imprimante et 8 rouleaux, ${prixProduitTexte('kit_light')} HTVA). Surtout utile si tu prépares des commandes à retirer. Sinon, ton téléphone, ta tablette ou ton PC suffisent pour tout gérer.`,
       plan: null,
     },
   ]
@@ -2806,8 +2813,31 @@ function ProduitCard({ produit, actif, onToggle, secondaire = false }) {
         </div>
       </div>
 
-      {/* Mention adaptative (visible uniquement pour produits "secondaires") */}
-      {secondaire && produit.mention && (
+      {/* ⚠️ CE QU'IL Y A DANS LA BOÎTE, ÉNUMÉRÉ. Une phrase de résumé suffit à
+          donner envie, jamais à décider : « imprimante + rouleaux » ne dit ni
+          combien de rouleaux, ni pour combien de temps, ni ce qui est fait
+          avant l'envoi. Un commerçant qui hésite sur 469 € a besoin de la
+          liste, pas d'un argument. */}
+      {Array.isArray(produit.contenu) && produit.contenu.length > 0 && (
+        <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: 3 }}>
+          {produit.contenu.map((ligne, i) => (
+            <li key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 11.5, lineHeight: 1.45, color: actif ? 'rgba(255,255,255,0.9)' : T.deep }}>
+              <span style={{ flexShrink: 0, marginTop: 1, color: actif ? T.light : produit.badgeColor }}>
+                <Check size={12} strokeWidth={3}/>
+              </span>
+              <span>{ligne}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* ⚠️ LA MENTION NE S'AFFICHAIT QUE SUR LES PRODUITS SECONDAIRES, et le
+          24/08 elle a cessé d'être un simple avertissement de catégorie : elle
+          porte désormais le rayon de 30 km, l'exigence d'un Kit Yoppaa et la
+          porte de sortie si le réseau ne permet pas la visio. Cachée sur les
+          produits PRINCIPAUX, elle laissait le commerçant acheter une
+          prestation dont il ignorait les limites. */}
+      {produit.mention && (
         <p style={{
           fontSize: 10.5,
           color: actif ? 'rgba(255,255,255,0.6)' : T.muted,

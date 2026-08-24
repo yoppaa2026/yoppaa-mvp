@@ -13,6 +13,7 @@ import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/
 import { consigneGoogle } from '@/lib/action-google'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
+import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
 import { capacitePrestation } from '@/lib/cours-collectifs'
 import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
@@ -3766,6 +3767,9 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
   const [telIntrouvable, setTelIntrouvable] = useState(null)  // numéro normalisé sans carte
   const [clientTrouve, setClientTrouve] = useState(null)      // compte Yoppaa portant ce numéro
   const [achatSms, setAchatSms] = useState(false)
+  // 🔴 Même défaut que les tunnels client : le commerçant qui renonce à son
+  // pack SMS chez Stripe revenait sur un bouton mort.
+  useResetAuRetourDePaiement(() => setAchatSms(false))
   const soldeSms = commercant?.fidelite_sms_credits || 0
 
   // Achat d'un pack de SMS : Stripe Checkout sur le compte plateforme (c'est
@@ -5897,6 +5901,9 @@ function TabAccompagnement({ commercantId, commercant, toast }) {
   const [choix, setChoix] = useState(() => new Set())
   const [message, setMessage] = useState('')
   const [envoi, setEnvoi] = useState(false)
+  // 🔴 Et la boutique aussi, que j'ai écrite ce matin sans voir le motif :
+  // renoncer au paiement d'un kit chez Stripe laissait le bouton figé.
+  useResetAuRetourDePaiement(() => setEnvoi(false))
   const [demandes, setDemandes] = useState([])
 
   const fetchDemandes = useCallback(async () => {

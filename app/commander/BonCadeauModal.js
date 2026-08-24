@@ -6,6 +6,7 @@
 
 import { useState } from 'react'
 import { redirectTop } from '@/lib/redirect-top'
+import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-cadeaux'
 
 const T = {
@@ -22,6 +23,10 @@ export default function BonCadeauModal({ commercant, validiteMois = 12, onClose 
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [erreur, setErreur] = useState(null)
+  // 🔴 Même défaut que les deux tunnels : annuler chez Stripe et revenir
+  // laissait le bouton bloqué, la page étant restaurée depuis le cache du
+  // navigateur avec son state figé.
+  useResetAuRetourDePaiement(() => setLoading(false))
 
   const montantNum = Math.round((parseFloat(String(montant).replace(',', '.')) || 0) * 100) / 100
   const montantOk = montantNum >= BON_MONTANT_MIN && montantNum <= BON_MONTANT_MAX

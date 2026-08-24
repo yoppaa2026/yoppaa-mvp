@@ -24,6 +24,8 @@ import {
   appliquerRecompenseAvantBon,
   recompenseUtilisable,
   libelleRemiseRecompense,
+  libelleOffreRecompense,
+  libelleRecompenseUtilisee,
 } from '../lib/fidelite-recompense.js'
 import { calculerRemiseBon } from '../lib/bons-cadeaux.js'
 import { montantFidelisable } from '../lib/fidelite.js'
@@ -492,6 +494,71 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
 }
 
 // ═══ RÉSULTAT ═════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════
+// 13. Le retour de Stripe, et les deux phrases du tunnel (24/08, après tests)
+// ═════════════════════════════════════════════════════════════════════════
+
+{
+  // ⚠️ EXÉCUTÉES, jamais cherchées au mot.
+  const montant = { type: 'montant', valeur: 5 }
+  const offre = libelleOffreRecompense(montant, 30)
+  verifie('l\'offre annonce le montant qui revient au Yopper', offre?.includes('5,00 €'))
+  verifie('l\'offre lui parle de ce qui l\'attend', /qui t’attend/.test(offre || ''))
+  // ⚠️ L'accord suit le montant : une faute sur l'écran qui parle d'argent
+  // coûte plus en crédibilité qu'elle ne coûte de temps à écrire.
+  verifie('l\'offre accorde au pluriel au-dessus de 1 €', /t’attendent/.test(offre || ''))
+  verifie('l\'offre accorde au singulier à 1 €',
+    /t’attend\b/.test(libelleOffreRecompense({ type: 'montant', valeur: 1 }, 30) || ''))
+
+  // ⚠️ ON ANNONCE CE QUI SERA RÉELLEMENT DÉDUIT : 10 € sur un panier à 6 €
+  // ne retire pas 10 €, et le dire ferait croire à un avoir qui n'existe pas.
+  verifie('l\'offre plafonne au panier', libelleOffreRecompense({ type: 'montant', valeur: 10 }, 6)?.includes('6,00 €'))
+  verifie('l\'offre se tait quand il n\'y a rien à déduire',
+    libelleOffreRecompense({ type: 'montant', valeur: 5 }, 0) === null)
+
+  const utilisee = libelleRecompenseUtilisee(montant, 30)
+  verifie('la confirmation félicite au lieu d\'accuser réception', /^Bravo/.test(utilisee || ''))
+  verifie('la confirmation redit le montant déduit', utilisee?.includes('-5,00 €'))
+
+  // Les deux tunnels lisent ces phrases, ils ne les recopient pas.
+  for (const f of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
+    const src = lireCode(f)
+    verifie(`${f} appelle l'offre`, /libelleOffreRecompense\(/.test(src))
+    verifie(`${f} appelle la confirmation`, /libelleRecompenseUtilisee\(/.test(src))
+    verifie(`${f} n'écrit plus l'ancienne phrase sans envie`, !/récompense fidélité t’attend/.test(src))
+  }
+
+  // 🔴 LE BOUTON QUI RESTAIT SUR « REDIRECTION… » AU RETOUR DE STRIPE.
+  // Sept écrans redirigent vers Stripe, aucun ne s'en protégeait : le
+  // navigateur restaure la page depuis son cache, state React compris.
+  const hook = lireCode('lib/retour-paiement.js')
+  verifie('le remède écoute pageshow', /addEventListener\('pageshow'/.test(hook))
+  // ⚠️ PAS `visibilitychange` : il se déclenche au changement d'onglet et
+  // effacerait l'état « en cours » pendant qu'une requête est en vol.
+  verifie('le remède n\'écoute pas visibilitychange', !/visibilitychange/.test(hook))
+  // ⚠️ Et il ne teste pas `persisted` : plusieurs navigateurs restaurent une
+  // page sans poser ce drapeau.
+  verifie('le remède ne se fie pas au drapeau persisted', !/\.persisted/.test(hook))
+
+  // ⚠️ GARDES MESURÉES MUETTES : chercher `useResetAuRetourDePaiement(` dans
+  // ConfigDashboard restait vert quand on retirait l'un des DEUX appels, les
+  // packs SMS et la boutique, parce que l'autre portait le même mot. Une garde
+  // qui cherche un appel verdit sur n'importe lequel de ses homonymes : on
+  // nomme donc le SETTER de chaque écran, il est unique.
+  const ECRANS_QUI_PAIENT = [
+    ['app/commander/[slug]/page.js', 'setLoadingCommande'],
+    ['app/commander/rdv/[slug]/page.js', 'setSubmitting'],
+    ['app/commander/BonCadeauModal.js', 'setLoading'],
+    ['app/dashboard/ConfigDashboard.js', 'setAchatSms'],
+    ['app/dashboard/ConfigDashboard.js', 'setEnvoi'],
+    ['app/dashboard/TabPaiements.js', 'setConnecting'],
+  ]
+  for (const [f, setter] of ECRANS_QUI_PAIENT) {
+    verifie(`${f} remet ${setter} au repos au retour de Stripe`,
+      new RegExp(`useResetAuRetourDePaiement\\(\\(\\) => ${setter}\\(false\\)\\)`).test(lireCode(f)))
+  }
+}
+
 if (echecs.length > 0) {
   console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.\n`)
   console.log('ÉCHECS :')

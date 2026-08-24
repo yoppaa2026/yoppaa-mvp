@@ -46,8 +46,9 @@ function enGras(texte) {
   )
 }
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
-import { calculerRemiseRecompense, libelleRemiseRecompense } from '@/lib/fidelite-recompense'
+import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee } from '@/lib/fidelite-recompense'
 import { redirectTop } from '@/lib/redirect-top'
+import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { referenceRdv } from '@/lib/numero-commande'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import HorairesSection from '../../HorairesSection'
@@ -331,6 +332,10 @@ export default function CommanderRdvSlug() {
   const [rgpdMarketing, setRgpdMarketing] = useState(true)  // pré-coché (cf signup data flow)
   // RDV-4d : insert + confirmation
   const [submitting, setSubmitting] = useState(false)
+  // 🔴 MÊME DÉFAUT QUE LE TUNNEL DE COMMANDE, trouvé en cherchant les frères :
+  // annuler chez Stripe et revenir laissait le bouton bloqué à vie, parce que
+  // le navigateur restaure la page depuis son cache, state compris.
+  useResetAuRetourDePaiement(() => setSubmitting(false))
   const [submitError, setSubmitError] = useState(null)
   const [rdvCree, setRdvCree] = useState(null)  // contient la ligne rdv_reservations créée + meta affichage
 
@@ -3028,15 +3033,18 @@ export default function CommanderRdvSlug() {
                         {recompenseFid && !seanceSurAbo && prixBase != null && acompteEnLigne && (
                           <div style={{ background: recompenseActive ? '#F5F3FF' : '#fff', border: `1.5px solid ${recompenseActive ? T.main : T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                             <div style={{ minWidth: 0 }}>
-                              <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 800, color: T.ink }}>
+                              {/* Mêmes phrases que le tunnel de commande, et
+                                  lues au même endroit : recopiées, elles
+                                  auraient divergé au premier ajustement. */}
+                              <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 800, color: recompenseActive ? '#059669' : T.ink }}>
                                 {recompenseActive
-                                  ? libelleRemiseRecompense(recompenseFid, prixBase)
-                                  : (recompenseFid.libelle || 'Ta récompense fidélité t’attend')}
+                                  ? libelleRecompenseUtilisee(recompenseFid, prixBase)
+                                  : libelleOffreRecompense(recompenseFid, prixBase)}
                               </p>
                               <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: T.muted, fontWeight: 600 }}>
                                 {recompenseActive
-                                  ? 'Déduite du prix de la prestation, acompte compris.'
-                                  : 'Tu peux la garder pour une prochaine fois : elle ne s’efface pas.'}
+                                  ? `${recompenseFid.libelle ? `${recompenseFid.libelle}. ` : ''}Déduite du prix, ton acompte baisse d’autant.`
+                                  : 'Utilise-les maintenant : ils se déduiront du prix, et ton acompte baissera d’autant.'}
                               </p>
                             </div>
                             <button type="button" onClick={() => setRecompenseActive(v => !v)}

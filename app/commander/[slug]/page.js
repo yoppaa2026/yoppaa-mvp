@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
-import { calculerRemiseRecompense, libelleRemiseRecompense } from '@/lib/fidelite-recompense'
+import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee } from '@/lib/fidelite-recompense'
 import { canDo, isVitrine } from '@/lib/plans'
 import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
@@ -80,6 +80,7 @@ function NoteLivraison({ valeur, onChange, localisee, aSaisiUneRue, expedition =
 }
 
 import { redirectTop } from '@/lib/redirect-top'
+import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import PillsStatut from '../PillsStatut'
 import CarteFideliteFiche from '../CarteFideliteFiche'
@@ -1054,6 +1055,11 @@ export default function CommanderSlug() {
   const [loading, setLoading] = useState(true)
   const [loadingCommande, setLoadingCommande] = useState(false)
   const [erreurCommande, setErreurCommande] = useState(null)
+  // 🔴 LE BOUTON RESTAIT SUR « REDIRECTION… » POUR TOUJOURS quand on annulait
+  // chez Stripe et qu'on revenait : le navigateur restaure la page depuis son
+  // cache de navigation, state React compris, et rien ne remonte. Le panier
+  // était intact, les articles se modifiaient, mais plus moyen de payer.
+  useResetAuRetourDePaiement(() => setLoadingCommande(false))
   const [ajustementStock, setAjustementStock] = useState(null)
   // Mode de paiement choisi (en_ligne | sur_place). null = défaut selon ce que
   // le commerçant propose : en ligne si Stripe actif, sinon sur place si accepté.
@@ -4464,15 +4470,20 @@ export default function CommanderSlug() {
                       {recompenseFid && (
                         <div style={{ background: recompenseActive ? '#F5F3FF' : '#fff', border: `1.5px solid ${recompenseActive ? T.main : T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                           <div style={{ minWidth: 0 }}>
-                            <p style={{ fontSize: '0.82rem', fontWeight: 800, color: T.ink, margin: 0 }}>
+                            {/* ⚠️ « Ta récompense fidélité t’attend » NE DONNAIT
+                                PAS ENVIE et ne disait pas ce qui allait se
+                                passer. Le Yopper lit maintenant le MONTANT qui
+                                lui revient, et une fois qu'il a cliqué on le
+                                félicite au lieu de lui accuser réception. */}
+                            <p style={{ fontSize: '0.82rem', fontWeight: 800, color: recompenseActive ? '#059669' : T.ink, margin: 0 }}>
                               {recompenseActive
-                                ? libelleRemiseRecompense(recompenseFid, totalAvecFrais())
-                                : (recompenseFid.libelle || 'Ta récompense fidélité t’attend')}
+                                ? libelleRecompenseUtilisee(recompenseFid, totalAvecFrais())
+                                : libelleOffreRecompense(recompenseFid, totalAvecFrais())}
                             </p>
                             <p style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 600, margin: '2px 0 0' }}>
                               {recompenseActive
-                                ? 'Elle sera déduite quand ta commande sera confirmée.'
-                                : `Tu peux la garder pour une prochaine fois : elle ne s’efface pas.`}
+                                ? `${recompenseFid.libelle ? `${recompenseFid.libelle}. ` : ''}Le montant est déduit de ta commande.`
+                                : 'Utilise-les maintenant : ils se déduiront de ta commande. Sinon ils t’attendront, ils ne s’effacent pas.'}
                             </p>
                           </div>
                           <button type="button" onClick={() => setRecompenseActive(v => !v)}

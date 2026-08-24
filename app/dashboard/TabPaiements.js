@@ -10,6 +10,7 @@
 //   • Alimentaire Vendre : paiement obligatoire à la commande C&C
 
 import { useState, useEffect, useCallback } from 'react'
+import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { supabase } from '@/lib/supabase'
 
 const T = {
@@ -28,6 +29,10 @@ export default function TabPaiements({ commercantId, toast }) {
   const [commercant, setCommercant] = useState(null)
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
+  // 🔴 Le plus coûteux des sept : abandonner l'ouverture du compte Stripe et
+  // revenir laissait « Connexion… » à vie, sur l'écran qui débloque TOUS les
+  // paiements en ligne du commerçant.
+  useResetAuRetourDePaiement(() => setConnecting(false))
   const [refreshing, setRefreshing] = useState(false)
   const [savingToggle, setSavingToggle] = useState(false)
 

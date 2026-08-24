@@ -21,7 +21,7 @@ function libelleRecompense(com) {
   return 'Récompense fidélité'
 }
 
-export default function CarteFideliteFiche({ commercant, carte, connecte = true }) {
+export default function CarteFideliteFiche({ commercant, carte, connecte = true, nbCartes = 0 }) {
   if (!commercant?.fidelite_actif) return null
   const estCagnotte = commercant.fidelite_mecanique === 'cagnotte'
   const seuilP = commercant.fidelite_seuil_passages || 10
@@ -58,6 +58,44 @@ export default function CarteFideliteFiche({ commercant, carte, connecte = true 
                 ? `Ta cagnotte : ${Number(carte.cagnotte).toFixed(2).replace('.', ',')}€. Encore ${Math.max(0, seuilC - Number(carte.cagnotte)).toFixed(2).replace('.', ',')}€ de cagnotte et tu débloques : ${libelle}`
                 : `${carte.passages} passage${carte.passages > 1 ? 's' : ''} sur ${seuilP}. Encore ${Math.max(0, seuilP - carte.passages)} et tu débloques : ${libelle}`}
           </p>
+
+          {/* ⚠️ 🔴 LA JAUGE CONTREDISAIT LA RÉCOMPENSE, et Alex l'a vu sur sa
+              propre carte : « 2/11 » affiché juste à côté de « récompense
+              débloquée ». Les deux nombres sont pourtant justes. Quand le
+              seuil tombe, `appliquerCredit` retire le seuil des passages et la
+              carte REPART : les points montrent donc le NOUVEAU cycle pendant
+              que le texte parle de la récompense gagnée au précédent.
+              Deux vérités qui se lisent comme une erreur.
+              On ne cache aucune des deux, on les SÉPARE en les nommant. */}
+          {recompense && (
+            <p style={{ margin: '4px 0 0', fontSize: '0.72rem', fontWeight: 600, color: T.deep, lineHeight: 1.5 }}>
+              {estCagnotte
+                ? `Ta nouvelle cagnotte a déjà repris à ${Number(carte.cagnotte).toFixed(2).replace('.', ',')}€.`
+                : `Ta nouvelle carte a déjà ${carte.passages} passage${carte.passages > 1 ? 's' : ''} sur ${seuilP}.`}
+            </p>
+          )}
+
+          {/* ⚠️ ET LE GESTE, qui manquait partout. « Montre cet écran » mentait
+              (le commerçant n'a pas de moyen de s'en servir) : sa seule porte
+              d'entrée au comptoir est le NUMÉRO DE GSM. En ligne, depuis le
+              24/08, la récompense est proposée au moment de payer. */}
+          {recompense && (
+            <p style={{ margin: '6px 0 0', fontSize: '0.72rem', fontWeight: 600, color: '#059669', lineHeight: 1.5 }}>
+              Au comptoir, donne ton numéro de GSM. En ligne, elle te sera proposée au moment de payer.
+            </p>
+          )}
+
+          {/* ⚠️ DEUX NUMÉROS DE GSM, DEUX CARTES, et il faut le DIRE. La carte
+              a pour clé le numéro : qui a changé d'opérateur, ou commandé une
+              fois avec le numéro du bureau, en a deux chez le même commerçant.
+              L'écran n'en montrait qu'une, silencieusement, et son porteur
+              comptait des passages qui ne s'additionnaient jamais. On montre
+              celle qui a quelque chose à donner, et on nomme les autres. */}
+          {nbCartes > 1 && (
+            <p style={{ margin: '6px 0 0', fontSize: '0.7rem', fontWeight: 600, color: T.deep, lineHeight: 1.5, opacity: 0.85 }}>
+              Tu as {nbCartes} cartes ici, une par numéro de GSM utilisé. Celle qui est montrée est celle qui te sert le plus.
+            </p>
+          )}
         </>
       ) : (
         <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: T.deep, lineHeight: 1.5 }}>

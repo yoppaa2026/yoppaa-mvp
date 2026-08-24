@@ -1171,6 +1171,10 @@ export default function CommanderSlug() {
   const [articleDetail, setArticleDetail] = useState(null)
   // B.6 fidélité : MA carte chez ce commerçant (null si pas connecté / pas de carte)
   const [maCarteFid, setMaCarteFid] = useState(null)
+  // Nombre de cartes de CE Yopper chez CE commerçant. Deux numéros de GSM,
+  // deux cartes : le dire plutôt que de laisser compter des passages qui ne
+  // s'additionnent pas.
+  const [cartesCeCommerce, setCartesCeCommerce] = useState(0)
   // Distingue « pas de carte » de « pas connecté » : sans ça, un Yopper qui a
   // des passages voit le teaser du programme et croit que rien n'est compté.
   const [fidConnecte, setFidConnecte] = useState(true)
@@ -1222,6 +1226,7 @@ export default function CommanderSlug() {
       .then(j => {
         if (!vivant || !j?.ok) return
         setMaCarteFid(j.carte || null)
+        setCartesCeCommerce(j.cartes_ce_commerce || 0)
         setFidConnecte(j.connecte !== false)
       })
       .catch(() => {})
@@ -3460,7 +3465,7 @@ export default function CommanderSlug() {
                     bas, elle arriverait trop tard. Même position exacte sur la
                     fiche de rendez-vous. */}
                 <div style={{ padding: '0 12px' }}>
-                  <CarteFideliteFiche commercant={commercant} carte={maCarteFid} connecte={fidConnecte}/>
+                  <CarteFideliteFiche commercant={commercant} carte={maCarteFid} connecte={fidConnecte} nbCartes={cartesCeCommerce}/>
 
                   {/* Retour d'achat d'un bon cadeau (Stripe success/cancel).
                       Reste EN HAUT alors que le bouton est descendu : celui qui

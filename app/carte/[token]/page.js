@@ -92,8 +92,18 @@ export default async function CartePage({ params }) {
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#065F46', lineHeight: 1.5 }}>
                   {libelleRecompense(com)}
                 </p>
-                <p style={{ margin: '8px 0 0', fontSize: 12, color: '#047857', lineHeight: 1.5 }}>
-                  Montre cet écran lors de ton prochain passage.
+                {/* ⚠️ CE TEXTE MENTAIT, ET IL A COÛTÉ SA QUESTION À ALEX :
+                    « je fais quoi avec ça ? ». Il disait « montre cet écran »,
+                    alors que le commerçant n'a AUCUN moyen de s'en servir : sa
+                    seule porte d'entrée, au comptoir, est le NUMÉRO DE GSM. Un
+                    écran montré ne se cherche pas dans son tableau de bord.
+                    On dit donc le geste réel, et le second depuis le 24/08 :
+                    la récompense se dépense aussi en ligne. */}
+                <p style={{ margin: '10px 0 0', fontSize: 12.5, color: '#047857', lineHeight: 1.55 }}>
+                  <strong>Au comptoir</strong>, donne ton numéro de GSM : c’est avec lui que {com.nom} retrouve ta carte.
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: 12.5, color: '#047857', lineHeight: 1.55 }}>
+                  <strong>En ligne</strong>, connecte-toi et elle te sera proposée au moment de payer.
                 </p>
               </div>
             ) : (

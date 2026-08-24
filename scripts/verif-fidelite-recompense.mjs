@@ -439,6 +439,58 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
     ca.encaisse + ca.attendu === 25, `encaissé ${ca.encaisse}, attendu ${ca.attendu}`)
 }
 
+// ═══ 12) LES ÉCRANS DU YOPPER (bloc 3) ════════════════════════════════════
+{
+  const token = lireCode('app/carte/[token]/page.js')
+  // ⚠️ CE TEXTE MENTAIT ET A COÛTÉ SA QUESTION À ALEX. Le commerçant n'a
+  // AUCUN moyen de se servir d'un écran montré : sa seule porte d'entrée au
+  // comptoir est le NUMÉRO DE GSM.
+  verifie('🔴 « montre cet écran » a disparu de la carte',
+    !/[Mm]ontre cet écran/.test(token),
+    (token.match(/.*[Mm]ontre cet écran.*/) || [])[0])
+  verifie('et le geste réel est écrit : le numéro de GSM',
+    /numéro de GSM/.test(token))
+  verifie('avec le second chemin, en ligne',
+    /au moment de payer/.test(token))
+
+  const fiche = lireCode('app/commander/CarteFideliteFiche.js')
+  // ⚠️ LA JAUGE CONTREDISAIT LA RÉCOMPENSE : « 2/11 » à côté de « débloquée ».
+  // Les deux nombres sont justes, le cycle a simplement repris. On les sépare.
+  // ⚠️ UN `||` ENTRE DEUX MOTIFS REND LA GARDE VERTE GRÂCE À L'AUTRE BRANCHE.
+  // Mesuré : casser la phrase des PASSAGES laissait la garde verte parce que
+  // celle de la CAGNOTTE existait encore. Les deux mécaniques doivent être
+  // couvertes, donc les deux motifs sont exigés séparément.
+  verifie('🔴 la nouvelle carte est nommée (passages)',
+    /Ta nouvelle carte a déjà/.test(fiche))
+  verifie('🔴 et la nouvelle cagnotte aussi',
+    /Ta nouvelle cagnotte a déjà repris/.test(fiche))
+  verifie('le geste est rappelé sur la fiche aussi',
+    /donne ton numéro de GSM/i.test(fiche))
+  verifie('et les cartes multiples sont NOMMÉES',
+    /nbCartes > 1/.test(fiche))
+
+  // ⚠️ UNE GARDE QUI VÉRIFIE LE COMPOSANT NE PROUVE PAS QUE L'ÉCRAN LE NOURRIT.
+  // Piège du 23/08 : les deux côtés, à chaque fois.
+  for (const p of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
+    const page = lireCode(p)
+    verifie(`${p} passe le nombre de cartes`, /nbCartes=\{cartesCeCommerce\}/.test(page))
+    verifie(`${p} le reçoit du serveur`, /setCartesCeCommerce\(j\.cartes_ce_commerce \|\| 0\)/.test(page))
+  }
+
+  // ⚠️ 🔴 LE `.limit(1)` SUR `updated_at` CACHAIT LA CARTE PLEINE. Un passage
+  // crédité sur un second numéro faisait disparaître de l'écran la carte qui
+  // portait la récompense : elle existait toujours, son porteur ne pouvait
+  // plus la voir ni la dépenser.
+  const mesCartes = lireCode('app/api/fidelite/mes-cartes/route.js')
+  verifie('🔴 la carte qui a une récompense passe devant',
+    /order\('recompenses_disponibles', \{ ascending: false \}\)/.test(mesCartes))
+  verifie('et l\'ancien limit(1) a disparu',
+    !/\.limit\(1\)/.test(mesCartes),
+    (mesCartes.match(/.*\.limit\(1\).*/) || [])[0])
+  verifie('le nombre de cartes du commerce est rendu',
+    /cartes_ce_commerce: liste\.length/.test(mesCartes))
+}
+
 // ═══ RÉSULTAT ═════════════════════════════════════════════════════════════
 if (echecs.length > 0) {
   console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.\n`)

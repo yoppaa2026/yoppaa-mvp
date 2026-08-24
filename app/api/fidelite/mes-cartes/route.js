@@ -75,16 +75,38 @@ export async function POST(request) {
       if (!commercantId || !RE_UUID.test(String(commercantId))) {
         return NextResponse.json({ ok: false, error: 'commercant_id invalide' }, { status: 400 })
       }
-      const { data: carte, error } = await supabase
+      // ⚠️ 🔴 UN YOPPER PEUT AVOIR DEUX CARTES CHEZ LE MÊME COMMERÇANT, et ce
+      // n'est pas un cas d'école : la clé est le NUMÉRO DE GSM. Quiconque a
+      // changé d'opérateur, ou commandé une fois avec le numéro du bureau,
+      // en a deux.
+      //
+      // ⚠️ LE `.limit(1)` SUR `updated_at` PRENAIT LA PLUS RÉCEMMENT TOUCHÉE,
+      // pas la plus utile. Un passage crédité sur le nouveau numéro faisait
+      // DISPARAÎTRE de l'écran la carte pleine de l'ancien : la récompense
+      // existait toujours en base, mais son porteur ne la voyait plus et ne
+      // pouvait plus la dépenser en ligne.
+      //
+      // On trie donc d'abord sur la récompense disponible. Une carte qui a
+      // quelque chose à donner passe devant une carte qui vient de bouger.
+      const { data: trouvees, error } = await supabase
         .from('fidelite_cartes')
         .select(`${CHAMPS_CARTE}, commercant:commercants(${CHAMPS_COMMERCANT})`)
         .eq('commercant_id', commercantId)
         .in('telephone', tels)
+        .order('recompenses_disponibles', { ascending: false })
         .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+        .limit(10)
       if (error) throw new Error(error.message)
-      return NextResponse.json({ ok: true, connecte: true, carte: carte || null })
+      const liste = trouvees || []
+      // ⚠️ ET ON DIT QU'IL Y EN A PLUSIEURS. Cacher les autres derrière un
+      // seul chiffre laisserait le Yopper compter des passages qui ne
+      // s'additionnent pas, sans jamais comprendre pourquoi.
+      return NextResponse.json({
+        ok: true,
+        connecte: true,
+        carte: liste[0] || null,
+        cartes_ce_commerce: liste.length,
+      })
     }
 
     // list : toutes les cartes, chez des commerçants à la fidélité active

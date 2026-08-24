@@ -275,7 +275,11 @@ export default function CommanderRdvSlug() {
   }
   const [deals, setDeals] = useState([])                    // deals actifs du jour (même fenêtre que la fiche commerce)
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
-  const [maCarteFid, setMaCarteFid] = useState(null)        // ma carte de fidélité chez ce commerçant
+  const [maCarteFid, setMaCarteFid] = useState(null)
+  // Nombre de cartes de CE Yopper chez CE commerçant. Deux numéros de GSM,
+  // deux cartes : le dire plutôt que de laisser compter des passages qui ne
+  // s'additionnent pas.
+  const [cartesCeCommerce, setCartesCeCommerce] = useState(0)        // ma carte de fidélité chez ce commerçant
   const [fidConnecte, setFidConnecte] = useState(true)      // distingue « pas de carte » de « pas connecté »
   const [photos, setPhotos] = useState([])                  // « Mon commerce en images »
   // La couverture ouvre la série, comme sur la fiche boutique. Deux sources,
@@ -528,6 +532,7 @@ export default function CommanderRdvSlug() {
       .then(j => {
         if (!vivant || !j?.ok) return
         setMaCarteFid(j.carte || null)
+        setCartesCeCommerce(j.cartes_ce_commerce || 0)
         setFidConnecte(j.connecte !== false)
       })
       .catch(() => {})
@@ -2129,7 +2134,7 @@ export default function CommanderRdvSlug() {
                     (Alex, 05/08) : elle parle de MA relation avec ce commerce et
                     donne une raison d'acheter AVANT de voir ce qu'il propose.
                     Même position exacte sur la fiche boutique. */}
-                {etape === 1 && <CarteFideliteFiche commercant={commercant} carte={maCarteFid} connecte={fidConnecte}/>}
+                {etape === 1 && <CarteFideliteFiche commercant={commercant} carte={maCarteFid} connecte={fidConnecte} nbCartes={cartesCeCommerce}/>}
 
                 {/* Les photos du salon : cette page n'en montrait AUCUNE, elle
                     se contentait de la couverture en bandeau. Pour un salon,

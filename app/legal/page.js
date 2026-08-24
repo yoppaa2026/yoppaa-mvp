@@ -1,5 +1,11 @@
 'use client'
 import { useState } from 'react'
+// ⚠️ LES PRIX DE LA BOUTIQUE SE LISENT DANS LE CATALOGUE. Recopiés dans les
+// CGU, ils auraient divergé au premier ajustement, et c'est le document
+// CONTRACTUEL qui aurait eu tort face à l'écran de vente. Les tarifs SMS et
+// d'abonnement de cette page sont encore écrits en dur : dette connue, à
+// reprendre de la même façon.
+import { SHOP_PRODUCTS, prixProduitTexte, COMPAT_IMPRESSION } from '@/lib/produits-boutique'
 
 const T = {
   main: '#6B35C4',
@@ -35,6 +41,15 @@ function Section({ id, title, children }) {
 // procédure de suppression de compte, accessible SANS installer l'application.
 function H3({ id, children }) {
   return <h3 id={id} style={{ fontWeight: 800, fontSize: '1rem', color: T.ink, marginTop: '1.5rem', marginBottom: '0.5rem', scrollMarginTop: '80px' }}>{children}</h3>
+}
+
+// Sous-titre de niveau 4, introduit le 24/08 pour la section Boutique : elle
+// couvre six sujets distincts (qualité de professionnel, paiement, livraison,
+// garantie, compatibilité, prestations) que six blocs de texte d'affilée
+// rendraient illisibles, et qu'on doit pouvoir citer un par un en cas de
+// litige.
+function H4({ children }) {
+  return <h4 style={{ fontWeight: 800, fontSize: '0.88rem', color: T.deep, marginTop: '1.1rem', marginBottom: '0.4rem' }}>{children}</h4>
 }
 
 function P({ children }) {
@@ -225,7 +240,52 @@ export default function LegalPage() {
               'Ne pas utiliser les données des Clients à des fins non autorisées.',
             ]}/>
 
-            <H3>8. Résiliation</H3>
+            {/* ⚠️ SECTION AJOUTÉE LE 24/08. Les CGU décrivaient la relation
+                Yopper ↔ Commerçant et l'abonnement, mais RIEN de ce que
+                Yoppaa vend en son NOM PROPRE : ni le matériel, ni les
+                prestations d'accompagnement. Aucune occurrence de « Kit »,
+                « imprimante » ou « garantie » n'existait dans cette page
+                pendant que la boutique encaissait des kits à 469 €. */}
+            <H3>8. Boutique Yoppaa : matériel et prestations</H3>
+            <P>Cette section couvre les biens et services vendus par <strong>Avcotech SRL en son nom propre</strong> au Commerçant, et non les produits des commerçants vendus via la plateforme, qui relèvent des conditions Clients ci-dessus.</P>
+            <Ul items={SHOP_PRODUCTS.map(p => `${p.label} : ${prixProduitTexte(p.type)} HTVA. ${p.desc}`)}/>
+            <P>L&rsquo;encodage d&rsquo;articles au-delà de ceux compris dans le Success Pack est proposé sur demande et fait l&rsquo;objet d&rsquo;un devis préalable.</P>
+
+            <H4>8.1. Qualité de professionnel</H4>
+            {/* ⚠️ LE POINT LE PLUS IMPORTANT DE LA SECTION. Le Commerçant
+                achète pour son activité : il n'est pas un consommateur au
+                sens du Livre VI du CDE. Ni rétractation de 14 jours, ni
+                garantie légale de deux ans de plein droit. Sans clause
+                écrite, c'est le droit commun des vices cachés qui s'applique,
+                et il est nettement plus flou. */}
+            <P>Le Commerçant achète ces biens et services <strong>pour les besoins de son activité professionnelle</strong>. Il n&rsquo;a donc pas la qualité de consommateur au sens du Livre VI du Code de droit économique belge. En conséquence, <strong>le droit de rétractation de 14 jours ne s&rsquo;applique pas</strong> à ces commandes, et la garantie légale de conformité de deux ans réservée aux consommateurs n&rsquo;est pas due.</P>
+
+            <H4>8.2. Paiement préalable</H4>
+            <P>Le matériel n&rsquo;est expédié et les prestations ne sont exécutées <strong>qu&rsquo;après encaissement intégral</strong>. Aucune commande n&rsquo;est préparée ni aucun rendez-vous confirmé sur la base d&rsquo;une commande non réglée. Le paiement s&rsquo;effectue en ligne via Stripe, aux tarifs HTVA affichés au moment de la commande, la TVA applicable étant ajoutée selon le statut et le pays du Commerçant.</P>
+
+            <H4>8.3. Livraison et transfert des risques</H4>
+            <P>Les frais de livraison sont compris dans les prix affichés pour une livraison en Belgique. Les délais annoncés sont indicatifs et ne sont pas de rigueur : un retard de livraison n&rsquo;ouvre droit ni à indemnité ni à annulation. <strong>Les risques sont transférés au Commerçant à la remise du colis par le transporteur.</strong> Toute avarie ou manquant doit être signalé à bonjour@yoppaa.app dans les <strong>7 jours calendrier</strong> suivant la réception, photos à l&rsquo;appui.</P>
+
+            <H4>8.4. Garantie du matériel</H4>
+            {/* ⚠️ Yoppaa REVEND du matériel grand public. Elle n'est ni le
+                fabricant ni l'assureur d'une tablette tombée du comptoir. */}
+            <P>Le matériel bénéficie de la <strong>garantie commerciale du fabricant</strong>, dans les conditions et pour la durée fixées par celui-ci ; Yoppaa transmet la demande et accompagne le Commerçant dans ses démarches. Yoppaa n&rsquo;est pas le fabricant et n&rsquo;offre aucune garantie propre au-delà de celle-ci.</P>
+            <P>Sont exclus de toute garantie : les dommages résultant d&rsquo;une chute, d&rsquo;un liquide, d&rsquo;une surtension, d&rsquo;un usage non conforme à la notice ou d&rsquo;une intervention par un tiers, ainsi que <strong>l&rsquo;usure normale des consommables</strong>, les rouleaux d&rsquo;étiquettes n&rsquo;étant ni repris ni échangés une fois ouverts.</P>
+
+            <H4>8.5. Compatibilité</H4>
+            {/* ⚠️ Deux phrases opposées, toutes deux vraies. La limite est
+                CONTRACTUELLE, pas technique : le mot est « garantie », jamais
+                « compatible ». Voir COMPAT_IMPRESSION, dont ce paragraphe est
+                la traduction juridique. */}
+            <P>{COMPAT_IMPRESSION}</P>
+            <P>Yoppaa <strong>n&rsquo;assure pas la mise en route de matériel acquis auprès d&rsquo;un tiers</strong> et ne garantit aucun résultat d&rsquo;impression avec un appareil qu&rsquo;elle n&rsquo;a pas fourni. La mise en route à distance suppose que le Commerçant dispose d&rsquo;un réseau sans fil auquel les deux appareils peuvent se connecter simultanément ; lorsque la configuration du réseau ne le permet pas, un déplacement est proposé et convenu avec lui avant toute exécution.</P>
+
+            <H4>8.6. Prestations d&rsquo;accompagnement</H4>
+            <P>Le contenu et les limites de chaque prestation sont ceux affichés au moment de la commande : nombre de photos, nombre d&rsquo;articles encodés, durée sur place et rayon géographique. Les prestations sur site s&rsquo;entendent <strong>dans un rayon de 30 km autour de Mettet</strong> ; au-delà, un supplément de déplacement est convenu au préalable.</P>
+            <P>Un rendez-vous peut être reporté sans frais jusqu&rsquo;à <strong>48 heures</strong> avant l&rsquo;heure convenue. Passé ce délai, ou en cas d&rsquo;absence du Commerçant au rendez-vous, la prestation est due. Lorsqu&rsquo;une prestation ne peut être exécutée pour une cause imputable à Yoppaa, le Commerçant a le choix entre un report et le remboursement intégral.</P>
+            <P>Le Commerçant reste responsable du contenu publié sur sa fiche, y compris des articles encodés avec l&rsquo;aide de Yoppaa : descriptions, prix, allergènes et mentions légales relèvent de sa seule responsabilité.</P>
+
+            <H3>9. Résiliation</H3>
             <P>Le Commerçant peut résilier sa formule payante ou revenir à la formule gratuite Exister moyennant un préavis d&rsquo;un mois calendrier, prenant effet le 1er jour du mois suivant. Pour que le préavis prenne effet le 1er du mois M+1, il doit être notifié au plus tard le 17e jour du mois M (14 jours avant). En cas de retour à Exister, les données du Commerçant sont conservées mais les fonctionnalités payantes (paiement en ligne, rendez-vous ou Click &amp; Collect, boutique, livraison, deals, etc.) sont désactivées.</P>
             <P>Le préavis doit être notifié par courrier recommandé à Avcotech SRL (Rue de Prée 9 G, 5640 Mettet) ou par email à facturation@yoppaa.app.</P>
             <InfoBox>

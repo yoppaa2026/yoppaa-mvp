@@ -319,6 +319,34 @@ v('le tableau de bord rend la mention sans la réserver aux secondaires',
   /\{p\.mention && \(/.test(dash))
 
 // ─────────────────────────────────────────────────────────────────────────
+// 9. Les CGU couvrent ce que Yoppaa vend en son nom propre
+// ─────────────────────────────────────────────────────────────────────────
+
+// ⚠️ AVANT LE 24/08, /legal NE PARLAIT NI DU MATÉRIEL NI DES PRESTATIONS.
+// Aucune occurrence de « Kit », « imprimante » ou « garantie » pendant que la
+// boutique encaissait des kits à plusieurs centaines d'euros.
+const legal = lireCode('app/legal/page.js')
+v('les CGU ouvrent une section Boutique', /Boutique Yoppaa\s*:\s*matériel et prestations/.test(legal))
+// Le point le plus important : sans clause écrite, c'est le droit commun des
+// vices cachés qui s'applique, plus flou que ce qu'on croit.
+v('les CGU disent que le Commerçant n\'est pas un consommateur',
+  /qualité de consommateur/.test(legal) && /rétractation de 14 jours ne s/.test(legal))
+v('les CGU nomment la garantie du fabricant', /garantie commerciale du fabricant/.test(legal))
+v('les CGU posent le paiement préalable', /qu&rsquo;après encaissement intégral/.test(legal))
+v('les CGU fixent le transfert des risques', /risques sont transférés/.test(legal))
+v('les CGU bornent le rayon des prestations sur site', /rayon de 30 km/.test(legal))
+v('les CGU refusent le matériel acquis auprès d\'un tiers', /matériel acquis auprès d&rsquo;un tiers/.test(legal))
+// ⚠️ Les prix des kits ne doivent pas être RECOPIÉS dans le document
+// contractuel : c'est lui qui aurait tort face à l'écran de vente.
+v('les CGU lisent la gamme dans le catalogue, sans la recopier',
+  /SHOP_PRODUCTS\.map/.test(legal) && /prixProduitTexte\(p\.type\)/.test(legal))
+// ⚠️ GARDE MESURÉE MUETTE : chercher `COMPAT_IMPRESSION` restait vert quand
+// le paragraphe disparaissait, parce que la LIGNE D'IMPORT porte le même mot.
+// Deuxième fois que ce motif exact passe aujourd'hui. On exige le rendu.
+v('les CGU reprennent la clause de compatibilité du catalogue',
+  /<P>\{COMPAT_IMPRESSION\}<\/P>/.test(legal))
+
+// ─────────────────────────────────────────────────────────────────────────
 
 console.log('')
 if (echecs.length) {

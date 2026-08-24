@@ -25,6 +25,7 @@ import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant, emailAbonnementConfirme, emailAbonnementVenduCommercant } from '@/lib/resend'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { debiterBon, recrediterBon } from '@/lib/bons-cadeaux-server'
+import { consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { referenceRdv } from '@/lib/numero-commande'
 import { programmerRappelRdv } from '@/lib/rappels'
@@ -691,7 +692,7 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
   // ET paye_en_ligne déjà true), on skip.
   const { data: existing } = await supabase
     .from('commandes')
-    .select('id, statut, paye_en_ligne, commercant_id, bon_cadeau_id, bon_cadeau_montant')
+    .select('id, statut, paye_en_ligne, commercant_id, bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id')
     .eq('id', commandeId)
     .maybeSingle()
   if (!existing) {
@@ -763,6 +764,33 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
       commande_id: commandeId,
     })
     if (!deb.ok) console.error('[webhook/commande] débit bon cadeau KO', deb.error, { commandeId })
+  }
+
+  // ─── RÉCOMPENSE DE FIDÉLITÉ : consommée ICI, et nulle part avant ─────────
+  //
+  // ⚠️ C'EST LE SEUL MOMENT OÙ ELLE EST RÉELLEMENT DÉPENSÉE sur le chemin en
+  // ligne. `create-commande` l'a seulement RÉSERVÉE en l'inscrivant sur la
+  // commande : un Yopper qui ouvre Stripe et ferme son onglet ne perd rien,
+  // exactement comme pour le bon cadeau.
+  //
+  // ⚠️ ET UN WEBHOOK REJOUÉ NE PEUT PAS LA DÉPENSER DEUX FOIS :
+  // `consommerRecompense` écrit sous `utilisee_at IS NULL`. Le second passage
+  // ne trouve plus de ligne, rend `false`, et se contente d'une trace. Stripe
+  // rejoue ses événements, ce n'est pas une hypothèse d'école.
+  if (existing.fidelite_recompense_id) {
+    const { data: rec } = await supabase
+      .from('fidelite_recompenses')
+      .select('id, carte_id, utilisee_at')
+      .eq('id', existing.fidelite_recompense_id)
+      .maybeSingle()
+    if (rec && !rec.utilisee_at) {
+      const prise = await consommerRecompense(supabase, {
+        recompense: rec,
+        source: 'commande',
+        commandeId,
+      })
+      if (!prise) console.warn('[webhook/commande] récompense déjà consommée', { commandeId })
+    }
   }
 
   // Libération des réservations stock : la commande EST désormais le stock
@@ -882,7 +910,7 @@ async function handleChargeRefunded(charge, supabase) {
   // Sinon update commande si trouvée + transition statut → 'annulee_client_refund'
   const { data: cmd } = await supabase
     .from('commandes')
-    .select('id, statut, bon_cadeau_id, bon_cadeau_montant')
+    .select('id, statut, bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id')
     .eq('stripe_payment_intent_id', paymentIntentId)
     .maybeSingle()
   if (cmd) {
@@ -901,6 +929,19 @@ async function handleChargeRefunded(charge, supabase) {
     if (isRefundTotal && cmd.bon_cadeau_id && Number(cmd.bon_cadeau_montant) > 0) {
       const rec = await recrediterBon(supabase, cmd.bon_cadeau_id, cmd.bon_cadeau_montant, cmd.id)
       if (!rec.ok) console.error('[webhook/refund] re-crédit bon cadeau KO', rec.error, { cmdId: cmd.id })
+    }
+    // ⚠️ MÊME RAISONNEMENT POUR LA RÉCOMPENSE, et c'est le frère du correctif
+    // ci-dessus : une commande intégralement remboursée n'a jamais eu lieu. La
+    // laisser consommée ferait perdre au Yopper une carte entière alors que le
+    // commerçant lui a tout rendu. `rendreRecompense` ne rend que ce qui est
+    // effectivement pris, donc un rejeu ne gonfle pas le compteur.
+    if (isRefundTotal && cmd.fidelite_recompense_id) {
+      const { data: recFid } = await supabase
+        .from('fidelite_recompenses')
+        .select('id, carte_id, utilisee_at')
+        .eq('id', cmd.fidelite_recompense_id)
+        .maybeSingle()
+      if (recFid?.utilisee_at) await rendreRecompense(supabase, recFid)
     }
     console.info('[stripe/webhook] refund enregistré sur commande', {
       cmdId: cmd.id, refund: refund.id, isRefundTotal, newStatut: updates.statut || cmd.statut,

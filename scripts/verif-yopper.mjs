@@ -457,9 +457,33 @@ verifier('la page rappelle qu\'on peut refuser la géolocalisation',
     /refreshSession\(\)/.test(fy))
   verifier('et sans jeton, il n\'appelle PAS le serveur',
     /if \(!token\) return reponseSessionPerdue\(\)/.test(fy))
-  verifier('l\'en-tête d\'autorisation n\'est plus conditionnel',
-    !/if \(token\) headers\.Authorization/.test(fy),
-    (fy.match(/.*if \(token\) headers\.Authorization.*/) || [])[0])
+  // ⚠️ LA GARDE PORTE SUR `fetchYopper` SEUL, PAS SUR LE FICHIER.
+  //
+  // Elle a été écrite le 11/08 pour interdire un en-tête d'autorisation
+  // OPTIONNEL, qui faisait partir les routes personnelles en anonyme et vidait
+  // l'application. Depuis le 24/08, le fichier contient AUSSI
+  // `fetchAvecPreuveSiConnecte`, dont l'en-tête est légitimement conditionnel :
+  // le tunnel de commande doit rester ouvert aux invités.
+  //
+  // Chercher le motif dans TOUT le fichier faisait donc rougir le banc sur du
+  // code sain. On isole le corps de `fetchYopper` : la règle reste entière là
+  // où elle protège quelque chose.
+  const corpsFetchYopper = (fy.split('export async function fetchYopper(')[1] || '').split('\n}')[0]
+  verifier('le corps de fetchYopper existe bien (la garde ne peut pas être vide)',
+    corpsFetchYopper.length > 50)
+  verifier('dans fetchYopper, l\'en-tête d\'autorisation n\'est pas conditionnel',
+    !/if \(token\) headers\.Authorization/.test(corpsFetchYopper),
+    (corpsFetchYopper.match(/.*if \(token\) headers\.Authorization.*/) || [])[0])
+
+  // ⚠️ ET L'AUTRE MOITIÉ DE LA RÈGLE : la fonction permissive doit rester
+  // permissive. Si quelqu'un lui ajoutait un jour le refus de `fetchYopper`,
+  // les invités ne pourraient plus commander du tout.
+  const corpsPermissif = (fy.split('export async function fetchAvecPreuveSiConnecte(')[1] || '').split('\n}')[0]
+  verifier('fetchAvecPreuveSiConnecte existe', corpsPermissif.length > 50)
+  verifier('et il part quand même sans jeton (l\'invité doit pouvoir commander)',
+    !/reponseSessionPerdue\(\)/.test(corpsPermissif))
+  verifier('mais il transporte la preuve quand elle existe',
+    /if \(token\) headers\.Authorization/.test(corpsPermissif))
 
   const sb = lire('lib/supabase.js')
   verifier('les options de session sont écrites, plus subies',

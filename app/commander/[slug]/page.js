@@ -3,7 +3,8 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { fetchYopper } from '@/lib/fetch-yopper'
+import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
+import { calculerRemiseRecompense, libelleRemiseRecompense } from '@/lib/fidelite-recompense'
 import { canDo, isVitrine } from '@/lib/plans'
 import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
@@ -1063,6 +1064,10 @@ export default function CommanderSlug() {
   const [bonsCfg, setBonsCfg] = useState(null)
   const [bonInput, setBonInput] = useState('')
   const [bonApplique, setBonApplique] = useState(null)   // { code, solde }
+  // Récompense de fidélité du Yopper CONNECTÉ chez CE commerçant, et son choix
+  // de l'utiliser ou non sur cette commande.
+  const [recompenseFid, setRecompenseFid] = useState(null)      // { id, type, valeur, libelle }
+  const [recompenseActive, setRecompenseActive] = useState(false)
   const [bonErreur, setBonErreur] = useState(null)
   const [bonLoading, setBonLoading] = useState(false)
   const [bonModalOuvert, setBonModalOuvert] = useState(false)
@@ -2320,11 +2325,49 @@ export default function CommanderSlug() {
       .then(r => r.json())
       .then(j => { if (j?.ok) setBonsCfg(j) })
       .catch(() => {})
-   
+
   }, [commercant?.id])
+
+  // Récompense de fidélité disponible chez ce commerçant.
+  //
+  // ⚠️ SILENCIEUX EN CAS D'ÉCHEC, ET C'EST VOULU ICI. Ce n'est pas l'écran vide
+  // du 11/08 : il ne s'agit pas d'une donnée que le Yopper vient consulter,
+  // mais d'une offre en plus. Un invité, une session endormie ou une panne
+  // réseau donnent le même résultat visible — pas de bloc récompense — et la
+  // commande reste possible dans tous les cas.
+  useEffect(() => {
+    if (!commercant?.id) return
+    let vivant = true
+    fetchAvecPreuveSiConnecte(`/api/fidelite/ma-recompense?commercant_id=${commercant.id}`)
+      .then(r => r.json())
+      .then(j => { if (vivant && j?.ok && j.recompense) setRecompenseFid(j.recompense) })
+      .catch(() => {})
+    return () => { vivant = false }
+  }, [commercant?.id])
+  // ─── RÉCOMPENSE DE FIDÉLITÉ ────────────────────────────────────────────
+  //
+  // ⚠️ ELLE N'EST PAS COCHÉE D'AVANCE, ET C'EST UN CHOIX. Une récompense de
+  // 5 € posée d'office sur un panier à 4 € en brûlerait 1 € que le Yopper ne
+  // récupérera jamais. On la propose bien en évidence, il décide.
+  //
+  // ⚠️ ET CE CALCUL N'EST QU'UN AFFICHAGE. Le prix qui fait foi est celui de
+  // `create-commande`, qui recharge la récompense depuis la base et revérifie
+  // qu'elle appartient à un numéro PROUVÉ de ce Yopper connecté.
+  function remiseRecompenseEffective() {
+    return (recompenseFid && recompenseActive) ? calculerRemiseRecompense(recompenseFid, totalAvecFrais()) : 0
+  }
+  // Ce qui reste à couvrir une fois la récompense passée : la base du bon.
+  function baseApresRecompense() {
+    return Math.max(0, Math.round((totalAvecFrais() - remiseRecompenseEffective()) * 100) / 100)
+  }
   // Bon cadeau appliqué : remise plafonnée (solde, total, minimum Stripe 0,50 €)
-  function remiseBonEffective() { return bonApplique ? calculerRemiseBon(bonApplique.solde, totalAvecFrais()) : 0 }
-  function totalDuApresBon() { return Math.max(0, Math.round((totalAvecFrais() - remiseBonEffective()) * 100) / 100) }
+  //
+  // ⚠️ LA BASE EST CELLE D'APRÈS LA RÉCOMPENSE, jamais le total brut. La
+  // récompense est une remise du commerçant, le bon est de l'argent déjà payé
+  // par quelqu'un : dans l'autre ordre, le porteur du bon perdrait du solde
+  // sur une part qui était offerte de toute façon.
+  function remiseBonEffective() { return bonApplique ? calculerRemiseBon(bonApplique.solde, baseApresRecompense()) : 0 }
+  function totalDuApresBon() { return Math.max(0, Math.round((baseApresRecompense() - remiseBonEffective()) * 100) / 100) }
 
   async function appliquerBon() {
     const code = normaliserCodeBon(bonInput)
@@ -2470,9 +2513,13 @@ export default function CommanderSlug() {
           stripeOK = stripeOK && p === 'en_ligne'
         }
       }
-      // Bon cadeau couvrant tout le dû : pas de choix de paiement à faire, le
-      // serveur confirme sans Stripe (chemin couvertParBon de create-commande).
-      const couvertParBon = !!bonApplique && totalDuApresBon() === 0
+      // Dû entièrement couvert : pas de choix de paiement à faire, le serveur
+      // confirme sans Stripe (chemin `couvertSansPaiement` de create-commande).
+      //
+      // ⚠️ LA RÉCOMPENSE COMPTE ICI AUSSI. Tant que la condition ne regardait
+      // que le bon cadeau, une récompense couvrant tout le panier laissait
+      // l'écran réclamer un mode de paiement pour 0 €.
+      const couvertParBon = totalDuApresBon() === 0 && (!!bonApplique || remiseRecompenseEffective() > 0)
       const modeEffectif = couvertParBon ? 'en_ligne' : (modePaiement || (stripeOK ? 'en_ligne' : cashOK ? 'sur_place' : null))
       if (!modeEffectif) {
         setErreurCommande('La commande en ligne n\'est pas encore disponible chez ce commerçant.')
@@ -2480,7 +2527,11 @@ export default function CommanderSlug() {
         return
       }
 
-      const res = await fetch('/api/stripe/checkout/create-commande', {
+      // ⚠️ `fetchAvecPreuveSiConnecte` ET NON `fetch` : sans l'en-tête
+      // d'autorisation, le serveur ne voit qu'un invité et REFUSE la
+      // récompense de fidélité. Et non `fetchYopper` non plus, qui refuserait
+      // l'appel faute de session : un invité doit pouvoir commander.
+      const res = await fetchAvecPreuveSiConnecte('/api/stripe/checkout/create-commande', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2494,6 +2545,7 @@ export default function CommanderSlug() {
           client_telephone: client.telephone,
           rgpd_marketing: rgpdMarketing,
           ...(bonApplique ? { bon_cadeau_code: bonApplique.code } : {}),
+          ...(recompenseFid && recompenseActive ? { fidelite_recompense_id: recompenseFid.id } : {}),
           ...(estDetail
             ? {
                 mode_retrait: modeBoutiqueEff === 'expedition' ? 'expedition' : 'retrait_boutique',
@@ -3957,17 +4009,29 @@ export default function CommanderSlug() {
                     <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.82rem' }}>Total</span>
                     <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.1rem' }}>{totalAvecFrais().toFixed(2)}€</span>
                   </div>
+                  {/* ⚠️ LA RÉCOMPENSE EST UNE LIGNE À PART, JAMAIS FONDUE DANS
+                      LE BON CADEAU. Ce sont deux natures d'avantage : l'une
+                      est offerte par le commerçant, l'autre a été payée par
+                      quelqu'un. Les additionner sur une seule ligne
+                      empêcherait le Yopper de savoir ce qu'il vient de
+                      dépenser de sa carte. */}
+                  {remiseRecompenseEffective() > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+                      <span style={{ fontWeight: 700, color: T.main, fontSize: '0.82rem' }}>Récompense fidélité</span>
+                      <span style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem' }}>−{remiseRecompenseEffective().toFixed(2)}€</span>
+                    </div>
+                  )}
                   {bonApplique && remiseBonEffective() > 0 && (
-                    <>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-                        <span style={{ fontWeight: 700, color: '#10B981', fontSize: '0.82rem' }}>Bon cadeau ({bonApplique.code})</span>
-                        <span style={{ fontWeight: 800, color: '#10B981', fontSize: '0.9rem' }}>−{remiseBonEffective().toFixed(2)}€</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                        <span style={{ fontWeight: 800, color: T.ink, fontSize: '0.82rem' }}>Reste à payer</span>
-                        <span style={{ fontWeight: 900, color: T.main, fontSize: '1.1rem' }}>{totalDuApresBon().toFixed(2)}€</span>
-                      </div>
-                    </>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+                      <span style={{ fontWeight: 700, color: '#10B981', fontSize: '0.82rem' }}>Bon cadeau ({bonApplique.code})</span>
+                      <span style={{ fontWeight: 800, color: '#10B981', fontSize: '0.9rem' }}>−{remiseBonEffective().toFixed(2)}€</span>
+                    </div>
+                  )}
+                  {(remiseRecompenseEffective() > 0 || (bonApplique && remiseBonEffective() > 0)) && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                      <span style={{ fontWeight: 800, color: T.ink, fontSize: '0.82rem' }}>Reste à payer</span>
+                      <span style={{ fontWeight: 900, color: T.main, fontSize: '1.1rem' }}>{totalDuApresBon().toFixed(2)}€</span>
+                    </div>
                   )}
                 </div>
 
@@ -4377,12 +4441,42 @@ export default function CommanderSlug() {
                     ? (!estExpe && commercant?.boutique_retrait_paiement === 'magasin')
                     : !!commercant?.accepte_paiement_cash
                   const surPlaceOu = modeCommande === 'livraison' ? 'au livreur' : estDetail ? 'au comptoir, au retrait' : 'au retrait'
-                  // Bon cadeau couvrant tout : plus rien à payer, pas de choix de mode
-                  const couvert = !!bonApplique && totalDuApresBon() === 0
+                  // Avantages couvrant tout : plus rien à payer, pas de choix
+                  // de mode. ⚠️ La récompense de fidélité peut y suffire seule.
+                  const couvert = totalDuApresBon() === 0 && (!!bonApplique || remiseRecompenseEffective() > 0)
                   const modeEffectif = couvert ? 'en_ligne' : (modePaiement || (stripeOK ? 'en_ligne' : cashOK ? 'sur_place' : null))
                   const surPlace = !couvert && modeEffectif === 'sur_place'
                   return (
                     <>
+                      {/* ─── Récompense de fidélité ────────────────────────
+                          ⚠️ N'APPARAÎT QUE POUR UN YOPPER CONNECTÉ qui a
+                          réellement une récompense chez CE commerçant : la
+                          route ne rend rien dans tous les autres cas. Un
+                          invité ne voit donc pas un bloc qu'il ne peut pas
+                          utiliser.
+                          ⚠️ ET LE BOUTON DIT LE GESTE, pas l'état : « Utiliser
+                          ma récompense », puis « Retirer ». */}
+                      {recompenseFid && (
+                        <div style={{ background: recompenseActive ? '#F5F3FF' : '#fff', border: `1.5px solid ${recompenseActive ? T.main : T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                          <div style={{ minWidth: 0 }}>
+                            <p style={{ fontSize: '0.82rem', fontWeight: 800, color: T.ink, margin: 0 }}>
+                              {recompenseActive
+                                ? libelleRemiseRecompense(recompenseFid, totalAvecFrais())
+                                : (recompenseFid.libelle || 'Ta récompense fidélité t’attend')}
+                            </p>
+                            <p style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 600, margin: '2px 0 0' }}>
+                              {recompenseActive
+                                ? 'Elle sera déduite quand ta commande sera confirmée.'
+                                : `Tu peux la garder pour une prochaine fois : elle ne s’efface pas.`}
+                            </p>
+                          </div>
+                          <button type="button" onClick={() => setRecompenseActive(v => !v)}
+                            style={{ flexShrink: 0, padding: '8px 14px', borderRadius: 12, border: recompenseActive ? `1.5px solid ${T.main}` : 'none', background: recompenseActive ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: recompenseActive ? T.main : '#fff', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                            {recompenseActive ? 'Retirer' : 'Utiliser'}
+                          </button>
+                        </div>
+                      )}
+
                       {/* Bon cadeau : champ code (si le commerçant a activé le module) */}
                       {bonsCfg?.actif && !bonApplique && (
                         <div style={{ background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 10 }}>

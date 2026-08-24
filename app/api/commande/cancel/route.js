@@ -20,6 +20,7 @@ import { envoyerAuCommercant, emailCommandeAnnuleeYopper, emailCommandeAnnuleeCo
 import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
 import { recrediterBon } from '@/lib/bons-cadeaux-server'
+import { rendreRecompense } from '@/lib/fidelite-recompense-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { referenceCommande } from '@/lib/numero-commande'
 import { libelleOptions } from '@/lib/options-ligne'
@@ -49,7 +50,7 @@ export async function POST(request) {
       id, statut, paye_en_ligne, total, stripe_payment_intent_id,
       client_email, client_nom, annulation_token, created_at, commercant_id,
       numero_commande, numero_prefixe, date_commande, creneau_id, rappel_push_id,
-      bon_cadeau_id, bon_cadeau_montant,
+      bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id,
       commercants:commercant_id (id, nom, slug, stripe_account_id, delai_annulation_heures),
       creneau:creneaux!creneau_id (heure_debut)
     `
@@ -193,6 +194,21 @@ export async function POST(request) {
     if (cmd.bon_cadeau_id && Number(cmd.bon_cadeau_montant) > 0) {
       const rec = await recrediterBon(supabase, cmd.bon_cadeau_id, cmd.bon_cadeau_montant, cmd.id)
       if (!rec.ok) console.error('[commande/cancel] re-crédit bon cadeau KO', rec.error, { commande_id: cmd.id })
+    }
+
+    // ⚠️ ET LA RÉCOMPENSE DE FIDÉLITÉ AVEC, pour la même raison exactement :
+    // une commande annulée n'a pas eu lieu. La laisser consommée ferait perdre
+    // au Yopper une carte entière sur une commande qu'il n'a jamais reçue, et
+    // il n'a aucun moyen de la récupérer lui-même. `rendreRecompense` ne rend
+    // que ce qui est effectivement pris : le webhook de remboursement fait le
+    // même appel en secours, un seul des deux passe.
+    if (cmd.fidelite_recompense_id) {
+      const { data: recFid } = await supabase
+        .from('fidelite_recompenses')
+        .select('id, carte_id, utilisee_at')
+        .eq('id', cmd.fidelite_recompense_id)
+        .maybeSingle()
+      if (recFid?.utilisee_at) await rendreRecompense(supabase, recFid)
     }
 
     // Annule le rappel push programmé (30 min avant retrait) s'il existe :

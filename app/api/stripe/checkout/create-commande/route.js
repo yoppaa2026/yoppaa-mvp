@@ -37,6 +37,9 @@ import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
 import { chargerBonValide, debiterBon } from '@/lib/bons-cadeaux-server'
+import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
+import { chargerRecompensePourYopper, consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
+import { identiteProuvee } from '@/lib/yopper-auth'
 import { tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
 import { calculerCapaciteCreneau, creneauCommandable, STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
 import { brusselsInstant, jourBruxelles, minutesBruxelles } from '@/lib/timezone'
@@ -65,6 +68,10 @@ export async function POST(request) {
       // les suggestions, et son mot au livreur.
       adresse_geocodage, livraison_lat, livraison_lng, note_livraison,
       paiement_mode, bon_cadeau_code,
+      // ⚠️ UN IDENTIFIANT ENVOYÉ PAR LE CLIENT N'EST JAMAIS UNE AUTORISATION.
+      // Il désigne seulement CE QU'IL DEMANDE ; tout est revérifié plus bas
+      // contre son identité PROUVÉE (voir 4.4).
+      fidelite_recompense_id,
     } = body
     const estLivraison = mode_retrait === 'livraison'
     // Boutique détail (Module 2 étape 5) : pas de créneau. Retrait en boutique
@@ -348,6 +355,62 @@ export async function POST(request) {
     }
     const fraisLivraisonEUR = fraisLivraisonCents / 100
 
+    // ─── 4.4) RÉCOMPENSE DE FIDÉLITÉ (bloc 2, 24/08) ──────────────────────
+    //
+    // ⚠️ ELLE PASSE AVANT LE BON CADEAU, et l'ordre n'est pas cosmétique. La
+    // récompense est une REMISE consentie par le commerçant : elle abaisse le
+    // prix. Le bon cadeau est de l'ARGENT DÉJÀ PAYÉ par quelqu'un : il paie ce
+    // qui reste. Dans l'autre sens, le bon serait consommé sur une part que le
+    // commerçant offrait de toute façon, et son porteur perdrait du solde pour
+    // rien. Voir `lib/fidelite-recompense.js`.
+    //
+    // ⚠️ ARBITRAGE D'ALEX (option A) : RÉSERVÉE AU YOPPER CONNECTÉ. La carte a
+    // pour clé un numéro de GSM et aucun flux de vérification par SMS n'existe.
+    // Sans identité prouvée, il suffirait d'essayer le numéro du voisin, de
+    // voir le prix baisser de 5 €, et d'apprendre qu'il a une carte pleine chez
+    // ce commerçant. `client_email` vient du CORPS de la requête : il ne prouve
+    // rien du tout, c'est `identiteProuvee` qui tranche.
+    //
+    // ⚠️ ET LA RESTRICTION PORTE SUR L'ÉTAT DU CLIENT, JAMAIS SUR LE CANAL : le
+    // Click and Collect, la boutique de détail, le retrait et l'expédition
+    // passent tous par ici et sont couverts de la même façon.
+    let recompense = null
+    let remiseRecompenseEUR = 0
+    if (fidelite_recompense_id) {
+      const identite = await identiteProuvee(request)
+      if (!identite?.email) {
+        return NextResponse.json({
+          ok: false,
+          error: 'Connecte-toi pour utiliser ta récompense fidélité.',
+          recompense_refusee: 'non_connecte',
+        }, { status: 401 })
+      }
+      const resRec = await chargerRecompensePourYopper(supabase, {
+        email: identite.email,
+        commercantId: commercant.id,
+        recompenseId: fidelite_recompense_id,
+      })
+      if (!resRec.ok) {
+        const messages = {
+          introuvable: 'Cette récompense n\'existe pas.',
+          deja_utilisee: 'Cette récompense a déjà été utilisée.',
+          autre_commercant: 'Cette récompense appartient à un autre commerce.',
+          pas_la_sienne: 'Cette récompense n\'est pas la tienne.',
+          absente: 'Récompense introuvable.',
+          non_connecte: 'Connecte-toi pour utiliser ta récompense fidélité.',
+        }
+        return NextResponse.json({
+          ok: false,
+          error: messages[resRec.raison] || 'Récompense inutilisable.',
+          recompense_refusee: resRec.raison,
+        }, { status: 400 })
+      }
+      recompense = resRec.recompense
+      remiseRecompenseEUR = appliquerRecompenseAvantBon(recompense, totalEUR + fraisLivraisonEUR).remiseRecompense
+    }
+    // Ce qu'il reste à couvrir après la récompense : la base du bon cadeau.
+    const baseApresRecompense = Math.round((totalEUR + fraisLivraisonEUR - remiseRecompenseEUR) * 100) / 100
+
     // ─── 4.5) Bon cadeau (module 3) : revalidation server-side du code ─────
     // La remise couvre articles + frais, plafonnée au solde du bon ET pour
     // laisser un reste à payer de 0 ou >= 0,50 € (minimum Stripe). Le DÉBIT
@@ -365,12 +428,15 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: resBon.error }, { status: 400 })
       }
       bonCadeau = resBon.bon
-      remiseBonEUR = calculerRemiseBon(bonCadeau.solde, totalEUR + fraisLivraisonEUR)
+      remiseBonEUR = calculerRemiseBon(bonCadeau.solde, baseApresRecompense)
     }
-    const duEUR = Math.round((totalEUR + fraisLivraisonEUR - remiseBonEUR) * 100) / 100
+    const duEUR = Math.round((baseApresRecompense - remiseBonEUR) * 100) / 100
     const duCents = Math.round(duEUR * 100)
-    // Dû entièrement couvert par le bon : confirmation directe, pas de Stripe.
-    const couvertParBon = !!bonCadeau && duCents === 0
+    // Dû entièrement couvert sans paiement : confirmation directe, pas de
+    // Stripe. ⚠️ LA RÉCOMPENSE SEULE PEUT Y SUFFIRE (5 € sur un panier à 4 €),
+    // et ce chemin n'existait que pour le bon cadeau : sans cet ajout, on
+    // envoyait le Yopper vers un paiement de 0 €, que Stripe refuse.
+    const couvertSansPaiement = duCents === 0 && (!!bonCadeau || !!recompense)
 
     // ─── 4.6) Le créneau est-il encore commandable ? ───────────────────────
     //
@@ -601,6 +667,12 @@ export async function POST(request) {
         total: totalEUR + fraisLivraisonEUR,
         bon_cadeau_id: bonCadeau?.id || null,
         bon_cadeau_montant: remiseBonEUR,
+        // ⚠️ LA REMISE EST FIGÉE SUR LA COMMANDE, pas recalculée à la lecture.
+        // C'est ce qui permet à la comptabilité de montrer, des années plus
+        // tard, ce que le commerçant a réellement offert ce jour-là. La
+        // récompense, elle, n'est CONSOMMÉE qu'à la confirmation (plus bas).
+        fidelite_recompense_id: recompense?.id || null,
+        fidelite_remise: remiseRecompenseEUR,
         statut: 'paiement_en_attente',
         date_commande,
         paye_en_ligne: false,
@@ -703,9 +775,47 @@ export async function POST(request) {
     // Stripe (paiement sur place ou dû entièrement couvert par le bon). Le
     // chemin Stripe, lui, débite au webhook paiement OK. Une course (bon vidé
     // entre la vérification et ici) annule proprement la commande.
-    if (bonCadeau && remiseBonEUR > 0 && (surPlace || couvertParBon)) {
+    // ⚠️ LA RÉCOMPENSE SE PREND AVANT LE BON, ET CE N'EST PAS L'ORDRE DU
+    // CALCUL QUI L'IMPOSE, C'EST LE DÉGÂT EN CAS D'ÉCHEC. Le bon cadeau
+    // débité ne se rend pas d'un revers de main ; la récompense, si. En
+    // prenant la récompense d'abord, un refus du bon peut être défait
+    // entièrement. Dans l'autre sens, le bon serait brûlé sur une commande
+    // annulée, et son porteur aurait perdu de l'argent pour rien.
+    const confirmeSansStripe = surPlace || couvertSansPaiement
+
+    // ─── 8.35) RÉCOMPENSE DE FIDÉLITÉ ──────────────────────────────────────
+    //
+    // ⚠️ ON NE CONSOMME QU'À LA CONFIRMATION. Un Yopper qui ouvre Stripe puis
+    // ferme son onglet ne doit rien perdre : le chemin en ligne consomme au
+    // webhook « paiement OK », jamais ici. C'est la règle du bon cadeau, et
+    // c'est aussi ce qui rend le double clic inoffensif.
+    //
+    // ⚠️ ET SI ELLE VIENT D'ÊTRE DÉPENSÉE AILLEURS, ON ANNULE PROPREMENT plutôt
+    // que d'offrir la remise deux fois : `consommerRecompense` écrit sous
+    // `utilisee_at IS NULL`, donc le second passage ne trouve plus de ligne et
+    // rend `false`. Sans ce contrôle, la même récompense paierait deux
+    // commandes et le commerçant en ferait les frais.
+    if (recompense && confirmeSansStripe) {
+      const prise = await consommerRecompense(supabase, {
+        recompense,
+        source: 'commande',
+        commandeId: commande.id,
+      })
+      if (!prise) {
+        await supabase.from('commandes').update({ statut: 'annulee_paiement_ko' }).eq('id', commande.id)
+        await supabase.from('commande_stock_reservation').delete().eq('commande_id', commande.id)
+        return NextResponse.json({ ok: false, error: 'Ta récompense vient d\'être utilisée ailleurs. Recharge la page et réessaie.' }, { status: 409 })
+      }
+    }
+
+    if (bonCadeau && remiseBonEUR > 0 && confirmeSansStripe) {
       const deb = await debiterBon(supabase, bonCadeau.id, remiseBonEUR, { source: 'commande', commande_id: commande.id })
       if (!deb.ok) {
+        // ⚠️ ON REND LA RÉCOMPENSE. Elle vient d'être prise trois lignes plus
+        // haut pour une commande qui n'aura pas lieu : la laisser dépensée
+        // ferait perdre au Yopper une carte entière à cause d'un bon cadeau
+        // qui ne le concerne même pas.
+        if (recompense) await rendreRecompense(supabase, recompense)
         await supabase.from('commandes').update({ statut: 'annulee_paiement_ko' }).eq('id', commande.id)
         await supabase.from('commande_stock_reservation').delete().eq('commande_id', commande.id)
         console.error('[create-commande] débit bon cadeau KO', deb.error)
@@ -717,10 +827,10 @@ export async function POST(request) {
     // immédiate, pas de Stripe. Miroir exact du webhook paiement OK : bascule
     // en_attente, libération de la réservation TTL (la commande EST le stock
     // consommé), puis emails + rappel push via lib/commande-notifs.
-    if (surPlace || couvertParBon) {
+    if (confirmeSansStripe) {
       const { error: errConfirm } = await supabase
         .from('commandes')
-        .update(couvertParBon && !surPlace
+        .update(couvertSansPaiement && !surPlace
           // Payé intégralement par le bon : équivalent d'un paiement en ligne
           ? { statut: 'en_attente', paye_en_ligne: true, paye_en_ligne_date: new Date().toISOString() }
           : { statut: 'en_attente' })
@@ -736,7 +846,10 @@ export async function POST(request) {
       } catch (e) {
         console.error('[create-commande] notifs sur place KO (non bloquant)', e?.message)
       }
-      return NextResponse.json({ ok: true, cash: surPlace, bon_total: couvertParBon && !surPlace, commande_id: commande.id })
+      // `bon_total` garde son nom pour l'écran, mais son sens s'élargit : « dû
+      // à zéro, confirmé sans passer par Stripe ». Ce peut désormais être la
+      // récompense de fidélité seule.
+      return NextResponse.json({ ok: true, cash: surPlace, bon_total: couvertSansPaiement && !surPlace, commande_id: commande.id })
     }
 
     // ─── 9) Stripe Checkout Session (Direct Charge sur compte connecté) ────
@@ -752,10 +865,17 @@ export async function POST(request) {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card', 'bancontact'],
-      // Avec bon cadeau : une seule ligne au montant restant dû (Stripe ne
+      // Avec une remise : une seule ligne au montant restant dû (Stripe ne
       // gère pas de ligne négative en Checkout), la déduction est explicitée
-      // dans le descriptif. Sans bon : lignes commande + frais classiques.
-      line_items: remiseBonEUR > 0 ? [
+      // dans le descriptif. Sans remise : lignes commande + frais classiques.
+      //
+      // ⚠️ LA CONDITION PORTE SUR TOUTE REMISE, PAS SUR LE SEUL BON CADEAU.
+      // Tant qu'elle ne regardait que `remiseBonEUR`, une récompense de
+      // fidélité utilisée SANS bon cadeau retombait dans la branche du bas et
+      // facturait `totalCents` : **le Yopper payait le prix plein pendant que
+      // sa commande enregistrait la remise, et sa récompense était consommée
+      // pour rien.**
+      line_items: (remiseBonEUR > 0 || remiseRecompenseEUR > 0) ? [
         {
           quantity: 1,
           price_data: {
@@ -763,7 +883,11 @@ export async function POST(request) {
             unit_amount: duCents,
             product_data: {
               name: `Commande Yoppaa · ${commercant.nom}`,
-              description: `${descCommande} · bon cadeau déduit (−${remiseBonEUR.toFixed(2)} €)`,
+              description: [
+                descCommande,
+                remiseRecompenseEUR > 0 ? `récompense fidélité (−${remiseRecompenseEUR.toFixed(2)} €)` : null,
+                remiseBonEUR > 0 ? `bon cadeau déduit (−${remiseBonEUR.toFixed(2)} €)` : null,
+              ].filter(Boolean).join(' · '),
             },
           },
         },

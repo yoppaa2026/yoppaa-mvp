@@ -23,6 +23,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
+import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
+import { chargerRecompensePourYopper } from '@/lib/fidelite-recompense-server'
+import { identiteProuvee } from '@/lib/yopper-auth'
 
 export async function POST(request) {
   try {
@@ -33,6 +36,9 @@ export async function POST(request) {
       commercant_id, prestation_id, praticien_id, date_rdv, heure_debut, heure_fin, duree_minutes,
       client_email, client_prenom, client_nom, client_telephone,
       notes_client, rgpd_marketing,
+      // ⚠️ DÉSIGNÉ PAR LE CLIENT, DONC REVÉRIFIÉ INTÉGRALEMENT plus bas contre
+      // son identité PROUVÉE. Un identifiant envoyé n'autorise rien.
+      fidelite_recompense_id,
     } = body
 
     // Validations basiques
@@ -75,11 +81,59 @@ export async function POST(request) {
     if (!prixBase || acomptePct <= 0) {
       return NextResponse.json({ ok: false, error: 'cette prestation ne demande pas d\'acompte en ligne' }, { status: 400 })
     }
-    const acompteMontant = Math.round(prixBase * acomptePct) / 100         // EUR, 2 décimales
+    // ─── RÉCOMPENSE DE FIDÉLITÉ (bloc 2, 24/08) ───────────────────────────
+    //
+    // ⚠️ ARBITRAGE D'ALEX : ELLE BAISSE LE TOTAL, ET L'ACOMPTE SE CALCULE SUR
+    // CE TOTAL RÉDUIT. Le rendez-vous ne prend qu'un acompte en ligne, le solde
+    // se règle au comptoir : si la remise ne portait que sur le solde, le
+    // Yopper avancerait un acompte calculé sur un prix qu'il ne paie pas. En
+    // baissant le total, tout suit — l'acompte, le solde, et le chiffre
+    // d'affaires du commerçant.
+    //
+    // ⚠️ MÊME RÈGLE QUE PARTOUT : identité PROUVÉE par le jeton, jamais
+    // `client_email`, qui est envoyé par le client et ne prouve rien.
+    let recompense = null
+    let remiseRecompenseEUR = 0
+    if (fidelite_recompense_id) {
+      const identite = await identiteProuvee(request)
+      if (!identite?.email) {
+        return NextResponse.json({
+          ok: false,
+          error: 'Connecte-toi pour utiliser ta récompense fidélité.',
+          recompense_refusee: 'non_connecte',
+        }, { status: 401 })
+      }
+      const resRec = await chargerRecompensePourYopper(supabase, {
+        email: identite.email,
+        commercantId: commercant.id,
+        recompenseId: fidelite_recompense_id,
+      })
+      if (!resRec.ok) {
+        return NextResponse.json({
+          ok: false,
+          error: 'Récompense inutilisable.',
+          recompense_refusee: resRec.raison,
+        }, { status: 400 })
+      }
+      recompense = resRec.recompense
+      remiseRecompenseEUR = appliquerRecompenseAvantBon(recompense, prixBase).remiseRecompense
+    }
+    const prixNet = Math.round((prixBase - remiseRecompenseEUR) * 100) / 100
+
+    const acompteMontant = Math.round(prixNet * acomptePct) / 100          // EUR, 2 décimales
     const acompteCents = Math.round(acompteMontant * 100)                    // centimes pour Stripe
 
+    // ⚠️ LA RÉCOMPENSE PEUT RENDRE L'ACOMPTE INENCAISSABLE, et il ne faut pas
+    // que ça se termine par un refus sec de Stripe. 20 % d'un solde de 2 €
+    // valent 0,40 €, sous le minimum. On le DIT, avec le geste à faire.
     if (acompteCents < 50) {
-      return NextResponse.json({ ok: false, error: 'acompte trop faible (min 0,50€ Stripe)' }, { status: 400 })
+      return NextResponse.json({
+        ok: false,
+        error: remiseRecompenseEUR > 0
+          ? 'Avec ta récompense, l\'acompte descend sous le minimum encaissable. Réserve sans la récompense : tu pourras l\'utiliser au comptoir.'
+          : 'acompte trop faible (min 0,50€ Stripe)',
+        recompense_refusee: remiseRecompenseEUR > 0 ? 'acompte_trop_faible' : undefined,
+      }, { status: 400 })
     }
 
     // TODO : valider l'overlap/horaires/pause ici (réutiliser logique existante).
@@ -123,8 +177,15 @@ export async function POST(request) {
             heure_debut: heure_debut.slice(0,5),
             heure_fin: heure_fin.slice(0,5),
             duree_minutes: String(duree_minutes || prestation.duree_minutes),
+            // ⚠️ LE TARIF DE LA PRESTATION RESTE LE BRUT. C'est ce qui a été
+            // affiché, et une remise ne réécrit pas un tarif. La remise voyage
+            // à côté, et tous les calculs de solde la retranchent.
             prix_estime: String(prixBase),
             acompte_montant: String(acompteMontant),
+            ...(recompense ? {
+              fidelite_recompense_id: String(recompense.id),
+              fidelite_remise: String(remiseRecompenseEUR),
+            } : {}),
             client_email,
             client_prenom,
             client_nom,

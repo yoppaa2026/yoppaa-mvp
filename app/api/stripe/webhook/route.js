@@ -185,6 +185,12 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       heure_fin: meta.heure_fin,
       duree_minutes: Number(meta.duree_minutes) || null,
       prix_estime: Number(meta.prix_estime) || null,
+      // ⚠️ LA REMISE EST FIGÉE SUR LE RENDEZ-VOUS, comme sur une commande.
+      // `prix_estime` garde le tarif de la prestation ; c'est `fidelite_remise`
+      // qui dit ce que le commerçant a offert, et tous les calculs de solde et
+      // de chiffre d'affaires la retranchent (voir lib/rdv-paiement.js).
+      fidelite_recompense_id: meta.fidelite_recompense_id || null,
+      fidelite_remise: Number(meta.fidelite_remise) || 0,
       acompte_montant: Number(meta.acompte_montant) || null,
       // Une prestation sans acompte reste confirmée : le client a payé ses
       // produits, le salon a une réservation ferme (décision Alex 04/08).
@@ -283,6 +289,34 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
     const { error } = await supabase.from('rdv_reservations').insert(payload)
     if (error) throw error
     console.info('[stripe/webhook] RDV créé via paiement Stripe', { rdvId, pi: paymentIntent.id })
+
+    // ─── RÉCOMPENSE DE FIDÉLITÉ : consommée ICI, le paiement étant acquis ───
+    //
+    // ⚠️ APRÈS L'INSERT, JAMAIS AVANT. Si l'insertion échoue, on relance et
+    // Stripe rejoue : consommer d'abord brûlerait la récompense d'un
+    // rendez-vous qui n'existe pas.
+    //
+    // ⚠️ ET UN REJEU NE LA DÉPENSE PAS DEUX FOIS : l'écriture se fait sous
+    // `utilisee_at IS NULL`. Non bloquant : le rendez-vous est créé et le
+    // client a payé, une erreur ici ne doit pas faire rejouer tout le webhook.
+    if (meta.fidelite_recompense_id) {
+      try {
+        const { data: recFid } = await supabase
+          .from('fidelite_recompenses')
+          .select('id, carte_id, utilisee_at')
+          .eq('id', meta.fidelite_recompense_id)
+          .maybeSingle()
+        if (recFid && !recFid.utilisee_at) {
+          await consommerRecompense(supabase, {
+            recompense: recFid,
+            source: 'rdv',
+            rdvId: rdvId || meta.yoppaa_rdv_id || null,
+          })
+        }
+      } catch (e) {
+        console.error('[stripe/webhook] consommation récompense RDV KO (non bloquant)', e?.message)
+      }
+    }
 
     // Tunnel unique : la commande de produits existe déjà en
     // 'paiement_en_attente'. On la confirme SANS ses propres emails, et on

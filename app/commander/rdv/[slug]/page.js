@@ -45,7 +45,8 @@ function enGras(texte) {
       : <span key={i}>{bout}</span>
   )
 }
-import { fetchYopper } from '@/lib/fetch-yopper'
+import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
+import { calculerRemiseRecompense, libelleRemiseRecompense } from '@/lib/fidelite-recompense'
 import { redirectTop } from '@/lib/redirect-top'
 import { referenceRdv } from '@/lib/numero-commande'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
@@ -305,6 +306,12 @@ export default function CommanderRdvSlug() {
   // État du flow (4 étapes)
   const [etape, setEtape] = useState(1)
   const [prestationChoisie, setPrestationChoisie] = useState(null)
+  // Récompense de fidélité du Yopper CONNECTÉ chez CE commerçant.
+  //
+  // ⚠️ PAS ACTIVE D'OFFICE : une récompense de 5 € posée sur une prestation à
+  // 4 € en brûlerait 1 € que le Yopper ne récupérera jamais. Il décide.
+  const [recompenseFid, setRecompenseFid] = useState(null)
+  const [recompenseActive, setRecompenseActive] = useState(false)
   const [praticienChoisi, setPraticienChoisi] = useState(null)  // null = "Sans préférence" (V1 : garde null en base)
   const [dateChoisie, setDateChoisie] = useState(null)        // Date object
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
@@ -534,7 +541,22 @@ export default function CommanderRdvSlug() {
       .then(r => r.json())
       .then(j => { if (j?.ok) setBonsCfg(j) })
       .catch(() => {})
-   
+
+  }, [commercant?.id])
+
+  // Récompense de fidélité disponible chez ce commerçant.
+  //
+  // ⚠️ SILENCIEUX EN CAS D'ÉCHEC : ce n'est pas une donnée que le Yopper vient
+  // consulter, c'est une offre en plus. Invité, session endormie ou panne
+  // réseau donnent le même résultat visible, et la réservation reste possible.
+  useEffect(() => {
+    if (!commercant?.id) return
+    let vivant = true
+    fetchAvecPreuveSiConnecte(`/api/fidelite/ma-recompense?commercant_id=${commercant.id}`)
+      .then(r => r.json())
+      .then(j => { if (vivant && j?.ok && j.recompense) setRecompenseFid(j.recompense) })
+      .catch(() => {})
+    return () => { vivant = false }
   }, [commercant?.id])
 
   // Retour Stripe après achat d'un bon cadeau : ?bon=ok|annule → bandeau + URL nettoyée
@@ -1469,7 +1491,11 @@ export default function CommanderRdvSlug() {
         } catch (e) { console.warn('[rdv] sessionStorage save fail', e) }
 
         try {
-          const res = await fetch('/api/stripe/checkout/create-rdv-acompte', {
+          // ⚠️ `fetchAvecPreuveSiConnecte` : sans l'en-tête d'autorisation, le
+          // serveur ne voit qu'un invité et refuse la récompense. Et surtout
+          // pas `fetchYopper`, qui refuserait l'appel faute de session : un
+          // invité doit pouvoir réserver.
+          const res = await fetchAvecPreuveSiConnecte('/api/stripe/checkout/create-rdv-acompte', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1486,6 +1512,7 @@ export default function CommanderRdvSlug() {
               client_telephone: telephone,
               notes_client: client.notes.trim() || null,
               rgpd_marketing: rgpdMarketing,
+              ...(recompenseFid && recompenseActive ? { fidelite_recompense_id: recompenseFid.id } : {}),
             }),
           })
           const j = await res.json()
@@ -2947,8 +2974,19 @@ export default function CommanderRdvSlug() {
                     // devant une séance qui ne coûte rien.
                     const acompteEnLigne = !seanceSurAbo && !!(commercant?.rdv_acompte_en_ligne_actif && commercant?.stripe_account_charges_enabled && prestationChoisie?.acompte_pourcent > 0)
                     const prixBase = prestationChoisie?.prix != null ? Number(prestationChoisie.prix) : (prestationChoisie?.prix_min != null ? Number(prestationChoisie.prix_min) : null)
-                    const acompteMnt = (prixBase != null && prestationChoisie?.acompte_pourcent > 0)
-                      ? Math.round(prixBase * prestationChoisie.acompte_pourcent) / 100
+                    // ⚠️ LA RÉCOMPENSE BAISSE LE TOTAL, ET L'ACOMPTE SE CALCULE
+                    // SUR CE TOTAL RÉDUIT (arbitrage d'Alex, 24/08). Sinon le
+                    // Yopper avancerait un acompte calculé sur un prix qu'il ne
+                    // paie pas. Ce calcul suit celui de `create-rdv-acompte`,
+                    // qui reste seul à faire foi.
+                    const remiseFid = (recompenseFid && recompenseActive && prixBase != null)
+                      ? calculerRemiseRecompense(recompenseFid, prixBase)
+                      : 0
+                    const prixNet = prixBase != null
+                      ? Math.round((prixBase - remiseFid) * 100) / 100
+                      : null
+                    const acompteMnt = (prixNet != null && prestationChoisie?.acompte_pourcent > 0)
+                      ? Math.round(prixNet * prestationChoisie.acompte_pourcent) / 100
                       : null
                     // Tunnel unique : ce qui est encaissé, c'est l'acompte plus
                     // le prix complet des produits. Le client doit voir les deux
@@ -2959,11 +2997,49 @@ export default function CommanderRdvSlug() {
                     // rien pour les produits, qui sont payés en entier.
                     // Et rien à régler sur place non plus : le prix vit sur le
                     // contrat, pas sur la séance.
-                    const surPlace = seanceSurAbo ? null : (prixBase != null
-                      ? prixBase - (acompteEnLigne && acompteMnt ? acompteMnt : 0)
+                    const surPlace = seanceSurAbo ? null : (prixNet != null
+                      ? prixNet - (acompteEnLigne && acompteMnt ? acompteMnt : 0)
                       : null)
                     return (
                       <>
+                        {/* ─── Récompense de fidélité ─────────────────────
+                            ⚠️ N'APPARAÎT QUE POUR UN YOPPER CONNECTÉ qui a une
+                            récompense chez CE commerçant : la route ne rend
+                            rien dans les autres cas. Et pas sur une séance
+                            d'abonnement, déjà payée : il n'y a rien à réduire.
+
+                            ⚠️ 🔴 ET SEULEMENT QUAND UN ACOMPTE EN LIGNE EST
+                            DEMANDÉ, ce qui est une LIMITE ASSUMÉE. Le
+                            rendez-vous SANS acompte est inséré directement
+                            depuis le NAVIGATEUR (voir l'insert plus haut) :
+                            y brancher la récompense reviendrait à laisser le
+                            client écrire lui-même le montant de sa remise,
+                            c'est-à-dire exactement le défaut corrigé le
+                            24/08 sur la carte de fidélité. La récompense reste
+                            utilisable au comptoir dans ce cas. La lever
+                            demande une ROUTE SERVEUR de réservation, inscrite
+                            à la todo, et ça ne s'improvise pas au milieu du
+                            code anti double-booking. */}
+                        {recompenseFid && !seanceSurAbo && prixBase != null && acompteEnLigne && (
+                          <div style={{ background: recompenseActive ? '#F5F3FF' : '#fff', border: `1.5px solid ${recompenseActive ? T.main : T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                            <div style={{ minWidth: 0 }}>
+                              <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 800, color: T.ink }}>
+                                {recompenseActive
+                                  ? libelleRemiseRecompense(recompenseFid, prixBase)
+                                  : (recompenseFid.libelle || 'Ta récompense fidélité t’attend')}
+                              </p>
+                              <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: T.muted, fontWeight: 600 }}>
+                                {recompenseActive
+                                  ? 'Déduite du prix de la prestation, acompte compris.'
+                                  : 'Tu peux la garder pour une prochaine fois : elle ne s’efface pas.'}
+                              </p>
+                            </div>
+                            <button type="button" onClick={() => setRecompenseActive(v => !v)}
+                              style={{ flexShrink: 0, padding: '8px 14px', borderRadius: 12, border: recompenseActive ? `1.5px solid ${T.main}` : 'none', background: recompenseActive ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: recompenseActive ? T.main : '#fff', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                              {recompenseActive ? 'Retirer' : 'Utiliser'}
+                            </button>
+                          </div>
+                        )}
                         {/* LE PANIER COMPLET, prestation comprise.
                             Il ne listait QUE les produits : ajouter un shampoing
                             donnait l'impression que le rendez-vous avait disparu

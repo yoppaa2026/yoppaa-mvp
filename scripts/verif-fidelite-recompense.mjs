@@ -28,6 +28,7 @@ import {
 import { calculerRemiseBon } from '../lib/bons-cadeaux.js'
 import { montantFidelisable } from '../lib/fidelite.js'
 import { construireLignes } from '../lib/export-comptable.js'
+import { resteAEncaisser, caDesRdvs, etatPaiementRdv } from '../lib/rdv-paiement.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -340,6 +341,102 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
     /calculerRemiseBon\(bonApplique\.solde, baseApresRecompense\(\)\)/.test(page))
   verifie('et le dû couvert tient compte de la récompense',
     /totalDuApresBon\(\) === 0 && \(!!bonApplique \|\| remiseRecompenseEffective\(\) > 0\)/.test(page))
+}
+
+// ═══ 10) LE RENDEZ-VOUS ═══════════════════════════════════════════════════
+//
+// ⚠️ ARBITRAGE D'ALEX : LA RÉCOMPENSE BAISSE LE TOTAL, ET L'ACOMPTE SE CALCULE
+// SUR CE TOTAL RÉDUIT. Le rendez-vous ne prend qu'un acompte en ligne, le
+// solde se règle au comptoir : si la remise ne portait que sur le solde, le
+// Yopper avancerait un acompte calculé sur un prix qu'il ne paie pas.
+{
+  const acompte = lireCode('app/api/stripe/checkout/create-rdv-acompte/route.js')
+  verifie('le RDV exige une identité PROUVÉE', /identiteProuvee\(request\)/.test(acompte))
+  verifie('🔴 l\'acompte se calcule sur le prix NET',
+    /const acompteMontant = Math\.round\(prixNet \* acomptePct\) \/ 100/.test(acompte))
+  verifie('le tarif de la prestation reste le BRUT dans les métadonnées',
+    /prix_estime: String\(prixBase\)/.test(acompte))
+  verifie('la remise et la récompense voyagent dans les métadonnées',
+    /fidelite_recompense_id: String\(recompense\.id\)/.test(acompte)
+    && /fidelite_remise: String\(remiseRecompenseEUR\)/.test(acompte))
+  // ⚠️ 20 % d'un solde de 2 € valent 0,40 €, sous le minimum Stripe. On le DIT,
+  // avec le geste à faire, plutôt que de laisser Stripe refuser sèchement.
+  verifie('un acompte devenu trop faible est expliqué',
+    /acompte_trop_faible/.test(acompte))
+  // ⚠️ RIEN N'EST CONSOMMÉ ICI : le paiement n'est pas encore acquis.
+  verifie('la récompense n\'est PAS consommée à la création',
+    !/consommerRecompense/.test(acompte))
+
+  const wh = lireCode('app/api/stripe/webhook/route.js')
+  verifie('le RDV créé porte la récompense et sa remise',
+    /fidelite_recompense_id: meta\.fidelite_recompense_id \|\| null/.test(wh)
+    && /fidelite_remise: Number\(meta\.fidelite_remise\) \|\| 0/.test(wh))
+  verifie('et elle est consommée avec la source « rdv »',
+    /source: 'rdv'/.test(wh))
+  // ⚠️ APRÈS L'INSERT, jamais avant : une insertion qui échoue est rejouée par
+  // Stripe, et consommer d'abord brûlerait la récompense d'un RDV inexistant.
+  const posInsert = wh.indexOf("from('rdv_reservations').insert(payload)")
+  const posConso = wh.indexOf("source: 'rdv'")
+  verifie('🔴 la consommation vient APRÈS la création du rendez-vous',
+    posInsert > 0 && posConso > posInsert, `insert ${posInsert}, conso ${posConso}`)
+
+  const annul = lireCode('app/api/rdv/cancel/route.js')
+  verifie('un rendez-vous annulé rend la récompense',
+    /if \(recFid\?\.utilisee_at\) await rendreRecompense\(supabase, recFid\)/.test(annul))
+  verifie('et la colonne est bien demandée',
+    /fidelite_recompense_id/.test(annul.split('const query =')[0]))
+
+  // ⚠️ 🔴 LA LIMITE ASSUMÉE : le RDV SANS acompte est inséré depuis le
+  // NAVIGATEUR. Y brancher la récompense laisserait le client écrire lui-même
+  // le montant de sa remise, c'est-à-dire le défaut corrigé le 24/08 sur la
+  // carte de fidélité. Le bloc n'est donc proposé que si un acompte en ligne
+  // est demandé. Cette garde EXISTE pour empêcher qu'on lève la condition sans
+  // avoir d'abord écrit la route serveur.
+  const pageRdv = lireCode('app/commander/rdv/[slug]/page.js')
+  verifie('🔴 la récompense n\'est proposée QUE si un acompte en ligne est pris',
+    /recompenseFid && !seanceSurAbo && prixBase != null && acompteEnLigne &&/.test(pageRdv),
+    'sans acompte, le RDV s\'insère depuis le navigateur : la remise serait écrite par le client')
+  verifie('l\'écran du RDV envoie la réservation avec la preuve d\'identité',
+    /fetchAvecPreuveSiConnecte\('\/api\/stripe\/checkout\/create-rdv-acompte'/.test(pageRdv))
+  verifie('et l\'identifiant part dans le corps',
+    /fidelite_recompense_id: recompenseFid\.id/.test(pageRdv))
+  verifie('la récompense du RDV n\'est pas active d\'office',
+    /const \[recompenseActive, setRecompenseActive\] = useState\(false\)/.test(pageRdv))
+}
+
+// ═══ 11) CE QUE LE COMMERÇANT RÉCLAME AU COMPTOIR ═════════════════════════
+{
+  verifie('le solde d\'un RDV retire la récompense',
+    resteAEncaisser({ prix_estime: 30, fidelite_remise: 5 }) === 25,
+    String(resteAEncaisser({ prix_estime: 30, fidelite_remise: 5 })))
+  verifie('acompte payé compris',
+    resteAEncaisser({ prix_estime: 30, fidelite_remise: 5, acompte_montant: 6.25, acompte_paye: true }) === 18.75,
+    String(resteAEncaisser({ prix_estime: 30, fidelite_remise: 5, acompte_montant: 6.25, acompte_paye: true })))
+  verifie('sans récompense, rien ne change',
+    resteAEncaisser({ prix_estime: 30 }) === 30)
+  // ⚠️ LE NULL RESTE UN NULL. `Number(null)` vaut 0 : une prestation sur devis
+  // annoncerait « 0,00 € à encaisser ». Piège rencontré trois fois sur ce
+  // projet, et signalé dans le fichier lui-même.
+  verifie('une prestation sur devis reste « on ne sait pas »',
+    resteAEncaisser({ prix_estime: null, fidelite_remise: 5 }) === null)
+  verifie('une séance d\'abonnement ne doit toujours rien',
+    resteAEncaisser({ abonnement_id: 'a1', prix_estime: 30 }) === 0)
+
+  // ⚠️ ET LA PHRASE MONTRÉE AU COMMERÇANT, pas seulement le nombre. C'est elle
+  // qu'il lit avant de réclamer l'argent : si elle annonce le tarif plein, il
+  // demandera 30 € à quelqu'un qui a vu 25 € au moment de réserver, et c'est
+  // le client qui aura raison. Garde ajoutée après une mutation MUETTE.
+  const etat = etatPaiementRdv({
+    prix_estime: 30, fidelite_remise: 5, statut: 'confirme',
+    date_rdv: '2030-01-01', heure_debut: '10:00', heure_fin: '11:00',
+  })
+  verifie('🔴 l\'écran du commerçant annonce le prix NET',
+    etat.libelle.includes('25,00') && !etat.libelle.includes('30,00'),
+    etat.libelle)
+
+  const ca = caDesRdvs([{ prix_estime: 30, fidelite_remise: 5, statut: 'honore', date_rdv: '2020-01-01', heure_debut: '10:00' }])
+  verifie('le CA des rendez-vous est net de récompense',
+    ca.encaisse + ca.attendu === 25, `encaissé ${ca.encaisse}, attendu ${ca.attendu}`)
 }
 
 // ═══ RÉSULTAT ═════════════════════════════════════════════════════════════

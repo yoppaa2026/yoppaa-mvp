@@ -21,6 +21,7 @@ import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
 import { adresseRendezVous } from '@/lib/lieu-fige'
+import { rendreRecompense } from '@/lib/fidelite-recompense-server'
 
 export async function POST(request) {
   try {
@@ -48,7 +49,7 @@ export async function POST(request) {
       id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id,
       stripe_refund_id, client_email, client_prenom, client_nom, annulation_token,
       date_rdv, heure_debut, heure_fin, duree_minutes, motif_annulation,
-      commercant_id, rappel_push_id, commande_id,
+      commercant_id, rappel_push_id, commande_id, fidelite_recompense_id,
       lieu_id, lieu_libelle, lieu_adresse,
       commercant:commercants(id, nom, slug, adresse, stripe_account_id, rdv_delai_annulation_heures),
       prestation:rdv_prestations(nom)
@@ -231,6 +232,20 @@ export async function POST(request) {
     if (errUpd) {
       console.error('[rdv/cancel] UPDATE statut KO', errUpd)
       return NextResponse.json({ ok: false, error: 'Erreur mise à jour RDV.' }, { status: 500 })
+    }
+
+    // ⚠️ LA RÉCOMPENSE DE FIDÉLITÉ REVIENT, comme pour une commande annulée.
+    // Le rendez-vous n'aura pas lieu : laisser la récompense dépensée ferait
+    // perdre au Yopper une carte entière sur une séance qu'il n'a pas eue, et
+    // il n'a aucun moyen de la récupérer lui-même. `rendreRecompense` ne rend
+    // que ce qui est effectivement pris, donc un double appel est sans effet.
+    if (rdv.fidelite_recompense_id) {
+      const { data: recFid } = await supabase
+        .from('fidelite_recompenses')
+        .select('id, carte_id, utilisee_at')
+        .eq('id', rdv.fidelite_recompense_id)
+        .maybeSingle()
+      if (recFid?.utilisee_at) await rendreRecompense(supabase, recFid)
     }
 
     // Annule le rappel push programmé (1h avant) s'il existe. Best-effort.

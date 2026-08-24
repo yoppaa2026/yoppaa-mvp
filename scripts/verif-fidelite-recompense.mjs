@@ -31,6 +31,7 @@ import { calculerRemiseBon } from '../lib/bons-cadeaux.js'
 import { montantFidelisable } from '../lib/fidelite.js'
 import { construireLignes } from '../lib/export-comptable.js'
 import { resteAEncaisser, caDesRdvs, etatPaiementRdv } from '../lib/rdv-paiement.js'
+import { cleReprisePanier } from '../lib/retour-paiement.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -557,6 +558,56 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
     verifie(`${f} remet ${setter} au repos au retour de Stripe`,
       new RegExp(`useResetAuRetourDePaiement\\(\\(\\) => ${setter}\\(false\\)\\)`).test(lireCode(f)))
   }
+}
+
+
+// ── Le panier qui survit à une annulation Stripe (24/08, test F13) ────────
+{
+  // ⚠️ Une clé PAR COMMERCE, sinon le panier du boucher réapparaît chez le
+  // coiffeur.
+  verifie('la clé de reprise porte le slug du commerce',
+    cleReprisePanier('boucher').includes('boucher'))
+  verifie('deux commerces ne partagent pas la même clé',
+    cleReprisePanier('a') !== cleReprisePanier('b'))
+
+  const tun = lireCode('app/commander/[slug]/page.js')
+
+  // ⚠️ `sessionStorage` et JAMAIS `localStorage` : le panier doit mourir avec
+  // l'onglet, sinon il ressuscite des semaines plus tard avec des articles
+  // supprimés et des prix périmés.
+  verifie('le panier est mis de côté avant de partir chez Stripe',
+    /sessionStorage\.setItem\(cleReprisePanier\(slug\)/.test(tun))
+  verifie('il n\'est pas confié à localStorage',
+    !/localStorage\.setItem\(cleReprisePanier/.test(tun))
+  verifie('le panier est repris au retour annulé',
+    /sessionStorage\.getItem\(cleReprisePanier\(slug\)/.test(tun))
+  verifie('et effacé après reprise',
+    /sessionStorage\.removeItem\(cleReprisePanier\(slug\)/.test(tun))
+  // ⚠️ Effacé AUSSI au paiement réussi, sinon le Yopper verrait réapparaître
+  // au prochain passage une commande qu'il a déjà payée.
+  verifie('et effacé après un paiement abouti',
+    (tun.match(/removeItem\(cleReprisePanier\(slug\)/g) || []).length >= 2)
+
+  // ⚠️ La récompense repart avec le panier : sans elle, le Yopper qui revient
+  // ne penserait pas à la recocher et paierait le prix plein.
+  verifie('la récompense fait partie de ce qu\'on met de côté',
+    /recompenseActive,\s*\n\s*bonApplique/.test(tun))
+  verifie('et elle se recoche toute seule au retour',
+    /snap\?\.recompenseActive\) setRecompenseActive\(true\)/.test(tun))
+
+  // ⚠️ La phrase ne promet un panier intact QUE s'il l'est vraiment : les deux
+  // formulations doivent exister, sinon on ment dans un des deux cas.
+  verifie('la phrase du retour dit la vérité sur le panier',
+    /Ta commande est intacte/.test(tun) && /Tu peux refaire ta commande/.test(tun))
+
+  // ⚠️ GARDE RETIRÉE, PAS MAQUILLÉE. J'avais écrit ici l'interdiction de la
+  // phrase qui mentait (« panier hydraté depuis localStorage ») : elle
+  // rougissait sur MON PROPRE commentaire, celui qui cite l'ancienne promesse
+  // pour expliquer le défaut. Le piège du commentaire, dans l'autre sens.
+  //
+  // Et la garde était de toute façon mal posée : ce qu'il faut protéger n'est
+  // pas l'absence d'une phrase, c'est la PRÉSENCE du mécanisme. Les quatre
+  // vérifications au-dessus le font déjà, et elles, elles se mesurent.
 }
 
 if (echecs.length > 0) {

@@ -80,7 +80,7 @@ function NoteLivraison({ valeur, onChange, localisee, aSaisiUneRue, expedition =
 }
 
 import { redirectTop } from '@/lib/redirect-top'
-import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
+import { useResetAuRetourDePaiement, cleReprisePanier } from '@/lib/retour-paiement'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import PillsStatut from '../PillsStatut'
 import CarteFideliteFiche from '../CarteFideliteFiche'
@@ -1449,7 +1449,32 @@ export default function CommanderSlug() {
     window.history.replaceState({}, '', window.location.pathname)
 
     if (paiement === 'annule') {
-      setErreurCommande('Paiement annulé. Tu peux relancer ta commande quand tu veux 🟣')
+      // 🔴 « Tu peux relancer ta commande » ÉTAIT UNE PHRASE VIDE : le panier
+      // avait disparu, puisque Stripe ramène par une VRAIE navigation vers
+      // cancel_url et que la page est rechargée à neuf. On remet ce qu'on
+      // avait mis de côté juste avant de partir, récompense comprise.
+      let repris = false
+      try {
+        const brut = sessionStorage.getItem(cleReprisePanier(slug))
+        if (brut) {
+          const snap = JSON.parse(brut)
+          if (snap?.panier && Object.keys(snap.panier).length > 0) {
+            setPanier(snap.panier)
+            repris = true
+          }
+          if (snap?.creneauChoisi) setCreneauChoisi(snap.creneauChoisi)
+          if (snap?.modePaiement) setModePaiement(snap.modePaiement)
+          if (snap?.bonApplique) setBonApplique(snap.bonApplique)
+          // ⚠️ La récompense se recoche toute seule, sinon le Yopper qui
+          // revient ne penserait pas à la reprendre et paierait le prix plein.
+          if (snap?.recompenseActive) setRecompenseActive(true)
+        }
+      } catch { /* snapshot illisible : on repart d'un panier vide, sans crasher */ }
+      sessionStorage.removeItem(cleReprisePanier(slug))
+
+      setErreurCommande(repris
+        ? 'Paiement annulé. Ta commande est intacte, tu peux la relancer quand tu veux 🟣'
+        : 'Paiement annulé. Tu peux refaire ta commande quand tu veux 🟣')
       allerEtape(3)
       return
     }
@@ -1476,6 +1501,10 @@ export default function CommanderSlug() {
           // Sans ça, un Yopper qui ne met jamais de favori n'était jamais sollicité.
           promptPushOneSignal()
           try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
+          // ⚠️ ET LE PANIER MIS DE CÔTÉ, sans quoi il ressusciterait au
+          // prochain passage : le Yopper verrait réapparaître une commande
+          // qu'il a déjà payée.
+          try { sessionStorage.removeItem(cleReprisePanier(slug)) } catch(e) {}
         }
       })()
     }
@@ -2596,9 +2625,31 @@ export default function CommanderSlug() {
         return
       }
 
-      // NB : on ne clear PAS le panier ici. Si Stripe redirige vers cancel_url,
-      // le user retrouve son panier (hydraté depuis localStorage) pour réessayer.
-      // Le clear se fait uniquement au retour ?paiement=ok (useEffect dédié).
+      // 🔴 CE COMMENTAIRE MENTAIT DEPUIS LE DÉBUT. Il promettait un panier
+      // « hydraté depuis localStorage » qui n'existait nulle part : le panier
+      // ne vivait qu'en mémoire, et `yoppaa_commerce_<slug>` est le cache du
+      // COMMERCE, pas de la commande. Deux retours possibles, deux sorts :
+      //   • bouton retour du navigateur → page restaurée depuis son cache,
+      //     panier intact, mais bouton figé (corrigé le 24/08) ;
+      //   • bouton « Retour » de Stripe → vraie navigation vers cancel_url,
+      //     page rechargée, PANIER PERDU. C'est celui-là qu'Alex a vu.
+      //
+      // On sauve donc l'état AVANT de partir, comme le fait déjà le tunnel du
+      // rendez-vous. `sessionStorage` et pas `localStorage` : il survit à
+      // l'aller-retour chez Stripe et meurt avec l'onglet, donc aucun panier
+      // fantôme ne ressuscite trois semaines plus tard avec des articles
+      // supprimés et des prix périmés.
+      //
+      // ⚠️ La récompense fidélité en fait partie : sans elle, le Yopper qui
+      // revient doit repenser à la recocher, et paierait le prix plein.
+      try {
+        sessionStorage.setItem(cleReprisePanier(slug), JSON.stringify({
+          panier, creneauChoisi, modePaiement,
+          recompenseActive,
+          bonApplique,
+        }))
+      } catch { /* quota plein ou navigation privée : on part quand même */ }
+
       //
       // redirectTop : quand l'application tourne dans une iframe (les slides de
       // démonstration), window.location.href redirigerait l'iframe vers Stripe

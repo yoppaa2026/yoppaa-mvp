@@ -12,6 +12,7 @@ import { logoProvisoireSvg, propositionsLogo } from '@/lib/logo-provisoire'
 import { scoreOnboarding, SEUIL_SOUMISSION } from '@/lib/score-onboarding'
 import { conseilPhoto, MAX_PHOTOS } from '@/lib/guide-photos'
 import { SHOP_PRODUCTS, classerProduitsParCategorie, prixProduitTexte } from '@/lib/produits-boutique'
+import { FRAIS_STRIPE_TEXTE } from '@/lib/frais-paiement'
 // Icônes Lucide React : SVG inline alignés sur la charte canonique Yoppaa.
 // Convention : stroke-width 1.8, currentColor pour hériter de la palette parent.
 // Aucun emoji dans l'UI (règle Master), sauf exceptions soleil GMY + 🟣 signature.
@@ -884,7 +885,7 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
       // découvrir sur son premier versement, c'est exactement le reproche qu'on
       // ne veut pas s'attirer. La page /legal les chiffre déjà, le signup doit
       // dire la même chose.
-      desc: 'Ton client paie son acompte ou sa commande depuis ta fiche, et l’argent arrive sur ton compte bancaire sous quelques jours. Yoppaa ne prend aucune commission. Seuls les frais de Stripe, notre prestataire de paiement, s’appliquent : à partir de 1,5 % + 0,25 € par transaction pour une carte européenne standard, davantage pour une carte premium ou étrangère.',
+      desc: `Ton client paie son acompte ou sa commande depuis ta fiche, et l’argent arrive sur ton compte bancaire sous quelques jours. Yoppaa ne prend aucune commission. Seuls les frais de Stripe, notre prestataire de paiement, s’appliquent : ${FRAIS_STRIPE_TEXTE}.`,
       plan: 'vendre',
     },
     {

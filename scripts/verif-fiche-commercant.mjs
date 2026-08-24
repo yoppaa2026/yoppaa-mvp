@@ -15,6 +15,7 @@ import { CONSEILS_PHOTOS, MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, 
 import { normaliserUrl, estIpPrivee, texteUtile } from '../lib/site-web.js'
 import { symbolePourType, symbolesPourType, couleurPourNom, logoProvisoireSvg, propositionsLogo } from '../lib/logo-provisoire.js'
 import { TYPES_SERVICE, TYPES_ALIMENTAIRE, TYPES_DETAIL } from '../lib/types-commerce.js'
+import { FRAIS_STRIPE_TEXTE } from '../lib/frais-paiement.js'
 import { emailMerciPreinscription } from '../lib/resend-landing.js'
 import { lieuAAfficher } from '../lib/lieux-activite.js'
 
@@ -699,10 +700,23 @@ verifier('le signup n’avance plus de pourcentage invérifiable',
 // ses commerçants un tarif PLUS BAS que la réalité, à quatre endroits dont les
 // conditions légales, et la garde verrouillait ce mensonge : corriger le
 // chiffre la faisait rougir. Elle dit maintenant l'intention.
+// ⚠️ ET ELLE A CESSÉ DE TENIR LE 24/08, POUR UNE AUTRE RAISON : le taux ne
+// s'écrit plus dans cette page. La phrase était recopiée à trois endroits
+// (CGU, inscription, email de la landing) et vit désormais dans
+// lib/frais-paiement.js, d'où Bancontact a pu entrer à 1,4 %. Déplacer un
+// texte, c'est changer un contrat : il faut relire chaque appelant, bancs
+// compris. La garde suit le texte au lieu de le chercher où il n'est plus,
+// et exige les DEUX moitiés, sans quoi elle verdirait sur un import mort.
 verifier('les frais Stripe sont annoncés dès l’inscription',
-  /1,5 ?% \+ 0,25 ?€/.test(signupSrcTxt))
+  /\$\{FRAIS_STRIPE_TEXTE\}/.test(signupSrcTxt) && /1,5 ?% \+ 0,25 ?€/.test(FRAIS_STRIPE_TEXTE))
 verifier('et l’inscription ne laisse pas croire que 1,5 % est un plafond',
-  /premium|étrangère/i.test(signupSrcTxt))
+  /premium|étrangère/i.test(FRAIS_STRIPE_TEXTE))
+// ⚠️ ET PLUS UN PLANCHER NON PLUS : « à partir de 1,5 % » est devenu FAUX le
+// 24/08, Bancontact étant à 1,4 %. Le taux le plus bas doit être celui que le
+// commerçant belge paiera vraiment, sinon on lui annonce plus cher que la
+// réalité au moment où il hésite.
+verifier('et le moyen de paiement belge est annoncé à son vrai tarif',
+  /Bancontact/.test(FRAIS_STRIPE_TEXTE) && /1,4 ?% \+ 0,25 ?€/.test(FRAIS_STRIPE_TEXTE))
 verifier('et la commission Yoppaa est nommée, jamais sous-entendue',
   !/\(0 ?% commission\)/.test(signupSrcTxt))
 
@@ -841,18 +855,37 @@ verifier('l’email de pré-inscription annonce les frais du prestataire',
 verifier('et il ne laisse pas croire que 1,5 % est un plafond',
   /premium|étrangère/i.test(emailPionnier))
 
-// ⚠️ ET SURTOUT : L'ANCIEN TAUX NE DOIT PLUS EXISTER NULLE PART. Il vivait dans
-// QUATRE fichiers, chacun tapé une fois et jamais revu. Une garde par endroit
-// ne suffit pas, il en manquerait toujours un : celle-ci balaie tout.
+// ⚠️ CETTE GARDE INTERDISAIT `1,4 %` PARTOUT, ET ELLE AVAIT RAISON EN AOÛT :
+// le taux était faux, annoncé plus bas que la réalité dans quatre fichiers.
+// LE 24/08 IL EST REDEVENU VRAI, pour Bancontact. Une garde écrite contre un
+// mensonge devient un verrou sur la vérité inverse dès que le monde bouge :
+// c'est exactement ce qui s'était produit dans l'autre sens le 19/08, où
+// corriger le chiffre faisait rougir le banc.
+//
+// La règle juste n'est pas « 1,4 % est interdit » mais « 1,4 % ne se dit que
+// de Bancontact ». Une CARTE à 1,4 % reste un mensonge.
 {
   const RACINE = new URL('../', import.meta.url)
   const aBalayer = ['app/legal/page.js', 'app/signup/page.js', 'lib/resend-landing.js',
     'app/api/stripe/checkout/create-rdv-acompte/route.js']
   for (const chemin of aBalayer) {
+    // ⚠️ COMMENTAIRES RETIRÉS : la garde cherche du texte AFFICHÉ, et un taux
+    // cité dans un commentaire qui explique la mécanique Stripe n'est annoncé
+    // à personne. Sans ce nettoyage elle rougissait sur une ligne de prose de
+    // create-rdv-acompte, ce qui aurait poussé à l'assouplir au lieu de la
+    // préciser.
     const src = readFileSync(new URL(chemin, RACINE), 'utf8')
-    verifier(`${chemin} n’annonce plus l’ancien taux de 1,4 %`,
-      !/1[,.]4 ?%/.test(src))
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/^\s*\/\/.*$/gm, ' ')
+    verifier(`${chemin} ne retape aucun taux de transaction`,
+      !/1[,.][45] ?%/.test(src))
   }
+  // Et sur le texte EFFECTIF, celui que le commerçant lit : le taux le plus
+  // bas appartient à Bancontact, jamais à une carte.
+  verifier('le taux de 1,4 % n’est annoncé que pour Bancontact',
+    /Bancontact/.test(FRAIS_STRIPE_TEXTE.slice(0, FRAIS_STRIPE_TEXTE.indexOf('carte'))))
+  verifier('et aucune carte n’est annoncée à 1,4 %',
+    !/carte[^.]{0,60}1,4 ?%/.test(FRAIS_STRIPE_TEXTE))
 }
 verifier('et il nomme Yoppaa là où il parle de commission',
   commissionsOrphelines(emailPionnier).length === 0, commissionsOrphelines(emailPionnier)[0] || '')

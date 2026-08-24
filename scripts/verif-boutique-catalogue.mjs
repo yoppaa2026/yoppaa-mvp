@@ -347,6 +347,52 @@ v('les CGU reprennent la clause de compatibilité du catalogue',
   /<P>\{COMPAT_IMPRESSION\}<\/P>/.test(legal))
 
 // ─────────────────────────────────────────────────────────────────────────
+// 10. Le paiement n'arrive jamais avant la validation de la fiche
+// ─────────────────────────────────────────────────────────────────────────
+
+// 🔴 CE QUE CE BLOC EMPÊCHE DE REVENIR : l'inscription écrivait dans
+// `success_packs` DEPUIS LE NAVIGATEUR, avec `montant_ht: 199` en dur, et
+// pour le seul Success Pack. Un commerçant qui cochait le Kit Pro voyait
+// 469 €, un total, « Paiement sécurisé par Stripe », et rien n'était gardé.
+v("l'inscription n'écrit plus dans success_packs depuis le navigateur",
+  !/from\('success_packs'\)\s*\.insert/.test(signup))
+v("l'inscription passe par la route serveur des souhaits",
+  /\/api\/accompagnement\/souhaits/.test(signup))
+// ⚠️ Aucun montant ne doit repartir du client : RLS protège la LIGNE, jamais
+// la VALEUR. Le corps de la requête ne porte que des TYPES.
+v("l'inscription n'envoie aucun montant au serveur",
+  !/montant_ht/.test(signup))
+// ⚠️ Et l'écran doit le DIRE. « Paiement sécurisé par Stripe » sous un total
+// laissait croire à un débit imminent qui n'existait pas.
+v("l'inscription annonce que rien n'est débité",
+  /Rien n&rsquo;est débité maintenant/.test(signup))
+
+const souhaits = lireCode('app/api/accompagnement/souhaits/route.js')
+v('la route des souhaits exige un jeton', /authorization/i.test(souhaits))
+v('la route des souhaits vérifie que le commerce appartient à l\'appelant',
+  /auth_user_id !== user\.id/.test(souhaits))
+// Le montant vient du CATALOGUE serveur, jamais du corps de la requête.
+v('la route des souhaits lit le prix dans le catalogue',
+  /produitParType/.test(souhaits) && /montant_ht: p\.prix/.test(souhaits))
+// ⚠️ La soumission se rejoue après un rejet KYB : sans nettoyage, le
+// commerçant accumulerait un souhait par tentative.
+v('la route des souhaits efface les souhaits précédents', /\.eq\('statut', STATUT_SOUHAIT\)/.test(souhaits))
+// ⚠️ Et JAMAIS une ligne payée : celles-là racontent de l'argent.
+v('la route des souhaits ne touche qu\'au statut souhaite',
+  !/\.delete\(\)[\s\S]{0,200}\.eq\('statut', 'paye'\)/.test(souhaits))
+
+const checkout = lireCode('app/api/accompagnement/checkout/route.js')
+// ⚠️ Sans cela, un Kit Pro apparaîtrait deux fois : « choisi » et « payé ».
+v('le checkout efface le souhait des produits commandés',
+  /\.eq\('statut', 'souhaite'\)/.test(checkout) && /\.in\('type'/.test(checkout))
+
+// Le tableau de bord doit RETROUVER le souhait, sinon il est enregistré pour
+// rien : le commerçant a choisi une fois, des semaines plus tôt.
+v('le tableau de bord pré-coche les souhaits', /statut === 'souhaite'/.test(dash))
+v('le tableau de bord nomme le statut souhaite sans parler de dette',
+  /souhaite:\s*\{ txt: '[^']*pas encore payé/.test(dash))
+
+// ─────────────────────────────────────────────────────────────────────────
 
 console.log('')
 if (echecs.length) {

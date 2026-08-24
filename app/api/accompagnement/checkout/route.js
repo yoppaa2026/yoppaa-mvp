@@ -71,6 +71,24 @@ export async function POST(request) {
     const lineItems = choisis.map(p => ({ price: getStripePriceIdProduitBoutique(p.envKey), quantity: 1 }))
 
     const note = String(message || '').trim().slice(0, 400)
+
+    // ⚠️ LE SOUHAIT DU MÊME PRODUIT S'EFFACE ICI, sinon le commerçant verrait
+    // deux lignes pour un seul Kit Pro : « choisi à l'inscription » ET « payé ».
+    // On ne touche QUE le statut 'souhaite', et QUE les types réellement
+    // commandés : ce qu'il avait coché sans le prendre aujourd'hui doit rester
+    // proposé, il n'a pas renoncé, il a seulement commandé autre chose d'abord.
+    const { error: errSouhaits } = await admin
+      .from('success_packs')
+      .delete()
+      .eq('commercant_id', com.id)
+      .eq('statut', 'souhaite')
+      .in('type', choisis.map(p => p.type))
+    if (errSouhaits) {
+      // Non bloquant : un doublon à l'écran est désagréable, perdre un
+      // paiement en cours le serait bien davantage.
+      console.error('[accompagnement/checkout] souhaits non nettoyés', errSouhaits.message)
+    }
+
     const { data: lignes, error: errIns } = await admin
       .from('success_packs')
       .insert(choisis.map(p => ({

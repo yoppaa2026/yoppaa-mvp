@@ -5890,8 +5890,9 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
 // de l'inscription. Celui qui passait à côté n'avait plus aucun moyen de le
 // demander, alors que la page d'inscription promettait déjà « tu pourras
 // commander à tout moment depuis ton tableau de bord ». C'est cet écran.
-// Rien n'est débité : la demande crée une ligne success_packs en attente et
-// nous rappelons le commerçant.
+// ⚠️ LE COMMENTAIRE DISAIT ENCORE « rien n'est débité », ce qui n'est plus
+// vrai depuis que cet écran ouvre un Stripe Checkout : le paiement est
+// immédiat, et c'est ici qu'on règle ce qu'on a coché à l'inscription.
 function TabAccompagnement({ commercantId, commercant, toast }) {
   const [choix, setChoix] = useState(() => new Set())
   const [message, setMessage] = useState('')
@@ -5906,6 +5907,13 @@ function TabAccompagnement({ commercantId, commercant, toast }) {
       .order('created_at', { ascending: false })
       .limit(10)
     setDemandes(data || [])
+    // ⚠️ CE QU'IL A COCHÉ À L'INSCRIPTION REVIENT PRÉ-COCHÉ ICI, sinon le
+    // souhait est enregistré pour rien : le commerçant a choisi son kit une
+    // fois, il ne doit pas avoir à s'en souvenir des semaines plus tard, au
+    // moment où sa fiche est enfin validée. On ne pré-coche QUE les souhaits,
+    // jamais une ligne payée : il la recommanderait sans le vouloir.
+    const souhaits = (data || []).filter(d => d.statut === 'souhaite').map(d => d.type)
+    if (souhaits.length) setChoix(prev => (prev.size ? prev : new Set(souhaits)))
   }, [commercantId])
   useEffect(() => { fetchDemandes() }, [fetchDemandes])
 
@@ -5945,6 +5953,9 @@ function TabAccompagnement({ commercantId, commercant, toast }) {
   const statutBadge = (st) => ({
     paiement_en_attente: { txt: 'Paiement non finalisé', bg: '#F3F4F6', color: '#9CA3AF' },
     paye:       { txt: 'Payé, on te contacte',  bg: '#F0FDF4', color: '#10B981' },
+    // ⚠️ Choisi à l'inscription, JAMAIS FACTURÉ. Le mot doit le dire, sinon le
+    // commerçant croit devoir de l'argent qu'on ne lui a pas demandé.
+    souhaite:   { txt: 'Choisi à l’inscription, pas encore payé', bg: '#EDE0FF', color: '#6B35C4' },
     en_attente: { txt: 'En attente',             bg: '#FFF7ED', color: '#EA580C' },
     planifie:   { txt: 'Planifié',               bg: '#EEF2FF', color: '#4F46E5' },
     termine:    { txt: 'Terminé',                bg: '#F0FDF4', color: '#10B981' },

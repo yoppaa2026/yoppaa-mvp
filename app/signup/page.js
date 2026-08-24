@@ -2467,17 +2467,36 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
     if (obErr) { setError(`Erreur : ${obErr.message}`); setSubmitting(false); return }
     onUpdateOb(ob)
 
-    // 2) Si Success Pack choisi : créer la ligne success_packs (statut en_attente)
-    if (aSuccessPack) {
-      await supabase.from('success_packs').insert({
-        commercant_id: commercant.id,
-        type: 'success_pack',
-        statut: 'en_attente',
-        montant_ht: 199,
+    // 2) LES CHOIX DE LA BOUTIQUE, ENREGISTRÉS PAR LE SERVEUR.
+    //
+    // ⚠️ CE BLOC ÉCRIVAIT DANS `success_packs` DEPUIS LE NAVIGATEUR, avec
+    // `montant_ht: 199` EN DUR, et uniquement pour le Success Pack. Trois
+    // défauts d'un coup :
+    //   1) le montant venait du client, or RLS protège la LIGNE, jamais la
+    //      VALEUR — la même leçon que la carte de fidélité, le matin même ;
+    //   2) le 199 était figé et ne suivait plus le catalogue ;
+    //   3) un commerçant qui cochait le Kit Pro voyait 469 €, un total, la
+    //      mention « Paiement sécurisé par Stripe », et RIEN n'était gardé.
+    //
+    // ⚠️ ET IL NE PAIE PAS ICI (arbitrage d'Alex, option B, 24/08) : sa fiche
+    // n'est pas validée, le matériel ne partirait pas et la prestation
+    // n'aurait pas lieu. Il paiera depuis son tableau de bord une fois publié.
+    // La règle « paiement avant la prestation » reste donc tenue.
+    //
+    // Non bloquant pour la soumission : perdre un souhait ne doit pas empêcher
+    // une fiche de partir en validation. Il reste rattrapable d'un clic dans
+    // le tableau de bord, où les mêmes produits sont proposés.
+    try {
+      const { data: { session: sSouhaits } } = await supabase.auth.getSession()
+      await fetch('/api/accompagnement/souhaits', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sSouhaits?.access_token || ''}`,
+        },
+        body: JSON.stringify({ commercant_id: commercant.id, produits: [...shopChoices] }),
       })
-    }
-    // TODO S2b : persister aussi kit_pro / kit_light / rouleau_etiquettes
-    // dans une table commercant_shop_orders dédiée + déclencher checkout Stripe
+    } catch { /* voir ci-dessus : jamais bloquant */ }
 
     // 3) Update commerçant : statut publication = brouillon → en_attente
     //    + kyb_statut = en_attente (S5 : Yoppaa doit valider la conformite KYB
@@ -2711,14 +2730,26 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
 
         {/* Récap total */}
         {shopChoices.size > 0 ? (
-          <div style={{ marginTop: 14, padding: '12px 14px', background: T.bgPanel, borderRadius: 12, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>
-              {shopChoices.size} produit{shopChoices.size > 1 ? 's' : ''} sélectionné{shopChoices.size > 1 ? 's' : ''}
-            </span>
-            <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: '-0.3px' }}>
-              Total : {totalChoisis.toFixed(2).replace('.', ',')}€ HTVA
-            </span>
-          </div>
+          <>
+            <div style={{ marginTop: 14, padding: '12px 14px', background: T.bgPanel, borderRadius: 12, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>
+                {shopChoices.size} produit{shopChoices.size > 1 ? 's' : ''} sélectionné{shopChoices.size > 1 ? 's' : ''}
+              </span>
+              <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: '-0.3px' }}>
+                Total : {totalChoisis.toFixed(2).replace('.', ',')}€ HTVA
+              </span>
+            </div>
+            {/* ⚠️ CE TOTAL S'AFFICHAIT SANS DIRE CE QU'IL DEVENAIT, juste
+                au-dessus d'un « Paiement sécurisé par Stripe » qui laissait
+                croire à un débit imminent. Rien n'était pourtant ni facturé ni
+                même enregistré pour les kits. On dit maintenant les deux
+                choses : ce n'est pas payé, et voilà quand ça le sera. */}
+            <p style={{ margin: '10px 0 0', fontSize: 11.5, fontWeight: 600, color: '#065F46', background: '#ECFDF5', border: '1.5px solid #A7F3D0', borderRadius: 10, padding: '10px 12px', lineHeight: 1.55 }}>
+              Rien n&rsquo;est débité maintenant. On garde ton choix de côté, et tu le règles
+              depuis ton tableau de bord quand ta fiche est validée : ton matériel part
+              à ce moment-là, pas avant.
+            </p>
+          </>
         ) : (
           <p style={{ fontSize: 12, color: T.muted, marginTop: 14, textAlign: 'center' }}>
             Rien de sélectionné, et c&apos;est très bien : continue.
@@ -2726,7 +2757,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
         )}
 
         <p style={{ fontSize: 10.5, color: T.muted, marginTop: 14, lineHeight: 1.5, textAlign: 'center' }}>
-          Paiement sécurisé par Stripe. Tu retrouveras cette boutique dans ton tableau de bord, onglet Boutique Yoppaa.
+          Tu retrouveras cette boutique dans ton tableau de bord, onglet Boutique Yoppaa, avec le paiement sécurisé par Stripe.
         </p>
       </Card>
 

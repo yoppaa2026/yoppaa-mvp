@@ -13,7 +13,11 @@
 
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, extname } from 'node:path'
-import { PLAN_FEATURES, canDo, canDoAvecCategorie, resolvePlan, getPillsStatut } from '../lib/plans.js'
+import {
+  PLAN_FEATURES, canDo, canDoAvecCategorie, resolvePlan, getPillsStatut,
+  planEffectif, peut, statutFonction, planPourGarder, essaiProposable,
+  FONCTION_INCLUSE, FONCTION_ESSAI_POSSIBLE, FONCTION_EN_ESSAI, FONCTION_FERMEE,
+} from '../lib/plans.js'
 
 const racine = process.cwd()
 const DOSSIERS = ['app', 'lib']
@@ -132,6 +136,102 @@ verifier('les alias legacy sont résolus', resolvePlan('full') != null && resolv
 verifier('la commande reste alimentaire', canDoAvecCategorie('vendre', 'commande', 'vitrine') === false)
 verifier('le RDV reste vitrine', canDoAvecCategorie('vendre', 'rdv', 'alimentaire') === false)
 verifier('le RDV passe chez une vitrine', canDoAvecCategorie('vendre', 'rdv', 'vitrine') === true)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA DÉGUSTATION — TOUT LE MONDE A TOUT JUSQU'AU 9 JANVIER
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ CES VÉRIFICATIONS EXÉCUTENT LES FONCTIONS, elles ne cherchent aucun mot.
+// Et elles se placent des deux côtés du 9 janvier : le code qui s'allumera ce
+// matin-là est aujourd'hui invisible en production, il ne se relit pas, il se
+// fait tourner.
+{
+  const PENDANT = new Date('2026-11-15T10:00:00Z')   // dégustation en cours
+  const APRES   = new Date('2027-02-01T10:00:00Z')   // dégustation terminée
+  const INSCRIT = '2026-08-20T09:00:00Z'
+
+  const boulanger = { plan: 'exister', categorie: 'alimentaire', created_at: INSCRIT }
+  const salon     = { plan: 'exister', categorie: 'vitrine',     created_at: INSCRIT }
+  const payant    = { plan: 'vendre',  categorie: 'alimentaire', created_at: INSCRIT }
+  // Le même boulanger, qui a DEMANDÉ à essayer Vendre.
+  const essayeur  = { ...boulanger, essai_plan: 'vendre' }
+
+  // ⚠️ LE CŒUR DE LA CORRECTION D'ALEX : L'ESSAI NE S'IMPOSE PAS.
+  // Celui qui a choisi Exister a les fonctions d'Exister, point. Lui ouvrir
+  // d'office le Click & Collect, ce serait lui répondre qu'il s'est trompé.
+  verifier('un Exister qui n\'a rien demandé garde EXACTEMENT Exister',
+    planEffectif(boulanger, PENDANT) === 'exister'
+    && peut(boulanger, 'commande', PENDANT) === false
+    && peut(boulanger, 'deals', PENDANT) === false)
+  verifier('mais l\'essai lui est proposable',
+    essaiProposable(boulanger, PENDANT) === true
+    && statutFonction(boulanger, 'commande', PENDANT) === FONCTION_ESSAI_POSSIBLE)
+
+  verifier('dès qu\'il demande l\'essai, il a le forfait en vigueur',
+    planEffectif(essayeur, PENDANT) === 'vendre'
+    && peut(essayeur, 'commande', PENDANT) === true)
+  verifier('et l\'écran doit le dire : la fonction est EN ESSAI, pas incluse',
+    statutFonction(essayeur, 'commande', PENDANT) === FONCTION_EN_ESSAI)
+  verifier('après le 9 janvier, l\'essai ne donne plus rien',
+    planEffectif(essayeur, APRES) === 'exister'
+    && peut(essayeur, 'commande', APRES) === false
+    && statutFonction(essayeur, 'commande', APRES) === FONCTION_FERMEE)
+  verifier('et on ne propose plus un essai qui n\'est plus possible',
+    essaiProposable(boulanger, APRES) === false
+    && statutFonction(boulanger, 'commande', APRES) === FONCTION_FERMEE)
+
+  // ⚠️ UN ESSAI NE RÉTROGRADE JAMAIS PERSONNE.
+  const vendreQuiEssaieMoins = { ...payant, essai_plan: 'communiquer' }
+  verifier('un essai plus bas que le forfait payé ne retire rien',
+    planEffectif(vendreQuiEssaieMoins, PENDANT) === 'vendre'
+    && peut(vendreQuiEssaieMoins, 'commande', PENDANT) === true)
+  verifier('et on ne propose pas d\'essai à qui a déjà tout',
+    essaiProposable(payant, PENDANT) === false)
+  verifier('un essai_plan inconnu ne débloque rien',
+    planEffectif({ ...boulanger, essai_plan: 'premium_illimite' }, PENDANT) === 'exister')
+
+  // ⚠️ LA CATÉGORIE TRANCHE AVANT LE FORFAIT. Un boulanger n'aura jamais de
+  // prise de rendez-vous, même en payant Vendre : lui montrer cette fonction,
+  // fût-elle grisée, serait lui promettre ce qui n'arrivera pas.
+  verifier('même en essayant Vendre, un boulanger n\'a pas le RDV',
+    peut({ ...essayeur }, 'rdv', PENDANT) === false)
+  verifier('et cette fonction est SANS OBJET pour lui, jamais fermée ni à l\'essai',
+    statutFonction(boulanger, 'rdv', PENDANT) === null
+    && statutFonction(essayeur, 'rdv', PENDANT) === null
+    && statutFonction(boulanger, 'rdv', APRES) === null)
+  verifier('alors qu\'un salon se la voit proposer, puis fermer',
+    statutFonction(salon, 'rdv', PENDANT) === FONCTION_ESSAI_POSSIBLE
+    && statutFonction(salon, 'rdv', APRES) === FONCTION_FERMEE)
+
+  verifier('ce qui est compris dans le forfait payé reste « inclus »',
+    statutFonction(payant, 'commande', PENDANT) === FONCTION_INCLUSE
+    && statutFonction(payant, 'commande', APRES) === FONCTION_INCLUSE)
+  verifier('ce qu\'Exister a déjà n\'est jamais annoncé comme un essai',
+    statutFonction(boulanger, 'vitrine', PENDANT) === FONCTION_INCLUSE
+    && statutFonction(essayeur, 'vitrine', PENDANT) === FONCTION_INCLUSE)
+
+  // Le forfait à prendre pour GARDER, celui qu'annonce la modale.
+  verifier('pour garder la commande, il faut Vendre',
+    planPourGarder(boulanger, 'commande', PENDANT) === 'vendre'
+    && planPourGarder(essayeur, 'commande', PENDANT) === 'vendre')
+  verifier('pour garder les deals, Communiquer suffit',
+    planPourGarder(boulanger, 'deals', PENDANT) === 'communiquer')
+  verifier('et on ne propose aucun forfait pour ce qui est déjà inclus',
+    planPourGarder(payant, 'commande', PENDANT) === null)
+  verifier('ni pour ce qui est sans objet dans le métier',
+    planPourGarder(boulanger, 'rdv', PENDANT) === null)
+
+  // ⚠️ ABSENCE DE DATE D'INSCRIPTION = PAS DE DÉGUSTATION.
+  // C'est la colonne oubliée dans un `select`, le défaut le plus fréquent du
+  // projet. Des deux erreurs possibles on garde celle qui se voit.
+  const sansDate = { plan: 'exister', categorie: 'alimentaire', essai_plan: 'vendre' }
+  verifier('sans date d\'inscription, l\'essai ne s\'ouvre pas',
+    planEffectif(sansDate, PENDANT) === 'exister'
+    && essaiProposable(sansDate, PENDANT) === false)
+  verifier('une date d\'inscription illisible non plus',
+    planEffectif({ ...sansDate, created_at: 'pas une date' }, PENDANT) === 'exister')
+  verifier('et un commerçant absent ne débloque rien',
+    planEffectif(null, PENDANT) === 'exister' && peut(null, 'commande', PENDANT) === false)
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // NE PAS VENDRE CE QUI N'EXISTE PAS

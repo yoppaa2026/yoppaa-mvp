@@ -48,6 +48,15 @@ const MESSAGES = {
     bouton: 'Je veux prendre RDV en ligne',
     confirme: 'Il saura que tu veux réserver en ligne',
   },
+  // ⚠️ AJOUTÉ LE 26/08. La phrase part de ce que l'habitant vit déjà : il vient
+  // souvent, et rien ne le compte. « Que ça compte » dit l'envie mieux que le
+  // mot « fidélité », qui est le vocabulaire du programme, pas le sien.
+  fidelite: {
+    titre: 'Dis-lui ce que tu voudrais',
+    phrase: nom => `Tu viens souvent chez ${nom} et tu aimerais que ça compte ? Dis-le-lui.`,
+    bouton: 'Je veux une carte de fidélité',
+    confirme: 'Il saura que tu veux une carte de fidélité',
+  },
 }
 
 const T = {

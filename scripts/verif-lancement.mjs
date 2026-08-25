@@ -32,7 +32,7 @@ import { calculerTrialEnd, isTrialDiffereActif } from '../lib/stripe-billing.js'
 import { jsonLdLanding, jsonLdLandingString, echapperJsonLd, SITE_URL } from '../lib/seo-landing.js'
 import { getPrixPlan } from '../lib/plans.js'
 import robots from '../app/robots.js'
-import { FACEBOOK_URL } from '../lib/reseaux.js'
+import { FACEBOOK_URL, INSTAGRAM_URL, RESEAUX_URLS } from '../lib/reseaux.js'
 import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '../lib/libelles-audience.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
@@ -657,6 +657,16 @@ function sansCommentaires(src) {
     FACEBOOK_URL === 'https://www.facebook.com/yoppaaapp/', FACEBOOK_URL)
   verifier('la landing affiche le lien Facebook',
     /FACEBOOK_URL/.test(reveal) && /RESEAUX\.map/.test(reveal))
+  // ⚠️ INSTAGRAM AUSSI, depuis le 26/08. Le compte s'écrit `yoppaa.app`, avec
+  // un point : un profil recopié de travers pointe dans le vide, et Google
+  // range alors l'entreprise et le compte comme deux entités étrangères.
+  verifier("l'adresse Instagram est celle du compte Yoppaa",
+    INSTAGRAM_URL === 'https://www.instagram.com/yoppaa.app/', INSTAGRAM_URL)
+  verifier('les deux réseaux sont publiés ensemble',
+    RESEAUX_URLS.includes(FACEBOOK_URL) && RESEAUX_URLS.includes(INSTAGRAM_URL),
+    RESEAUX_URLS.join(' | '))
+  verifier("le balisage relie Instagram à l'entreprise aussi",
+    (jsonLdLanding()['@graph'].find(n => n['@type'] === 'Organization').sameAs || []).includes(INSTAGRAM_URL))
   verifier("le balisage relie la page Facebook à l'entreprise",
     (jsonLdLanding()['@graph'].find(n => n['@type'] === 'Organization').sameAs || []).includes(FACEBOOK_URL),
     'sans `sameAs`, Google voit deux entités qui ne se connaissent pas')
@@ -701,11 +711,20 @@ function sansCommentaires(src) {
   // 20/08, déjà gardée plus haut : un second nombre sur la page, même exact,
   // « peut être interprété comme mensonger ». J'ai enfreint cette règle en
   // écrivant le bloc ci-dessous, et c'est cette garde-là qui m'a arrêté.
-  const blocInscription = (reveal.match(/jours offerts à partir du \{libelleLancement\(\)\}[\s\S]{0,140}/) || [])[0] || ''
-  verifier('les jours offerts du bloc commerçant restent calculés',
-    /\{joursOffertsAuLancement\(\)\} jours offerts à partir du \{libelleLancement\(\)\}/.test(reveal))
-  verifier("et l'avance y est annoncée en mots, pas en chiffre",
-    /est en bonus/.test(blocInscription) && !/\d/.test(blocInscription.replace(/\{[^}]*\}/g, '')))
+  //
+  // ⚠️ GARDE RETIRÉE, PAS RAFISTOLÉE. J'avais écrit ici une vérification qui
+  // découpait « les 140 caractères après la phrase » pour y chercher un
+  // chiffre : c'est exactement LA FENÊTRE DE N CARACTÈRES QUI LIT CHEZ LE
+  // VOISIN, piège déjà consigné le 15/08. Elle a rougi dès qu'un second bloc a
+  // porté la même phrase, sans qu'aucune règle ne soit enfreinte.
+  //
+  // Et elle était redondante : la garde du 20/08, quelques lignes plus haut,
+  // interdit DÉJÀ `{joursAvance()}` partout dans la landing, ce qui est la
+  // vraie règle d'Alex (un seul chiffre sur la page). Deux gardes pour une
+  // règle, dont une fragile, c'est une de trop.
+  const blocsJours = reveal.split('{joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()}').length - 1
+  verifier('les jours offerts restent calculés partout où ils sont dits',
+    blocsJours >= 2, `${blocsJours} bloc(s)`)
 
   // ⚠️ UN SEUL GESTE PAR PUBLIC (Alex, 26/08 : « le commerçant ne sait pas où
   // il doit s'inscrire »). Le formulaire de préinscription proposait EN PLUS

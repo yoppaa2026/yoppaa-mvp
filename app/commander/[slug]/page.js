@@ -3529,6 +3529,22 @@ export default function CommanderSlug() {
                 <div style={{ padding: '0 12px' }}>
                   <CarteFideliteFiche commercant={commercant} carte={maCarteFid} connecte={fidConnecte} nbCartes={cartesCeCommerce}/>
 
+                  {/* ⚠️ LE SIGNAL FIDÉLITÉ, ajouté le 26/08 à la demande d'Alex.
+                      `CarteFideliteFiche` ne rend RIEN quand le programme est
+                      inactif : la place était donc vide, et l'habitant qui
+                      revient toutes les semaines n'avait aucun moyen de dire
+                      qu'il aimerait que ça compte.
+                      ⚠️ La condition porte sur `fidelite_actif`, pas sur le
+                      palier : un commerçant qui A la fidélité dans sa formule
+                      mais ne l'a pas activée est justement celui que le signal
+                      convainc le plus vite, puisqu'il n'a rien à payer de
+                      plus. */}
+                  {!commercant?.fidelite_actif && (
+                    <div style={{ marginTop: 12 }}>
+                      <CTAUpgrade type="fidelite" commercant={commercant} variant="banner"/>
+                    </div>
+                  )}
+
                   {/* Retour d'achat d'un bon cadeau (Stripe success/cancel).
                       Reste EN HAUT alors que le bouton est descendu : celui qui
                       revient de sa banque doit voir l'accusé de réception sans

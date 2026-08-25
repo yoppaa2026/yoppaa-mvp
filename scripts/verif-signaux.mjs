@@ -6,7 +6,7 @@
 // règles-là méritent d'être verrouillées.
 
 import { readFileSync } from 'node:fs'
-import { libelleEnvie, phraseHorsOuverture, enviesAAlerter, peutEnvoyerEmail, LIBELLE_ENVIE } from '../lib/signaux.js'
+import { libelleEnvie, phraseHorsOuverture, enviesAAlerter, peutEnvoyerEmail, LIBELLE_ENVIE, TYPES_ENVIE, envieConnue } from '../lib/signaux.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -21,8 +21,46 @@ const egal = (nom, a, b) => verifier(nom, JSON.stringify(a) === JSON.stringify(b
 // ═══════════════════════════════════════════════════════════════════════════
 // Les cinq types d'envie doivent tous avoir leur libellé, sinon le tableau de
 // bord afficherait une clé technique au commerçant.
-const TYPES = ['commande', 'rdv', 'livraison', 'prix', 'deals']
-verifier('les cinq envies sont nommées', TYPES.every(t => LIBELLE_ENVIE[t]))
+// ⚠️ LA CARTE DE FIDÉLITÉ EST LA SIXIÈME, ajoutée le 26/08 à la demande
+// d'Alex. C'est le seul signal qui parle d'une habitude plutôt que d'un
+// service : celui qui le pose revient déjà, et personne ne réclame une carte
+// de fidélité au comptoir.
+const TYPES = ['commande', 'rdv', 'livraison', 'prix', 'deals', 'fidelite']
+verifier('les six envies sont nommées', TYPES.every(t => LIBELLE_ENVIE[t]))
+verifier('aucune envie ne manque à l\'appel', TYPES_ENVIE.length === TYPES.length,
+  `${TYPES_ENVIE.length} type(s) au module`)
+egal('la carte de fidélité se dit au singulier',
+  libelleEnvie('fidelite').phrase(1), '1 habitant aimerait une carte de fidélité chez toi')
+egal('et au pluriel',
+  libelleEnvie('fidelite').phrase(3), '3 habitants aimeraient une carte de fidélité chez toi')
+
+// 🔴 LA LISTE BLANCHE, posée le 26/08 en même temps que le sixième signal.
+// La route acceptait N'IMPORTE QUELLE chaîne de 40 caractères comme type : un
+// appelant pouvait inventer des catégories et polluer les statistiques sur
+// lesquelles le commerçant décide s'il change de formule.
+verifier('un type inventé est refusé', !envieConnue('n_importe_quoi'))
+verifier('et les six vrais sont acceptés', TYPES.every(t => envieConnue(t)))
+verifier('une envie vide ne passe pas', !envieConnue('') && !envieConnue(null))
+{
+  const route = readFileSync(new URL('../app/api/signaux/route.js', import.meta.url), 'utf8')
+  verifier('le serveur refuse une envie inconnue', /if \(!envieConnue\(feature\)\)/.test(route))
+  // ⚠️ ET IL LA LIT DU MODULE, sans recopier la liste : deux listes finissent
+  // toujours par oublier l'une des deux le jour où un type s'ajoute.
+  verifier('et la liste vient du module des signaux',
+    /from '@\/lib\/signaux'/.test(route))
+
+  // Le Yopper doit pouvoir POSER ce signal, et le commerçant le VOIR.
+  const cta = readFileSync(new URL('../app/commander/CTAUpgrade.js', import.meta.url), 'utf8')
+  verifier('le Yopper peut demander une carte de fidélité',
+    /bouton: 'Je veux une carte de fidélité'/.test(cta))
+  const fiche = readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8')
+  // ⚠️ La condition porte sur `fidelite_actif`, pas sur le palier : celui qui a
+  // la fidélité dans sa formule sans l'avoir activée est celui que le signal
+  // convainc le plus vite, puisqu'il n'a rien de plus à payer.
+  verifier('la fiche propose le signal quand le programme est inactif',
+    /!commercant\?\.fidelite_actif && \(/.test(fiche)
+    && /CTAUpgrade type="fidelite"/.test(fiche))
+}
 verifier('un type inconnu ne casse rien', typeof libelleEnvie('zzz').phrase(2) === 'string')
 
 egal('singulier', libelleEnvie('rdv').phrase(1), '1 habitant a voulu prendre rendez-vous chez toi')

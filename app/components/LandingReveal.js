@@ -25,6 +25,8 @@ import {
   estRegimeLancement, ESSAI_JOURS_MINIMUM,
 } from '@/lib/lancement'
 import { FACEBOOK_URL, RESEAUX } from '@/lib/reseaux'
+import { getPrixPlan } from '@/lib/plans'
+import { TYPES_ENVIE, libelleEnvie } from '@/lib/signaux'
 import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '@/lib/libelles-audience'
 import PartageMobilisation from './PartageMobilisation'
 
@@ -938,6 +940,182 @@ const inputStyle = {
 }
 
 // ─── Titre de section réutilisable ──────────────────────────────────────────
+// ─── LA TOTALE ───────────────────────────────────────────────────────────
+//
+// Le résumé-choc de l'offre, demandé par Alex le 26/08 : « il me faut une
+// communication percutante ». Il ouvre la partie commerçant, AVANT les
+// mockups et les cartes de formules, pour une raison de conversion : c'est le
+// premier endroit où le commerçant sait que la page lui parle. Celui qui est
+// déjà convaincu s'inscrit là, sans traverser six sections. Celui qui hésite
+// continue à défiler, et tout le reste est fait pour lui.
+//
+// ⚠️ TROIS « TU VEUX… ? », TROIS RÉPONSES. Un commerçant ne lit pas une grille
+// de comparaison, il cherche sa situation. Le gratuit passe en premier parce
+// qu'il désarme l'objection avant qu'elle n'arrive.
+//
+// ⚠️ AUCUN PRIX, AUCUN NOMBRE DE JOURS ÉCRIT À LA MAIN : ils viennent de
+// `lib/plans.js` et `lib/lancement.js`. Le jour où 19,90 bouge, ce bloc suit.
+//
+// ⚠️ ET RIEN QUE CE QUI EXISTE. La réservation de table est ABSENTE malgré son
+// drapeau à `true` dans `lib/plans.js` : le module n'est pas écrit. Une liste
+// « la totale » qui promet une fonctionnalité fantôme se retourne au premier
+// restaurateur qui signe.
+function LaTotale() {
+  const prix = p => getPrixPlan(p)?.mensuel
+  const eur = n => `${Number(n).toFixed(2).replace('.', ',')} €`
+
+  // ⚠️ ALEX, 26/08 : « il ne faut plus broder, il faut être percutant et oser
+  // s'affirmer ». Les descriptions sont donc des ÉNUMÉRATIONS, pas des
+  // phrases : le commerçant scanne, il ne lit pas. Chaque mot de liaison retiré
+  // est un nom de plus qu'il voit.
+  const NIVEAUX = [
+    {
+      question: 'Être vu ?',
+      reponse: 'Gratuit. À vie.',
+      quoi: 'Ta page, tes photos, tes horaires, Google, tes statistiques, le Good Morning Yoppers.',
+      // ⚠️ L'ARGUMENT LE PLUS FORT DE LA PAGE, et il est gratuit. C'est ce que
+      // le module des signaux a été écrit pour porter : ce ne sont pas des
+      // clients qu'il a déjà, ce sont des clients qu'il perd.
+      signaux: true,
+      prix: '0 €, pour toujours, sans carte.',
+      vedette: true,
+    },
+    {
+      question: 'Être entendu ?',
+      reponse: `${eur(prix('communiquer'))}/mois.`,
+      quoi: 'Actus, deals, bonnes affaires, notifications push à tes favoris, carte de fidélité, IA qui rédige tes textes.',
+    },
+    {
+      question: 'Vendre ?',
+      reponse: `${eur(prix('vendre'))}/mois.`,
+      quoi: 'Click and Collect, livraison, rendez-vous en ligne, multi-praticiens, abonnements, paiement en ligne ou au comptoir, bons cadeaux, fidélité automatique.',
+    },
+  ]
+
+  return (
+    <div style={{ maxWidth: 780, margin: '0 auto 48px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 24, overflow: 'hidden' }}>
+      <div style={{ padding: 'clamp(24px, 5vw, 34px)' }}>
+        {/* ⚠️ LE TITRE EST D'ALEX, mot pour mot. Le mien disait « tout ce qu'un
+            commerce de quartier peut faire en ligne » : correct, tiède, et
+            long. Le sien nomme le lecteur et revendique la place. */}
+        <h3 style={{ margin: '0 0 6px', fontSize: 'clamp(1.35rem, 3.8vw, 1.9rem)', fontWeight: 900, letterSpacing: '-0.9px', lineHeight: 1.15, color: '#fff', textAlign: 'center' }}>
+          Les outils du commerçant de proximité.
+        </h3>
+        <p style={{ margin: '0 0 24px', fontSize: 14.5, fontWeight: 700, color: T.light, textAlign: 'center' }}>
+          {/* ⚠️ « Zéro commission » TOUT COURT est interdit, et le banc m'a
+              arrêté ici. Le commerçant paie quand même les frais de son
+              prestataire de paiement : sans le sujet, la phrase promet une
+              gratuité qui n'existe pas. Règle d'Alex, gardée depuis des mois. */}
+          Tout, dans une seule app. Zéro commission Yoppaa.
+        </p>
+
+        <div style={{ display: 'grid', gap: 16 }}>
+          {NIVEAUX.map(n => (
+            <div key={n.question} style={{ background: n.vedette ? 'rgba(196,160,244,0.13)' : 'rgba(255,255,255,0.04)', border: `1px solid ${n.vedette ? 'rgba(196,160,244,0.4)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 16, padding: '18px 18px 16px' }}>
+              <p style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>
+                {n.question} <span style={{ color: T.light }}>{n.reponse}</span>
+              </p>
+              <p style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, fontWeight: 500 }}>
+                {n.quoi}
+              </p>
+              {n.signaux && (
+                <>
+                  <p style={{ margin: '12px 0 0', fontSize: 13.5, color: '#fff', lineHeight: 1.6, fontWeight: 700 }}>
+                    Et tes Yoppers te disent ce qu’ils attendent de toi.
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, fontWeight: 500 }}>
+                    {/* ⚠️ LES CINQ ENVIES VIENNENT DU MODULE, pas d'une liste
+                        recopiée : ajouter un signal doit suffire à l'annoncer
+                        ici. Le sixième, la carte de fidélité, est arrivé le
+                        26/08 et cette phrase l'a pris toute seule. */}
+                    {TYPES_ENVIE.map(t => libelleEnvie(t).court.toLowerCase()).join(', ')}. Tu vois combien
+                    ils sont, et combien ont demandé <strong style={{ color: '#fff' }}>le soir ou le week-end,
+                    quand ta boutique était fermée et que personne ne pouvait t’appeler.</strong>
+                  </p>
+                  <p style={{ margin: '10px 0 0', fontSize: 13.5, color: T.light, fontWeight: 800, lineHeight: 1.6 }}>
+                    Ça ne s’achète nulle part. Et chez nous, c’est gratuit.
+                  </p>
+                </>
+              )}
+              {n.prix && (
+                <p style={{ margin: '10px 0 0', fontSize: 13, fontWeight: 800, color: T.light }}>{n.prix}</p>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 22, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.12)', textAlign: 'center' }}>
+          {estRegimeLancement() && (
+            <p style={{ margin: '0 0 6px', fontSize: 14.5, fontWeight: 800, color: '#fff', lineHeight: 1.55 }}>
+              {joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()},
+              et tout le temps d’ici là est en bonus.
+            </p>
+          )}
+          <p style={{ margin: '0 0 4px', fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: 600, lineHeight: 1.6 }}>
+            Sans carte de paiement. Sans engagement. Tarifs affichés, aucune surprise.
+          </p>
+          {/* ⚠️ « Yoppaa ne prend aucune commission », JAMAIS « tout te
+              revient » : le commerçant paie quand même les frais de son
+              prestataire de paiement, et la formule sans sujet est un mensonge
+              par omission. Règle posée par Alex de longue date. */}
+          <p style={{ margin: '0 0 22px', fontSize: 13, color: '#fff', fontWeight: 800 }}>
+            Yoppaa ne prend aucune commission sur tes ventes.
+          </p>
+
+          {/* ⚠️ ALEX, 26/08 : « il faut faire comprendre aux commerçants qu'ils
+              n'ont RIEN À PERDRE mais tout à gagner. »
+
+              Le reste du bloc dit ce qu'il gagne. Celui-ci répond à la question
+              qu'il se pose vraiment avant de cliquer : qu'est-ce que ça
+              m'engage ? Chaque ligne est VÉRIFIABLE dans le produit, aucune
+              n'est une figure de style :
+                • Exister est à 0 € et son libellé de plan dit « Gratuit à vie » ;
+                • les deux formules payantes portent « sans engagement » ;
+                • aucun Checkout n'est ouvert à l'inscription (option B, 24/08) ;
+                • Yoppaa ne prélève rien sur les ventes ;
+                • et surtout, RIEN À REMPLACER : c'est écrit noir sur blanc dans
+                  `lib/signaux.js`, un commerçant peut être là gratuitement même
+                  s'il a déjà un logiciel de rendez-vous. C'est la réponse à la
+                  seule vraie objection, « j'ai déjà un système ». */}
+          <div style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.4)', borderRadius: 16, padding: '16px 18px', marginBottom: 22, textAlign: 'left' }}>
+            <p style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 900, color: '#A7F3D0', letterSpacing: '-0.3px' }}>
+              Ce que ça t’engage : rien.
+            </p>
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 6 }}>
+              {[
+                'Tu ne donnes aucune carte de paiement pour t’inscrire.',
+                'Tu ne remplaces rien : garde ton logiciel, ta caisse, tes habitudes.',
+                'Tu restes libre de partir quand tu veux, sans préavis.',
+                'Et si tu n’en fais rien, ta page reste en ligne gratuitement. À vie.',
+              ].map(l => (
+                <li key={l} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: 'rgba(255,255,255,0.92)', lineHeight: 1.55, fontWeight: 600 }}>
+                  <span style={{ flexShrink: 0, marginTop: 2, color: '#6EE7B7' }}><IconCheck size={12}/></span>
+                  <span>{l}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <p style={{ margin: '0 0 4px', fontSize: 'clamp(1.05rem, 2.6vw, 1.3rem)', fontWeight: 900, color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.3 }}>
+            C’est le rendez-vous des Yoppers de ton quartier.
+          </p>
+          <p style={{ margin: '0 0 16px', fontSize: 'clamp(1.05rem, 2.6vw, 1.3rem)', fontWeight: 900, color: T.light, letterSpacing: '-0.4px', lineHeight: 1.3 }}>
+            Tu ne peux pas ne pas y être.
+          </p>
+          <p style={{ margin: '0 0 20px', fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 500, lineHeight: 1.6 }}>
+            Et si tu décides de ne pas venir, dis-le-nous : on veut comprendre pourquoi.
+          </p>
+
+          <Link href="/signup"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '15px 32px', borderRadius: 100, background: 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: '#1A0840', fontWeight: 900, fontSize: 15.5, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 8px 22px rgba(150,96,224,0.35)' }}>
+            J&rsquo;inscris mon commerce
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SectionEyebrow({ children, dark = false }) {
   return (
     <p style={{ margin: '0 0 10px', fontSize: 12.5, fontWeight: 800, color: dark ? T.light : T.main, textTransform: 'uppercase', letterSpacing: '1.6px' }}>
@@ -1387,6 +1565,7 @@ export default function LandingReveal({ referent = null }) {
       </section>
 
       {/* ═══ 4. CÔTÉ COMMERÇANTS (sombre, punch) ═══ */}
+      {/* Voir le composant LaTotale, juste sous l'accroche. */}
       <section style={{ background: `linear-gradient(135deg, ${T.panel} 0%, ${T.ink} 100%)`, color: '#fff', marginTop: 48 }}>
         <Bande3px/>
         <div style={{ maxWidth: 1080, margin: '0 auto', padding: '64px 20px 72px' }}>
@@ -1403,6 +1582,8 @@ export default function LandingReveal({ referent = null }) {
               Tout est pensé pour te faire gagner du temps, et Yoppaa ne prélève jamais rien sur tes ventes.
             </p>
           </div>
+
+          <LaTotale />
 
           {/* Chiffres punch */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14, maxWidth: 760, margin: '0 auto 48px' }}>

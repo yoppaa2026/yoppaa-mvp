@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { lireIdentiteYopper } from '@/lib/yopper-session'
 import { globalLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
+import { envieConnue } from '@/lib/signaux'
 
 const TYPES = ['signalement', 'suggestion', 'envie']
 
@@ -79,6 +80,15 @@ export async function POST(request) {
     const feature = texte(body.feature, 40)
     if (!body.commercant_id || !feature) {
       return NextResponse.json({ ok: false, error: 'paramètres manquants' }, { status: 400 })
+    }
+    // ⚠️ LISTE BLANCHE, posée le 26/08. Cette route acceptait N'IMPORTE QUELLE
+    // chaîne de 40 caractères comme type de signal : un appelant pouvait donc
+    // inventer autant de catégories qu'il voulait dans `upgrade_requests`, et
+    // le commerçant lisait des statistiques polluées pour décider s'il change
+    // de formule. La liste vit dans `lib/signaux.js`, avec les libellés qu'elle
+    // sert : une seule source, jamais deux.
+    if (!envieConnue(feature)) {
+      return NextResponse.json({ ok: false, error: 'envie inconnue' }, { status: 400 })
     }
     if (clientId) {
       const ilYa7Jours = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()

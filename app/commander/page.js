@@ -23,6 +23,7 @@ import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
 import { lieuxDuJour } from '@/lib/lieux-activite'
 import { morningADuContenu } from '@/lib/morning-contenu'
 import { libellePrixSeance } from '@/lib/abonnements'
+import { libelleCarteRecompenses } from '@/lib/fidelite-recompense'
 import { lirePositionMemorisee, memoriserPosition, marquerDemandee, dejaDemandee, decisionGeoloc, etatAutorisation,
   lectureReussieDansCetteSession, marquerLectureDeCetteSession, demandeFaiteDansCetteSession, marquerDemandeDeCetteSession } from '@/lib/geoloc'
 import PillsStatut from './PillsStatut'
@@ -3858,7 +3859,10 @@ export default function Commander() {
                         const seuilP = com.fidelite_seuil_passages || 10
                         const seuilC = Number(com.fidelite_seuil_cagnotte || 10)
                         const pct = estCagnotte ? Math.min(100, Math.round((Number(carte.cagnotte) / seuilC) * 100)) : Math.min(100, Math.round((carte.passages / seuilP) * 100))
-                        const recompense = (carte.recompenses_disponibles || 0) > 0
+                        // ⚠️ UN NOMBRE, PAS UN BOOLÉEN. Deux récompenses ne
+                        // s'annonçaient pas plus qu'une, ici comme sur la fiche.
+                        const nbRecompenses = Number(carte.recompenses_disponibles || 0)
+                        const recompense = nbRecompenses > 0
                         const lien = com.categorie === 'vitrine' ? `/commander/rdv/${com.slug}` : `/commander/${com.slug}`
                         const libelle = com.fidelite_recompense_libelle
                           || (com.fidelite_recompense_type === 'remise_pct' && com.fidelite_recompense_valeur ? `-${Number(com.fidelite_recompense_valeur)}%` : com.fidelite_recompense_valeur ? `${Number(com.fidelite_recompense_valeur).toFixed(2)}€ offerts` : 'Récompense fidélité')
@@ -3877,7 +3881,7 @@ export default function Commander() {
                               </div>
                               <p style={{ margin: 0, fontSize: '0.68rem', fontWeight: 700, color: recompense ? '#059669' : T.muted }}>
                                 {recompense
-                                  ? `Récompense débloquée : ${libelle}`
+                                  ? libelleCarteRecompenses(nbRecompenses, libelle, { court: true })
                                   : estCagnotte
                                     ? `${Number(carte.cagnotte).toFixed(2).replace('.', ',')}€ / ${seuilC.toFixed(2).replace('.', ',')}€ → ${libelle}`
                                     : `${carte.passages}/${seuilP} passages → ${libelle}`}

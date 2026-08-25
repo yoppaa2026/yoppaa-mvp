@@ -26,6 +26,8 @@ import {
   libelleRemiseRecompense,
   libelleOffreRecompense,
   libelleRecompenseUtilisee,
+  libelleAutresRecompenses,
+  libelleCarteRecompenses,
 } from '../lib/fidelite-recompense.js'
 import { calculerRemiseBon } from '../lib/bons-cadeaux.js'
 import { montantFidelisable } from '../lib/fidelite.js'
@@ -677,6 +679,107 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
   // Et la garde était de toute façon mal posée : ce qu'il faut protéger n'est
   // pas l'absence d'une phrase, c'est la PRÉSENCE du mécanisme. Les quatre
   // vérifications au-dessus le font déjà, et elles, elles se mesurent.
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// 15. 🔴 DEUX RÉCOMPENSES EN BASE, UNE SEULE À L'ÉCRAN (25/08, trouvé par Alex)
+// ═════════════════════════════════════════════════════════════════════════
+//
+// Le compteur `recompenses_disponibles` est un NOMBRE, et TROIS écrans sur
+// quatre le lisaient comme un BOOLÉEN : la fiche du commerce, la liste « Mes
+// cartes » et le tunnel. Seule la carte publique `/carte/[token]` comptait
+// juste. Vu du Yopper : il en a gagné deux, l'application en montre une, il la
+// croit perdue.
+//
+// ⚠️ UNE SEULE SE DÉPENSE PAR COMMANDE, ET C'EST UN CHOIX (arbitrage d'Alex,
+// 25/08) : la remise est bornée au panier, cumuler en brûlerait une pour rien.
+// Ce qui manquait n'était pas le cumul, c'était de LE DIRE.
+{
+  // ── Les phrases, EXÉCUTÉES ────────────────────────────────────────────
+  verifie('rien à dire quand il n\'en a qu\'une', libelleAutresRecompenses(1) === null)
+  verifie('ni quand il n\'en a aucune', libelleAutresRecompenses(0) === null)
+  const deux = libelleAutresRecompenses(2)
+  verifie('avec deux, on annonce celle qui reste', /1 autre\b/.test(deux || ''))
+  verifie('et on dit quand elle reviendra', /prochaine commande/.test(deux || ''))
+  const trois = libelleAutresRecompenses(3)
+  verifie('avec trois, il en reste deux', /2 autres\b/.test(trois || ''))
+  // ⚠️ « à ta prochaine commande » serait FAUX au-delà d'une : il en faudra
+  // autant de passages que de récompenses.
+  verifie('et on dit qu\'elles viennent une par une', /une par une/.test(trois || ''))
+  verifie('le rendez-vous ne parle pas de commande',
+    !/commande/.test(libelleAutresRecompenses(2, 'rdv') || '')
+    && /rendez-vous/.test(libelleAutresRecompenses(2, 'rdv') || ''))
+
+  verifie('la carte se tait sans récompense', libelleCarteRecompenses(0, '10€ offerts') === null)
+  verifie('une récompense reste au singulier',
+    /ta récompense est débloquée/.test(libelleCarteRecompenses(1, '10€ offerts') || ''))
+  const carte2 = libelleCarteRecompenses(2, '10€ offerts')
+  verifie('deux récompenses se comptent', /2 récompenses débloquées/.test(carte2 || ''))
+  // ⚠️ « CHACUNE » N'EST PAS UN ORNEMENT : le libellé décrit UNE récompense.
+  // Sans ce mot, « 2 récompenses : 10€ offerts » se lit comme 10 € en tout, et
+  // l'écran ment de moitié.
+  verifie('et le montant est dit PAR récompense', /chacune/.test(carte2 || ''))
+  const carte2Court = libelleCarteRecompenses(2, '10€ offerts', { court: true })
+  verifie('la version courte compte aussi', /2 récompenses débloquées/.test(carte2Court || ''))
+  // ⚠️ MESURÉ MUET : retirer « chacune » de la version COURTE laissait la
+  // garde ci-dessus verte, parce qu'elle ne lisait que la version longue. Les
+  // deux phrases portent le même risque, elles se vérifient toutes les deux.
+  verifie('et la courte dit aussi le montant PAR récompense', /chacune/.test(carte2Court || ''))
+  verifie('la version courte ne félicite pas',
+    !/^Bravo/.test(libelleCarteRecompenses(1, '10€ offerts', { court: true }) || ''))
+
+  // ── Le serveur rend le TOTAL, et il le compte en base ──────────────────
+  const rs = lireCode('lib/fidelite-recompense-server.js')
+  verifie('le serveur rend la récompense ET le total',
+    /return \{ recompense: premiere, total:/.test(rs))
+  // ⚠️ COMPTER LES LIGNES RENDUES SOUS UN `.limit()` PLAFONNE LE TOTAL en
+  // silence : au-delà de la limite, le Yopper en verrait moins qu'il n'en a.
+  verifie('et le total vient d\'un vrai count, pas des lignes reçues',
+    /count: 'exact'/.test(rs) && !/total: liste\.length/.test(rs))
+  // ⚠️ MESURÉ MUET : demander `count: 'exact'` ne suffisait pas, on pouvait le
+  // demander et rendre `total: 1` quand même. La garde doit lire le CHEMIN de
+  // la donnée, pas la présence de l'option.
+  verifie('et il est bien LU dans la réponse de la base',
+    /total: premiere \? Number\(count\)/.test(rs))
+  const route = lireCode('app/api/fidelite/ma-recompense/route.js')
+  verifie('la route expose le total au tunnel', /\n\s+total,/.test(route))
+
+  // ── Les quatre écrans, nommés un par un ───────────────────────────────
+  //
+  // ⚠️ ON NE CHERCHE PAS LE NOM DE LA FONCTION SEUL : il est dans la ligne
+  // d'import, qui verdit la garde même quand l'appel a disparu. Trois gardes
+  // muettes de cette forme le 25/08. On exige donc l'appel AVEC son argument,
+  // qui n'existe qu'au point de rendu.
+  //
+  // ⚠️ ET ON EXIGE LES DEUX APPELS DANS LES TUNNELS, pas un seul. Mesuré muet :
+  // la phrase y est écrite deux fois, en CONDITION puis en RENDU, et en
+  // supprimer une laissait la garde verte sur l'autre. C'est exactement la
+  // garde du 25/08 qui verdissait sur le second `useResetAuRetourDePaiement`.
+  // Retirer la condition affiche un bloc vide, retirer le rendu affiche un
+  // bloc muet : les deux comptent.
+  for (const [f, appel, minimum] of [
+    ['app/commander/[slug]/page.js', 'libelleAutresRecompenses(recompensesTotal)', 2],
+    ['app/commander/rdv/[slug]/page.js', "libelleAutresRecompenses(recompensesTotal, 'rdv')", 2],
+    ['app/commander/CarteFideliteFiche.js', 'libelleCarteRecompenses(nbRecompenses, libelle)', 1],
+    ['app/commander/page.js', 'libelleCarteRecompenses(nbRecompenses, libelle, { court: true })', 1],
+  ]) {
+    verifie(`${f} dit combien il en a`, lireCode(f).split(appel).length - 1 >= minimum)
+  }
+
+  // ⚠️ ET LE TOTAL EST BIEN CHARGÉ, sinon les phrases ci-dessus se tairaient
+  // toujours : `libelleAutresRecompenses(0)` rend null, donc un état resté à
+  // zéro donnerait un écran identique à l'ancien, sans rien signaler.
+  for (const f of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
+    verifie(`${f} charge le total depuis la route`,
+      /setRecompensesTotal\(Number\(j\.total\) \|\| 1\)/.test(lireCode(f)))
+  }
+
+  // ⚠️ LES DEUX ÉCRANS DE CARTE NE LISENT PLUS UN NOMBRE COMME UN BOOLÉEN.
+  for (const f of ['app/commander/CarteFideliteFiche.js', 'app/commander/page.js']) {
+    verifie(`${f} garde le nombre, pas seulement le oui/non`,
+      /const nbRecompenses = Number\(carte\??\.?\.?recompenses_disponibles/.test(lireCode(f))
+      || /nbRecompenses = Number\(carte/.test(lireCode(f)))
+  }
 }
 
 if (echecs.length > 0) {

@@ -16,7 +16,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { identiteProuvee } from '@/lib/yopper-auth'
-import { recompenseDisponible } from '@/lib/fidelite-recompense-server'
+import { recompensesDisponibles } from '@/lib/fidelite-recompense-server'
 
 export async function GET(request) {
   try {
@@ -31,7 +31,7 @@ export async function GET(request) {
     // On répond « rien à proposer », l'écran n'affiche simplement pas le bloc.
     // Répondre 401 ferait clignoter une alerte à chaque commande d'invité.
     if (!identite?.email) {
-      return NextResponse.json({ ok: true, connecte: false, recompense: null })
+      return NextResponse.json({ ok: true, connecte: false, recompense: null, total: 0 })
     }
 
     const supabase = createClient(
@@ -40,7 +40,7 @@ export async function GET(request) {
       { auth: { persistSession: false } }
     )
 
-    const recompense = await recompenseDisponible(supabase, {
+    const { recompense, total } = await recompensesDisponibles(supabase, {
       email: identite.email,
       commercantId,
     })
@@ -56,6 +56,10 @@ export async function GET(request) {
             libelle: recompense.libelle || null,
           }
         : null,
+      // ⚠️ COMBIEN IL EN A, pas seulement laquelle on propose. Une seule se
+      // dépense par commande : sans ce nombre, le tunnel ne peut pas dire que
+      // les autres existent, et le Yopper les croit perdues.
+      total,
     })
   } catch (e) {
     console.error('[fidelite/ma-recompense]', e)

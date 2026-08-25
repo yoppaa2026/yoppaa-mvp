@@ -4225,8 +4225,13 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
                         ? `${Number(c.cagnotte).toFixed(2).replace('.', ',')}€`
                         : `${c.passages}/${commercant.fidelite_seuil_passages || 10}`}
                     </span>
+                    {/* ⚠️ LE NOMBRE, comme sur la fiche ouverte juste en
+                        dessous. Une pastille « Récompense » sur un client qui
+                        en a deux fait servir la première et oublier l'autre. */}
                     {(c.recompenses_disponibles || 0) > 0 && (
-                      <span style={{ fontSize: 10, fontWeight: 800, color: '#059669', background: '#F0FDF4', padding: '2px 8px', borderRadius: 100, border: '1px solid #10B98133' }}>Récompense</span>
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#059669', background: '#F0FDF4', padding: '2px 8px', borderRadius: 100, border: '1px solid #10B98133' }}>
+                        {c.recompenses_disponibles > 1 ? `${c.recompenses_disponibles} récompenses` : 'Récompense'}
+                      </span>
                     )}
                   </button>
                 ))}

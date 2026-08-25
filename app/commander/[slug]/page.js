@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
-import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee } from '@/lib/fidelite-recompense'
+import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses } from '@/lib/fidelite-recompense'
 import { canDo, isVitrine } from '@/lib/plans'
 import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
@@ -1073,6 +1073,9 @@ export default function CommanderSlug() {
   // Récompense de fidélité du Yopper CONNECTÉ chez CE commerçant, et son choix
   // de l'utiliser ou non sur cette commande.
   const [recompenseFid, setRecompenseFid] = useState(null)      // { id, type, valeur, libelle }
+  // Combien il en a en tout chez ce commerce. Une seule se dépense par
+  // commande : ce nombre ne sert qu'à DIRE que les autres l'attendent.
+  const [recompensesTotal, setRecompensesTotal] = useState(0)
   const [recompenseActive, setRecompenseActive] = useState(false)
   const [bonErreur, setBonErreur] = useState(null)
   const [bonLoading, setBonLoading] = useState(false)
@@ -2380,7 +2383,11 @@ export default function CommanderSlug() {
     let vivant = true
     fetchAvecPreuveSiConnecte(`/api/fidelite/ma-recompense?commercant_id=${commercant.id}`)
       .then(r => r.json())
-      .then(j => { if (vivant && j?.ok && j.recompense) setRecompenseFid(j.recompense) })
+      .then(j => {
+        if (!vivant || !j?.ok || !j.recompense) return
+        setRecompenseFid(j.recompense)
+        setRecompensesTotal(Number(j.total) || 1)
+      })
       .catch(() => {})
     return () => { vivant = false }
   }, [commercant?.id])
@@ -4536,6 +4543,19 @@ export default function CommanderSlug() {
                                 ? `${recompenseFid.libelle ? `${recompenseFid.libelle}. ` : ''}Le montant est déduit de ta commande.`
                                 : 'Utilise-les maintenant : ils se déduiront de ta commande. Sinon ils t’attendront, ils ne s’effacent pas.'}
                             </p>
+                            {/* ⚠️ 🔴 DEUX RÉCOMPENSES EN BASE, UNE SEULE À L'ÉCRAN,
+                                et rien ne disait que l'autre existait : Alex l'a
+                                vu le 25/08. On n'en dépense qu'une par commande
+                                (la remise est bornée au panier, cumuler en
+                                brûlerait une pour rien), mais un choix qui ne se
+                                dit pas se lit comme une perte. La phrase reste
+                                affichée APRÈS le clic : c'est même là qu'elle
+                                rassure le plus. */}
+                            {libelleAutresRecompenses(recompensesTotal) && (
+                              <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, margin: '4px 0 0' }}>
+                                {libelleAutresRecompenses(recompensesTotal)}
+                              </p>
+                            )}
                           </div>
                           <button type="button" onClick={() => setRecompenseActive(v => !v)}
                             style={{ flexShrink: 0, padding: '8px 14px', borderRadius: 12, border: recompenseActive ? `1.5px solid ${T.main}` : 'none', background: recompenseActive ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: recompenseActive ? T.main : '#fff', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>

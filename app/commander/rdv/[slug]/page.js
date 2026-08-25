@@ -46,7 +46,7 @@ function enGras(texte) {
   )
 }
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
-import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee } from '@/lib/fidelite-recompense'
+import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses } from '@/lib/fidelite-recompense'
 import { redirectTop } from '@/lib/redirect-top'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { referenceRdv } from '@/lib/numero-commande'
@@ -316,6 +316,9 @@ export default function CommanderRdvSlug() {
   // ⚠️ PAS ACTIVE D'OFFICE : une récompense de 5 € posée sur une prestation à
   // 4 € en brûlerait 1 € que le Yopper ne récupérera jamais. Il décide.
   const [recompenseFid, setRecompenseFid] = useState(null)
+  // Combien il en a en tout ici. Une seule se dépense par rendez-vous : ce
+  // nombre ne sert qu'à DIRE que les autres l'attendent.
+  const [recompensesTotal, setRecompensesTotal] = useState(0)
   const [recompenseActive, setRecompenseActive] = useState(false)
   const [praticienChoisi, setPraticienChoisi] = useState(null)  // null = "Sans préférence" (V1 : garde null en base)
   const [dateChoisie, setDateChoisie] = useState(null)        // Date object
@@ -564,7 +567,11 @@ export default function CommanderRdvSlug() {
     let vivant = true
     fetchAvecPreuveSiConnecte(`/api/fidelite/ma-recompense?commercant_id=${commercant.id}`)
       .then(r => r.json())
-      .then(j => { if (vivant && j?.ok && j.recompense) setRecompenseFid(j.recompense) })
+      .then(j => {
+        if (!vivant || !j?.ok || !j.recompense) return
+        setRecompenseFid(j.recompense)
+        setRecompensesTotal(Number(j.total) || 1)
+      })
       .catch(() => {})
     return () => { vivant = false }
   }, [commercant?.id])
@@ -3046,6 +3053,15 @@ export default function CommanderRdvSlug() {
                                   ? `${recompenseFid.libelle ? `${recompenseFid.libelle}. ` : ''}Déduite du prix, ton acompte baisse d’autant.`
                                   : 'Utilise-les maintenant : ils se déduiront du prix, et ton acompte baissera d’autant.'}
                               </p>
+                              {/* ⚠️ 🔴 CE QU'IL A EN PLUS, et qui restait muet.
+                                  Une seule récompense se dépense par rendez-vous,
+                                  c'est un choix protecteur, mais tu ne peux pas
+                                  demander au Yopper de le deviner. */}
+                              {libelleAutresRecompenses(recompensesTotal, 'rdv') && (
+                                <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: T.main, fontWeight: 700 }}>
+                                  {libelleAutresRecompenses(recompensesTotal, 'rdv')}
+                                </p>
+                              )}
                             </div>
                             <button type="button" onClick={() => setRecompenseActive(v => !v)}
                               style={{ flexShrink: 0, padding: '8px 14px', borderRadius: 12, border: recompenseActive ? `1.5px solid ${T.main}` : 'none', background: recompenseActive ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: recompenseActive ? T.main : '#fff', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>

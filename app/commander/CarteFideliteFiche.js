@@ -5,6 +5,8 @@
 // Les infos du PROGRAMME viennent de la vue commercants_public (fidelite_*),
 // MA carte vient de /api/fidelite/mes-cartes (cookie Yopper), fetchée par la fiche.
 
+import { libelleCarteRecompenses } from '@/lib/fidelite-recompense'
+
 const T = {
   main:  '#6B35C4',
   mid:   '#9660E0',
@@ -27,7 +29,13 @@ export default function CarteFideliteFiche({ commercant, carte, connecte = true,
   const seuilP = commercant.fidelite_seuil_passages || 10
   const seuilC = Number(commercant.fidelite_seuil_cagnotte || 10)
   const libelle = libelleRecompense(commercant)
-  const recompense = (carte?.recompenses_disponibles || 0) > 0
+  // ⚠️ 🔴 C'EST UN NOMBRE, PAS UN BOOLÉEN, et cet écran le lisait comme un
+  // booléen depuis le premier jour. Alex a eu deux récompenses en base le
+  // 25/08 et n'en a vu qu'une annoncée : le compteur monte, la phrase reste au
+  // singulier, et rien ne dit qu'il y en a deux. On garde `recompense` pour
+  // les couleurs, mais le TEXTE compte.
+  const nbRecompenses = Number(carte?.recompenses_disponibles || 0)
+  const recompense = nbRecompenses > 0
 
   return (
     <div style={{ marginTop: 12, background: recompense ? '#F0FDF4' : T.pale, border: `1.5px solid ${recompense ? '#10B98155' : `${T.main}22`}`, borderRadius: 12, padding: '10px 12px' }}>
@@ -53,7 +61,7 @@ export default function CarteFideliteFiche({ commercant, carte, connecte = true,
           )}
           <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: recompense ? '#059669' : T.deep, lineHeight: 1.5 }}>
             {recompense
-              ? `Bravo, ta récompense est débloquée : ${libelle} 🟣`
+              ? libelleCarteRecompenses(nbRecompenses, libelle)
               : estCagnotte
                 ? `Ta cagnotte : ${Number(carte.cagnotte).toFixed(2).replace('.', ',')}€. Encore ${Math.max(0, seuilC - Number(carte.cagnotte)).toFixed(2).replace('.', ',')}€ de cagnotte et tu débloques : ${libelle}`
                 : `${carte.passages} passage${carte.passages > 1 ? 's' : ''} sur ${seuilP}. Encore ${Math.max(0, seuilP - carte.passages)} et tu débloques : ${libelle}`}
@@ -81,7 +89,12 @@ export default function CarteFideliteFiche({ commercant, carte, connecte = true,
               24/08, la récompense est proposée au moment de payer. */}
           {recompense && (
             <p style={{ margin: '6px 0 0', fontSize: '0.72rem', fontWeight: 600, color: '#059669', lineHeight: 1.5 }}>
-              Au comptoir, donne ton numéro de GSM. En ligne, elle te sera proposée au moment de payer.
+              {/* ⚠️ ET LE GESTE SUIT LE NOMBRE. « elle te sera proposée » à
+                  quelqu'un qui en a deux laisse croire que la seconde se perd
+                  en route : on dit qu'elles viennent l'une après l'autre. */}
+              {nbRecompenses > 1
+                ? 'Au comptoir, donne ton numéro de GSM. En ligne, elles te seront proposées une par une, à chacune de tes commandes.'
+                : 'Au comptoir, donne ton numéro de GSM. En ligne, elle te sera proposée au moment de payer.'}
             </p>
           )}
 

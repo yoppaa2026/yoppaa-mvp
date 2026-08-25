@@ -38,6 +38,7 @@ import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
 import { chargerBonValide, debiterBon } from '@/lib/bons-cadeaux-server'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
+import { modesPaiementOuverts } from '@/lib/modes-paiement'
 import { chargerRecompensePourYopper, consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
@@ -189,13 +190,26 @@ export async function POST(request) {
     }
     // Sur place : autorisé selon accepte_paiement_cash (alimentaire) ou selon
     // le choix boutique_retrait_paiement='magasin' (retrait boutique détail).
-    const cashAutorise = estRetraitBoutique
-      ? commercant.boutique_retrait_paiement === 'magasin'
-      : commercant.accepte_paiement_cash
+    //
+    // ⚠️ MÊME RÈGLE QUE L'ÉCRAN, LUE AU MÊME ENDROIT (`lib/modes-paiement.js`).
+    // Elle était réécrite ici dans d'autres mots, et une TROISIÈME fois dans le
+    // tunnel : trois copies d'une règle qui décide qui encaisse.
+    const { stripeOK: enLigneAutorise, cashOK: cashAutorise } = modesPaiementOuverts({
+      commercant,
+      estDetail: estBoutique,
+      modeBoutique: estExpedition ? 'expedition' : 'retrait',
+    })
     if (surPlace && !cashAutorise) {
       return NextResponse.json({ ok: false, error: 'Le paiement sur place n\'est pas proposé chez ce commerçant.' }, { status: 400 })
     }
-    if (!surPlace && (!commercant.stripe_account_id || !commercant.stripe_account_charges_enabled)) {
+    // ⚠️ ET LE PAIEMENT EN LIGNE SE REFUSE AUSSI. Le serveur ne vérifiait que
+    // le compte Stripe : un commerçant de détail qui a choisi d'encaisser AU
+    // COMPTOIR pouvait quand même recevoir un paiement en ligne, et donc une
+    // commission qu'il avait refusée. Son choix n'était tenu que par l'écran.
+    if (!surPlace && !enLigneAutorise) {
+      return NextResponse.json({ ok: false, error: 'Le paiement en ligne n\'est pas proposé chez ce commerçant.' }, { status: 400 })
+    }
+    if (!surPlace && !commercant.stripe_account_id) {
       return NextResponse.json({ ok: false, error: 'Le paiement en ligne n\'est pas encore activé chez ce commerçant.' }, { status: 400 })
     }
 

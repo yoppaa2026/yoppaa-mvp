@@ -32,7 +32,9 @@ import {
 import { calculerRemiseBon } from '../lib/bons-cadeaux.js'
 import { montantFidelisable } from '../lib/fidelite.js'
 import { construireLignes } from '../lib/export-comptable.js'
-import { resteAEncaisser, caDesRdvs, etatPaiementRdv } from '../lib/rdv-paiement.js'
+import { resteAEncaisser, caDesRdvs, etatPaiementRdv, resteAEncaisserCommande } from '../lib/rdv-paiement.js'
+import { modesPaiementOuverts, modePaiementEffectif } from '../lib/modes-paiement.js'
+import { emailCommandeConfirmee, emailNouvelleCommandeCommercant } from '../lib/resend.js'
 import { cleReprisePanier } from '../lib/retour-paiement.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
@@ -780,6 +782,160 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
       /const nbRecompenses = Number\(carte\??\.?\.?recompenses_disponibles/.test(lireCode(f))
       || /nbRecompenses = Number\(carte/.test(lireCode(f)))
   }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// 16. 🔴 LA REMISE OUBLIÉE PAR TOUT CE QUI PARLE D'ARGENT (26/08, test d'Alex)
+// ═════════════════════════════════════════════════════════════════════════
+//
+// Une commande de 36 € avec 10 € de récompense annonçait 26 € à l'écran, puis
+// 36 € dans le ticket, et 36 € dans la modale d'encaissement du comptoir. La
+// récompense était pourtant bien consommée : le Yopper payait DEUX FOIS, en
+// argent et en récompense brûlée.
+//
+// Une seule cause : `resteAEncaisserCommande` ne déduisait que le bon cadeau.
+// C'est la source unique du montant dû, donc TOUT ce qui en découle mentait.
+{
+  // ── La règle, EXÉCUTÉE ────────────────────────────────────────────────
+  verifie('la récompense se déduit de ce qui reste à encaisser',
+    resteAEncaisserCommande({ total: 36, fidelite_remise: 10, paye_en_ligne: false }) === 26)
+  verifie('elle se cumule avec le bon cadeau',
+    resteAEncaisserCommande({ total: 36, fidelite_remise: 10, bon_cadeau_montant: 6, paye_en_ligne: false }) === 20)
+  verifie('et jamais de solde négatif',
+    resteAEncaisserCommande({ total: 8, fidelite_remise: 10, paye_en_ligne: false }) === 0)
+  // ⚠️ Le piège du zéro, pour la sixième fois sur ce projet : une commande
+  // sans total ne doit rien annoncer, surtout pas « 0,00 € ».
+  verifie('sans total, on ne prétend rien',
+    resteAEncaisserCommande({ fidelite_remise: 10, paye_en_ligne: false }) === null)
+  verifie('une commande déjà payée en ligne ne redemande rien',
+    resteAEncaisserCommande({ total: 36, fidelite_remise: 10, paye_en_ligne: true }) === 0)
+
+  // ── La colonne arrive jusqu'aux quatre lecteurs ───────────────────────
+  //
+  // ⚠️ SANS LE `select`, LA CORRECTION EST MUETTE. `Number(undefined)` n'est
+  // pas fini : la fonction retombe sur l'ancien montant, sans erreur ni log.
+  // C'est le défaut le plus fréquent de ce projet.
+  for (const f of [
+    'app/api/emails/commande-prete/route.js',
+    'app/api/cron/rappels-retrait/route.js',
+    'app/api/yopper/commandes/route.js',
+  ]) {
+    verifie(`${f} charge fidelite_remise`, /fidelite_remise/.test(lireCode(f)))
+  }
+  // ⚠️ MESURÉ MUET : dans `commande-notifs`, le mot apparaît DEUX fois, dans le
+  // `select` puis dans le passage au template. En retirer un laissait la garde
+  // verte sur l'autre — et il faut les deux : sans la colonne on ne l'a pas,
+  // sans le passage le ticket ne la voit pas. Troisième fois aujourd'hui que la
+  // présence d'un mot ne prouve rien.
+  //
+  // ⚠️ ET COMPTER LES OCCURRENCES NE SUFFISAIT PAS NON PLUS : la ligne qui
+  // transmet, `fidelite_remise: cmd.fidelite_remise`, en contient DEUX à elle
+  // seule. Retirer la colonne du `select` laissait le compte à 2, donc la garde
+  // verte, pour une commande qui n'aurait jamais chargé la remise. On nomme
+  // donc chaque rôle par sa forme exacte.
+  const notifs = lireCode('lib/commande-notifs.js')
+  verifie('lib/commande-notifs.js demande la colonne à la base',
+    /^\s*fidelite_remise,\s*$/m.test(notifs))
+  verifie('et le ticket la reçoit bien de la commande relue',
+    /fidelite_remise:\s+cmd\.fidelite_remise/.test(notifs))
+
+  // ── Le ticket du Yopper, RENDU et relu ────────────────────────────────
+  const ticket = emailCommandeConfirmee({
+    yopper_prenom: 'Alexandre', commercant_nom: 'La Boutique Témoin',
+    numero_commande: 'RE4', articles: [{ nom: 'Robe fleurie', quantite: 1, prix_total: 36 }],
+    total: 36, fidelite_remise: 10, date_retrait: '2026-08-26',
+    mode_retrait: 'retrait_boutique', commercant_categorie: 'detail',
+  })
+  verifie('le ticket nomme la récompense', /Récompense fidélité/.test(ticket))
+  verifie('et il en montre le montant déduit', /−10\.00 €/.test(ticket))
+  // ⚠️ LE NET, PAS SEULEMENT LA SOUSTRACTION AFFICHÉE. C'est le chiffre que le
+  // Yopper emporte au comptoir.
+  verifie('le ticket dit ce qui reste réellement', /26\.00 €/.test(ticket))
+
+  const ticketSansRemise = emailCommandeConfirmee({
+    yopper_prenom: 'Alexandre', commercant_nom: 'La Boutique Témoin',
+    numero_commande: 'RE5', articles: [{ nom: 'Robe fleurie', quantite: 1, prix_total: 36 }],
+    total: 36, date_retrait: '2026-08-26', mode_retrait: 'retrait_boutique',
+  })
+  verifie('et sans récompense il ne parle pas de remise',
+    !/Récompense fidélité/.test(ticketSansRemise) && !/Total après remise/.test(ticketSansRemise))
+
+  // ── L'email du COMMERÇANT, qui prépare et encaisse ────────────────────
+  //
+  // ⚠️ IL LISAIT LE BRUT LUI AUSSI, et pour le bon cadeau depuis bien plus
+  // longtemps. Celui qui prépare la commande doit voir le même chiffre que
+  // celui qui vient la chercher.
+  const ticketCom = emailNouvelleCommandeCommercant({
+    nom_commercant: 'La Boutique Témoin', yopper_prenom: 'Alexandre',
+    numero_commande: 'RE4', articles: [{ nom: 'Robe fleurie', quantite: 1, prix_total: 36 }],
+    total: 36, fidelite_remise: 10, date_retrait: '2026-08-26',
+  })
+  verifie('l\'email commerçant montre la récompense', /Récompense fidélité/.test(ticketCom))
+  verifie('et le net qu\'il aura à encaisser', /26\.00 €/.test(ticketCom))
+  const ticketComBon = emailNouvelleCommandeCommercant({
+    nom_commercant: 'La Boutique Témoin', yopper_prenom: 'Alexandre',
+    numero_commande: 'RE5', articles: [{ nom: 'Robe fleurie', quantite: 1, prix_total: 36 }],
+    total: 36, bon_cadeau_montant: 6, date_retrait: '2026-08-26',
+  })
+  verifie('il montre aussi le bon cadeau', /Bon cadeau/.test(ticketComBon) && /30\.00 €/.test(ticketComBon))
+  // ⚠️ MESURÉ MUET, QUATRIÈME FOIS AUJOURD'HUI. Chercher
+  // `fidelite_remise: cmd.fidelite_remise` trouvait la ligne du ticket YOPPER
+  // et restait vert quand celle du COMMERÇANT disparaissait. Les deux emails
+  // partent du même fichier : il faut donc DEUX passages, pas un.
+  const notifsCom = lireCode('lib/commande-notifs.js')
+  verifie('la remise part vers les DEUX emails',
+    notifsCom.split(/fidelite_remise:\s+cmd\.fidelite_remise/).length - 1 >= 2)
+  verifie('et le bon cadeau aussi',
+    notifsCom.split(/bon_cadeau_montant:\s+cmd\.bon_cadeau_montant/).length - 1 >= 2)
+
+  // ── Les moyens de paiement : UNE règle, trois lecteurs ────────────────
+  //
+  // 🔴 L'écran offrait « Payer en ligne » chez un commerçant qui encaisse au
+  // comptoir, puis la commande partait en `sur_place` sans Stripe. Deux copies
+  // d'une même règle, dont une plus permissive.
+  const comptoir = {
+    stripe_account_charges_enabled: true,
+    boutique_retrait_paiement: 'magasin',
+    accepte_paiement_cash: false,
+  }
+  const retraitComptoir = modesPaiementOuverts({ commercant: comptoir, estDetail: true, modeBoutique: 'retrait' })
+  verifie('un retrait payé au comptoir ferme le paiement en ligne', retraitComptoir.stripeOK === false)
+  verifie('et il ouvre bien la caisse', retraitComptoir.cashOK === true)
+  const expe = modesPaiementOuverts({ commercant: comptoir, estDetail: true, modeBoutique: 'expedition' })
+  // ⚠️ Un colis part avant toute rencontre : il ne se paie pas au comptoir.
+  verifie('une expédition ne se paie jamais sur place', expe.cashOK === false)
+  verifie('et elle rouvre le paiement en ligne', expe.stripeOK === true)
+  const alim = modesPaiementOuverts({
+    commercant: { stripe_account_charges_enabled: true, accepte_paiement_cash: true },
+    estDetail: false,
+  })
+  verifie('l\'alimentaire garde ses deux moyens', alim.stripeOK === true && alim.cashOK === true)
+
+  // ⚠️ UN CHOIX FERMÉ NE SE RESPECTE PAS : c'est tout le défaut d'Alex. L'écran
+  // avait « en_ligne » en mémoire, le commerçant ne l'accepte pas.
+  verifie('un choix devenu impossible retombe sur ce qui existe',
+    modePaiementEffectif({ choix: 'en_ligne', stripeOK: false, cashOK: true }) === 'sur_place')
+  verifie('un choix possible est respecté',
+    modePaiementEffectif({ choix: 'sur_place', stripeOK: true, cashOK: true }) === 'sur_place')
+  verifie('sans choix, le paiement en ligne passe devant',
+    modePaiementEffectif({ choix: null, stripeOK: true, cashOK: true }) === 'en_ligne')
+  verifie('sans aucun moyen, on ne prétend pas en avoir un',
+    modePaiementEffectif({ choix: null, stripeOK: false, cashOK: false }) === null)
+  verifie('une commande entièrement couverte ne demande aucun moyen',
+    modePaiementEffectif({ choix: null, stripeOK: false, cashOK: false, couvert: true }) === 'en_ligne')
+
+  // ── Et les trois lecteurs lisent bien la fonction, sans la recopier ───
+  const tunnelPaie = lireCode('app/commander/[slug]/page.js')
+  verifie('le tunnel appelle la règle deux fois : au rendu ET à l\'envoi',
+    tunnelPaie.split('modesPaiementOuverts({').length - 1 >= 2)
+  verifie('et il n\'a plus sa copie locale de la règle boutique',
+    !/stripeOK = stripeOK && p === 'en_ligne'/.test(tunnelPaie))
+  const routeCmd = lireCode('app/api/stripe/checkout/create-commande/route.js')
+  verifie('le serveur lit la même règle', /modesPaiementOuverts\(\{/.test(routeCmd))
+  // ⚠️ ET IL REFUSE LE PAIEMENT EN LIGNE FERMÉ. Sans ça, le choix du commerçant
+  // n'était tenu que par l'écran, donc par personne.
+  verifie('et il refuse un paiement en ligne que le commerçant n\'a pas ouvert',
+    /if \(!surPlace && !enLigneAutorise\)/.test(routeCmd))
 }
 
 if (echecs.length > 0) {

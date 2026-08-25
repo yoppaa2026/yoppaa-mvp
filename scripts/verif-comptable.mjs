@@ -937,8 +937,17 @@ verifier('le serveur refuse aussi, et nomme sa raison',
   /resteAEncaisserCommande\(cmd\) > 0/.test(srcRouteYopper) && /solde_a_regler/.test(srcRouteYopper))
 // ⚠️ LES COLONNES DOIVENT ARRIVER JUSQU'À LA GARDE. Sans elles le solde vaut
 // null, la garde laisse tout passer, et elle le fait EN SILENCE.
-verifier('et il charge de quoi calculer ce solde',
-  /select\('id, mode_retrait, client_email, total, paye_en_ligne, bon_cadeau_montant'\)/.test(srcRouteYopper))
+//
+// ⚠️ CETTE GARDE FIGEAIT LA LISTE EXACTE, et elle a donc REFUSÉ l'ajout de
+// `fidelite_remise` le 26/08 : le verrouillage de forme, une fois de plus. Une
+// liste de colonnes n'a pas à être identique, elle doit CONTENIR ce dont le
+// calcul a besoin. On nomme donc chaque colonne, séparément.
+{
+  const selectReception = (srcRouteYopper.match(/\.select\('id, mode_retrait, client_email[^']*'\)/) || [])[0] || ''
+  for (const col of ['total', 'paye_en_ligne', 'bon_cadeau_montant', 'fidelite_remise']) {
+    verifier(`et il charge ${col} pour calculer ce solde`, selectReception.includes(col))
+  }
+}
 
 // La porte de secours du commerçant, pour les commandes déjà remises.
 verifier('une commande remise sans moyen garde son rattrapage',

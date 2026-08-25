@@ -146,10 +146,14 @@ export async function POST(request) {
       // Vérifie l'appartenance : la commande doit être à l'email du cookie.
       const { data: cmd } = await supabase
         .from('commandes')
-        // ⚠️ `total`, `paye_en_ligne` ET `bon_cadeau_montant` SONT INDISPENSABLES :
-        // sans eux, le solde ne peut pas être calculé, la garde ci-dessous
-        // laisserait tout passer, et elle le ferait EN SILENCE.
-        .select('id, mode_retrait, client_email, total, paye_en_ligne, bon_cadeau_montant')
+        // ⚠️ `total`, `paye_en_ligne`, `bon_cadeau_montant` ET `fidelite_remise`
+        // SONT INDISPENSABLES : sans eux, le solde ne peut pas être calculé, la
+        // garde ci-dessous laisserait tout passer, et elle le ferait EN SILENCE.
+        //
+        // ⚠️ `fidelite_remise` MANQUAIT, et l'oubli allait dans l'autre sens :
+        // la garde refusait le geste au Yopper qui avait tout réglé, parce
+        // qu'elle croyait qu'il restait la valeur de la récompense à payer.
+        .select('id, mode_retrait, client_email, total, paye_en_ligne, bon_cadeau_montant, fidelite_remise')
         .eq('id', id).maybeSingle()
       if (!cmd || cmd.client_email?.toLowerCase() !== yopper.email) {
         return NextResponse.json({ ok: false, error: 'commande_introuvable' }, { status: 404 })

@@ -63,7 +63,7 @@ export async function GET(request) {
       .from('commandes')
       .select(`
         id, numero_commande, numero_prefixe, pret_at, rappel_retrait_nb,
-        total, paye_en_ligne, bon_cadeau_montant, encaisse_mode, encaisse_montant,
+        total, paye_en_ligne, bon_cadeau_montant, fidelite_remise, encaisse_mode, encaisse_montant,
         client_email, client_prenom, client_nom, mode_retrait, rdv_reservation_id,
         lieu_id, lieu_libelle, lieu_adresse,
         commercant:commercants(nom, adresse, categorie),

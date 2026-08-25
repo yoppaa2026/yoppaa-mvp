@@ -47,7 +47,7 @@ export async function POST(request) {
         id, numero_commande, numero_prefixe, client_email, client_prenom, mode_retrait,
         lieu_id, lieu_libelle, lieu_adresse,
         adresse_livraison,
-        total, paye_en_ligne, bon_cadeau_montant, encaisse_mode, encaisse_montant,
+        total, paye_en_ligne, bon_cadeau_montant, fidelite_remise, encaisse_mode, encaisse_montant,
         commercant:commercants(nom, slug, adresse),
         creneau:creneaux(heure_debut, heure_fin),
         creneau_livraison:livraison_creneaux(heure_debut, heure_fin)

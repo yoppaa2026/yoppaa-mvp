@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses } from '@/lib/fidelite-recompense'
+import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
 import { canDo, isVitrine } from '@/lib/plans'
 import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
@@ -2547,19 +2548,14 @@ export default function CommanderSlug() {
 
       // Mode de paiement effectif : choix explicite du Yopper, sinon défaut
       // selon ce que le commerçant propose (en ligne prioritaire).
-      let stripeOK = !!commercant.stripe_account_charges_enabled
-      let cashOK = !!commercant.accepte_paiement_cash
-      if (estDetail) {
-        // Boutique : expédition = en ligne obligatoire ; retrait = LE choix du
-        // commerçant (boutique_retrait_paiement : en_ligne OU magasin).
-        if (modeBoutiqueEff === 'expedition') {
-          cashOK = false
-        } else {
-          const p = commercant.boutique_retrait_paiement || 'en_ligne'
-          cashOK = p === 'magasin'
-          stripeOK = stripeOK && p === 'en_ligne'
-        }
-      }
+      //
+      // ⚠️ LA RÈGLE VIT DANS `lib/modes-paiement.js`, ET L'ÉCRAN LIT LA MÊME.
+      // Elle était recopiée ici et calculée autrement au rendu : l'écran
+      // proposait « Payer en ligne » chez un commerçant qui encaisse au
+      // comptoir, et la commande partait en `sur_place` sans Stripe.
+      const { stripeOK, cashOK } = modesPaiementOuverts({
+        commercant, estDetail, modeBoutique: modeBoutiqueEff,
+      })
       // Dû entièrement couvert : pas de choix de paiement à faire, le serveur
       // confirme sans Stripe (chemin `couvertSansPaiement` de create-commande).
       //
@@ -2567,7 +2563,9 @@ export default function CommanderSlug() {
       // que le bon cadeau, une récompense couvrant tout le panier laissait
       // l'écran réclamer un mode de paiement pour 0 €.
       const couvertParBon = totalDuApresBon() === 0 && (!!bonApplique || remiseRecompenseEffective() > 0)
-      const modeEffectif = couvertParBon ? 'en_ligne' : (modePaiement || (stripeOK ? 'en_ligne' : cashOK ? 'sur_place' : null))
+      const modeEffectif = modePaiementEffectif({
+        choix: modePaiement, stripeOK, cashOK, couvert: couvertParBon,
+      })
       if (!modeEffectif) {
         setErreurCommande('La commande en ligne n\'est pas encore disponible chez ce commerçant.')
         setLoadingCommande(false)
@@ -4504,16 +4502,23 @@ export default function CommanderSlug() {
                   //  • alimentaire : en ligne (Stripe) et/ou sur place (accepte_paiement_cash)
                   //  • boutique détail : expédition = TOUJOURS en ligne ; retrait =
                   //    selon boutique_retrait_paiement (en_ligne obligatoire OU comptoir)
-                  const stripeOK = !!commercant?.stripe_account_charges_enabled
+                  // 🔴 CE CALCUL ÉTAIT LE JUMEAU DE CELUI DE `passerCommande`,
+                  // en plus permissif : il oubliait que le retrait en boutique
+                  // ferme le paiement en ligne quand le commerçant encaisse au
+                  // comptoir. L'écran offrait donc une carte bancaire, et la
+                  // commande partait en `sur_place` sans Stripe. Une seule
+                  // règle, lue des deux côtés ET par le serveur.
                   const estExpe = estDetail && modeBoutiqueEff === 'expedition'
-                  const cashOK = estDetail
-                    ? (!estExpe && commercant?.boutique_retrait_paiement === 'magasin')
-                    : !!commercant?.accepte_paiement_cash
+                  const { stripeOK, cashOK } = modesPaiementOuverts({
+                    commercant, estDetail, modeBoutique: modeBoutiqueEff,
+                  })
                   const surPlaceOu = modeCommande === 'livraison' ? 'au livreur' : estDetail ? 'au comptoir, au retrait' : 'au retrait'
                   // Avantages couvrant tout : plus rien à payer, pas de choix
                   // de mode. ⚠️ La récompense de fidélité peut y suffire seule.
                   const couvert = totalDuApresBon() === 0 && (!!bonApplique || remiseRecompenseEffective() > 0)
-                  const modeEffectif = couvert ? 'en_ligne' : (modePaiement || (stripeOK ? 'en_ligne' : cashOK ? 'sur_place' : null))
+                  const modeEffectif = modePaiementEffectif({
+                    choix: modePaiement, stripeOK, cashOK, couvert,
+                  })
                   const surPlace = !couvert && modeEffectif === 'sur_place'
                   return (
                     <>

@@ -1542,6 +1542,18 @@ export default function LandingReveal({ referent = null }) {
           Ensuite, paiement mensuel par Bancontact ou carte, aucune augmentation en cours d&rsquo;année,
           et tu restes libre de partir quand tu veux.
         </p>
+        {/* ⚠️ ICI AUSSI, ET PAS SEULEMENT EN BAS DE PAGE. C'est le moment où le
+            commerçant vient de lire les prix : c'est là qu'il décide. L'envoyer
+            chercher un bouton six sections plus bas, c'est le perdre. */}
+        <div style={{ textAlign: 'center', marginTop: 26 }}>
+          <Link href="/signup"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '14px 28px', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, fontSize: 15, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 8px 20px rgba(107,53,196,0.28)' }}>
+            J&rsquo;inscris mon commerce
+          </Link>
+          <p style={{ margin: '10px 0 0', fontSize: 12.5, color: T.muted, fontWeight: 600 }}>
+            Ta page peut être en ligne cette semaine. Sans carte de paiement.
+          </p>
+        </div>
       </section>
 
       {/* ═══ 6. LA ZONE : commune par commune ═══ */}
@@ -1605,6 +1617,35 @@ export default function LandingReveal({ referent = null }) {
             <strong style={{ color: '#fff' }}>Habitant ?</strong> Laisse ton email : tu seras parmi les
             premiers à télécharger l&rsquo;app, et on te prévient dès qu&rsquo;elle est disponible.
           </p>
+
+          {/* 🔴 LE COMMERÇANT N'AVAIT AUCUN MOYEN DE S'INSCRIRE (Alex, 26/08).
+              Toute cette page lui parle : les mockups de son tableau de bord,
+              les formules, la réponse à ses trois objections, et jusqu'au texte
+              juste au-dessus qui lui promet ses jours offerts. Puis il arrivait
+              ici, et le seul geste disponible était de laisser son email dans
+              une liste d'attente destinée aux HABITANTS.
+
+              Aucun lien vers /signup n'existait nulle part sur la landing. Ce
+              n'était pas les publications qui manquaient de force : elles
+              menaient à un cul-de-sac. */}
+          <Link href="/signup"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '15px 30px', borderRadius: 100, background: 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: '#1A0840', fontWeight: 900, fontSize: 15.5, letterSpacing: 0.2, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif', marginBottom: 10, boxShadow: '0 8px 22px rgba(150,96,224,0.35)' }}>
+            J&rsquo;inscris mon commerce
+          </Link>
+          {/* ⚠️ LE COMPTE VIENT DE `lib/lancement.js`, JAMAIS ÉCRIT EN DUR :
+              « 100 » est calculé depuis les deux dates, et un 100 tapé à la
+              main deviendrait un mensonge daté.
+              ⚠️ ET UN SEUL CHIFFRE SUR LA PAGE, décision d'Alex du 20/08. Un
+              second nombre, même exact, « peut être interprété comme
+              mensonger » : une offre qu'on soupçonne ne convainc personne.
+              L'avance se dit donc EN MOTS, comme dans le hero. Le banc l'avait
+              gardé, et il m'a arrêté ici. */}
+          {estRegimeLancement() && (
+            <p style={{ margin: '0 0 30px', fontSize: 13.5, fontWeight: 700, color: T.light, lineHeight: 1.55 }}>
+              {joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()},
+              et tout le temps d&rsquo;ici là est en bonus. Sans carte de paiement.
+            </p>
+          )}
 
           {statut.envoi === 'ok' ? (
             <div style={{ maxWidth: 460, width: '100%' }}>

@@ -21,7 +21,7 @@
 //   4. le balisage Google est un JSON valide, et ses prix sont ceux des
 //      cartes affichées, pas des nombres recopiés.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import {
   finEssai, joursOfferts, joursOffertsAuLancement, joursAvance, estRegimeLancement, phraseEssai,
   libelleLancement, libelleFinEssaiLancement, libelleDernierJourGratuit,
@@ -659,6 +659,50 @@ function sansCommentaires(src) {
   verifier("aucune adresse de réseau n'est recopiée dans la landing",
     !/facebook\.com/.test(reveal),
     'elle doit venir de lib/reseaux, sinon une des copies pointera un jour dans le vide')
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 LE COMMERÇANT DOIT POUVOIR S'INSCRIRE DEPUIS LA LANDING (26/08)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Toute la page lui parle : mockups de son tableau de bord, formules, réponse
+// à ses trois objections. Puis il arrivait en bas et le SEUL geste disponible
+// était de laisser son email dans une liste d'attente destinée aux habitants.
+// Aucun lien vers /signup n'existait nulle part. Ce n'étaient pas les
+// publications d'Alex qui manquaient de force : elles menaient à un cul-de-sac.
+{
+  const reveal = readFileSync('app/components/LandingReveal.js', 'utf8')
+
+  // ⚠️ DEUX BOUTONS, PAS UN. Celui de la section des formules attrape le
+  // commerçant au moment où il vient de lire les prix, c'est-à-dire au moment
+  // où il décide. Compter les occurrences, sinon retirer l'un des deux
+  // laisserait la garde verte sur l'autre : cinq fois aujourd'hui.
+  const liens = reveal.split('href="/signup"').length - 1
+  verifier('la landing mène au signup, en haut de page comme en bas',
+    liens >= 2, `${liens} lien(s) trouvé(s)`)
+  verifier('et le bouton dit le geste, pas la destination',
+    /J&rsquo;inscris mon commerce/.test(reveal))
+
+  // ⚠️ LE COMPTE DE JOURS N'EST JAMAIS ÉCRIT EN DUR. « 100 » est calculé depuis
+  // les deux dates : tapé à la main, il deviendrait un mensonge daté.
+  //
+  // ⚠️ ET L'AVANCE SE DIT EN MOTS, JAMAIS EN CHIFFRE. Décision d'Alex du
+  // 20/08, déjà gardée plus haut : un second nombre sur la page, même exact,
+  // « peut être interprété comme mensonger ». J'ai enfreint cette règle en
+  // écrivant le bloc ci-dessous, et c'est cette garde-là qui m'a arrêté.
+  const blocInscription = (reveal.match(/jours offerts à partir du \{libelleLancement\(\)\}[\s\S]{0,140}/) || [])[0] || ''
+  verifier('les jours offerts du bloc commerçant restent calculés',
+    /\{joursOffertsAuLancement\(\)\} jours offerts à partir du \{libelleLancement\(\)\}/.test(reveal))
+  verifier("et l'avance y est annoncée en mots, pas en chiffre",
+    /est en bonus/.test(blocInscription) && !/\d/.test(blocInscription.replace(/\{[^}]*\}/g, '')))
+
+  // L'adresse courte des publications Facebook et Instagram.
+  const pro = readFileSync('app/pro/page.tsx', 'utf8')
+  verifier('/pro existe et mène à l\'inscription', /redirect\('\/signup\?via=pro'\)/.test(pro))
+  // ⚠️ UN `href` EST UNE CHAÎNE, RIEN NE LE VOIT. La cible doit exister sur le
+  // disque, sinon le lien le plus visible de la page mène à un 404.
+  verifier('et la page d\'inscription existe vraiment',
+    existsSync('app/signup/page.js') || existsSync('app/signup/page.tsx'))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

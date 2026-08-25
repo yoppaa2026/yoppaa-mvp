@@ -2028,7 +2028,12 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
 }
 
 // ─── ÉTAPE 5 : SUCCESS PACK + SOUMISSION ──────────────────────────────────────
-// - Choix optionnel d'un Success Pack (STARTER 49€ ou PREMIUM 249€)
+// - Choix optionnel de matériel et d'accompagnement, lus dans le CATALOGUE
+//   (lib/produits-boutique.js). ⚠️ Cette ligne annonçait « STARTER 49€ ou
+//   PREMIUM 249€ » : deux packs qui n'existent plus depuis la refonte de la
+//   gamme du 24/08, à des prix qui n'ont jamais été ceux d'aujourd'hui. Un
+//   commentaire faux est plus coûteux qu'un commentaire absent : il fait
+//   croire qu'on sait.
 // - Calcul du score automatique 0-100 (visible en live)
 // - Soumission (statut = en_attente_validation + email Yoppaa via Resend)
 // - Bouton verrouille si score < 60
@@ -2390,6 +2395,39 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
         : onboarding.success_pack_choisi])
     : new Set()
   const [shopChoices, setShopChoices] = useState(initialChoices)
+
+  // 🔴 LES CHOIX ENREGISTRÉS NE REVENAIENT PAS À L'ÉCRAN (26/08).
+  //
+  // Les cases se reconstituaient depuis `onboarding.success_pack_choisi`, un
+  // champ LEGACY qui ne retient qu'une valeur, et seulement le Success Pack.
+  // Un commerçant qui avait coché Kit Pro, rouleaux et mise en route
+  // retrouvait l'écran VIDE : ses choix étaient pourtant bien en base, dans
+  // `success_packs`, personne ne les relisait.
+  //
+  // Ce n'est pas un cas d'école : c'est le parcours de tout commerçant rejeté
+  // au KYB qui corrige sa fiche et la renvoie. Il recochait, ou il repartait
+  // sans son matériel.
+  //
+  // ⚠️ ON N'ÉCRASE JAMAIS UNE SÉLECTION EN COURS. Si la réponse arrive après
+  // qu'il a coché quelque chose, on la laisse : reprendre la main sur des
+  // cases qu'il vient de toucher serait pire que l'oubli qu'on répare.
+  useEffect(() => {
+    let annule = false
+    ;(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session || annule) return
+        const r = await fetch(`/api/accompagnement/souhaits?commercant_id=${commercant.id}`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        })
+        const j = await r.json()
+        if (annule || !j?.ok || !Array.isArray(j.souhaites) || j.souhaites.length === 0) return
+        setShopChoices(prev => (prev.size > 0 ? prev : new Set(j.souhaites)))
+      } catch { /* la boutique reste vide : elle n'a rien d'obligatoire */ }
+    })()
+    return () => { annule = true }
+  }, [commercant.id])
+
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(onboarding.statut === 'en_attente_validation' || onboarding.statut === 'valide')
   const [error, setError] = useState('')
@@ -2442,9 +2480,15 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
     setSubmitting(true)
     setError('')
 
-    // S2a : on persiste UNIQUEMENT le success_pack dans onboarding_commercants
-    // (compat schéma existant). Les kits hardware + rouleau sont collectés en
-    // local state pour l'instant et seront persistés en S2b après migration DB.
+    // ⚠️ CE CHAMP EST UN VESTIGE, ET IL NE SERT PLUS QU'À L'ADMIN. Il ne retient
+    // qu'une valeur, et seulement le Success Pack : c'est un drapeau, pas un
+    // panier. Le panier complet part juste en dessous vers `success_packs`, et
+    // c'est LUI qui fait foi.
+    //
+    // Le commentaire précédent annonçait des kits « collectés en local state,
+    // persistés en S2b après migration DB » : c'est faux depuis le 24/08, ils
+    // sont enregistrés par la route serveur. Un commentaire périmé sur ce qui
+    // touche à l'argent finit par décider quelqu'un.
     const aSuccessPack = shopChoices.has('success_pack')
 
     // 1) Update onboarding : statut + score + success_pack_choisi (legacy)

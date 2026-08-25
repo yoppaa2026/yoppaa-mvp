@@ -392,6 +392,51 @@ v('le tableau de bord pré-coche les souhaits', /statut === 'souhaite'/.test(das
 v('le tableau de bord nomme le statut souhaite sans parler de dette',
   /souhaite:\s*\{ txt: '[^']*pas encore payé/.test(dash))
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 CE QUI EST ENREGISTRÉ DOIT REVENIR À L'ÉCRAN (26/08)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// L'étape 5 reconstituait les cases cochées depuis
+// `onboarding_commercants.success_pack_choisi`, un champ LEGACY qui ne retient
+// qu'une valeur et seulement le Success Pack. Un commerçant qui avait coché
+// Kit Pro, rouleaux et mise en route retrouvait l'écran VIDE, alors que ses
+// choix étaient bien en base. C'est le parcours de tout commerçant rejeté au
+// KYB qui corrige et renvoie sa fiche.
+{
+  const route = lireCode('app/api/accompagnement/souhaits/route.js')
+  const signup = lireCode('app/signup/page.js')
+
+  // ⚠️ LA PARENTHÈSE COMPTE. Sans elle, `export async function GET_AUTRE_CHOSE`
+  // validait la garde : le verbe GET pouvait disparaître sans que rien ne
+  // rougisse. Mesuré par mutation, et c'est elle qui l'a montré.
+  v('la route sait rendre les souhaits enregistrés',
+    /export async function GET\(/.test(route))
+  // ⚠️ SEULEMENT LES SOUHAITS. Une ligne payée ou en cours de paiement ne se
+  // repropose jamais dans une case à cocher : elle se re-soumettrait.
+  v('et elle ne rend QUE les souhaits, jamais ce qui est payé',
+    /\.eq\('statut', STATUT_SOUHAIT\)/.test(route))
+  // ⚠️ LA MÊME AUTORISATION POUR LES DEUX VERBES : lire les choix d'un autre
+  // commerce doit être aussi impossible que les écrire.
+  v('la lecture est gardée comme l\'écriture',
+    /const auth = await autoriser\(request, commercantId\)/.test(route))
+  v('un type retiré du catalogue ne ressuscite pas une case',
+    /\.filter\(t => produitParType\(t\)\)/.test(route))
+
+  v('le signup relit ses souhaits au chargement',
+    /\/api\/accompagnement\/souhaits\?commercant_id=/.test(signup))
+  // ⚠️ ET IL N'ÉCRASE PAS UNE SÉLECTION EN COURS : reprendre la main sur des
+  // cases que le commerçant vient de toucher serait pire que l'oubli réparé.
+  v('sans écraser ce qu\'il vient de cocher',
+    /prev\.size > 0 \? prev : new Set\(j\.souhaites\)/.test(signup))
+
+  // Les deux commentaires qui mentaient sur les prix et sur ce qui est gardé.
+  const signupBrut = readFileSync('app/signup/page.js', 'utf8')
+  v('plus aucun pack fantôme dans les commentaires du signup',
+    !/STARTER 49€ ou PREMIUM 249€/.test(signupBrut))
+  v('et plus de promesse de persistance « en S2b »',
+    !/seront persistés en S2b/.test(signupBrut))
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 
 console.log('')

@@ -184,6 +184,48 @@ function egale(nom, recu, attendu) {
   verifie('toutes portent le marqueur de départ voulu', marques === total, `${marques}/${total}`)
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 L'ÉCRAN QUI NE FINIT JAMAIS DE CHARGER (26/08, trouvé par Alex)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Au retour dans l'application après un moment, elle restait sur « On réveille
+// ton quartier · Les commerces arrivent… », définitivement. Deux manques, et
+// il fallait les deux pour bloquer :
+//   • aucun DÉLAI MAXIMAL : au réveil de l'iPhone la requête reste PENDANTE,
+//     donc ni succès ni échec, donc le `finally` n'est jamais atteint ;
+//   • aucune RELANCE au retour au premier plan : `chargerCommercants` n'était
+//     appelée qu'au montage, quand tout le reste se rafraîchit déjà.
+{
+  const src = readFileSync('app/commander/page.js', 'utf8')
+
+  verifie('le chargement des commerces a un délai maximal',
+    /const DELAI_MAX_COMMERCES_MS = \d+/.test(src))
+  // ⚠️ LE DÉLAI DOIT ÊTRE BRANCHÉ, pas seulement déclaré. Une constante non
+  // utilisée est exactement le genre de garde verte qui ne protège rien.
+  verifie('et il abandonne réellement la requête',
+    /setTimeout\(\(\) => abandon\.abort\(\), DELAI_MAX_COMMERCES_MS\)/.test(src)
+    && /\.abortSignal\(abandon\.signal\)/.test(src))
+  verifie('le drapeau de chargement retombe quoi qu\'il arrive',
+    /finally \{\s*\n\s*clearTimeout\(minuteur\)\s*\n\s*setCommercesEnChargement\(false\)/.test(src))
+
+  // ⚠️ ON NOMME L'ÉCOUTEUR, PAS L'ÉVÈNEMENT. `visibilitychange` apparaît
+  // quatre fois dans ce fichier : chercher le mot serait vert quoi qu'on
+  // retire. C'est la garde muette de la journée, cinquième forme.
+  verifie('la liste vide se recharge au retour au premier plan',
+    /document\.addEventListener\('visibilitychange', reveiller\)/.test(src))
+  // ⚠️ ET `pageshow` AUSSI : une page restaurée depuis le cache du navigateur
+  // ne repasse pas toujours par un changement de visibilité. Leçon du bouton
+  // mort au retour de Stripe, 24/08.
+  verifie('et aussi quand la page est restaurée depuis le cache',
+    /window\.addEventListener\('pageshow', reveiller\)/.test(src))
+  // ⚠️ SEULEMENT SI LA LISTE EST VIDE : recharger une liste déjà affichée à
+  // chaque bascule ferait clignoter l'écran et consommerait du réseau.
+  verifie('mais jamais quand la liste est déjà là',
+    /if \(commercants\.length > 0\) return/.test(src))
+  verifie('et l\'écouteur se retire en partant',
+    /removeEventListener\('pageshow', reveiller\)/.test(src))
+}
+
 console.log(`\nSession + position : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

@@ -1943,6 +1943,11 @@ export default function Commander() {
     )
   }
 
+  // Au-delà, on cesse d'attendre et on propose de réessayer. Douze secondes,
+  // c'est déjà très long pour une liste, et infiniment moins qu'un écran de
+  // chargement qui ne finit jamais.
+  const DELAI_MAX_COMMERCES_MS = 12000
+
   async function chargerCommercants() {
     // Ne lister QUE les fiches publiées (validation admin OK).
     // Les brouillons / en_attente / refusées restent invisibles côté client.
@@ -1953,13 +1958,32 @@ export default function Commander() {
     // data: null SANS lever d'exception. La liste était donc effacée et le
     // Yopper lisait « Aucun résultat » pour une simple panne de réseau, en
     // concluant qu'il n'y avait aucun commerce chez lui.
+    //
+    // 🔴 ET SURTOUT : UNE REQUÊTE QUI NE REND JAMAIS LA MAIN N'EST PAS UNE
+    // ERREUR, C'EST UN ÉCRAN MORT. Trouvé par Alex le 26/08 : au retour dans
+    // l'application après un moment, elle restait sur « On réveille ton
+    // quartier · Les commerces arrivent… », **définitivement**.
+    //
+    // Le `finally` ci-dessous remettait pourtant bien le drapeau à false. Mais
+    // il n'est atteint que si la promesse se règle : au réveil de l'iPhone, la
+    // connexion est morte sans que personne ne le dise, la requête reste
+    // PENDANTE, et aucun délai maximal n'existait. Ni succès, ni échec, ni
+    // message : les trois points tournaient pour toujours.
+    //
+    // ⚠️ C'est le même motif que le bouton « Redirection… » du 24/08 : un état
+    // de chargement sans porte de sortie. Là c'était le cache du navigateur,
+    // ici c'est le réseau, et le remède est le même : PRÉVOIR LA SORTIE.
     setErreurChargement(false)
+    setCommercesEnChargement(true)
+    const abandon = new AbortController()
+    const minuteur = setTimeout(() => abandon.abort(), DELAI_MAX_COMMERCES_MS)
     try {
       const { data, error } = await supabase
         .from('commercants_public')  // vue publique (colonnes sûres, publiés) — RLS commercants
         .select('*')
         .eq('statut_publication', 'publie')
         .order('nom')
+        .abortSignal(abandon.signal)
       if (error) throw error
       setCommercants(data || [])
       if (data?.length > 0) {
@@ -1974,9 +1998,41 @@ export default function Commander() {
       console.warn('[commander] chargement des commerces KO', e?.message)
       setErreurChargement(true)
     } finally {
+      clearTimeout(minuteur)
       setCommercesEnChargement(false)
     }
   }
+
+  // 🔴 LA LISTE DES COMMERCES NE SE RECHARGEAIT JAMAIS AU RETOUR (Alex, 26/08).
+  //
+  // `chargerCommercants` n'était appelée QU'AU MONTAGE. Tout le reste se
+  // rafraîchit au retour au premier plan — l'activité du jour, les notes, les
+  // commandes, les rendez-vous — mais pas la liste elle-même. Résultat : un
+  // premier chargement resté en carafe n'avait plus aucune seconde chance, et
+  // l'écran restait sur ses trois points jusqu'à ce que le Yopper tue
+  // l'application.
+  //
+  // ⚠️ ON NE RELANCE QUE SI LA LISTE EST VIDE. Recharger une liste déjà
+  // affichée à chaque bascule d'application ferait clignoter l'écran et
+  // consommerait du réseau pour rien.
+  //
+  // ⚠️ ET `pageshow` EN PLUS DE `visibilitychange` : une page restaurée depuis
+  // le cache du navigateur ne repasse pas toujours par un changement de
+  // visibilité. C'est la leçon du bouton mort au retour de Stripe.
+  useEffect(() => {
+    if (commercants.length > 0) return
+    const reveiller = () => {
+      if (document.visibilityState !== 'visible') return
+      chargerCommercants()
+    }
+    document.addEventListener('visibilitychange', reveiller)
+    window.addEventListener('pageshow', reveiller)
+    return () => {
+      document.removeEventListener('visibilitychange', reveiller)
+      window.removeEventListener('pageshow', reveiller)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- relance pilotée par le vide, pas par l'identité de la fonction
+  }, [commercants.length])
 
   // Refresh deals/actus quand le user revient sur l'onglet (cas typique : il a cree une
   // actu cote dashboard et revient sur l'app client). + polling 60s en backup.

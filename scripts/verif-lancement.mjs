@@ -655,8 +655,18 @@ function sansCommentaires(src) {
   // d) Les réseaux sociaux, une seule source pour trois surfaces.
   verifier("l'adresse Facebook est celle de la page Yoppaa",
     FACEBOOK_URL === 'https://www.facebook.com/yoppaaapp/', FACEBOOK_URL)
-  verifier('la landing affiche le lien Facebook',
-    /FACEBOOK_URL/.test(reveal) && /RESEAUX\.map/.test(reveal))
+  // ⚠️ CETTE GARDE EXIGEAIT `FACEBOOK_URL` DANS LA PAGE, donc la seule forme
+  // qui existait le jour où elle a été écrite. Le 26/08, le hero est passé à
+  // la liste complète pour afficher Instagram : la constante a disparu du
+  // fichier et la garde a refusé une amélioration juste. Verrouillage de forme,
+  // le quatrième de la journée.
+  //
+  // Ce qu'il faut protéger n'est pas le nom d'une constante : c'est que la
+  // landing affiche TOUS les réseaux de la liste, et qu'elle les affiche DEUX
+  // fois — dans le hero, où Alex recrute, et dans le pied de page.
+  const blocsReseaux = reveal.split('RESEAUX.map').length - 1
+  verifier('la landing affiche les réseaux dans le hero ET dans le pied',
+    blocsReseaux >= 2, `${blocsReseaux} bloc(s)`)
   // ⚠️ INSTAGRAM AUSSI, depuis le 26/08. Le compte s'écrit `yoppaa.app`, avec
   // un point : un profil recopié de travers pointe dans le vide, et Google
   // range alors l'entreprise et le compte comme deux entités étrangères.

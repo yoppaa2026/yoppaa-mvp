@@ -1459,13 +1459,22 @@ export default function LandingReveal({ referent = null }) {
             Pas besoin de l&rsquo;attendre pour commencer : ta page part en ligne dès qu&rsquo;elle est
             validée, et tes premiers clients commandent avant tout le monde.
           </p>
-          <p style={{ margin: '20px 0 0', fontSize: 13.5, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>
-            Suis-nous sur{' '}
-            <a href={FACEBOOK_URL} target="_blank" rel="noopener noreferrer"
-              style={{ color: T.light, fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3 }}>
-              notre page Facebook
-            </a>
-          </p>
+          {/* ⚠️ ALEX, 26/08 : « rends-les plus visibles, je recrute pour les
+              réseaux ». Une ligne soulignée en petit sous un compte à rebours
+              ne se voit pas : elle avait le poids d'une note de bas de page
+              alors qu'elle porte un objectif.
+
+              ⚠️ ET LA LISTE VIENT DE `lib/reseaux`, jamais nommée ici. C'est ce
+              qui a fait qu'Instagram est apparu partout d'un coup, et c'est ce
+              qui fera apparaître le suivant sans toucher à cette ligne. */}
+          <div style={{ marginTop: 24, display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+            {RESEAUX.map(r => (
+              <a key={r.nom} href={r.url} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '11px 20px', borderRadius: 100, background: 'rgba(255,255,255,0.1)', border: '1.5px solid rgba(196,160,244,0.5)', color: '#fff', fontWeight: 800, fontSize: 13.5, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}>
+                Suis-nous sur {r.nom}
+              </a>
+            ))}
+          </div>
         </div>
       </section>
 

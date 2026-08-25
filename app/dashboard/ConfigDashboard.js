@@ -35,6 +35,8 @@ import { BarreEnregistrer, ModaleQuitter, useAvertirAvantDeQuitter } from './Bar
 import { confirme } from './PosteConfirmation'
 import { confirmationSimple } from '@/lib/confirmations'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
+import BoutonIaFiche from './BoutonIaFiche'
+import { MIN_DESCRIPTION, descriptionRefusee, jaugeDescription, motsInspirationDescription, MOTS_INSPIRATION_INFOS, astuceRedaction } from '@/lib/fiche-redaction'
 import BandeDefilante from '@/app/components/BandeDefilante'
 // ⚠️ `estFoodTruck` NE SERT PLUS ICI, ET C'EST VOULU. Le métier ne dit pas si
 // un commerce bouge, ce sont ses LIEUX qui le disent : une professeure de yoga
@@ -5109,6 +5111,10 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
   const [initial, setInitial] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  // Propositions de l'IA, UNE LISTE PAR CHAMP. Une seule pour les deux et
+  // choisir une présentation remplirait aussi les infos pratiques.
+  const [propsIaDescription, setPropsIaDescription] = useState([])
+  const [propsIaInfos, setPropsIaInfos] = useState([])
   const [sousOnglet, setSousOnglet] = useState('fiche')
   // ⚠️ `null` tant qu'on ne sait pas : afficher la grille des horaires puis la
   // retirer une seconde plus tard ferait clignoter l'écran, et un commerçant
@@ -5285,6 +5291,15 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
   // de fonctionner à l'identique.
   async function saveProfil() {
     if (!form.nom.trim()) { toast('Le nom est obligatoire', 'error'); return false }
+    // ⚠️ LE REFUS NE PORTE QUE SUR CE QU'IL VIENT D'ÉCRIRE. Alex voulait de la
+    // qualité sans savoir s'il fallait bloquer : bloquer TOUTE fiche courte
+    // punirait celui qui vient corriger son téléphone, pour un champ qu'il n'a
+    // pas touché et qui date d'avant la règle. La règle vit dans
+    // `lib/fiche-redaction.js`, avec tout ce raisonnement.
+    if (descriptionRefusee(initial?.description, form.description)) {
+      toast(`Ta description fait ${form.description.trim().length} caractères. Il en faut ${MIN_DESCRIPTION} : c'est ce texte qui donne envie de pousser ta porte. Le bouton ✨ le rédige à partir de tes mots.`, 'error')
+      return false
+    }
     setSaving(true)
     const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, site_web: (form.site_web || '').trim() || null, description: form.description.trim() || null, infos_pratiques: (form.infos_pratiques || '').trim() || null, horaires: form.horaires.trim() || null, horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, rdv_actif: !!form.rdv_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des), boutique_delai_heures: Math.max(0, parseInt(form.boutique_delai_heures, 10) || 0) }).eq('id', commercantId)
     setSaving(false)
@@ -5311,6 +5326,9 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
   // relevé par Alex le 15/08.
   const champsModifiesProfil = champsModifies(initial, form)
   const nbModifsProfil = champsModifiesProfil.length
+  // La jauge de la description, recalculée à chaque frappe : elle dit ce qu'il
+  // reste à écrire, jamais qu'une règle n'est pas respectée.
+  const jauge = jaugeDescription(form?.description)
   useAvertirAvantDeQuitter(nbModifsProfil > 0)
 
   // Les actions vivent dans une référence rafraîchie à CHAQUE rendu : le parent
@@ -5505,17 +5523,56 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
             <label style={s.label}>Type de commerce</label>
             <SelecteurTypes categorie={form.categorie} value={form.type} onChange={v => setForm(p => ({ ...p, type: v }))}/>
           </div>
+          {/* ⚠️ LES DEUX TEXTES QUI VENDENT LA FICHE, et qui étaient les seuls
+              champs du tableau de bord SANS aide à la rédaction (Alex, 26/08).
+              Le placeholder vouvoyait, en plus, alors que Yoppaa tutoie
+              partout. */}
           <div>
-            <label style={s.label}>Description (visible clients)</label>
-            <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Décrivez votre commerce..." />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+              <label style={{ ...s.label, marginBottom: 0 }}>Description (visible clients)</label>
+              <BoutonIaFiche commercantId={commercantId} champ="presentation"
+                mots={form.description} siteWeb={form.site_web}
+                onVariantes={vs => setPropsIaDescription(vs)} toast={toast} />
+            </div>
+            <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+              placeholder="Ex : Salon de coiffure familial depuis 1998, spécialisé en colorations végétales. On prend le temps." />
+            {propsIaDescription.length > 0 ? (
+              <PropositionsIa propositions={propsIaDescription}
+                onChoisir={v => { setForm(p => ({ ...p, description: v.court || v.long })); setPropsIaDescription([]) }}
+                onFermer={() => setPropsIaDescription([])} />
+            ) : (
+              <>
+                {/* La jauge dit ce qu'il reste à faire, jamais « minimum non
+                    atteint » : un reproche ne s'exécute pas, un nombre si. */}
+                <p style={{ fontSize: 11, fontWeight: 700, marginTop: 4, color: jauge.atteint ? '#059669' : T.muted }}>
+                  {jauge.texte}
+                </p>
+                <p style={{ fontSize: 10, color: T.muted, marginTop: 3, lineHeight: 1.45 }}>
+                  {astuceRedaction(motsInspirationDescription(form.categorie))}
+                </p>
+              </>
+            )}
           </div>
           <div>
-            <label style={s.label}>Infos pratiques (visible clients)</label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+              <label style={{ ...s.label, marginBottom: 0 }}>Infos pratiques (visible clients)</label>
+              <BoutonIaFiche commercantId={commercantId} champ="infos_pratiques"
+                mots={form.infos_pratiques} onVariantes={vs => setPropsIaInfos(vs)} toast={toast} />
+            </div>
             <p style={{ fontSize: 11, color: T.muted, marginBottom: 6, lineHeight: 1.5 }}>
               Politique d&rsquo;annulation, modes de paiement acceptés, consignes... Affichées sur ta fiche et dans l&rsquo;email de confirmation de RDV.
             </p>
             <Textarea value={form.infos_pratiques || ''} onChange={e => setForm(p => ({ ...p, infos_pratiques: e.target.value }))}
-              placeholder={'Ex : Paiement en liquide ou QR code.\nToute annulation moins de 24h avant le RDV sera facturée.'} />
+              placeholder={'Ex : Paiement en Bancontact ou en espèces.\nToute annulation moins de 24h avant le RDV sera facturée.'} />
+            {propsIaInfos.length > 0 ? (
+              <PropositionsIa propositions={propsIaInfos}
+                onChoisir={v => { setForm(p => ({ ...p, infos_pratiques: v.court || v.long })); setPropsIaInfos([]) }}
+                onFermer={() => setPropsIaInfos([])} />
+            ) : (
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 3, lineHeight: 1.45 }}>
+                {astuceRedaction(MOTS_INSPIRATION_INFOS)}
+              </p>
+            )}
           </div>
         </div>
       </div>

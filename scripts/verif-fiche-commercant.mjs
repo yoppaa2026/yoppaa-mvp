@@ -306,14 +306,22 @@ egal('html vide', texteUtile(''), '')
 // ═══════════════════════════════════════════════════════════════════════════
 const routeIa = lire('app/api/ia/presentation/route.js')
 // Alex a demandé explicitement un plafond au signup (05/08).
-verifier('le nombre de demandes est plafonné', /const MAX_PAR_COMMERCE = \d+/.test(routeIa))
-const plafond = Number(/const MAX_PAR_COMMERCE = (\d+)/.exec(routeIa)?.[1])
-verifier('le plafond est bas', plafond > 0 && plafond <= 5, `${plafond}`)
+//
+// ⚠️ CETTE GARDE FIGEAIT LE NOM DE LA CONSTANTE (`MAX_PAR_COMMERCE`) et a donc
+// REFUSÉ le passage à un quota MENSUEL PAR PALIER le 26/08. Troisième
+// verrouillage de forme de la journée : ce qu'il faut protéger n'est pas le nom
+// d'une variable, c'est qu'un plafond EXISTE et qu'il soit vérifié AVANT de
+// dépenser un appel payant.
+//
+// Les VALEURS du plafond se vérifient là où elles vivent, dans
+// `npm run verif:redaction`, exécutées et mesurées. Les recopier ici en
+// donnerait deux définitions, qui finiraient par diverger.
+verifier('le nombre de demandes est plafonné', /quota_mois/.test(routeIa))
 // Comparer à l'APPEL, pas à l'import : `genererTexte` figure en haut du
 // fichier dans la liste des imports, ce qui rendait la comparaison absurde.
 verifier('le plafond est vérifié avant de générer',
-  routeIa.indexOf('MAX_PAR_COMMERCE)') > 0 &&
-  routeIa.indexOf('>= MAX_PAR_COMMERCE') < routeIa.indexOf('await genererTexte('))
+  routeIa.indexOf('>= quotaMois') > 0 &&
+  routeIa.indexOf('>= quotaMois') < routeIa.indexOf('await genererTexte('))
 verifier('le rate-limit est branché', /checkLimit\(aiLimiter/.test(routeIa))
 verifier('le cap global est respecté', /IA_QUOTA_GLOBAL_MOIS/.test(routeIa))
 verifier('la propriété du commerce est vérifiée', /auth_user_id !== user\.id/.test(routeIa))

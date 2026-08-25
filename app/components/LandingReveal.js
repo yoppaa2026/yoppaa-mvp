@@ -1121,8 +1121,27 @@ export default function LandingReveal({ referent = null }) {
     rendre()
   }
 
+  // 🔴 L'INSCRIPTION, PAS LA LISTE D'ATTENTE (Alex, 26/08 : « objectif
+  // INSCRIPTION »). CINQ boutons de cette page portaient le mot commerçant, et
+  // les cinq faisaient DÉFILER vers le formulaire d'email : le bouton du hero,
+  // celui de la carte matériel, celui de chaque formule, l'encart de l'offre
+  // et le pavé flottant « Je rejoins la tribu ». Aucun n'inscrivait.
+  //
+  // ⚠️ Deux d'entre eux sont des composants qui reçoivent une fonction : ils ne
+  // peuvent pas être un `Link`, d'où ce petit navigateur. Les trois autres sont
+  // devenus de vrais liens, qui s'ouvrent dans un nouvel onglet au clic milieu
+  // et se copient au clic droit, comme tout lien doit pouvoir le faire.
+  const allerAuSignup = () => {
+    if (typeof window !== 'undefined') window.location.href = '/signup'
+  }
+
   const allerAuForm = (typeUtilisateur) => {
-    if (typeUtilisateur) setForm(p => ({ ...p, type_utilisateur: typeUtilisateur }))
+    // ⚠️ LE FORMULAIRE EST CELUI DES HABITANTS, ET LUI SEUL. Un appelant qui
+    // demanderait « commercant » le rendrait invalide sans rien afficher : le
+    // champ du nom de commerce n'est plus obligatoire ni annoncé comme tel, et
+    // le visiteur resterait bloqué sur un bouton d'envoi sans savoir pourquoi.
+    // Le commerçant a son propre bouton, qui l'inscrit vraiment.
+    if (typeUtilisateur === 'yopper') setForm(p => ({ ...p, type_utilisateur: 'yopper' }))
     if (typeof document !== 'undefined') {
       document.getElementById('preinscription')?.scrollIntoView({ behavior: 'smooth' })
     }
@@ -1235,7 +1254,15 @@ export default function LandingReveal({ referent = null }) {
           )}
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 40 }}>
-            <button onClick={() => allerAuForm('commercant')} style={btnPrimaire}>{LIBELLE_COMMERCANT}</button>
+            {/* ⚠️ LE TROISIÈME CHEMIN, trouvé par la mutation du banc et pas
+                par la relecture. Ce bouton d'en-tête FAISAIT DÉFILER vers le
+                formulaire de préinscription : le commerçant qui cliquait dès
+                l'arrivée, c'est-à-dire le plus décidé de tous, atterrissait
+                dans le formulaire des habitants. Il mène maintenant là où il
+                dit qu'il mène. */}
+            <Link href="/signup" style={{ ...btnPrimaire, display: 'inline-block', textDecoration: 'none', textAlign: 'center' }}>
+              {LIBELLE_COMMERCANT}
+            </Link>
             <button onClick={() => allerAuForm('yopper')}
               style={{ ...btnPrimaire, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,0.4)', boxShadow: 'none' }}>
               {LIBELLE_HABITANT}
@@ -1412,9 +1439,12 @@ export default function LandingReveal({ referent = null }) {
                   <p style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.88)', lineHeight: 1.6, fontWeight: 500 }}>{a.texte}</p>
                 </div>
               ))}
-              <button onClick={() => allerAuForm('commercant')} style={{ ...btnPrimaire, marginTop: 6, width: '100%' }}>
-                Préinscrire mon commerce
-              </button>
+              {/* ⚠️ « Préinscrire », c'était le mot du problème : ce bouton
+                  descendait vers un formulaire d'email. L'objectif est
+                  l'INSCRIPTION, pas la liste d'attente. */}
+              <Link href="/signup" style={{ ...btnPrimaire, marginTop: 6, width: '100%', display: 'block', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box' }}>
+                J&rsquo;inscris mon commerce
+              </Link>
             </div>
           </div>
 
@@ -1483,7 +1513,7 @@ export default function LandingReveal({ referent = null }) {
         </div>
         {/* L'offre de lancement, en grand, AVANT les cartes : c'est elle qui
             fait lire la grille tarifaire, pas l'inverse. */}
-        <EncartOffreLancement onRejoindre={() => allerAuForm('commercant')}/>
+        <EncartOffreLancement onRejoindre={allerAuSignup}/>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: 18, alignItems: 'stretch' }}>
           {FORMULES.map(f => (
@@ -1517,19 +1547,24 @@ export default function LandingReveal({ referent = null }) {
                     </div>
                   ))}
                 </div>
-                <button onClick={() => allerAuForm('commercant')}
+                {/* ⚠️ « Je me préinscris » sur une carte de FORMULE était le
+                    plus trompeur des cinq : le commerçant vient de choisir son
+                    prix, il clique, et il atterrit dans un formulaire d'email
+                    qui ne retient même pas la formule qu'il a choisie. */}
+                <Link href="/signup"
                   style={{
                     marginTop: 'auto', width: '100%', padding: '13px', borderRadius: 100,
                     fontWeight: 900, fontSize: 13.5, letterSpacing: 0.4, textTransform: 'uppercase',
                     cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                    display: 'block', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box',
                     /* CTA plein pour la vedette, contour pour les accroches */
                     border: f.vedette ? 'none' : `1.5px solid ${T.main}`,
                     background: f.vedette ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
                     color: f.vedette ? '#fff' : T.main,
                     boxShadow: f.vedette ? `0 6px 20px ${T.main}55` : 'none',
                   }}>
-                  Je me préinscris
-                </button>
+                  Je m&rsquo;inscris
+                </Link>
               </div>
             </div>
           ))}
@@ -1610,12 +1645,7 @@ export default function LandingReveal({ referent = null }) {
           <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)', margin: '0 0 32px', lineHeight: 1.65, fontWeight: 500, maxWidth: 460 }}>
             {/* ⚠️ Plus d'« activation de commune » : la Wallonie est ouverte,
                 et faire dépendre l'inscription d'un seuil serait faux. */}
-            <strong style={{ color: '#fff' }}>Commerçant ?</strong> Ta commune est déjà ouverte
-            et ta page peut être en ligne cette semaine.
-            {estRegimeLancement() && <> Tes <strong style={{ color: T.light }}>{joursOffertsAuLancement()} jours offerts</strong> t’attendent, et tout le temps d’ici là est en bonus.</>}
-            <br/>
-            <strong style={{ color: '#fff' }}>Habitant ?</strong> Laisse ton email : tu seras parmi les
-            premiers à télécharger l&rsquo;app, et on te prévient dès qu&rsquo;elle est disponible.
+            Deux publics, deux gestes différents. Prends celui qui te ressemble.
           </p>
 
           {/* 🔴 LE COMMERÇANT N'AVAIT AUCUN MOYEN DE S'INSCRIRE (Alex, 26/08).
@@ -1628,10 +1658,27 @@ export default function LandingReveal({ referent = null }) {
               Aucun lien vers /signup n'existait nulle part sur la landing. Ce
               n'était pas les publications qui manquaient de force : elles
               menaient à un cul-de-sac. */}
-          <Link href="/signup"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '15px 30px', borderRadius: 100, background: 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: '#1A0840', fontWeight: 900, fontSize: 15.5, letterSpacing: 0.2, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif', marginBottom: 10, boxShadow: '0 8px 22px rgba(150,96,224,0.35)' }}>
-            J&rsquo;inscris mon commerce
-          </Link>
+          {/* ⚠️ UN BLOC PAR PUBLIC, ET UN SEUL GESTE DANS CHACUN (Alex, 26/08).
+              Le bouton du commerçant et le formulaire des habitants se
+              suivaient dans la même colonne, et le formulaire proposait EN PLUS
+              un choix « Je suis commerçant » : deux chemins pour le même
+              visiteur, dont un qui ne l'inscrivait pas. « Le commerçant ne sait
+              pas où il doit s'inscrire », et il avait raison de ne pas savoir.
+
+              Le formulaire est désormais celui des HABITANTS, sans sélecteur :
+              un champ qui demande qui tu es, juste après un bouton qui te l'a
+              demandé, est une question de trop. */}
+          <div style={{ width: '100%', maxWidth: 460, background: 'rgba(196,160,244,0.12)', border: '1.5px solid rgba(196,160,244,0.45)', borderRadius: 18, padding: '22px 20px', marginBottom: 18 }}>
+            <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.9px' }}>
+              {LIBELLE_COMMERCANT}
+            </p>
+            <p style={{ margin: '0 0 16px', fontSize: 14.5, color: '#fff', fontWeight: 600, lineHeight: 1.6 }}>
+              Ta commune est déjà ouverte et ta page peut être en ligne cette semaine.
+            </p>
+            <Link href="/signup"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '15px 30px', borderRadius: 100, background: 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: '#1A0840', fontWeight: 900, fontSize: 15.5, letterSpacing: 0.2, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif', marginBottom: 10, boxShadow: '0 8px 22px rgba(150,96,224,0.35)' }}>
+              J&rsquo;inscris mon commerce
+            </Link>
           {/* ⚠️ LE COMPTE VIENT DE `lib/lancement.js`, JAMAIS ÉCRIT EN DUR :
               « 100 » est calculé depuis les deux dates, et un 100 tapé à la
               main deviendrait un mensonge daté.
@@ -1640,12 +1687,34 @@ export default function LandingReveal({ referent = null }) {
               mensonger » : une offre qu'on soupçonne ne convainc personne.
               L'avance se dit donc EN MOTS, comme dans le hero. Le banc l'avait
               gardé, et il m'a arrêté ici. */}
-          {estRegimeLancement() && (
-            <p style={{ margin: '0 0 30px', fontSize: 13.5, fontWeight: 700, color: T.light, lineHeight: 1.55 }}>
-              {joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()},
-              et tout le temps d&rsquo;ici là est en bonus. Sans carte de paiement.
+            {estRegimeLancement() && (
+              <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: T.light, lineHeight: 1.55 }}>
+                {joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()},
+                et tout le temps d&rsquo;ici là est en bonus. Sans carte de paiement.
+              </p>
+            )}
+          </div>
+
+          {/* Le second public, et son seul geste à lui : laisser son email. */}
+          <div style={{ width: '100%', maxWidth: 460, textAlign: 'left', marginBottom: 10 }}>
+            <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.9px' }}>
+              {LIBELLE_HABITANT}
             </p>
-          )}
+            {/* ⚠️ ALEX, 26/08 : « simplifier la communication côté Yopper.
+                Inscris-toi et on te tient au courant quand les premiers
+                commerçants sont en ligne et pour télécharger l'app. Simple et
+                clair. »
+
+                L'ancienne phrase promettait d'être « parmi les premiers à
+                télécharger », ce qui ne dit ni quand, ni pourquoi s'inscrire
+                maintenant. Les deux nouvelles raisons sont concrètes et
+                datées par des évènements réels : les commerces qui ouvrent, et
+                l'app qui sort. */}
+            <p style={{ margin: 0, fontSize: 14, color: 'rgba(255,255,255,0.9)', fontWeight: 500, lineHeight: 1.6 }}>
+              Inscris-toi : on te prévient quand les premiers commerces de ton quartier
+              sont en ligne, et le jour où l&rsquo;app est téléchargeable.
+            </p>
+          </div>
 
           {statut.envoi === 'ok' ? (
             <div style={{ maxWidth: 460, width: '100%' }}>
@@ -1681,28 +1750,17 @@ export default function LandingReveal({ referent = null }) {
 
               <IncitantMobilisation communeStats={communeStats} globalStats={globalStats}/>
 
-              <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                {[
-                  { val: 'yopper', label: LIBELLE_HABITANT },
-                  { val: 'commercant', label: LIBELLE_COMMERCANT },
-                ].map(opt => {
-                  const actif = form.type_utilisateur === opt.val
-                  return (
-                    <button key={opt.val} type="button"
-                      onClick={() => setForm(p => ({ ...p, type_utilisateur: opt.val }))}
-                      style={{ flex: 1, padding: '11px 12px', borderRadius: 12, border: `1.5px solid ${actif ? '#C4A0F4' : 'rgba(255,255,255,0.18)'}`, background: actif ? 'rgba(196,160,244,0.18)' : 'transparent', color: actif ? '#fff' : '#C4A0F4', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s' }}>
-                      {opt.label}
-                    </button>
-                  )
-                })}
-              </div>
+              {/* ⚠️ LE SÉLECTEUR « habitant / commerçant » A ÉTÉ RETIRÉ le 26/08.
+                  Il ouvrait un SECOND chemin au commerçant, celui qui ne
+                  l'inscrit pas : il cochait « Je suis commerçant », laissait
+                  son email, et repartait sans compte en croyant s'être
+                  inscrit. Le bouton juste au-dessus est son chemin, celui-ci
+                  est celui des habitants. Redemander qui tu es, juste après un
+                  bouton qui te l'a demandé, est une question de trop. */}
 
               <input type="text"
-                required={form.type_utilisateur === 'commercant'}
                 maxLength={160}
-                placeholder={form.type_utilisateur === 'commercant'
-                  ? 'Le nom de ton commerce'
-                  : 'Un commerce que tu aimerais voir ? (optionnel)'}
+                placeholder="Un commerce que tu aimerais voir ? (optionnel)"
                 value={form.commercant_nom}
                 onChange={e => setForm(p => ({ ...p, commercant_nom: e.target.value }))}
                 style={inputStyle}/>
@@ -1771,7 +1829,7 @@ export default function LandingReveal({ referent = null }) {
           qu'on ne l'a pas vu. */}
       <FenetreTribu
         masquer={statut.envoi === 'ok'}
-        onRejoindre={() => allerAuForm('commercant')}
+        onRejoindre={allerAuSignup}
       />
 
       <style>{`

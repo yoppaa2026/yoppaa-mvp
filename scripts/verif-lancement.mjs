@@ -450,8 +450,12 @@ function sansCommentaires(src) {
   verifier('le titre du hero s\'adresse au commerçant',
     /Ton commerce,<br\/>dans la poche de ton quartier/.test(reveal),
     'il disait « Ton quartier dans ta poche », donc il parlait à l\'habitant')
+  // ⚠️ CETTE GARDE COMPARAIT DEUX `allerAuForm`, et le bouton du commerçant a
+  // cessé d'en être un le 26/08 : il mène désormais au signup. On compare donc
+  // le PREMIER lien d'inscription au bouton habitant, ce qui est la même
+  // intention (le commerçant d'abord) sans figer la mécanique du bouton.
   verifier('le premier bouton du hero est celui du commerçant',
-    reveal.indexOf("allerAuForm('commercant')") < reveal.indexOf("allerAuForm('yopper')"),
+    reveal.indexOf('href="/signup"') < reveal.indexOf("allerAuForm('yopper')"),
     'le bouton Yopper passait devant')
 
   // b) ⚠️ LE CONTRESENS LE PLUS COÛTEUX : la page invitait à ATTENDRE le
@@ -677,9 +681,16 @@ function sansCommentaires(src) {
   // commerçant au moment où il vient de lire les prix, c'est-à-dire au moment
   // où il décide. Compter les occurrences, sinon retirer l'un des deux
   // laisserait la garde verte sur l'autre : cinq fois aujourd'hui.
+  // ⚠️ TROIS, PAS DEUX. Le bouton d'en-tête, celui de la section des formules,
+  // et celui du bloc final. Le premier FAISAIT DÉFILER vers le formulaire des
+  // habitants : le commerçant le plus décidé, celui qui clique dès l'arrivée,
+  // était le plus mal servi. Trouvé par une mutation du banc, pas à la
+  // relecture.
   const liens = reveal.split('href="/signup"').length - 1
-  verifier('la landing mène au signup, en haut de page comme en bas',
-    liens >= 2, `${liens} lien(s) trouvé(s)`)
+  verifier('les trois boutons commerçant mènent au signup',
+    liens >= 3, `${liens} lien(s) trouvé(s)`)
+  verifier("et aucun ne fait plus défiler le commerçant vers le formulaire",
+    !/allerAuForm\('commercant'\)/.test(reveal))
   verifier('et le bouton dit le geste, pas la destination',
     /J&rsquo;inscris mon commerce/.test(reveal))
 
@@ -695,6 +706,25 @@ function sansCommentaires(src) {
     /\{joursOffertsAuLancement\(\)\} jours offerts à partir du \{libelleLancement\(\)\}/.test(reveal))
   verifier("et l'avance y est annoncée en mots, pas en chiffre",
     /est en bonus/.test(blocInscription) && !/\d/.test(blocInscription.replace(/\{[^}]*\}/g, '')))
+
+  // ⚠️ UN SEUL GESTE PAR PUBLIC (Alex, 26/08 : « le commerçant ne sait pas où
+  // il doit s'inscrire »). Le formulaire de préinscription proposait EN PLUS
+  // « Je suis commerçant » : le commerçant y laissait son email et repartait
+  // sans compte, en croyant s'être inscrit. Deux chemins pour le même
+  // visiteur, dont un qui ne mène nulle part.
+  verifier('le formulaire ne redemande plus qui tu es',
+    !/type_utilisateur: opt\.val/.test(reveal),
+    'le sélecteur habitant/commerçant ouvrait un second chemin au commerçant')
+  verifier('et il ne réclame plus le nom d\'un commerce',
+    !/required=\{form\.type_utilisateur === 'commercant'\}/.test(reveal))
+  // ⚠️ ET AUCUN APPELANT NE PEUT LE REMETTRE DANS CET ÉTAT : sans champ pour
+  // le nom du commerce, un formulaire en mode « commercant » serait invalide
+  // sans que rien ne le dise.
+  verifier('aucun lien ne peut basculer le formulaire en mode commerçant',
+    /if \(typeUtilisateur === 'yopper'\)/.test(reveal))
+  // Les deux publics sont ANNONCÉS, chacun au-dessus de son geste.
+  verifier('chaque public est nommé au-dessus de son propre geste',
+    /\{LIBELLE_COMMERCANT\}/.test(reveal) && /\{LIBELLE_HABITANT\}/.test(reveal))
 
   // L'adresse courte des publications Facebook et Instagram.
   const pro = readFileSync('app/pro/page.tsx', 'utf8')

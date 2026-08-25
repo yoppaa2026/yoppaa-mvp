@@ -561,6 +561,75 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
 }
 
 
+// ── 🔴 LA RÉCOMPENSE EXISTAIT À DEUX ENDROITS (25/08, test F16 d'Alex) ────
+//
+// Le COMPTEUR `fidelite_cartes.recompenses_disponibles` était alimenté par
+// `appliquerCredit`, la fiche du commerce le lisait pour annoncer « ta
+// récompense est débloquée », et le SMS partait. Mais la LIGNE
+// `fidelite_recompenses`, seule chose que le tunnel de paiement interroge,
+// n'était créée NULLE PART dans le code : les seules existantes venaient du
+// rattrapage unique de la migration.
+//
+// Toute récompense débloquée depuis était donc ANNONCÉE au client et
+// INTROUVABLE au paiement. Ce n'était pas un défaut du détail : le Click and
+// Collect marchait seulement parce que ces cartes-là dataient d'avant.
+{
+  const rs = lireCode('lib/fidelite-recompense-server.js')
+  verifie('une fonction crée les récompenses au déblocage',
+    /export async function creerRecompensesDebloquees/.test(rs))
+  verifie('et elle écrit bien dans la table des récompenses',
+    /from\('fidelite_recompenses'\)\s*\.insert\(/.test(rs))
+  // ⚠️ AUTANT DE LIGNES QUE DE RÉCOMPENSES : une cagnotte qui dépasse deux
+  // fois le seuil d'un coup en débloque deux, et le compteur le sait.
+  verifie('elle en crée autant que le compteur en annonce',
+    /Array\.from\(\{ length: n \}/.test(rs))
+  verifie('elle ne fait rien quand rien n\'est débloqué', /if \(n <= 0/.test(rs))
+  // ⚠️ LA CONFIGURATION EST FIGÉE : le montant est celui du jour où le client
+  // l'a gagnée. Un commerçant qui baisse sa récompense ne reprend pas ce qu'il
+  // a déjà promis. Mêmes replis que la migration, pour que les lignes créées à
+  // chaud soient indiscernables de celles du rattrapage.
+  verifie('elle fige le type, la valeur et le libellé du commerçant',
+    /fidelite_recompense_type/.test(rs) && /fidelite_recompense_valeur/.test(rs)
+    && /fidelite_recompense_libelle/.test(rs))
+  verifie('avec les mêmes replis que la migration',
+    /'remise_montant'/.test(rs) && /\|\| 5\b/.test(rs) && /'Récompense fidélité'/.test(rs))
+
+  // 🔴 LES DEUX CHEMINS DE CRÉDIT, pas un seul. Le chemin automatique (commande
+  // récupérée, rendez-vous honoré) ET le comptoir avaient le même trou.
+  const auto = lireCode('lib/fidelite-server.js')
+  const comptoir = lireCode('app/api/fidelite/mouvement/route.js')
+  verifie('le crédit automatique crée la récompense',
+    /creerRecompensesDebloquees\(supabase, \{ carte, commercant, nombre: debloquees \}\)/.test(auto))
+  verifie('le crédit au comptoir la crée aussi',
+    /creerRecompensesDebloquees\(db, \{ carte: maj, commercant: com, nombre: debloquees \}\)/.test(comptoir))
+  // ⚠️ Chacun sous SA garde `debloquees > 0` : créée sans déblocage, elle
+  // offrirait une récompense que personne n'a gagnée.
+  verifie('le comptoir ne crée rien sans déblocage',
+    /if \(debloquees > 0\) \{[\s\S]{0,400}creerRecompensesDebloquees/.test(comptoir))
+  verifie('le chemin automatique non plus',
+    /if \(debloquees > 0\) \{[\s\S]{0,600}creerRecompensesDebloquees/.test(auto))
+
+  // ⚠️ LE SMS PART APRÈS, jamais avant : il annonce au client quelque chose
+  // qui doit exister quand il clique sur le lien.
+  //
+  // ⚠️ GARDE MESURÉE MUETTE : comparer les positions de `creerRecompensesDebloquees`
+  // et du SMS restait vrai même en inversant l'ordre, parce que `indexOf`
+  // trouvait la LIGNE D'IMPORT, toujours en tête de fichier. Troisième fois
+  // que ce motif exact passe. On compare les positions des APPELS, reconnus à
+  // leur premier argument.
+  for (const [nom, src, appel] of [
+    ['le chemin automatique', auto, 'creerRecompensesDebloquees(supabase,'],
+    ['le comptoir', comptoir, 'creerRecompensesDebloquees(db,'],
+  ]) {
+    const posCreation = src.indexOf(appel)
+    const posSms = src.indexOf('smsRecompenseDebloquee(db,') >= 0
+      ? src.indexOf('smsRecompenseDebloquee(db,')
+      : src.indexOf('smsRecompenseDebloquee(supabase,')
+    verifie(`${nom} crée la récompense AVANT d'envoyer le SMS`,
+      posCreation >= 0 && posSms >= 0 && posCreation < posSms)
+  }
+}
+
 // ── Le panier qui survit à une annulation Stripe (24/08, test F13) ────────
 {
   // ⚠️ Une clé PAR COMMERCE, sinon le panier du boucher réapparaît chez le

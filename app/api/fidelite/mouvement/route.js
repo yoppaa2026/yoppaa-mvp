@@ -28,6 +28,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { appliquerCredit } from '@/lib/fidelite'
 import { smsRecompenseDebloquee } from '@/lib/fidelite-sms'
+import { creerRecompensesDebloquees } from '@/lib/fidelite-recompense-server'
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -182,10 +183,19 @@ export async function POST(request) {
         .update(patch).eq('id', carte.id).select().single()
       if (errUp) throw new Error(errUp.message)
 
-      // ⚠️ LE SMS QUI NE PARTAIT JAMAIS DU COMPTOIR. Best-effort : un SMS qui
-      // ne part pas ne doit jamais faire échouer un crédit déjà écrit.
+      // 🔴 ET LA RÉCOMPENSE ELLE-MÊME, qui n'existait qu'en COMPTEUR. Le
+      // second chemin de crédit avait le même trou que le chemin automatique :
+      // `recompenses_disponibles` montait, la fiche annonçait la récompense au
+      // client, le SMS partait, et le tunnel de paiement ne trouvait aucune
+      // ligne dans `fidelite_recompenses`. Débloquée au comptoir, elle était
+      // donc impossible à dépenser en ligne.
       let sms = null
       if (debloquees > 0) {
+        await creerRecompensesDebloquees(db, { carte: maj, commercant: com, nombre: debloquees })
+        // ⚠️ LE SMS QUI NE PARTAIT JAMAIS DU COMPTOIR. Best-effort : un SMS qui
+        // ne part pas ne doit jamais faire échouer un crédit déjà écrit.
+        // ⚠️ Envoyé APRÈS la création : il annonce quelque chose qui doit
+        // exister quand le client clique sur le lien.
         try { sms = await smsRecompenseDebloquee(db, com, maj) } catch { /* non bloquant */ }
       }
 

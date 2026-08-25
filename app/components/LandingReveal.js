@@ -1426,7 +1426,12 @@ export default function LandingReveal({ referent = null }) {
               </span>
               <span style={{ fontSize: 13.5, fontWeight: 700, color: T.light }}>
                 à partir du {libelleLancement()}, quel que soit le forfait
-                {joursAvance() > 0 && ' · et tout le temps d’ici là est en bonus'}
+                {/* ⚠️ VIRGULE, PAS POINT MÉDIAN. Le point médian sépare des
+                    éléments distincts (les réseaux, les arguments d'une liste).
+                    Ici « et tout le temps d'ici là » est coordonné à la même
+                    phrase : c'est une virgule, comme dans « La totale » et
+                    dans le signup, qui portent déjà la phrase. */}
+                {joursAvance() > 0 && ', et tout le temps d’ici là est en bonus'}
               </span>
             </div>
           )}

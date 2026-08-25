@@ -492,6 +492,20 @@ function sansCommentaires(src) {
     !/\{joursOfferts\(\)\}/.test(hero),
     'un seul chiffre sur la page : 100')
 
+  // ⚠️ LE POINT MÉDIAN SÉPARE DES ÉLÉMENTS, IL NE COORDONNE PAS UNE PHRASE.
+  // Alex l'a vu sur une capture du hero : « quel que soit le forfait · et tout
+  // le temps d'ici là est en bonus ». Une virgule ouvrait la phrase, un point
+  // médian la refermait. Les deux autres endroits qui portent déjà cette
+  // promesse (« La totale » et le signup) écrivaient la virgule : c'est le
+  // hero qui divergeait.
+  // La garde porte sur la RÈGLE et pas sur cette phrase-là, sinon elle ne
+  // dirait rien du prochain texte écrit dans le même réflexe.
+  for (const chemin of ['app/components/LandingReveal.js', 'app/signup/page.js']) {
+    verifier(`${chemin} ne fait jamais coordonner le point médian`,
+      !/ · (et|mais|donc|car|ou) /.test(sansCommentaires(lire(chemin))),
+      'un point médian sépare, une virgule coordonne')
+  }
+
   // ⚠️ AUCUN SECOND NOMBRE, NULLE PART.
   // J'avais retiré le total (142) mais laissé « + 42 jours d'avance » dans la
   // pastille du hero : c'était toujours un second chiffre, et Alex l'a vu à

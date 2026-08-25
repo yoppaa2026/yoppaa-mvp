@@ -1360,7 +1360,10 @@ export default function Dashboard() {
             || String(a.heure_debut || '').localeCompare(String(b.heure_debut || '')))[0]
           const { titre, corps } = texteAlerteRdv(aAnnoncer, { aujourdhui, demain: dateKey(demainD) })
           if (notificationsActives) {
-            envoyerNotification(titre, nouveaux.length > 1 ? `${corps} · et ${nouveaux.length - 1} autre${nouveaux.length > 2 ? 's' : ''}` : corps, 'yoppaa-rdv')
+            // ⚠️ Le point médian sépare des éléments, il ne coordonne pas :
+            // « · et » mélangeait les deux rôles, et « 2 autres » tout court
+            // laissait deviner 2 autres QUOI, juste après un nom de prestation.
+            envoyerNotification(titre, nouveaux.length > 1 ? `${corps} · ${nouveaux.length - 1} autre${nouveaux.length > 2 ? 's' : ''} rendez-vous` : corps, 'yoppaa-rdv')
           }
           setNouveauRdv({ titre, corps, nombre: nouveaux.length })
           setTimeout(() => setNouveauRdv(null), 8000)

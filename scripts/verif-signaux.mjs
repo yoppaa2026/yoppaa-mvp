@@ -10,6 +10,7 @@ import {
   libelleEnvie, phraseHorsOuverture, enviesAAlerter, peutEnvoyerEmail,
   LIBELLE_ENVIE, TYPES_ENVIE, envieConnue,
   ENVIE_VERS_FONCTION, fonctionDeLEnvie, envieDeLaFonction, phraseEnvieFonction,
+  enviesProposables,
 } from '../lib/signaux.js'
 import { PLAN_FEATURES } from '../lib/plans.js'
 
@@ -109,16 +110,82 @@ verifier('une envie vide ne passe pas', !envieConnue('') && !envieConnue(null))
     /from '@\/lib\/signaux'/.test(route))
 
   // Le Yopper doit pouvoir POSER ce signal, et le commerçant le VOIR.
-  const cta = readFileSync(new URL('../app/commander/CTAUpgrade.js', import.meta.url), 'utf8')
+  //
+  // 🔴 LES QUATRE BANDEAUX SONT DEVENUS UN SEUL BLOC EN BAS DE FICHE (Alex,
+  // 26/08 : « les signaux Yopper doivent tous être dans le bas de la page du
+  // commerçant, phrase simple, claire et efficace »). `CTAUpgrade` a été
+  // supprimé ; la règle vit dans `enviesProposables`, l'écran dans
+  // `SignauxYopper`.
+  const bloc = readFileSync(new URL('../app/commander/SignauxYopper.js', import.meta.url), 'utf8')
   verifier('le Yopper peut demander une carte de fidélité',
-    /bouton: 'Je veux une carte de fidélité'/.test(cta))
+    /fidelite: {2}'Une carte de fidélité'/.test(bloc))
+  // ⚠️ ET IL N'Y A QU'UN SEUL BLOC. Le titre répété trois fois sur une même
+  // page n'était plus une invitation, c'était une insistance.
   const fiche = readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8')
-  // ⚠️ La condition porte sur `fidelite_actif`, pas sur le palier : celui qui a
-  // la fidélité dans sa formule sans l'avoir activée est celui que le signal
-  // convainc le plus vite, puisqu'il n'a rien de plus à payer.
-  verifier('la fiche propose le signal quand le programme est inactif',
-    /!commercant\?\.fidelite_actif && \(/.test(fiche)
-    && /CTAUpgrade type="fidelite"/.test(fiche))
+  const ficheCode = fiche.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ')
+  verifier('la fiche ne rend le bloc d\'envies qu\'une seule fois',
+    (ficheCode.match(/<SignauxYopper/g) || []).length === 1)
+  // ⚠️ ET IL EST APRÈS LE CATALOGUE. On ne demande à quelqu'un ce qui lui
+  // manque qu'une fois qu'il a vu ce qu'il y a ; l'ancien bandeau fidélité
+  // arrivait AVANT, sous les coordonnées.
+  verifier('le bloc d\'envies arrive avant la sortie de fiche',
+    ficheCode.indexOf('<SignauxYopper') > 0
+    && ficheCode.indexOf('<SignauxYopper') < ficheCode.indexOf('<BandeAutourDeToi'))
+  // ⚠️ ET LA RÈGLE N'EST PLUS DANS LE JSX. Une condition écrite à quatre
+  // endroits différents est une condition qu'on ne peut pas mesurer.
+  verifier('la règle vient du module, pas de l\'écran',
+    /enviesProposables\(commercant, \{ peutCommander \}\)/.test(ficheCode))
+
+  // La règle elle-même, EXÉCUTÉE.
+  const boulangerExister = { categorie: 'alimentaire', plan: 'exister' }
+  const listeBoulanger = enviesProposables(boulangerExister, { peutCommander: false })
+  verifier('un boulanger sans commande se voit proposer « commander ici »',
+    listeBoulanger.includes('commande'))
+  // ⚠️ ON NE PROPOSE PAS LA LIVRAISON LÀ OÙ ON NE PEUT RIEN COMMANDER : ce
+  // serait réclamer la suite d'une chose qui n'existe pas.
+  verifier('et jamais la livraison tant que commander est impossible',
+    !listeBoulanger.includes('livraison'))
+  // ⚠️ ET JAMAIS LE RENDEZ-VOUS CHEZ UN BOULANGER. Même règle que les onglets
+  // du tableau de bord : ce qui est SANS OBJET pour la catégorie ne se montre
+  // pas, même en gris, même en question.
+  verifier('et jamais « prendre rendez-vous » chez un boulanger',
+    !listeBoulanger.includes('rdv'))
+
+  const salon = { categorie: 'vitrine', plan: 'communiquer', rdv_actif: false }
+  const listeSalon = enviesProposables(salon, { peutCommander: false })
+  verifier('un salon sans agenda se voit proposer le rendez-vous',
+    listeSalon.includes('rdv'))
+  // ⚠️ « COMMANDER » NE VEUT RIEN DIRE CHEZ UN COIFFEUR : il ne vend pas un
+  // panier, il vend un créneau.
+  verifier('et jamais « commander ici » chez un prestataire',
+    !listeSalon.includes('commande'))
+
+  const complet = {
+    categorie: 'alimentaire', plan: 'vendre',
+    livraison_actif: true, fidelite_actif: true,
+  }
+  // ⚠️ RIEN À DEMANDER → LISTE VIDE, et le composant ne rend RIEN. Pas de cadre
+  // vide, pas de titre orphelin en bas d'une fiche déjà complète.
+  verifier('un commerce qui propose déjà tout ne se fait rien demander',
+    enviesProposables(complet, { peutCommander: true }).length === 0)
+  verifier('sans commerçant, aucune envie', enviesProposables(null).length === 0)
+
+  // ⚠️ CHAQUE ENVIE PROPOSÉE DOIT AVOIR SON BOUTON. Une clé rendue par le
+  // module sans libellé dans l'écran disparaîtrait EN SILENCE : le composant
+  // filtre ce qu'il ne sait pas nommer.
+  const toutesLesEnvies = [
+    ...enviesProposables(boulangerExister, { peutCommander: false }),
+    ...enviesProposables(salon, { peutCommander: false }),
+    ...enviesProposables({ categorie: 'alimentaire', plan: 'vendre', fidelite_actif: false }, { peutCommander: true }),
+  ]
+  verifier('chaque envie proposée porte un libellé de bouton',
+    toutesLesEnvies.every(t => new RegExp(`^ {2}${t}: `, 'm').test(bloc)),
+    toutesLesEnvies.join(', '))
+  // ⚠️ ET LE BLOC NE PARLE PAS LE VOCABULAIRE DU PRODUIT. C'est la règle du
+  // 03/08 : l'habitant ne lit pas un abonnement, il lit une envie.
+  verifier('le bloc ne parle ni forfait ni abonnement',
+    !/formule|abonnement|débloquer|upgrade|Vendre|Communiquer|Exister/.test(
+      bloc.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ')))
 }
 verifier('un type inconnu ne casse rien', typeof libelleEnvie('zzz').phrase(2) === 'string')
 

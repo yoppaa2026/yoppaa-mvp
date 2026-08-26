@@ -70,6 +70,10 @@ export async function POST(request) {
     // et son horaire dans `livraison_creneaux` : en lisant `creneaux`, le
     // message affichait « ? → ? » à tous les clients en livraison.
     const estLivraison = cmd.mode_retrait === 'livraison'
+    // 🔴 ET L'EXPÉDITION, QUI TOMBAIT DANS « LE RESTE » (Alex, 26/08). Le
+    // client d'un colis recevait le message du RETRAIT : l'adresse du magasin,
+    // un itinéraire, et « à tout de suite ».
+    const estExpedition = cmd.mode_retrait === 'expedition'
     const creneau = estLivraison ? cmd.creneau_livraison : cmd.creneau
 
     try {
@@ -82,6 +86,7 @@ export async function POST(request) {
         heure_debut:       creneau?.heure_debut,
         heure_fin:         creneau?.heure_fin,
         est_livraison:     estLivraison,
+        est_expedition:    estExpedition,
         adresse_livraison: cmd.adresse_livraison,
         paiement:          cmd,
       })
@@ -90,7 +95,9 @@ export async function POST(request) {
         to: cmd.client_email,
         // Dire « prête » à quelqu'un qui ne se déplace pas ne veut rien dire :
         // ce qu'il attend, c'est de savoir que ça part.
-        subject: estLivraison
+        subject: estExpedition
+          ? `📦 Ton colis #${referenceCommande(cmd) || ''} est emballé chez ${cmd.commercant?.nom || ''}`
+          : estLivraison
           ? `🛵 Ta commande #${referenceCommande(cmd) || ''} est prête, livraison en préparation`
           : `🎉 Ta commande #${referenceCommande(cmd) || ''} est prête chez ${cmd.commercant?.nom || ''}`,
         html,

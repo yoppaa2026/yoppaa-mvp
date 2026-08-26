@@ -87,7 +87,11 @@ import PillsStatut from '../PillsStatut'
 import CarteFideliteFiche from '../CarteFideliteFiche'
 import BonCadeauModal from '../BonCadeauModal'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
-import CTAUpgrade from '../CTAUpgrade'
+// ⚠️ `CTAUpgrade` A DISPARU DE CETTE FICHE (26/08). Il rendait UN bandeau par
+// envie, et cette page en posait quatre à des hauteurs différentes. Les envies
+// tiennent maintenant dans un seul bloc en bas : `SignauxYopper`.
+import SignauxYopper from '../SignauxYopper'
+import { enviesProposables } from '@/lib/signaux'
 import ModalSignalement from '../ModalSignalement'
 import HorairesSection from '../HorairesSection'
 import BandeAutourDeToi from '@/app/components/BandeAutourDeToi'
@@ -3529,21 +3533,16 @@ export default function CommanderSlug() {
                 <div style={{ padding: '0 12px' }}>
                   <CarteFideliteFiche commercant={commercant} carte={maCarteFid} connecte={fidConnecte} nbCartes={cartesCeCommerce}/>
 
-                  {/* ⚠️ LE SIGNAL FIDÉLITÉ, ajouté le 26/08 à la demande d'Alex.
-                      `CarteFideliteFiche` ne rend RIEN quand le programme est
-                      inactif : la place était donc vide, et l'habitant qui
-                      revient toutes les semaines n'avait aucun moyen de dire
-                      qu'il aimerait que ça compte.
-                      ⚠️ La condition porte sur `fidelite_actif`, pas sur le
-                      palier : un commerçant qui A la fidélité dans sa formule
-                      mais ne l'a pas activée est justement celui que le signal
-                      convainc le plus vite, puisqu'il n'a rien à payer de
-                      plus. */}
-                  {!commercant?.fidelite_actif && (
-                    <div style={{ marginTop: 12 }}>
-                      <CTAUpgrade type="fidelite" commercant={commercant} variant="banner"/>
-                    </div>
-                  )}
+                  {/* 🔴 LE SIGNAL FIDÉLITÉ ÉTAIT ICI, ET IL N'Y EST PLUS.
+                      Alex, 26/08 : « on parle fidélité alors que le commerçant
+                      est en Communiquer et qu'il a déjà la fidélité comptoir.
+                      Les signaux Yopper doivent tous être dans le bas de la
+                      page du commerçant. »
+                      Un panneau sombre pleine largeur, sous les coordonnées,
+                      avant même le catalogue : l'habitant venu voir les
+                      horaires se faisait interpeller pour réclamer quelque
+                      chose. Les cinq envies vivent maintenant dans UN seul
+                      bloc, en bas de fiche : voir `SignauxYopper`. */}
 
                   {/* Retour d'achat d'un bon cadeau (Stripe success/cancel).
                       Reste EN HAUT alors que le bouton est descendu : celui qui
@@ -3932,31 +3931,12 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {/* CTAs contextuels selon le plan - sections grisées du commerce.
-                    Pour la catégorie vitrine, on masque le CTA "commande" (pas pertinent
-                    pour coiffeur/opticien) et on garde uniquement le CTA "prix" si plan ON. */}
-                {!peutCommander && (
-                  <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {/* La clé était 'prix', qui n'existe pas dans la table des
-                        fonctionnalités : canDo renvoyait donc toujours false et
-                        la bannière « demander l'affichage des prix » s'affichait
-                        chez TOUS les commerçants non transactionnels, y compris
-                        Communiquer dont les prix sont bel et bien affichés. La
-                        vraie clé est 'prix_affiches'. */}
-                    {!canDo(commercant.plan, 'prix_affiches') && (
-                      <CTAUpgrade type="prix" commercant={commercant} variant="banner"/>
-                    )}
-                    {!vitrine && (
-                      <CTAUpgrade type="commande" commercant={commercant} variant="banner"/>
-                    )}
-                  </div>
-                )}
-                {/* CTA livraison pour une formule qui ne la comprend pas, en bandeau discret */}
-                {peutCommander && !canDo(commercant.plan, 'livraison') && (
-                  <div style={{ marginTop: 24 }}>
-                    <CTAUpgrade type="livraison" commercant={commercant} variant="banner"/>
-                  </div>
-                )}
+                {/* 🔴 LES TROIS AUTRES BANDEAUX ÉTAIENT ICI. Chacun avec sa
+                    condition écrite dans le JSX, aucune avec la même forme, et
+                    rien pour empêcher qu'ils s'affichent tous les trois à la
+                    suite en répétant trois fois le même titre. La règle vit
+                    maintenant dans `enviesProposables`, et le bloc unique est
+                    plus bas. */}
 
                 {/* ─── Offrir un bon cadeau ─────────────────────────────────
                     APRÈS le catalogue (Alex, 05/08). On offre un bon quand on a
@@ -3979,6 +3959,19 @@ export default function CommanderSlug() {
                     </button>
                   </div>
                 )}
+
+                {/* ─── CE QUI MANQUE, DIT EN UN CLIC ────────────────────────
+                    🔴 « Les signaux Yopper doivent tous être dans le bas de la
+                    page du commerçant, phrase simple, claire et efficace »
+                    (Alex, 26/08).
+                    ⚠️ ICI ET NULLE PART AILLEURS, et après le catalogue : on
+                    ne demande à quelqu'un ce qui lui manque qu'une fois qu'il
+                    a vu ce qu'il y a. Avant la bande « autour de toi », qui
+                    est le bouton de sortie de la fiche. */}
+                <SignauxYopper
+                  types={enviesProposables(commercant, { peutCommander })}
+                  commercant={commercant}
+                />
 
                 {/* ─── « Tous les commerces autour de toi » ──────────────────
                     Beaucoup de Yoppers arrivent ici SANS passer par l'accueil :

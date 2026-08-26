@@ -47,7 +47,7 @@ export async function POST(request) {
       .from('commandes')
       .select(`
         id, numero_commande, numero_prefixe, client_email, client_prenom, mode_retrait,
-        adresse_livraison, expedition_suivi,
+        adresse_livraison, expedition_suivi, expedition_transporteur,
         commercant:commercants(nom, slug)
       `)
       .eq('id', commande_id)
@@ -78,6 +78,10 @@ export async function POST(request) {
         commercant_nom:    cmd.commercant?.nom || '',
         numero_commande:   referenceCommande(cmd),
         expedition_suivi:  cmd.expedition_suivi,
+        // ⚠️ SANS CETTE COLONNE ICI, L'EMAIL RETOMBE EN SILENCE sur « le site
+        // du transporteur », sans nom ni lien. Pas d'erreur, juste un message
+        // qui redevient inutilisable. Le select ci-dessus la charge.
+        expedition_transporteur: cmd.expedition_transporteur,
         adresse_livraison: cmd.adresse_livraison,
       })
 

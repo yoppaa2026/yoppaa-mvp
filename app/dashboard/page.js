@@ -15,6 +15,8 @@ import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree,
 import { confirmationSimple } from '@/lib/confirmations'
 import { etatPaiementRdv, etatPaiementCommande, couleurPaiement, caDesRdvs, resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
 import ModalDeplacerRdv from './ModalDeplacerRdv'
+import ModaleExpedition from './ModaleExpedition'
+import { libelleExpedition, suiviUrl } from '@/lib/transporteurs'
 import { Reply, ClipboardList } from 'lucide-react'
 // ⚠️ `planEffectif` ET NON `commercant.plan` : c'est ce qui fait qu'un essai en
 // cours se voit dans la navigation. La PORTÉE ne change pas d'un pouce (canDo
@@ -351,15 +353,24 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
       onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 2px 12px ${couleur.border}14` }}>
       <div style={{ height: 4, background: `linear-gradient(90deg, ${couleur.border}, ${couleur.border}88)` }}/>
       <div style={{ padding: '0.875rem 1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.625rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* ⚠️ LES DEUX COLONNES DOIVENT POUVOIR RÉTRÉCIR, ET UNE SEULE DOIT LE
+            FAIRE. Sans `minWidth: 0`, un enfant de flex refuse de descendre
+            sous la largeur de son contenu : une adresse un peu longue ou un
+            email gonflaient la colonne de gauche, poussaient la colonne de
+            droite HORS de la carte, et `overflow: hidden` la coupait net. Le
+            commerçant perdait le montant, l'état et « à payer » : exactement
+            les trois choses qu'il lit en premier (Alex, 26/08, capture à
+            l'appui). La colonne de droite, elle, ne rétrécit JAMAIS : ses
+            pastilles sont en `nowrap` et se couperaient à leur tour. */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: '0.625rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
             {/* Numéro + date dans le carré */}
             <div style={{ minWidth: 44, borderRadius: 10, background: `linear-gradient(135deg, ${couleur.border}, ${couleur.border}bb)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0, boxShadow: `0 3px 10px ${couleur.border}44`, padding: '6px 6px', gap: 2 }}>
               <span style={{ fontWeight: 900, fontSize: '0.9rem', lineHeight: 1 }}>#{numero}</span>
               {dateFormatee && <span style={{ fontSize: '0.55rem', fontWeight: 700, opacity: 0.85, textAlign: 'center', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{dateFormatee}</span>}
             </div>
-            <div>
-              <p style={{ fontWeight: 800, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{nomAffiche}</p>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <p style={{ fontWeight: 800, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.2px', overflowWrap: 'anywhere' }}>{nomAffiche}</p>
               {/* ⚠️ CE QUE LE COMMERÇANT DOIT LIRE SANS OUVRIR : quoi, quand,
                   comment. Il n'avait que le prénom et le téléphone. Le MODE dit
                   s'il prépare un colis, une remise au comptoir ou une tournée ;
@@ -423,20 +434,33 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
                   <span style={{ fontSize: '0.72rem', color: '#92400E', fontWeight: 700, lineHeight: 1.4 }}>{commande.note_livraison}</span>
                 </div>
               )}
-              {estExpedition && commande.expedition_suivi && (
-                <p style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 700, margin: '3px 0 0' }}>Suivi : {commande.expedition_suivi}</p>
+              {/* ⚠️ LE TRANSPORTEUR AVEC LE NUMÉRO, jamais le numéro seul
+                  (Alex, 26/08). Deux jours après avoir déposé le paquet, un
+                  commerçant ne sait plus chez qui il l'a laissé : une suite de
+                  seize chiffres ne le lui dit pas. */}
+              {estExpedition && libelleExpedition(commande.expedition_transporteur, commande.expedition_suivi) && (
+                <p style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 700, margin: '3px 0 0', overflowWrap: 'anywhere' }}>
+                  Suivi : {libelleExpedition(commande.expedition_transporteur, commande.expedition_suivi)}
+                  {suiviUrl(commande.expedition_transporteur, commande.expedition_suivi) && (
+                    <a href={suiviUrl(commande.expedition_transporteur, commande.expedition_suivi)}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{ marginLeft: 6, color: T.main, fontWeight: 800, textDecoration: 'underline' }}>
+                      suivre
+                    </a>
+                  )}
+                </p>
               )}
               {/* L'adresse mail : le seul moyen de joindre un client qui n'a pas
                   laissé de numéro, et le commerçant n'y avait pas accès. */}
               {commande.client_email && (
-                <p style={{ fontSize: '0.68rem', color: T.muted, fontWeight: 600, margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
+                <p style={{ fontSize: '0.68rem', color: T.muted, fontWeight: 600, margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                   {commande.client_email}
                 </p>
               )}
             </div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ fontWeight: 900, color: T.ink, margin: '0 0 4px', fontSize: '1.05rem', letterSpacing: '-0.3px' }}>{Number(commande.total).toFixed(2)}€</p>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <p style={{ fontWeight: 900, color: T.ink, margin: '0 0 4px', fontSize: '1.05rem', letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>{Number(commande.total).toFixed(2)}€</p>
             <span style={{ background: badge.couleur.badge, color: '#fff', fontSize: '0.65rem', fontWeight: 800, padding: '3px 9px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.3px', whiteSpace: 'nowrap', display: 'inline-block' }}>
               {badge.icon} {badge.label}
             </span>
@@ -573,13 +597,11 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
           )
         })()}
         {/* Expédition boutique : à « Prête », remplace le bouton générique par
-            « Marquer expédiée » avec saisie du n° de suivi (manuel, optionnel) */}
+            « Marquer expédiée », qui ouvre la fenêtre transporteur + suivi.
+            🔴 C'ÉTAIT UN `window.prompt()` JUSQU'AU 26/08 : la boîte grise du
+            système, un seul champ, et pas de transporteur. */}
         {estExpedition && commande.statut === 'pret' && (
-          <button onClick={() => {
-            const suivi = window.prompt('N° de suivi du colis (optionnel, laisse vide si aucun) :', commande.expedition_suivi || '')
-            if (suivi === null) return
-            onExpedier(commande.id, suivi.trim())
-          }}
+          <button onClick={() => onExpedier(commande)}
             style={{ width: '100%', padding: '0.625rem', background: `linear-gradient(135deg, ${T.bleu.border}, ${T.bleu.border}cc)`, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: '0.82rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.bleu.border}44`, letterSpacing: '-0.2px' }}>
             Marquer expédiée →
           </button>
@@ -733,15 +755,20 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
       onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 2px 12px ${couleur.border}14` }}>
       <div style={{ height: 4, background: `linear-gradient(90deg, ${couleur.border}, ${couleur.border}88)` }}/>
       <div style={{ padding: '0.875rem 1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.625rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* ⚠️ MÊME RÈGLE QUE SUR LA CARTE DE COMMANDE, et c'est le FRÈRE du même
+            défaut : sans `minWidth: 0` la colonne de gauche refuse de
+            rétrécir, pousse la pastille de statut hors de la carte, et
+            `overflow: hidden` la coupe. `flexShrink: 0` sur la pastille ne
+            suffit pas : il l'empêche de maigrir, pas d'être poussée dehors. */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: '0.625rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
             {/* Numero RDV + date */}
             <div style={{ minWidth: 44, borderRadius: 10, background: `linear-gradient(135deg, ${couleur.border}, ${couleur.border}bb)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0, boxShadow: `0 3px 10px ${couleur.border}44`, padding: '6px 6px', gap: 2 }}>
               <span style={{ fontWeight: 900, fontSize: '0.9rem', lineHeight: 1 }}>#{rdv.numero_rdv || '?'}</span>
               {dateFormatee && <span style={{ fontSize: '0.55rem', fontWeight: 700, opacity: 0.85, textAlign: 'center', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{dateFormatee}</span>}
             </div>
-            <div>
-              <p style={{ fontWeight: 800, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{nomComplet}</p>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <p style={{ fontWeight: 800, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.2px', overflowWrap: 'anywhere' }}>{nomComplet}</p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
                 <IconClock size={11} color={couleur.border}/>
                 <span style={{ fontSize: '0.75rem', color: couleur.border, fontWeight: 700 }}>{heureD}–{heureF}{dureeTexte ? ` · ${dureeTexte}` : ''}</span>
@@ -933,6 +960,11 @@ export default function Dashboard() {
   const [rdvSelectionne, setRdvSelectionne] = useState(null)  // RDV ouvert dans la modale details
   const [nouveauRdvSlot, setNouveauRdvSlot] = useState(null)  // { date, heure } -> ouvre la modale d'ajout manuel
   const [rdvADeplacer, setRdvADeplacer] = useState(null)      // RDV ouvert dans la modale de déplacement
+  // La commande dont on est en train de dire qu'elle est partie. On garde la
+  // COMMANDE entière et pas son seul identifiant : la fenêtre affiche sa
+  // référence, et repropose le transporteur déjà saisi si le commerçant
+  // revient corriger.
+  const [commandeAExpedier, setCommandeAExpedier] = useState(null)
   // La question posée avant d'agir sur un rendez-vous, puis la phrase qui dit
   // ce qui a été fait. Deux états et pas un : la fenêtre reste ouverte après le
   // geste pour confirmer, au lieu de disparaître en laissant deviner.
@@ -1499,8 +1531,12 @@ export default function Dashboard() {
   // (comme un retrait récupéré). Le retrait, lui, s'arrête à « pret » (swipe client).
   // Boutique détail : marque la commande expédiée (statut final recupere) avec
   // le n° de suivi saisi à la main (MVP expédition, colonne expedition_suivi).
-  async function expedierCommande(commandeId, suivi) {
-    const patch = { statut: 'recupere', expedition_suivi: suivi || null }
+  async function expedierCommande(commandeId, { transporteur = null, suivi = null } = {}) {
+    const patch = {
+      statut: 'recupere',
+      expedition_suivi: suivi || null,
+      expedition_transporteur: transporteur || null,
+    }
     const { error } = await supabase.from('commandes').update(patch).eq('id', commandeId)
     if (error) { alert(`Erreur : ${error.message}`); return }
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...patch } : c))
@@ -1513,6 +1549,12 @@ export default function Dashboard() {
     // bord. Envoyé APRÈS la mise à jour en base, pour que la route relise le
     // numéro qui vient d'être enregistré. Non bloquant : l'écran est déjà à jour.
     postPro('/api/emails/commande-expediee', { commande_id: commandeId }).catch(e => console.warn('[dashboard] email commande-expediee KO', e))
+    // 🔴 ET LE PUSH, QUI N'EXISTAIT PAS. « Prête » envoyait au client d'une
+    // expédition le message du RETRAIT — « va récupérer ta commande » — puis
+    // plus rien quand le colis partait vraiment. Il attendait au magasin un
+    // paquet qui était dans un camion (Alex, 26/08 : « les pushs d'expédition
+    // sont empruntés au tunnel de retrait »).
+    postPro('/api/commande/push-statut', { commande_id: commandeId, statut: 'expediee' }).catch(e => console.warn('[dashboard] push expediee KO', e))
   }
 
   // ⚠️ LE RETOUR ARRIÈRE, ET SES TROIS PRÉCAUTIONS.
@@ -3030,7 +3072,7 @@ export default function Dashboard() {
                         numero={getNumeroJour(commandes, commande.id)}
                         onChangerStatut={changerStatut}
                         onLivraisonStatut={changerStatutLivraison}
-                        onExpedier={expedierCommande}
+                        onExpedier={setCommandeAExpedier}
                         onProduitsRemis={produitsRemis}
                         onRetourArriere={annulerRemise}
                         filtreCourant={filtreStatut}
@@ -3162,6 +3204,23 @@ export default function Dashboard() {
           Sans lui, `confirme()` rend `null` et aucun geste destructif ne part :
           le repli penche du côté qui ne détruit pas. */}
       <PosteConfirmation />
+
+      {/* ─── LE COLIS EST PARTI : CHEZ QUI, SOUS QUEL NUMÉRO ──────────────── */}
+      {/* 🔴 C'était un `window.prompt()` jusqu'au 26/08 : la boîte grise du
+          système, un seul champ, aucun transporteur. */}
+      <ModaleExpedition
+        ouverte={!!commandeAExpedier}
+        reference={commandeAExpedier && referenceCommande(commandeAExpedier)
+          ? `#${referenceCommande(commandeAExpedier)}` : null}
+        transporteurInitial={commandeAExpedier?.expedition_transporteur || ''}
+        suiviInitial={commandeAExpedier?.expedition_suivi || ''}
+        onValider={({ transporteur, suivi }) => {
+          const id = commandeAExpedier?.id
+          setCommandeAExpedier(null)
+          if (id) expedierCommande(id, { transporteur, suivi })
+        }}
+        onFermer={() => setCommandeAExpedier(null)}
+      />
 
       {/* ─── LA FENÊTRE QUI DEMANDE, PUIS QUI CONFIRME ────────────────────── */}
       <ModaleConfirmation

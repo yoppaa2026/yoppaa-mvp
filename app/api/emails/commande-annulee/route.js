@@ -43,6 +43,7 @@ export async function POST(request) {
       .select(`
         id, numero_commande, numero_prefixe, total, date_commande, paye_en_ligne,
         client_email, client_prenom, client_nom,
+        fidelite_remise, bon_cadeau_montant,
         commercant:commercants(id, nom, email, notif_mode),
         creneau:creneaux(heure_debut, heure_fin),
         articles:commande_articles(quantite, prix_unitaire, prix_total, option_libelle, article:articles(nom))
@@ -71,6 +72,11 @@ export async function POST(request) {
           commercant_nom:  cmd.commercant?.nom || '',
           numero_commande: referenceCommande(cmd),
           total:           cmd.total,
+          // ⚠️ SANS CES DEUX COLONNES LE GABARIT SE TAIT EN SILENCE :
+          // `Number(undefined)` n'est pas fini, la ligne ne sort pas, et
+          // personne ne voit d'erreur. Le select ci-dessus les charge.
+          fidelite_remise:    cmd.fidelite_remise,
+          bon_cadeau_montant: cmd.bon_cadeau_montant,
           refund_ok:       refund_status === 'succeeded' || refund_status === 'pending',
           refund_manuel:   refundManuel,
           paye_en_ligne:   !!cmd.paye_en_ligne,
@@ -96,8 +102,13 @@ export async function POST(request) {
           articles:        articlesFlat,
           total:           cmd.total,
           date_retrait:    cmd.date_commande,
+          // ⚠️ UNE COMMANDE DE BOUTIQUE DE DÉTAIL N'A PAS DE CRÉNEAU : ces deux
+          // valeurs sont `undefined`, et le gabarit ne rend plus la ligne
+          // plutôt que d'écrire « ? → ? » (Alex, 26/08).
           heure_debut:     cmd.creneau?.heure_debut,
           heure_fin:       cmd.creneau?.heure_fin,
+          fidelite_remise:    cmd.fidelite_remise,
+          bon_cadeau_montant: cmd.bon_cadeau_montant,
           refund_manuel:   refundManuel,
           paye_en_ligne:   !!cmd.paye_en_ligne,
         })

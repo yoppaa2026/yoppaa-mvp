@@ -3001,8 +3001,27 @@ verifier('un suivi fait d\'espaces ne compte pas', !/Numéro de suivi/i.test(mai
 // Et le tableau de bord doit APPELER la route, sinon rien ne part.
 const routeExp = readFileSync(new URL('../app/api/emails/commande-expediee/route.js', import.meta.url), 'utf8')
 const dashExp = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+// ⚠️ ON DÉCOUPE LA FONCTION, ON NE COMPTE PAS LES CARACTÈRES. Cette garde
+// cherchait l'appel dans une fenêtre de 900 signes après `expedierCommande` :
+// le 26/08, la fonction a grandi de trois lignes (le transporteur, le push du
+// colis parti) et la garde a rougi alors que RIEN n'était cassé. Une garde qui
+// se déclenche sur la LONGUEUR du code ne mesure pas ce qu'elle prétend
+// mesurer, et le jour où elle rougit à tort on prend l'habitude de l'ignorer.
+const corpsExpedier = (() => {
+  const debut = dashExp.indexOf('async function expedierCommande')
+  if (debut < 0) return ''
+  // Jusqu'à la fonction suivante de ce composant, quelle qu'elle soit.
+  const suite = dashExp.slice(debut + 1)
+  const fin = suite.search(/\n {2}(?:async )?function /)
+  return fin < 0 ? suite : suite.slice(0, fin)
+})()
+verifier('la fonction d\'expédition existe toujours', corpsExpedier.length > 0)
 verifier('le tableau de bord déclenche l\'email en expédiant',
-  /expedierCommande[\s\S]{0,900}?\/api\/emails\/commande-expediee/.test(dashExp))
+  corpsExpedier.includes('/api/emails/commande-expediee'))
+// 🔴 ET LE PUSH, qui n'existait pas : le colis partait, le numéro de suivi
+// était saisi, et le Yopper n'en savait rien jusqu'à l'email.
+verifier('et il prévient aussi par notification',
+  /statut: 'expediee'/.test(corpsExpedier))
 // ⚠️ APRÈS l'écriture en base, sinon la route relirait l'ancien numéro de suivi
 // (ou pas de numéro du tout) et le client recevrait un email incomplet.
 verifier('il l\'envoie après avoir enregistré le numéro de suivi',

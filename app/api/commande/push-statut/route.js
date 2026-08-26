@@ -17,13 +17,18 @@ import { createClient } from '@supabase/supabase-js'
 import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerPushParExternalId } from '@/lib/onesignal'
 import { referenceCommande } from '@/lib/numero-commande'
+import { nomTransporteur } from '@/lib/transporteurs'
 
 const URL_COMMANDES = '/commander?onglet=commandes'
 
 export async function POST(request) {
   try {
     const { commande_id, statut } = await request.json()
-    if (!commande_id || !['en_preparation', 'pret'].includes(statut)) {
+    // 🔴 `expediee` AJOUTÉ LE 26/08. Ce n'est pas un statut de la table : c'est
+    // le moment où le colis part vraiment, et il n'envoyait AUCUN push. Voir le
+    // détail plus bas, avec le message de retrait qu'un client d'expédition
+    // recevait à sa place.
+    if (!commande_id || !['en_preparation', 'pret', 'expediee'].includes(statut)) {
       return NextResponse.json({ ok: false, error: 'commande_id + statut valide requis' }, { status: 400 })
     }
 
@@ -45,6 +50,7 @@ export async function POST(request) {
       .from('commandes')
       .select(`
         id, numero_commande, numero_prefixe, client_email, mode_retrait,
+        expedition_suivi, expedition_transporteur,
         commercant:commercants(nom),
         creneau:creneaux(heure_debut, heure_fin)
       `)
@@ -70,6 +76,12 @@ export async function POST(request) {
     // du commerçant désignaient la même commande.
     const num = referenceCommande(cmd) || ''
     const estLivraison = cmd.mode_retrait === 'livraison'
+    // 🔴 L'EXPÉDITION N'ÉTAIT PAS DISTINGUÉE, ET C'EST TOUT LE DÉFAUT (Alex,
+    // 26/08 : « les pushs d'expédition sont empruntés au tunnel de retrait »).
+    // Le test portait sur `livraison` OU le reste, et un colis tombait donc
+    // dans « le reste » : celui qui avait payé un envoi à domicile recevait
+    // « Va récupérer ta commande chez X ». Il pouvait faire la route.
+    const estExpedition = cmd.mode_retrait === 'expedition'
     const creneauTxt = cmd.creneau?.heure_debut
       ? `${cmd.creneau.heure_debut.slice(0, 5)}${cmd.creneau.heure_fin ? ` – ${cmd.creneau.heure_fin.slice(0, 5)}` : ''}`
       : null
@@ -78,12 +90,36 @@ export async function POST(request) {
     if (statut === 'en_preparation') {
       contenu = {
         headings: '👨‍🍳 Ta commande est en préparation',
-        contents: `${nom} prépare ta commande #${num}. On te prévient dès qu’elle est prête.`,
+        contents: estExpedition
+          ? `${nom} prépare ton colis #${num}. On te prévient dès qu’il part.`
+          : `${nom} prépare ta commande #${num}. On te prévient dès qu’elle est prête.`,
         data: { kind: 'commande_en_preparation', commande_id: cmd.id },
+      }
+    } else if (statut === 'expediee') {
+      // 🔴 CE MESSAGE N'EXISTAIT PAS. Le colis partait, le numéro de suivi
+      // était saisi, et le client n'en savait rien : il recevait un email et
+      // c'est tout, alors que le push est justement ce qui se lit tout de
+      // suite. ⚠️ Et on dit CHEZ QUI : un numéro de suivi seul ne se suit
+      // nulle part.
+      const porteur = nomTransporteur(cmd.expedition_transporteur)
+      const suivi = String(cmd.expedition_suivi || '').trim()
+      const precision = porteur && suivi ? ` ${porteur} · ${suivi}`
+        : porteur ? ` par ${porteur}`
+        : suivi ? ` Suivi : ${suivi}` : ''
+      contenu = {
+        headings: '📦 Ton colis est parti',
+        contents: `${nom} vient d’expédier ta commande #${num}.${precision}`,
+        data: { kind: 'commande_expediee', commande_id: cmd.id },
       }
     } else {
       // statut === 'pret'
-      contenu = estLivraison
+      contenu = estExpedition
+        ? {
+            headings: '📦 Ton colis est prêt',
+            contents: `${nom} a emballé ta commande #${num}. On te prévient dès qu’elle part.`,
+            data: { kind: 'commande_prete_expedition', commande_id: cmd.id },
+          }
+        : estLivraison
         ? {
             headings: '📦 Ta commande est prête',
             contents: `${nom} a terminé ta commande #${num}, elle part bientôt en livraison.`,

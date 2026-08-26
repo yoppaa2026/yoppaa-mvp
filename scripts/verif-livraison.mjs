@@ -15,12 +15,18 @@ import {
   STATUTS_LIVRAISON, prochainStatutLivraison, transitionLivraisonValide,
   libelleSuiviLivraison,
 } from '../lib/livraison.js'
-import { emailCommandePrete, emailCommandeEnLivraison } from '../lib/resend.js'
+import {
+  emailCommandePrete, emailCommandeEnLivraison, emailCommandeExpediee,
+  emailCommandeAnnuleeCommercant, emailCommandeAnnuleeYopper,
+} from '../lib/resend.js'
 import {
   composerAdresseLivraison, requeteGeocodage, coordonneesPlausibles,
   champsAdressePourAPI, NOTE_MAX,
 } from '../lib/adresse-livraison.js'
-import { etatPaiementClient } from '../lib/rdv-paiement.js'
+import {
+  etatPaiementClient, etatPaiementCommande, etatPaiementRdv, phraseAvantages,
+} from '../lib/rdv-paiement.js'
+import { nomTransporteur, suiviUrl, libelleExpedition } from '../lib/transporteurs.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -549,6 +555,203 @@ verifier('et range la commande du bon côté',
   verifier('le message de refus ne recopie aucune adresse',
     !/\$\{s\.adresse/.test(route))
 }
+
+
+// ═══ L'EXPÉDITION N'EST PAS UN RETRAIT ══════════════════════════════════════
+//
+// 🔴 « LES PUSHS D'EXPÉDITION SONT EMPRUNTÉS AU TUNNEL DE RETRAIT » (Alex,
+// 26/08). Le mode de retrait était testé en BINAIRE — livraison, ou « le
+// reste » — et un colis tombait dans « le reste ». Le client qui avait payé un
+// envoi à domicile recevait « Ta commande est prête 🎉 … t'attend », l'adresse
+// DU MAGASIN, un bouton « Itinéraire Google Maps » et « À tout de suite ». Il
+// pouvait faire la route pour rien.
+//
+// ⚠️ « LE RESTE » N'EST PAS UNE CATÉGORIE, C'EST UN OUBLI. Chaque fois qu'un
+// écran teste UN mode et met tous les autres dans un `else`, le mode ajouté
+// ensuite hérite de messages écrits pour un autre métier, en silence.
+{
+  const COMMUN_EXP = {
+    yopper_prenom: 'Alexandre', commercant_nom: 'La Boutique Témoin',
+    commercant_adresse: 'Rue de Prée 9G, 5640 Mettet', commercant_slug: 'boutique-temoin',
+    numero_commande: 'EX2',
+  }
+  const pretColis = emailCommandePrete({ ...COMMUN_EXP, est_expedition: true })
+  verifier('« prête » pour un colis ne propose pas d\'itinéraire',
+    !pretColis.includes('Itinéraire Google Maps'))
+  verifier('« prête » pour un colis ne dit pas « à tout de suite »',
+    !pretColis.includes('À tout de suite'))
+  verifier('« prête » pour un colis ne donne pas l\'adresse du magasin',
+    !pretColis.includes('Rue de Prée'))
+  verifier('« prête » pour un colis annonce le suivi à venir',
+    pretColis.includes('numéro de suivi dès que le colis'))
+  // ⚠️ ET LE RETRAIT GARDE LE SIEN. Une correction qui casse le cas d'origine
+  // n'est pas une correction.
+  const pretRetrait = emailCommandePrete({ ...COMMUN_EXP })
+  verifier('le retrait, lui, garde son itinéraire',
+    pretRetrait.includes('Itinéraire Google Maps'))
+
+  // Le push suit la même règle, et c'est le même fichier qui les portait tous.
+  const routePush = lire('app/api/commande/push-statut/route.js')
+  verifier('le push distingue l\'expédition du retrait',
+    /const estExpedition = cmd\.mode_retrait === 'expedition'/.test(routePush))
+  verifier('le push d\'un colis parti existe',
+    /statut === 'expediee'/.test(routePush))
+  verifier('et la route l\'accepte en entrée',
+    /'en_preparation', 'pret', 'expediee'/.test(routePush))
+  // ⚠️ ET IL RELIT LE TRANSPORTEUR EN BASE. Sans la colonne dans le select, le
+  // message repart sans nom, sans erreur, en silence.
+  verifier('le push relit le transporteur',
+    /expedition_suivi, expedition_transporteur/.test(routePush))
+}
+
+// ═══ UN NUMÉRO DE SUIVI SEUL NE SE SUIT NULLE PART ══════════════════════════
+//
+// 🔴 « IL FAUT POUVOIR AJOUTER LE NOM DU TRANSPORTEUR AVEC LE NUMÉRO
+// D'EXPÉDITION. LE NOM DOIT AUSSI S'AFFICHER CÔTÉ YOPPER » (Alex, 26/08).
+// Avant ça, les deux écrans affichaient « Suivi : 0072638628362826 » : ce n'est
+// pas une information, c'est une chaîne de caractères.
+{
+  verifier('un transporteur connu se nomme', nomTransporteur('bpost') === 'bpost')
+  // ⚠️ AUCUN REPLI SUR « INCONNU » : une commande partie avant le 26/08 n'a pas
+  // de transporteur, ce n'est pas la même chose qu'un transporteur illisible.
+  verifier('un transporteur absent ne s\'invente pas', nomTransporteur(null) === null)
+  verifier('un transporteur inconnu non plus', nomTransporteur('chronopost') === null)
+
+  verifier('le lien de suivi se fabrique',
+    (suiviUrl('bpost', '0072638628362826') || '').includes('0072638628362826'))
+  // ⚠️ IL FAUT LES DEUX. L'un sans l'autre ne mène nulle part, et un lien mort
+  // est pire qu'un numéro nu : il donne l'impression d'avoir été suivi.
+  verifier('pas de lien sans numéro', suiviUrl('bpost', '') === null)
+  verifier('pas de lien sans transporteur', suiviUrl(null, '123') === null)
+  verifier('pas de lien pour « autre transporteur »', suiviUrl('autre', '123') === null)
+  // Le numéro voyage échappé : il finit dans une URL.
+  verifier('un numéro douteux ne s\'injecte pas dans l\'URL',
+    !(suiviUrl('bpost', 'a b&c=1') || '').includes('&c=1'))
+
+  verifier('la ligne dit le transporteur ET le numéro',
+    libelleExpedition('bpost', '00726') === 'bpost · 00726')
+  verifier('le transporteur seul suffit', libelleExpedition('bpost', null) === 'bpost')
+  verifier('le numéro seul aussi', libelleExpedition(null, '00726') === '00726')
+  // ⚠️ RIEN À DIRE → RIEN D'AFFICHÉ. Un « Suivi : » suivi du vide est pire que
+  // pas de ligne du tout.
+  verifier('rien des deux ne rend rien', libelleExpedition(null, null) === null)
+
+  // L'email
+  const mailBpost = emailCommandeExpediee({
+    yopper_prenom: 'Alexandre', commercant_nom: 'X', numero_commande: 'EX2',
+    expedition_suivi: '0072638628362826', expedition_transporteur: 'bpost',
+  })
+  // ⚠️ ON CHERCHE LA PHRASE, PAS LE MOT. « bpost » figure aussi dans
+  // `track.bpost.cloud` : une garde qui cherche le mot reste VERTE alors que le
+  // nom a disparu de l'email. Mesuré par mutation le 26/08, et la première
+  // écriture de cette garde était justement muette.
+  verifier('l\'email nomme le transporteur', mailBpost.includes('Par bpost'))
+  verifier('l\'email propose le lien de suivi', mailBpost.includes('Suivre mon colis chez'))
+  verifier('le numéro garde ses zéros de tête', mailBpost.includes('0072638628362826'))
+  const mailNu = emailCommandeExpediee({ yopper_prenom: 'A', commercant_nom: 'X', numero_commande: 'EX3' })
+  verifier('sans transporteur ni numéro, aucun cadre vide',
+    !mailNu.includes('Numéro de suivi') && !mailNu.includes('Transporteur'))
+
+  // Les deux écrans, et la colonne qui doit arriver jusqu'à eux.
+  const dash = lire('app/dashboard/page.js')
+  verifier('le tableau de bord affiche le transporteur',
+    /libelleExpedition\(commande\.expedition_transporteur, commande\.expedition_suivi\)/.test(dash))
+  // 🔴 LE `window.prompt()` A DISPARU : boîte grise du système, un seul champ,
+  // pas de transporteur, et un clavier alphabétique devant seize chiffres.
+  //
+  // ⚠️ ON DÉPOUILLE LES COMMENTAIRES AVANT DE CHERCHER, et c'est la TROISIÈME
+  // fois de la journée : les deux commentaires qui expliquent ce qu'on a
+  // retiré contiennent forcément l'écriture fautive, et faisaient rougir la
+  // garde. Retirer l'explication serait perdre la mémoire du défaut ; on
+  // cherche donc dans le CODE, pas dans la prose.
+  const codeSeul = (src) => src
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/^[ \t]*\/\/.*$/gm, ' ')
+  verifier('le tableau de bord n\'ouvre plus de prompt système',
+    !/window\.prompt/.test(codeSeul(dash)))
+  verifier('la commande est marquée avec son transporteur',
+    /expedition_transporteur: transporteur \|\| null/.test(dash))
+  const appli = lire('app/commander/page.js')
+  verifier('le Yopper voit le transporteur dans ses commandes',
+    /libelleExpedition\(c\.expedition_transporteur, c\.expedition_suivi\)/.test(appli))
+  const routeMail = lire('app/api/emails/commande-expediee/route.js')
+  verifier('la route d\'email relit le transporteur en base',
+    /expedition_suivi, expedition_transporteur/.test(routeMail))
+}
+
+// ═══ CE QUI A FAIT BAISSER LE PRIX SE DIT, PARTOUT ══════════════════════════
+//
+// 🔴 « IL FAUT AUSSI MENTIONNER QUAND UN MONTANT DE LA FIDÉLITÉ OU BC A ÉTÉ
+// UTILISÉ » (Alex, 26/08, capture à l'appui : une commande à 36,00 € portant
+// « À payer 26,00 € », et rien pour expliquer les dix euros manquants).
+//
+// ⚠️ LE BON CADEAU ÉTAIT DIT, LA RÉCOMPENSE NON. Elle avait été branchée dans
+// les CALCULS le matin même ; les PHRASES étaient restées au bon cadeau seul.
+// Un montant juste que personne ne peut expliquer se lit comme une erreur.
+{
+  const cmd = { total: 36, fidelite_remise: 10 }
+  verifier('le commerçant lit d\'où vient l\'écart',
+    (etatPaiementCommande(cmd)?.detail || '').includes('10,00 € de récompense fidélité'))
+  verifier('et le montant réclamé reste le bon',
+    etatPaiementCommande(cmd)?.libelle === 'À payer 26,00 €')
+  // ⚠️ ORDRE D'APPLICATION, jamais alphabétique : la récompense d'abord (une
+  // remise), le bon cadeau ensuite (de l'argent déjà payé).
+  const deux = etatPaiementCommande({ total: 30, fidelite_remise: 5, bon_cadeau_montant: 20 })
+  verifier('les deux avantages se disent dans l\'ordre où ils s\'appliquent',
+    (deux?.detail || '').indexOf('récompense') < (deux?.detail || '').indexOf('bon cadeau'))
+  // ⚠️ RIEN À DIRE → PAS DE PHRASE. Jamais « dont 0,00 € de récompense ».
+  verifier('sans avantage, aucune phrase inventée',
+    etatPaiementCommande({ total: 36 })?.detail === null)
+  verifier('phraseAvantages se tait sur zéro',
+    phraseAvantages({ fidelite_remise: 0, bon_cadeau_montant: 0 }) === null)
+
+  // Côté client, ses mots à lui.
+  verifier('le Yopper voit sa récompense déduite',
+    (etatPaiementClient(cmd)?.detail || '').includes('ta récompense'))
+  // ⚠️ TOUT COUVERT N'EST PAS « GRATUIT » : c'est gagné. Et le confondre avec
+  // le bon cadeau ferait croire à un bon dépensé qui ne l'a pas été.
+  const couvert = etatPaiementClient({ total: 5, fidelite_remise: 5 })
+  verifier('une commande couverte par la récompense le dit',
+    couvert?.libelle === 'Offert par ta récompense')
+  verifier('et ne parle pas de bon cadeau',
+    !(couvert?.detail || '').includes('bon cadeau'))
+
+  // Le rendez-vous partage la règle et la colonne.
+  const rdv = { statut: 'confirme', prix_estime: 30, fidelite_remise: 5, acompte_montant: 6.25, acompte_paye: true }
+  verifier('le RDV dit sa récompense au comptoir',
+    (etatPaiementRdv(rdv)?.detail || '').includes('5,00 € de récompense fidélité'))
+  // 🔴 F24 : le solde et la phrase doivent dire le MÊME montant.
+  verifier('et le solde reste 18,75 € (F24)',
+    etatPaiementRdv(rdv)?.libelle === 'Partiel · 18,75 € à payer')
+
+  // Les emails d'annulation.
+  const mailPro = emailCommandeAnnuleeCommercant({
+    nom_commercant: 'X', yopper_prenom: 'A', numero_commande: 'RE6', total: 36,
+    date_retrait: '2026-08-27', heure_debut: null, heure_fin: null, fidelite_remise: 10,
+  })
+  // 🔴 « IL Y A UN ? - ?, C'EST UN BUG » (Alex, 26/08). Une commande de boutique
+  // de détail n'a PAS de créneau : une valeur de repli n'est pas une réponse à
+  // une donnée SANS OBJET. Pas d'heure, pas de ligne.
+  verifier('l\'email d\'annulation n\'écrit plus « ? → ? »', !/\?\s*→\s*\?/.test(mailPro))
+  verifier('l\'email d\'annulation dit la récompense', mailPro.includes('de récompense fidélité'))
+  const mailAvecHeure = emailCommandeAnnuleeCommercant({
+    nom_commercant: 'X', yopper_prenom: 'A', numero_commande: 'CC1', total: 20,
+    date_retrait: '2026-08-27', heure_debut: '17:00:00', heure_fin: '17:30:00',
+  })
+  verifier('mais il garde la plage quand elle existe', mailAvecHeure.includes('17:00 → 17:30'))
+  const mailYop = emailCommandeAnnuleeYopper({
+    yopper_prenom: 'A', commercant_nom: 'X', numero_commande: 'RE6', total: 36, fidelite_remise: 10,
+  })
+  // ⚠️ SA SEULE QUESTION : « et ma récompense ? » Une récompense se rend en
+  // récompense, jamais en argent, et le taire la ferait croire perdue.
+  verifier('le Yopper apprend que sa récompense lui revient', mailYop.includes('t’est rendue'))
+  // ⚠️ ET LA ROUTE DOIT CHARGER LES COLONNES, sinon les gabarits se taisent
+  // sans lever la moindre erreur.
+  const routeAnn = lire('app/api/emails/commande-annulee/route.js')
+  verifier('la route d\'annulation charge la remise et le bon',
+    /fidelite_remise, bon_cadeau_montant/.test(routeAnn))
+}
+
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

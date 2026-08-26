@@ -24,6 +24,7 @@ import { lieuxDuJour } from '@/lib/lieux-activite'
 import { morningADuContenu } from '@/lib/morning-contenu'
 import { libellePrixSeance } from '@/lib/abonnements'
 import { libelleCarteRecompenses } from '@/lib/fidelite-recompense'
+import { libelleExpedition, suiviUrl } from '@/lib/transporteurs'
 import { lirePositionMemorisee, memoriserPosition, marquerDemandee, dejaDemandee, decisionGeoloc, etatAutorisation,
   lectureReussieDansCetteSession, marquerLectureDeCetteSession, demandeFaiteDansCetteSession, marquerDemandeDeCetteSession } from '@/lib/geoloc'
 import PillsStatut from './PillsStatut'
@@ -3425,17 +3426,31 @@ export default function Commander() {
                       ? { label: '✓ Expédiée', bg: '#FFF7ED', color: '#EA580C' }
                       : statutMapCmd[c.statut] || { label: c.statut, bg: T.pale, color: T.muted }
                     return (
-                      <div key={c.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
+                      <div key={c.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ fontWeight: 700, color: T.ink, marginBottom: 2, fontSize: '0.875rem' }}>
                             {c.commercant?.nom}{c.numeroAffiche && <span style={{ color: T.muted, fontWeight: 600 }}> - commande #{c.numeroAffiche}</span>}
                           </p>
                           <p style={{ fontSize: '0.7rem', color: T.muted }}>{new Date((c.date_commande || c.created_at) + 'T12:00:00').toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })}</p>
-                          {estColisExpedie && c.expedition_suivi && (
-                            <p style={{ fontSize: '0.7rem', color: '#EA580C', fontWeight: 700, margin: '2px 0 0' }}>Suivi : {c.expedition_suivi}</p>
+                          {/* 🔴 LE TRANSPORTEUR, PAS SEULEMENT LE NUMÉRO (Alex,
+                              26/08). Le Yopper lisait « Suivi :
+                              0072638628362826 » et n'avait aucun moyen de
+                              savoir où coller ces seize chiffres. Le nom, et
+                              quand on peut, le lien direct. */}
+                          {estColisExpedie && libelleExpedition(c.expedition_transporteur, c.expedition_suivi) && (
+                            <p style={{ fontSize: '0.7rem', color: '#EA580C', fontWeight: 700, margin: '2px 0 0', overflowWrap: 'anywhere' }}>
+                              Suivi : {libelleExpedition(c.expedition_transporteur, c.expedition_suivi)}
+                              {suiviUrl(c.expedition_transporteur, c.expedition_suivi) && (
+                                <a href={suiviUrl(c.expedition_transporteur, c.expedition_suivi)}
+                                  target="_blank" rel="noopener noreferrer"
+                                  style={{ marginLeft: 6, color: T.main, fontWeight: 800, textDecoration: 'underline' }}>
+                                  suivre mon colis
+                                </a>
+                              )}
+                            </p>
                           )}
                         </div>
-                        <div style={{ textAlign: 'right' }}>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
                           <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(c.total).toFixed(2)}€</p>
                           <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: sc.bg, color: sc.color }}>{sc.label}</span>
                           {/* ⚠️ L'HISTORIQUE AUSSI. Une commande récupérée dont

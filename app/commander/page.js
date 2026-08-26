@@ -2019,8 +2019,26 @@ export default function Commander() {
   // ⚠️ ET `pageshow` EN PLUS DE `visibilitychange` : une page restaurée depuis
   // le cache du navigateur ne repasse pas toujours par un changement de
   // visibilité. C'est la leçon du bouton mort au retour de Stripe.
+  // 🔴 ET LE PREMIER CHARGEMENT AVAIT DISPARU AVEC LA CORRECTION (Alex, 26/08).
+  //
+  // En ajoutant la relance au retour au premier plan, j'ai REMPLACÉ l'appel au
+  // montage au lieu de m'y ajouter. `chargerCommercants` n'avait donc plus
+  // qu'un seul appelant : cet écouteur. Or à l'ouverture de l'application,
+  // `pageshow` s'est déjà produit AVANT que React n'attache quoi que ce soit :
+  // l'événement est manqué, personne n'appelle, et les trois points tournent
+  // pour toujours. Sur iPhone comme sur Android, à chaque ouverture.
+  //
+  // ⚠️ CE N'EST PAS LA MÊME PANNE QUE CELLE DU MATIN, C'EST SON EXACT INVERSE.
+  // Le matin, la requête ne rendait jamais la main. Ici elle n'est jamais
+  // partie. Le symptôme à l'écran est identique au pixel près, et c'est
+  // précisément ce qui rend ce défaut si facile à croire déjà corrigé.
+  //
+  // ⚠️ LA RELANCE N'EST PAS UN CHARGEMENT. Un écouteur ne remplace jamais
+  // l'appel qu'il est censé secourir : le secours ne se déclenche que si
+  // quelqu'un a d'abord essayé.
   useEffect(() => {
     if (commercants.length > 0) return
+    chargerCommercants()
     const reveiller = () => {
       if (document.visibilityState !== 'visible') return
       chargerCommercants()

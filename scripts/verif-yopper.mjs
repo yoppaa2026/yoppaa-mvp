@@ -728,6 +728,52 @@ for (const chemin of routesAdmin) {
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
+
+
+// ═══ LA LISTE SE CHARGE AU MONTAGE, ET SE RELANCE AU RETOUR ════════════════
+//
+// 🔴 DEUX PANNES OPPOSÉES, UN SEUL ÉCRAN, LE MÊME JOUR.
+// Le matin du 26/08 : la requête ne rendait jamais la main au réveil du
+// téléphone. Corrigée par un délai maximal et une relance au retour au premier
+// plan. Mais en ajoutant la relance, l'appel AU MONTAGE a été remplacé au lieu
+// d'être complété : `chargerCommercants` n'avait plus qu'un seul appelant,
+// l'écouteur. Or à l'ouverture de l'application, `pageshow` s'est déjà produit
+// AVANT que React n'attache l'écouteur : l'événement est manqué, personne
+// n'appelle, et « On réveille ton quartier » tourne indéfiniment.
+//
+// ⚠️ LE SYMPTÔME EST IDENTIQUE AU PIXEL PRÈS. C'est ce qui rend ce défaut
+// dangereux : on le croit déjà corrigé, puisqu'on vient de corriger le même
+// écran. Alex l'a retrouvé sur iPhone ET sur Android, à chaque ouverture.
+//
+// ⚠️ LA RÈGLE QUE CETTE GARDE TIENT : une relance n'est pas un chargement. Un
+// écouteur de secours ne se déclenche que si quelqu'un a d'abord essayé.
+{
+  const src = lire('app/commander/page.js')
+
+  // Le corps de l'effet, découpé entre deux repères de CODE, jamais sur un
+  // nombre de caractères : une fenêtre glissante lit chez le voisin.
+  const avantEcouteur = /if \(commercants\.length > 0\) return([\s\S]*?)const reveiller/.exec(src)?.[1]
+  verifier("l'effet de chargement des commerces est reconnaissable",
+    typeof avantEcouteur === 'string')
+  verifier('la liste des commerces se charge AU MONTAGE',
+    /chargerCommercants\(\)/.test(avantEcouteur || ''),
+    'plus aucun appel hors de l\'écouteur : l\'écran resterait sur ses trois points')
+
+  // Et la relance du matin reste en place, avec ses DEUX événements : une page
+  // restaurée depuis le cache ne repasse pas toujours par un changement de
+  // visibilité (leçon du bouton mort au retour de Stripe).
+  verifier('et elle se relance au retour au premier plan',
+    /addEventListener\('visibilitychange', reveiller\)/.test(src)
+    && /addEventListener\('pageshow', reveiller\)/.test(src))
+
+  // ⚠️ ET LA SORTIE DE SECOURS DU MATIN NE DOIT PAS DISPARAÎTRE NON PLUS :
+  // sans délai maximal, une requête pendante rend le même écran mort.
+  verifier('le chargement a toujours un délai maximal',
+    /abandon\.abort\(\)/.test(src) && /abortSignal\(abandon\.signal\)/.test(src))
+  verifier("et un échec se DIT au lieu de ressembler à un vide",
+    /setErreurChargement\(true\)/.test(src))
+}
+
 if (ko > 0) {
   console.log('\nÉCHECS :')
   echecs.forEach(e => console.log('  ✕ ' + e))

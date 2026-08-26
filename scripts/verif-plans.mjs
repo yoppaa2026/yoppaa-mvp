@@ -55,12 +55,29 @@ function argumentsDe(source, debut) {
   return args
 }
 
+// ⚠️ LE SCANNER LISAIT LES COMMENTAIRES, DANS LES DEUX SENS.
+// Trouvé le 26/08 : un commentaire qui CITE un appel fautif en exemple, pour
+// mettre en garde contre lui, était compté comme un vrai appel et faisait
+// rougir le banc. C'était le symptôme visible. L'invisible est bien pire : un
+// `canDo(plan, 'commande')` MIS EN COMMENTAIRE comptait comme un usage réel,
+// donc une clé pouvait passer pour utilisée alors que plus rien ne l'appelait.
+// C'est la famille des tests faussement verts, dans sa forme « le commentaire
+// valide la garde ».
+//
+// ⚠️ LES LIGNES SONT VIDÉES, JAMAIS RETIRÉES : ce scanner rend des numéros de
+// ligne, et les décaler rendrait chacun de ses messages faux.
+function sansCommentaires(src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, (bloc) => '\n'.repeat((bloc.match(/\n/g) || []).length))
+    .split('\n').map(l => (/^\s*\/\//.test(l) ? '' : l)).join('\n')
+}
+
 const clesTrouvees = new Map()   // cle -> [fichier:ligne]
 const clesDynamiques = []
 
 for (const dossier of DOSSIERS) {
   for (const fichier of fichiersJs(join(racine, dossier))) {
-    const source = readFileSync(fichier, 'utf8')
+    const source = sansCommentaires(readFileSync(fichier, 'utf8'))
     const regex = /\bcanDo(?:AvecCategorie)?\s*\(/g
     let m
     while ((m = regex.exec(source)) !== null) {
@@ -136,6 +153,26 @@ verifier('les alias legacy sont résolus', resolvePlan('full') != null && resolv
 verifier('la commande reste alimentaire', canDoAvecCategorie('vendre', 'commande', 'vitrine') === false)
 verifier('le RDV reste vitrine', canDoAvecCategorie('vendre', 'rdv', 'alimentaire') === false)
 verifier('le RDV passe chez une vitrine', canDoAvecCategorie('vendre', 'rdv', 'vitrine') === true)
+
+// ⚠️ LE SCANNER LUI-MÊME, MIS À L'ÉPREUVE. Il vient d'être corrigé pour ne
+// plus lire les commentaires ; un correctif de banc qui ne se vérifie pas ne
+// vaut pas mieux que le défaut qu'il prétend fermer.
+{
+  const echantillon = [
+    "// canDo(plan, 'cle_commentee')",
+    "  /* canDo(plan, 'cle_en_bloc') */",
+    "const vrai = canDo(plan, 'commande')",
+    "const url = 'https://exemple.be/a//b'",
+  ].join('\n')
+  const nettoye = sansCommentaires(echantillon)
+  verifier('un appel mis en commentaire ne compte pas comme un usage',
+    !/cle_commentee/.test(nettoye) && !/cle_en_bloc/.test(nettoye))
+  verifier('mais le vrai appel survit', /canDo\(plan, 'commande'\)/.test(nettoye))
+  verifier('et une adresse web n\'est pas prise pour un commentaire',
+    /exemple\.be/.test(nettoye))
+  verifier('les numéros de ligne ne bougent pas',
+    nettoye.split('\n').length === echantillon.split('\n').length)
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA DÉGUSTATION — TOUT LE MONDE A TOUT JUSQU'AU 9 JANVIER

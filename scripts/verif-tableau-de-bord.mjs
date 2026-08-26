@@ -364,6 +364,88 @@ const verifie = (nom, cond, detail = '') => {
 }
 
 console.log(`\nTableau de bord : ${ok} vérifications`)
+
+// ═══ LES ONGLETS : LE SEGMENT DÉCIDE QU'ILS EXISTENT, LE FORFAIT LEUR ÉTAT ══
+//
+// ⚠️ CE QUE CES GARDES PROTÈGENT N'EST PAS UNE FORME MAIS DEUX RÈGLES.
+// Avant le 26/08, un onglet hors forfait n'était pas grisé, il était ABSENT :
+// le commerçant en Exister ne savait même pas que la fidélité existait.
+// Alex : « tous les onglets du segment affichés, grisés si besoin, ça montre
+// l'ampleur des possibilités et ça donne envie ».
+//
+// Le COMPORTEMENT des quatre états est prouvé par exécution dans
+// scripts/verif-plans.mjs. Ici on vérifie seulement que l'écran s'y branche.
+{
+  // ⚠️ LES COMMENTAIRES SONT RETIRÉS, ET C'EST LA LEÇON DU MATIN MÊME.
+  // Le scanner de scripts/verif-plans.mjs prenait un appel CITÉ EN EXEMPLE
+  // dans un commentaire pour un vrai appel. Le symptôme est bénin — une garde
+  // qui rougit à tort — mais la maladie ne l'est pas : dans l'autre sens, un
+  // appel MIS EN COMMENTAIRE validait une garde, et c'est la famille des tests
+  // faussement verts. Une date écrite dans un commentaire ne ment à personne ;
+  // la même date dans une chaîne affichée, si.
+  const sansCommentaires = (src) => src
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').map(l => (/^\s*\/\//.test(l) ? '' : l)).join('\n')
+  const cfg = sansCommentaires(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  const bord = sansCommentaires(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+
+  // ⚠️ RÈGLE 1 — UN DROIT NE SE CALCULE JAMAIS SUR UN `.plan` DÉTACHÉ.
+  // C'est en détachant le plan de son commerçant qu'on perd `created_at`, donc
+  // l'essai en cours, et qu'un commerçant se retrouve privé en silence de ce
+  // qu'il vient d'activer. Le défaut « colonne absente du select », septième
+  // occurrence du projet, prend exactement cette forme.
+  verifie("le tableau de bord ne décide aucun droit sur un plan détaché",
+    !/canDo\((?:commercant\??\.|form\.)plan\b/.test(cfg + bord),
+    'un canDo(x.plan, …) subsiste')
+
+  // ⚠️ RÈGLE 2 — CE QUI EST SANS OBJET DISPARAÎT, LE RESTE NE DISPARAÎT PLUS.
+  // Un boulanger ne doit jamais voir « Prise de RDV », même grisée : ce n'est
+  // pas une question d'argent, et la lui montrer serait lui promettre ce qui
+  // n'arrivera pas, quel que soit son chèque.
+  verifie("la liste d'onglets ne retire que ce qui est sans objet",
+    /\.filter\(t => t\.etat !== null\)/.test(cfg))
+  verifie("et l'état de chaque onglet vient de la matrice, pas d'un booléen maison",
+    /etat: t\.feature \? etatDe\(t\.feature\) : FONCTION_INCLUSE/.test(cfg))
+
+  // ⚠️ RÈGLE 3 — PENDANT SA PÉRIODE, RIEN N'EST VERROUILLÉ.
+  // Un cadenas dit « tu n'as pas payé ». C'est la leçon des pastilles grises
+  // retirées de la fiche publique le 03/08 : ce qui est gris ne se lit pas
+  // comme un tarif, ça se lit comme un jugement. Il n'apparaît donc qu'une
+  // fois la période passée.
+  verifie('le cadenas ne se pose que sur une fonction fermée',
+    /const ferme = t\.etat === FONCTION_FERMEE/.test(cfg)
+    && /ferme\s*\n?\s*\? <Lock/.test(cfg))
+  // ⚠️ UNE SECONDE GARDE A ÉTÉ ÉCRITE PUIS RETIRÉE ICI, VOLONTAIREMENT.
+  // Elle cherchait `<Lock` dans les 120 caractères suivant
+  // FONCTION_ESSAI_POSSIBLE : c'est la « fenêtre qui lit chez le voisin »,
+  // piège consigné le 15/08, qui rougit ou verdit au gré d'une accolade
+  // déplacée. La règle est déjà portée par la ligne ci-dessus, et le
+  // comportement des quatre états par verif-plans. On ne rafistole pas une
+  // garde fragile, on la retire.
+
+  // ⚠️ RÈGLE 4 — LA GARDE D'ÉCRAN N'EST JAMAIS UNE RÉPONSE À ELLE SEULE.
+  // Griser un onglet n'empêche rien : `tab` peut venir d'un raccourci, d'une
+  // URL, d'un état resté en mémoire. Ce sont ces conditions-ci qui empêchent
+  // vraiment le contenu de s'afficher.
+  for (const [onglet, fonction] of [
+    ['fidelite', 'fidelite'], ['bons', 'bons_cadeaux'],
+    ['comptabilite', 'export_comptable'], ['deals', 'deals'],
+  ]) {
+    verifie(`le contenu de l'onglet « ${onglet} » reste gardé au rendu`,
+      new RegExp(`tab === '${onglet}'[^\\n]*peut\\(commercant, '${fonction}'\\)`).test(cfg))
+  }
+
+  // ⚠️ RÈGLE 5 — LA DATE ANNONCÉE EST LA SIENNE, JAMAIS UNE DATE ÉCRITE À LA
+  // MAIN. Celui qui s'inscrira en mars aura trente jours, pas cent. Et c'est
+  // le DERNIER JOUR GRATUIT qu'on annonce : « offert jusqu'au 9 janvier »
+  // serait faux d'une journée, distinction gardée depuis le 20/08.
+  verifie("le bandeau d'essai calcule la date de fin",
+    /libelleDernierJourGratuit\(/.test(cfg))
+  verifie("et n'écrit aucune date en dur",
+    !/9 janvier|8 janvier/.test(cfg), 'une date est écrite à la main')
+}
+
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)
   for (const e of echecs) console.log('   • ' + e)

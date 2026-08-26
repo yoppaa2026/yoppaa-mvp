@@ -6,7 +6,12 @@
 // règles-là méritent d'être verrouillées.
 
 import { readFileSync } from 'node:fs'
-import { libelleEnvie, phraseHorsOuverture, enviesAAlerter, peutEnvoyerEmail, LIBELLE_ENVIE, TYPES_ENVIE, envieConnue } from '../lib/signaux.js'
+import {
+  libelleEnvie, phraseHorsOuverture, enviesAAlerter, peutEnvoyerEmail,
+  LIBELLE_ENVIE, TYPES_ENVIE, envieConnue,
+  ENVIE_VERS_FONCTION, fonctionDeLEnvie, envieDeLaFonction, phraseEnvieFonction,
+} from '../lib/signaux.js'
+import { PLAN_FEATURES } from '../lib/plans.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -38,6 +43,60 @@ egal('et au pluriel',
 // La route acceptait N'IMPORTE QUELLE chaîne de 40 caractères comme type : un
 // appelant pouvait inventer des catégories et polluer les statistiques sur
 // lesquelles le commerçant décide s'il change de formule.
+// ═══════════════════════════════════════════════════════════════════════════
+// DE L'ENVIE À LA FONCTION QUI Y RÉPOND
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ CROISÉE AVEC LA VRAIE MATRICE, jamais avec une liste recopiée ici. Une
+// correspondance qui pointe vers une clé inexistante ne lève AUCUNE erreur :
+// `canDo` rend simplement false, et la fonction disparaît en silence. C'est
+// exactement ce qui est arrivé avec `prix` au lieu de `prix_affiches`.
+{
+  const clesMatrice = new Set(Object.keys(PLAN_FEATURES.vendre))
+  for (const [envie, fonction] of Object.entries(ENVIE_VERS_FONCTION)) {
+    verifier(`l'envie « ${envie} » pointe une clé qui existe vraiment`,
+      clesMatrice.has(fonction), `${fonction} est absente de PLAN_FEATURES`)
+    verifier(`et « ${envie} » est un type de signal connu`, envieConnue(envie))
+  }
+  verifier('les six envies ont toutes leur fonction',
+    Object.keys(ENVIE_VERS_FONCTION).length === TYPES_ENVIE.length)
+
+  // ⚠️ LE PIÈGE NOMMÉ. Si quelqu'un « simplifie » en écrivant 'prix', les prix
+  // disparaissent de toutes les fiches sans qu'aucune erreur ne le dise.
+  egal('le signal « prix » mène à prix_affiches, jamais à prix',
+    fonctionDeLEnvie('prix'), 'prix_affiches')
+  verifier('un type inconnu ne mène nulle part', fonctionDeLEnvie('bidon') === null)
+  verifier('et le sens inverse retombe sur le bon signal',
+    envieDeLaFonction('prix_affiches') === 'prix'
+    && envieDeLaFonction('fidelite') === 'fidelite'
+    && envieDeLaFonction('export_comptable') === null)
+}
+
+// ⚠️ ON SE TAIT QUAND LE NOMBRE NE PARLE PAS. `rdv` et `deals` ne sont émis
+// par AUCUN écran : leurs compteurs valent zéro pour tout le monde. Écrire
+// « 0 habitant aimerait » sous une fonction qu'on espère vendre serait le
+// meilleur moyen d'en dissuader le commerçant.
+{
+  const envies = [
+    { type: 'fidelite', trente_jours: 12, total: 30 },
+    { type: 'commande', trente_jours: 0,  total: 4 },
+  ]
+  egal('la phrase reprend le compte des trente derniers jours',
+    phraseEnvieFonction('fidelite', envies),
+    '12 habitants aimeraient une carte de fidélité chez toi')
+  verifier('zéro signal ne dit rien du tout',
+    phraseEnvieFonction('commande', envies) === null)
+  verifier('un signal jamais posé ne dit rien non plus',
+    phraseEnvieFonction('deals', envies) === null)
+  verifier('une fonction sans signal correspondant se tait',
+    phraseEnvieFonction('export_comptable', envies) === null)
+  verifier('et une liste absente ne fait pas tomber l\'écran',
+    phraseEnvieFonction('fidelite', null) === null
+    && phraseEnvieFonction('fidelite') === null)
+  egal('le singulier se dit au singulier',
+    phraseEnvieFonction('fidelite', [{ type: 'fidelite', trente_jours: 1 }]),
+    '1 habitant aimerait une carte de fidélité chez toi')
+}
+
 verifier('un type inventé est refusé', !envieConnue('n_importe_quoi'))
 verifier('et les six vrais sont acceptés', TYPES.every(t => envieConnue(t)))
 verifier('une envie vide ne passe pas', !envieConnue('') && !envieConnue(null))

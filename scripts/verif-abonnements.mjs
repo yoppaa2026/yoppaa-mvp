@@ -1187,8 +1187,25 @@ verifier('et ils ont quitté la barre de la prise de rendez-vous',
 // demanderait à sa cliente de réserver un créneau pour chacun de ses dix pains.
 // Les autres métiers ont les cartes cadeaux, qui pointent déjà au comptoir sans
 // agenda. Décision d'Alex le même soir.
+// ⚠️ REPOSÉE SUR LA RÈGLE LE 26/08, ET C'EST LE CINQUIÈME VERROUILLAGE DE
+// FORME DU PROJET. Elle exigeait l'expression LITTÉRALE
+// `estVitrine && canDo(commercant?.plan, 'rdv')` et refusait donc une
+// évolution juste : `peut(commercant, 'rdv')` porte exactement la même règle,
+// puisque la matrice réserve déjà `rdv` aux commerces de service, et sait en
+// plus lire un essai en cours.
+//
+// Ce qui doit rester vrai, et que cette garde mesure :
+//   • le droit se déduit de la fonctionnalité `rdv`, pas d'un booléen posé à
+//     la main ;
+//   • il ne se calcule JAMAIS sur un `.plan` détaché, parce que c'est en le
+//     détachant qu'on perd la catégorie en route et qu'on ouvre le module aux
+//     boulangeries.
+// Que `rdv` soit bien refusé hors commerce de service est prouvé par
+// EXÉCUTION dans scripts/verif-plans.mjs, jamais par lecture de source.
+const calculPeutAbonnements = /const peutAbonnements = ([^\n]+)/.exec(srcAbo)?.[1] || ''
 verifier('le catalogue ne propose les abonnements qu’aux commerces de service',
-  /const peutAbonnements = estVitrine && canDo\(commercant\?\.plan, 'rdv'\)/.test(srcAbo))
+  /'rdv'/.test(calculPeutAbonnements) && !/\.plan\b/.test(calculPeutAbonnements),
+  calculPeutAbonnements || 'ligne introuvable')
 verifier('et sans eux, aucune barre de sous-onglets ne s’affiche',
   /if \(!peutAbonnements\) \{[\s\S]{0,160}return <TabMenu/.test(srcAbo))
 // La formule reste attachée à une prestation : c'est ce qui rend le module

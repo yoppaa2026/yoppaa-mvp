@@ -16,7 +16,12 @@ import { confirmationSimple } from '@/lib/confirmations'
 import { etatPaiementRdv, etatPaiementCommande, couleurPaiement, caDesRdvs, resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
 import ModalDeplacerRdv from './ModalDeplacerRdv'
 import { Reply, ClipboardList } from 'lucide-react'
-import { canDo } from '@/lib/plans'
+// ⚠️ `planEffectif` ET NON `commercant.plan` : c'est ce qui fait qu'un essai en
+// cours se voit dans la navigation. La PORTÉE ne change pas d'un pouce (canDo
+// sans catégorie, comme avant), seul le forfait lu devient celui qui est
+// vraiment en vigueur. ⚠️ Cette fonction a besoin de `created_at` : le
+// chargement de cet écran fait bien `select('*')`.
+import { canDo, planEffectif } from '@/lib/plans'
 import { remplissageCreneaux } from '@/lib/creneaux'
 import BandeDefilante from '@/app/components/BandeDefilante'
 import { partagerCommandes } from '@/lib/commandes-vue'
@@ -971,7 +976,7 @@ export default function Dashboard() {
   // auto sur l'onglet RDV. Une vitrine Vendre vend ses produits au salon (31/07)
   // et garde donc l'onglet Commandes.
   useEffect(() => {
-    if (commercant?.categorie === 'vitrine' && !canDo(commercant?.plan, 'commande') && ongletPrincipal === 'commandes') {
+    if (commercant?.categorie === 'vitrine' && !canDo(planEffectif(commercant), 'commande') && ongletPrincipal === 'commandes') {
       setOngletPrincipal('rdv')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2521,11 +2526,11 @@ export default function Dashboard() {
 
           <nav style={{ flex: 1 }}>
             {[
-              { key: 'commandes', label: 'Commandes',   Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(commercant?.plan, 'commande') },
+              { key: 'commandes', label: 'Commandes',   Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(planEffectif(commercant), 'commande') },
               // Services : l'onglet Rendez-vous reste visible même module non
               // activé (l'agenda explique alors comment l'activer), sinon un
               // salon qui vend aussi des produits ne voyait que Commandes.
-              { key: 'rdv',       label: 'Rendez-vous', Icon: IconRdv,       visible: !!commercant?.rdv_actif || (commercant?.categorie === 'vitrine' && canDo(commercant?.plan, 'rdv')) },
+              { key: 'rdv',       label: 'Rendez-vous', Icon: IconRdv,       visible: !!commercant?.rdv_actif || (commercant?.categorie === 'vitrine' && canDo(planEffectif(commercant), 'rdv')) },
               { key: 'config',    label: 'Paramètres',  Icon: IconConfig,    visible: true },
             ].filter(t => t.visible).map(({ key, label, Icon }) => {
               const actif = ongletPrincipal === key
@@ -2617,8 +2622,8 @@ export default function Dashboard() {
                   reste nommée pour les lecteurs d'écran et au survol. */}
               <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 3, border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
                 {[
-                  { key: 'commandes', label: 'Cmd',    titre: 'Commandes',   Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(commercant?.plan, 'commande') },
-                  { key: 'rdv',       label: 'RDV',    titre: 'Rendez-vous', Icon: IconRdv,       visible: !!commercant?.rdv_actif || (commercant?.categorie === 'vitrine' && canDo(commercant?.plan, 'rdv')) },
+                  { key: 'commandes', label: 'Cmd',    titre: 'Commandes',   Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(planEffectif(commercant), 'commande') },
+                  { key: 'rdv',       label: 'RDV',    titre: 'Rendez-vous', Icon: IconRdv,       visible: !!commercant?.rdv_actif || (commercant?.categorie === 'vitrine' && canDo(planEffectif(commercant), 'rdv')) },
                   { key: 'config',    label: 'Config', titre: 'Paramètres',  Icon: IconConfig,    visible: true },
                 ].filter(t => t.visible).map(({ key, label, titre, Icon }) => {
                   const actif = ongletPrincipal === key
@@ -2654,19 +2659,19 @@ export default function Dashboard() {
               Paramètres). Demande Alex 01/08. ─── */}
           {ongletPrincipal !== 'config' && commercant && (() => {
             const actions = [
-              canDo(commercant.plan, 'fidelite') && {
+              canDo(planEffectif(commercant), 'fidelite') && {
                 key: 'fidelite',
                 label: commercant.fidelite_actif ? 'Carte de fidélité' : 'Activer la fidélité',
                 aide: commercant.fidelite_actif ? 'Pointer un client au comptoir' : 'Programme en 2 minutes',
                 icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/></svg>,
               },
-              canDo(commercant.plan, 'bons_cadeaux') && commercant.bons_cadeaux_actif && {
+              canDo(planEffectif(commercant), 'bons_cadeaux') && commercant.bons_cadeaux_actif && {
                 key: 'bons',
                 label: 'Bon cadeau',
                 aide: 'Encaisser un code',
                 icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>,
               },
-              canDo(commercant.plan, 'deals') && {
+              canDo(planEffectif(commercant), 'deals') && {
                 key: 'deals',
                 label: 'Deal du jour',
                 aide: 'Créer une offre',

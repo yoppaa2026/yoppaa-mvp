@@ -2,13 +2,25 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { postPro } from '@/lib/fetch-pro'
 import { supabase } from '@/lib/supabase'
-import { canDo, getIaConfig } from '@/lib/plans'
+import {
+  canDo, getIaConfig, getPlanLabel, getPrixPlan,
+  // ⚠️ `peut` APPLIQUE LA CATÉGORIE, `planEffectif` NON, ET LA NUANCE COÛTE
+  // CHER. La matrice réserve `commande` à l'alimentaire, alors que toute
+  // l'application l'accorde aussi au détail et au salon qui vendent leurs
+  // produits (getPillsStatut, la fiche client). Basculer ces appels-là sur
+  // `peut` aurait coupé la boutique de tout commerce de détail en Vendre.
+  // Là où l'historique appelait `canDo(plan, …)` sans catégorie, on garde
+  // exactement cette portée et on n'ajoute QUE l'essai.
+  peut, planEffectif, statutFonction, planPourGarder, planEnEssai, essaiProposable,
+  FONCTION_INCLUSE, FONCTION_ESSAI_POSSIBLE, FONCTION_EN_ESSAI, FONCTION_FERMEE,
+} from '@/lib/plans'
+import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
 // elles auraient menti au commerçant le jour où on les change.
 import { normaliserCodeBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-cadeaux'
 import { estRemiseSurProduit } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
-import { avantLancement, libelleLancement } from '@/lib/lancement'
+import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit } from '@/lib/lancement'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
@@ -32,7 +44,7 @@ import { BarreEnregistrer, ModaleQuitter, useAvertirAvantDeQuitter } from './Bar
 // ⚠️ Le POSTE qui affiche ces fenêtres est monté une seule fois, dans
 // `app/dashboard/page.js`, qui rend cet écran. On n'importe ici que la
 // fonction qui pose la question.
-import { confirme } from './PosteConfirmation'
+import { confirme, confirmer } from './PosteConfirmation'
 import { confirmationSimple } from '@/lib/confirmations'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import BoutonIaFiche from './BoutonIaFiche'
@@ -723,7 +735,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                       <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Stock permanent. Si le produit a des variantes, le stock se gère par variante.</p>
                     </div>
                   </div>
-                  {!canDo(commercant?.plan, 'commande') && (
+                  {!canDo(planEffectif(commercant), 'commande') && (
                     <p style={{ fontSize: 10, color: T.muted, marginTop: -4 }}>La commande en ligne s&rsquo;active avec la formule Vendre. En attendant, le produit s&rsquo;affiche avec son prix.</p>
                   )}
                 </>
@@ -908,7 +920,7 @@ function TabMenu({ commercantId, commercant, toast }) {
           n'apparaît côté client. Le commerçant n'avait AUCUN moyen de le
           savoir, l'état du compte ne vivant que dans l'onglet Paiements. Il
           aurait attendu des commandes qui ne pouvaient pas arriver. */}
-      {canDo(commercant?.plan, 'commande') && commercant?.stripe_account_charges_enabled !== true && (
+      {canDo(planEffectif(commercant), 'commande') && commercant?.stripe_account_charges_enabled !== true && (
         <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '12px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -3755,7 +3767,7 @@ function configFidelite(commercant) {
 // les transactions Yoppaa (branché étape 4). SMS Brevo branchés à l'étape 6.
 function TabFidelite({ commercantId, commercant, toast, onSaved, surModifications }) {
   const actif = commercant?.fidelite_actif === true
-  const peutAuto = canDo(commercant?.plan, 'fidelite_auto')
+  const peutAuto = peut(commercant, 'fidelite_auto')
   const [saving, setSaving] = useState(false)
   const [showConfig, setShowConfig] = useState(!actif)
   const [cfg, setCfg] = useState(() => configFidelite(commercant))
@@ -5248,7 +5260,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
         // passage ses infos pratiques, qui s'affichent sur ses DEUX fiches et
         // dans l'email de confirmation de rendez-vous. Rien ne le prévenait.
         infos_pratiques: data.infos_pratiques || '',
-        horaires: data.horaires || '', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '', boutique_delai_heures: data.boutique_delai_heures ?? 2 }
+        horaires: data.horaires || '', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', created_at: data.created_at, notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '', boutique_delai_heures: data.boutique_delai_heures ?? 2 }
       setForm(profil)
       // ⚠️ LE MÊME OBJET DANS LES DEUX ÉTATS, ET C'EST VOULU. `setForm` ne
       // modifie jamais en place (toujours `{ ...p, … }`), donc la référence
@@ -5746,7 +5758,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
             Prise de RDV, qui vérifie qu'il y a bien une prestation et un
             créneau. Ici, c'est l'interrupteur de tous les jours : on referme
             avant de partir, on rouvre en rentrant. */}
-        {form.categorie === 'vitrine' && canDo(form.plan, 'rdv') && (
+        {form.categorie === 'vitrine' && peut(form, 'rdv') && (
           <div style={{ marginBottom: 18, paddingBottom: 16, borderBottom: `1px solid ${T.pale}` }}>
             <p style={{ ...s.label, marginBottom: 10 }}>Prise de rendez-vous</p>
             <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.rdv_actif ? T.main : T.pale}`, background: form.rdv_actif ? T.pale : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
@@ -5765,7 +5777,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
         {/* Toggle unique notif_mode (chaque/recap_jour/aucun) qui s'applique aux RDV
             pour les vitrines ET aux commandes C&C pour les alimentaires Vendre.
             Label adapte selon categorie (un commercant n'est jamais les deux). */}
-        {((form.categorie === 'vitrine' && form.rdv_actif) || (form.categorie === 'alimentaire' && canDo(form.plan, 'commande'))) && (() => {
+        {((form.categorie === 'vitrine' && form.rdv_actif) || (form.categorie === 'alimentaire' && peut(form, 'commande'))) && (() => {
           const estVitrine = form.categorie === 'vitrine'
           const noun = estVitrine ? 'RDV' : 'commandes'
           const nounSing = estVitrine ? 'RDV' : 'commande'
@@ -5803,7 +5815,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
         {/* ─── Toggles Vendre (alimentaire uniquement) ─── */}
         {/* Les commerçants Vendre alim peuvent choisir d'activer/désactiver
             certaines features (livraison, fidelite). La pill client reflete l'etat. */}
-        {canDo(form.plan, 'commande') && form.categorie === 'alimentaire' && (
+        {peut(form, 'commande') && form.categorie === 'alimentaire' && (
           <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
             <p style={{ ...s.label, marginBottom: 12 }}>Fonctionnalités activables (plan Vendre)</p>
 
@@ -10115,7 +10127,7 @@ function TabComptabilite({ commercantId, toast }) {
 function TabCatalogue({ commercantId, commercant, toast }) {
   const [sousOnglet, setSousOnglet] = useState('produits')
   const estVitrine = commercant?.categorie === 'vitrine'
-  const peutAbonnements = estVitrine && canDo(commercant?.plan, 'rdv')
+  const peutAbonnements = peut(commercant, 'rdv')
 
   // Sans abonnements, aucune barre : une barre à un seul onglet n'apprend rien
   // et vole de la hauteur d'écran à un téléphone.
@@ -10151,6 +10163,67 @@ function TabCatalogue({ commercantId, commercant, toast }) {
   )
 }
 
+// ─── LE BANDEAU DE L'ESSAI ───────────────────────────────────────────────────
+//
+// ⚠️ IL DIT DEUX CHOSES, ET LA SECONDE EST CELLE QU'ON OUBLIERAIT.
+// Alex, 26/08 : « il faut que le commerçant SACHE ce qu'il a maintenant, et
+// que ces fonctions dépendent de Vendre. S'il choisit un autre forfait plus
+// tard, il perdra certaines fonctionnalités. » Sans cette phrase, il monte son
+// Click & Collect pendant cent jours en croyant que c'est compris, et découvre
+// la vérité le jour de la première facture.
+//
+// ⚠️ LA DATE EST LA SIENNE, JAMAIS « LE 9 JANVIER » ÉCRIT À LA MAIN. Celui qui
+// s'inscrira en mars aura trente jours. Et c'est le DERNIER JOUR GRATUIT qu'on
+// annonce, pas la fin d'essai : « offert jusqu'au 9 janvier » serait faux d'une
+// journée, distinction que le banc du lancement garde depuis le 20/08.
+function BandeauEssai({ commercant, onEssayer }) {
+  if (!commercant) return null
+  if (!degustationEnCours(commercant.created_at)) return null
+
+  const enEssai = planEnEssai(commercant)
+  const proposable = essaiProposable(commercant)
+  if (!enEssai && !proposable) return null
+
+  const jusquAu = libelleDernierJourGratuit()
+  const cadre = {
+    display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+    background: '#F8F6FF', border: `1px solid ${T.pale}`, borderRadius: 14,
+    padding: '12px 16px', marginBottom: 14,
+  }
+
+  if (enEssai) {
+    return (
+      <div style={cadre}>
+        <p style={{ margin: 0, flex: 1, minWidth: 220, fontSize: 13, fontWeight: 600, color: T.ink, lineHeight: 1.5 }}>
+          Tu essaies <strong style={{ color: T.main }}>{getPlanLabel(enEssai)}</strong>, offert jusqu&rsquo;au {jusquAu} inclus.{' '}
+          Ensuite, ces fonctions demandent {getPlanLabel(enEssai)} : sans lui, tu les perdras.
+        </p>
+        <a href="/dashboard/abonnement"
+          style={{ background: T.main, color: '#fff', textDecoration: 'none', fontWeight: 800, fontSize: 12.5, padding: '9px 16px', borderRadius: 100, whiteSpace: 'nowrap' }}>
+          Je le garde
+        </a>
+      </div>
+    )
+  }
+
+  // ⚠️ PROPOSÉ, JAMAIS IMPOSÉ. « Sinon on ne respecte pas le choix du
+  // commerçant et il se sent pressé par Yoppaa » (Alex, 25/08). Celui qui a
+  // pris Exister a Exister, et c'est lui qui décide d'aller voir plus loin.
+  return (
+    <div style={cadre}>
+      <p style={{ margin: 0, flex: 1, minWidth: 220, fontSize: 13, fontWeight: 600, color: T.ink, lineHeight: 1.5 }}>
+        Tu es en <strong style={{ color: T.main }}>{getPlanLabel(commercant.plan)}</strong>.{' '}
+        Jusqu&rsquo;au {jusquAu} inclus, tu peux essayer <strong style={{ color: T.main }}>Vendre</strong> et tout ce qu&rsquo;il contient.{' '}
+        Sans carte, sans engagement, et tu gardes ta formule si tu n&rsquo;en fais rien.
+      </p>
+      <button onClick={() => onEssayer('vendre')}
+        style={{ background: T.main, color: '#fff', border: 'none', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 12.5, padding: '9px 16px', borderRadius: 100, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        Essayer jusqu&rsquo;au {libelleDernierJourGratuit({ avecAnnee: false })}
+      </button>
+    </div>
+  )
+}
+
 export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
   const [tab, setTab] = useState(tabInitial)
   const [toastMsg, setToastMsg] = useState('')
@@ -10178,10 +10251,75 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
 
   function changerOnglet(id) {
     if (id === tab) return
+    // ⚠️ UN ONGLET HORS FORFAIT NE CHANGE PAS D'ONGLET : il ouvre la
+    // proposition. Même geste que pour le formulaire non enregistré juste en
+    // dessous, et c'est le seul endroit à intercepter, puisque toute la barre
+    // passe par ici.
+    const cible = tabs.find(t => t.id === id)
+    if (cible && cible.etat !== FONCTION_INCLUSE && cible.etat !== FONCTION_EN_ESSAI) {
+      proposerFonction(cible)
+      return
+    }
     // Changer d'onglet démonte le formulaire : c'est la sortie qui coûte le
     // plus cher, et la seule qu'aucun bouton ne voit venir.
     if (modifs.modifie) { setOngletVise(id); return }
     setTab(id)
+  }
+
+  // ─── LA PROPOSITION ────────────────────────────────────────────────────────
+  //
+  // ⚠️ ELLE S'OUVRE SUR SES HABITANTS, PAS SUR NOTRE CATALOGUE.
+  // « 12 habitants aimeraient une carte de fidélité chez toi » n'est pas un
+  // argument de vente, c'est une information sur son commerce, et il en tire
+  // lui-même la conclusion. C'est la règle 2 du module des signaux, et c'est
+  // aussi ce qui répond au « il ne doit pas se sentir pressé par Yoppaa » :
+  // ce ne sont pas nos mots, ce sont ses clients.
+  //
+  // Et on se TAIT quand le compte est nul : écrire « 0 habitant » sous une
+  // fonction qu'on espère lui voir prendre est le meilleur moyen de l'en
+  // dissuader.
+  async function proposerFonction(t) {
+    const forfait = planPourGarder(commercant, t.feature)
+    if (!forfait) return
+    const nomForfait = getPlanLabel(forfait)
+    const prix = getPrixPlan(forfait)
+    const signal = phraseEnvieFonction(t.feature, envies)
+    const essaiOuvert = t.etat === FONCTION_ESSAI_POSSIBLE
+
+    const message = essaiOuvert
+      ? `${t.label} fait partie de ${nomForfait} (${prix?.label_mensuel || ''}). Tu peux l'essayer, avec tout le reste de ${nomForfait}, jusqu'au ${libelleDernierJourGratuit()} inclus. Sans carte, et sans engagement.`
+      : `${t.label} fait partie de ${nomForfait}. ${prix?.label_mensuel || ''}.`
+
+    const choix = await confirmer({
+      titre: t.label,
+      message,
+      details: signal || null,
+      actions: essaiOuvert
+        ? [
+            { valeur: 'essayer', label: `Essayer jusqu'au ${libelleDernierJourGratuit({ avecAnnee: false })}`, ton: 'principal' },
+            { valeur: 'rien', label: 'Plus tard', ton: 'neutre' },
+          ]
+        : [
+            { valeur: 'forfaits', label: `Passer à ${nomForfait}`, ton: 'principal' },
+            { valeur: 'rien', label: 'Plus tard', ton: 'neutre' },
+          ],
+    })
+
+    if (choix === 'essayer') await demarrerEssai(forfait)
+    if (choix === 'forfaits') window.location.href = '/dashboard/abonnement'
+  }
+
+  // ⚠️ L'ESSAI PORTE SUR LE FORFAIT ENTIER (« pas de chipotage », Alex 26/08).
+  // On écrit le forfait demandé, jamais la fonction : c'est en formules que le
+  // commerçant raisonne, et c'est une formule que sa facture portera.
+  async function demarrerEssai(forfait) {
+    const { error } = await supabase
+      .from('commercants')
+      .update({ essai_plan: forfait, essai_demande_le: new Date().toISOString() })
+      .eq('id', commercantId)
+    if (error) { showToast(`L'essai n'a pas pu démarrer : ${error.message}`, 'error'); return }
+    await rechargerCommercant()
+    showToast(`Tu essaies ${getPlanLabel(forfait)} jusqu'au ${libelleDernierJourGratuit()} inclus.`, 'success')
   }
 
   async function enregistrerPuisContinuer() {
@@ -10221,9 +10359,19 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { rechargerCommercant() }, [commercantId])
 
-  // Onglets dynamiques selon le plan + la catégorie
-  const peutDeals = canDo(commercant?.plan, 'deals')
-  const peutActus = canDo(commercant?.plan, 'actus_illimitees')
+  // ─── L'ÉTAT DE CHAQUE FONCTION, ET PLUS UN OUI/NON ────────────────────────
+  //
+  // ⚠️ AVANT, UN ONGLET HORS FORFAIT N'ÉTAIT PAS GRISÉ : IL ÉTAIT ABSENT.
+  // Le commerçant en Exister ne savait donc même pas que la fidélité existait.
+  // Décision d'Alex : « tous les onglets du segment affichés, grisés si besoin,
+  // ça montre l'ampleur des possibilités et ça donne envie ».
+  //
+  // `statutFonction` rend l'un de quatre états, ou `null` quand la fonction n'a
+  // AUCUN SENS pour la catégorie. Ce null est le plus important des cinq : un
+  // boulanger ne verra jamais « Prise de RDV », même grisée, parce que ce n'est
+  // pas une question d'argent et que la lui montrer serait lui promettre ce qui
+  // n'arrivera jamais.
+  const etatDe = (feature) => statutFonction(commercant, feature)
   const iaActif = getIaConfig(commercant?.plan).actif   // Générateur IA (exister 1 test / communiquer / vendre)
   const estVitrine = commercant?.categorie === 'vitrine'
 
@@ -10246,6 +10394,12 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
   // envie se regarde. Mais il faut qu'elle se voie, sinon un commerçant qui n'a
   // rien à gérer n'ouvrira jamais cet écran.
   const [enviesNouvelles, setEnviesNouvelles] = useState(0)
+  // ⚠️ LE DÉTAIL ÉTAIT CHARGÉ PUIS JETÉ. La route rend déjà `envies`, un compte
+  // par type sur trente jours, et seul `nouvelles` en était gardé. C'est
+  // pourtant ce détail qui porte l'argument commercial : quand le commerçant
+  // ouvre une fonction qu'il n'a pas, on ne lui vend rien, on lui dit combien
+  // de ses habitants l'attendent. Aucune requête de plus, une ligne.
+  const [envies, setEnvies] = useState([])
   useEffect(() => {
     if (!commercantId) return
     let annule = false
@@ -10255,25 +10409,27 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
         .then(r => r.json())
-        .then(j => { if (!annule && j?.ok) setEnviesNouvelles(j.nouvelles || 0) })
+        .then(j => {
+          if (annule || !j?.ok) return
+          setEnviesNouvelles(j.nouvelles || 0)
+          setEnvies(Array.isArray(j.envies) ? j.envies : [])
+        })
         .catch(() => {})
     })
     return () => { annule = true }
   }, [commercantId, tab])
 
-  // Onglet 'Paiements' visible uniquement pour les commerçants Vendre :
-  //   • Vitrine Vendre → acompte RDV en ligne
-  //   • Alimentaire Vendre → paiement obligatoire commande C&C (Phase 1.5)
-  const peutPaiements = canDo(commercant?.plan, 'paiement_ligne')
-
-  // Onglet 'RDV' visible uniquement pour vitrine au plan Vendre (canDo rdv).
-  // Regroupe Prestations + Praticiens + Créneaux RDV en sous-onglets.
-  const peutRdv = estVitrine && canDo(commercant?.plan, 'rdv')
-
-  // Onglet Livraison : alim uniquement, quand la livraison est activée (toggle Profil).
-  const peutLivraison = !estVitrine && commercant?.livraison_actif
+  // Ce que le commerçant a VRAIMENT en main, pour le rendu du contenu.
+  const peutPaiements = peut(commercant, 'paiement_ligne')
+  const peutRdv       = peut(commercant, 'rdv')
+  const peutLivraison = peut(commercant, 'livraison') && commercant?.livraison_actif
 
   // Vitrine : on parle de "Vitrine" plutôt que "Menu", et on masque "Créneaux" (pas de C&C)
+  //
+  // ⚠️ LA LISTE NE FILTRE PLUS SUR LE DROIT, elle porte un `etat` par onglet et
+  // ne retire que ce qui est SANS OBJET pour le métier (`etat: null`). Un
+  // onglet hors forfait reste donc à sa place, et c'est son état qui décide de
+  // son apparence.
   const tabs = [
     // Les chiffres en premier : c'est ce qu'un commerçant vient voir en
     // ouvrant son tableau de bord, et la landing les lui promet depuis le
@@ -10281,23 +10437,27 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
     // ce que sa fiche produit est ce qui donne envie d'en faire plus.
     { id: 'stats',    label: 'Chiffres', icon: 'chart' },
     { id: 'menu',     label: commercant?.categorie === 'detail' ? 'Boutique' : estVitrine ? 'Catalogue' : 'Menu', icon: 'menu' },
-    peutDeals && { id: 'deals', label: 'Deals', icon: 'tag' },
-    peutActus && { id: 'actus', label: 'Actus', icon: 'sliders' },
+    { id: 'deals', label: 'Deals', icon: 'tag', feature: 'deals' },
+    { id: 'actus', label: 'Actus', icon: 'sliders', feature: 'actus_illimitees' },
     iaActif && { id: 'ia', label: 'Générateur', icon: 'sparkles' },
     // Créneaux de retrait C&C : alimentaire uniquement (le retrait boutique détail
     // sera cadré au Module 2 étape 5).
-    !estVitrine && commercant?.categorie !== 'detail' && { id: 'creneaux', label: 'Créneaux', icon: 'clock' },
-    peutLivraison && { id: 'livraison', label: 'Livraison', icon: 'box' },
+    // ⚠️ CET ONGLET ÉCHAPPAIT AU FORFAIT : il s'affichait pour tout commerce
+    // alimentaire, y compris en Exister, où des créneaux de retrait ne servent
+    // rien puisqu'aucune commande ne peut arriver. Rentré dans le rang.
+    !estVitrine && commercant?.categorie !== 'detail' && { id: 'creneaux', label: 'Créneaux', icon: 'clock', feature: 'commande' },
+    // ⚠️ CELUI-CI AUSSI : il ne dépendait que de l'interrupteur du Profil.
+    !estVitrine && { id: 'livraison', label: 'Livraison', icon: 'box', feature: 'livraison' },
     // « RDV » ne disait pas ce qu'on y règle (prestations, praticiens, horaires
     // de réservation) : renommé « Prise de RDV » (demande Alex 01/08).
-    peutRdv && { id: 'rdv', label: 'Prise de RDV', icon: 'calendar' },
+    { id: 'rdv', label: 'Prise de RDV', icon: 'calendar', feature: 'rdv' },
     // Fidélité : Communiquer (comptoir) et Vendre (comptoir + crédit auto)
-    canDo(commercant?.plan, 'fidelite') && { id: 'fidelite', label: 'Fidélité', icon: 'heart' },
+    { id: 'fidelite', label: 'Fidélité', icon: 'heart', feature: 'fidelite' },
     // Bons cadeaux : Vendre uniquement (l'achat passe par Stripe)
-    canDo(commercant?.plan, 'bons_cadeaux') && { id: 'bons', label: 'Bons cadeaux', icon: 'gift' },
-    peutPaiements && { id: 'paiements', label: 'Paiements', icon: 'tag' },
+    { id: 'bons', label: 'Bons cadeaux', icon: 'gift', feature: 'bons_cadeaux' },
+    { id: 'paiements', label: 'Paiements', icon: 'tag', feature: 'paiement_ligne' },
     // Journal des transactions et export : promis par la formule Vendre.
-    canDo(commercant?.plan, 'export_comptable') && { id: 'comptabilite', label: 'Comptabilité', icon: 'tag' },
+    { id: 'comptabilite', label: 'Comptabilité', icon: 'tag', feature: 'export_comptable' },
     { id: 'profil',   label: 'Profil',   icon: 'shop' },
     // Accompagnement sur place et matériel : accessible à tout moment, plus
     // seulement à l'inscription (l'étape 5 le promettait déjà).
@@ -10308,6 +10468,13 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
     // l'argument. Renommé « Signaux » (05/08).
     { id: 'signaux', label: 'Signaux', icon: 'signal', badge: signalementsEnAttente, dot: enviesNouvelles > 0 },
   ].filter(Boolean)
+    // ⚠️ L'ÉTAT SE CALCULE ICI, UNE FOIS, ET LE FILTRE NE PORTE QUE SUR `null`.
+    // Un onglet sans `feature` est toujours à lui (Chiffres, Profil, Avis…).
+    // `null` veut dire SANS OBJET pour son métier : c'est le seul cas où l'on
+    // retire un onglet, et il faut le retirer, parce qu'un boulanger à qui on
+    // montre « Prise de RDV » grisée croira pouvoir l'acheter.
+    .map(t => ({ ...t, etat: t.feature ? etatDe(t.feature) : FONCTION_INCLUSE }))
+    .filter(t => t.etat !== null)
 
   return (
     // ⚠️ La barre est en `fixed` : sans cette marge, elle recouvrirait le bas de
@@ -10315,39 +10482,65 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
     // historique. On ne protège pas le travail en cachant l'endroit où on le
     // saisit.
     <div style={{ fontFamily: '"DM Sans", sans-serif', paddingBottom: modifs.modifie ? 104 : 24 }}>
+      <BandeauEssai commercant={commercant} onEssayer={demarrerEssai} />
       {/* Barre d'onglets : UNE ligne défilable horizontalement (sur mobile les
           9+ onglets s'empilaient sur 3 lignes, layout ODOO = compact + scroll). */}
       <style>{`.cfg-tabs::-webkit-scrollbar { display: none }`}</style>
       <BandeDefilante className="cfg-tabs" libelle="les onglets" style={{ display: 'flex', gap: 4, background: '#fff', padding: 4, borderRadius: 14, marginBottom: 20, boxShadow: '0 2px 12px rgba(22,6,54,0.06)', border: `1px solid ${T.hairline}`, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => changerOnglet(t.id)}
-            style={{ flex: '1 0 auto', padding: '10px 12px', whiteSpace: 'nowrap', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, transition: 'all 0.2s', background: tab === t.id ? T.bgPanel : 'transparent', color: tab === t.id ? '#fff' : T.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, position: 'relative' }}>
-            <Icon name={t.icon} size={16} color={tab === t.id ? '#fff' : T.muted}/>
-            {t.label}
-            {t.badge > 0 && (
-              <span style={{ background: '#DC2626', color: '#fff', fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 100, minWidth: 16, textAlign: 'center', boxShadow: '0 0 0 2px #fff' }}>
-                {t.badge}
-              </span>
-            )}
-            {t.dot && !(t.badge > 0) && (
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: tab === t.id ? '#fff' : T.main, boxShadow: '0 0 0 2px #fff' }} />
-            )}
-          </button>
-        ))}
+        {tabs.map(t => {
+          // ⚠️ PENDANT SA PÉRIODE, RIEN N'EST VERROUILLÉ. Un cadenas dit « tu
+          // n'as pas payé », et ce n'est pas ce qu'on veut lui répéter dix fois
+          // par jour pendant qu'il a le droit de tout essayer. Le cadenas
+          // n'arrive qu'APRÈS, quand il a su, essayé ou non, et choisi.
+          // C'est la leçon des pastilles grises retirées de la fiche publique
+          // le 03/08 : ce qui est gris ne se lit pas comme un tarif, ça se lit
+          // comme un jugement.
+          const aLui = t.etat === FONCTION_INCLUSE || t.etat === FONCTION_EN_ESSAI
+          const ferme = t.etat === FONCTION_FERMEE
+          const actif = tab === t.id
+          const couleur = actif ? '#fff' : T.muted
+          // Le point violet des signaux : ce sont ses habitants qui réclament
+          // cette fonction. Il n'apparaît que si le compte parle.
+          const reclame = !aLui && !!phraseEnvieFonction(t.feature, envies)
+          const pointe = (t.dot || reclame) && !(t.badge > 0)
+          return (
+            <button key={t.id} onClick={() => changerOnglet(t.id)}
+              title={aLui ? undefined : `${t.label} — ${ferme ? 'hors de ta formule' : 'à essayer'}`}
+              style={{ flex: '1 0 auto', padding: '10px 12px', whiteSpace: 'nowrap', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: 13, transition: 'all 0.2s', background: actif ? T.bgPanel : 'transparent', color: couleur, opacity: aLui ? 1 : 0.55, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, position: 'relative' }}>
+              {ferme
+                ? <Lock size={15} strokeWidth={2} color={couleur}/>
+                : <Icon name={t.icon} size={16} color={couleur}/>}
+              {t.label}
+              {t.badge > 0 && (
+                <span style={{ background: '#DC2626', color: '#fff', fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 100, minWidth: 16, textAlign: 'center', boxShadow: '0 0 0 2px #fff' }}>
+                  {t.badge}
+                </span>
+              )}
+              {pointe && (
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: actif ? '#fff' : T.main, boxShadow: '0 0 0 2px #fff' }} />
+              )}
+            </button>
+          )
+        })}
       </BandeDefilante>
 
       {tab === 'stats'    && <TabStatistiques commercantId={commercantId} toast={showToast} />}
       {tab === 'menu'     && <TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} />}
-      {tab === 'deals'    && peutDeals && <TabDeals commercantId={commercantId} commercant={commercant} toast={showToast} />}
-      {tab === 'actus'    && peutActus && <TabActus commercantId={commercantId} commercant={commercant} toast={showToast} />}
+      {/* ⚠️ LE SECOND CONTRÔLE, ET IL RESTE. La barre grise un onglet, mais un
+          `tab` peut aussi venir d'ailleurs (un raccourci, une URL, un état
+          resté en mémoire). Une garde d'écran n'est jamais une réponse à elle
+          seule : ces conditions sont ce qui empêche vraiment le contenu de
+          s'afficher, et elles lisent `peut()`, donc l'essai en cours. */}
+      {tab === 'deals'    && peut(commercant, 'deals') && <TabDeals commercantId={commercantId} commercant={commercant} toast={showToast} />}
+      {tab === 'actus'    && peut(commercant, 'actus_illimitees') && <TabActus commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'ia'       && iaActif && <TabGenerateur commercantId={commercantId} commercant={commercant} toast={showToast} />}
-      {tab === 'creneaux' && <TabCreneaux commercantId={commercantId} toast={showToast} />}
+      {tab === 'creneaux' && peut(commercant, 'commande') && <TabCreneaux commercantId={commercantId} toast={showToast} />}
       {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} toast={showToast} surModifications={declarerModifications} />}
       {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}
-      {tab === 'fidelite' && canDo(commercant?.plan, 'fidelite') && <TabFidelite commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
-      {tab === 'bons' && canDo(commercant?.plan, 'bons_cadeaux') && <TabBonsCadeaux commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
+      {tab === 'fidelite' && peut(commercant, 'fidelite') && <TabFidelite commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
+      {tab === 'bons' && peut(commercant, 'bons_cadeaux') && <TabBonsCadeaux commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
-      {tab === 'comptabilite' && canDo(commercant?.plan, 'export_comptable') && <TabComptabilite commercantId={commercantId} toast={showToast} />}
+      {tab === 'comptabilite' && peut(commercant, 'export_comptable') && <TabComptabilite commercantId={commercantId} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
       {tab === 'accompagnement' && <TabAccompagnement commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}

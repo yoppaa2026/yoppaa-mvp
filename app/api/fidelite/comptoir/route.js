@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { normaliserTelephone } from '@/lib/fidelite'
 import { smsCarteCreee } from '@/lib/fidelite-sms'
+import { verdictForfait } from '@/lib/garde-forfait'
 
 export async function POST(request) {
   try {
@@ -48,7 +49,8 @@ export async function POST(request) {
     // Yoppaa en impersonation passe par son propre compte, donc même règle)
     const { data: com } = await admin
       .from('commercants')
-      .select('id, nom, auth_user_id, fidelite_actif, fidelite_sms_actif, fidelite_sms_credits')
+      // ⚠️ `plan`, `essai_plan` ET `created_at` : la garde de forfait en dépend.
+      .select('id, nom, auth_user_id, fidelite_actif, fidelite_sms_actif, fidelite_sms_credits, plan, essai_plan, created_at')
       .eq('id', commercant_id)
       .maybeSingle()
     if (!com) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
@@ -80,6 +82,32 @@ export async function POST(request) {
     }
 
     if (action === 'creer') {
+      // 🔴 LA GARDE DE FORFAIT EST ICI, PAS EN TÊTE DE ROUTE, et c'est tout
+      // l'enjeu de ces cinq gardes.
+      //
+      // ⚠️ `chercher` RESTE OUVERT, TOUJOURS. C'est l'action qui retrouve une
+      // carte EXISTANTE pour que le client dépense la récompense qu'il a
+      // gagnée. La fermer sur le forfait reviendrait à confisquer, du jour au
+      // lendemain, ce que deux cents habitants ont mérité en revenant : ils
+      // n'ont rien décidé, ils ont juste consommé chez ce commerçant. On lui
+      // interdit d'ouvrir de NOUVELLES cartes, jamais d'honorer les anciennes.
+      //
+      // ⚠️ ET LA MÊME LOGIQUE VAUT POUR LE PROGRAMME ÉTEINT : `fidelite_actif`
+      // à faux ne doit pas empêcher de retrouver une carte remplie du temps où
+      // il était allumé. Là encore, on ne bloque que la création.
+      const verdict = verdictForfait(com, 'fidelite')
+      if (!verdict.ok) {
+        return NextResponse.json(
+          { ok: false, error: verdict.message, code: verdict.code, plan_requis: verdict.plan_requis },
+          { status: verdict.statut }
+        )
+      }
+      if (!com.fidelite_actif) {
+        return NextResponse.json(
+          { ok: false, error: 'Ton programme de fidélité n’est pas activé. Tu peux l’allumer depuis ton tableau de bord.', code: 'fidelite_inactive' },
+          { status: 409 }
+        )
+      }
       if (carte) return NextResponse.json({ ok: true, telephone: tel, carte, client, deja: true })
       const { data: nouvelle, error } = await admin
         .from('fidelite_cartes')

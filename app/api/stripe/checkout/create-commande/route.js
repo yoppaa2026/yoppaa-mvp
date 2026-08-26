@@ -48,6 +48,7 @@ import { joursRetraitBoutique } from '@/lib/ouverture'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 import { normaliserEmail } from '@/lib/email-normalise'
+import { verdictForfait } from '@/lib/garde-forfait'
 
 export async function POST(request) {
   try {
@@ -119,7 +120,9 @@ export async function POST(request) {
       .from('commercants')
       // `horaires_detail` et `boutique_delai_heures` : la date de retrait d'une
       // boutique n'était vérifiée NULLE PART côté serveur (voir plus bas).
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures')
+      // ⚠️ `plan`, `essai_plan` ET `created_at` : la garde de forfait juste en
+      // dessous en dépend, et sans elles elle se trompe EN SILENCE.
+      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, plan, essai_plan, created_at')
       .eq('id', commercant_id)
       .single()
     if (errC || !commercant) {
@@ -127,6 +130,42 @@ export async function POST(request) {
     }
     if (commercant.statut_publication !== 'publie') {
       return NextResponse.json({ ok: false, error: 'Ce commerçant n\'accepte pas encore de commandes.' }, { status: 400 })
+    }
+
+    // 🔴 LE FORFAIT N'ÉTAIT PAS VÉRIFIÉ ICI, et c'est le cœur transactionnel.
+    // Un commerçant en Exister ne voit pas le bouton « commander » sur sa
+    // fiche, mais rien n'empêchait un `fetch` bien formé de créer la commande
+    // et de lancer le paiement. **Une garde d'écran n'est jamais une réponse.**
+    //
+    // ⚠️ ET ON NE PASSE PAS PAR `peut()` ICI. `peut()` applique la CATÉGORIE,
+    // et la matrice réserve `commande` à l'alimentaire alors que toute
+    // l'application l'accorde aussi au DÉTAIL : cette route sert justement les
+    // deux mondes. Y appliquer la catégorie couperait la boutique de tous les
+    // commerces de détail en Vendre. C'est passé à deux doigts le 26/08 ;
+    // `verdictForfait` travaille donc au forfait seul.
+    //
+    // ⚠️ CRÉER, PAS CONSOMMER : cette route ouvre une commande NEUVE. Elle ne
+    // touche à rien de ce qui a déjà été vendu.
+    {
+      const verdict = verdictForfait(commercant, 'commande')
+      if (!verdict.ok) {
+        return NextResponse.json(
+          { ok: false, error: 'Ce commerçant n\'accepte pas encore de commandes.', code: verdict.code },
+          { status: verdict.statut }
+        )
+      }
+    }
+    // ⚠️ LA LIVRAISON EST UNE AUTRE FONCTION, et elle a son propre palier. Une
+    // seule garde sur `commande` laisserait passer une tournée chez un
+    // commerçant qui n'y a pas droit.
+    if (estLivraison) {
+      const verdictLiv = verdictForfait(commercant, 'livraison')
+      if (!verdictLiv.ok) {
+        return NextResponse.json(
+          { ok: false, error: 'La livraison n\'est pas proposée chez ce commerçant.', code: verdictLiv.code },
+          { status: verdictLiv.statut }
+        )
+      }
     }
     if (estBoutique) {
       // Monde boutique : détail ET vitrine (vente de produits au salon, 31/07)

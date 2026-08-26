@@ -19,6 +19,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG } from '@/lib/stripe'
+import { verdictForfait } from '@/lib/garde-forfait'
 
 export async function POST(request) {
   try {
@@ -50,7 +51,9 @@ export async function POST(request) {
     // Ownership : le user doit être le commerçant (auth_user_id match)
     const { data: commercant, error: errC } = await supabase
       .from('commercants')
-      .select('id, nom, email, stripe_account_id, auth_user_id')
+      // ⚠️ `plan`, `essai_plan` ET `created_at` : sans ces trois colonnes la
+      // garde de forfait ci-dessous se trompe EN SILENCE (voir COLONNES_GARDE).
+      .select('id, nom, email, stripe_account_id, auth_user_id, plan, essai_plan, created_at')
       .eq('id', commercant_id)
       .single()
 
@@ -64,6 +67,27 @@ export async function POST(request) {
     // 1. Crée le compte Connect Express si pas encore lié
     let accountId = commercant.stripe_account_id
     if (!accountId) {
+      // 🔴 LA GARDE DE FORFAIT EST ICI, ET NULLE PART AILLEURS DANS CETTE
+      // ROUTE. C'est le point le plus délicat des cinq gardes serveur.
+      //
+      // ⚠️ ELLE PORTE SUR LA CRÉATION D'UN COMPTE, JAMAIS SUR L'ACCÈS À UN
+      // COMPTE EXISTANT. Posée au début de la route, elle empêcherait un
+      // commerçant redescendu en Exister de regénérer son lien Stripe : il ne
+      // pourrait plus **rembourser** un client, ni atteindre l'argent qu'il a
+      // déjà encaissé. On lui interdirait l'accès à son propre compte
+      // bancaire pour cause de forfait. Ce serait indéfendable, et c'est
+      // exactement le piège signalé le 26/08.
+      //
+      // Encaisser en ligne demande Vendre. Ouvrir un compte pour la première
+      // fois, c'est donc créer une capacité qu'il n'a pas encore : là, on
+      // ferme. Après, jamais.
+      const verdict = verdictForfait(commercant, 'paiement_ligne')
+      if (!verdict.ok) {
+        return NextResponse.json(
+          { ok: false, error: verdict.message, code: verdict.code, plan_requis: verdict.plan_requis },
+          { status: verdict.statut }
+        )
+      }
       const account = await stripe.accounts.create({
         type: 'express',
         country: 'BE',

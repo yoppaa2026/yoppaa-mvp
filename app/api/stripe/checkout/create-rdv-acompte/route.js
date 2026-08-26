@@ -26,6 +26,7 @@ import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadat
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
 import { chargerRecompensePourYopper } from '@/lib/fidelite-recompense-server'
 import { identiteProuvee } from '@/lib/yopper-auth'
+import { verdictForfait } from '@/lib/garde-forfait'
 
 export async function POST(request) {
   try {
@@ -58,13 +59,40 @@ export async function POST(request) {
 
     // Récupère commerçant + prestation pour calculer montants
     const [{ data: commercant }, { data: prestation }] = await Promise.all([
-      supabase.from('commercants').select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, rdv_acompte_en_ligne_actif, rdv_acompte_global').eq('id', commercant_id).single(),
+      // ⚠️ `plan`, `essai_plan` ET `created_at` : la garde de forfait en dépend.
+      supabase.from('commercants').select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, rdv_acompte_en_ligne_actif, rdv_acompte_global, rdv_actif, plan, essai_plan, created_at').eq('id', commercant_id).single(),
       supabase.from('rdv_prestations').select('id, nom, prix, prix_min, acompte_pourcent, duree_minutes').eq('id', prestation_id).single(),
     ])
 
     if (!commercant) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
     if (!prestation) return NextResponse.json({ ok: false, error: 'prestation introuvable' }, { status: 404 })
 
+    // 🔴 LE FORFAIT N'ÉTAIT PAS VÉRIFIÉ ICI NON PLUS. Cette route est appelée
+    // PUBLIQUEMENT, par n'importe quel Yopper, y compris un invité : elle
+    // tourne avec la clé de service et ne demandait au commerçant que d'avoir
+    // Stripe branché. Un rendez-vous payant pouvait donc se poser chez un
+    // commerçant qui n'a pas l'agenda dans sa formule.
+    //
+    // ⚠️ DEUX FONCTIONS, DEUX GARDES : `rdv` ouvre l'agenda, `paiement_ligne`
+    // ouvre l'encaissement. Une seule des deux laisserait passer la moitié du
+    // geste.
+    //
+    // ⚠️ CRÉER, PAS CONSOMMER : on refuse un rendez-vous NEUF. Rien ici ne
+    // touche à un rendez-vous déjà pris, ni à son remboursement.
+    for (const feature of ['rdv', 'paiement_ligne']) {
+      const verdict = verdictForfait(commercant, feature)
+      if (!verdict.ok) {
+        return NextResponse.json(
+          { ok: false, error: 'Ce commerçant ne prend pas encore de rendez-vous en ligne.', code: verdict.code },
+          { status: verdict.statut }
+        )
+      }
+    }
+    // ⚠️ ET L'INTERRUPTEUR, séparément du forfait : l'avoir dans sa formule ne
+    // veut pas dire l'avoir allumé.
+    if (!commercant.rdv_actif) {
+      return NextResponse.json({ ok: false, error: 'Ce commerçant ne prend pas encore de rendez-vous en ligne.' }, { status: 400 })
+    }
     if (!commercant.stripe_account_id || !commercant.stripe_account_charges_enabled) {
       return NextResponse.json({ ok: false, error: 'le commerçant n\'a pas activé les paiements en ligne' }, { status: 400 })
     }

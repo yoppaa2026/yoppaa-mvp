@@ -175,6 +175,37 @@ verifier('le RDV passe chez une vitrine', canDoAvecCategorie('vendre', 'rdv', 'v
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// L'INSCRIPTION DOIT POUVOIR SE TERMINER, ET SAVOIR QUAND ELLE ÉCHOUE
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 LE VERROU POSÉ SUR `plan` LE 26/08 A CASSÉ LE SIGNUP LE MÊME JOUR.
+// `mettreAJourPlan()` écrit la formule choisie à l'étape 1, et s'exécute pour
+// tout commerçant DÉJÀ CONNECTÉ — donc pour tout le monde au retour de la
+// confirmation d'email. Le verrou la refusait.
+//
+// ⚠️ ET PERSONNE NE L'AURAIT VU : l'appel n'a jamais lu son erreur. L'écran
+// passait à l'étape suivante avec, en mémoire, une formule que la base n'avait
+// pas enregistrée. Le commerçant terminait son inscription en croyant avoir
+// pris Vendre et arrivait en Exister.
+//
+// ⚠️ Un `await` dont on ne lit pas l'erreur n'est pas une écriture, c'est un
+// espoir. Cette garde cherche les écritures totalement aveugles sur la fiche,
+// pas les demi-aveugles qui lisent `data` sans regarder `error` : c'est la
+// classe exacte du défaut, et l'élargir la rendrait bavarde au point qu'on
+// cesserait de la lire.
+{
+  const signup = readFileSync(join(racine, 'app', 'signup', 'page.js'), 'utf8')
+  const ecritures = signup.split('\n')
+    .map((l, i) => ({ n: i + 1, l }))
+    .filter(({ l }) => /supabase\.from\('commercants'\)/.test(l))
+  const aveugles = ecritures.filter(({ l }) => !/const \{|let \{/.test(l))
+  verifier("chaque écriture du signup sur la fiche lit son résultat",
+    aveugles.length === 0,
+    aveugles.map(({ n }) => `ligne ${n}`).join(', '))
+  verifier("et l'enregistrement de la formule dit au commerçant s'il a échoué",
+    /errPlan\) return setError/.test(signup))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // LA DÉGUSTATION — TOUT LE MONDE A TOUT JUSQU'AU 9 JANVIER
 // ═══════════════════════════════════════════════════════════════════════════
 // ⚠️ CES VÉRIFICATIONS EXÉCUTENT LES FONCTIONS, elles ne cherchent aucun mot.

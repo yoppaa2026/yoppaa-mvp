@@ -550,10 +550,19 @@ function Etape1Compte({ session, commercant, onCompte }) {
       onCompte(session, res.commercant, res.onboarding)
       return
     }
-    await supabase.from('commercants')
+    // ⚠️ CETTE ERREUR N'ÉTAIT PAS LUE, ET ELLE A CACHÉ UN DÉFAUT ENTIER.
+    // Le verrou posé sur `plan` le 26/08 refusait cette écriture : l'écran
+    // passait quand même à l'étape suivante, avec en mémoire une formule que
+    // la base n'avait jamais enregistrée. Le commerçant remplissait son
+    // inscription complète en croyant avoir choisi Vendre, et se retrouvait
+    // en Exister à l'arrivée, sans qu'aucun message ne soit passé.
+    // Un `await` sans lecture de l'erreur n'est pas une écriture, c'est un
+    // espoir.
+    const { error: errPlan } = await supabase.from('commercants')
       .update({ categorie, plan, plan_actif_depuis: new Date().toISOString() })
       .eq('id', commercant.id)
     setLoading(false)
+    if (errPlan) return setError(`Ta formule n'a pas pu être enregistrée : ${errPlan.message}`)
     onCompte(session, { ...commercant, categorie, plan }, null)
   }
 

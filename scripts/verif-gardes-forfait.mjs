@@ -232,6 +232,61 @@ for (const r of ROUTES) {
     !/canDo\(commercant\.plan, 'fidelite_auto'\)/.test(src))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 3. L'ESSAI DOIT SE VOIR DEPUIS LA FICHE PUBLIQUE
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 TROUVÉ LE 26/08 EN VÉRIFIANT AUTRE CHOSE. Un commerçant active l'essai de
+// Vendre : son tableau de bord s'ouvre, les onglets s'allument, le bandeau
+// annonce sa date. Et SA FICHE PUBLIQUE CONTINUE DE REFUSER LES COMMANDES.
+//
+// ⚠️ CE N'ÉTAIT PAS UN DÉTAIL D'AFFICHAGE, C'ÉTAIT L'ESSAI QUI NE SERVAIT À
+// RIEN. Il va voir sa propre boutique, rien n'a changé, et il conclut que la
+// proposition était creuse. « Qu'il y goûte, et qu'il y reste » suppose qu'il
+// y ait quelque chose à goûter.
+{
+  const ECRANS = [
+    { nom: 'la fiche commerçant', chemin: 'app/commander/[slug]/page.js' },
+    { nom: 'la fiche rendez-vous', chemin: 'app/commander/rdv/[slug]/page.js' },
+    { nom: 'la liste des commerces', chemin: 'app/commander/page.js' },
+  ]
+  for (const e of ECRANS) {
+    const src = codeSeul(lire(e.chemin))
+    verifier(`${e.nom} lit le forfait effectif`, /planEffectif\(/.test(src))
+    // ⚠️ ET PLUS LA COLONNE BRUTE. Un seul `canDo(x.plan, …)` oublié et
+    // l'essai reste invisible à cet endroit-là, sans erreur nulle part.
+    verifier(`${e.nom} ne lit plus la colonne brute`,
+      !/canDo\((?:commercant\??\.|c\.)plan\b/.test(src))
+    // 🔴 ET SURTOUT PAS `peut()`. Il applique la CATÉGORIE, et la matrice
+    // réserve `commande` à l'alimentaire alors que ces écrans servent AUSSI
+    // le détail et la vitrine : y passer couperait la boutique de tous les
+    // commerces de détail en Vendre. Passé à deux doigts le 26/08.
+    verifier(`${e.nom} n'applique pas la catégorie`, !/\bpeut\(/.test(src))
+  }
+
+  // ⚠️ ET LA COLONNE DOIT ARRIVER JUSQU'À EUX. Ces écrans lisent la VUE
+  // `commercants_public`, pas la table : `essai_plan` doit y être exposée,
+  // sinon `planEffectif` retombe sur `plan` EN SILENCE et tout ce qui précède
+  // ne sert à rien.
+  const migration = lire('migrations/MIGRATION_VUE_PUBLIQUE_ESSAI.sql')
+  verifier('la vue publique expose essai_plan', /^\s*essai_plan$/m.test(migration))
+  // ⚠️ ET ELLE GARDE TOUT LE RESTE. `CREATE OR REPLACE VIEW` REMPLACE : une
+  // liste amputée ferait disparaître des colonnes sans lever d'erreur. Une
+  // première version de cette migration en oubliait TREIZE, dont toute la
+  // configuration de fidélité.
+  for (const col of ['fidelite_mecanique', 'fidelite_recompense_libelle', 'bons_cadeaux_actif',
+    'photos_catalogue_actif', 'infos_pratiques', 'boutique_delai_heures', 'created_at']) {
+    verifier(`la vue garde « ${col} »`, new RegExp(`\\b${col}\\b`).test(migration))
+  }
+  // ⚠️ GRANT SYSTÉMATIQUE : une vue sans GRANT, c'est la fiche publique qui
+  // rend 42501 à tous les visiteurs, d'un coup.
+  verifier('la vue est bien accordée à anon',
+    /GRANT SELECT ON commercants_public TO anon, authenticated;/.test(migration))
+  // ⚠️ ET `essai_demande_le` RESTE DEHORS : on n'expose que ce qui sert.
+  verifier('la date de demande d\'essai n\'est pas exposée',
+    !/^\s*essai_demande_le,?$/m.test(migration))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

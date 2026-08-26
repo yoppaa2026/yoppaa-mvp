@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses } from '@/lib/fidelite-recompense'
 import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
-import { canDo, isVitrine } from '@/lib/plans'
+import { canDo, isVitrine, planEffectif } from '@/lib/plans'
 import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
@@ -2264,7 +2264,7 @@ export default function CommanderSlug() {
   useEffect(() => {
     if (panierReprisRef.current) return
     if (!slug || articles.length === 0) return
-    if (!canDo(commercant?.plan, 'commande')) return
+    if (!canDo(planEffectif(commercant), 'commande')) return
     const depot = reprendrePanierPourBoutique(slug)
     panierReprisRef.current = true
     if (!depot) return
@@ -2855,10 +2855,26 @@ export default function CommanderSlug() {
   // peutCommander = plan Vendre uniquement (active panier + tunnel), toutes
   // catégories : C&C alimentaire, boutique détail ET produits vitrine (31/07).
   // Les plans Exister/Communiquer gardent le catalogue en lecture seule.
+  //
+  // 🔴 `planEffectif` ET NON `commercant.plan` (26/08). Un commerçant qui
+  // active l'essai de Vendre voyait son tableau de bord s'ouvrir et SA FICHE
+  // PUBLIQUE CONTINUER DE REFUSER LES COMMANDES : ses clients ne voyaient
+  // aucune différence, donc il n'avait rien à goûter. L'essai ne servait à
+  // rien là où il devait convaincre.
+  //
+  // ⚠️ `canDo(planEffectif(...))` ET SURTOUT PAS `peut()`. `peut()` applique la
+  // CATÉGORIE, et la matrice réserve `commande` à l'alimentaire alors que
+  // cette fiche sert AUSSI le détail et la vitrine : y passer couperait la
+  // boutique de tous les commerces de détail en Vendre. La portée ne change
+  // pas d'un pouce, seul le forfait lu devient celui qui est en vigueur.
+  //
+  // ⚠️ Cette lecture a besoin de `essai_plan` ET `created_at` : les deux
+  // viennent de la vue `commercants_public` (voir MIGRATION_VUE_PUBLIQUE_ESSAI).
   const vitrine = isVitrine(commercant)
-  const peutCommander = canDo(commercant?.plan, 'commande')
+  const forfaitVivant = planEffectif(commercant)
+  const peutCommander = canDo(forfaitVivant, 'commande')
   // Module RDV natif : si vitrine FULL avec rdv_actif=true, on propose le bouton "Prendre RDV"
-  const peutPrendreRdv = vitrine && canDo(commercant?.plan, 'rdv') && commercant?.rdv_actif === true
+  const peutPrendreRdv = vitrine && canDo(forfaitVivant, 'rdv') && commercant?.rdv_actif === true
 
   return (
     <>
@@ -3568,7 +3584,7 @@ export default function CommanderSlug() {
                 {/* Bandeau alertes/actualités (alertes en rouge, prioritaires).
                     Cliquable si l'actu a un contenu enrichi (photo ou contenu_long),
                     sinon rendu simple. */}
-                {canDo(commercant.plan, 'actus_illimitees') && actualites.length > 0 && (
+                {canDo(planEffectif(commercant), 'actus_illimitees') && actualites.length > 0 && (
                   <div style={{ margin: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {actualites.map(a => {
                       const isAlerte = a.type === 'alerte'
@@ -3604,7 +3620,7 @@ export default function CommanderSlug() {
                 )}
 
                 {/* Bandeau deal du jour - cliquable pour ouvrir le détail */}
-                {canDo(commercant.plan, 'deals') && dealActif && (
+                {canDo(planEffectif(commercant), 'deals') && dealActif && (
                   <div style={{ margin: '0 12px 12px' }}>
                     <button onClick={() => setDealDetailOuvert(dealActif)}
                       style={{ width: '100%', background: `linear-gradient(135deg, ${T.ink}, ${T.deep})`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: 14, animation: 'dealGlow 1.8s ease-in-out infinite', border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left' }}>
@@ -3809,7 +3825,7 @@ export default function CommanderSlug() {
                               ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                               stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
                               onCommanderDemain={commanderPourJour}
-                              getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')}
+                              getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(planEffectif(commercant), 'prix_affiches')}
                               photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                               variantes={variantesParArticle[a.id] || []}
                               remise={remiseSurArticle(a, dealsActifs)}
@@ -3840,7 +3856,7 @@ export default function CommanderSlug() {
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
                             onCommanderDemain={commanderPourJour}
-                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(commercant?.plan, 'prix_affiches')}
+                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(planEffectif(commercant), 'prix_affiches')}
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                             variantes={variantesParArticle[a.id] || []}
                             remise={remiseSurArticle(a, dealsActifs)}

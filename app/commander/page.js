@@ -13,7 +13,9 @@ import { resteAEncaisserCommande, etatPaiementClient, couleurPaiement } from '@/
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
 import { libelleOptions } from '@/lib/options-ligne'
 import IconeRetrait from '@/app/components/IconeRetrait'
-import { canDo, bandeauCategorie } from '@/lib/plans'
+// ⚠️ `planEffectif` ET NON `c.plan` : sans lui, un commerçant en essai de
+// Vendre restait « vitrine » dans la liste des commerces (26/08).
+import { canDo, bandeauCategorie, planEffectif } from '@/lib/plans'
 // Une note sans son nombre d'avis ne dit rien, et cinq étoiles vides se lisent
 // comme un zéro. La règle vit en fonction pure et testée.
 import { resumeAvis } from '@/lib/avis-affichage'
@@ -944,7 +946,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
 
   const physique = getStatutPhysique()
   // Pas de reservation si le plan ne permet pas la commande (palier Exister)
-  const peutCommander = canDo(c.plan, 'commande')
+  const peutCommander = canDo(planEffectif(c), 'commande')
   const resa = peutCommander ? getStatutResa(physique) : null
 
   return (

@@ -24,7 +24,11 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { isVitrine, canDo } from '@/lib/plans'
+// ⚠️ `planEffectif` ET NON `commercant.plan` : un commerçant en essai de Vendre
+// voyait son tableau de bord s'ouvrir et sa fiche publique continuer de refuser
+// (26/08). ⚠️ Et `canDo` SANS catégorie, jamais `peut()` : la matrice réserve
+// `commande` à l'alimentaire alors que cette fiche sert les vitrines.
+import { isVitrine, canDo, planEffectif } from '@/lib/plans'
 import { dealActifCeJour, remiseSurArticle } from '@/lib/deals'
 import { reprendrePanierPourRdv, deposerPanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
@@ -443,7 +447,7 @@ export default function CommanderRdvSlug() {
         .filter(x => x.lieux.length > 0)
     : []
 
-  const produitsAchetables = canDo(commercant?.plan, 'commande')
+  const produitsAchetables = canDo(planEffectif(commercant), 'commande')
     && commercant?.stripe_account_charges_enabled === true
     && !commercant?._rdvDesactive
 
@@ -798,7 +802,7 @@ export default function CommanderRdvSlug() {
       // pour que les vitrines Communiquer sans RDV affichent quand même leurs deals
       // (CTA « Appeler pour réserver »). Fenêtre identique à la fiche commerce :
       // date_deal ponctuelle = aujourd'hui OU intervalle date_debut/date_fin.
-      if (canDo(c.plan, 'deals')) {
+      if (canDo(planEffectif(c), 'deals')) {
         const { data: dealsData, error: errDeals } = await supabase
           .from('yoppaa_deals')
           .select('*')
@@ -3471,7 +3475,7 @@ export default function CommanderRdvSlug() {
                   Les produits d'un salon vivent sur sa boutique : quand le deal
                   vise un article ou une catégorie, on y emmène le Yopper au
                   lieu de le laisser chercher. */}
-              {(dealDetailOuvert.article_id || dealDetailOuvert.categorie_cible) && commercant?.slug && canDo(commercant?.plan, 'commande') && (
+              {(dealDetailOuvert.article_id || dealDetailOuvert.categorie_cible) && commercant?.slug && canDo(planEffectif(commercant), 'commande') && (
                 <a href={`/commander/${commercant.slug}`}
                   onClick={() => trackDeal(dealDetailOuvert.id, 'cta_click')}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', marginTop: 14, padding: '0.95rem', borderRadius: 100, background: 'linear-gradient(135deg, #DC2626, #F97316)', color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 6px 20px rgba(220,38,38,0.4)', textDecoration: 'none' }}>

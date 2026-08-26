@@ -5222,6 +5222,37 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
     toast('Photo ajoutée'); setUploadingGal(false)
   }
 
+  // Remplace une photo SANS toucher à sa place dans la série.
+  //
+  // ⚠️ POURQUOI CE N'EST PAS « SUPPRIMER PUIS RAJOUTER ». La nouvelle photo
+  // repartirait en dernière position, et l'ordre n'est pas décoratif ici :
+  // l'écran le dit lui-même au commerçant, « on regarde rarement plus loin que
+  // la troisième ». Lui faire perdre sa place pour changer une image, c'est lui
+  // faire refaire son classement à chaque retouche.
+  //
+  // ⚠️ L'ANCIEN FICHIER EST EFFACÉ APRÈS, et seulement après. Le faire avant
+  // laisserait une ligne pointant vers un objet disparu si l'envoi échoue :
+  // une photo cassée sur sa fiche publique, et lui n'en saurait rien.
+  async function remplacerPhotoGalerie(photo, file) {
+    if (!file || !file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
+    if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
+    setUploadingGal(true)
+    const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
+    const fileName = `gal-${commercantId}-${Date.now()}.jpg`
+    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
+    if (upErr) { toast('Erreur upload photo', 'error'); setUploadingGal(false); return }
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    const { error } = await supabase.from('commercant_photos')
+      .update({ url: urlData.publicUrl }).eq('id', photo.id)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); setUploadingGal(false); return }
+    setGalerie(prev => prev.map(p => (p.id === photo.id ? { ...p, url: urlData.publicUrl } : p)))
+    try {
+      const ancien = (photo.url || '').split('/').pop()
+      if (ancien) await supabase.storage.from('logos').remove([ancien])
+    } catch { /* nettoyage best effort */ }
+    toast('Photo remplacée'); setUploadingGal(false)
+  }
+
   // Change une photo de place. On réécrit TOUTES les positions plutôt que
   // d'échanger deux valeurs : deux photos ayant hérité du même `ordre` par le
   // passé rendraient l'affichage imprévisible, et cette renumérotation les
@@ -5476,16 +5507,27 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
             const conseil = conseilPhoto(i + 2, metierFiche)
             return (
               <div key={p.id} style={{ display: 'flex', gap: 12, alignItems: 'center', background: T.bg, borderRadius: 12, padding: 8 }}>
-                <div style={{ width: 96, aspectRatio: '4/3', borderRadius: 10, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}`, flexShrink: 0 }}>
+                {/* ⚠️ UN `label` ET PAS UN `button` : le sélecteur de fichier
+                    d'iOS n'accepte qu'un geste utilisateur direct, et un clic
+                    relayé par du code est refusé. C'est le même montage que la
+                    couverture juste au-dessus, qui, elle, marchait déjà. */}
+                <label title="Cliquer pour remplacer cette photo"
+                  style={{ width: 96, aspectRatio: '4/3', borderRadius: 10, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}`, flexShrink: 0, cursor: uploadingGal ? 'wait' : 'pointer', display: 'block' }}>
                   <img decoding="async" loading="lazy" src={p.url} alt=""
                     onLoad={e => mesurerImage(p.id, e)}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                </div>
+                  <input type="file" accept="image/*" style={{ display: 'none' }} disabled={uploadingGal}
+                    onChange={e => { if (e.target.files?.[0]) remplacerPhotoGalerie(p, e.target.files[0]); e.target.value = '' }}/>
+                </label>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>
                     Photo {i + 2} · {conseil.titre}
                   </p>
                   <p style={{ fontSize: 11, color: T.muted, margin: 0, lineHeight: 1.45 }}>{conseil.aide}</p>
+                  {/* Le geste ne se devine pas sur une vignette : on le dit. */}
+                  <p style={{ fontSize: 10.5, color: T.main, fontWeight: 700, margin: '3px 0 0' }}>
+                    Clique la vignette pour la remplacer, sans perdre sa place.
+                  </p>
                   <AvertissementTaille dims={dimsImages[p.id]}/>
                 </div>
                 {/* Flèches plutôt que glisser-déposer : sur un téléphone, au

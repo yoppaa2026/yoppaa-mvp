@@ -1425,6 +1425,42 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     onSaving?.('saved')
   }
 
+  // Remplace une photo SANS lui faire perdre sa place dans la série. Supprimer
+  // puis rajouter la renverrait en dernier, et l'ordre compte : l'écran dit
+  // lui-même qu'on regarde rarement plus loin que la troisième.
+  //
+  // ⚠️ L'ANCIEN FICHIER EST EFFACÉ APRÈS, et seulement après. L'effacer avant
+  // laisserait, si l'envoi échoue, une ligne pointant vers un objet disparu :
+  // une image cassée sur la fiche publique, et personne pour s'en apercevoir.
+  async function remplacerPhotoGalerie(photo, file) {
+    // ⚠️ LE MÊME CONTRÔLE QUE L'AJOUT, ET SURTOUT PAS UN CONTRÔLE MAISON.
+    // `controlerImage` refuse les formats impossibles ET les fichiers abîmés,
+    // en posant lui-même le message. Un remplacement plus permissif que l'ajout
+    // laisserait passer par la petite porte ce que la grande refuse.
+    const dims = await controlerImage(file, setMsgGalerie)
+    if (!dims) return
+    setUploadingGalerie(true)
+    onSaving?.('saving')
+    const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
+    const fileName = `gal-${commercant.id}-${Date.now()}.jpg`
+    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
+    if (upErr) { setMsgGalerie({ ton: 'erreur', titre: `Upload échoué : ${upErr.message}` }); setUploadingGalerie(false); return }
+    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    const { error: majErr } = await supabase.from('commercant_photos')
+      .update({ url: urlData.publicUrl }).eq('id', photo.id)
+    if (majErr) { setMsgGalerie({ ton: 'erreur', titre: `Enregistrement échoué : ${majErr.message}` }); setUploadingGalerie(false); return }
+    setGalerie(prev => prev.map(p => (p.id === photo.id ? { ...p, url: urlData.publicUrl } : p)))
+    setDimsImages(prev => ({ ...prev, [photo.id]: dims }))
+    try {
+      const ancien = (photo.url || '').split('/').pop()
+      if (ancien) await supabase.storage.from('logos').remove([ancien])
+    } catch { /* nettoyage best-effort, l'image orpheline ne casse rien */ }
+    const av = avertissementTaille(dims, TAILLE_CONSEILLEE.photo, 'photo')
+    setMsgGalerie(av ? { ton: 'avertissement', titre: av.titre, detail: av.detail } : null)
+    setUploadingGalerie(false)
+    onSaving?.('saved')
+  }
+
   async function supprimerPhotoGalerie(photo) {
     onSaving?.('saving')
     await supabase.from('commercant_photos').delete().eq('id', photo.id)
@@ -1542,7 +1578,8 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
             )
           })}
           <p style={{ margin: 0, fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
-            Au-delà, tu peux aller jusqu&rsquo;à {MAX_PHOTOS} photos et changer leur ordre depuis ton tableau de bord.
+            Clique une vignette pour la remplacer, la croix pour la retirer. Au-delà, tu peux aller
+            jusqu&rsquo;à {MAX_PHOTOS} photos et changer leur ordre depuis ton tableau de bord.
           </p>
         </div>
         <GalerieMini
@@ -1551,6 +1588,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
           uploading={uploadingGalerie}
           onFile={uploadPhotoGalerie}
           onSupprimer={supprimerPhotoGalerie}
+          onRemplacer={remplacerPhotoGalerie}
           dims={dimsImages}
           onMesure={(id, d) => setDimsImages(prev => (prev[id] ? prev : { ...prev, [id]: d }))}
         />
@@ -1699,7 +1737,10 @@ function PastilleTaille({ dims, minPx, quoi = 'photo' }) {
 
 // Grille de thumbs galerie + bouton "+" pour ajouter une photo (max atteint).
 // Affiche une croix sur chaque thumb pour supprimer.
-function GalerieMini({ photos, max, uploading, onFile, onSupprimer, dims = {}, onMesure }) {
+// ⚠️ `onRemplacer` EST FACULTATIF, ET C'EST VOULU. Le composant sert aussi là
+// où le remplacement n'a pas de sens ; sans la fonction, la vignette redevient
+// une simple image et rien ne promet un geste qui n'arriverait pas.
+function GalerieMini({ photos, max, uploading, onFile, onSupprimer, onRemplacer, dims = {}, onMesure }) {
   const inputRef = useRef(null)
   const peutAjouter = photos.length < max
   return (
@@ -1712,9 +1753,19 @@ function GalerieMini({ photos, max, uploading, onFile, onSupprimer, dims = {}, o
                 à 640 px une fois stockée. La mesure au chargement donne donc la
                 même réponse, et elle vaut aussi pour les photos déjà en place
                 avant aujourd'hui. Aucune migration, aucune colonne à remplir. */}
-            <img decoding="async" loading="lazy" src={p.url} alt=""
-              onLoad={e => onMesure?.(p.id, { w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+            {/* ⚠️ UN `label`, PAS UN `button` QUI CLIQUE UN INPUT : iOS exige
+                un geste utilisateur DIRECT pour ouvrir le sélecteur de
+                fichiers, et refuse un clic relayé par du code. */}
+            <label title={onRemplacer ? 'Cliquer pour remplacer cette photo' : undefined}
+              style={{ display: 'block', width: '100%', height: '100%', cursor: onRemplacer ? (uploading ? 'wait' : 'pointer') : 'default' }}>
+              <img decoding="async" loading="lazy" src={p.url} alt=""
+                onLoad={e => onMesure?.(p.id, { w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+              {onRemplacer && (
+                <input type="file" accept="image/*" style={{ display: 'none' }} disabled={uploading}
+                  onChange={e => { if (e.target.files?.[0]) onRemplacer(p, e.target.files[0]); e.target.value = '' }}/>
+              )}
+            </label>
             <PastilleTaille dims={dims[p.id]} minPx={TAILLE_CONSEILLEE.photo}/>
             <button type="button" onClick={() => onSupprimer(p)} aria-label="Supprimer"
               style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(22,6,54,0.85)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, lineHeight: 1, padding: 0 }}>

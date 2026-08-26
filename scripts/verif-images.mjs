@@ -278,6 +278,54 @@ verifie('seuil photo = 800', TAILLE_CONSEILLEE.photo === 800, `reçu ${TAILLE_CO
 }
 
 console.log(`\nQualité des images : ${ok} vérifications`)
+
+// ═══ REMPLACER UNE PHOTO NE LUI FAIT PAS PERDRE SA PLACE ═══════════════════
+//
+// ⚠️ CE QUE CETTE GARDE PROTÈGE EST UNE RÈGLE, PAS UNE IMPLÉMENTATION.
+// Avant le 26/08, changer une photo de galerie demandait de la supprimer puis
+// d'en charger une autre — qui repartait en DERNIÈRE position. L'ordre n'est
+// pourtant pas décoratif : l'écran dit lui-même au commerçant qu'« on regarde
+// rarement plus loin que la troisième ». Lui faire refaire son classement à
+// chaque retouche, c'est le décourager de retoucher.
+//
+// Le remplacement doit donc être un UPDATE de l'URL sur la ligne existante, et
+// jamais un couple suppression/insertion. La tentation de « simplifier » en
+// réutilisant les deux fonctions voisines est réelle, et elle ferait
+// disparaître la règle sans qu'aucun écran ne change d'apparence.
+{
+  // Découpe sur les FRONTIÈRES DE FONCTION, jamais sur un nombre de caractères :
+  // une fenêtre glissante lit chez le voisin et verdit au gré d'une accolade
+  // déplacée (piège du 15/08).
+  const corpsDe = (src, nom) => {
+    const debut = src.indexOf(`async function ${nom}(`)
+    if (debut < 0) return null
+    const suite = src.indexOf('\n  async function ', debut + 10)
+    return src.slice(debut, suite < 0 ? src.length : suite)
+  }
+
+  for (const [chemin, etiquette] of [
+    ['app/dashboard/ConfigDashboard.js', 'le tableau de bord'],
+    ['app/signup/page.js', "l'inscription"],
+  ]) {
+    const src = readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
+    const corps = corpsDe(src, 'remplacerPhotoGalerie')
+    verifie(`${etiquette} sait remplacer une photo`, corps !== null)
+    if (!corps) continue
+    verifie(`${etiquette} remplace l'image sur la ligne existante`,
+      /\.update\(\{ url:/.test(corps))
+    verifie(`${etiquette} ne détruit jamais la ligne pour la remplacer`,
+      !/\.delete\(\)/.test(corps) && !/\.insert\(/.test(corps),
+      'un supprimer/rajouter ferait perdre sa place à la photo')
+    // ⚠️ L'ORDRE COMPTE : effacer l'ancien fichier AVANT d'avoir écrit le
+    // nouveau laisserait, si l'envoi échoue, une ligne qui pointe vers un objet
+    // disparu — une image cassée sur la fiche publique, et personne pour s'en
+    // apercevoir.
+    verifie(`${etiquette} n'efface l'ancien fichier qu'après avoir écrit le nouveau`,
+      corps.indexOf('.update({ url:') < corps.indexOf('storage.from(\'logos\').remove'),
+      'le nettoyage passe avant l\'enregistrement')
+  }
+}
+
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)
   for (const e of echecs) console.log('   • ' + e)

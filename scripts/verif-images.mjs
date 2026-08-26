@@ -14,7 +14,8 @@
 //
 //   npm run verif:images
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
+import { CAPTURES } from '../lib/captures-landing.js'
 import {
   TAILLE_CONSEILLEE,
   avertissementTaille,
@@ -277,6 +278,67 @@ verifie('seuil photo = 800', TAILLE_CONSEILLEE.photo === 800, `reçu ${TAILLE_CO
   verifie('elle ne lit aucun identifiant du corps de la requête', !/request\.json\(\)/.test(get))
 }
 
+// Largeur et hauteur d'un WebP, lues dans son entête. Trois formats coexistent
+// (VP8X étendu, VP8L sans perte, VP8 simple) et ils ne rangent pas la taille au
+// même endroit : deviner à partir d'un seul suffirait à rendre la garde muette.
+function tailleWebp(b) {
+  const type = b.slice(12, 16).toString('ascii')
+  if (type === 'VP8X') return { width: (b.readUIntLE(24, 3) & 0xFFFFFF) + 1, height: (b.readUIntLE(27, 3) & 0xFFFFFF) + 1 }
+  if (type === 'VP8L') {
+    const n = b.readUInt32LE(21)
+    return { width: (n & 0x3FFF) + 1, height: ((n >> 14) & 0x3FFF) + 1 }
+  }
+  if (type === 'VP8 ') return { width: b.readUInt16LE(26) & 0x3FFF, height: b.readUInt16LE(28) & 0x3FFF }
+  return { width: 0, height: 0 }
+}
+
+// ═══ LES VRAIES CAPTURES DE LA LANDING ═════════════════════════════════════
+//
+// ⚠️ UNE IMAGE MORTE SUR UNE LANDING NE SE VOIT QUE QUAND UN COMMERÇANT LA
+// REGARDE. Rien ne casse, rien ne rougit, aucune erreur ne remonte : il y a
+// juste un cadre vide à l'endroit où on lui promettait une preuve. C'est le
+// pire moment pour un défaut silencieux, et c'est exactement ce que cette
+// garde ferme.
+//
+// ⚠️ ET LES DIMENSIONS SONT VÉRIFIÉES CONTRE LE FICHIER, pas seulement
+// déclarées. Elles servent au navigateur à réserver la place avant l'arrivée
+// de l'image : une valeur recopiée de travers produit précisément le saut de
+// page qu'elles étaient censées éviter, et il se produit sous le pouce du
+// visiteur au moment où il commence à lire.
+{
+  const dossier = new URL('../public/captures/', import.meta.url)
+  for (const c of CAPTURES) {
+    const chemin = new URL(c.fichier, dossier)
+    const existe = existsSync(chemin)
+    verifie(`la capture « ${c.cle} » a bien son fichier`, existe, c.fichier)
+    if (!existe) continue
+
+    const octets = readFileSync(chemin)
+    // ⚠️ WebP, PAS PNG. Une capture pleine page en PNG pèse dix fois plus, et
+    // la landing est ce qui doit s'ouvrir vite sur un téléphone en 4G.
+    verifie(`« ${c.cle} » est en WebP`,
+      octets.slice(0, 4).toString('ascii') === 'RIFF' && octets.slice(8, 12).toString('ascii') === 'WEBP',
+      c.fichier)
+
+    // Le poids : au-delà de 150 ko une image se sent, et la landing en a
+    // plusieurs. Si ça dépasse, c'est le CADRE qui est trop large — resserrer,
+    // jamais baisser la qualité : une capture floue ne convainc personne.
+    verifie(`« ${c.cle} » reste sous 150 ko`, octets.length <= 150 * 1024,
+      `${Math.round(octets.length / 1024)} ko`)
+
+    // Les dimensions déclarées doivent être celles du fichier.
+    const { width, height } = tailleWebp(octets)
+    verifie(`« ${c.cle} » déclare sa vraie largeur`, width === c.largeur, `fichier ${width}, déclaré ${c.largeur}`)
+    verifie(`« ${c.cle} » déclare sa vraie hauteur`, height === c.hauteur, `fichier ${height}, déclaré ${c.hauteur}`)
+
+    // ⚠️ ET ELLE DOIT DIRE CE QU'ELLE MONTRE. Une capture sans texte de
+    // remplacement est un trou pour qui n'y voit pas, et la landing est la
+    // porte d'entrée de tout le reste.
+    verifie(`« ${c.cle} » a un texte de remplacement digne de ce nom`,
+      typeof c.alt === 'string' && c.alt.trim().length >= 30, c.alt)
+  }
+}
+
 console.log(`\nQualité des images : ${ok} vérifications`)
 
 // ═══ REMPLACER UNE PHOTO NE LUI FAIT PAS PERDRE SA PLACE ═══════════════════
@@ -325,6 +387,7 @@ console.log(`\nQualité des images : ${ok} vérifications`)
       'le nettoyage passe avant l\'enregistrement')
   }
 }
+
 
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

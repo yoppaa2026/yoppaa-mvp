@@ -28,6 +28,7 @@ import { FACEBOOK_URL, RESEAUX } from '@/lib/reseaux'
 import { getPrixPlan } from '@/lib/plans'
 import { TYPES_ENVIE, libelleEnvie } from '@/lib/signaux'
 import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '@/lib/libelles-audience'
+import { CAPTURES, captureSrc } from '@/lib/captures-landing'
 import PartageMobilisation from './PartageMobilisation'
 
 const T = {
@@ -197,6 +198,33 @@ function PhoneFrame({ children, label }) {
       </div>
       {label && <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: 'inherit', opacity: 0.85, textAlign: 'center', maxWidth: 250, lineHeight: 1.4 }}>{label}</p>}
     </div>
+  )
+}
+
+// ─── Une vraie capture du produit ───────────────────────────────────────────
+//
+// ⚠️ `width` ET `height` EN ATTRIBUTS, PAS SEULEMENT EN CSS. Le navigateur s'en
+// sert pour réserver la place AVANT que l'image n'arrive : sans eux, la page
+// saute au moment précis où le visiteur commence à lire, et sur un téléphone
+// lent ce saut arrive juste sous son pouce.
+//
+// ⚠️ `loading="lazy"` : ces captures vivent au milieu de la partie commerçant,
+// très bas dans la page. Les charger à l'ouverture ralentirait le hero pour
+// des images que la plupart des visiteurs n'atteindront jamais.
+function CaptureProduit({ capture }) {
+  return (
+    <figure style={{ margin: 0, flex: '1 1 300px', maxWidth: 440 }}>
+      <img
+        src={captureSrc(capture)} alt={capture.alt}
+        width={capture.largeur} height={capture.hauteur}
+        loading="lazy" decoding="async"
+        style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 14, background: '#fff', border: '1px solid rgba(255,255,255,0.18)', boxShadow: '0 14px 34px rgba(0,0,0,0.3)' }}
+      />
+      <figcaption style={{ marginTop: 12, textAlign: 'left' }}>
+        <p style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 15, color: '#fff', letterSpacing: '-0.2px' }}>{capture.titre}</p>
+        <p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.86)', lineHeight: 1.55, fontWeight: 500 }}>{capture.legende}</p>
+      </figcaption>
+    </figure>
   )
 }
 
@@ -1662,6 +1690,31 @@ export default function LandingReveal({ referent = null }) {
               <MockOnboarding/>
             </PhoneFrame>
           </div>
+
+          {/* ⚠️ CE NE SONT PAS DES MAQUETTES, ET C'EST TOUT L'INTÉRÊT.
+              Idée d'Alex, 26/08 : « on montre la réalité ». Tout ce qui précède
+              est dessiné à la main en JSX — léger, net, toujours à jour. Ces
+              deux images-ci sont de vraies captures de l'inscription, prises le
+              jour où elle a été testée de bout en bout. Un dessin dit « voilà à
+              quoi ça pourrait ressembler » ; une capture dit « voilà ce que tu
+              auras », et c'est ce qui décide un commerçant qui hésite.
+
+              ⚠️ Le mockup au-dessus RESTE. Il porte le geste et le mouvement,
+              elles portent la preuve : ce n'est pas la même chose, et l'un ne
+              remplace pas l'autre. */}
+          {CAPTURES.length > 0 && (
+            <div style={{ marginTop: 52 }}>
+              <p style={{ textAlign: 'center', margin: '0 0 6px', fontSize: 'clamp(1.15rem, 2.6vw, 1.4rem)', fontWeight: 900, letterSpacing: '-0.5px', color: '#fff' }}>
+                Et ça, ce ne sont pas des maquettes.
+              </p>
+              <p style={{ textAlign: 'center', margin: '0 0 26px', fontSize: 13.5, color: 'rgba(255,255,255,0.82)', fontWeight: 600 }}>
+                Ce sont les écrans que tu verras, tels quels.
+              </p>
+              <div style={{ display: 'flex', gap: 'clamp(20px, 4vw, 44px)', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                {CAPTURES.map(c => <CaptureProduit key={c.cle} capture={c}/>)}
+              </div>
+            </div>
+          )}
 
           {/* Trio « rassurance » : les 3 objections qu'on entend au comptoir
               (matériel à acheter, peur de l'installation, personne au bout du fil) */}

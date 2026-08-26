@@ -84,15 +84,38 @@ WHERE statut_publication = 'publie';
 GRANT SELECT ON commercants_public TO anon, authenticated;
 
 -- ─── CONTRÔLE ───────────────────────────────────────────────────────────────
--- Attendu : essai_plan_expose = 1, colonnes_vue = 55 (54 + la nouvelle), et
--- commerces_visibles INCHANGÉ par rapport à avant la migration.
+-- ✅ PASSÉE LE 26/08 : essai_plan_expose = 1, colonnes_vue = 56,
+-- commerces_visibles = 12.
 --
 -- ⚠️ ON COMPTE AUSSI LES COLONNES, pas seulement la nouvelle. C'est ce qui
 -- attraperait une liste amputée : `essai_plan` serait bien là, et treize autres
 -- auraient disparu en silence.
+--
+-- ⚠️ MAIS UN COMPTE NE SUFFIT PAS À PROUVER QU'ON N'A RIEN PERDU, et il faut
+-- le dire : `CREATE OR REPLACE VIEW` remplace la définition, donc le compte
+-- obtenu vaut TOUJOURS la longueur de la liste ci-dessus. Si une colonne avait
+-- été ajoutée à la vue en dehors du dépôt, elle aurait disparu ici sans que ce
+-- chiffre bouge. La seule preuve est la LISTE, comparée à ce que le code lit :
+-- c'est ce que fait la requête de contrôle suivante.
 SELECT
   (SELECT count(*) FROM information_schema.columns
     WHERE table_name = 'commercants_public' AND column_name = 'essai_plan') AS essai_plan_expose,
   (SELECT count(*) FROM information_schema.columns
     WHERE table_name = 'commercants_public') AS colonnes_vue,
   (SELECT count(*) FROM commercants_public) AS commerces_visibles;
+
+-- ─── CONTRÔLE DÉCISIF : QU'EST-CE QUI MANQUE ? ──────────────────────────────
+-- Toutes les colonnes que la vue N'EXPOSE PAS. On y lit les colonnes privées
+-- (email, bce, stripe_*, kyb_*…), qui doivent TOUTES y figurer, et rien d'autre
+-- qui ressemblerait à un réglage d'affichage.
+--
+-- ⚠️ C'est cette liste qui prouve, pas le compte : si un réglage public s'y
+-- trouve, c'est qu'il a été perdu.
+SELECT column_name
+FROM information_schema.columns
+WHERE table_name = 'commercants'
+  AND column_name NOT IN (
+    SELECT column_name FROM information_schema.columns
+    WHERE table_name = 'commercants_public'
+  )
+ORDER BY column_name;

@@ -76,7 +76,11 @@ export async function GET(request) {
     const [{ data: commandes }, { data: rdvs }, { data: avis }, { data: deals }, { count: nbArticles }, { data: abonnements }] =
       await Promise.all([
         supabase.from('commandes')
-          .select('id, total, statut, created_at')
+          // ⚠️ `fidelite_remise` EST INDISPENSABLE : `valeurCommande` la retranche
+          // du chiffre d'affaires. Absente du select, elle vaut `undefined`,
+          // donc zéro, et la correction du 27/08 serait restée sans effet SANS
+          // la moindre erreur. C'est le défaut le plus fréquent du projet.
+          .select('id, total, fidelite_remise, statut, created_at')
           .eq('commercant_id', commercantId)
           .gte('created_at', depuis),
         // ⚠️ `prix_estime` est INDISPENSABLE : depuis le 09/08 un rendez-vous
@@ -92,7 +96,8 @@ export async function GET(request) {
         // la réalité était 270 € sur 18 (Alex, 19/08). Septième fois que ce
         // défaut se présente sur ce projet.
         supabase.from('rdv_reservations')
-          .select('id, statut, acompte_montant, acompte_paye, prix_estime, prestation_id, encaisse_mode, abonnement_id, created_at')
+          // Même raison : `valeurRdv` retranche la récompense du prix.
+          .select('id, statut, acompte_montant, acompte_paye, prix_estime, fidelite_remise, prestation_id, encaisse_mode, abonnement_id, created_at')
           .eq('commercant_id', commercantId)
           .gte('created_at', depuis),
         supabase.from('avis')

@@ -33,7 +33,8 @@ import { calculerRemiseBon } from '../lib/bons-cadeaux.js'
 import { montantFidelisable } from '../lib/fidelite.js'
 import { construireLignes } from '../lib/export-comptable.js'
 import { resteAEncaisser, caDesRdvs, etatPaiementRdv, resteAEncaisserCommande, soldeRdv } from '../lib/rdv-paiement.js'
-import { emailRdvConfirme, emailNouveauRdvCommercant } from "../lib/resend.js"
+import { emailRdvConfirme, emailNouveauRdvCommercant } from '../lib/resend.js'
+import { valeurCommande, valeurRdv, chiffreAffaires } from '../lib/statistiques.js'
 import { modesPaiementOuverts, modePaiementEffectif } from '../lib/modes-paiement.js'
 import { emailCommandeConfirmee, emailNouvelleCommandeCommercant } from '../lib/resend.js'
 import { cleReprisePanier } from '../lib/retour-paiement.js'
@@ -1015,6 +1016,51 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
   })
   verifie('🔴 la carte du tableau de bord dit la récompense',
     /récompense fidélité/i.test(carte?.detail || ''), carte?.detail || '(rien)')
+}
+
+// ═══ 🔴 LA CONCORDANCE DES CHIFFRES (27/08, demandée par Alex) ═════════════
+//
+// 🔴 `fidelite_remise` N'EXISTAIT PAS DANS `lib/statistiques.js`. Le module de
+// paiement retranchait la récompense partout ; les statistiques comptaient le
+// tarif plein. Le commerçant lisait 40 € de chiffre d'affaires là où il en
+// avait encaissé 30, sur les trois segments.
+//
+// ⚠️ LA RÉCOMPENSE SE RETRANCHE, LE BON CADEAU **NON**. Se tromper coûte cher
+// dans les deux sens : la récompense n'entre jamais dans la caisse, le bon
+// cadeau y est DÉJÀ entré le jour où il a été acheté.
+{
+  const cmdBrute  = { statut: 'recupere', total: 40 }
+  const cmdRemise = { statut: 'recupere', total: 40, fidelite_remise: 10 }
+  const cmdBon    = { statut: 'recupere', total: 40, bon_cadeau_montant: 10 }
+
+  verifie('sans récompense, la commande vaut son total', valeurCommande(cmdBrute) === 40)
+  verifie('🔴 avec 10 € de récompense, elle ne vaut plus que 30',
+    valeurCommande(cmdRemise) === 30, String(valeurCommande(cmdRemise)))
+  // ⚠️ LA GARDE QUI PROTÈGE DE LA SUR-CORRECTION.
+  verifie('🔴 mais un bon cadeau NE se retranche PAS du chiffre d\'affaires',
+    valeurCommande(cmdBon) === 40, String(valeurCommande(cmdBon)))
+
+  const rdvRemise = { statut: 'honore', prix_estime: 40, fidelite_remise: 10, acompte_montant: 9, acompte_paye: true }
+  verifie('🔴 le rendez-vous suit la même règle', valeurRdv(rdvRemise) === 30, String(valeurRdv(rdvRemise)))
+  // ⚠️ L'ACOMPTE EST DÉJÀ NET : le retrancher une seconde fois enlèverait la
+  // remise deux fois d'un montant qui ne la contient plus.
+  verifie('une prestation sans prix se rabat sur l\'acompte, sans le réduire',
+    valeurRdv({ statut: 'honore', prix_estime: null, fidelite_remise: 10, acompte_montant: 9 }) === 9)
+
+  // Et le total, bout à bout : 30 de produits + 30 de prestation.
+  const ca = chiffreAffaires([cmdRemise], [rdvRemise], [])
+  verifie('🔴 le chiffre d\'affaires concorde avec ce qui est encaissé',
+    ca.produits === 30 && ca.prestations === 30,
+    `produits ${ca.produits}, prestations ${ca.prestations}`)
+
+  // ⚠️ ET LA COLONNE DOIT ARRIVER JUSQU'À EUX. La règle la plus juste ne sert à
+  // rien si le select ne la demande pas : `Number(undefined || 0)` vaut 0, et la
+  // correction serait restée sans effet sans la moindre erreur.
+  const routeStats = readFileSync(new URL('../app/api/dashboard/statistiques/route.js', import.meta.url), 'utf8')
+  verifie('🔴 la route des stats charge la remise des commandes',
+    /select\('id, total, fidelite_remise, statut, created_at'\)/.test(routeStats))
+  verifie('🔴 et celle des rendez-vous',
+    /prix_estime, fidelite_remise, prestation_id/.test(routeStats))
 }
 
 // ═══ 🔴 LE TUNNEL RDV + PRODUITS CONNAÎT LA FIDÉLITÉ (27/08) ═══════════════

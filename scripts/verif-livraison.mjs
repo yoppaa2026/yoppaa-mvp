@@ -27,6 +27,7 @@ import {
   etatPaiementClient, etatPaiementCommande, etatPaiementRdv, phraseAvantages,
 } from '../lib/rdv-paiement.js'
 import { nomTransporteur, suiviUrl, libelleExpedition } from '../lib/transporteurs.js'
+import { prenomClient, nomCompletClient } from '../lib/nom-client.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -874,6 +875,74 @@ verifier('et range la commande du bon côté',
     verifier(`${nom} passe aussi le bon cadeau`,
       (src.match(/bon_cadeau_montant:\s+cmd\.bon_cadeau_montant/g) || []).length >= 2)
   }
+}
+
+// ═══ `commandes.client_prenom` N'EXISTE PAS ═════════════════════════════════
+//
+// 🔴 CE DÉFAUT A ÉTÉ TROUVÉ DEUX FOIS, À UN MOIS D'INTERVALLE.
+//
+//   • 28/07 — le récapitulatif du matin annonçait « 0 commande » à des
+//     commerçants qui en avaient. Corrigé DANS CETTE ROUTE-LÀ, avec un
+//     commentaire de six lignes qui expliquait tout.
+//   • 27/08 — le mail « ton colis est prêt » ne partait pas. CINQ autres
+//     routes demandaient encore `commandes.client_prenom`.
+//
+// ⚠️ LA CONNAISSANCE N'AVAIT PAS VOYAGÉ. Un commentaire dans un fichier ne
+// protège que ce fichier. C'est exactement ce que cette garde répare : elle
+// protège aussi les routes qui n'existent pas encore.
+//
+// ⚠️ ET CE N'EST PAS « LA COLONNE ABSENTE D'UN SELECT », C'EST SON CONTRAIRE.
+// Une colonne qui EXISTE mais qu'on oublie de demander vaut `undefined` en
+// silence. Une colonne qui N'EXISTE PAS fait échouer TOUTE la requête :
+// PostgREST rend un 400, `data` vaut null, et la route en conclut que la
+// commande n'existe pas. Le silence est le même, la cause est l'inverse.
+{
+  const ROUTES_COMMANDES = [
+    'app/api/emails/commande-prete/route.js',
+    'app/api/emails/commande-expediee/route.js',
+    'app/api/emails/commande-annulee/route.js',
+    'app/api/emails/commande-confirmee/route.js',
+    'app/api/livraison/statut/route.js',
+    'app/api/cron/rappels-retrait/route.js',
+    'app/api/commande/cancel/route.js',
+    'app/api/commande/push-statut/route.js',
+    'app/api/cron/recap-jour-8h/route.js',
+  ]
+  for (const chemin of ROUTES_COMMANDES) {
+    const src = lire(chemin)
+    // ⚠️ ON CHERCHE DANS LE SELECT, pas dans le fichier : les commentaires qui
+    // expliquent le piège contiennent forcément le mot fautif, et les routes
+    // qui lisent AUSSI `rdv_reservations` ont le droit de le demander là.
+    const selects = (src.match(/(?:\.select\(|selectCols\s*=\s*)`([\s\S]*?)`/g) || [])
+    const surCommandes = selects.filter(s => {
+      const i = src.indexOf(s)
+      // Le `.from('...')` qui précède immédiatement ce select.
+      const avant = src.slice(Math.max(0, i - 400), i)
+      const dernierFrom = [...avant.matchAll(/\.from\('([a-z_]+)'\)/g)].pop()
+      return dernierFrom?.[1] === 'commandes'
+    })
+    for (const s of surCommandes) {
+      verifier(`${chemin} ne demande pas commandes.client_prenom`,
+        !/\bclient_prenom\b/.test(s), s.slice(0, 120))
+    }
+  }
+
+  // Et le prénom se dérive, une fois, pour tout le monde.
+  verifier('un prénom seul reste tel quel', prenomClient({ client_prenom: 'Alex' }) === 'Alex')
+  // ⚠️ LE PREMIER MOT, PAS LE DERNIER.
+  verifier('un nom complet donne son premier mot',
+    prenomClient({ client_nom: 'Alexandre Verstappen' }) === 'Alexandre')
+  verifier('les espaces multiples ne cassent rien',
+    prenomClient({ client_nom: '  Jean-Luc   Dupont ' }) === 'Jean-Luc')
+  // ⚠️ `null`, JAMAIS UNE CHAÎNE VIDE : elle donnerait « Bonjour  , » avec un
+  // trou au milieu, et les appelants écrivent tous `|| 'Yopper'`.
+  verifier('rien du tout rend null', prenomClient({}) === null)
+  verifier('une ligne absente aussi', prenomClient(null) === null)
+  // Le nom complet ne se double pas quand `client_nom` le contient déjà.
+  verifier('le nom complet ne se double pas',
+    nomCompletClient({ client_prenom: 'Alexandre', client_nom: 'Alexandre Verstappen' }) === 'Alexandre Verstappen')
+  verifier('mais il se recolle quand les deux sont séparés',
+    nomCompletClient({ client_prenom: 'Alexandre', client_nom: 'Verstappen' }) === 'Alexandre Verstappen')
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

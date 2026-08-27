@@ -18,6 +18,10 @@ import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerPushParExternalId } from '@/lib/onesignal'
 import { envoyerAuCommercant, emailCommandeEnLivraison } from '@/lib/resend'
 import { referenceCommande } from '@/lib/numero-commande'
+// ⚠️ `commandes` N'A PAS DE COLONNE `client_prenom` : le nom complet vit
+// dans `client_nom`. La demander faisait échouer TOUTE la requête, et la
+// route annonçait « Commande introuvable » sur une commande bien présente.
+import { prenomClient } from '@/lib/nom-client'
 
 export async function POST(request) {
   try {
@@ -43,7 +47,7 @@ export async function POST(request) {
     const { data: cmd, error } = await supabase
       .from('commandes')
       .select(`
-        id, numero_commande, numero_prefixe, client_email, client_nom, client_prenom,
+        id, numero_commande, numero_prefixe, client_email, client_nom,
         adresse_livraison,
         commercant:commercants(nom, slug),
         creneau_livraison:livraison_creneaux(heure_debut, heure_fin)
@@ -71,7 +75,7 @@ export async function POST(request) {
           to: cmd.client_email,
           subject: `🛵 Ta commande #${referenceCommande(cmd) || ''} arrive`,
           html: emailCommandeEnLivraison({
-            yopper_prenom: cmd.client_prenom || 'Yopper',
+            yopper_prenom: prenomClient(cmd) || 'Yopper',
             commercant_nom: cmd.commercant?.nom || 'ton commerçant',
             numero_commande: referenceCommande(cmd),
             adresse_livraison: cmd.adresse_livraison,

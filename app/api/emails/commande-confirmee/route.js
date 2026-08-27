@@ -12,6 +12,10 @@ import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerAuCommercant, emailCommandeConfirmee, emailNouvelleCommandeCommercant } from '@/lib/resend'
 import { referenceCommande } from '@/lib/numero-commande'
 import { adresseRendezVous } from '@/lib/lieu-fige'
+// ⚠️ `commandes` N'A PAS DE COLONNE `client_prenom` : le nom complet vit
+// dans `client_nom`. La demander faisait échouer TOUTE la requête, et la
+// route annonçait « Commande introuvable » sur une commande bien présente.
+import { prenomClient } from '@/lib/nom-client'
 
 export async function POST(request) {
   try {
@@ -42,7 +46,7 @@ export async function POST(request) {
       .from('commandes')
       .select(`
         id, numero_commande, numero_prefixe, total, notes_client, date_commande,
-        client_email, client_prenom, client_nom, client_telephone,
+        client_email, client_nom, client_telephone,
         annulation_token,
         lieu_id, lieu_libelle, lieu_adresse,
         commercant:commercants(id, nom, slug, adresse, email, notif_mode, delai_annulation_heures),
@@ -77,7 +81,7 @@ export async function POST(request) {
     if (cmd.client_email) {
       try {
         const html = emailCommandeConfirmee({
-          yopper_prenom:           cmd.client_prenom || 'Yopper',
+          yopper_prenom:           prenomClient(cmd) || 'Yopper',
           commercant_nom:          cmd.commercant?.nom || '',
           commercant_adresse:      adresseRendezVous({ ...cmd, commercant: cmd.commercant }),
           commercant_slug:         cmd.commercant?.slug || '',
@@ -107,7 +111,7 @@ export async function POST(request) {
       try {
         const html = emailNouvelleCommandeCommercant({
           nom_commercant:  cmd.commercant.nom,
-          yopper_prenom:   cmd.client_prenom,
+          yopper_prenom:   prenomClient(cmd),
           yopper_nom:      cmd.client_nom,
           yopper_email:    cmd.client_email,
           yopper_telephone:cmd.client_telephone,
@@ -122,7 +126,7 @@ export async function POST(request) {
 
         await envoyerAuCommercant({
           to: cmd.commercant.email,
-          subject: `Nouvelle commande #${referenceCommande(cmd) || ''} — ${cmd.client_prenom || 'Yopper'}`,
+          subject: `Nouvelle commande #${referenceCommande(cmd) || ''} — ${prenomClient(cmd) || 'Yopper'}`,
           html,
         })
       } catch (e) {

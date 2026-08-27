@@ -39,6 +39,10 @@ import { referenceCommande } from '@/lib/numero-commande'
 import { rappelAEnvoyer, texteRappelRetrait, RAPPEL_TROP_TARD_HEURES } from '@/lib/rappels-retrait'
 import { rdvPorteLesProduits } from '@/lib/ecran-retrait'
 import { adresseRendezVous } from '@/lib/lieu-fige'
+// ⚠️ `commandes` N'A PAS DE COLONNE `client_prenom` : le nom complet vit
+// dans `client_nom`. La demander faisait échouer TOUTE la requête, et la
+// route annonçait « Commande introuvable » sur une commande bien présente.
+import { prenomClient } from '@/lib/nom-client'
 
 export async function GET(request) {
   const authHeader = request.headers.get('authorization') || ''
@@ -64,7 +68,7 @@ export async function GET(request) {
       .select(`
         id, numero_commande, numero_prefixe, pret_at, rappel_retrait_nb,
         total, paye_en_ligne, bon_cadeau_montant, fidelite_remise, encaisse_mode, encaisse_montant,
-        client_email, client_prenom, client_nom, mode_retrait, rdv_reservation_id,
+        client_email, client_nom, mode_retrait, rdv_reservation_id,
         lieu_id, lieu_libelle, lieu_adresse,
         commercant:commercants(nom, adresse, categorie),
         rdv:rdv_reservations!commandes_rdv_reservation_id_fkey(id, statut)
@@ -137,7 +141,7 @@ export async function GET(request) {
             to: cmd.client_email,
             subject: `${texte.titre}${reference ? ` — #${reference}` : ''}`,
             html: emailRappelRetrait({
-              yopper_prenom: cmd.client_prenom || 'Yopper',
+              yopper_prenom: prenomClient(cmd) || 'Yopper',
               commercant_nom: cmd.commercant?.nom,
               commercant_adresse: adresseRendezVous({ ...cmd, commercant: cmd.commercant }),
               numero_commande: reference,

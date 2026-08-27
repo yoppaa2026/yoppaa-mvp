@@ -11,6 +11,10 @@ import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerAuCommercant, emailCommandePrete } from '@/lib/resend'
 import { referenceCommande } from '@/lib/numero-commande'
 import { adresseRendezVous } from '@/lib/lieu-fige'
+// ⚠️ `commandes` N'A PAS DE COLONNE `client_prenom` : le nom complet vit
+// dans `client_nom`. La demander faisait échouer TOUTE la requête, et la
+// route annonçait « Commande introuvable » sur une commande bien présente.
+import { prenomClient } from '@/lib/nom-client'
 
 export async function POST(request) {
   try {
@@ -44,7 +48,7 @@ export async function POST(request) {
     const { data: cmd, error } = await supabase
       .from('commandes')
       .select(`
-        id, numero_commande, numero_prefixe, client_email, client_prenom, mode_retrait,
+        id, numero_commande, numero_prefixe, client_email, client_nom, mode_retrait,
         lieu_id, lieu_libelle, lieu_adresse,
         adresse_livraison,
         total, paye_en_ligne, bon_cadeau_montant, fidelite_remise, encaisse_mode, encaisse_montant,
@@ -105,7 +109,7 @@ export async function POST(request) {
 
     try {
       const html = emailCommandePrete({
-        yopper_prenom:     cmd.client_prenom || 'Yopper',
+        yopper_prenom:     prenomClient(cmd) || 'Yopper',
         commercant_nom:    cmd.commercant?.nom || '',
         commercant_adresse:adresseRendezVous({ ...cmd, commercant: cmd.commercant }),
         commercant_slug:   cmd.commercant?.slug || '',

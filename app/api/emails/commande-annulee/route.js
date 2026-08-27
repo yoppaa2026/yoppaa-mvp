@@ -13,6 +13,10 @@ import { createClient } from '@supabase/supabase-js'
 import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerAuCommercant, emailCommandeAnnuleeYopper, emailCommandeAnnuleeCommercant } from '@/lib/resend'
 import { referenceCommande } from '@/lib/numero-commande'
+// ⚠️ `commandes` N'A PAS DE COLONNE `client_prenom` : le nom complet vit
+// dans `client_nom`. La demander faisait échouer TOUTE la requête, et la
+// route annonçait « Commande introuvable » sur une commande bien présente.
+import { prenomClient } from '@/lib/nom-client'
 
 export async function POST(request) {
   try {
@@ -42,7 +46,7 @@ export async function POST(request) {
       .from('commandes')
       .select(`
         id, numero_commande, numero_prefixe, total, date_commande, paye_en_ligne,
-        client_email, client_prenom, client_nom,
+        client_email, client_nom,
         fidelite_remise, bon_cadeau_montant,
         commercant:commercants(id, nom, email, notif_mode),
         creneau:creneaux(heure_debut, heure_fin),
@@ -68,7 +72,7 @@ export async function POST(request) {
     if (cmd.client_email) {
       try {
         const html = emailCommandeAnnuleeYopper({
-          yopper_prenom:   cmd.client_prenom || 'Yopper',
+          yopper_prenom:   prenomClient(cmd) || 'Yopper',
           commercant_nom:  cmd.commercant?.nom || '',
           numero_commande: referenceCommande(cmd),
           total:           cmd.total,
@@ -96,7 +100,7 @@ export async function POST(request) {
       try {
         const html = emailCommandeAnnuleeCommercant({
           nom_commercant:  cmd.commercant.nom,
-          yopper_prenom:   cmd.client_prenom,
+          yopper_prenom:   prenomClient(cmd),
           yopper_nom:      cmd.client_nom,
           numero_commande: referenceCommande(cmd),
           articles:        articlesFlat,
@@ -114,7 +118,7 @@ export async function POST(request) {
         })
         await envoyerAuCommercant({
           to: cmd.commercant.email,
-          subject: `Commande #${referenceCommande(cmd) || ''} annulée — ${cmd.client_prenom || 'Yopper'}`,
+          subject: `Commande #${referenceCommande(cmd) || ''} annulée — ${prenomClient(cmd) || 'Yopper'}`,
           html,
         })
       } catch (e) {

@@ -253,7 +253,7 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
     // qui donne cours en salle.
     const { data: cLieu } = await supabase
       .from('commercants')
-      .select('id, nom, adresse, latitude, longitude, commune_id, siege_social_est_lieu_activite')
+      .select('id, nom, adresse, latitude, longitude, siege_social_est_lieu_activite')
       .eq('id', meta.yoppaa_commercant_id)
       .maybeSingle()
     Object.assign(payload, await champsLieuPour(supabase, cLieu, {

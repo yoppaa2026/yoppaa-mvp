@@ -45,7 +45,7 @@ export async function POST(request) {
     const { data: cmd, error: errCmd } = await supabase
       .from('commandes')
       .select(`
-        id, numero_commande, numero_prefixe, total, notes_client, date_commande,
+        id, numero_commande, numero_prefixe, total, date_commande,
         client_email, client_nom, client_telephone,
         annulation_token,
         lieu_id, lieu_libelle, lieu_adresse,
@@ -121,7 +121,8 @@ export async function POST(request) {
           date_retrait:    cmd.date_commande,
           heure_debut:     cmd.creneau?.heure_debut,
           heure_fin:       cmd.creneau?.heure_fin,
-          notes_client:    cmd.notes_client,
+          // commandes n a PAS de colonne notes_client : la demander cassait TOUT le select.
+          notes_client:    null,
         })
 
         await envoyerAuCommercant({

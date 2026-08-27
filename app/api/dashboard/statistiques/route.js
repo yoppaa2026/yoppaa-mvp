@@ -133,7 +133,7 @@ export async function GET(request) {
     if (idsEncaissees.length > 0) {
       const { data } = await supabase
         .from('commande_articles')
-        .select('nom, quantite, prix_unitaire')
+        .select('article_nom, quantite, prix_unitaire')
         .in('commande_id', idsEncaissees)
       lignes = data || []
     }

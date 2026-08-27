@@ -52,16 +52,57 @@ export async function POST(request) {
     const seuil = rdv.commercant.rdv_fidelite_seuil || 10
     const pourcent = rdv.commercant.rdv_fidelite_pourcent || 10
 
-    // Cherche la progression actuelle (trigger DB l'a deja incremente)
+    // 🔴 DEUX DÉFAUTS EMPILÉS ICI, TROUVÉS LE 27/08 PAR L'AUDIT DES COLONNES.
+    //
+    // 1. LA COLONNE N'EXISTAIT PAS. On demandait `nb_rdv_total` ; la table
+    //    porte `compteur`. Toute la requête échouait, `prog` valait null, et
+    //    `nbRdvActuels` retombait sur 0. L'email annonçait donc
+    //    « Ta fidélité progresse — 0/10 » à quelqu'un qui venait d'honorer son
+    //    cinquième rendez-vous. Et l'erreur n'était même pas lue.
+    //
+    // 2. 🔴 ET L'EMAIL DE RÉCOMPENSE N'EST JAMAIS PARTI. Il se déclenchait sur
+    //    `nbRdvActuels === seuil`, une égalité qui ne pouvait pas se produire.
+    //    ⚠️ ET CORRIGER LE SEUL NOM DE COLONNE NE L'AURAIT PAS RÉPARÉ : le
+    //    déclencheur `incrementer_fidelite_rdv` REMET `compteur` À ZÉRO au
+    //    moment exact où il pose la récompense. Au dixième rendez-vous,
+    //    `compteur` vaut donc 0, jamais 10. On aurait remplacé un mensonge par
+    //    un autre, et l'email serait resté muet.
+    //
+    // La bonne lecture est celle que le déclencheur écrit vraiment :
+    //   • `recompense_dispo` passe à true au déblocage ;
+    //   • `compteur` retombe à 0 dans le même geste.
+    // Donc « débloquée À CE rendez-vous » se lit `recompense_dispo && compteur
+    // === 0`. Au rendez-vous suivant, `compteur` vaut 1 : l'email ne repart
+    // pas, même si la récompense n'a pas encore été utilisée.
+    //
+    // ⚠️ Aucune horloge là-dedans, et c'est voulu : comparer
+    // `derniere_recompense_le` à `now()` marcherait au banc et dériverait en
+    // production au premier envoi différé.
     let nbRdvActuels = 0
+    let recompenseDebloquee = false
     if (rdv.client_id) {
-      const { data: prog } = await supabase
+      const { data: prog, error: errProg } = await supabase
         .from('rdv_fidelite_progression')
-        .select('nb_rdv_total')
+        .select('compteur, recompense_dispo')
         .eq('client_id', rdv.client_id)
         .eq('commercant_id', rdv.commercant.id)
         .maybeSingle()
-      nbRdvActuels = prog?.nb_rdv_total || 0
+      // ⚠️ ON LIT L'ERREUR. C'est son absence qui a caché le défaut pendant des
+      // mois : la requête échouait, `prog` valait null, et le zéro passait pour
+      // une progression légitime.
+      if (errProg) {
+        console.error('[emails/rdv-honore] progression illisible', errProg)
+        return NextResponse.json(
+          { ok: false, error: `progression illisible : ${errProg.message || errProg.code}` },
+          { status: 500 }
+        )
+      }
+      const compteur = Number(prog?.compteur) || 0
+      recompenseDebloquee = prog?.recompense_dispo === true && compteur === 0
+      // ⚠️ AU DÉBLOCAGE, ON AFFICHE LE SEUIL, PAS LE ZÉRO. Le client vient de
+      // compléter sa carte : lui écrire « 0/10 » à cette seconde précise serait
+      // le plus mauvais moment de tout le programme.
+      nbRdvActuels = recompenseDebloquee ? seuil : compteur
     }
 
     // 1) Email progression (toujours envoye)

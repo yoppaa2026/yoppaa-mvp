@@ -54,6 +54,19 @@ FROM rdv_fidelite_progression;
 -- deviennent ceux de la carte unifiée. COALESCE partout, pour ne jamais écraser
 -- un réglage qu'il aurait déjà posé côté unifié.
 
+-- 🔴 CORRIGÉ APRÈS COUP, LE 27/08, ET LA FAUTE VALAIT DE L'ARGENT.
+-- La première version écrivait un libellé construit sur rdv_fidelite_pourcent,
+-- SANS REGARDER le fidelite_recompense_type déjà posé. Chez Dermaé, le type
+-- valait `remise_montant` et la valeur 10.00 : le texte annonçait donc
+-- « -10% sur ton prochain rendez-vous » pour une récompense de 10 EUROS. Sur un
+-- soin à 60 €, la phrase promettait 6 € et le tunnel en appliquait 10.
+--
+-- ⚠️ ON N'ÉCRIT PLUS DE LIBELLÉ DU TOUT. `libelleRecompense()` le déduit du
+-- type et de la valeur, donc il est juste par construction. Un libellé qui
+-- recopie ces deux champs est une SECONDE VÉRITÉ, et elle dérive au premier
+-- changement de réglage du commerçant. On ne le garde que s'il l'a écrit
+-- lui-même.
+
 UPDATE commercants
 SET fidelite_actif              = true,
     fidelite_mecanique          = COALESCE(fidelite_mecanique, 'passages'),
@@ -62,9 +75,6 @@ SET fidelite_actif              = true,
     fidelite_recompense_type    = COALESCE(fidelite_recompense_type, 'remise_pct'),
     fidelite_recompense_valeur  = COALESCE(fidelite_recompense_valeur,
                                            NULLIF(rdv_fidelite_pourcent, 0), 10),
-    fidelite_recompense_libelle = COALESCE(NULLIF(TRIM(fidelite_recompense_libelle), ''),
-                                           '-' || COALESCE(NULLIF(rdv_fidelite_pourcent, 0), 10)::text
-                                           || '% sur ton prochain rendez-vous'),
     rdv_fidelite_actif          = false
 WHERE rdv_fidelite_actif = true;
 

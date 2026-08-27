@@ -1,6 +1,9 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { postPro } from '@/lib/fetch-pro'
+// ⚠️ `prevenirClient` LIT LA RÉPONSE, `postPro` ne fait que la rendre. Les
+// appels qui engagent le CLIENT passent par le premier : un email qui ne part
+// pas doit se voir (Alex, 27/08).
+import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import { retourArriereAutorise, alerteAutreOnglet, indexBlocages, appliquerBlocage, etatCreneau } from '@/lib/tableau-de-bord'
@@ -965,6 +968,10 @@ export default function Dashboard() {
   // référence, et repropose le transporteur déjà saisi si le commerçant
   // revient corriger.
   const [commandeAExpedier, setCommandeAExpedier] = useState(null)
+  // 🔴 CE QUI N'EST PAS PARTI CHEZ LE CLIENT, ET QUI NE SE DISAIT NULLE PART.
+  // Voir `prevenirClient` : un 403 ou un 500 ne déclenchait aucun `.catch()`,
+  // donc le commerçant croyait avoir prévenu quelqu'un qui n'avait rien reçu.
+  const [envoiRate, setEnvoiRate] = useState(null)   // { quoi, erreur }
   // La question posée avant d'agir sur un rendez-vous, puis la phrase qui dit
   // ce qui a été fait. Deux états et pas un : la fenêtre reste ouverte après le
   // geste pour confirmer, au lieu de disparaître en laissant deviner.
@@ -1519,11 +1526,27 @@ export default function Dashboard() {
       postPro('/api/commande/push-statut', { commande_id: commandeId, statut }).catch(e => console.warn('[dashboard] push-statut KO', e))
     }
 
-    // Si on passe a 'pret' : email au Yopper pour le prevenir
-    // (non-bloquant, fire-and-forget — l'UI commercant est deja a jour)
+    // Si on passe a 'pret' : email au Yopper pour le prevenir.
+    // ⚠️ NON BLOQUANT MAIS PLUS MUET. L'écran du commerçant est déjà à jour, et
+    // il le reste : on ne l'arrête pas parce qu'un email n'est pas parti. Mais
+    // on le lui DIT, sinon il attend un client qui n'a jamais été prévenu.
     if (statut === 'pret') {
-      postPro('/api/emails/commande-prete', { commande_id: commandeId }).catch(e => console.warn('[dashboard] email commande-prete KO', e))
+      signalerEnvoi('/api/emails/commande-prete', { commande_id: commandeId }, 'l’email « c’est prêt »')
     }
+  }
+
+  // ⚠️ « PERSONNE NE CHERCHE UNE INFORMATION » (règle d'Alex). Un email qui ne
+  // part pas est une information que le commerçant doit recevoir SANS LA
+  // CHERCHER : c'est lui qui attendra le client au comptoir.
+  //
+  // ⚠️ ET SEULEMENT POUR CE QUI ENGAGE LE CLIENT. Un push raté n'est pas un
+  // email raté : le message se retrouve dans l'application de toute façon. Si
+  // cette ligne s'affichait à chaque hoquet, plus personne ne la lirait, et
+  // elle ne servirait plus le jour où elle compte.
+  async function signalerEnvoi(url, corps, quoi) {
+    const r = await prevenirClient(url, corps, quoi)
+    if (!r.ok) setEnvoiRate({ quoi: r.quoi, erreur: r.erreur })
+    return r.ok
   }
 
   // Flux de statut spécifique livraison : Prête → En livraison → Livrée.
@@ -1548,7 +1571,7 @@ export default function Dashboard() {
     // un colis n'apprenait rien. Le numéro de suivi restait dans ce tableau de
     // bord. Envoyé APRÈS la mise à jour en base, pour que la route relise le
     // numéro qui vient d'être enregistré. Non bloquant : l'écran est déjà à jour.
-    postPro('/api/emails/commande-expediee', { commande_id: commandeId }).catch(e => console.warn('[dashboard] email commande-expediee KO', e))
+    signalerEnvoi('/api/emails/commande-expediee', { commande_id: commandeId }, 'l’email avec le suivi du colis')
     // 🔴 ET LE PUSH, QUI N'EXISTAIT PAS. « Prête » envoyait au client d'une
     // expédition le message du RETRAIT — « va récupérer ta commande » — puis
     // plus rien quand le colis partait vraiment. Il attendait au magasin un
@@ -1736,9 +1759,9 @@ export default function Dashboard() {
     if (statut === 'annule_commercant') {
       // TODO Sess 4/8 suite : refund Stripe acompte côté commerçant.
       // Pour l'instant on notifie juste le Yopper, le commerçant refund manuellement via Stripe Dashboard.
-      postPro('/api/emails/rdv-annule', { rdv_id: rdvId, raison_annulation: raison }).catch(e => console.warn('[dashboard] email rdv-annule KO', e))
+      signalerEnvoi('/api/emails/rdv-annule', { rdv_id: rdvId, raison_annulation: raison }, 'l’email d’annulation du rendez-vous')
     } else if (statut === 'honore') {
-      postPro('/api/emails/rdv-honore', { rdv_id: rdvId }).catch(e => console.warn('[dashboard] email rdv-honore KO', e))
+      signalerEnvoi('/api/emails/rdv-honore', { rdv_id: rdvId }, 'l’email de fin de rendez-vous')
 
       // ⚠️ LE RENDEZ-VOUS HONORÉ EMPORTE SES PRODUITS. C'est le moment exact où
       // le commerçant tend le sachet : lui demander un second geste dans un
@@ -1751,7 +1774,7 @@ export default function Dashboard() {
     } else if (statut === 'no_show') {
       // Notif Yopper qu'il a été marqué absent (transparence + permet contestation).
       // L'acompte n'est PAS refundé (le commerçant a bloqué le créneau pour rien).
-      postPro('/api/emails/rdv-no-show', { rdv_id: rdvId }).catch(e => console.warn('[dashboard] email rdv-no-show KO', e))
+      signalerEnvoi('/api/emails/rdv-no-show', { rdv_id: rdvId }, 'l’email « tu n’es pas venu »')
     }
     return true
   }
@@ -2695,6 +2718,40 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
+          {/* ─── CE QUI N'EST PAS PARTI CHEZ LE CLIENT ─────────────────────
+              🔴 « Le mail colis prêt n'arrive pas » (Alex, 27/08). Il ne
+              partait pas ET personne ne pouvait le savoir : quatre couches se
+              passaient le silence. Voir `prevenirClient`.
+
+              ⚠️ ELLE DIT CE QUI MARCHE ENCORE. Sans ça le commerçant croit
+              avoir tout perdu et rappelle son client à la main, alors que sa
+              commande est bien à jour dans l'application. Un avertissement qui
+              n'indique pas la suite est une inquiétude, pas une information.
+
+              ⚠️ ET ELLE NE S'AFFICHE QUE POUR CE QUI ENGAGE LE CLIENT : un
+              push raté n'apparaît pas ici. Une bande qui s'allume tout le
+              temps ne se lit plus le jour où elle compte. */}
+          {envoiRate && (
+            <div style={{ margin: '0 0 12px', background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                <path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
+              </svg>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 800, color: '#92400E', lineHeight: 1.4 }}>
+                  {envoiRate.quoi} n&rsquo;est pas parti
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: '0.74rem', fontWeight: 600, color: '#92400E', lineHeight: 1.45, overflowWrap: 'anywhere' }}>
+                  Ta commande est bien à jour, ton client la voit dans son application. Tu peux le prévenir par téléphone si c&rsquo;est urgent.
+                  {envoiRate.erreur ? ` (${envoiRate.erreur})` : ''}
+                </p>
+              </div>
+              <button onClick={() => setEnvoiRate(null)} aria-label="Fermer"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, color: '#B45309', fontWeight: 900, fontSize: '1rem', lineHeight: 1 }}>
+                ×
+              </button>
+            </div>
+          )}
 
           {/* ─── Actions rapides (esprit ODOO : les gestes de comptoir sont à
               portée de clic depuis l'écran d'accueil, sans fouiller les

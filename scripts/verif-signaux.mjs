@@ -118,7 +118,28 @@ verifier('une envie vide ne passe pas', !envieConnue('') && !envieConnue(null))
   // `SignauxYopper`.
   const bloc = readFileSync(new URL('../app/commander/SignauxYopper.js', import.meta.url), 'utf8')
   verifier('le Yopper peut demander une carte de fidélité',
-    /fidelite: {2}'Une carte de fidélité'/.test(bloc))
+    /fidelite: {2}'Carte de fidélité'/.test(bloc))
+  // ⚠️ LES LIBELLÉS NOMMENT LE SERVICE, pas le geste (Alex, 27/08). C'est la
+  // même liste que celle du tableau de bord : les deux côtés doivent parler
+  // des mêmes choses, sinon le commerçant ne reconnaît pas ce qu'on lui
+  // rapporte.
+  verifier('et les cinq libellés sont ceux d\'Alex',
+    /commande: {2}'Commande en ligne'/.test(bloc)
+    && /livraison: 'Livraison'/.test(bloc)
+    && /rdv: {7}'Prendre rendez-vous'/.test(bloc)
+    && /deals: {5}'Bonnes affaires, deals et actus'/.test(bloc))
+  verifier('la phrase part de son envie à lui',
+    /Tu aimerais un service en plus chez/.test(bloc)
+    && /Demande-le-lui en cliquant ci-dessous/.test(bloc))
+  // ⚠️ « VOIR LES PRIX » N'A PLUS DE BOUTON, ET IL ÉTAIT MORT DEPUIS TOUJOURS :
+  // `prix_affiches` vaut `true` dans les TROIS forfaits, donc sa condition
+  // n'a JAMAIS été vraie. Le vérifier ici plutôt que de le croire.
+  verifier('les trois forfaits affichent déjà les prix',
+    ['exister', 'communiquer', 'vendre'].every(p => PLAN_FEATURES[p].prix_affiches === true))
+  verifier('le bouton « voir les prix » a disparu', !/prix: /.test(bloc))
+  // ⚠️ MAIS LE VOCABULAIRE RESTE : d'anciens signaux `prix` peuvent exister en
+  // base, et le tableau de bord doit continuer à les nommer.
+  verifier('le type « prix » reste connu du module', envieConnue('prix'))
   // ⚠️ ET IL N'Y A QU'UN SEUL BLOC. Le titre répété trois fois sur une même
   // page n'était plus une invitation, c'était une insistance.
   const fiche = readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8')
@@ -159,6 +180,43 @@ verifier('une envie vide ne passe pas', !envieConnue('') && !envieConnue(null))
   // panier, il vend un créneau.
   verifier('et jamais « commander ici » chez un prestataire',
     !listeSalon.includes('commande'))
+
+  // 🔴 LA BOUTIQUE TÉMOIN : DÉTAIL, VENDRE, ET ELLE EXPÉDIE (Alex, 27/08 :
+  // « y'a le signal pour expédition alors qu'on le fait »).
+  //
+  // ⚠️ DEUX MÉCANIQUES, UN SEUL BESOIN. `livraison_actif` est l'interrupteur de
+  // la TOURNÉE alimentaire ; un détaillant ne fait pas de tournée, il EXPÉDIE
+  // (`boutique_mode_vente`). La règle lisait donc un drapeau jamais allumé chez
+  // lui, et le bouton restait à vie.
+  const boutiqueQuiExpedie = {
+    categorie: 'detail', plan: 'vendre',
+    boutique_mode_vente: 'expedition', fidelite_actif: true,
+  }
+  verifier('une boutique qui expédie ne se fait pas réclamer la livraison',
+    !enviesProposables(boutiqueQuiExpedie, { peutCommander: true }).includes('livraison'))
+  verifier('ni « les deux »',
+    !enviesProposables({ ...boutiqueQuiExpedie, boutique_mode_vente: 'les_deux' }, { peutCommander: true })
+      .includes('livraison'))
+  // ⚠️ ET ON N'A PAS FERMÉ LE CAS QU'ON VOULAIT GARDER : une boutique qui ne
+  // fait QUE du retrait doit toujours pouvoir se le faire demander. `retrait`
+  // est la valeur PAR DÉFAUT de la colonne, donc la seule qui veut dire « rien ».
+  verifier('une boutique qui ne fait que du retrait, si',
+    enviesProposables({ ...boutiqueQuiExpedie, boutique_mode_vente: 'retrait' }, { peutCommander: true })
+      .includes('livraison'))
+  // Et l'alimentaire garde SA mécanique : la tournée.
+  verifier('une friterie qui livre déjà ne se fait rien réclamer',
+    !enviesProposables({ categorie: 'alimentaire', plan: 'vendre', livraison_actif: true }, { peutCommander: true })
+      .includes('livraison'))
+  verifier('une friterie sans tournée, si',
+    enviesProposables({ categorie: 'alimentaire', plan: 'vendre', livraison_actif: false }, { peutCommander: true })
+      .includes('livraison'))
+
+  // ⚠️ ET LES DEALS SUIVENT LE FORFAIT EFFECTIF. Communiquer les a ; un Exister
+  // EN ESSAI de Communiquer aussi, et on ne doit plus les lui réclamer.
+  verifier('on réclame les bonnes affaires à un Exister',
+    enviesProposables({ categorie: 'alimentaire', plan: 'exister' }, { peutCommander: false }).includes('deals'))
+  verifier('mais plus à un Communiquer',
+    !enviesProposables({ categorie: 'alimentaire', plan: 'communiquer' }, { peutCommander: false }).includes('deals'))
 
   const complet = {
     categorie: 'alimentaire', plan: 'vendre',

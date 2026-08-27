@@ -91,7 +91,24 @@ export async function POST(request) {
         paiement:          cmd,
       })
 
-      await envoyerAuCommercant({
+      // 🔴 ON LIT LE RÉSULTAT, ET C'EST TOUTE LA CORRECTION DU 27/08.
+      //
+      // Alex : « le mail colis prêt n'arrive pas ». Il avait raison, et
+      // personne ne pouvait le savoir : QUATRE COUCHES SE PASSAIENT LE
+      // SILENCE, chacune poliment.
+      //
+      //   1. `envoyer()` (lib/resend.js) NE LÈVE JAMAIS : il attrape l'erreur
+      //      Resend et rend `{ ok: false, error }` ;
+      //   2. cette route ne lisait pas ce retour, donc son `try/catch`
+      //      n'attrapait rien — il n'y avait rien à attraper ;
+      //   3. elle rendait `{ ok: true }` quoi qu'il arrive ;
+      //   4. et le navigateur écrivait `postPro(...).catch(...)`, qui ne se
+      //      déclenche pas sur un code HTTP.
+      //
+      // ⚠️ UN `await` DONT ON NE LIT PAS LE RÉSULTAT N'EST PAS UN ENVOI, C'EST
+      // UN ESPOIR. La même phrase que pour l'écriture du forfait le 26/08 :
+      // c'est le même défaut, dans l'autre sens.
+      const envoi = await envoyerAuCommercant({
         to: cmd.client_email,
         // Dire « prête » à quelqu'un qui ne se déplace pas ne veut rien dire :
         // ce qu'il attend, c'est de savoir que ça part.
@@ -102,8 +119,19 @@ export async function POST(request) {
           : `🎉 Ta commande #${referenceCommande(cmd) || ''} est prête chez ${cmd.commercant?.nom || ''}`,
         html,
       })
+      if (!envoi?.ok) {
+        // ⚠️ 502 ET PAS 500 : ce n'est pas nous qui avons échoué, c'est le
+        // service d'envoi. Le distinguer évite de chercher le défaut ici.
+        const detail = typeof envoi?.error === 'string'
+          ? envoi.error
+          : (envoi?.error?.message || envoi?.error?.name || 'refus du service d’envoi')
+        console.error('[emails/commande-prete] envoi refusé', { to: cmd.client_email, detail })
+        return NextResponse.json({ ok: false, error: detail }, { status: 502 })
+      }
     } catch (e) {
-      console.error('[emails/commande-prete] envoi KO', e)
+      // Il reste le cas où c'est la COMPOSITION qui casse, pas l'envoi.
+      console.error('[emails/commande-prete] exception de composition', e)
+      return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })
     }
 
     return NextResponse.json({ ok: true })

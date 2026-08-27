@@ -753,6 +753,129 @@ verifier('et range la commande du bon côté',
 }
 
 
+// ═══ « RIEN À SORTIR AU COMPTOIR » SUR UN COLIS ═════════════════════════════
+//
+// 🔴 Alex, 27/08 : l'email de confirmation d'une commande EXPÉDIÉE annonçait
+// « Payé en ligne · Rien à sortir au comptoir ». Il n'y a pas de comptoir.
+//
+// ⚠️ LA FONCTION CONNAISSAIT DÉJÀ LE MODE, mais seulement dans sa branche
+// IMPAYÉE (`auLivreur`). La branche PAYÉE disait « comptoir » à tout le monde,
+// et c'est elle qui part dans l'email qu'on lit en premier. **Un cas traité à
+// moitié est un cas non traité : il attend juste l'autre chemin.**
+{
+  const paye = (mode) => etatPaiementClient({ total: 43, paye_en_ligne: true, mode_retrait: mode })
+  verifier('un colis payé ne parle pas de comptoir',
+    !/comptoir/i.test(paye('expedition')?.detail || ''))
+  verifier('et il dit ce qui se passe vraiment',
+    /colis part/i.test(paye('expedition')?.detail || ''))
+  verifier('une livraison payée ne parle pas de comptoir non plus',
+    !/comptoir/i.test(paye('livraison')?.detail || ''))
+  // ⚠️ ET LE RETRAIT GARDE SON MOT. Une correction qui casse le cas d'origine
+  // n'est pas une correction.
+  verifier('le retrait, lui, garde son comptoir',
+    /comptoir/i.test(paye('retrait')?.detail || ''))
+  // ⚠️ LE REPLI EST LE RETRAIT, et c'est le bon : une commande sans
+  // `mode_retrait` est un Click and Collect, le mode historique.
+  verifier('sans mode connu, on retombe sur le comptoir',
+    /comptoir/i.test(paye(null)?.detail || ''))
+  // ⚠️ LE FRÈRE : une commande ENTIÈREMENT couverte par une récompense ne passe
+  // PAS par Stripe, donc `paye_en_ligne` est faux et elle atterrit dans une
+  // AUTRE branche, qui disait « comptoir » elle aussi.
+  const colisOffert = etatPaiementClient({ total: 5, fidelite_remise: 5, mode_retrait: 'expedition' })
+  verifier('un colis offert par la récompense ne parle pas de comptoir',
+    !/comptoir/i.test(colisOffert?.detail || ''))
+  verifier('et il dit d\'où vient la gratuité', /récompense/i.test(colisOffert?.detail || ''))
+}
+
+// ═══ QUATRE COUCHES SE PASSAIENT LE SILENCE ═════════════════════════════════
+//
+// 🔴 « LE MAIL COLIS PRÊT N'ARRIVE PAS » (Alex, 27/08). Le vrai défaut n'était
+// pas qu'il ne partait pas : c'est que PERSONNE NE POUVAIT LE SAVOIR.
+//
+//   1. `envoyer()` NE LÈVE JAMAIS : il attrape l'erreur Resend et rend
+//      `{ ok: false, error }` ;
+//   2. la route ne lisait pas ce retour, donc son `try/catch` n'attrapait rien ;
+//   3. elle rendait `{ ok: true }` quoi qu'il arrive ;
+//   4. et le navigateur écrivait `postPro(...).catch(...)`, qui ne se déclenche
+//      JAMAIS sur un code HTTP — c'est le comportement normal de `fetch`.
+//
+// ⚠️ UN `await` DONT ON NE LIT PAS LE RÉSULTAT N'EST PAS UN ENVOI, C'EST UN
+// ESPOIR. La même phrase que pour l'écriture du forfait le 26/08.
+{
+  for (const [nom, chemin] of [
+    ['« c\'est prêt »',   'app/api/emails/commande-prete/route.js'],
+    ['« colis parti »',   'app/api/emails/commande-expediee/route.js'],
+  ]) {
+    const src = lire(chemin)
+    verifier(`la route ${nom} lit le résultat de l'envoi`,
+      /const envoi = await envoyerAuCommercant\(/.test(src))
+    verifier(`la route ${nom} refuse de mentir quand l'envoi échoue`,
+      /if \(!envoi\?\.ok\)/.test(src) && /status: 502/.test(src))
+  }
+
+  const fetchPro = lire('lib/fetch-pro.js')
+  verifier('`prevenirClient` existe', /export async function prevenirClient/.test(fetchPro))
+  // ⚠️ IL LIT `res.ok`, PAS SEULEMENT LE `catch`. C'est toute la différence.
+  verifier('et il lit vraiment la réponse', /if \(res\.ok\)/.test(fetchPro))
+  // ⚠️ ET IL LIT LE CORPS : une raison vaut dix codes. « forfait insuffisant »
+  // et « commande introuvable » sont tous deux des 4xx et n'appellent pas le
+  // même geste.
+  verifier('il rapporte la raison, pas juste le code', /j\?\.error \|\| j\?\.message/.test(fetchPro))
+
+  const dash = lire('app/dashboard/page.js')
+  const dashCode = dash.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ')
+  // Les cinq envois qui engagent le CLIENT passent par le chemin bavard.
+  for (const url of ['commande-prete', 'commande-expediee', 'rdv-annule', 'rdv-honore', 'rdv-no-show']) {
+    verifier(`le tableau de bord signale l'échec de « ${url} »`,
+      new RegExp(`signalerEnvoi\\('/api/emails/${url}`).test(dashCode))
+  }
+  // ⚠️ ET LE COMMERÇANT LE VOIT SANS LE CHERCHER, avec CE QUI MARCHE ENCORE :
+  // un avertissement qui n'indique pas la suite est une inquiétude, pas une
+  // information.
+  verifier('et il l\'affiche au commerçant', /envoiRate && \(/.test(dashCode))
+  verifier('en lui disant ce qui marche encore',
+    /ton client la voit dans son application/.test(dash))
+}
+
+// ═══ DEUX ROUTES D'ANNULATION, UN SEUL DISCOURS ═════════════════════════════
+//
+// 🔴 « RIEN NE DIT QUE LES 10 € DE FIDÉLITÉ ONT ÉTÉ REMIS » (Alex, 27/08).
+//
+// ⚠️ LE CRÉDIT, LUI, FONCTIONNE : `rendreRecompense` remet `utilisee_at` à
+// null, incrémente le compteur de la carte et écrit un mouvement. C'est
+// l'EMAIL qui se taisait.
+//
+// ⚠️ ET C'EST LE FRÈRE NON TRAITÉ. Il existe DEUX chemins d'annulation, et les
+// gabarits n'ont été corrigés que pour l'un des deux le 26/08. Celui qui tourne
+// vraiment, `/api/commande/cancel`, compose ses propres appels : personne n'est
+// allé voir. Les deux doivent passer LES MÊMES COLONNES, sinon ils divergeront
+// encore.
+{
+  for (const [nom, chemin] of [
+    ['/api/emails/commande-annulee', 'app/api/emails/commande-annulee/route.js'],
+    ['/api/commande/cancel',         'app/api/commande/cancel/route.js'],
+  ]) {
+    const src = lire(chemin)
+    // ⚠️ ON CHERCHE DANS LE SELECT, PAS DANS LE FICHIER. Première écriture de
+    // cette garde : `/\bfidelite_remise\b/.test(src)`. Elle restait VERTE
+    // quand on retirait la colonne du select, parce que le mot survit dans les
+    // appels de gabarit deux cents lignes plus bas. **Le mot présent AILLEURS
+    // dans le fichier**, pour la troisième fois en deux jours — mesuré par
+    // mutation, jamais vu à la relecture.
+    const listeSelect = (src.match(/(?:\.select\(|selectCols\s*=\s*)`([\s\S]*?)`/g) || []).join(' ')
+    verifier(`${nom} a bien un select repérable`, listeSelect.length > 0)
+    verifier(`${nom} charge la remise de fidélité DANS SON SELECT`,
+      /\bfidelite_remise\b/.test(listeSelect))
+    verifier(`${nom} charge aussi le bon cadeau dans son select`,
+      /\bbon_cadeau_montant\b/.test(listeSelect))
+    // Deux gabarits chacun : le Yopper ET le commerçant.
+    verifier(`${nom} la passe aux DEUX gabarits`,
+      (src.match(/fidelite_remise:\s+cmd\.fidelite_remise/g) || []).length >= 2)
+    verifier(`${nom} passe aussi le bon cadeau`,
+      (src.match(/bon_cadeau_montant:\s+cmd\.bon_cadeau_montant/g) || []).length >= 2)
+  }
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

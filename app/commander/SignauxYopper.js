@@ -31,13 +31,22 @@ const T = {
 // « j'envoie une envie », il pense « je veux pouvoir commander ici ».
 // ⚠️ Ce sont SES mots, jamais le vocabulaire du produit : pas de « formule »,
 // pas de « débloquer », pas de nom de forfait.
+// ⚠️ LES LIBELLÉS SONT CEUX D'ALEX (27/08), et ils nomment LE SERVICE, pas le
+// geste. « Commander ici » disait ce que l'habitant ferait ; « Commande en
+// ligne » dit ce qui manque au commerce. C'est la même liste que celle qu'un
+// commerçant lit dans son tableau de bord : les deux côtés parlent enfin des
+// mêmes choses.
+//
+// ⚠️ « Voir les prix » A DISPARU. Sa condition était `!canDo(plan,
+// 'prix_affiches')`, or les TROIS forfaits affichent les prix : le bouton
+// n'a jamais pu s'afficher chez personne. Le type `prix` reste dans
+// `TYPES_ENVIE`, pour que d'anciens signaux gardent un nom.
 const BOUTONS = {
-  commande:  'Commander ici',
-  livraison: 'Être livré',
+  commande:  'Commande en ligne',
+  livraison: 'Livraison',
   rdv:       'Prendre rendez-vous',
-  prix:      'Voir les prix',
-  fidelite:  'Une carte de fidélité',
-  deals:     'Ses bons plans',
+  fidelite:  'Carte de fidélité',
+  deals:     'Bonnes affaires, deals et actus',
 }
 
 export default function SignauxYopper({ types = [], commercant }) {
@@ -80,19 +89,19 @@ export default function SignauxYopper({ types = [], commercant }) {
           <p style={{ fontSize: '0.6rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 6px', opacity: 0.85 }}>
             Dis-lui ce que tu voudrais
           </p>
-          {/* ⚠️ UNE PHRASE, SIMPLE, ET ELLE PART DE LUI. Pas « demande à ce
-              commerçant d'activer », qui place l'habitant en pétitionnaire et
-              parle le vocabulaire interne du produit. On dit ce qui manque,
-              et que ça se dit en un clic. */}
+          {/* ⚠️ UNE PHRASE, SIMPLE, ET ELLE PART DE LUI. Mots d'Alex, 27/08.
+              Pas « demande à ce commerçant d'activer », qui place l'habitant en
+              pétitionnaire et parle le vocabulaire interne du produit : on
+              nomme un SERVICE EN PLUS, et on dit que ça tient en un clic. */}
           <p style={{ fontSize: 14.5, fontWeight: 700, color: '#fff', lineHeight: 1.45, margin: '0 0 4px', letterSpacing: '-0.2px' }}>
             {tousEnvoyes
               ? <>C&rsquo;est transmis à <strong>{commercant.nom}</strong> 🟣</>
-              : <>Il te manque quelque chose chez <strong>{commercant.nom}</strong> ?</>}
+              : <>Tu aimerais un service en plus chez <strong>{commercant.nom}</strong> ?</>}
           </p>
           <p style={{ fontSize: 12.5, fontWeight: 600, color: T.light, lineHeight: 1.5, margin: '0 0 12px', opacity: 0.9 }}>
             {tousEnvoyes
               ? 'Il verra combien d’habitants le demandent. Merci d’avoir pris trente secondes.'
-              : 'Un clic, et il le saura. On ne lui donne jamais ton nom.'}
+              : 'Demande-le-lui en cliquant ci-dessous. On ne lui donne jamais ton nom.'}
           </p>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

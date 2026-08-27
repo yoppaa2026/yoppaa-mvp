@@ -50,7 +50,7 @@ export async function POST(request) {
       id, statut, paye_en_ligne, total, stripe_payment_intent_id,
       client_email, client_nom, annulation_token, created_at, commercant_id,
       numero_commande, numero_prefixe, date_commande, creneau_id, rappel_push_id,
-      bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id,
+      bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id, fidelite_remise,
       commercants:commercant_id (id, nom, slug, stripe_account_id, delai_annulation_heures),
       creneau:creneaux!creneau_id (heure_debut)
     `
@@ -254,7 +254,17 @@ export async function POST(request) {
           commercant_nom:  commercant?.nom || '',
           numero_commande: referenceCommande(cmd),
           total:           cmd.total,
-          refund_ok:       refundStatus === 'succeeded' || refundStatus === 'pending',
+          // 🔴 CES DEUX MONTANTS MANQUAIENT (Alex, 27/08 : « rien ne dit que
+          // les 10 € de fidélité ont été remis »). La récompense EST bien
+          // rendue quelques lignes plus haut ; c'est l'email qui se taisait.
+          //
+          // ⚠️ ET C'EST LE FRÈRE NON TRAITÉ. Les gabarits ont été corrigés le
+          // 26/08 pour l'AUTRE route d'annulation, `/api/emails/commande-annulee`.
+          // Celle-ci compose ses propres appels, et personne n'est allé voir.
+          // Le gabarit se taisait donc en silence : `Number(undefined)` n'est
+          // pas fini, aucune erreur, juste une ligne qui ne sort pas.
+          fidelite_remise:    cmd.fidelite_remise,
+          bon_cadeau_montant: cmd.bon_cadeau_montant,
           refund_manuel:   refundManuel,
           paye_en_ligne:   !!cmd.paye_en_ligne,
         })
@@ -285,6 +295,8 @@ export async function POST(request) {
           date_retrait:    cmd.date_commande,
           heure_debut:     details?.creneau?.heure_debut,
           heure_fin:       details?.creneau?.heure_fin,
+          fidelite_remise:    cmd.fidelite_remise,
+          bon_cadeau_montant: cmd.bon_cadeau_montant,
           refund_manuel:   refundManuel,
           paye_en_ligne:   !!cmd.paye_en_ligne,
         })

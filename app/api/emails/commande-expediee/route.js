@@ -85,13 +85,25 @@ export async function POST(request) {
         adresse_livraison: cmd.adresse_livraison,
       })
 
-      await envoyerAuCommercant({
+      // 🔴 ON LIT LE RÉSULTAT (27/08). `envoyer()` NE LÈVE JAMAIS : il attrape
+      // l'erreur Resend et rend `{ ok: false }`. Ne pas lire ce retour, c'est
+      // rendre `ok: true` sur un email qui n'est jamais parti — et le
+      // commerçant croit son client prévenu.
+      const envoi = await envoyerAuCommercant({
         to: cmd.client_email,
         subject: `📦 Ton colis #${referenceCommande(cmd) || ''} est parti de chez ${cmd.commercant?.nom || ''}`,
         html,
       })
+      if (!envoi?.ok) {
+        const detail = typeof envoi?.error === 'string'
+          ? envoi.error
+          : (envoi?.error?.message || envoi?.error?.name || 'refus du service d’envoi')
+        console.error('[emails/commande-expediee] envoi refusé', { to: cmd.client_email, detail })
+        return NextResponse.json({ ok: false, error: detail }, { status: 502 })
+      }
     } catch (e) {
-      console.error('[emails/commande-expediee] envoi KO', e)
+      console.error('[emails/commande-expediee] exception de composition', e)
+      return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })
     }
 
     return NextResponse.json({ ok: true })

@@ -91,11 +91,15 @@ function formatDuree(min) {
   const m = min % 60
   return m ? `${h}h${String(m).padStart(2,'0')}` : `${h}h`
 }
+// ⚠️ PLUS DE FOURCHETTE (Alex, 27/08) : « le prix est le prix ». Un « 30 – 50 € »
+// ne dit rien au client, ne permet pas de calculer un acompte honnête, et
+// déplace la négociation dans l'application. Ce qu'un commerçant ajoute en cours
+// de prestation, il l'ajoute à sa caisse. Les colonnes `prix_min` et `prix_max`
+// ont été retirées de la base le même jour, après conversion des fourchettes
+// existantes en prix fixe (au minimum annoncé).
 function formatPrix(prestation) {
-  const { prix, prix_min, prix_max } = prestation
+  const { prix } = prestation
   if (prix != null) return `${Number(prix).toFixed(2)} €`
-  if (prix_min != null && prix_max != null) return `${Number(prix_min).toFixed(0)} – ${Number(prix_max).toFixed(0)} €`
-  if (prix_min != null) return `dès ${Number(prix_min).toFixed(2)} €`
   return 'Sur demande'
 }
 
@@ -1335,10 +1339,9 @@ export default function CommanderRdvSlug() {
       }
       console.info('[rdv] validation OK, insert')
 
-      // Prix estimé (figé - si prix variable, on prend prix_min)
-      const prixEstime = prestationChoisie.prix != null
-        ? Number(prestationChoisie.prix)
-        : (prestationChoisie.prix_min != null ? Number(prestationChoisie.prix_min) : null)
+      // Le prix, figé sur le rendez-vous. Plus de repli sur une fourchette :
+      // elles n'existent plus (27/08).
+      const prixEstime = prestationChoisie.prix != null ? Number(prestationChoisie.prix) : null
 
       // Acompte (figé)
       const acomptePct = prestationChoisie.acompte_pourcent || commercant.rdv_acompte_global || 0
@@ -2787,7 +2790,7 @@ export default function CommanderRdvSlug() {
                         <p style={{ margin: 0, fontSize: '0.74rem', color: T.deep, fontWeight: 700, background: T.pale, borderRadius: 8, padding: '6px 10px' }}>
                           Acompte {prestationChoisie.acompte_pourcent}% {acompteEnLigneDispo ? 'à payer en ligne maintenant' : 'à régler sur place'}
                           {(() => {
-                            const base = prestationChoisie.prix != null ? Number(prestationChoisie.prix) : (prestationChoisie.prix_min != null ? Number(prestationChoisie.prix_min) : null)
+                            const base = prestationChoisie.prix != null ? Number(prestationChoisie.prix) : null
                             return base != null ? ` · ${(Math.round(base * prestationChoisie.acompte_pourcent) / 100).toFixed(2)}€` : ''
                           })()}
                         </p>
@@ -3004,7 +3007,7 @@ export default function CommanderRdvSlug() {
                     // bouton aurait annoncé « Payer 12,50 € et confirmer »
                     // devant une séance qui ne coûte rien.
                     const acompteEnLigne = !seanceSurAbo && !!(commercant?.rdv_acompte_en_ligne_actif && commercant?.stripe_account_charges_enabled && prestationChoisie?.acompte_pourcent > 0)
-                    const prixBase = prestationChoisie?.prix != null ? Number(prestationChoisie.prix) : (prestationChoisie?.prix_min != null ? Number(prestationChoisie.prix_min) : null)
+                    const prixBase = prestationChoisie?.prix != null ? Number(prestationChoisie.prix) : null
                     // ⚠️ LA RÉCOMPENSE BAISSE LE TOTAL, ET L'ACOMPTE SE CALCULE
                     // SUR CE TOTAL RÉDUIT (arbitrage d'Alex, 24/08). Sinon le
                     // Yopper avancerait un acompte calculé sur un prix qu'il ne

@@ -6841,7 +6841,7 @@ function TabRdv({ commercantId, commercant, toast, onSaved }) {
 }
 
 // Sess 5a : CRUD Prestations RDV. nom, description, durée_minutes, prix
-// (fixe ou fourchette prix_min/max), acompte_pourcent, ordre, actif.
+// (fixe, ou vide = sur demande), acompte_pourcent, ordre, actif.
 // Soft delete via deleted_at (conformité 7 ans Belgique).
 function TabRdvPrestations({ commercantId, toast }) {
   const [prestations, setPrestations] = useState([])
@@ -6854,7 +6854,7 @@ function TabRdvPrestations({ commercantId, toast }) {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
-  const initialForm = { nom: '', description: '', duree_minutes: '30', prix_mode: 'fixe', prix: '', prix_min: '', prix_max: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1' }
+  const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1' }
   const [form, setForm] = useState(initialForm)
   // Propositions IA pour la description de la prestation (surface 'prestation')
   const [propsIa, setPropsIa] = useState([])
@@ -6910,15 +6910,11 @@ function TabRdvPrestations({ commercantId, toast }) {
   }
   function openEdit(p) {
     setPropsIa([])
-    const isFourchette = p.prix == null && (p.prix_min != null || p.prix_max != null)
     setForm({
       nom: p.nom || '',
       description: p.description || '',
       duree_minutes: String(p.duree_minutes || 30),
-      prix_mode: isFourchette ? 'fourchette' : 'fixe',
       prix: p.prix != null ? String(p.prix) : '',
-      prix_min: p.prix_min != null ? String(p.prix_min) : '',
-      prix_max: p.prix_max != null ? String(p.prix_max) : '',
       acompte_pourcent: String(p.acompte_pourcent ?? 0),
       actif: p.actif !== false,
       tva_taux: p.tva_taux ?? '',
@@ -6950,9 +6946,8 @@ function TabRdvPrestations({ commercantId, toast }) {
       nom: form.nom.trim(),
       description: form.description.trim() || null,
       duree_minutes: duree,
-      prix:     form.prix_mode === 'fixe'       ? (form.prix ? Number(form.prix) : null) : null,
-      prix_min: form.prix_mode === 'fourchette' ? (form.prix_min ? Number(form.prix_min) : null) : null,
-      prix_max: form.prix_mode === 'fourchette' ? (form.prix_max ? Number(form.prix_max) : null) : null,
+      // Vide = tarif de vive voix, la fiche affiche « Prix sur demande ».
+      prix: form.prix ? Number(form.prix) : null,
       acompte_pourcent: Math.max(0, Math.min(100, parseInt(form.acompte_pourcent, 10) || 0)),
       actif: !!form.actif,
       // Vide = pas renseigné : null, jamais 0, sinon la prestation passerait
@@ -7027,11 +7022,7 @@ function TabRdvPrestations({ commercantId, toast }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {prestations.map(p => {
-            const prixLabel = p.prix != null
-              ? `${Number(p.prix).toFixed(2)} €`
-              : (p.prix_min != null || p.prix_max != null)
-                ? `${p.prix_min ? Number(p.prix_min).toFixed(0) : '?'} – ${p.prix_max ? Number(p.prix_max).toFixed(0) : '?'} €`
-                : 'Prix sur demande'
+            const prixLabel = p.prix != null ? `${Number(p.prix).toFixed(2)} €` : 'Prix sur demande'
             return (
               <div key={p.id} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: `1px solid ${T.hairline}`, opacity: p.actif ? 1 : 0.55, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -7138,28 +7129,20 @@ function TabRdvPrestations({ commercantId, toast }) {
               </p>
             </div>
 
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 6 }}>Tarification</label>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-              <button onClick={() => setForm({ ...form, prix_mode: 'fixe' })} style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${form.prix_mode === 'fixe' ? T.main : T.hairline}`, background: form.prix_mode === 'fixe' ? T.pale : '#fff', color: form.prix_mode === 'fixe' ? T.main : T.muted, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>Prix fixe</button>
-              <button onClick={() => setForm({ ...form, prix_mode: 'fourchette' })} style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${form.prix_mode === 'fourchette' ? T.main : T.hairline}`, background: form.prix_mode === 'fourchette' ? T.pale : '#fff', color: form.prix_mode === 'fourchette' ? T.main : T.muted, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>Fourchette</button>
+            {/* ⚠️ LA FOURCHETTE A ÉTÉ RETIRÉE LE 27/08 (décision d'Alex).
+                « Le prix est le prix » : un « 30 – 50 € » ne dit rien au client,
+                interdit de calculer un acompte honnête, et déplace la
+                négociation dans l'application. Ce qu'un commerçant ajoute en
+                cours de prestation, il l'ajoute à sa caisse. Les colonnes
+                `prix_min` et `prix_max` ont été supprimées de la base, après
+                conversion des fourchettes existantes au minimum annoncé. */}
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Prix (€)</label>
+              <Input type="number" min="0" step="0.50" value={form.prix} onChange={e => setForm({ ...form, prix: e.target.value })} placeholder="35.00"/>
+              <p style={{ fontSize: 11, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
+                Laisse vide si le tarif se fixe de vive voix : ta prestation s&rsquo;affichera « Prix sur demande ».
+              </p>
             </div>
-            {form.prix_mode === 'fixe' ? (
-              <div style={{ marginBottom: 10 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Prix (€)</label>
-                <Input type="number" min="0" step="0.50" value={form.prix} onChange={e => setForm({ ...form, prix: e.target.value })} placeholder="35.00"/>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Min (€)</label>
-                  <Input type="number" min="0" step="0.50" value={form.prix_min} onChange={e => setForm({ ...form, prix_min: e.target.value })} placeholder="30"/>
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Max (€)</label>
-                  <Input type="number" min="0" step="0.50" value={form.prix_max} onChange={e => setForm({ ...form, prix_max: e.target.value })} placeholder="50"/>
-                </div>
-              </div>
-            )}
             {/* Junction prestation ↔ praticiens : optionnel, aucun coché = tous éligibles */}
             {praticiens.length > 0 && (
               <div style={{ marginBottom: 14, padding: 12, background: T.bg, borderRadius: 10 }}>

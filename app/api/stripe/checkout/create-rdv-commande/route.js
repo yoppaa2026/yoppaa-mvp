@@ -88,7 +88,7 @@ export async function POST(request) {
         .select('id, nom, slug, categorie, plan, stripe_account_id, stripe_account_charges_enabled, rdv_acompte_en_ligne_actif, rdv_acompte_global, tva_taux_defaut')
         .eq('id', commercant_id).single(),
       supabase.from('rdv_prestations')
-        .select('id, nom, prix, prix_min, acompte_pourcent, duree_minutes, commercant_id')
+        .select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id')
         .eq('id', prestation_id).single(),
     ])
 
@@ -104,9 +104,8 @@ export async function POST(request) {
     // Peut valoir zéro : la prestation n'en demande pas, ou le commerçant n'a
     // pas activé l'acompte en ligne. Dans ce cas seuls les produits sont
     // encaissés, et le rendez-vous est confirmé quand même.
-    const prixBase = prestation.prix != null
-      ? Number(prestation.prix)
-      : (prestation.prix_min != null ? Number(prestation.prix_min) : null)
+    // Plus de repli sur une fourchette : les colonnes n'existent plus (27/08).
+    const prixBase = prestation.prix != null ? Number(prestation.prix) : null
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
 
     // ─── RÉCOMPENSE DE FIDÉLITÉ ────────────────────────────────────────────

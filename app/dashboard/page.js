@@ -1144,7 +1144,7 @@ export default function Dashboard() {
         // fiche et le lien vers l'abonnement dans « Mes rendez-vous ». Le banc
         // exige désormais que TOUS les champs lus par les modales soient
         // demandés ici.
-        .select('id, nom, duree_minutes, prix, prix_min, prix_max, acompte_pourcent, ordre, tva_taux, capacite')
+        .select('id, nom, duree_minutes, prix, acompte_pourcent, ordre, tva_taux, capacite')
         .eq('commercant_id', id)
         .eq('actif', true)
         .is('deleted_at', null)

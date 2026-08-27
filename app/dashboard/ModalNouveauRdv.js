@@ -141,10 +141,9 @@ export default function ModalNouveauRdv({
   const finMin = dureeMin ? debutMin + dureeMin : null
   const heureFin = finMin != null ? minutesToTime(finMin) : null
 
-  // Prix estimé selon prestation (prix fixe ou prix_min si variable)
-  const prixEstime = presta
-    ? (presta.prix != null ? Number(presta.prix) : (presta.prix_min != null ? Number(presta.prix_min) : null))
-    : null
+  // Le prix de la prestation. Plus de fourchette depuis le 27/08 : le prix est
+  // le prix, et ce qu'on ajoute se règle à la caisse.
+  const prixEstime = presta && presta.prix != null ? Number(presta.prix) : null
 
   // ⚠️ LE VERDICT EST CALCULÉ ICI ET RÉUTILISÉ PARTOUT : l'encadré, le libellé du
   // bouton et l'écriture posent la MÊME question. Deux calculs auraient fini par
@@ -441,7 +440,7 @@ export default function ModalNouveauRdv({
             <select id="mn-rdv-presta" value={prestationId} onChange={(e) => setPrestationId(e.target.value)} style={inputSt}>
               <option value="">— Choisir une prestation —</option>
               {(prestations || []).map(p => {
-                const prix = p.prix != null ? `${Number(p.prix).toFixed(0)}€` : (p.prix_min != null ? `dès ${Number(p.prix_min).toFixed(0)}€` : '')
+                const prix = p.prix != null ? `${Number(p.prix).toFixed(0)}€` : ''
                 return (
                   <option key={p.id} value={p.id}>
                     {p.nom} · {p.duree_minutes}min{prix ? ` · ${prix}` : ''}

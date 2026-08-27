@@ -61,7 +61,7 @@ export async function POST(request) {
     const [{ data: commercant }, { data: prestation }] = await Promise.all([
       // ⚠️ `plan`, `essai_plan` ET `created_at` : la garde de forfait en dépend.
       supabase.from('commercants').select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, rdv_acompte_en_ligne_actif, rdv_acompte_global, rdv_actif, plan, essai_plan, created_at').eq('id', commercant_id).single(),
-      supabase.from('rdv_prestations').select('id, nom, prix, prix_min, acompte_pourcent, duree_minutes').eq('id', prestation_id).single(),
+      supabase.from('rdv_prestations').select('id, nom, prix, acompte_pourcent, duree_minutes').eq('id', prestation_id).single(),
     ])
 
     if (!commercant) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
@@ -104,7 +104,8 @@ export async function POST(request) {
     // acompte_pourcent est stocké en DB comme un entier (20 = 20%, PAS 0.20),
     // donc la formule est prix * pct / 100. Bug initial : *100 au lieu de /100
     // → un acompte de 20% sur 60€ donnait 1200€ au lieu de 12€ (testé en mode test, fix avant prod).
-    const prixBase = prestation.prix != null ? Number(prestation.prix) : (prestation.prix_min != null ? Number(prestation.prix_min) : null)
+    // Plus de repli sur une fourchette : les colonnes n'existent plus (27/08).
+    const prixBase = prestation.prix != null ? Number(prestation.prix) : null
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
     if (!prixBase || acomptePct <= 0) {
       return NextResponse.json({ ok: false, error: 'cette prestation ne demande pas d\'acompte en ligne' }, { status: 400 })

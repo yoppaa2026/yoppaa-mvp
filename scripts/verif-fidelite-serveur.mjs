@@ -14,8 +14,12 @@
 //
 //   npm run verif:fid
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { appliquerCredit, libelleRecompense, normaliserTelephone } from '../lib/fidelite.js'
+// ⚠️ IMPORTÉS POUR ÊTRE EXÉCUTÉS, pas pour verdir une garde par leur seule
+// présence : c'est l'IMPORT qui rendait des bancs verts à tort (19/08).
+import { texteSmsRecompense } from '../lib/fidelite-sms.js'
+import { emailFideliteRecompenseDebloquee } from '../lib/resend.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -148,7 +152,7 @@ const egal = (nom, obtenu, attendu) =>
 
   // ⚠️ LE SMS QUI NE PARTAIT JAMAIS DU COMPTOIR.
   verifie('🔴 le SMS de récompense part enfin du comptoir',
-    /smsRecompenseDebloquee\(db, com, maj\)/.test(route))
+    /smsRecompenseDebloquee\(db, com, maj, debloquees\)/.test(route))
   verifie('et il ne peut pas faire échouer le crédit',
     /try \{ sms = await smsRecompenseDebloquee[\s\S]{0,60}catch/.test(route))
 }
@@ -185,7 +189,7 @@ const egal = (nom, obtenu, attendu) =>
     /export async function crediterFideliteCommande\(/.test(serveur))
   verifie('le mouvement y précède aussi la carte',
     serveur.indexOf("from('fidelite_mouvements').insert({") < serveur.indexOf("from('fidelite_cartes').update(patch)"))
-  verifie('le SMS automatique est intact', /smsRecompenseDebloquee\(supabase, commercant, carte\)/.test(serveur))
+  verifie('le SMS automatique est intact', /smsRecompenseDebloquee\(supabase, commercant, carte, debloquees\)/.test(serveur))
   // ⚠️ ANCRÉ SUR L'APPEL, PAS SUR LE NOM. La garde était verte grâce à la
   // LIGNE D'IMPORT : on pouvait remplacer l'appel par `cmd.total` — donc
   // recompter la part payée par un bon cadeau, déjà créditée à l'achat du bon
@@ -235,12 +239,113 @@ const egal = (nom, obtenu, attendu) =>
 
   // ⚠️ PAS D'EMOJI DANS UN SMS : le 🟣 arrivait en « ? » chez l'opérateur, sur
   // le canal où l'on se méfie le plus des liens.
-  const textes = sms.match(/const contenu = `[^`]*`/g) || []
-  verifie('deux textes de SMS, pas plus', textes.length === 2, String(textes.length))
+  // ⚠️ ANCRÉ SUR `${SIGNATURE}`, PLUS SUR `const contenu`. Le texte de la
+  // récompense a été SORTI dans `texteSmsRecompense` pour devenir exécutable au
+  // banc (27/08) : la garde d'avant comptait des affectations, elle serait
+  // tombée à une seule sans que rien ne soit cassé, et le pluriel tout neuf
+  // n'aurait jamais été contrôlé contre l'emoji.
+  const textes = sms.match(/`\$\{SIGNATURE\}[^`]*`/g) || []
+  verifie('trois textes de SMS, pas plus', textes.length === 3, String(textes.length))
   for (const t of textes) {
     verifie('🔴 aucun emoji dans un SMS',
       !/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(t), t.slice(0, 60))
   }
+}
+
+// ═══ 6) LE PLURIEL ET L'EMAIL, EXÉCUTÉS (27/08) ════════════════════════════
+//
+// ⚠️ TOUT CE BLOC EXÉCUTE. Chercher le mot « chacune » dans un fichier ne
+// prouve rien : il peut vivre dans un commentaire, dans la branche morte, ou
+// dans une fonction que personne n'appelle. On construit les phrases.
+{
+  const com = {
+    id: 'c1', nom: 'Ciseaux et Soins',
+    fidelite_recompense_libelle: '10,00€ offerts',
+  }
+  const carte = { token: 'TOK123', telephone: '+32470000000' }
+
+  // ── Le SMS, aux deux nombres ──────────────────────────────────────────
+  const un = texteSmsRecompense(com, carte, 1)
+  const trois = texteSmsRecompense(com, carte, 3)
+  verifie('un SMS au singulier reste au singulier', /ta récompense est débloquée/.test(un))
+  verifie('et il ne dit pas « chacune » pour une seule', !/chacune/.test(un))
+  verifie('🔴 trois récompenses se disent au pluriel', /tu as 3 récompenses débloquées/.test(trois))
+  // ⚠️ SANS « CHACUNE », « 10,00€ offerts » à côté de « 3 récompenses » se lit
+  // comme un TOTAL : le message mentirait des deux tiers.
+  verifie('🔴 et « chacune » empêche de lire un total', /offerts chacune/.test(trois))
+  verifie('les deux portent le lien de la carte',
+    un.includes('/carte/TOK123') && trois.includes('/carte/TOK123'))
+  // Un nombre absent ou aberrant ne doit pas produire « tu as 0 récompenses ».
+  verifie('un nombre nul retombe sur le singulier',
+    /ta récompense est débloquée/.test(texteSmsRecompense(com, carte, 0)))
+
+  // ── L'email, exécuté lui aussi ────────────────────────────────────────
+  const html1 = emailFideliteRecompenseDebloquee({
+    prenom: 'Alexandre', commercant_nom: com.nom,
+    libelle: libelleRecompense(com), nombre: 1, carte_token: 'TOK123',
+  })
+  // 🔴 LA GARDE LA PLUS RENTABLE DU BLOC. L'ancien gabarit affichait
+  // `-${pourcent_recompense}%` : appelé avec les nouveaux paramètres, il aurait
+  // écrit « -undefined% » au client sans qu'aucune erreur ne soit levée.
+  verifie('🔴 aucun « undefined » dans l\'email', !/undefined/.test(html1))
+  verifie('l\'email dit ce que vaut la récompense', html1.includes('10,00€ offerts'))
+  verifie('et il mène à la carte, pas à une fiche',
+    html1.includes('/carte/TOK123') && html1.includes('Voir ma carte'))
+  // ⚠️ IL NE PARLE PLUS DE RENDEZ-VOUS. Le même email part désormais à qui
+  // achète du pain : « Réserver mon prochain RDV » n'a plus de sens.
+  verifie('🔴 il ne parle plus de rendez-vous', !/Réserver mon prochain RDV/.test(html1))
+
+  const html3 = emailFideliteRecompenseDebloquee({
+    prenom: 'Alexandre', commercant_nom: com.nom,
+    libelle: libelleRecompense(com), nombre: 3, carte_token: 'TOK123',
+  })
+  verifie('🔴 l\'email aussi sait compter', /3 récompenses/.test(html3))
+  verifie('et il dit « chacune »', /chacune/.test(html3))
+
+  // ⚠️ LE LIBELLÉ EST ÉCRIT PAR LE COMMERÇANT ET ARRIVE DANS LA BOÎTE D'UN
+  // TIERS. C'est la règle du 22/08, et ce champ est neuf.
+  const htmlXss = emailFideliteRecompenseDebloquee({
+    prenom: 'Alexandre', commercant_nom: com.nom,
+    libelle: '<script>alert(1)</script>', nombre: 1, carte_token: 'TOK123',
+  })
+  verifie('🔴 le libellé du commerçant est échappé',
+    !/<script>/.test(htmlXss) && /&lt;script&gt;/.test(htmlXss))
+
+  // ── L'ancienne fidélité des rendez-vous a bien disparu ────────────────
+  const resendSrc = lireCode('lib/resend.js')
+  verifie('🔴 l\'email de progression n\'existe plus',
+    !/emailFideliteProgression/.test(resendSrc))
+  verifie('🔴 et la route de l\'ancienne fidélité non plus',
+    !existsSync(new URL('../app/api/emails/rdv-honore/route.js', import.meta.url)))
+  const dash = lireCode('app/dashboard/page.js')
+  verifie('le tableau de bord ne l\'appelle plus', !/emails\/rdv-honore/.test(dash))
+
+  // ── L'email part du POINT DE CRÉDIT, et il lit son retour ─────────────
+  const serveur = lireCode('lib/fidelite-server.js')
+  verifie('🔴 le crédit annonce la récompense par email',
+    /await annoncerRecompenseParEmail\(commercant, carte, refs, debloquees\)/.test(serveur))
+  // ⚠️ UN `await` DONT ON NE LIT PAS LE RÉSULTAT EST UN ESPOIR, PAS UN ENVOI.
+  verifie('🔴 et il lit vraiment ce que Resend a répondu',
+    /if \(!res\?\.ok\)[\s\S]{0,120}NON PARTI/.test(serveur))
+  verifie('sans adresse, il ne tente rien', /if \(!to\) return \{ ok: false, raison: 'sans_email' \}/.test(serveur))
+  // Les deux chemins qui portent une adresse la font vraiment voyager.
+  verifie('la commande fait voyager le prénom', /client_prenom: prenomClient\(cmd\)/.test(serveur))
+  verifie('🔴 et elle demande `client_nom`, PAS `client_prenom`',
+    /client_email, client_nom, total/.test(serveur) && !/commandes[\s\S]{0,300}client_prenom,/.test(serveur))
+
+  // ⚠️ LE COMPTOIR N'ENVOIE PAS D'EMAIL, ET C'EST VOULU : il ne connaît qu'un
+  // numéro. Si un jour quelqu'un y branche l'email, il partira à `undefined`.
+  const comptoir = lireCode('app/api/fidelite/mouvement/route.js')
+  verifie('le comptoir reste au SMS seul', !/emailFidelite|envoyerAuCommercant/.test(comptoir))
+
+  // ── 🔴 LE CRON QUI PUNISSAIT LE BON ÉLÈVE ─────────────────────────────
+  const cron = lireCode('app/api/cron/fidelite-rdv/route.js')
+  verifie('🔴 le cron crédite aussi les rendez-vous CLÔTURÉS',
+    /\.in\('statut', \['confirme', 'honore'\]\)/.test(cron))
+  verifie('mais jamais un absent ni une annulation',
+    !/no_show/.test(cron) && !/annule/.test(cron))
+  verifie('et il fait voyager le prénom du Yopper',
+    /client_email, client_prenom, prestation/.test(cron) && /client_prenom: rdv\.client_prenom/.test(cron))
 }
 
 console.log(`\nFidélité serveur : ${ok} vérifications`)

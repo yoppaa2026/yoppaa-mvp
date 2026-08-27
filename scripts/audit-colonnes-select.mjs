@@ -199,15 +199,21 @@ const VERIFIEES = {
 
 // ⚠️ ET CE QUI RESTE DOUTEUX, PARCE QUE LES MIGRATIONS NE SUFFISENT PAS.
 // Ces colonnes n'apparaissent nulle part dans le dépôt, mais le code qui les
-// lit fonctionne en production : elles ont donc été ajoutées à la main dans la
+// lit fonctionne en production : elles auraient été ajoutées à la main dans la
 // console Supabase. **On ne les déclare ni vertes ni rouges tant qu'on n'a pas
 // interrogé la BASE**, et la requête qui tranche est dans
 // `migrations/DIAGNOSTIC_COLONNES_MANQUANTES.sql`.
-const A_CONFIRMER_EN_BASE = {
-  'rdv_reservations.annulation_token':      'le lien d’annulation des emails RDV fonctionne : la colonne existe forcément',
-  'pre_inscriptions.slug_kit':              'à confirmer en base',
-  'rdv_fidelite_progression.nb_rdv_total':  'vue créée hors dépôt, à confirmer en base',
-}
+//
+// ⚠️ VIDÉE LE 27/08, ET C'EST UNE BONNE NOUVELLE : les trois entrées ont été
+// tranchées en base. `annulation_token` et `slug_kit` existent vraiment, le
+// schéma réel les porte, l'exception ne servait plus à rien.
+// `rdv_fidelite_progression.nb_rdv_total` n'existait pas, et sa table entière
+// a été retirée avec l'ancienne fidélité des rendez-vous.
+//
+// ⚠️ UNE EXCEPTION QUI SURVIT À SON MOTIF DEVIENT UN TROU : le jour où l'un de
+// ces noms revient sous une autre forme, l'audit le laisserait passer en
+// silence. Une liste d'exceptions se solde, comme un audit.
+const A_CONFIRMER_EN_BASE = {}
 
 const manquantes = []
 const aConfirmer = []

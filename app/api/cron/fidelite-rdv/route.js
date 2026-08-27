@@ -54,10 +54,22 @@ export async function GET(request) {
     for (const commercant of eligibles) {
       const { data: rdvs, error: errRdvs } = await supabase
         .from('rdv_reservations')
-        .select('id, client_telephone, client_email, prestation:rdv_prestations(prix)')
+        // `client_prenom` sert l'email de récompense débloquée : c'est le seul
+        // chemin de crédit d'un rendez-vous, donc le seul endroit où le prénom
+        // du Yopper peut voyager jusqu'à l'annonce.
+        .select('id, client_telephone, client_email, client_prenom, prestation:rdv_prestations(prix)')
         .eq('commercant_id', commercant.id)
         .eq('date_rdv', dateHier)
-        .eq('statut', 'confirme')
+        // 🔴 LE FILTRE NE VOYAIT QUE `confirme`, ET IL PUNISSAIT LE BON ÉLÈVE.
+        // Trouvé le 27/08. Le tableau de bord permet de clôturer un rendez-vous
+        // (`changerStatutRdv(id, 'honore')`), et ce geste faisait sortir la
+        // ligne du filtre : le commerçant qui marquait ses rendez-vous comme
+        // honorés était le seul dont les clients n'étaient jamais crédités.
+        // Celui qui ne touchait à rien, si.
+        // ⚠️ On prend les deux statuts, jamais `no_show` ni les annulations :
+        // ceux-là n'ont pas eu lieu. Rejouer reste sans risque, l'index unique
+        // (carte_id, rdv_id) de `fidelite_mouvements` absorbe les doublons.
+        .in('statut', ['confirme', 'honore'])
         .is('deleted_at', null)
       if (errRdvs) {
         console.error('[cron/fidelite-rdv] fetch rdvs KO', { commercant: commercant.id, error: errRdvs.message })
@@ -73,6 +85,7 @@ export async function GET(request) {
           if (commercant.fidelite_mecanique === 'cagnotte' && !credit.montant) { ignores++; continue }
           const res = await crediterFidelite(supabase, commercant, rdv.client_telephone, credit, {
             source: 'rdv', rdv_id: rdv.id, client_email: rdv.client_email || null,
+            client_prenom: rdv.client_prenom || null,
           })
           if (res.deja_credite) deja++
           else if (res.ok) credites++

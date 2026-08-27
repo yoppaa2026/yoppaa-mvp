@@ -1761,7 +1761,19 @@ export default function Dashboard() {
       // Pour l'instant on notifie juste le Yopper, le commerçant refund manuellement via Stripe Dashboard.
       signalerEnvoi('/api/emails/rdv-annule', { rdv_id: rdvId, raison_annulation: raison }, 'l’email d’annulation du rendez-vous')
     } else if (statut === 'honore') {
-      signalerEnvoi('/api/emails/rdv-honore', { rdv_id: rdvId }, 'l’email de fin de rendez-vous')
+      // ⚠️ PLUS D'EMAIL ICI, ET C'EST UN RETRAIT VOLONTAIRE (27/08).
+      // `/api/emails/rdv-honore` servait l'ANCIENNE fidélité des rendez-vous,
+      // celle de `rdv_fidelite_progression`, supprimée le même jour. Elle
+      // n'écrivait qu'un compteur : aucune carte, aucun SMS, et aucune ligne
+      // dans `fidelite_recompenses`, donc une récompense annoncée par email et
+      // impossible à dépenser au moment de payer.
+      // La fidélité unifiée annonce le déblocage depuis `crediterFidelite`,
+      // pour les trois segments à la fois. Le crédit d'un rendez-vous, lui,
+      // passe par le cron de 9h le lendemain : l'annonce part donc le matin
+      // suivant, pas à la seconde où le commerçant clôture.
+      // ⚠️ L'email de PROGRESSION (« 4 sur 10 » à chaque passage) est retiré
+      // pour de bon : dix messages pour une récompense, quand la progression se
+      // lit déjà sur la fiche et sur la carte.
 
       // ⚠️ LE RENDEZ-VOUS HONORÉ EMPORTE SES PRODUITS. C'est le moment exact où
       // le commerçant tend le sachet : lui demander un second geste dans un

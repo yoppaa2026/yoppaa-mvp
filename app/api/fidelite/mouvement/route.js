@@ -196,7 +196,13 @@ export async function POST(request) {
         // ne part pas ne doit jamais faire échouer un crédit déjà écrit.
         // ⚠️ Envoyé APRÈS la création : il annonce quelque chose qui doit
         // exister quand le client clique sur le lien.
-        try { sms = await smsRecompenseDebloquee(db, com, maj) } catch { /* non bloquant */ }
+        // ⚠️ ET IL DIT COMBIEN. Un crédit de cagnotte franchit parfois plusieurs
+        // seuils d'un coup : le 27/08, trois crédits au comptoir en ont ouvert
+        // sept, et le SMS restait au singulier.
+        // ⚠️ PAS D'EMAIL ICI, ET C'EST VOULU : le comptoir ne connaît qu'un
+        // numéro de téléphone. Les chemins qui portent une adresse (commande,
+        // rendez-vous) passent par `crediterFidelite`, qui l'envoie.
+        try { sms = await smsRecompenseDebloquee(db, com, maj, debloquees) } catch { /* non bloquant */ }
       }
 
       return NextResponse.json({ ok: true, carte: maj, debloquees, sms })

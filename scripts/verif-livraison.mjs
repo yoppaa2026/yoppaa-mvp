@@ -825,8 +825,12 @@ verifier('et range la commande du bon côté',
 
   const dash = lire('app/dashboard/page.js')
   const dashCode = dash.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ')
-  // Les cinq envois qui engagent le CLIENT passent par le chemin bavard.
-  for (const url of ['commande-prete', 'commande-expediee', 'rdv-annule', 'rdv-honore', 'rdv-no-show']) {
+  // Les envois qui engagent le CLIENT passent par le chemin bavard.
+  // ⚠️ `rdv-honore` A QUITTÉ CETTE LISTE LE 27/08, avec sa route : il servait
+  // l'ancienne fidélité des rendez-vous, retirée le même jour. La fidélité
+  // unifiée annonce depuis `crediterFidelite`, côté serveur, donc hors du
+  // tableau de bord et hors de ce chemin-ci.
+  for (const url of ['commande-prete', 'commande-expediee', 'rdv-annule', 'rdv-no-show']) {
     verifier(`le tableau de bord signale l'échec de « ${url} »`,
       new RegExp(`signalerEnvoi\\('/api/emails/${url}`).test(dashCode))
   }

@@ -81,6 +81,7 @@ WHERE statut_publication = 'publie';
 -- ⚠️ GRANT SYSTÉMATIQUE. `CREATE OR REPLACE VIEW` conserve les droits
 -- existants, mais on ne PARIE pas là-dessus : une vue sans GRANT, c'est la
 -- fiche publique qui rend 42501 à tous les visiteurs, d'un coup.
+REVOKE INSERT, UPDATE, DELETE ON commercants_public FROM anon, authenticated;
 GRANT SELECT ON commercants_public TO anon, authenticated;
 
 -- ─── CONTRÔLE ───────────────────────────────────────────────────────────────

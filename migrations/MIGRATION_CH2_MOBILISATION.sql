@@ -44,4 +44,5 @@ LEFT JOIN pre_inscriptions p ON p.commune_id = c.id
 GROUP BY c.id, c.nom, c.province, c.active, c.seuil_preinscrits;
 
 -- 5. GRANT : la vue ne renvoie que des agrégats non-PII -> lecture publique OK.
+REVOKE INSERT, UPDATE, DELETE ON commune_stats FROM anon, authenticated;
 GRANT SELECT ON commune_stats TO anon, authenticated, service_role;

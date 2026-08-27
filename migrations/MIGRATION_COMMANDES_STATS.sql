@@ -39,6 +39,7 @@ SELECT
   created_at
 FROM commandes;
 
+REVOKE INSERT, UPDATE, DELETE ON commandes_stats FROM anon, authenticated;
 GRANT SELECT ON commandes_stats TO anon, authenticated;
 
 -- ─── 2. Policies RLS commerçant (dashboard, authentifié Supabase Auth) ──────

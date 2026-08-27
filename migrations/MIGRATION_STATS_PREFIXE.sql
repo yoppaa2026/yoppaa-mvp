@@ -46,6 +46,7 @@ FROM commandes;
 -- ⚠️ GRANT systématique : un CREATE OR REPLACE VIEW conserve les droits
 -- existants, mais on les repose explicitement pour que cette migration soit
 -- lisible seule, sans avoir à retrouver celle qui les avait posés.
+REVOKE INSERT, UPDATE, DELETE ON commandes_stats FROM anon, authenticated;
 GRANT SELECT ON commandes_stats TO anon, authenticated;
 
 -- ─── Contrôle ───────────────────────────────────────────────────────────────

@@ -49,6 +49,7 @@ WHERE statut_publication = 'publie';
 -- stripe_subscription_id, stripe_onboarding_done_at, subscription_*,
 -- billing_exempt, plan_actif_depuis, bce, representant_legal_*, kyb_*.
 
+REVOKE INSERT, UPDATE, DELETE ON commercants_public FROM anon, authenticated;
 GRANT SELECT ON commercants_public TO anon, authenticated;
 
 -- ─── 2. Verrouillage de la table de base ────────────────────────────────────

@@ -95,6 +95,7 @@ CREATE OR REPLACE VIEW avis_public AS
 COMMENT ON VIEW avis_public IS
   'Avis destinés à l''affichage public : la note, le commentaire, la réponse du commerçant et le fait que l''avis suive une commande. Ni client_id ni commande_id : ils relieraient un avis à une personne et à un achat.';
 
+REVOKE INSERT, UPDATE, DELETE ON avis_public FROM anon, authenticated;
 GRANT SELECT ON avis_public TO anon, authenticated;
 
 -- La table reste lisible par son auteur, par le commerçant concerné et par

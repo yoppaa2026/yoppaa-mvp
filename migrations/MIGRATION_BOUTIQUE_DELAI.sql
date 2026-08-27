@@ -80,6 +80,7 @@ SELECT
 FROM commercants
 WHERE statut_publication = 'publie';
 
+REVOKE INSERT, UPDATE, DELETE ON commercants_public FROM anon, authenticated;
 GRANT SELECT ON commercants_public TO anon, authenticated;
 
 -- ─── Contrôle de l'étape 2 ──────────────────────────────────────────────────

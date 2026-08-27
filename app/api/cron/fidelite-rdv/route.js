@@ -18,8 +18,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { crediterFidelite } from '@/lib/fidelite-server'
-import { canDo } from '@/lib/plans'
+import { crediterFideliteRdv } from '@/lib/fidelite-server'
 
 export async function GET(request) {
   const authHeader = request.headers.get('authorization') || ''
@@ -39,66 +38,44 @@ export async function GET(request) {
     const hier = new Date(Date.now() - 24 * 60 * 60 * 1000)
     const dateHier = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Brussels' }).format(hier)
 
-    // Commerçants éligibles : fidélité active + Vendre (fidelite_auto)
-    const { data: commercants, error: errCom } = await supabase
-      .from('commercants')
-      .select('*')
-      .eq('fidelite_actif', true)
-    if (errCom) throw new Error(errCom.message)
-    const eligibles = (commercants || []).filter(c => canDo(c.plan, 'fidelite_auto'))
+    // ⚠️ CE CRON N'EST PLUS LE SEUL CHEMIN, ET IL N'EST PLUS CELUI QUI DÉCIDE.
+    // Depuis le 27/08, le tableau de bord crédite au moment où le commerçant
+    // clôture, via /api/fidelite/rdv-honore. Le cron reste EN FILET pour les
+    // rendez-vous que personne n'a clôturés, et il ne rattrape rien deux fois :
+    // l'index unique (carte_id, rdv_id) absorbe le second passage.
+    //
+    // ⚠️ ET IL NE PORTE PLUS SA PROPRE RÈGLE. Il lisait `commercant.plan` au
+    // lieu de `planEffectif` : un commerçant EN ESSAI de Vendre voyait son
+    // tableau de bord lui ouvrir la fidélité automatique et ce cron la lui
+    // refuser en silence, chaque nuit. Deux copies d'une même règle finissent
+    // toujours par diverger ; celle-ci vit désormais dans
+    // `crediterFideliteRdv`, avec l'autre appelant.
+    //
+    // 🔴 LE FILTRE NE VOYAIT QUE `confirme`, ET IL PUNISSAIT LE BON ÉLÈVE.
+    // Clôturer un rendez-vous le faisait sortir du filtre : le commerçant qui
+    // marquait ses rendez-vous honorés était le seul dont les clients
+    // n'étaient jamais crédités. Celui qui ne touchait à rien, si.
+    const { data: rdvs, error: errRdvs } = await supabase
+      .from('rdv_reservations')
+      .select('id')
+      .eq('date_rdv', dateHier)
+      .in('statut', ['confirme', 'honore'])
+      .is('deleted_at', null)
+    if (errRdvs) throw new Error(errRdvs.message)
 
     let credites = 0
     let deja = 0
     let ignores = 0
 
-    for (const commercant of eligibles) {
-      const { data: rdvs, error: errRdvs } = await supabase
-        .from('rdv_reservations')
-        // `client_prenom` sert l'email de récompense débloquée : c'est le seul
-        // chemin de crédit d'un rendez-vous, donc le seul endroit où le prénom
-        // du Yopper peut voyager jusqu'à l'annonce.
-        .select('id, client_telephone, client_email, client_prenom, prestation:rdv_prestations(prix)')
-        .eq('commercant_id', commercant.id)
-        .eq('date_rdv', dateHier)
-        // 🔴 LE FILTRE NE VOYAIT QUE `confirme`, ET IL PUNISSAIT LE BON ÉLÈVE.
-        // Trouvé le 27/08. Le tableau de bord permet de clôturer un rendez-vous
-        // (`changerStatutRdv(id, 'honore')`), et ce geste faisait sortir la
-        // ligne du filtre : le commerçant qui marquait ses rendez-vous comme
-        // honorés était le seul dont les clients n'étaient jamais crédités.
-        // Celui qui ne touchait à rien, si.
-        // ⚠️ On prend les deux statuts, jamais `no_show` ni les annulations :
-        // ceux-là n'ont pas eu lieu. Rejouer reste sans risque, l'index unique
-        // (carte_id, rdv_id) de `fidelite_mouvements` absorbe les doublons.
-        .in('statut', ['confirme', 'honore'])
-        .is('deleted_at', null)
-      if (errRdvs) {
-        console.error('[cron/fidelite-rdv] fetch rdvs KO', { commercant: commercant.id, error: errRdvs.message })
-        continue
-      }
-
-      for (const rdv of (rdvs || [])) {
-        try {
-          const credit = commercant.fidelite_mecanique === 'cagnotte'
-            ? { montant: Number(rdv.prestation?.prix || 0) }
-            : { passages: 1 }
-          // Cagnotte sans prix de prestation : rien à créditer
-          if (commercant.fidelite_mecanique === 'cagnotte' && !credit.montant) { ignores++; continue }
-          const res = await crediterFidelite(supabase, commercant, rdv.client_telephone, credit, {
-            source: 'rdv', rdv_id: rdv.id, client_email: rdv.client_email || null,
-            client_prenom: rdv.client_prenom || null,
-          })
-          if (res.deja_credite) deja++
-          else if (res.ok) credites++
-          else ignores++
-        } catch (e) {
-          console.error('[cron/fidelite-rdv] credit KO', { rdv: rdv.id, error: e?.message })
-          ignores++
-        }
-      }
+    for (const rdv of (rdvs || [])) {
+      const res = await crediterFideliteRdv(supabase, rdv.id, '[cron/fidelite-rdv]')
+      if (res.deja_credite) deja++
+      else if (res.ok) credites++
+      else ignores++
     }
 
-    console.info('[cron/fidelite-rdv]', { dateHier, commercants: eligibles.length, credites, deja, ignores })
-    return NextResponse.json({ ok: true, date: dateHier, commercants: eligibles.length, credites, deja, ignores })
+    console.info('[cron/fidelite-rdv]', { dateHier, rdvs: (rdvs || []).length, credites, deja, ignores })
+    return NextResponse.json({ ok: true, date: dateHier, rdvs: (rdvs || []).length, credites, deja, ignores })
   } catch (e) {
     console.error('[cron/fidelite-rdv] exception', e)
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })

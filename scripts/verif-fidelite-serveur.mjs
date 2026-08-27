@@ -344,8 +344,76 @@ const egal = (nom, obtenu, attendu) =>
     /\.in\('statut', \['confirme', 'honore'\]\)/.test(cron))
   verifie('mais jamais un absent ni une annulation',
     !/no_show/.test(cron) && !/annule/.test(cron))
-  verifie('et il fait voyager le prénom du Yopper',
-    /client_email, client_prenom, prestation/.test(cron) && /client_prenom: rdv\.client_prenom/.test(cron))
+  // ⚠️ L'ASSERTION A DÉMÉNAGÉ AVEC LA VÉRITÉ. Le prénom voyageait par le select
+  // du cron ; depuis le 27/08 il voyage par `crediterFideliteRdv`, que le cron
+  // ET la route de clôture appellent. La garder sur le cron aurait exigé une
+  // colonne qu'il n'a plus aucune raison de lire.
+  const serveurRdv = lireCode('lib/fidelite-server.js')
+  verifie('et le prénom du Yopper voyage par la règle partagée',
+    /client_prenom, prestation:rdv_prestations/.test(serveurRdv)
+    && /client_prenom: rdv\.client_prenom/.test(serveurRdv))
+}
+
+// ═══ 7) LA CARTE SE REMPLIT À LA CLÔTURE, PLUS DEMAIN MATIN (27/08) ════════
+//
+// ⚠️ ET SURTOUT : LA RÈGLE N'EXISTE QU'UNE FOIS. Le cron avait sa propre copie,
+// on vient d'ajouter un second appelant, et c'est exactement comme ça que les
+// deux systèmes de fidélité supprimés ce matin avaient divergé.
+{
+  const serveur = lireCode('lib/fidelite-server.js')
+  const cron = lireCode('app/api/cron/fidelite-rdv/route.js')
+  const route = lireCode('app/api/fidelite/rdv-honore/route.js')
+  const dash = lireCode('app/dashboard/page.js')
+
+  verifie('la règle du crédit RDV existe une fois',
+    /export async function crediterFideliteRdv\(/.test(serveur))
+  // ⚠️ `planEffectif`, PAS `commercant.plan` : le cron lisait le second, donc un
+  // commerçant EN ESSAI de Vendre voyait la fidélité s'ouvrir sur son tableau de
+  // bord et le crédit lui être refusé en silence chaque nuit.
+  const blocRdv = serveur.slice(serveur.indexOf('export async function crediterFideliteRdv'))
+  // ⚠️ L'ÉLIGIBILITÉ N'EXISTE QU'UNE FOIS. Elle était recopiée dans les deux
+  // fonctions de crédit, et le cron en portait une TROISIÈME, fausse.
+  verifie('🔴 l\'éligibilité vit dans une seule fonction',
+    /function fideliteAutoOuverte\(commercant\)/.test(serveur))
+  verifie('🔴 et elle applique le plan EFFECTIF, essai compris',
+    /fideliteAutoOuverte[\s\S]{0,200}canDo\(planEffectif\(commercant\), 'fidelite_auto'\)/.test(serveur))
+  // ⚠️ ET PLUS PERSONNE NE LIT `commercant.plan` EN DIRECT : c'est la forme
+  // exacte du défaut, un essai de Vendre refusé en silence.
+  verifie('🔴 personne ne relit `plan` en direct', !/canDo\(commercant\.plan/.test(serveur))
+  verifie('les deux crédits passent par elle',
+    (serveur.match(/if \(!fideliteAutoOuverte\(commercant\)\)/g) || []).length === 2)
+  verifie('🔴 et elle refuse ce qui n\'a pas eu lieu',
+    /statut !== 'confirme' && rdv\.statut !== 'honore'/.test(blocRdv))
+  verifie('un rendez-vous supprimé ne crédite rien', /rdv\.deleted_at/.test(blocRdv))
+
+  // ⚠️ LE CRON NE DOIT PLUS PORTER SA PROPRE COPIE. S'il refait un
+  // `crediterFidelite(` en direct, les deux règles recommencent à diverger.
+  // ⚠️ LA VIRGULE FINALE FAIT TOUT LE TRAVAIL. Sans elle, `rdv\.id` restait
+  // vrai après un renommage en `rdv.identifiant` : le mot cherché est un
+  // PRÉFIXE de son propre remplaçant. Mesuré à la mutation le 27/08, et c'est
+  // le même piège que celui déjà noté sur `crediterFideliteCommande`.
+  verifie('🔴 le cron passe par la règle partagée',
+    /crediterFideliteRdv\(supabase, rdv\.id,/.test(cron))
+  verifie('🔴 et il n\'a plus de copie de la règle',
+    !/crediterFidelite\(supabase, commercant/.test(cron) && !/fidelite_mecanique/.test(cron))
+  verifie('le cron reste un filet sur les deux statuts',
+    /\.in\('statut', \['confirme', 'honore'\]\)/.test(cron))
+
+  // La route, et sa garde : elle tourne en clé de service.
+  verifie('🔴 la route de clôture porte une garde d\'autorisation',
+    /gardeSurLigne\(request, supabase, 'rdv_reservations', rdvId\)/.test(route))
+  verifie('et elle refuse un identifiant qui n\'en est pas un', /RE_UUID\.test/.test(route))
+  // ⚠️ UN REFUS MÉTIER N'EST PAS UNE PANNE. Sans ça, le commerçant verrait un
+  // avertissement à CHAQUE clôture chez qui n'a pas la fidélité, et cesserait
+  // de les lire.
+  verifie('🔴 une fidélité éteinte ne déclenche pas d\'avertissement',
+    /res\.reason === 'exception'/.test(route))
+
+  // Et l'écran appelle vraiment, avec une phrase de secours VRAIE.
+  verifie('🔴 le tableau de bord crédite à la clôture',
+    /signalerEnvoi\([\s\S]{0,80}\/api\/fidelite\/rdv-honore/.test(dash))
+  verifie('et il dit ce qui marche encore',
+    /rattrapé automatiquement demain matin/.test(dash))
 }
 
 console.log(`\nFidélité serveur : ${ok} vérifications`)

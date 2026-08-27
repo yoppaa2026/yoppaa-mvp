@@ -1543,9 +1543,13 @@ export default function Dashboard() {
   // email raté : le message se retrouve dans l'application de toute façon. Si
   // cette ligne s'affichait à chaque hoquet, plus personne ne la lirait, et
   // elle ne servirait plus le jour où elle compte.
-  async function signalerEnvoi(url, corps, quoi) {
+  // ⚠️ `suite` DIT CE QUI MARCHE ENCORE, et ça change selon ce qui a échoué.
+  // Un email raté laisse la commande à jour dans l'application du client ; un
+  // crédit de fidélité raté, lui, sera rattrapé par le cron du lendemain matin.
+  // Servir la même phrase aux deux ferait mentir l'une des deux.
+  async function signalerEnvoi(url, corps, quoi, suite = null) {
     const r = await prevenirClient(url, corps, quoi)
-    if (!r.ok) setEnvoiRate({ quoi: r.quoi, erreur: r.erreur })
+    if (!r.ok) setEnvoiRate({ quoi: r.quoi, erreur: r.erreur, suite })
     return r.ok
   }
 
@@ -1774,6 +1778,20 @@ export default function Dashboard() {
       // ⚠️ L'email de PROGRESSION (« 4 sur 10 » à chaque passage) est retiré
       // pour de bon : dix messages pour une récompense, quand la progression se
       // lit déjà sur la fiche et sur la carte.
+
+      // ⚠️ LA CARTE SE REMPLIT MAINTENANT, PLUS DEMAIN MATIN. Le crédit d'un
+      // rendez-vous n'existait que dans le cron de 9h : le client repartait du
+      // salon sans rien, et le commerçant n'avait rien à lui montrer. Le cron
+      // reste EN FILET pour les rendez-vous que personne ne clôture, et l'index
+      // unique (carte_id, rdv_id) empêche le double crédit.
+      // ⚠️ La phrase de secours dit ce qui marche encore, et elle est VRAIE :
+      // c'est précisément ce filet-là.
+      signalerEnvoi(
+        '/api/fidelite/rdv-honore',
+        { rdv_id: rdvId },
+        'le crédit de fidélité de ton client',
+        'Le rendez-vous est bien clôturé. Le crédit sera rattrapé automatiquement demain matin.',
+      )
 
       // ⚠️ LE RENDEZ-VOUS HONORÉ EMPORTE SES PRODUITS. C'est le moment exact où
       // le commerçant tend le sachet : lui demander un second geste dans un
@@ -2751,10 +2769,10 @@ export default function Dashboard() {
               </svg>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 800, color: '#92400E', lineHeight: 1.4 }}>
-                  {envoiRate.quoi} n&rsquo;est pas parti
+                  {envoiRate.quoi} n&rsquo;a pas abouti
                 </p>
                 <p style={{ margin: '2px 0 0', fontSize: '0.74rem', fontWeight: 600, color: '#92400E', lineHeight: 1.45, overflowWrap: 'anywhere' }}>
-                  Ta commande est bien à jour, ton client la voit dans son application. Tu peux le prévenir par téléphone si c&rsquo;est urgent.
+                  {envoiRate.suite || 'Ta commande est bien à jour, ton client la voit dans son application. Tu peux le prévenir par téléphone si c’est urgent.'}
                   {envoiRate.erreur ? ` (${envoiRate.erreur})` : ''}
                 </p>
               </div>

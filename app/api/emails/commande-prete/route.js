@@ -55,9 +55,36 @@ export async function POST(request) {
       .eq('id', commande_id)
       .single()
 
-    if (error || !cmd) {
-      console.error('[emails/commande-prete] Commande introuvable', { commande_id, error })
+    // 🔴 UN SEUL MESSAGE POUR DEUX CAUSES OPPOSÉES (Alex, 27/08 : la ligne
+    // d'avertissement disait « Commande introuvable » sur une commande qui
+    // s'affichait à l'écran, dont le push venait de partir, et dont la garde
+    // d'autorisation avait reconnu le propriétaire).
+    //
+    // ⚠️ `error` ET `!cmd` NE DISENT PAS LA MÊME CHOSE :
+    //   • `!cmd`  → la ligne n'existe pas. C'est un 404, et c'est rare.
+    //   • `error` → la REQUÊTE a échoué : une colonne absente, une relation que
+    //     PostgREST ne sait pas résoudre. La commande, elle, est bien là.
+    //
+    // Les confondre envoie chercher au mauvais endroit : on regarde la
+    // commande alors que c'est le `select` qui est fautif. C'est la même
+    // famille que « la colonne absente d'un select », en plus sournois, parce
+    // qu'ici l'erreur EXISTE et qu'on la remplace par une phrase inventée.
+    // ⚠️ ET `.single()` BROUILLE LES DEUX : sur zéro ligne, il ne rend pas
+    // `data: null`, il rend une ERREUR (`PGRST116`). Sans ce test, une commande
+    // réellement absente serait annoncée comme un défaut de requête, et on
+    // chercherait un bogue là où il n'y en a pas.
+    if (error?.code === 'PGRST116' || (!error && !cmd)) {
+      console.error('[emails/commande-prete] commande absente', { commande_id })
       return NextResponse.json({ ok: false, error: 'Commande introuvable' }, { status: 404 })
+    }
+    if (error) {
+      console.error('[emails/commande-prete] requête refusée', { commande_id, error })
+      return NextResponse.json(
+        // ⚠️ SEULEMENT `message` : `details` et `hint` de PostgREST recopient
+        // volontiers la requête, donc des noms de colonnes et des valeurs.
+        { ok: false, error: `lecture impossible : ${error.message || error.code || 'erreur inconnue'}` },
+        { status: 500 }
+      )
     }
 
     if (!cmd.client_email) {

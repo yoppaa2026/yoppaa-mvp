@@ -33,7 +33,7 @@ import { calculerRemiseBon } from '../lib/bons-cadeaux.js'
 import { montantFidelisable } from '../lib/fidelite.js'
 import { construireLignes } from '../lib/export-comptable.js'
 import { resteAEncaisser, caDesRdvs, etatPaiementRdv, resteAEncaisserCommande, soldeRdv } from '../lib/rdv-paiement.js'
-import { emailRdvConfirme } from "../lib/resend.js"
+import { emailRdvConfirme, emailNouveauRdvCommercant } from "../lib/resend.js"
 import { modesPaiementOuverts, modePaiementEffectif } from '../lib/modes-paiement.js'
 import { emailCommandeConfirmee, emailNouvelleCommandeCommercant } from '../lib/resend.js'
 import { cleReprisePanier } from '../lib/retour-paiement.js'
@@ -981,6 +981,40 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
     htmlRdv.includes('21.00 €') && !htmlRdv.includes('28.00 €'))
   // ⚠️ « Prix », pas « Prix estimé » (Alex, 27/08) : le prix est le prix.
   verifie('et il ne parle plus de prix ESTIMÉ', !/Prix estimé/.test(htmlRdv))
+
+  // 🔴 LA LIGNE QUI EXPLIQUE LE DÉCOMPTE. Alex, 27/08 : « Prix 40,00 € ·
+  // Acompte payé 9,00 € · Solde 21,00 € », et 40 moins 9 ne fait pas 21. Un
+  // décompte qu'on ne peut pas refaire de tête se lit comme une erreur, et
+  // celui qui doute réclame le montant affiché en haut.
+  // ⚠️ Règle d'Alex : « affiché PARTOUT où on parle de la transaction. »
+  verifie('🔴 l\'email client DIT la récompense dans le décompte',
+    /Récompense fidélité/.test(htmlRdv) && /−10\.00 €/.test(htmlRdv))
+
+  const htmlPro = emailNouveauRdvCommercant({
+    nom_commercant: 'Ciseaux et Soins', yopper_prenom: 'Alexandre', yopper_nom: 'V',
+    prestation_nom: 'Coloration', date_rdv: '2026-08-27',
+    heure_debut: '16:00', heure_fin: '17:30',
+    prix_estime: 40, acompte_paye: true, acompte_montant: 9, fidelite_remise: 10,
+  })
+  verifie('🔴 et l\'email du COMMERÇANT aussi',
+    /Récompense fidélité/.test(htmlPro) && /−10\.00 €/.test(htmlPro))
+  // ⚠️ RIEN QUAND IL N'Y A RIEN : une ligne « −0,00 € » vaut moins que pas de
+  // ligne du tout.
+  const htmlSansRemise = emailRdvConfirme({
+    yopper_prenom: 'Alexandre', commercant_nom: 'Ciseaux et Soins',
+    prestation_nom: 'Coloration', date_rdv: '2026-08-27',
+    heure_debut: '16:00', heure_fin: '17:30',
+    prix_estime: 40, acompte_paye: true, acompte_montant: 12,
+  })
+  verifie('sans récompense, aucune ligne parasite', !/Récompense fidélité/.test(htmlSansRemise))
+
+  // Et la CARTE du tableau de bord, exécutée : elle lit la même colonne.
+  const carte = etatPaiementRdv({
+    statut: 'confirme', prix_estime: 40, fidelite_remise: 10,
+    acompte_montant: 9, acompte_paye: true, date_rdv: '2099-01-01',
+  })
+  verifie('🔴 la carte du tableau de bord dit la récompense',
+    /récompense fidélité/i.test(carte?.detail || ''), carte?.detail || '(rien)')
 }
 
 // ═══ 🔴 LE TUNNEL RDV + PRODUITS CONNAÎT LA FIDÉLITÉ (27/08) ═══════════════

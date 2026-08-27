@@ -172,6 +172,8 @@ export async function POST(request) {
           duree_minutes:   rdv.duree_minutes,
           prix_estime:     rdv.prix_estime,
           acompte_paye:    !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),
+          // Le commercant voit ce qui a fait baisser son acompte (27/08).
+          fidelite_remise: rdv.fidelite_remise || 0,
           acompte_montant: rdv.acompte_montant,
           notes_client:    rdv.notes_client,
         })

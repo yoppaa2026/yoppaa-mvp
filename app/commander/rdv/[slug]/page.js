@@ -1484,6 +1484,16 @@ export default function CommanderRdvSlug() {
               // Le serveur ne reçoit que des identifiants et des quantités :
               // c'est lui qui décide des prix.
               articles: lignesPanier.map(l => ({ id: l.article.id, quantite: l.quantite })),
+              // 🔴 CETTE LIGNE MANQUAIT, ET ELLE COÛTAIT LA RÉCOMPENSE. Trouvé
+              // par Alex le 27/08 en production. Le tunnel voisin, celui du
+              // rendez-vous SANS produit, l'envoyait depuis toujours (voir plus
+              // bas). Ici l'écran déduisait les 10 € et affichait « Payer
+              // 30,90 € », mais le serveur n'apprenait jamais qu'une récompense
+              // était utilisée : il encaissait 33,90 €, ne la consommait pas, et
+              // l'email de confirmation décrivait un plein tarif.
+              // ⚠️ On envoie l'IDENTIFIANT, jamais le montant : c'est le serveur
+              // qui recharge la récompense et calcule la remise.
+              ...(recompenseFid && recompenseActive ? { fidelite_recompense_id: recompenseFid.id } : {}),
             }),
           })
           const j = await res.json()
@@ -3289,7 +3299,7 @@ export default function CommanderRdvSlug() {
                           croire à un cadeau. La phrase vient du module, la même
                           que dans « Mes rendez-vous ». */}
                       <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        {rdvCree.abonnement_id ? 'Paiement' : 'Prix estimé'}
+                        {rdvCree.abonnement_id ? 'Paiement' : 'Prix'}
                       </span>
                       <span style={{ fontSize: rdvCree.abonnement_id ? '0.8rem' : '0.95rem', fontWeight: rdvCree.abonnement_id ? 800 : 900, color: T.main, textAlign: 'right' }}>
                         {libellePrixSeance(rdvCree) || formatPrix(prestationChoisie)}

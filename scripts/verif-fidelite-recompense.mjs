@@ -32,7 +32,8 @@ import {
 import { calculerRemiseBon } from '../lib/bons-cadeaux.js'
 import { montantFidelisable } from '../lib/fidelite.js'
 import { construireLignes } from '../lib/export-comptable.js'
-import { resteAEncaisser, caDesRdvs, etatPaiementRdv, resteAEncaisserCommande } from '../lib/rdv-paiement.js'
+import { resteAEncaisser, caDesRdvs, etatPaiementRdv, resteAEncaisserCommande, soldeRdv } from '../lib/rdv-paiement.js'
+import { emailRdvConfirme } from "../lib/resend.js"
 import { modesPaiementOuverts, modePaiementEffectif } from '../lib/modes-paiement.js'
 import { emailCommandeConfirmee, emailNouvelleCommandeCommercant } from '../lib/resend.js'
 import { cleReprisePanier } from '../lib/retour-paiement.js'
@@ -936,6 +937,92 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
   // n'était tenu que par l'écran, donc par personne.
   verifie('et il refuse un paiement en ligne que le commerçant n\'a pas ouvert',
     /if \(!surPlace && !enLigneAutorise\)/.test(routeCmd))
+}
+
+// ═══ LE SOLDE SUR PLACE, EXÉCUTÉ (27/08) ═══════════════════════════════════
+//
+// 🔴 TROUVÉ PAR ALEX EN PRODUCTION. Deux endroits recalculaient le solde à côté
+// du module, et tous deux oubliaient la remise de fidélité : l'email de
+// confirmation et le rappel de la veille. Un client ayant utilisé sa récompense
+// de 10 € lisait « Solde sur place 28,00 € » au lieu de 21,00 €, et le comptoir
+// lui aurait réclamé 7 € de trop. C'est la famille du 25/08.
+{
+  const base = { prix_estime: 40, acompte_montant: 12, acompte_paye: true }
+
+  verifie('🔴 sans récompense, le solde reste le tarif moins l\'acompte',
+    soldeRdv(base) === 28, String(soldeRdv(base)))
+  // Le vrai cas d'Alex : 40 € de coloration, 10 € de récompense, acompte de 30 %
+  // calculé sur le NET (9 €). Il ne doit plus que 21 € au salon.
+  verifie('🔴 avec 10 € de récompense, le solde tombe à 21 €',
+    soldeRdv({ prix_estime: 40, fidelite_remise: 10, acompte_montant: 9, acompte_paye: true }) === 21,
+    String(soldeRdv({ prix_estime: 40, fidelite_remise: 10, acompte_montant: 9, acompte_paye: true })))
+  // ⚠️ LE RAPPEL DE LA VEILLE LIT L'AUTRE COLONNE. Exiger `acompte_paye` l'aurait
+  // rendu muet sur l'acompte, et ce silence-là ne se voit pas.
+  verifie('l\'autre colonne d\'acompte est comprise aussi',
+    soldeRdv({ prix_estime: 40, fidelite_remise: 10, acompte_montant: 9, acompte_paye_en_ligne: true }) === 21)
+  // ⚠️ UN ACOMPTE PRÉVU MAIS NON PAYÉ RESTE DÛ : le retrancher ferait cadeau.
+  verifie('un acompte non payé ne se déduit pas',
+    soldeRdv({ prix_estime: 40, fidelite_remise: 10, acompte_montant: 9, acompte_paye: false }) === 30)
+  // ⚠️ `Number(null)` VAUT 0 ET PASSE LES GARDES : une prestation sur devis
+  // annoncerait « 0,00 € à régler ». Piège déjà rencontré trois fois ici.
+  verifie('🔴 une prestation sans prix ne rend PAS zéro',
+    soldeRdv({ prix_estime: null, acompte_montant: 9, acompte_paye: true }) === null)
+  verifie('une récompense plus grosse que le prix ne rend jamais négatif',
+    soldeRdv({ prix_estime: 10, fidelite_remise: 30, acompte_montant: 0 }) === 0)
+
+  // Et le gabarit, exécuté : c'est lui qui mentait au client.
+  const htmlRdv = emailRdvConfirme({
+    yopper_prenom: 'Alexandre', commercant_nom: 'Ciseaux et Soins',
+    prestation_nom: 'Coloration', date_rdv: '2026-08-27',
+    heure_debut: '16:00', heure_fin: '17:30',
+    prix_estime: 40, acompte_paye: true, acompte_montant: 9, fidelite_remise: 10,
+  })
+  verifie('🔴 l\'email de confirmation annonce 21,00 €, pas 28,00 €',
+    htmlRdv.includes('21.00 €') && !htmlRdv.includes('28.00 €'))
+  // ⚠️ « Prix », pas « Prix estimé » (Alex, 27/08) : le prix est le prix.
+  verifie('et il ne parle plus de prix ESTIMÉ', !/Prix estimé/.test(htmlRdv))
+}
+
+// ═══ 🔴 LE TUNNEL RDV + PRODUITS CONNAÎT LA FIDÉLITÉ (27/08) ═══════════════
+//
+// 🔴 IL NE LA CONNAISSAIT PAS. Son frère `create-rdv-acompte` chargeait la
+// récompense depuis le 24/08 ; celui-ci, non. Dès qu'un PRODUIT accompagnait le
+// rendez-vous, l'écran annonçait « Payer 30,90 € » et le serveur encaissait
+// 33,90 €. La récompense n'était pas consommée, et le client la retrouvait sur
+// sa carte après l'avoir « utilisée ».
+//
+// ⚠️ L'ÉCRAN CALCULE, LE SERVEUR DÉCIDE. Une remise qui n'existe que côté
+// client est une promesse sans débiteur.
+{
+  const lire = (c) => readFileSync(new URL(`../${c}`, import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ')
+  const tunnel = lire('app/api/stripe/checkout/create-rdv-commande/route.js')
+  const ecran = lire('app/commander/rdv/[slug]/page.js')
+
+  verifie('🔴 le tunnel lit l\'identifiant de récompense',
+    /fidelite_recompense_id,/.test(tunnel))
+  verifie('🔴 et il la RECHARGE côté serveur, sans croire l\'écran',
+    /chargerRecompensePourYopper\(supabase, \{/.test(tunnel))
+  // ⚠️ IDENTITÉ PROUVÉE PAR LE JETON, jamais `client_email` : il est envoyé par
+  // le client et ne prouve rien. Sans ça, connaître l'identifiant d'une
+  // récompense suffirait à dépenser celle d'un autre.
+  verifie('🔴 l\'identité est PROUVÉE avant toute remise',
+    /identiteProuvee\(request\)/.test(tunnel))
+  // ⚠️ L'ACOMPTE SE CALCULE SUR LE NET, sinon le Yopper avance un acompte assis
+  // sur un prix qu'il ne paie pas. C'est la règle F22.
+  verifie('🔴 l\'acompte se calcule sur le prix NET',
+    /Math\.round\(prixNet \* acomptePct\)/.test(tunnel) && !/Math\.round\(prixBase \* acomptePct\)/.test(tunnel))
+  // ⚠️ SANS LES MÉTADONNÉES, LE WEBHOOK NE SAIT RIEN : il écrit
+  // `fidelite_remise: 0` et ne consomme jamais la récompense.
+  verifie('🔴 la remise voyage jusqu\'au webhook',
+    /fidelite_remise: String\(remiseRecompenseEUR\)/.test(tunnel)
+    && /fidelite_recompense_id: String\(recompense\.id\)/.test(tunnel))
+
+  // Et l'écran l'envoie vraiment : une route qui sait lire ne sert à rien si
+  // personne ne lui parle (le piège du 23/08, contrôlé des DEUX côtés).
+  const appel = ecran.slice(ecran.indexOf('create-rdv-commande'), ecran.indexOf('create-rdv-commande') + 1600)
+  verifie('🔴 et l\'écran envoie l\'identifiant à CE tunnel-là',
+    /fidelite_recompense_id: recompenseFid\.id/.test(appel))
 }
 
 if (echecs.length > 0) {

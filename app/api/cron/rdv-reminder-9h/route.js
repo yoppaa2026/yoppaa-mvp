@@ -16,6 +16,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRdvReminder } from '@/lib/resend'
 import { adresseRendezVous } from '@/lib/lieu-fige'
+import { soldeRdv } from '@/lib/rdv-paiement'
 
 export async function GET(request) {
   // 1) Securite : verifie Bearer token
@@ -45,7 +46,7 @@ export async function GET(request) {
       .from('rdv_reservations')
       .select(`
         id, date_rdv, heure_debut, heure_fin, duree_minutes,
-        prix_estime, acompte_paye_en_ligne, acompte_montant,
+        prix_estime, acompte_paye_en_ligne, acompte_montant, fidelite_remise,
         client_email, client_prenom,
         lieu_id, lieu_libelle, lieu_adresse,
         commercant:commercants(nom, slug, adresse, rdv_delai_annulation_heures),
@@ -70,9 +71,11 @@ export async function GET(request) {
         continue
       }
       try {
-        const solde = (r.prix_estime != null && r.acompte_paye_en_ligne && r.acompte_montant)
-          ? Number(r.prix_estime) - Number(r.acompte_montant)
-          : (r.prix_estime != null ? Number(r.prix_estime) : null)
+        // 🔴 CE CALCUL OUBLIAIT LA REMISE DE FIDÉLITÉ, comme celui de l'email de
+        // confirmation. La veille du rendez-vous, il aurait annoncé 28 € à
+        // quelqu'un qui ne doit que 21 €. La règle vit dans `soldeRdv`, une
+        // seule fois, avec la remise dedans.
+        const solde = soldeRdv(r)
 
         const html = emailRdvReminder({
           yopper_prenom:           r.client_prenom || 'Yopper',

@@ -38,6 +38,9 @@ import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { REGIME_EMPORTER } from '@/lib/tva'
 import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 import { normaliserEmail } from '@/lib/email-normalise'
+import { identiteProuvee } from '@/lib/yopper-auth'
+import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
+import { chargerRecompensePourYopper } from '@/lib/fidelite-recompense-server'
 
 export async function POST(request) {
   try {
@@ -54,6 +57,10 @@ export async function POST(request) {
       client_email, client_prenom, client_nom, client_telephone,
       notes_client, rgpd_marketing,
       articles = [],
+      // 🔴 CE CHAMP N'EXISTAIT NI ICI NI CHEZ L'APPELANT. Les deux côtés étaient
+      // muets, ce qui explique qu'aucune erreur ne soit jamais remontée : il n'y
+      // avait rien à refuser, juste une remise qui n'arrivait pas.
+      fidelite_recompense_id,
     } = body
 
     if (!commercant_id || !prestation_id || !date_rdv || !heure_debut || !heure_fin) {
@@ -101,10 +108,66 @@ export async function POST(request) {
       ? Number(prestation.prix)
       : (prestation.prix_min != null ? Number(prestation.prix_min) : null)
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
-    const acompteMontant = (commercant.rdv_acompte_en_ligne_actif && prixBase && acomptePct > 0)
-      ? Math.round(prixBase * acomptePct) / 100
+
+    // ─── RÉCOMPENSE DE FIDÉLITÉ ────────────────────────────────────────────
+    //
+    // 🔴 CETTE ROUTE NE CONNAISSAIT PAS LA FIDÉLITÉ. Trouvé par Alex le 27/08,
+    // en production. Son frère `create-rdv-acompte` chargeait la récompense,
+    // calculait l'acompte sur le net et transmettait la remise au webhook.
+    // Celle-ci ne faisait rien de tout ça : dès qu'un PRODUIT accompagnait le
+    // rendez-vous, l'écran annonçait « Payer 30,90 € » après déduction des
+    // 10 €, et le serveur encaissait 33,90 €. La récompense n'était pas
+    // consommée, `fidelite_remise` restait à zéro, et l'email de confirmation
+    // décrivait fidèlement un paiement plein tarif.
+    //
+    // ⚠️ L'ÉCRAN CALCULE, LE SERVEUR DÉCIDE. Le montant affiché venait du
+    // navigateur ; il était juste, mais il n'engageait personne. Une remise qui
+    // n'existe que côté client est une promesse sans débiteur.
+    //
+    // ⚠️ MÊME RÈGLE QUE LE TUNNEL VOISIN, et c'est le but : identité PROUVÉE
+    // par le jeton (jamais `client_email`, envoyé par le client), remise
+    // appliquée AVANT le bon cadeau, et acompte calculé sur le prix NET, sans
+    // quoi le Yopper avancerait un acompte assis sur un prix qu'il ne paie pas.
+    let recompense = null
+    let remiseRecompenseEUR = 0
+    if (fidelite_recompense_id) {
+      const identite = await identiteProuvee(request)
+      if (!identite?.email) {
+        return NextResponse.json({
+          ok: false,
+          error: 'Connecte-toi pour utiliser ta récompense fidélité.',
+          recompense_refusee: 'non_connecte',
+        }, { status: 401 })
+      }
+      const resRec = await chargerRecompensePourYopper(supabase, {
+        email: identite.email,
+        commercantId: commercant.id,
+        recompenseId: fidelite_recompense_id,
+      })
+      if (!resRec.ok) {
+        return NextResponse.json({
+          ok: false,
+          error: 'Récompense inutilisable.',
+          recompense_refusee: resRec.raison,
+        }, { status: 400 })
+      }
+      recompense = resRec.recompense
+      remiseRecompenseEUR = appliquerRecompenseAvantBon(recompense, prixBase).remiseRecompense
+    }
+    const prixNet = prixBase != null
+      ? Math.round((prixBase - remiseRecompenseEUR) * 100) / 100
+      : null
+
+    const acompteMontant = (commercant.rdv_acompte_en_ligne_actif && prixNet && acomptePct > 0)
+      ? Math.round(prixNet * acomptePct) / 100
       : 0
     const acompteCents = Math.round(acompteMontant * 100)
+
+    // ⚠️ ICI, PAS DE REFUS SI L'ACOMPTE TOMBE SOUS LE MINIMUM STRIPE, contrairement
+    // au tunnel d'acompte seul : le panier porte AUSSI des produits, donc le
+    // paiement total dépasse largement les 0,50 €. Un acompte réduit à zéro par
+    // la récompense laisse simplement les produits à encaisser, et le
+    // rendez-vous reste confirmé (règle déjà en place au-dessus).
 
     // ─── Produits : prix, remises et TVA calculés SERVEUR ──────────────────
     const articleIds = [...new Set(articles.map(a => a.id).filter(Boolean))]
@@ -309,6 +372,16 @@ export async function POST(request) {
             duree_minutes: String(duree_minutes || prestation.duree_minutes),
             prix_estime: String(prixBase ?? ''),
             acompte_montant: String(acompteMontant),
+            // ⚠️ SANS CES DEUX LIGNES, LE WEBHOOK NE SAIT RIEN. Il lit
+            // `meta.fidelite_remise` et `meta.fidelite_recompense_id` pour figer
+            // la remise sur le rendez-vous et consommer la récompense. Absentes,
+            // il écrivait `fidelite_remise: 0` et la récompense restait
+            // disponible : le client la voyait toujours sur sa carte après
+            // l'avoir « utilisée ».
+            ...(recompense ? {
+              fidelite_recompense_id: String(recompense.id),
+              fidelite_remise: String(remiseRecompenseEUR),
+            } : {}),
             produits_montant: String(produitsCents / 100),
             // Le rendez-vous naît de ces métadonnées au webhook : sans
             // normalisation ici, il repartirait avec l'email tel que tapé.

@@ -1047,7 +1047,7 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
     .select(`
       id, date_rdv, heure_debut, heure_fin, duree_minutes, prix_estime,
       numero_rdv, numero_prefixe,
-      acompte_paye_en_ligne, acompte_montant,
+      acompte_paye_en_ligne, acompte_montant, fidelite_remise,
       client_email, client_prenom, client_nom, client_telephone, notes_client,
       annulation_token, commande_id,
       lieu_id, lieu_libelle, lieu_adresse,
@@ -1124,6 +1124,9 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       numero_rdv:              referenceRdv(rdv),
       acompte_paye:            !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),
       acompte_montant:         rdv.acompte_montant,
+      // ⚠️ SANS ELLE, LE SOLDE ANNONCÉ IGNORE LA RÉCOMPENSE et le comptoir
+      // réclame le tarif plein. Le gabarit la retranche via `soldeRdv`.
+      fidelite_remise:         rdv.fidelite_remise || 0,
       delai_annulation_heures: rdv.commercant.rdv_delai_annulation_heures || 24,
       annulation_token:        rdv.annulation_token,
       praticien_prenom:        rdv.praticien?.prenom || null,

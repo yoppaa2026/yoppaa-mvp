@@ -320,6 +320,30 @@ const egal = (nom, obtenu, attendu) =>
     /\{!bonApplique && mesBonsIci\.length > 0 &&/.test(tunnel))
 }
 
+// ═══ 13) 🔴 ON NE REFUSE PAS UN PAIEMENT QUI N'EXISTE PAS ═════════════════
+//
+// Trouvé par Alex en production le 28/08 : une récompense de 10 € sur un
+// panier à 8 € couvre tout, l'écran envoie alors `en_ligne` par défaut, et
+// chez un commerçant qui encaisse AU COMPTOIR la commande était refusée avec
+// « Le paiement en ligne n'est pas proposé chez ce commerçant ».
+//
+// ⚠️ CE N'EST PAS LE CONTENU DE LA RÈGLE QUI ÉTAIT FAUX, C'EST SA POSITION :
+// elle tombait deux cents lignes avant que le dû soit connu. Une garde de
+// contenu n'aurait rien vu. On compare donc des POSITIONS.
+{
+  const src = lireCode('app/api/stripe/checkout/create-commande/route.js')
+  const posCouvert = src.indexOf('const couvertSansPaiement =')
+  const posRefus = src.indexOf('Le paiement en ligne n\\\'est pas proposé')
+  verifie('le dû est connu AVANT qu\'on refuse un moyen de paiement',
+    posCouvert > 0 && posRefus > posCouvert, `couvert@${posCouvert} refus@${posRefus}`)
+  verifie('et les trois gardes sautent quand tout est couvert',
+    /if \(!couvertSansPaiement\) \{/.test(src))
+  // ⚠️ LE SERVEUR CALCULE « couvert », il ne le reçoit pas : sinon il suffirait
+  // de l'annoncer pour commander sans payer.
+  verifie('« couvert » est calculé par le serveur, jamais reçu',
+    !/couvert_sans_paiement/.test(src) && !/body\.couvert/.test(src))
+}
+
 console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.`)
 if (echecs.length) {
   console.log('\nÉCHECS :')

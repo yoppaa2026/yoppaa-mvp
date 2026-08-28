@@ -238,19 +238,17 @@ export async function POST(request) {
       estDetail: estBoutique,
       modeBoutique: estExpedition ? 'expedition' : 'retrait',
     })
-    if (surPlace && !cashAutorise) {
-      return NextResponse.json({ ok: false, error: 'Le paiement sur place n\'est pas proposé chez ce commerçant.' }, { status: 400 })
-    }
-    // ⚠️ ET LE PAIEMENT EN LIGNE SE REFUSE AUSSI. Le serveur ne vérifiait que
-    // le compte Stripe : un commerçant de détail qui a choisi d'encaisser AU
-    // COMPTOIR pouvait quand même recevoir un paiement en ligne, et donc une
-    // commission qu'il avait refusée. Son choix n'était tenu que par l'écran.
-    if (!surPlace && !enLigneAutorise) {
-      return NextResponse.json({ ok: false, error: 'Le paiement en ligne n\'est pas proposé chez ce commerçant.' }, { status: 400 })
-    }
-    if (!surPlace && !commercant.stripe_account_id) {
-      return NextResponse.json({ ok: false, error: 'Le paiement en ligne n\'est pas encore activé chez ce commerçant.' }, { status: 400 })
-    }
+    // 🔴 LES TROIS GARDES DE MOYEN DE PAIEMENT ONT DÉMÉNAGÉ PLUS BAS (28/08).
+    //
+    // Elles tombaient ICI, plus de deux cents lignes AVANT que le serveur sache
+    // ce qu'il reste à payer. Trouvé par Alex : une récompense de 10 € sur un
+    // panier à 8 € couvre tout, l'écran envoie alors `en_ligne` par défaut, et
+    // chez un commerçant qui encaisse AU COMPTOIR la commande était refusée
+    // avec « Le paiement en ligne n'est pas proposé chez ce commerçant ».
+    //
+    // ⚠️ ON NE REFUSE PAS UN MOYEN DE PAIEMENT POUR UN PAIEMENT QUI N'EXISTE
+    // PAS. Le contrôle n'a de sens qu'une fois le dû connu, donc APRÈS que la
+    // récompense et le bon cadeau ont été chargés et revalidés.
 
     // ─── 3) Récup créneau (retrait OU livraison) + check actif ──────────────
     // En livraison : créneau depuis livraison_creneaux + vérif zone (code postal).
@@ -490,6 +488,31 @@ export async function POST(request) {
     // et ce chemin n'existait que pour le bon cadeau : sans cet ajout, on
     // envoyait le Yopper vers un paiement de 0 €, que Stripe refuse.
     const couvertSansPaiement = duCents === 0 && (!!bonCadeau || !!recompense)
+
+    // ─── 4.55) LE MOYEN DE PAIEMENT, MAINTENANT QUE LE DÛ EST CONNU ────────
+    //
+    // ⚠️ CES TROIS GARDES ÉTAIENT DEUX CENTS LIGNES PLUS HAUT, et elles
+    // refusaient une commande entièrement couverte. Le dû se calcule ici, pas
+    // avant : la récompense et le bon viennent d'être revalidés en base.
+    //
+    // ⚠️ ET LE `couvertSansPaiement` EST CALCULÉ PAR LE SERVEUR, jamais reçu de
+    // l'écran : sinon il suffirait d'annoncer « c'est couvert » pour esquiver
+    // le choix du commerçant et commander sans payer.
+    if (!couvertSansPaiement) {
+      if (surPlace && !cashAutorise) {
+        return NextResponse.json({ ok: false, error: 'Le paiement sur place n\'est pas proposé chez ce commerçant.' }, { status: 400 })
+      }
+      // ⚠️ ET LE PAIEMENT EN LIGNE SE REFUSE AUSSI. Le serveur ne vérifiait que
+      // le compte Stripe : un commerçant de détail qui a choisi d'encaisser AU
+      // COMPTOIR pouvait quand même recevoir un paiement en ligne, et donc une
+      // commission qu'il avait refusée. Son choix n'était tenu que par l'écran.
+      if (!surPlace && !enLigneAutorise) {
+        return NextResponse.json({ ok: false, error: 'Le paiement en ligne n\'est pas proposé chez ce commerçant.' }, { status: 400 })
+      }
+      if (!surPlace && !commercant.stripe_account_id) {
+        return NextResponse.json({ ok: false, error: 'Le paiement en ligne n\'est pas encore activé chez ce commerçant.' }, { status: 400 })
+      }
+    }
 
     // ─── 4.6) Le créneau est-il encore commandable ? ───────────────────────
     //

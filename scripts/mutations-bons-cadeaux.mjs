@@ -99,6 +99,11 @@ const MUTATIONS = [
     de: "    if (!String(acheteur_prenom || '').trim()) {",
     vers: "    if (false && !String(acheteur_prenom || '').trim()) {" },
 
+  { nom: '🔴 la garde de paiement remonte AVANT le calcul du dû',
+    banc: 'verif:bons', fichier: 'app/api/stripe/checkout/create-commande/route.js',
+    de: '    if (!couvertSansPaiement) {\n      if (surPlace && !cashAutorise) {',
+    vers: '    if (true) {\n      if (surPlace && !cashAutorise) {' },
+
   { nom: '🔴 la bibliothèque d’emails reformate un montant à la main',
     banc: 'verif:logique', fichier: 'lib/resend.js',
     de: '${euros(Number(montant))}</p>',

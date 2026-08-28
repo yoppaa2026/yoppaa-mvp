@@ -18,6 +18,12 @@ import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
 // elles auraient menti au commerçant le jour où on les change.
 import { normaliserCodeBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-cadeaux'
+// ⚠️ UN MONTANT S'ÉCRIT « 12,50 € », ET CET ÉCRAN L'IGNORAIT (Alex, 28/08). Le
+// Yopper lisait « 8,00 € » dans son email pendant que le commerçant lisait
+// « 8.00€ » dans le même produit, sur la même commande. Deux définitions du
+// format vivaient d'ailleurs ici même, justes toutes les deux, pendant que
+// vingt-cinq autres montants formataient à la main. Une seule source.
+import { euros } from '@/lib/montants'
 import { estRemiseSurProduit } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit } from '@/lib/lancement'
@@ -1158,7 +1164,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontWeight: 700, color: T.ink, fontSize: 14, margin: 0 }}>{a.nom}</p>
-                    <p style={{ fontSize: 11, color: T.muted, margin: '2px 0 0' }}>{Number(a.prix).toFixed(2)}€ {a.categorie ? `· ${a.categorie}` : ''}</p>
+                    <p style={{ fontSize: 11, color: T.muted, margin: '2px 0 0' }}>{euros(a.prix)} {a.categorie ? `· ${a.categorie}` : ''}</p>
                   </div>
                   <Icon name="chevR" size={16} color={T.muted}/>
                 </summary>
@@ -1320,7 +1326,7 @@ function OptionsArticle({ articleId, toast }) {
             {(g.valeurs || []).map(v => (
               <span key={v.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 100, padding: '3px 8px 3px 10px', fontSize: 12 }}>
                 <span style={{ color: T.ink, fontWeight: 600 }}>{v.nom}</span>
-                {v.prix_supplement > 0 && <span style={{ color: T.main, fontSize: 11, fontWeight: 700 }}>+{Number(v.prix_supplement).toFixed(2)}€</span>}
+                {v.prix_supplement > 0 && <span style={{ color: T.main, fontSize: 11, fontWeight: 700 }}>+{euros(v.prix_supplement)}</span>}
                 <button onClick={() => deleteValeur(v.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>
               </span>
             ))}
@@ -1619,7 +1625,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
             {Number(a.prix) > 0 ? (
               <span style={{ fontWeight: 900, fontSize: 18, color: T.bgPanel, letterSpacing: '-0.3px' }}>
                 {estVitrine && <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginRight: 4 }}>à partir de</span>}
-                {Number(a.prix).toFixed(2)} €
+                {euros(a.prix)}
               </span>
             ) : estVitrine ? (
               <span style={{ fontSize: 12, fontWeight: 700, color: T.muted }}>Prix sur demande</span>
@@ -2181,7 +2187,7 @@ function TabDeals({ commercantId, commercant, toast }) {
                     variantes en V1, stock/choix ingérables) */}
                 {articlesLiables.map(a => (
                   <option key={a.id} value={a.id}>
-                    {a.nom}{a.categorie ? ` · ${a.categorie}` : ''} · {Number(a.prix).toFixed(2)}€
+                    {a.nom}{a.categorie ? ` · ${a.categorie}` : ''} · {euros(a.prix)}
                   </option>
                 ))}
                 {/* Toute une catégorie d'un coup, réservé aux remises : « -20 %
@@ -2209,7 +2215,7 @@ function TabDeals({ commercantId, commercant, toast }) {
                   style={{ ...s.input, cursor: 'pointer' }}>
                   <option value="">— Choisir —</option>
                   {articles.filter(a => !a.gere_variantes && a.id !== form.article_id).map(a => (
-                    <option key={a.id} value={a.id}>{a.nom} · {Number(a.prix).toFixed(2)}€</option>
+                    <option key={a.id} value={a.id}>{a.nom} · {euros(a.prix)}</option>
                   ))}
                 </select>
               </div>
@@ -2225,7 +2231,7 @@ function TabDeals({ commercantId, commercant, toast }) {
                     const art = articles.find(a => a.id === form.article_id)
                     const pct = parseInt(form.remise_pct, 10)
                     if (!art || !pct) return <p style={{ fontSize: 11, color: T.muted, margin: 0 }}>Prix calculé automatiquement</p>
-                    return <p style={{ fontSize: 12.5, fontWeight: 800, color: T.main, margin: 0 }}>{(Number(art.prix) * (100 - pct) / 100).toFixed(2)}€ <span style={{ color: T.muted, fontWeight: 600, textDecoration: 'line-through' }}>{Number(art.prix).toFixed(2)}€</span></p>
+                    return <p style={{ fontSize: 12.5, fontWeight: 800, color: T.main, margin: 0 }}>{euros(Number(art.prix) * (100 - pct) / 100)} <span style={{ color: T.muted, fontWeight: 600, textDecoration: 'line-through' }}>{euros(art.prix)}</span></p>
                   })()}
                 </div>
               </div>
@@ -2358,8 +2364,8 @@ function DealRow({ d, today, onEdit, onToggle, onDelete, passe = false }) {
             <span style={{ color: T.muted, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="calendar" size={11}/>{dateAffichee}</span>
             {d.prix_deal && (
               <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6 }}>
-                <span style={{ fontWeight: 900, color: T.bgPanel, fontSize: 16 }}>{Number(d.prix_deal).toFixed(2)}€</span>
-                {d.prix_original && <span style={{ textDecoration: 'line-through', color: T.muted, fontSize: 12 }}>{Number(d.prix_original).toFixed(2)}€</span>}
+                <span style={{ fontWeight: 900, color: T.bgPanel, fontSize: 16 }}>{euros(d.prix_deal)}</span>
+                {d.prix_original && <span style={{ textDecoration: 'line-through', color: T.muted, fontSize: 12 }}>{euros(d.prix_original)}</span>}
               </span>
             )}
           </div>
@@ -3590,8 +3596,8 @@ function TabLivraison({ commercantId, toast, surModifications }) {
             const m = minimumCommande.trim() ? parseFloat(minimumCommande.replace(',', '.')) : null
             const base = f === 0
               ? 'Livraison gratuite'
-              : `Livraison ${f.toFixed(2)}€${g ? `, offerte dès ${g.toFixed(2)}€` : ''}`
-            return m > 0 ? `${base} · à partir de ${m.toFixed(2)}€ de commande` : base
+              : `Livraison ${euros(f)}${g ? `, offerte dès ${euros(g)}` : ''}`
+            return m > 0 ? `${base} · à partir de ${euros(m)} de commande` : base
           })()}
         </p>
         <p style={{ margin: '6px 0 0', fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
@@ -4009,8 +4015,8 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
       return (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: T.deep }}>Cagnotte : {Number(c.cagnotte).toFixed(2).replace('.', ',')}€</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: T.muted }}>objectif {seuil.toFixed(2).replace('.', ',')}€</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: T.deep }}>Cagnotte : {euros(c.cagnotte)}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: T.muted }}>objectif {euros(seuil)}</span>
           </div>
           <div style={{ height: 8, borderRadius: 100, background: T.pale, overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: `linear-gradient(90deg, ${T.main}, ${T.mid})`, transition: 'width 0.3s' }}/>
@@ -4069,7 +4075,7 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
                 {Object.entries(PACKS_SMS).map(([cle, p]) => (
                   <button key={cle} onClick={() => acheterPack(cle)} disabled={achatSms}
                     style={{ padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${T.main}`, background: cle === '500' ? T.main : '#fff', color: cle === '500' ? '#fff' : T.main, fontWeight: 800, fontSize: 12, cursor: achatSms ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                    {achatSms ? '…' : `${p.nb} SMS · ${p.prix_htva.toFixed(2)}€`}
+                    {achatSms ? '…' : `${p.nb} SMS · ${euros(p.prix_htva)}`}
                   </button>
                 ))}
               </div>
@@ -4150,7 +4156,7 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: T.deep }}>
               {commercant.fidelite_mecanique === 'cagnotte'
-                ? `${Number(commercant.fidelite_taux_cagnotte)}% en cagnotte, récompense dès ${Number(commercant.fidelite_seuil_cagnotte).toFixed(2).replace('.', ',')}€`
+                ? `${Number(commercant.fidelite_taux_cagnotte)}% en cagnotte, récompense dès ${euros(commercant.fidelite_seuil_cagnotte)}`
                 : `${commercant.fidelite_seuil_passages} passages → récompense`}
               {' · '}{libelleRecompense(commercant)}
             </span>
@@ -4236,7 +4242,7 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
                     <span style={{ fontSize: 13, fontWeight: 800, color: T.ink, flex: 1 }}>{afficherTelephone(c.telephone)}</span>
                     <span style={{ fontSize: 12, fontWeight: 700, color: T.muted }}>
                       {commercant.fidelite_mecanique === 'cagnotte'
-                        ? `${Number(c.cagnotte).toFixed(2).replace('.', ',')}€`
+                        ? euros(c.cagnotte)
                         : `${c.passages}/${commercant.fidelite_seuil_passages || 10}`}
                     </span>
                     {/* ⚠️ LE NOMBRE, comme sur la fiche ouverte juste en
@@ -6110,7 +6116,7 @@ function TabAccompagnement({ commercantId, commercant, toast }) {
               <span style={{ fontSize: 14, fontWeight: 900, color: T.ink }}>{p.label}</span>
               <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: p.badgeColor, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{p.badge}</span>
               <span style={{ marginLeft: 'auto', fontSize: 15, fontWeight: 900, color: T.main, whiteSpace: 'nowrap' }}>
-                {p.prix.toFixed(2).replace('.', ',')} €
+                {euros(p.prix)}
                 <span style={{ fontSize: 10, fontWeight: 700, color: T.muted, marginLeft: 3 }}>HTVA</span>
               </span>
             </div>
@@ -6184,7 +6190,7 @@ function TabAccompagnement({ commercantId, commercant, toast }) {
           </button>
           {choix.size > 0 && (
             <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>
-              Total : <strong style={{ color: T.ink }}>{total.toFixed(2).replace('.', ',')} € HTVA</strong>
+              Total : <strong style={{ color: T.ink }}>{euros(total)} HTVA</strong>
               <span style={{ marginLeft: 6 }}>· TVA ajoutée au paiement</span>
             </p>
           )}
@@ -6203,7 +6209,7 @@ function TabAccompagnement({ commercantId, commercant, toast }) {
                   <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: 0 }}>{p?.label || d.type}</p>
                   <p style={{ fontSize: 11, color: T.muted, margin: '2px 0 0' }}>
                     Demandé le {new Date(d.created_at).toLocaleDateString('fr-BE')}
-                    {d.montant_ht ? ` · ${Number(d.montant_ht).toFixed(2).replace('.', ',')} € HTVA` : ''}
+                    {d.montant_ht ? ` · ${euros(d.montant_ht)} HTVA` : ''}
                   </p>
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 800, color: b.color, background: b.bg, padding: '4px 10px', borderRadius: 100, whiteSpace: 'nowrap' }}>{b.txt}</span>
@@ -6569,7 +6575,7 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
     if (!bon) return
     const m = Math.round((parseFloat(String(montantDebit).replace(',', '.')) || 0) * 100) / 100
     if (!(m > 0)) { toast('Indique le montant de l\'achat à déduire', 'error'); return }
-    if (m > Number(bon.solde)) { toast(`Le solde du bon est de ${Number(bon.solde).toFixed(2)} €`, 'error'); return }
+    if (m > Number(bon.solde)) { toast(`Le solde du bon est de ${euros(bon.solde)}`, 'error'); return }
     setDebitLoading(true)
     // Mouvement d'abord (historique), puis solde — même pattern que la fidélité
     const { error: errMvt } = await supabase
@@ -6586,15 +6592,15 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
     setBon(p => ({ ...p, solde: nouveauSolde }))
     setMontantDebit('')
     fetchBons()
-    toast(nouveauSolde > 0 ? `−${m.toFixed(2)} € · reste ${nouveauSolde.toFixed(2)} € sur le bon 🟣` : 'Bon entièrement utilisé 🟣')
+    toast(nouveauSolde > 0 ? `−${euros(m)} · reste ${euros(nouveauSolde)} sur le bon 🟣` : 'Bon entièrement utilisé 🟣')
   }
 
   const soldeBadge = (b) => {
     const expire = b.expires_at && new Date(b.expires_at) < new Date()
     if (expire) return { txt: 'Expiré', bg: '#F3F4F6', color: '#9CA3AF' }
     if (Number(b.solde) <= 0) return { txt: 'Utilisé', bg: '#F3F4F6', color: '#6B7280' }
-    if (Number(b.solde) < Number(b.montant_initial)) return { txt: `Reste ${Number(b.solde).toFixed(2)} €`, bg: '#FFF7ED', color: '#EA580C' }
-    return { txt: `${Number(b.solde).toFixed(2)} €`, bg: '#F0FDF4', color: '#10B981' }
+    if (Number(b.solde) < Number(b.montant_initial)) return { txt: `Reste ${euros(b.solde)}`, bg: '#FFF7ED', color: '#EA580C' }
+    return { txt: euros(b.solde), bg: '#F0FDF4', color: '#10B981' }
   }
 
   return (
@@ -6671,7 +6677,7 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
                 </p>
               </div>
               <p style={{ fontSize: 18, fontWeight: 900, color: Number(bon.solde) > 0 ? '#10B981' : '#DC2626', margin: 0 }}>
-                {Number(bon.solde).toFixed(2)} €
+                {euros(bon.solde)}
               </p>
             </div>
             {Number(bon.solde) > 0 && (
@@ -6706,7 +6712,7 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
               <div style={{ minWidth: 0 }}>
                 <p style={{ fontSize: 12.5, fontWeight: 800, color: T.ink, margin: 0, fontFamily: 'monospace', letterSpacing: '0.5px' }}>{b.code}</p>
                 <p style={{ fontSize: 10.5, color: T.muted, margin: '1px 0 0' }}>
-                  {Number(b.montant_initial).toFixed(2)} € · {new Date(b.created_at).toLocaleDateString('fr-BE')}
+                  {euros(b.montant_initial)} · {new Date(b.created_at).toLocaleDateString('fr-BE')}
                   {b.destinataire_mode === 'offrir' ? ' · offert' : ''}
                 </p>
               </div>
@@ -7022,7 +7028,7 @@ function TabRdvPrestations({ commercantId, toast }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {prestations.map(p => {
-            const prixLabel = p.prix != null ? `${Number(p.prix).toFixed(2)} €` : 'Prix sur demande'
+            const prixLabel = p.prix != null ? euros(p.prix) : 'Prix sur demande'
             return (
               <div key={p.id} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: `1px solid ${T.hairline}`, opacity: p.actif ? 1 : 0.55, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -7805,7 +7811,7 @@ function TabRdvAbonnements({ commercantId, toast }) {
                       {presta ? `${presta.nom} · ` : ''}{resume}
                     </p>
                     <p style={{ fontSize: 11.5, color: T.muted, marginTop: 3 }}>
-                      {f.prix > 0 ? `${Number(f.prix).toFixed(2)} €` : 'Prix non renseigné'}
+                      {f.prix > 0 ? euros(f.prix) : 'Prix non renseigné'}
                       {f.seances_par_semaine > 1 ? ` · jusqu’à ${f.seances_par_semaine} par semaine` : ' · 1 par semaine'}
                       {nbExclus > 0 ? ` · ${nbExclus} période${nbExclus > 1 ? 's' : ''} sans cours` : ''}
                     </p>
@@ -7844,7 +7850,7 @@ function TabRdvAbonnements({ commercantId, toast }) {
                 style={{ ...s.input, marginBottom: 12 }}>
                 <option value="">Choisis une formule…</option>
                 {formules.filter(f => f.actif !== false).map(f => (
-                  <option key={f.id} value={f.id}>{f.libelle}{f.prix > 0 ? ` · ${Number(f.prix).toFixed(2)} €` : ''}</option>
+                  <option key={f.id} value={f.id}>{f.libelle}{f.prix > 0 ? ` · ${euros(f.prix)}` : ''}</option>
                 ))}
               </select>
 
@@ -8014,7 +8020,7 @@ function TabRdvAbonnements({ commercantId, toast }) {
                     {!resilie && !a.paye && encaisseOuvert === a.id && (
                       <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.hairline}` }}>
                         <p style={{ fontSize: 12, fontWeight: 700, color: T.ink, marginBottom: 8 }}>
-                          Comment {a.client_prenom} a-t-elle payé ses {Number(a.prix).toFixed(2)} € ?
+                          Comment {a.client_prenom} a-t-elle payé ses {euros(a.prix)} ?
                         </p>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {MOYENS_ENCAISSEMENT.map(m => (
@@ -9081,7 +9087,7 @@ function TabStatistiques({ commercantId, toast }) {
     setLoading(false)
   }
 
-  const euros = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
+  // `euros` vient de `lib/montants` : cet écran en avait sa propre copie.
 
   // Une flèche colorée ne dit rien à qui la regarde vite. Le sens s'écrit.
   function Evolution({ e }) {
@@ -9904,7 +9910,8 @@ function TabComptabilite({ commercantId, toast }) {
     setTelechargement(null)
   }
 
-  const eur = (n) => `${(Number(n) || 0).toFixed(2).replace('.', ',')} €`
+  // Alias court : les tableaux de la Comptabilité en appellent quinze.
+  const eur = euros
   // ⚠️ LES FRAIS STRIPE ÉTAIENT CALCULÉS, EXPORTÉS DANS LE CSV, ET JETÉS À
   // L'AFFICHAGE (Alex, 17/08 : « les frais Stripe qui ne sont pas
   // comptabilisés »). Le commerçant lisait son chiffre TTC sans jamais voir ce

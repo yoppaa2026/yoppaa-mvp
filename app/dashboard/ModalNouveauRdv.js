@@ -11,6 +11,7 @@ import { postPro } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
+import { euros } from '@/lib/montants'
 import { capacitePrestation, premierePlaceLibre } from '@/lib/cours-collectifs'
 import { creneauAcceptable, creneauxDuJour } from '@/lib/deplacement-rdv'
 // ⚠️ LES RÈGLES DE L'ABONNEMENT NE SONT PAS RÉÉCRITES ICI, elles sont APPELÉES.
@@ -512,7 +513,7 @@ export default function ModalNouveauRdv({
               {aboChoisi && !verdictAbo?.ok && (
                 <p style={{ fontSize: '0.72rem', color: T.muted, marginTop: 8, lineHeight: 1.5 }}>
                   Tu peux quand même poser cette séance : elle sera enregistrée <strong>hors abonnement</strong>, au tarif normal
-                  {prixEstime != null ? ` de ${prixEstime.toFixed(2)} €` : ''}, et le solde ne bougera pas.
+                  {prixEstime != null ? ` de ${euros(prixEstime)}` : ''}, et le solde ne bougera pas.
                 </p>
               )}
 

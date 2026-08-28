@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { PLAN_LABEL } from '@/lib/plans'
+import { euros } from '@/lib/montants'
 import { estRegimeLancement, libelleDernierJourGratuit, ESSAI_JOURS_MINIMUM } from '@/lib/lancement'
 
 const T = {
@@ -53,7 +54,7 @@ function libelleFinEssaiReelle(iso) {
 // formule. Pendant le régime de lancement on annonce la DATE, qui vaut mieux
 // qu'une durée : elle se vérifie d'un coup d'œil sur un calendrier.
 function phraseEssaiTarif(tarif) {
-  const suite = `puis ${tarif.toFixed(2).replace('.', ',')}€/mois sans engagement`
+  const suite = `puis ${euros(tarif)}/mois sans engagement`
   return estRegimeLancement()
     ? `Offert jusqu'au ${libelleDernierJourGratuit()} inclus, ${suite}`
     : `${ESSAI_JOURS_MINIMUM} jours gratuits, ${suite}`
@@ -372,7 +373,7 @@ function PlanCard({ title, price, features, cta, trial, loading, onClick, accent
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '14px 0 4px' }}>
         <p style={{ fontSize: 36, fontWeight: 900, letterSpacing: '-1px', margin: 0 }}>
-          {price.toFixed(2).replace('.', ',')}€
+          {euros(price)}
         </p>
         <p style={{ fontSize: 13, color: accent ? T.light : T.muted, margin: 0 }}>HTVA / mois</p>
       </div>

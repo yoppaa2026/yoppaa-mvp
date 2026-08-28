@@ -157,7 +157,12 @@ verifier('elle refuse un statut inconnu', /!\['en_livraison', 'livree'\]\.includ
 const dash = lire('app/dashboard/ConfigDashboard.js')
 verifier('le commerçant peut régler son minimum', /minimum_commande: mini/.test(dash))
 verifier('le champ est proposé dans l\'écran', /Minimum de commande/.test(dash))
-verifier('l\'aperçu annonce le minimum au commerçant', /à partir de \$\{m\.toFixed\(2\)\}/.test(dash))
+// ⚠️ CETTE GARDE S'ANCRAIT SUR LE FORMAT, PAS SUR LA RÈGLE. Elle exigeait
+// littéralement `m.toFixed(2)` : le jour où les montants du commerçant sont
+// passés à la virgule (28/08), elle a rougi alors que la phrase disait
+// toujours ce qu'elle doit dire. Ce qu'elle protège, c'est que le commerçant
+// LISE son minimum dans l'aperçu, pas la façon de l'écrire.
+verifier('l\'aperçu annonce le minimum au commerçant', /à partir de \$\{euros\(m\)\} de commande/.test(dash))
 
 // La migration existe et vérifie l'état réel de la base.
 const mig = lire('migrations/MIGRATION_LIVRAISON_MINIMUM.sql')

@@ -117,6 +117,32 @@ const MUTATIONS = [
     banc: 'verif:logique', fichier: 'lib/resend.js',
     de: '${euros(Number(montant))}</p>',
     vers: '${Number(montant).toFixed(2)} €</p>' },
+
+  // ─── LE CA DU JOUR (défaut trouvé par Alex le 28/08) ─────────────────────
+  { nom: '🔴 le CA du jour réoublie la récompense (le défaut d’Alex)',
+    banc: 'verif:bord', fichier: 'lib/statistiques.js',
+    de: '  const remise = Number(commande.fidelite_remise || 0)\n  return arrondi(Math.max(0, total - remise))',
+    vers: '  return arrondi(Math.max(0, total))' },
+
+  { nom: '🔴 SUR-CORRECTION : le CA des commandes retranche le bon cadeau',
+    banc: 'verif:bord', fichier: 'lib/statistiques.js',
+    de: '  const remise = Number(commande.fidelite_remise || 0)\n  return arrondi(Math.max(0, total - remise))',
+    vers: '  const remise = Number(commande.fidelite_remise || 0)\n  return arrondi(Math.max(0, total - remise - Number(commande.bon_cadeau_montant || 0)))' },
+
+  { nom: '🔴 la marchandise restée sur l’étagère recompte dans le CA',
+    banc: 'verif:bord', fichier: 'lib/statistiques.js',
+    de: "const STATUTS_ENCAISSES = ['en_attente', 'en_preparation', 'pret', 'recupere']",
+    vers: "const STATUTS_ENCAISSES = ['en_attente', 'en_preparation', 'pret', 'recupere', 'non_retire']" },
+
+  { nom: '🔴 le pavé se remet à additionner le tarif plein',
+    banc: 'verif:bord', fichier: 'app/dashboard/page.js',
+    de: '    ca:         chiffreAffaires(commandesDuJour).produits,',
+    vers: "    ca:         commandesDuJour.filter(c => c.statut !== 'annulee_client_refund').reduce((acc, c) => acc + Number(c.total), 0)," },
+
+  { nom: '🔴 un montant du commerçant repasse au point décimal',
+    banc: 'verif:bord', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                {euros(bon.solde)}',
+    vers: '                {Number(bon.solde).toFixed(2)} €' },
 ]
 
 function lancer(banc) {
@@ -125,7 +151,16 @@ function lancer(banc) {
     return { rouge: false, plante: false }
   } catch (e) {
     const sortie = `${e.stdout || ''}${e.stderr || ''}`
-    return { rouge: true, plante: !/en échec/.test(sortie), extrait: sortie.slice(-260) }
+    // ⚠️ DISTINGUER UN BANC QUI ROUGIT D'UN BANC QUI PLANTE, ET LES BANCS NE
+    // LE DISENT PAS TOUS AVEC LES MÊMES MOTS. `verif:bons` écrit « en échec »,
+    // `verif:bord` écrit « ÉCHEC(S) ». Le détecteur ne connaissait que le
+    // premier : cinq mutations parfaitement attrapées ont été comptées comme
+    // des plantages, c'est-à-dire comme des NON-preuves. Un harnais de mesure
+    // qui se trompe de verdict est pire qu'une garde molle, parce qu'il a
+    // l'air de travailler. Une vraie erreur d'exécution, elle, n'imprime
+    // aucune de ces deux formules et reste donc bien détectée.
+    const aRougiProprement = /en échec|ÉCHEC\(S\)/.test(sortie)
+    return { rouge: true, plante: !aRougiProprement, extrait: sortie.slice(-260) }
   }
 }
 

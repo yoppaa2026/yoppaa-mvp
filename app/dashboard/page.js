@@ -34,7 +34,11 @@ import { nouveauxRdvs, idsDes, texteAlerteRdv } from '@/lib/alerte-rdv'
 import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
 import { libelleOptions } from '@/lib/options-ligne'
 import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '@/lib/bons-vendus'
-import { eurosNus } from '@/lib/montants'
+import { euros } from '@/lib/montants'
+// ⚠️ LE CHIFFRE D'AFFAIRES A UNE SEULE DÉFINITION, ET ELLE VIT ICI. Le pavé
+// « CA du jour » avait la sienne, écrite à la main, et elle se trompait de
+// quatre façons à la fois (voir le calcul de `stats.ca`).
+import { chiffreAffaires } from '@/lib/statistiques'
 import { peutMarquerNonRetire, ancienneteCommande } from '@/lib/rappels-retrait'
 import { libellePeriodeStats } from '@/lib/agenda-bloc'
 import { compterAClore } from '@/lib/rdv-statut'
@@ -464,7 +468,7 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
             </div>
           </div>
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <p style={{ fontWeight: 900, color: T.ink, margin: '0 0 4px', fontSize: '1.05rem', letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>{Number(commande.total).toFixed(2)}€</p>
+            <p style={{ fontWeight: 900, color: T.ink, margin: '0 0 4px', fontSize: '1.05rem', letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>{euros(commande.total)}</p>
             <span style={{ background: badge.couleur.badge, color: '#fff', fontSize: '0.65rem', fontWeight: 800, padding: '3px 9px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.3px', whiteSpace: 'nowrap', display: 'inline-block' }}>
               {badge.icon} {badge.label}
             </span>
@@ -563,14 +567,14 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
                       </span>
                     )
                   })()}
-                  <span style={{ fontWeight: 700, color: T.ink }}>{(ligne.quantite * ligne.prix_unitaire).toFixed(2)}€</span>
+                  <span style={{ fontWeight: 700, color: T.ink }}>{euros(ligne.quantite * ligne.prix_unitaire)}</span>
                 </div>
                 {Object.entries(optionsParGroupe).map(([groupe, vals]) => (
                   <div key={groupe} style={{ fontSize: '0.72rem', color: T.deep, marginLeft: 10, marginTop: 1, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                     <span style={{ color: T.muted, fontWeight: 600 }}>{groupe} :</span>
                     {vals.map((v, i) => (
                       <span key={i} style={{ fontWeight: 700, color: T.deep }}>
-                        {v.valeur_nom}{Number(v.prix_supplement) > 0 ? ` +${Number(v.prix_supplement).toFixed(2)}€` : ''}{i < vals.length - 1 ? ',' : ''}
+                        {v.valeur_nom}{Number(v.prix_supplement) > 0 ? ` +${euros(v.prix_supplement)}` : ''}{i < vals.length - 1 ? ',' : ''}
                       </span>
                     ))}
                   </div>
@@ -862,7 +866,7 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
               )
             })}
             <p style={{ fontSize: '0.7rem', color: '#047857', margin: '4px 0 0', fontWeight: 800 }}>
-              {Number(rdv.commande.total).toFixed(2)}€ encaissés{nomComplet ? ` · à remettre à ${nomComplet}` : ''}
+              {euros(rdv.commande.total)} encaissés{nomComplet ? ` · à remettre à ${nomComplet}` : ''}
             </p>
           </div>
         )}
@@ -2087,8 +2091,28 @@ export default function Dashboard() {
     pretes:     commandesDuJour.filter(c => c.statut === 'pret').length,
     recuperees: commandesDuJour.filter(c => c.statut === 'recupere').length,
     annulees:   commandesDuJour.filter(c => c.statut === 'annulee_client_refund' || c.statut === 'annulee_paiement_ko').length,
-    // CA = uniquement commandes effectivement honorées (exclut les annulees pour ne pas fausser)
-    ca:         commandesDuJour.filter(c => c.statut !== 'annulee_client_refund' && c.statut !== 'annulee_paiement_ko').reduce((acc, c) => acc + Number(c.total), 0),
+    // 🔴 CE CHIFFRE MENTAIT DE QUATRE FAÇONS À LA FOIS (Alex, 28/08 : un nœud
+    // papillon à 8 € entièrement payé par une récompense entrait quand même
+    // pour 8 € dans le CA du jour). Il additionnait `total`, le tarif BRUT, et
+    // n'excluait que les deux statuts d'annulation :
+    //
+    //   1. la RÉCOMPENSE n'était pas retranchée — le commerçant a offert cet
+    //      argent, personne ne le lui a versé ;
+    //   2. `paiement_en_attente` comptait — une commande dont Stripe n'a rien
+    //      confirmé, et qui peut ne jamais être payée ;
+    //   3. `non_retire` comptait — la marchandise est restée sur l'étagère ;
+    //   4. le BON CADEAU, lui, ne doit surtout PAS se retrancher : c'est de
+    //      l'argent déjà encaissé le jour de la vente du bon.
+    //
+    // ⚠️ ET LA RÈGLE JUSTE ÉTAIT DÉJÀ ÉCRITE DEPUIS LE 27/08, dans
+    // `lib/statistiques.js`, appliquée par la page Statistiques et par l'export
+    // comptable. Ce pavé était le frère non traité : deux écrans du même
+    // tableau de bord annonçaient deux chiffres d'affaires différents pour la
+    // même journée (feedback_appliquer_partout).
+    // ⚠️ ON APPELLE LA FONCTION DE LA PAGE STATISTIQUES, on ne la recopie pas :
+    // c'est la recopie qui a produit l'écart. `chiffreAffaires(...).produits`
+    // EST ce que cette page annonce pour la même journée.
+    ca:         chiffreAffaires(commandesDuJour).produits,
   }
 
   const commandesFiltrees = commandesDuJour.filter(c => {
@@ -2119,7 +2143,7 @@ export default function Dashboard() {
     { label: 'Nouvelles',  value: stats.nouvelles,           color: '#DC2626', bg: '#FFF0F0', border: '#DC262618', pulse: stats.nouvelles > 0 },
     { label: 'En prépa',   value: stats.enPrepa,             color: '#EA580C', bg: '#FFF7ED', border: '#EA580C18', pulse: false },
     { label: 'Prêtes',     value: stats.pretes,              color: '#10B981', bg: '#F0FDF4', border: '#10B98118', pulse: false },
-    { label: 'CA du jour', value: `${stats.ca.toFixed(2)}€`, color: T.main,   bg: T.pale,   border: `${T.main}18`, pulse: false },
+    { label: 'CA du jour', value: euros(stats.ca),           color: T.main,   bg: T.pale,   border: `${T.main}18`, pulse: false },
   ]
 
   // ─── RDVs : calculs derives ────────────────────────────────────────────────
@@ -2649,7 +2673,7 @@ export default function Dashboard() {
               {jourActif ? dateLabel(jourActif + 'T00:00:00') : "Aujourd'hui"}
             </p>
             {[
-              { label: 'CA', value: `${stats.ca.toFixed(2)}€`, color: T.mid },
+              { label: 'CA', value: euros(stats.ca), color: T.mid },
               { label: 'Commandes', value: commandesDuJour.length, color: '#fff' },
               { label: 'Récupérées', value: stats.recuperees, color: T.light },
             ].map((s, i) => (
@@ -2985,7 +3009,7 @@ export default function Dashboard() {
                         {resumeBons.nombre > 1 ? `${resumeBons.nombre} bons cadeaux vendus` : 'Bon cadeau vendu'}
                       </p>
                       <p style={{ fontSize: '0.95rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.3px', margin: '1px 0 0' }}>
-                        {eurosNus(resumeBons.total)}€
+                        {euros(resumeBons.total)}
                         <span style={{ fontSize: '0.7rem', fontWeight: 700, color: T.muted, marginLeft: 7 }}>déjà encaissés · rien à préparer</span>
                       </p>
                     </div>

@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs'
 import { retourArriereAutorise, alerteAutreOnglet, travailEnAttente, indexBlocages, appliquerBlocage, etatCreneau } from '../lib/tableau-de-bord.js'
 import { calculerCapaciteCreneau } from '../lib/creneaux.js'
+import { chiffreAffaires } from '../lib/statistiques.js'
 
 let ok = 0
 const echecs = []
@@ -444,6 +445,87 @@ console.log(`\nTableau de bord : ${ok} vérifications`)
     /libelleDernierJourGratuit\(/.test(cfg))
   verifie("et n'écrit aucune date en dur",
     !/9 janvier|8 janvier/.test(cfg), 'une date est écrite à la main')
+}
+
+// ═══ 6) LE PAVÉ « CA DU JOUR », ET LES QUATRE FAÇONS DONT IL MENTAIT ══════
+//
+// 🔴 TROUVÉ PAR ALEX EN PRODUCTION LE 28/08. Un nœud papillon à 8 € réglé
+// ENTIÈREMENT par une récompense de fidélité entrait pour 8 € dans le CA du
+// jour : le commerçant a offert l'article, personne ne lui a versé cet argent,
+// et son tableau de bord le comptait quand même.
+//
+// ⚠️ LE CALCUL EST EXÉCUTÉ ICI, PAS DÉCRIT. Une garde qui cherche le nom
+// `chiffreAffaires` dans le source resterait verte si la fonction rendait un
+// mauvais nombre. Le cas d'Alex est donc rejoué tel quel, chiffres compris.
+{
+  const cmd = (o) => ({ statut: 'recupere', total: 0, fidelite_remise: 0, ...o })
+
+  // La journée exacte de la capture : une robe à 36 €, un nœud papillon à 8 €
+  // payé par une récompense de 8 €, et une troisième commande à 8 €.
+  const journee = [
+    cmd({ total: 36 }),
+    cmd({ total: 8, fidelite_remise: 8 }),
+    cmd({ total: 8 }),
+  ]
+  const ca = chiffreAffaires(journee).produits
+  verifie('la journée d\'Alex ne vaut plus 52 €', ca !== 52, `rend ${ca}`)
+  verifie('elle vaut les 44 € réellement encaissés', ca === 44, `rend ${ca}`)
+
+  // ⚠️ ET LE BON CADEAU NE SE RETRANCHE PAS. Se tromper de sens ici coûte
+  // aussi cher que l'oubli de la récompense : le bon est de l'argent DÉJÀ
+  // encaissé le jour de sa vente, le retrancher effacerait cette vente-là.
+  const avecBon = chiffreAffaires([cmd({ total: 30, bon_cadeau_montant: 30 })]).produits
+  verifie('un bon cadeau ne sort pas du chiffre d\'affaires', avecBon === 30, `rend ${avecBon}`)
+
+  // Une récompense plus grosse que le panier ne rend jamais un CA négatif.
+  const trop = chiffreAffaires([cmd({ total: 8, fidelite_remise: 10 })]).produits
+  verifie('une récompense plus grosse que le panier plancher à zéro', trop === 0, `rend ${trop}`)
+
+  // ⚠️ DEUX STATUTS QUE LE PAVÉ COMPTAIT AUSSI, et qui n'ont rien à y faire :
+  // `paiement_en_attente` est une commande dont Stripe n'a rien confirmé, et
+  // `non_retire` de la marchandise restée sur l'étagère.
+  for (const statut of ['paiement_en_attente', 'non_retire', 'annulee_client_refund', 'annulee_paiement_ko']) {
+    const r = chiffreAffaires([cmd({ statut, total: 50 })]).produits
+    verifie(`« ${statut} » n'entre pas dans le CA du jour`, r === 0, `rend ${r}`)
+  }
+  // Et les quatre qui, elles, comptent.
+  for (const statut of ['en_attente', 'en_preparation', 'pret', 'recupere']) {
+    const r = chiffreAffaires([cmd({ statut, total: 50 })]).produits
+    verifie(`« ${statut} » compte bien`, r === 50, `rend ${r}`)
+  }
+
+  // ⚠️ LA GARDE DE BRANCHEMENT, ancrée sur l'EXPRESSION ENTIÈRE. Ancrée sur le
+  // seul mot `chiffreAffaires`, elle resterait verte si le calcul revenait à
+  // `Number(c.total)` juste à côté : c'est le défaut des six gardes molles du
+  // 28/08, toutes vertes parce que le mot existait AILLEURS.
+  const src = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  verifie('le pavé appelle la fonction de la page Statistiques',
+    /ca:\s*chiffreAffaires\(commandesDuJour\)\.produits/.test(src))
+  verifie('et ne recalcule plus le CA à la main',
+    !/acc \+ Number\(c\.total\)/.test(src),
+    'le total brut est encore additionné')
+}
+
+// ═══ 7) UN MONTANT S'ÉCRIT « 12,50 € », Y COMPRIS CHEZ LE COMMERÇANT ══════
+//
+// 🔴 Alex, 28/08 : le tableau de bord affichait « 52.00€ » et « 8.00€ » sur la
+// même commande dont l'email au Yopper disait « 8,00 € ». Le balayage de la
+// virgule du 28/08 s'était arrêté au produit côté client.
+{
+  const FICHIERS = [
+    'page.js', 'ConfigDashboard.js', 'ModalNouveauRdv.js', 'abonnement/page.js',
+  ]
+  for (const f of FICHIERS) {
+    const src = readFileSync(new URL(`../app/dashboard/${f}`, import.meta.url), 'utf8')
+    // ⚠️ UNE SEULE EXCEPTION, ET ELLE EST VOULUE : le `placeholder` d'un
+    // `<input type="number">`, où la valeur se SAISIT avec un point. Y mettre
+    // une virgule montrerait au commerçant un exemple qu'il ne peut pas taper.
+    const restes = src.split('\n')
+      .filter(l => l.includes('toFixed(2)') && !l.includes('placeholder='))
+    verifie(`aucun montant formaté à la main dans ${f}`,
+      restes.length === 0,
+      restes.length > 0 ? `${restes.length} reste(s), dont : ${restes[0].trim().slice(0, 70)}` : '')
+  }
 }
 
 if (echecs.length > 0) {

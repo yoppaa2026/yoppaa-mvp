@@ -28,6 +28,8 @@ import {
   libelleRecompenseUtilisee,
   libelleAutresRecompenses,
   libelleCarteRecompenses,
+  perteRecompense,
+  libellePerteRecompense,
 } from '../lib/fidelite-recompense.js'
 import { calculerRemiseBon } from '../lib/bons-cadeaux.js'
 import { montantFidelisable } from '../lib/fidelite.js'
@@ -1103,6 +1105,47 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
   const appel = ecran.slice(ecran.indexOf('create-rdv-commande'), ecran.indexOf('create-rdv-commande') + 1600)
   verifie('🔴 et l\'écran envoie l\'identifiant à CE tunnel-là',
     /fidelite_recompense_id: recompenseFid\.id/.test(appel))
+}
+
+// ═══ 🔴 CE QUI SE PERD QUAND LA RÉCOMPENSE VAUT PLUS QUE LE PANIER ════════
+//
+// Trouvé par Alex en production le 28/08 : 10 € de récompense sur un panier à
+// 8 € déduisaient 8 €, brûlaient la récompense ENTIÈRE, et les 2 € partaient
+// sans un mot, sous un « 10€ offerts sur ton prochain achat » qui disait
+// l'inverse. Décision d'Alex : on ne bloque pas, on ne reporte pas, ON LE DIT.
+{
+  const R10 = { type: 'remise_montant', valeur: 10 }
+  const R5 = { type: 'remise_montant', valeur: 5 }
+
+  egal('10 € sur un panier à 8 € : 2 € se perdent', perteRecompense(R10, 8), 2)
+  egal('10 € sur un panier à 30 € : rien ne se perd', perteRecompense(R10, 30), 0)
+  // ⚠️ LE PLANCHER STRIPE PERD AUSSI, et je ne l'avais pas anticipé : sur
+  // 5,30 €, la remise est rabotée à 4,80 € pour laisser 0,50 € encaissable.
+  egal('le plancher Stripe perd 0,20 € sur 5,30 €', perteRecompense(R5, 5.30), 0.2)
+
+  const phrase = libellePerteRecompense(R10, 8)
+  verifie('la phrase dit les TROIS chiffres',
+    /10,00 €/.test(phrase) && /8,00 €/.test(phrase) && /2,00 €/.test(phrase), phrase)
+  // ⚠️ PERSONNE NE CHERCHE UNE INFORMATION : dire la perte sans donner la
+  // sortie ne sert à rien.
+  verifie('et elle donne le geste', /Ajoute un article/.test(phrase), phrase)
+  egal('sans perte, aucune phrase', libellePerteRecompense(R10, 30), null)
+  verifie('le mot change selon l\'écran',
+    /ta prestation/.test(libellePerteRecompense(R10, 8, 'ta prestation')))
+
+  // ⚠️ ET LES DEUX ÉCRANS L'AFFICHENT. Recopiée, elle aurait divergé ; absente
+  // d'un des deux, la moitié des Yoppers perdraient toujours en silence.
+  // ⚠️ ANCRÉE SUR LA CONDITION ENTIÈRE, `{appel(...) && (`. Deux ancres plus
+  // faibles ont échoué avant celle-ci, toutes deux trouvées par la mesure :
+  //   • le nom seul survivait à `{false && libellePerteRecompense(...)` ;
+  //   • l'accolade ouvrante aussi, parce que le JSX appelle la fonction DEUX
+  //     fois, dans la condition ET dans le corps : la seconde occurrence
+  //     maintenait la garde verte à elle seule.
+  // Sixième garde molle de la journée. Aucune n'a été trouvée en relisant.
+  for (const chemin of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
+    verifie(`${chemin.split('/')[2]} affiche l'avertissement`,
+      /\{libellePerteRecompense\(recompenseFid,[^\n]*\) && \(/.test(lireCode(chemin)))
+  }
 }
 
 if (echecs.length > 0) {

@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
-import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses } from '@/lib/fidelite-recompense'
+import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
 import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
 import { canDo, isVitrine, planEffectif } from '@/lib/plans'
 import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
@@ -4621,6 +4621,20 @@ export default function CommanderSlug() {
                                 ? `${recompenseFid.libelle ? `${recompenseFid.libelle}. ` : ''}Le montant est déduit de ta commande.`
                                 : 'Utilise-les maintenant : ils se déduiront de ta commande. Sinon ils t’attendront, ils ne s’effacent pas.'}
                             </p>
+                            {/* 🔴 CE QUI SE PERD QUAND LA RÉCOMPENSE VAUT PLUS
+                                QUE LE PANIER. Alex, 28/08 : une récompense de
+                                10 € sur un panier à 8 € déduisait 8 €, brûlait
+                                la récompense ENTIÈRE, et les 2 € disparaissaient
+                                sans un mot, juste sous un « 10€ offerts sur ton
+                                prochain achat » qui disait le contraire.
+                                ⚠️ ON NE BLOQUE PAS ET ON NE REPORTE PAS : on le
+                                DIT, et il choisit. La récompense n'est pas
+                                active d'office, la sortie est à un clic. */}
+                            {libellePerteRecompense(recompenseFid, totalAvecFrais()) && (
+                              <p style={{ fontSize: '0.72rem', color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '7px 9px', fontWeight: 700, margin: '6px 0 0', lineHeight: 1.45 }}>
+                                {libellePerteRecompense(recompenseFid, totalAvecFrais())}
+                              </p>
+                            )}
                             {/* ⚠️ 🔴 DEUX RÉCOMPENSES EN BASE, UNE SEULE À L'ÉCRAN,
                                 et rien ne disait que l'autre existait : Alex l'a
                                 vu le 25/08. On n'en dépense qu'une par commande

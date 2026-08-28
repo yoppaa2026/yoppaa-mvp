@@ -99,6 +99,15 @@ const MUTATIONS = [
     de: "    if (!String(acheteur_prenom || '').trim()) {",
     vers: "    if (false && !String(acheteur_prenom || '').trim()) {" },
 
+  { nom: '🔴 la perte de récompense redevient silencieuse',
+    banc: 'verif:recompense', fichier: 'lib/fidelite-recompense.js',
+    de: '  return perte > 0 ? perte : 0',
+    vers: '  return 0' },
+
+  { nom: '🔴 le tunnel de commande cesse d avertir',
+    banc: 'verif:recompense', fichier: 'app/commander/[slug]/page.js',
+    de: '{libellePerteRecompense(recompenseFid, totalAvecFrais()) && (',
+    vers: '{false && libellePerteRecompense(recompenseFid, totalAvecFrais()) && (' },
   { nom: '🔴 la garde de paiement remonte AVANT le calcul du dû',
     banc: 'verif:bons', fichier: 'app/api/stripe/checkout/create-commande/route.js',
     de: '    if (!couvertSansPaiement) {\n      if (surPlace && !cashAutorise) {',

@@ -50,7 +50,7 @@ function enGras(texte) {
   )
 }
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
-import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses } from '@/lib/fidelite-recompense'
+import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
 import { calculerRemiseBon } from '@/lib/bons-cadeaux'
 import { eurosNus } from '@/lib/montants'
 import BonCadeauFiche from '../../BonCadeauFiche'
@@ -3127,6 +3127,16 @@ export default function CommanderRdvSlug() {
                                   ? `${recompenseFid.libelle ? `${recompenseFid.libelle}. ` : ''}Déduite du prix, ton acompte baisse d’autant.`
                                   : 'Utilise-les maintenant : ils se déduiront du prix, et ton acompte baissera d’autant.'}
                               </p>
+                              {/* 🔴 CE QUI SE PERD, dit AVANT le clic. Une
+                                  récompense de 10 € sur une prestation à 8 € en
+                                  brûlait 2 sans un mot (Alex, 28/08). Même
+                                  phrase que le tunnel de commande, lue au même
+                                  endroit : recopiée, elle aurait divergé. */}
+                              {libellePerteRecompense(recompenseFid, prixBase, 'ta prestation') && (
+                                <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '7px 9px', fontWeight: 700, lineHeight: 1.45 }}>
+                                  {libellePerteRecompense(recompenseFid, prixBase, 'ta prestation')}
+                                </p>
+                              )}
                               {/* ⚠️ 🔴 CE QU'IL A EN PLUS, et qui restait muet.
                                   Une seule récompense se dépense par rendez-vous,
                                   c'est un choix protecteur, mais tu ne peux pas

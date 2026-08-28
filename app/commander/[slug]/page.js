@@ -88,7 +88,8 @@ import CarteFideliteFiche from '../CarteFideliteFiche'
 import BonCadeauFiche from '../BonCadeauFiche'
 // ⚠️ Les 31 montants de ce tunnel s'écrivaient au POINT. Le panier, les
 // suppléments, les deals, les frais de livraison, le reste à payer : tout.
-import { euros, eurosNus } from '@/lib/montants'
+import { euros } from '@/lib/montants'
+import { doitMontrerFlottant, SEUIL_CACHER, SEUIL_MONTRER } from '@/lib/bouton-flottant'
 import BonCadeauModal from '../BonCadeauModal'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 // ⚠️ `CTAUpgrade` A DISPARU DE CETTE FICHE (26/08). Il rendait UN bandeau par
@@ -301,7 +302,7 @@ function OptionsSelector({ article, groupes, onAjouter }) {
                     </span>
                     <span style={{ flex: 1, fontWeight: selected ? 700 : 600, color: T.ink, fontSize: '0.85rem' }}>{v.nom}</span>
                     {v.prix_supplement > 0 && (
-                      <span style={{ fontWeight: 800, color: T.main, fontSize: '0.78rem' }}>+{eurosNus(Number(v.prix_supplement))}€</span>
+                      <span style={{ fontWeight: 800, color: T.main, fontSize: '0.78rem' }}>+{euros(Number(v.prix_supplement))}</span>
                     )}
                   </button>
                 )
@@ -312,7 +313,7 @@ function OptionsSelector({ article, groupes, onAjouter }) {
       })}
       <button onClick={valider}
         style={{ width: '100%', padding: '0.75rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.main}44`, marginTop: 4 }}>
-        Ajouter à ma commande{supplement > 0 ? ` (+${eurosNus(supplement)}€)` : ''}
+        Ajouter à ma commande{supplement > 0 ? ` (+${euros(supplement)})` : ''}
       </button>
     </div>
   )
@@ -382,7 +383,7 @@ function VariantesSelector({ article, variantes, onAjouter }) {
       {varianteChoisie && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           {prixAffiche != null && Number(prixAffiche) > 0 && (
-            <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px' }}>{eurosNus(Number(prixAffiche))}€</span>
+            <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px' }}>{euros(Number(prixAffiche))}</span>
           )}
           {epuise ? (
             <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#DC2626', background: '#FEE2E2', padding: '3px 10px', borderRadius: 100 }}>Épuisé</span>
@@ -459,7 +460,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
                   <p style={{ fontSize: '0.68rem', color: T.main, fontWeight: 700, marginTop: 2 }}>Stock disponible atteint</p>
                 )}
               </div>
-              <p style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem', flexShrink: 0 }}>{eurosNus((prixUnitaire * item.quantite))}€</p>
+              <p style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem', flexShrink: 0 }}>{euros((prixUnitaire * item.quantite))}</p>
             </div>
           )
         })}
@@ -467,7 +468,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
       <div style={{ padding: '1rem 1.25rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: noteSousTotal ? 4 : 12 }}>
           <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.875rem' }}>Total commande</span>
-          <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.25rem', letterSpacing: '-0.5px' }}>{eurosNus(total)}€</span>
+          <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.25rem', letterSpacing: '-0.5px' }}>{euros(total)}</span>
         </div>
         {noteSousTotal && (
           <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, margin: '0 0 12px' }}>{noteSousTotal}</p>
@@ -565,7 +566,7 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
               Number(article.prix) > 0 ? (
                 <p style={{ fontSize: '0.95rem', color: T.main, fontWeight: 800, letterSpacing: '-0.2px' }}>
                   <span style={{ fontSize: '0.68rem', fontWeight: 700, color: T.muted, marginRight: 4 }}>dès</span>
-                  {eurosNus(Number(article.prix))}€
+                  {euros(Number(article.prix))}
                 </p>
               ) : (
                 <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '4px 10px', borderRadius: 100 }}>
@@ -576,14 +577,14 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
               // Article remisé : le prix promo REMPLACE le prix normal, l'ancien
               // reste barré à côté. Un seul article, un seul prix affiché.
               <>
-                <p style={{ fontSize: '1rem', color: '#DC2626', fontWeight: 900, letterSpacing: '-0.3px' }}>{eurosNus(remise.prix)}€</p>
-                <span style={{ fontSize: '0.8rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{eurosNus(remise.prixBarre)}€</span>
+                <p style={{ fontSize: '1rem', color: '#DC2626', fontWeight: 900, letterSpacing: '-0.3px' }}>{euros(remise.prix)}</p>
+                <span style={{ fontSize: '0.8rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{euros(remise.prixBarre)}</span>
                 <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#fff', background: '#DC2626', padding: '2px 7px', borderRadius: 100, letterSpacing: '0.2px' }}>
                   {remise.deal.remise_pct ? `-${remise.deal.remise_pct}%` : 'PROMO'}
                 </span>
               </>
             ) : (
-              <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{eurosNus(Number(article.prix))}€</p>
+              <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{euros(Number(article.prix))}</p>
             )}
             {hasOptions && (
               <button onClick={e => { e.stopPropagation(); setShowOptions(v => !v) }}
@@ -754,10 +755,10 @@ function DealOfferCard({ deal, qte = 0, onAjouter, onRetirer }) {
           {deal.description && <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)', lineHeight: 1.45, margin: '0 0 6px' }}>{deal.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {prixAffiche != null && (
-              <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{eurosNus(prixAffiche)}€</span>
+              <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{euros(prixAffiche)}</span>
             )}
             {prixBarre != null && (
-              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700, textDecoration: 'line-through' }}>{eurosNus(prixBarre)}€</span>
+              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700, textDecoration: 'line-through' }}>{euros(prixBarre)}</span>
             )}
           </div>
         </div>
@@ -897,9 +898,9 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
             {!hasVar && Number(article.prix) > 0 && (
               <p style={{ fontSize: '1.15rem', fontWeight: 900, color: remise ? '#DC2626' : T.main, letterSpacing: '-0.4px', margin: 0, flexShrink: 0, display: 'flex', alignItems: 'baseline', gap: 6 }}>
                 {article.est_vitrine ? <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, marginRight: 5 }}>dès</span> : null}
-                {remise ? eurosNus(remise.prix) : eurosNus(Number(article.prix))}€
+                {remise ? euros(remise.prix) : euros(Number(article.prix))}
                 {remise && (
-                  <span style={{ fontSize: '0.85rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{eurosNus(remise.prixBarre)}€</span>
+                  <span style={{ fontSize: '0.85rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{euros(remise.prixBarre)}</span>
                 )}
               </p>
             )}
@@ -1392,6 +1393,14 @@ export default function CommanderSlug() {
   const headerRef = useRef(null)
   const scrollRef = useRef(null)
   const recapPanierRef = useRef(null)   // cible du bouton panier flottant (scroll vers le récap)
+
+  // ⚠️ LE BOUTON FLOTTANT S'EFFACE QUAND SA CIBLE EST À L'ÉCRAN (Alex, 28/08).
+  // La règle et ses deux seuils vivent dans `lib/bouton-flottant.js` : ici, on
+  // ne fait qu'observer. Voir ce fichier pour le pourquoi de l'hystérésis.
+  // ⚠️ NOMMÉ DANS LE SENS DE CE QU'IL COMMANDE, jamais l'inverse : un
+  // `panierEnVue` qu'il faut renier deux fois à la lecture finit par être lu à
+  // l'envers. Il vaut `true` au départ : tant qu'on n'a rien observé, on montre.
+  const [montrerFlottant, setMontrerFlottant] = useState(true)
 
   // Lecture de l'état favori au mount (et quand clientId / commercant changent)
   useEffect(() => {
@@ -2487,6 +2496,30 @@ export default function CommanderSlug() {
     setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 50)
   }
 
+  // ⚠️ ON OBSERVE, ON N'ÉCOUTE PAS LE DÉFILEMENT. `IntersectionObserver` ne
+  // s'accroche pas au scroll : c'est la leçon de la zone morte au doigt, où
+  // trois jours ont été perdus sur un défilement iOS gêné par du code greffé
+  // dessus. Le `root` est le conteneur qui défile, pas la fenêtre.
+  useEffect(() => {
+    const cible = recapPanierRef.current
+    const conteneur = scrollRef.current
+    if (!cible || !conteneur || typeof IntersectionObserver === 'undefined') return
+    const obs = new IntersectionObserver(
+      ([entree]) => {
+        // On lit l'état PRÉCÉDENT pour l'hystérésis, d'où la forme fonctionnelle.
+        setMontrerFlottant(avant => doitMontrerFlottant(entree.intersectionRatio, avant))
+      },
+      // ⚠️ PLUSIEURS SEUILS, sinon le navigateur ne rappelle qu'à un seul point
+      // et la bande morte entre les deux valeurs ne serait jamais franchie.
+      { root: conteneur, threshold: [0, SEUIL_MONTRER, SEUIL_CACHER, 0.6, 1] },
+    )
+    obs.observe(cible)
+    return () => obs.disconnect()
+    // ⚠️ `panier` EST DANS LES DÉPENDANCES : le récap n'existe dans le DOM
+    // qu'une fois le premier article ajouté. Sans lui, l'observateur se poserait
+    // sur un `null` au premier rendu et ne se reposerait jamais.
+  }, [etape, peutCommander, panier])
+
   // Scrolle jusqu'au récap panier (bouton flottant). On centre le récap dans le
   // conteneur scrollable plutôt que scrollIntoView (qui viserait la fenêtre entière).
   function scrollVersPanier() {
@@ -3015,9 +3048,9 @@ export default function CommanderSlug() {
                   </h2>
                   {dealDetailOuvert.prix_deal && (
                     <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
-                      <span style={{ fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.5px', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{eurosNus(Number(dealDetailOuvert.prix_deal))}€</span>
+                      <span style={{ fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.5px', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{euros(Number(dealDetailOuvert.prix_deal))}</span>
                       {dealDetailOuvert.prix_original && (
-                        <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.75)', textDecoration: 'line-through', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{eurosNus(Number(dealDetailOuvert.prix_original))}€</span>
+                        <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.75)', textDecoration: 'line-through', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{euros(Number(dealDetailOuvert.prix_original))}</span>
                       )}
                     </div>
                   )}
@@ -3040,9 +3073,9 @@ export default function CommanderSlug() {
                 </h2>
                 {dealDetailOuvert.prix_deal && (
                   <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, marginTop: 12, background: 'rgba(255,255,255,0.1)', padding: '8px 14px', borderRadius: 12 }}>
-                    <span style={{ fontWeight: 900, fontSize: '1.6rem', color: T.light, letterSpacing: '-0.5px' }}>{eurosNus(Number(dealDetailOuvert.prix_deal))}€</span>
+                    <span style={{ fontWeight: 900, fontSize: '1.6rem', color: T.light, letterSpacing: '-0.5px' }}>{euros(Number(dealDetailOuvert.prix_deal))}</span>
                     {dealDetailOuvert.prix_original && (
-                      <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.5)', textDecoration: 'line-through' }}>{eurosNus(Number(dealDetailOuvert.prix_original))}€</span>
+                      <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.5)', textDecoration: 'line-through' }}>{euros(Number(dealDetailOuvert.prix_original))}</span>
                     )}
                   </div>
                 )}
@@ -3317,7 +3350,11 @@ export default function CommanderSlug() {
             (retour utilisateur 16/07). Ce bouton flottant montre le nombre d'articles
             + le total et scrolle jusqu'au récap pour confirmer. Visible seulement à
             l'étape Menu quand le panier n'est pas vide. */}
-        {etape === 2 && peutCommander && nbArticlesPanier() > 0 && (
+        {/* ⚠️ …ET IL DISPARAÎT DÈS QUE LE RÉCAP EST À L'ÉCRAN (Alex, 28/08) :
+            un raccourci vers ce qu'on regarde déjà n'est plus un raccourci,
+            il cache le bas de l'écran et il fait hésiter entre deux boutons
+            violets. Le pourquoi complet est dans `lib/bouton-flottant.js`. */}
+        {etape === 2 && peutCommander && nbArticlesPanier() > 0 && montrerFlottant && (
           <button onClick={scrollVersPanier}
             aria-label="Voir ma commande"
             style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 18, zIndex: 60, width: 'calc(100% - 32px)', maxWidth: 420, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', cursor: 'pointer', boxShadow: `0 10px 30px ${T.main}66`, animation: 'panierPop 0.25s ease-out' }}>
@@ -3329,7 +3366,7 @@ export default function CommanderSlug() {
               <span style={{ position: 'absolute', top: -8, right: -10, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 100, background: '#fff', color: T.main, fontSize: '0.68rem', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>{nbArticlesPanier()}</span>
             </span>
             <span style={{ fontWeight: 800, fontSize: '0.95rem', flex: 1, textAlign: 'left' }}>Voir ma commande</span>
-            <span style={{ fontWeight: 900, fontSize: '1rem', whiteSpace: 'nowrap' }}>{eurosNus(totalPanier())} €</span>
+            <span style={{ fontWeight: 900, fontSize: '1rem', whiteSpace: 'nowrap' }}>{euros(totalPanier())}</span>
           </button>
         )}
 
@@ -3685,8 +3722,8 @@ export default function CommanderSlug() {
                         </div>
                       ) : dealActif.prix_deal ? (
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          {dealActif.prix_original && <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', textDecoration: 'line-through' }}>{eurosNus(Number(dealActif.prix_original))}€</p>}
-                          <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{eurosNus(Number(dealActif.prix_deal))}€</p>
+                          {dealActif.prix_original && <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', textDecoration: 'line-through' }}>{euros(Number(dealActif.prix_original))}</p>}
+                          <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{euros(Number(dealActif.prix_deal))}</p>
                         </div>
                       ) : null}
                       <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', flexShrink: 0, marginLeft: 4 }}>›</span>
@@ -3989,7 +4026,7 @@ export default function CommanderSlug() {
                         if (!seuil) return null
                         const restant = seuil - totalPanier()
                         if (restant <= 0) return 'Frais de port offerts sur l’expédition 🟣'
-                        return `Plus que ${eurosNus(restant)}€ pour l’expédition offerte`
+                        return `Plus que ${euros(restant)} pour l’expédition offerte`
                       })()}
                     />
                   </div>
@@ -4128,7 +4165,7 @@ export default function CommanderSlug() {
                     return (
                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: 3 }}>
                         <span style={{ color: T.ink, fontWeight: 600 }}>{item.quantite}× {item.nom}</span>
-                        <span style={{ color: T.main, fontWeight: 800 }}>{eurosNus(((item.prix + supplement) * item.quantite))}€</span>
+                        <span style={{ color: T.main, fontWeight: 800 }}>{euros(((item.prix + supplement) * item.quantite))}</span>
                       </div>
                     )
                   })}
@@ -4136,18 +4173,18 @@ export default function CommanderSlug() {
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginTop: 6, color: T.deep }}>
                         <span style={{ fontWeight: 600 }}>{estDetail ? 'Frais de port' : 'Frais de livraison'}</span>
-                        <span style={{ fontWeight: 800 }}>{fraisLivraison() === 0 ? 'Offerts' : `+${eurosNus(fraisLivraison())}€`}</span>
+                        <span style={{ fontWeight: 800 }}>{fraisLivraison() === 0 ? 'Offerts' : `+${euros(fraisLivraison())}`}</span>
                       </div>
                       {livraisonConfig?.gratuit_des != null && (
                         fraisLivraison() > 0
-                          ? <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, margin: '4px 0 0' }}>Plus que {eurosNus((Number(livraisonConfig.gratuit_des) - totalPanier()))}€ pour la livraison offerte</p>
-                          : <p style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, margin: '4px 0 0' }}>Livraison offerte à partir de {eurosNus(Number(livraisonConfig.gratuit_des))}€</p>
+                          ? <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, margin: '4px 0 0' }}>Plus que {euros((Number(livraisonConfig.gratuit_des) - totalPanier()))} pour la livraison offerte</p>
+                          : <p style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, margin: '4px 0 0' }}>Livraison offerte à partir de {euros(Number(livraisonConfig.gratuit_des))}</p>
                       )}
                     </>
                   )}
                   <div style={{ borderTop: `1px solid ${T.pale}`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.82rem' }}>Total</span>
-                    <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.1rem' }}>{eurosNus(totalAvecFrais())}€</span>
+                    <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.1rem' }}>{euros(totalAvecFrais())}</span>
                   </div>
                   {/* ⚠️ LA RÉCOMPENSE EST UNE LIGNE À PART, JAMAIS FONDUE DANS
                       LE BON CADEAU. Ce sont deux natures d'avantage : l'une
@@ -4158,19 +4195,19 @@ export default function CommanderSlug() {
                   {remiseRecompenseEffective() > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
                       <span style={{ fontWeight: 700, color: T.main, fontSize: '0.82rem' }}>Récompense fidélité</span>
-                      <span style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem' }}>−{eurosNus(remiseRecompenseEffective())}€</span>
+                      <span style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem' }}>−{euros(remiseRecompenseEffective())}</span>
                     </div>
                   )}
                   {bonApplique && remiseBonEffective() > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
                       <span style={{ fontWeight: 700, color: '#10B981', fontSize: '0.82rem' }}>Bon cadeau ({bonApplique.code})</span>
-                      <span style={{ fontWeight: 800, color: '#10B981', fontSize: '0.9rem' }}>−{eurosNus(remiseBonEffective())}€</span>
+                      <span style={{ fontWeight: 800, color: '#10B981', fontSize: '0.9rem' }}>−{euros(remiseBonEffective())}</span>
                     </div>
                   )}
                   {(remiseRecompenseEffective() > 0 || (bonApplique && remiseBonEffective() > 0)) && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
                       <span style={{ fontWeight: 800, color: T.ink, fontSize: '0.82rem' }}>Reste à payer</span>
-                      <span style={{ fontWeight: 900, color: T.main, fontSize: '1.1rem' }}>{eurosNus(totalDuApresBon())}€</span>
+                      <span style={{ fontWeight: 900, color: T.main, fontSize: '1.1rem' }}>{euros(totalDuApresBon())}</span>
                     </div>
                   )}
                 </div>
@@ -4709,13 +4746,13 @@ export default function CommanderSlug() {
                         <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 14, padding: '10px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                           <div style={{ minWidth: 0 }}>
                             <p style={{ fontSize: '0.82rem', fontWeight: 800, color: '#065F46', margin: 0 }}>
-                              Bon cadeau appliqué : −{eurosNus(remiseBonEffective())}€
+                              Bon cadeau appliqué : −{euros(remiseBonEffective())}
                             </p>
                             <p style={{ fontSize: '0.72rem', color: '#047857', fontWeight: 600, margin: '2px 0 0' }}>
                               {couvert
                                 ? 'Ta commande est entièrement couverte 🟣'
-                                : `Reste à payer : ${eurosNus(totalDuApresBon())}€`}
-                              {remiseBonEffective() < Number(bonApplique.solde) && ` · il restera ${eurosNus(Number(bonApplique.solde) - remiseBonEffective())}€ sur ton bon`}
+                                : `Reste à payer : ${euros(totalDuApresBon())}`}
+                              {remiseBonEffective() < Number(bonApplique.solde) && ` · il restera ${euros(Number(bonApplique.solde) - remiseBonEffective())} sur ton bon`}
                             </p>
                           </div>
                           <button type="button" onClick={() => { setBonApplique(null); setBonErreur(null) }}
@@ -4760,7 +4797,7 @@ export default function CommanderSlug() {
                         style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (!formValide || !modeEffectif) ? 0.45 : 1, cursor: (!formValide || !modeEffectif) ? 'default' : 'pointer' }}>
                         {loadingCommande ? ((surPlace || couvert) ? 'Confirmation…' : 'Redirection…') : (
                           <>
-                            {(surPlace || couvert) ? 'Confirmer' : 'Payer & confirmer'} - {eurosNus(totalDuApresBon())}€
+                            {(surPlace || couvert) ? 'Confirmer' : 'Payer & confirmer'} - {euros(totalDuApresBon())}
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
                           </>
                         )}

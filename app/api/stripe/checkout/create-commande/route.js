@@ -29,6 +29,7 @@
 // 'paiement_en_attente' > 15 min (au cas où webhook ne vient jamais).
 
 import { NextResponse } from 'next/server'
+import { eurosNus } from '@/lib/montants'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { geocoderAdresse } from '@/lib/geocode'
@@ -382,7 +383,7 @@ export async function POST(request) {
       if (!seuilMini.ok) {
         return NextResponse.json({
           ok: false,
-          error: `La livraison démarre à ${seuilMini.seuil.toFixed(2).replace('.', ',')} € chez ${commercant.nom}. Il te manque ${seuilMini.manque.toFixed(2).replace('.', ',')} €, ou choisis le retrait en magasin.`,
+          error: `La livraison démarre à ${eurosNus(seuilMini.seuil)} € chez ${commercant.nom}. Il te manque ${eurosNus(seuilMini.manque)} €, ou choisis le retrait en magasin.`,
           minimum_livraison: seuilMini.seuil,
           manque: seuilMini.manque,
         }, { status: 400 })
@@ -961,8 +962,8 @@ export async function POST(request) {
               name: `Commande Yoppaa · ${commercant.nom}`,
               description: [
                 descCommande,
-                remiseRecompenseEUR > 0 ? `récompense fidélité (−${remiseRecompenseEUR.toFixed(2)} €)` : null,
-                remiseBonEUR > 0 ? `bon cadeau déduit (−${remiseBonEUR.toFixed(2)} €)` : null,
+                remiseRecompenseEUR > 0 ? `récompense fidélité (−${eurosNus(remiseRecompenseEUR)} €)` : null,
+                remiseBonEUR > 0 ? `bon cadeau déduit (−${eurosNus(remiseBonEUR)} €)` : null,
               ].filter(Boolean).join(' · '),
             },
           },

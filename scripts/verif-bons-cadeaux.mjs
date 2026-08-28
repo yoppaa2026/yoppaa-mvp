@@ -356,6 +356,28 @@ const egal = (nom, obtenu, attendu) =>
     !/couvert_sans_paiement/.test(src) && !/body\.couvert/.test(src))
 }
 
+// ═══ 14) 🔴 LA VIRGULE, JUSQUE DANS LES SUJETS D'EMAIL ════════════════════
+//
+// ⚠️ J'AVAIS BALAYÉ LA BIBLIOTHÈQUE ET LE TUNNEL, PAS LES ROUTES. Six montants
+// restaient au point, dont DEUX SUJETS d'email lus avant même l'ouverture :
+// « Bon cadeau vendu · 25.00 € » et « Abonnement vendu · 38.00 € ». Plus les
+// phrases d'annulation de rendez-vous, qui annoncent un remboursement.
+//
+// « Une amélioration s'applique PARTOUT » : je m'étais arrêté à deux fichiers.
+{
+  const routes = [
+    'app/api/rdv/cancel/route.js',
+    'app/api/stripe/checkout/create-commande/route.js',
+    'app/api/stripe/webhook/route.js',
+  ]
+  for (const chemin of routes) {
+    const src = lireCode(chemin)
+    verifie(`${chemin.split('/').slice(-2).join('/')} n'écrit plus un montant au point`,
+      !/toFixed\(2\)/.test(src),
+      (src.match(/.*toFixed\(2\).*/) || [])[0])
+  }
+}
+
 console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.`)
 if (echecs.length) {
   console.log('\nÉCHECS :')

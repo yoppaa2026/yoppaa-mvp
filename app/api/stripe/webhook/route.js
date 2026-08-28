@@ -20,6 +20,7 @@
 // signature (signature calculée sur le body byte-par-byte, pas après JSON.parse).
 
 import { NextResponse } from 'next/server'
+import { eurosNus } from '@/lib/montants'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant, emailAbonnementConfirme, emailAbonnementVenduCommercant } from '@/lib/resend'
@@ -597,7 +598,7 @@ async function handleAbonnementSucceeded(paymentIntent, supabase, eventAccount =
       if (comEmail?.notif_mode === 'chaque' && comEmail?.email) {
         await envoyerAuCommercant({
           to: comEmail.email,
-          subject: `Abonnement vendu · ${Number(formule.prix).toFixed(2)} €`,
+          subject: `Abonnement vendu · ${eurosNus(Number(formule.prix))} €`,
           html: emailAbonnementVenduCommercant({
             nom_commercant: com.nom,
             client_prenom: contrat.client_prenom || '',
@@ -723,7 +724,7 @@ async function handleBonCadeauSucceeded(paymentIntent, supabase) {
     if (bon.commercant?.notif_mode === 'chaque' && bon.commercant?.email) {
       await envoyerAuCommercant({
         to: bon.commercant.email,
-        subject: `Bon cadeau vendu · ${Number(bon.montant_initial).toFixed(2)} €`,
+        subject: `Bon cadeau vendu · ${eurosNus(Number(bon.montant_initial))} €`,
         html: emailBonCadeauVenduCommercant({
           nom_commercant: bon.commercant.nom,
           montant: bon.montant_initial,

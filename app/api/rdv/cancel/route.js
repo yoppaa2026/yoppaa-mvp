@@ -14,6 +14,7 @@
 //   4. Email annulation Yopper + iCal CANCEL (appel direct emailRdvAnnule)
 
 import { NextResponse } from 'next/server'
+import { eurosNus } from '@/lib/montants'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe } from '@/lib/stripe'
 import { envoyerAuCommercant, emailRdvAnnule } from '@/lib/resend'
@@ -310,10 +311,10 @@ export async function POST(request) {
       message = 'Ton RDV est annulé. Le remboursement sera traité manuellement par le commerçant sous quelques jours.'
     } else if (gardeSesProduits) {
       message = refundMontant > 0
-        ? `Ton RDV est annulé. Tes ${refundMontant.toFixed(2)}€ d'acompte reviennent sur ton moyen de paiement dans 5 à 10 jours, et tes produits t'attendent en boutique.`
+        ? `Ton RDV est annulé. Tes ${eurosNus(refundMontant)}€ d'acompte reviennent sur ton moyen de paiement dans 5 à 10 jours, et tes produits t'attendent en boutique.`
         : 'Ton RDV est annulé. Tes produits t\'attendent en boutique.'
     } else if (refundMontant > 0) {
-      message = `Ton RDV est annulé. ${refundMontant.toFixed(2)}€ reviennent sur ton moyen de paiement dans 5 à 10 jours.`
+      message = `Ton RDV est annulé. ${eurosNus(refundMontant)}€ reviennent sur ton moyen de paiement dans 5 à 10 jours.`
     } else {
       message = 'Ton RDV est annulé.'
     }

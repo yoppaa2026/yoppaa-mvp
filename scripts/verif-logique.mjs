@@ -1486,7 +1486,7 @@ verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === n
 
   // Ce qu'on lui dit : il n'a rien à faire, il a juste à savoir.
   const txt = texteBonVendu({ montant_initial: 50 })
-  verifier('le montant est annoncé', txt.corps.includes('50.00'))
+  verifier('le montant est annoncé', txt.corps.includes('50,00 €'))
   verifier('et qu\'il n\'a rien à préparer', /rien à préparer/.test(txt.corps))
   verifier('sans montant, la phrase tient debout',
     !/undefined|NaN/.test(texteBonVendu({}).corps), texteBonVendu({}).corps)
@@ -1509,7 +1509,18 @@ verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === n
     bons_vendus: [{ montant_initial: 50 }, { montant_initial: 25 }],
   })
   verifier('le récapitulatif annonce les bons vendus', /2 bons cadeaux vendus/.test(recapAvec))
-  verifier('avec leur total', recapAvec.includes('75.00'))
+  verifier('avec leur total', recapAvec.includes('75,00 €'))
+  // ⚠️ 37 MONTANTS SUR 39 S'ÉCRIVAIENT « 75.00 € » dans la bibliothèque
+  // d'emails, sur TOUS les segments : rendez-vous, commandes, annulations,
+  // récapitulatifs. Un montant se lit à la virgule en Belgique. Deux gardes :
+  // le HTML rendu ne doit plus jamais porter de point décimal devant un euro,
+  // et le fichier ne doit plus contenir de `toFixed(2)` en liberté, puisque
+  // `euros()` est désormais le seul chemin.
+  verifier('et aucun montant au point dans le HTML rendu',
+    !/\d\.\d{2}\s*€/.test(recapAvec))
+  const libEmails = readFileSync(new URL('../lib/resend.js', import.meta.url), 'utf8')
+  verifier('la bibliothèque d\'emails ne formate plus un montant à la main',
+    !/toFixed\(2\)/.test(libEmails) && /from '\.\/montants'/.test(libEmails))
   verifier('et qu\'il n\'y a rien à préparer', /rien à préparer/.test(recapAvec))
   // Sans bon vendu, aucun bloc : on n'écrit pas « 0 bon cadeau ».
   const recapSans = emailRecapCommandesJour({ nom_commercant: 'X', date_jour: '2026-08-11', commandes: [] })

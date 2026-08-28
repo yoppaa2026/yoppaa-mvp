@@ -48,6 +48,17 @@ export async function POST(request) {
     if (modeDest === 'offrir' && !EMAIL_RE.test(beneficiaire_email || '')) {
       return NextResponse.json({ ok: false, error: 'L\'email de la personne à qui tu offres le bon est requis.' }, { status: 400 })
     }
+    // ⚠️ UN CADEAU DOIT DIRE DE QUI IL VIENT, et une garde d'écran n'est jamais
+    // une réponse. Sans prénom, le bénéficiaire lisait « on t'offre un bon
+    // cadeau », de la part de personne, et l'acheteur « envoyé à » suivi d'une
+    // adresse email brute. Les gabarits se rabattaient poliment sur « Merci »
+    // et « Hello » : un repli propre, mais un cadeau anonyme quand même.
+    if (!String(acheteur_prenom || '').trim()) {
+      return NextResponse.json({ ok: false, error: 'Ton prénom est requis : un cadeau doit dire de qui il vient.' }, { status: 400 })
+    }
+    if (modeDest === 'offrir' && !String(beneficiaire_prenom || '').trim()) {
+      return NextResponse.json({ ok: false, error: 'Le prénom de la personne à qui tu offres le bon est requis.' }, { status: 400 })
+    }
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,

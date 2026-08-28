@@ -4,6 +4,7 @@
 // (la table bons_cadeaux n'a aucune lecture publique).
 
 import { createClient } from '@supabase/supabase-js'
+import { euros } from '@/lib/montants'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,9 +81,9 @@ export default async function CadeauPage({ params }) {
             <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, borderRadius: 16, padding: '20px 16px', marginBottom: 14 }}>
               <p style={{ margin: '0 0 2px', fontSize: 10, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1px' }}>Solde disponible</p>
               <p style={{ margin: '0 0 12px', fontSize: 36, fontWeight: 900, color: '#fff', letterSpacing: '-1.5px' }}>
-                {Number(bon.solde).toFixed(2)} €
+                {euros(bon.solde)}
                 {Number(bon.solde) < Number(bon.montant_initial) && (
-                  <span style={{ fontSize: 13, fontWeight: 700, color: T.light, marginLeft: 6 }}>sur {Number(bon.montant_initial).toFixed(2)} €</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: T.light, marginLeft: 6 }}>sur {euros(bon.montant_initial)}</span>
                 )}
               </p>
               <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1px' }}>Ton code</p>

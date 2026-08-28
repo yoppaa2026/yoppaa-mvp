@@ -9,7 +9,8 @@ import { libelleRetrait } from '@/lib/libelle-retrait'
 // pure et testée : un voile éteint au mauvais moment cache du contenu.
 import { bordsDefilement } from '@/lib/responsive'
 import { referenceCommande } from '@/lib/numero-commande'
-import { resteAEncaisserCommande, etatPaiementClient, couleurPaiement } from '@/lib/rdv-paiement'
+import { resteAEncaisserCommande, etatPaiementClient, couleurPaiement, montantNetCommande, phraseAvantages } from '@/lib/rdv-paiement'
+import { eurosNus } from '@/lib/montants'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
 import { libelleOptions } from '@/lib/options-ligne'
 import IconeRetrait from '@/app/components/IconeRetrait'
@@ -821,6 +822,35 @@ function BadgeTypeCommande({ mode, categorie = null }) {
 //
 // Un total n'est pas un état. Le mot d'état vient donc en tête, ici comme dans
 // l'agenda du commerçant : « À régler sur place 15,00 € », jamais l'inverse.
+// 🔴 LE COMPTE ANNONÇAIT LE TARIF PLEIN. Quatre cartes affichaient
+// `commande.total` brut : un Yopper qui avait réglé 26 € grâce à une récompense
+// et un bon cadeau lisait « 36.00€ » dans son historique, sans un mot pour
+// expliquer les dix euros. La donnée était pourtant là, chargée par le `select
+// *` de la liste : c'est l'AFFICHAGE qui l'ignorait.
+//
+// ⚠️ On ne remplace pas le montant, on montre les DEUX : le prix barré dit d'où
+// l'on part, le net dit ce qu'on a payé. Sans le barré, le client se demande si
+// le commerçant s'est trompé de prix.
+//
+// Aucun style propre : le fragment hérite de la couleur et de la taille du
+// parent, et fonctionne donc à l'identique dans les quatre cartes.
+function MontantPaye({ commande }) {
+  const net = montantNetCommande(commande)
+  if (net === null) return null
+  const brut = Number(commande?.total)
+  const remise = Number.isFinite(brut) && brut > net
+  return (
+    <>
+      {remise && (
+        <span style={{ textDecoration: 'line-through', fontWeight: 700, opacity: 0.45, marginRight: 5, fontSize: '0.82em' }}>
+          {eurosNus(brut)}€
+        </span>
+      )}
+      {eurosNus(net)}€
+    </>
+  )
+}
+
 function PillPaiementClient({ commande, taille = 'normal' }) {
   const etat = etatPaiementClient(commande)
   if (!etat) return null
@@ -2606,11 +2636,20 @@ export default function Commander() {
   // ⚠️ CE TOTAL RESTE INCOMPLET tant que l'écran d'abonnement n'existe pas :
   // le montant du contrat n'est lu nulle part côté Yopper. L'exclusion dit au
   // moins clairement pourquoi, au lieu de faire croire à un calcul juste.
+  // 🔴 ET IL COMPTAIT LE TARIF PLEIN. Cette carte annonce « ce que tu as
+  // dépensé » : elle additionnait des prix affichés, pas des euros sortis du
+  // portefeuille. Une récompense fidélité et un bon cadeau ne se paient pas,
+  // et les compter gonflait le total de tout ce que le Yopper avait ÉCONOMISÉ.
   const totalDepense =
-    clientCommandes.reduce((acc, c) => acc + Number(c.total || 0), 0)
+    clientCommandes.reduce((acc, c) => acc + (montantNetCommande(c) || 0), 0)
     + rdvsActifs
       .filter(r => r.statut === 'honore' && !r.abonnement_id)
-      .reduce((acc, r) => acc + Number(r.prix_estime || 0), 0)
+      // Le rendez-vous n'accepte pas encore de bon cadeau ; on lit quand même
+      // la colonne, pour que ce total reste juste le jour où il en acceptera.
+      .reduce((acc, r) => acc + Math.max(0,
+        Number(r.prix_estime || 0)
+        - Number(r.fidelite_remise || 0)
+        - Number(r.bon_cadeau_montant || 0)), 0)
   const commercesUniques = new Set([
     ...clientCommandes.map(c => c.commercant_id),
     ...rdvsActifs.map(r => r.commercant_id),
@@ -3276,7 +3315,7 @@ export default function Commander() {
                               <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#4F46E5' }}>En route vers toi{c.date_commande ? ` · ${new Date(c.date_commande + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'short', day: 'numeric', month: 'short' })}` : ''}{cren ? ` · ${cren.heure_debut.slice(0,5)}–${cren.heure_fin.slice(0,5)}` : ''}</span>
                             </span>
                           </div>
-                          <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /><p style={{ fontWeight: 900, color: '#4F46E5', fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p><PillPaiementClient commande={c}/></div>
+                          <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /><p style={{ fontWeight: 900, color: '#4F46E5', fontSize: '1rem', letterSpacing: '-0.3px' }}><MontantPaye commande={c}/></p><PillPaiementClient commande={c}/></div>
                         </div>
                         <button onClick={() => setPickupCommande(c)}
                           style={{ width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.95rem', background: 'linear-gradient(135deg, #4F46E5, #6366F1)', color: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 16px #4F46E544', letterSpacing: '-0.3px' }}>
@@ -3318,7 +3357,7 @@ export default function Commander() {
                             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.main }}>{libelleRetrait(c, cren, { court: true })}</span>
                           </span>
                         </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /><p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p><PillPaiementClient commande={c}/></div>
+                        <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /><p style={{ fontWeight: 900, color: T.main, fontSize: '1rem', letterSpacing: '-0.3px' }}><MontantPaye commande={c}/></p><PillPaiementClient commande={c}/></div>
                       </div>
                       {ok ? (
                         <button onClick={() => setPickupCommande(c)}
@@ -3376,7 +3415,7 @@ export default function Commander() {
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>
                             <div style={{ marginBottom: 4 }}><BadgeTypeCommande mode={c.mode_retrait} categorie={c.commercant?.categorie} /></div>
-                            <p style={{ fontWeight: 900, color: T.main, marginBottom: 4, fontSize: '0.95rem', letterSpacing: '-0.3px' }}>{Number(c.total).toFixed(2)}€</p>
+                            <p style={{ fontWeight: 900, color: T.main, marginBottom: 4, fontSize: '0.95rem', letterSpacing: '-0.3px' }}><MontantPaye commande={c}/></p>
                             <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '3px 8px', borderRadius: 100, background: sc.bg, color: sc.color }}>{sc.label}</span>
                             <div style={{ marginTop: 4 }}><PillPaiementClient commande={c} taille="petit"/></div>
                           </div>
@@ -3453,7 +3492,7 @@ export default function Commander() {
                           )}
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(c.total).toFixed(2)}€</p>
+                          <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}><MontantPaye commande={c}/></p>
                           <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: sc.bg, color: sc.color }}>{sc.label}</span>
                           {/* ⚠️ L'HISTORIQUE AUSSI. Une commande récupérée dont
                               rien n'a été encaissé reste une dette : c'est

@@ -31,7 +31,14 @@ export default function BonCadeauModal({ commercant, validiteMois = 12, onClose 
   const montantNum = Math.round((parseFloat(String(montant).replace(',', '.')) || 0) * 100) / 100
   const montantOk = montantNum >= BON_MONTANT_MIN && montantNum <= BON_MONTANT_MAX
   const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e || '')
-  const formOk = montantOk && emailOk(acheteur.email) && (mode === 'moi' || emailOk(benef.email))
+  // ⚠️ UN CADEAU DOIT DIRE DE QUI IL VIENT. Les prénoms n'étaient pas exigés :
+  // le bénéficiaire recevait « on t'offre un bon cadeau », de la part de
+  // personne, et l'acheteur lisait « envoyé à » suivi d'une adresse email.
+  // Les gabarits savent se rabattre sur « Merci » et « Hello », mais un repli
+  // poli reste un cadeau anonyme.
+  const prenomOk = (v) => String(v || '').trim().length > 0
+  const formOk = montantOk && emailOk(acheteur.email) && prenomOk(acheteur.prenom)
+    && (mode === 'moi' || (emailOk(benef.email) && prenomOk(benef.prenom)))
 
   async function payer() {
     if (!formOk || loading) return
@@ -122,7 +129,7 @@ export default function BonCadeauModal({ commercant, validiteMois = 12, onClose 
           {mode === 'offrir' && (
             <>
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                <input value={benef.prenom} onChange={e => setBenef(p => ({ ...p, prenom: e.target.value }))} placeholder="Son prénom" style={{ ...inputSt, flex: '0 0 38%' }}/>
+                <input value={benef.prenom} onChange={e => setBenef(p => ({ ...p, prenom: e.target.value }))} placeholder="Son prénom *" style={{ ...inputSt, flex: '0 0 38%' }}/>
                 <input type="email" value={benef.email} onChange={e => setBenef(p => ({ ...p, email: e.target.value }))} placeholder="Son email *" style={{ ...inputSt, flex: 1 }}/>
               </div>
               <textarea value={message} onChange={e => setMessage(e.target.value.slice(0, 300))} rows={2}
@@ -133,7 +140,7 @@ export default function BonCadeauModal({ commercant, validiteMois = 12, onClose 
 
           <p style={{ margin: '0 0 8px', fontSize: '0.72rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tes coordonnées</p>
           <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-            <input value={acheteur.prenom} onChange={e => setAcheteur(p => ({ ...p, prenom: e.target.value }))} placeholder="Ton prénom" style={{ ...inputSt, flex: '0 0 38%' }}/>
+            <input value={acheteur.prenom} onChange={e => setAcheteur(p => ({ ...p, prenom: e.target.value }))} placeholder="Ton prénom *" style={{ ...inputSt, flex: '0 0 38%' }}/>
             <input type="email" value={acheteur.email} onChange={e => setAcheteur(p => ({ ...p, email: e.target.value }))} placeholder="Ton email *" style={{ ...inputSt, flex: 1 }}/>
           </div>
 

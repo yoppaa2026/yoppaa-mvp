@@ -34,6 +34,7 @@ import { nouveauxRdvs, idsDes, texteAlerteRdv } from '@/lib/alerte-rdv'
 import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
 import { libelleOptions } from '@/lib/options-ligne'
 import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '@/lib/bons-vendus'
+import { eurosNus } from '@/lib/montants'
 import { peutMarquerNonRetire, ancienneteCommande } from '@/lib/rappels-retrait'
 import { libellePeriodeStats } from '@/lib/agenda-bloc'
 import { compterAClore } from '@/lib/rdv-statut'
@@ -2984,7 +2985,7 @@ export default function Dashboard() {
                         {resumeBons.nombre > 1 ? `${resumeBons.nombre} bons cadeaux vendus` : 'Bon cadeau vendu'}
                       </p>
                       <p style={{ fontSize: '0.95rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.3px', margin: '1px 0 0' }}>
-                        {resumeBons.total.toFixed(2)}€
+                        {eurosNus(resumeBons.total)}€
                         <span style={{ fontSize: '0.7rem', fontWeight: 700, color: T.muted, marginLeft: 7 }}>déjà encaissés · rien à préparer</span>
                       </p>
                     </div>

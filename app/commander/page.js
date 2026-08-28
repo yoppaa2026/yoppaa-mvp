@@ -10,7 +10,7 @@ import { libelleRetrait } from '@/lib/libelle-retrait'
 import { bordsDefilement } from '@/lib/responsive'
 import { referenceCommande } from '@/lib/numero-commande'
 import { resteAEncaisserCommande, etatPaiementClient, couleurPaiement, montantNetCommande, phraseAvantages } from '@/lib/rdv-paiement'
-import { eurosNus } from '@/lib/montants'
+import { euros } from '@/lib/montants'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
 import { libelleOptions } from '@/lib/options-ligne'
 import IconeRetrait from '@/app/components/IconeRetrait'
@@ -843,10 +843,10 @@ function MontantPaye({ commande }) {
     <>
       {remise && (
         <span style={{ textDecoration: 'line-through', fontWeight: 700, opacity: 0.45, marginRight: 5, fontSize: '0.82em' }}>
-          {eurosNus(brut)}€
+          {euros(brut)}
         </span>
       )}
-      {eurosNus(net)}€
+      {euros(net)}
     </>
   )
 }
@@ -4013,7 +4013,7 @@ export default function Commander() {
                       </span>
                       <div style={{ flex: 1, height: 1, background: '#D1FAE5' }}/>
                       <span style={{ fontSize: 11, fontWeight: 700, color: '#059669' }}>
-                        {eurosNus(mesBons.reduce((s, b) => s + Number(b.solde || 0), 0))}€
+                        {euros(mesBons.reduce((s, b) => s + Number(b.solde || 0), 0))}
                       </span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -4040,10 +4040,10 @@ export default function Commander() {
                               </p>
                             </div>
                             <span style={{ flexShrink: 0, fontSize: '1rem', fontWeight: 900, color: '#059669', letterSpacing: '-0.3px' }}>
-                              {eurosNus(b.solde)}€
+                              {euros(b.solde)}
                               {Number(b.solde) < Number(b.montant_initial) && (
                                 <span style={{ display: 'block', fontSize: '0.62rem', fontWeight: 700, color: '#047857', opacity: 0.75, textAlign: 'right' }}>
-                                  sur {eurosNus(b.montant_initial)}€
+                                  sur {euros(b.montant_initial)}
                                 </span>
                               )}
                             </span>

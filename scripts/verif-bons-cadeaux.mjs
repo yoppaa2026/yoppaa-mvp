@@ -23,6 +23,7 @@
 import { readFileSync } from 'node:fs'
 import { euros, eurosNus } from '../lib/montants.js'
 import { elisionDe } from '../lib/francais.js'
+import { doitMontrerFlottant, SEUIL_CACHER, SEUIL_MONTRER } from '../lib/bouton-flottant.js'
 import { calculerRemiseBon, normaliserCodeBon, bonExpire } from '../lib/bons-cadeaux.js'
 import { resteAEncaisser, soldeRdv, etatPaiementRdv, caDesRdvs, montantNetCommande, phraseAvantages } from '../lib/rdv-paiement.js'
 import { emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire } from '../lib/resend.js'
@@ -428,6 +429,88 @@ const egal = (nom, obtenu, attendu) =>
   verifie('le prénom du bénéficiaire est échappé', !/<img src=x/.test(piege))
   verifie('le prénom de l\'acheteur est échappé', !/<b>Pirate<\/b>/.test(piege))
   verifie('et le texte reste lisible plutôt que supprimé', /&lt;b&gt;Pirate/.test(piege))
+}
+
+// ═══ LE BOUTON FLOTTANT S'EFFACE QUAND SA CIBLE EST LÀ (Alex, 28/08) ══════
+//
+// « Est-ce qu'il ne devrait pas disparaître une fois que le bouton recherché
+// est visible ? Sinon ça fait un peu doublon. » Oui : un raccourci vers ce
+// qu'on regarde déjà n'est plus un raccourci, il cache le bas de l'écran, et
+// deux boutons violets à trois centimètres font hésiter.
+//
+// ⚠️ LA RÈGLE EST EXÉCUTÉE, pas décrite. Une garde qui chercherait le mot
+// `IntersectionObserver` dans le source resterait verte avec des seuils
+// inversés, donc avec un bouton qui clignote.
+{
+  // Cible franchement visible → il s'efface, quel que soit l'état d'avant.
+  verifie('cible bien visible : le bouton s\'efface', doitMontrerFlottant(0.8, true) === false)
+  verifie('et il reste effacé', doitMontrerFlottant(0.8, false) === false)
+  // Cible franchement sortie → il revient, quel que soit l'état d'avant.
+  verifie('cible sortie : le bouton revient', doitMontrerFlottant(0, false) === true)
+  verifie('et il reste affiché', doitMontrerFlottant(0, true) === true)
+
+  // ⚠️ LA BANDE MORTE, ET C'EST TOUT L'INTÉRÊT : entre les deux seuils, on ne
+  // change RIEN. Sans elle, un doigt qui bouge d'un millimètre à la frontière
+  // ferait apparaître et disparaître le bouton en boucle.
+  verifie('entre les deux seuils, un bouton affiché le reste',
+    doitMontrerFlottant(0.2, true) === true)
+  verifie('entre les deux seuils, un bouton effacé le reste',
+    doitMontrerFlottant(0.2, false) === false)
+  verifie('les deux seuils sont bien distincts', SEUIL_MONTRER < SEUIL_CACHER)
+
+  // Un ratio absent ne doit jamais faire sauter le bouton d'un état à l'autre.
+  verifie('un ratio illisible ne change rien', doitMontrerFlottant(undefined, true) === true
+    && doitMontrerFlottant(null, false) === false)
+
+  const src = lireCode('app/commander/[slug]/page.js')
+  verifie('le bouton flottant est conditionné à la règle',
+    /nbArticlesPanier\(\) > 0 && montrerFlottant &&/.test(src))
+  verifie('la décision passe par la fonction, jamais par un test maison',
+    /setMontrerFlottant\(avant => doitMontrerFlottant\(entree\.intersectionRatio, avant\)\)/.test(src))
+  // ⚠️ PAS D'ÉCOUTEUR DE DÉFILEMENT DE PLUS : c'est la leçon de la zone morte
+  // au doigt, trois jours perdus sur un scroll iOS gêné par du code greffé
+  // dessus. Il en existe UN seul dans cet écran, antérieur, et il sert à
+  // l'entête collante et à la catégorie active. La garde compte donc, elle
+  // n'interdit pas : écrite en « aucun », elle rougissait sur du code sain.
+  verifie('le seul écouteur de défilement reste celui de l\'entête',
+    (src.match(/addEventListener\('scroll'/g) || []).length === 1)
+  verifie('l\'observation se fait dans le conteneur qui défile, pas la fenêtre',
+    /root: conteneur/.test(src))
+  // Sans plusieurs seuils, le navigateur ne rappelle qu'à un point et la bande
+  // morte ne serait jamais franchie : le bouton resterait bloqué.
+  verifie('les deux seuils sont donnés à l\'observateur',
+    /threshold: \[0, SEUIL_MONTRER, SEUIL_CACHER/.test(src))
+}
+
+// ═══ « DONT TVA » SE LIT COMME UNE TVA SUR LA LIGNE DU DESSUS ═════════════
+//
+// 🔴 Alex a entouré ce bloc : au-dessus « Plus rien à payer 0,00 € », en
+// dessous « TVA 21 % · 1,39 € ». Le chiffre est JUSTE (un bon cadeau est un
+// moyen de paiement, la vente vaut toujours 8 €), c'est la phrase qui manque.
+{
+  const src = readFileSync(new URL('../lib/resend.js', import.meta.url), 'utf8')
+  verifie('le bloc TVA nomme son assiette', /TVA comprise dans les \$\{euros\(/.test(src))
+  // ⚠️ L'ASSIETTE VIENT DE LA VENTILATION, PAS DE `total` : avec une
+  // récompense la base a été réduite, et annoncer « le total » serait faux
+  // d'exactement le montant de la remise.
+  verifie('et il la calcule sur les lignes qu\'il chapeaute',
+    /TVA comprise dans les \$\{euros\(ventilation_tva\.reduce\(/.test(src))
+  verifie('« Dont TVA » seul a disparu',
+    !/letter-spacing:0\.6px;border-top:1px solid \$\{C\.pale\};">Dont TVA</.test(src))
+}
+
+// ═══ LES MONTANTS DU TUNNEL CLIENT, COLLÉS À LEUR EURO ════════════════════
+//
+// Sur le même écran, le panier écrivait « 8,00€ » et la barre flottante juste
+// en dessous « 8,00 € ». Frère du balayage commerçant du matin.
+{
+  for (const f of ['app/commander/[slug]/page.js', 'app/commander/page.js',
+                   'app/commander/rdv/[slug]/page.js']) {
+    const src = lireCode(f)
+    const restes = (src.match(/eurosNus\([^\n]*?\)\}\s?€/g) || [])
+    verifie(`${f.split('/').slice(-2).join('/')} n'écrit plus un montant à la main`,
+      restes.length === 0, restes[0] || '')
+  }
 }
 
 console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.`)

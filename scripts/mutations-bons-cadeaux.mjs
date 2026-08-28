@@ -189,6 +189,41 @@ const MUTATIONS = [
     de: '    const pris = Math.min(sortie[cle], reste)',
     vers: '    const pris = 0' },
 
+  // ─── LE BOUTON FLOTTANT ET LA PHRASE DE LA TVA (28/08, soir) ─────────────
+  { nom: '🔴 le bouton flottant perd son hystérésis et clignote',
+    banc: 'verif:bons', fichier: 'lib/bouton-flottant.js',
+    de: '  if (v <= SEUIL_MONTRER) return true\n  return montreAvant',
+    vers: '  return true' },
+
+  { nom: '🔴 les deux seuils du bouton flottant sont inversés',
+    banc: 'verif:bons', fichier: 'lib/bouton-flottant.js',
+    // ⚠️ ANCRÉE SUR LE CHIFFRE SEUL, pas sur le commentaire : ma première
+    // version y cherchait une apostrophe typographique là où le fichier en a
+    // une droite, et la mutation devenait « TEXTE INTROUVABLE », donc une
+    // NON-mesure qui passe pour une mesure. Troisième fois aujourd'hui.
+    de: 'export const SEUIL_CACHER = 0.35',
+    vers: 'export const SEUIL_CACHER = 0.02' },
+
+  { nom: '🔴 le piège du zéro revient sur le ratio absent',
+    banc: 'verif:bons', fichier: 'lib/bouton-flottant.js',
+    de: "  if (visible === null || visible === undefined || visible === '') return montreAvant",
+    vers: '  // garde retirée' },
+
+  { nom: '🔴 le bouton flottant redevient toujours visible',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: 'nbArticlesPanier() > 0 && montrerFlottant && (',
+    vers: 'nbArticlesPanier() > 0 && (' },
+
+  { nom: '🔴 la TVA du ticket reperd son assiette',
+    banc: 'verif:bons', fichier: 'lib/resend.js',
+    de: '`TVA comprise dans les ${euros(ventilation_tva.reduce((s, v) => s + Number(v.ttc || 0), 0))}`',
+    vers: "'Dont TVA'" },
+
+  { nom: '🔴 SUR-CORRECTION : la phrase de TVA annonce le TOTAL, pas la base',
+    banc: 'verif:bons', fichier: 'lib/resend.js',
+    de: '`TVA comprise dans les ${euros(ventilation_tva.reduce((s, v) => s + Number(v.ttc || 0), 0))}`',
+    vers: '`TVA comprise dans les ${euros(Number(total))}`' },
+
   { nom: '🔴 SUR-CORRECTION : le bon cadeau sortirait de la base TVA',
     banc: 'verif:comptable', fichier: 'lib/commande-notifs.js',
     de: '  const parTauxNet = imputerRemise(parTauxTicket, cmd.fidelite_remise)',

@@ -52,7 +52,7 @@ function enGras(texte) {
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
 import { calculerRemiseBon } from '@/lib/bons-cadeaux'
-import { eurosNus } from '@/lib/montants'
+import { euros } from '@/lib/montants'
 import BonCadeauFiche from '../../BonCadeauFiche'
 import { redirectTop } from '@/lib/redirect-top'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
@@ -3181,12 +3181,12 @@ export default function CommanderRdvSlug() {
                                 <div key={b.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 6 }}>
                                   <div style={{ minWidth: 0 }}>
                                     <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 800, color: actif ? '#059669' : T.ink }}>
-                                      {actif ? `−${eurosNus(deduit)}€ déduits` : `${eurosNus(b.solde)}€ disponibles`}
+                                      {actif ? `−${euros(deduit)} déduits` : `${euros(b.solde)} disponibles`}
                                     </p>
                                     <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: actif ? '#047857' : T.muted, fontWeight: 600 }}>
                                       {actif
                                         ? (deduit < Number(b.solde)
-                                          ? `Il restera ${eurosNus(Number(b.solde) - deduit)}€ sur ton bon. Ton acompte baisse d’autant.`
+                                          ? `Il restera ${euros(Number(b.solde) - deduit)} sur ton bon. Ton acompte baisse d’autant.`
                                           : 'Ton acompte baisse d’autant.')
                                         : b.code}
                                     </p>

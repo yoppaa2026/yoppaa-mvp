@@ -51,6 +51,9 @@ function enGras(texte) {
 }
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses } from '@/lib/fidelite-recompense'
+import { calculerRemiseBon } from '@/lib/bons-cadeaux'
+import { eurosNus } from '@/lib/montants'
+import BonCadeauFiche from '../../BonCadeauFiche'
 import { redirectTop } from '@/lib/redirect-top'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { referenceRdv } from '@/lib/numero-commande'
@@ -328,6 +331,13 @@ export default function CommanderRdvSlug() {
   // nombre ne sert qu'à DIRE que les autres l'attendent.
   const [recompensesTotal, setRecompensesTotal] = useState(0)
   const [recompenseActive, setRecompenseActive] = useState(false)
+  // ⚠️ MES BONS CADEAUX CHEZ CE COMMERÇANT (28/08). Un salon PEUT vendre des
+  // bons : son bénéficiaire recevait un email promettant l'usage en ligne, et
+  // arrivait sur cette fiche qui n'en connaissait aucun. Cul-de-sac.
+  const [mesBonsIci, setMesBonsIci] = useState([])
+  // Le bon retenu pour ce rendez-vous. Comme la récompense, il n'est PAS actif
+  // d'office : un bon de 50 € posé sur une prestation à 20 € brûlerait 30 €.
+  const [bonChoisi, setBonChoisi] = useState(null)
   const [praticienChoisi, setPraticienChoisi] = useState(null)  // null = "Sans préférence" (V1 : garde null en base)
   const [dateChoisie, setDateChoisie] = useState(null)        // Date object
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
@@ -563,6 +573,27 @@ export default function CommanderRdvSlug() {
       .then(j => { if (j?.ok) setBonsCfg(j) })
       .catch(() => {})
 
+  }, [commercant?.id])
+
+  // MES bons cadeaux chez ce commerçant.
+  //
+  // ⚠️ `fetchYopper`, pas `fetch` : la route exige une identité PROUVÉE. Un
+  // fetch nu n'emporte pas le jeton, et l'écran resterait muet sans erreur.
+  //
+  // ⚠️ AUCUNE GARDE SUR `bons_cadeaux_actif` : un commerçant peut avoir fermé
+  // la vente après avoir vendu. Ces bons-là restent dépensables.
+  useEffect(() => {
+    const id = commercant?.id
+    if (!id) { setMesBonsIci([]); return }
+    let vivant = true
+    fetchYopper('/api/yopper/mes-bons', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'une', commercant_id: id }),
+    })
+      .then(r => r.json())
+      .then(j => { if (vivant && j?.ok) setMesBonsIci(j.bons || []) })
+      .catch(() => {})
+    return () => { vivant = false }
   }, [commercant?.id])
 
   // Récompense de fidélité disponible chez ce commerçant.
@@ -1497,6 +1528,11 @@ export default function CommanderRdvSlug() {
               // ⚠️ On envoie l'IDENTIFIANT, jamais le montant : c'est le serveur
               // qui recharge la récompense et calcule la remise.
               ...(recompenseFid && recompenseActive ? { fidelite_recompense_id: recompenseFid.id } : {}),
+              // ⚠️ ON N'ENVOIE QUE LE CODE, jamais le montant : la route
+              // recharge le bon, revérifie le commerçant, le statut,
+              // l'expiration et le solde, puis recalcule ce qui est déduit.
+              // L'écran calcule pour montrer, le serveur décide.
+              ...(bonChoisi ? { bon_cadeau_code: bonChoisi.code } : {}),
             }),
           })
           const j = await res.json()
@@ -1547,6 +1583,11 @@ export default function CommanderRdvSlug() {
               notes_client: client.notes.trim() || null,
               rgpd_marketing: rgpdMarketing,
               ...(recompenseFid && recompenseActive ? { fidelite_recompense_id: recompenseFid.id } : {}),
+              // ⚠️ ON N'ENVOIE QUE LE CODE, jamais le montant : la route
+              // recharge le bon, revérifie le commerçant, le statut,
+              // l'expiration et le solde, puis recalcule ce qui est déduit.
+              // L'écran calcule pour montrer, le serveur décide.
+              ...(bonChoisi ? { bon_cadeau_code: bonChoisi.code } : {}),
             }),
           })
           const j = await res.json()
@@ -2164,6 +2205,11 @@ export default function CommanderRdvSlug() {
                     donne une raison d'acheter AVANT de voir ce qu'il propose.
                     Même position exacte sur la fiche boutique. */}
                 {etape === 1 && <CarteFideliteFiche commercant={commercant} carte={maCarteFid} connecte={fidConnecte} nbCartes={cartesCeCommerce}/>}
+                {/* ⚠️ Même place que sur la fiche boutique, juste sous la carte
+                    de fidélité : les deux disent MA relation avec ce commerce.
+                    Un bon cadeau découvert après avoir choisi sa prestation
+                    arrive trop tard pour donner envie de réserver. */}
+                {etape === 1 && <BonCadeauFiche bons={mesBonsIci}/>}
 
                 {/* Les photos du salon : cette page n'en montrait AUCUNE, elle
                     se contentait de la couverture en bandeau. Pour un salon,
@@ -3016,8 +3062,19 @@ export default function CommanderRdvSlug() {
                     const remiseFid = (recompenseFid && recompenseActive && prixBase != null)
                       ? calculerRemiseRecompense(recompenseFid, prixBase)
                       : 0
-                    const prixNet = prixBase != null
+                    // ⚠️ LE BON CADEAU VIENT APRÈS LA RÉCOMPENSE, jamais avant.
+                    // La récompense est une remise du commerçant, le bon est de
+                    // l'argent déjà payé : dans l'autre ordre, le porteur du bon
+                    // brûlerait du solde sur une part qui lui était offerte.
+                    // Ce calcul suit celui de `create-rdv-acompte`, qui fait foi.
+                    const baseApresRecompense = prixBase != null
                       ? Math.round((prixBase - remiseFid) * 100) / 100
+                      : null
+                    const remiseBon = (bonChoisi && baseApresRecompense != null)
+                      ? calculerRemiseBon(bonChoisi.solde, baseApresRecompense)
+                      : 0
+                    const prixNet = baseApresRecompense != null
+                      ? Math.round((baseApresRecompense - remiseBon) * 100) / 100
                       : null
                     const acompteMnt = (prixNet != null && prestationChoisie?.acompte_pourcent > 0)
                       ? Math.round(prixNet * prestationChoisie.acompte_pourcent) / 100
@@ -3084,6 +3141,54 @@ export default function CommanderRdvSlug() {
                               style={{ flexShrink: 0, padding: '8px 14px', borderRadius: 12, border: recompenseActive ? `1.5px solid ${T.main}` : 'none', background: recompenseActive ? '#fff' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: recompenseActive ? T.main : '#fff', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                               {recompenseActive ? 'Retirer' : 'Utiliser'}
                             </button>
+                          </div>
+                        )}
+
+                        {/* ─── Bon cadeau ────────────────────────────────────
+                            🔴 UN COMMERCE DE SERVICE PEUT VENDRE DES BONS, et
+                            son bénéficiaire arrivait dans un cul-de-sac : cette
+                            fiche n'en connaissait aucun, alors que son email lui
+                            promettait « applique le code au moment de payer ».
+
+                            ⚠️ MÊME LIMITE QUE LA RÉCOMPENSE, et pour la même
+                            raison : SEULEMENT quand un acompte en ligne est
+                            demandé. Un rendez-vous sans acompte s'insère depuis
+                            le NAVIGATEUR ; y brancher le bon reviendrait à
+                            laisser le client écrire lui-même sa remise. Le bon
+                            reste utilisable au comptoir dans ce cas.
+
+                            ⚠️ ET IL N'EST PAS ACTIF D'OFFICE : un bon de 50 €
+                            posé sur une prestation à 20 € en brûlerait 30. */}
+                        {mesBonsIci.length > 0 && !seanceSurAbo && prixBase != null && acompteEnLigne && (
+                          <div style={{ background: bonChoisi ? '#F0FDF4' : '#fff', border: `1.5px solid ${bonChoisi ? '#86EFAC' : T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 12 }}>
+                            <p style={{ margin: '0 0 6px', fontSize: '0.62rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+                              {mesBonsIci.length > 1 ? 'Tes bons cadeaux ici' : 'Ton bon cadeau ici'}
+                            </p>
+                            {mesBonsIci.map(b => {
+                              const actif = bonChoisi?.code === b.code
+                              const deduit = calculerRemiseBon(b.solde, baseApresRecompense ?? 0)
+                              return (
+                                <div key={b.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 6 }}>
+                                  <div style={{ minWidth: 0 }}>
+                                    <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 800, color: actif ? '#059669' : T.ink }}>
+                                      {actif ? `−${eurosNus(deduit)}€ déduits` : `${eurosNus(b.solde)}€ disponibles`}
+                                    </p>
+                                    <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: actif ? '#047857' : T.muted, fontWeight: 600 }}>
+                                      {actif
+                                        ? (deduit < Number(b.solde)
+                                          ? `Il restera ${eurosNus(Number(b.solde) - deduit)}€ sur ton bon. Ton acompte baisse d’autant.`
+                                          : 'Ton acompte baisse d’autant.')
+                                        : b.code}
+                                    </p>
+                                  </div>
+                                  {/* ⚠️ LE BOUTON DIT LE GESTE, pas l'état. */}
+                                  <button type="button" onClick={() => setBonChoisi(actif ? null : b)}
+                                    style={{ flexShrink: 0, padding: '8px 14px', borderRadius: 12, border: actif ? '1.5px solid #059669' : 'none', background: actif ? '#fff' : 'linear-gradient(135deg, #059669, #10B981)', color: actif ? '#059669' : '#fff', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                                    {actif ? 'Retirer' : 'Utiliser'}
+                                  </button>
+                                </div>
+                              )
+                            })}
                           </div>
                         )}
                         {/* LE PANIER COMPLET, prestation comprise.

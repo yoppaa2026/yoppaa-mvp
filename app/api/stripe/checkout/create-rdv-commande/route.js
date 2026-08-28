@@ -41,6 +41,8 @@ import { normaliserEmail } from '@/lib/email-normalise'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
 import { chargerRecompensePourYopper } from '@/lib/fidelite-recompense-server'
+import { chargerBonValide } from '@/lib/bons-cadeaux-server'
+import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
 
 export async function POST(request) {
   try {
@@ -61,6 +63,8 @@ export async function POST(request) {
       // muets, ce qui explique qu'aucune erreur ne soit jamais remontée : il n'y
       // avait rien à refuser, juste une remise qui n'arrivait pas.
       fidelite_recompense_id,
+      // Revalide plus bas : un code envoye n autorise rien.
+      bon_cadeau_code,
     } = body
 
     if (!commercant_id || !prestation_id || !date_rdv || !heure_debut || !heure_fin) {
@@ -153,8 +157,36 @@ export async function POST(request) {
       recompense = resRec.recompense
       remiseRecompenseEUR = appliquerRecompenseAvantBon(recompense, prixBase).remiseRecompense
     }
-    const prixNet = prixBase != null
+
+    // ⚠️ 🔴 LE BON CADEAU AUSSI, ET C'EST EXACTEMENT LE DÉFAUT DU 27/08.
+    // Ce jour-là, DEUX tunnels de paiement pour un rendez-vous, un seul
+    // connaissait la fidélité : l'écran annonçait 30,90 €, le serveur
+    // encaissait 33,90 €. Le bon cadeau vient d'entrer dans le tunnel
+    // d'acompte seul ; l'oublier ici recréerait la même promesse sans
+    // débiteur, dès qu'un produit accompagne le rendez-vous.
+    //
+    // Le bon s'applique sur la part PRESTATION uniquement : les produits sont
+    // payés en entier, comme partout dans ce tunnel.
+    let bonCadeau = null
+    let remiseBonEUR = 0
+    const baseApresRecompense = prixBase != null
       ? Math.round((prixBase - remiseRecompenseEUR) * 100) / 100
+      : null
+    if (bon_cadeau_code && baseApresRecompense != null) {
+      const codeBon = normaliserCodeBon(bon_cadeau_code)
+      if (!codeBon) {
+        return NextResponse.json({ ok: false, error: 'Code de bon cadeau invalide.' }, { status: 400 })
+      }
+      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id })
+      if (!resBon.ok) {
+        return NextResponse.json({ ok: false, error: resBon.error, bon_refuse: true }, { status: 400 })
+      }
+      bonCadeau = resBon.bon
+      remiseBonEUR = calculerRemiseBon(bonCadeau.solde, baseApresRecompense)
+    }
+
+    const prixNet = baseApresRecompense != null
+      ? Math.round((baseApresRecompense - remiseBonEUR) * 100) / 100
       : null
 
     const acompteMontant = (commercant.rdv_acompte_en_ligne_actif && prixNet && acomptePct > 0)
@@ -380,6 +412,14 @@ export async function POST(request) {
             ...(recompense ? {
               fidelite_recompense_id: String(recompense.id),
               fidelite_remise: String(remiseRecompenseEUR),
+            } : {}),
+            // ⚠️ MÊME RAISON POUR LE BON : le webhook fige le montant sur le
+            // rendez-vous et débite le bon depuis ces deux clés. Absentes, il
+            // créerait le rendez-vous au tarif plein et laisserait le bon
+            // crédité, alors que le client a payé un acompte réduit.
+            ...(bonCadeau ? {
+              bon_cadeau_id: String(bonCadeau.id),
+              bon_cadeau_montant: String(remiseBonEUR),
             } : {}),
             produits_montant: String(produitsCents / 100),
             // Le rendez-vous naît de ces métadonnées au webhook : sans

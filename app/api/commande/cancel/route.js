@@ -192,7 +192,7 @@ export async function POST(request) {
     // via l'index unique source='annulation' — le webhook charge.refunded
     // fait le même appel en backup, un seul des deux passe.
     if (cmd.bon_cadeau_id && Number(cmd.bon_cadeau_montant) > 0) {
-      const rec = await recrediterBon(supabase, cmd.bon_cadeau_id, cmd.bon_cadeau_montant, cmd.id)
+      const rec = await recrediterBon(supabase, cmd.bon_cadeau_id, cmd.bon_cadeau_montant, { commande_id: cmd.id })
       if (!rec.ok) console.error('[commande/cancel] re-crédit bon cadeau KO', rec.error, { commande_id: cmd.id })
     }
 

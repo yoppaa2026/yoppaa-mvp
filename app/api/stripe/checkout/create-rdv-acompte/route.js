@@ -25,6 +25,8 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
 import { chargerRecompensePourYopper } from '@/lib/fidelite-recompense-server'
+import { chargerBonValide } from '@/lib/bons-cadeaux-server'
+import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { verdictForfait } from '@/lib/garde-forfait'
 
@@ -40,6 +42,9 @@ export async function POST(request) {
       // ⚠️ DÉSIGNÉ PAR LE CLIENT, DONC REVÉRIFIÉ INTÉGRALEMENT plus bas contre
       // son identité PROUVÉE. Un identifiant envoyé n'autorise rien.
       fidelite_recompense_id,
+      // ⚠️ MÊME RÈGLE : un code envoyé n'autorise rien, il est revalidé plus bas
+      // contre le commerçant, le statut, l'expiration et le solde.
+      bon_cadeau_code,
     } = body
 
     // Validations basiques
@@ -147,7 +152,32 @@ export async function POST(request) {
       recompense = resRec.recompense
       remiseRecompenseEUR = appliquerRecompenseAvantBon(recompense, prixBase).remiseRecompense
     }
-    const prixNet = Math.round((prixBase - remiseRecompenseEUR) * 100) / 100
+
+    // ⚠️ LE BON CADEAU, APRÈS LA RÉCOMPENSE ET JAMAIS AVANT (28/08). Un
+    // commerce de service peut vendre des bons ; son bénéficiaire arrivait
+    // pourtant dans un cul-de-sac, cette route n'en connaissant aucun.
+    //
+    // ⚠️ LE CODE ENVOYÉ N'AUTORISE RIEN : il est revalidé ici contre le
+    // commerçant, le statut, l'expiration et le solde. Le montant réellement
+    // déduit est recalculé, jamais celui que l'écran a annoncé.
+    // « L'écran calcule, le serveur décide. »
+    let bonCadeau = null
+    let remiseBonEUR = 0
+    const baseApresRecompense = Math.round((prixBase - remiseRecompenseEUR) * 100) / 100
+    if (bon_cadeau_code) {
+      const codeBon = normaliserCodeBon(bon_cadeau_code)
+      if (!codeBon) {
+        return NextResponse.json({ ok: false, error: 'Code de bon cadeau invalide.' }, { status: 400 })
+      }
+      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id })
+      if (!resBon.ok) {
+        return NextResponse.json({ ok: false, error: resBon.error }, { status: 400 })
+      }
+      bonCadeau = resBon.bon
+      remiseBonEUR = calculerRemiseBon(bonCadeau.solde, baseApresRecompense)
+    }
+
+    const prixNet = Math.round((baseApresRecompense - remiseBonEUR) * 100) / 100
 
     const acompteMontant = Math.round(prixNet * acomptePct) / 100          // EUR, 2 décimales
     const acompteCents = Math.round(acompteMontant * 100)                    // centimes pour Stripe
@@ -158,10 +188,13 @@ export async function POST(request) {
     if (acompteCents < 50) {
       return NextResponse.json({
         ok: false,
-        error: remiseRecompenseEUR > 0
-          ? 'Avec ta récompense, l\'acompte descend sous le minimum encaissable. Réserve sans la récompense : tu pourras l\'utiliser au comptoir.'
+        // ⚠️ ON NOMME CE QUI A FAIT BAISSER L'ACOMPTE, sinon le message accuse
+        // la récompense alors que c'est le bon cadeau qui l'a rendu trop petit.
+        error: (remiseRecompenseEUR > 0 || remiseBonEUR > 0)
+          ? `Avec ${remiseBonEUR > 0 && remiseRecompenseEUR > 0 ? 'ta récompense et ton bon cadeau' : remiseBonEUR > 0 ? 'ton bon cadeau' : 'ta récompense'}, l'acompte descend sous le minimum encaissable. Réserve sans, tu pourras t'en servir au comptoir.`
           : 'acompte trop faible (min 0,50€ Stripe)',
         recompense_refusee: remiseRecompenseEUR > 0 ? 'acompte_trop_faible' : undefined,
+        bon_refuse: remiseBonEUR > 0 ? 'acompte_trop_faible' : undefined,
       }, { status: 400 })
     }
 
@@ -214,6 +247,14 @@ export async function POST(request) {
             ...(recompense ? {
               fidelite_recompense_id: String(recompense.id),
               fidelite_remise: String(remiseRecompenseEUR),
+            } : {}),
+            // ⚠️ LE BON VOYAGE PAR LES MÉTADONNÉES, comme la récompense. Sans
+            // ça le webhook créerait le rendez-vous au tarif plein et ne
+            // débiterait jamais le bon : le client aurait payé un acompte
+            // réduit, et le comptoir lui réclamerait la différence.
+            ...(bonCadeau ? {
+              bon_cadeau_id: String(bonCadeau.id),
+              bon_cadeau_montant: String(remiseBonEUR),
             } : {}),
             client_email,
             client_prenom,

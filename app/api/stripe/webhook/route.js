@@ -191,6 +191,13 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       // de chiffre d'affaires la retranchent (voir lib/rdv-paiement.js).
       fidelite_recompense_id: meta.fidelite_recompense_id || null,
       fidelite_remise: Number(meta.fidelite_remise) || 0,
+      // ⚠️ ET LE BON CADEAU, DE LA MÊME FAÇON (28/08). Sans ces deux lignes, le
+      // rendez-vous naîtrait au tarif plein alors que le client a payé un
+      // acompte réduit : le comptoir lui réclamerait la différence, et le bon
+      // ne serait jamais débité. Le débit lui-même se fait plus bas, APRÈS
+      // l'insertion, pour que le mouvement puisse désigner le rendez-vous.
+      bon_cadeau_id: meta.bon_cadeau_id || null,
+      bon_cadeau_montant: Number(meta.bon_cadeau_montant) || 0,
       acompte_montant: Number(meta.acompte_montant) || null,
       // Une prestation sans acompte reste confirmée : le client a payé ses
       // produits, le salon a une réservation ferme (décision Alex 04/08).
@@ -315,6 +322,30 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
         }
       } catch (e) {
         console.error('[stripe/webhook] consommation récompense RDV KO (non bloquant)', e?.message)
+      }
+    }
+
+    // ─── BON CADEAU : débité ICI, pour la même raison ──────────────────────
+    //
+    // ⚠️ APRÈS L'INSERT, comme la récompense : le mouvement DÉSIGNE le
+    // rendez-vous, il ne peut donc pas le précéder. Et l'index unique partiel
+    // (bon_id, rdv_id) WHERE source='rdv' absorbe le rejeu : un webhook
+    // Stripe relivré ne débite jamais deux fois.
+    //
+    // ⚠️ ON LIT LE RÉSULTAT. Un `await` dont on ignore le retour est un espoir,
+    // pas une action : c'est la dette nommée le 27/08, et ici elle coûterait
+    // de l'argent réel, le bon restant crédité alors qu'il a payé.
+    if (meta.bon_cadeau_id && Number(meta.bon_cadeau_montant) > 0) {
+      try {
+        const deb = await debiterBon(supabase, meta.bon_cadeau_id, Number(meta.bon_cadeau_montant), {
+          source: 'rdv',
+          rdv_id: rdvId || meta.yoppaa_rdv_id || null,
+        })
+        if (!deb?.ok) {
+          console.error('[stripe/webhook] débit bon cadeau RDV KO', deb?.error, { rdvId })
+        }
+      } catch (e) {
+        console.error('[stripe/webhook] débit bon cadeau RDV KO (non bloquant)', e?.message)
       }
     }
 
@@ -961,7 +992,7 @@ async function handleChargeRefunded(charge, supabase) {
     // Idempotent (index unique source='annulation'), déjà fait si la route
     // /api/commande/cancel est passée avant ce webhook.
     if (isRefundTotal && cmd.bon_cadeau_id && Number(cmd.bon_cadeau_montant) > 0) {
-      const rec = await recrediterBon(supabase, cmd.bon_cadeau_id, cmd.bon_cadeau_montant, cmd.id)
+      const rec = await recrediterBon(supabase, cmd.bon_cadeau_id, cmd.bon_cadeau_montant, { commande_id: cmd.id })
       if (!rec.ok) console.error('[webhook/refund] re-crédit bon cadeau KO', rec.error, { cmdId: cmd.id })
     }
     // ⚠️ MÊME RAISONNEMENT POUR LA RÉCOMPENSE, et c'est le frère du correctif
@@ -1047,7 +1078,7 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
     .select(`
       id, date_rdv, heure_debut, heure_fin, duree_minutes, prix_estime,
       numero_rdv, numero_prefixe,
-      acompte_paye_en_ligne, acompte_montant, fidelite_remise,
+      acompte_paye_en_ligne, acompte_montant, fidelite_remise, bon_cadeau_montant,
       client_email, client_prenom, client_nom, client_telephone, notes_client,
       annulation_token, commande_id,
       lieu_id, lieu_libelle, lieu_adresse,
@@ -1127,6 +1158,7 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       // ⚠️ SANS ELLE, LE SOLDE ANNONCÉ IGNORE LA RÉCOMPENSE et le comptoir
       // réclame le tarif plein. Le gabarit la retranche via `soldeRdv`.
       fidelite_remise:         rdv.fidelite_remise || 0,
+      bon_cadeau_montant:      rdv.bon_cadeau_montant || 0,
       delai_annulation_heures: rdv.commercant.rdv_delai_annulation_heures || 24,
       annulation_token:        rdv.annulation_token,
       praticien_prenom:        rdv.praticien?.prenom || null,
@@ -1161,6 +1193,7 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       acompte_paye:    !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),
       // Le commercant voit ce qui a fait baisser son acompte (27/08).
       fidelite_remise: rdv.fidelite_remise || 0,
+      bon_cadeau_montant: rdv.bon_cadeau_montant || 0,
       acompte_montant: rdv.acompte_montant,
       notes_client:    rdv.notes_client,
       produits,

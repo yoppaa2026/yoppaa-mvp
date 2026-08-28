@@ -85,6 +85,10 @@ import { useResetAuRetourDePaiement, cleReprisePanier } from '@/lib/retour-paiem
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import PillsStatut from '../PillsStatut'
 import CarteFideliteFiche from '../CarteFideliteFiche'
+import BonCadeauFiche from '../BonCadeauFiche'
+// ⚠️ Les 31 montants de ce tunnel s'écrivaient au POINT. Le panier, les
+// suppléments, les deals, les frais de livraison, le reste à payer : tout.
+import { euros, eurosNus } from '@/lib/montants'
 import BonCadeauModal from '../BonCadeauModal'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 // ⚠️ `CTAUpgrade` A DISPARU DE CETTE FICHE (26/08). Il rendait UN bandeau par
@@ -297,7 +301,7 @@ function OptionsSelector({ article, groupes, onAjouter }) {
                     </span>
                     <span style={{ flex: 1, fontWeight: selected ? 700 : 600, color: T.ink, fontSize: '0.85rem' }}>{v.nom}</span>
                     {v.prix_supplement > 0 && (
-                      <span style={{ fontWeight: 800, color: T.main, fontSize: '0.78rem' }}>+{Number(v.prix_supplement).toFixed(2)}€</span>
+                      <span style={{ fontWeight: 800, color: T.main, fontSize: '0.78rem' }}>+{eurosNus(Number(v.prix_supplement))}€</span>
                     )}
                   </button>
                 )
@@ -308,7 +312,7 @@ function OptionsSelector({ article, groupes, onAjouter }) {
       })}
       <button onClick={valider}
         style={{ width: '100%', padding: '0.75rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.main}44`, marginTop: 4 }}>
-        Ajouter à ma commande{supplement > 0 ? ` (+${supplement.toFixed(2)}€)` : ''}
+        Ajouter à ma commande{supplement > 0 ? ` (+${eurosNus(supplement)}€)` : ''}
       </button>
     </div>
   )
@@ -378,7 +382,7 @@ function VariantesSelector({ article, variantes, onAjouter }) {
       {varianteChoisie && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           {prixAffiche != null && Number(prixAffiche) > 0 && (
-            <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px' }}>{Number(prixAffiche).toFixed(2)}€</span>
+            <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px' }}>{eurosNus(Number(prixAffiche))}€</span>
           )}
           {epuise ? (
             <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#DC2626', background: '#FEE2E2', padding: '3px 10px', borderRadius: 100 }}>Épuisé</span>
@@ -455,7 +459,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
                   <p style={{ fontSize: '0.68rem', color: T.main, fontWeight: 700, marginTop: 2 }}>Stock disponible atteint</p>
                 )}
               </div>
-              <p style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem', flexShrink: 0 }}>{(prixUnitaire * item.quantite).toFixed(2)}€</p>
+              <p style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem', flexShrink: 0 }}>{eurosNus((prixUnitaire * item.quantite))}€</p>
             </div>
           )
         })}
@@ -463,7 +467,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
       <div style={{ padding: '1rem 1.25rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: noteSousTotal ? 4 : 12 }}>
           <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.875rem' }}>Total commande</span>
-          <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.25rem', letterSpacing: '-0.5px' }}>{total.toFixed(2)}€</span>
+          <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.25rem', letterSpacing: '-0.5px' }}>{eurosNus(total)}€</span>
         </div>
         {noteSousTotal && (
           <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, margin: '0 0 12px' }}>{noteSousTotal}</p>
@@ -561,7 +565,7 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
               Number(article.prix) > 0 ? (
                 <p style={{ fontSize: '0.95rem', color: T.main, fontWeight: 800, letterSpacing: '-0.2px' }}>
                   <span style={{ fontSize: '0.68rem', fontWeight: 700, color: T.muted, marginRight: 4 }}>dès</span>
-                  {Number(article.prix).toFixed(2)}€
+                  {eurosNus(Number(article.prix))}€
                 </p>
               ) : (
                 <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '4px 10px', borderRadius: 100 }}>
@@ -572,14 +576,14 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
               // Article remisé : le prix promo REMPLACE le prix normal, l'ancien
               // reste barré à côté. Un seul article, un seul prix affiché.
               <>
-                <p style={{ fontSize: '1rem', color: '#DC2626', fontWeight: 900, letterSpacing: '-0.3px' }}>{remise.prix.toFixed(2)}€</p>
-                <span style={{ fontSize: '0.8rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{remise.prixBarre.toFixed(2)}€</span>
+                <p style={{ fontSize: '1rem', color: '#DC2626', fontWeight: 900, letterSpacing: '-0.3px' }}>{eurosNus(remise.prix)}€</p>
+                <span style={{ fontSize: '0.8rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{eurosNus(remise.prixBarre)}€</span>
                 <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#fff', background: '#DC2626', padding: '2px 7px', borderRadius: 100, letterSpacing: '0.2px' }}>
                   {remise.deal.remise_pct ? `-${remise.deal.remise_pct}%` : 'PROMO'}
                 </span>
               </>
             ) : (
-              <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{Number(article.prix).toFixed(2)}€</p>
+              <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{eurosNus(Number(article.prix))}€</p>
             )}
             {hasOptions && (
               <button onClick={e => { e.stopPropagation(); setShowOptions(v => !v) }}
@@ -750,10 +754,10 @@ function DealOfferCard({ deal, qte = 0, onAjouter, onRetirer }) {
           {deal.description && <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)', lineHeight: 1.45, margin: '0 0 6px' }}>{deal.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {prixAffiche != null && (
-              <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{prixAffiche.toFixed(2)}€</span>
+              <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{eurosNus(prixAffiche)}€</span>
             )}
             {prixBarre != null && (
-              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700, textDecoration: 'line-through' }}>{prixBarre.toFixed(2)}€</span>
+              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700, textDecoration: 'line-through' }}>{eurosNus(prixBarre)}€</span>
             )}
           </div>
         </div>
@@ -893,9 +897,9 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
             {!hasVar && Number(article.prix) > 0 && (
               <p style={{ fontSize: '1.15rem', fontWeight: 900, color: remise ? '#DC2626' : T.main, letterSpacing: '-0.4px', margin: 0, flexShrink: 0, display: 'flex', alignItems: 'baseline', gap: 6 }}>
                 {article.est_vitrine ? <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, marginRight: 5 }}>dès</span> : null}
-                {remise ? remise.prix.toFixed(2) : Number(article.prix).toFixed(2)}€
+                {remise ? eurosNus(remise.prix) : eurosNus(Number(article.prix))}€
                 {remise && (
-                  <span style={{ fontSize: '0.85rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{remise.prixBarre.toFixed(2)}€</span>
+                  <span style={{ fontSize: '0.85rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{eurosNus(remise.prixBarre)}€</span>
                 )}
               </p>
             )}
@@ -1192,6 +1196,10 @@ export default function CommanderSlug() {
   // Distingue « pas de carte » de « pas connecté » : sans ça, un Yopper qui a
   // des passages voit le teaser du programme et croit que rien n'est compté.
   const [fidConnecte, setFidConnecte] = useState(true)
+  // ⚠️ MES BONS CADEAUX CHEZ CE COMMERÇANT (28/08). Ils n'existaient que dans
+  // l'email du jour de l'achat : on pouvait ouvrir dix fois cette fiche sans
+  // qu'aucun écran ne rappelle qu'on avait de l'argent à y dépenser.
+  const [mesBonsIci, setMesBonsIci] = useState([])
   // Fiche « façon post » (30/07) : cœurs + partage. Les cœurs sont anonymes
   // par appareil (device_id localStorage), tout passe par /api/articles/like.
   const [articleSocial, setArticleSocial] = useState(null)  // { count, liked } de l'article ouvert
@@ -1246,6 +1254,30 @@ export default function CommanderSlug() {
       .catch(() => {})
     return () => { vivant = false }
   }, [commercant?.id, commercant?.fidelite_actif])
+
+  // Mes bons cadeaux chez CE commerçant.
+  //
+  // ⚠️ `fetchYopper`, pas `fetch` : la route exige une identité PROUVÉE, et un
+  // fetch nu n'emporte pas le jeton. C'est exactement l'oubli qui avait rendu
+  // la carte de fidélité muette pendant deux jours.
+  //
+  // ⚠️ ET AUCUN GARDE SUR `bons_cadeaux_actif` : le commerçant peut avoir
+  // FERMÉ la vente de nouveaux bons après en avoir vendu. Ceux-là restent
+  // dépensables, et leur porteur doit continuer à les voir. On interroge donc
+  // toujours, la réponse vide ne coûte rien.
+  useEffect(() => {
+    const id = commercant?.id
+    if (!id) { setMesBonsIci([]); return }
+    let vivant = true
+    fetchYopper('/api/yopper/mes-bons', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'une', commercant_id: id }),
+    })
+      .then(r => r.json())
+      .then(j => { if (vivant && j?.ok) setMesBonsIci(j.bons || []) })
+      .catch(() => {})
+    return () => { vivant = false }
+  }, [commercant?.id])
 
   // Cœurs : charge le compteur + mon état à l'ouverture d'une fiche article
   useEffect(() => {
@@ -2421,8 +2453,17 @@ export default function CommanderSlug() {
   function remiseBonEffective() { return bonApplique ? calculerRemiseBon(bonApplique.solde, baseApresRecompense()) : 0 }
   function totalDuApresBon() { return Math.max(0, Math.round((baseApresRecompense() - remiseBonEffective()) * 100) / 100) }
 
-  async function appliquerBon() {
-    const code = normaliserCodeBon(bonInput)
+  // ⚠️ `codeDirect` SERT LE YOPPER CONNECTÉ, qui n'a pas à retaper de mémoire
+  // un code qu'il possède déjà. Le champ de saisie reste, pour qui a reçu un
+  // code sans avoir de compte.
+  //
+  // ⚠️ ET ON N'ACCEPTE QU'UNE CHAÎNE : ce même bouton s'écrit ailleurs
+  // `onClick={appliquerBon}`, et React passe alors l'ÉVÉNEMENT en premier
+  // argument. Sans ce test, un clic sur « Appliquer » normaliserait un objet
+  // React et échouerait sur un format de code.
+  async function appliquerBon(codeDirect = null) {
+    const source = typeof codeDirect === 'string' ? codeDirect : bonInput
+    const code = normaliserCodeBon(source)
     if (!code) { setBonErreur('Format attendu : BC-XXXX-XXXX'); return }
     setBonLoading(true); setBonErreur(null)
     try {
@@ -2974,9 +3015,9 @@ export default function CommanderSlug() {
                   </h2>
                   {dealDetailOuvert.prix_deal && (
                     <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
-                      <span style={{ fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.5px', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{Number(dealDetailOuvert.prix_deal).toFixed(2)}€</span>
+                      <span style={{ fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.5px', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{eurosNus(Number(dealDetailOuvert.prix_deal))}€</span>
                       {dealDetailOuvert.prix_original && (
-                        <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.75)', textDecoration: 'line-through', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{Number(dealDetailOuvert.prix_original).toFixed(2)}€</span>
+                        <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.75)', textDecoration: 'line-through', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{eurosNus(Number(dealDetailOuvert.prix_original))}€</span>
                       )}
                     </div>
                   )}
@@ -2999,9 +3040,9 @@ export default function CommanderSlug() {
                 </h2>
                 {dealDetailOuvert.prix_deal && (
                   <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, marginTop: 12, background: 'rgba(255,255,255,0.1)', padding: '8px 14px', borderRadius: 12 }}>
-                    <span style={{ fontWeight: 900, fontSize: '1.6rem', color: T.light, letterSpacing: '-0.5px' }}>{Number(dealDetailOuvert.prix_deal).toFixed(2)}€</span>
+                    <span style={{ fontWeight: 900, fontSize: '1.6rem', color: T.light, letterSpacing: '-0.5px' }}>{eurosNus(Number(dealDetailOuvert.prix_deal))}€</span>
                     {dealDetailOuvert.prix_original && (
-                      <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.5)', textDecoration: 'line-through' }}>{Number(dealDetailOuvert.prix_original).toFixed(2)}€</span>
+                      <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.5)', textDecoration: 'line-through' }}>{eurosNus(Number(dealDetailOuvert.prix_original))}€</span>
                     )}
                   </div>
                 )}
@@ -3288,7 +3329,7 @@ export default function CommanderSlug() {
               <span style={{ position: 'absolute', top: -8, right: -10, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 100, background: '#fff', color: T.main, fontSize: '0.68rem', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>{nbArticlesPanier()}</span>
             </span>
             <span style={{ fontWeight: 800, fontSize: '0.95rem', flex: 1, textAlign: 'left' }}>Voir ma commande</span>
-            <span style={{ fontWeight: 900, fontSize: '1rem', whiteSpace: 'nowrap' }}>{totalPanier().toFixed(2)} €</span>
+            <span style={{ fontWeight: 900, fontSize: '1rem', whiteSpace: 'nowrap' }}>{eurosNus(totalPanier())} €</span>
           </button>
         )}
 
@@ -3549,6 +3590,13 @@ export default function CommanderSlug() {
                 <div style={{ padding: '0 12px' }}>
                   <CarteFideliteFiche commercant={commercant} carte={maCarteFid} connecte={fidConnecte} nbCartes={cartesCeCommerce}/>
 
+                  {/* ⚠️ JUSTE SOUS LA CARTE DE FIDÉLITÉ, et pour la même
+                      raison : les deux parlent de MA relation avec ce commerce
+                      et donnent une raison d'acheter AVANT le catalogue. Un
+                      bon cadeau qu'on découvre après avoir choisi ses articles
+                      arrive trop tard pour donner envie. */}
+                  <BonCadeauFiche bons={mesBonsIci}/>
+
                   {/* 🔴 LE SIGNAL FIDÉLITÉ ÉTAIT ICI, ET IL N'Y EST PLUS.
                       Alex, 26/08 : « on parle fidélité alors que le commerçant
                       est en Communiquer et qu'il a déjà la fidélité comptoir.
@@ -3637,8 +3685,8 @@ export default function CommanderSlug() {
                         </div>
                       ) : dealActif.prix_deal ? (
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          {dealActif.prix_original && <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', textDecoration: 'line-through' }}>{Number(dealActif.prix_original).toFixed(2)}€</p>}
-                          <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{Number(dealActif.prix_deal).toFixed(2)}€</p>
+                          {dealActif.prix_original && <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', textDecoration: 'line-through' }}>{eurosNus(Number(dealActif.prix_original))}€</p>}
+                          <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{eurosNus(Number(dealActif.prix_deal))}€</p>
                         </div>
                       ) : null}
                       <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', flexShrink: 0, marginLeft: 4 }}>›</span>
@@ -3941,7 +3989,7 @@ export default function CommanderSlug() {
                         if (!seuil) return null
                         const restant = seuil - totalPanier()
                         if (restant <= 0) return 'Frais de port offerts sur l’expédition 🟣'
-                        return `Plus que ${restant.toFixed(2)}€ pour l’expédition offerte`
+                        return `Plus que ${eurosNus(restant)}€ pour l’expédition offerte`
                       })()}
                     />
                   </div>
@@ -4080,7 +4128,7 @@ export default function CommanderSlug() {
                     return (
                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: 3 }}>
                         <span style={{ color: T.ink, fontWeight: 600 }}>{item.quantite}× {item.nom}</span>
-                        <span style={{ color: T.main, fontWeight: 800 }}>{((item.prix + supplement) * item.quantite).toFixed(2)}€</span>
+                        <span style={{ color: T.main, fontWeight: 800 }}>{eurosNus(((item.prix + supplement) * item.quantite))}€</span>
                       </div>
                     )
                   })}
@@ -4088,18 +4136,18 @@ export default function CommanderSlug() {
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginTop: 6, color: T.deep }}>
                         <span style={{ fontWeight: 600 }}>{estDetail ? 'Frais de port' : 'Frais de livraison'}</span>
-                        <span style={{ fontWeight: 800 }}>{fraisLivraison() === 0 ? 'Offerts' : `+${fraisLivraison().toFixed(2)}€`}</span>
+                        <span style={{ fontWeight: 800 }}>{fraisLivraison() === 0 ? 'Offerts' : `+${eurosNus(fraisLivraison())}€`}</span>
                       </div>
                       {livraisonConfig?.gratuit_des != null && (
                         fraisLivraison() > 0
-                          ? <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, margin: '4px 0 0' }}>Plus que {(Number(livraisonConfig.gratuit_des) - totalPanier()).toFixed(2)}€ pour la livraison offerte</p>
-                          : <p style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, margin: '4px 0 0' }}>Livraison offerte à partir de {Number(livraisonConfig.gratuit_des).toFixed(2)}€</p>
+                          ? <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, margin: '4px 0 0' }}>Plus que {eurosNus((Number(livraisonConfig.gratuit_des) - totalPanier()))}€ pour la livraison offerte</p>
+                          : <p style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, margin: '4px 0 0' }}>Livraison offerte à partir de {eurosNus(Number(livraisonConfig.gratuit_des))}€</p>
                       )}
                     </>
                   )}
                   <div style={{ borderTop: `1px solid ${T.pale}`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontWeight: 700, color: T.muted, fontSize: '0.82rem' }}>Total</span>
-                    <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.1rem' }}>{totalAvecFrais().toFixed(2)}€</span>
+                    <span style={{ fontWeight: 900, color: T.ink, fontSize: '1.1rem' }}>{eurosNus(totalAvecFrais())}€</span>
                   </div>
                   {/* ⚠️ LA RÉCOMPENSE EST UNE LIGNE À PART, JAMAIS FONDUE DANS
                       LE BON CADEAU. Ce sont deux natures d'avantage : l'une
@@ -4110,19 +4158,19 @@ export default function CommanderSlug() {
                   {remiseRecompenseEffective() > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
                       <span style={{ fontWeight: 700, color: T.main, fontSize: '0.82rem' }}>Récompense fidélité</span>
-                      <span style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem' }}>−{remiseRecompenseEffective().toFixed(2)}€</span>
+                      <span style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem' }}>−{eurosNus(remiseRecompenseEffective())}€</span>
                     </div>
                   )}
                   {bonApplique && remiseBonEffective() > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
                       <span style={{ fontWeight: 700, color: '#10B981', fontSize: '0.82rem' }}>Bon cadeau ({bonApplique.code})</span>
-                      <span style={{ fontWeight: 800, color: '#10B981', fontSize: '0.9rem' }}>−{remiseBonEffective().toFixed(2)}€</span>
+                      <span style={{ fontWeight: 800, color: '#10B981', fontSize: '0.9rem' }}>−{eurosNus(remiseBonEffective())}€</span>
                     </div>
                   )}
                   {(remiseRecompenseEffective() > 0 || (bonApplique && remiseBonEffective() > 0)) && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
                       <span style={{ fontWeight: 800, color: T.ink, fontSize: '0.82rem' }}>Reste à payer</span>
-                      <span style={{ fontWeight: 900, color: T.main, fontSize: '1.1rem' }}>{totalDuApresBon().toFixed(2)}€</span>
+                      <span style={{ fontWeight: 900, color: T.main, fontSize: '1.1rem' }}>{eurosNus(totalDuApresBon())}€</span>
                     </div>
                   )}
                 </div>
@@ -4594,6 +4642,39 @@ export default function CommanderSlug() {
                         </div>
                       )}
 
+                      {/* 🔴 LE YOPPER DEVAIT RETAPER SON PROPRE CODE. Il
+                          possédait le bon, l'application le savait, et elle lui
+                          demandait quand même d'aller le rechercher dans un
+                          email pour le recopier à la main. La récompense
+                          fidélité, elle, se pose d'un geste depuis le 24/08.
+                          ⚠️ AUCUNE GARDE SUR `bonsCfg?.actif` : un commerçant
+                          peut avoir FERMÉ la vente de nouveaux bons après en
+                          avoir vendu. Ceux-là restent dépensables, et
+                          `/api/bons-cadeaux/verifier` les accepte toujours. */}
+                      {!bonApplique && mesBonsIci.length > 0 && (
+                        <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 14, padding: '10px 12px', marginBottom: 10 }}>
+                          <p style={{ fontSize: '0.68rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px' }}>
+                            {mesBonsIci.length > 1 ? 'Tes bons cadeaux ici' : 'Ton bon cadeau ici'}
+                          </p>
+                          {mesBonsIci.map(b => (
+                            <div key={b.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 6 }}>
+                              <div style={{ minWidth: 0 }}>
+                                <p style={{ fontSize: '0.82rem', fontWeight: 800, color: '#065F46', margin: 0 }}>
+                                  {euros(b.solde)} disponibles
+                                </p>
+                                <p style={{ fontSize: '0.7rem', color: '#047857', fontWeight: 600, margin: '2px 0 0', fontFamily: 'monospace', letterSpacing: '0.5px' }}>{b.code}</p>
+                              </div>
+                              {/* ⚠️ LE BOUTON DIT LE GESTE, pas l'état. */}
+                              <button type="button" onClick={() => appliquerBon(b.code)} disabled={bonLoading}
+                                style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 100, border: 'none', background: 'linear-gradient(135deg, #059669, #10B981)', color: '#fff', fontWeight: 800, fontSize: '0.8rem', cursor: bonLoading ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', opacity: bonLoading ? 0.6 : 1 }}>
+                                {bonLoading ? '…' : 'Utiliser'}
+                              </button>
+                            </div>
+                          ))}
+                          {bonErreur && <p style={{ fontSize: '0.74rem', color: '#DC2626', fontWeight: 700, margin: '6px 0 0' }}>{bonErreur}</p>}
+                        </div>
+                      )}
+
                       {/* Bon cadeau : champ code (si le commerçant a activé le module) */}
                       {bonsCfg?.actif && !bonApplique && (
                         <div style={{ background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 10 }}>
@@ -4614,13 +4695,13 @@ export default function CommanderSlug() {
                         <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 14, padding: '10px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                           <div style={{ minWidth: 0 }}>
                             <p style={{ fontSize: '0.82rem', fontWeight: 800, color: '#065F46', margin: 0 }}>
-                              Bon cadeau appliqué : −{remiseBonEffective().toFixed(2)}€
+                              Bon cadeau appliqué : −{eurosNus(remiseBonEffective())}€
                             </p>
                             <p style={{ fontSize: '0.72rem', color: '#047857', fontWeight: 600, margin: '2px 0 0' }}>
                               {couvert
                                 ? 'Ta commande est entièrement couverte 🟣'
-                                : `Reste à payer : ${totalDuApresBon().toFixed(2)}€`}
-                              {remiseBonEffective() < Number(bonApplique.solde) && ` · il restera ${(Number(bonApplique.solde) - remiseBonEffective()).toFixed(2)}€ sur ton bon`}
+                                : `Reste à payer : ${eurosNus(totalDuApresBon())}€`}
+                              {remiseBonEffective() < Number(bonApplique.solde) && ` · il restera ${eurosNus(Number(bonApplique.solde) - remiseBonEffective())}€ sur ton bon`}
                             </p>
                           </div>
                           <button type="button" onClick={() => { setBonApplique(null); setBonErreur(null) }}
@@ -4665,7 +4746,7 @@ export default function CommanderSlug() {
                         style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (!formValide || !modeEffectif) ? 0.45 : 1, cursor: (!formValide || !modeEffectif) ? 'default' : 'pointer' }}>
                         {loadingCommande ? ((surPlace || couvert) ? 'Confirmation…' : 'Redirection…') : (
                           <>
-                            {(surPlace || couvert) ? 'Confirmer' : 'Payer & confirmer'} - {totalDuApresBon().toFixed(2)}€
+                            {(surPlace || couvert) ? 'Confirmer' : 'Payer & confirmer'} - {eurosNus(totalDuApresBon())}€
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
                           </>
                         )}

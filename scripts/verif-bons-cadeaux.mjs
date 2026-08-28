@@ -318,6 +318,18 @@ const egal = (nom, obtenu, attendu) =>
   const tunnel = lireCode('app/commander/[slug]/page.js')
   verifie('le bouton « Utiliser » ne dépend pas de la vente encore ouverte',
     /\{!bonApplique && mesBonsIci\.length > 0 &&/.test(tunnel))
+
+  // ⚠️ ET LE COMPTE LES LISTE, sinon perdre l'email reste perdre le bon.
+  const compte = lireCode('app/commander/page.js')
+  verifie('le compte Yopper charge mes bons', /yopper\/mes-bons/.test(compte))
+  verifie('avec le jeton, sinon la liste reste vide en silence',
+    /fetchYopper\('\/api\/yopper\/mes-bons'/.test(compte))
+  verifie('et chaque bon mène à sa page par jeton',
+    /href=\{`\/cadeau\/\$\{b\.token\}`\}/.test(compte))
+  // ⚠️ L'ALARME NE SE DÉCLENCHE QUE SI ELLE A UNE RAISON : un bon valable
+  // encore onze mois n'a pas besoin d'un compte à rebours.
+  verifie('l\'expiration proche est signalée, la lointaine non',
+    /jours <= 30/.test(compte))
 }
 
 // ═══ 13) 🔴 ON NE REFUSE PAS UN PAIEMENT QUI N'EXISTE PAS ═════════════════

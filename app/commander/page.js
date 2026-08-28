@@ -1459,6 +1459,26 @@ export default function Commander() {
       .catch(() => {})
     return () => { vivant = false }
   }, [onglet])
+
+  // ⚠️ MES BONS CADEAUX (28/08). Ils n'existaient que dans l'email reçu le jour
+  // de l'achat : perdre l'email, c'était perdre le bon. La page `/cadeau` était
+  // bien faite mais ORPHELINE, aucun écran n'y menait.
+  //
+  // ⚠️ `fetchYopper`, pas `fetch` : la route exige une identité PROUVÉE. Un
+  // fetch nu laisserait la liste vide EN SILENCE, comme la fidélité l'a été
+  // pendant deux jours.
+  useEffect(() => {
+    if (onglet !== 'profil') return
+    let vivant = true
+    fetchYopper('/api/yopper/mes-bons', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'list' }),
+    })
+      .then(r => r.json())
+      .then(j => { if (vivant && j?.ok) setMesBons(j.bons || []) })
+      .catch(() => {})
+    return () => { vivant = false }
+  }, [onglet])
   function setOnglet(val) { setOngletState(val); localStorage.setItem('yoppaa_onglet', val) }
 
   // Sous-onglet de l'onglet Commandes : 'alimentaires' (C&C) ou 'rdvs' (vitrines).
@@ -1568,6 +1588,9 @@ export default function Commander() {
   const [clientCommandes, setClientCommandes] = useState([])
   // B.6 fidélité : mes cartes (rattachées par les téléphones de mes commandes)
   const [mesCartesFid, setMesCartesFid] = useState([])
+  // Mes bons cadeaux dépensables, tous commerces confondus, du plus proche de
+  // l'expiration au plus lointain (la route les trie).
+  const [mesBons, setMesBons] = useState([])
   const [fidConnecte, setFidConnecte] = useState(true)
   const [clientRdvs, setClientRdvs] = useState([])
   // Les abonnements de la cliente. Vide pour l'immense majorité des Yoppers,
@@ -3968,6 +3991,66 @@ export default function Commander() {
                     <p style={{ fontSize: '0.8rem', color: T.muted, lineHeight: 1.55, margin: 0 }}>
                       Connecte-toi pour retrouver tes cartes et voir où en sont tes points 🟣
                     </p>
+                  </div>
+                )}
+
+                {/* 🔴 MES BONS CADEAUX (28/08). Ils n'existaient QUE dans
+                    l'email du jour de l'achat : perdre l'email, c'était perdre
+                    le bon. Alex, en production : « rien côté Yopper, pas de
+                    trace des BC dans son compte ».
+
+                    ⚠️ AU-DESSUS DES CARTES DE FIDÉLITÉ, et c'est voulu : un bon
+                    cadeau est de l'argent qui DORT et qui peut EXPIRER, une
+                    carte de fidélité se remplit toute seule sans rien risquer.
+
+                    ⚠️ Chaque bon mène à sa page par jeton, qui reste la seule
+                    vue complète (solde en temps réel, mode d'emploi). */}
+                {mesBons.length > 0 && (
+                  <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px 12px', marginBottom: '0.875rem', border: '1px solid #86EFAC' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                        {mesBons.length > 1 ? 'Mes bons cadeaux' : 'Mon bon cadeau'}
+                      </span>
+                      <div style={{ flex: 1, height: 1, background: '#D1FAE5' }}/>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#059669' }}>
+                        {eurosNus(mesBons.reduce((s, b) => s + Number(b.solde || 0), 0))}€
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {mesBons.map(b => {
+                        const jours = b.expires_at
+                          ? Math.ceil((new Date(b.expires_at).getTime() - Date.now()) / 86400000)
+                          : null
+                        // ⚠️ ON N'ALARME QUE QUAND IL Y A DE QUOI : un bon
+                        // valable encore onze mois n'a pas besoin d'un compte
+                        // à rebours, il ferait du bruit pour rien.
+                        const presse = jours !== null && jours <= 30
+                        return (
+                          <a key={b.id} href={`/cadeau/${b.token}`}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#F0FDF4', border: '1px solid #D1FAE5', borderRadius: 12, padding: '10px 12px', textDecoration: 'none' }}>
+                            <div style={{ minWidth: 0 }}>
+                              <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: '#065F46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {b.commercant?.nom || 'Bon cadeau'}
+                              </p>
+                              <p style={{ margin: '2px 0 0', fontSize: '0.72rem', fontWeight: 600, color: presse ? '#B45309' : '#047857' }}>
+                                {b.code}
+                                {jours !== null && (presse
+                                  ? ` · expire dans ${jours} jour${jours > 1 ? 's' : ''}`
+                                  : ` · valable jusqu’au ${new Date(b.expires_at).toLocaleDateString('fr-BE', { day: 'numeric', month: 'short', year: 'numeric' })}`)}
+                              </p>
+                            </div>
+                            <span style={{ flexShrink: 0, fontSize: '1rem', fontWeight: 900, color: '#059669', letterSpacing: '-0.3px' }}>
+                              {eurosNus(b.solde)}€
+                              {Number(b.solde) < Number(b.montant_initial) && (
+                                <span style={{ display: 'block', fontSize: '0.62rem', fontWeight: 700, color: '#047857', opacity: 0.75, textAlign: 'right' }}>
+                                  sur {eurosNus(b.montant_initial)}€
+                                </span>
+                              )}
+                            </span>
+                          </a>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
 

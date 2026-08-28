@@ -18,8 +18,16 @@ const chemin = (f) => `${RACINE}/${f}`
 const MUTATIONS = [
   { nom: '🔴 le montant repasse au point décimal',
     banc: 'verif:bons', fichier: 'lib/montants.js',
-    de: "return `${(Number.isFinite(n) ? n : 0).toFixed(2).replace('.', ',')} €`",
-    vers: "return `${(Number.isFinite(n) ? n : 0).toFixed(2)} €`" },
+    // ⚠️ L'ESPACE EST INSÉCABLE DANS LE FICHIER, et une espace ordinaire écrite
+    // ici ne trouve rien : la mutation devient « TEXTE INTROUVABLE », c'est-à-
+    // dire une NON-mesure qui passe pour une mesure. On l'échappe.
+    de: "return `${(Number.isFinite(n) ? n : 0).toFixed(2).replace('.', ',')} €`",
+    vers: "return `${(Number.isFinite(n) ? n : 0).toFixed(2)} €`" },
+
+  { nom: '🔴 l’espace avant l’euro redevient sécable',
+    banc: 'verif:bons', fichier: 'lib/montants.js',
+    de: "return `${(Number.isFinite(n) ? n : 0).toFixed(2).replace('.', ',')} €`",
+    vers: "return `${(Number.isFinite(n) ? n : 0).toFixed(2).replace('.', ',')} €`" },
 
   { nom: '🔴 le solde du rendez-vous réoublie le bon cadeau',
     banc: 'verif:bons', fichier: 'lib/rdv-paiement.js',
@@ -143,6 +151,48 @@ const MUTATIONS = [
     banc: 'verif:bord', fichier: 'app/dashboard/ConfigDashboard.js',
     de: '                {euros(bon.solde)}',
     vers: '                {Number(bon.solde).toFixed(2)} €' },
+
+  // ─── CE QUE LA DESTINATAIRE A VU (28/08) ─────────────────────────────────
+  { nom: '🔴 le bloc du bon cadeau reperd sa couleur de repli',
+    banc: 'verif:bons', fichier: 'lib/resend.js',
+    de: 'background-color:#160636;background-image:linear-gradient(135deg,#160636 0%,#2D0F6B 100%)',
+    vers: 'background:linear-gradient(135deg,#160636 0%,#2D0F6B 100%)' },
+
+  { nom: '🔴 l’entête de TOUS les emails reperd sa couleur de repli',
+    banc: 'verif:bons', fichier: 'lib/resend.js',
+    de: 'background-color:${C.panel};background-image:linear-gradient(135deg,${C.panel} 0%,#2D0F6B 60%,${C.ink} 100%)',
+    vers: 'background:linear-gradient(135deg,${C.panel} 0%,#2D0F6B 60%,${C.ink} 100%)' },
+
+  { nom: '🔴 « Le mot DE Alexandre » revient',
+    banc: 'verif:bons', fichier: 'lib/francais.js',
+    de: '  return VOYELLES.includes(m[0]) ? `d’${m}` : `de ${m}`',
+    vers: '  return `de ${m}`' },
+
+  { nom: '🔴 l’élision se déclenche AUSSI devant une consonne',
+    banc: 'verif:bons', fichier: 'lib/francais.js',
+    de: '  return VOYELLES.includes(m[0]) ? `d’${m}` : `de ${m}`',
+    vers: '  return `d’${m}`' },
+
+  { nom: '🔴 SÉCURITÉ : le prénom du bénéficiaire repart brut dans le HTML',
+    banc: 'verif:bons', fichier: 'lib/resend.js',
+    de: "<strong>${echapperHtml(beneficiaire_prenom) || 'Hello'}</strong>",
+    vers: "<strong>${beneficiaire_prenom || 'Hello'}</strong>" },
+
+  { nom: '🔴 SÉCURITÉ : le prénom de l’acheteur repart brut dans le HTML',
+    banc: 'verif:bons', fichier: 'lib/resend.js',
+    de: "<strong>${echapperHtml(acheteur_prenom)}</strong> t'offre",
+    vers: "<strong>${acheteur_prenom}</strong> t'offre" },
+
+  // ─── LA TVA DU TICKET (28/08) ────────────────────────────────────────────
+  { nom: '🔴 la récompense ne sort plus de la base TVA',
+    banc: 'verif:comptable', fichier: 'lib/tva.js',
+    de: '    const pris = Math.min(sortie[cle], reste)',
+    vers: '    const pris = 0' },
+
+  { nom: '🔴 SUR-CORRECTION : le bon cadeau sortirait de la base TVA',
+    banc: 'verif:comptable', fichier: 'lib/commande-notifs.js',
+    de: '  const parTauxNet = imputerRemise(parTauxTicket, cmd.fidelite_remise)',
+    vers: '  const parTauxNet = imputerRemise(parTauxTicket, Number(cmd.fidelite_remise || 0) + Number(cmd.bon_cadeau_montant || 0))' },
 ]
 
 function lancer(banc) {

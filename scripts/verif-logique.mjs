@@ -17,6 +17,11 @@ import {
 } from '../lib/deals.js'
 import { construireLignesCommande, verifierStockDisponible } from '../lib/lignes-commande.js'
 import { libelleRetrait, estRetraitBoutique } from '../lib/libelle-retrait.js'
+// ⚠️ ON COMPARE AVEC `euros()`, PAS AVEC UNE CHAÎNE ÉCRITE À LA MAIN. Une
+// garde qui recopie « 15,00 € » teste sa propre copie du format, et rougit dès
+// qu'il s'améliore : le passage à l'espace insécable en a fait tomber cinq
+// d'un coup, dont une qui affichait « obtenu X, attendu X », identiques à l'œil.
+import { euros } from '../lib/montants.js'
 import { generateRdvIcs, icsToBase64Attachment } from '../lib/ical.js'
 import { tauxFraisLivraison } from '../lib/tva.js'
 import { ventilerFrais } from '../lib/stripe-frais.js'
@@ -1486,7 +1491,9 @@ verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === n
 
   // Ce qu'on lui dit : il n'a rien à faire, il a juste à savoir.
   const txt = texteBonVendu({ montant_initial: 50 })
-  verifier('le montant est annoncé', txt.corps.includes('50,00 €'))
+  // ⚠️ L'espace avant l'euro est INSÉCABLE depuis le 28/08 : on cherche le
+  // montant, pas le codet du caractère d'espacement.
+  verifier('le montant est annoncé', /50,00[\s ]€/.test(txt.corps))
   verifier('et qu\'il n\'a rien à préparer', /rien à préparer/.test(txt.corps))
   verifier('sans montant, la phrase tient debout',
     !/undefined|NaN/.test(texteBonVendu({}).corps), texteBonVendu({}).corps)
@@ -1509,7 +1516,7 @@ verifier('frais absents = pas de ventilation', ventilerFrais(null, 10, 10) === n
     bons_vendus: [{ montant_initial: 50 }, { montant_initial: 25 }],
   })
   verifier('le récapitulatif annonce les bons vendus', /2 bons cadeaux vendus/.test(recapAvec))
-  verifier('avec leur total', recapAvec.includes('75,00 €'))
+  verifier('avec leur total', /75,00[\s ]€/.test(recapAvec))
   // ⚠️ 37 MONTANTS SUR 39 S'ÉCRIVAIENT « 75.00 € » dans la bibliothèque
   // d'emails, sur TOUS les segments : rendez-vous, commandes, annulations,
   // récapitulatifs. Un montant se lit à la virgule en Belgique. Deux gardes :
@@ -3247,7 +3254,7 @@ verifier('et le détail dit que l’acompte n’a pas été payé',
 
 // Le cas ordinaire : ni contrat, ni acompte.
 egal('sans acompte, le prix est à payer',
-  etatPaiementRdv({ prix_estime: 15 }).libelle, 'À payer 15,00 €')
+  etatPaiementRdv({ prix_estime: 15 }).libelle, `À payer ${euros(15)}`)
 
 // ⚠️ SANS PRIX CONNU (prestation sur devis), on ne FABRIQUE PAS un montant.
 // Annoncer « 0,00 € à encaisser » sur un devis serait pire que de ne rien dire.

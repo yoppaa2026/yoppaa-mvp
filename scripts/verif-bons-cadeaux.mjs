@@ -22,6 +22,7 @@
 
 import { readFileSync } from 'node:fs'
 import { euros, eurosNus } from '../lib/montants.js'
+import { elisionDe } from '../lib/francais.js'
 import { calculerRemiseBon, normaliserCodeBon, bonExpire } from '../lib/bons-cadeaux.js'
 import { resteAEncaisser, soldeRdv, etatPaiementRdv, caDesRdvs, montantNetCommande, phraseAvantages } from '../lib/rdv-paiement.js'
 import { emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire } from '../lib/resend.js'
@@ -51,13 +52,13 @@ const egal = (nom, obtenu, attendu) =>
 // et les 31 du tunnel de commande aussi. Ce n'était pas un défaut des bons
 // cadeaux : c'était tout le produit.
 {
-  egal('50 s\'écrit 50,00 €', euros(50), '50,00 €')
-  egal('12,5 s\'écrit 12,50 €', euros(12.5), '12,50 €')
+  egal('50 s\'écrit 50,00 €', euros(50), `50,00\u00A0€`)
+  egal('12,5 s\'écrit 12,50 €', euros(12.5), `12,50\u00A0€`)
   egal('la version nue n\'a ni espace ni symbole', eurosNus(7), '7,00')
   // ⚠️ MÊME COMPORTEMENT QUE L'ANCIEN `Number(x).toFixed(2)` : `null` vaut 0.
   // Changer ça en silence aurait vidé des cellules d'email sur 37 sites.
-  egal('null vaut zéro, comme avant', euros(null), '0,00 €')
-  egal('et undefined ne rend plus « NaN € »', euros(undefined), '0,00 €')
+  egal('null vaut zéro, comme avant', euros(null), `0,00\u00A0€`)
+  egal('et undefined ne rend plus « NaN € »', euros(undefined), `0,00\u00A0€`)
 }
 
 // ═══ 2) LA RÈGLE D'ARGENT, EXÉCUTÉE ═══════════════════════════════════════
@@ -96,8 +97,8 @@ const egal = (nom, obtenu, attendu) =>
   // ⚠️ LA PHRASE DU COMMERÇANT DIT LE MÊME MONTANT que le calcul. Le 27/08,
   // le calcul retranchait et la phrase se taisait.
   const etat = etatPaiementRdv({ ...RDV, statut: 'confirme' })
-  verifie('l\'agenda ne réclame que 10 €', /10,00 €/.test(etat.libelle), etat.libelle)
-  verifie('et il ne réclame jamais 40 €', !/40,00 €/.test(etat.libelle), etat.libelle)
+  verifie('l\'agenda ne réclame que 10 €', /10,00[\s\u00A0]€/.test(etat.libelle), etat.libelle)
+  verifie('et il ne réclame jamais 40 €', !/40,00[\s\u00A0]€/.test(etat.libelle), etat.libelle)
   verifie('la phrase nomme le bon cadeau',
     /bon cadeau/i.test(`${etat.libelle} ${etat.detail || ''}`), etat.detail)
 
@@ -132,14 +133,14 @@ const egal = (nom, obtenu, attendu) =>
   }
   const html = emailRdvConfirme(base)
   verifie('l\'email client nomme le bon cadeau', /Bon cadeau/.test(html))
-  verifie('et en annonce les 20,00 €', /20,00 €/.test(html))
+  verifie('et en annonce les 20,00 €', /20,00[\s\u00A0]€/.test(html))
   // ⚠️ 40,00 € DOIT APPARAÎTRE : c'est le TARIF de la prestation, et il ne se
   // réécrit pas. Ma première garde l'interdisait bêtement. Ce qu'il faut
   // vérifier, c'est que la ligne du SOLDE, elle, dit 7,50 € et pas 40,00 €.
-  verifie('le tarif de la prestation reste affiché', /40,00 €/.test(html))
+  verifie('le tarif de la prestation reste affiché', /40,00[\s\u00A0]€/.test(html))
   verifie('mais le solde sur place dit 7,50 €',
-    /Solde sur place[\s\S]{0,300}?7,50 €/.test(html))
-  verifie('et la récompense est annoncée à −10,00 €', /−10,00 €/.test(html))
+    /Solde sur place[\s\S]{0,300}?7,50[\s\u00A0]€/.test(html))
+  verifie('et la récompense est annoncée à −10,00 €', /−10,00[\s\u00A0]€/.test(html))
   // ⚠️ AUCUN MONTANT AU POINT nulle part dans le rendu.
   verifie('et aucun montant au point', !/\d\.\d{2}\s*€/.test(html))
 
@@ -158,7 +159,7 @@ const egal = (nom, obtenu, attendu) =>
     commercant_nom: 'La Boutique Témoin', montant: 50, code: 'BC-3QJN-J5G9', token: 'tok',
   })
   verifie('le donateur est nommé', /Carole/.test(html))
-  verifie('le montant s\'écrit à la virgule', /50,00 €/.test(html) && !/50\.00/.test(html))
+  verifie('le montant s\'écrit à la virgule', /50,00[\s\u00A0]€/.test(html) && !/50\.00/.test(html))
 
   const modale = lireCode('app/commander/BonCadeauModal.js')
   verifie('l\'écran exige le prénom de l\'acheteur', /prenomOk\(acheteur\.prenom\)/.test(modale))
@@ -288,7 +289,7 @@ const egal = (nom, obtenu, attendu) =>
   verifie('un bon sans date ne l\'est jamais', !bonExpire({ expires_at: null }))
 
   const txt = texteBonVendu({ montant_initial: 50 })
-  verifie('le commerçant lit 50,00 €', txt.corps.includes('50,00 €'))
+  verifie('le commerçant lit 50,00 €', /50,00[\s\u00A0]€/.test(txt.corps))
   verifie('et sans montant lisible, on n\'invente pas un zéro',
     !/0,00/.test(texteBonVendu({}).corps))
 }
@@ -376,6 +377,57 @@ const egal = (nom, obtenu, attendu) =>
       !/toFixed\(2\)/.test(src),
       (src.match(/.*toFixed\(2\).*/) || [])[0])
   }
+}
+
+// ═══ CE QUE LA DESTINATAIRE A VRAIMENT VU (28/08, deux vrais emails) ═══════
+//
+// 🔴 CAROLE NE POUVAIT PAS LIRE SON CODE. Sur le client mail d'un téléphone
+// Android, le bloc du bon n'avait pour fond qu'un `linear-gradient`, que ce
+// client JETTE. Le fond redevenait blanc, et le montant comme le code, écrits
+// en `#fff`, devenaient invisibles. Le bon partait, signé DKIM, inutilisable.
+//
+// ⚠️ LA GARDE PORTE SUR LA COULEUR DE REPLI, pas sur le dégradé. Un fond sombre
+// annoncé UNIQUEMENT par un dégradé est le défaut, où qu'il se trouve.
+{
+  const src = readFileSync(new URL('../lib/resend.js', import.meta.url), 'utf8')
+  const sansRepli = src.split('\n').filter(l => /background:linear-gradient/.test(l))
+  verifie('aucun fond d\'email ne repose sur le seul dégradé',
+    sansRepli.length === 0,
+    sansRepli.length ? `${sansRepli.length} reste(s) : ${sansRepli[0].trim().slice(0, 70)}` : '')
+
+  // Les deux blocs qui portent du texte blanc, nommés un par un : l'entête de
+  // TOUS les emails, et le bloc du bon où vivent le montant et le code.
+  verifie('l\'entête garde une couleur de repli',
+    /background-color:\$\{C\.panel\};background-image:linear-gradient/.test(src))
+  verifie('le bloc du bon cadeau garde une couleur de repli',
+    /background-color:#160636;background-image:linear-gradient/.test(src))
+  verifie('les emails de la landing aussi',
+    !/background:linear-gradient/.test(
+      readFileSync(new URL('../lib/resend-landing.js', import.meta.url), 'utf8')))
+
+  // 🔴 « LE MOT DE ALEXANDRE », lu dans le vrai email de la destinataire.
+  verifie('le mot du donateur s\'élide devant une voyelle', elisionDe('Alexandre') === 'd’Alexandre', elisionDe('Alexandre'))
+  verifie('et ne s\'élide pas devant une consonne', elisionDe('Carole') === 'de Carole', elisionDe('Carole'))
+  verifie('le h est traité comme une voyelle', elisionDe('Hugo') === 'd’Hugo', elisionDe('Hugo'))
+  verifie('un accent en tête compte comme une voyelle', elisionDe('Élise') === 'd’Élise', elisionDe('Élise'))
+  verifie('sans prénom, la préposition seule', elisionDe('') === 'de' && elisionDe(null) === 'de')
+  // ⚠️ LA FONCTION REND LA PRÉPOSITION : sans ça un appelant écrirait
+  // « de ${elisionDe(x)} » et recréerait la faute en croyant l'avoir corrigée.
+  verifie('le gabarit ne recolle pas « de » devant', !/Le mot de \$\{/.test(src))
+
+  // 🔴 LES DEUX PRÉNOMS PARTAIENT BRUTS DANS LE HTML, juste à côté d'un
+  // `message` échappé depuis le 22/08. Ils viennent de l'ACHETEUR et
+  // atterrissent chez un tiers qu'il choisit librement : c'est exactement le
+  // cas que le commentaire de sécurité de `resend.js` décrit mot pour mot.
+  const piege = emailBonCadeauBeneficiaire({
+    beneficiaire_prenom: '<img src=x onerror=alert(1)>',
+    acheteur_prenom: '<b>Pirate</b>',
+    commercant_nom: 'La Boutique Témoin',
+    montant: 50, code: 'ABC123', token: 'jeton', message: 'coucou',
+  })
+  verifie('le prénom du bénéficiaire est échappé', !/<img src=x/.test(piege))
+  verifie('le prénom de l\'acheteur est échappé', !/<b>Pirate<\/b>/.test(piege))
+  verifie('et le texte reste lisible plutôt que supprimé', /&lt;b&gt;Pirate/.test(piege))
 }
 
 console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.`)

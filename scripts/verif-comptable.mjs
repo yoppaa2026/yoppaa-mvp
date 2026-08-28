@@ -13,7 +13,7 @@
 // en forme.
 
 import { readFileSync, readdirSync } from 'node:fs'
-import { ventiler, tauxFraisLivraison, cleTaux, libelleTaux, tauxPourArticle, TAUX_NON_RENSEIGNE, REGIME_EMPORTER } from '../lib/tva.js'
+import { ventiler, tauxFraisLivraison, cleTaux, libelleTaux, tauxPourArticle, imputerRemise, TAUX_NON_RENSEIGNE, REGIME_EMPORTER } from '../lib/tva.js'
 import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal, csvDetail, montantStripe, sommeStripe, arrondi, referencesNonQualifiees } from '../lib/export-comptable.js'
 import { calculerRemiseBon, normaliserCodeBon, genererCodeBon, bonExpire, BON_MONTANT_MIN, BON_MONTANT_MAX } from '../lib/bons-cadeaux.js'
 import { brusselsInstant } from '../lib/timezone.js'
@@ -870,8 +870,13 @@ const { etatPaiementClient } = await import('../lib/rdv-paiement.js')
 
 egal('une commande à payer au comptoir le dit au client',
   etatPaiementClient({ total: 15, paye_en_ligne: false }).cle, 'du')
+// ⚠️ L'ESPACE AVANT L'EURO EST INSÉCABLE DEPUIS LE 28/08, et ces deux gardes
+// l'écrivaient en dur. Ce qu'elles protègent, c'est l'ORDRE des mots — l'état
+// d'abord, le montant ensuite — pas le codet du caractère d'espacement. Une
+// garde qui rougit sur une amélioration de typographie surveille la mauvaise
+// chose, comme celle du minimum de livraison ce matin.
 verifier('avec le mot d’état EN TÊTE, puis le montant',
-  /^À régler sur place 15,00 €$/.test(etatPaiementClient({ total: 15, paye_en_ligne: false }).libelle))
+  /^À régler sur place 15,00[\s ]€$/.test(etatPaiementClient({ total: 15, paye_en_ligne: false }).libelle))
 egal('une commande payée en ligne est verte',
   etatPaiementClient({ total: 15, paye_en_ligne: true }).cle, 'paye')
 verifier('et elle promet qu’il n’y a rien à sortir',
@@ -891,7 +896,7 @@ verifier('un bon partiel ne réclame que le solde',
 // ─── LA MÊME PHRASE DANS LES EMAILS ───────────────────────────────────────
 const { blocPaiementYopper } = await import('../lib/resend.js')
 verifier('l’email d’une commande à payer sur place le dit',
-  /À régler sur place 15,00 €/.test(blocPaiementYopper({ total: 15, paye_en_ligne: false })))
+  /À régler sur place 15,00[\s ]€/.test(blocPaiementYopper({ total: 15, paye_en_ligne: false })))
 verifier('l’email d’une commande payée en ligne le dit aussi',
   /Payé en ligne/.test(blocPaiementYopper({ total: 15, paye_en_ligne: true })))
 // ⚠️ LE DÉFAUT D'ORIGINE, EN UNE LIGNE : les deux emails étaient RIGOUREUSEMENT
@@ -1332,6 +1337,72 @@ verifier('une commande remise sans moyen garde son rattrapage',
   // sont pas la même chose, c'est toute la raison de ce correctif.
   egal('un frais réellement nul reste un zéro',
     construireLignes({ abonnements: [{ ...aboSansFrais, stripe_frais: 0 }], tauxDefaut: 21 })[0]?.fraisStripe, 0)
+}
+
+// ═══ LA RÉCOMPENSE SORT DE LA BASE TVA, LE BON CADEAU NON (28/08) ═════════
+//
+// 🔴 Trouvé par Alex dans deux vrais tickets reçus le même quart d'heure. Le
+// premier disait « Plus rien à payer 0,00 € » et, deux lignes plus bas,
+// « TVA 21 % · base 6,61 € · 1,39 € ». Le document se contredisait tout seul.
+//
+// ⚠️ LES DEUX SENS SONT VÉRIFIÉS ICI, parce que se tromper coûte cher dans les
+// deux : oublier la remise fait déclarer une TVA qu'on ne doit pas, retrancher
+// le bon cadeau fait disparaître une TVA réellement due.
+{
+  // Le ticket d'Alex, cas 1 : 8,00 € à 21 %, récompense de 8,00 €.
+  const offert = imputerRemise({ 21: 8 }, 8)
+  egal('une commande entièrement offerte ne laisse aucune base', offert, { 21: 0 })
+
+  // Le ticket d'Alex, cas 2 : 72,00 € à 21 %, bon cadeau de 50,00 €.
+  // Le bon n'est PAS passé à `imputerRemise` : la base reste entière.
+  const avecBon = imputerRemise({ 21: 72 }, 0)
+  egal('un bon cadeau ne touche pas à la base imposable', avecBon, { 21: 72 })
+  egal('et la TVA due reste celle des 72 €', ventiler(avecBon[21], 21), { base: 59.50, tva: 12.50 })
+
+  // Une remise partielle mord sur le taux le plus lourd d'abord.
+  egal('la remise s\'impute sur le plus gros montant',
+    imputerRemise({ 6: 16, 21: 40 }, 10), { 6: 16, 21: 30 })
+
+  // ⚠️ ET ELLE DÉBORDE quand elle épuise ce taux, sinon une grosse récompense
+  // laisserait une base imposable que le client n'a pas payée.
+  egal('une remise plus grosse déborde sur le taux suivant',
+    imputerRemise({ 6: 16, 21: 40 }, 50), { 6: 6, 21: 0 })
+  egal('une remise qui dépasse tout ne laisse rien',
+    imputerRemise({ 6: 16, 21: 40 }, 100), { 6: 0, 21: 0 })
+
+  // Les cas dégénérés ne doivent rien casser ni rien inventer.
+  egal('aucune remise laisse la ventilation intacte', imputerRemise({ 21: 30 }, 0), { 21: 30 })
+  egal('une remise absente vaut aucune remise', imputerRemise({ 21: 30 }, null), { 21: 30 })
+  egal('une remise négative n\'augmente rien', imputerRemise({ 21: 30 }, -5), { 21: 30 })
+  egal('sans aucun taux, rien à imputer', imputerRemise({}, 10), {})
+
+  // ⚠️ LE GARDE-FOU CONTRE LA DIVERGENCE, et c'est LE point de ce bloc. Le
+  // ticket du client et le journal du comptable décrivent la MÊME commande :
+  // ils doivent en tirer la même base imposable. C'est en les laissant
+  // calculer chacun de leur côté que l'écart est né.
+  const cmdRemise = {
+    id: 'tva1', numero_commande: 42, statut: 'recupere', date_commande: '2026-08-28',
+    created_at: '2026-08-28T10:00:00Z', mode_retrait: 'retrait', regime_tva: 'emporter',
+    paye_en_ligne: true, total: 50, fidelite_remise: 10, frais_livraison: 0,
+    tva_taux_livraison: null, encaisse_mode: null,
+    commande_articles: [{ article_id: 'a1', quantite: 1, prix_unitaire: 50, tva_taux: 21 }],
+  }
+  // ⚠️ GARDE DE BRANCHEMENT, ET ELLE MANQUAIT : la mesure par mutation l'a dit.
+  // `imputerRemise` avait beau être juste, RIEN ne vérifiait que le gabarit du
+  // ticket lui passe la SEULE récompense. Y ajouter `bon_cadeau_montant`
+  // laissait tout vert, et faisait disparaître de la TVA réellement due.
+  const notifs = readFileSync(new URL('../lib/commande-notifs.js', import.meta.url), 'utf8')
+  verifier('le ticket n’impute que la récompense',
+    /imputerRemise\(parTauxTicket, cmd\.fidelite_remise\)/.test(notifs))
+  verifier('et jamais le bon cadeau, qui est un moyen de paiement',
+    !/imputerRemise\([^)]*bon_cadeau/.test(notifs))
+
+  const ligneJournal = construireLignes({ commandes: [cmdRemise], tauxDefaut: 21 })[0]
+  const baseTicket = ventiler(imputerRemise({ 21: 50 }, 10)[21], 21).base
+  const baseJournal = ventiler(ligneJournal.parTaux['21'], 21).base
+  verifier('le ticket du client et le journal du comptable disent la même base',
+    Math.abs(baseTicket - baseJournal) < 0.005,
+    `ticket ${baseTicket} / journal ${baseJournal}`)
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

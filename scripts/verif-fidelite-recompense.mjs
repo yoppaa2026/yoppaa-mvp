@@ -851,10 +851,12 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
     mode_retrait: 'retrait_boutique', commercant_categorie: 'detail',
   })
   verifie('le ticket nomme la récompense', /Récompense fidélité/.test(ticket))
-  verifie('et il en montre le montant déduit', /−10,00 €/.test(ticket))
+  // ⚠️ L'espace avant l'euro est INSÉCABLE depuis le 28/08 : ces gardes
+  // cherchent le MONTANT, pas le codet du caractère d'espacement.
+  verifie('et il en montre le montant déduit', /−10,00[\s ]€/.test(ticket))
   // ⚠️ LE NET, PAS SEULEMENT LA SOUSTRACTION AFFICHÉE. C'est le chiffre que le
   // Yopper emporte au comptoir.
-  verifie('le ticket dit ce qui reste réellement', /26,00 €/.test(ticket))
+  verifie('le ticket dit ce qui reste réellement', /26,00[\s ]€/.test(ticket))
 
   const ticketSansRemise = emailCommandeConfirmee({
     yopper_prenom: 'Alexandre', commercant_nom: 'La Boutique Témoin',
@@ -875,13 +877,13 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
     total: 36, fidelite_remise: 10, date_retrait: '2026-08-26',
   })
   verifie('l\'email commerçant montre la récompense', /Récompense fidélité/.test(ticketCom))
-  verifie('et le net qu\'il aura à encaisser', /26,00 €/.test(ticketCom))
+  verifie('et le net qu\'il aura à encaisser', /26,00[\s ]€/.test(ticketCom))
   const ticketComBon = emailNouvelleCommandeCommercant({
     nom_commercant: 'La Boutique Témoin', yopper_prenom: 'Alexandre',
     numero_commande: 'RE5', articles: [{ nom: 'Robe fleurie', quantite: 1, prix_total: 36 }],
     total: 36, bon_cadeau_montant: 6, date_retrait: '2026-08-26',
   })
-  verifie('il montre aussi le bon cadeau', /Bon cadeau/.test(ticketComBon) && /30,00 €/.test(ticketComBon))
+  verifie('il montre aussi le bon cadeau', /Bon cadeau/.test(ticketComBon) && /30,00[\s ]€/.test(ticketComBon))
   // ⚠️ MESURÉ MUET, QUATRIÈME FOIS AUJOURD'HUI. Chercher
   // `fidelite_remise: cmd.fidelite_remise` trouvait la ligne du ticket YOPPER
   // et restait vert quand celle du COMMERÇANT disparaissait. Les deux emails
@@ -981,7 +983,10 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
     prix_estime: 40, acompte_paye: true, acompte_montant: 9, fidelite_remise: 10,
   })
   verifie('🔴 l\'email de confirmation annonce 21,00 €, pas 28,00 €',
-    htmlRdv.includes('21,00 €') && !htmlRdv.includes('28,00 €'))
+    // ⚠️ LES DEUX CÔTÉS TOLÈRENT L'INSÉCABLE, y compris la garde NÉGATIVE :
+    // laissée en espace ordinaire, elle serait devenue toujours vraie, donc
+    // muette, et c'est elle qui protège le vrai défaut du 27/08.
+    /21,00[\s ]€/.test(htmlRdv) && !/28,00[\s ]€/.test(htmlRdv))
   // ⚠️ « Prix », pas « Prix estimé » (Alex, 27/08) : le prix est le prix.
   verifie('et il ne parle plus de prix ESTIMÉ', !/Prix estimé/.test(htmlRdv))
 
@@ -991,7 +996,7 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
   // celui qui doute réclame le montant affiché en haut.
   // ⚠️ Règle d'Alex : « affiché PARTOUT où on parle de la transaction. »
   verifie('🔴 l\'email client DIT la récompense dans le décompte',
-    /Récompense fidélité/.test(htmlRdv) && /−10,00 €/.test(htmlRdv))
+    /Récompense fidélité/.test(htmlRdv) && /−10,00[\s ]€/.test(htmlRdv))
 
   const htmlPro = emailNouveauRdvCommercant({
     nom_commercant: 'Ciseaux et Soins', yopper_prenom: 'Alexandre', yopper_nom: 'V',
@@ -1000,7 +1005,7 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
     prix_estime: 40, acompte_paye: true, acompte_montant: 9, fidelite_remise: 10,
   })
   verifie('🔴 et l\'email du COMMERÇANT aussi',
-    /Récompense fidélité/.test(htmlPro) && /−10,00 €/.test(htmlPro))
+    /Récompense fidélité/.test(htmlPro) && /−10,00[\s ]€/.test(htmlPro))
   // ⚠️ RIEN QUAND IL N'Y A RIEN : une ligne « −0,00 € » vaut moins que pas de
   // ligne du tout.
   const htmlSansRemise = emailRdvConfirme({
@@ -1125,7 +1130,7 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
 
   const phrase = libellePerteRecompense(R10, 8)
   verifie('la phrase dit les TROIS chiffres',
-    /10,00 €/.test(phrase) && /8,00 €/.test(phrase) && /2,00 €/.test(phrase), phrase)
+    /10,00[\s ]€/.test(phrase) && /8,00[\s ]€/.test(phrase) && /2,00[\s ]€/.test(phrase), phrase)
   // ⚠️ PERSONNE NE CHERCHE UNE INFORMATION : dire la perte sans donner la
   // sortie ne sert à rien.
   verifie('et elle donne le geste', /Ajoute un article/.test(phrase), phrase)

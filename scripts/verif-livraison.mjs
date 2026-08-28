@@ -27,6 +27,8 @@ import {
   etatPaiementClient, etatPaiementCommande, etatPaiementRdv, phraseAvantages,
 } from '../lib/rdv-paiement.js'
 import { nomTransporteur, suiviUrl, libelleExpedition } from '../lib/transporteurs.js'
+// On compare avec `euros()`, jamais avec une copie du format écrite à la main.
+import { euros } from '../lib/montants.js'
 import { prenomClient, nomCompletClient } from '../lib/nom-client.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
@@ -697,9 +699,9 @@ verifier('et range la commande du bon côté',
 {
   const cmd = { total: 36, fidelite_remise: 10 }
   verifier('le commerçant lit d\'où vient l\'écart',
-    (etatPaiementCommande(cmd)?.detail || '').includes('10,00 € de récompense fidélité'))
+    /10,00[\s ]€ de récompense fidélité/.test(etatPaiementCommande(cmd)?.detail || ''))
   verifier('et le montant réclamé reste le bon',
-    etatPaiementCommande(cmd)?.libelle === 'À payer 26,00 €')
+    etatPaiementCommande(cmd)?.libelle === `À payer ${euros(26)}`)
   // ⚠️ ORDRE D'APPLICATION, jamais alphabétique : la récompense d'abord (une
   // remise), le bon cadeau ensuite (de l'argent déjà payé).
   const deux = etatPaiementCommande({ total: 30, fidelite_remise: 5, bon_cadeau_montant: 20 })
@@ -725,10 +727,10 @@ verifier('et range la commande du bon côté',
   // Le rendez-vous partage la règle et la colonne.
   const rdv = { statut: 'confirme', prix_estime: 30, fidelite_remise: 5, acompte_montant: 6.25, acompte_paye: true }
   verifier('le RDV dit sa récompense au comptoir',
-    (etatPaiementRdv(rdv)?.detail || '').includes('5,00 € de récompense fidélité'))
+    /5,00[\s ]€ de récompense fidélité/.test(etatPaiementRdv(rdv)?.detail || ''))
   // 🔴 F24 : le solde et la phrase doivent dire le MÊME montant.
   verifier('et le solde reste 18,75 € (F24)',
-    etatPaiementRdv(rdv)?.libelle === 'Partiel · 18,75 € à payer')
+    etatPaiementRdv(rdv)?.libelle === `Partiel · ${euros(18.75)} à payer`)
 
   // Les emails d'annulation.
   const mailPro = emailCommandeAnnuleeCommercant({

@@ -13,6 +13,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { euros } from '@/lib/montants'
 
 const T = {
   bg:      '#F8F6FF',
@@ -160,12 +161,12 @@ export default function RdvCancelPage() {
               {produits.lignes.map((l, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: `1px solid ${T.pale}` }}>
                   <span style={{ fontSize: '0.88rem', fontWeight: 700, color: T.ink }}>{l.quantite} × {l.nom}</span>
-                  <span style={{ fontSize: '0.88rem', fontWeight: 800, color: T.ink }}>{Number(l.total).toFixed(2)}€</span>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 800, color: T.ink }}>{euros(l.total)}</span>
                 </div>
               ))}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 14px' }}>
                 <span style={{ fontSize: '0.88rem', fontWeight: 800, color: T.deep }}>Total produits</span>
-                <span style={{ fontSize: '0.95rem', fontWeight: 900, color: T.main }}>{Number(produits.total).toFixed(2)}€</span>
+                <span style={{ fontSize: '0.95rem', fontWeight: 900, color: T.main }}>{euros(produits.total)}</span>
               </div>
             </div>
 
@@ -174,7 +175,7 @@ export default function RdvCancelPage() {
             </button>
             <p style={{ fontSize: '0.78rem', color: T.muted, textAlign: 'center', margin: '8px 0 16px', lineHeight: 1.45 }}>
               {produits.acompte > 0
-                ? `Seul ton acompte de ${Number(produits.acompte).toFixed(2)}€ te sera remboursé. Tes produits t'attendent en boutique.`
+                ? `Seul ton acompte de ${euros(produits.acompte)} te sera remboursé. Tes produits t'attendent en boutique.`
                 : 'Tes produits t\'attendent en boutique, rien n\'est remboursé.'}
             </p>
 
@@ -182,7 +183,7 @@ export default function RdvCancelPage() {
               {loading ? 'En cours…' : 'Je rends tout et je me fais rembourser'}
             </button>
             <p style={{ fontSize: '0.78rem', color: T.muted, textAlign: 'center', margin: '8px 0 0', lineHeight: 1.45 }}>
-              {(Number(produits.total) + Number(produits.acompte)).toFixed(2)}€ reviennent sur ton moyen de paiement dans 5 à 10 jours.
+              {euros(produits.rembourse != null ? produits.rembourse : Number(produits.total) + Number(produits.acompte))} reviennent sur ton moyen de paiement dans 5 à 10 jours.
             </p>
           </>
         )}

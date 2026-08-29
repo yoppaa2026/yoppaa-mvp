@@ -82,7 +82,10 @@ export async function GET(request) {
       // moindre erreur, et le commerçant relirait « 0,00 € au comptoir » sur un
       // document destiné à son comptable. C'est LE défaut le plus fréquent de
       // ce projet : une colonne oubliée dans un select.
-      .select('id, numero_rdv, numero_prefixe, numero_semaine, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, tva_taux, stripe_frais, stripe_net, date_rdv, encaisse_mode, encaisse_montant, encaisse_le, acompte_paye_date, created_at, client_prenom, client_nom')
+      // ⚠️ `bon_cadeau_montant` EST OBLIGATOIRE DEPUIS LE 29/08 : sans lui, la
+      // ligne « Bon cadeau RDV » ne s'écrit jamais et une prestation payée par
+      // un bon disparaît du journal, sans la moindre erreur.
+      .select('id, numero_rdv, numero_prefixe, numero_semaine, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, bon_cadeau_montant, fidelite_remise, tva_taux, stripe_frais, stripe_net, date_rdv, encaisse_mode, encaisse_montant, encaisse_le, acompte_paye_date, created_at, client_prenom, client_nom')
       .eq('commercant_id', commercantId)
       .gte('date_rdv', du)
       .lte('date_rdv', au)

@@ -51,8 +51,8 @@ function enGras(texte) {
 }
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
-import { calculerRemiseBon } from '@/lib/bons-cadeaux'
 import { euros } from '@/lib/montants'
+import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import BonCadeauFiche from '../../BonCadeauFiche'
 import { redirectTop } from '@/lib/redirect-top'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
@@ -748,6 +748,8 @@ export default function CommanderRdvSlug() {
           stripe_checkout_session_id: sessionId,
           statut: 'confirme',
           acompte_montant: snapshot.acompteMontant ?? null,
+          // Ce que le client vient RÉELLEMENT de payer, et par quoi.
+          _ventilation: snapshot.ventilation || null,
         })
         allerEtape(4)
         // Invite aux push (rappel de RDV) au moment de plus forte intention.
@@ -1374,11 +1376,31 @@ export default function CommanderRdvSlug() {
       // elles n'existent plus (27/08).
       const prixEstime = prestationChoisie.prix != null ? Number(prestationChoisie.prix) : null
 
-      // Acompte (figé)
+      // ─── Acompte (figé) ────────────────────────────────────────────────
+      //
+      // 🔴 IL SE CALCULAIT SUR LE PRIX PLEIN, ET C'EST CE MONTANT-LÀ QUI
+      // S'AFFICHAIT APRÈS LE PAIEMENT. Alex, 29/08 : sa confirmation annonçait
+      // « ACOMPTE 8,75 € ✓ payé en ligne » sur un rendez-vous dont le bon
+      // cadeau couvrait la prestation, et où Stripe n'avait donc encaissé que
+      // les produits. Le même montant était calculé JUSTE trente écrans plus
+      // bas, sur le prix net : deux calculs du même nombre, un seul correct.
+      //
+      // ⚠️ IL VIENT MAINTENANT DU MODULE, comme l'écran de l'étape 3 et comme
+      // les deux routes serveur. C'est le seul moyen qu'ils ne redivergent pas.
       const acomptePct = prestationChoisie.acompte_pourcent || commercant.rdv_acompte_global || 0
-      const acompteMontant = (prixEstime != null && acomptePct > 0)
-        ? Math.round(prixEstime * acomptePct) / 100
-        : null
+      const ventFigee = ventilerTunnelRdv({
+        prixPrestation: prixEstime,
+        acomptePourcent: acomptePct,
+        acompteEnLigne: !!(commercant.rdv_acompte_en_ligne_actif && commercant.stripe_account_charges_enabled),
+        totalProduits: (lignesPanier.length > 0 && produitsAchetables) ? totalProduits : 0,
+        remiseRecompense: (recompenseFid && recompenseActive && prixEstime != null)
+          ? calculerRemiseRecompense(recompenseFid, prixEstime) : 0,
+        soldeBon: bonChoisi ? Number(bonChoisi.solde) : 0,
+      })
+      // ⚠️ `null` ET NON `0` QUAND IL N'Y A PAS D'ACOMPTE : l'écran de
+      // confirmation teste la présence de ce champ pour afficher sa ligne, et
+      // « 0,00 € payé en ligne » se lit comme une erreur de caisse.
+      const acompteMontant = ventFigee.acompte > 0 ? ventFigee.acompte : null
 
       // ─── STRIPE PAIEMENT ACOMPTE EN LIGNE ─────────────────────────────────────
       // Si le commercant a active l'acompte en ligne ET que la prestation a un %
@@ -1389,6 +1411,30 @@ export default function CommanderRdvSlug() {
         && commercant.stripe_account_charges_enabled
         && acompteMontant && acompteMontant >= 0.5
       )
+
+      // 🔴 UN AVANTAGE QUI ANNULE L'ACOMPTE NE DOIT PAS S'ÉVAPORER EN SILENCE.
+      //
+      // Depuis que le bon cadeau paie le panier entier, il peut ramener
+      // l'acompte à zéro. Le rendez-vous basculerait alors sur l'insertion
+      // DIRECTE, celle qui n'appelle aucune route serveur : le bon ne serait
+      // jamais débité, la récompense jamais consommée, et le client
+      // repartirait persuadé de les avoir dépensés. Rien ne le lui dirait.
+      //
+      // ⚠️ ON REFUSE, ET ON DIT LE GESTE À FAIRE. C'est exactement ce que
+      // répond déjà `create-rdv-acompte` quand l'acompte tombe sous le minimum
+      // Stripe : la règle est la même des deux côtés, elle est juste énoncée
+      // ici avant que le client se soit déplacé pour rien.
+      const avantageUtilise = !!bonChoisi || !!(recompenseFid && recompenseActive)
+      const sansProduits = !(lignesPanier.length > 0 && produitsAchetables)
+      if (avantageUtilise && sansProduits && !acompteEnLigneRequis
+          && commercant.rdv_acompte_en_ligne_actif && commercant.stripe_account_charges_enabled
+          && acomptePct > 0) {
+        setSubmitError(bonChoisi
+          ? 'Ton bon cadeau couvre déjà tout : il n’y a plus d’acompte à payer en ligne. Réserve sans le bon, et présente-le au comptoir le jour du rendez-vous.'
+          : 'Avec ta récompense, il n’y a plus d’acompte à payer en ligne. Réserve sans, elle te sera proposée au comptoir.')
+        setSubmitting(false)
+        return
+      }
 
       // ─── LA SÉANCE EST PRISE SUR L'ABONNEMENT ──────────────────────────────
       //
@@ -1494,6 +1540,14 @@ export default function CommanderRdvSlug() {
             heureChoisie,
             client: { email, prenom, nom, telephone, notes: client.notes },
             acompteMontant,
+            // ⚠️ LES AVANTAGES VOYAGENT AVEC, sans quoi l’écran de retour ne
+            // peut rien en dire : il ne connaît que ce que ce cliché contient.
+            // Alex, 29/08 : son récapitulatif de confirmation affichait « Prix
+            // 35,00 € » et « Acompte 8,75 € », sans un mot du bon cadeau qui
+            // venait de tout payer, ni des 43,80 € de produits réellement
+            // débités. Le seul écran qui dit ce qu’on vient de payer ne le
+            // disait pas.
+            ventilation: ventFigee,
           }))
         } catch (e) { console.warn('[rdv] sessionStorage save fail', e) }
 
@@ -1557,6 +1611,14 @@ export default function CommanderRdvSlug() {
             heureChoisie,
             client: { email, prenom, nom, telephone, notes: client.notes },
             acompteMontant,
+            // ⚠️ LES AVANTAGES VOYAGENT AVEC, sans quoi l’écran de retour ne
+            // peut rien en dire : il ne connaît que ce que ce cliché contient.
+            // Alex, 29/08 : son récapitulatif de confirmation affichait « Prix
+            // 35,00 € » et « Acompte 8,75 € », sans un mot du bon cadeau qui
+            // venait de tout payer, ni des 43,80 € de produits réellement
+            // débités. Le seul écran qui dit ce qu’on vient de payer ne le
+            // disait pas.
+            ventilation: ventFigee,
           }))
         } catch (e) { console.warn('[rdv] sessionStorage save fail', e) }
 
@@ -3062,35 +3124,31 @@ export default function CommanderRdvSlug() {
                     const remiseFid = (recompenseFid && recompenseActive && prixBase != null)
                       ? calculerRemiseRecompense(recompenseFid, prixBase)
                       : 0
+                    // ⚠️ UN SEUL CALCUL, PARTAGÉ AVEC LES DEUX ROUTES SERVEUR
+                    // ET AVEC LE CLICHÉ DE CONFIRMATION (29/08). Il était
+                    // recopié ici, plus haut dans la soumission, et dans chaque
+                    // route : quatre exemplaires, et celui de la soumission
+                    // avait dérivé sur le prix plein.
+                    //
                     // ⚠️ LE BON CADEAU VIENT APRÈS LA RÉCOMPENSE, jamais avant.
                     // La récompense est une remise du commerçant, le bon est de
                     // l'argent déjà payé : dans l'autre ordre, le porteur du bon
                     // brûlerait du solde sur une part qui lui était offerte.
-                    // Ce calcul suit celui de `create-rdv-acompte`, qui fait foi.
-                    const baseApresRecompense = prixBase != null
-                      ? Math.round((prixBase - remiseFid) * 100) / 100
-                      : null
-                    const remiseBon = (bonChoisi && baseApresRecompense != null)
-                      ? calculerRemiseBon(bonChoisi.solde, baseApresRecompense)
-                      : 0
-                    const prixNet = baseApresRecompense != null
-                      ? Math.round((baseApresRecompense - remiseBon) * 100) / 100
-                      : null
-                    const acompteMnt = (prixNet != null && prestationChoisie?.acompte_pourcent > 0)
-                      ? Math.round(prixNet * prestationChoisie.acompte_pourcent) / 100
-                      : null
-                    // Tunnel unique : ce qui est encaissé, c'est l'acompte plus
-                    // le prix complet des produits. Le client doit voir les deux
-                    // séparément avant d'arriver sur Stripe, sinon le total le
-                    // surprend et il abandonne.
-                    const aPayerMaintenant = (acompteEnLigne && acompteMnt ? acompteMnt : 0) + totalProduits
-                    // Reste à régler sur place : le solde de la prestation, plus
-                    // rien pour les produits, qui sont payés en entier.
-                    // Et rien à régler sur place non plus : le prix vit sur le
-                    // contrat, pas sur la séance.
-                    const surPlace = seanceSurAbo ? null : (prixNet != null
-                      ? prixNet - (acompteEnLigne && acompteMnt ? acompteMnt : 0)
-                      : null)
+                    const vent = ventilerTunnelRdv({
+                      prixPrestation: prixBase,
+                      acomptePourcent: prestationChoisie?.acompte_pourcent || 0,
+                      acompteEnLigne,
+                      totalProduits,
+                      remiseRecompense: remiseFid,
+                      soldeBon: bonChoisi ? Number(bonChoisi.solde) : 0,
+                    })
+                    const remiseBon = vent.bonTotal
+                    const prixNet = vent.prestaNette
+                    const acompteMnt = vent.acompte > 0 ? vent.acompte : null
+                    const aPayerMaintenant = vent.aPayerMaintenant
+                    // Rien à régler sur place sur une séance d'abonnement : le
+                    // prix vit sur le contrat, pas sur la séance.
+                    const surPlace = seanceSurAbo ? null : vent.soldeSurPlace
                     return (
                       <>
                         {/* ─── Récompense de fidélité ─────────────────────
@@ -3176,7 +3234,31 @@ export default function CommanderRdvSlug() {
                             </p>
                             {mesBonsIci.map(b => {
                               const actif = bonChoisi?.code === b.code
-                              const deduit = calculerRemiseBon(b.solde, baseApresRecompense ?? 0)
+                              // ⚠️ CE QUE CE BON PRÉCIS DÉDUIRAIT, calculé avec
+                              // le même module que le reste : sur la prestation
+                              // ET sur les produits depuis le 29/08.
+                              const ventBon = ventilerTunnelRdv({
+                                prixPrestation: prixBase,
+                                acomptePourcent: prestationChoisie?.acompte_pourcent || 0,
+                                acompteEnLigne,
+                                totalProduits,
+                                remiseRecompense: remiseFid,
+                                soldeBon: Number(b.solde),
+                              })
+                              const deduit = ventBon.bonTotal
+                              const reste = Math.round((Number(b.solde) - deduit) * 100) / 100
+                              // 🔴 LA PHRASE ÉTAIT LE VRAI DÉFAUT (Alex, 29/08).
+                              // Elle disait « ton acompte baisse d'autant »
+                              // alors que le bon ne mordait que sur la
+                              // prestation : le client lisait « −25,00 €
+                              // déduits » et voyait le montant à payer ne pas
+                              // bouger d'un centime. Elle dit maintenant ce que
+                              // le bon paie, et sur quoi.
+                              const surQuoi = ventBon.bonSurProduits > 0
+                                ? (ventBon.bonSurPresta > 0
+                                  ? 'Sur ta prestation et tes produits.'
+                                  : 'Sur tes produits.')
+                                : 'Sur ta prestation : ton acompte baisse d’autant.'
                               return (
                                 <div key={b.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 6 }}>
                                   <div style={{ minWidth: 0 }}>
@@ -3185,9 +3267,7 @@ export default function CommanderRdvSlug() {
                                     </p>
                                     <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: actif ? '#047857' : T.muted, fontWeight: 600 }}>
                                       {actif
-                                        ? (deduit < Number(b.solde)
-                                          ? `Il restera ${euros(Number(b.solde) - deduit)} sur ton bon. Ton acompte baisse d’autant.`
-                                          : 'Ton acompte baisse d’autant.')
+                                        ? `${surQuoi}${reste > 0 ? ` Il restera ${euros(reste)} sur ton bon.` : ''}`
                                         : b.code}
                                     </p>
                                   </div>
@@ -3427,10 +3507,47 @@ export default function CommanderRdvSlug() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Acompte</span>
                         <span style={{ fontSize: '0.85rem', fontWeight: 800, color: rdvCree._viaStripe ? '#059669' : T.deep }}>
-                          {Number(rdvCree.acompte_montant).toFixed(2)} € {rdvCree._viaStripe ? '✓ payé en ligne' : 'sur place'}
+                          {euros(rdvCree.acompte_montant)} {rdvCree._viaStripe ? '✓ payé en ligne' : 'sur place'}
                         </span>
                       </div>
                     )}
+                    {/* 🔴 CE BLOC N'EXISTAIT PAS, ET C'EST LE SEUL ÉCRAN QUI DIT
+                        AU CLIENT CE QU'IL VIENT DE PAYER. Alex, 29/08 : il
+                        annonçait « Prix 35,00 € · Acompte 8,75 € », sans un mot
+                        du bon cadeau qui venait de couvrir la prestation, ni
+                        des 43,80 € de produits réellement débités. Un
+                        récapitulatif qui tait les deux tiers de la transaction
+                        n'est pas un récapitulatif. */}
+                    {(() => {
+                      const v = rdvCree._ventilation
+                      if (!v) return null
+                      const lignes = []
+                      if (v.remiseRecompense > 0) lignes.push(['Récompense fidélité', `− ${euros(v.remiseRecompense)}`, '#059669'])
+                      if (v.bonTotal > 0) lignes.push(['Bon cadeau', `− ${euros(v.bonTotal)}`, '#059669'])
+                      if (v.produitsAPayer > 0) lignes.push(['Tes produits', euros(v.produitsAPayer), T.ink])
+                      if (!lignes.length) return null
+                      return (
+                        <>
+                          {lignes.map(([label, valeur, couleur]) => (
+                            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.pale}` }}>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</span>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 800, color: couleur }}>{valeur}</span>
+                            </div>
+                          ))}
+                          {rdvCree._viaStripe && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 8, borderTop: `2px solid ${T.main}33` }}>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: T.ink, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payé en ligne</span>
+                              <span style={{ fontSize: '0.95rem', fontWeight: 900, color: '#059669' }}>{euros(v.aPayerMaintenant)}</span>
+                            </div>
+                          )}
+                          {v.soldeSurPlace > 0 && (
+                            <p style={{ margin: '10px 0 0', fontSize: '0.75rem', color: T.muted, lineHeight: 1.5 }}>
+                              Il restera {euros(v.soldeSurPlace)} à régler sur place le jour du rendez-vous.
+                            </p>
+                          )}
+                        </>
+                      )
+                    })()}
                   </div>
 
                   {/* CTA invite : creation de compte post-RDV (apres la confirmation, pas pendant le flow).

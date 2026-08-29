@@ -18,7 +18,15 @@ import { adresseRendezVous } from '@/lib/lieu-fige'
 export async function POST(request) {
   try {
     const body = await request.json()
-    const { rdv_id, raison_annulation = 'commercant', refund_en_cours = false } = body
+    // ⚠️ LES MONTANTS VIENNENT DE L'APPELANT, ET C'EST VOULU : seule la route
+    // qui a remboursé sait ce que Stripe a repris et ce qui est retourné sur le
+    // bon. Ils sont purement DESCRIPTIFS, aucune écriture n'en dépend, donc
+    // rien ne se joue si un appelant les oublie : l'email se rabat alors sur
+    // l'acompte, comme avant.
+    const {
+      rdv_id, raison_annulation = 'commercant', refund_en_cours = false,
+      refund_montant = null, bon_rendu = 0, produits_montant = 0,
+    } = body
     if (!rdv_id) return NextResponse.json({ ok: false, error: 'rdv_id requis' }, { status: 400 })
 
     const supabase = createClient(
@@ -91,6 +99,9 @@ export async function POST(request) {
       acompte_montant:   rdv.acompte_montant,
       refund_en_cours,
       raison_annulation,
+      refund_montant,
+      bon_rendu,
+      produits_montant,
     })
 
     await envoyerAuCommercant({

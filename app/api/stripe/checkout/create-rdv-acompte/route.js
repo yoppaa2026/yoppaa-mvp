@@ -26,7 +26,8 @@ import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadat
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
 import { chargerRecompensePourYopper } from '@/lib/fidelite-recompense-server'
 import { chargerBonValide } from '@/lib/bons-cadeaux-server'
-import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
+import { normaliserCodeBon } from '@/lib/bons-cadeaux'
+import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { verdictForfait } from '@/lib/garde-forfait'
 
@@ -174,12 +175,25 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: resBon.error }, { status: 400 })
       }
       bonCadeau = resBon.bon
-      remiseBonEUR = calculerRemiseBon(bonCadeau.solde, baseApresRecompense)
     }
 
-    const prixNet = Math.round((baseApresRecompense - remiseBonEUR) * 100) / 100
-
-    const acompteMontant = Math.round(prixNet * acomptePct) / 100          // EUR, 2 décimales
+    // ⚠️ LA VENTILATION VIT DANS UN SEUL MODULE DEPUIS LE 29/08, et cette route
+    // s'en sert comme les deux autres. Ce même calcul était recopié à trois
+    // endroits, et l'un des trois avait dérivé : l'écran de confirmation
+    // annonçait « acompte 8,75 € payé en ligne » sur un rendez-vous où le
+    // serveur encaissait zéro. Ici, sans produits, la ventilation se réduit à
+    // la prestation, et le bon ne peut mordre nulle part ailleurs.
+    const vent = ventilerTunnelRdv({
+      prixPrestation: prixBase,
+      acomptePourcent: acomptePct,
+      acompteEnLigne: true,
+      totalProduits: 0,
+      remiseRecompense: remiseRecompenseEUR,
+      soldeBon: bonCadeau ? Number(bonCadeau.solde) : 0,
+    })
+    remiseBonEUR = vent.bonSurPresta
+    const prixNet = vent.prestaNette
+    const acompteMontant = vent.acompte                                      // EUR, 2 décimales
     const acompteCents = Math.round(acompteMontant * 100)                    // centimes pour Stripe
 
     // ⚠️ LA RÉCOMPENSE PEUT RENDRE L'ACOMPTE INENCAISSABLE, et il ne faut pas

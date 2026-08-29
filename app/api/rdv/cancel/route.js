@@ -14,7 +14,7 @@
 //   4. Email annulation Yopper + iCal CANCEL (appel direct emailRdvAnnule)
 
 import { NextResponse } from 'next/server'
-import { eurosNus } from '@/lib/montants'
+import { euros } from '@/lib/montants'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe } from '@/lib/stripe'
 import { envoyerAuCommercant, emailRdvAnnule } from '@/lib/resend'
@@ -23,6 +23,7 @@ import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { rendreRecompense } from '@/lib/fidelite-recompense-server'
+import { recrediterBon } from '@/lib/bons-cadeaux-server'
 
 export async function POST(request) {
   try {
@@ -52,6 +53,7 @@ export async function POST(request) {
       date_rdv, heure_debut, heure_fin, duree_minutes, motif_annulation,
       commercant_id, rappel_push_id, commande_id, fidelite_recompense_id,
       lieu_id, lieu_libelle, lieu_adresse,
+      prix_estime, fidelite_remise, bon_cadeau_id, bon_cadeau_montant,
       commercant:commercants(id, nom, slug, adresse, stripe_account_id, rdv_delai_annulation_heures),
       prestation:rdv_prestations(nom)
     `
@@ -117,7 +119,11 @@ export async function POST(request) {
     if (rdv.commande_id) {
       const { data: cmd } = await supabase
         .from('commandes')
-        .select('id, statut, total, paye_en_ligne')
+        // ⚠️ LES TROIS COLONNES D'AVANTAGE SONT OBLIGATOIRES ICI. `total` est le
+        // tarif BRUT : un bon cadeau ou une récompense posés dessus n'ont
+        // jamais été payés par carte, et les rembourser reviendrait à rendre
+        // au client de l'argent qu'il n'a pas sorti.
+        .select('id, statut, total, paye_en_ligne, bon_cadeau_id, bon_cadeau_montant, fidelite_remise, fidelite_recompense_id')
         .eq('id', rdv.commande_id)
         .maybeSingle()
       // Une commande déjà annulée ne pose plus de question.
@@ -138,6 +144,17 @@ export async function POST(request) {
         produits: {
           total: Number(commandeLiee.total),
           acompte: Number(rdv.acompte_montant || 0),
+          // ⚠️ CE QUI REVIENT SUR LA CARTE N'EST PAS LE TOTAL DES PRODUITS.
+          // Un bon cadeau ou une récompense posés dessus n'ont jamais été
+          // payés par carte : l'écran annonçait donc un remboursement plus
+          // gros que le prélèvement. Le brut sert à LISTER, ce montant-ci à
+          // PROMETTRE, et on ne promet que ce que Stripe peut rendre.
+          rembourse: Math.round(Math.max(0,
+            Number(commandeLiee.total || 0)
+            - Number(commandeLiee.bon_cadeau_montant || 0)
+            - Number(commandeLiee.fidelite_remise || 0)
+            + Number(rdv.acompte_montant || 0)) * 100) / 100,
+          bon: Math.round((Number(commandeLiee.bon_cadeau_montant || 0) + Number(rdv.bon_cadeau_montant || 0)) * 100) / 100,
           lignes: (lignes || []).map(l => ({
             nom: l.article?.nom || 'Article',
             quantite: l.quantite,
@@ -164,9 +181,19 @@ export async function POST(request) {
     let refundMontant = null
 
     const acompteMontant = Number(rdv.acompte_montant || 0)
+    // ⚠️ CE QUE LA CARTE A RÉELLEMENT PAYÉ SUR LES PRODUITS, pas leur prix
+    // affiché. Un bon cadeau et une récompense posés sur la commande ont baissé
+    // le montant encaissé d'autant : demander à Stripe de rembourser le brut,
+    // c'est réclamer plus que ce qui a été prélevé.
+    const arr = (n) => Math.round(Number(n || 0) * 100) / 100
+    const produitsPayesCarte = commandeLiee
+      ? arr(Math.max(0, Number(commandeLiee.total || 0)
+          - Number(commandeLiee.bon_cadeau_montant || 0)
+          - Number(commandeLiee.fidelite_remise || 0)))
+      : 0
     const aRembourser = gardeSesProduits
       ? acompteMontant
-      : acompteMontant + Number(commandeLiee?.total || 0)
+      : arr(acompteMontant + produitsPayesCarte)
     const aDejaPaye = (rdv.acompte_paye || !!commandeLiee) && rdv.stripe_payment_intent_id
 
     if (aDejaPaye && !rdv.stripe_refund_id && aRembourser > 0) {
@@ -235,19 +262,59 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'Erreur mise à jour RDV.' }, { status: 500 })
     }
 
-    // ⚠️ LA RÉCOMPENSE DE FIDÉLITÉ REVIENT, comme pour une commande annulée.
-    // Le rendez-vous n'aura pas lieu : laisser la récompense dépensée ferait
-    // perdre au Yopper une carte entière sur une séance qu'il n'a pas eue, et
-    // il n'a aucun moyen de la récupérer lui-même. `rendreRecompense` ne rend
-    // que ce qui est effectivement pris, donc un double appel est sans effet.
-    if (rdv.fidelite_recompense_id) {
-      const { data: recFid } = await supabase
-        .from('fidelite_recompenses')
-        .select('id, carte_id, utilisee_at')
-        .eq('id', rdv.fidelite_recompense_id)
-        .maybeSingle()
-      if (recFid?.utilisee_at) await rendreRecompense(supabase, recFid)
+    // ═══ CE QUI N'EST PAS DE LA CARTE REVIENT AUSSI ═══════════════════════
+    //
+    // 🔴 LE BON CADEAU N'ÉTAIT PAS RENDU, ET ALEX L'A VU EN PRODUCTION LE
+    // 29/08. Un bon de 75 €, 35 € posés sur une coupe, le rendez-vous annulé :
+    // sa fiche affichait toujours 40 €. Stripe ne rembourse QUE la part carte,
+    // la part bon n'existe pas pour lui. Personne d'autre ne la rendait.
+    //
+    // ⚠️ C'ÉTAIT LE FRÈRE NON TRAITÉ DU 28/08. Ce jour-là `recrediterBon` a
+    // appris à accepter `{ rdv_id }` et j'ai relu « les deux appelants » : ils
+    // désignent tous deux une COMMANDE. La capacité était écrite, l'appelant
+    // jamais. Le banc gardait ces deux fichiers-là, donc il est resté vert.
+    //
+    // ⚠️ ET LA COMMANDE LIÉE SUIT LE CHOIX DU CLIENT : ses avantages ne
+    // reviennent que s'il rend ses produits. Les garder, c'est les acheter.
+    const rendreAvantages = async ({ bonId, bonMontant, recompenseId, refs }) => {
+      let rendu = 0
+      if (bonId && Number(bonMontant) > 0) {
+        const rec = await recrediterBon(supabase, bonId, Number(bonMontant), refs)
+        // ⚠️ ON LIT LE RÉSULTAT : un `await` qu'on n'écoute pas est un espoir,
+        // et ici l'espoir vaut de l'argent que le Yopper a déjà payé.
+        if (!rec?.ok) console.error('[rdv/cancel] re-crédit bon cadeau KO', rec?.error, { rdvId: rdv.id, ...refs })
+        else if (!rec.deja_recredite) rendu = Number(bonMontant)
+      }
+      if (recompenseId) {
+        const { data: recFid } = await supabase
+          .from('fidelite_recompenses')
+          .select('id, carte_id, utilisee_at')
+          .eq('id', recompenseId)
+          .maybeSingle()
+        // `rendreRecompense` ne rend que ce qui est effectivement pris : un
+        // double appel est sans effet.
+        if (recFid?.utilisee_at) await rendreRecompense(supabase, recFid)
+      }
+      return rendu
     }
+
+    // Le rendez-vous n'aura pas lieu : ce qu'il a consommé revient toujours.
+    let bonRendu = await rendreAvantages({
+      bonId: rdv.bon_cadeau_id,
+      bonMontant: rdv.bon_cadeau_montant,
+      recompenseId: rdv.fidelite_recompense_id,
+      refs: { rdv_id: rdv.id },
+    })
+
+    if (commandeLiee && !gardeSesProduits) {
+      bonRendu += await rendreAvantages({
+        bonId: commandeLiee.bon_cadeau_id,
+        bonMontant: commandeLiee.bon_cadeau_montant,
+        recompenseId: commandeLiee.fidelite_recompense_id,
+        refs: { commande_id: commandeLiee.id },
+      })
+    }
+    bonRendu = arr(bonRendu)
 
     // Annule le rappel push programmé (1h avant) s'il existe. Best-effort.
     if (rdv.rappel_push_id) {
@@ -268,6 +335,12 @@ export async function POST(request) {
           acompte_montant:   rdv.acompte_montant,
           refund_en_cours:   !!refundId && !refundError,
           raison_annulation: 'yopper',
+          // ⚠️ LES TROIS MONTANTS ARRIVENT JUSQU'ICI, sans quoi le gabarit se
+          // rabat sur le seul acompte et se tait dès qu'il vaut zéro.
+          refund_montant:    refundMontant != null ? refundMontant : (refundError ? null : 0),
+          bon_rendu:         bonRendu,
+          produits_gardes:   gardeSesProduits,
+          produits_montant:  produitsPayesCarte,
         })
         // iCal CANCEL (SEQUENCE+1 par rapport au confirme initial)
         // ⚠️ CORRIGÉ LE 05/08 : cet appel passait `rdv_id` alors que la
@@ -306,17 +379,25 @@ export async function POST(request) {
     // Message : dire exactement ce qui revient et ce qui reste à récupérer.
     // Un client qui garde ses produits doit lire noir sur blanc qu'ils
     // l'attendent, sinon il croit avoir perdu son argent.
+    // ⚠️ ET LE BON CADEAU SE DIT, LUI AUSSI. Stripe ne rembourse que la carte :
+    // sans cette phrase, le Yopper lit « 43,80 € reviennent » et croit avoir
+    // perdu les 35 € de son bon. Il faut ouvrir sa fiche pour découvrir qu'ils
+    // y sont revenus, et personne ne va vérifier ce qu'on ne lui annonce pas.
+    const phraseBon = bonRendu > 0
+      ? ` Les ${euros(bonRendu)} de ton bon cadeau sont recrédités dessus, utilisables tout de suite.`
+      : ''
+
     let message
     if (refundError) {
-      message = 'Ton RDV est annulé. Le remboursement sera traité manuellement par le commerçant sous quelques jours.'
+      message = `Ton RDV est annulé. Le remboursement sera traité manuellement par le commerçant sous quelques jours.${phraseBon}`
     } else if (gardeSesProduits) {
       message = refundMontant > 0
-        ? `Ton RDV est annulé. Tes ${eurosNus(refundMontant)}€ d'acompte reviennent sur ton moyen de paiement dans 5 à 10 jours, et tes produits t'attendent en boutique.`
-        : 'Ton RDV est annulé. Tes produits t\'attendent en boutique.'
+        ? `Ton RDV est annulé. Tes ${euros(refundMontant)} d'acompte reviennent sur ton moyen de paiement dans 5 à 10 jours, et tes produits t'attendent en boutique.${phraseBon}`
+        : `Ton RDV est annulé. Tes produits t'attendent en boutique.${phraseBon}`
     } else if (refundMontant > 0) {
-      message = `Ton RDV est annulé. ${eurosNus(refundMontant)}€ reviennent sur ton moyen de paiement dans 5 à 10 jours.`
+      message = `Ton RDV est annulé. ${euros(refundMontant)} reviennent sur ton moyen de paiement dans 5 à 10 jours.${phraseBon}`
     } else {
-      message = 'Ton RDV est annulé.'
+      message = `Ton RDV est annulé.${phraseBon}`
     }
 
     return NextResponse.json({

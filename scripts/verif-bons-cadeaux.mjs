@@ -212,16 +212,24 @@ const egal = (nom, obtenu, attendu) =>
     const src = lireCode(chemin)
     verifie(`tunnel ${nom} : lit le code envoyé`, /bon_cadeau_code/.test(src))
     verifie(`tunnel ${nom} : le REVALIDE côté serveur`, /chargerBonValide\(/.test(src))
-    verifie(`tunnel ${nom} : recalcule la remise`, /calculerRemiseBon\(/.test(src))
-    // ⚠️ L'ORDRE : la récompense d'abord, le bon ensuite. Dans l'autre sens,
-    // le porteur du bon brûlerait du solde sur une part déjà offerte.
+    // ⚠️ LE CALCUL A DÉMÉNAGÉ LE 29/08 dans `lib/tunnel-rdv-montants.js`, seul
+    // endroit du projet où l'on ventile un rendez-vous. Ces deux gardes
+    // recopiaient l'appel littéral `calculerRemiseBon(bonCadeau.solde,
+    // baseApresRecompense)` : elles sont devenues rouges au déménagement sans
+    // qu'aucune règle ne change. Une garde qui suit une FORME casse à chaque
+    // refactoring ; celle qui suit la RÈGLE survit.
     //
-    // ⚠️ ANCRÉE SUR L'APPEL LUI-MÊME, et pas sur le mot `baseApresRecompense` :
-    // ce mot est aussi le nom de la variable, donc il survivait à la mutation
-    // qui calculait la remise sur `prixBase`. Garde verte parce que le mot
-    // existe AILLEURS, pour la cinquième fois sur ce projet. Mesuré, pas relu.
-    verifie(`tunnel ${nom} : le bon s'applique APRÈS la récompense`,
-      /calculerRemiseBon\(bonCadeau\.solde, baseApresRecompense\)/.test(src))
+    // L'ordre récompense puis bon, lui, est EXÉCUTÉ par `verif:tunnel-rdv` :
+    // 40 € de prestation, 10 € de récompense, un bon de 100 € → le bon ne paie
+    // que 30 €, jamais 40. Ici on garde ce qui est propre à la route : elle
+    // délègue, et elle ne recalcule rien dans son coin.
+    verifie(`tunnel ${nom} : ventile avec le module unique`, /ventilerTunnelRdv\(/.test(src))
+    verifie(`tunnel ${nom} : ne recalcule plus la remise du bon à la main`,
+      !/calculerRemiseBon\(/.test(src))
+    // ⚠️ ET LE SOLDE DU BON VIENT DE LA BASE, jamais de l'écran : « l'écran
+    // calcule, le serveur décide ».
+    verifie(`tunnel ${nom} : le solde vient du bon rechargé`,
+      /soldeBon: bonCadeau \? Number\(bonCadeau\.solde\) : 0/.test(src))
     verifie(`tunnel ${nom} : transmet le bon au webhook`,
       /bon_cadeau_id: String\(bonCadeau\.id\)/.test(src))
   }

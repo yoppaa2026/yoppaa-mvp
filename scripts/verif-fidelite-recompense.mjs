@@ -363,8 +363,16 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
 {
   const acompte = lireCode('app/api/stripe/checkout/create-rdv-acompte/route.js')
   verifie('le RDV exige une identité PROUVÉE', /identiteProuvee\(request\)/.test(acompte))
-  verifie('🔴 l\'acompte se calcule sur le prix NET',
-    /const acompteMontant = Math\.round\(prixNet \* acomptePct\) \/ 100/.test(acompte))
+  // ⚠️ CETTE GARDE RECOPIAIT LA FORMULE, ET LA FORMULE A DÉMÉNAGÉ (29/08).
+  // Elle vit maintenant dans `lib/tunnel-rdv-montants.js`, seul endroit du
+  // projet où l'acompte se calcule, et `verif:tunnel-rdv` l'EXÉCUTE sur le cas
+  // F22 (30 € à 25 % avec 5 € de récompense font 6,25 €). Ici on ne garde que
+  // ce qui reste vrai à cet endroit : la route DÉLÈGUE, et ne refait pas le
+  // calcul dans son coin sur le prix plein.
+  verifie('🔴 l\'acompte vient du module unique, pas d\'une recopie',
+    /ventilerTunnelRdv\(/.test(acompte))
+  verifie('🔴 et il n\'est jamais calculé sur le prix plein',
+    !/Math\.round\(prixBase \* acomptePct\)/.test(acompte))
   verifie('le tarif de la prestation reste le BRUT dans les métadonnées',
     /prix_estime: String\(prixBase\)/.test(acompte))
   verifie('la remise et la récompense voyagent dans les métadonnées',
@@ -1097,8 +1105,12 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
     /identiteProuvee\(request\)/.test(tunnel))
   // ⚠️ L'ACOMPTE SE CALCULE SUR LE NET, sinon le Yopper avance un acompte assis
   // sur un prix qu'il ne paie pas. C'est la règle F22.
-  verifie('🔴 l\'acompte se calcule sur le prix NET',
-    /Math\.round\(prixNet \* acomptePct\)/.test(tunnel) && !/Math\.round\(prixBase \* acomptePct\)/.test(tunnel))
+  // ⚠️ MÊME REMARQUE QUE POUR SON FRÈRE : la formule vit désormais dans
+  // `lib/tunnel-rdv-montants.js`, et elle y est EXÉCUTÉE par `verif:tunnel-rdv`
+  // sur le cas F22. Recopier la formule ici la ferait rougir à chaque
+  // déménagement sans jamais rien prouver de plus.
+  verifie('🔴 l\'acompte vient du module unique, pas d\'une recopie',
+    /ventilerTunnelRdv\(/.test(tunnel) && !/Math\.round\(prixBase \* acomptePct\)/.test(tunnel))
   // ⚠️ SANS LES MÉTADONNÉES, LE WEBHOOK NE SAIT RIEN : il écrit
   // `fidelite_remise: 0` et ne consomme jamais la récompense.
   verifie('🔴 la remise voyage jusqu\'au webhook',

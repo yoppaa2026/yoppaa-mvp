@@ -45,11 +45,17 @@ export async function GET(request) {
   const email = identite.email
 
   const supabase = getSupabaseAdmin()
+  // ⚠️ `fidelite_remise` ET `bon_cadeau_montant` SONT OBLIGATOIRES ICI, et
+  // leur absence ne lève RIEN : `Number(undefined)` n'est pas fini, donc
+  // `montantNetRdv` se rabattrait sur le tarif plein en silence. C'est le
+  // défaut le plus fréquent de ce projet, et il a valu à Alex de lire « 35€ »
+  // sur une coupe entièrement payée par un bon cadeau.
   const { data, error } = await supabase
     .from('rdv_reservations')
     .select(`
       id, statut, date_rdv, heure_debut, heure_fin, prix_estime, numero_rdv,
       commercant_id, prestation_id, praticien_id,
+      fidelite_remise, bon_cadeau_montant,
       acompte_paye_en_ligne, acompte_montant, acompte_paye_date,
       annulation_token, client_email,
       abonnement_id,

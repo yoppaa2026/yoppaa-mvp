@@ -42,7 +42,9 @@ import { identiteProuvee } from '@/lib/yopper-auth'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
 import { chargerRecompensePourYopper } from '@/lib/fidelite-recompense-server'
 import { chargerBonValide } from '@/lib/bons-cadeaux-server'
-import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
+import { normaliserCodeBon } from '@/lib/bons-cadeaux'
+import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
+import { euros } from '@/lib/montants'
 
 export async function POST(request) {
   try {
@@ -165,14 +167,12 @@ export async function POST(request) {
     // d'acompte seul ; l'oublier ici recréerait la même promesse sans
     // débiteur, dès qu'un produit accompagne le rendez-vous.
     //
-    // Le bon s'applique sur la part PRESTATION uniquement : les produits sont
-    // payés en entier, comme partout dans ce tunnel.
+    // ⚠️ LE BON PAIE MAINTENANT LES PRODUITS AUSSI (décision d'Alex, 29/08).
+    // Il ne mordait que sur la prestation : le client voyait son bon fondre de
+    // 35 € sans que le montant à payer bouge d'un centime. C'est de l'argent
+    // déjà versé chez ce commerçant, il paie ce qu'il y a dans le panier.
     let bonCadeau = null
-    let remiseBonEUR = 0
-    const baseApresRecompense = prixBase != null
-      ? Math.round((prixBase - remiseRecompenseEUR) * 100) / 100
-      : null
-    if (bon_cadeau_code && baseApresRecompense != null) {
+    if (bon_cadeau_code) {
       const codeBon = normaliserCodeBon(bon_cadeau_code)
       if (!codeBon) {
         return NextResponse.json({ ok: false, error: 'Code de bon cadeau invalide.' }, { status: 400 })
@@ -182,23 +182,7 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: resBon.error, bon_refuse: true }, { status: 400 })
       }
       bonCadeau = resBon.bon
-      remiseBonEUR = calculerRemiseBon(bonCadeau.solde, baseApresRecompense)
     }
-
-    const prixNet = baseApresRecompense != null
-      ? Math.round((baseApresRecompense - remiseBonEUR) * 100) / 100
-      : null
-
-    const acompteMontant = (commercant.rdv_acompte_en_ligne_actif && prixNet && acomptePct > 0)
-      ? Math.round(prixNet * acomptePct) / 100
-      : 0
-    const acompteCents = Math.round(acompteMontant * 100)
-
-    // ⚠️ ICI, PAS DE REFUS SI L'ACOMPTE TOMBE SOUS LE MINIMUM STRIPE, contrairement
-    // au tunnel d'acompte seul : le panier porte AUSSI des produits, donc le
-    // paiement total dépasse largement les 0,50 €. Un acompte réduit à zéro par
-    // la récompense laisse simplement les produits à encaisser, et le
-    // rendez-vous reste confirmé (règle déjà en place au-dessus).
 
     // ─── Produits : prix, remises et TVA calculés SERVEUR ──────────────────
     const articleIds = [...new Set(articles.map(a => a.id).filter(Boolean))]
@@ -249,7 +233,46 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'Total des produits invalide.' }, { status: 400 })
     }
 
-    const totalCents = acompteCents + produitsCents
+    // ─── LA VENTILATION, ET ELLE VIT DANS UN SEUL MODULE ───────────────────
+    //
+    // ⚠️ ELLE ARRIVE APRÈS LES PRODUITS, ET C'EST OBLIGATOIRE : le bon cadeau
+    // paie désormais le panier entier, donc il faut connaître le total des
+    // produits pour savoir ce qu'il reste du bon après la prestation.
+    //
+    // ⚠️ MÊME FONCTION QUE L'ÉCRAN. C'est tout l'objet du module : les deux
+    // calculs séparés avaient divergé, et l'écran de confirmation annonçait un
+    // acompte de 8,75 € sur un rendez-vous où le serveur en encaissait zéro.
+    const vent = ventilerTunnelRdv({
+      prixPrestation: prixBase,
+      acomptePourcent: acomptePct,
+      acompteEnLigne: !!commercant.rdv_acompte_en_ligne_actif,
+      totalProduits: produitsCents / 100,
+      remiseRecompense: remiseRecompenseEUR,
+      soldeBon: bonCadeau ? Number(bonCadeau.solde) : 0,
+    })
+    const acompteMontant = vent.acompte
+    const acompteCents = Math.round(acompteMontant * 100)
+    const produitsAPayerCents = Math.round(vent.produitsAPayer * 100)
+    const bonSurProduitsCents = Math.round(vent.bonSurProduits * 100)
+
+    // ⚠️ ICI, PAS DE REFUS SI L'ACOMPTE TOMBE SOUS LE MINIMUM STRIPE, contrairement
+    // au tunnel d'acompte seul : le panier porte AUSSI des produits, donc le
+    // paiement total dépasse largement les 0,50 €. Un acompte réduit à zéro par
+    // la récompense laisse simplement les produits à encaisser, et le
+    // rendez-vous reste confirmé (règle déjà en place plus haut).
+    //
+    // ⚠️ EN REVANCHE, UN BON QUI COUVRE TOUT NE LAISSE RIEN À ENCAISSER, et ce
+    // cas n'existait pas avant que le bon paie les produits. Stripe refuse un
+    // paiement sous 0,50 € : on le dit AVANT le tunnel, au lieu de laisser une
+    // erreur technique tomber sur le client à l'écran de paiement.
+    const totalCents = acompteCents + produitsAPayerCents
+    if (totalCents === 0) {
+      return NextResponse.json({
+        ok: false,
+        error: 'Ton bon cadeau couvre la totalité : il n\'y a rien à payer en ligne. Réserve sans produits, ou présente ton bon au comptoir.',
+        rien_a_payer: true,
+      }, { status: 400 })
+    }
     if (totalCents < 50) {
       return NextResponse.json({ ok: false, error: 'Total trop faible (minimum 0,50 € Stripe).' }, { status: 400 })
     }
@@ -294,6 +317,16 @@ export async function POST(request) {
         statut: 'paiement_en_attente',
         date_commande: date_rdv,
         paye_en_ligne: false,
+        // ⚠️ LA PART DU BON QUI PAIE LES PRODUITS VIT SUR LA COMMANDE, pas sur
+        // le rendez-vous, et ce n'est pas un détail de rangement : à
+        // l'annulation, le client peut GARDER ses produits. Cette part-là ne
+        // lui revient alors pas, alors que la part prestation revient toujours.
+        // Le webhook la débite tout seul depuis ces deux colonnes, avec
+        // `source:'commande'`, comme pour n'importe quelle commande.
+        ...(bonCadeau && vent.bonSurProduits > 0 ? {
+          bon_cadeau_id: bonCadeau.id,
+          bon_cadeau_montant: vent.bonSurProduits,
+        } : {}),
       })
       .select()
       .single()
@@ -365,7 +398,27 @@ export async function POST(request) {
         },
       })
     }
-    for (const l of lignes) {
+    // ⚠️ QUAND LE BON MORD SUR LES PRODUITS, LE DÉTAIL LAISSE LA PLACE À UNE
+    // LIGNE UNIQUE, et c'est une contrainte de Stripe, pas un choix de confort :
+    // une session Checkout n'accepte AUCUN montant négatif, donc il n'existe
+    // pas de « ligne de déduction ». Garder le détail au prix plein ferait
+    // encaisser au client l'argent que son bon vient de payer.
+    // Le détail ligne à ligne, lui, reste sous ses yeux à l'écran précédent et
+    // dans l'email de confirmation.
+    if (bonSurProduitsCents > 0) {
+      const nbArticles = lignes.reduce((s, l) => s + l.quantite, 0)
+      lineItems.push({
+        quantity: 1,
+        price_data: {
+          currency: 'eur',
+          unit_amount: produitsAPayerCents,
+          product_data: {
+            name: `Tes produits (${nbArticles}) — bon cadeau déduit`,
+            description: `${euros(bonSurProduitsCents / 100)} payés par ton bon cadeau · à retirer le jour de ton rendez-vous`,
+          },
+        },
+      })
+    } else for (const l of lignes) {
       lineItems.push({
         quantity: l.quantite,
         price_data: {
@@ -417,9 +470,13 @@ export async function POST(request) {
             // rendez-vous et débite le bon depuis ces deux clés. Absentes, il
             // créerait le rendez-vous au tarif plein et laisserait le bon
             // crédité, alors que le client a payé un acompte réduit.
-            ...(bonCadeau ? {
+            // ⚠️ SEULE LA PART PRESTATION PART DANS LES MÉTADONNÉES DU
+            // RENDEZ-VOUS. La part produits vit sur la commande, qui a ses
+            // propres colonnes et son propre débit : deux mouvements, deux
+            // cibles, comme l'impose `bons_cadeaux_mouvements_une_cible`.
+            ...(bonCadeau && vent.bonSurPresta > 0 ? {
               bon_cadeau_id: String(bonCadeau.id),
-              bon_cadeau_montant: String(remiseBonEUR),
+              bon_cadeau_montant: String(vent.bonSurPresta),
             } : {}),
             produits_montant: String(produitsCents / 100),
             // Le rendez-vous naît de ces métadonnées au webhook : sans

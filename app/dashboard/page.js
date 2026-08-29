@@ -1755,6 +1755,36 @@ export default function Dashboard() {
   // est honoré sans son encaissement, et c'est exactement l'état qu'on cherche
   // à faire disparaître.
   async function changerStatutRdv(rdvId, statut, raison = 'commercant', { silencieux = false, champs = null } = {}) {
+    // 🔴 L'ANNULATION PAR LE COMMERÇANT PASSE PAR LE SERVEUR, ET C'EST NEUF.
+    //
+    // Elle se contentait d'écrire le statut depuis ce navigateur, et le
+    // commentaire d'à côté l'avouait : « le commerçant refund manuellement via
+    // Stripe Dashboard ». Sur un rendez-vous payé, le Yopper perdait donc son
+    // acompte, son bon cadeau ET sa récompense, sur une annulation dont il
+    // n'était même pas responsable. La route rembourse, recrédite et rend, puis
+    // l'email dit ce qui revient.
+    if (statut === 'annule_commercant') {
+      const res = await postPro('/api/rdv/annuler-commercant', { rdv_id: rdvId, raison })
+      const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+      if (!j?.ok) {
+        console.error('[dashboard] annulation RDV KO', j?.error || res?.status)
+        if (!silencieux) alert(`Le rendez-vous n'a pas pu être annulé : ${j?.error || 'réessaie dans un instant'}.`)
+        return false
+      }
+      setRdvs(prev => prev.map(r => r.id === rdvId ? { ...r, statut, motif_annulation: raison } : r))
+      // ⚠️ L'EMAIL PORTE LES MONTANTS RENDUS PAR LA ROUTE. Sans eux le gabarit
+      // se rabat sur le seul acompte, et se tait dès qu'il vaut zéro.
+      signalerEnvoi('/api/emails/rdv-annule', {
+        rdv_id: rdvId,
+        raison_annulation: raison,
+        refund_montant: j.refund_montant,
+        refund_en_cours: !!j.refund_id && !j.refund_error,
+        bon_rendu: j.bon_rendu,
+        produits_montant: j.produits_montant,
+      }, 'l’email d’annulation du rendez-vous')
+      return true
+    }
+
     const payload = { statut, ...(champs || {}) }
     const { error } = await supabase.from('rdv_reservations').update(payload).eq('id', rdvId)
     if (error) {
@@ -1765,11 +1795,7 @@ export default function Dashboard() {
     setRdvs(prev => prev.map(r => r.id === rdvId ? { ...r, ...payload } : r))
 
     // Si statut change → emails contextuels (non-bloquant, fire-and-forget)
-    if (statut === 'annule_commercant') {
-      // TODO Sess 4/8 suite : refund Stripe acompte côté commerçant.
-      // Pour l'instant on notifie juste le Yopper, le commerçant refund manuellement via Stripe Dashboard.
-      signalerEnvoi('/api/emails/rdv-annule', { rdv_id: rdvId, raison_annulation: raison }, 'l’email d’annulation du rendez-vous')
-    } else if (statut === 'honore') {
+    if (statut === 'honore') {
       // ⚠️ PLUS D'EMAIL ICI, ET C'EST UN RETRAIT VOLONTAIRE (27/08).
       // `/api/emails/rdv-honore` servait l'ANCIENNE fidélité des rendez-vous,
       // celle de `rdv_fidelite_progression`, supprimée le même jour. Elle

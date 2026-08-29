@@ -59,10 +59,16 @@ const MUTATIONS = [
     de: '  const total = nombre(commande?.total)\n  if (total === null) return null',
     vers: '  const total = Number(commande?.total)\n  if (!Number.isFinite(total)) return null' },
 
-  { nom: '🔴 tunnel ACOMPTE : le bon passe AVANT la récompense',
+  // ⚠️ RÉ-ANCRÉE LE 29/08. Elle visait l'appel littéral
+  // `calculerRemiseBon(bonCadeau.solde, baseApresRecompense)`, qui a déménagé
+  // dans `lib/tunnel-rdv-montants.js` : elle rendait TEXTE INTROUVABLE, ce qui
+  // est une non-mesure. L'ordre récompense-puis-bon est désormais EXÉCUTÉ par
+  // `verif:tunnel-rdv` ; ce qui reste à garder ici, c'est que la route délègue
+  // au module au lieu de refaire le calcul dans son coin.
+  { nom: '🔴 tunnel ACOMPTE : la route recalcule le bon dans son coin',
     banc: 'verif:bons', fichier: 'app/api/stripe/checkout/create-rdv-acompte/route.js',
-    de: '      remiseBonEUR = calculerRemiseBon(bonCadeau.solde, baseApresRecompense)',
-    vers: '      remiseBonEUR = calculerRemiseBon(bonCadeau.solde, prixBase)' },
+    de: '    const vent = ventilerTunnelRdv({',
+    vers: '    const vent = calculMaison({' },
 
   { nom: '🔴 tunnel PRODUITS : le bon n’est plus revalidé',
     banc: 'verif:bons', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',

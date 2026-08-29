@@ -961,19 +961,46 @@ async function handleChargeRefunded(charge, supabase) {
     stripe_refund_date: new Date().toISOString(),
   }
 
-  // Update RDV si trouvé
+  // ─── Le rendez-vous ────────────────────────────────────────────────────
+  //
+  // 🔴 CE BLOC S'ARRÊTAIT ICI SUR UN `return`, ET IL COÛTAIT DEUX CHOSES.
+  //
+  // 1) Il ne rendait NI le bon cadeau NI la récompense du rendez-vous, alors
+  //    que la branche « commande » juste en dessous le fait depuis le 28/08.
+  //    Stripe ne rembourse que la part carte : le reste n'existe pas pour lui.
+  // 2) Surtout, dans le tunnel RDV + produits, LE RENDEZ-VOUS ET LA COMMANDE
+  //    PARTAGENT LE MÊME `payment_intent`. Trouver le rendez-vous et sortir
+  //    empêchait donc la commande liée de recevoir son identifiant de
+  //    remboursement, son passage en « annulée », son propre re-crédit et sa
+  //    propre récompense. Un remboursement lancé depuis le tableau de bord
+  //    Stripe ne faisait rien du tout.
+  //
+  // On traite maintenant les deux, dans l'ordre, et on ne sort plus.
   const { data: rdv } = await supabase
     .from('rdv_reservations')
-    .select('id')
+    .select('id, bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id')
     .eq('stripe_payment_intent_id', paymentIntentId)
     .maybeSingle()
   if (rdv) {
     await supabase.from('rdv_reservations').update(updateData).eq('id', rdv.id)
+    if (rdv.bon_cadeau_id && Number(rdv.bon_cadeau_montant) > 0) {
+      // Idempotent via l'index unique (bon_id, rdv_id) sur source='annulation' :
+      // déjà fait si /api/rdv/cancel est passée avant ce webhook.
+      const rec = await recrediterBon(supabase, rdv.bon_cadeau_id, rdv.bon_cadeau_montant, { rdv_id: rdv.id })
+      if (!rec.ok) console.error('[webhook/refund] re-crédit bon cadeau RDV KO', rec.error, { rdvId: rdv.id })
+    }
+    if (rdv.fidelite_recompense_id) {
+      const { data: recFid } = await supabase
+        .from('fidelite_recompenses')
+        .select('id, carte_id, utilisee_at')
+        .eq('id', rdv.fidelite_recompense_id)
+        .maybeSingle()
+      if (recFid?.utilisee_at) await rendreRecompense(supabase, recFid)
+    }
     console.info('[stripe/webhook] refund enregistré sur RDV', { rdvId: rdv.id, refund: refund.id })
-    return
   }
 
-  // Sinon update commande si trouvée + transition statut → 'annulee_client_refund'
+  // ─── Et la commande, qui peut porter le MÊME paiement ──────────────────
   const { data: cmd } = await supabase
     .from('commandes')
     .select('id, statut, bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id')

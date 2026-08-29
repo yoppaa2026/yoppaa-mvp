@@ -9,7 +9,7 @@ import { libelleRetrait } from '@/lib/libelle-retrait'
 // pure et testée : un voile éteint au mauvais moment cache du contenu.
 import { bordsDefilement } from '@/lib/responsive'
 import { referenceCommande } from '@/lib/numero-commande'
-import { resteAEncaisserCommande, etatPaiementClient, couleurPaiement, montantNetCommande, phraseAvantages } from '@/lib/rdv-paiement'
+import { resteAEncaisserCommande, etatPaiementClient, couleurPaiement, montantNetCommande, montantNetRdv, phraseAvantages } from '@/lib/rdv-paiement'
 import { euros } from '@/lib/montants'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
 import { libelleOptions } from '@/lib/options-ligne'
@@ -3612,8 +3612,15 @@ export default function Commander() {
                                   année voyait trente-six lignes à « 0 € ». */}
                               {libellePrixSeance(r) ? (
                                 <p style={{ fontWeight: 800, color: '#10B981', fontSize: '0.7rem', flexShrink: 0, textAlign: 'right', maxWidth: 92, lineHeight: 1.3 }}>{libellePrixSeance(r)}</p>
-                              ) : r.prix_estime != null && (
-                                <p style={{ fontWeight: 900, color: T.main, fontSize: '0.95rem', letterSpacing: '-0.3px', flexShrink: 0 }}>{Number(r.prix_estime).toFixed(0)}€</p>
+                              ) : montantNetRdv(r) != null && (
+                                /* 🔴 LE TARIF PLEIN S'AFFICHAIT SUR UN RENDEZ-VOUS
+                                   DÉJÀ PAYÉ (Alex, 29/08) : sa coupe réglée par
+                                   un bon cadeau annonçait « 35€ » dans son
+                                   suivi. Même défaut que celui corrigé pour les
+                                   commandes le 28/08, jamais porté au
+                                   rendez-vous. Le module retranche la
+                                   récompense ET le bon, côté client. */
+                                <p style={{ fontWeight: 900, color: T.main, fontSize: '0.95rem', letterSpacing: '-0.3px', flexShrink: 0 }}>{euros(montantNetRdv(r))}</p>
                               )}
                             </div>
                             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -3655,14 +3662,25 @@ export default function Commander() {
                     {rdvsPasses.slice(0, 5).map(r => {
                       const dateObj = r.date_rdv ? new Date(r.date_rdv + 'T12:00:00') : null
                       // Mapping statuts vers libellés FR + couleur (badge)
+                      // 🔴 IL MANQUAIT `confirme`, ET C'EST LE CAS LE PLUS
+                      // FRÉQUENT. Un rendez-vous passé que le commerçant n'a
+                      // jamais clôturé reste à « confirme » : le repli
+                      // affichait alors la valeur BRUTE de la base, et Alex a
+                      // lu « confirme » trois fois dans son historique, sans
+                      // accent et sans majuscule. Un mot technique dans une
+                      // interface client est toujours un défaut.
                       const statutMap = {
+                        confirme:           { label: 'Rendez-vous passé',          bg: '#F5F3FF', color: '#6B35C4' },
+                        en_attente:         { label: 'En attente',                 bg: '#FFF7ED', color: '#EA580C' },
                         honore:             { label: '✓ Effectué',                 bg: '#F0FDF4', color: '#10B981' },
                         annule_client:      { label: 'Annulé par toi',             bg: '#FEF2F2', color: '#DC2626' },
                         annule_commercant:  { label: 'Annulé par le commerçant',   bg: '#FEF2F2', color: '#DC2626' },
                         no_show:            { label: 'Non honoré',                 bg: '#F9FAFB', color: '#6B7280' },
                         reporte:            { label: 'Reporté',                    bg: '#FFF7ED', color: '#EA580C' },
                       }
-                      const st = statutMap[r.statut] || { label: r.statut, bg: T.pale, color: T.muted }
+                      // ⚠️ ET LE REPLI NE MONTRE PLUS RIEN DE TECHNIQUE : un
+                      // statut inconnu vaut mieux muet que trahi.
+                      const st = statutMap[r.statut] || { label: 'Terminé', bg: T.pale, color: T.muted }
                       const statutLabel = st.label
                       const statutBg = st.bg
                       const statutColor = st.color
@@ -3682,7 +3700,7 @@ export default function Commander() {
                                 gratuite, pas comme une séance déjà réglée. */}
                             {libellePrixSeance(r)
                               ? <p style={{ fontWeight: 800, color: '#10B981', marginBottom: 3, fontSize: '0.66rem', lineHeight: 1.3 }}>Compris dans<br/>ton abonnement</p>
-                              : r.prix_estime != null && <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{Number(r.prix_estime).toFixed(0)}€</p>}
+                              : montantNetRdv(r) != null && <p style={{ fontWeight: 700, color: T.main, marginBottom: 3, fontSize: '0.875rem' }}>{euros(montantNetRdv(r))}</p>}
                             <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: 100, background: statutBg, color: statutColor }}>{statutLabel}</span>
                           </div>
                         </div>

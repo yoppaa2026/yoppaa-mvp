@@ -366,14 +366,18 @@ export default function KitCommercant() {
                     fatalité, donc la suite du papier a quelque chose à proposer. */}
                 <h1 style={S.h1}>Ils passent devant chez toi.<br/><span style={{ color: T.main }}>Ils décident sur leur téléphone.</span></h1>
 
-                {/* ⚠️ UN EXEMPLE PAR SEGMENT, ET C'EST DÉLIBÉRÉ. Le chapo disait
+                {/* ⚠️ « EN RAYON » EST PARTI (Alex, 29/08) : ça sonnait supermarché,
+                    alors que le mot devait justement ÉLARGIR. Les trois segments sont
+                    déjà portés par les pastilles juste en dessous ; le chapo n'a pas
+                    besoin de les répéter, il a besoin de ne fermer aucune porte.
+                    ⚠️ UN EXEMPLE PAR SEGMENT, ET C'EST DÉLIBÉRÉ. Le chapo disait
                     « ni que tu fais des sandwichs le samedi » : le même défaut que le
                     titre, un seul métier nommé sur une page qui promet les trois. On
                     MONTRE l'horizontalité au lieu de la déclarer, trois lignes avant
                     les pastilles qui l'annoncent. */}
                 <p style={S.chapo}>
                   Tes clients habitent à trois rues. Ils ne savent pas que tu es ouvert ce midi,
-                  que tu prends les rendez-vous en ligne, ni que tu as en rayon ce qu&rsquo;ils cherchent.
+                  que tu prends les rendez-vous en ligne, ni que tu as ce qu&rsquo;ils cherchent.
                 </p>
 
                 {/* L'horizontalité : les catégories réelles de lib/plans.js. */}
@@ -416,7 +420,7 @@ export default function KitCommercant() {
                     commune », 05:30 UTC soit 07:30 à Bruxelles. */}
                 <div style={{ margin: '4.5mm 0 0', background: T.panel, color: '#fff', borderRadius: '4mm', padding: '5mm 6.5mm' }}>
                   <p style={{ margin: 0, fontSize: '14pt', fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1.15 }}>
-                    Good Morning Yoppers,<br/>la gazette du quartier <span style={{ color: T.light }}>à 7 h 30.</span>
+                    Good Morning Yoppers,<br/>la gazette du quartier <span style={{ color: T.light }}>version 2026, à 7 h 30.</span>
                   </p>
                   <p style={{ margin: '2.6mm 0 0', fontSize: '10.2pt', lineHeight: 1.36, fontWeight: 600, color: T.light }}>
                     Elle part chaque matin chez <strong style={{ color: '#fff' }}>tous les habitants qui ont choisi

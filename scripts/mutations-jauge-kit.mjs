@@ -139,10 +139,44 @@ const MUTATIONS = [
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
     de: '<Telechargements cible={carteQr}', vers: '<Rien cible={carteQr}' },
 
+  // ══ LE PDF RECTO/VERSO ══
+  // ⚠️ Ses deux défauts ne se voient qu'une fois la pile imprimée.
+  { nom: '🔴 LE PDF SORT AVEC UNE PREMIÈRE PAGE BLANCHE et le recto en page 2',
+    banc: 'verif:kit', fichier: 'lib/export-feuille.js',
+    de: '    if (i > 0) doc.addPage([largeurMm, hauteurMm], \'portrait\')',
+    vers: '    doc.addPage([largeurMm, hauteurMm], \'portrait\')' },
+
+  { nom: '🔴 les deux faces partent dans le mauvais ordre',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: '<TelechargementCombine pages={[recto, verso]}/>',
+    vers: '<TelechargementCombine pages={[verso, recto]}/>' },
+
+  { nom: '🔴 jspdf repart dans le bundle de tout le monde',
+    banc: 'verif:kit', fichier: 'lib/export-feuille.js',
+    de: "  const { jsPDF } = await import('jspdf')", vers: '  const jsPDF = globalThis.jsPDF' },
+
+  { nom: '🔴 le PDF se remet à rastériser de son côté, et divergera du PNG',
+    banc: 'verif:kit', fichier: 'lib/export-feuille.js',
+    de: '    const toile = await svgEnToile(svg, largeurMm, hauteurMm, dpi)\n    // ⚠️ LA PAGE',
+    vers: '    const toile = document.createElement(\'canvas\')\n    // ⚠️ LA PAGE' },
+
   { nom: '🔴 les boutons réapparaîtraient sur le papier imprimé',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
     de: '.atelier, .jauge, .notice, .outils { display:none !important }',
     vers: '.atelier, .jauge, .notice { display:none !important }' },
+
+  // ══ LES TARIFS SUR LE PAPIER ══
+  //
+  // 🔴 UN PRIX RECOPIÉ SUR UN PAPIER PLASTIFIÉ NE SE CORRIGE PLUS, et les
+  // tarifs sont paramétrables par variable d'environnement dans `lib/plans.js`.
+  { nom: '🔴 un tarif est écrit en dur sur le papier au lieu d’être lu dans lib/plans.js',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: "{euros(getPrixPlan('communiquer').mensuel)}", vers: '19,90 €' },
+
+  { nom: '🔴 le HTVA disparaît : un prix TTC sous-entendu chez un professionnel',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: '{euros(getPrixPlan(\'vendre\').mensuel)}, HTVA par mois.',
+    vers: '{euros(getPrixPlan(\'vendre\').mensuel)} par mois.' },
 
   // ══ LE DÉPOUILLEUR PARTAGÉ ══
   //

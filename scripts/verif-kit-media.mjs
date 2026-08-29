@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs'
 import { LOGO, proportionsLogo, pointsLogo, largeurPoints } from '../lib/logo.js'
 import { verdictJauge } from '../lib/jauge-page.js'
 import { policesEmbarquees, feuilleEnSvg, _oublierPolices } from '../lib/export-feuille.js'
+import { getPrixPlan } from '../lib/plans.js'
 import { sansProse } from './lire-code.mjs'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
@@ -765,7 +766,68 @@ const egal = (nom, obtenu, attendu) =>
     /r\.parentStyleSheet\?\.href \|\| location\.href/.test(ex))
   verifie('300 dpi, la résolution d\'un imprimeur', /DPI_IMPRESSION = 300/.test(ex))
 
+  // ══ LE PDF RECTO/VERSO ══
+  //
+  // ⚠️ SES DEUX DÉFAUTS POSSIBLES NE SE VOIENT QU'UNE FOIS LA PILE IMPRIMÉE :
+  // une première page blanche, et des faces inversées. Aucun des deux ne
+  // rougirait à l'écran.
+  //
+  // 🔴 `jsPDF` CRÉE DÉJÀ UNE PAGE À LA CONSTRUCTION. Un `addPage()` avant la
+  // première image donne un PDF dont la page 1 est vide et le recto en page 2.
+  verifie('🔴 la page n’est ajoutée qu’À PARTIR DE LA DEUXIÈME',
+    /if \(i > 0\) doc\.addPage\(/.test(ex))
+  verifie('le PDF est en millimètres, au format de la feuille',
+    /new jsPDF\(\{ unit: 'mm', format: \[largeurMm, hauteurMm\], orientation: 'portrait' \}\)/.test(ex))
+  // ⚠️ `jspdf` pèse plusieurs centaines de kilo-octets : importé au sommet, il
+  // partirait dans le bundle de tous ceux qui ne cliqueront jamais.
+  verifie('jspdf est chargé à la demande, pas au sommet du fichier',
+    /await import\('jspdf'\)/.test(ex) && !/^import .*jspdf/m.test(ex))
+  // ⚠️ UNE SEULE RASTÉRISATION SERT LE PNG ET LE PDF : deux chemins de dessin
+  // finiraient par diverger, et le PDF ne ressemblerait plus au PNG.
+  verifie('🔴 le PNG et le PDF passent par la MÊME toile',
+    /function svgEnToile/.test(ex)
+    && /svgEnPng[\s\S]{0,200}await svgEnToile/.test(ex)
+    && /feuillesEnPdf[\s\S]{0,900}await svgEnToile/.test(ex))
+
+  // ══ LES TROIS FORMULES SUR LE PAPIER ══
+  //
+  // 🔴 UN TARIF RECOPIÉ SUR UN PAPIER PLASTIFIÉ NE SE CORRIGE PLUS. Les prix
+  // sont paramétrables par variable d'environnement dans `lib/plans.js` : les
+  // écrire en dur ici donnerait deux sources de vérité, et c'est celle qu'on ne
+  // peut pas mettre à jour qui se retrouverait chez le commerçant.
+  {
+    const kit = lireCode('app/brand-kit/commercant/page.js')
+    verifie('🔴 les tarifs viennent de lib/plans.js, ils ne sont pas recopiés',
+      /getPrixPlan\('communiquer'\)\.mensuel/.test(kit) && /getPrixPlan\('vendre'\)\.mensuel/.test(kit))
+    verifie('🔴 et aucun montant d’abonnement n’est écrit en dur',
+      !/19[.,]90|49[.,]90/.test(kit), (kit.match(/19[.,]90|49[.,]90/g) || []).join(' '))
+    // ⚠️ ANCRÉES SUR LE BLOC, PAS SUR LA MISE EN FORME. Écrites pour la version
+    // où les trois formules étaient empilées, elles ont rougi dès qu'on les a
+    // mises en un seul paragraphe. Une garde qui recopie un format rougit sur
+    // une amélioration légitime, et on finit par la desserrer au lieu de
+    // l'écouter. On mesure : les deux prix et le HTVA voyagent ENSEMBLE.
+    const i = kit.indexOf('Ensuite, tu choisis')
+    const socle = i === -1 ? '' : kit.slice(i, i + 900)
+    verifie('le bloc des formules existe', socle.length > 200, String(socle.length))
+    // ⚠️ HTVA DANS LE MÊME BLOC QUE LES PRIX. On s'adresse à des professionnels :
+    // un prix TTC sous-entendu serait un piège, et le papier engage.
+    verifie('🔴 les deux tarifs et le HTVA sont dans le même bloc',
+      /getPrixPlan\('communiquer'\)[\s\S]*getPrixPlan\('vendre'\)[\s\S]*HTVA/.test(socle))
+    // Les trois formules portent leurs vrais noms, ceux de lib/plans.js.
+    for (const nom of ['Exister', 'Communiquer', 'Vendre']) {
+      verifie(`la formule ${nom} est nommée`, socle.includes(nom))
+    }
+    // ⚠️ « GRATUIT À VIE » EST UN ENGAGEMENT : il doit rester vrai dans le code.
+    verifie('🔴 « gratuit à vie » correspond bien au plan Exister de lib/plans.js',
+      getPrixPlan('exister').mensuel === 0, String(getPrixPlan('exister').mensuel))
+  }
+
   const page = lire('app/brand-kit/commercant/page.js')
+  // 🔴 L'ORDRE DES FACES. Inversé, il ne se voit qu'une fois la pile sortie.
+  verifie('🔴 le PDF assemble le recto PUIS le verso',
+    /<TelechargementCombine pages=\{\[recto, verso\]\}\/>/.test(page))
+  verifie('le bouton combiné existe et dit ce qu’il produit',
+    /PDF recto\/verso · les 2 pages A4/.test(page))
   verifie('🔴 les boutons sont masqués à l\'impression',
     /\.atelier, \.jauge, \.notice, \.outils \{ display:none !important \}/.test(page))
   // Les quatre supports ont leurs boutons : les deux A4 et les deux cartes.

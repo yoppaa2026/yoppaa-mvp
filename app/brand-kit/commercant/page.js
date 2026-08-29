@@ -420,7 +420,13 @@ export default function KitCommercant() {
                     commune », 05:30 UTC soit 07:30 à Bruxelles. */}
                 <div style={{ margin: '4.5mm 0 0', background: T.panel, color: '#fff', borderRadius: '4mm', padding: '5mm 6.5mm' }}>
                   <p style={{ margin: 0, fontSize: '14pt', fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1.15 }}>
-                    Good Morning Yoppers,<br/>la gazette du quartier <span style={{ color: T.light }}>version 2026, à 7 h 30.</span>
+                    {/* ⚠️ « NOUVELLE GÉNÉRATION » ET PAS « VERSION 2026 ». Ce papier est
+                        plastifié pour rester des mois sur un comptoir : une année écrite
+                        dessus le datera toute seule au premier janvier suivant, et c'est
+                        exactement le reproche qu'on faisait au suffixe « 2.0 ». Le mot
+                        gazette flatte la mémoire du commerçant, « nouvelle génération »
+                        dit que c'est la même chose en mieux, et ne vieillit pas. */}
+                    Good Morning Yoppers,<br/>la gazette du quartier <span style={{ color: T.light }}>nouvelle génération, à 7 h 30.</span>
                   </p>
                   <p style={{ margin: '2.6mm 0 0', fontSize: '10.2pt', lineHeight: 1.36, fontWeight: 600, color: T.light }}>
                     Elle part chaque matin chez <strong style={{ color: '#fff' }}>tous les habitants qui ont choisi

@@ -63,8 +63,8 @@ const MUTATIONS = [
 
   { nom: '🔴 un repère de mesure disparaît : la marge ne se calcule plus',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
-    de: '<div ref={versoPied} style={{ marginTop: \'auto\', background: T.pale,',
-    vers: '<div style={{ marginTop: \'auto\', background: T.pale,' },
+    de: '<div ref={versoPied} style={{ marginTop: \'auto\', background: T.panel,',
+    vers: '<div style={{ marginTop: \'auto\', background: T.panel,' },
 
   { nom: '🔴 l’écran cesse de lire le module et se remet à décider tout seul',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
@@ -177,6 +177,19 @@ const MUTATIONS = [
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
     de: '{euros(getPrixPlan(\'vendre\').mensuel)}, HTVA par mois.',
     vers: '{euros(getPrixPlan(\'vendre\').mensuel)} par mois.' },
+
+  // ══ LES APLATS PÂLES (29/08) ══
+  //
+  // 🔴 CE DÉFAUT NE SE VOIT NULLE PART À L'ÉCRAN. Le violet très clair ressort
+  // BLEU CIEL au tirage, et ça coûte une feuille pour l'apprendre.
+  { nom: '🔴 un aplat pâle revient sur le closer : il ressortira bleu à l’impression',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: "<div style={{ margin: '5mm 0 0', background: '#fff', border: `1.4pt solid ${T.main}`",
+    vers: "<div style={{ margin: '5mm 0 0', background: T.bg, border: `1.4pt solid ${T.main}`" },
+
+  { nom: '🔴 le logo du bandeau repasse en clair et disparaît sur le fond foncé',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: '<YoppaaLogo size={22} mode="dark"/>', vers: '<YoppaaLogo size={22} mode="light"/>' },
 
   // ══ LE DÉPOUILLEUR PARTAGÉ ══
   //

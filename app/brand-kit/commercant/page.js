@@ -137,7 +137,7 @@ function useQr(url) {
 }
 
 function Qr({ src, taille }) {
-  if (!src) return <div style={{ width: taille, height: taille, background: '#F3F0FA', borderRadius: '2mm' }}/>
+  if (!src) return <div style={{ width: taille, height: taille, background: '#F1F1F2', borderRadius: '2mm' }}/>
   // Une `<img>` nue et non `next/image` : la source est une donnée `data:`
   // produite dans le navigateur, il n'y a aucun fichier à optimiser.
   //
@@ -516,7 +516,7 @@ export default function KitCommercant() {
                 <div style={{ margin: '3mm 0 0', display: 'grid', gap: '2.2mm' }}>
                   {['3 habitants ont voulu commander chez toi',
                     '2 habitants aimeraient une carte de fidélité chez toi'].map(t => (
-                    <div key={t} style={{ background: T.bg, border: `1.2pt solid ${T.pale}`, borderRadius: '3mm', padding: '2.4mm 4.4mm', display: 'flex', gap: '3.4mm', alignItems: 'center' }}>
+                    <div key={t} style={{ background: '#fff', border: `1.2pt solid ${T.light}`, borderRadius: '3mm', padding: '2.4mm 4.4mm', display: 'flex', gap: '3.4mm', alignItems: 'center' }}>
                       <span style={{ flex: '0 0 auto', width: '3.6mm', height: '3.6mm', borderRadius: '50%', background: T.main }}/>
                       <p style={{ margin: 0, fontSize: '10.4pt', lineHeight: 1.3, fontWeight: 700, color: T.ink }}>{t}</p>
                     </div>
@@ -528,7 +528,7 @@ export default function KitCommercant() {
                     d'y aller maintenant » met en mouvement. ⚠️ L'urgence ne
                     dresse PAS le commerçant contre son voisin : chaque échoppe
                     de plus rend la place plus utile aux autres. */}
-                <div style={{ margin: '5mm 0 0', background: T.bg, border: `1.4pt solid ${T.main}`, borderRadius: '4mm', padding: '5mm 6mm' }}>
+                <div style={{ margin: '5mm 0 0', background: '#fff', border: `1.4pt solid ${T.main}`, borderRadius: '4mm', padding: '5mm 6mm' }}>
                   <p style={{ margin: 0, fontSize: '14.5pt', lineHeight: 1.16, fontWeight: 800, letterSpacing: '-.025em', color: T.ink }}>
                     Tu n&rsquo;as aucune raison<br/>de ne pas y être.
                   </p>
@@ -549,12 +549,12 @@ export default function KitCommercant() {
                 </div>
               </div>
 
-              <div ref={versoPied} style={{ marginTop: 'auto', background: T.pale, padding: '6mm 17mm', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '6mm' }}>
+              <div ref={versoPied} style={{ marginTop: 'auto', background: T.panel, color: '#fff', padding: '6mm 17mm', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '6mm' }}>
                 <div>
-                  <p style={{ margin: 0, fontSize: '11.5pt', fontWeight: 800, letterSpacing: '-.02em', color: T.ink, lineHeight: 1.2 }}>
-                    Tu commences ici.<br/><span style={{ color: T.main }}>Avec ceux d&rsquo;à côté.</span>
+                  <p style={{ margin: 0, fontSize: '11.5pt', fontWeight: 800, letterSpacing: '-.02em', color: '#fff', lineHeight: 1.2 }}>
+                    Tu commences ici.<br/><span style={{ color: T.light }}>Avec ceux d&rsquo;à côté.</span>
                   </p>
-                  <p style={{ margin: '3mm 0 0', fontSize: '9.4pt', lineHeight: 1.42, fontWeight: 600, color: T.grey }}>
+                  <p style={{ margin: '3mm 0 0', fontSize: '9.4pt', lineHeight: 1.42, fontWeight: 600, color: T.light }}>
                     {/* ⚠️ LE CONTACT TIENT SUR UNE SEULE LIGNE, ET C'EST CE QUI PAIE
                         LA MENTION LÉGALE. Le verso n'avait que 5,9 mm de marge :
                         ajouter une ligne sans en reprendre une l'aurait fait passer
@@ -576,7 +576,7 @@ export default function KitCommercant() {
                   <div style={{ background: '#fff', borderRadius: '2.4mm', padding: '2.2mm' }}>
                     <Qr src={qr} taille="21mm"/>
                   </div>
-                  <YoppaaLogo size={22} mode="light"/>
+                  <YoppaaLogo size={22} mode="dark"/>
                 </div>
               </div>
             </div>

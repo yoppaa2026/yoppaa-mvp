@@ -822,6 +822,35 @@ const egal = (nom, obtenu, attendu) =>
       getPrixPlan('exister').mensuel === 0, String(getPrixPlan('exister').mensuel))
   }
 
+  // ══ 🔴 AUCUN APLAT PÂLE SUR CE QUI S'IMPRIME (29/08, vu par Alex) ══
+  //
+  // Les fonds en violet très clair (`T.bg` #F8F6FF, `T.pale` #EDE0FF)
+  // RESSORTAIENT BLEU CIEL à l'impression. Une teinte quasi imperceptible ne se
+  // restitue pas : l'imprimante la rend avec des points cyan, et le pâle vire
+  // au bleu. Le défaut ne se voit NULLE PART à l'écran, et coûte une feuille.
+  //
+  // ✅ LA RÈGLE : sur une page destinée au papier, un fond est BLANC ou
+  // FRANCHEMENT FONCÉ. Jamais entre les deux. Les blocs clairs tiennent par
+  // leur bordure, et le bandeau du verso est passé au violet foncé, comme le
+  // socle du recto auquel il répond.
+  {
+    const kit = lireCode('app/brand-kit/commercant/page.js')
+    for (const teinte of ['T.bg', 'T.pale']) {
+      verifie(`🔴 aucun fond en ${teinte} : il ressortirait bleu à l’impression`,
+        !new RegExp(`background: ${teinte.replace('.', '\\.')}\\b`).test(kit))
+    }
+    // ⚠️ La bordure, elle, reste permise : un filet de 1,2pt ne montre pas de
+    // dominante. C'est l'APLAT qui trahit, pas le trait.
+    verifie('les blocs clairs tiennent par leur bordure',
+      /border: `1\.2pt solid \$\{T\.light\}`/.test(kit) && /border: `1\.4pt solid \$\{T\.main\}`/.test(kit))
+    // Le bandeau du verso est foncé, et son logo est passé en conséquence :
+    // un logo sombre sur fond sombre serait invisible, et ne se verrait qu'au
+    // tirage puisque le composant ne lève pas.
+    verifie('🔴 le bandeau du verso est foncé', /ref=\{versoPied\}[^\n]*background: T\.panel/.test(kit))
+    verifie('🔴 et son logo est en mode dark, sinon il disparaît dessus',
+      /<YoppaaLogo size=\{22\} mode="dark"\/>/.test(kit))
+  }
+
   const page = lire('app/brand-kit/commercant/page.js')
   // 🔴 L'ORDRE DES FACES. Inversé, il ne se voit qu'une fois la pile sortie.
   verifie('🔴 le PDF assemble le recto PUIS le verso',

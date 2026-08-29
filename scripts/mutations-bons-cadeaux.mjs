@@ -224,6 +224,19 @@ const MUTATIONS = [
     de: '`TVA comprise dans les ${euros(ventilation_tva.reduce((s, v) => s + Number(v.ttc || 0), 0))}`',
     vers: '`TVA comprise dans les ${euros(Number(total))}`' },
 
+  // ─── L'ANCRE DU PAPIER (29/08) ───────────────────────────────────────────
+  // ⚠️ Un QR imprimé ne se corrige plus : cette garde protège des exemplaires
+  // déjà distribués, que personne ne peut rappeler.
+  { nom: '🔴 l’ancre du QR imprimé disparaît de la landing',
+    banc: 'verif:lancement', fichier: 'app/components/LandingReveal.js',
+    de: '<section id="commercants" style={{ background: `linear-gradient(135deg, ${T.panel} 0%, ${T.ink} 100%)`',
+    vers: '<section style={{ background: `linear-gradient(135deg, ${T.panel} 0%, ${T.ink} 100%)`' },
+
+  { nom: '🔴 l’ancre existe mais glisse sur une autre section',
+    banc: 'verif:lancement', fichier: 'app/components/LandingReveal.js',
+    de: '<section id="commercants"',
+    vers: '<section id="commercants-ailleurs"' },
+
   { nom: '🔴 SUR-CORRECTION : le bon cadeau sortirait de la base TVA',
     banc: 'verif:comptable', fichier: 'lib/commande-notifs.js',
     de: '  const parTauxNet = imputerRemise(parTauxTicket, cmd.fidelite_remise)',

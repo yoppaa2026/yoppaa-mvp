@@ -778,6 +778,29 @@ function sansCommentaires(src) {
     existsSync('app/signup/page.js') || existsSync('app/signup/page.tsx'))
 }
 
+// ═══ L'ANCRE DU PAPIER LAISSÉ EN BOUTIQUE (29/08) ════════════════════════
+//
+// ⚠️ UN QR IMPRIMÉ NE SE CORRIGE PLUS. Le QR de l'A4 commerçant vise
+// `/?via=kit#commercants`. Le jour où quelqu'un renomme ou retire cet `id`,
+// rien ne casse, rien ne rougit, aucune page n'est en erreur : les exemplaires
+// déjà distribués ouvrent simplement la landing en haut, côté Yopper, et le
+// commerçant referme avant d'avoir trouvé ce qui le concerne.
+//
+// C'est le défaut le plus silencieux qu'on puisse produire, parce que le
+// support est en papier et qu'on ne le rappelle pas.
+{
+  const brut = lire('app/components/LandingReveal.js')
+  verifier('la section commerçant porte son ancre pour le QR imprimé',
+    /<section id="commercants"/.test(brut),
+    'l\'ancre #commercants a disparu : les A4 déjà distribués tombent en haut de page')
+  // ⚠️ ET ELLE RESTE LA SECTION COMMERÇANT : une ancre juste, posée au mauvais
+  // endroit, est aussi fausse qu'une ancre absente.
+  const apres = brut.slice(brut.indexOf('<section id="commercants"'))
+  verifier('et elle est bien posée sur le bloc « Pour les commerçants »',
+    /Pour les commerçants/.test(apres.slice(0, 900)),
+    'l\'ancre existe mais ne coiffe plus la section commerçant')
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

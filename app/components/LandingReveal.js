@@ -1608,7 +1608,16 @@ export default function LandingReveal({ referent = null }) {
 
       {/* ═══ 4. CÔTÉ COMMERÇANTS (sombre, punch) ═══ */}
       {/* Voir le composant LaTotale, juste sous l'accroche. */}
-      <section style={{ background: `linear-gradient(135deg, ${T.panel} 0%, ${T.ink} 100%)`, color: '#fff', marginTop: 48 }}>
+      {/* ⚠️ `id` POSÉ LE 29/08 POUR LE PAPIER LAISSÉ EN BOUTIQUE. Le QR de l'A4
+          commerçant vise `/?via=kit#commercants` et non la racine : cette page
+          s'ouvre sur le Yopper, et un commerçant qui doit traverser tout le
+          contenu qui ne le concerne pas referme avant d'arriver ici.
+          ⚠️ ET SURTOUT PAS VERS `/pro` : cette route n'est pas une page, c'est
+          un `redirect` vers le formulaire d'inscription. Un commerçant qui
+          scanne entre deux clients veut REGARDER, pas saisir ses coordonnées.
+          `/pro` reste l'adresse ÉCRITE, courte et dictable, pour celui qui se
+          décide plus tard et la tape lui-même. */}
+      <section id="commercants" style={{ background: `linear-gradient(135deg, ${T.panel} 0%, ${T.ink} 100%)`, color: '#fff', marginTop: 48, scrollMarginTop: 12 }}>
         <Bande3px/>
         <div style={{ maxWidth: 1080, margin: '0 auto', padding: '64px 20px 72px' }}>
           <div style={{ textAlign: 'center', marginBottom: 44 }}>

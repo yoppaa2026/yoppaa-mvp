@@ -2496,29 +2496,6 @@ export default function CommanderSlug() {
     setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 50)
   }
 
-  // ⚠️ ON OBSERVE, ON N'ÉCOUTE PAS LE DÉFILEMENT. `IntersectionObserver` ne
-  // s'accroche pas au scroll : c'est la leçon de la zone morte au doigt, où
-  // trois jours ont été perdus sur un défilement iOS gêné par du code greffé
-  // dessus. Le `root` est le conteneur qui défile, pas la fenêtre.
-  useEffect(() => {
-    const cible = recapPanierRef.current
-    const conteneur = scrollRef.current
-    if (!cible || !conteneur || typeof IntersectionObserver === 'undefined') return
-    const obs = new IntersectionObserver(
-      ([entree]) => {
-        // On lit l'état PRÉCÉDENT pour l'hystérésis, d'où la forme fonctionnelle.
-        setMontrerFlottant(avant => doitMontrerFlottant(entree.intersectionRatio, avant))
-      },
-      // ⚠️ PLUSIEURS SEUILS, sinon le navigateur ne rappelle qu'à un seul point
-      // et la bande morte entre les deux valeurs ne serait jamais franchie.
-      { root: conteneur, threshold: [0, SEUIL_MONTRER, SEUIL_CACHER, 0.6, 1] },
-    )
-    obs.observe(cible)
-    return () => obs.disconnect()
-    // ⚠️ `panier` EST DANS LES DÉPENDANCES : le récap n'existe dans le DOM
-    // qu'une fois le premier article ajouté. Sans lui, l'observateur se poserait
-    // sur un `null` au premier rendu et ne se reposerait jamais.
-  }, [etape, peutCommander, panier])
 
   // Scrolle jusqu'au récap panier (bouton flottant). On centre le récap dans le
   // conteneur scrollable plutôt que scrollIntoView (qui viserait la fenêtre entière).
@@ -2949,6 +2926,47 @@ export default function CommanderSlug() {
   const peutCommander = canDo(forfaitVivant, 'commande')
   // Module RDV natif : si vitrine FULL avec rdv_actif=true, on propose le bouton "Prendre RDV"
   const peutPrendreRdv = vitrine && canDo(forfaitVivant, 'rdv') && commercant?.rdv_actif === true
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔴 CET EFFET EST ICI, ET SA PLACE EST LE CORRECTIF (29/08).
+  //
+  // Il vivait 428 lignes plus haut, et son tableau de dependances lisait
+  // `peutCommander`, declare juste au-dessus. Or UN TABLEAU DE DEPENDANCES
+  // EST EVALUE PENDANT LE RENDU : la lecture tombait dans la zone morte
+  // temporelle du `const`, levait "Cannot access before initialization", et
+  // AUCUNE FICHE COMMERCANT NE S'OUVRAIT. Page blanche, reload, retry.
+  //
+  // ⚠️ NI LE LINT NI LE BUILD NE LE VOIENT. `no-undef` est satisfait, le nom
+  // existe bien dans la portee ; ce n'est ni un import manquant ni une faute
+  // de frappe, c'est un ORDRE. Troisieme fois dans ce projet. Garde posee :
+  // `npm run verif:zone-morte`.
+  //
+  // ⚠️ NE PAS LE REMONTER. Il doit rester SOUS `peutCommander`, et au-dessus
+  // du `return` : deplace au-dessus, la page redevient blanche.
+  // ═══════════════════════════════════════════════════════════════════════
+  // ⚠️ ON OBSERVE, ON N'ÉCOUTE PAS LE DÉFILEMENT. `IntersectionObserver` ne
+  // s'accroche pas au scroll : c'est la leçon de la zone morte au doigt, où
+  // trois jours ont été perdus sur un défilement iOS gêné par du code greffé
+  // dessus. Le `root` est le conteneur qui défile, pas la fenêtre.
+  useEffect(() => {
+    const cible = recapPanierRef.current
+    const conteneur = scrollRef.current
+    if (!cible || !conteneur || typeof IntersectionObserver === 'undefined') return
+    const obs = new IntersectionObserver(
+      ([entree]) => {
+        // On lit l'état PRÉCÉDENT pour l'hystérésis, d'où la forme fonctionnelle.
+        setMontrerFlottant(avant => doitMontrerFlottant(entree.intersectionRatio, avant))
+      },
+      // ⚠️ PLUSIEURS SEUILS, sinon le navigateur ne rappelle qu'à un seul point
+      // et la bande morte entre les deux valeurs ne serait jamais franchie.
+      { root: conteneur, threshold: [0, SEUIL_MONTRER, SEUIL_CACHER, 0.6, 1] },
+    )
+    obs.observe(cible)
+    return () => obs.disconnect()
+    // ⚠️ `panier` EST DANS LES DÉPENDANCES : le récap n'existe dans le DOM
+    // qu'une fois le premier article ajouté. Sans lui, l'observateur se poserait
+    // sur un `null` au premier rendu et ne se reposerait jamais.
+  }, [etape, peutCommander, panier])
 
   return (
     <>

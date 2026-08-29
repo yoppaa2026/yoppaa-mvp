@@ -676,6 +676,36 @@ export default function BrandKit() {
           </p>
         </div>
 
+        {/* ── LE KIT COMMERÇANT ─────────────────────────────────────────────
+            Le papier qu'Alex laisse au comptoir quand il passe et que le
+            commerçant n'a que deux minutes. Il vit sur sa propre route pour
+            être imprimable tel quel, sans l'habillage de cette page.
+            ⚠️ ET IL NE PORTE PAS LE SLOGAN, mais le DESCRIPTEUR. « Ton
+            quartier dans ta poche » est écrit du point de vue du Yopper ;
+            un commerçant demande d'abord ce que c'est, pas ce que ça lui
+            apporte. Le slogan reste sur tout ce qui s'adresse au public. */}
+        <a href="/brand-kit/commercant"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap',
+            background: `linear-gradient(135deg, ${T.deep}, ${T.ink})`, color: '#fff', textDecoration: 'none',
+            borderRadius: 14, padding: '18px 22px', marginBottom: 14 }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: '1.6px', textTransform: 'uppercase', color: T.light }}>
+              À imprimer et à plastifier
+            </p>
+            <p style={{ margin: '5px 0 0', fontSize: 17, fontWeight: 800, letterSpacing: '-0.3px' }}>
+              Le kit commerçant · A4 recto/verso et carte de visite
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: 12.5, color: T.light, lineHeight: 1.5 }}>
+              Le QR mène à la section commerçante de la landing. Une jauge mesure
+              le débordement de chaque page : ce qui dépasse d&rsquo;un A4 est coupé
+              sans le moindre avertissement.
+            </p>
+          </div>
+          <span style={{ fontSize: 14, fontWeight: 800, background: 'rgba(255,255,255,0.14)', padding: '10px 18px', borderRadius: 100, whiteSpace: 'nowrap' }}>
+            Ouvrir →
+          </span>
+        </a>
+
         {/* TOGGLE AVEC / SANS SLOGAN */}
         <div style={{ background: '#fff', borderRadius: 14, padding: '14px 18px', marginBottom: 14, border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div>

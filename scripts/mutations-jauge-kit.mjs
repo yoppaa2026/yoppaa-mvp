@@ -88,7 +88,30 @@ const MUTATIONS = [
 
   { nom: '🔴 la réponse du fetch de la fonte n’est plus lue : un 404 deviendrait une police',
     banc: 'verif:kit', fichier: 'lib/export-feuille.js',
-    de: '      if (!rep.ok) continue', vers: '      if (false) continue' },
+    de: '      if (!rep.ok) { echecs.push(`HTTP ${rep.status}`); continue }',
+    vers: '      if (false) { echecs.push(`HTTP ${rep.status}`); continue }' },
+
+  // ⚠️ LES DEUX SUSPECTS DU REFUS VU EN PRODUCTION LE 29/08, mis au banc pour
+  // qu'ils ne reviennent jamais. La jauge était verte, la page parfaite, et
+  // l'export refusait : je ne pouvais pas ouvrir un navigateur pour regarder.
+  { nom: '🔴 la collecte cesse de descendre dans les @layer : la fonte redevient invisible',
+    banc: 'verif:kit', fichier: 'lib/export-feuille.js',
+    de: '    if (r.cssRules) reglesDePolice(r.cssRules, sortie)', vers: '' },
+
+  { nom: '🔴 la règle se reconnaît de nouveau à son `type`, déprécié et pas rendu partout',
+    banc: 'verif:kit', fichier: 'lib/export-feuille.js',
+    de: "    if (/^@font-face/i.test(r.cssText || '')) { sortie.push(r); continue }",
+    vers: '    if (r.type === 5) { sortie.push(r); continue }' },
+
+  { nom: '🔴 une famille non reconnue refait échouer l’export au lieu de tout embarquer',
+    banc: 'verif:kit', fichier: 'lib/export-feuille.js',
+    de: '  const retenues = voulues.length > 0 ? voulues : toutes',
+    vers: '  const retenues = voulues' },
+
+  { nom: '🔴 le refus cesse de dire ce qu’il a vu',
+    banc: 'verif:kit', fichier: 'lib/export-feuille.js',
+    de: "    return { css: null, diag: `aucune règle @font-face dans les ${feuilles.length} feuilles de style`",
+    vers: "    return { css: null, diag: `rien à faire`.replace('x', `${feuilles.length}`)" },
 
   { nom: '🔴 le base64 repasse en un seul coup : la pile déborderait sur une vraie fonte',
     banc: 'verif:kit', fichier: 'lib/export-feuille.js',

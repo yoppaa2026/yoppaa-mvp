@@ -473,12 +473,21 @@ const egal = (nom, obtenu, attendu) =>
 {
   const octetsFonte = new Uint8Array([0x77, 0x4F, 0x46, 0x32, 1, 2, 3, 4]).buffer
 
-  // Une règle @font-face telle que le navigateur l'expose : `type` 5 et un
-  // `style` qui répond à `getPropertyValue`.
+  // Une règle @font-face telle que le navigateur l'expose.
+  //
+  // ⚠️ `type: 0` DÉLIBÉRÉMENT. `CSSRule.type` est déprécié et ne rend pas 5
+  // partout : la première version reconnaissait la règle à ce nombre, et c'est
+  // l'un des deux suspects du refus vu par Alex en production. On reconnaît
+  // désormais la règle à son `cssText`, et le banc l'exige.
   const regle = (proprietes) => ({
-    type: 5,
+    type: 0,
+    cssText: '@font-face { ... }',
     style: { getPropertyValue: (p) => proprietes[p] || '' },
   })
+  // Une règle groupante, `@layer` ou `@media` : elle porte ses enfants dans
+  // son propre `cssRules` et n'est pas elle-même un `@font-face`.
+  const groupe = (enfants) => ({ type: 0, cssText: '@layer base { ... }', cssRules: enfants })
+
   const FAMILLE = '__Plus_Jakarta_Sans_abc123'
   const regleJakarta = regle({
     'font-family': `'${FAMILLE}'`,
@@ -492,18 +501,20 @@ const egal = (nom, obtenu, attendu) =>
     globalThis.document = { styleSheets: [{ cssRules: regles }] }
     globalThis.fetch = async () => reponse
     globalThis.btoa = (s) => Buffer.from(s, 'binary').toString('base64')
+    globalThis.location = { href: 'https://www.yoppaa.app/brand-kit/commercant' }
   }
   const demonter = () => {
     delete globalThis.document
     delete globalThis.fetch
     delete globalThis.btoa
+    delete globalThis.location
   }
   const okFonte = { ok: true, arrayBuffer: async () => octetsFonte }
 
   // ══ 1. LE CAS NORMAL : la police part DANS le fichier ══
   _oublierPolices()
   monter({ regles: [regleJakarta], reponse: okFonte })
-  const css = await policesEmbarquees(`${FAMILLE}, system-ui, sans-serif`)
+  const { css } = await policesEmbarquees(`${FAMILLE}, system-ui, sans-serif`)
   verifie('🔴 la police est embarquée en base64 dans le fichier',
     typeof css === 'string' && css.includes('data:font/woff2;base64,'), String(css).slice(0, 80))
   verifie('🔴 et l\'adresse locale a DISPARU du CSS produit',
@@ -511,16 +522,47 @@ const egal = (nom, obtenu, attendu) =>
   verifie('la graisse est conservée', /font-weight:800/.test(css || ''))
   verifie('la plage de caractères aussi', /unicode-range:U\+0000-00FF/.test(css || ''))
 
-  // ══ 2. LES CAS OÙ IL FAUT REFUSER ══
+  // ══ 2. 🔴 LES DEUX SUSPECTS DU REFUS VU EN PRODUCTION LE 29/08 ══
+  //
+  // La jauge était verte, la page parfaite, et l'export refusait. Je ne peux
+  // pas ouvrir un navigateur d'ici : je durcis les deux hypothèses, et je les
+  // mets au banc pour qu'elles ne reviennent jamais.
+  //
+  // ⚠️ SUSPECT 1 : LA RÈGLE EST RANGÉE DANS UN `@layer`. Tailwind v4 en pose,
+  // et une boucle sur les seules règles de tête ne la voit JAMAIS. Le défaut
+  // est muet : la feuille est bien lue, elle a l'air vide.
+  _oublierPolices()
+  monter({ regles: [groupe([regleJakarta])], reponse: okFonte })
+  const enCouche = await policesEmbarquees(`${FAMILLE}, sans-serif`)
+  verifie('🔴 une @font-face rangée dans un @layer est TROUVÉE',
+    typeof enCouche.css === 'string' && enCouche.css.includes('data:font/woff2'), enCouche.diag)
+
+  // Et deux crans plus bas, un `@media` dans un `@layer`.
+  _oublierPolices()
+  monter({ regles: [groupe([groupe([regleJakarta])])], reponse: okFonte })
+  const deuxCrans = await policesEmbarquees(`${FAMILLE}, sans-serif`)
+  verifie('🔴 même imbriquée deux fois', typeof deuxCrans.css === 'string', deuxCrans.diag)
+
+  // ⚠️ SUSPECT 2 : LE NOM DE FAMILLE. `next/font` l'engendre à chaque build
+  // (`__Plus_Jakarta_Sans_<hash>`), et s'accrocher dessus casse sans prévenir.
+  // Quand la famille n'est pas reconnue, on prend TOUTES les fontes : une de
+  // trop coûte quelques kilo-octets, refuser coûte le fichier.
+  _oublierPolices()
+  monter({ regles: [regle({ 'font-family': "'UneAutre'", src: "url(/f.woff2)" })], reponse: okFonte })
+  const repli = await policesEmbarquees(`${FAMILLE}, sans-serif`)
+  verifie('🔴 famille non reconnue : on embarque tout au lieu de refuser',
+    typeof repli.css === 'string' && repli.css.includes('data:font/woff2'), repli.diag)
+  verifie('et le diagnostic le DIT, au lieu de le faire en douce',
+    /famille demandée n’a pas été reconnue/.test(repli.diag), repli.diag)
+
+  // ══ 3. LES CAS OÙ IL FAUT VRAIMENT REFUSER ══
   //
   // ⚠️ `null` VEUT DIRE SANS OBJET, PAS « VIDE ». Rendre une chaîne vide
   // laisserait l'export continuer et produire un fichier en police de
   // substitution : le pire résultat possible, parce qu'il a l'air normal.
   const refus = [
-    ['aucune règle ne correspond à la famille', { regles: [regle({ 'font-family': "'Autre'" })], reponse: okFonte },
-      `${FAMILLE}, sans-serif`],
-    ['aucune feuille de style lisible', { regles: [], reponse: okFonte }, `${FAMILLE}, sans-serif`],
-    ['la famille demandée est vide', { regles: [regleJakarta], reponse: okFonte }, ''],
+    ['aucune @font-face nulle part', { regles: [], reponse: okFonte }, `${FAMILLE}, sans-serif`],
+    ['il n’y a que des règles groupantes vides', { regles: [groupe([])], reponse: okFonte }, `${FAMILLE}, sans-serif`],
     // 🔴 LA FAMILLE « await NON LU » : `fetch` NE REJETTE PAS sur un code HTTP.
     // Sans lecture de `res.ok`, la fonte serait faite de la page d'erreur.
     ['la fonte répond 404', { regles: [regleJakarta], reponse: { ok: false, status: 404, arrayBuffer: async () => octetsFonte } },
@@ -530,10 +572,13 @@ const egal = (nom, obtenu, attendu) =>
     _oublierPolices()
     monter(montage)
     const r = await policesEmbarquees(famille)
-    verifie(`🔴 refus quand ${quoi}`, r === null, `rendu ${JSON.stringify(r)?.slice(0, 60)}`)
+    verifie(`🔴 refus quand ${quoi}`, r.css === null, `rendu ${String(r.css).slice(0, 40)}`)
+    // ⚠️ ET LE REFUS DIT CE QU'IL A VU. Un « ça n'a pas marché » sans chiffres
+    // oblige à deviner, et c'est un aller-retour de perdu à chaque fois.
+    verifie('et il chiffre ce qu’il a vu', typeof r.diag === 'string' && /\d/.test(r.diag), r.diag)
   }
 
-  // ══ 3. UNE FEUILLE D'UN AUTRE DOMAINE NE FAIT PAS PLANTER ══
+  // ══ 4. UNE FEUILLE D'UN AUTRE DOMAINE NE FAIT PAS PLANTER ══
   // `cssRules` lève sur une feuille cross-origin : on passe, on ne casse pas.
   _oublierPolices()
   globalThis.document = {
@@ -544,8 +589,9 @@ const egal = (nom, obtenu, attendu) =>
   }
   globalThis.fetch = async () => okFonte
   globalThis.btoa = (s) => Buffer.from(s, 'binary').toString('base64')
+  globalThis.location = { href: 'https://www.yoppaa.app/brand-kit/commercant' }
   let survecu = null
-  try { survecu = await policesEmbarquees(`${FAMILLE}, sans-serif`) } catch { survecu = 'PLANTAGE' }
+  try { survecu = (await policesEmbarquees(`${FAMILLE}, sans-serif`)).css } catch { survecu = 'PLANTAGE' }
   verifie('🔴 une feuille d\'un autre domaine est ignorée, pas fatale',
     typeof survecu === 'string' && survecu.includes('@font-face'), String(survecu).slice(0, 60))
 
@@ -567,10 +613,16 @@ const egal = (nom, obtenu, attendu) =>
     /police/i.test(messageRefus), messageRefus)
 
   // Et avec la police, il produit bien un SVG aux bonnes dimensions.
+  //
+  // ⚠️ SOUS `try`, ET C'EST UNE LEÇON DE HARNAIS. Écrit sans, une mutation qui
+  // casse la collecte des fontes faisait LEVER cette ligne, et le banc mourait
+  // au lieu de rougir : « le banc a PLANTÉ », donc une NON-mesure. Une mutation
+  // doit changer le RÉSULTAT, jamais la TERMINAISON.
   _oublierPolices()
   monter({ regles: [regleJakarta], reponse: okFonte })
-  const svg = await feuilleEnSvg(faussNoeud, 210, 297)
-  verifie('avec la police, le SVG est produit', /^<svg /.test(svg))
+  let svg = ''
+  try { svg = await feuilleEnSvg(faussNoeud, 210, 297) } catch (e) { svg = `LEVÉ : ${e.message}` }
+  verifie('avec la police, le SVG est produit', /^<svg /.test(svg), svg.slice(0, 90))
   verifie('🔴 il fait bien un A4 en millimètres', /width="210mm" height="297mm"/.test(svg))
   verifie('🔴 et la fonte voyage DEDANS', svg.includes('data:font/woff2;base64,'))
   verifie('il porte un fond blanc explicite', /<rect width="100%" height="100%" fill="#ffffff"\/>/.test(svg))
@@ -579,6 +631,43 @@ const egal = (nom, obtenu, attendu) =>
   delete globalThis.getComputedStyle
   delete globalThis.XMLSerializer
   _oublierPolices()
+}
+
+// ════════════════════════════════════════════════════════════════════
+// LE DÉPOUILLEUR LUI-MÊME, EXÉCUTÉ SUR LE PIÈGE.
+//
+// ⚠️ ET C'EST UNE LEÇON SUR LES GARDES. Ce défaut était d'abord surveillé
+// INDIRECTEMENT : une mutation cassait `sansProse`, un fichier réel se faisait
+// amputer, et les gardes qui le lisaient rougissaient. Puis j'ai réécrit ce
+// fichier, le motif piégeux en est sorti, et la garde est devenue VERTE SANS
+// RIEN SURVEILLER. Une garde qui dépend du hasard du contenu d'un autre
+// fichier n'est pas une garde. On mesure la RÈGLE, sur une entrée à nous.
+{
+  const PIEGE = [
+    '// sert /_next/static/media/*.woff2',
+    'const GARDE_A_NE_PAS_PERDRE = 1',
+    "} catch { /* rien à faire */ }",
+    'const GARDE_APRES = 2',
+  ].join('\n')
+
+  const depouille = sansProse(PIEGE)
+  verifie('🔴 LE CODE ENTRE LE FAUX BLOC ET SA FAUSSE FERMETURE SURVIT',
+    depouille.includes('GARDE_A_NE_PAS_PERDRE'), JSON.stringify(depouille).slice(0, 120))
+  verifie('🔴 et ce qui suit aussi', depouille.includes('GARDE_APRES'))
+  verifie('la prose, elle, a bien disparu', !depouille.includes('sert /_next'))
+  verifie('le vrai commentaire de bloc aussi', !depouille.includes('rien à faire'))
+
+  // Le cas normal ne doit pas régresser : un vrai bloc part en entier.
+  const normal = sansProse('const a = 1\n/* un vrai bloc\n   sur deux lignes */\nconst b = 2')
+  verifie('un vrai bloc est bien retiré', !normal.includes('deux lignes'))
+  verifie('et le code autour reste', normal.includes('const a = 1') && normal.includes('const b = 2'))
+
+  // ⚠️ ET L'AUTRE SENS : les commentaires JSX ne doivent pas avaler la page.
+  // C'est ce qui est arrivé en inversant l'ordre, le 29/08 : `ConfigDashboard`
+  // est tombé de 644 000 à 112 000 caractères.
+  const jsx = sansProse('{/* un commentaire JSX */}\nconst MILIEU = 1\n{/* un autre */}\nconst FIN = 2')
+  verifie('🔴 deux commentaires JSX n’avalent pas ce qui les sépare',
+    jsx.includes('MILIEU') && jsx.includes('FIN'), JSON.stringify(jsx).slice(0, 120))
 }
 
 // Les décisions de l'export qui ne s'exécutent pas ici (elles demandent un vrai
@@ -596,7 +685,11 @@ const egal = (nom, obtenu, attendu) =>
   // fonte : le défaut n'apparaît QUE sur les gros fichiers.
   verifie('🔴 le base64 se fait par tranches, pas d\'un seul coup',
     /const TRANCHE = 8192/.test(ex) && /subarray\(i, i \+ TRANCHE\)/.test(ex))
-  verifie('🔴 la réponse du fetch de la fonte est LUE', /if \(!rep\.ok\) continue/.test(ex))
+  // ⚠️ ANCRÉE SUR LA RÈGLE, PAS SUR LA FORME DE LA LIGNE. Écrite
+  // `if (!rep.ok) continue`, elle a rougi dès que la ligne a gagné un
+  // diagnostic : une garde qui recopie un format rougit sur une amélioration
+  // légitime, et on finit par la desserrer au lieu de l'écouter.
+  verifie('🔴 la réponse du fetch de la fonte est LUE', /if \(!rep\.ok\)/.test(ex))
   verifie('300 dpi, la résolution d\'un imprimeur', /DPI_IMPRESSION = 300/.test(ex))
 
   const page = lire('app/brand-kit/commercant/page.js')

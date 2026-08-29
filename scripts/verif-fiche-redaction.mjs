@@ -22,13 +22,14 @@ import {
   astuceRedaction,
 } from '../lib/fiche-redaction.js'
 import { IA_FICHE_CONFIG, getIaFicheConfig } from '../lib/plans.js'
+import { sansProse } from './lire-code.mjs'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 // Le code SANS sa prose : une garde verte grâce au commentaire qui EXPLIQUE la
 // règle, au lieu du code qui l'applique, s'est produite huit fois sur ce projet.
-const lireCode = (chemin) => lire(chemin)
-  .replace(/\/\*[\s\S]*?\*\//g, '')
-  .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n')
+// ⚠️ LE DÉPOUILLEUR EST PARTAGÉ (`scripts/lire-code.mjs`) : il vivait recopié
+// dans huit bancs, et le défaut du 29/08 aurait dû être corrigé huit fois.
+const lireCode = (chemin) => sansProse(lire(chemin))
 
 let ok = 0
 const echecs = []

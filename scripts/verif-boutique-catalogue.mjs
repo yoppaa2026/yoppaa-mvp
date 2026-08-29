@@ -19,6 +19,7 @@ import {
 } from '../lib/produits-boutique.js'
 
 import { readFileSync } from 'node:fs'
+import { sansProse } from './lire-code.mjs'
 
 let ok = 0
 const echecs = []
@@ -30,10 +31,10 @@ function v(nom, cond) {
 // ⚠️ LES COMMENTAIRES SONT RETIRÉS AVANT TOUTE RECHERCHE. Une garde verte
 // grâce au commentaire qui EXPLIQUE la règle est le piège le plus fréquent de
 // ce dépôt : le code peut disparaître, la phrase reste, et le banc applaudit.
+// ⚠️ LE DÉPOUILLEUR EST PARTAGÉ (`scripts/lire-code.mjs`) : il vivait recopié
+// dans huit bancs, et le défaut du 29/08 aurait dû être corrigé huit fois.
 function lireCode(chemin) {
-  return readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/^\s*\/\/.*$/gm, ' ')
+  return sansProse(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
 }
 
 // ─────────────────────────────────────────────────────────────────────────

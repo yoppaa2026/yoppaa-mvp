@@ -40,15 +40,15 @@ import { valeurCommande, valeurRdv, chiffreAffaires } from '../lib/statistiques.
 import { modesPaiementOuverts, modePaiementEffectif } from '../lib/modes-paiement.js'
 import { emailCommandeConfirmee, emailNouvelleCommandeCommercant } from '../lib/resend.js'
 import { cleReprisePanier } from '../lib/retour-paiement.js'
+import { sansProse } from './lire-code.mjs'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
 // Le code SANS sa prose. Huit fois depuis le 19/08, une garde a été verte
 // grâce au commentaire qui EXPLIQUE la règle au lieu du code qui l'applique.
-const lireCode = (chemin) => lire(chemin)
-  .replace(/\/\*[\s\S]*?\*\//g, ' ')
-  .replace(/^[ \t]*\/\/.*$/gm, ' ')
-  .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
+// ⚠️ LE DÉPOUILLEUR EST PARTAGÉ (`scripts/lire-code.mjs`) : il vivait recopié
+// dans huit bancs, et le défaut du 29/08 aurait dû être corrigé huit fois.
+const lireCode = (chemin) => sansProse(lire(chemin))
 
 const lireSql = (chemin) => lire(chemin).replace(/^\s*--.*$/gm, ' ')
 

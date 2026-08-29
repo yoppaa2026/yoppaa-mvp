@@ -38,6 +38,7 @@ const NAVIGATEUR = {
   Notification: 'readonly', ResizeObserver: 'readonly', IntersectionObserver: 'readonly',
   MutationObserver: 'readonly', Event: 'readonly', CustomEvent: 'readonly',
   HTMLElement: 'readonly', Element: 'readonly', Node: 'readonly', DOMParser: 'readonly',
+  getComputedStyle: 'readonly', XMLSerializer: 'readonly',
   atob: 'readonly', btoa: 'readonly', crypto: 'readonly', structuredClone: 'readonly',
   performance: 'readonly', history: 'readonly', screen: 'readonly', matchMedia: 'readonly',
   requestIdleCallback: 'readonly', queueMicrotask: 'readonly', TextEncoder: 'readonly',

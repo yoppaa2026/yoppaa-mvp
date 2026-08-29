@@ -20,15 +20,15 @@ import { appliquerCredit, libelleRecompense, normaliserTelephone } from '../lib/
 // présence : c'est l'IMPORT qui rendait des bancs verts à tort (19/08).
 import { texteSmsRecompense } from '../lib/fidelite-sms.js'
 import { emailFideliteRecompenseDebloquee } from '../lib/resend.js'
+import { sansProse } from './lire-code.mjs'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
 // Le code sans sa prose : un commentaire qui explique pourquoi une écriture a
 // été retirée contient forcément cette écriture (8 occurrences depuis le 19/08).
-const lireCode = (chemin) => lire(chemin)
-  .replace(/\/\*[\s\S]*?\*\//g, ' ')
-  .replace(/^[ \t]*\/\/.*$/gm, ' ')
-  .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
+// ⚠️ LE DÉPOUILLEUR EST PARTAGÉ (`scripts/lire-code.mjs`) : il vivait recopié
+// dans huit bancs, et le défaut du 29/08 aurait dû être corrigé huit fois.
+const lireCode = (chemin) => sansProse(lire(chemin))
 
 const lireSql = (chemin) => lire(chemin).replace(/^\s*--.*$/gm, ' ')
 

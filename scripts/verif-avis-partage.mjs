@@ -12,16 +12,16 @@ import { readFileSync } from 'node:fs'
 import { AVIS_MINIMUM_POUR_MOYENNE, resumeAvis, libelleBascule } from '../lib/avis-affichage.js'
 import { actionCommerce, potentialActionJsonLd, consigneGoogle } from '../lib/action-google.js'
 import { pointsLogo } from '../lib/logo.js'
+import { sansProse } from './lire-code.mjs'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
 // ⚠️ ON CHERCHE DANS LE CODE, JAMAIS DANS LA PROSE. Septième fois que je trouve
 // le mot cherché dans mon propre commentaire : celui qui explique pourquoi une
 // moyenne ne s'affiche plus contient forcément le mot « moyenne ».
-const lireCode = (chemin) => lire(chemin)
-  .replace(/\/\*[\s\S]*?\*\//g, ' ')
-  .replace(/^[ \t]*\/\/.*$/gm, ' ')
-  .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
+// ⚠️ LE DÉPOUILLEUR EST PARTAGÉ (`scripts/lire-code.mjs`) : il vivait recopié
+// dans huit bancs, et le défaut du 29/08 aurait dû être corrigé huit fois.
+const lireCode = (chemin) => sansProse(lire(chemin))
 
 // ⚠️ ET LA MÊME CHOSE POUR LE SQL, HUITIÈME OCCURRENCE DU MÊME PIÈGE. Mesuré à
 // la mutation le 24/08 : ma garde cherchait `ON DELETE SET NULL` dans la

@@ -9,6 +9,9 @@
 
 import { readFileSync } from 'node:fs'
 import { LOGO, proportionsLogo, pointsLogo, largeurPoints } from '../lib/logo.js'
+import { verdictJauge } from '../lib/jauge-page.js'
+import { policesEmbarquees, feuilleEnSvg, _oublierPolices } from '../lib/export-feuille.js'
+import { sansProse } from './lire-code.mjs'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -17,10 +20,9 @@ const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 
 // PROPRE COMMENTAIRE : celui qui explique pourquoi `document.write` a été
 // retiré contient forcément `document.write`. Retirer le commentaire serait
 // perdre l'explication ; on dépouille le texte, une fois pour toutes.
-const lireCode = (chemin) => lire(chemin)
-  .replace(/\/\*[\s\S]*?\*\//g, ' ')
-  .replace(/^[ \t]*\/\/.*$/gm, ' ')
-  .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
+// ⚠️ LE DÉPOUILLEUR EST PARTAGÉ (`scripts/lire-code.mjs`) : il vivait recopié
+// dans huit bancs, et le défaut du 29/08 aurait dû être corrigé huit fois.
+const lireCode = (chemin) => sansProse(lire(chemin))
 
 let ok = 0
 const echecs = []
@@ -363,6 +365,254 @@ const egal = (nom, obtenu, attendu) =>
     verifie('« commission » est toujours attribuée à Yoppaa',
       /Yoppaa ne prend aucune commission/.test(phrase), phrase.trim())
   }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// LA JAUGE DES PAGES IMPRIMABLES — exécutée, pas relue.
+//
+// ⚠️ POURQUOI ELLE MÉRITE UN BANC. C'est un INSTRUMENT DE MESURE, et un
+// instrument qui se trompe de verdict est pire que pas d'instrument : il donne
+// une confiance fausse. Le harnais de mutation l'a fait la veille en prenant
+// des rouges pour des plantages. Ici, le mauvais verdict s'imprime sur du
+// papier plastifié qu'on ne peut plus corriger.
+{
+  const cas = [
+    // [entrée, état attendu, ce qu'on vérifie]
+    [null, null, 'rien de mesuré ne rend AUCUN verdict'],
+    [undefined, null, 'undefined non plus'],
+    ['', null, 'la chaîne vide non plus'],
+    ['abc', null, 'ni une valeur illisible'],
+    [11.4, 'deborde', 'le débordement mesuré chez Alex'],
+    [0.1, 'deborde', 'un dixième de millimètre déborde quand même'],
+    [0, 'juste', 'pile à ras bord : ça tient, mais sans marge'],
+    [-1, 'juste', 'un millimètre de marge est trop juste'],
+    [-3, 'ok', 'le seuil bas est atteint, donc bon à tirer'],
+    [-10, 'ok', 'dix millimètres de marge, la bonne zone'],
+    [-18, 'ok', 'le seuil haut est encore acceptable'],
+    [-18.1, 'vide', 'au-delà, il y a de la place à reprendre'],
+  ]
+  for (const [entree, attendu, quoi] of cas) {
+    const v = verdictJauge(entree)
+    verifie(`🔴 ${quoi}`, (v === null ? null : v.etat) === attendu,
+      `verdictJauge(${JSON.stringify(entree)}) rend ${v === null ? 'null' : v.etat}, attendu ${attendu}`)
+  }
+
+  // ⚠️ LE PIÈGE DU ZÉRO, SEPTIÈME FOIS DANS CE PROJET. `Number(null)` vaut 0 et
+  // EST fini : une garde écrite `if (!mm)` prendrait « pas encore mesuré » pour
+  // « 0 mm, ça tient pile ». Les deux entrées doivent rendre des choses
+  // DIFFÉRENTES, et c'est ce qu'on mesure ici, pas la forme de la garde.
+  verifie('🔴 « pas mesuré » et « 0 mm » ne rendent PAS la même chose',
+    verdictJauge(null) === null && verdictJauge(0) !== null,
+    `null → ${verdictJauge(null)}, 0 → ${JSON.stringify(verdictJauge(0)?.etat)}`)
+
+  // ⚠️ LA GARDE QUI COMPTE VRAIMENT : LE SENS NE S'INVERSE JAMAIS. Un signe
+  // retourné dans le hook, et la jauge annoncerait « tient dans la page » sur
+  // une page dont le bas est coupé. C'est le seul défaut de ce fichier qui
+  // coûte du papier.
+  for (const trop of [0.1, 1, 11.4, 40]) {
+    const t = verdictJauge(trop).texte
+    verifie('🔴 ce qui déborde ne dit JAMAIS que ça tient',
+      /DÉBORDE/.test(t) && !/[Tt]ient/.test(t), `${trop} → « ${t} »`)
+  }
+  for (const reste of [0, -1, -10, -30]) {
+    const t = verdictJauge(reste).texte
+    verifie('🔴 ce qui tient ne dit JAMAIS que ça déborde',
+      /[Tt]ient/.test(t) && !/DÉBORDE/.test(t), `${reste} → « ${t} »`)
+  }
+
+  // Le nombre annoncé est celui qu'on a mesuré : c'est lui qu'Alex me redonne
+  // pour que je sache combien couper. ⚠️ ET IL S'ÉCRIT À LA VIRGULE, comme
+  // tout le reste depuis le 28/08 : « 11.4 mm » est une notation anglaise.
+  verifie('🔴 le débordement annonce le millimétrage exact, à la virgule',
+    verdictJauge(11.4).texte.includes('11,4 mm'), verdictJauge(11.4).texte)
+  verifie('🔴 la marge aussi', verdictJauge(-4.2).texte.includes('4,2 mm'), verdictJauge(-4.2).texte)
+
+  // ⚠️ PAS DE TIRET CADRATIN EN FRANÇAIS, règle du projet. Le texte de la
+  // jauge en portait un depuis sa création.
+  for (const n of [11.4, 0, -1, -10, -30]) {
+    verifie('aucun tiret cadratin dans la jauge', !/—/.test(verdictJauge(n).texte), verdictJauge(n).texte)
+  }
+}
+
+// ⚠️ LA MESURE N'A DE SENS QUE SI LA FEUILLE COUPE VRAIMENT. Sans
+// `overflow:hidden`, la page s'étire, `scrollHeight` égale `clientHeight`, la
+// jauge lit 0 pour l'éternité et affiche un vert PERMANENT et FAUX. Le défaut
+// serait invisible : la jauge marcherait, elle serait juste devenue aveugle.
+{
+  const page = lire('app/brand-kit/commercant/page.js')
+  verifie('🔴 la feuille coupe ce qui dépasse, sinon la jauge est aveugle',
+    /width: '210mm', height: '297mm', overflow: 'hidden'/.test(page))
+  verifie('🔴 le verdict vient du module, il n\'est pas recopié dans l\'écran',
+    /import \{ verdictJauge.*\} from '@\/lib\/jauge-page'/.test(page))
+  verifie('et l\'écran ne redéfinit aucun seuil de son côté',
+    !/const MARGE_(MINI|MAXI)/.test(lireCode('app/brand-kit/commercant/page.js')))
+  // Les trois repères : sans le corps et le pied, la marge ne se mesure pas.
+  for (const repere of ['rectoCorps', 'rectoPied', 'versoCorps', 'versoPied']) {
+    verifie(`le repère ${repere} est posé dans la page`,
+      new RegExp(`ref=\\{${repere}\\}`).test(page))
+  }
+  // ⚠️ LE VERSO A SA PROPRE MARGE HAUTE (29/08) : il débordait de 11,4 mm.
+  // Si `padVerso` disparaît, le raccourcissement part avec lui, en silence.
+  verifie('🔴 le verso garde sa marge haute resserrée',
+    /const padVerso = \{ padding: '13mm 17mm 0' \}/.test(page))
+  verifie('et le verso l\'utilise vraiment', /ref=\{versoCorps\} style=\{padVerso\}/.test(page))
+}
+
+// ════════════════════════════════════════════════════════════════════
+// L'EXPORT SVG / PNG — la partie qui DÉCIDE, exécutée avec un faux document.
+//
+// ⚠️ CE QUI EST EN JEU. `next/font` sert Plus Jakarta Sans depuis
+// `/_next/static/media/*.woff2`. Un fichier exporté qui pointerait vers cette
+// adresse s'ouvrirait AILLEURS dans une police de substitution plus large :
+// c'est LE défaut qui a coûté trois allers-retours sur ce kit, et il serait
+// SILENCIEUX. Le fichier s'ouvrirait, il serait juste faux, et on ne le verrait
+// que chez l'imprimeur.
+//
+// Le rendu, lui, est du navigateur et n'est pas testable ici. Mais la décision
+// « j'embarque ou je refuse » est du JavaScript pur : on l'exécute.
+{
+  const octetsFonte = new Uint8Array([0x77, 0x4F, 0x46, 0x32, 1, 2, 3, 4]).buffer
+
+  // Une règle @font-face telle que le navigateur l'expose : `type` 5 et un
+  // `style` qui répond à `getPropertyValue`.
+  const regle = (proprietes) => ({
+    type: 5,
+    style: { getPropertyValue: (p) => proprietes[p] || '' },
+  })
+  const FAMILLE = '__Plus_Jakarta_Sans_abc123'
+  const regleJakarta = regle({
+    'font-family': `'${FAMILLE}'`,
+    src: "url(/_next/static/media/jakarta.p.woff2) format('woff2')",
+    'font-weight': '800',
+    'font-style': 'normal',
+    'unicode-range': 'U+0000-00FF',
+  })
+
+  const monter = ({ regles, reponse }) => {
+    globalThis.document = { styleSheets: [{ cssRules: regles }] }
+    globalThis.fetch = async () => reponse
+    globalThis.btoa = (s) => Buffer.from(s, 'binary').toString('base64')
+  }
+  const demonter = () => {
+    delete globalThis.document
+    delete globalThis.fetch
+    delete globalThis.btoa
+  }
+  const okFonte = { ok: true, arrayBuffer: async () => octetsFonte }
+
+  // ══ 1. LE CAS NORMAL : la police part DANS le fichier ══
+  _oublierPolices()
+  monter({ regles: [regleJakarta], reponse: okFonte })
+  const css = await policesEmbarquees(`${FAMILLE}, system-ui, sans-serif`)
+  verifie('🔴 la police est embarquée en base64 dans le fichier',
+    typeof css === 'string' && css.includes('data:font/woff2;base64,'), String(css).slice(0, 80))
+  verifie('🔴 et l\'adresse locale a DISPARU du CSS produit',
+    typeof css === 'string' && !css.includes('/_next/static/media/'), String(css).slice(0, 120))
+  verifie('la graisse est conservée', /font-weight:800/.test(css || ''))
+  verifie('la plage de caractères aussi', /unicode-range:U\+0000-00FF/.test(css || ''))
+
+  // ══ 2. LES CAS OÙ IL FAUT REFUSER ══
+  //
+  // ⚠️ `null` VEUT DIRE SANS OBJET, PAS « VIDE ». Rendre une chaîne vide
+  // laisserait l'export continuer et produire un fichier en police de
+  // substitution : le pire résultat possible, parce qu'il a l'air normal.
+  const refus = [
+    ['aucune règle ne correspond à la famille', { regles: [regle({ 'font-family': "'Autre'" })], reponse: okFonte },
+      `${FAMILLE}, sans-serif`],
+    ['aucune feuille de style lisible', { regles: [], reponse: okFonte }, `${FAMILLE}, sans-serif`],
+    ['la famille demandée est vide', { regles: [regleJakarta], reponse: okFonte }, ''],
+    // 🔴 LA FAMILLE « await NON LU » : `fetch` NE REJETTE PAS sur un code HTTP.
+    // Sans lecture de `res.ok`, la fonte serait faite de la page d'erreur.
+    ['la fonte répond 404', { regles: [regleJakarta], reponse: { ok: false, status: 404, arrayBuffer: async () => octetsFonte } },
+      `${FAMILLE}, sans-serif`],
+  ]
+  for (const [quoi, montage, famille] of refus) {
+    _oublierPolices()
+    monter(montage)
+    const r = await policesEmbarquees(famille)
+    verifie(`🔴 refus quand ${quoi}`, r === null, `rendu ${JSON.stringify(r)?.slice(0, 60)}`)
+  }
+
+  // ══ 3. UNE FEUILLE D'UN AUTRE DOMAINE NE FAIT PAS PLANTER ══
+  // `cssRules` lève sur une feuille cross-origin : on passe, on ne casse pas.
+  _oublierPolices()
+  globalThis.document = {
+    styleSheets: [
+      { get cssRules() { throw new Error('SecurityError') } },
+      { cssRules: [regleJakarta] },
+    ],
+  }
+  globalThis.fetch = async () => okFonte
+  globalThis.btoa = (s) => Buffer.from(s, 'binary').toString('base64')
+  let survecu = null
+  try { survecu = await policesEmbarquees(`${FAMILLE}, sans-serif`) } catch { survecu = 'PLANTAGE' }
+  verifie('🔴 une feuille d\'un autre domaine est ignorée, pas fatale',
+    typeof survecu === 'string' && survecu.includes('@font-face'), String(survecu).slice(0, 60))
+
+  // ══ 4. L'EXPORT REFUSE PLUTÔT QUE DE MENTIR ══
+  //
+  // 🔴 LA VÉRIFICATION LA PLUS IMPORTANTE DU LOT. Sans police embarquée,
+  // `feuilleEnSvg` doit LEVER. S'il rendait un SVG quand même, le fichier
+  // s'ouvrirait dans une autre police sans que rien ne l'ait signalé.
+  _oublierPolices()
+  monter({ regles: [], reponse: okFonte })
+  globalThis.getComputedStyle = () => ({ fontFamily: `${FAMILLE}, sans-serif` })
+  globalThis.XMLSerializer = class { serializeToString() { return '<div></div>' } }
+  const faussNoeud = { cloneNode: () => ({ setAttribute() {}, style: {} }) }
+  let aLeve = false
+  let messageRefus = ''
+  try { await feuilleEnSvg(faussNoeud, 210, 297) } catch (e) { aLeve = true; messageRefus = e.message }
+  verifie('🔴 SANS POLICE EMBARQUÉE, L\'EXPORT LÈVE au lieu de produire un fichier faux', aLeve)
+  verifie('et il dit pourquoi, en nommant la police',
+    /police/i.test(messageRefus), messageRefus)
+
+  // Et avec la police, il produit bien un SVG aux bonnes dimensions.
+  _oublierPolices()
+  monter({ regles: [regleJakarta], reponse: okFonte })
+  const svg = await feuilleEnSvg(faussNoeud, 210, 297)
+  verifie('avec la police, le SVG est produit', /^<svg /.test(svg))
+  verifie('🔴 il fait bien un A4 en millimètres', /width="210mm" height="297mm"/.test(svg))
+  verifie('🔴 et la fonte voyage DEDANS', svg.includes('data:font/woff2;base64,'))
+  verifie('il porte un fond blanc explicite', /<rect width="100%" height="100%" fill="#ffffff"\/>/.test(svg))
+
+  demonter()
+  delete globalThis.getComputedStyle
+  delete globalThis.XMLSerializer
+  _oublierPolices()
+}
+
+// Les décisions de l'export qui ne s'exécutent pas ici (elles demandent un vrai
+// navigateur) mais qui se perdraient en silence si on les retirait.
+{
+  const ex = lireCode('lib/export-feuille.js')
+  // ⚠️ UN `blob:` TEINTE LA TOILE dans certains navigateurs, et `toBlob` lève
+  // alors une erreur de sécurité : le PNG ne sortirait jamais.
+  verifie('🔴 le PNG passe par une adresse data: et non blob:',
+    /img\.src = 'data:image\/svg\+xml/.test(ex) && !/img\.src = URL\.createObjectURL/.test(ex))
+  // ⚠️ Une toile naît TRANSPARENTE : sans ce fond, le PNG serait à trous.
+  verifie('🔴 le PNG reçoit un fond blanc explicite',
+    /fillStyle = '#ffffff'[\s\S]{0,60}fillRect\(0, 0, l, h\)/.test(ex))
+  // ⚠️ `String.fromCharCode(...tableau)` fait déborder la pile sur une vraie
+  // fonte : le défaut n'apparaît QUE sur les gros fichiers.
+  verifie('🔴 le base64 se fait par tranches, pas d\'un seul coup',
+    /const TRANCHE = 8192/.test(ex) && /subarray\(i, i \+ TRANCHE\)/.test(ex))
+  verifie('🔴 la réponse du fetch de la fonte est LUE', /if \(!rep\.ok\) continue/.test(ex))
+  verifie('300 dpi, la résolution d\'un imprimeur', /DPI_IMPRESSION = 300/.test(ex))
+
+  const page = lire('app/brand-kit/commercant/page.js')
+  verifie('🔴 les boutons sont masqués à l\'impression',
+    /\.atelier, \.jauge, \.notice, \.outils \{ display:none !important \}/.test(page))
+  // Les quatre supports ont leurs boutons : les deux A4 et les deux cartes.
+  verifie('les quatre supports sont exportables',
+    (page.match(/<Telechargements /g) || []).length === 4,
+    String((page.match(/<Telechargements /g) || []).length))
+  // ⚠️ ON N'EXPORTE PAS UN SECOND DESSIN. Si un canvas redessinait la page,
+  // les deux versions divergeraient dès la première correction de texte.
+  verifie('🔴 l\'export sérialise la page, il ne la redessine pas',
+    /feuilleEnSvg\(cible\.current/.test(page))
+  // ⚠️ L'erreur se VOIT. Un bouton qui échoue en silence fait recommencer
+  // trois fois avant qu'on comprenne.
+  verifie('🔴 un export raté affiche sa raison', /setErreur\(e\?\.message/.test(page))
 }
 
 console.log(`\nKit média : ${ok} vérifications`)

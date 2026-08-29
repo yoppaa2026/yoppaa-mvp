@@ -28,15 +28,15 @@ import { calculerRemiseBon, normaliserCodeBon, bonExpire } from '../lib/bons-cad
 import { resteAEncaisser, soldeRdv, etatPaiementRdv, caDesRdvs, montantNetCommande, phraseAvantages } from '../lib/rdv-paiement.js'
 import { emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire } from '../lib/resend.js'
 import { texteBonVendu } from '../lib/bons-vendus.js'
+import { sansProse } from './lire-code.mjs'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
 // Le code SANS sa prose : une garde a déjà été verte grâce au commentaire qui
 // EXPLIQUE la règle au lieu du code qui l'applique. Huit fois depuis le 19/08.
-const lireCode = (chemin) => lire(chemin)
-  .replace(/\/\*[\s\S]*?\*\//g, ' ')
-  .replace(/^[ \t]*\/\/.*$/gm, ' ')
-  .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
+// ⚠️ LE DÉPOUILLEUR EST PARTAGÉ (`scripts/lire-code.mjs`) : il vivait recopié
+// dans huit bancs, et le défaut du 29/08 aurait dû être corrigé huit fois.
+const lireCode = (chemin) => sansProse(lire(chemin))
 
 let ok = 0
 const echecs = []

@@ -20,9 +20,21 @@
 // où lire une variable déclarée plus bas est parfaitement légal. Une garde qui
 // rougit sur du code correct coûte plus cher que pas de garde : on l'a retirée.
 //
-// ⚠️ IL N'Y A DONC AUCUN FILET SUR CE CAS. La seule protection est de RELIRE
-// l'ordre des déclarations quand on insère un hook, et de se méfier dès qu'on
-// écrit du code loin de l'endroit où vivent ses dépendances.
+// ✅ LE FILET EXISTE DEPUIS LE 29/08 : `npm run verif:zone-morte`.
+//
+// Il a fallu un TROISIÈME écran blanc pour l'écrire. Mon effet du bouton
+// flottant lisait `peutCommander` dans son tableau de dépendances, 428 lignes
+// AVANT sa déclaration : plus AUCUNE fiche commerçant ne s'ouvrait.
+//
+// La garde ne regarde QUE les tableaux de dépendances, et c'est ce qui la rend
+// tenable là où `no-use-before-define` avait échoué. Un tableau de dépendances
+// est évalué PENDANT LE RENDU : y lire un `const` déclaré plus bas dans le même
+// composant lève à coup sûr, sans exception et donc sans faux positif.
+//
+// ⚠️ CE QUI RESTE DÉCOUVERT : un `const` lu ailleurs que dans un tableau de
+// dépendances, directement dans le corps du composant. Là, il faut toujours
+// RELIRE l'ordre des déclarations quand on insère du code loin de l'endroit où
+// vivent ses dépendances.
 // ═══════════════════════════════════════════════════════════════════════════
 import { defineConfig, globalIgnores } from 'eslint/config'
 

@@ -555,6 +555,73 @@ const egal = (nom, obtenu, attendu) =>
   verifie('et le diagnostic le DIT, au lieu de le faire en douce',
     /famille demandée n’a pas été reconnue/.test(repli.diag), repli.diag)
 
+  // ══ 2 bis. 🔴 LE VRAI COUPABLE, TROUVÉ PAR LE DIAGNOSTIC (29/08) ══
+  //
+  // Alex en production : « 17 règles @font-face trouvées, aucune lisible
+  // (HTTP 404, HTTP 404, HTTP 404) ». La collecte marchait, c'était l'ADRESSE.
+  //
+  // 🔴 UNE ADRESSE RELATIVE SE RÉSOUT CONTRE SA FEUILLE DE STYLE, PAS CONTRE
+  // LA PAGE. Le CSS de `next/font` vit dans `/_next/static/css/` et écrit
+  // `../media/x.woff2`. Résolu contre `/brand-kit/commercant`, ça donnait
+  // `/media/x.woff2` : 404 à tous les coups. Et c'est le genre de faute qui ne
+  // se voit JAMAIS en relisant, parce que les deux lignes se ressemblent.
+  {
+    const demandees = []
+    globalThis.document = {
+      styleSheets: [{
+        cssRules: [{
+          type: 0,
+          cssText: '@font-face { ... }',
+          parentStyleSheet: { href: 'https://www.yoppaa.app/_next/static/css/a1b2.css' },
+          style: {
+            getPropertyValue: (p) => ({
+              'font-family': `'${FAMILLE}'`,
+              src: 'url(../media/jakarta.p.woff2) format("woff2")',
+              'font-weight': '800',
+            })[p] || '',
+          },
+        }],
+      }],
+    }
+    globalThis.location = { href: 'https://www.yoppaa.app/brand-kit/commercant' }
+    globalThis.btoa = (s) => Buffer.from(s, 'binary').toString('base64')
+    globalThis.fetch = async (u) => {
+      demandees.push(String(u))
+      // Le serveur ne sert la fonte QU'À sa vraie adresse.
+      return String(u) === 'https://www.yoppaa.app/_next/static/media/jakarta.p.woff2'
+        ? { ok: true, arrayBuffer: async () => octetsFonte }
+        : { ok: false, status: 404, arrayBuffer: async () => octetsFonte }
+    }
+    _oublierPolices()
+    const relatif = await policesEmbarquees(`${FAMILLE}, sans-serif`)
+    verifie('🔴 UNE ADRESSE RELATIVE EST RÉSOLUE CONTRE SA FEUILLE DE STYLE',
+      typeof relatif.css === 'string' && relatif.css.includes('data:font/woff2'),
+      `${relatif.diag} — demandé : ${demandees.join(' puis ')}`)
+    verifie('🔴 et la première adresse essayée est la bonne, pas celle de la page',
+      demandees[0] === 'https://www.yoppaa.app/_next/static/media/jakarta.p.woff2',
+      demandees[0])
+
+    // ⚠️ ET LA PAGE RESTE UN SECOND ESSAI : une feuille posée en ligne n'a pas
+    // de `href`, il faut bien une base.
+    const vues = []
+    globalThis.document.styleSheets[0].cssRules[0].parentStyleSheet = { href: null }
+    globalThis.fetch = async (u) => {
+      vues.push(String(u))
+      return { ok: true, arrayBuffer: async () => octetsFonte }
+    }
+    _oublierPolices()
+    const enLigne = await policesEmbarquees(`${FAMILLE}, sans-serif`)
+    verifie('une feuille sans href retombe sur l’adresse de la page',
+      typeof enLigne.css === 'string' && vues.length > 0, vues.join(' '))
+
+    // Le refus nomme l'adresse qu'il a essayée : sans elle, on devine encore.
+    globalThis.fetch = async () => ({ ok: false, status: 404, arrayBuffer: async () => octetsFonte })
+    _oublierPolices()
+    const rate = await policesEmbarquees(`${FAMILLE}, sans-serif`)
+    verifie('🔴 le refus nomme l’adresse essayée, pas seulement le code',
+      rate.css === null && /woff2/.test(rate.diag), rate.diag)
+  }
+
   // ══ 3. LES CAS OÙ IL FAUT VRAIMENT REFUSER ══
   //
   // ⚠️ `null` VEUT DIRE SANS OBJET, PAS « VIDE ». Rendre une chaîne vide
@@ -689,7 +756,13 @@ const egal = (nom, obtenu, attendu) =>
   // `if (!rep.ok) continue`, elle a rougi dès que la ligne a gagné un
   // diagnostic : une garde qui recopie un format rougit sur une amélioration
   // légitime, et on finit par la desserrer au lieu de l'écouter.
-  verifie('🔴 la réponse du fetch de la fonte est LUE', /if \(!rep\.ok\)/.test(ex))
+  verifie('🔴 la réponse du fetch de la fonte est LUE', /if \(essai\.ok\)/.test(ex))
+  // ⚠️ ET L'ADRESSE SE RÉSOUT CONTRE LA FEUILLE DE STYLE, pas contre la page :
+  // le défaut aux dix-sept 404 du 29/08. Exécuté plus haut ; ici on garde la
+  // ligne elle-même, parce qu'elle est indistinguable de la fausse à la
+  // relecture.
+  verifie('🔴 la base de résolution est la feuille de style',
+    /r\.parentStyleSheet\?\.href \|\| location\.href/.test(ex))
   verifie('300 dpi, la résolution d\'un imprimeur', /DPI_IMPRESSION = 300/.test(ex))
 
   const page = lire('app/brand-kit/commercant/page.js')

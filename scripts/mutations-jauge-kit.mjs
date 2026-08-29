@@ -88,8 +88,16 @@ const MUTATIONS = [
 
   { nom: '🔴 la réponse du fetch de la fonte n’est plus lue : un 404 deviendrait une police',
     banc: 'verif:kit', fichier: 'lib/export-feuille.js',
-    de: '      if (!rep.ok) { echecs.push(`HTTP ${rep.status}`); continue }',
-    vers: '      if (false) { echecs.push(`HTTP ${rep.status}`); continue }' },
+    de: '        if (essai.ok) { rep = essai; break }',
+    vers: '        { rep = essai; break }' },
+
+  // 🔴 LE DÉFAUT AUX DIX-SEPT 404 DU 29/08, remis exprès. Les deux lignes se
+  // ressemblent tellement qu'aucune relecture ne les distingue : seule
+  // l'exécution les sépare.
+  { nom: '🔴 l’adresse de la fonte se résout de nouveau contre la PAGE et non contre sa feuille',
+    banc: 'verif:kit', fichier: 'lib/export-feuille.js',
+    de: '    const base = r.parentStyleSheet?.href || location.href',
+    vers: '    const base = location.href' },
 
   // ⚠️ LES DEUX SUSPECTS DU REFUS VU EN PRODUCTION LE 29/08, mis au banc pour
   // qu'ils ne reviennent jamais. La jauge était verte, la page parfaite, et

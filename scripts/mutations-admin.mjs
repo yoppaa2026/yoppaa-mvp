@@ -48,6 +48,33 @@ const MUTATIONS = [
     fichier: 'app/api/admin/commercants/route.js',
     de: "        error: 'compte_admin',",
     vers: "        error: 'zz_compte_admin',", toutes: true },
+
+  // ─── LE PIÈGE QUI N'EXISTE PAS ENCORE ──────────────────────────────────
+  //
+  // 🔴 CANONISER LES ADRESSES GMAIL est une idée qui revient dès qu'on veut
+  // dédoublonner des clients, et elle est même juste du point de vue de Gmail.
+  // Ici elle transformerait les DOUZE comptes de test en douze administrateurs.
+  // ⚠️ ÉCRITES SANS LA MOINDRE BARRE OBLIQUE INVERSE, ET C'EST DÉLIBÉRÉ. Ma
+  // première version passait par une expression régulière : l'échappement s'est
+  // perdu en route, le fichier muté ne compilait plus, et le banc a PLANTÉ au
+  // lieu de rougir. Une mutation change le RÉSULTAT, jamais la TERMINAISON —
+  // un banc qui explose ne mesure rien, il constate un accident.
+  { nom: '🔴 la normalisation se met à retirer le +alias (12 admins d’un coup)',
+    fichier: 'lib/email-normalise.js',
+    de: '  return s || null',
+    vers: "  if (!s) return null\n  const [av, ap] = s.split('@')\n  return ap ? av.split('+')[0] + '@' + ap : s" },
+
+  { nom: '🔴 et elle se met aussi à retirer les points',
+    fichier: 'lib/email-normalise.js',
+    de: '  return s || null',
+    vers: "  if (!s) return null\n  const [av, ap] = s.split('@')\n  return ap ? av.split('.').join('') + '@' + ap : s" },
+
+  // ⚠️ ET DANS L'AUTRE SENS : une normalisation qui ne fait plus RIEN casserait
+  // la reconnaissance d'un email tapé avec une majuscule.
+  { nom: '🔴 la normalisation cesse d’uniformiser la casse',
+    fichier: 'lib/email-normalise.js',
+    de: "  const s = String(valeur ?? '').trim().toLowerCase()",
+    vers: "  const s = String(valeur ?? '')" },
 ]
 
 const lancer = () => {

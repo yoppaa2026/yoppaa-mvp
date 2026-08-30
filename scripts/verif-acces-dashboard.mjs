@@ -20,6 +20,10 @@ import {
   accesDashboard, STATUTS_ACCES_AUTORISE,
   RAISON_OK, RAISON_AUCUN_COMPTE, RAISON_ONBOARDING, RAISON_REJETE, RAISON_ATTENTE,
 } from '../lib/statut-commercant.js'
+// ⚠️ IMPORTÉE POUR ÊTRE EXÉCUTÉE : c'est elle qui décide si un `+alias` reste
+// distinct de l'adresse administrateur, donc si douze comptes de test restent
+// douze commerçants ordinaires.
+import { normaliserEmail, memeEmail } from '../lib/email-normalise.js'
 
 // ⚠️ On NORMALISE LES FINS DE LIGNE. Git rend ces fichiers en CRLF sous
 // Windows, et une expression qui cherche `return\n` ne trouve alors rien : la
@@ -237,6 +241,41 @@ function sansCommentaires(src) {
   verifier('le refus admin passe avant le garde-fou des paiements',
     posAdmin > 0 && posPaye > 0 && posAdmin < posPaye,
     `admin ${posAdmin}, paiements ${posPaye}`)
+}
+
+// ═══ LE PIÈGE QUI N'EXISTE PAS ENCORE, ET QU'ON EMPÊCHE D'ARRIVER ═════════
+//
+// 🔴 LES DOUZE COMMERCES DE TEST UTILISENT UN `+alias` DE LA MÊME BOÎTE :
+// `verstappenalexandre+ciseauxprovisoires@gmail.com`, et onze autres. Gmail les
+// livre toutes au même endroit, mais Supabase en fait DOUZE UTILISATEURS
+// DISTINCTS, et l'admin se reconnaît à une égalité stricte de chaîne.
+//
+// ⚠️ DONC TOUT TIENT À UNE CHOSE : que la normalisation d'email NE CANONISE
+// PAS les adresses Gmail. Retirer la partie après le `+` (et les points) est une
+// idée qui revient dès qu'on veut dédoublonner des clients : elle est même
+// techniquement juste du point de vue de Gmail. Le jour où quelqu'un l'ajoute,
+// **chacun de ces douze comptes devient administrateur de Yoppaa**, sans qu'une
+// seule ligne du contrôle admin n'ait bougé.
+//
+// ⚠️ ON EXÉCUTE LA FONCTION, on ne lit pas son code : une garde qui cherche
+// l'absence de `split('+')` raterait n'importe quelle autre écriture du même
+// raffinement.
+{
+  const ADMIN = 'verstappenalexandre@gmail.com'
+  verifier('la normalisation garde le +alias distinct de l’adresse admin',
+    normaliserEmail('verstappenalexandre+ciseauxprovisoires@gmail.com') !== ADMIN,
+    normaliserEmail('verstappenalexandre+ciseauxprovisoires@gmail.com'))
+  verifier('et elle ne retire pas non plus les points',
+    normaliserEmail('verstappen.alexandre@gmail.com') !== ADMIN,
+    normaliserEmail('verstappen.alexandre@gmail.com'))
+  // ⚠️ ET ELLE FAIT QUAND MÊME SON TRAVAIL : casse et espaces, sinon un email
+  // tapé « Alexandre@… » perdrait ses commandes en se connectant.
+  verifier('mais elle uniformise bien la casse et les espaces',
+    normaliserEmail('  VerstappenAlexandre@Gmail.com ') === ADMIN)
+  verifier('et deux écritures de la même adresse se reconnaissent',
+    memeEmail('A@B.be', ' a@b.be ') === true)
+  verifier('quand deux adresses différentes ne se confondent pas',
+    memeEmail('verstappenalexandre+x@gmail.com', ADMIN) === false)
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

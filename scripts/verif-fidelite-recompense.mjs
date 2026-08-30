@@ -421,11 +421,47 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
       posInsert > 0 && posConso > posInsert, `insert ${posInsert}, conso ${posConso}`)
   }
 
+  // 🔴 ELLE ÉTAIT RENDUE, ET PERSONNE NE LE DISAIT (Alex, 30/08, sur son propre
+  // parcours). Le montant du BON remontait jusqu'à l'écran et jusqu'à l'email ;
+  // la récompense, elle, revenait en silence sur la carte de fidélité. Alex l'a
+  // vu parce qu'il est allé vérifier. Un Yopper croit avoir perdu ses 10 €.
+  //
+  // ⚠️ LES DEUX ROUTES D'ANNULATION SONT DES FRÈRES, et le défaut vivait dans
+  // les deux : `rendreAvantages` avait été recopiée telle quelle de l'une à
+  // l'autre. On les mesure ensemble, sinon on en corrige une et pas l'autre.
+  for (const [nom, chemin, client] of [
+    ['l’annulation par le Yopper', 'app/api/rdv/cancel/route.js', 'supabase'],
+    ['l’annulation par le commerçant', 'app/api/rdv/annuler-commercant/route.js', 'supabase'],
+  ]) {
+    const src = lireCode(chemin)
+    verifie(`${nom} rend la récompense`,
+      new RegExp(`await rendreRecompense\\(${client}, recFid\\)`).test(src))
+    // ⚠️ ET ON COMPTE SOUS LA MÊME CONDITION QU'ON REND : annoncer un retour sur
+    // un rejeu où rien n'a bougé serait un second mensonge.
+    verifie(`${nom} compte ce qu’elle rend`,
+      /rendu\.recompense = Number\(recompenseMontant\) \|\| 0/.test(src))
+    verifie(`${nom} remonte le montant à l’appelant`,
+      /recompense_rendue/.test(src))
+    // 🔴 LA COLONNE DU MONTANT DOIT ÊTRE DEMANDÉE. Absente du `select`, elle
+    // vaut `undefined`, `Number(undefined || 0)` vaut 0, la ligne disparaît et
+    // AUCUNE erreur ne se lève. C'est le défaut le plus fréquent du projet, et
+    // je l'ai recréé dans la route commerçant en écrivant ce correctif.
+    verifie(`${nom} demande la remise figée`,
+      /fidelite_remise/.test(src.split('.eq(\'id\', rdv_id)')[0] || src))
+  }
   const annul = lireCode('app/api/rdv/cancel/route.js')
-  verifie('un rendez-vous annulé rend la récompense',
-    /if \(recFid\?\.utilisee_at\) await rendreRecompense\(supabase, recFid\)/.test(annul))
-  verifie('et la colonne est bien demandée',
+  verifie('et la colonne de la récompense est bien demandée',
     /fidelite_recompense_id/.test(annul.split('const query =')[0]))
+  // ⚠️ ET LE GABARIT D'EMAIL A SA LIGNE, sinon les deux routes calculent un
+  // montant que personne n'affiche.
+  const mail = lireCode('lib/resend.js')
+  verifie('l’email d’annulation annonce la récompense rendue',
+    /Ta récompense fidélité de <strong>\$\{euros\(surCarteFid\)\}<\/strong> retourne sur ta carte/.test(mail))
+  // ⚠️ ET LE BLOC RESTE VERT quand seule la fidélité revient : sans ça, un
+  // rendez-vous payé entièrement par la récompense passait en orange
+  // « Remboursement à voir » alors que tout était déjà revenu.
+  verifie('et le bloc reste vert quand seule la récompense revient',
+    /const vert = refund_en_cours \|\| surBon > 0 \|\| surCarteFid > 0/.test(mail))
 
   // ⚠️ LA RAISON DE CETTE GARDE A CHANGÉ LE 30/08, ET IL FAUT LE DIRE.
   //

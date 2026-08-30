@@ -181,6 +181,43 @@ const MUTATIONS = [
     de: "    if (!String(acheteur_prenom || '').trim()) {",
     vers: "    if (false && !String(acheteur_prenom || '').trim()) {" },
 
+  // ─── LA RÉCOMPENSE RENDUE, ET DITE (30/08, trouvé par Alex) ──────────
+  //
+  // 🔴 Elle revenait sur la carte, et personne ne l'annonçait. Alex l'a vu
+  // parce qu'il est allé vérifier sa carte ; un Yopper, lui, croit avoir perdu
+  // ses 10 €. Frère exact du bon cadeau, corrigé la veille et jamais porté à
+  // côté — dans les DEUX routes d'annulation, qui se recopient l'une l'autre.
+  { nom: '🔴 l’annulation Yopper rend la récompense sans la compter',
+    banc: 'verif:recompense', fichier: 'app/api/rdv/cancel/route.js',
+    de: '          await rendreRecompense(supabase, recFid)\n          rendu.recompense = Number(recompenseMontant) || 0',
+    vers: '          await rendreRecompense(supabase, recFid)' },
+
+  { nom: '🔴 l’annulation commerçant fait pareil',
+    banc: 'verif:recompense', fichier: 'app/api/rdv/annuler-commercant/route.js',
+    de: '          await rendreRecompense(supabase, recFid)\n          rendu.recompense = Number(recompenseMontant) || 0',
+    vers: '          await rendreRecompense(supabase, recFid)' },
+
+  // 🔴 LA COLONNE ABSENTE DU SELECT, le défaut le plus fréquent du projet, et
+  // je l'ai RECRÉÉ en écrivant ce correctif : `Number(undefined || 0)` vaut 0,
+  // la ligne disparaît, et aucune erreur ne se lève.
+  { nom: '🔴 la remise figée disparaît du select de l’annulation commerçant',
+    banc: 'verif:recompense', fichier: 'app/api/rdv/annuler-commercant/route.js',
+    de: '        commande_id, fidelite_recompense_id, fidelite_remise, bon_cadeau_id, bon_cadeau_montant,',
+    vers: '        commande_id, fidelite_recompense_id, bon_cadeau_id, bon_cadeau_montant,' },
+
+  { nom: '🔴 l’email d’annulation redevient muet sur la récompense',
+    banc: 'verif:recompense', fichier: 'lib/resend.js',
+    de: '          lignes.push(`Ta récompense fidélité de <strong>${euros(surCarteFid)}</strong> retourne sur ta carte, utilisable à ton prochain passage.`)',
+    vers: '          void surCarteFid' },
+
+  // ⚠️ ET LA COULEUR NE DOIT PAS MENTIR : un rendez-vous payé entièrement par
+  // la fidélité passait en ORANGE « Remboursement à voir » alors que tout était
+  // déjà revenu.
+  { nom: '🔴 le bloc passe en orange quand seule la récompense revient',
+    banc: 'verif:recompense', fichier: 'lib/resend.js',
+    de: '        const vert = refund_en_cours || surBon > 0 || surCarteFid > 0',
+    vers: '        const vert = refund_en_cours || surBon > 0' },
+
   { nom: '🔴 la perte de récompense redevient silencieuse',
     banc: 'verif:recompense', fichier: 'lib/fidelite-recompense.js',
     de: '  return perte > 0 ? perte : 0',

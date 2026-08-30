@@ -1780,6 +1780,9 @@ export default function Dashboard() {
         refund_montant: j.refund_montant,
         refund_en_cours: !!j.refund_id && !j.refund_error,
         bon_rendu: j.bon_rendu,
+        // 🔴 AJOUTÉ LE 30/08 : la récompense revenait sur la carte du Yopper
+        // sans que rien ne le lui dise. Frère du bon cadeau, corrigé la veille.
+        recompense_rendue: j.recompense_rendue,
         produits_montant: j.produits_montant,
       }, 'l’email d’annulation du rendez-vous')
       return true

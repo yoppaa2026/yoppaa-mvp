@@ -276,14 +276,22 @@ export async function POST(request) {
     //
     // ⚠️ ET LA COMMANDE LIÉE SUIT LE CHOIX DU CLIENT : ses avantages ne
     // reviennent que s'il rend ses produits. Les garder, c'est les acheter.
-    const rendreAvantages = async ({ bonId, bonMontant, recompenseId, refs }) => {
-      let rendu = 0
+    // 🔴 CETTE FONCTION RENDAIT LA RÉCOMPENSE ET NE LE DISAIT À PERSONNE (Alex,
+    // 30/08, sur son propre parcours). Elle ne rendait QUE le montant du bon :
+    // la récompense revenait bel et bien sur la carte de fidélité, mais aucun
+    // écran ni aucun email ne l'annonçait. Alex l'a vu parce qu'il est allé
+    // vérifier sa carte — un Yopper, lui, croit avoir perdu ses 10 €.
+    //
+    // ⚠️ EXACTEMENT LE MÊME DÉFAUT QUE LE BON LE 29/08, un jour plus tard et
+    // une ligne plus bas. Le geste avait été porté au bon, jamais à sa voisine.
+    const rendreAvantages = async ({ bonId, bonMontant, recompenseId, recompenseMontant, refs }) => {
+      const rendu = { bon: 0, recompense: 0 }
       if (bonId && Number(bonMontant) > 0) {
         const rec = await recrediterBon(supabase, bonId, Number(bonMontant), refs)
         // ⚠️ ON LIT LE RÉSULTAT : un `await` qu'on n'écoute pas est un espoir,
         // et ici l'espoir vaut de l'argent que le Yopper a déjà payé.
         if (!rec?.ok) console.error('[rdv/cancel] re-crédit bon cadeau KO', rec?.error, { rdvId: rdv.id, ...refs })
-        else if (!rec.deja_recredite) rendu = Number(bonMontant)
+        else if (!rec.deja_recredite) rendu.bon = Number(bonMontant)
       }
       if (recompenseId) {
         const { data: recFid } = await supabase
@@ -293,7 +301,13 @@ export async function POST(request) {
           .maybeSingle()
         // `rendreRecompense` ne rend que ce qui est effectivement pris : un
         // double appel est sans effet.
-        if (recFid?.utilisee_at) await rendreRecompense(supabase, recFid)
+        // ⚠️ ET ON COMPTE CE QU'ON REND, sous la même condition. Compter sans
+        // regarder `utilisee_at` annoncerait un retour sur un rejeu où rien
+        // n'a bougé.
+        if (recFid?.utilisee_at) {
+          await rendreRecompense(supabase, recFid)
+          rendu.recompense = Number(recompenseMontant) || 0
+        }
       }
       return rendu
     }
@@ -316,22 +330,35 @@ export async function POST(request) {
       && Number(commandeLiee?.fidelite_remise || 0) > 0
 
     // Le rendez-vous n'aura pas lieu : ce qu'il a consommé revient.
-    let bonRendu = await rendreAvantages({
+    //
+    // ⚠️ LA REMISE ANNONCÉE EST CELLE QUI A ÉTÉ FIGÉE, prestation ET produits :
+    // une récompense est UNE ligne, mais elle a pu mordre des deux côtés depuis
+    // le 30/08. N'annoncer que la part prestation ferait dire « 6 € te
+    // reviennent » quand 10 € reviennent.
+    const rendu = await rendreAvantages({
       bonId: rdv.bon_cadeau_id,
       bonMontant: rdv.bon_cadeau_montant,
       recompenseId: recompenseSurProduitsGardes ? null : rdv.fidelite_recompense_id,
+      recompenseMontant: arr(Number(rdv.fidelite_remise || 0)
+        + (gardeSesProduits ? 0 : Number(commandeLiee?.fidelite_remise || 0))),
       refs: { rdv_id: rdv.id },
     })
+    let bonRendu = rendu.bon
+    let recompenseRendue = rendu.recompense
 
     if (commandeLiee && !gardeSesProduits) {
-      bonRendu += await rendreAvantages({
+      const rc = await rendreAvantages({
         bonId: commandeLiee.bon_cadeau_id,
         bonMontant: commandeLiee.bon_cadeau_montant,
         recompenseId: commandeLiee.fidelite_recompense_id,
+        recompenseMontant: Number(commandeLiee.fidelite_remise || 0),
         refs: { commande_id: commandeLiee.id },
       })
+      bonRendu += rc.bon
+      recompenseRendue += rc.recompense
     }
     bonRendu = arr(bonRendu)
+    recompenseRendue = arr(recompenseRendue)
 
     // Annule le rappel push programmé (1h avant) s'il existe. Best-effort.
     if (rdv.rappel_push_id) {
@@ -352,10 +379,13 @@ export async function POST(request) {
           acompte_montant:   rdv.acompte_montant,
           refund_en_cours:   !!refundId && !refundError,
           raison_annulation: 'yopper',
-          // ⚠️ LES TROIS MONTANTS ARRIVENT JUSQU'ICI, sans quoi le gabarit se
-          // rabat sur le seul acompte et se tait dès qu'il vaut zéro.
+          // ⚠️ LES QUATRE MONTANTS ARRIVENT JUSQU'ICI, sans quoi le gabarit se
+          // rabat sur le seul acompte et se tait dès qu'il vaut zéro. La
+          // récompense est le quatrième, ajouté le 30/08 : elle revenait déjà,
+          // et rien ne le disait.
           refund_montant:    refundMontant != null ? refundMontant : (refundError ? null : 0),
           bon_rendu:         bonRendu,
+          recompense_rendue: recompenseRendue,
           produits_gardes:   gardeSesProduits,
           produits_montant:  produitsPayesCarte,
         })
@@ -403,18 +433,27 @@ export async function POST(request) {
     const phraseBon = bonRendu > 0
       ? ` Les ${euros(bonRendu)} de ton bon cadeau sont recrédités dessus, utilisables tout de suite.`
       : ''
+    // 🔴 ET LA RÉCOMPENSE, QUI REVENAIT SANS QUE PERSONNE NE LE DISE (Alex,
+    // 30/08). Exactement le défaut du bon cadeau, un jour plus tard : le geste
+    // avait été porté au bon et jamais à sa voisine. Le Yopper devait ouvrir sa
+    // carte de fidélité pour découvrir que ses 10 € y étaient revenus, et
+    // personne ne va vérifier ce qu'on ne lui annonce pas.
+    const phraseRecompense = recompenseRendue > 0
+      ? ` Ta récompense fidélité de ${euros(recompenseRendue)} retourne sur ta carte, utilisable à ton prochain passage.`
+      : ''
+    const retours = `${phraseBon}${phraseRecompense}`
 
     let message
     if (refundError) {
-      message = `Ton RDV est annulé. Le remboursement sera traité manuellement par le commerçant sous quelques jours.${phraseBon}`
+      message = `Ton RDV est annulé. Le remboursement sera traité manuellement par le commerçant sous quelques jours.${retours}`
     } else if (gardeSesProduits) {
       message = refundMontant > 0
-        ? `Ton RDV est annulé. Tes ${euros(refundMontant)} d'acompte reviennent sur ton moyen de paiement dans 5 à 10 jours, et tes produits t'attendent en boutique.${phraseBon}`
-        : `Ton RDV est annulé. Tes produits t'attendent en boutique.${phraseBon}`
+        ? `Ton RDV est annulé. Tes ${euros(refundMontant)} d'acompte reviennent sur ton moyen de paiement dans 5 à 10 jours, et tes produits t'attendent en boutique.${retours}`
+        : `Ton RDV est annulé. Tes produits t'attendent en boutique.${retours}`
     } else if (refundMontant > 0) {
-      message = `Ton RDV est annulé. ${euros(refundMontant)} reviennent sur ton moyen de paiement dans 5 à 10 jours.${phraseBon}`
+      message = `Ton RDV est annulé. ${euros(refundMontant)} reviennent sur ton moyen de paiement dans 5 à 10 jours.${retours}`
     } else {
-      message = `Ton RDV est annulé.${phraseBon}`
+      message = `Ton RDV est annulé.${retours}`
     }
 
     return NextResponse.json({

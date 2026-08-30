@@ -120,8 +120,13 @@ export default function CancelPage() {
               <h1 style={{ fontWeight: 900, fontSize: '1.5rem', color: T.ink, marginBottom: 8, letterSpacing: '-0.5px' }}>
                 Annuler ta commande ?
               </h1>
+              {/* ⚠️ FRÈRE DE L'ÉCRAN DU RENDEZ-VOUS (30/08) : la phrase ne
+                  parlait que du paiement en ligne, et laissait croire qu'un bon
+                  cadeau ou une récompense posés sur la commande étaient perdus.
+                  On nomme les trois retours ; l'écran suivant donne les
+                  chiffres, qui ne sont pas encore connus ici. */}
               <p style={{ color: T.muted, fontSize: '0.95rem', lineHeight: 1.5 }}>
-                Si tu as payé en ligne, le remboursement sera lancé automatiquement.
+                Ton paiement, ton bon cadeau et ta récompense fidélité te reviennent automatiquement.
               </p>
             </div>
 

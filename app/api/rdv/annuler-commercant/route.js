@@ -52,7 +52,7 @@ export async function POST(request) {
       .from('rdv_reservations')
       .select(`
         id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id, stripe_refund_id,
-        commande_id, fidelite_recompense_id, bon_cadeau_id, bon_cadeau_montant,
+        commande_id, fidelite_recompense_id, fidelite_remise, bon_cadeau_id, bon_cadeau_montant,
         rappel_push_id, commercant_id,
         commercant:commercants(stripe_account_id)
       `)
@@ -135,30 +135,53 @@ export async function POST(request) {
     }
 
     // ─── Ce qui n'est pas de la carte revient aussi ─────────────────────────
-    const rendreAvantages = async ({ bonId, bonMontant, recompenseId, refs }) => {
-      let rendu = 0
+    //
+    // 🔴 ET ON COMPTE LA RÉCOMPENSE, PAS SEULEMENT LE BON (Alex, 30/08). Elle
+    // était rendue et jamais annoncée : le Yopper devait ouvrir sa carte de
+    // fidélité pour découvrir que ses 10 € y étaient revenus. Frère exact du
+    // défaut du bon cadeau, corrigé la veille dans cette même fonction, et
+    // recopié tel quel ici.
+    const rendreAvantages = async ({ bonId, bonMontant, recompenseId, recompenseMontant, refs }) => {
+      const rendu = { bon: 0, recompense: 0 }
       if (bonId && Number(bonMontant) > 0) {
         const rec = await recrediterBon(supabase, bonId, Number(bonMontant), refs)
         if (!rec?.ok) console.error('[rdv/annuler-commercant] re-crédit bon KO', rec?.error, refs)
-        else if (!rec.deja_recredite) rendu = Number(bonMontant)
+        else if (!rec.deja_recredite) rendu.bon = Number(bonMontant)
       }
       if (recompenseId) {
         const { data: recFid } = await supabase
           .from('fidelite_recompenses').select('id, carte_id, utilisee_at').eq('id', recompenseId).maybeSingle()
-        if (recFid?.utilisee_at) await rendreRecompense(supabase, recFid)
+        // ⚠️ ON COMPTE SOUS LA MÊME CONDITION QU'ON REND : annoncer un retour
+        // sur un rejeu où rien n'a bougé serait un mensonge de plus.
+        if (recFid?.utilisee_at) {
+          await rendreRecompense(supabase, recFid)
+          rendu.recompense = Number(recompenseMontant) || 0
+        }
       }
       return rendu
     }
 
-    let bonRendu = await rendreAvantages({
+    // ⚠️ LE COMMERÇANT ANNULE : TOUT REVIENT, y compris la part de récompense
+    // posée sur les produits. Il n'y a pas de « je garde mes produits » ici,
+    // c'est lui qui renonce à la vente.
+    const rendu = await rendreAvantages({
       bonId: rdv.bon_cadeau_id, bonMontant: rdv.bon_cadeau_montant,
-      recompenseId: rdv.fidelite_recompense_id, refs: { rdv_id: rdv.id },
+      recompenseId: rdv.fidelite_recompense_id,
+      recompenseMontant: arr(Number(rdv.fidelite_remise || 0)
+        + Number(commandeLiee?.fidelite_remise || 0)),
+      refs: { rdv_id: rdv.id },
     })
+    let bonRendu = rendu.bon
+    let recompenseRendue = rendu.recompense
     if (commandeLiee) {
-      bonRendu += await rendreAvantages({
+      const rc = await rendreAvantages({
         bonId: commandeLiee.bon_cadeau_id, bonMontant: commandeLiee.bon_cadeau_montant,
-        recompenseId: commandeLiee.fidelite_recompense_id, refs: { commande_id: commandeLiee.id },
+        recompenseId: commandeLiee.fidelite_recompense_id,
+        recompenseMontant: Number(commandeLiee.fidelite_remise || 0),
+        refs: { commande_id: commandeLiee.id },
       })
+      bonRendu += rc.bon
+      recompenseRendue += rc.recompense
     }
 
     if (rdv.rappel_push_id) annulerPush(rdv.rappel_push_id).catch(() => {})
@@ -170,6 +193,7 @@ export async function POST(request) {
       refund_montant: refundMontant,
       refund_error: refundError,
       bon_rendu: arr(bonRendu),
+      recompense_rendue: arr(recompenseRendue),
       produits_montant: produitsPayesCarte,
     })
   } catch (e) {

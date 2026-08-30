@@ -131,8 +131,15 @@ export default function RdvCancelPage() {
               <h1 style={{ fontWeight: 900, fontSize: '1.5rem', color: T.ink, marginBottom: 8, letterSpacing: '-0.5px' }}>
                 Annuler ton RDV ?
               </h1>
+              {/* ⚠️ CETTE PHRASE NE PARLAIT QUE DE L'ACOMPTE (Alex, 30/08). Sur
+                  un rendez-vous payé par bon cadeau et par récompense, elle
+                  laissait croire que ces deux-là étaient perdus : le client
+                  hésite à annuler, ou annule en pensant y laisser 50 €.
+                  ⚠️ ON NE CHIFFRE PAS ICI : l'annulation n'a pas eu lieu, les
+                  montants ne sont pas connus. On nomme les trois retours, et
+                  l'écran suivant donne les chiffres. */}
               <p style={{ color: T.muted, fontSize: '0.95rem', lineHeight: 1.5 }}>
-                Si tu as payé un acompte en ligne, le remboursement sera lancé automatiquement.
+                Ton acompte, ton bon cadeau et ta récompense fidélité te reviennent automatiquement.
               </p>
             </div>
 

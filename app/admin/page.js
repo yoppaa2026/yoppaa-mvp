@@ -216,22 +216,11 @@ export default function AdminPage() {
       <main style={{ maxWidth: 1080, margin: '0 auto', padding: '24px 16px 80px' }}>
         {loading && <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement…</p>}
 
-        {/* Diagnostic Brevo : la connexion email/SMS répond-elle ? */}
-        <SectionDiagnosticBrevo />
-
-        {/* Le compteur d'essais bloque-t-il vraiment ? Invérifiable à la main. */}
-        <SectionDiagnosticRatelimit />
-
-        {/* Préinscriptions (suivi de croissance) */}
-        <SectionPreinscriptions />
-
-        {/* Communes : activation manuelle + réglage du seuil (remplace les UPDATE SQL) */}
-        <SectionCommunes />
-
-        {/* Commerces réclamés par les habitants et encore absents : la liste de
-            prospection, classée par nombre de demandes. */}
-        <SectionSuggestions />
-
+        {/* 🔴 LES DEUX VALIDATIONS D'ABORD (Alex, 30/08) : « ce sont les
+            premiers éléments que je dois retrouver dans mon DB ». Elles étaient
+            sixième et septième, derrière deux diagnostics techniques et deux
+            cent soixante communes. Un tableau de bord se range par ce qu'on y
+            vient chercher, pas par l'ordre où les blocs ont été écrits. */}
         {/* À valider */}
         <section style={{ marginBottom: 32 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
@@ -272,6 +261,24 @@ export default function AdminPage() {
 
         {/* KYB en attente (S5.3 - 19/06) : valider/rejeter les verifications entreprise */}
         <SectionKYBAValider toast={(msg, type) => setToast({ msg, type })} />
+
+
+
+        {/* Diagnostic Brevo : la connexion email/SMS répond-elle ? */}
+        <SectionDiagnosticBrevo />
+
+        {/* Le compteur d'essais bloque-t-il vraiment ? Invérifiable à la main. */}
+        <SectionDiagnosticRatelimit />
+
+        {/* Préinscriptions (suivi de croissance) */}
+        <SectionPreinscriptions />
+
+        {/* Communes : activation manuelle + réglage du seuil (remplace les UPDATE SQL) */}
+        <SectionCommunes />
+
+        {/* Commerces réclamés par les habitants et encore absents : la liste de
+            prospection, classée par nombre de demandes. */}
+        <SectionSuggestions />
 
         {/* Tous les commerçants (édition + impersonation) */}
         <SectionTousCommercants toast={(msg, type) => setToast({ msg, type })} />

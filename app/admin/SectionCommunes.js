@@ -6,7 +6,10 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
-import { MapPin, Search, Check, RefreshCw } from 'lucide-react'
+import { Search, Check, RefreshCw } from 'lucide-react'
+// Le repli vit à part : d'autres blocs de l'admin sont aussi longs, et un bloc
+// plié doit continuer de dire ce qu'il contient.
+import Repli from './Repli'
 
 const T = {
   bg: '#F8F6FF', main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF',
@@ -115,19 +118,32 @@ export default function SectionCommunes() {
   const nbActives = communes.filter(c => c.active).length
   const masquees = !recherche.trim() ? communes.length - filtrees.length : 0
 
+  // ⚠️ CE QUI SE PERDRAIT EN REPLIANT. Une modification saisie et non
+  // enregistrée reste en mémoire, invisible : c'est comme ça qu'on égare une
+  // saisie. Le repli le DIT au lieu de la faire disparaître en silence.
+  const enAttente = communes.filter(c => estModifie(c)).length
+
   return (
-    <section style={{ marginBottom: 32 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
-        <h2 style={{ fontSize: 22, fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: 0 }}>
-          <MapPin size={20} strokeWidth={2} style={{ display: 'inline', verticalAlign: '-3px', marginRight: 6, color: T.main }}/>
-          Communes <span style={{ color: T.main }}>· {nbActives} active{nbActives > 1 ? 's' : ''}</span>
+    <Repli
+      titre="Communes"
+      // 🔴 LE TITRE PARLE MÊME PLIÉ (Alex, 30/08 : « c'est beaucoup trop
+      // grand »). Un bloc replié dont l'intitulé ne dit rien oblige à l'ouvrir
+      // pour savoir s'il valait la peine d'être ouvert.
+      resume={(
+        <>
+          <span style={{ color: T.main, fontSize: 22, fontWeight: 900 }}> · {nbActives} active{nbActives > 1 ? 's' : ''}</span>
           <span style={{ color: T.muted, fontWeight: 700, fontSize: 14 }}> / {communes.length}</span>
-        </h2>
+        </>
+      )}
+      alerte={enAttente > 0
+        ? `${enAttente} commune${enAttente > 1 ? 's' : ''} modifiée${enAttente > 1 ? 's' : ''} et pas encore enregistrée${enAttente > 1 ? 's' : ''}.`
+        : null}
+      actions={(
         <button onClick={charger} style={{ background: 'none', border: `1px solid ${T.hairline}`, padding: '6px 12px', borderRadius: 100, color: T.muted, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <RefreshCw size={13} strokeWidth={2}/> Rafraîchir
         </button>
-      </div>
-
+      )}
+    >
       <p style={{ fontSize: 13, color: T.muted, margin: '0 0 14px', lineHeight: 1.5 }}>
         Activation <strong>manuelle</strong> : bascule une commune sur <strong>Active</strong> quand tu y as assez de commerçants.
         Une commune active devient disponible sur la landing. Ajuste le <strong>seuil</strong> de déblocage si besoin.
@@ -206,6 +222,6 @@ export default function SectionCommunes() {
           {toast.msg}
         </div>
       )}
-    </section>
+    </Repli>
   )
 }

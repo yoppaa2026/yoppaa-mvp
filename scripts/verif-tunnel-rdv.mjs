@@ -258,6 +258,27 @@ for (const chemin of [
 }
 {
   const src = lireCode('app/commander/rdv/[slug]/page.js')
+
+  // 🔴 LES DEUX BOUTS DU FIL, ET C'EST NEUF (30/08).
+  //
+  // L'appel au tunnel avec produits partait en `fetch` NU : aucun en-tête
+  // d'autorisation, donc `identiteProuvee` ne voyait qu'un invité et refusait
+  // la récompense. Alex lisait « Connecte-toi pour utiliser ta récompense
+  // fidélité » en étant parfaitement connecté, et le paiement était bloqué.
+  //
+  // ⚠️ MON BANC NE REGARDAIT QU'UNE MOITIÉ DE LA CONVERSATION : il vérifiait
+  // que la ROUTE exige une preuve, jamais que l'APPELANT en envoie une. Une
+  // exigence sans émetteur est un refus garanti.
+  for (const route of ['create-rdv-acompte', 'create-rdv-commande']) {
+    const appel = (src.match(new RegExp(`[\\w]+\\('/api/stripe/checkout/${route}'`)) || [''])[0]
+    verifie(`l'appel à ${route} porte la preuve d'identité`,
+      /fetchAvecPreuveSiConnecte\(/.test(appel), appel || 'appel introuvable')
+    // ⚠️ ET SURTOUT PAS `fetchYopper`, qui refuserait l'appel faute de
+    // session : un invité doit pouvoir réserver, sans récompense.
+    verifie(`${route} n'exige pas une session pour un invité`,
+      !/fetchYopper\(/.test(appel))
+  }
+
   // 🔴 LE CLICHÉ DE SESSION PORTE LA VENTILATION : sans elle, l'écran de
   // retour de Stripe ne peut rien dire de ce qui vient d'être payé.
   verifie('le cliché de session porte la ventilation', /ventilation: ventFigee/.test(src))
@@ -375,6 +396,33 @@ for (const chemin of [
   const src = lireCode('app/api/rdv/mes-rdvs/route.js')
   verifie('le suivi Yopper charge les deux colonnes d’avantage',
     /fidelite_remise/.test(src) && /bon_cadeau_montant/.test(src))
+}
+
+// ═══ 8bis) LE RÉCAPITULATIF DIT CE QUI EST DÉDUIT ═════════════════════════
+{
+  const src = lireCode('app/commander/rdv/[slug]/page.js')
+  // 🔴 IL SE TAISAIT (Alex, 30/08) : « les infos de ce qui est déduit sont
+  // inexistantes aux yeux du client, du coup il ne comprend rien ». Il listait
+  // la prestation à son prix plein, les produits, puis un acompte sans lien
+  // visible avec quoi que ce soit.
+  const recap = src.slice(src.indexOf('Ton récapitulatif'), src.indexOf('Solde à régler sur place') + 400)
+  // ⚠️ ON MESURE LA CONDITION QUI DÉCIDE DE L'AFFICHAGE, pas le libellé
+  // affiché : neutraliser le `if` laissait le texte en place, donc la garde
+  // verte. Troisième fois de la journée que je vise un mot au lieu d'une
+  // règle, et les trois fois c'est le harnais de mutation qui me l'a dit.
+  verifie('la ligne de récompense est bien conditionnée à son montant',
+    /\{remiseFid > 0 && \([\s\S]{0,600}Ta récompense fidélité/.test(recap))
+  verifie('la ligne de bon cadeau est bien conditionnée à son montant',
+    /\{remiseBon > 0 && \([\s\S]{0,600}Ton bon cadeau/.test(recap))
+  // ⚠️ ET L'ASSIETTE DE L'ACOMPTE EST DITE quand elle n'est plus le prix
+  // affiché : « 50 % » d'une prestation à 60 € qui donne 5 € a l'air faux.
+  verifie('l’assiette de l’acompte est nommée quand elle change',
+    /de \$\{euros\(prixNet\)\}/.test(recap))
+  // ⚠️ ET LE TOTAL ÉCONOMISÉ, en une ligne, sans faire soustraire le client.
+  verifie('le total économisé est annoncé', /Tu économises/.test(src))
+  // ⚠️ FORMAT BELGE : virgule et espace insécable, jamais « 26.90€ ».
+  verifie('plus aucun montant au point dans le récapitulatif',
+    !/aPayerMaintenant\.toFixed\(2\)/.test(src) && !/acompteMnt\.toFixed\(2\)/.test(src))
 }
 
 // ═══ 8) PLUS AUCUN STATUT TECHNIQUE À L'ÉCRAN ═════════════════════════════

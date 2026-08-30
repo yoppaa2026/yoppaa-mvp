@@ -122,7 +122,25 @@ const MUTATIONS = [
     de: 'acompte_paye_en_ligne, bon_cadeau_montant, fidelite_remise, tva_taux',
     vers: 'acompte_paye_en_ligne, tva_taux' },
 
-  // ─── 9) L'AVANTAGE QUI S'ÉVAPORE ─────────────────────────────────────
+  // ─── 9) LES DEUX BOUTS DU FIL (30/08) ────────────────────────────────
+  // 🔴 LE DÉFAUT QUI A BLOQUÉ ALEX : l'appel partait sans jeton, la route
+  // exigeait une identité prouvée, et le paiement se refusait tout seul.
+  { nom: '🔴 l’appel au tunnel avec produits repart sans preuve d’identité',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: "const res = await fetchAvecPreuveSiConnecte('/api/stripe/checkout/create-rdv-commande'",
+    vers: "const res = await fetch('/api/stripe/checkout/create-rdv-commande'" },
+
+  { nom: '🔴 le récapitulatif redevient muet sur le bon cadeau',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                          {remiseBon > 0 && (',
+    vers: '                          {false && (' },
+
+  { nom: '🔴 le récapitulatif redevient muet sur la récompense',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                          {remiseFid > 0 && (',
+    vers: '                          {false && (' },
+
+  // ─── 10) L'AVANTAGE QUI S'ÉVAPORE ────────────────────────────────────
   { nom: '🔴 un bon qui annule l’acompte repart en insertion directe, sans débit',
     fichier: 'app/commander/rdv/[slug]/page.js',
     de: '      const avantageUtilise = !!bonChoisi || !!(recompenseFid && recompenseActive)',

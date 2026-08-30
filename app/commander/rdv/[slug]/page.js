@@ -1552,7 +1552,28 @@ export default function CommanderRdvSlug() {
         } catch (e) { console.warn('[rdv] sessionStorage save fail', e) }
 
         try {
-          const res = await fetch('/api/stripe/checkout/create-rdv-commande', {
+          // 🔴 CET APPEL PARTAIT SANS JETON, ET LA RÉCOMPENSE N'A DONC JAMAIS
+          // PU FONCTIONNER SUR CE TUNNEL. Alex, 30/08 : « Erreur paiement :
+          // Connecte-toi pour utiliser ta récompense fidélité », alors qu'il
+          // était parfaitement connecté.
+          //
+          // La route exige une identité PROUVÉE avant d'accorder une remise, ce
+          // qui est la bonne règle. Mais un `fetch` nu n'envoie aucun en-tête
+          // d'autorisation : le serveur ne voyait qu'un invité et refusait.
+          //
+          // ⚠️ CE DÉFAUT DATE DU 27/08, le jour où j'ai ajouté
+          // `fidelite_recompense_id` à ce corps de requête. J'ai transmis
+          // l'identifiant sans transmettre la preuve, et le tunnel voisin
+          // faisait déjà le bon geste vingt lignes plus bas.
+          //
+          // ⚠️ ET MON BANC REGARDAIT UN SEUL BOUT DU FIL : il vérifiait que la
+          // ROUTE exige `identiteProuvee`, jamais que l'APPELANT envoie de quoi
+          // la prouver. Une garde sur une moitié de conversation.
+          //
+          // ⚠️ `fetchAvecPreuveSiConnecte` et surtout pas `fetchYopper`, qui
+          // refuserait l'appel faute de session : un invité doit pouvoir
+          // réserver, il n'aura simplement aucune récompense.
+          const res = await fetchAvecPreuveSiConnecte('/api/stripe/checkout/create-rdv-commande', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -3305,29 +3326,61 @@ export default function CommanderRdvSlug() {
                             <div key={l.article.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: T.ink }}>{l.article.nom}</p>
-                                <p style={{ margin: 0, fontSize: '0.7rem', color: T.muted, fontWeight: 600 }}>{l.quantite} × {l.prix.toFixed(2)}€ · à emporter le jour J</p>
+                                <p style={{ margin: 0, fontSize: '0.7rem', color: T.muted, fontWeight: 600 }}>{l.quantite} × {euros(l.prix)} · à emporter le jour J</p>
                               </div>
-                              <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.ink }}>{(l.prix * l.quantite).toFixed(2)}€</span>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.ink }}>{euros(l.prix * l.quantite)}</span>
                               <button onClick={() => retirerProduit(l.article)} aria-label={`Retirer ${l.article.nom}`}
                                 style={{ width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M5 12h14"/></svg>
                               </button>
                             </div>
                           ))}
+                          {/* 🔴 LES DÉDUCTIONS N'APPARAISSAIENT NULLE PART, et
+                              Alex l'a dit tel quel le 30/08 : « les infos de ce
+                              qui est déduit sont inexistantes aux yeux du
+                              client, du coup il ne comprend rien ».
+                              Le récapitulatif listait « Head Spa 60,00 € » puis
+                              « Acompte 5,00 € », sans le moindre lien entre les
+                              deux. Les blocs verts au-dessus annonçaient bien
+                              −10 € et −40 €, mais le récapitulatif, lui, celui
+                              qu'on relit juste avant de payer, se taisait.
+                              ⚠️ UN RÉCAPITULATIF QUI SAUTE UNE ÉTAPE DU CALCUL
+                              n'est pas un récapitulatif : c'est un total à
+                              croire sur parole. */}
+                          {remiseFid > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
+                              <span style={{ fontSize: '0.8rem', color: '#047857', fontWeight: 700 }}>Ta récompense fidélité</span>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 900, color: '#059669' }}>− {euros(remiseFid)}</span>
+                            </div>
+                          )}
+                          {remiseBon > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
+                              <span style={{ fontSize: '0.8rem', color: '#047857', fontWeight: 700 }}>Ton bon cadeau</span>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 900, color: '#059669' }}>− {euros(remiseBon)}</span>
+                            </div>
+                          )}
                           {/* Ce qui part maintenant, et ce qui reste pour plus
                               tard. Les deux sont dits, y compris quand rien
                               n'est prélevé : « tu paies 0 € » n'apprend rien,
                               « tu règles tout sur place » rassure. */}
                           {acompteEnLigne && acompteMnt ? (
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
-                              <span style={{ fontSize: '0.8rem', color: T.muted, fontWeight: 600 }}>Acompte du rendez-vous ({prestationChoisie?.acompte_pourcent}%)</span>
-                              <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.ink }}>{acompteMnt.toFixed(2)}€</span>
+                              {/* ⚠️ L'ASSIETTE EST DITE quand elle n'est plus le
+                                  prix affiché : « 50 % » de quoi, sur une
+                                  prestation à 60 € dont l'acompte vaut 5 € ?
+                                  Sans le « de 10,00 € », le pourcentage a l'air
+                                  faux. */}
+                              <span style={{ fontSize: '0.8rem', color: T.muted, fontWeight: 600 }}>
+                                Acompte du rendez-vous ({prestationChoisie?.acompte_pourcent}%
+                                {(remiseFid > 0 || remiseBon > 0) && prixNet != null ? ` de ${euros(prixNet)}` : ''})
+                              </span>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 900, color: T.ink }}>{euros(acompteMnt)}</span>
                             </div>
                           ) : null}
                           {aPayerMaintenant > 0 ? (
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 14px', background: T.pale }}>
                               <span style={{ fontSize: '0.85rem', color: T.deep, fontWeight: 800 }}>Tu paies maintenant</span>
-                              <span style={{ fontSize: '1rem', fontWeight: 900, color: T.main }}>{aPayerMaintenant.toFixed(2)}€</span>
+                              <span style={{ fontSize: '1rem', fontWeight: 900, color: T.main }}>{euros(aPayerMaintenant)}</span>
                             </div>
                           ) : (
                             <div style={{ padding: '11px 14px', background: T.pale }}>
@@ -3337,7 +3390,18 @@ export default function CommanderRdvSlug() {
                           {surPlace != null && surPlace > 0 && aPayerMaintenant > 0 && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px' }}>
                               <span style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 600 }}>Solde à régler sur place</span>
-                              <span style={{ fontSize: '0.82rem', fontWeight: 800, color: T.deep }}>{surPlace.toFixed(2)}€</span>
+                              <span style={{ fontSize: '0.82rem', fontWeight: 800, color: T.deep }}>{euros(surPlace)}</span>
+                            </div>
+                          )}
+                          {/* ⚠️ ET LE TOTAL ÉCONOMISÉ, EN UNE LIGNE. C'est la
+                              seule chose que le porteur d'un bon veut vérifier
+                              avant de payer, et elle demandait jusqu'ici de
+                              faire soi-même trois soustractions. */}
+                          {(remiseFid > 0 || remiseBon > 0) && (
+                            <div style={{ padding: '9px 14px', background: '#ECFDF5', borderTop: '1px solid #10B98122' }}>
+                              <span style={{ fontSize: '0.8rem', color: '#047857', fontWeight: 800 }}>
+                                Tu économises {euros(remiseFid + remiseBon)} sur ce rendez-vous.
+                              </span>
                             </div>
                           )}
                         </div>
@@ -3346,7 +3410,7 @@ export default function CommanderRdvSlug() {
                           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: (!formValide || submitting) ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: (!formValide || submitting) ? '#9CA3AF' : '#fff', fontWeight: 800, fontSize: '1rem', cursor: (!formValide || submitting) ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: (!formValide || submitting) ? 'none' : `0 6px 24px ${T.main}55`, opacity: (!formValide || submitting) ? 0.6 : 1, transition: 'all 0.2s' }}>
                           {submitting ? 'Réservation en cours…' : (
                             <>
-                              {aPayerMaintenant > 0 ? `Payer ${aPayerMaintenant.toFixed(2)}€ et confirmer` : 'Confirmer mon RDV'}
+                              {aPayerMaintenant > 0 ? `Payer ${euros(aPayerMaintenant)} et confirmer` : 'Confirmer mon RDV'}
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
                               </svg>

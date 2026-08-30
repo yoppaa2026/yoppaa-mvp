@@ -35,7 +35,10 @@ async function requireAdmin(request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { persistSession: false } }
   )
-  return { admin }
+  // ⚠️ ON REND AUSSI L'UTILISATEUR. La suppression a besoin de savoir QUI
+  // appelle, pas seulement qu'il a le droit d'appeler : c'est ce qui lui permet
+  // de refuser d'effacer le compte de celui qui tient les clés.
+  return { admin, user }
 }
 
 // GET -> les PHOTOS des commerçants en attente de validation.
@@ -83,7 +86,7 @@ export async function GET(request) {
 
 export async function DELETE(request) {
   try {
-    const { admin, error, status } = await requireAdmin(request)
+    const { admin, user, error, status } = await requireAdmin(request)
     if (error) return NextResponse.json({ ok: false, error }, { status })
 
     const body = await request.json().catch(() => ({}))
@@ -96,6 +99,49 @@ export async function DELETE(request) {
       .eq('id', commercant_id)
       .maybeSingle()
     if (!c) return NextResponse.json({ ok: false, error: 'Commerçant introuvable' }, { status: 404 })
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔴 ON NE SUPPRIME JAMAIS LE COMPTE QUI TIENT LES CLÉS.
+    //
+    // Trouvé le 30/08 au soir, en répondant à une question d'Alex sur le ménage
+    // dans ses comptes de test. Cette route supprime l'utilisateur Auth rattaché
+    // au commerçant, et le commerce « Kebabistro » était rattaché au SIEN.
+    //
+    // Un seul clic sur son propre écran d'administration aurait :
+    //   • effacé son compte,
+    //   • LIBÉRÉ son adresse dans Supabase Auth,
+    //   • et donc offert Yoppaa à la première personne qui s'y serait inscrite.
+    //
+    // ⚠️ PARCE QU'ÊTRE ADMIN N'EST PAS « ÊTRE CE COMPTE », C'EST « DÉTENIR CETTE
+    // ADRESSE » : `is_yoppaa_admin()` teste `auth.email()`, et le code teste la
+    // même chaîne à vingt-cinq endroits. L'accès ne meurt pas avec le compte,
+    // il se met à flotter.
+    //
+    // ⚠️ ET LE GARDE-FOU DES TRANSACTIONS PAYÉES N'AURAIT RIEN VU : un commerce
+    // de test n'a pas de paiement, il passe donc sans qu'on lui demande rien.
+    //
+    // ⚠️ DEUX CHEMINS INDÉPENDANTS, comme pour un diagnostic : l'identifiant du
+    // demandeur, et l'adresse du compte visé. Le premier suffit aujourd'hui ; le
+    // second tiendra encore le jour où l'admin sera une liste et non une
+    // constante.
+    // ═══════════════════════════════════════════════════════════════════════
+    if (c.auth_user_id && user?.id && c.auth_user_id === user.id) {
+      return NextResponse.json({
+        ok: false,
+        error: 'compte_admin',
+        message: `« ${c.nom} » est rattaché à TON compte. Le supprimer effacerait ton accès administrateur et libérerait ton adresse : n'importe qui pourrait ensuite s'inscrire avec et prendre ta place. Détache d'abord ce commerce de ton compte.`,
+      }, { status: 409 })
+    }
+    if (c.auth_user_id) {
+      const { data: vise } = await admin.auth.admin.getUserById(c.auth_user_id)
+      if (vise?.user?.email && vise.user.email === ADMIN_EMAIL) {
+        return NextResponse.json({
+          ok: false,
+          error: 'compte_admin',
+          message: `« ${c.nom} » est rattaché au compte administrateur. Le supprimer libérerait l'adresse qui donne tous les droits sur Yoppaa.`,
+        }, { status: 409 })
+      }
+    }
 
     // Garde-fou : transactions payées (rétention légale)
     const { count: nbCmd } = await admin

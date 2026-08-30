@@ -34,6 +34,11 @@ const verifier = (nom, cond, detail = '') => {
   if (cond) { ok++; return }
   ko++; echecs.push(`${nom}${detail ? ` → ${detail}` : ''}`)
 }
+// ⚠️ COMPTER, PAS CHERCHER. Une garde qui teste la présence d'un mot reste
+// verte quand ce mot vit à deux endroits et qu'on n'en abîme qu'un. Ce piège
+// s'est présenté trois fois dans la soirée du 30/08.
+const egalNombre = (nom, obtenu, attendu) =>
+  verifier(nom, obtenu === attendu, `obtenu ${obtenu}, attendu ${attendu}`)
 
 function sansCommentaires(src) {
   return src
@@ -183,6 +188,55 @@ function sansCommentaires(src) {
     'l\'ambre dit « à corriger », le rouge dit « perdu »')
   verifier("l'écran mesure en dvh, jamais en vh",
     !/[^d]vh\b/.test(ecran))
+}
+
+// ═══ LA PORTE DE L'ADMINISTRATION ═════════════════════════════════════════
+//
+// 🔴 UN CLIC DE L'ADMIN POUVAIT EFFACER SON PROPRE ACCÈS (30/08 au soir, trouvé
+// en répondant à une question d'Alex sur le ménage dans ses comptes de test).
+// La suppression d'un commerçant supprime l'utilisateur Auth rattaché, et le
+// commerce « Kebabistro » était rattaché AU SIEN.
+//
+// ⚠️ CE N'EST PAS UNE SIMPLE PERTE D'ACCÈS, C'EST UNE PORTE QUI S'OUVRE. Être
+// admin n'est pas « être ce compte », c'est « détenir cette adresse » :
+// `is_yoppaa_admin()` teste `auth.email()`, et le code teste la même chaîne à
+// vingt-cinq endroits. Le compte supprimé, l'adresse redevient libre, et la
+// première personne qui s'y inscrit reprend tous les droits.
+{
+  const src = lire('app/api/admin/commercants/route.js')
+
+  // ⚠️ ON MESURE LES DEUX CHEMINS, pas la présence d'un mot : l'identifiant du
+  // demandeur, et l'adresse du compte visé. Une garde qui n'interroge qu'un
+  // seul chemin se tait le jour où celui-là change.
+  verifier('la suppression sait QUI la demande',
+    /return \{ admin, user \}/.test(src))
+  verifier('elle refuse d’effacer le compte du demandeur',
+    /c\.auth_user_id === user\.id/.test(src))
+  verifier('et elle refuse aussi par l’adresse du compte visé',
+    /getUserById\(c\.auth_user_id\)/.test(src)
+    && /vise\.user\.email === ADMIN_EMAIL/.test(src))
+
+  // ⚠️ ET LES DEUX REFUS DISENT CE QU'ILS ÉVITENT. « Suppression impossible »
+  // ferait cliquer une seconde fois ; ici il faut comprendre qu'on vient
+  // d'éviter de donner Yoppaa à un inconnu.
+  //
+  // 🔴 ON COMPTE, ON NE CHERCHE PAS. Ma première version testait la présence de
+  // « libérerait » dans le fichier : le mot vit dans les DEUX messages, donc en
+  // abîmer un seul laissait la garde verte. Le harnais l'a dit, et c'est la
+  // troisième fois de la soirée que je copie un mot au lieu de compter.
+  const refus = [...src.matchAll(/error: 'compte_admin',\s*\n\s*message: `([^`]*)`/g)].map(m => m[1])
+  egalNombre('les deux refus admin existent', refus.length, 2)
+  egalNombre('et tous les deux disent ce qu’ils évitent',
+    refus.filter(m => /libérerait/.test(m) && /adresse/.test(m)).length, 2)
+
+  // 🔴 LE GARDE-FOU DES TRANSACTIONS PAYÉES NE COUVRE PAS CE CAS : un commerce
+  // de test n'a aucun paiement, il passe donc sans qu'on lui demande rien. Les
+  // deux gardes sont indépendantes, et celle de l'admin vient AVANT.
+  const posAdmin = src.indexOf("error: 'compte_admin'")
+  const posPaye = src.indexOf("error: 'transactions_payees'")
+  verifier('le refus admin passe avant le garde-fou des paiements',
+    posAdmin > 0 && posPaye > 0 && posAdmin < posPaye,
+    `admin ${posAdmin}, paiements ${posPaye}`)
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

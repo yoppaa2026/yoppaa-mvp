@@ -202,7 +202,55 @@ const egal = (nom, obtenu, attendu) =>
   })
   egal('le bon reste sur la prestation', v.bonSurPresta, 10)
   egal('et ne touche pas aux produits', v.bonSurProduits, 0)
-  egal('l’acompte suit la prestation nette', v.acompte, 6.25)
+  // 🔴 CE CONTRÔLE ATTENDAIT 6,25 € JUSQU'AU 30/08 AU SOIR : l'acompte se
+  // calculait sur la prestation NETTE de bon. La règle a changé, et ce n'est
+  // pas un raffinement, c'est un renversement.
+  egal('l’acompte dû se calcule sur la prestation', v.acompteDu, 8.75)
+  egal('et les 10 € du bon l’effacent', v.acompte, 0)
+  egal('le comptoir encaisse le reste de la prestation', v.soldeSurPlace, 25)
+  egal('Stripe n’encaisse plus que les produits', v.aPayerMaintenant, 20)
+}
+{
+  // 🔴 LE CAS EXACT D'ALEX, CAPTURE DU 30/08 AU SOIR. Head Spa 60 € à 50 %
+  // d'acompte, récompense de 10 €, bon de 40 €, un shampoing à 21,90 €.
+  //
+  // AVANT : l'acompte se calculait sur la prestation nette, soit 50 % de 10 €,
+  // et on réclamait 5 € de plus à quelqu'un qui venait d'engager 40 € de bon.
+  // « Le client se dit : j'ai déjà payé bien plus que l'acompte. »
+  //
+  // ⚠️ LA RÉCOMPENSE BAISSE LE PRIX, LE BON PAIE LE PRIX. L'assiette vaut donc
+  // 50 € (le prix moins la récompense), l'acompte dû 25 €, et le bon de 40 € le
+  // couvre déjà largement. Un acompte est une GARANTIE, et le bon en est une
+  // plus grosse : il ne revient qu'à l'annulation, jamais sur un no-show. La
+  // demander deux fois, c'est la demander deux fois.
+  const v = ventilerTunnelRdv({
+    prixPrestation: 60, acomptePourcent: 50, acompteEnLigne: true,
+    totalProduits: 21.90, remiseRecompense: 10, soldeBon: 40,
+  })
+  egal('la récompense reste sur la prestation', v.recompenseSurPresta, 10)
+  egal('le bon paie 40 € de prestation', v.bonSurPresta, 40)
+  egal('l’acompte dû valait 25 €', v.acompteDu, 25)
+  egal('le bon l’a déjà couvert : plus rien à avancer', v.acompte, 0)
+  egal('les 10 € restants se règlent au comptoir', v.soldeSurPlace, 10)
+  egal('et Stripe n’encaisse que les produits', v.aPayerMaintenant, 21.90)
+}
+{
+  // ⚠️ UN BON PLUS PETIT QUE L'ACOMPTE NE LE SUPPRIME PAS, IL LE RÉDUIT. La
+  // garantie du commerçant reste entière, elle change seulement de support.
+  const v = ventilerTunnelRdv({
+    prixPrestation: 60, acomptePourcent: 50, acompteEnLigne: true, soldeBon: 20,
+  })
+  egal('l’acompte dû vaut 30 €', v.acompteDu, 30)
+  egal('le bon en retranche 20 €', v.acompte, 10)
+  egal('bon et acompte réunis font la garantie entière', v.bonSurPresta + v.acompte, 30)
+  egal('et le comptoir encaisse le reste', v.soldeSurPlace, 30)
+}
+{
+  // ⚠️ ET L'ACOMPTE NE DÉPASSE JAMAIS CE QUI RESTE À PAYER. Un réglage à 120 %
+  // ferait avancer au Yopper plus que le prix de sa prestation.
+  const v = ventilerTunnelRdv({ prixPrestation: 40, acomptePourcent: 120, acompteEnLigne: true })
+  egal('l’acompte est plafonné à la prestation nette', v.acompte, 40)
+  egal('et le comptoir n’a plus rien à prendre', v.soldeSurPlace, 0)
 }
 
 // ═══ 2) CE QUE LE CLIENT LIT SUR SON SUIVI ════════════════════════════════
@@ -251,10 +299,18 @@ for (const [nom, chemin] of [
   verifie(`${nom} : le select du rendez-vous charge bon_cadeau_id`,
     /bon_cadeau_id/.test(selectRdv))
   verifie(`${nom} : et bon_cadeau_montant`, /bon_cadeau_montant/.test(selectRdv))
-  verifie(`${nom} : appelle recrediterBon`, /recrediterBon\(/.test(src))
-  // ⚠️ ON LIT LE RÉSULTAT : un `await` qu'on n'écoute pas est un espoir.
-  verifie(`${nom} : lit le résultat du re-crédit`, /rec\?\.ok|!rec\.ok/.test(src))
-  verifie(`${nom} : rend aussi la récompense`, /rendreRecompense\(/.test(src))
+  // 🔴 CES TROIS GARDES CHERCHAIENT `recrediterBon(`, `rec?.ok` et
+  // `rendreRecompense(` DANS LA ROUTE, jusqu'au 30/08 au soir. Elles ont rougi
+  // sur du code juste le jour où le geste a déménagé dans un module, et elles
+  // seraient restées vertes sur DEUX versions divergentes du même geste : c'est
+  // exactement ce qui a produit le défaut qu'elles étaient censées garder.
+  //
+  // ⚠️ ON MESURE LA DÉLÉGATION, et le CONTENU s'exécute plus bas, section 9.
+  verifie(`${nom} : passe le bon du rendez-vous au module`,
+    /bonId: rdv\.bon_cadeau_id/.test(src))
+  verifie(`${nom} : et sa récompense`, /recompenseId: [^\n]*rdv\.fidelite_recompense_id/.test(src))
+  verifie(`${nom} : avec le montant qu'elle valait`,
+    /recompenseMontant: [\s\S]{0,120}fidelite_remise/.test(src))
   // ⚠️ ET LA COMMANDE LIÉE PORTE SES PROPRES AVANTAGES depuis que le bon paie
   // les produits : les oublier laisserait la moitié du bon dans le vide.
   verifie(`${nom} : traite les avantages de la commande liée`,
@@ -790,6 +846,341 @@ for (const chemin of [
   // ⚠️ ET LE PRIX AFFICHÉ EST LE NET CLIENT, pas le tarif plein.
   verifie('le suivi affiche le net client', /montantNetRdv\(r\)/.test(src))
   verifie('et plus le prix brut arrondi', !/Number\(r\.prix_estime\)\.toFixed\(0\)/.test(src))
+}
+
+// ═══ 9) CE QUI REVIENT SE MESURE EN L'EXÉCUTANT ═══════════════════════════
+//
+// 🔴 LE DÉFAUT DU 30/08 AU SOIR, VU PAR ALEX SUR SON PROPRE EMAIL : annulation
+// par le commerçant, le bon de 40 € annoncé, les 10 € de récompense passés sous
+// silence. Le même email, envoyé par l'autre route, disait les deux.
+//
+// ⚠️ LA CAUSE ÉTAIT UNE CONFUSION DE GARDES. La fonction ne comptait un retour
+// que si c'était ELLE qui l'avait fait : `utilisee_at` non nul, `deja_recredite`
+// faux. Ces drapeaux répondent à « est-ce moi qui viens d'agir ». La question du
+// Yopper est « est-ce que je récupère mon argent ».
+//
+// ⚠️ ET ELLE VIVAIT EN DEUX EXEMPLAIRES, un par route. Les trois corrections des
+// trois derniers jours n'en ont touché qu'un à chaque fois. Elle vit maintenant
+// dans un module, et ON L'EXÉCUTE : une garde qui cherche un mot dans un fichier
+// de route n'aurait jamais vu la différence.
+{
+  const { rendreAvantagesRdv } = await import('../lib/rdv-annulation-server.js')
+
+  // Une base qui répond ce qu'on lui dit, et qui GARDE ce qu'on lui écrit.
+  function baseAvantages({ recompense = null, mouvementEnDoublon = false }) {
+    const vu = { mouvements: [], recompenseRendue: false }
+    const table = (nom) => {
+      let patch = null
+      const chaine = {
+        select: () => chaine,
+        eq: () => chaine,
+        is: () => chaine,
+        not: () => chaine,
+        insert: (ligne) => {
+          if (nom === 'bons_cadeaux_mouvements' && mouvementEnDoublon) {
+            return Promise.resolve({ error: { code: '23505' } })
+          }
+          vu.mouvements.push({ table: nom, ...ligne })
+          return Promise.resolve({ error: null })
+        },
+        update: (p) => { patch = p; return chaine },
+        maybeSingle: () => {
+          if (nom === 'fidelite_recompenses') {
+            // L'UPDATE de `rendreRecompense` repasse par ici : il ne rend une
+            // ligne que s'il y avait effectivement quelque chose à rendre.
+            if (patch) {
+              if (!recompense?.utilisee_at) return Promise.resolve({ data: null })
+              vu.recompenseRendue = true
+              return Promise.resolve({ data: { id: recompense.id } })
+            }
+            return Promise.resolve({ data: recompense })
+          }
+          if (nom === 'fidelite_cartes') return Promise.resolve({ data: { recompenses_disponibles: 2 } })
+          return Promise.resolve({ data: null })
+        },
+        single: () => Promise.resolve({ data: { solde: 10, montant_initial: 75 } }),
+        then: (suite) => Promise.resolve({ error: null }).then(suite),
+      }
+      return chaine
+    }
+    return { from: table, _vu: vu }
+  }
+
+  // ── LE CAS ORDINAIRE : les deux reviennent, les deux se disent ──────────
+  {
+    const db = baseAvantages({ recompense: { id: 'r1', carte_id: 'ca1', utilisee_at: '2026-08-30T15:00:00Z' } })
+    const rendu = await rendreAvantagesRdv(db, {
+      bonId: 'b1', bonMontant: 40, recompenseId: 'r1', recompenseMontant: 10,
+      refs: { rdv_id: 'rdv1' },
+    })
+    egal('le bon recrédité est annoncé', rendu.bon, 40)
+    egal('et la récompense aussi', rendu.recompense, 10)
+    verifie('la récompense a bien été rendue', db._vu.recompenseRendue === true)
+    const mvt = db._vu.mouvements.find(m => m.table === 'bons_cadeaux_mouvements')
+    verifie('le mouvement du bon désigne le rendez-vous',
+      mvt?.rdv_id === 'rdv1' && mvt?.montant === 40, JSON.stringify(mvt))
+  }
+
+  // ── 🔴 LE DÉFAUT D'ALEX : QUELQU'UN EST PASSÉ AVANT NOUS ────────────────
+  //
+  // Le webhook `charge.refunded` fait les mêmes gestes en secours. S'il arrive
+  // le premier, la récompense est déjà libre et le mouvement du bon existe
+  // déjà. L'argent EST revenu. Se taire, c'est laisser croire qu'il est perdu.
+  {
+    const db = baseAvantages({
+      recompense: { id: 'r1', carte_id: 'ca1', utilisee_at: null },
+      mouvementEnDoublon: true,
+    })
+    // ⚠️ ON INTERCEPTE L'ALERTE ET ON LA MESURE, au lieu de la laisser salir la
+    // sortie du banc. Une récompense déjà libre est VRAIE pour le client et
+    // ANORMALE pour nous : si personne ne crie, ce cas-là reste invisible des
+    // semaines, ce qui est exactement ce qui vient de se passer.
+    const warnOriginal = console.warn
+    const cris = []
+    console.warn = (...a) => cris.push(a.join(' '))
+    let rendu
+    try {
+      rendu = await rendreAvantagesRdv(db, {
+        bonId: 'b1', bonMontant: 40, recompenseId: 'r1', recompenseMontant: 10,
+        refs: { rdv_id: 'rdv1' },
+      })
+    } finally {
+      console.warn = warnOriginal
+    }
+    egal('un bon déjà recrédité s’annonce quand même', rendu.bon, 40)
+    egal('une récompense déjà libre s’annonce quand même', rendu.recompense, 10)
+    // ⚠️ ET ON NE LA REND PAS UNE SECONDE FOIS : le compteur de la carte
+    // monterait d'un cran à chaque passage.
+    verifie('mais on ne la rend pas deux fois', db._vu.recompenseRendue === false)
+    verifie('et l’anomalie est criée dans les journaux',
+      cris.some(c => /déjà libre/.test(c)), cris.join(' | '))
+  }
+
+  // ── CE QUI N'EXISTE PAS NE S'ANNONCE PAS ────────────────────────────────
+  {
+    const db = baseAvantages({ recompense: null })
+    const rendu = await rendreAvantagesRdv(db, {
+      bonId: null, bonMontant: 0, recompenseId: 'inconnue', recompenseMontant: 10,
+      refs: { rdv_id: 'rdv1' },
+    })
+    egal('une récompense introuvable n’annonce rien', rendu.recompense, 0)
+    egal('et sans bon, rien non plus', rendu.bon, 0)
+    verifie('aucun mouvement écrit', db._vu.mouvements.length === 0)
+  }
+  {
+    const db = baseAvantages({ recompense: { id: 'r1', carte_id: 'ca1', utilisee_at: 'x' } })
+    const rendu = await rendreAvantagesRdv(db, {
+      bonId: 'b1', bonMontant: 0, recompenseId: null, refs: { rdv_id: 'rdv1' },
+    })
+    egal('un bon à zéro ne s’annonce pas', rendu.bon, 0)
+    egal('et une récompense non demandée non plus', rendu.recompense, 0)
+  }
+}
+{
+  // ⚠️ ET LES DEUX ROUTES DÉLÈGUENT, ELLES NE RECOPIENT PLUS. C'est la copie
+  // qui a fabriqué les trois défauts : une garde qui vérifierait le contenu
+  // dans chaque route accepterait qu'il en existe deux versions.
+  for (const chemin of ['app/api/rdv/cancel/route.js', 'app/api/rdv/annuler-commercant/route.js']) {
+    const src = lireCode(chemin)
+    const court = chemin.split('/').slice(-2)[0]
+    verifie(`${court} : délègue le retour des avantages au module`,
+      /rendreAvantagesRdv\(supabase, \{/.test(src))
+    verifie(`${court} : n’en garde aucune copie locale`,
+      !/const rendreAvantages = async/.test(src))
+    // 🔴 ET LE STOCK DES VERSIONS REVIENT, comme sur les trois autres sorties.
+    verifie(`${court} : rend le stock des versions`,
+      /restaurerStockVariantes\(supabase, \[/.test(src))
+    // ⚠️ SUR UNE BASCULE RÉELLE SEULEMENT : `restaurerStockVariantes` n'est pas
+    // idempotente, c'est à l'appelant de ne l'appeler qu'une fois.
+    verifie(`${court} : et seulement si la commande a vraiment basculé`,
+      /\.neq\('statut', 'annulee_client_refund'\)/.test(src))
+    // ⚠️ ET JAMAIS DEUX FOIS LA MÊME LIGNE DE RÉCOMPENSE. Tant qu'on ne
+    // comptait que ce qu'on rendait soi-même, la seconde passe se taisait
+    // d'elle-même. Depuis qu'on annonce l'ÉTAT, il faut l'écrire.
+    verifie(`${court} : ne compte jamais deux fois la même récompense`,
+      /memeRecompense \? null :/.test(src))
+  }
+}
+{
+  // ⚠️ « TON ACOMPTE BAISSE D'AUTANT » APPARTIENT AU BON, PAS À LA RÉCOMPENSE.
+  // Le bon PAIE, euro pour euro. La récompense REMISE : elle baisse le prix, et
+  // l'acompte se recalcule dessus. Dire « d'autant » des deux serait faux d'un
+  // côté, et c'était le cas depuis toujours.
+  const ecran = lireCode('app/commander/rdv/[slug]/page.js')
+  const blocRecompense = (ecran.match(/recompenseFid\.libelle[\s\S]{0,400}/) || [''])[0]
+  verifie('la récompense ne promet plus une baisse « d’autant »',
+    !/acompte baisse d’autant/.test(blocRecompense), blocRecompense.slice(0, 200))
+  verifie('elle dit que l’acompte se calcule sur ce qui reste',
+    /acompte se calcule sur ce qui reste/.test(blocRecompense))
+  // ⚠️ ET LE BON, LUI, LE DIT : c'est vrai à la lettre depuis le 30/08 au soir.
+  verifie('le bon annonce la baisse de l’acompte', /Ton acompte baisse d’autant/.test(ecran))
+  verifie('et dit quand il l’efface entièrement',
+    /couvre déjà ton acompte/.test(ecran) && /ventBon\.acompte === 0/.test(ecran))
+}
+
+// ═══ 10) LE COMMERÇANT LIT CE QU'IL DÉCLENCHE ═════════════════════════════
+//
+// 🔴 « QUAND LE COMMERÇANT ANNULE LE RDV, RIEN NE LUI DIT ET DEMANDE CE QU'IL
+// FAIT DU PRODUIT QUE LE CLIENT DEVAIT VENIR CHERCHER » (Alex, 30/08 au soir).
+{
+  const { questionRdv, confirmationRdv } = await import('../lib/confirmation-rdv.js')
+
+  // Le rendez-vous de la capture : Head Spa 60 €, acompte 5 € payé, récompense
+  // 10 €, bon 40 €, et un shampoing à 21,90 € payé en ligne.
+  const RDV = {
+    client_prenom: 'Alexandre', client_nom: 'Verstappen',
+    date_rdv: '2026-09-02', heure_debut: '15:30',
+    prix_estime: 60, acompte_montant: 5, acompte_paye: true, acompte_paye_en_ligne: true,
+    fidelite_remise: 10, bon_cadeau_montant: 40,
+    commande: {
+      id: 'cmd1', statut: 'en_attente', total: 21.90,
+      bon_cadeau_montant: 0, fidelite_remise: 0,
+      commande_articles: [{ quantite: 1 }],
+    },
+  }
+  const q = questionRdv('annule_commercant', RDV)
+  // 🔴 LA PHRASE NE PARLAIT QUE DE L'ACOMPTE, AU CONDITIONNEL.
+  verifie('la fenêtre ne parle plus du seul acompte',
+    !/son acompte lui sera remboursé/.test(q.message), q.message)
+  verifie('elle dit ce qui repart sur la carte', q.message.includes('26,90'), q.message)
+  verifie('elle dit le bon cadeau', q.message.includes('40,00') && /bon cadeau/.test(q.message), q.message)
+  verifie('elle dit la récompense', q.message.includes('10,00') && /fidélité/.test(q.message), q.message)
+  // ⚠️ ET LES PRODUITS SE NOMMENT À PART : c'est de la marchandise que le
+  // commerçant a pu préparer, et qui repart en rayon.
+  verifie('et elle dit ce que deviennent les produits', /en stock/.test(q.message), q.message)
+
+  // ── Rien d'engagé : on ne compose pas une phrase vide ───────────────────
+  const nu = questionRdv('annule_commercant', { client_prenom: 'Zoé', date_rdv: '2026-09-02', heure_debut: '10:00' })
+  verifie('sans argent, la fenêtre le dit simplement',
+    /n’a rien avancé/.test(nu.message) && !/€/.test(nu.message), nu.message)
+
+  // ── ⚠️ UNE COMMANDE DÉJÀ ANNULÉE NE SE REMBOURSE PAS DEUX FOIS ──────────
+  const dejaAnnulee = questionRdv('annule_commercant', {
+    ...RDV, commande: { ...RDV.commande, statut: 'annulee_client_refund' },
+  })
+  verifie('une commande déjà annulée ne compte plus',
+    dejaAnnulee.message.includes('5,00') && !dejaAnnulee.message.includes('26,90'), dejaAnnulee.message)
+
+  // ── ⚠️ LE BRUT N'EST PAS CE QUE LA CARTE A PAYÉ ─────────────────────────
+  // Un bon posé sur la commande n'a jamais été prélevé : l'annoncer
+  // promettrait plus que ce que Stripe peut rendre.
+  const avecBonSurProduits = questionRdv('annule_commercant', {
+    ...RDV,
+    commande: { ...RDV.commande, total: 21.90, bon_cadeau_montant: 21.90 },
+  })
+  verifie('la part payée par bon ne se promet pas sur la carte',
+    !avecBonSurProduits.message.includes('26,90'), avecBonSurProduits.message)
+
+  // ── APRÈS LE CLIC : ce qui est RÉELLEMENT parti ─────────────────────────
+  const apres = confirmationRdv('annule_commercant', {
+    rdv: RDV, raison: 'commercant',
+    retours: { refund_montant: 26.90, bon_rendu: 40, recompense_rendue: 10, produits_montant: 21.90 },
+  })
+  verifie('la confirmation dit le remboursement', apres.includes('26,90'), apres)
+  verifie('elle dit le bon', apres.includes('40,00'), apres)
+  verifie('elle dit la récompense', apres.includes('10,00'), apres)
+  // 🔴 ET UN REMBOURSEMENT RATÉ SE DIT EN PREMIER. Sans ça, le commerçant
+  // l'apprend par une réclamation, des semaines plus tard.
+  const rate = confirmationRdv('annule_commercant', {
+    rdv: RDV, raison: 'commercant',
+    retours: { refund_montant: 26.90, refund_error: 'card_declined', bon_rendu: 40, recompense_rendue: 10 },
+  })
+  verifie('un remboursement raté est annoncé', /n’est pas passé/.test(rate), rate)
+  verifie('et il dit quoi faire', /Stripe/.test(rate), rate)
+  verifie('sans noyer l’échec dans les bonnes nouvelles', !rate.includes('40,00'), rate)
+  // ⚠️ SANS RETOURS, la phrase reste celle d'avant : les autres appelants ne
+  // changent pas de comportement.
+  const sansRetours = confirmationRdv('annule_commercant', { rdv: RDV, raison: 'commercant' })
+  verifie('sans montants, la phrase reste sobre', !/€/.test(sansRetours), sansRetours)
+
+  // ── LE FRÈRE : le no-show ne parlait que de l'acompte lui aussi ─────────
+  const ns = questionRdv('no_show', RDV)
+  verifie('le no-show nomme le bon cadeau gardé',
+    ns.message.includes('40,00') && /bon cadeau/.test(ns.message), ns.message)
+  verifie('et l’acompte avec', ns.message.includes('5,00'), ns.message)
+  // ⚠️ LA RÉCOMPENSE N'EST PAS DE L'ARGENT QU'IL ENCAISSE : c'est une remise
+  // qu'il a consentie. La compter dans « tu gardes » serait un mensonge.
+  verifie('mais pas la récompense, qui n’est pas un encaissement',
+    !/fidélité/.test(ns.message), ns.message)
+}
+
+// ═══ 11) LE CLIENT SAIT CE QUE DEVIENNENT SES PRODUITS ════════════════════
+{
+  // 🔴 L'EMAIL DISAIT « 26,90 € REVIENNENT » SANS DIRE que le shampoing en
+  // faisait partie : le client attendait un sachet qui ne serait pas préparé.
+  const rendus = emailRdvAnnule({
+    yopper_prenom: 'Alexandre', commercant_nom: 'Ciseaux et Soins', commercant_slug: 'ciseaux',
+    prestation_nom: 'Head Spa', date_rdv: '2026-09-02', heure_debut: '15:30',
+    acompte_paye: true, acompte_montant: 5, refund_en_cours: true, raison_annulation: 'commercant',
+    refund_montant: 26.90, bon_rendu: 40, recompense_rendue: 10,
+    produits_gardes: false, produits_montant: 21.90,
+  })
+  verifie('les produits remboursés sont annoncés', /remboursés eux aussi/.test(rendus))
+  verifie('et on dit qu’ils ne seront pas mis de côté', /pas mis de côté/.test(rendus))
+  verifie('et qu’il peut les recommander', /recommander/.test(rendus))
+  verifie('leur montant est dit', rendus.includes('21,90'))
+  // ⚠️ ET LES TROIS RETOURS RESTENT LÀ, tous les trois.
+  verifie('la carte, le bon et la fidélité sont tous les trois annoncés',
+    rendus.includes('26,90') && rendus.includes('40,00') && rendus.includes('10,00'))
+  // ⚠️ LES DEUX SORTS DES PRODUITS NE SE MÉLANGENT PAS.
+  const gardes = emailRdvAnnule({
+    yopper_prenom: 'Alexandre', commercant_nom: 'X', commercant_slug: 'x',
+    prestation_nom: 'Coupe', date_rdv: '2026-09-02', heure_debut: '15:30',
+    acompte_paye: true, acompte_montant: 5, refund_en_cours: true, raison_annulation: 'yopper',
+    refund_montant: 5, produits_gardes: true, produits_montant: 21.90,
+  })
+  verifie('des produits gardés ne sont jamais dits remboursés',
+    /attendent en boutique/.test(gardes) && !/remboursés eux aussi/.test(gardes))
+}
+{
+  // ⚠️ LE FRÈRE DU NO-SHOW : le bon reste chez le commerçant, et rien ne le
+  // disait. Sur un rendez-vous dont l'acompte vaut zéro, le bloc entier
+  // disparaissait et le Yopper perdait 40 € en silence.
+  const { emailRdvNoShow } = await import('../lib/resend.js')
+  const html = emailRdvNoShow({
+    yopper_prenom: 'Alexandre', commercant_nom: 'Ciseaux et Soins',
+    prestation_nom: 'Coupe', date_rdv: '2026-09-02', heure_debut: '15:30',
+    acompte_paye: false, acompte_montant: 0, bon_cadeau_montant: 40,
+  })
+  verifie('le no-show dit que le bon reste chez le commerçant',
+    html.includes('40,00') && /bon cadeau/.test(html))
+  const rien = emailRdvNoShow({
+    yopper_prenom: 'Alexandre', commercant_nom: 'X',
+    prestation_nom: 'Coupe', date_rdv: '2026-09-02', heure_debut: '15:30',
+    acompte_paye: false, acompte_montant: 0,
+  })
+  verifie('et sans argent engagé, aucun bloc ne s’invente',
+    !/reste chez le commerçant/i.test(rien))
+  // ⚠️ ET LA ROUTE CHARGE LA COLONNE. Sans elle, `Number(undefined || 0)` vaut
+  // zéro, la ligne disparaît, et rien ne lève.
+  //
+  // 🔴 MA PREMIÈRE VERSION CHERCHAIT `bon_cadeau_montant,` N'IMPORTE OÙ dans le
+  // fichier : le nom apparaît AUSSI dans l'argument passé au gabarit, donc
+  // retirer la colonne du select laissait la garde verte. Le harnais de
+  // mutation l'a dit. C'est la quatrième fois de la semaine que je copie un MOT
+  // au lieu d'isoler l'endroit où la RÈGLE s'applique.
+  const route = lireCode('app/api/emails/rdv-no-show/route.js')
+  const selectNoShow = (route.match(/\.select\(`([^`]*)`\)/) || ['', ''])[1]
+  verifie('le select du no-show charge le bon cadeau',
+    /bon_cadeau_montant/.test(selectNoShow), selectNoShow.slice(0, 160))
+  verifie('et la route le passe au gabarit',
+    /bon_cadeau_montant: rdv\.bon_cadeau_montant/.test(route))
+}
+{
+  // ⚠️ LA COLONNE ABSENTE D'UN SELECT, septième occurrence évitée. Sans
+  // `bon_cadeau_montant` et `fidelite_remise` sur la commande jointe, la
+  // fenêtre d'annulation promettrait le BRUT des produits.
+  const dash = lire('app/dashboard/page.js')
+  const jointure = (dash.match(/commande:commandes![^`]*/) || [''])[0]
+  verifie('la commande jointe porte le bon cadeau',
+    /bon_cadeau_montant/.test(jointure), jointure.slice(0, 200))
+  verifie('et la remise de fidélité', /fidelite_remise/.test(jointure), jointure.slice(0, 200))
+  // ⚠️ ET LE TABLEAU DE BORD RELAIE, jusqu'à l'email et jusqu'à la fenêtre.
+  const dashCode = sansProse(dash)
+  verifie('le tableau de bord relaie la récompense à l’email',
+    /recompense_rendue: j\.recompense_rendue/.test(dashCode))
+  verifie('et il montre au commerçant ce qui est parti',
+    /surRetours: \(r\) => \{ retours = r \}/.test(dashCode))
 }
 
 // ═══ RÉSULTAT ════════════════════════════════════════════════════════════

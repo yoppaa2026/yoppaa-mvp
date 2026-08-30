@@ -20,10 +20,13 @@ const BANC = 'verif:tunnel-rdv'
 
 const MUTATIONS = [
   // ─── 1) LE DÉFAUT PRINCIPAL : LE BON NON RECRÉDITÉ ──────────────────────
-  { nom: '🔴 le bon n’est plus recrédité à l’annulation client',
-    fichier: 'app/api/rdv/cancel/route.js',
-    de: '        const rec = await recrediterBon(supabase, bonId, Number(bonMontant), refs)',
-    vers: '        const rec = { ok: true }' },
+  // ⚠️ LE GESTE A DÉMÉNAGÉ DANS UN MODULE (30/08 au soir). Il vivait en DEUX
+  // exemplaires, un par route d'annulation, et les trois corrections des trois
+  // derniers jours n'en ont touché qu'un à chaque fois.
+  { nom: '🔴 le bon n’est plus recrédité à l’annulation',
+    fichier: 'lib/rdv-annulation-server.js',
+    de: '    const rec = await recrediterBon(db, bonId, Number(bonMontant), refs)',
+    vers: '    const rec = { ok: true }' },
 
   { nom: '🔴 la colonne du bon disparaît du select d’annulation',
     fichier: 'app/api/rdv/cancel/route.js',
@@ -79,8 +82,123 @@ const MUTATIONS = [
   // et c'est aussi la source du « 8,75 € payé en ligne » quand elle est ignorée.
   { nom: '🔴 l’acompte se recalcule sur le prix PLEIN (le 8,75 € d’Alex)',
     fichier: 'lib/tunnel-rdv-montants.js',
-    de: '    ? arrondi(Math.round(prestaNette * pct) / 100)',
+    de: '    ? arrondi(Math.round(prestaApresRecompense * pct) / 100)',
     vers: '    ? arrondi(Math.round((prix || 0) * pct) / 100)' },
+
+  // 🔴 LA RÈGLE DU 30/08 AU SOIR : LE BON SE DÉDUIT DE L'ACOMPTE, EURO POUR
+  // EURO. Revenir à « un pourcentage de ce qui reste » recrée le 5 € réclamé à
+  // quelqu'un qui venait d'engager 40 € de bon.
+  { nom: '🔴 l’acompte redevient un pourcentage de ce qui reste après le bon',
+    fichier: 'lib/tunnel-rdv-montants.js',
+    de: '    : arrondi(Math.min(Math.max(0, acompteDu - bonSurPresta), prestaNette))',
+    vers: '    : arrondi(Math.round(prestaNette * pct) / 100)' },
+
+  // ⚠️ ET IL NE DÉPASSE JAMAIS CE QUI RESTE À PAYER.
+  { nom: '🔴 un pourcentage au-delà de 100 fait avancer plus que la prestation',
+    fichier: 'lib/tunnel-rdv-montants.js',
+    de: '    : arrondi(Math.min(Math.max(0, acompteDu - bonSurPresta), prestaNette))',
+    vers: '    : arrondi(Math.max(0, acompteDu - bonSurPresta))' },
+
+  // ─── 11) CE QUI REVIENT S'ANNONCE, MÊME SI CE N'EST PAS NOUS (30/08 soir) ─
+  //
+  // 🔴 LA MUTATION QUI COMPTE LE PLUS DE CE FICHIER : c'est le défaut exact
+  // qu'Alex a lu sur son email, le bon annoncé et la récompense muette.
+  { nom: '🔴 la récompense ne s’annonce que si c’est NOUS qui l’avons rendue',
+    fichier: 'lib/rdv-annulation-server.js',
+    de: '      rendu.recompense = arr(recompenseMontant)',
+    vers: '      if (recFid.utilisee_at) rendu.recompense = arr(recompenseMontant)' },
+
+  { nom: '🔴 un bon déjà recrédité par le webhook redevient muet',
+    fichier: 'lib/rdv-annulation-server.js',
+    de: '    else rendu.bon = arr(bonMontant)',
+    vers: '    else if (!rec.deja_recredite) rendu.bon = arr(bonMontant)' },
+
+  { nom: '🔴 une récompense déjà libre ne fait plus crier personne',
+    fichier: 'lib/rdv-annulation-server.js',
+    de: '      else console.warn(`[${ou}] récompense déjà libre à l’annulation`, { recompenseId, ...refs })',
+    vers: '' },
+
+  { nom: '🔴 la même récompense est comptée deux fois, rendez-vous et commande',
+    fichier: 'app/api/rdv/annuler-commercant/route.js',
+    de: '        recompenseId: memeRecompense ? null : commandeLiee.fidelite_recompense_id,',
+    vers: '        recompenseId: commandeLiee.fidelite_recompense_id,' },
+
+  // ─── 12) LE COMMERÇANT NE SAIT PAS CE QU'IL DÉCLENCHE (30/08 soir) ───────
+  { nom: '🔴 la fenêtre d’annulation reparle du seul acompte',
+    fichier: 'lib/confirmation-rdv.js',
+    de: '    const liste = libelleRetours(r)',
+    vers: "    const liste = ''" },
+
+  { nom: '🔴 les produits mis de côté ne sont plus comptés',
+    fichier: 'lib/rdv-paiement.js',
+    de: '  const produits = vivante\n    ? arr(Math.max(0, n(cmd.total) - n(cmd.bon_cadeau_montant) - n(cmd.fidelite_remise)))\n    : 0',
+    vers: '  const produits = 0' },
+
+  // ⚠️ LE BRUT N'EST PAS CE QUE LA CARTE A PAYÉ : promettre le brut promet plus
+  // que ce que Stripe peut rendre.
+  { nom: '🔴 la part des produits payée par bon est promise sur la carte',
+    fichier: 'lib/rdv-paiement.js',
+    de: '    ? arr(Math.max(0, n(cmd.total) - n(cmd.bon_cadeau_montant) - n(cmd.fidelite_remise)))',
+    vers: '    ? arr(Math.max(0, n(cmd.total)))' },
+
+  { nom: '🔴 une commande déjà annulée est remboursée une seconde fois',
+    fichier: 'lib/rdv-paiement.js',
+    de: "  const vivante = !!cmd && !['annulee_client_refund', 'annulee_paiement_ko'].includes(cmd.statut)",
+    vers: '  const vivante = !!cmd' },
+
+  { nom: '🔴 la fenêtre d’après redevient muette sur l’argent parti',
+    fichier: 'lib/confirmation-rdv.js',
+    de: '    return `${base}${retours ? libelleRetoursFaits(retours) : \'\'}`',
+    vers: '    return base' },
+
+  // 🔴 UN REMBOURSEMENT RATÉ QUI SE TAIT EST PIRE QUE PAS DE MESSAGE : le
+  // commerçant l'apprend par une réclamation, des semaines plus tard.
+  { nom: '🔴 un remboursement Stripe raté est noyé dans les bonnes nouvelles',
+    fichier: 'lib/rdv-paiement.js',
+    de: '  if (refund_error) {',
+    vers: '  if (false) {' },
+
+  { nom: '🔴 le no-show ne parle plus du bon cadeau gardé',
+    fichier: 'lib/confirmation-rdv.js',
+    de: "      r.surBon > 0 ? `${euros(r.surBon)} de bon cadeau` : '',",
+    vers: "      ''," },
+
+  { nom: '🔴 le tableau de bord ne montre plus au commerçant ce qui est parti',
+    fichier: 'app/dashboard/page.js',
+    de: '      surRetours: (r) => { retours = r },',
+    vers: '' },
+
+  // ⚠️ LA COLONNE ABSENTE D'UN SELECT, septième occurrence.
+  { nom: '🔴 la commande jointe reperd ses colonnes d’avantage',
+    fichier: 'app/dashboard/page.js',
+    de: 'statut, bon_cadeau_montant, fidelite_remise, commande_articles(',
+    vers: 'statut, commande_articles(' },
+
+  // ─── 13) LE CLIENT ET SES PRODUITS ──────────────────────────────────────
+  { nom: '🔴 l’email d’annulation ne dit plus le sort des produits remboursés',
+    fichier: 'lib/resend.js',
+    de: '        } else if (desProduits > 0) {',
+    vers: '        } else if (false) {' },
+
+  { nom: '🔴 le no-show ne dit plus au client que son bon reste au commerçant',
+    fichier: 'lib/resend.js',
+    de: '        const surBon = Number(bon_cadeau_montant) || 0',
+    vers: '        const surBon = 0' },
+
+  { nom: '🔴 la route du no-show ne charge plus la colonne du bon',
+    fichier: 'app/api/emails/rdv-no-show/route.js',
+    de: '        bon_cadeau_montant,\n',
+    vers: '' },
+
+  { nom: '🔴 le stock des versions n’est plus rendu à l’annulation d’un RDV',
+    fichier: 'app/api/rdv/cancel/route.js',
+    de: '        const rest = await restaurerStockVariantes(supabase, [commandeLiee.id])',
+    vers: '        const rest = { ok: true }' },
+
+  { nom: '🔴 la récompense promet de nouveau une baisse « d’autant » de l’acompte',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '${totalProduits > 0 ? \'Déduite de ta prestation et de tes produits\' : \'Déduite du prix\'}, ton acompte se calcule sur ce qui reste.`',
+    vers: '${totalProduits > 0 ? \'Déduite de ta prestation et de tes produits\' : \'Déduite du prix\'}, ton acompte baisse d’autant.`' },
 
   // ⚠️ LE PIÈGE DU ZÉRO, sixième fois : `Number(null)` vaut 0 et EST fini.
   { nom: '🔴 un prix absent devient zéro au lieu de rester inconnu',

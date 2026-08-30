@@ -22,8 +22,8 @@ import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
 import { adresseRendezVous } from '@/lib/lieu-fige'
-import { rendreRecompense } from '@/lib/fidelite-recompense-server'
-import { recrediterBon } from '@/lib/bons-cadeaux-server'
+import { rendreAvantagesRdv } from '@/lib/rdv-annulation-server'
+import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 
 export async function POST(request) {
   try {
@@ -233,11 +233,23 @@ export async function POST(request) {
     // celui que le comptage de stock ignore. S'il les garde, la commande vit
     // sa vie : elle sera retirée en boutique.
     if (commandeLiee && !gardeSesProduits) {
-      const { error: errCmd } = await supabase
+      // ⚠️ `.neq(...).select()` : l'écriture ne rend une ligne QUE si elle a
+      // réellement fait basculer la commande, et c'est cette bascule seule qui
+      // autorise à rendre le stock.
+      const { data: basculees, error: errCmd } = await supabase
         .from('commandes')
         .update({ statut: 'annulee_client_refund' })
         .eq('id', commandeLiee.id)
+        .neq('statut', 'annulee_client_refund')
+        .select('id')
       if (errCmd) console.error('[rdv/cancel] annulation commande liée KO', errCmd.message, { commandeId: commandeLiee.id })
+      // ⚠️ ET LE STOCK DES VERSIONS REVIENT, comme sur les autres sorties. Le
+      // tunnel du rendez-vous ne vend pas encore d'article à versions : c'est
+      // sans effet aujourd'hui, et ce serait un piège le jour où il en vendra.
+      else if ((basculees || []).length > 0) {
+        const rest = await restaurerStockVariantes(supabase, [commandeLiee.id])
+        if (!rest.ok) console.error('[rdv/cancel] restitution stock versions KO', rest.error, { commandeId: commandeLiee.id })
+      }
     }
 
     // ─── 6) UPDATE RDV (statut + motif + refund cols) ──────────────────────
@@ -284,33 +296,12 @@ export async function POST(request) {
     //
     // ⚠️ EXACTEMENT LE MÊME DÉFAUT QUE LE BON LE 29/08, un jour plus tard et
     // une ligne plus bas. Le geste avait été porté au bon, jamais à sa voisine.
-    const rendreAvantages = async ({ bonId, bonMontant, recompenseId, recompenseMontant, refs }) => {
-      const rendu = { bon: 0, recompense: 0 }
-      if (bonId && Number(bonMontant) > 0) {
-        const rec = await recrediterBon(supabase, bonId, Number(bonMontant), refs)
-        // ⚠️ ON LIT LE RÉSULTAT : un `await` qu'on n'écoute pas est un espoir,
-        // et ici l'espoir vaut de l'argent que le Yopper a déjà payé.
-        if (!rec?.ok) console.error('[rdv/cancel] re-crédit bon cadeau KO', rec?.error, { rdvId: rdv.id, ...refs })
-        else if (!rec.deja_recredite) rendu.bon = Number(bonMontant)
-      }
-      if (recompenseId) {
-        const { data: recFid } = await supabase
-          .from('fidelite_recompenses')
-          .select('id, carte_id, utilisee_at')
-          .eq('id', recompenseId)
-          .maybeSingle()
-        // `rendreRecompense` ne rend que ce qui est effectivement pris : un
-        // double appel est sans effet.
-        // ⚠️ ET ON COMPTE CE QU'ON REND, sous la même condition. Compter sans
-        // regarder `utilisee_at` annoncerait un retour sur un rejeu où rien
-        // n'a bougé.
-        if (recFid?.utilisee_at) {
-          await rendreRecompense(supabase, recFid)
-          rendu.recompense = Number(recompenseMontant) || 0
-        }
-      }
-      return rendu
-    }
+    //
+    // 🔴 ET LA FONCTION A QUITTÉ CE FICHIER (30/08 au soir). Elle y vivait en
+    // double, ici et dans l'annulation par le commerçant, et les trois
+    // corrections des trois derniers jours n'en ont touché qu'une à chaque
+    // fois. Elle vit dans `lib/rdv-annulation-server.js`, où le banc l'exécute
+    // sur une base simulée.
 
     // ⚠️ UNE RÉCOMPENSE QUI A PAYÉ DES PRODUITS GARDÉS NE REVIENT PAS.
     //
@@ -335,7 +326,8 @@ export async function POST(request) {
     // une récompense est UNE ligne, mais elle a pu mordre des deux côtés depuis
     // le 30/08. N'annoncer que la part prestation ferait dire « 6 € te
     // reviennent » quand 10 € reviennent.
-    const rendu = await rendreAvantages({
+    const rendu = await rendreAvantagesRdv(supabase, {
+      ou: 'rdv/cancel',
       bonId: rdv.bon_cadeau_id,
       bonMontant: rdv.bon_cadeau_montant,
       recompenseId: recompenseSurProduitsGardes ? null : rdv.fidelite_recompense_id,
@@ -347,10 +339,18 @@ export async function POST(request) {
     let recompenseRendue = rendu.recompense
 
     if (commandeLiee && !gardeSesProduits) {
-      const rc = await rendreAvantages({
+      // ⚠️ ET SURTOUT PAS DEUX FOIS LA MÊME LIGNE. Une récompense est UNE ligne,
+      // portée par le rendez-vous. Tant qu'on ne comptait que ce qu'on rendait
+      // soi-même, une commande qui aurait porté le même identifiant se taisait
+      // d'elle-même à la seconde passe. Depuis qu'on annonce l'ÉTAT, il faut
+      // l'écrire, sinon la part produits serait annoncée deux fois.
+      const memeRecompense = commandeLiee.fidelite_recompense_id
+        && String(commandeLiee.fidelite_recompense_id) === String(rdv.fidelite_recompense_id || '')
+      const rc = await rendreAvantagesRdv(supabase, {
+        ou: 'rdv/cancel',
         bonId: commandeLiee.bon_cadeau_id,
         bonMontant: commandeLiee.bon_cadeau_montant,
-        recompenseId: commandeLiee.fidelite_recompense_id,
+        recompenseId: memeRecompense ? null : commandeLiee.fidelite_recompense_id,
         recompenseMontant: Number(commandeLiee.fidelite_remise || 0),
         refs: { commande_id: commandeLiee.id },
       })

@@ -434,12 +434,24 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
     ['l’annulation par le commerçant', 'app/api/rdv/annuler-commercant/route.js', 'supabase'],
   ]) {
     const src = lireCode(chemin)
-    verifie(`${nom} rend la récompense`,
-      new RegExp(`await rendreRecompense\\(${client}, recFid\\)`).test(src))
-    // ⚠️ ET ON COMPTE SOUS LA MÊME CONDITION QU'ON REND : annoncer un retour sur
-    // un rejeu où rien n'a bougé serait un second mensonge.
-    verifie(`${nom} compte ce qu’elle rend`,
-      /rendu\.recompense = Number\(recompenseMontant\) \|\| 0/.test(src))
+    // 🔴 ET LE 30/08 AU SOIR, LE MÊME DÉFAUT A RECOMMENCÉ, D'UN CRAN PLUS
+    // SUBTIL : les deux routes rendaient la récompense, et n'en parlaient que
+    // si c'était ELLES qui l'avaient rendue. Le webhook `charge.refunded` fait
+    // les mêmes gestes en secours ; dès qu'il passait le premier, l'email se
+    // taisait sur un retour bel et bien effectué. Alex l'a lu sur sa capture.
+    //
+    // ⚠️ CES DEUX GARDES CHERCHAIENT `await rendreRecompense(supabase, recFid)`
+    // DANS LA ROUTE. C'est ce qui les a laissées vertes sur DEUX copies
+    // divergentes du même geste, et c'est la copie qui a fabriqué le défaut.
+    // Le geste vit maintenant dans `lib/rdv-annulation-server.js`, et le banc
+    // du tunnel l'EXÉCUTE sur une base simulée : c'est là que le contenu se
+    // mesure. Ici, on mesure ce que la route TRANSMET.
+    verifie(`${nom} délègue le retour au module partagé`,
+      new RegExp(`rendreAvantagesRdv\\(${client}, \\{`).test(src))
+    verifie(`${nom} lui passe la récompense du rendez-vous`,
+      /recompenseId: [^\n]*rdv\.fidelite_recompense_id/.test(src))
+    verifie(`${nom} n’en garde aucune copie locale`,
+      !/const rendreAvantages = async/.test(src))
     verifie(`${nom} remonte le montant à l’appelant`,
       /recompense_rendue/.test(src))
     // 🔴 LA COLONNE DU MONTANT DOIT ÊTRE DEMANDÉE. Absente du `select`, elle

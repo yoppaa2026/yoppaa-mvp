@@ -41,6 +41,7 @@ export async function POST(request) {
       .select(`
         id, date_rdv, heure_debut, acompte_paye_en_ligne, acompte_montant,
         client_email, client_prenom,
+        bon_cadeau_montant,
         commercant:commercants(nom, slug),
         prestation:rdv_prestations(nom)
       `)
@@ -66,6 +67,12 @@ export async function POST(request) {
         heure_debut:      rdv.heure_debut,
         acompte_paye:     !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),
         acompte_montant:  rdv.acompte_montant,
+        // 🔴 LE BON CADEAU RESTE CHEZ LE COMMERÇANT LUI AUSSI, et rien ne le
+        // disait. Sur un rendez-vous dont l'acompte vaut zéro parce qu'un bon
+        // de 40 € a payé la prestation, le bloc entier disparaissait : le
+        // Yopper perdait 40 € sans qu'un seul écran ni un seul email ne le
+        // mentionne. Frère du défaut de l'annulation, trouvé le 30/08 au soir.
+        bon_cadeau_montant: rdv.bon_cadeau_montant,
       })
       await envoyerAuCommercant({
         to: rdv.client_email,

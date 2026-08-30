@@ -187,15 +187,24 @@ const MUTATIONS = [
   // parce qu'il est allé vérifier sa carte ; un Yopper, lui, croit avoir perdu
   // ses 10 €. Frère exact du bon cadeau, corrigé la veille et jamais porté à
   // côté — dans les DEUX routes d'annulation, qui se recopient l'une l'autre.
-  { nom: '🔴 l’annulation Yopper rend la récompense sans la compter',
+  // ⚠️ ET LE 30/08 AU SOIR, LE GESTE A QUITTÉ LES DEUX ROUTES pour un module
+  // unique : c'est la RECOPIE qui produisait ces frères à répétition. Ce qu'on
+  // mesure ici, c'est donc que chaque route TRANSMET encore sa récompense ; le
+  // contenu, lui, s'exécute dans `verif:tunnel-rdv` sur une base simulée.
+  { nom: '🔴 l’annulation Yopper ne transmet plus sa récompense au module',
     banc: 'verif:recompense', fichier: 'app/api/rdv/cancel/route.js',
-    de: '          await rendreRecompense(supabase, recFid)\n          rendu.recompense = Number(recompenseMontant) || 0',
-    vers: '          await rendreRecompense(supabase, recFid)' },
+    de: '      recompenseId: recompenseSurProduitsGardes ? null : rdv.fidelite_recompense_id,',
+    vers: '      recompenseId: null,' },
 
   { nom: '🔴 l’annulation commerçant fait pareil',
     banc: 'verif:recompense', fichier: 'app/api/rdv/annuler-commercant/route.js',
-    de: '          await rendreRecompense(supabase, recFid)\n          rendu.recompense = Number(recompenseMontant) || 0',
-    vers: '          await rendreRecompense(supabase, recFid)' },
+    de: '      recompenseId: rdv.fidelite_recompense_id,',
+    vers: '      recompenseId: null,' },
+
+  { nom: '🔴 une route se remet à écrire sa propre copie du geste',
+    banc: 'verif:recompense', fichier: 'app/api/rdv/cancel/route.js',
+    de: '    const rendu = await rendreAvantagesRdv(supabase, {',
+    vers: '    const rendreAvantages = async () => ({ bon: 0, recompense: 0 })\n    const rendu = await rendreAvantages({' },
 
   // 🔴 LA COLONNE ABSENTE DU SELECT, le défaut le plus fréquent du projet, et
   // je l'ai RECRÉÉ en écrivant ce correctif : `Number(undefined || 0)` vaut 0,

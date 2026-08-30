@@ -143,7 +143,14 @@ const SELECT_COMMANDES = `*, creneau:creneaux(*), creneau_livraison:livraison_cr
 // Côté rendez-vous, la commande liée vient avec sa RÉFÉRENCE et le détail de ses
 // lignes : c'est ce qui permet au commerçant de retrouver le paquet dans son
 // onglet Commandes au lieu de le chercher au jugé.
-const SELECT_RDVS = `*, prestation:rdv_prestations(nom, duree_minutes, prix), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, numero_commande, numero_prefixe, numero_semaine, total, statut, commande_articles(quantite, article_nom, options, article:articles(nom)))`
+// ⚠️ `bon_cadeau_montant` ET `fidelite_remise` SONT OBLIGATOIRES ICI. `total`
+// est le tarif BRUT des produits ; ce que la carte a réellement payé, et donc
+// ce que l'annulation remboursera, c'est ce brut MOINS les deux avantages
+// posés dessus. Sans ces colonnes, la fenêtre d'annulation annoncerait au
+// commerçant un remboursement plus gros que le prélèvement, et personne ne
+// verrait l'erreur : `Number(undefined || 0)` vaut zéro et ne lève rien. C'est
+// le défaut le plus fréquent de ce projet, à sa septième occurrence.
+const SELECT_RDVS = `*, prestation:rdv_prestations(nom, duree_minutes, prix), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, numero_commande, numero_prefixe, numero_semaine, total, statut, bon_cadeau_montant, fidelite_remise, commande_articles(quantite, article_nom, options, article:articles(nom)))`
 
 // ─── Notifications système ────────────────────────────────────────────────────
 let _notifPermission = 'default'
@@ -1754,7 +1761,12 @@ export default function Dashboard() {
   // statut. Deux `update` séparés laisseraient une fenêtre où le rendez-vous
   // est honoré sans son encaissement, et c'est exactement l'état qu'on cherche
   // à faire disparaître.
-  async function changerStatutRdv(rdvId, statut, raison = 'commercant', { silencieux = false, champs = null } = {}) {
+  // ⚠️ `surRetours` EST UN RAPPEL, ET PAS UN CHANGEMENT DE TYPE DE RETOUR. La
+  // fenêtre a besoin de ce que la route a réellement remboursé, mais cette
+  // fonction rend `true`/`false` à TROIS appelants : changer son type
+  // obligerait à relire les trois, et c'est le piège nommé le 24/08. On ajoute
+  // une sortie, on ne déplace pas la porte.
+  async function changerStatutRdv(rdvId, statut, raison = 'commercant', { silencieux = false, champs = null, surRetours = null } = {}) {
     // 🔴 L'ANNULATION PAR LE COMMERÇANT PASSE PAR LE SERVEUR, ET C'EST NEUF.
     //
     // Elle se contentait d'écrire le statut depuis ce navigateur, et le
@@ -1772,6 +1784,19 @@ export default function Dashboard() {
         return false
       }
       setRdvs(prev => prev.map(r => r.id === rdvId ? { ...r, statut, motif_annulation: raison } : r))
+      // 🔴 ET LE COMMERÇANT LIT CE QU'IL VIENT DE DÉCLENCHER (Alex, 30/08 au
+      // soir). La fenêtre disait « il vient d'en être prévenu par email » sur un
+      // clic qui rembourse une carte, recrédite un bon, rend une récompense et
+      // remet des produits en rayon. Et si le remboursement Stripe échoue, c'est
+      // ICI qu'il faut le savoir, pas dans une réclamation trois semaines plus
+      // tard.
+      if (surRetours) surRetours({
+        refund_montant: j.refund_montant,
+        refund_error: j.refund_error,
+        bon_rendu: j.bon_rendu,
+        recompense_rendue: j.recompense_rendue,
+        produits_montant: j.produits_montant,
+      })
       // ⚠️ L'EMAIL PORTE LES MONTANTS RENDUS PAR LA ROUTE. Sans eux le gabarit
       // se rabat sur le seul acompte, et se tait dès qu'il vaut zéro.
       signalerEnvoi('/api/emails/rdv-annule', {
@@ -1871,7 +1896,11 @@ export default function Dashboard() {
           encaisse_le: new Date().toISOString(),
         }
       : null
-    const ok = await changerStatutRdv(actionRdv.rdv.id, decision.statut, decision.raison, { champs })
+    let retours = null
+    const ok = await changerStatutRdv(actionRdv.rdv.id, decision.statut, decision.raison, {
+      champs,
+      surRetours: (r) => { retours = r },
+    })
     setActionEnCours(false)
     // ⚠️ ON NE CONFIRME QUE CE QUI A EU LIEU. Annoncer « c'est annulé » après un
     // échec ferait croire au commerçant que son client est prévenu.
@@ -1883,7 +1912,7 @@ export default function Dashboard() {
       }))
       return
     }
-    setConfirmationRdvTexte(confirmationRdv(actionRdv.action, { rdv: actionRdv.rdv, raison: decision.raison }))
+    setConfirmationRdvTexte(confirmationRdv(actionRdv.action, { rdv: actionRdv.rdv, raison: decision.raison, retours }))
   }
 
   function fermerActionRdv() {

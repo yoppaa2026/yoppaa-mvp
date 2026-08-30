@@ -3282,9 +3282,19 @@ export default function CommanderRdvSlug() {
                                      prix » quand un shampoing est dans le
                                      panier laisserait croire qu'il n'est pas
                                      concerné, exactement le reproche qu'Alex a
-                                     fait au bon cadeau. */
-                                  ? `${recompenseFid.libelle ? `${recompenseFid.libelle}. ` : ''}${totalProduits > 0 ? 'Déduite de ta prestation et de tes produits' : 'Déduite du prix'}, ton acompte baisse d’autant.`
-                                  : `Utilise-les maintenant : ils se déduiront ${totalProduits > 0 ? 'de ta prestation et de tes produits' : 'du prix'}, et ton acompte baissera d’autant.`}
+                                     fait au bon cadeau.
+
+                                     🔴 ET « TON ACOMPTE BAISSE D'AUTANT » ÉTAIT
+                                     FAUX ICI, depuis toujours. Une récompense
+                                     de 10 € sur un acompte de 50 % fait baisser
+                                     l'acompte de CINQ euros, pas de dix : elle
+                                     réduit le PRIX, et l'acompte se calcule
+                                     ensuite dessus. La phrase est vraie pour le
+                                     BON, qui paie, jamais pour la récompense,
+                                     qui remise. Deux gestes différents ne
+                                     partagent pas la même phrase (30/08). */
+                                  ? `${recompenseFid.libelle ? `${recompenseFid.libelle}. ` : ''}${totalProduits > 0 ? 'Déduite de ta prestation et de tes produits' : 'Déduite du prix'}, ton acompte se calcule sur ce qui reste.`
+                                  : `Utilise-les maintenant : ils se déduiront ${totalProduits > 0 ? 'de ta prestation et de tes produits' : 'du prix'}, et ton acompte se calculera sur ce qui reste.`}
                               </p>
                               {/* 🔴 CE QUI SE PERD, dit AVANT le clic. Une
                                   récompense de 10 € sur une prestation à 8 € en
@@ -3374,7 +3384,22 @@ export default function CommanderRdvSlug() {
                                 ? (ventBon.bonSurPresta > 0
                                   ? 'Sur ta prestation et tes produits.'
                                   : 'Sur tes produits.')
-                                : 'Sur ta prestation : ton acompte baisse d’autant.'
+                                : 'Sur ta prestation.'
+                              // 🟢 ET L'EFFET SUR L'ACOMPTE SE DIT À PART, parce
+                              // qu'il ne suit pas la même règle que la déduction.
+                              // Depuis le 30/08 au soir, « ton acompte baisse
+                              // d'autant » est vrai À LA LETTRE : le bon se
+                              // retranche de l'acompte dû, euro pour euro. Quand
+                              // il l'efface, on le DIT au lieu de laisser un zéro
+                              // sans explication : c'est la bonne nouvelle du
+                              // parcours, elle mérite sa phrase.
+                              const motAcompte = ventBon.acompteDu <= 0
+                                ? ''
+                                : ventBon.acompte === 0
+                                  ? ' Il couvre déjà ton acompte : tu n’avances rien en ligne.'
+                                  : ventBon.bonSurPresta > 0
+                                    ? ' Ton acompte baisse d’autant.'
+                                    : ''
                               return (
                                 <div key={b.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 6 }}>
                                   <div style={{ minWidth: 0 }}>
@@ -3392,7 +3417,7 @@ export default function CommanderRdvSlug() {
                                         endroit. */}
                                     <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: actif ? '#047857' : T.muted, fontWeight: 600 }}>
                                       {actif
-                                        ? `${surQuoi}${reste > 0 ? ` ${libelleResteBon(reste, commercant?.nom)}` : ''}`
+                                        ? `${surQuoi}${motAcompte}${reste > 0 ? ` ${libelleResteBon(reste, commercant?.nom)}` : ''}`
                                         : b.code}
                                     </p>
                                   </div>

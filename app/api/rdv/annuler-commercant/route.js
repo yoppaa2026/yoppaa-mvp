@@ -89,6 +89,62 @@ export async function POST(request) {
     const acompteMontant = Number(rdv.acompte_montant || 0)
     const aRembourser = arr(acompteMontant + produitsPayesCarte)
 
+    // ─── Ce qui n'est pas de la carte revient AVANT le remboursement ────────
+    //
+    // 🔴 L'ORDRE N'EST PAS COSMÉTIQUE, IL SUPPRIME UNE COURSE (traces du 30/08
+    // relues en base). Créer le remboursement déclenche le webhook
+    // `charge.refunded`, qui recrédite le bon et rend la récompense EN SECOURS.
+    // Sur le rendez-vous d'Alex il est arrivé entre notre re-crédit du bon et
+    // notre relecture de la récompense : la ligne était déjà libre, et l'email
+    // s'est tu sur 10 € pourtant bien revenus.
+    //
+    // ⚠️ ANNONCER L'ÉTAT SUFFISAIT À DIRE VRAI, MAIS PAS À DORMIR TRANQUILLE :
+    // l'alerte « récompense déjà libre » se serait déclenchée à CHAQUE
+    // annulation remboursée. Une alerte qui crie en régime normal n'est plus
+    // lue par personne, et c'est exactement le mal qu'on chasse. En agissant
+    // les premiers, le webhook redevient un vrai secours et le cri retrouve son
+    // sens : il ne reste que le cas anormal.
+    //
+    // ⚠️ ET C'EST AUSSI LE BON ORDRE EN CAS D'ÉCHEC. Si le remboursement rate
+    // juste après, le Yopper garde son bon et sa récompense pendant qu'on règle
+    // l'argent à la main. L'inverse lui prenait tout d'un coup.
+    //
+    // ⚠️ LES DEUX GESTES SONT IDEMPOTENTS : index unique partiel pour le bon,
+    // `utilisee_at IS NULL` pour la récompense. Un rejeu ne double rien.
+    //
+    // ⚠️ LE COMMERÇANT ANNULE : TOUT REVIENT, y compris la part de récompense
+    // posée sur les produits. Il n'y a pas de « je garde mes produits » ici,
+    // c'est lui qui renonce à la vente.
+    const rendu = await rendreAvantagesRdv(supabase, {
+      ou: 'rdv/annuler-commercant',
+      bonId: rdv.bon_cadeau_id, bonMontant: rdv.bon_cadeau_montant,
+      recompenseId: rdv.fidelite_recompense_id,
+      recompenseMontant: arr(Number(rdv.fidelite_remise || 0)
+        + Number(commandeLiee?.fidelite_remise || 0)),
+      refs: { rdv_id: rdv.id },
+    })
+    let bonRendu = rendu.bon
+    let recompenseRendue = rendu.recompense
+    if (commandeLiee) {
+      // ⚠️ ET SURTOUT PAS DEUX FOIS LA MÊME LIGNE. Une récompense est UNE ligne,
+      // et le tunnel ne la pose que sur le rendez-vous ; une commande ancienne
+      // pourrait pourtant porter le même identifiant. Tant qu'on ne comptait que
+      // ce qu'on rendait soi-même, la seconde passe se taisait d'elle-même.
+      // Depuis qu'on annonce l'ÉTAT, il faut le dire ici : sinon la part
+      // produits serait annoncée deux fois.
+      const memeRecompense = commandeLiee.fidelite_recompense_id
+        && String(commandeLiee.fidelite_recompense_id) === String(rdv.fidelite_recompense_id || '')
+      const rc = await rendreAvantagesRdv(supabase, {
+        ou: 'rdv/annuler-commercant',
+        bonId: commandeLiee.bon_cadeau_id, bonMontant: commandeLiee.bon_cadeau_montant,
+        recompenseId: memeRecompense ? null : commandeLiee.fidelite_recompense_id,
+        recompenseMontant: Number(commandeLiee.fidelite_remise || 0),
+        refs: { commande_id: commandeLiee.id },
+      })
+      bonRendu += rc.bon
+      recompenseRendue += rc.recompense
+    }
+
     // ─── Remboursement Stripe ──────────────────────────────────────────────
     let refundId = null
     let refundError = null
@@ -146,46 +202,6 @@ export async function POST(request) {
         const rest = await restaurerStockVariantes(supabase, [commandeLiee.id])
         if (!rest.ok) console.error('[rdv/annuler-commercant] restitution stock versions KO', rest.error)
       }
-    }
-
-    // ─── Ce qui n'est pas de la carte revient aussi ─────────────────────────
-    //
-    // 🔴 LA FONCTION A QUITTÉ CE FICHIER (30/08 au soir). Elle y vivait en
-    // DEUX exemplaires, un par route d'annulation, et chacune des trois
-    // corrections des trois derniers jours n'en a touché qu'un. Elle vit
-    // maintenant dans `lib/rdv-annulation-server.js`, où le banc l'EXÉCUTE.
-    //
-    // ⚠️ LE COMMERÇANT ANNULE : TOUT REVIENT, y compris la part de récompense
-    // posée sur les produits. Il n'y a pas de « je garde mes produits » ici,
-    // c'est lui qui renonce à la vente.
-    const rendu = await rendreAvantagesRdv(supabase, {
-      ou: 'rdv/annuler-commercant',
-      bonId: rdv.bon_cadeau_id, bonMontant: rdv.bon_cadeau_montant,
-      recompenseId: rdv.fidelite_recompense_id,
-      recompenseMontant: arr(Number(rdv.fidelite_remise || 0)
-        + Number(commandeLiee?.fidelite_remise || 0)),
-      refs: { rdv_id: rdv.id },
-    })
-    let bonRendu = rendu.bon
-    let recompenseRendue = rendu.recompense
-    if (commandeLiee) {
-      // ⚠️ ET SURTOUT PAS DEUX FOIS LA MÊME LIGNE. Une récompense est UNE ligne,
-      // et le tunnel ne la pose que sur le rendez-vous ; une commande ancienne
-      // pourrait pourtant porter le même identifiant. Tant qu'on ne comptait que
-      // ce qu'on rendait soi-même, la seconde passe se taisait d'elle-même.
-      // Depuis qu'on annonce l'ÉTAT, il faut le dire ici : sinon la part
-      // produits serait annoncée deux fois.
-      const memeRecompense = commandeLiee.fidelite_recompense_id
-        && String(commandeLiee.fidelite_recompense_id) === String(rdv.fidelite_recompense_id || '')
-      const rc = await rendreAvantagesRdv(supabase, {
-        ou: 'rdv/annuler-commercant',
-        bonId: commandeLiee.bon_cadeau_id, bonMontant: commandeLiee.bon_cadeau_montant,
-        recompenseId: memeRecompense ? null : commandeLiee.fidelite_recompense_id,
-        recompenseMontant: Number(commandeLiee.fidelite_remise || 0),
-        refs: { commande_id: commandeLiee.id },
-      })
-      bonRendu += rc.bon
-      recompenseRendue += rc.recompense
     }
 
     if (rdv.rappel_push_id) annulerPush(rdv.rappel_push_id).catch(() => {})

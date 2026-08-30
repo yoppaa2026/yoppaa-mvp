@@ -113,6 +113,24 @@ const MUTATIONS = [
     de: '    else rendu.bon = arr(bonMontant)',
     vers: '    else if (!rec.deja_recredite) rendu.bon = arr(bonMontant)' },
 
+  // 🔴 L'ORDRE QUI SUPPRIME LA COURSE. Rembourser AVANT de rendre rouvre la
+  // fenêtre où le webhook `charge.refunded` rend la récompense entre notre
+  // re-crédit du bon et notre relecture. C'est ce qui s'est passé le 30/08,
+  // traces en base à l'appui.
+  //
+  // ⚠️ MA PREMIÈRE VERSION NEUTRALISAIT L'APPEL SANS LE DÉPLACER, et la garde
+  // est restée verte : elle mesure une POSITION, pas une présence. Le harnais
+  // l'a dit. Celle-ci remet vraiment un remboursement en amont.
+  { nom: '🔴 le remboursement Stripe repasse AVANT le retour des avantages',
+    fichier: 'app/api/rdv/annuler-commercant/route.js',
+    de: '    // ─── Ce qui n\'est pas de la carte revient AVANT le remboursement ────────',
+    vers: '    await stripe.refunds.create({ payment_intent: rdv.stripe_payment_intent_id })' },
+
+  { nom: '🔴 et pareil sur l’annulation par le client',
+    fichier: 'app/api/rdv/cancel/route.js',
+    de: '    // ─── 4.7) CE QUI N\'EST PAS DE LA CARTE REVIENT, ET IL REVIENT D\'ABORD ───',
+    vers: '    await stripe.refunds.create({ payment_intent: rdv.stripe_payment_intent_id })' },
+
   { nom: '🔴 une récompense déjà libre ne fait plus crier personne',
     fichier: 'lib/rdv-annulation-server.js',
     de: '      else console.warn(`[${ou}] récompense déjà libre à l’annulation`, { recompenseId, ...refs })',

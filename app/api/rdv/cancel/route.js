@@ -165,6 +165,85 @@ export async function POST(request) {
     }
 
     const gardeSesProduits = !!commandeLiee && produits_choix === 'garde'
+    const arr = (n) => Math.round(Number(n || 0) * 100) / 100
+
+    // ─── 4.7) CE QUI N'EST PAS DE LA CARTE REVIENT, ET IL REVIENT D'ABORD ───
+    //
+    // 🔴 L'ORDRE SUPPRIME UNE COURSE, vérifiée dans les traces du 30/08. Créer
+    // le remboursement déclenche le webhook `charge.refunded`, qui recrédite le
+    // bon et rend la récompense EN SECOURS. Il peut arriver entre notre
+    // re-crédit du bon et notre relecture de la récompense : la ligne est alors
+    // déjà libre, et c'est ainsi qu'un email a annoncé 40 € de bon sans dire un
+    // mot des 10 € de récompense pourtant bien revenus.
+    //
+    // ⚠️ ANNONCER L'ÉTAT SUFFISAIT À DIRE VRAI, PAS À DORMIR TRANQUILLE :
+    // l'alerte « récompense déjà libre » se serait déclenchée à chaque
+    // annulation remboursée. Une alerte qui crie en régime normal n'est plus
+    // lue, et c'est le mal qu'on chasse. En agissant les premiers, le webhook
+    // redevient un vrai secours et le cri ne reste que pour l'anormal.
+    //
+    // ⚠️ ET C'EST LE BON ORDRE EN CAS D'ÉCHEC : si le remboursement rate juste
+    // après, le Yopper garde son bon et sa récompense pendant qu'on règle
+    // l'argent à la main. L'inverse lui prenait tout d'un coup.
+    //
+    // 🔴 LE BON CADEAU N'ÉTAIT PAS RENDU, ET ALEX L'A VU EN PRODUCTION LE
+    // 29/08. Un bon de 75 €, 35 € posés sur une coupe, le rendez-vous annulé :
+    // sa fiche affichait toujours 40 €. Stripe ne rembourse QUE la part carte,
+    // la part bon n'existe pas pour lui. Personne d'autre ne la rendait.
+    //
+    // ⚠️ ET LA COMMANDE LIÉE SUIT LE CHOIX DU CLIENT : ses avantages ne
+    // reviennent que s'il rend ses produits. Les garder, c'est les acheter.
+    //
+    // ⚠️ UNE RÉCOMPENSE QUI A PAYÉ DES PRODUITS GARDÉS NE REVIENT PAS. Depuis
+    // le 30/08 elle mord sur les produits quand elle dépasse la prestation. Si
+    // le client annule mais GARDE sa marchandise, cette part est bel et bien
+    // consommée : la rendre lui offrirait une remise sur ce qu'il emporte.
+    //
+    // ⚠️ ET ON NE LA REND PAS POUR LA REPRENDRE ENSUITE. `rendreRecompense`
+    // incrémente `recompenses_disponibles` ET écrit un mouvement d'ajustement :
+    // remettre `utilisee_at` après coup laisserait le compteur au-dessus du
+    // nombre de lignes, l'invariant surveillé depuis le 24/08. On décide AVANT
+    // d'agir. Une récompense est UNE ligne : prise ou rendue, jamais à moitié.
+    const recompenseSurProduitsGardes = gardeSesProduits
+      && Number(commandeLiee?.fidelite_remise || 0) > 0
+
+    // ⚠️ LA REMISE ANNONCÉE EST CELLE QUI A ÉTÉ FIGÉE, prestation ET produits :
+    // une récompense est UNE ligne, mais elle a pu mordre des deux côtés.
+    // N'annoncer que la part prestation ferait dire « 6 € te reviennent » quand
+    // 10 € reviennent.
+    const rendu = await rendreAvantagesRdv(supabase, {
+      ou: 'rdv/cancel',
+      bonId: rdv.bon_cadeau_id,
+      bonMontant: rdv.bon_cadeau_montant,
+      recompenseId: recompenseSurProduitsGardes ? null : rdv.fidelite_recompense_id,
+      recompenseMontant: arr(Number(rdv.fidelite_remise || 0)
+        + (gardeSesProduits ? 0 : Number(commandeLiee?.fidelite_remise || 0))),
+      refs: { rdv_id: rdv.id },
+    })
+    let bonRendu = rendu.bon
+    let recompenseRendue = rendu.recompense
+
+    if (commandeLiee && !gardeSesProduits) {
+      // ⚠️ ET SURTOUT PAS DEUX FOIS LA MÊME LIGNE. Une récompense est UNE ligne,
+      // portée par le rendez-vous. Tant qu'on ne comptait que ce qu'on rendait
+      // soi-même, une commande qui aurait porté le même identifiant se taisait
+      // d'elle-même à la seconde passe. Depuis qu'on annonce l'ÉTAT, il faut
+      // l'écrire, sinon la part produits serait annoncée deux fois.
+      const memeRecompense = commandeLiee.fidelite_recompense_id
+        && String(commandeLiee.fidelite_recompense_id) === String(rdv.fidelite_recompense_id || '')
+      const rc = await rendreAvantagesRdv(supabase, {
+        ou: 'rdv/cancel',
+        bonId: commandeLiee.bon_cadeau_id,
+        bonMontant: commandeLiee.bon_cadeau_montant,
+        recompenseId: memeRecompense ? null : commandeLiee.fidelite_recompense_id,
+        recompenseMontant: Number(commandeLiee.fidelite_remise || 0),
+        refs: { commande_id: commandeLiee.id },
+      })
+      bonRendu += rc.bon
+      recompenseRendue += rc.recompense
+    }
+    bonRendu = arr(bonRendu)
+    recompenseRendue = arr(recompenseRendue)
 
     // ─── 5) Refund Stripe (Direct Charge sur compte connecté) ──────────────
     //
@@ -185,7 +264,6 @@ export async function POST(request) {
     // affiché. Un bon cadeau et une récompense posés sur la commande ont baissé
     // le montant encaissé d'autant : demander à Stripe de rembourser le brut,
     // c'est réclamer plus que ce qui a été prélevé.
-    const arr = (n) => Math.round(Number(n || 0) * 100) / 100
     const produitsPayesCarte = commandeLiee
       ? arr(Math.max(0, Number(commandeLiee.total || 0)
           - Number(commandeLiee.bon_cadeau_montant || 0)
@@ -273,92 +351,6 @@ export async function POST(request) {
       console.error('[rdv/cancel] UPDATE statut KO', errUpd)
       return NextResponse.json({ ok: false, error: 'Erreur mise à jour RDV.' }, { status: 500 })
     }
-
-    // ═══ CE QUI N'EST PAS DE LA CARTE REVIENT AUSSI ═══════════════════════
-    //
-    // 🔴 LE BON CADEAU N'ÉTAIT PAS RENDU, ET ALEX L'A VU EN PRODUCTION LE
-    // 29/08. Un bon de 75 €, 35 € posés sur une coupe, le rendez-vous annulé :
-    // sa fiche affichait toujours 40 €. Stripe ne rembourse QUE la part carte,
-    // la part bon n'existe pas pour lui. Personne d'autre ne la rendait.
-    //
-    // ⚠️ C'ÉTAIT LE FRÈRE NON TRAITÉ DU 28/08. Ce jour-là `recrediterBon` a
-    // appris à accepter `{ rdv_id }` et j'ai relu « les deux appelants » : ils
-    // désignent tous deux une COMMANDE. La capacité était écrite, l'appelant
-    // jamais. Le banc gardait ces deux fichiers-là, donc il est resté vert.
-    //
-    // ⚠️ ET LA COMMANDE LIÉE SUIT LE CHOIX DU CLIENT : ses avantages ne
-    // reviennent que s'il rend ses produits. Les garder, c'est les acheter.
-    // 🔴 CETTE FONCTION RENDAIT LA RÉCOMPENSE ET NE LE DISAIT À PERSONNE (Alex,
-    // 30/08, sur son propre parcours). Elle ne rendait QUE le montant du bon :
-    // la récompense revenait bel et bien sur la carte de fidélité, mais aucun
-    // écran ni aucun email ne l'annonçait. Alex l'a vu parce qu'il est allé
-    // vérifier sa carte — un Yopper, lui, croit avoir perdu ses 10 €.
-    //
-    // ⚠️ EXACTEMENT LE MÊME DÉFAUT QUE LE BON LE 29/08, un jour plus tard et
-    // une ligne plus bas. Le geste avait été porté au bon, jamais à sa voisine.
-    //
-    // 🔴 ET LA FONCTION A QUITTÉ CE FICHIER (30/08 au soir). Elle y vivait en
-    // double, ici et dans l'annulation par le commerçant, et les trois
-    // corrections des trois derniers jours n'en ont touché qu'une à chaque
-    // fois. Elle vit dans `lib/rdv-annulation-server.js`, où le banc l'exécute
-    // sur une base simulée.
-
-    // ⚠️ UNE RÉCOMPENSE QUI A PAYÉ DES PRODUITS GARDÉS NE REVIENT PAS.
-    //
-    // Depuis le 30/08 la récompense mord sur les produits quand elle dépasse
-    // la prestation. Si le client annule mais GARDE sa marchandise, la part
-    // qu'elle a payée est bel et bien consommée : la rendre reviendrait à lui
-    // offrir une remise sur ce qu'il emporte.
-    //
-    // ⚠️ ET ON NE LA REND PAS POUR LA REPRENDRE ENSUITE. `rendreRecompense`
-    // incrémente `recompenses_disponibles` ET écrit un mouvement d'ajustement :
-    // remettre `utilisee_at` après coup laisserait le compteur au-dessus du
-    // nombre de lignes, exactement l'invariant qu'on surveille depuis le 24/08.
-    // On décide AVANT d'agir, on ne défait pas après.
-    //
-    // ⚠️ Une récompense est UNE ligne : prise ou rendue, jamais à moitié.
-    const recompenseSurProduitsGardes = gardeSesProduits
-      && Number(commandeLiee?.fidelite_remise || 0) > 0
-
-    // Le rendez-vous n'aura pas lieu : ce qu'il a consommé revient.
-    //
-    // ⚠️ LA REMISE ANNONCÉE EST CELLE QUI A ÉTÉ FIGÉE, prestation ET produits :
-    // une récompense est UNE ligne, mais elle a pu mordre des deux côtés depuis
-    // le 30/08. N'annoncer que la part prestation ferait dire « 6 € te
-    // reviennent » quand 10 € reviennent.
-    const rendu = await rendreAvantagesRdv(supabase, {
-      ou: 'rdv/cancel',
-      bonId: rdv.bon_cadeau_id,
-      bonMontant: rdv.bon_cadeau_montant,
-      recompenseId: recompenseSurProduitsGardes ? null : rdv.fidelite_recompense_id,
-      recompenseMontant: arr(Number(rdv.fidelite_remise || 0)
-        + (gardeSesProduits ? 0 : Number(commandeLiee?.fidelite_remise || 0))),
-      refs: { rdv_id: rdv.id },
-    })
-    let bonRendu = rendu.bon
-    let recompenseRendue = rendu.recompense
-
-    if (commandeLiee && !gardeSesProduits) {
-      // ⚠️ ET SURTOUT PAS DEUX FOIS LA MÊME LIGNE. Une récompense est UNE ligne,
-      // portée par le rendez-vous. Tant qu'on ne comptait que ce qu'on rendait
-      // soi-même, une commande qui aurait porté le même identifiant se taisait
-      // d'elle-même à la seconde passe. Depuis qu'on annonce l'ÉTAT, il faut
-      // l'écrire, sinon la part produits serait annoncée deux fois.
-      const memeRecompense = commandeLiee.fidelite_recompense_id
-        && String(commandeLiee.fidelite_recompense_id) === String(rdv.fidelite_recompense_id || '')
-      const rc = await rendreAvantagesRdv(supabase, {
-        ou: 'rdv/cancel',
-        bonId: commandeLiee.bon_cadeau_id,
-        bonMontant: commandeLiee.bon_cadeau_montant,
-        recompenseId: memeRecompense ? null : commandeLiee.fidelite_recompense_id,
-        recompenseMontant: Number(commandeLiee.fidelite_remise || 0),
-        refs: { commande_id: commandeLiee.id },
-      })
-      bonRendu += rc.bon
-      recompenseRendue += rc.recompense
-    }
-    bonRendu = arr(bonRendu)
-    recompenseRendue = arr(recompenseRendue)
 
     // Annule le rappel push programmé (1h avant) s'il existe. Best-effort.
     if (rdv.rappel_push_id) {

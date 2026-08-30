@@ -999,6 +999,20 @@ for (const chemin of [
     // d'elle-même. Depuis qu'on annonce l'ÉTAT, il faut l'écrire.
     verifie(`${court} : ne compte jamais deux fois la même récompense`,
       /memeRecompense \? null :/.test(src))
+    // 🔴 ET L'ORDRE SUPPRIME LA COURSE QUI A PRODUIT LE DÉFAUT. Créer le
+    // remboursement réveille le webhook `charge.refunded`, qui recrédite le bon
+    // et rend la récompense EN SECOURS. Le 30/08 il s'est glissé entre notre
+    // re-crédit et notre relecture : la récompense était déjà libre, et l'email
+    // n'en a rien dit. On agit donc AVANT de rembourser.
+    //
+    // ⚠️ ET CE N'EST PAS QUE DU CONFORT : sans cet ordre, l'alerte
+    // « récompense déjà libre » se déclencherait à chaque annulation
+    // remboursée, et une alerte qui crie en régime normal n'est plus lue.
+    const posRendu = src.indexOf('rendreAvantagesRdv(supabase, {')
+    const posRefund = src.indexOf('stripe.refunds.create(')
+    verifie(`${court} : les avantages reviennent AVANT le remboursement`,
+      posRendu > 0 && posRefund > 0 && posRendu < posRefund,
+      `avantages ${posRendu}, remboursement ${posRefund}`)
   }
 }
 {

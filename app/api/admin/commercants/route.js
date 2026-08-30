@@ -227,16 +227,46 @@ export async function DELETE(request) {
       return NextResponse.json({ ok: false, error: `Erreur suppression : ${delErr.message}` }, { status: 500 })
     }
 
-    // Best effort : compte auth lié (libère l'email) + logo dans le storage.
+    // ─── LE COMPTE LIÉ, ET ON LIT CE QUI SE PASSE ──────────────────────────
+    //
+    // 🔴 CE `await` ÉTAIT UN ESPOIR, PAS UNE ACTION (30/08 au soir). Son échec
+    // partait dans un `console.warn` que personne ne lit, et l'écran répondait
+    // « supprimé » dans tous les cas.
+    //
+    // ⚠️ CE N'EST PAS UN DÉTAIL DE JOURNAL : effacer un commerçant, c'est
+    // répondre à une demande d'effacement. Si le compte survit, la personne
+    // reste inscrite, peut encore se connecter, et Yoppaa croit l'avoir
+    // supprimée. On le DIT au lieu de l'espérer.
+    //
+    // ⚠️ ET C'EST PRÉCISÉMENT CE SILENCE QUI A SAUVÉ L'ACCÈS D'ALEX : le
+    // commerce « Dermaé » était rattaché à son compte, l'effacement a échoué, et
+    // rien ne l'a signalé. La chance a fait le travail d'une garde.
+    let compteSupprime = null
     if (c.auth_user_id) {
-      await admin.auth.admin.deleteUser(c.auth_user_id).catch((e) => console.warn('[admin/commercants DELETE] auth user', e?.message))
+      const { error: errAuth } = await admin.auth.admin.deleteUser(c.auth_user_id)
+        .catch((e) => ({ error: e }))
+      if (errAuth) {
+        console.error('[admin/commercants DELETE] compte auth NON supprimé', errAuth?.message, { cid })
+        compteSupprime = false
+      } else {
+        compteSupprime = true
+      }
     }
     if (c.logo_url && c.logo_url.includes('/logos/')) {
       const fileName = c.logo_url.split('/logos/')[1]?.split('?')[0]
       if (fileName) await admin.storage.from('logos').remove([fileName]).catch(() => {})
     }
 
-    return NextResponse.json({ ok: true, deleted: c.nom, forced: !!force })
+    return NextResponse.json({
+      ok: true,
+      deleted: c.nom,
+      forced: !!force,
+      // `null` = il n'y avait aucun compte à supprimer, et ce n'est pas `false`.
+      compte_supprime: compteSupprime,
+      ...(compteSupprime === false ? {
+        avertissement: `Le commerce est supprimé, mais son compte de connexion existe toujours : ${c.nom} peut encore se connecter. À supprimer à la main dans Supabase Auth.`,
+      } : {}),
+    })
   } catch (e) {
     console.error('[admin/commercants DELETE]', e?.message)
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })

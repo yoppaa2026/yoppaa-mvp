@@ -49,6 +49,26 @@ const MUTATIONS = [
     de: "        error: 'compte_admin',",
     vers: "        error: 'zz_compte_admin',", toutes: true },
 
+  // 🔴 L'ESPOIR À LA PLACE DE L'ACTION. C'est ce silence-là qui a sauvé l'accès
+  // d'Alex : « Dermaé » était rattaché à son compte, l'effacement a échoué, et
+  // rien ne l'a signalé. La chance a fait le travail d'une garde.
+  { nom: '🔴 l’effacement du compte lié redevient un espoir',
+    fichier: 'app/api/admin/commercants/route.js',
+    de: '      const { error: errAuth } = await admin.auth.admin.deleteUser(c.auth_user_id)\n        .catch((e) => ({ error: e }))',
+    vers: '      const errAuth = null\n      await admin.auth.admin.deleteUser(c.auth_user_id).catch((e) => console.warn(e?.message))' },
+
+  { nom: '🔴 l’échec ne remonte plus jusqu’à l’écran',
+    fichier: 'app/api/admin/commercants/route.js',
+    de: '      compte_supprime: compteSupprime,',
+    vers: '' },
+
+  // ⚠️ `null` N'EST PAS `false` : « aucun compte à supprimer » et « le compte
+  // n'a pas pu l'être » ne se disent pas de la même façon.
+  { nom: '🔴 « aucun compte » se confond avec « échec »',
+    fichier: 'app/api/admin/commercants/route.js',
+    de: '    let compteSupprime = null',
+    vers: '    let compteSupprime = false' },
+
   // ─── LE PIÈGE QUI N'EXISTE PAS ENCORE ──────────────────────────────────
   //
   // 🔴 CANONISER LES ADRESSES GMAIL est une idée qui revient dès qu'on veut

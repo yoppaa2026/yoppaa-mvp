@@ -241,6 +241,26 @@ function sansCommentaires(src) {
   verifier('le refus admin passe avant le garde-fou des paiements',
     posAdmin > 0 && posPaye > 0 && posAdmin < posPaye,
     `admin ${posAdmin}, paiements ${posPaye}`)
+
+  // 🔴 ET L'EFFACEMENT DU COMPTE LIÉ SE LIT, il ne s'espère pas. Son échec
+  // partait dans un `console.warn` que personne ne lit, et l'écran répondait
+  // « supprimé » dans tous les cas.
+  //
+  // ⚠️ CE N'EST PAS UN DÉTAIL DE JOURNAL : supprimer un commerçant, c'est
+  // répondre à une demande d'effacement. Un compte qui survit, c'est une
+  // personne qui reste inscrite et peut encore se connecter, pendant que
+  // Yoppaa la croit partie.
+  verifier('l’effacement du compte lié lit son résultat',
+    /const \{ error: errAuth \} = await admin\.auth\.admin\.deleteUser/.test(src))
+  verifier('et il ne se contente plus d’un avertissement de console',
+    !/deleteUser\(c\.auth_user_id\)\.catch\(\(e\) => console\.warn/.test(src))
+  verifier('un échec remonte jusqu’à l’écran',
+    /compte_supprime: compteSupprime/.test(src) && /avertissement:/.test(src))
+  // ⚠️ `null` N'EST PAS `false`, huitième fois sur ce projet : « il n'y avait
+  // aucun compte » et « le compte n'a pas pu être supprimé » ne se disent pas
+  // de la même façon.
+  verifier('« aucun compte » ne se confond pas avec « échec »',
+    /let compteSupprime = null/.test(src))
 }
 
 // ═══ LE PIÈGE QUI N'EXISTE PAS ENCORE, ET QU'ON EMPÊCHE D'ARRIVER ═════════

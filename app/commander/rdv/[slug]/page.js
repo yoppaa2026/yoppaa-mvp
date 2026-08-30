@@ -465,6 +465,29 @@ export default function CommanderRdvSlug() {
     && commercant?.stripe_account_charges_enabled === true
     && !commercant?._rdvDesactive
 
+  // ⚠️ L'ASSIETTE DE LA RÉCOMPENSE VIT ICI, ET NULLE PART AILLEURS.
+  //
+  // Elle s'écrivait à trois endroits dans ce fichier : le calcul de la remise
+  // affichée, celui de la soumission, et la phrase qui annonce ce qui se perd.
+  // Deux des trois disaient la même chose de deux façons, et la troisième
+  // regardait encore la prestation seule après le passage au panier entier :
+  // elle annonçait « 4,00 € perdus » sans qu'un centime ne se perde.
+  //
+  // ⚠️ ELLE SE DÉCLARE AVANT TOUT USAGE DANS LE RENDU. Ce fichier a déjà
+  // produit un écran blanc le 29/08 pour un `const` lu trop tôt : les trois
+  // lecteurs sont plus bas, la déclaration reste ici.
+  // ⚠️ UN SEUL DÉRÉFÉRENCEMENT, ET IL EST OPTIONNEL. `verif:logique` a rougi
+  // sur ma première version, qui relisait `prestationChoisie.prix` sans `?.`
+  // dans la branche du ternaire : le garde de chargement est plus bas, et ce
+  // motif casse dès qu'un rendu passe avant lui. Le banc avait raison.
+  // ⚠️ Une prestation SUR DEVIS (prix `null`) donne une assiette réduite aux
+  // seuls produits, ce qui est exact : on ne devine pas un prix inconnu.
+  const assietteRecompense = Number(prestationChoisie?.prix ?? 0)
+    + ((lignesPanier.length > 0 && produitsAchetables) ? totalProduits : 0)
+  // Le mot suit l'assiette : nommer « ta prestation » un montant qui contient
+  // des produits, c'est décrire un calcul que le client ne retrouvera pas.
+  const motAssiette = (lignesPanier.length > 0 && produitsAchetables) ? 'ton panier' : 'ta prestation'
+
   // Réserver n'est proposé que si c'est réellement possible : module de
   // rendez-vous actif ET au moins une prestation. Sinon la barre n'affiche que
   // la sortie boutique, plutôt qu'un bouton qui ne mène nulle part.
@@ -1397,7 +1420,7 @@ export default function CommanderRdvSlug() {
           // ⚠️ L'ASSIETTE EST LE PANIER ENTIER (Alex, 30/08) : la récompense
           // paie la prestation ET les produits, comme le bon, et comme elle le
           // faisait déjà dans le tunnel boutique depuis toujours.
-          ? calculerRemiseRecompense(recompenseFid, prixEstime + ((lignesPanier.length > 0 && produitsAchetables) ? totalProduits : 0)) : 0,
+          ? calculerRemiseRecompense(recompenseFid, assietteRecompense) : 0,
         soldeBon: bonChoisi ? Number(bonChoisi.solde) : 0,
       })
       // ⚠️ `null` ET NON `0` QUAND IL N'Y A PAS D'ACOMPTE : l'écran de
@@ -3149,8 +3172,12 @@ export default function CommanderRdvSlug() {
                     // prestation PLUS produits. La même récompense payait le
                     // pain chez le boulanger et refusait le shampoing chez le
                     // coiffeur, au seul motif qu'un rendez-vous l'accompagnait.
+                    // ⚠️ L'ASSIETTE EST NOMMÉE UNE FOIS, et tout ce qui en
+                    // parle la relit : le calcul de la remise, ET la phrase qui
+                    // annonce ce qui se perd. Les tenir séparées, c'est
+                    // exactement ce qui a fait annoncer une perte inexistante.
                     const remiseFid = (recompenseFid && recompenseActive && prixBase != null)
-                      ? calculerRemiseRecompense(recompenseFid, prixBase + totalProduits)
+                      ? calculerRemiseRecompense(recompenseFid, assietteRecompense)
                       : 0
                     // ⚠️ UN SEUL CALCUL, PARTAGÉ AVEC LES DEUX ROUTES SERVEUR
                     // ET AVEC LE CLICHÉ DE CONFIRMATION (29/08). Il était
@@ -3224,10 +3251,25 @@ export default function CommanderRdvSlug() {
                                   récompense de 10 € sur une prestation à 8 € en
                                   brûlait 2 sans un mot (Alex, 28/08). Même
                                   phrase que le tunnel de commande, lue au même
-                                  endroit : recopiée, elle aurait divergé. */}
-                              {libellePerteRecompense(recompenseFid, prixBase, 'ta prestation') && (
+                                  endroit : recopiée, elle aurait divergé.
+
+                                  🔴 ET SON ASSIETTE A SUIVI CELLE DE LA
+                                  RÉCOMPENSE, le 30/08. Elle regardait la seule
+                                  prestation : depuis que la récompense paie
+                                  aussi les produits, elle annonçait une perte
+                                  qui n'existait plus, et dissuadait le Yopper
+                                  d'utiliser une récompense entièrement
+                                  utilisable. J'avais changé le calcul sans
+                                  changer la phrase qui le commente : le frère
+                                  non traité, dans la même heure.
+
+                                  ⚠️ ET LE MOT SUIT L'ASSIETTE : « ta
+                                  prestation » devient « ton panier » dès qu'un
+                                  produit s'y ajoute, sinon la phrase nomme un
+                                  montant qu'elle ne mesure pas. */}
+                              {libellePerteRecompense(recompenseFid, assietteRecompense, motAssiette) && (
                                 <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '7px 9px', fontWeight: 700, lineHeight: 1.45 }}>
-                                  {libellePerteRecompense(recompenseFid, prixBase, 'ta prestation')}
+                                  {libellePerteRecompense(recompenseFid, assietteRecompense, motAssiette)}
                                 </p>
                               )}
                               {/* ⚠️ 🔴 CE QU'IL A EN PLUS, et qui restait muet.

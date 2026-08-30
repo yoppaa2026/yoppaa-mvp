@@ -122,6 +122,23 @@ const MUTATIONS = [
     banc: 'verif:recompense', fichier: 'app/commander/[slug]/page.js',
     de: '{libellePerteRecompense(recompenseFid, totalAvecFrais()) && (',
     vers: '{false && libellePerteRecompense(recompenseFid, totalAvecFrais()) && (' },
+
+  // 🔴 L'AVERTISSEMENT DOIT MESURER LA MÊME ASSIETTE QUE LA REMISE (30/08).
+  // Alex a demandé si ce message était à jour partout : il ne l'était pas, le
+  // tunnel rendez-vous le calculait encore sur la prestation seule alors que
+  // la récompense venait de passer au panier entier le matin même. Il
+  // annonçait une perte qui n'existait plus.
+  { nom: '🔴 l’avertissement de perte retombe sur la prestation seule',
+    banc: 'verif:recompense', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                              {libellePerteRecompense(recompenseFid, assietteRecompense, motAssiette) && (',
+    vers: '                              {libellePerteRecompense(recompenseFid, prixBase, motAssiette) && (' },
+
+  // ⚠️ ET L'INVERSE : la remise qui s'écarte de l'avertissement. Les deux
+  // doivent lire la MÊME variable, pas deux expressions équivalentes.
+  { nom: '🔴 la remise et l’avertissement se remettent à calculer chacun de leur côté',
+    banc: 'verif:recompense', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                      ? calculerRemiseRecompense(recompenseFid, assietteRecompense)',
+    vers: '                      ? calculerRemiseRecompense(recompenseFid, prixBase + totalProduits)' },
   { nom: '🔴 la garde de paiement remonte AVANT le calcul du dû',
     banc: 'verif:bons', fichier: 'app/api/stripe/checkout/create-commande/route.js',
     de: '    if (!couvertSansPaiement) {\n      if (surPlace && !cashAutorise) {',

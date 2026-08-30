@@ -1169,6 +1169,38 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
     verifie(`${chemin.split('/')[2]} affiche l'avertissement`,
       /\{libellePerteRecompense\(recompenseFid,[^\n]*\) && \(/.test(lireCode(chemin)))
   }
+
+  // 🔴 ET LA PHRASE DOIT MESURER LA MÊME ASSIETTE QUE LA REMISE (30/08).
+  //
+  // Alex a demandé si ce message était à jour partout. Il ne l'était pas : le
+  // tunnel rendez-vous le calculait encore sur `prixBase`, la prestation
+  // seule, alors que la récompense venait de passer au panier entier LE MATIN
+  // MÊME. Une récompense de 10 € sur une prestation à 6 € plus 21,90 € de
+  // produits annonçait « 4,00 € perdus » sans qu'un centime ne se perde, et
+  // dissuadait le Yopper d'utiliser ce qui lui revenait entièrement.
+  //
+  // ⚠️ J'AVAIS CHANGÉ LE CALCUL SANS CHANGER LA PHRASE QUI LE COMMENTE. La
+  // garde ci-dessus voyait bien l'avertissement, mais jamais SUR QUOI il
+  // portait : elle vérifiait qu'on parle, pas qu'on dise vrai.
+  for (const [chemin, assiette] of [
+    ['app/commander/[slug]/page.js', 'totalAvecFrais()'],
+    ['app/commander/rdv/[slug]/page.js', 'assietteRecompense'],
+  ]) {
+    const src = lireCode(chemin)
+    // ⚠️ ON NORMALISE DES DEUX CÔTÉS plutôt que de raffiner le motif : `[^,)]+`
+    // coupe `totalAvecFrais()` à sa parenthèse, et la garde rougissait sur du
+    // code parfaitement juste. Une expression d'assiette se compare à son NOM,
+    // jamais à sa ponctuation.
+    const nom = (s) => s.trim().replace(/[()\s]+$/, '')
+    const appels = [...src.matchAll(/libellePerteRecompense\(recompenseFid,\s*([^,)]+)/g)].map(m => nom(m[1]))
+    verifie(`${chemin.split('/')[2]} : l'avertissement mesure la bonne assiette`,
+      appels.length > 0 && appels.every(a => a === nom(assiette)), appels.join(' | ') || 'aucun appel')
+    // ⚠️ ET LA MÊME QUE LA REMISE RÉELLEMENT APPLIQUÉE : deux assiettes
+    // différentes pour le même avantage, c'est la divergence garantie.
+    const remises = [...src.matchAll(/calculerRemiseRecompense\(recompenseFid,\s*([^,)]+)/g)].map(m => nom(m[1]))
+    verifie(`${chemin.split('/')[2]} : la remise et l'avertissement partagent l'assiette`,
+      remises.every(r => appels.includes(r)), `remise sur ${remises.join(' | ')}`)
+  }
 }
 
 if (echecs.length > 0) {

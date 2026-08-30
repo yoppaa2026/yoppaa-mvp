@@ -14,7 +14,13 @@ import { envoyerAuCommercant, emailRdvNoShow } from '@/lib/resend'
 
 export async function POST(request) {
   try {
-    const { rdv_id } = await request.json()
+    // ⚠️ LES MONTANTS VIENNENT DE L'APPELANT, comme pour l'email d'annulation :
+    // seule la route qui a partagé sait ce que le commerçant garde et ce qui
+    // est reparti. Ils sont purement DESCRIPTIFS, aucune écriture n'en dépend.
+    const {
+      rdv_id,
+      bon_garde = 0, bon_restitue = 0, recompense_rendue = 0,
+    } = await request.json()
     if (!rdv_id) {
       return NextResponse.json({ ok: false, error: 'rdv_id requis' }, { status: 400 })
     }
@@ -41,7 +47,6 @@ export async function POST(request) {
       .select(`
         id, date_rdv, heure_debut, acompte_paye_en_ligne, acompte_montant,
         client_email, client_prenom,
-        bon_cadeau_montant,
         commercant:commercants(nom, slug),
         prestation:rdv_prestations(nom)
       `)
@@ -72,7 +77,13 @@ export async function POST(request) {
         // de 40 € a payé la prestation, le bloc entier disparaissait : le
         // Yopper perdait 40 € sans qu'un seul écran ni un seul email ne le
         // mentionne. Frère du défaut de l'annulation, trouvé le 30/08 au soir.
-        bon_cadeau_montant: rdv.bon_cadeau_montant,
+        //
+        // ⚠️ ET C'EST LA PART GARDÉE, PAS LE MONTANT POSÉ. La garantie ne porte
+        // que sur l'acompte dû : lire `rdv.bon_cadeau_montant` ferait annoncer
+        // 40 € perdus quand le commerçant n'en garde que 25.
+        bon_garde,
+        bon_restitue,
+        recompense_rendue,
       })
       await envoyerAuCommercant({
         to: rdv.client_email,

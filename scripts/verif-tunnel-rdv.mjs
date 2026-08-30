@@ -1151,34 +1151,45 @@ for (const chemin of [
   // disait. Sur un rendez-vous dont l'acompte vaut zéro, le bloc entier
   // disparaissait et le Yopper perdait 40 € en silence.
   const { emailRdvNoShow } = await import('../lib/resend.js')
+  // 🔴 LA GARANTIE NE PORTE QUE SUR L'ACOMPTE DÛ (Alex, 30/08 au soir). Le
+  // commerçant garde 25 € sur les 40 € du bon, et les 15 € qui dépassaient
+  // reviennent. L'email doit dire les DEUX : sans la seconde ligne, le Yopper
+  // croit tout perdre et ne va pas vérifier son bon.
   const html = emailRdvNoShow({
     yopper_prenom: 'Alexandre', commercant_nom: 'Ciseaux et Soins',
     prestation_nom: 'Coupe', date_rdv: '2026-09-02', heure_debut: '15:30',
-    acompte_paye: false, acompte_montant: 0, bon_cadeau_montant: 40,
+    acompte_paye: false, acompte_montant: 0,
+    bon_garde: 25, bon_restitue: 15, recompense_rendue: 10,
   })
-  verifie('le no-show dit que le bon reste chez le commerçant',
-    html.includes('40,00') && /bon cadeau/.test(html))
+  verifie('le no-show dit ce qui reste chez le commerçant',
+    html.includes('25,00') && /bon cadeau/.test(html))
+  verifie('et ce qui revient quand même sur le bon', html.includes('15,00'))
+  verifie('et la récompense avec', html.includes('10,00') && /fidélité/.test(html))
+  // ⚠️ IL N'ANNONCE JAMAIS LE MONTANT POSÉ, qui n'est ni l'un ni l'autre.
+  verifie('le montant posé de 40 € n’apparaît nulle part', !html.includes('40,00'), 'bon_garde + bon_restitue')
   const rien = emailRdvNoShow({
     yopper_prenom: 'Alexandre', commercant_nom: 'X',
     prestation_nom: 'Coupe', date_rdv: '2026-09-02', heure_debut: '15:30',
     acompte_paye: false, acompte_montant: 0,
   })
   verifie('et sans argent engagé, aucun bloc ne s’invente',
-    !/reste chez le commerçant/i.test(rien))
-  // ⚠️ ET LA ROUTE CHARGE LA COLONNE. Sans elle, `Number(undefined || 0)` vaut
-  // zéro, la ligne disparaît, et rien ne lève.
+    !/reste chez le commerçant/i.test(rien) && !/revient quand même/i.test(rien))
+  // ⚠️ ET LA ROUTE RELAIE LES TROIS MONTANTS, qu'elle ne peut pas deviner :
+  // seule `/api/rdv/no-show` a fait le partage.
   //
   // 🔴 MA PREMIÈRE VERSION CHERCHAIT `bon_cadeau_montant,` N'IMPORTE OÙ dans le
-  // fichier : le nom apparaît AUSSI dans l'argument passé au gabarit, donc
+  // fichier : le nom apparaissait AUSSI dans l'argument passé au gabarit, donc
   // retirer la colonne du select laissait la garde verte. Le harnais de
-  // mutation l'a dit. C'est la quatrième fois de la semaine que je copie un MOT
-  // au lieu d'isoler l'endroit où la RÈGLE s'applique.
+  // mutation l'a dit.
   const route = lireCode('app/api/emails/rdv-no-show/route.js')
-  const selectNoShow = (route.match(/\.select\(`([^`]*)`\)/) || ['', ''])[1]
-  verifie('le select du no-show charge le bon cadeau',
-    /bon_cadeau_montant/.test(selectNoShow), selectNoShow.slice(0, 160))
-  verifie('et la route le passe au gabarit',
-    /bon_cadeau_montant: rdv\.bon_cadeau_montant/.test(route))
+  for (const champ of ['bon_garde', 'bon_restitue', 'recompense_rendue']) {
+    verifie(`la route du no-show relaie ${champ}`,
+      new RegExp(`${champ}[,\\s]`).test(route.split('emailRdvNoShow({')[1] || ''))
+  }
+  // ⚠️ ET ELLE NE LES RECALCULE PAS : lire `rdv.bon_cadeau_montant` ferait
+  // annoncer 40 € perdus quand le commerçant n'en garde que 25.
+  verifie('et elle ne réinvente pas le montant depuis la ligne',
+    !/bon_garde: rdv\./.test(route))
 }
 {
   // ⚠️ LA COLONNE ABSENTE D'UN SELECT, septième occurrence évitée. Sans
@@ -1195,6 +1206,198 @@ for (const chemin of [
     /recompense_rendue: j\.recompense_rendue/.test(dashCode))
   verifie('et il montre au commerçant ce qui est parti',
     /surRetours: \(r\) => \{ retours = r \}/.test(dashCode))
+}
+
+// ═══ 12) LE NO-SHOW NE GARDE QUE LA GARANTIE ══════════════════════════════
+//
+// 🔴 DÉCISION D'ALEX, 30/08 AU SOIR : « la garantie ne porte que sur l'acompte,
+// le reste doit être restitué. » Un client qui posait 40 € de bon sur une
+// prestation à 60 € avec 50 % d'acompte perdait les 40 € s'il ne venait pas,
+// quand la garantie n'en valait que 25. Quinze euros de trop.
+{
+  const { restitutionNoShow, libelleNoShow } = await import('../lib/rdv-paiement.js')
+
+  // ── LE CAS D'ALEX : le bon a tout couvert, il en garde la garantie ──────
+  {
+    const p = restitutionNoShow({
+      acompte_du: 25, acompte_montant: 0, acompte_paye: false,
+      bon_cadeau_montant: 40, fidelite_remise: 10,
+    })
+    egal('la garantie vaut l’acompte dû', p.garantie, 25)
+    egal('rien en caisse, tout venait du bon', p.gardeEnCaisse, 0)
+    egal('le commerçant garde 25 € sur le bon', p.gardeSurBon, 25)
+    egal('et 15 € retournent au client', p.bonRestitue, 15)
+    // ⚠️ LA RÉCOMPENSE N'EST PAS UNE GARANTIE : elle ne coûte rien au
+    // commerçant, c'est une remise qu'il a consentie. Elle revient toujours.
+    egal('la récompense revient en entier', p.recompenseRendue, 10)
+  }
+
+  // ── L'ARGENT COMPTANT S'IMPUTE EN PREMIER ──────────────────────────────
+  {
+    const p = restitutionNoShow({
+      acompte_du: 25, acompte_montant: 5, acompte_paye: true,
+      bon_cadeau_montant: 20, fidelite_remise: 0,
+    })
+    egal('les 5 € encaissés comptent dans la garantie', p.gardeEnCaisse, 5)
+    egal('le bon comble les 20 € qui manquaient', p.gardeSurBon, 20)
+    // 🔴 SI CE NOMBRE N'EST PAS ZÉRO, on rend du bon en gardant du liquide
+    // au-delà de la garantie.
+    egal('et rien ne dépasse, donc rien ne revient', p.bonRestitue, 0)
+  }
+
+  // ── UN BON QUI COUVRE BIEN AU-DELÀ ─────────────────────────────────────
+  {
+    const p = restitutionNoShow({
+      acompte_du: 25, acompte_montant: 0, acompte_paye: false,
+      bon_cadeau_montant: 60, fidelite_remise: 0,
+    })
+    egal('la garantie reste plafonnée à l’acompte dû', p.gardeSurBon, 25)
+    egal('et 35 € reviennent', p.bonRestitue, 35)
+  }
+
+  // ── SANS BON : l'acompte encaissé reste, et c'est tout ─────────────────
+  {
+    const p = restitutionNoShow({
+      acompte_du: 25, acompte_montant: 25, acompte_paye: true,
+      bon_cadeau_montant: 0, fidelite_remise: 0,
+    })
+    egal('le commerçant garde son acompte', p.gardeEnCaisse, 25)
+    egal('il n’y a aucun bon à partager', p.bonRestitue, 0)
+  }
+
+  // ── 🔴 LE PIÈGE DU ZÉRO, HUITIÈME FOIS : `null` N'EST PAS `0` ──────────
+  //
+  // Un rendez-vous antérieur à la colonne ne dit pas que rien n'était dû : il
+  // ne dit RIEN. Inventer une garantie qu'on ne sait pas prouver, ce serait
+  // retenir de l'argent sur une supposition.
+  {
+    const p = restitutionNoShow({
+      acompte_montant: 0, acompte_paye: false,
+      bon_cadeau_montant: 40, fidelite_remise: 10,
+    })
+    verifie('un acompte dû absent se sait', p.connu === false)
+    egal('on ne garde alors que l’argent encaissé', p.gardeSurBon, 0)
+    egal('et le bon revient en entier', p.bonRestitue, 40)
+  }
+  {
+    // 🔴 ET LA GARANTIE RAPPORTÉE VAUT L'ENCAISSÉ, PAS ZÉRO. Sans acompte dû,
+    // les deux lectures donnent le même PARTAGE : c'est le nombre ANNONCÉ au
+    // commerçant qui les sépare. Mesuré muet sans ce contrôle, parce que la
+    // garde ne regardait que le bon.
+    const p = restitutionNoShow({
+      acompte_montant: 5, acompte_paye: true,
+      bon_cadeau_montant: 40, fidelite_remise: 0,
+    })
+    egal('la garantie annoncée vaut l’argent encaissé', p.garantie, 5)
+    egal('et les 5 € restent chez le commerçant', p.gardeEnCaisse, 5)
+    egal('le bon revient quand même en entier', p.bonRestitue, 40)
+  }
+  {
+    // ⚠️ ET UN ZÉRO EXPLICITE EST UNE VRAIE RÉPONSE : aucun acompte n'était
+    // demandé, donc aucune garantie, donc tout revient. Confondre les deux
+    // ferait garder 40 € à un commerçant qui n'avait rien exigé.
+    const p = restitutionNoShow({
+      acompte_du: 0, acompte_montant: 0, acompte_paye: false,
+      bon_cadeau_montant: 40, fidelite_remise: 0,
+    })
+    verifie('un acompte dû de zéro est CONNU', p.connu === true)
+    egal('et le bon revient tout de même en entier', p.bonRestitue, 40)
+  }
+
+  // ── LES DEUX PHRASES, ET AUCUNE NE MENT ────────────────────────────────
+  {
+    const { garde, rend } = libelleNoShow(restitutionNoShow({
+      acompte_du: 25, acompte_montant: 5, acompte_paye: true,
+      bon_cadeau_montant: 40, fidelite_remise: 10,
+    }))
+    verifie('la phrase dit la garantie et son détail',
+      /25,00/.test(garde) && /5,00/.test(garde) && /20,00/.test(garde), garde)
+    verifie('et celle du retour dit ce qui dépassait',
+      /20,00/.test(rend) && /bon cadeau/.test(rend), rend)
+    verifie('et la récompense', /10,00/.test(rend) && /carte/.test(rend), rend)
+  }
+}
+{
+  const { questionRdv, confirmationRdv } = await import('../lib/confirmation-rdv.js')
+  const RDV = {
+    client_prenom: 'Alexandre', client_nom: 'Verstappen',
+    date_rdv: '2026-09-02', heure_debut: '15:30',
+    prix_estime: 60, acompte_du: 25, acompte_montant: 0, acompte_paye: false,
+    bon_cadeau_montant: 40, fidelite_remise: 10,
+  }
+  const q = questionRdv('no_show', RDV)
+  // 🔴 « TU GARDES SON ACOMPTE » DISAIT DEUX FAUSSETÉS À LA FOIS : l'acompte
+  // vaut zéro, et il ne garde plus tout.
+  verifie('la fenêtre ne dit plus « tu gardes son acompte »',
+    !/tu gardes ce qu’il a déjà versé/.test(q.message), q.message)
+  verifie('elle dit la garantie gardée', q.message.includes('25,00'), q.message)
+  verifie('elle dit ce qui retourne sur le bon', q.message.includes('15,00'), q.message)
+  verifie('et la récompense qui revient', q.message.includes('10,00'), q.message)
+
+  // ⚠️ « ON NE SAIT PAS » SE DIT, sinon le commerçant croit à une erreur.
+  const ancien = questionRdv('no_show', { ...RDV, acompte_du: undefined })
+  verifie('un rendez-vous sans acompte dû l’explique',
+    /antérieur au calcul de la garantie/.test(ancien.message), ancien.message)
+
+  // ── APRÈS LE CLIC : ce que la route a réellement rendu ─────────────────
+  const apres = confirmationRdv('no_show', {
+    rdv: RDV,
+    retours: { garantie: 25, bon_restitue: 15, recompense_rendue: 10 },
+  })
+  verifie('la confirmation dit la garantie', apres.includes('25,00'), apres)
+  verifie('et ce qui est reparti', apres.includes('15,00') && apres.includes('10,00'), apres)
+  const sansRetours = confirmationRdv('no_show', { rdv: RDV })
+  verifie('sans montants, la phrase reste sobre', !/€/.test(sansRetours), sansRetours)
+}
+{
+  // ⚠️ LE NO-SHOW PASSE PAR LE SERVEUR, dernier frère du trou fermé le 29/08.
+  // Une restitution ne part pas du navigateur d'un commerçant.
+  const dash = sansProse(lire('app/dashboard/page.js'))
+  verifie('le tableau de bord ne marque plus l’absence lui-même',
+    /postPro\('\/api\/rdv\/no-show'/.test(dash))
+  const src = lireCode('app/api/rdv/no-show/route.js')
+  verifie('la route du no-show a sa garde d’autorisation',
+    /gardeSurLigne\(request, supabase, 'rdv_reservations', rdv_id\)/.test(src))
+  // 🔴 LES COLONNES DU PARTAGE DOIVENT ARRIVER JUSQU'À LA ROUTE.
+  const selectRdv = (src.match(/\.select\(`([^`]*)`\)/) || ['', ''])[1]
+  for (const col of ['acompte_du', 'acompte_montant', 'bon_cadeau_id', 'bon_cadeau_montant', 'fidelite_recompense_id', 'fidelite_remise']) {
+    verifie(`le select du no-show charge ${col}`, new RegExp(col).test(selectRdv), selectRdv.slice(0, 200))
+  }
+  // ⚠️ ON RESTITUE LA PART QUI DÉPASSE, JAMAIS LE BON ENTIER.
+  verifie('la route restitue la part qui dépasse, pas le bon entier',
+    /bonMontant: part\.bonRestitue/.test(src) && !/bonMontant: rdv\.bon_cadeau_montant/.test(src))
+  // ⚠️ ET UN RENDEZ-VOUS ANNULÉ NE SE MARQUE PAS ABSENT : il n'a pas eu lieu,
+  // et lui appliquer la garantie ferait garder un acompte déjà remboursé.
+  verifie('un rendez-vous annulé ne peut pas être noté absent',
+    /statut === 'annule_client' \|\| rdv\.statut === 'annule_commercant'/.test(src))
+  // ⚠️ ET LE REJEU NE RESTITUE PAS DEUX FOIS.
+  verifie('la bascule de statut sert de verrou',
+    /\.neq\('statut', 'no_show'\)/.test(src) && /basculees \|\| \[\]\)\.length === 0/.test(src))
+}
+{
+  // ⚠️ LES QUATRE CHEMINS DE CRÉATION FIGENT L'ACOMPTE DÛ, sans quoi le partage
+  // n'aurait aucune borne et le bon resterait acquis en entier.
+  // 🔴 ON COMPTE, ON NE CHERCHE PAS. Deux de ces fichiers écrivent l'acompte
+  // dû à DEUX endroits : un payload et des métadonnées pour l'un, deux payloads
+  // pour l'autre. Une garde de présence restait verte quand on en retirait un
+  // seul, et le harnais de mutation l'a dit. C'est le piège des deux
+  // `<NoteHorsApp/>` du 30/08, à l'identique.
+  for (const [nom, chemin, attendu] of [
+    ['la route serveur de réservation', 'app/api/rdv/reserver/route.js', 2],
+    ['le tunnel avec produits', 'app/api/stripe/checkout/create-rdv-commande/route.js', 2],
+    ['le tunnel à simple acompte', 'app/api/stripe/checkout/create-rdv-acompte/route.js', 1],
+    ['la modale du tableau de bord', 'app/dashboard/ModalNouveauRdv.js', 1],
+    ['le webhook Stripe', 'app/api/stripe/webhook/route.js', 1],
+  ]) {
+    const combien = (lireCode(chemin).match(/acompte_du:/g) || []).length
+    egal(`${nom} fige l’acompte dû partout où il le faut`, combien, attendu)
+  }
+  // 🔴 ET LE WEBHOOK NE LE TRANSFORME PAS EN ZÉRO. `Number(undefined) || null`
+  // rendrait null, mais `Number('') || null` aussi, et surtout un acompte dû
+  // légitimement nul deviendrait « inconnu ». On distingue les trois.
+  const wh = lireCode('app/api/stripe/webhook/route.js')
+  verifie('le webhook distingue « absent » de « zéro »',
+    /meta\.acompte_du === undefined \|\| meta\.acompte_du === ''/.test(wh))
 }
 
 // ═══ RÉSULTAT ════════════════════════════════════════════════════════════

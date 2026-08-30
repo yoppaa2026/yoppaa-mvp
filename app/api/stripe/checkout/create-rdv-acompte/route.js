@@ -258,6 +258,9 @@ export async function POST(request) {
             // à côté, et tous les calculs de solde la retranchent.
             prix_estime: String(prixBase),
             acompte_montant: String(acompteMontant),
+            // ⚠️ ET CE QUI ÉTAIT DÛ VOYAGE AVEC, sans quoi le webhook créerait un
+            // rendez-vous incapable de dire ce que le bon garantissait.
+            acompte_du: String(vent.acompteDu),
             ...(recompense ? {
               fidelite_recompense_id: String(recompense.id),
               fidelite_remise: String(remiseRecompenseEUR),

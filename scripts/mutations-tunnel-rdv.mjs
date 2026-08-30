@@ -176,10 +176,10 @@ const MUTATIONS = [
     de: '  if (refund_error) {',
     vers: '  if (false) {' },
 
-  { nom: '🔴 le no-show ne parle plus du bon cadeau gardé',
-    fichier: 'lib/confirmation-rdv.js',
-    de: "      r.surBon > 0 ? `${euros(r.surBon)} de bon cadeau` : '',",
-    vers: "      ''," },
+  { nom: '🔴 la fenêtre du no-show ne dit plus la part gardée sur le bon',
+    fichier: 'lib/rdv-paiement.js',
+    de: '  if (part.gardeSurBon > 0) morceaux.push(`${euros(part.gardeSurBon)} pris sur son bon cadeau`)',
+    vers: '' },
 
   { nom: '🔴 le tableau de bord ne montre plus au commerçant ce qui est parti',
     fichier: 'app/dashboard/page.js',
@@ -198,20 +198,115 @@ const MUTATIONS = [
     de: '        } else if (desProduits > 0) {',
     vers: '        } else if (false) {' },
 
-  { nom: '🔴 le no-show ne dit plus au client que son bon reste au commerçant',
+  { nom: '🔴 le no-show ne dit plus au client ce qui reste au commerçant',
     fichier: 'lib/resend.js',
-    de: '        const surBon = Number(bon_cadeau_montant) || 0',
+    de: '        const surBon = Number(bon_garde) || 0',
     vers: '        const surBon = 0' },
 
-  { nom: '🔴 la route du no-show ne charge plus la colonne du bon',
+  { nom: '🔴 et il ne dit plus ce qui lui revient quand même',
+    fichier: 'lib/resend.js',
+    de: '        const surBon = Number(bon_restitue) || 0',
+    vers: '        const surBon = 0' },
+
+  { nom: '🔴 la route du no-show ne relaie plus les montants du partage',
     fichier: 'app/api/emails/rdv-no-show/route.js',
-    de: '        bon_cadeau_montant,\n',
+    de: '        bon_garde,\n        bon_restitue,\n        recompense_rendue,',
     vers: '' },
 
   { nom: '🔴 le stock des versions n’est plus rendu à l’annulation d’un RDV',
     fichier: 'app/api/rdv/cancel/route.js',
     de: '        const rest = await restaurerStockVariantes(supabase, [commandeLiee.id])',
     vers: '        const rest = { ok: true }' },
+
+  // ─── 14) LE NO-SHOW NE GARDE QUE LA GARANTIE (30/08 au soir) ────────────
+  //
+  // 🔴 LE DÉFAUT D'ORIGINE : le commerçant gardait le bon EN ENTIER, soit 40 €
+  // retenus pour un service non rendu quand la garantie n'en valait que 25.
+  { nom: '🔴 le commerçant regarde de nouveau tout le bon comme sa garantie',
+    fichier: 'lib/rdv-paiement.js',
+    de: '  const bonGarde = arr(Math.min(surBon, resteAImputer))',
+    vers: '  const bonGarde = surBon' },
+
+  // ⚠️ L'ARGENT COMPTANT S'IMPUTE EN PREMIER : sans ça on rend du bon tout en
+  // gardant du liquide au-delà de la garantie.
+  { nom: '🔴 l’acompte encaissé ne s’impute plus sur la garantie',
+    fichier: 'lib/rdv-paiement.js',
+    de: '  const resteAImputer = Math.max(0, arr(garantie - enCaisse))',
+    vers: '  const resteAImputer = Math.max(0, arr(garantie))' },
+
+  // 🔴 LE PIÈGE DU ZÉRO, HUITIÈME FOIS : confondre « on ne sait pas » et
+  // « rien n'était dû » ferait retenir de l'argent sur une supposition.
+  { nom: '🔴 un acompte dû inconnu devient une garantie inventée',
+    fichier: 'lib/rdv-paiement.js',
+    de: '  const garantie = connu ? arr(brut) : enCaisse',
+    vers: '  const garantie = arr(brut)' },
+
+  { nom: '🔴 la récompense ne revient plus sur un no-show',
+    fichier: 'lib/rdv-paiement.js',
+    de: '    recompenseRendue: arr(rdv?.fidelite_remise),',
+    vers: '    recompenseRendue: 0,' },
+
+  { nom: '🔴 la fenêtre du no-show se tait sur ce qui revient',
+    fichier: 'lib/confirmation-rdv.js',
+    de: '    const { garde, rend } = libelleNoShow(part)',
+    vers: "    const { garde } = libelleNoShow(part)\n    const rend = ''" },
+
+  { nom: '🔴 un ancien rendez-vous ne dit plus qu’on ignore sa garantie',
+    fichier: 'lib/confirmation-rdv.js',
+    de: '    const inconnu = !part.connu && part.bonRestitue > 0',
+    vers: '    const inconnu = false && part.bonRestitue > 0' },
+
+  { nom: '🔴 le no-show se réécrit depuis le navigateur',
+    fichier: 'app/dashboard/page.js',
+    de: "      const res = await postPro('/api/rdv/no-show', { rdv_id: rdvId })",
+    vers: "      const res = await postPro('/api/emails/rdv-no-show', { rdv_id: rdvId })" },
+
+  { nom: '🔴 la route du no-show perd sa garde d’autorisation',
+    fichier: 'app/api/rdv/no-show/route.js',
+    de: "    const verdict = await gardeSurLigne(request, supabase, 'rdv_reservations', rdv_id)",
+    vers: '    const verdict = { ok: true }' },
+
+  // 🔴 RESTITUER LE BON ENTIER, C'EST RENDRE AU CLIENT UNE GARANTIE QUE LE
+  // COMMERÇANT A LE DROIT DE GARDER.
+  { nom: '🔴 le no-show restitue le bon entier au lieu du surplus',
+    fichier: 'app/api/rdv/no-show/route.js',
+    de: '      bonMontant: part.bonRestitue,',
+    vers: '      bonMontant: rdv.bon_cadeau_montant,' },
+
+  { nom: '🔴 un rendez-vous annulé peut de nouveau être noté absent',
+    fichier: 'app/api/rdv/no-show/route.js',
+    de: "    if (rdv.statut === 'annule_client' || rdv.statut === 'annule_commercant') {",
+    vers: '    if (false) {' },
+
+  { nom: '🔴 le no-show rejoué restitue une seconde fois',
+    fichier: 'app/api/rdv/no-show/route.js',
+    de: "      .neq('statut', 'no_show')",
+    vers: '' },
+
+  // ⚠️ L'ACOMPTE DÛ DOIT ÊTRE FIGÉ À LA RÉSERVATION, comme la TVA et le lieu.
+  // ⚠️ CES DEUX-LÀ RETIRENT *TOUTES* LES OCCURRENCES, et c'est le harnais qui
+  // me l'a appris ce soir : ces fichiers figent l'acompte dû à DEUX endroits,
+  // et n'en muter qu'un laissait la garde verte puisqu'elle COMPTE. Une
+  // mutation partielle sur une règle qui se compte ne mesure rien.
+  { nom: '🔴 la route de réservation ne fige plus l’acompte dû',
+    fichier: 'app/api/rdv/reserver/route.js',
+    de: '        acompte_du: vent.acompteDu,\n',
+    vers: '', toutes: true },
+
+  { nom: '🔴 l’acompte dû ne voyage plus dans le tunnel avec produits',
+    fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: 'acompte_du: ',
+    vers: 'acompte_du_ignore: ', toutes: true },
+
+  { nom: '🔴 le webhook confond « acompte dû absent » et « zéro »',
+    fichier: 'app/api/stripe/webhook/route.js',
+    de: "      acompte_du: meta.acompte_du === undefined || meta.acompte_du === ''",
+    vers: '      acompte_du: false' },
+
+  { nom: '🔴 l’email du no-show annonce le montant posé, pas la part gardée',
+    fichier: 'app/api/emails/rdv-no-show/route.js',
+    de: '        bon_garde,\n        bon_restitue,\n        recompense_rendue,',
+    vers: '        bon_garde: rdv.bon_cadeau_montant,' },
 
   { nom: '🔴 la récompense promet de nouveau une baisse « d’autant » de l’acompte',
     fichier: 'app/commander/rdv/[slug]/page.js',
@@ -472,7 +567,11 @@ for (const m of MUTATIONS) {
     console.log(`  ? introuvable : ${m.nom}`)
     continue
   }
-  writeFileSync(f, original.replace(m.de, m.vers), 'utf8')
+  // ⚠️ `toutes` RETIRE TOUTES LES OCCURRENCES, ET C'EST NÉCESSAIRE (30/08 au
+  // soir). Deux fichiers écrivent l'acompte dû à DEUX endroits : n'en muter
+  // qu'un laissait la garde verte, parce qu'elle COMPTE. Une mutation partielle
+  // sur une règle qui se compte ne mesure rien.
+  writeFileSync(f, m.toutes ? original.split(m.de).join(m.vers) : original.replace(m.de, m.vers), 'utf8')
   const res = lancer()
   writeFileSync(f, original, 'utf8')
 

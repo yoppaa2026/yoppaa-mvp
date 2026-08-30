@@ -450,6 +450,10 @@ export async function POST(request) {
           prix_estime: prixBase,
           // Aucun acompte n'a été encaissé : il n'y avait rien à encaisser.
           acompte_montant: null,
+          // ⚠️ MAIS QUELQUE CHOSE ÉTAIT DÛ, et c'est le bon qui l'a couvert. Sans
+          // ce nombre, un no-show ne saurait pas quelle part du bon était la
+          // garantie du commerçant, et la lui laisserait tout entière.
+          acompte_du: vent.acompteDu,
           acompte_paye: false,
           statut: 'confirme',
           source: 'yopper',
@@ -639,6 +643,10 @@ export async function POST(request) {
             duree_minutes: String(duree_minutes || prestation.duree_minutes),
             prix_estime: String(prixBase ?? ''),
             acompte_montant: String(acompteMontant),
+            // ⚠️ ET CE QUI ÉTAIT DÛ VOYAGE AVEC. Le webhook crée le rendez-vous
+            // depuis ces métadonnées : absent ici, l'acompte dû serait perdu
+            // pour toujours, et le no-show garderait le bon en entier.
+            acompte_du: String(vent.acompteDu),
             // ⚠️ SANS CES DEUX LIGNES, LE WEBHOOK NE SAIT RIEN. Il lit
             // `meta.fidelite_remise` et `meta.fidelite_recompense_id` pour figer
             // la remise sur le rendez-vous et consommer la récompense. Absentes,

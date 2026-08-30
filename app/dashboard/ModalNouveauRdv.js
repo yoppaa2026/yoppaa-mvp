@@ -323,6 +323,11 @@ export default function ModalNouveauRdv({
         // ici le zéro est la bonne réponse, pas une absence.
         prix_estime: surAbonnement ? 0 : prixEstime,
         acompte_montant: surAbonnement ? null : acompteMontant,
+        // ⚠️ ICI, DÛ ET ENCAISSÉ SONT LE MÊME NOMBRE : un rendez-vous posé au
+        // comptoir ne porte aucun bon cadeau, donc rien ne vient se déduire de
+        // l'acompte. On l'écrit quand même, parce que `null` voudrait dire
+        // « on ne sait pas » et priverait un futur no-show de sa borne.
+        acompte_du: surAbonnement ? null : acompteMontant,
         acompte_paye: false,
         statut: 'confirme',
         // TVA figée à la réservation : recalculer plus tard depuis la

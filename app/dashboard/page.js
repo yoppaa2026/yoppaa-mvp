@@ -1813,6 +1813,39 @@ export default function Dashboard() {
       return true
     }
 
+    // 🔴 LE NO-SHOW PASSE PAR LE SERVEUR, ET C'EST NEUF (30/08 au soir).
+    //
+    // Il s'écrivait ici, depuis ce navigateur, et c'était tenable tant que le
+    // geste ne touchait à aucun argent. Il en touche maintenant : la garantie
+    // du commerçant ne porte que sur l'acompte dû, et ce qui dépasse retourne
+    // sur le bon cadeau du client. Une restitution ne part pas d'un navigateur.
+    // Dernier frère du trou fermé le 29/08 sur l'annulation commerçant.
+    if (statut === 'no_show') {
+      const res = await postPro('/api/rdv/no-show', { rdv_id: rdvId })
+      const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+      if (!j?.ok) {
+        console.error('[dashboard] no-show KO', j?.error || res?.status)
+        if (!silencieux) alert(`Ce client n'a pas pu être noté absent : ${j?.error || 'réessaie dans un instant'}.`)
+        return false
+      }
+      setRdvs(prev => prev.map(r => r.id === rdvId ? { ...r, statut, motif_annulation: 'commercant' } : r))
+      if (surRetours) surRetours({
+        garantie: j.garantie,
+        garantie_connue: j.garantie_connue,
+        bon_restitue: j.bon_restitue,
+        recompense_rendue: j.recompense_rendue,
+      })
+      // ⚠️ L'EMAIL PORTE LA PART GARDÉE, PAS LE MONTANT POSÉ : sans elle il
+      // annoncerait au Yopper 40 € perdus quand il n'en perd que 25.
+      signalerEnvoi('/api/emails/rdv-no-show', {
+        rdv_id: rdvId,
+        bon_garde: j.garde_sur_bon,
+        bon_restitue: j.bon_restitue,
+        recompense_rendue: j.recompense_rendue,
+      }, 'l’email « tu n’es pas venu »')
+      return true
+    }
+
     const payload = { statut, ...(champs || {}) }
     const { error } = await supabase.from('rdv_reservations').update(payload).eq('id', rdvId)
     if (error) {
@@ -1860,10 +1893,6 @@ export default function Dashboard() {
       if (rdvHonore?.commande?.id) {
         await produitsRemis(rdvHonore.commande.id)
       }
-    } else if (statut === 'no_show') {
-      // Notif Yopper qu'il a été marqué absent (transparence + permet contestation).
-      // L'acompte n'est PAS refundé (le commerçant a bloqué le créneau pour rien).
-      signalerEnvoi('/api/emails/rdv-no-show', { rdv_id: rdvId }, 'l’email « tu n’es pas venu »')
     }
     return true
   }

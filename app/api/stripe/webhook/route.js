@@ -199,6 +199,12 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       bon_cadeau_id: meta.bon_cadeau_id || null,
       bon_cadeau_montant: Number(meta.bon_cadeau_montant) || 0,
       acompte_montant: Number(meta.acompte_montant) || null,
+      // ⚠️ L'ACOMPTE *DÛ*, figé comme la TVA et le lieu. `null` s'il n'a pas
+      // voyagé : « on ne sait pas » n'est pas « zéro », et le no-show le lit
+      // ainsi pour ne garder que l'argent réellement encaissé.
+      acompte_du: meta.acompte_du === undefined || meta.acompte_du === ''
+        ? null
+        : (Number.isFinite(Number(meta.acompte_du)) ? Number(meta.acompte_du) : null),
       // Une prestation sans acompte reste confirmée : le client a payé ses
       // produits, le salon a une réservation ferme (décision Alex 04/08).
       acompte_paye: Number(meta.acompte_montant) > 0,

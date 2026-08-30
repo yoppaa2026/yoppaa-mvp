@@ -307,6 +307,10 @@ export async function POST(request) {
         // confirmation teste la présence de ce champ, et « 0,00 € payé en
         // ligne » se lit comme une erreur de caisse.
         acompte_montant: vent.acompte > 0 ? vent.acompte : null,
+        // ⚠️ CE QUI ÉTAIT DÛ, à côté de ce qui a été encaissé. Le bon se déduit
+        // de l'acompte dû euro pour euro : sans ce nombre figé, un no-show ne
+        // saurait plus quelle part du bon tenait lieu de garantie.
+        acompte_du: vent.acompteDu,
         acompte_paye: false,
         statut: 'confirme',
         source: 'yopper',
@@ -361,6 +365,7 @@ export async function POST(request) {
         duree_minutes: dureeMinutes,
         prix_estime: prixBase,
         acompte_montant: vent.acompte > 0 ? vent.acompte : null,
+        acompte_du: vent.acompteDu,
         acompte_paye: false,
         statut: 'confirme',
         client_email: email,

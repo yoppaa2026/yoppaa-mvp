@@ -46,6 +46,8 @@ import { normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { euros } from '@/lib/montants'
 
+const arrondiEuros = (n) => Math.round(Number(n || 0) * 100) / 100
+
 export async function POST(request) {
   try {
     requireStripe()
@@ -134,7 +136,6 @@ export async function POST(request) {
     // appliquée AVANT le bon cadeau, et acompte calculé sur le prix NET, sans
     // quoi le Yopper avancerait un acompte assis sur un prix qu'il ne paie pas.
     let recompense = null
-    let remiseRecompenseEUR = 0
     if (fidelite_recompense_id) {
       const identite = await identiteProuvee(request)
       if (!identite?.email) {
@@ -157,7 +158,12 @@ export async function POST(request) {
         }, { status: 400 })
       }
       recompense = resRec.recompense
-      remiseRecompenseEUR = appliquerRecompenseAvantBon(recompense, prixBase).remiseRecompense
+      // ⚠️ L'ASSIETTE EST LE PANIER ENTIER DEPUIS LE 30/08, et pas la seule
+      // prestation. Elle ne peut donc plus se calculer ici : le total des
+      // produits n'est connu qu'une fois les articles relus en base. Le calcul
+      // descend plus bas, avec la ventilation.
+      // (Décision d'Alex : la même récompense payait le pain chez le boulanger
+      // et refusait le shampoing chez le coiffeur.)
     }
 
     // ⚠️ 🔴 LE BON CADEAU AUSSI, ET C'EST EXACTEMENT LE DÉFAUT DU 27/08.
@@ -242,6 +248,16 @@ export async function POST(request) {
     // ⚠️ MÊME FONCTION QUE L'ÉCRAN. C'est tout l'objet du module : les deux
     // calculs séparés avaient divergé, et l'écran de confirmation annonçait un
     // acompte de 8,75 € sur un rendez-vous où le serveur en encaissait zéro.
+    //
+    // ⚠️ L'ASSIETTE DE LA RÉCOMPENSE EST LE PANIER ENTIER, prestation plus
+    // produits (Alex, 30/08). `appliquerRecompenseAvantBon` plafonne la remise
+    // à cette assiette : une récompense de 10 € sur un panier de 6 € ne peut
+    // pas en déduire 10.
+    const assietteRecompense = arrondiEuros((prixBase || 0) + produitsCents / 100)
+    const remiseRecompenseEUR = recompense
+      ? appliquerRecompenseAvantBon(recompense, assietteRecompense).remiseRecompense
+      : 0
+
     const vent = ventilerTunnelRdv({
       prixPrestation: prixBase,
       acomptePourcent: acomptePct,
@@ -327,6 +343,15 @@ export async function POST(request) {
           bon_cadeau_id: bonCadeau.id,
           bon_cadeau_montant: vent.bonSurProduits,
         } : {}),
+        // ⚠️ ET LA PART DE RÉCOMPENSE QUI TOMBE SUR LES PRODUITS, depuis
+        // qu'elle paie le panier entier (30/08). Sans elle, `commandes.total`
+        // resterait le brut : le reste à encaisser au comptoir et le journal
+        // comptable réclameraient une remise que le client a déjà eue.
+        //
+        // ⚠️ PAS DE `fidelite_recompense_id` ICI : la récompense est UNE ligne,
+        // consommée UNE fois, et c'est le rendez-vous qui la porte. La poser
+        // aussi sur la commande ferait croire à deux consommations.
+        ...(vent.recompenseSurProduits > 0 ? { fidelite_remise: vent.recompenseSurProduits } : {}),
       })
       .select()
       .single()
@@ -405,16 +430,24 @@ export async function POST(request) {
     // encaisser au client l'argent que son bon vient de payer.
     // Le détail ligne à ligne, lui, reste sous ses yeux à l'écran précédent et
     // dans l'email de confirmation.
-    if (bonSurProduitsCents > 0) {
+    // ⚠️ LA RÉCOMPENSE PEUT MORDRE SUR LES PRODUITS ELLE AUSSI depuis le
+    // 30/08 : la condition porte donc sur les DEUX avantages. Ne tester que le
+    // bon aurait laissé passer des lignes au prix plein alors que le total
+    // encaissé, lui, était déjà réduit — un écart que Stripe aurait refusé.
+    const deduitSurProduits = (vent.bonSurProduits + vent.recompenseSurProduits) > 0
+    if (deduitSurProduits) {
       const nbArticles = lignes.reduce((s, l) => s + l.quantite, 0)
+      const parts = []
+      if (vent.recompenseSurProduits > 0) parts.push(`${euros(vent.recompenseSurProduits)} de récompense`)
+      if (vent.bonSurProduits > 0) parts.push(`${euros(vent.bonSurProduits)} de bon cadeau`)
       lineItems.push({
         quantity: 1,
         price_data: {
           currency: 'eur',
           unit_amount: produitsAPayerCents,
           product_data: {
-            name: `Tes produits (${nbArticles}) — bon cadeau déduit`,
-            description: `${euros(bonSurProduitsCents / 100)} payés par ton bon cadeau · à retirer le jour de ton rendez-vous`,
+            name: `Tes produits (${nbArticles}) — remises déduites`,
+            description: `${parts.join(' et ')} · à retirer le jour de ton rendez-vous`,
           },
         },
       })
@@ -462,9 +495,13 @@ export async function POST(request) {
             // il écrivait `fidelite_remise: 0` et la récompense restait
             // disponible : le client la voyait toujours sur sa carte après
             // l'avoir « utilisée ».
+            // ⚠️ SEULE LA PART PRESTATION VOYAGE VERS LE RENDEZ-VOUS, comme
+            // pour le bon : la part produits vit sur la commande. Envoyer la
+            // remise totale ici la compterait deux fois, une fois de chaque
+            // côté du lien.
             ...(recompense ? {
               fidelite_recompense_id: String(recompense.id),
-              fidelite_remise: String(remiseRecompenseEUR),
+              fidelite_remise: String(vent.recompenseSurPresta),
             } : {}),
             // ⚠️ MÊME RAISON POUR LE BON : le webhook fige le montant sur le
             // rendez-vous et débite le bon depuis ces deux clés. Absentes, il

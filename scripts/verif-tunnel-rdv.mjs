@@ -92,14 +92,80 @@ const egal = (nom, obtenu, attendu) =>
   verifie('le bon n’a pas mangé la part offerte', v.bonTotal === 30)
 }
 {
-  // ⚠️ LA RÉCOMPENSE NE PAIE JAMAIS DE PRODUITS (décision d'Alex, 29/08) :
-  // c'est une remise offerte sur un acte, pas un avoir.
+  // 🔴 LA RÉCOMPENSE PAIE LES PRODUITS AUSSI (rectifié le 30/08).
+  //
+  // Je l'avais d'abord réservée à la prestation. Alex a demandé ce qui se
+  // passe quand on n'achète QUE des produits : `create-commande` applique
+  // déjà la récompense sur le total, frais de livraison compris. La même
+  // récompense payait donc le pain chez le boulanger et refusait le shampoing
+  // chez le coiffeur, au seul motif qu'un rendez-vous l'accompagnait.
   const v = ventilerTunnelRdv({
     prixPrestation: 20, acomptePourcent: 0, acompteEnLigne: false,
     totalProduits: 50, remiseRecompense: 40,
   })
-  egal('la récompense est plafonnée à la prestation', v.remiseRecompense, 20)
-  egal('les produits restent dus en entier', v.produitsAPayer, 50)
+  egal('la récompense couvre la prestation', v.recompenseSurPresta, 20)
+  egal('et déborde sur les produits', v.recompenseSurProduits, 20)
+  egal('elle est consommée en entier', v.remiseRecompense, 40)
+  egal('il ne reste que 30 € de produits', v.produitsAPayer, 30)
+  // ⚠️ MAIS JAMAIS AU-DELÀ DU PANIER : une récompense de 100 € sur un panier
+  // de 70 € n'en déduit que 70.
+  const trop = ventilerTunnelRdv({
+    prixPrestation: 20, acomptePourcent: 0, acompteEnLigne: false,
+    totalProduits: 50, remiseRecompense: 100,
+  })
+  egal('la récompense est plafonnée au panier', trop.remiseRecompense, 70)
+  egal('et rien ne devient négatif', trop.produitsAPayer, 0)
+}
+{
+  // ⚠️ L'ORDRE ENTRE LES DEUX AVANTAGES ET LES DEUX POSTES, tout ensemble.
+  // Récompense d'abord, bon ensuite ; prestation d'abord, produits ensuite.
+  const v = ventilerTunnelRdv({
+    prixPrestation: 60, acomptePourcent: 50, acompteEnLigne: true,
+    totalProduits: 21.90, remiseRecompense: 10, soldeBon: 100,
+  })
+  egal('la récompense reste sur la prestation tant qu’elle y tient', v.recompenseSurPresta, 10)
+  egal('elle ne touche donc pas les produits', v.recompenseSurProduits, 0)
+  egal('le bon prend le reste de la prestation', v.bonSurPresta, 50)
+  egal('puis les produits en entier', v.bonSurProduits, 21.90)
+  egal('plus rien à payer', v.aPayerMaintenant, 0)
+  egal('ni au comptoir', v.soldeSurPlace, 0)
+}
+{
+  // ⚠️ LA PART PRODUITS DE LA RÉCOMPENSE S'ÉCRIT SUR LA COMMANDE, la part
+  // prestation sur le rendez-vous. Sans ce partage, `resteAEncaisser` et le
+  // journal comptable réclameraient une remise déjà accordée.
+  const src = lireCode('app/api/stripe/checkout/create-rdv-commande/route.js')
+  verifie('la part produits de la récompense vit sur la commande',
+    /fidelite_remise: vent\.recompenseSurProduits/.test(src))
+  verifie('la part prestation part vers le rendez-vous',
+    /fidelite_remise: String\(vent\.recompenseSurPresta\)/.test(src))
+  // ⚠️ ET UN SEUL PORTEUR DE LA RÉCOMPENSE : elle est consommée une fois.
+  verifie('la commande ne porte pas l’identifiant de la récompense',
+    !/fidelite_recompense_id: recompense/.test(src))
+  // ⚠️ L'ASSIETTE EST LE PANIER, calculée après la lecture des produits.
+  verifie('l’assiette de la récompense est le panier entier',
+    /assietteRecompense = arrondiEuros\(\(prixBase \|\| 0\) \+ produitsCents/.test(src))
+  // ⚠️ LA LIGNE STRIPE UNIQUE COUVRE LES DEUX AVANTAGES : ne tester que le bon
+  // laisserait passer des lignes au prix plein sur un total déjà réduit.
+  verifie('la ligne Stripe unique tient compte des deux avantages',
+    /vent\.bonSurProduits \+ vent\.recompenseSurProduits/.test(src))
+}
+{
+  // ⚠️ ET À L'ANNULATION : une récompense qui a payé des produits GARDÉS ne
+  // revient pas. ⚠️ On décide AVANT d'agir : la rendre puis la reprendre
+  // laisserait `recompenses_disponibles` au-dessus du nombre de lignes.
+  const src = lireCode('app/api/rdv/cancel/route.js')
+  // ⚠️ ON MESURE LA DÉFINITION, pas le nom : `= false` laissait le nom en
+  // place et la garde verte. Quatrième fois en deux jours.
+  const defGardes = (src.match(/const recompenseSurProduitsGardes = [^\n]*(\n[^\n]*)?/) || [''])[0]
+  verifie('la récompense ne revient pas si elle a payé des produits gardés',
+    /gardeSesProduits/.test(defGardes) && /fidelite_remise/.test(defGardes), defGardes)
+  // ⚠️ ET LE CHOIX SE FAIT AVANT L'APPEL, pas après : rendre puis reprendre
+  // laisserait `recompenses_disponibles` au-dessus du nombre de lignes.
+  verifie('la décision passe dans l’appel qui rend',
+    /recompenseId: recompenseSurProduitsGardes \? null :/.test(src))
+  verifie('et on ne la rend pas pour la reprendre ensuite',
+    !/utilisee_at: new Date\(\)/.test(src))
 }
 {
   // ⚠️ LE PIÈGE DU ZÉRO, sixième fois sur ce projet : une prestation SUR DEVIS
@@ -303,8 +369,8 @@ for (const chemin of [
     /bon_cadeau_montant: String\(vent\.bonSurPresta\)/.test(src))
   // ⚠️ STRIPE N'ACCEPTE AUCUN MONTANT NÉGATIF : garder le détail au prix plein
   // ferait payer au client ce que son bon vient de couvrir.
-  verifie('le détail laisse la place à une ligne unique quand le bon mord',
-    /bonSurProduitsCents > 0/.test(src))
+  verifie('le détail laisse la place à une ligne unique quand un avantage mord',
+    /if \(deduitSurProduits\)/.test(src))
   // ⚠️ ET UN PANIER ENTIÈREMENT COUVERT NE PART PAS CHEZ STRIPE POUR RIEN.
   verifie('un total nul est refusé avec le geste à faire', /rien_a_payer/.test(src))
 }

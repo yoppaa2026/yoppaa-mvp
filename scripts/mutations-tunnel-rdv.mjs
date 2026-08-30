@@ -65,14 +65,14 @@ const MUTATIONS = [
   // exactement au défaut qu'Alex a vu : le bon fond, le montant ne bouge pas.
   { nom: '🔴 le bon ne paie plus les produits',
     fichier: 'lib/tunnel-rdv-montants.js',
-    de: '  const bonSurProduits = arrondi(Math.min(bonRestant, produits))',
+    de: '  const bonSurProduits = arrondi(Math.min(bonRestant, produitsApresRecompense))',
     vers: '  const bonSurProduits = 0' },
 
   // ⚠️ L'ORDRE : bon avant récompense, et le porteur du bon brûlerait du solde
   // sur une part qui lui était offerte de toute façon.
   { nom: '🔴 la récompense passe APRÈS le bon',
     fichier: 'lib/tunnel-rdv-montants.js',
-    de: '  const prestaApresRecompense = prix === null ? null : arrondi(Math.max(0, prix - recompense))',
+    de: '  const prestaApresRecompense = prix === null ? null : arrondi(Math.max(0, prix - recompenseSurPresta))',
     vers: '  const prestaApresRecompense = prix === null ? null : arrondi(Math.max(0, prix))' },
 
   // ⚠️ F22 : l'acompte se calcule sur le NET. C'est la règle d'Alex du 24/08,
@@ -88,11 +88,52 @@ const MUTATIONS = [
     de: "  if (v === null || v === undefined || v === '') return null",
     vers: '  if (false) return null' },
 
-  // ⚠️ La récompense ne paie pas de marchandise revendue.
-  { nom: '🔴 la récompense n’est plus plafonnée à la prestation',
+  // 🔴 LA RÉCOMPENSE PAIE LES PRODUITS AUSSI (30/08) : la retenir sur la seule
+  // prestation recrée l'incohérence qu'Alex a trouvée en posant la question
+  // des produits seuls.
+  { nom: '🔴 la récompense redevient prisonnière de la prestation',
     fichier: 'lib/tunnel-rdv-montants.js',
-    de: '  const recompense = prix === null ? 0 : arrondi(Math.min(Math.max(0, Number(remiseRecompense) || 0), prix))',
-    vers: '  const recompense = prix === null ? 0 : arrondi(Math.max(0, Number(remiseRecompense) || 0))' },
+    de: '  const recompenseSurProduits = arrondi(Math.min(recompenseRestante, produits))',
+    vers: '  const recompenseSurProduits = 0' },
+
+  // ⚠️ ET JAMAIS AU-DELÀ DU PANIER : sans plafond, une récompense de 100 €
+  // sur un panier de 70 € rendrait des montants négatifs.
+  { nom: '🔴 la récompense n’est plus plafonnée au panier',
+    fichier: 'lib/tunnel-rdv-montants.js',
+    de: '  const recompenseSurPresta = prix === null ? 0 : arrondi(Math.min(recompenseRestante, prix))',
+    vers: '  const recompenseSurPresta = prix === null ? 0 : recompenseRestante' },
+
+  // ⚠️ LES DEUX PARTS DOIVENT ATTERRIR SUR LES DEUX OBJETS.
+  { nom: '🔴 la part produits de la récompense ne s’écrit plus sur la commande',
+    fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '        ...(vent.recompenseSurProduits > 0 ? { fidelite_remise: vent.recompenseSurProduits } : {}),',
+    vers: '' },
+
+  { nom: '🔴 le rendez-vous reçoit la remise TOTALE, comptée deux fois',
+    fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '              fidelite_remise: String(vent.recompenseSurPresta),',
+    vers: '              fidelite_remise: String(vent.remiseRecompense),' },
+
+  // 🔴 ET L'ASSIETTE : la calculer sur la seule prestation, c'est refuser au
+  // client une remise qu'il a gagnée.
+  { nom: '🔴 l’assiette de la récompense retombe sur la prestation seule',
+    fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '    const assietteRecompense = arrondiEuros((prixBase || 0) + produitsCents / 100)',
+    vers: '    const assietteRecompense = arrondiEuros(prixBase || 0)' },
+
+  // ⚠️ ET LA LIGNE STRIPE : ne regarder que le bon ferait payer au client des
+  // produits que sa récompense vient de couvrir.
+  { nom: '🔴 la ligne Stripe ignore la récompense sur les produits',
+    fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '    const deduitSurProduits = (vent.bonSurProduits + vent.recompenseSurProduits) > 0',
+    vers: '    const deduitSurProduits = vent.bonSurProduits > 0' },
+
+  // ⚠️ L'ANNULATION : une récompense qui a payé des produits gardés reste
+  // consommée, sinon le client emporte une remise gratuite.
+  { nom: '🔴 la récompense revient même quand elle a payé des produits gardés',
+    fichier: 'app/api/rdv/cancel/route.js',
+    de: '    const recompenseSurProduitsGardes = gardeSesProduits\n      && Number(commandeLiee?.fidelite_remise || 0) > 0',
+    vers: '    const recompenseSurProduitsGardes = false' },
 
   // ─── 6) CE QUE LE CLIENT LIT ─────────────────────────────────────────
   { nom: '🔴 le suivi Yopper réaffiche le tarif plein',

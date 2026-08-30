@@ -1113,9 +1113,15 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
     /ventilerTunnelRdv\(/.test(tunnel) && !/Math\.round\(prixBase \* acomptePct\)/.test(tunnel))
   // ⚠️ SANS LES MÉTADONNÉES, LE WEBHOOK NE SAIT RIEN : il écrit
   // `fidelite_remise: 0` et ne consomme jamais la récompense.
+  // ⚠️ LA REMISE VOYAGE TOUJOURS, MAIS PLUS EN ENTIER (30/08). Depuis que la
+  // récompense paie aussi les produits, elle se ventile : la part PRESTATION
+  // part vers le rendez-vous, la part PRODUITS reste sur la commande. Envoyer
+  // le total ici la compterait deux fois, une de chaque côté du lien.
   verifie('🔴 la remise voyage jusqu\'au webhook',
-    /fidelite_remise: String\(remiseRecompenseEUR\)/.test(tunnel)
+    /fidelite_remise: String\(vent\.recompenseSurPresta\)/.test(tunnel)
     && /fidelite_recompense_id: String\(recompense\.id\)/.test(tunnel))
+  verifie('🔴 et la part produits reste sur la commande',
+    /fidelite_remise: vent\.recompenseSurProduits/.test(tunnel))
 
   // Et l'écran l'envoie vraiment : une route qui sait lire ne sert à rien si
   // personne ne lui parle (le piège du 23/08, contrôlé des DEUX côtés).

@@ -1394,7 +1394,10 @@ export default function CommanderRdvSlug() {
         acompteEnLigne: !!(commercant.rdv_acompte_en_ligne_actif && commercant.stripe_account_charges_enabled),
         totalProduits: (lignesPanier.length > 0 && produitsAchetables) ? totalProduits : 0,
         remiseRecompense: (recompenseFid && recompenseActive && prixEstime != null)
-          ? calculerRemiseRecompense(recompenseFid, prixEstime) : 0,
+          // ⚠️ L'ASSIETTE EST LE PANIER ENTIER (Alex, 30/08) : la récompense
+          // paie la prestation ET les produits, comme le bon, et comme elle le
+          // faisait déjà dans le tunnel boutique depuis toujours.
+          ? calculerRemiseRecompense(recompenseFid, prixEstime + ((lignesPanier.length > 0 && produitsAchetables) ? totalProduits : 0)) : 0,
         soldeBon: bonChoisi ? Number(bonChoisi.solde) : 0,
       })
       // ⚠️ `null` ET NON `0` QUAND IL N'Y A PAS D'ACOMPTE : l'écran de
@@ -3142,8 +3145,12 @@ export default function CommanderRdvSlug() {
                     // Yopper avancerait un acompte calculé sur un prix qu'il ne
                     // paie pas. Ce calcul suit celui de `create-rdv-acompte`,
                     // qui reste seul à faire foi.
+                    // ⚠️ ET L'ASSIETTE EST LE PANIER ENTIER depuis le 30/08 :
+                    // prestation PLUS produits. La même récompense payait le
+                    // pain chez le boulanger et refusait le shampoing chez le
+                    // coiffeur, au seul motif qu'un rendez-vous l'accompagnait.
                     const remiseFid = (recompenseFid && recompenseActive && prixBase != null)
-                      ? calculerRemiseRecompense(recompenseFid, prixBase)
+                      ? calculerRemiseRecompense(recompenseFid, prixBase + totalProduits)
                       : 0
                     // ⚠️ UN SEUL CALCUL, PARTAGÉ AVEC LES DEUX ROUTES SERVEUR
                     // ET AVEC LE CLICHÉ DE CONFIRMATION (29/08). Il était
@@ -3203,8 +3210,15 @@ export default function CommanderRdvSlug() {
                               </p>
                               <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: T.muted, fontWeight: 600 }}>
                                 {recompenseActive
-                                  ? `${recompenseFid.libelle ? `${recompenseFid.libelle}. ` : ''}Déduite du prix, ton acompte baisse d’autant.`
-                                  : 'Utilise-les maintenant : ils se déduiront du prix, et ton acompte baissera d’autant.'}
+                                  /* ⚠️ LA PHRASE DIT SUR QUOI ÇA PORTE, et elle
+                                     a changé le 30/08 : la récompense paie
+                                     maintenant les produits aussi. Dire « du
+                                     prix » quand un shampoing est dans le
+                                     panier laisserait croire qu'il n'est pas
+                                     concerné, exactement le reproche qu'Alex a
+                                     fait au bon cadeau. */
+                                  ? `${recompenseFid.libelle ? `${recompenseFid.libelle}. ` : ''}${totalProduits > 0 ? 'Déduite de ta prestation et de tes produits' : 'Déduite du prix'}, ton acompte baisse d’autant.`
+                                  : `Utilise-les maintenant : ils se déduiront ${totalProduits > 0 ? 'de ta prestation et de tes produits' : 'du prix'}, et ton acompte baissera d’autant.`}
                               </p>
                               {/* 🔴 CE QUI SE PERD, dit AVANT le clic. Une
                                   récompense de 10 € sur une prestation à 8 € en

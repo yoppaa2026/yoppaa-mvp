@@ -298,11 +298,28 @@ export async function POST(request) {
       return rendu
     }
 
-    // Le rendez-vous n'aura pas lieu : ce qu'il a consommé revient toujours.
+    // ⚠️ UNE RÉCOMPENSE QUI A PAYÉ DES PRODUITS GARDÉS NE REVIENT PAS.
+    //
+    // Depuis le 30/08 la récompense mord sur les produits quand elle dépasse
+    // la prestation. Si le client annule mais GARDE sa marchandise, la part
+    // qu'elle a payée est bel et bien consommée : la rendre reviendrait à lui
+    // offrir une remise sur ce qu'il emporte.
+    //
+    // ⚠️ ET ON NE LA REND PAS POUR LA REPRENDRE ENSUITE. `rendreRecompense`
+    // incrémente `recompenses_disponibles` ET écrit un mouvement d'ajustement :
+    // remettre `utilisee_at` après coup laisserait le compteur au-dessus du
+    // nombre de lignes, exactement l'invariant qu'on surveille depuis le 24/08.
+    // On décide AVANT d'agir, on ne défait pas après.
+    //
+    // ⚠️ Une récompense est UNE ligne : prise ou rendue, jamais à moitié.
+    const recompenseSurProduitsGardes = gardeSesProduits
+      && Number(commandeLiee?.fidelite_remise || 0) > 0
+
+    // Le rendez-vous n'aura pas lieu : ce qu'il a consommé revient.
     let bonRendu = await rendreAvantages({
       bonId: rdv.bon_cadeau_id,
       bonMontant: rdv.bon_cadeau_montant,
-      recompenseId: rdv.fidelite_recompense_id,
+      recompenseId: recompenseSurProduitsGardes ? null : rdv.fidelite_recompense_id,
       refs: { rdv_id: rdv.id },
     })
 

@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs'
 import { euros, eurosNus } from '../lib/montants.js'
 import { elisionDe } from '../lib/francais.js'
 import { doitMontrerFlottant, SEUIL_CACHER, SEUIL_MONTRER } from '../lib/bouton-flottant.js'
-import { calculerRemiseBon, normaliserCodeBon, bonExpire } from '../lib/bons-cadeaux.js'
+import { calculerRemiseBon, normaliserCodeBon, bonExpire, libelleResteBon } from '../lib/bons-cadeaux.js'
 import { resteAEncaisser, soldeRdv, etatPaiementRdv, caDesRdvs, montantNetCommande, phraseAvantages } from '../lib/rdv-paiement.js'
 import { emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire } from '../lib/resend.js'
 import { texteBonVendu } from '../lib/bons-vendus.js'
@@ -569,6 +569,84 @@ const egal = (nom, obtenu, attendu) =>
     const restes = (src.match(/eurosNus\([^\n]*?\)\}\s?€/g) || [])
     verifie(`${f.split('/').slice(-2).join('/')} n'écrit plus un montant à la main`,
       restes.length === 0, restes[0] || '')
+  }
+}
+
+// ═══ CE QUI RESTE SUR LE BON, ET À QUOI ÇA SERT (30/08) ═══════════════════
+//
+// 🔴 LA PHRASE S'ARRÊTAIT À « Il restera 18,10 € sur ton bon. » Un solde dont on
+// ignore l'usage est un solde qu'on oublie, et un bon oublié est de l'argent que
+// le commerçant a encaissé sans jamais revoir le client.
+//
+// ⚠️ EXÉCUTÉE, pas cherchée : c'est la seule façon de vérifier qu'elle dit
+// vraiment ce qu'on croit.
+{
+  const p = libelleResteBon(18.10, 'Ciseaux et Soins')
+  verifie('la phrase donne le montant restant', p.includes(euros(18.10)), p)
+  verifie('et nomme le commerce où il est utilisable',
+    p.includes('chez Ciseaux et Soins'), p)
+  verifie('et dit à quoi il sert', /prochaine fois/.test(p), p)
+  // ⚠️ SANS NOM, ELLE DIT QUAND MÊME À QUOI ÇA SERT : le nom peut manquer si la
+  // fiche n'est pas encore chargée, la phrase ne doit pas retomber muette.
+  const sansNom = libelleResteBon(18.10)
+  verifie('sans le nom du commerce, elle reste utile',
+    /prochaine fois/.test(sansNom) && !/chez/.test(sansNom), sansNom)
+  // ⚠️ RIEN À DIRE SUR UN SOLDE NUL : une phrase sur zéro est du bruit, et
+  // « Il restera 0,00 € sur ton bon » se lit comme une erreur.
+  verifie('un solde nul ne dit rien', libelleResteBon(0, 'X') === '')
+  verifie('un solde négatif non plus', libelleResteBon(-3, 'X') === '')
+  verifie('un solde absent non plus', libelleResteBon(null, 'X') === '')
+  // ⚠️ L'ESPACE INSÉCABLE : sur un téléphone, « 18,10 € » se coupait en fin de
+  // ligne et le « € » tombait seul sur la ligne suivante.
+  verifie('le montant garde son espace insécable', /18,10 €/.test(p), p)
+
+  // ⚠️ ET LES DEUX TUNNELS LA LISENT, au lieu de l'écrire chacun de son côté.
+  // Elle vivait en deux exemplaires et sous deux formes : « Il restera X sur ton
+  // bon. » d'un côté, « · il restera X sur ton bon » de l'autre.
+  for (const f of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
+    const src = lireCode(f)
+    verifie(`${f.split('/').slice(-2).join('/')} lit la phrase du module`,
+      /libelleResteBon\(/.test(src))
+    verifie(`${f.split('/').slice(-2).join('/')} ne la réécrit plus à la main`,
+      !/restera \$\{euros/.test(src) && !/restera \$\{/.test(src.replace(/Il te restera[^\n]*/g, '')))
+  }
+}
+
+// ═══ LE BON INVISIBLE QUAND RIEN NE SE PAIE EN LIGNE (30/08) ══════════════
+//
+// 🔴 Le bloc du bon ne s'affichait QUE si un acompte en ligne était demandé.
+// Chez un commerçant qui n'en prend pas, un Yopper avec 40 € de bon cadeau ne
+// voyait RIEN et se présentait sans savoir qu'il avait de l'argent à dépenser.
+{
+  const src = lireCode('app/commander/rdv/[slug]/page.js')
+  verifie('un bloc s’affiche quand AUCUN acompte n’est pris en ligne',
+    /mesBonsIci\.length > 0 && !seanceSurAbo && !acompteEnLigne &&/.test(src))
+  verifie('il annonce le solde disponible ici',
+    /sur ton bon cadeau ici\./.test(src))
+  verifie('et le geste à faire', /Présente ton code au comptoir/.test(src))
+  // ⚠️ LE CODE SOUS LES YEUX : c'est lui qu'on donne au comptoir, et il ne vit
+  // sinon que dans un email reçu il y a trois mois.
+  verifie('le code du bon est affiché', /\{b\.code\}/.test(src))
+  // ⚠️ INFORMATIF, PAS ACTIONNABLE : sans paiement en ligne, on informe, on ne
+  // débite pas. Un bouton « Utiliser » ici brûlerait le bon des semaines avant
+  // un rendez-vous qui ne fait sortir aucun argent.
+  const blocInfo = (() => {
+    const i = src.indexOf('mesBonsIci.length > 0 && !seanceSurAbo && !acompteEnLigne &&')
+    return i < 0 ? '' : src.slice(i, src.indexOf('\n                        )}', i))
+  })()
+  verifie('le bloc informatif est bien isolé', blocInfo.length > 300, `${blocInfo.length} caractères`)
+  verifie('il ne propose aucun bouton d’utilisation', !/setBonChoisi/.test(blocInfo))
+
+  // 🔴 CE QU'ON N'ÉCRIT PAS, ET LA GARDE EXISTE POUR QU'ON NE LE RÉÉCRIVE PAS.
+  //
+  // « Le reste de ton bon pourra solder ta prestation au comptoir » décrirait un
+  // cas IMPOSSIBLE : le bon éteint la prestation avant de déborder sur les
+  // produits, donc s'il reste du solde il n'y a plus rien à solder, et s'il
+  // reste à payer le bon est vide. Vérifié le 30/08, et écrit ici pour que
+  // personne ne le repropose dans trois semaines.
+  for (const interdit of ['solder ta presta', 'soldera ta presta', 'solder le reste de ta presta']) {
+    verifie(`la phrase impossible « ${interdit} » n’est pas écrite`,
+      !src.includes(interdit))
   }
 }
 

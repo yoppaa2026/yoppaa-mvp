@@ -116,6 +116,56 @@ const MUTATIONS = [
     de: '      recompenseId: meta.fidelite_recompense_id || null,',
     vers: '      recompenseId: null,' },
 
+  // ─── LE RESTE DU BON, ET À QUOI IL SERT (30/08) ──────────────────────
+  { nom: '🔴 la phrase du reste ne dit plus à quoi il sert',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '    ? `Il restera ${euros(r)} sur ton bon, pour une prochaine fois chez ${chez}.`',
+    vers: '    ? `Il restera ${euros(r)} sur ton bon.`' },
+
+  { nom: '🔴 elle ne nomme plus le commerce où le solde est utilisable',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '  const chez = String(nomCommercant || \'\').trim()',
+    vers: '  const chez = \'\'' },
+
+  { nom: '🔴 un solde nul se met à parler',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: "  if (!Number.isFinite(r) || r <= 0) return ''",
+    vers: '  if (false) return \'\'' },
+
+  { nom: '🔴 le montant du reste reperd son espace insécable',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '    ? `Il restera ${euros(r)} sur ton bon, pour une prochaine fois chez ${chez}.`',
+    vers: '    ? `Il restera ${r.toFixed(2).replace(\'.\', \',\')} € sur ton bon, pour une prochaine fois chez ${chez}.`' },
+
+  { nom: '🔴 le tunnel boutique réécrit la phrase dans son coin',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: "                              {' '}{libelleResteBon(Number(bonApplique.solde) - remiseBonEffective(), commercant?.nom)}",
+    vers: '                              {remiseBonEffective() < Number(bonApplique.solde) && ` · il restera ${euros(Number(bonApplique.solde) - remiseBonEffective())} sur ton bon`}' },
+
+  // ─── LE BON INVISIBLE SANS ACOMPTE (30/08) ───────────────────────────
+  { nom: '🔴 le bon redevient invisible quand rien ne se paie en ligne',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                        {mesBonsIci.length > 0 && !seanceSurAbo && !acompteEnLigne && (',
+    vers: '                        {false && mesBonsIci.length > 0 && !seanceSurAbo && (' },
+
+  { nom: '🔴 le bloc informatif ne montre plus le code à présenter',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                                  {b.code}\n                                </span>',
+    vers: '                                  {b.id}\n                                </span>' },
+
+  { nom: '🔴 le bloc informatif se met à débiter le bon',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                              {mesBonsIci.map(b => (\n                                <span key={b.id}',
+    vers: '                              {mesBonsIci.map(b => (\n                                <span onClick={() => setBonChoisi(b)} key={b.id}' },
+
+  // 🔴 LA PHRASE IMPOSSIBLE : le bon éteint la prestation AVANT de déborder sur
+  // les produits, donc « le reste soldera ta presta au comptoir » décrit un cas
+  // qui n'existe pas. La garde existe pour qu'on ne le repropose pas.
+  { nom: '🔴 la phrase impossible réapparaît',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: "                                : 'Présente ton code au comptoir le jour de ton rendez-vous.'}",
+    vers: "                                : 'Le reste pourra solder ta prestation au comptoir.'}" },
+
   { nom: '🔴 LA COLONNE DISPARAÎT DU SELECT (le défaut le plus fréquent)',
     banc: 'verif:bons', fichier: 'app/api/emails/rdv-confirme/route.js',
     de: 'acompte_montant, fidelite_remise, bon_cadeau_montant,',

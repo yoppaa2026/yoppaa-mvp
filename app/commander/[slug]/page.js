@@ -7,7 +7,7 @@ import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
 import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
 import { canDo, isVitrine, planEffectif } from '@/lib/plans'
-import { calculerRemiseBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
+import { calculerRemiseBon, normaliserCodeBon, libelleResteBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
@@ -4766,11 +4766,17 @@ export default function CommanderSlug() {
                             <p style={{ fontSize: '0.82rem', fontWeight: 800, color: '#065F46', margin: 0 }}>
                               Bon cadeau appliqué : −{euros(remiseBonEffective())}
                             </p>
+                            {/* ⚠️ LA PHRASE DU RESTE VIT DANS LE MODULE (30/08),
+                                avec celle du tunnel rendez-vous. Elle s'arrêtait
+                                à « il restera 18,10 € sur ton bon » : un solde
+                                dont on ignore l'usage est un solde qu'on oublie,
+                                et un bon oublié est de l'argent encaissé sans
+                                jamais revoir le client. */}
                             <p style={{ fontSize: '0.72rem', color: '#047857', fontWeight: 600, margin: '2px 0 0' }}>
                               {couvert
                                 ? 'Ta commande est entièrement couverte 🟣'
                                 : `Reste à payer : ${euros(totalDuApresBon())}`}
-                              {remiseBonEffective() < Number(bonApplique.solde) && ` · il restera ${euros(Number(bonApplique.solde) - remiseBonEffective())} sur ton bon`}
+                              {' '}{libelleResteBon(Number(bonApplique.solde) - remiseBonEffective(), commercant?.nom)}
                             </p>
                           </div>
                           <button type="button" onClick={() => { setBonApplique(null); setBonErreur(null) }}

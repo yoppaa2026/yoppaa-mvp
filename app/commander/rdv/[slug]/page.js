@@ -38,6 +38,10 @@ import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 // le lieu gravé et la première place libre se décident CÔTÉ SERVEUR, dans
 // `lib/rdv-creation-server.js`, avec le webhook Stripe et la route d'abonnement.
 import { capacitePrestation, estCoursCollectif, libellePlaces } from '@/lib/cours-collectifs'
+// ⚠️ LA PHRASE DU RESTE DU BON VIT DANS LE MODULE, avec celle du tunnel
+// boutique : deux écritures d'une même phrase finissent toujours par dire deux
+// choses.
+import { libelleResteBon } from '@/lib/bons-cadeaux'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import GalerieCommerce from '@/app/components/GalerieCommerce'
@@ -3377,9 +3381,18 @@ export default function CommanderRdvSlug() {
                                     <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 800, color: actif ? '#059669' : T.ink }}>
                                       {actif ? `−${euros(deduit)} déduits` : `${euros(b.solde)} disponibles`}
                                     </p>
+                                    {/* ⚠️ LA PHRASE DU RESTE VIT DANS LE MODULE
+                                        (30/08). Elle s'arrêtait à « Il restera
+                                        18,10 € sur ton bon. » : un solde dont on
+                                        ignore l'usage est un solde qu'on oublie,
+                                        et un bon oublié est de l'argent encaissé
+                                        sans jamais revoir le client. Elle nomme
+                                        maintenant le commerce, comme dans le
+                                        tunnel boutique, et depuis le même
+                                        endroit. */}
                                     <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: actif ? '#047857' : T.muted, fontWeight: 600 }}>
                                       {actif
-                                        ? `${surQuoi}${reste > 0 ? ` Il restera ${euros(reste)} sur ton bon.` : ''}`
+                                        ? `${surQuoi}${reste > 0 ? ` ${libelleResteBon(reste, commercant?.nom)}` : ''}`
                                         : b.code}
                                     </p>
                                   </div>
@@ -3391,6 +3404,59 @@ export default function CommanderRdvSlug() {
                                 </div>
                               )
                             })}
+                          </div>
+                        )}
+                        {/* ─── 🔴 LE BON INVISIBLE, QUAND RIEN NE SE PAIE EN
+                            LIGNE (Alex, 30/08) ───────────────────────────────
+
+                            Le bloc ci-dessus ne s'affiche que si un acompte en
+                            ligne est demandé. Chez un commerçant qui n'en prend
+                            pas, un Yopper qui a 40 € de bon cadeau ne voyait
+                            RIEN, et se présentait au rendez-vous sans savoir
+                            qu'il avait de l'argent à dépenser. Un bon qu'on
+                            oublie est de l'argent que le commerçant a encaissé
+                            sans jamais revoir le client.
+
+                            ⚠️ INFORMATIF, PAS ACTIONNABLE, et c'est la décision
+                            d'Alex : sans paiement en ligne, on INFORME, on ne
+                            débite pas. Débiter des semaines avant un rendez-vous
+                            qui ne fait sortir aucun argent, ce serait brûler le
+                            bon pour rien si la personne ne vient pas. Le
+                            commerçant le voit sur sa fiche et l'applique au
+                            comptoir.
+
+                            ⚠️ CE QU'ON N'ÉCRIT PAS : « le reste de ton bon
+                            soldera ta prestation au comptoir ». Vérifié : les
+                            deux situations ne coexistent jamais. Le bon éteint
+                            la prestation avant de déborder sur les produits,
+                            donc s'il reste du solde il n'y a plus rien à solder,
+                            et s'il reste à payer le bon est vide. La phrase
+                            promettrait un cas impossible. */}
+                        {mesBonsIci.length > 0 && !seanceSurAbo && !acompteEnLigne && (
+                          <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 14, padding: '10px 12px', marginBottom: 12 }}>
+                            <p style={{ margin: '0 0 6px', fontSize: '0.62rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+                              {mesBonsIci.length > 1 ? 'Tes bons cadeaux ici' : 'Ton bon cadeau ici'}
+                            </p>
+                            <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 800, color: '#065F46' }}>
+                              {mesBonsIci.length > 1
+                                ? `Tu as ${euros(mesBonsIci.reduce((s, b) => s + Number(b.solde || 0), 0))} sur tes bons cadeaux ici.`
+                                : `Tu as ${euros(mesBonsIci[0].solde)} sur ton bon cadeau ici.`}
+                            </p>
+                            <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: '#047857', fontWeight: 600 }}>
+                              {mesBonsIci.length > 1
+                                ? 'Présente tes codes au comptoir le jour de ton rendez-vous.'
+                                : 'Présente ton code au comptoir le jour de ton rendez-vous.'}
+                            </p>
+                            {/* Le code SOUS LES YEUX, et pas seulement dans un
+                                email reçu il y a trois mois : c'est lui qu'on
+                                donne au comptoir. */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                              {mesBonsIci.map(b => (
+                                <span key={b.id} style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 8, background: '#fff', border: '1px solid #86EFAC', color: '#065F46', fontWeight: 800, fontSize: '0.76rem', letterSpacing: '0.5px' }}>
+                                  {b.code}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         )}
                         {/* LE PANIER COMPLET, prestation comprise.

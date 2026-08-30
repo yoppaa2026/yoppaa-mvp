@@ -34,8 +34,10 @@ import { reprendrePanierPourRdv, deposerPanierPourBoutique } from '@/lib/panier-
 import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
 import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
-import { champsLieuPour } from '@/lib/lieu-fige'
-import { capacitePrestation, estCoursCollectif, premierePlaceLibre, libellePlaces } from '@/lib/cours-collectifs'
+// ⚠️ `champsLieuPour` et `premierePlaceLibre` ont quitté cet écran le 30/08 :
+// le lieu gravé et la première place libre se décident CÔTÉ SERVEUR, dans
+// `lib/rdv-creation-server.js`, avec le webhook Stripe et la route d'abonnement.
+import { capacitePrestation, estCoursCollectif, libellePlaces } from '@/lib/cours-collectifs'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import GalerieCommerce from '@/app/components/GalerieCommerce'
@@ -1141,9 +1143,10 @@ export default function CommanderRdvSlug() {
   // Enrichit chaque jour avec le nombre de slots libres pour la prestation choisie
   // (necessite reservations60j + commercant.horaires_detail). Utilise par le mini-calendrier
   // pour afficher un dot vert (dispo) / rouge (complet ou ferme) par jour.
-  // Le créneau retenu, avec sa jauge et surtout SES PLACES DÉJÀ OCCUPÉES :
-  // c'est de là que sort le numéro de place du prochain inscrit.
-  const slotChoisi = slots.find(s => s.heure === heureChoisie) || null
+  // ⚠️ `slotChoisi` A DISPARU LE 30/08. Il ne servait qu'à sortir le numéro de
+  // place du prochain inscrit, et cette décision appartient désormais au
+  // serveur : la place se calcule AU MOMENT DE L'ÉCRITURE, sinon deux personnes
+  // qui réservent en même temps repartent avec la même.
 
   const joursAvecDispo = joursDispos.map(j => {
     if (!j.ouvert || !prestationChoisie) return { ...j, nbLibres: 0 }
@@ -1438,29 +1441,17 @@ export default function CommanderRdvSlug() {
         && acompteMontant && acompteMontant >= 0.5
       )
 
-      // 🔴 UN AVANTAGE QUI ANNULE L'ACOMPTE NE DOIT PAS S'ÉVAPORER EN SILENCE.
+      // ✅ CE REFUS A DISPARU LE 30/08, ET C'EST TOUT L'OBJET DU CHANTIER.
       //
-      // Depuis que le bon cadeau paie le panier entier, il peut ramener
-      // l'acompte à zéro. Le rendez-vous basculerait alors sur l'insertion
-      // DIRECTE, celle qui n'appelle aucune route serveur : le bon ne serait
-      // jamais débité, la récompense jamais consommée, et le client
-      // repartirait persuadé de les avoir dépensés. Rien ne le lui dirait.
+      // Un avantage qui ramenait l'acompte à zéro faisait basculer le
+      // rendez-vous sur l'insertion DIRECTE, celle qui n'appelait aucune route
+      // serveur : le bon n'était jamais débité, la récompense jamais consommée,
+      // et le client repartait persuadé de les avoir dépensés. On refusait donc,
+      // en renvoyant au comptoir le porteur d'un bon qui payait tout.
       //
-      // ⚠️ ON REFUSE, ET ON DIT LE GESTE À FAIRE. C'est exactement ce que
-      // répond déjà `create-rdv-acompte` quand l'acompte tombe sous le minimum
-      // Stripe : la règle est la même des deux côtés, elle est juste énoncée
-      // ici avant que le client se soit déplacé pour rien.
-      const avantageUtilise = !!bonChoisi || !!(recompenseFid && recompenseActive)
-      const sansProduits = !(lignesPanier.length > 0 && produitsAchetables)
-      if (avantageUtilise && sansProduits && !acompteEnLigneRequis
-          && commercant.rdv_acompte_en_ligne_actif && commercant.stripe_account_charges_enabled
-          && acomptePct > 0) {
-        setSubmitError(bonChoisi
-          ? 'Ton bon cadeau couvre déjà tout : il n’y a plus d’acompte à payer en ligne. Réserve sans le bon, et présente-le au comptoir le jour du rendez-vous.'
-          : 'Avec ta récompense, il n’y a plus d’acompte à payer en ligne. Réserve sans, elle te sera proposée au comptoir.')
-        setSubmitting(false)
-        return
-      }
+      // Il n'y a plus rien à refuser : `/api/rdv/reserver` crée le rendez-vous
+      // CÔTÉ SERVEUR, débite le bon et consomme la récompense. L'insertion
+      // directe, elle, n'existe plus.
 
       // ─── LA SÉANCE EST PRISE SUR L'ABONNEMENT ──────────────────────────────
       //
@@ -1637,6 +1628,58 @@ export default function CommanderRdvSlug() {
             }),
           })
           const j = await res.json()
+
+          // ✅ RIEN À ENCAISSER : LE SERVEUR A DÉJÀ TOUT FAIT (30/08). Un bon
+          // qui couvre la prestation ET les produits ne laisse rien à payer, et
+          // Stripe refuse sous 0,50 € : la route confirme alors le rendez-vous
+          // et la commande sans passer par le paiement. Ce cas était refusé
+          // jusqu'ici, et c'était le plus favorable au client.
+          if (j.ok && j.bon_total) {
+            setRdvCree({
+              id: j.rdv_id,
+              numero_rdv: j.numero_rdv ?? null,
+              commercant_id: commercant.id,
+              prestation_id: prestationChoisie.id,
+              praticien_id: praticienChoisi?.id || null,
+              client_email: email, client_prenom: prenom, client_nom: nom, client_telephone: telephone,
+              date_rdv: dateStr, heure_debut: heureChoisie, heure_fin: heureFin,
+              duree_minutes: prestationChoisie.duree_minutes,
+              prix_estime: prixEstime,
+              acompte_montant: null,
+              acompte_paye: false,
+              statut: 'confirme',
+              fidelite_remise: j.avantages?.recompense || 0,
+              bon_cadeau_montant: j.avantages?.bon || 0,
+            })
+            setSubmitting(false)
+            setEtape(4)
+            setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
+            promptPushOneSignal()
+            if (j.rdv_id) {
+              fetch('/api/rdv/schedule-rappel', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rdv_id: j.rdv_id }),
+              }).catch(e => console.warn('[rdv] schedule-rappel KO', e?.message))
+              fetch('/api/emails/rdv-confirme', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rdv_id: j.rdv_id }),
+              }).catch(e => console.warn('[rdv] email KO', e?.message))
+            }
+            return
+          }
+
+          // Le créneau peut avoir été pris pendant que le client remplissait ses
+          // coordonnées : on le dit, et on le renvoie choisir une autre heure.
+          if (!j.ok && j.error === 'place_prise') {
+            setSubmitError(j.collectif
+              ? 'La dernière place vient d’être prise. Choisis un autre horaire.'
+              : 'Ce créneau vient d’être pris. Choisis-en un autre.')
+            setHeureChoisie(null)
+            setSubmitting(false)
+            setTimeout(() => allerEtape(2), 1200)
+            return
+          }
+
           if (!j.ok || !j.url) throw new Error(j.error || 'Erreur création du paiement')
           redirectTop(j.url)
           return
@@ -1717,87 +1760,93 @@ export default function CommanderRdvSlug() {
         }
       }
 
-      // UUID client-side : pas besoin de .select() après insert
-      const rdvId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null
-      // ⚠️ LE LIEU EST GRAVÉ À LA RÉSERVATION. Sans lui, la confirmation
-      // annonce le siège social, donc le DOMICILE d'une commerçante inscrite
-      // chez elle mais qui donne cours en salle.
+      // ═══ RÉSERVATION SANS PAIEMENT : PAR LE SERVEUR (30/08) ═══════════════
+      //
+      // 🔴 CE RENDEZ-VOUS S'INSÉRAIT DEPUIS LE NAVIGATEUR, et absolument rien
+      // n'était vérifié côté serveur : ni le forfait du commerçant, ni son
+      // interrupteur d'agenda, ni l'appartenance de la prestation à ce commerce,
+      // ni le prix, ni l'acompte. Une requête écrite à la main posait un
+      // rendez-vous payant chez quelqu'un qui n'a pas l'agenda dans sa formule.
+      //
+      // Et c'est ce même chemin qui interdisait au bon cadeau de tout payer : le
+      // navigateur n'a pas le droit de débiter un bon ni de consommer une
+      // récompense, donc on refusait plutôt que d'avaler en silence.
+      //
       // ⚠️ Si la PLAGE de réservation désigne un emplacement, c'est celui-là et
       // pas un autre : c'est le choix explicite du commerçant, et le déduire de
       // l'heure le contredirait. Deux plages peuvent se suivre au même endroit,
       // ou se tenir à deux adresses sans que les horaires le disent.
       const plageChoisie = (creneauxFiltres || []).find(c =>
         c.lieu_id && c.heure_debut?.slice(0, 5) <= heureChoisie && c.heure_fin?.slice(0, 5) > heureChoisie)
-      const lieu = await champsLieuPour(supabase, commercant, {
-        jour: dateStr, heure: heureChoisie, lieuId: plageChoisie?.lieu_id || null,
-      })
-      const payload = {
-        ...lieu,
-        ...(rdvId ? { id: rdvId } : {}),
-        commercant_id: commercant.id,
-        client_id: cid,
-        prestation_id: prestationChoisie.id,
-        praticien_id: praticienChoisi?.id || null,  // null = Sans préférence (à assigner par commerçant)
-        client_email: email,
-        client_prenom: prenom,
-        client_nom: nom,
-        client_telephone: telephone,
-        date_rdv: dateStr,
-        heure_debut: heureChoisie,
-        heure_fin: heureFin,
-        duree_minutes: prestationChoisie.duree_minutes,
-        prix_estime: prixEstime,
-        acompte_montant: acompteMontant,
-        acompte_paye: false,
-        statut: 'confirme',
-        // TVA figée à la réservation : le taux de la prestation peut changer,
-        // le rendez-vous déjà pris ne doit pas bouger dans les exports.
-        tva_taux: prestationChoisie.tva_taux ?? null,
-        notes_client: client.notes.trim() || null,
-        rgpd_marketing: rgpdMarketing,
-        // ⚠️ LA CAPACITÉ EST GRAVÉE, comme la TVA et pour la même raison : la
-        // contrainte d'exclusion la lit pour savoir si elle doit s'appliquer,
-        // et une contrainte ne peut pas interroger une table voisine.
-        capacite_creneau: capacitePrestation(prestationChoisie),
-        // ⚠️ LA PREMIÈRE PLACE LIBRE, pas « nombre d'inscrits + 1 ». Quand
-        // quelqu'un annule, sa place se libère AU MILIEU : sur un cours où les
-        // places 1, 2 et 4 sont prises, la suivante est la 3. Compter aurait
-        // redonné une place déjà occupée, l'index unique aurait rejeté
-        // l'inscription, et le client aurait lu « ce créneau vient d'être
-        // pris » devant un cours à moitié vide.
-        place_no: premierePlaceLibre(prestationChoisie, slotChoisi?.placesOccupees || []) || 1,
+
+      let j
+      try {
+        // ⚠️ `fetchAvecPreuveSiConnecte` et surtout pas `fetchYopper`, qui
+        // refuserait l'appel faute de session : un invité doit pouvoir réserver,
+        // il n'aura simplement aucune récompense à faire valoir.
+        const res = await fetchAvecPreuveSiConnecte('/api/rdv/reserver', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            commercant_id: commercant.id,
+            prestation_id: prestationChoisie.id,
+            praticien_id: praticienChoisi?.id || null,  // null = Sans préférence
+            date_rdv: dateStr,
+            heure_debut: heureChoisie,
+            client_email: email,
+            client_prenom: prenom,
+            client_nom: nom,
+            client_telephone: telephone,
+            notes_client: client.notes.trim() || null,
+            rgpd_marketing: rgpdMarketing,
+            lieu_id: plageChoisie?.lieu_id || null,
+            // ⚠️ ON N'ENVOIE QUE DES IDENTIFIANTS, jamais des montants : la
+            // route recharge la récompense et le bon, revérifie tout, et
+            // recalcule ce qui est déduit. L'écran calcule pour montrer, le
+            // serveur décide.
+            ...(recompenseFid && recompenseActive ? { fidelite_recompense_id: recompenseFid.id } : {}),
+            ...(bonChoisi ? { bon_cadeau_code: bonChoisi.code } : {}),
+          }),
+        })
+        j = await res.json().catch(() => ({}))
+      } catch (e) {
+        console.error('[rdv] reserver KO', e)
+        setSubmitError(`Ta réservation n’a pas pu être enregistrée : ${e?.message || 'réessaie'}.`)
+        setSubmitting(false)
+        return
       }
 
-      console.info('[rdv] inserting', { id: rdvId, date: dateStr, heure: heureChoisie, place: payload.place_no })
-      const { error } = await supabase.from('rdv_reservations').insert(payload)
-
-      if (error) {
-        // Double-booking rattrapé au niveau DB (atomique, race-proof) :
-        //   23505 = unique_violation   -> rdv_no_double_book (même heure exacte)
-        //   23P01 = exclusion_violation -> rdv_no_overlap_praticien (chevauchement)
-        if (error.code === '23505' || error.code === '23P01') {
-          console.warn('[rdv] double-booking caught', error.code)
-          // ⚠️ Le texte doit dire ce qui s'est VRAIMENT passé. Sur un cours de
-          // douze, « ce créneau vient d'être pris » laisserait croire que le
-          // cours est annulé, alors qu'il ne reste simplement plus de place.
-          setSubmitError(estCoursCollectif(prestationChoisie)
+      if (!j?.ok) {
+        // Le créneau a pu être pris pendant que le client remplissait ses
+        // coordonnées. ⚠️ Le texte doit dire ce qui s'est VRAIMENT passé : sur
+        // un cours de douze, « ce créneau vient d'être pris » laisserait croire
+        // que le cours est annulé, alors qu'il ne reste plus de place.
+        if (j?.error === 'place_prise') {
+          setSubmitError(j.collectif
             ? 'La dernière place vient d’être prise. Choisis un autre horaire.'
-            : 'Ce créneau vient d\'être pris par un autre client. Choisis-en un autre.')
+            : 'Ce créneau vient d’être pris par un autre client. Choisis-en un autre.')
           setHeureChoisie(null)
           setSubmitting(false)
           setTimeout(() => allerEtape(2), 1200)
           return
         }
-        console.error('[rdv] insert error', error)
-        setSubmitError(`Erreur : ${error.message || error.code || 'inconnue'}`)
+        if (j?.creneau_refuse) {
+          setSubmitError(j.error)
+          setHeureChoisie(null)
+          setSubmitting(false)
+          setTimeout(() => allerEtape(2), 1200)
+          return
+        }
+        setSubmitError(j?.error || 'Ta réservation n’a pas pu être enregistrée. Réessaie.')
         setSubmitting(false)
         return
       }
 
-      console.info('[rdv] insert OK, fetching numero')
+      const rdvId = j.rdv?.id || null
+      console.info('[rdv] réservation serveur OK', { id: rdvId, numero: j.rdv?.numero_rdv })
 
-      // Rappel push 1h avant le RDV (booking sans acompte). Fire-and-forget,
-      // non bloquant : le chemin avec acompte le programme via le webhook.
+      // Rappel push 1h avant le RDV. Fire-and-forget, non bloquant : le chemin
+      // avec acompte le programme via le webhook.
       if (rdvId) {
         fetch('/api/rdv/schedule-rappel', {
           method: 'POST',
@@ -1806,24 +1855,10 @@ export default function CommanderRdvSlug() {
         }).catch(e => console.warn('[rdv] schedule-rappel KO', e?.message))
       }
 
-      // Récupère le numero_rdv assigné par le trigger DB (RPC SECURITY DEFINER, bypass RLS)
-      let numeroFinal = null
-      if (rdvId) {
-        try {
-          const { data: numero } = await supabase.rpc('rdv_numero_pour_id', { p_rdv_id: rdvId })
-          numeroFinal = typeof numero === 'number' ? numero : null
-          console.info('[rdv] numero =', numeroFinal)
-        } catch (e) {
-          console.warn('[rdv] numero rpc skip', e)
-        }
-      }
-
-      // État final pour écran confirmation (étape 4)
-      setRdvCree({
-        id: rdvId,
-        ...payload,
-        numero_rdv: numeroFinal,
-      })
+      // État final pour écran confirmation (étape 4). ⚠️ IL VIENT DU SERVEUR,
+      // et c'est ce qui permet enfin d'y annoncer ce que le bon et la récompense
+      // ont réellement payé : le navigateur ne le savait pas, il l'estimait.
+      setRdvCree({ ...j.rdv, client_id: cid })
       setSubmitting(false)
       setEtape(4)
       setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)

@@ -25,8 +25,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { peutReserverSurAbonnement, seancesConsommees, datesConsommees } from '@/lib/abonnements'
-import { capacitePrestation, premierePlaceLibre } from '@/lib/cours-collectifs'
-import { champsLieuPour } from '@/lib/lieu-fige'
+import { creerReservationRdv } from '@/lib/rdv-creation-server'
 
 function admin() {
   return createClient(
@@ -101,9 +100,13 @@ export async function POST(request) {
     return NextResponse.json({ ok: false, error: 'abonnement_sans_cours' }, { status: 409 })
   }
 
+  // ⚠️ SEULE LA DURÉE EST LUE ICI : elle sert à calculer l'heure de fin AVANT
+  // l'insertion. La capacité, le taux de TVA et l'appartenance au commerce sont
+  // relus par `creerReservationRdv`, qui refuse une prestation d'un autre
+  // commerce. Un seul endroit sait de quoi le payload a besoin.
   const { data: prestation } = await db
     .from('rdv_prestations')
-    .select('id, nom, duree_minutes, capacite, tva_taux, commercant_id')
+    .select('id, duree_minutes, commercant_id')
     .eq('id', prestationId)
     .maybeSingle()
   if (!prestation || String(prestation.commercant_id) !== String(contrat.commercant_id)) {
@@ -140,86 +143,55 @@ export async function POST(request) {
   const finMin = h * 60 + m + duree
   const heureFin = `${String(Math.floor(finMin / 60) % 24).padStart(2, '0')}:${String(finMin % 60).padStart(2, '0')}`
 
-  const { data: commercant } = await db
-    .from('commercants')
-    .select('id, nom, adresse, latitude, longitude, siege_social_est_lieu_activite')
-    .eq('id', contrat.commercant_id)
-    .maybeSingle()
+  // ⚠️ LE LIEU GRAVÉ, LA CAPACITÉ GRAVÉE ET LA PREMIÈRE PLACE LIBRE VIENNENT DU
+  // MODULE, comme pour le webhook Stripe et le tunnel sans paiement. La place
+  // est la PREMIÈRE LIBRE, pas « inscrits + 1 » : quand quelqu'un annule, sa
+  // place se libère AU MILIEU.
+  const res = await creerReservationRdv(db, {
+    commercantId: contrat.commercant_id,
+    prestationId: prestation.id,
+    dateRdv,
+    heureDebut: heure,
+    lieuId,
+    champs: {
+      abonnement_id: contrat.id,
+      client_email: yopper.email,
+      client_prenom: contrat.client_prenom || yopper.prenom || '',
+      client_nom: contrat.client_nom || yopper.nom || null,
+      client_telephone: contrat.client_telephone || null,
+      heure_fin: heureFin,
+      duree_minutes: duree,
+      // ⚠️ ZÉRO PARCE QUE C'EST DÉJÀ PAYÉ, et le prix vit sur le CONTRAT.
+      // Compter le tarif plein ici multiplierait le chiffre d'affaires du
+      // commerçant par trente-six. Côté cliente, `libellePrixSeance` sait déjà
+      // qu'une séance d'abonnement ne s'affiche pas « 0 € » mais « comprise
+      // dans ton abonnement ».
+      prix_estime: 0,
+      acompte_montant: null,
+      acompte_paye: false,
+      statut: 'confirme',
+      notes_client: typeof notes === 'string' && notes.trim() ? notes.trim() : null,
+    },
+  })
 
-  // ⚠️ LA PLACE SE CALCULE MAINTENANT, et c'est la PREMIÈRE LIBRE, pas
-  // « inscrits + 1 » : quand quelqu'un annule, sa place se libère AU MILIEU.
-  const capacite = capacitePrestation(prestation)
-  let placeNo = 1
-  if (capacite > 1) {
-    const { data: dejaLa } = await db
-      .from('rdv_reservations')
-      .select('place_no')
-      .eq('commercant_id', contrat.commercant_id)
-      .eq('date_rdv', dateRdv)
-      .eq('heure_debut', heure)
-      .eq('prestation_id', prestation.id)
-      .in('statut', ['confirme', 'honore'])
-      .is('deleted_at', null)
-    placeNo = premierePlaceLibre(prestation, (dejaLa || []).map(r => r.place_no)) || 1
-  }
-
-  const lieu = await champsLieuPour(db, commercant, { jour: dateRdv, heure, lieuId })
-
-  const payload = {
-    ...lieu,
-    commercant_id: contrat.commercant_id,
-    prestation_id: prestation.id,
-    abonnement_id: contrat.id,
-    client_email: yopper.email,
-    client_prenom: contrat.client_prenom || yopper.prenom || '',
-    client_nom: contrat.client_nom || yopper.nom || null,
-    client_telephone: contrat.client_telephone || null,
-    date_rdv: dateRdv,
-    heure_debut: heure,
-    heure_fin: heureFin,
-    duree_minutes: duree,
-    // ⚠️ ZÉRO PARCE QUE C'EST DÉJÀ PAYÉ, et le prix vit sur le CONTRAT. Compter
-    // le tarif plein ici multiplierait le chiffre d'affaires du commerçant par
-    // trente-six. Côté cliente, `libellePrixSeance` sait déjà qu'une séance
-    // d'abonnement ne s'affiche pas « 0 € » mais « comprise dans ton
-    // abonnement ».
-    prix_estime: 0,
-    acompte_montant: null,
-    acompte_paye: false,
-    statut: 'confirme',
-    tva_taux: prestation.tva_taux ?? null,
-    notes_client: typeof notes === 'string' && notes.trim() ? notes.trim() : null,
-    capacite_creneau: capacite,
-    place_no: placeNo,
-  }
-
-  const { data: cree, error } = await db
-    .from('rdv_reservations')
-    .insert(payload)
-    .select('id, numero_rdv, numero_prefixe, place_no')
-    .single()
-
-  if (error) {
-    // Double-booking rattrapé par la base, atomiquement :
-    //   23505 = unique_violation    → même heure exacte, ou place déjà prise
-    //   23P01 = exclusion_violation → chevauchement sur le praticien
-    if (error.code === '23505' || error.code === '23P01') {
+  if (!res.ok) {
+    if (res.code === 'place_prise') {
       return NextResponse.json(
-        { ok: false, error: 'place_prise', collectif: capacite > 1 },
+        { ok: false, error: 'place_prise', collectif: !!res.collectif },
         { status: 409 },
       )
     }
-    console.error('[rdv/reserver-abonnement] insert', error)
+    if (res.code === 'prestation_hors_commerce' || res.code === 'prestation_introuvable') {
+      return NextResponse.json({ ok: false, error: 'cours_introuvable' }, { status: 409 })
+    }
+    console.error('[rdv/reserver-abonnement] insert', res.error)
     return NextResponse.json({ ok: false, error: 'ecriture_impossible' }, { status: 500 })
   }
 
   return NextResponse.json({
     ok: true,
     rdv: {
-      id: cree.id,
-      numero_rdv: cree.numero_rdv ?? null,
-      numero_prefixe: cree.numero_prefixe ?? null,
-      place_no: cree.place_no ?? placeNo,
+      ...res.rdv,
       date_rdv: dateRdv,
       heure_debut: heure,
       heure_fin: heureFin,

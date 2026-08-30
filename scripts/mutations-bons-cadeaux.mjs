@@ -85,18 +85,36 @@ const MUTATIONS = [
     de: '    const id = await identiteProuvee(request)',
     vers: '    const id = { email: (await request.clone().json().catch(() => ({}))).email }' },
 
-  // ⚠️ ANCRÉE SUR LA LIGNE SUIVANTE : `source: 'rdv',` apparaît D'ABORD dans la
-  // consommation de la récompense, quinze lignes plus haut. Sans cette ancre,
-  // la mutation frappait le mauvais bloc et ne prouvait rien.
-  { nom: '🔴 le webhook ne débite plus le bon d’un rendez-vous',
-    banc: 'verif:bons', fichier: 'app/api/stripe/webhook/route.js',
-    de: "          source: 'rdv',\n          rdv_id: rdvId",
-    vers: "          source: 'commande',\n          rdv_id: rdvId" },
+  // ⚠️ LE DÉBIT A DÉMÉNAGÉ DANS LE MODULE LE 30/08, avec la consommation de la
+  // récompense : les trois chemins qui créent un rendez-vous font les deux
+  // gestes par le même appel. La mutation suit, sinon elle mesurerait du code
+  // que plus personne n'exécute.
+  { nom: '🔴 le bon d’un rendez-vous est débité en « commande »',
+    banc: 'verif:bons', fichier: 'lib/rdv-creation-server.js',
+    de: "      const deb = await debiterBon(db, bonCadeauId, Number(bonMontant), { source: 'rdv', rdv_id: rdvId })",
+    vers: "      const deb = await debiterBon(db, bonCadeauId, Number(bonMontant), { source: 'commande', rdv_id: rdvId })" },
 
-  { nom: '🔴 le webhook cesse de LIRE le résultat du débit',
+  { nom: '🔴 le module cesse de LIRE le résultat du débit',
+    banc: 'verif:bons', fichier: 'lib/rdv-creation-server.js',
+    de: "      if (!deb?.ok) console.error('[rdv/creation] débit bon cadeau KO', deb?.error, { rdvId })\n      else bilan.bon = true",
+    vers: '      bilan.bon = true' },
+
+  // ⚠️ ET LE WEBHOOK DOIT LUI PASSER LE BON REÇU DE STRIPE, sinon les deux
+  // mutations ci-dessus mesurent du code qu'on appelle à vide.
+  //
+  // 🔴 CETTE MUTATION EST RESTÉE VERTE À SA PREMIÈRE ÉCRITURE, et c'est pour ça
+  // qu'elle est écrite ainsi. Elle neutralisait l'appel en gardant son NOM en
+  // place : la garde cherchait le nom, elle ne voyait rien. Elle vide
+  // maintenant l'ARGUMENT, ce qu'aucune recherche de mot ne peut ignorer.
+  { nom: '🔴 le webhook appelle le module sans lui passer le bon',
     banc: 'verif:bons', fichier: 'app/api/stripe/webhook/route.js',
-    de: '        if (!deb?.ok) {\n          console.error(\'[stripe/webhook] débit bon cadeau RDV KO\', deb?.error, { rdvId })\n        }',
-    vers: '        void deb' },
+    de: '      bonCadeauId: meta.bon_cadeau_id || null,',
+    vers: '      bonCadeauId: null,' },
+
+  { nom: '🔴 ni la récompense',
+    banc: 'verif:bons', fichier: 'app/api/stripe/webhook/route.js',
+    de: '      recompenseId: meta.fidelite_recompense_id || null,',
+    vers: '      recompenseId: null,' },
 
   { nom: '🔴 LA COLONNE DISPARAÎT DU SELECT (le défaut le plus fréquent)',
     banc: 'verif:bons', fichier: 'app/api/emails/rdv-confirme/route.js',

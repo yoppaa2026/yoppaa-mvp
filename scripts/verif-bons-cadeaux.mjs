@@ -237,13 +237,40 @@ const egal = (nom, obtenu, attendu) =>
   // ⚠️ ET L'ÉCRAN N'ENVOIE QUE LE CODE, jamais le montant : le 27/08, les DEUX
   // CÔTÉS étaient muets, d'où l'absence totale d'erreur.
   const ecran = lireCode('app/commander/rdv/[slug]/page.js')
-  // ⚠️ DEUX FOIS, ET ON LES COMPTE. L'écran a DEUX appels de paiement, un par
-  // tunnel. Se contenter d'« au moins une occurrence » laissait passer la
-  // mutation qui n'en cassait qu'un : exactement le défaut du 27/08, où un
-  // seul des deux tunnels connaissait la fidélité.
+  // ⚠️ TROIS FOIS, ET ON LES COMPTE. L'écran a TROIS sorties : l'acompte seul,
+  // le tunnel avec produits, et depuis le 30/08 la réservation SANS paiement.
+  // Se contenter d'« au moins une occurrence » laissait passer la mutation qui
+  // n'en cassait qu'une : exactement le défaut du 27/08, où un seul des deux
+  // tunnels connaissait la fidélité.
   const envois = (ecran.match(/bon_cadeau_code: bonChoisi\.code/g) || []).length
-  egal('l\'écran envoie le code du bon dans les DEUX tunnels', envois, 2)
-  verifie('et n\'envoie AUCUN montant de bon', !/bon_cadeau_montant:/.test(ecran))
+  egal('l\'écran envoie le code du bon dans les TROIS sorties', envois, 3)
+  // ⚠️ CETTE GARDE CHERCHAIT UN MOT DANS TOUT LE FICHIER, et elle a rougi le
+  // 30/08 sur du code juste : l'écran de confirmation AFFICHE désormais
+  // `bon_cadeau_montant`, que le serveur vient de lui rendre. Afficher un
+  // montant qu'on a reçu et en ENVOYER un ne sont pas le même geste.
+  //
+  // On isole donc les corps de requête, et on n'y cherche aucun montant. C'est
+  // la règle : « l'écran calcule pour montrer, le serveur décide ».
+  const corpsEnvoyes = (() => {
+    const out = []
+    let i = 0
+    const marqueur = 'body: JSON.stringify('
+    while ((i = ecran.indexOf(marqueur, i)) >= 0) {
+      let profondeur = 0, j = i + marqueur.length
+      for (; j < ecran.length; j++) {
+        if (ecran[j] === '(') profondeur++
+        else if (ecran[j] === ')') { if (profondeur === 0) break; profondeur-- }
+      }
+      out.push(ecran.slice(i, j))
+      i = j
+    }
+    return out
+  })()
+  verifie('l\'écran a bien des corps de requête à inspecter', corpsEnvoyes.length >= 3,
+    `${corpsEnvoyes.length} corps trouvés`)
+  verifie('et aucun n\'envoie de montant de bon ni de remise',
+    corpsEnvoyes.every(c => !/bon_cadeau_montant/.test(c) && !/fidelite_remise/.test(c)),
+    corpsEnvoyes.filter(c => /bon_cadeau_montant|fidelite_remise/.test(c)).length + ' corps fautifs')
 }
 
 // ═══ 9) LE WEBHOOK FIGE ET DÉBITE ═════════════════════════════════════════
@@ -253,14 +280,38 @@ const egal = (nom, obtenu, attendu) =>
     /bon_cadeau_id: meta\.bon_cadeau_id/.test(wh))
   verifie('et avec le montant figé',
     /bon_cadeau_montant: Number\(meta\.bon_cadeau_montant\)/.test(wh))
+  // ⚠️ LE DÉBIT A DÉMÉNAGÉ DANS LE MODULE LE 30/08, avec la consommation de la
+  // récompense : les trois chemins qui créent un rendez-vous font désormais les
+  // deux gestes par le même appel, au lieu de les réécrire chacun.
+  const mod = lireCode('lib/rdv-creation-server.js')
   // ⚠️ ANCRÉE SUR LE COUPLE, et pas sur `source: 'rdv'` seul : la consommation
   // de la RÉCOMPENSE porte exactement la même chaîne quinze lignes plus haut.
-  // La garde restait donc verte alors que le débit passait en « commande ».
+  // La garde restait verte alors que le débit passait en « commande ».
   verifie('le bon est débité avec la source « rdv »',
-    /source: 'rdv',\s*rdv_id: rdvId/.test(wh))
+    /source: 'rdv', rdv_id: rdvId/.test(mod))
   // ⚠️ UN `await` DONT ON NE LIT PAS LE RÉSULTAT EST UN ESPOIR, PAS UNE
   // ACTION. Ici, le silence coûterait de l'argent réel.
-  verifie('et le résultat du débit est LU', /if \(!deb\?\.ok\)/.test(wh))
+  verifie('et le résultat du débit est LU', /if \(!deb\?\.ok\)/.test(mod))
+  // Et le webhook appelle bien ce module, sinon les deux gardes ci-dessus
+  // mesureraient du code que plus personne n'exécute.
+  //
+  // 🔴 CETTE GARDE A ÉTÉ MESURÉE MUETTE, ET C'EST LA MÊME LEÇON QUE LE 30/08 AU
+  // MATIN : elle cherchait `appliquerAvantagesRdv(supabase, {`, donc le NOM de
+  // l'appel. Neutraliser l'appel gardait le nom en place, et la garde restait
+  // verte. On inspecte donc CE QU'IL TRANSMET : un appel qui passe `null` au
+  // lieu du bon reçu de Stripe ne débite rien, et il n'y a pas de plus grande
+  // différence que celle-là.
+  const appelAvantages = (() => {
+    const i = wh.indexOf('appliquerAvantagesRdv(supabase, {')
+    return i < 0 ? '' : wh.slice(i, wh.indexOf('\n    })', i))
+  })()
+  verifie('le webhook applique les avantages par le module', appelAvantages.length > 60,
+    `${appelAvantages.length} caractères`)
+  verifie('et il lui passe le bon reçu de Stripe, pas un vide',
+    /bonCadeauId: meta\.bon_cadeau_id/.test(appelAvantages)
+    && /bonMontant: Number\(meta\.bon_cadeau_montant\)/.test(appelAvantages))
+  verifie('ainsi que la récompense',
+    /recompenseId: meta\.fidelite_recompense_id/.test(appelAvantages))
 
   // Le contrat de `recrediterBon` a changé : les DEUX appelants ont été relus.
   const srv = lireCode('lib/bons-cadeaux-server.js')

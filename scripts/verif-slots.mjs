@@ -320,10 +320,18 @@ verifier('au moins un mercredi ouvert sur 14 jours', jours.some(j => j.ouvert))
 // réservation, elle crée le contrat et rien d'autre.
 // ⚠️ Poser les séances redevient un geste d'agenda, donc `ModalNouveauRdv.js`,
 // qui est déjà dans la liste et déjà surveillé. Rien n'est sorti du filet.
+//
+// ⚠️ LA LISTE EST TOMBÉE DE QUATRE À DEUX LE 30/08, et c'est le contraire d'un
+// relâchement : trois des quatre chemins passent désormais par
+// `lib/rdv-creation-server.js`, qui grave le lieu, la capacité et la place une
+// fois pour tous. Le webhook Stripe, la route d'abonnement et le tunnel client
+// n'insèrent plus rien eux-mêmes.
+//
+// 🔴 ET LE FILET NE REGARDAIT QUE `app/`. Le module vit dans `lib/` : sans
+// l'étendre, le SEUL endroit qui écrit vraiment dans la table aurait échappé au
+// comptage, et la garde serait devenue verte en ne surveillant plus rien.
 const CHEMINS_ECRITURE = [
-  'app/api/stripe/webhook/route.js',
-  'app/api/rdv/reserver-abonnement/route.js',
-  'app/commander/rdv/[slug]/page.js',
+  'lib/rdv-creation-server.js',
   'app/dashboard/ModalNouveauRdv.js',
 ]
 
@@ -345,7 +353,10 @@ function fichiersQuiInserent(dossier) {
   return trouves
 }
 
-const ecrivains = fichiersQuiInserent('app')
+// ⚠️ `lib` AUTANT QUE `app` : la création de réservation vit dans un module
+// depuis le 30/08, et un filet qui ne balaie que les écrans laisserait passer
+// exactement l'endroit où l'écriture a lieu.
+const ecrivains = [...fichiersQuiInserent('app'), ...fichiersQuiInserent('lib')]
 verifier('aucun chemin d’écriture n’échappe à la liste',
   ecrivains.length === CHEMINS_ECRITURE.length,
   `trouvés : ${ecrivains.join(' · ')}`)
@@ -364,10 +375,10 @@ const sansCommentaires = (src) =>
 
 for (const chemin of CHEMINS_ECRITURE) {
   const src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
-  // Les trois chemins n'écrivent pas de la même façon : le webhook complète un
-  // payload déjà construit (`payload.place_no = …`), les deux autres déclarent
-  // la propriété (`place_no: …`). Les deux formes sont des ÉCRITURES, et c'est
-  // tout ce qui compte ici.
+  // Les deux chemins n'écrivent pas de la même façon : la modale déclare la
+  // propriété dans son payload, le module la pose sur le sien après avoir lu
+  // les places prises. Les deux formes sont des ÉCRITURES, et c'est tout ce qui
+  // compte ici.
   verifier(`${chemin} grave la place occupée`, /place_no\s*[:=][^=]/.test(src))
   verifier(`${chemin} grave la capacité du créneau`, /capacite_creneau\s*[:=][^=]/.test(src))
 }

@@ -390,14 +390,36 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
   verifie('le RDV créé porte la récompense et sa remise',
     /fidelite_recompense_id: meta\.fidelite_recompense_id \|\| null/.test(wh)
     && /fidelite_remise: Number\(meta\.fidelite_remise\) \|\| 0/.test(wh))
+  // ⚠️ LA CONSOMMATION A DÉMÉNAGÉ DANS LE MODULE LE 30/08, avec le débit du bon
+  // cadeau : les deux gestes sont les mêmes pour les trois chemins qui créent un
+  // rendez-vous, et les tenir en trois exemplaires garantissait qu'un jour l'un
+  // des trois oublierait l'un des deux.
+  const modRdv = lireCode('lib/rdv-creation-server.js')
   verifie('et elle est consommée avec la source « rdv »',
-    /source: 'rdv'/.test(wh))
+    /consommerRecompense\(db, \{ recompense: recFid, source: 'rdv', rdvId \}\)/.test(modRdv))
   // ⚠️ APRÈS L'INSERT, jamais avant : une insertion qui échoue est rejouée par
   // Stripe, et consommer d'abord brûlerait la récompense d'un RDV inexistant.
-  const posInsert = wh.indexOf("from('rdv_reservations').insert(payload)")
-  const posConso = wh.indexOf("source: 'rdv'")
-  verifie('🔴 la consommation vient APRÈS la création du rendez-vous',
-    posInsert > 0 && posConso > posInsert, `insert ${posInsert}, conso ${posConso}`)
+  // ⚠️ MESURÉ SUR LES TROIS APPELANTS, pas sur un seul : c'est l'ORDRE qui
+  // protège, et il se perd appelant par appelant.
+  for (const [nom, chemin, creation] of [
+    ['le webhook Stripe', 'app/api/stripe/webhook/route.js', 'creerReservationRdv(supabase, {'],
+    ['la réservation sans paiement', 'app/api/rdv/reserver/route.js', 'creerReservationRdv(db, {'],
+  ]) {
+    const src = lireCode(chemin)
+    const posInsert = src.indexOf(creation)
+    const posConso = src.indexOf('appliquerAvantagesRdv(')
+    verifie(`🔴 ${nom} : la consommation vient APRÈS la création du rendez-vous`,
+      posInsert > 0 && posConso > posInsert, `insert ${posInsert}, conso ${posConso}`)
+  }
+  // Le tunnel avec produits consomme lui-même, ses deux avantages se ventilant
+  // sur deux cibles : même règle, même ordre.
+  {
+    const src = lireCode('app/api/stripe/checkout/create-rdv-commande/route.js')
+    const posInsert = src.indexOf('creerReservationRdv(supabase, {')
+    const posConso = src.indexOf("consommerRecompense(supabase, { recompense, source: 'rdv'")
+    verifie('🔴 le tunnel avec produits consomme APRÈS la création aussi',
+      posInsert > 0 && posConso > posInsert, `insert ${posInsert}, conso ${posConso}`)
+  }
 
   const annul = lireCode('app/api/rdv/cancel/route.js')
   verifie('un rendez-vous annulé rend la récompense',
@@ -405,16 +427,22 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
   verifie('et la colonne est bien demandée',
     /fidelite_recompense_id/.test(annul.split('const query =')[0]))
 
-  // ⚠️ 🔴 LA LIMITE ASSUMÉE : le RDV SANS acompte est inséré depuis le
-  // NAVIGATEUR. Y brancher la récompense laisserait le client écrire lui-même
-  // le montant de sa remise, c'est-à-dire le défaut corrigé le 24/08 sur la
-  // carte de fidélité. Le bloc n'est donc proposé que si un acompte en ligne
-  // est demandé. Cette garde EXISTE pour empêcher qu'on lève la condition sans
-  // avoir d'abord écrit la route serveur.
+  // ⚠️ LA RAISON DE CETTE GARDE A CHANGÉ LE 30/08, ET IL FAUT LE DIRE.
+  //
+  // Elle existait parce que le rendez-vous SANS acompte s'insérait depuis le
+  // NAVIGATEUR : y brancher la récompense aurait laissé le client écrire
+  // lui-même le montant de sa remise. Ce n'est plus vrai, `/api/rdv/reserver`
+  // crée tout côté serveur.
+  //
+  // ⚠️ ELLE RESTE, POUR UNE AUTRE RAISON, ET C'EST UNE DÉCISION D'ALEX : sans
+  // paiement en ligne, on INFORME, on ne débite pas. Consommer une récompense
+  // des semaines avant un rendez-vous qui ne fait sortir aucun argent, c'est la
+  // brûler pour rien si la personne ne vient pas. La récompense reste utilisable
+  // au comptoir, où le commerçant la voit sur la fiche.
   const pageRdv = lireCode('app/commander/rdv/[slug]/page.js')
-  verifie('🔴 la récompense n\'est proposée QUE si un acompte en ligne est pris',
+  verifie('la récompense n\'est proposée QUE si un acompte en ligne est pris',
     /recompenseFid && !seanceSurAbo && prixBase != null && acompteEnLigne &&/.test(pageRdv),
-    'sans acompte, le RDV s\'insère depuis le navigateur : la remise serait écrite par le client')
+    'sans paiement en ligne, on informe, on ne débite pas (décision Alex 30/08)')
   verifie('l\'écran du RDV envoie la réservation avec la preuve d\'identité',
     /fetchAvecPreuveSiConnecte\('\/api\/stripe\/checkout\/create-rdv-acompte'/.test(pageRdv))
   verifie('et l\'identifiant part dans le corps',

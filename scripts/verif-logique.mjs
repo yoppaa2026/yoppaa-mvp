@@ -1182,20 +1182,40 @@ const srcResaRdv = sansCommentaires(
 const srcWebhookRdv = sansCommentaires(
   readFileSync(new URL('../app/api/stripe/webhook/route.js', import.meta.url), 'utf8'))
 
-verifier('la réservation grave la capacité',
-  /capacite_creneau: capacitePrestation\(prestationChoisie\)/.test(srcResaRdv))
+// ⚠️ CES QUATRE GARDES MESURAIENT LA FORME D'UN PAYLOAD, dans deux fichiers qui
+// n'en construisent plus (30/08). La capacité, la place, le lieu et la TVA
+// vivent maintenant dans `lib/rdv-creation-server.js`, et les quatre écrans qui
+// inscrivent lui délèguent. Ce qui compte n'est plus « écrit-il
+// `capacite_creneau` ? » mais « passe-t-il par le seul endroit qui sait ? ».
+//
+// Le contenu du payload, lui, est mesuré EN EXÉCUTANT le module dans
+// `scripts/verif-tunnel-rdv.mjs` : une garde de forme n'aurait pas vu qu'une
+// place figée est périmée, une garde qui exécute le voit.
+const srcCreationRdv = sansCommentaires(
+  readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
+
+// 🔴 L'ÉCRAN N'ÉCRIT PLUS DANS LA TABLE. Il l'a fait jusqu'au 30/08, sans
+// qu'aucune garde serveur ne vérifie le forfait, l'interrupteur d'agenda,
+// l'appartenance de la prestation ni le prix.
+verifier('la réservation sans paiement passe par le serveur',
+  /fetchAvecPreuveSiConnecte\('\/api\/rdv\/reserver'/.test(srcResaRdv))
+verifier('et l’écran n’insère plus lui-même de rendez-vous',
+  !/from\('rdv_reservations'\)\s*\.insert/.test(srcResaRdv))
+verifier('le paiement d’acompte délègue lui aussi',
+  /creerReservationRdv\(supabase, \{/.test(srcWebhookRdv))
+// ⚠️ La place se calcule à l'ÉCRITURE, pas au moment du paiement : entre les
+// deux, d'autres personnes ont pu s'inscrire, et une place figée dans les
+// métadonnées Stripe serait périmée APRÈS que le client a payé. Le webhook ne
+// doit donc plus prononcer le mot.
+verifier('et ne fige plus la place dans les métadonnées',
+  !/place_no/.test(srcWebhookRdv))
 // ⚠️ ANCRÉ SUR `premierePlaceLibre`, jamais sur un comptage : c'est la
 // différence entre réattribuer la place libérée au milieu et en redemander une
 // déjà occupée.
-verifier('et prend la première place libre',
-  /place_no: premierePlaceLibre\(prestationChoisie, slotChoisi\?\.placesOccupees/.test(srcResaRdv))
-verifier('le paiement d’acompte grave la capacité aussi',
-  /payload\.capacite_creneau = capacite/.test(srcWebhookRdv))
-// ⚠️ La place se calcule à l'arrivée du WEBHOOK, pas au moment du paiement :
-// entre les deux, d'autres personnes ont pu s'inscrire, et une place figée
-// dans les métadonnées Stripe serait périmée APRÈS que le client a payé.
-verifier('et la calcule au moment de créer le rendez-vous',
-  /payload\.place_no = premierePlaceLibre\(presta,/.test(srcWebhookRdv))
+verifier('le module prend la première place libre',
+  /premierePlaceLibre\(prestation, \(dejaLa \|\| \[\]\)\.map\(r => r\.place_no\)\)/.test(srcCreationRdv))
+verifier('et il grave la capacité',
+  /capacite_creneau: capacite/.test(srcCreationRdv))
 // Le moteur reçoit la capacité, sans quoi un cours se fermerait au premier
 // inscrit et personne ne pourrait jamais être deux.
 //
@@ -1321,32 +1341,42 @@ verifier('un commerce qui bouge ne se voit pas proposer d’adresse fixe',
 verifier('et un commerce fixe ne se voit pas proposer de planning',
   /\{mobile && \(<>/.test(srcConfigLieux))
 
-const ECRANS_QUI_GRAVENT = [
-  ['la réservation par le client', 'app/commander/rdv/[slug]/page.js'],
-  ['le paiement d’acompte', 'app/api/stripe/webhook/route.js'],
-  ['la création par le commerçant', 'app/dashboard/ModalNouveauRdv.js'],
-]
+// ⚠️ LA MODALE DU COMMERÇANT EST LA SEULE QUI GRAVE ENCORE ELLE-MÊME. Les trois
+// autres écrans passent par `creerReservationRdv` depuis le 30/08 : le lieu s'y
+// grave une fois pour tout le monde.
+//
 // ⚠️ ANCRÉ SUR L'ÉCRITURE, PAS SUR L'APPEL. La première version cherchait
 // `champsLieuPour(` et restait VERTE quand on neutralisait son résultat :
 // l'appel était bien écrit, il ne servait simplement plus à rien. Un test qui
 // vérifie qu'un morceau de code EXISTE ne dit rien de ce qu'il fait, et c'est
 // la quatrième forme du test faussement vert de ce projet.
-for (const [nom, chemin] of ECRANS_QUI_GRAVENT) {
-  const src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
-  verifier(`${nom} grave le lieu dans la réservation`,
+{
+  const src = sansCommentaires(
+    readFileSync(new URL('../app/dashboard/ModalNouveauRdv.js', import.meta.url), 'utf8'))
+  verifier('la création par le commerçant grave le lieu dans la réservation',
     /Object\.assign\(payload, await champsLieuPour\(/.test(src)
     || /\.\.\.lieu,/.test(src) && /const lieu = await champsLieuPour\(/.test(src))
 }
+// Et le module grave celui des trois autres, en l'étalant DANS le payload : un
+// `champsLieuPour` appelé sans que son résultat serve laisserait la garde verte
+// et le client au siège social.
+verifier('le module grave le lieu dans la réservation',
+  /const lieu = await champsLieuPour\(db, commercant/.test(srcCreationRdv)
+  && /\.\.\.lieu,/.test(srcCreationRdv))
 // Le lieu se résout à la DATE ET À L'HEURE : c'est ce qui distingue le service
 // du midi de celui du soir chez un food truck.
-const srcResaClient = sansCommentaires(
-  readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
 verifier('et il le résout à l’heure du rendez-vous',
-  /jour: dateStr, heure: heureChoisie/.test(srcResaClient))
+  /\{ jour: dateRdv, heure, lieuId \}/.test(srcCreationRdv))
 // ⚠️ Mais le CHOIX EXPLICITE du commerçant l'emporte : quand la plage de
 // réservation désigne un emplacement, le déduire de l'heure le contredirait.
+// Il voyage donc de l'écran jusqu'au module, en trois relais.
+const srcResaClient = sansCommentaires(
+  readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+const srcRouteReserver = sansCommentaires(
+  readFileSync(new URL('../app/api/rdv/reserver/route.js', import.meta.url), 'utf8'))
 verifier('sauf si la plage désigne elle-même un emplacement',
-  /lieuId: plageChoisie\?\.lieu_id \|\| null/.test(srcResaClient))
+  /lieu_id: plageChoisie\?\.lieu_id \|\| null/.test(srcResaClient)
+  && /lieuId: lieu_id/.test(srcRouteReserver))
 
 // ─── L'ACCUEIL MESURE JUSQU'AU BON ENDROIT ────────────────────────────────
 // ⚠️ La distance se mesurait depuis le SIÈGE SOCIAL. Le food truck affichait la

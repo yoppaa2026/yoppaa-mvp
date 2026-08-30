@@ -181,11 +181,127 @@ const MUTATIONS = [
     de: '                          {remiseFid > 0 && (',
     vers: '                          {false && (' },
 
-  // ─── 10) L'AVANTAGE QUI S'ÉVAPORE ────────────────────────────────────
-  { nom: '🔴 un bon qui annule l’acompte repart en insertion directe, sans débit',
+  // ─── 10) LA CRÉATION DE RÉSERVATION, MESURÉE EN L'EXÉCUTANT (30/08) ──
+  //
+  // ⚠️ CES MUTATIONS-LÀ SONT LES PLUS IMPORTANTES DU FICHIER. Le lieu, la
+  // capacité, la place et la TVA vivaient en QUATRE copies, et les gardes qui
+  // les surveillaient cherchaient `place_no:` dans quatre fichiers : une FORME,
+  // pas une RÈGLE. Une place figée à 1 serait passée sans un rougissement.
+  { nom: '🔴 la place se COMPTE au lieu de chercher la première libre',
+    fichier: 'lib/rdv-creation-server.js',
+    de: '    placeNo = premierePlaceLibre(prestation, (dejaLa || []).map(r => r.place_no)) || 1',
+    vers: '    placeNo = (dejaLa || []).length + 1' },
+
+  { nom: '🔴 la capacité gravée retombe à 1, la contrainte bloque le 2e inscrit',
+    fichier: 'lib/rdv-creation-server.js',
+    de: '    capacite_creneau: capacite,',
+    vers: '    capacite_creneau: 1,' },
+
+  { nom: '🔴 la TVA n’est plus figée à la réservation',
+    fichier: 'lib/rdv-creation-server.js',
+    de: '    tva_taux: prestation.tva_taux ?? null,',
+    vers: '    tva_taux: null,' },
+
+  // 🔴 L'ORDRE DU SPREAD : un appelant pourrait alors imposer sa propre place,
+  // et on recrée exactement la divergence que le module existe pour tuer.
+  { nom: '🔴 l’appelant peut imposer sa place, sa capacité et sa TVA',
+    fichier: 'lib/rdv-creation-server.js',
+    de: '    capacite_creneau: capacite,\n    place_no: placeNo,\n  }',
+    vers: '    capacite_creneau: capacite,\n    place_no: placeNo,\n    ...champs,\n  }' },
+
+  // 🔴 CROISER DEUX IDENTIFIANTS SANS VÉRIFIER LEUR LIEN : la prestation d’un
+  // salon se réserverait dans l’agenda d’un autre.
+  { nom: '🔴 la prestation n’est plus rattachée à son commerce',
+    fichier: 'lib/rdv-creation-server.js',
+    de: "  if (String(prestation.commercant_id) !== String(commercantId)) {",
+    vers: '  if (false) {' },
+
+  // ⚠️ UN RENDEZ-VOUS ANNULÉ LIBÈRE SA PLACE : la compter la rendrait
+  // introuvable, et un cours à moitié vide afficherait complet.
+  { nom: '🔴 un rendez-vous annulé occupe encore sa place',
+    fichier: 'lib/rdv-creation-server.js',
+    de: "      .in('statut', STATUTS_OCCUPENT)",
+    vers: "      .in('statut', ['confirme', 'honore', 'annule_client'])" },
+
+  // 🔴 LE LIEU EXPLICITE DE LA PLAGE : sans lui, la confirmation envoie au
+  // siège social, donc au DOMICILE d’une commerçante inscrite chez elle.
+  { nom: '🔴 le lieu explicite de la plage est ignoré',
+    fichier: 'lib/rdv-creation-server.js',
+    de: '  const lieu = await champsLieuPour(db, commercant, { jour: dateRdv, heure, lieuId })',
+    vers: '  const lieu = await champsLieuPour(db, commercant, { jour: dateRdv, heure })' },
+
+  { nom: '🔴 un chevauchement de praticien devient une panne technique',
+    fichier: 'lib/rdv-creation-server.js',
+    de: "    if (error.code === '23505' || error.code === '23P01') {",
+    vers: "    if (error.code === '23505') {" },
+
+  { nom: '🔴 un cours complet dit « ce créneau vient d’être pris »',
+    fichier: 'lib/rdv-creation-server.js',
+    de: "      return { ok: false, code: 'place_prise', collectif: capacite > 1 }",
+    vers: "      return { ok: false, code: 'place_prise', collectif: false }" },
+
+  // ─── 11) LA ROUTE SANS PAIEMENT ET SES GARDES ────────────────────────
+  //
+  // 🔴 LA GARDE QUI FAIT TENIR TOUT LE RESTE : sans elle, il suffit d’appeler
+  // cette route pour réserver sans payer l’acompte du commerçant.
+  { nom: '🔴 un acompte encaissable passe quand même sans paiement',
+    fichier: 'app/api/rdv/reserver/route.js',
+    de: '    if (vent.acompte >= MINIMUM_STRIPE) {',
+    vers: '    if (false) {' },
+
+  { nom: '🔴 le forfait du commerçant n’est plus vérifié',
+    fichier: 'app/api/rdv/reserver/route.js',
+    de: "    const verdict = verdictForfait(commercant, 'rdv')",
+    vers: '    const verdict = { ok: true }' },
+
+  { nom: '🔴 l’interrupteur d’agenda n’est plus regardé',
+    fichier: 'app/api/rdv/reserver/route.js',
+    de: '    if (!commercant.rdv_actif) {',
+    vers: '    if (false) {' },
+
+  { nom: '🔴 la récompense s’accorde sans identité prouvée',
+    fichier: 'app/api/rdv/reserver/route.js',
+    de: '      const identite = await identiteProuvee(request)',
+    vers: "      const identite = { email: client_email }" },
+
+  { nom: '🔴 un créneau déjà passé est accepté',
+    fichier: 'app/api/rdv/reserver/route.js',
+    de: '    if (isNaN(instant.getTime()) || instant.getTime() <= Date.now()) {',
+    vers: '    if (false) {' },
+
+  // 🔴 UN `client_id` FOURNI PAR L’APPELANT rattacherait le rendez-vous à la
+  // fiche de n’importe qui.
+  { nom: '🔴 la fiche client est désignée par l’appelant',
+    fichier: 'app/api/rdv/reserver/route.js',
+    de: "      const { data: fiche } = await db.from('clients').select('id').eq('email', email).maybeSingle()",
+    vers: "      const { data: fiche } = await db.from('clients').select('id').eq('id', body.client_id).maybeSingle()" },
+
+  // ─── 12) LE PANIER ENTIÈREMENT COUVERT ───────────────────────────────
+  { nom: '🔴 « couvert sans paiement » n’est plus déduit du total',
+    fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '    const couvertSansPaiement = totalCents === 0 && (!!bonCadeau || !!recompense)',
+    vers: '    const couvertSansPaiement = false' },
+
+  { nom: '🔴 la part produits du bon n’est plus débitée',
+    fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: "        const deb = await debiterBon(supabase, bonCadeau.id, vent.bonSurProduits, { source: 'commande', commande_id: commande.id })",
+    vers: '        const deb = { ok: true }' },
+
+  { nom: '🔴 un second débit raté laisse le premier dépensé',
+    fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '          if (vent.bonSurPresta > 0) await recrediterBon(supabase, bonCadeau.id, vent.bonSurPresta, { rdv_id: idRdv })',
+    vers: '          if (false) await recrediterBon(supabase, bonCadeau.id, 0, {})' },
+
+  { nom: '🔴 la commande couverte n’est plus marquée payée en ligne',
+    fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '          paye_en_ligne: true,',
+    vers: '          paye_en_ligne: false,' },
+
+  // ─── 13) L'ÉCRAN N'ÉCRIT PLUS LUI-MÊME ───────────────────────────────
+  { nom: '🔴 la réservation sans paiement repart sans preuve d’identité',
     fichier: 'app/commander/rdv/[slug]/page.js',
-    de: '      const avantageUtilise = !!bonChoisi || !!(recompenseFid && recompenseActive)',
-    vers: '      const avantageUtilise = false' },
+    de: "        const res = await fetchAvecPreuveSiConnecte('/api/rdv/reserver', {",
+    vers: "        const res = await fetch('/api/rdv/reserver', {" },
 ]
 
 function lancer() {

@@ -139,9 +139,22 @@ const egal = (nom, obtenu, attendu) =>
     /fidelite_remise: vent\.recompenseSurProduits/.test(src))
   verifie('la part prestation part vers le rendez-vous',
     /fidelite_remise: String\(vent\.recompenseSurPresta\)/.test(src))
-  // ⚠️ ET UN SEUL PORTEUR DE LA RÉCOMPENSE : elle est consommée une fois.
+  // ⚠️ ET UN SEUL PORTEUR DE LA RÉCOMPENSE : elle est consommée une fois, et
+  // c'est le RENDEZ-VOUS qui la porte. La poser aussi sur la commande ferait
+  // croire à deux consommations.
+  //
+  // ⚠️ ON ISOLE L'INSERT DE LA COMMANDE. La garde cherchait le mot dans TOUT le
+  // fichier, et elle a rougi le 30/08 sur du code juste : le rendez-vous créé
+  // sans paiement porte légitimement `fidelite_recompense_id`. Chercher un mot
+  // dans un fichier qui parle de ce mot ailleurs ne mesure rien.
+  const insertCommande = (() => {
+    const i = src.indexOf('.from(\'commandes\')\n      .insert({')
+    return i < 0 ? '' : src.slice(i, src.indexOf('\n      })', i))
+  })()
+  verifie('l’insert de la commande est bien trouvé', insertCommande.length > 200,
+    `${insertCommande.length} caractères`)
   verifie('la commande ne porte pas l’identifiant de la récompense',
-    !/fidelite_recompense_id: recompense/.test(src))
+    !/fidelite_recompense_id/.test(insertCommande))
   // ⚠️ L'ASSIETTE EST LE PANIER, calculée après la lecture des produits.
   verifie('l’assiette de la récompense est le panier entier',
     /assietteRecompense = arrondiEuros\(\(prixBase \|\| 0\) \+ produitsCents/.test(src))
@@ -349,15 +362,23 @@ for (const chemin of [
   // retour de Stripe ne peut rien dire de ce qui vient d'être payé.
   verifie('le cliché de session porte la ventilation', /ventilation: ventFigee/.test(src))
   verifie('et l’écran de confirmation la lit', /_ventilation/.test(src))
-  // ⚠️ UN AVANTAGE NE DOIT PAS S'ÉVAPORER : si le bon annule l'acompte, le
-  // rendez-vous basculerait sur l'insertion directe, qui ne débite rien.
+  // ✅ UN AVANTAGE NE S'ÉVAPORE PLUS, ET ON NE LE REFUSE PLUS NON PLUS (30/08).
   //
-  // ⚠️ ON MESURE LA DÉFINITION, pas le nom. Le remplacer par `false` gardait
-  // le nom en place, donc la garde verte : deuxième fois dans ce fichier.
-  const defAvantage = (src.match(/const avantageUtilise = [^\n]*/) || [''])[0]
-  verifie('l’avantage est reconnu depuis le bon ET la récompense',
-    /bonChoisi/.test(defAvantage) && /recompenseActive/.test(defAvantage), defAvantage)
-  verifie('et le refus dit le geste à faire', /couvre déjà tout/.test(src))
+  // Il a existé ici une garde d'écran : quand le bon annulait l'acompte, le
+  // rendez-vous basculait sur l'insertion DIRECTE, qui ne débite rien, donc on
+  // refusait la réservation. Le remède réel était une route serveur, elle
+  // existe, et le refus a disparu avec elle.
+  //
+  // ⚠️ CE QUI SE VÉRIFIE MAINTENANT EST PLUS FORT : l'écran n'écrit plus dans
+  // la table, et la seule sortie sans paiement passe par le serveur. Une garde
+  // d'écran n'est jamais une réponse ; celle-ci mesure qu'il n'y a plus d'écran
+  // à garder.
+  verifie('l’écran n’insère plus aucun rendez-vous lui-même',
+    !/from\('rdv_reservations'\)\s*\.insert/.test(src))
+  verifie('et la réservation sans paiement passe par la route serveur',
+    /fetchAvecPreuveSiConnecte\('\/api\/rdv\/reserver'/.test(src))
+  verifie('l’ancien refus « le bon couvre déjà tout » a disparu',
+    !/couvre déjà tout/.test(src))
 }
 {
   const src = lireCode('app/api/stripe/checkout/create-rdv-commande/route.js')
@@ -371,8 +392,274 @@ for (const chemin of [
   // ferait payer au client ce que son bon vient de couvrir.
   verifie('le détail laisse la place à une ligne unique quand un avantage mord',
     /if \(deduitSurProduits\)/.test(src))
-  // ⚠️ ET UN PANIER ENTIÈREMENT COUVERT NE PART PAS CHEZ STRIPE POUR RIEN.
-  verifie('un total nul est refusé avec le geste à faire', /rien_a_payer/.test(src))
+  // ✅ ET UN PANIER ENTIÈREMENT COUVERT EST CONFIRMÉ SANS STRIPE (30/08). Il
+  // était REFUSÉ : « ton bon couvre la totalité, réserve sans produits ». Le cas
+  // le plus favorable au client était le seul qu'on renvoyait au comptoir.
+  //
+  // ⚠️ LE SERVEUR LE CALCULE, il ne le reçoit pas : sinon il suffirait
+  // d'annoncer « c'est couvert » pour réserver sans payer. On mesure la
+  // DÉFINITION, pas le nom : la remplacer par `true` gardait le nom en place.
+  const defCouvert = (src.match(/const couvertSansPaiement = [^\n]*/) || [''])[0]
+  verifie('« couvert » se déduit du total ET d’un avantage réel',
+    /totalCents === 0/.test(defCouvert)
+    && /bonCadeau/.test(defCouvert) && /recompense/.test(defCouvert), defCouvert)
+  verifie('et il n’est jamais reçu du navigateur',
+    !/couvertSansPaiement\s*[,}]/.test(src.split('const body =')[1]?.split('}')[0] || ''))
+  verifie('le rendez-vous se crée alors côté serveur',
+    /if \(couvertSansPaiement\) \{/.test(src) && /creerReservationRdv\(supabase, \{/.test(src))
+  // ⚠️ ET LES DEUX MOUVEMENTS DU BON PARTENT, un par cible : la contrainte
+  // `bons_cadeaux_mouvements_une_cible` interdit un mouvement qui désignerait
+  // les deux à la fois.
+  verifie('le bon est débité sur la prestation ET sur les produits',
+    /debiterBon\(supabase, bonCadeau\.id, vent\.bonSurPresta, \{ source: 'rdv'/.test(src)
+    && /debiterBon\(supabase, bonCadeau\.id, vent\.bonSurProduits, \{ source: 'commande'/.test(src))
+  // ⚠️ ET ON REND CE QU'ON VIENT DE PRENDRE si le second débit échoue : laisser
+  // la part prestation dépensée ferait perdre de l'argent au porteur du bon
+  // pour une réservation qui n'a pas eu lieu.
+  verifie('un second débit raté recrédite le premier',
+    /recrediterBon\(supabase, bonCadeau\.id, vent\.bonSurPresta, \{ rdv_id: idRdv \}\)/.test(src))
+  verifie('et la commande couverte est marquée payée en ligne',
+    /paye_en_ligne: true/.test(src) && /rdv_reservation_id: idRdv/.test(src))
+}
+
+// ═══ 5 bis) LA CRÉATION DE RÉSERVATION, EXÉCUTÉE ══════════════════════════
+//
+// ⚠️ EXÉCUTÉE, PAS RELUE. Le lieu, la capacité, la place et la TVA vivaient en
+// quatre copies : les gardes qui les surveillaient cherchaient `place_no:` dans
+// quatre fichiers, c'est-à-dire une FORME, pas une RÈGLE. Une place figée à 1
+// ou une capacité recopiée à côté seraient passées.
+//
+// La base est simulée : un objet qui rend ce qu'on lui a dit de rendre, et qui
+// GARDE le payload inséré. C'est lui qu'on inspecte.
+{
+  const { creerReservationRdv } = await import('../lib/rdv-creation-server.js')
+
+  function baseSimulee({ prestation, lieux = [], placesPrises = [], erreurInsert = null }) {
+    const vu = { payload: null, filtresPlaces: {} }
+    const table = (nom) => {
+      const filtres = {}
+      const chaine = {
+        select: () => chaine,
+        eq: (col, val) => { filtres[col] = val; return chaine },
+        in: (col, val) => { filtres[col] = val; return chaine },
+        is: () => chaine,
+        maybeSingle: async () => ({
+          data: nom === 'rdv_prestations' ? prestation
+            : nom === 'commercants' ? { id: 'c1', nom: 'Ciseaux et Soins', adresse: 'Rue du Siège 1' }
+            : null,
+        }),
+        single: async () => ({
+          data: { id: 'rdv-1', numero_rdv: 42, numero_prefixe: 'RV', place_no: vu.payload?.place_no },
+          error: erreurInsert,
+        }),
+        insert: (p) => { vu.payload = p; return chaine },
+        // Les lectures sans `.single()` sont attendues directement : la chaîne
+        // doit donc être « thenable », comme l'est un client Supabase.
+        then: (resoudre) => resoudre(
+          nom === 'commercant_lieux' ? { data: lieux }
+          : nom === 'rdv_reservations' ? (vu.filtresPlaces = filtres, { data: placesPrises.map(place_no => ({ place_no })) })
+          : { data: [] }
+        ),
+      }
+      return chaine
+    }
+    return { from: table, _vu: vu }
+  }
+
+  const PRESTA_SOLO = { id: 'p1', nom: 'Coupe', capacite: 1, tva_taux: 21, duree_minutes: 45, commercant_id: 'c1' }
+  const PRESTA_COURS = { id: 'p2', nom: 'Hatha yoga', capacite: 12, tva_taux: 6, duree_minutes: 60, commercant_id: 'c1' }
+
+  // ── Le cas ordinaire : un rendez-vous individuel ────────────────────────
+  {
+    const db = baseSimulee({ prestation: PRESTA_SOLO })
+    const res = await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'p1',
+      dateRdv: '2026-09-07', heureDebut: '10:00',
+      champs: { client_email: 'a@b.be', prix_estime: 35 },
+    })
+    verifie('la création rend le rendez-vous créé', res.ok === true && res.rdv?.id === 'rdv-1')
+    egal('la capacité gravée vaut 1 sur une prestation solo', db._vu.payload.capacite_creneau, 1)
+    egal('et la place vaut 1', db._vu.payload.place_no, 1)
+    egal('la TVA est figée depuis la prestation', db._vu.payload.tva_taux, 21)
+    verifie('les champs de l’appelant sont conservés',
+      db._vu.payload.client_email === 'a@b.be' && db._vu.payload.prix_estime === 35)
+    verifie('le commerce et la prestation sont écrits',
+      db._vu.payload.commercant_id === 'c1' && db._vu.payload.prestation_id === 'p1')
+    // ⚠️ L'HEURE EST NORMALISÉE EN HH:MM. Une heure en HH:MM:SS ne trouverait
+    // aucune place prise et en redonnerait une déjà occupée.
+    verifie('l’heure est normalisée', db._vu.payload.heure_debut === '10:00')
+  }
+
+  // ── LA PLACE LIBÉRÉE AU MILIEU, le cœur du sujet ────────────────────────
+  {
+    const db = baseSimulee({ prestation: PRESTA_COURS, placesPrises: [1, 2, 4] })
+    await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'p2',
+      dateRdv: '2026-09-07', heureDebut: '18:30', champs: {},
+    })
+    // 🔴 SI CE NOMBRE VAUT 4, C'EST QU'ON COMPTE AU LIEU DE CHERCHER : la place
+    // 3 a été libérée par une annulation, l'index unique rejetterait la 4.
+    egal('la place est la première LIBRE, pas « inscrits + 1 »', db._vu.payload.place_no, 3)
+    egal('et la capacité du cours est gravée', db._vu.payload.capacite_creneau, 12)
+    // ⚠️ LES PLACES SE LISENT SUR CETTE SÉANCE-LÀ, pas sur la journée : sans le
+    // filtre de prestation, deux cours à la même heure se voleraient leurs
+    // places.
+    verifie('les places prises sont lues sur la bonne séance',
+      db._vu.filtresPlaces.date_rdv === '2026-09-07'
+      && db._vu.filtresPlaces.heure_debut === '18:30'
+      && db._vu.filtresPlaces.prestation_id === 'p2')
+    // ⚠️ ET SEULS LES STATUTS QUI OCCUPENT COMPTENT : un rendez-vous annulé
+    // libère sa place, la compter la rendrait introuvable.
+    verifie('et seuls les rendez-vous vivants occupent une place',
+      Array.isArray(db._vu.filtresPlaces.statut)
+      && db._vu.filtresPlaces.statut.includes('confirme')
+      && !db._vu.filtresPlaces.statut.includes('annule_client'))
+  }
+
+  // ── LE LIEU GRAVÉ, et le choix explicite qui l'emporte ──────────────────
+  {
+    const LIEUX = [
+      { id: 'L1', type: 'hebdo', jour_semaine: 'lundi', libelle: 'Salle du Centre', adresse: 'Place 3', heure_debut: '18:00', heure_fin: '21:00', actif: true },
+      { id: 'L2', type: 'hebdo', jour_semaine: 'lundi', libelle: 'Salle des Fêtes', adresse: 'Rue Haute 9', heure_debut: '09:00', heure_fin: '12:00', actif: true },
+    ]
+    const db = baseSimulee({ prestation: PRESTA_COURS, lieux: LIEUX })
+    await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'p2',
+      dateRdv: '2026-09-07', heureDebut: '18:30', lieuId: 'L2', champs: {},
+    })
+    // 🔴 SANS CE CHOIX, LA CONFIRMATION ENVOIE AU SIÈGE SOCIAL, donc au domicile
+    // d'une commerçante inscrite chez elle mais qui donne cours en salle.
+    verifie('le lieu explicite de la plage l’emporte sur l’heure',
+      db._vu.payload.lieu_id === 'L2' && db._vu.payload.lieu_libelle === 'Salle des Fêtes')
+  }
+  {
+    const LIEUX = [
+      { id: 'L1', type: 'hebdo', jour_semaine: 'lundi', libelle: 'Salle du Centre', adresse: 'Place 3', heure_debut: '18:00', heure_fin: '21:00', actif: true },
+    ]
+    const db = baseSimulee({ prestation: PRESTA_COURS, lieux: LIEUX })
+    await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'p2',
+      dateRdv: '2026-09-07', heureDebut: '18:30', champs: {},
+    })
+    verifie('et sans plage désignée, le lieu se résout à l’heure',
+      db._vu.payload.lieu_id === 'L1')
+  }
+
+  // ── CE QUE LE MODULE DÉCIDE L'EMPORTE SUR CE QU'ON LUI PASSE ────────────
+  {
+    const db = baseSimulee({ prestation: PRESTA_COURS, placesPrises: [1, 2] })
+    await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'p2',
+      dateRdv: '2026-09-07', heureDebut: '18:30',
+      champs: { place_no: 1, capacite_creneau: 1, tva_taux: 99 },
+    })
+    // 🔴 UN APPELANT QUI RECOPIERAIT SA PROPRE PLACE RECRÉERAIT EXACTEMENT la
+    // divergence que ce module existe pour tuer.
+    egal('un appelant ne peut pas imposer sa place', db._vu.payload.place_no, 3)
+    egal('ni sa capacité', db._vu.payload.capacite_creneau, 12)
+    egal('ni son taux de TVA', db._vu.payload.tva_taux, 6)
+  }
+
+  // ── LA PRESTATION D'UN AUTRE COMMERCE EST REFUSÉE ───────────────────────
+  {
+    const db = baseSimulee({ prestation: { ...PRESTA_SOLO, commercant_id: 'AUTRE' } })
+    const res = await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'p1',
+      dateRdv: '2026-09-07', heureDebut: '10:00', champs: {},
+    })
+    // 🔴 CROISER DEUX IDENTIFIANTS SANS VÉRIFIER LEUR LIEN laisserait réserver
+    // la prestation d'un salon dans l'agenda d'un autre.
+    verifie('une prestation d’un autre commerce est refusée',
+      res.ok === false && res.code === 'prestation_hors_commerce')
+    verifie('et rien n’est écrit', db._vu.payload === null)
+  }
+  {
+    const db = baseSimulee({ prestation: null })
+    const res = await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'inconnue',
+      dateRdv: '2026-09-07', heureDebut: '10:00', champs: {},
+    })
+    verifie('une prestation introuvable est refusée',
+      res.ok === false && res.code === 'prestation_introuvable')
+  }
+
+  // ── LE DOUBLE-BOOKING EST NOMMÉ, PAS AVALÉ ──────────────────────────────
+  {
+    const db = baseSimulee({ prestation: PRESTA_COURS, placesPrises: [1], erreurInsert: { code: '23505' } })
+    const res = await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'p2',
+      dateRdv: '2026-09-07', heureDebut: '18:30', champs: {},
+    })
+    // ⚠️ « COLLECTIF » CHANGE LA PHRASE MONTRÉE : sur un cours de douze, « ce
+    // créneau vient d'être pris » laisserait croire que le cours est annulé.
+    verifie('un doublon rend « place_prise » et dit que c’est un cours',
+      res.ok === false && res.code === 'place_prise' && res.collectif === true)
+  }
+  {
+    const db = baseSimulee({ prestation: PRESTA_SOLO, erreurInsert: { code: '23P01' } })
+    const res = await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'p1',
+      dateRdv: '2026-09-07', heureDebut: '10:00', champs: {},
+    })
+    verifie('un chevauchement de praticien aussi, sans parler de cours',
+      res.ok === false && res.code === 'place_prise' && res.collectif === false)
+  }
+  {
+    const db = baseSimulee({ prestation: PRESTA_SOLO, erreurInsert: { code: '42P01', message: 'table absente' } })
+    const res = await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'p1',
+      dateRdv: '2026-09-07', heureDebut: '10:00', champs: {},
+    })
+    // ⚠️ UNE PANNE N'EST PAS UN CRÉNEAU PRIS. Les confondre enverrait le client
+    // choisir un autre horaire devant un agenda parfaitement libre.
+    verifie('et toute autre erreur reste une panne, pas un créneau pris',
+      res.ok === false && res.code === 'ecriture_impossible')
+  }
+}
+
+// ═══ 5 ter) LA ROUTE SANS PAIEMENT, ET SA GARDE ═══════════════════════════
+{
+  const src = lireCode('app/api/rdv/reserver/route.js')
+  // 🔴 LA GARDE QUI FAIT TENIR TOUT LE RESTE : si un acompte encaissable
+  // subsiste, cette route n'est pas le bon chemin, et l'accepter ferait perdre
+  // son acompte au commerçant en silence.
+  verifie('un acompte encaissable renvoie vers le paiement',
+    /if \(vent\.acompte >= MINIMUM_STRIPE\)/.test(src) && /paiement_requis: true/.test(src))
+  // ⚠️ ET LE SEUIL EST LE MINIMUM STRIPE, pas zéro : entre 0 et 0,50 € il n'y a
+  // aucun paiement possible, donc ce chemin-ci est le bon.
+  verifie('et le seuil est bien le minimum encaissable', /MINIMUM_STRIPE = 0\.5/.test(src))
+  // 🔴 LE FORFAIT ET L'INTERRUPTEUR, qui n'étaient vérifiés NULLE PART sur ce
+  // chemin tant qu'il vivait dans le navigateur.
+  verifie('le forfait du commerçant est vérifié', /verdictForfait\(commercant, 'rdv'\)/.test(src))
+  verifie('et son interrupteur d’agenda aussi', /if \(!commercant\.rdv_actif\)/.test(src))
+  // ⚠️ `paiement_ligne` N'EST PAS EXIGÉ ICI, et c'est volontaire : il n'y a rien
+  // à encaisser. L'exiger fermerait la réservation gratuite chez qui ne l'a pas.
+  verifie('mais pas la fonction de paiement, inutile ici',
+    !/verdictForfait\(commercant, 'paiement_ligne'\)/.test(src))
+  // ⚠️ L'IDENTITÉ PROUVÉE POUR LA RÉCOMPENSE, jamais `client_email` : il est
+  // envoyé par le client et ne prouve rien.
+  verifie('la récompense exige une identité prouvée',
+    /const identite = await identiteProuvee\(request\)/.test(src)
+    && /recompense_refusee: 'non_connecte'/.test(src))
+  verifie('et le bon est rechargé en base', /chargerBonValide\(db, \{ code: codeBon/.test(src))
+  // ⚠️ LE CRÉNEAU EST REVÉRIFIÉ CÔTÉ SERVEUR : passé, jour de fermeture, pause.
+  // ⚠️ L'HEURE MURALE BELGE, jamais l'horloge du serveur : Vercel tourne en
+  // temps universel, et un rendez-vous d'hier matin passerait.
+  verifie('un créneau déjà passé est refusé',
+    /brusselsInstant\(date_rdv, heure\)/.test(src) && /instant\.getTime\(\) <= Date\.now\(\)/.test(src))
+  verifie('un jour de fermeture aussi', /est fermé ce jour-là/.test(src))
+  verifie('et une pause aussi', /tombe pendant une pause/.test(src))
+  // 🔴 LA FICHE CLIENT EST RÉSOLUE, PAS REÇUE. Un `client_id` fourni par
+  // l'appelant rattacherait le rendez-vous à la fiche de n'importe qui.
+  verifie('la fiche client se retrouve par l’email, jamais par un identifiant reçu',
+    !/client_id[,:]/.test(src.split('const {')[1]?.split('} = body')[0] || '')
+    && /from\('clients'\)\.select\('id'\)\.eq\('email', email\)/.test(src))
+  // ⚠️ APRÈS L'INSERT, comme partout : les deux mouvements DÉSIGNENT le
+  // rendez-vous, ils ne peuvent pas le précéder.
+  const posCreation = src.indexOf('creerReservationRdv(db, {')
+  const posAvantages = src.indexOf('appliquerAvantagesRdv(db, {')
+  verifie('les avantages s’appliquent APRÈS la création',
+    posCreation > 0 && posAvantages > posCreation, `création ${posCreation}, avantages ${posAvantages}`)
 }
 
 // ═══ 6) L'EMAIL D'ANNULATION DIT L'ARGENT ═════════════════════════════════

@@ -1672,7 +1672,10 @@ verifier('la règle du module est appelée, pas réécrite',
   /peutReserverSurAbonnement\(contrat, \{/.test(srcReserverAbo))
 const iVerdictAbo = srcReserverAbo.indexOf('peutReserverSurAbonnement(contrat')
 const iRefusAbo = srcReserverAbo.indexOf("error: 'refus'")
-const iInsertAbo = srcReserverAbo.indexOf('.insert(payload)')
+// ⚠️ L'ÉCRITURE A CHANGÉ DE NOM LE 30/08 : la route ne bâtit plus son payload,
+// elle délègue à `creerReservationRdv`. Ce qui compte n'a pas bougé d'un pouce,
+// c'est le MOMENT : rien ne doit être écrit avant que le droit soit vérifié.
+const iInsertAbo = srcReserverAbo.indexOf('creerReservationRdv(db, {')
 verifier('rien n’est écrit avant que le droit soit vérifié',
   iVerdictAbo > 0 && iInsertAbo > 0 && iVerdictAbo < iInsertAbo,
   `verdict ${iVerdictAbo}, insert ${iInsertAbo}`)
@@ -1697,27 +1700,30 @@ verifier('et les dates déjà prises aussi, pour le plafond',
 // vert alors que la ligne écrite en base avait disparu. Mesuré en mutation, et
 // c'est la même leçon que le select voisin de ce matin.
 const payloadSeance = (() => {
-  const i = srcReserverAbo.indexOf('const payload = {')
-  return i < 0 ? '' : srcReserverAbo.slice(i, srcReserverAbo.indexOf('\n  }', i))
+  const i = srcReserverAbo.indexOf('champs: {')
+  return i < 0 ? '' : srcReserverAbo.slice(i, srcReserverAbo.indexOf('\n    }', i))
 })()
 verifier('la séance écrite en base porte le contrat qui la paie',
   /abonnement_id: contrat\.id/.test(payloadSeance), payloadSeance ? '' : 'payload introuvable')
 // ⚠️ ZÉRO PARCE QUE C'EST DÉJÀ PAYÉ. Le prix vit sur le CONTRAT : compter le
 // tarif plein ici multiplierait le chiffre d'affaires du commerçant par 36.
 verifier('et un prix nul, le prix vivant sur le contrat', /prix_estime: 0/.test(payloadSeance))
-verifier('aucun acompte n’est réclamé', /acompte_montant: null/.test(srcReserverAbo))
-// ⚠️ LA PREMIÈRE PLACE LIBRE, pas « inscrits + 1 » : une annulation libère une
-// place AU MILIEU, et compter en redonnerait une déjà prise.
-verifier('la place est la première libre', /premierePlaceLibre\(prestation/.test(srcReserverAbo))
-verifier('la capacité est gravée comme partout', /capacite_creneau: capacite/.test(srcReserverAbo))
-// ⚠️ LE LIEU EST GRAVÉ ICI AUSSI. C'est le quatrième chemin qui crée un
-// rendez-vous : sans lui, la confirmation annonce le siège social, donc le
-// DOMICILE d'une commerçante inscrite chez elle mais qui donne cours en salle.
-verifier('le lieu est gravé, comme sur les trois autres chemins',
-  /champsLieuPour\(db, commercant/.test(srcReserverAbo))
-// Le double-booking reste rattrapé par la base, atomiquement.
+verifier('aucun acompte n’est réclamé', /acompte_montant: null/.test(payloadSeance))
+// ⚠️ LA PLACE, LA CAPACITÉ ET LE LIEU ONT QUITTÉ CETTE ROUTE LE 30/08, et c'est
+// le but : ils vivaient en quatre copies, ils vivent dans un module. Ce qui se
+// vérifie ici, c'est la DÉLÉGATION ; le contenu, lui, est mesuré en EXÉCUTANT
+// `creerReservationRdv` dans `scripts/verif-tunnel-rdv.mjs`.
+verifier('la place, la capacité et le lieu viennent du module',
+  /creerReservationRdv\(db, \{/.test(srcReserverAbo))
+verifier('et la route ne les recopie plus elle-même',
+  !/capacite_creneau\s*:/.test(srcReserverAbo)
+  && !/place_no\s*:/.test(srcReserverAbo)
+  && !/champsLieuPour\(/.test(srcReserverAbo))
+// Le double-booking reste rattrapé par la base, atomiquement, et son code
+// remonte jusqu'à l'écran pour qu'il dise « la dernière place vient d'être
+// prise » plutôt qu'une erreur technique.
 verifier('le double-booking est rattrapé par la base',
-  /error\.code === '23505' \|\| error\.code === '23P01'/.test(srcReserverAbo))
+  /res\.code === 'place_prise'/.test(srcReserverAbo))
 
 // ─── L'ÉCRAN ──────────────────────────────────────────────────────────────
 const srcTunnelAbo = sansCommentSrc(lire('app/commander/rdv/[slug]/page.js'))

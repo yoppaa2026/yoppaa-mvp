@@ -40,8 +40,9 @@ import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SEL
 import { normaliserEmail } from '@/lib/email-normalise'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
-import { chargerRecompensePourYopper } from '@/lib/fidelite-recompense-server'
-import { chargerBonValide } from '@/lib/bons-cadeaux-server'
+import { chargerRecompensePourYopper, consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
+import { chargerBonValide, debiterBon, recrediterBon } from '@/lib/bons-cadeaux-server'
+import { creerReservationRdv } from '@/lib/rdv-creation-server'
 import { normaliserCodeBon } from '@/lib/bons-cadeaux'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { euros } from '@/lib/montants'
@@ -269,7 +270,6 @@ export async function POST(request) {
     const acompteMontant = vent.acompte
     const acompteCents = Math.round(acompteMontant * 100)
     const produitsAPayerCents = Math.round(vent.produitsAPayer * 100)
-    const bonSurProduitsCents = Math.round(vent.bonSurProduits * 100)
 
     // ⚠️ ICI, PAS DE REFUS SI L'ACOMPTE TOMBE SOUS LE MINIMUM STRIPE, contrairement
     // au tunnel d'acompte seul : le panier porte AUSSI des produits, donc le
@@ -278,18 +278,24 @@ export async function POST(request) {
     // rendez-vous reste confirmé (règle déjà en place plus haut).
     //
     // ⚠️ EN REVANCHE, UN BON QUI COUVRE TOUT NE LAISSE RIEN À ENCAISSER, et ce
-    // cas n'existait pas avant que le bon paie les produits. Stripe refuse un
-    // paiement sous 0,50 € : on le dit AVANT le tunnel, au lieu de laisser une
-    // erreur technique tomber sur le client à l'écran de paiement.
+    // cas n'existait pas avant que le bon paie les produits.
+    //
+    // 🔴 IL ÉTAIT REFUSÉ. « Ton bon cadeau couvre la totalité : réserve sans
+    // produits, ou présente ton bon au comptoir. » Le cas le plus favorable au
+    // client était le seul qu'on renvoyait au comptoir, parce que Stripe refuse
+    // un paiement sous 0,50 €.
+    //
+    // ✅ IL EST MAINTENANT CONFIRMÉ SANS STRIPE, comme la boutique le fait
+    // depuis toujours avec `couvertSansPaiement` : le rendez-vous se crée, la
+    // commande se confirme, le bon se débite et la récompense se consomme, tout
+    // en bas de cette route.
+    //
+    // ⚠️ ET LE SERVEUR LE CALCULE, il ne le reçoit pas : sinon il suffirait
+    // d'annoncer « c'est couvert » pour réserver sans payer. Le bon et la
+    // récompense viennent d'être rechargés en base, c'est leur solde qui décide.
     const totalCents = acompteCents + produitsAPayerCents
-    if (totalCents === 0) {
-      return NextResponse.json({
-        ok: false,
-        error: 'Ton bon cadeau couvre la totalité : il n\'y a rien à payer en ligne. Réserve sans produits, ou présente ton bon au comptoir.',
-        rien_a_payer: true,
-      }, { status: 400 })
-    }
-    if (totalCents < 50) {
+    const couvertSansPaiement = totalCents === 0 && (!!bonCadeau || !!recompense)
+    if (totalCents < 50 && !couvertSansPaiement) {
       return NextResponse.json({ ok: false, error: 'Total trop faible (minimum 0,50 € Stripe).' }, { status: 400 })
     }
 
@@ -403,6 +409,150 @@ export async function POST(request) {
       await supabase.from('commandes').delete().eq('id', commande.id)
       console.error('[create-rdv-commande] insert lignes KO', errLignes)
       return NextResponse.json({ ok: false, error: 'Impossible d\'enregistrer le détail de la commande.' }, { status: 500 })
+    }
+
+    // ─── RIEN À ENCAISSER : ON CONFIRME ICI, SANS STRIPE ───────────────────
+    //
+    // Miroir exact de `couvertSansPaiement` dans le tunnel boutique, et miroir
+    // exact du webhook « paiement OK » de ce tunnel-ci : le rendez-vous naît, la
+    // commande bascule, les deux avantages se consomment, le lien s'écrit des
+    // deux côtés.
+    //
+    // ⚠️ L'ORDRE N'EST PAS ESTHÉTIQUE, IL EST DICTÉ PAR LE DÉGÂT EN CAS
+    // D'ÉCHEC. Le rendez-vous d'abord, parce que c'est le seul geste qui peut
+    // être refusé par la base (créneau pris entre-temps) et qu'il se supprime
+    // proprement. La récompense ensuite, parce qu'elle se rend d'un revers de
+    // main. Le bon en dernier, parce qu'un bon débité coûte de l'argent réel à
+    // son porteur.
+    if (couvertSansPaiement) {
+      const rdvId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null
+      // Tout défaire : le stock revient, la commande disparaît. Sans ça, un
+      // créneau pris entre-temps laisserait une commande fantôme qui garde de
+      // la marchandise réservée jusqu'à l'expiration.
+      const toutDefaire = async () => {
+        await supabase.from('commande_stock_reservation').delete().eq('commande_id', commande.id)
+        await supabase.from('commande_articles').delete().eq('commande_id', commande.id)
+        await supabase.from('commandes').delete().eq('id', commande.id)
+      }
+
+      const resa = await creerReservationRdv(supabase, {
+        rdvId,
+        commercantId: commercant.id,
+        prestationId: prestation.id,
+        dateRdv: date_rdv,
+        heureDebut: heure_debut,
+        champs: {
+          praticien_id: praticien_id || null,
+          client_email: normaliserEmail(client_email),
+          client_prenom, client_nom, client_telephone,
+          heure_fin: String(heure_fin).slice(0, 5),
+          duree_minutes: Number(duree_minutes || prestation.duree_minutes) || null,
+          prix_estime: prixBase,
+          // Aucun acompte n'a été encaissé : il n'y avait rien à encaisser.
+          acompte_montant: null,
+          acompte_paye: false,
+          statut: 'confirme',
+          source: 'yopper',
+          commande_id: commande.id,
+          notes_client: (notes_client || '').slice(0, 480) || null,
+          rgpd_marketing: !!rgpd_marketing,
+          // ⚠️ SEULE LA PART PRESTATION EST FIGÉE ICI. La part produits vit sur
+          // la commande, avec ses propres colonnes : à l'annulation, le client
+          // peut GARDER ses produits, et cette part-là ne lui revient pas.
+          ...(recompense ? {
+            fidelite_recompense_id: recompense.id,
+            fidelite_remise: vent.recompenseSurPresta,
+          } : {}),
+          ...(bonCadeau && vent.bonSurPresta > 0 ? {
+            bon_cadeau_id: bonCadeau.id,
+            bon_cadeau_montant: vent.bonSurPresta,
+          } : {}),
+        },
+      })
+      if (!resa.ok) {
+        await toutDefaire()
+        if (resa.code === 'place_prise') {
+          return NextResponse.json({ ok: false, error: 'place_prise', collectif: !!resa.collectif }, { status: 409 })
+        }
+        console.error('[create-rdv-commande] création RDV sans paiement KO', resa.code, resa.error)
+        return NextResponse.json({ ok: false, error: 'Ta réservation n\'a pas pu être enregistrée. Réessaie.' }, { status: 500 })
+      }
+      const idRdv = resa.rdv.id
+
+      // ⚠️ ÉCRITE SOUS `utilisee_at IS NULL` : si elle vient d'être dépensée
+      // ailleurs, on ne l'offre pas deux fois, on annule proprement.
+      if (recompense) {
+        const prise = await consommerRecompense(supabase, { recompense, source: 'rdv', rdvId: idRdv })
+        if (!prise) {
+          await supabase.from('rdv_reservations').delete().eq('id', idRdv)
+          await toutDefaire()
+          return NextResponse.json({ ok: false, error: 'Ta récompense vient d\'être utilisée ailleurs. Recharge la page et réessaie.' }, { status: 409 })
+        }
+      }
+
+      // ⚠️ DEUX MOUVEMENTS, PAS UN. La contrainte `bons_cadeaux_mouvements_une_cible`
+      // interdit un mouvement qui désignerait à la fois un rendez-vous et une
+      // commande, et les index uniques partiels sont posés par cible : c'est ce
+      // qui garde l'idempotence des deux côtés.
+      if (bonCadeau && vent.bonSurPresta > 0) {
+        const deb = await debiterBon(supabase, bonCadeau.id, vent.bonSurPresta, { source: 'rdv', rdv_id: idRdv })
+        if (!deb?.ok) {
+          if (recompense) await rendreRecompense(supabase, recompense)
+          await supabase.from('rdv_reservations').delete().eq('id', idRdv)
+          await toutDefaire()
+          console.error('[create-rdv-commande] débit bon (prestation) KO', deb?.error)
+          return NextResponse.json({ ok: false, error: 'Ce bon cadeau vient d\'être utilisé, vérifie son solde et réessaie.' }, { status: 409 })
+        }
+      }
+      if (bonCadeau && vent.bonSurProduits > 0) {
+        const deb = await debiterBon(supabase, bonCadeau.id, vent.bonSurProduits, { source: 'commande', commande_id: commande.id })
+        if (!deb?.ok) {
+          // ⚠️ ON REND CE QU'ON VIENT DE PRENDRE. La part prestation a été
+          // débitée trois lignes plus haut pour un rendez-vous qui n'aura pas
+          // lieu : la laisser dépensée ferait perdre de l'argent au porteur du
+          // bon à cause d'une course qu'il n'a pas provoquée.
+          if (vent.bonSurPresta > 0) await recrediterBon(supabase, bonCadeau.id, vent.bonSurPresta, { rdv_id: idRdv })
+          if (recompense) await rendreRecompense(supabase, recompense)
+          await supabase.from('rdv_reservations').delete().eq('id', idRdv)
+          await toutDefaire()
+          console.error('[create-rdv-commande] débit bon (produits) KO', deb?.error)
+          return NextResponse.json({ ok: false, error: 'Ce bon cadeau vient d\'être utilisé, vérifie son solde et réessaie.' }, { status: 409 })
+        }
+      }
+
+      // La commande bascule comme au webhook : payée intégralement par les
+      // avantages, donc équivalente à un paiement en ligne. Le lien s'écrit des
+      // deux côtés, sans quoi une annulation ne saurait pas quoi rembourser.
+      const { error: errConfirm } = await supabase
+        .from('commandes')
+        .update({
+          statut: 'en_attente',
+          paye_en_ligne: true,
+          paye_en_ligne_date: new Date().toISOString(),
+          rdv_reservation_id: idRdv,
+        })
+        .eq('id', commande.id)
+      if (errConfirm) console.error('[create-rdv-commande] confirmation commande couverte KO', errConfirm)
+      // La commande EST le stock consommé : la réservation temporaire n'a plus
+      // lieu d'être.
+      await supabase.from('commande_stock_reservation').delete().eq('commande_id', commande.id)
+
+      // ⚠️ PAS D'EMAIL DE COMMANDE ICI, exactement comme le webhook du tunnel
+      // unique (`sansEmails: true`) : les produits sont retirés le jour du
+      // rendez-vous, c'est l'email du rendez-vous qui les annonce. Deux emails
+      // pour un seul geste feraient croire à deux ventes.
+      return NextResponse.json({
+        ok: true,
+        bon_total: true,
+        rdv_id: idRdv,
+        commande_id: commande.id,
+        numero_rdv: resa.rdv.numero_rdv,
+        avantages: {
+          recompense: vent.remiseRecompense,
+          bon: vent.bonTotal,
+          solde_sur_place: vent.soldeSurPlace,
+        },
+      })
     }
 
     // ─── Checkout Session : le détail est visible, pas un montant global ────

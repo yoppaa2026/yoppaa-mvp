@@ -38,8 +38,7 @@ import { contratDepuisFormule, resumeContratAchete } from '@/lib/abonnements'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { normaliserEmail } from '@/lib/email-normalise'
-import { champsLieuPour } from '@/lib/lieu-fige'
-import { capacitePrestation, premierePlaceLibre } from '@/lib/cours-collectifs'
+import { creerReservationRdv, appliquerAvantagesRdv } from '@/lib/rdv-creation-server'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -168,11 +167,13 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
     }
 
     // Crée le RDV avec acompte_paye_en_ligne=true
+    //
+    // ⚠️ LE LIEU, LA CAPACITÉ, LA PLACE ET LA TVA NE SONT PLUS CONSTRUITS ICI :
+    // ils viennent de `creerReservationRdv`, comme pour les trois autres écrans
+    // qui créent un rendez-vous. Ce bloc ne porte plus que ce qui est PROPRE au
+    // paiement Stripe.
     const rdvId = meta.yoppaa_rdv_id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null)
-    const payload = {
-      ...(rdvId ? { id: rdvId } : {}),
-      commercant_id: meta.yoppaa_commercant_id,
-      prestation_id: meta.prestation_id,
+    const champs = {
       praticien_id: meta.praticien_id || null,
       // ⚠️ Normalisé : le rendez-vous naît ICI, à partir des métadonnées Stripe.
       // Enregistré tel que tapé, il disparaissait de l'écran du client dès qu'il
@@ -181,8 +182,6 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       client_prenom: meta.client_prenom,
       client_nom: meta.client_nom,
       client_telephone: meta.client_telephone,
-      date_rdv: meta.date_rdv,
-      heure_debut: meta.heure_debut,
       heure_fin: meta.heure_fin,
       duree_minutes: Number(meta.duree_minutes) || null,
       prix_estime: Number(meta.prix_estime) || null,
@@ -212,17 +211,6 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       acompte_paye_en_ligne: Number(meta.acompte_montant) > 0,
       acompte_paye_date: Number(meta.acompte_montant) > 0 ? new Date().toISOString() : null,
     }
-    // TVA figée à la réservation. Le taux est lu maintenant, sur la prestation
-    // telle qu'elle existe au moment de la vente, et ne sera plus jamais
-    // recalculé : un changement de taux ne doit pas réécrire l'historique.
-    if (meta.prestation_id) {
-      const { data: presta } = await supabase
-        .from('rdv_prestations')
-        .select('tva_taux')
-        .eq('id', meta.prestation_id)
-        .maybeSingle()
-      payload.tva_taux = presta?.tva_taux ?? null
-    }
 
     // ─── Frais Stripe ──────────────────────────────────────────────────────
     //
@@ -243,112 +231,55 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       if (frais) {
         const parts = avecProduits ? ventilerFrais(frais.frais, montantAcompte, montantProduits) : null
         if (parts) {
-          payload.stripe_frais = parts.rdv.frais
-          payload.stripe_net = parts.rdv.net
+          champs.stripe_frais = parts.rdv.frais
+          champs.stripe_net = parts.rdv.net
           fraisPourCommande = parts.commande
         } else {
-          payload.stripe_frais = frais.frais
-          payload.stripe_net = frais.net
+          champs.stripe_frais = frais.frais
+          champs.stripe_net = frais.net
         }
       }
     } catch (e) {
       console.warn('[webhook] frais Stripe RDV non enregistrés (non bloquant)', e?.message)
     }
 
-    // ⚠️ LE LIEU EST GRAVÉ À LA RÉSERVATION, ici comme dans les deux autres
-    // écrans qui créent un rendez-vous. Sans lui, la confirmation annonce le
-    // siège social, donc le DOMICILE d'une commerçante inscrite chez elle mais
-    // qui donne cours en salle.
-    const { data: cLieu } = await supabase
-      .from('commercants')
-      .select('id, nom, adresse, latitude, longitude, siege_social_est_lieu_activite')
-      .eq('id', meta.yoppaa_commercant_id)
-      .maybeSingle()
-    Object.assign(payload, await champsLieuPour(supabase, cLieu, {
-      jour: meta.date_rdv, heure: meta.heure_debut,
-    }))
-
-    // ⚠️ LA PLACE SE CALCULE ICI, PAS AU MOMENT DU PAIEMENT. Entre le clic du
-    // client et l'arrivée de ce webhook, d'autres personnes ont pu s'inscrire :
-    // une place figée dans les métadonnées Stripe serait périmée, et l'index
-    // unique rejetterait l'insertion après que le client a payé.
-    //
-    // On lit les places déjà prises sur CETTE séance, et on choisit la
-    // première libre. ⚠️ Pas « nombre d'inscrits + 1 » : une annulation libère
-    // une place AU MILIEU.
-    const { data: presta } = await supabase
-      .from('rdv_prestations').select('capacite').eq('id', meta.prestation_id).maybeSingle()
-    const capacite = capacitePrestation(presta)
-    payload.capacite_creneau = capacite
-
-    if (capacite > 1) {
-      const { data: dejaLa } = await supabase
-        .from('rdv_reservations')
-        .select('place_no')
-        .eq('commercant_id', meta.yoppaa_commercant_id)
-        .eq('date_rdv', meta.date_rdv)
-        .eq('heure_debut', meta.heure_debut)
-        .eq('prestation_id', meta.prestation_id)
-        .in('statut', ['confirme', 'honore'])
-        .is('deleted_at', null)
-      payload.place_no = premierePlaceLibre(presta, (dejaLa || []).map(r => r.place_no)) || 1
-    }
-
-    const { error } = await supabase.from('rdv_reservations').insert(payload)
-    if (error) throw error
+    // ⚠️ LE LIEU GRAVÉ, LA CAPACITÉ GRAVÉE, LA PREMIÈRE PLACE LIBRE ET LA TVA
+    // FIGÉE VIENNENT DU MODULE. Ces quatre gestes vivaient en quatre copies :
+    // ici, dans la route d'abonnement, dans la modale du tableau de bord, et
+    // dans l'écran du tunnel qui écrivait depuis le navigateur. La place, en
+    // particulier, se calcule AU MOMENT DE L'ÉCRITURE : entre le clic du client
+    // et l'arrivée de ce webhook, d'autres personnes ont pu s'inscrire.
+    const resa = await creerReservationRdv(supabase, {
+      rdvId,
+      commercantId: meta.yoppaa_commercant_id,
+      prestationId: meta.prestation_id,
+      dateRdv: meta.date_rdv,
+      heureDebut: meta.heure_debut,
+      champs,
+    })
+    // ⚠️ ON RELANCE, comme avant : Stripe rejouera le webhook, et le garde
+    // anti-double-création en tête de ce handler absorbe le rejeu. Le client a
+    // payé, un rendez-vous manquant ne doit pas se perdre en silence.
+    if (!resa.ok) throw new Error(`création RDV impossible (${resa.code}) : ${resa.error?.message || resa.code}`)
+    const payload = resa.payload
     console.info('[stripe/webhook] RDV créé via paiement Stripe', { rdvId, pi: paymentIntent.id })
 
-    // ─── RÉCOMPENSE DE FIDÉLITÉ : consommée ICI, le paiement étant acquis ───
+    // ─── LES DEUX AVANTAGES, APRÈS L'INSERT ────────────────────────────────
     //
-    // ⚠️ APRÈS L'INSERT, JAMAIS AVANT. Si l'insertion échoue, on relance et
-    // Stripe rejoue : consommer d'abord brûlerait la récompense d'un
-    // rendez-vous qui n'existe pas.
+    // ⚠️ APRÈS, JAMAIS AVANT : les deux mouvements DÉSIGNENT le rendez-vous, et
+    // consommer d'abord brûlerait la récompense d'un rendez-vous qui n'existe
+    // pas. Le rejeu est absorbé des deux côtés (`utilisee_at IS NULL` pour la
+    // récompense, index unique partiel pour le bon).
     //
-    // ⚠️ ET UN REJEU NE LA DÉPENSE PAS DEUX FOIS : l'écriture se fait sous
-    // `utilisee_at IS NULL`. Non bloquant : le rendez-vous est créé et le
-    // client a payé, une erreur ici ne doit pas faire rejouer tout le webhook.
-    if (meta.fidelite_recompense_id) {
-      try {
-        const { data: recFid } = await supabase
-          .from('fidelite_recompenses')
-          .select('id, carte_id, utilisee_at')
-          .eq('id', meta.fidelite_recompense_id)
-          .maybeSingle()
-        if (recFid && !recFid.utilisee_at) {
-          await consommerRecompense(supabase, {
-            recompense: recFid,
-            source: 'rdv',
-            rdvId: rdvId || meta.yoppaa_rdv_id || null,
-          })
-        }
-      } catch (e) {
-        console.error('[stripe/webhook] consommation récompense RDV KO (non bloquant)', e?.message)
-      }
-    }
-
-    // ─── BON CADEAU : débité ICI, pour la même raison ──────────────────────
-    //
-    // ⚠️ APRÈS L'INSERT, comme la récompense : le mouvement DÉSIGNE le
-    // rendez-vous, il ne peut donc pas le précéder. Et l'index unique partiel
-    // (bon_id, rdv_id) WHERE source='rdv' absorbe le rejeu : un webhook
-    // Stripe relivré ne débite jamais deux fois.
-    //
-    // ⚠️ ON LIT LE RÉSULTAT. Un `await` dont on ignore le retour est un espoir,
-    // pas une action : c'est la dette nommée le 27/08, et ici elle coûterait
-    // de l'argent réel, le bon restant crédité alors qu'il a payé.
-    if (meta.bon_cadeau_id && Number(meta.bon_cadeau_montant) > 0) {
-      try {
-        const deb = await debiterBon(supabase, meta.bon_cadeau_id, Number(meta.bon_cadeau_montant), {
-          source: 'rdv',
-          rdv_id: rdvId || meta.yoppaa_rdv_id || null,
-        })
-        if (!deb?.ok) {
-          console.error('[stripe/webhook] débit bon cadeau RDV KO', deb?.error, { rdvId })
-        }
-      } catch (e) {
-        console.error('[stripe/webhook] débit bon cadeau RDV KO (non bloquant)', e?.message)
-      }
-    }
+    // ⚠️ ET LE MODULE LIT LE RÉSULTAT du débit. Un `await` dont on ignore le
+    // retour est un espoir, pas une action, et ici l'espoir coûte de l'argent
+    // réel : le bon resterait crédité alors qu'il vient de payer.
+    await appliquerAvantagesRdv(supabase, {
+      rdvId: rdvId || meta.yoppaa_rdv_id || null,
+      recompenseId: meta.fidelite_recompense_id || null,
+      bonCadeauId: meta.bon_cadeau_id || null,
+      bonMontant: Number(meta.bon_cadeau_montant) || 0,
+    })
 
     // Tunnel unique : la commande de produits existe déjà en
     // 'paiement_en_attente'. On la confirme SANS ses propres emails, et on

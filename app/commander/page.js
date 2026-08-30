@@ -33,7 +33,10 @@ import { lirePositionMemorisee, memoriserPosition, marquerDemandee, dejaDemandee
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
-import { brancherSessionPermanente, marquerDeconnexionVoulue } from '@/lib/session-permanente'
+import { brancherSessionPermanente, marquerDeconnexionVoulue, dejaConnecteIci } from '@/lib/session-permanente'
+// ⚠️ « SESSION EXPIRÉE » ne se dit que si une session a existé ICI : le lien
+// d'email s'ouvre dans le navigateur, où le Yopper n'a jamais été connecté.
+import { libelleAccesPerdu } from '@/lib/retour-app'
 import OneSignalInit, { taggerFavoriOneSignal, syncYopperTags } from '@/app/components/OneSignalInit'
 import CarteNotifications from './CarteNotifications'
 import SupprimerCompte from './SupprimerCompte'
@@ -1558,6 +1561,11 @@ export default function Commander() {
   // et son email restaient affichés. Il n'avait aucun moyen de comprendre, et
   // redémarrer l'application n'y changeait rien.
   const [sessionPerdue, setSessionPerdue] = useState(false)
+  // ⚠️ LU APRÈS LE MONTAGE, JAMAIS PENDANT LE RENDU. `localStorage` n'existe pas
+  // au rendu serveur, et l'interroger là produirait une hydratation qui ne
+  // correspond pas au HTML envoyé. `false` au départ, ce qui est la lecture
+  // prudente : on ne parle d'expiration qu'une fois la preuve lue.
+  const [dejaVenuIci, setDejaVenuIci] = useState(false)
   const [statutsCommerce, setStatutsCommerce] = useState({})
   // Fermetures exceptionnelles, par commerçant. La carte les ignorait : un
   // commerce en congé s'affichait « Ouvert » en vert sur l'accueil.
@@ -1802,7 +1810,14 @@ export default function Commander() {
     // renouvellement. Or cette session est RÉCUPÉRABLE : on en garde une copie,
     // et on la repose avant de déranger qui que ce soit.
     // Alex, 22/08 : la déconnexion n'appartient qu'au Yopper.
-    const debrancher = brancherSessionPermanente(perdue => setSessionPerdue(perdue))
+    const debrancher = brancherSessionPermanente(perdue => {
+      setSessionPerdue(perdue)
+      // ⚠️ RELU AU MOMENT DE LA PERTE, pas une fois pour toutes au montage : la
+      // marque se pose quand une session est mémorisée, ce qui peut arriver
+      // APRÈS ce montage. La lire trop tôt ferait dire « pas encore connecté ici »
+      // à quelqu'un qui vient de se connecter.
+      if (perdue) setDejaVenuIci(dejaConnecteIci())
+    })
 
     return () => {
       try { sub?.subscription?.unsubscribe() } catch (e) {}
@@ -3146,17 +3161,23 @@ export default function Commander() {
                   <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
                 </svg>
               </div>
+              {/* 🔴 « SESSION EXPIRÉE » NE SE DIT QUE SI UNE SESSION A EXISTÉ
+                  ICI (Alex, 30/08). Le lien reçu par email s'ouvre dans le
+                  NAVIGATEUR du téléphone, jamais dans l'application installée :
+                  le Yopper y arrive sans jamais s'y être connecté. Ce n'est pas
+                  une expiration, c'est une absence, et lui annoncer qu'il a
+                  perdu quelque chose est faux autant qu'inquiétant. */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 10, fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.6px', margin: '0 0 2px' }}>
-                  Session expirée
+                  {libelleAccesPerdu({ dejaConnecte: dejaVenuIci }).titre}
                 </p>
                 <p style={{ fontSize: 13, fontWeight: 700, color: '#78350F', margin: 0, lineHeight: 1.35 }}>
-                  Reconnecte-toi pour retrouver tes commandes et tes rendez-vous. Rien n&rsquo;est perdu 🟣
+                  {libelleAccesPerdu({ dejaConnecte: dejaVenuIci }).texte}
                 </p>
               </div>
               <button onClick={() => router.push('/commander/auth?redirect=/commander')}
                 style={{ padding: '8px 14px', borderRadius: 100, border: 'none', background: '#92400E', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
-                Se reconnecter
+                {libelleAccesPerdu({ dejaConnecte: dejaVenuIci }).bouton}
               </button>
             </div>
           )}

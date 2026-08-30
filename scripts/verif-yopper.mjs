@@ -519,8 +519,22 @@ verifier('la page rappelle qu\'on peut refuser la géolocalisation',
   // déranger le Yopper pour ça était le défaut à corriger.
   verifier('le bandeau ne s\'allume plus directement sur SIGNED_OUT',
     !/if \(event === 'SIGNED_OUT'\) setSessionPerdue\(true\)/.test(src))
-  verifier('le bandeau de session expirée existe', /Session expirée/.test(src))
-  verifier('il propose de se reconnecter', /Se reconnecter/.test(src))
+  // ⚠️ CES DEUX GARDES CHERCHAIENT « Session expirée » ET « Se reconnecter »
+  // DANS L'ÉCRAN, et le 30/08 elles ont rougi sur du code juste : les deux
+  // phrases ont déménagé dans `lib/retour-app.js`, parce qu'il y en a
+  // maintenant DEUX jeux. Sur un navigateur où le Yopper ne s'est jamais
+  // connecté, il n'y a pas d'expiration mais une absence, et lui annoncer qu'il
+  // a perdu quelque chose est faux autant qu'inquiétant.
+  //
+  // Ce qui compte n'a pas bougé : un bandeau existe, et il propose une porte de
+  // sortie. Il se mesure là où la règle vit, et `verif:session` l'exécute.
+  verifier('le bandeau lit la règle d’accès perdu', /libelleAccesPerdu\(\{ dejaConnecte:/.test(src))
+  verifier('et il en affiche le titre, le texte ET le bouton',
+    /\.titre\}/.test(src) && /\.texte\}/.test(src) && /\.bouton\}/.test(src))
+  const retour = lire('lib/retour-app.js')
+  verifier('la règle sait dire « session expirée » quand c’en est une',
+    /titre: 'Session expirée'/.test(retour))
+  verifier('et propose de se reconnecter', /bouton: 'Se reconnecter'/.test(retour))
   // ⚠️ ON VISE L'INTÉRIEUR DE LA FONCTION, pas le fichier entier : la même
   // ligne de garde existe dans le chargement des commandes, et un test posé sur
   // tout le fichier resterait vert alors que les rendez-vous, eux, seraient de

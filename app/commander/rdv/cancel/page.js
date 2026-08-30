@@ -14,6 +14,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { euros } from '@/lib/montants'
+// ⚠️ Le lien d'email s'ouvre dans le NAVIGATEUR, jamais dans l'application
+// installée : on le DIT, sinon le Yopper croit que « son » application l'a oublié.
+import NoteHorsApp from '@/app/components/NoteHorsApp'
 
 const T = {
   bg:      '#F8F6FF',
@@ -207,6 +210,7 @@ export default function RdvCancelPage() {
             <button onClick={() => router.push('/commander')} style={btnPrimary}>
               Retour à Yoppaa
             </button>
+            <NoteHorsApp/>
           </>
         )}
 
@@ -230,6 +234,7 @@ export default function RdvCancelPage() {
             <button onClick={() => router.push('/commander')} style={btnPrimary}>
               Retour à Yoppaa
             </button>
+            <NoteHorsApp/>
           </>
         )}
       </div>

@@ -137,7 +137,13 @@ function egale(nom, recu, attendu) {
   verifie('plus de bandeau allumé directement sur SIGNED_OUT',
     !/if \(event === 'SIGNED_OUT'\) setSessionPerdue\(true\)/.test(src))
   verifie('la session permanente est branchée', /brancherSessionPermanente\(/.test(src))
-  verifie('et son résultat pilote le bandeau', /brancherSessionPermanente\(perdue => setSessionPerdue\(perdue\)\)/.test(src))
+  // ⚠️ ANCRÉE SUR LE GESTE, PAS SUR LA LIGNE EXACTE. Elle exigeait la forme
+  // courte `perdue => setSessionPerdue(perdue)` mot pour mot, et le 30/08 le
+  // rappel a gagné une seconde ligne (relire la marque « déjà connecté ici ») :
+  // la garde rougissait sur du code juste. Ce qui compte est que le résultat du
+  // branchement pilote bien le bandeau.
+  verifie('et son résultat pilote le bandeau',
+    /brancherSessionPermanente\(perdue => \{?\s*setSessionPerdue\(perdue\)/.test(src))
 
   // ⚠️ LES DEUX MÉMOIRES DE SESSION SONT CE QUI DÉGÈLE LA POSITION. On ancre
   // sur l'APPEL avec ses parenthèses, jamais sur le nom seul : le nom figure
@@ -224,6 +230,120 @@ function egale(nom, recu, attendu) {
     /if \(commercants\.length > 0\) return/.test(src))
   verifie('et l\'écouteur se retire en partant',
     /removeEventListener\('pageshow', reveiller\)/.test(src))
+}
+
+// ═══ 5) LE RETOUR PAR UN LIEN D'EMAIL (30/08) ═════════════════════════════
+//
+// 🔴 CE QU'ALEX A VU. Il annule un rendez-vous depuis le lien reçu par email.
+// iOS ouvre ce lien dans le NAVIGATEUR, pas dans l'application installée. Il
+// annule, clique « Retour à Yoppaa », et se retrouve dans une application qui ne
+// le reconnaît pas et lui redemande sa position.
+//
+// Deux choses à corriger, et une troisième à NE PAS promettre.
+{
+  const { libelleAccesPerdu, messageHorsApp, estDansLApp } = await import('../lib/retour-app.js')
+
+  // 🔴 « SESSION EXPIRÉE » MENTAIT ET INQUIÉTAIT. Sur un navigateur où le Yopper
+  // ne s'est jamais connecté, il n'y a pas d'expiration : il y a une absence.
+  const expire = libelleAccesPerdu({ dejaConnecte: true })
+  const jamais = libelleAccesPerdu({ dejaConnecte: false })
+  verifie('une session qui a existé peut être dite « expirée »',
+    /expirée/i.test(expire.titre), expire.titre)
+  verifie('et on propose de SE RECONNECTER', /Reconnecte-toi/.test(expire.texte), expire.texte)
+  verifie('une session qui n’a JAMAIS existé ne parle pas d’expiration',
+    !/expir/i.test(jamais.titre) && !/expir/i.test(jamais.texte), `${jamais.titre} / ${jamais.texte}`)
+  // ⚠️ « CONNECTE-TOI », PAS « RECONNECTE-TOI » : le préfixe suppose une
+  // première fois qui n'a pas eu lieu sur cet appareil.
+  verifie('elle dit « connecte-toi », sans le RE',
+    /Connecte-toi/.test(jamais.texte) && !/Reconnecte/.test(jamais.texte), jamais.texte)
+  verifie('et son bouton suit', jamais.bouton === 'Se connecter', jamais.bouton)
+  // ⚠️ DANS LES DEUX CAS ON RASSURE : rien n'est perdu, c'est l'accès qui manque.
+  verifie('les deux disent que rien n’est perdu',
+    /Rien n’est perdu/.test(expire.texte) && /Rien n’est perdu/.test(jamais.texte))
+  // Le défaut par défaut est le PRUDENT : sans preuve, on ne parle pas d'une
+  // expiration qu'on n'a pas constatée.
+  verifie('sans argument, on ne parle pas d’expiration',
+    !/expir/i.test(libelleAccesPerdu().titre))
+
+  // ⚠️ LA MARQUE QUI PORTE CETTE DISTINCTION, et elle ne s'efface JAMAIS : un
+  // Yopper qui se déconnecte puis revient ne redevient pas un inconnu.
+  const srcSession = readFileSync(new URL('../lib/session-permanente.js', import.meta.url), 'utf8')
+  verifie('la marque « déjà connecté ici » se pose avec la session',
+    /ecrire\(CLE_DEJA_CONNECTE, '1'\)/.test(srcSession))
+  verifie('et rien ne l’efface',
+    !/effacer\(CLE_DEJA_CONNECTE\)/.test(srcSession))
+  // ⚠️ ET L'ÉCRAN LA LIT. Sans ça, les deux textes ci-dessus existeraient sans
+  // que personne ne les affiche : une règle sans appelant.
+  const srcEcran = readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8')
+  verifie('le bandeau lit la règle au lieu d’écrire sa phrase',
+    /libelleAccesPerdu\(\{ dejaConnecte: dejaVenuIci \}\)/.test(srcEcran))
+  verifie('et il ne code plus « Session expirée » en dur',
+    !/^\s+Session expirée$/m.test(srcEcran))
+  verifie('la marque est relue au moment de la perte',
+    /if \(perdue\) setDejaVenuIci\(dejaConnecteIci\(\)\)/.test(srcEcran))
+
+  // ⚠️ ON DIT OÙ ON EST, ON NE PROMET PAS D'OUVRIR L'APPLICATION. Une page web
+  // n'a aucun moyen de lancer une application installée sur iOS : un bouton qui
+  // ne ferait rien serait pire que pas de bouton.
+  verifie('hors de l’application, on explique où on est',
+    /navigateur/.test(messageHorsApp(false) || ''), messageHorsApp(false) || '(rien)')
+  verifie('et on dit le geste : ouvrir Yoppaa depuis l’écran d’accueil',
+    /écran d’accueil/.test(messageHorsApp(false) || ''))
+  // ⚠️ RIEN QUAND ON EST DÉJÀ DANS L'APPLICATION, et rien quand ON NE SAIT PAS :
+  // « on ne sait pas » n'est pas « tu es dans un navigateur », et une phrase qui
+  // apparaît puis disparaît est un défaut à elle seule.
+  verifie('dans l’application, on se tait', messageHorsApp(true) === null)
+  verifie('et tant qu’on ne sait pas, on se tait aussi', messageHorsApp(null) === null)
+  // Au banc, il n'y a pas de `window` : la détection doit rendre « on ne sait
+  // pas » plutôt que de jeter.
+  verifie('la détection ne plante pas hors navigateur', estDansLApp() === null)
+
+  // 🔴 IPHONE N'A QUE `navigator.standalone`, ET C'EST TOUT LE SUJET. Safari n'a
+  // jamais implémenté `display-mode: standalone` pour les applications ajoutées
+  // à l'écran d'accueil : une détection qui ne regarde que `matchMedia` répond
+  // « tu es dans un navigateur » à quelqu'un qui est DANS l'application, et lui
+  // affiche une phrase fausse.
+  //
+  // ⚠️ ON SIMULE LES DEUX SIGNAUX SÉPARÉMENT, sans quoi la garde ne mesure
+  // jamais l'un des deux : mesuré MUET une première fois, le banc ne faisait
+  // qu'appeler la fonction hors navigateur, où elle rend `null` quoi qu'il
+  // arrive. Une garde qui ne peut pas rougir ne garde rien.
+  const fenetreOrigine = globalThis.window
+  try {
+    globalThis.window = { navigator: { standalone: true }, matchMedia: () => ({ matches: false }) }
+    verifie('🔴 sur iPhone, `navigator.standalone` suffit à dire « dans l’app »',
+      estDansLApp() === true)
+    globalThis.window = { navigator: {}, matchMedia: (q) => ({ matches: q === '(display-mode: standalone)' }) }
+    verifie('sur Android, `display-mode: standalone` suffit aussi', estDansLApp() === true)
+    globalThis.window = { navigator: { standalone: false }, matchMedia: () => ({ matches: false }) }
+    verifie('et dans un onglet ordinaire, la réponse est non', estDansLApp() === false)
+    // Un navigateur sans `matchMedia` ne doit pas faire échouer la réservation.
+    globalThis.window = { navigator: {} }
+    verifie('un navigateur sans matchMedia rend « non », pas une exception',
+      estDansLApp() === false)
+  } finally {
+    if (fenetreOrigine === undefined) delete globalThis.window
+    else globalThis.window = fenetreOrigine
+  }
+
+  // ⚠️ ET LES DEUX ÉCRANS DE RETOUR L'AFFICHENT. Ils sont frères : la commande
+  // et le rendez-vous s'annulent tous les deux par un lien d'email, et corriger
+  // un seul des deux, c'est le motif qui revient le plus souvent ici.
+  //
+  // ⚠️ ON COMPTE, ON NE CHERCHE PAS. La première écriture testait la PRÉSENCE de
+  // `<NoteHorsApp/>` : chaque écran en porte DEUX (succès et erreur), et en
+  // retirer un laissait la garde verte. Mesuré par mutation. On exige donc
+  // qu'AUCUN « Retour à Yoppaa » ne reste sans sa phrase.
+  for (const f of ['app/commander/cancel/page.js', 'app/commander/rdv/cancel/page.js']) {
+    const src = readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+    const nom = f.split('/').slice(-2).join('/')
+    const retours = (src.match(/Retour à Yoppaa/g) || []).length
+    const notes = (src.match(/<NoteHorsApp\/>/g) || []).length
+    verifie(`${nom} importe la phrase`, /import NoteHorsApp/.test(src))
+    verifie(`${nom} a bien des retours à couvrir`, retours > 0, `${retours} retour(s)`)
+    verifie(`${nom} : aucun « Retour à Yoppaa » sans sa phrase`,
+      notes === retours, `${notes} phrase(s) pour ${retours} retour(s)`)
+  }
 }
 
 console.log(`\nSession + position : ${ok} vérifications`)

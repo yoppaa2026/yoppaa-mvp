@@ -156,7 +156,11 @@ const ORDRE_CANONIQUE = [
   ['coordonnées', /aria-label="Appeler"/],
   ['fidélité', /<CarteFideliteFiche/],
   ['photos', /<GalerieCommerce/],
-  ['bon cadeau', /Offrir un bon cadeau<\/span>/],
+  // ⚠️ ON REPÈRE LE BLOC PAR SON GESTE, PAS PAR LE NOM DU BON. Le libellé suit
+  // désormais le métier du commerce (31/08) : chercher « bon cadeau » ferait
+  // rougir cette garde chez un boulanger alors que le bloc est bien là, à sa
+  // place. « Offrir un … » est ce qui ne change pas.
+  ['bon à offrir', /Offrir un [^<]*<\/span>/],
 ]
 for (const chemin of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
   const src = lire(chemin)
@@ -174,8 +178,8 @@ for (const chemin of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/
   }
   // Le message de retour de paiement, lui, reste EN HAUT : celui qui revient de
   // sa banque doit le voir sans faire défiler la page.
-  const retour = src.indexOf('Ton bon cadeau est payé')
-  const bouton = /Offrir un bon cadeau<\/span>/.exec(src)?.index ?? -1
+  const retour = src.search(/Ton \S+ est payé 🟣/)
+  const bouton = /Offrir un [^<]*<\/span>/.exec(src)?.index ?? -1
   verifier(`${chemin} : le retour de paiement reste au-dessus du bouton`,
     retour > 0 && bouton > 0 && retour < bouton)
 }

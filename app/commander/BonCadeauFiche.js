@@ -11,6 +11,7 @@
 // reconnu comme appartenant au Yopper connecté.
 
 import { euros } from '@/lib/montants'
+import { libelleBon } from '@/lib/bons-cadeaux'
 
 const T = {
   vert:  '#059669',
@@ -26,7 +27,11 @@ function dateFr(d) {
   } catch { return null }
 }
 
-export default function BonCadeauFiche({ bons = [], enLigne = true }) {
+// ⚠️ CET ENCART VIT SUR LA FICHE D'UN SEUL COMMERCE, contrairement à la liste
+// « Mes bons » de l'accueil qui les mélange tous : il peut donc porter le mot
+// du métier. `categorie` est le seul ajout, et il doit venir de l'appelant, qui
+// est le seul à connaître le commerce affiché.
+export default function BonCadeauFiche({ bons = [], categorie = null, enLigne = true }) {
   const liste = (bons || []).filter(b => Number(b?.solde) > 0)
   if (liste.length === 0) return null
 
@@ -44,7 +49,9 @@ export default function BonCadeauFiche({ bons = [], enLigne = true }) {
           <path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/>
           <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
         </svg>
-        {plusieurs ? 'Tes bons cadeaux' : 'Ton bon cadeau'}
+        {plusieurs
+          ? `Tes ${libelleBon(categorie, { pluriel: true })}`
+          : `Ton ${libelleBon(categorie)}`}
       </p>
 
       <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 800, color: T.vert, lineHeight: 1.5 }}>

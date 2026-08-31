@@ -596,6 +596,47 @@ const MUTATIONS = [
     banc: 'verif:bons', fichier: 'lib/export-comptable.js',
     de: "import { jourBruxelles, heureBruxelles } from './timezone'",
     vers: "import { jourBruxelles, heureBruxelles } from './timezone'\nimport { libelleBon } from './bons-cadeaux'" },
+
+  // ═══ CÔTÉ YOPPER : LES DEUX FAMILLES D'ÉCRANS (31/08) ════════════════════
+  //
+  // 🔴 LA RÈGLE D'ALEX A DEUX MOITIÉS, et une garde qui n'en tiendrait qu'une
+  // laisserait passer la moitié des défauts. Là où le commerce est connu, le
+  // mot suit le métier ; là où il ne l'est pas, on dit « bon » nu. Les cinq
+  // mutations attaquent les deux moitiés, dans les deux sens.
+  { nom: '🔴 BonCadeauFiche ne reçoit plus la catégorie',
+    banc: 'verif:bons', fichier: 'app/commander/BonCadeauFiche.js',
+    de: 'export default function BonCadeauFiche({ bons = [], categorie = null, enLigne = true }) {',
+    vers: 'export default function BonCadeauFiche({ bons = [], enLigne = true }) {' },
+
+  { nom: '🔴 le tunnel boutique cesse de passer la catégorie à l’encart',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: '<BonCadeauFiche bons={mesBonsIci} categorie={commercant?.categorie}/>',
+    vers: '<BonCadeauFiche bons={mesBonsIci}/>' },
+
+  { nom: '🔴 le tunnel rendez-vous regèle un libellé dans son récapitulatif',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: "fontWeight: 700 }}>Ton {nomBon}</span>",
+    vers: "fontWeight: 700 }}>Ton bon cadeau</span>" },
+
+  // 🔴 L'AUTRE SENS, ET C'EST CELUI QUE J'AURAIS COMMIS SEUL : faire suivre le
+  // métier à une liste qui MÉLANGE les commerces. Elle afficherait « Mes bons
+  // cadeaux » au-dessus d'un bon de boulangerie.
+  { nom: '🔴 SUR-CORRECTION : la liste multi-commerces renomme un métier',
+    banc: 'verif:bons', fichier: 'app/commander/page.js',
+    de: "{mesBons.length > 1 ? 'Mes bons' : 'Mon bon'}",
+    vers: "{mesBons.length > 1 ? 'Mes bons cadeaux' : 'Mon bon cadeau'}" },
+
+  // ⚠️ MA PREMIÈRE VERSION DE CETTE MUTATION AJOUTAIT UN IMPORT, RIEN DE PLUS,
+  // et elle est restée verte à juste titre : un symbole importé sans être
+  // appelé ne change aucun texte à l'écran, ce n'est donc pas un défaut. Une
+  // mutation doit changer le RÉSULTAT. Celle-ci fait ce qu'un développeur
+  // ferait vraiment en croyant bien faire : câbler la fonction avec la seule
+  // chose disponible ici, c'est-à-dire rien, ce qui affiche « bon cadeau » chez
+  // un boulanger par le jeu du repli.
+  { nom: '🔴 SUR-CORRECTION : l’écran d’annulation devine un métier qu’il ignore',
+    banc: 'verif:bons', fichier: 'app/commander/cancel/page.js',
+    de: 'Ton paiement, ton bon et ta récompense fidélité te reviennent automatiquement.',
+    vers: 'Ton paiement, ton {libelleBon(null)} et ta récompense fidélité te reviennent automatiquement.' },
 ]
 
 function lancer(banc) {

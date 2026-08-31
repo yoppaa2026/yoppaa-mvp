@@ -41,7 +41,7 @@ import { capacitePrestation, estCoursCollectif, libellePlaces } from '@/lib/cour
 // ⚠️ LA PHRASE DU RESTE DU BON VIT DANS LE MODULE, avec celle du tunnel
 // boutique : deux écritures d'une même phrase finissent toujours par dire deux
 // choses.
-import { libelleResteBon } from '@/lib/bons-cadeaux'
+import { libelleResteBon, libelleBon } from '@/lib/bons-cadeaux'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import GalerieCommerce from '@/app/components/GalerieCommerce'
@@ -313,7 +313,13 @@ export default function CommanderRdvSlug() {
     return [...tete, ...autres]
   })()
   const [produits, setProduits] = useState([])              // catalogue produits (aperçu → page boutique /commander/[slug])
-  const [bonsCfg, setBonsCfg] = useState(null)              // config bons cadeaux (bouton Offrir)
+  const [bonsCfg, setBonsCfg] = useState(null)              // config du bon (bouton Offrir)
+  // ─── LE NOM DU BON, UNE FOIS POUR TOUT L'ÉCRAN ───────────────────────────
+  // On est sur la fiche d'UN commerce : son métier est connu, le mot le suit.
+  // Sept phrases en dépendent plus bas ; les calculer ici évite qu'une seule
+  // d'entre elles reste en arrière le jour d'une retouche.
+  const nomBon = libelleBon(commercant?.categorie)
+  const nomBons = libelleBon(commercant?.categorie, { pluriel: true })
   const [bonModalOuvert, setBonModalOuvert] = useState(false)
   const [bonRetour, setBonRetour] = useState(null)          // 'ok' | 'annule' après retour Stripe achat de bon
   const [abonnementRetour, setAbonnementRetour] = useState(null)  // idem, achat d'abonnement
@@ -2357,7 +2363,7 @@ export default function CommanderRdvSlug() {
                     de fidélité : les deux disent MA relation avec ce commerce.
                     Un bon cadeau découvert après avoir choisi sa prestation
                     arrive trop tard pour donner envie de réserver. */}
-                {etape === 1 && <BonCadeauFiche bons={mesBonsIci}/>}
+                {etape === 1 && <BonCadeauFiche bons={mesBonsIci} categorie={commercant?.categorie}/>}
 
                 {/* Les photos du salon : cette page n'en montrait AUCUNE, elle
                     se contentait de la couverture en bandeau. Pour un salon,
@@ -2398,8 +2404,8 @@ export default function CommanderRdvSlug() {
                   <div style={{ marginTop: 12, background: bonRetour === 'ok' ? '#F0FDF4' : '#FFFBEB', border: `1.5px solid ${bonRetour === 'ok' ? '#86EFAC' : '#FCD34D'}`, borderRadius: 12, padding: '10px 14px' }}>
                     <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: bonRetour === 'ok' ? '#065F46' : '#78350F', lineHeight: 1.5 }}>
                       {bonRetour === 'ok'
-                        ? 'Ton bon cadeau est payé 🟣 Il arrive par email dans quelques instants (pense à vérifier les indésirables).'
-                        : 'Paiement annulé : aucun bon cadeau n\'a été débité.'}
+                        ? `Ton ${nomBon} est payé 🟣 Il arrive par email dans quelques instants (pense à vérifier les indésirables).`
+                        : `Paiement annulé : aucun ${nomBon} n'a été débité.`}
                     </p>
                   </div>
                 )}
@@ -2598,7 +2604,7 @@ export default function CommanderRdvSlug() {
                         <path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
                       </svg>
                       <span style={{ minWidth: 0 }}>
-                        <span style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', color: T.ink }}>Offrir un bon cadeau</span>
+                        <span style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', color: T.ink }}>Offrir un {nomBon}</span>
                         <span style={{ display: 'block', fontSize: '0.7rem', color: T.muted, fontWeight: 600, marginTop: 1 }}>Montant libre, envoyé par email, valable {bonsCfg.validite_mois} mois</span>
                       </span>
                     </span>
@@ -3377,7 +3383,7 @@ export default function CommanderRdvSlug() {
                         {mesBonsIci.length > 0 && !seanceSurAbo && prixBase != null && (
                           <div style={{ background: bonChoisi ? '#F0FDF4' : '#fff', border: `1.5px solid ${bonChoisi ? '#86EFAC' : T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 12 }}>
                             <p style={{ margin: '0 0 6px', fontSize: '0.62rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
-                              {mesBonsIci.length > 1 ? 'Tes bons cadeaux ici' : 'Ton bon cadeau ici'}
+                              {mesBonsIci.length > 1 ? `Tes ${nomBons} ici` : `Ton ${nomBon} ici`}
                             </p>
                             {mesBonsIci.map(b => {
                               const actif = bonChoisi?.code === b.code
@@ -3484,12 +3490,12 @@ export default function CommanderRdvSlug() {
                         {mesBonsIci.length > 0 && !seanceSurAbo && prixBase == null && (
                           <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 14, padding: '10px 12px', marginBottom: 12 }}>
                             <p style={{ margin: '0 0 6px', fontSize: '0.62rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
-                              {mesBonsIci.length > 1 ? 'Tes bons cadeaux ici' : 'Ton bon cadeau ici'}
+                              {mesBonsIci.length > 1 ? `Tes ${nomBons} ici` : `Ton ${nomBon} ici`}
                             </p>
                             <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 800, color: '#065F46' }}>
                               {mesBonsIci.length > 1
-                                ? `Tu as ${euros(mesBonsIci.reduce((s, b) => s + Number(b.solde || 0), 0))} sur tes bons cadeaux ici.`
-                                : `Tu as ${euros(mesBonsIci[0].solde)} sur ton bon cadeau ici.`}
+                                ? `Tu as ${euros(mesBonsIci.reduce((s, b) => s + Number(b.solde || 0), 0))} sur tes ${nomBons} ici.`
+                                : `Tu as ${euros(mesBonsIci[0].solde)} sur ton ${nomBon} ici.`}
                             </p>
                             <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: '#047857', fontWeight: 600 }}>
                               {mesBonsIci.length > 1
@@ -3561,7 +3567,7 @@ export default function CommanderRdvSlug() {
                           )}
                           {remiseBon > 0 && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', borderBottom: `1px solid ${T.pale}` }}>
-                              <span style={{ fontSize: '0.8rem', color: '#047857', fontWeight: 700 }}>Ton bon cadeau</span>
+                              <span style={{ fontSize: '0.8rem', color: '#047857', fontWeight: 700 }}>Ton {nomBon}</span>
                               <span style={{ fontSize: '0.85rem', fontWeight: 900, color: '#059669' }}>− {euros(remiseBon)}</span>
                             </div>
                           )}
@@ -3815,7 +3821,7 @@ export default function CommanderRdvSlug() {
                       if (!v) return null
                       const lignes = []
                       if (v.remiseRecompense > 0) lignes.push(['Récompense fidélité', `− ${euros(v.remiseRecompense)}`, '#059669'])
-                      if (v.bonTotal > 0) lignes.push(['Bon cadeau', `− ${euros(v.bonTotal)}`, '#059669'])
+                      if (v.bonTotal > 0) lignes.push([libelleBon(commercant?.categorie, { majuscule: true }), `− ${euros(v.bonTotal)}`, '#059669'])
                       if (v.produitsAPayer > 0) lignes.push(['Tes produits', euros(v.produitsAPayer), T.ink])
                       if (!lignes.length) return null
                       return (

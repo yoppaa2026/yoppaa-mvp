@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import { redirectTop } from '@/lib/redirect-top'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
-import { BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-cadeaux'
+import { BON_MONTANT_MIN, BON_MONTANT_MAX, libelleBon } from '@/lib/bons-cadeaux'
 
 const T = {
   bgPanel: '#160636', ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4',
@@ -83,7 +83,7 @@ export default function BonCadeauModal({ commercant, validiteMois = 12, onClose 
         {/* Header violet */}
         <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, padding: '18px 20px', position: 'sticky', top: 0, zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <div>
-            <p style={{ margin: 0, fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px' }}>Bon cadeau</p>
+            <p style={{ margin: 0, fontSize: '0.62rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px' }}>{libelleBon(commercant?.categorie, { majuscule: true })}</p>
             <p style={{ margin: '2px 0 0', fontSize: '1.05rem', fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>{commercant?.nom}</p>
           </div>
           <button onClick={onClose} aria-label="Fermer"

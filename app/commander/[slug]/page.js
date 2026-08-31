@@ -7,7 +7,7 @@ import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
 import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
 import { canDo, isVitrine, planEffectif } from '@/lib/plans'
-import { calculerRemiseBon, normaliserCodeBon, libelleResteBon } from '@/lib/bons-cadeaux'
+import { calculerRemiseBon, normaliserCodeBon, libelleResteBon, libelleBon } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
@@ -1078,6 +1078,12 @@ export default function CommanderSlug() {
   // La remise effective est recalculée à chaque rendu (le panier peut bouger),
   // le serveur revalide tout (solde, plafond, minimum Stripe 0,50 €).
   const [bonsCfg, setBonsCfg] = useState(null)
+  // ─── LE NOM DU BON, UNE FOIS POUR TOUT L'ÉCRAN ───────────────────────────
+  // Frère exact du tunnel de rendez-vous : même règle, même endroit, pour que
+  // les deux écrans ne se remettent pas à diverger. C'est le motif qui revient
+  // le plus souvent ici, une phrase écrite en deux exemplaires.
+  const nomBon = libelleBon(commercant?.categorie)
+  const nomBons = libelleBon(commercant?.categorie, { pluriel: true })
   const [bonInput, setBonInput] = useState('')
   const [bonApplique, setBonApplique] = useState(null)   // { code, solde }
   // Récompense de fidélité du Yopper CONNECTÉ chez CE commerçant, et son choix
@@ -3650,7 +3656,7 @@ export default function CommanderSlug() {
                       et donnent une raison d'acheter AVANT le catalogue. Un
                       bon cadeau qu'on découvre après avoir choisi ses articles
                       arrive trop tard pour donner envie. */}
-                  <BonCadeauFiche bons={mesBonsIci}/>
+                  <BonCadeauFiche bons={mesBonsIci} categorie={commercant?.categorie}/>
 
                   {/* 🔴 LE SIGNAL FIDÉLITÉ ÉTAIT ICI, ET IL N'Y EST PLUS.
                       Alex, 26/08 : « on parle fidélité alors que le commerçant
@@ -3671,8 +3677,8 @@ export default function CommanderSlug() {
                     <div style={{ marginTop: 12, background: bonRetour === 'ok' ? '#F0FDF4' : '#FFFBEB', border: `1.5px solid ${bonRetour === 'ok' ? '#86EFAC' : '#FCD34D'}`, borderRadius: 12, padding: '10px 14px' }}>
                       <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: bonRetour === 'ok' ? '#065F46' : '#78350F', lineHeight: 1.5 }}>
                         {bonRetour === 'ok'
-                          ? 'Ton bon cadeau est payé 🟣 Il arrive par email dans quelques instants (pense à vérifier les indésirables).'
-                          : 'Paiement annulé : aucun bon cadeau n\'a été débité.'}
+                          ? `Ton ${nomBon} est payé 🟣 Il arrive par email dans quelques instants (pense à vérifier les indésirables).`
+                          : `Paiement annulé : aucun ${nomBon} n'a été débité.`}
                       </p>
                     </div>
                   )}
@@ -4070,7 +4076,7 @@ export default function CommanderSlug() {
                           <path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
                         </svg>
                         <span style={{ minWidth: 0 }}>
-                          <span style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', color: T.ink }}>Offrir un bon cadeau</span>
+                          <span style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', color: T.ink }}>Offrir un {nomBon}</span>
                           <span style={{ display: 'block', fontSize: '0.7rem', color: T.muted, fontWeight: 600, marginTop: 1 }}>Montant libre, envoyé par email, valable {bonsCfg.validite_mois} mois</span>
                         </span>
                       </span>
@@ -4218,7 +4224,7 @@ export default function CommanderSlug() {
                   )}
                   {bonApplique && remiseBonEffective() > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-                      <span style={{ fontWeight: 700, color: '#10B981', fontSize: '0.82rem' }}>Bon cadeau ({bonApplique.code})</span>
+                      <span style={{ fontWeight: 700, color: '#10B981', fontSize: '0.82rem' }}>{libelleBon(commercant?.categorie, { majuscule: true })} ({bonApplique.code})</span>
                       <span style={{ fontWeight: 800, color: '#10B981', fontSize: '0.9rem' }}>−{euros(remiseBonEffective())}</span>
                     </div>
                   )}
@@ -4723,7 +4729,7 @@ export default function CommanderSlug() {
                       {!bonApplique && mesBonsIci.length > 0 && (
                         <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 14, padding: '10px 12px', marginBottom: 10 }}>
                           <p style={{ fontSize: '0.68rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px' }}>
-                            {mesBonsIci.length > 1 ? 'Tes bons cadeaux ici' : 'Ton bon cadeau ici'}
+                            {mesBonsIci.length > 1 ? `Tes ${nomBons} ici` : `Ton ${nomBon} ici`}
                           </p>
                           {mesBonsIci.map(b => (
                             <div key={b.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 6 }}>
@@ -4747,7 +4753,7 @@ export default function CommanderSlug() {
                       {/* Bon cadeau : champ code (si le commerçant a activé le module) */}
                       {bonsCfg?.actif && !bonApplique && (
                         <div style={{ background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 10 }}>
-                          <p style={{ fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px' }}>J&rsquo;ai un bon cadeau</p>
+                          <p style={{ fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px' }}>J&rsquo;ai un {nomBon}</p>
                           <div style={{ display: 'flex', gap: 8 }}>
                             <input value={bonInput} onChange={e => { setBonInput(e.target.value); setBonErreur(null) }}
                               placeholder="BC-XXXX-XXXX" autoCapitalize="characters" spellCheck={false}
@@ -4764,7 +4770,7 @@ export default function CommanderSlug() {
                         <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 14, padding: '10px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                           <div style={{ minWidth: 0 }}>
                             <p style={{ fontSize: '0.82rem', fontWeight: 800, color: '#065F46', margin: 0 }}>
-                              Bon cadeau appliqué : −{euros(remiseBonEffective())}
+                              {libelleBon(commercant?.categorie, { majuscule: true })} appliqué : −{euros(remiseBonEffective())}
                             </p>
                             {/* ⚠️ LA PHRASE DU RESTE VIT DANS LE MODULE (30/08),
                                 avec celle du tunnel rendez-vous. Elle s'arrêtait

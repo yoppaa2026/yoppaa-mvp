@@ -139,7 +139,10 @@ export default function RdvCancelPage() {
                   montants ne sont pas connus. On nomme les trois retours, et
                   l'écran suivant donne les chiffres. */}
               <p style={{ color: T.muted, fontSize: '0.95rem', lineHeight: 1.5 }}>
-                Ton acompte, ton bon cadeau et ta récompense fidélité te reviennent automatiquement.
+                {/* ⚠️ FRÈRE DE L'ÉCRAN DE LA COMMANDE : lui non plus ne connaît
+                    que le jeton, donc aucun métier à nommer. Les deux phrases
+                    changent ENSEMBLE, sinon elles se remettent à diverger. */}
+                Ton acompte, ton bon et ta récompense fidélité te reviennent automatiquement.
               </p>
             </div>
 

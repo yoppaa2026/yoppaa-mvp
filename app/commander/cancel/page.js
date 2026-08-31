@@ -126,7 +126,11 @@ export default function CancelPage() {
                   On nomme les trois retours ; l'écran suivant donne les
                   chiffres, qui ne sont pas encore connus ici. */}
               <p style={{ color: T.muted, fontSize: '0.95rem', lineHeight: 1.5 }}>
-                Ton paiement, ton bon cadeau et ta récompense fidélité te reviennent automatiquement.
+                {/* ⚠️ CET ÉCRAN NE CONNAÎT QUE LE JETON, jamais le commerce :
+                    aucune catégorie n'est disponible, donc aucun métier à
+                    nommer. « Ton bon » est vrai partout, « ton bon cadeau »
+                    serait faux une fois sur deux. Règle d'Alex, 31/08. */}
+                Ton paiement, ton bon et ta récompense fidélité te reviennent automatiquement.
               </p>
             </div>
 

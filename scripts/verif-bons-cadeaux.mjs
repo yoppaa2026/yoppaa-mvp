@@ -693,8 +693,14 @@ const egal = (nom, obtenu, attendu) =>
   verifie('🔴 le bloc actionnable propose bien de l’utiliser',
     /setBonChoisi\(/.test(blocActif))
   verifie('et le repli, lui, ne débite rien', !/setBonChoisi\(/.test(blocInfo))
+  // ⚠️ DEUXIÈME GARDE DE LA JOURNÉE À AVOIR SURVEILLÉ LE MOT. Elle cherchait
+  // « sur ton bon cadeau ici. » et a rougi le jour où le libellé s'est mis à
+  // suivre le métier, alors que la phrase disait toujours exactement la même
+  // chose. Ce qu'elle défend, ce n'est pas le nom du bon : c'est qu'on annonce
+  // un MONTANT et qu'on dise qu'il est utilisable ICI. On ancre donc sur ces
+  // deux-là, qui ne doivent pas bouger, et on laisse le nom varier.
   verifie('il annonce le solde disponible ici',
-    /sur ton bon cadeau ici\./.test(src))
+    /Tu as \$\{euros\(mesBonsIci\[0\]\.solde\)\}[^`]*\bici\./.test(src))
   verifie('et le geste à faire', /Présente ton code au comptoir/.test(blocInfo))
   // ⚠️ LE CODE SOUS LES YEUX : c'est lui qu'on donne au comptoir, et il ne vit
   // sinon que dans un email reçu il y a trois mois. Il est dans LES DEUX blocs,
@@ -782,6 +788,98 @@ const egal = (nom, obtenu, attendu) =>
     /bons? cadeaux?/i.test(lireCode('lib/export-comptable.js')))
   verifie('l\'export comptable n\'appelle pas libelleBon',
     !/libelleBon/.test(lire('lib/export-comptable.js')))
+}
+
+// ═══ CÔTÉ YOPPER : LE MOT DU COMMERCE, SAUF QUAND ON NE LE CONNAÎT PAS ═════
+//
+// 🔴 LA RÈGLE D'ALEX, 31/08, ET ELLE EST PLUS FINE QUE LA MIENNE. Je voulais
+// faire suivre le métier partout ; il a vu que la liste « Mes bons » de
+// l'accueil MÉLANGE LES COMMERCES. Un bon de la boulangerie et un du coiffeur
+// y voisinent : aucun des deux mots ne conviendrait au titre. « Mes bons »
+// suffit, parce que le possessif dit tout ce que le titre doit dire, et que le
+// métier est déjà nommé sur chaque carte juste en dessous.
+//
+// D'où DEUX familles d'écrans, et la garde tient les deux :
+//   • on connaît le commerce (sa fiche, ses tunnels, la page d'un bon) → le mot
+//     suit le métier ;
+//   • on ne le connaît pas (liste multi-commerces, écrans d'annulation qui
+//     n'ont qu'un jeton, titre d'onglet figé à la construction) → « bon » nu.
+//     Un mot vrai partout vaut mieux qu'un mot juste une fois sur deux.
+{
+  // ⚠️ LE DÉPOUILLEUR NE RETIRE PAS LES COMMENTAIRES DE FIN DE LIGNE (mesuré :
+  // `const a = 1  // bons cadeaux` ressort intact). On les écarte donc ici,
+  // sinon la garde rougirait sur une phrase que personne ne lit.
+  const codeSeul = (chemin) => lireCode(chemin)
+    .split('\n')
+    .map(l => l.replace(/\/\/.*$/, ''))
+    .join('\n')
+
+  // 🔴 LE FIL, ENCORE, ET IL M'A REPRIS. Mes deux premières gardes côté Yopper
+  // vérifiaient qu'il n'y a plus de libellé figé et que `libelleBon()` est bien
+  // appelée. Deux mutations sont passées au travers : retirer `categorie` de la
+  // signature de `BonCadeauFiche`, et cesser de la passer à l'appel. Les deux
+  // laissent un fichier qui appelle `libelleBon()` sans aucun mot gelé, donc
+  // deux gardes vertes, et un encart qui dit « bon cadeau » chez un boulanger.
+  // Ce n'est pas une garde de plus : c'est la MÊME règle que pour le tableau de
+  // bord, qu'il fallait appliquer ici aussi. Chercher les frères, encore.
+  {
+    const src = lireCode('app/commander/BonCadeauFiche.js')
+    const signature = /function BonCadeauFiche\(\{([^}]*)\}\)/.exec(src)
+    verifie('BonCadeauFiche reçoit la catégorie',
+      !!signature && /\bcategorie\b/.test(signature[1]),
+      signature ? `signature : { ${signature[1].trim()} }` : 'composant introuvable')
+
+    // ⚠️ TOUS LES APPELS : l'encart vit sur les DEUX fiches, produits et
+    // rendez-vous, et c'est exactement le genre d'endroit où une seule des deux
+    // est mise à jour. Ce projet a déjà connu la phrase écrite en double.
+    const appels = []
+    for (const f of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
+      for (const a of lireCode(f).match(/<BonCadeauFiche\b[^>]*\/>/g) || []) appels.push([f, a])
+    }
+    verifie('l\'encart est appelé sur les deux fiches', appels.length === 2, `${appels.length} appel(s)`)
+    const muets = appels.filter(([, a]) => !/\bcategorie=\{/.test(a))
+    verifie(`les ${appels.length} appel(s) de BonCadeauFiche passent la catégorie`,
+      muets.length === 0, muets.map(([f]) => f).join(', '))
+  }
+
+  // Là où le commerce est connu : plus aucun libellé figé.
+  for (const fichier of [
+    'app/commander/BonCadeauFiche.js',
+    'app/commander/BonCadeauModal.js',
+    'app/commander/rdv/[slug]/page.js',
+    'app/commander/[slug]/page.js',
+    'app/cadeau/[token]/page.js',
+  ]) {
+    const restants = codeSeul(fichier).match(/bons? cadeaux?/gi) || []
+    verifie(`aucun libellé figé dans ${fichier}`,
+      restants.length === 0, `${restants.length} restant(s)`)
+    verifie(`${fichier} appelle bien libelleBon`, /libelleBon\(/.test(codeSeul(fichier)))
+  }
+
+  // 🔴 ET LÀ OÙ ON NE CONNAÎT PAS LE COMMERCE, ON N'INVENTE PAS. Ces trois
+  // écrans n'ont aucune catégorie sous la main : ils doivent dire « bon » nu,
+  // et surtout ne pas appeler `libelleBon()`, qui rendrait « bon cadeau » chez
+  // un boulanger par le jeu du repli. C'est la sur-correction que cette garde
+  // interdit.
+  const accueil = codeSeul('app/commander/page.js')
+  verifie('🔴 la liste multi-commerces dit « Mes bons », sans métier',
+    /mesBons\.length > 1 \? 'Mes bons' : 'Mon bon'/.test(accueil))
+
+  for (const [fichier, phrase] of [
+    ['app/commander/cancel/page.js', 'Ton paiement, ton bon et ta récompense fidélité te reviennent automatiquement.'],
+    ['app/commander/rdv/cancel/page.js', 'Ton acompte, ton bon et ta récompense fidélité te reviennent automatiquement.'],
+  ]) {
+    const src = codeSeul(fichier)
+    verifie(`${fichier} dit « ton bon » sans nommer de métier`, src.includes(phrase))
+    verifie(`${fichier} n'appelle pas libelleBon (aucune catégorie sous la main)`,
+      !/libelleBon\(/.test(src))
+  }
+
+  // ⚠️ CE TITRE EST FIGÉ À LA CONSTRUCTION DU MODULE, avant qu'on sache de quel
+  // bon il s'agit : il ne PEUT pas suivre le métier, et c'est écrit ici pour
+  // qu'on ne le « corrige » pas dans six mois.
+  verifie('le titre d\'onglet de la page d\'un bon reste neutre',
+    /title: 'Mon bon · Yoppaa'/.test(codeSeul('app/cadeau/[token]/page.js')))
 }
 
 console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.`)

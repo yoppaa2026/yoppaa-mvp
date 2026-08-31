@@ -821,8 +821,15 @@ for (const chemin of [
   // règle, et les trois fois c'est le harnais de mutation qui me l'a dit.
   verifie('la ligne de récompense est bien conditionnée à son montant',
     /\{remiseFid > 0 && \([\s\S]{0,600}Ta récompense fidélité/.test(recap))
+  // ⚠️ ET LE LIBELLÉ QUI SUIT LA CONDITION NE SE CHERCHE PLUS EN DUR : il porte
+  // le mot du métier depuis le 31/08, donc on vise la VARIABLE qui le rend.
+  // C'est la quatrième garde de la journée à avoir rougi pour un mot qui a
+  // changé alors que la règle, elle, tenait toujours.
   verifie('la ligne de bon cadeau est bien conditionnée à son montant',
-    /\{remiseBon > 0 && \([\s\S]{0,600}Ton bon cadeau/.test(recap))
+    // ⚠️ `Ton {nomBon}` et non `Ton ${nomBon}` : cette ligne-ci est du JSX, pas
+    // un gabarit de chaîne. Ma première écriture cherchait le dollar et rendait
+    // la garde définitivement rouge, ce qui est le bon échec : elle a dit non.
+    /\{remiseBon > 0 && \([\s\S]{0,600}Ton \{nomBon\}/.test(recap))
   // ⚠️ ET L'ASSIETTE DE L'ACOMPTE EST DITE quand elle n'est plus le prix
   // affiché : « 50 % » d'une prestation à 60 € qui donne 5 € a l'air faux.
   verifie('l’assiette de l’acompte est nommée quand elle change',

@@ -5,11 +5,17 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { euros } from '@/lib/montants'
+import { libelleBon } from '@/lib/bons-cadeaux'
 
 export const dynamic = 'force-dynamic'
 
+// ⚠️ CE TITRE NE PEUT PAS SUIVRE LE MÉTIER, et ce n'est pas un oubli : il est
+// évalué à la construction du module, avant qu'on sache de quel bon il s'agit.
+// On applique donc la règle d'Alex du 31/08, celle de la liste « Mes bons » :
+// quand on ne connaît pas le commerce, le possessif suffit. Mieux vaut un mot
+// vrai partout qu'un mot juste une fois sur deux.
 export const metadata = {
-  title: 'Mon bon cadeau · Yoppaa',
+  title: 'Mon bon · Yoppaa',
   robots: { index: false, follow: false },  // page personnelle, jamais indexée
 }
 
@@ -66,7 +72,9 @@ export default async function CadeauPage({ params }) {
         <div style={{ background: '#fff', borderRadius: 22, padding: '28px 24px', maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 18px 44px rgba(0,0,0,0.3)' }}>
           <p style={{ margin: '0 0 6px', fontWeight: 900, fontSize: 18, color: T.ink }}>Bon introuvable</p>
           <p style={{ margin: 0, fontSize: 13.5, color: T.muted, lineHeight: 1.6 }}>
-            Ce lien ne correspond à aucun bon cadeau actif. Vérifie le lien de ton email, ou contacte le commerçant.
+            {/* ⚠️ ON NE CONNAÎT PAS LE COMMERCE ICI, puisque le bon est
+                introuvable : nommer un métier serait une devinette. */}
+            Ce lien ne correspond à aucun bon actif. Vérifie le lien de ton email, ou contacte le commerçant.
           </p>
         </div>
       ) : (
@@ -75,7 +83,7 @@ export default async function CadeauPage({ params }) {
           <div style={{ height: 5, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
 
           <div style={{ padding: '24px 22px 26px', textAlign: 'center' }}>
-            <p style={{ margin: '0 0 2px', fontSize: 11, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '1px' }}>Bon cadeau</p>
+            <p style={{ margin: '0 0 2px', fontSize: 11, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '1px' }}>{libelleBon(bon.commercant?.categorie, { majuscule: true })}</p>
             <p style={{ margin: '0 0 14px', fontWeight: 900, fontSize: 20, color: T.ink, letterSpacing: '-0.4px' }}>{bon.commercant?.nom}</p>
 
             <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, borderRadius: 16, padding: '20px 16px', marginBottom: 14 }}>

@@ -12,6 +12,7 @@ import { bordsDefilement } from '@/lib/responsive'
 import { referenceCommande } from '@/lib/numero-commande'
 import { resteAEncaisserCommande, etatPaiementClient, couleurPaiement, montantNetCommande, montantNetRdv, phraseAvantages } from '@/lib/rdv-paiement'
 import { euros } from '@/lib/montants'
+import { libelleBon } from '@/lib/bons-cadeaux'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
 import { libelleOptions } from '@/lib/options-ligne'
 import IconeRetrait from '@/app/components/IconeRetrait'
@@ -4094,7 +4095,14 @@ export default function Commander() {
                   <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px 12px', marginBottom: '0.875rem', border: '1px solid #86EFAC' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                       <span style={{ fontSize: 11, fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-                        {mesBons.length > 1 ? 'Mes bons cadeaux' : 'Mon bon cadeau'}
+                        {/* ⚠️ ICI ET NULLE PART AILLEURS, LE MOT DU MÉTIER DISPARAÎT,
+                            et c'est la trouvaille d'Alex : cette liste mélange les
+                            commerces. Un bon de la boulangerie et un du coiffeur y
+                            voisinent, aucun des deux mots ne conviendrait au titre.
+                            « Mes bons » suffit, parce que le possessif dit tout ce
+                            que le titre doit dire, et que le métier est déjà nommé
+                            sur chaque carte, juste en dessous. */}
+                        {mesBons.length > 1 ? 'Mes bons' : 'Mon bon'}
                       </span>
                       <div style={{ flex: 1, height: 1, background: '#D1FAE5' }}/>
                       <span style={{ fontSize: 11, fontWeight: 700, color: '#059669' }}>
@@ -4115,7 +4123,7 @@ export default function Commander() {
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#F0FDF4', border: '1px solid #D1FAE5', borderRadius: 12, padding: '10px 12px', textDecoration: 'none' }}>
                             <div style={{ minWidth: 0 }}>
                               <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: '#065F46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {b.commercant?.nom || 'Bon cadeau'}
+                                {b.commercant?.nom || libelleBon(b.commercant?.categorie, { majuscule: true })}
                               </p>
                               <p style={{ margin: '2px 0 0', fontSize: '0.72rem', fontWeight: 600, color: presse ? '#B45309' : '#047857' }}>
                                 {b.code}

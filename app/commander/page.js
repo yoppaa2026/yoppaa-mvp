@@ -857,7 +857,9 @@ function MontantPaye({ commande }) {
 }
 
 function PillPaiementClient({ commande, taille = 'normal' }) {
-  const etat = etatPaiementClient(commande)
+  // La commande porte déjà son commerçant ici : on lui demande sa catégorie,
+  // comme le fait `BadgeTypeCommande` juste à côté, dans la même carte.
+  const etat = etatPaiementClient(commande, { categorie: commande?.commercant?.categorie })
   if (!etat) return null
   const c = couleurPaiement(etat)
   const petit = taille === 'petit'

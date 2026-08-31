@@ -72,7 +72,9 @@ const MUTATIONS = [
 
   { nom: '🔴 tunnel PRODUITS : le bon n’est plus revalidé',
     banc: 'verif:bons', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
-    de: '      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id })',
+    // ⚠️ RE-ANCREE LE 31/08 : l appel a recu la categorie du commerce, et
+    // l ancre litterale rendait TEXTE INTROUVABLE, c est-a-dire une NON-mesure.
+    de: '      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id, categorie: commercant.categorie })',
     vers: '      const resBon = { ok: true, bon: { id: bon_cadeau_code, solde: 999 } }' },
 
   { nom: '🔴 tunnel PRODUITS : le bon ne part plus vers le webhook',
@@ -671,6 +673,27 @@ const MUTATIONS = [
   // n'est pas garder : la garde vise désormais la RÈGLE, « aucun journal
   // n'appelle `libelleBon` », et la mutation fait ce qu'un développeur zélé
   // ferait un jour, câbler le mot du métier jusque dans la console.
+  // ═══ LE MODULE DE PAIEMENT ET LES ROUTES (31/08) ═════════════════════════
+  //
+  // 🔴 `rdv-paiement` EST LU PAR LES DEUX CÔTÉS À LA FOIS, écrans et emails :
+  // une phrase qui y regèle son mot se propage partout d'un coup.
+  { nom: '🔴 la phrase des avantages regèle le mot du bon',
+    banc: 'verif:bons', fichier: 'lib/rdv-paiement.js',
+    de: '  if (bon) morceaux.push(`${euros(bon)} en ${libelleBon(categorie)}`)',
+    vers: '  if (bon) morceaux.push(`${euros(bon)} en bon cadeau`)' },
+
+  { nom: '🔴 l’état de paiement du client ignore la catégorie reçue',
+    banc: 'verif:bons', fichier: 'lib/rdv-paiement.js',
+    de: '        libelle: `Payé avec ton ${libelleBon(categorie)}`,',
+    vers: '        libelle: `Payé avec ton ${libelleBon(null)}`,' },
+
+  // ⚠️ ET LE REPLI DOIT SURVIVRE : ce module est appelé SANS options par de
+  // vieux appelants. Le casser serait une régression silencieuse de plus.
+  { nom: '🔴 SUR-CORRECTION : le module bascule au gourmand sans catégorie',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: "const CATEGORIE_GOURMANDE = 'alimentaire'",
+    vers: "const CATEGORIE_GOURMANDE = ''" },
+
   { nom: '🔴 SUR-CORRECTION : un journal technique se met à varier',
     banc: 'verif:bons', fichier: 'app/api/stripe/webhook/route.js',
     de: "console.error('[stripe/webhook] bon cadeau introuvable', bonId)",

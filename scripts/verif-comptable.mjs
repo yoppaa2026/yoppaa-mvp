@@ -830,8 +830,13 @@ verifier('la livraison et l’expédition gardent la leur',
 // MUETTE. La règle sert DEUX fois sur la carte, pour la pastille et pour la
 // ligne de détail : chercher son nom laissait le second usage satisfaire le
 // test, et retirer la pastille ne faisait rien rougir.
+//
+// ⚠️ ET L'ANCRE NE FIGE PLUS LES ARGUMENTS. Elle cherchait `etatPaiementCommande(commande)`
+// à la parenthèse près : le jour où la fonction a reçu la catégorie du commerce
+// (31/08), le compte est tombé à zéro alors que les deux usages étaient bien là.
+// Une garde qui compte doit compter l'APPEL, pas sa signature du moment.
 egal('la carte passe par la règle du paiement aux deux endroits',
-  (srcDashCmd.match(/etatPaiementCommande\(commande\)/g) || []).length, 2)
+  (srcDashCmd.match(/etatPaiementCommande\(commande[,)]/g) || []).length, 2)
 
 // ─── LE SWIPE NE VAUT QUE S'IL N'Y A PLUS RIEN À PAYER ────────────────────
 //

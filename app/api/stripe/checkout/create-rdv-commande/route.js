@@ -32,6 +32,7 @@
 // rembourser.
 
 import { NextResponse } from 'next/server'
+import { libelleBon } from '@/lib/bons-cadeaux'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
@@ -182,9 +183,9 @@ export async function POST(request) {
     if (bon_cadeau_code) {
       const codeBon = normaliserCodeBon(bon_cadeau_code)
       if (!codeBon) {
-        return NextResponse.json({ ok: false, error: 'Code de bon cadeau invalide.' }, { status: 400 })
+        return NextResponse.json({ ok: false, error: `Code de ${libelleBon(commercant.categorie)} invalide.` }, { status: 400 })
       }
-      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id })
+      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id, categorie: commercant.categorie })
       if (!resBon.ok) {
         return NextResponse.json({ ok: false, error: resBon.error, bon_refuse: true }, { status: 400 })
       }
@@ -505,7 +506,7 @@ export async function POST(request) {
           await supabase.from('rdv_reservations').delete().eq('id', idRdv)
           await toutDefaire()
           console.error('[create-rdv-commande] débit bon (prestation) KO', deb?.error)
-          return NextResponse.json({ ok: false, error: 'Ce bon cadeau vient d\'être utilisé, vérifie son solde et réessaie.' }, { status: 409 })
+          return NextResponse.json({ ok: false, error: `Ce ${libelleBon(commercant.categorie)} vient d’être utilisé, vérifie son solde et réessaie.` }, { status: 409 })
         }
       }
       if (bonCadeau && vent.bonSurProduits > 0) {
@@ -520,7 +521,7 @@ export async function POST(request) {
           await supabase.from('rdv_reservations').delete().eq('id', idRdv)
           await toutDefaire()
           console.error('[create-rdv-commande] débit bon (produits) KO', deb?.error)
-          return NextResponse.json({ ok: false, error: 'Ce bon cadeau vient d\'être utilisé, vérifie son solde et réessaie.' }, { status: 409 })
+          return NextResponse.json({ ok: false, error: `Ce ${libelleBon(commercant.categorie)} vient d’être utilisé, vérifie son solde et réessaie.` }, { status: 409 })
         }
       }
 
@@ -593,7 +594,7 @@ export async function POST(request) {
       const nbArticles = lignes.reduce((s, l) => s + l.quantite, 0)
       const parts = []
       if (vent.recompenseSurProduits > 0) parts.push(`${euros(vent.recompenseSurProduits)} de récompense`)
-      if (vent.bonSurProduits > 0) parts.push(`${euros(vent.bonSurProduits)} de bon cadeau`)
+      if (vent.bonSurProduits > 0) parts.push(`${euros(vent.bonSurProduits)} de ${libelleBon(commercant.categorie)}`)
       lineItems.push({
         quantity: 1,
         price_data: {

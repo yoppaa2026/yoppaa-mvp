@@ -14,6 +14,7 @@
 //          beneficiaire_prenom?, message? }
 
 import { NextResponse } from 'next/server'
+import { libelleBon } from '@/lib/bons-cadeaux'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { canDo } from '@/lib/plans'
@@ -75,7 +76,7 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'Commerçant introuvable.' }, { status: 404 })
     }
     if (!commercant.bons_cadeaux_actif || !canDo(commercant.plan, 'bons_cadeaux')) {
-      return NextResponse.json({ ok: false, error: 'Les bons cadeaux ne sont pas proposés chez ce commerçant.' }, { status: 400 })
+      return NextResponse.json({ ok: false, error: `Les ${libelleBon(commercant?.categorie, { pluriel: true })} ne sont pas proposés chez ce commerçant.` }, { status: 400 })
     }
     if (!commercant.stripe_account_id || !commercant.stripe_account_charges_enabled) {
       return NextResponse.json({ ok: false, error: 'Le paiement en ligne n\'est pas encore activé chez ce commerçant.' }, { status: 400 })
@@ -120,7 +121,7 @@ export async function POST(request) {
           currency: 'eur',
           unit_amount: montantCents,
           product_data: {
-            name: `Bon cadeau · ${commercant.nom}`,
+            name: `${libelleBon(commercant.categorie, { majuscule: true })} · ${commercant.nom}`,
             description: modeDest === 'offrir'
               ? `Offert à ${beneficiaire_prenom || beneficiaire_email} · valable ${validiteMois} mois`
               : `Valable ${validiteMois} mois`,

@@ -29,6 +29,7 @@
 // 'paiement_en_attente' > 15 min (au cas où webhook ne vient jamais).
 
 import { NextResponse } from 'next/server'
+import { libelleBon } from '@/lib/bons-cadeaux'
 import { eurosNus } from '@/lib/montants'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
@@ -473,9 +474,9 @@ export async function POST(request) {
     if (bon_cadeau_code) {
       const codeBon = normaliserCodeBon(bon_cadeau_code)
       if (!codeBon) {
-        return NextResponse.json({ ok: false, error: 'Code de bon cadeau invalide.' }, { status: 400 })
+        return NextResponse.json({ ok: false, error: `Code de ${libelleBon(commercant.categorie)} invalide.` }, { status: 400 })
       }
-      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id })
+      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id, categorie: commercant.categorie })
       if (!resBon.ok) {
         return NextResponse.json({ ok: false, error: resBon.error }, { status: 400 })
       }
@@ -896,7 +897,7 @@ export async function POST(request) {
         await supabase.from('commandes').update({ statut: 'annulee_paiement_ko' }).eq('id', commande.id)
         await supabase.from('commande_stock_reservation').delete().eq('commande_id', commande.id)
         console.error('[create-commande] débit bon cadeau KO', deb.error)
-        return NextResponse.json({ ok: false, error: 'Ce bon cadeau vient d\'être utilisé, vérifie son solde et réessaie.' }, { status: 409 })
+        return NextResponse.json({ ok: false, error: `Ce ${libelleBon(commercant.categorie)} vient d’être utilisé, vérifie son solde et réessaie.` }, { status: 409 })
       }
     }
 
@@ -963,7 +964,7 @@ export async function POST(request) {
               description: [
                 descCommande,
                 remiseRecompenseEUR > 0 ? `récompense fidélité (−${eurosNus(remiseRecompenseEUR)} €)` : null,
-                remiseBonEUR > 0 ? `bon cadeau déduit (−${eurosNus(remiseBonEUR)} €)` : null,
+                remiseBonEUR > 0 ? `${libelleBon(commercant.categorie)} déduit (−${eurosNus(remiseBonEUR)} €)` : null,
               ].filter(Boolean).join(' · '),
             },
           },

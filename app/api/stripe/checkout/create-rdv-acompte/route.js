@@ -21,6 +21,7 @@
 // retry côté webhook handler.
 
 import { NextResponse } from 'next/server'
+import { libelleBon } from '@/lib/bons-cadeaux'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
@@ -66,7 +67,7 @@ export async function POST(request) {
     // Récupère commerçant + prestation pour calculer montants
     const [{ data: commercant }, { data: prestation }] = await Promise.all([
       // ⚠️ `plan`, `essai_plan` ET `created_at` : la garde de forfait en dépend.
-      supabase.from('commercants').select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, rdv_acompte_en_ligne_actif, rdv_acompte_global, rdv_actif, plan, essai_plan, created_at').eq('id', commercant_id).single(),
+      supabase.from('commercants').select('id, nom, slug, categorie, stripe_account_id, stripe_account_charges_enabled, rdv_acompte_en_ligne_actif, rdv_acompte_global, rdv_actif, plan, essai_plan, created_at').eq('id', commercant_id).single(),
       supabase.from('rdv_prestations').select('id, nom, prix, acompte_pourcent, duree_minutes').eq('id', prestation_id).single(),
     ])
 
@@ -168,9 +169,9 @@ export async function POST(request) {
     if (bon_cadeau_code) {
       const codeBon = normaliserCodeBon(bon_cadeau_code)
       if (!codeBon) {
-        return NextResponse.json({ ok: false, error: 'Code de bon cadeau invalide.' }, { status: 400 })
+        return NextResponse.json({ ok: false, error: `Code de ${libelleBon(commercant.categorie)} invalide.` }, { status: 400 })
       }
-      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id })
+      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id, categorie: commercant.categorie })
       if (!resBon.ok) {
         return NextResponse.json({ ok: false, error: resBon.error }, { status: 400 })
       }
@@ -205,7 +206,7 @@ export async function POST(request) {
         // ⚠️ ON NOMME CE QUI A FAIT BAISSER L'ACOMPTE, sinon le message accuse
         // la récompense alors que c'est le bon cadeau qui l'a rendu trop petit.
         error: (remiseRecompenseEUR > 0 || remiseBonEUR > 0)
-          ? `Avec ${remiseBonEUR > 0 && remiseRecompenseEUR > 0 ? 'ta récompense et ton bon cadeau' : remiseBonEUR > 0 ? 'ton bon cadeau' : 'ta récompense'}, l'acompte descend sous le minimum encaissable. Réserve sans, tu pourras t'en servir au comptoir.`
+          ? `Avec ${remiseBonEUR > 0 && remiseRecompenseEUR > 0 ? `ta récompense et ton ${libelleBon(commercant.categorie)}` : remiseBonEUR > 0 ? `ton ${libelleBon(commercant.categorie)}` : 'ta récompense'}, l'acompte descend sous le minimum encaissable. Réserve sans, tu pourras t'en servir au comptoir.`
           : 'acompte trop faible (min 0,50€ Stripe)',
         recompense_refusee: remiseRecompenseEUR > 0 ? 'acompte_trop_faible' : undefined,
         bon_refuse: remiseBonEUR > 0 ? 'acompte_trop_faible' : undefined,

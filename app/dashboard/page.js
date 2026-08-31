@@ -290,7 +290,12 @@ const ACTIONS_RDV_LABEL = {
 }
 
 // ─── Carte commande ───────────────────────────────────────────────────────────
-function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, onExpedier, onProduitsRemis, onRetourArriere, filtreCourant, modeHistorique = false }) {
+// ⚠️ `categorie` ARRIVE EN PROP, ET C EST TOUT LE SUJET : cette carte vit
+// HORS du composant Dashboard, elle ne voit pas son `commercant`. Ma premiere
+// version y ecrivait `commercant?.categorie` : une variable inexistante, donc
+// un ecran blanc au rendu. Attrape par `verif:undef`, pas par le lint
+// principal, ou la regle `no-undef` est eteinte.
+function CarteCommande({ commande, numero, categorie = null, onChangerStatut, onLivraisonStatut, onExpedier, onProduitsRemis, onRetourArriere, filtreCourant, modeHistorique = false }) {
   const statut = STATUTS[commande.statut] || STATUTS['en_attente']
   const { couleur } = statut
   const estLivraison = commande.mode_retrait === 'livraison'
@@ -486,7 +491,7 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
                 main. Le rendez-vous portait cette pastille depuis le matin, la
                 commande non : même défaut, même code couleur, même module. */}
             {(() => {
-              const p = etatPaiementCommande(commande)
+              const p = etatPaiementCommande(commande, { categorie })
               if (!p) return null
               const c = couleurPaiement(p)
               return (
@@ -501,7 +506,7 @@ function CarteCommande({ commande, numero, onChangerStatut, onLivraisonStatut, o
             moyen déclaré. Une ligne, sous l'entête, et seulement s'il y a
             quelque chose à dire. */}
         {(() => {
-          const p = etatPaiementCommande(commande)
+          const p = etatPaiementCommande(commande, { categorie })
           if (!p?.detail) return null
           return <p style={{ fontSize: '0.7rem', color: T.muted, fontWeight: 600, margin: '0 0 8px' }}>{p.detail}</p>
         })()}
@@ -3270,6 +3275,7 @@ export default function Dashboard() {
                         key={commande.id}
                         commande={commande}
                         numero={getNumeroJour(commandes, commande.id)}
+                        categorie={commercant?.categorie}
                         onChangerStatut={changerStatut}
                         onLivraisonStatut={changerStatutLivraison}
                         onExpedier={setCommandeAExpedier}
@@ -3425,7 +3431,7 @@ export default function Dashboard() {
       {/* ─── LA FENÊTRE QUI DEMANDE, PUIS QUI CONFIRME ────────────────────── */}
       <ModaleConfirmation
         ouverte={!!actionRdv}
-        {...(actionRdv && !confirmationRdvTexte ? (questionRdv(actionRdv.action, actionRdv.rdv) || {}) : {})}
+        {...(actionRdv && !confirmationRdvTexte ? (questionRdv(actionRdv.action, actionRdv.rdv, commercant?.categorie) || {}) : {})}
         enCours={actionEnCours}
         confirmation={confirmationRdvTexte}
         onChoix={repondreActionRdv}

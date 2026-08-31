@@ -25,7 +25,7 @@ import { euros, eurosNus } from '../lib/montants.js'
 import { elisionDe } from '../lib/francais.js'
 import { doitMontrerFlottant, SEUIL_CACHER, SEUIL_MONTRER } from '../lib/bouton-flottant.js'
 import { calculerRemiseBon, normaliserCodeBon, bonExpire, libelleResteBon, libelleBon } from '../lib/bons-cadeaux.js'
-import { resteAEncaisser, soldeRdv, etatPaiementRdv, caDesRdvs, montantNetCommande, phraseAvantages } from '../lib/rdv-paiement.js'
+import { resteAEncaisser, soldeRdv, etatPaiementRdv, caDesRdvs, montantNetCommande, phraseAvantages, etatPaiementClient } from '../lib/rdv-paiement.js'
 import { emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant } from '../lib/resend.js'
 import { texteBonVendu } from '../lib/bons-vendus.js'
 import { sansProse } from './lire-code.mjs'
@@ -969,6 +969,52 @@ const egal = (nom, obtenu, attendu) =>
     verifie(`aucun journal de ${fichier} n'appelle libelleBon`,
       fautifs.length === 0, `${fautifs.length} journal(aux) fautif(s)`)
   }
+}
+
+// ═══ LE MODULE DE PAIEMENT ET LES ROUTES, EXÉCUTÉS ═══════════════════════
+//
+// 🔴 `lib/rdv-paiement.js` EST LU PAR LES DEUX CÔTÉS À LA FOIS : les écrans du
+// Yopper, ceux du commerçant, et les emails. Neuf phrases y nommaient le bon.
+// Comme pour les emails, on ne cherche pas une chaîne : on exécute.
+{
+  const commande = { total: 30, paye_en_ligne: true, bon_cadeau_montant: 30, fidelite_remise: 0 }
+  for (const [metier, attendu, absent] of [
+    ['alimentaire', 'bon gourmand', 'bon cadeau'],
+    ['detail', 'bon cadeau', 'bon gourmand'],
+    [null, 'bon cadeau', 'bon gourmand'],
+  ]) {
+    const nomMetier = metier || 'catégorie absente'
+
+    const phrase = phraseAvantages({ bon_cadeau_montant: 12 }, { categorie: metier })
+    verifie(`[${nomMetier}] la phrase des avantages dit « ${attendu} »`, String(phrase).includes(attendu))
+    verifie(`[${nomMetier}] et jamais « ${absent} »`, !String(phrase).includes(absent))
+
+    const etat = etatPaiementClient(commande, { categorie: metier })
+    const texte = `${etat?.libelle || ''} ${etat?.detail || ''}`
+    verifie(`[${nomMetier}] l'état de paiement du client dit « ${attendu} »`, texte.includes(attendu))
+    verifie(`[${nomMetier}] et jamais « ${absent} »`, !texte.includes(absent))
+
+    // ⚠️ ET LE CAS OÙ LE BON PAIE TOUT SANS PASSER PAR STRIPE : c'est le SEUL
+    // qui nomme le bon dans le LIBELLÉ et pas seulement dans le détail. Ma
+    // première série de données ne l'atteignait pas, et une mutation posée
+    // exprès sur cette ligne est restée verte : le banc ne mesurait qu'une
+    // branche sur deux. Une couverture qui rate une branche est une couverture
+    // qui ment.
+    const couvert = etatPaiementClient(
+      { total: 30, paye_en_ligne: false, bon_cadeau_montant: 30, fidelite_remise: 0 },
+      { categorie: metier },
+    )
+    verifie(`[${nomMetier}] « payé avec ton … » nomme le bon dans son libellé`,
+      String(couvert?.libelle || '').includes(attendu), `libellé : « ${couvert?.libelle} »`)
+    verifie(`[${nomMetier}] et jamais « ${absent} » dans ce libellé`,
+      !String(couvert?.libelle || '').includes(absent))
+  }
+
+  // ⚠️ ET LE REPLI RESTE LE REPLI : appelée SANS options, comme avant ce
+  // chantier, la fonction doit continuer à rendre le mot canonique. Un module
+  // partagé qui casserait ses anciens appelants serait un défaut de plus.
+  verifie('sans catégorie, le module garde le mot compris partout',
+    String(phraseAvantages({ bon_cadeau_montant: 12 })).includes('bon cadeau'))
 }
 
 console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.`)

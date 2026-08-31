@@ -14,6 +14,7 @@
 //   4. Email annulation Yopper + iCal CANCEL (appel direct emailRdvAnnule)
 
 import { NextResponse } from 'next/server'
+import { libelleBon } from '@/lib/bons-cadeaux'
 import { euros } from '@/lib/montants'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe } from '@/lib/stripe'
@@ -424,7 +425,7 @@ export async function POST(request) {
     // perdu les 35 € de son bon. Il faut ouvrir sa fiche pour découvrir qu'ils
     // y sont revenus, et personne ne va vérifier ce qu'on ne lui annonce pas.
     const phraseBon = bonRendu > 0
-      ? ` Les ${euros(bonRendu)} de ton bon cadeau sont recrédités dessus, utilisables tout de suite.`
+      ? ` Les ${euros(bonRendu)} de ton ${libelleBon(commercant?.categorie)} sont recrédités dessus, utilisables tout de suite.`
       : ''
     // 🔴 ET LA RÉCOMPENSE, QUI REVENAIT SANS QUE PERSONNE NE LE DISE (Alex,
     // 30/08). Exactement le défaut du bon cadeau, un jour plus tard : le geste

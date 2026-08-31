@@ -99,9 +99,13 @@ export async function POST(request) {
       .gt('solde', 0)
       .or(`acheteur_email.eq.${email},beneficiaire_email.eq.${email}`)
     if (bonsActifs?.length > 0) {
+      // ⚠️ MULTI-COMMERCES, DONC PAS DE MÉTIER À NOMMER. Un Yopper qui supprime
+      // son compte peut porter un bon de sa boulangerie et un de son coiffeur :
+      // aucun des deux mots ne conviendrait. Règle d'Alex du 31/08, la même que
+      // pour la liste « Mes bons » de l'accueil.
       blocages.push(bonsActifs.length > 1
-        ? `${bonsActifs.length} bons cadeaux ont encore du solde à utiliser.`
-        : 'Un bon cadeau a encore du solde à utiliser.')
+        ? `${bonsActifs.length} bons ont encore du solde à utiliser.`
+        : 'Un bon a encore du solde à utiliser.')
     }
 
     if (blocages.length > 0) {

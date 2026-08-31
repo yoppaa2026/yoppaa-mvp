@@ -33,6 +33,7 @@
 // règle, écrite dans `ventilerTunnelRdv`.
 
 import { NextResponse } from 'next/server'
+import { libelleBon } from '@/lib/bons-cadeaux'
 import { createClient } from '@supabase/supabase-js'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { identiteProuvee } from '@/lib/yopper-auth'
@@ -100,7 +101,7 @@ export async function POST(request) {
     // une colonne absente d'un select la rendrait muette sans lever d'erreur.
     const [{ data: commercant }, { data: prestation }] = await Promise.all([
       db.from('commercants')
-        .select('id, nom, slug, rdv_actif, rdv_acompte_en_ligne_actif, rdv_acompte_global, stripe_account_id, stripe_account_charges_enabled, horaires_detail, plan, essai_plan, created_at')
+        .select('id, nom, slug, categorie, rdv_actif, rdv_acompte_en_ligne_actif, rdv_acompte_global, stripe_account_id, stripe_account_charges_enabled, horaires_detail, plan, essai_plan, created_at')
         .eq('id', commercant_id).maybeSingle(),
       db.from('rdv_prestations')
         .select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id')
@@ -218,8 +219,8 @@ export async function POST(request) {
     let bonCadeau = null
     if (bon_cadeau_code) {
       const codeBon = normaliserCodeBon(bon_cadeau_code)
-      if (!codeBon) return NextResponse.json({ ok: false, error: 'Code de bon cadeau invalide.' }, { status: 400 })
-      const resBon = await chargerBonValide(db, { code: codeBon, commercant_id: commercant.id })
+      if (!codeBon) return NextResponse.json({ ok: false, error: `Code de ${libelleBon(commercant.categorie)} invalide.` }, { status: 400 })
+      const resBon = await chargerBonValide(db, { code: codeBon, commercant_id: commercant.id, categorie: commercant.categorie })
       if (!resBon.ok) return NextResponse.json({ ok: false, error: resBon.error, bon_refuse: true }, { status: 400 })
       bonCadeau = resBon.bon
     }

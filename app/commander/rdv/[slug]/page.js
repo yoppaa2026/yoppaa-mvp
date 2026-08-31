@@ -3344,16 +3344,37 @@ export default function CommanderRdvSlug() {
                             fiche n'en connaissait aucun, alors que son email lui
                             promettait « applique le code au moment de payer ».
 
-                            ⚠️ MÊME LIMITE QUE LA RÉCOMPENSE, et pour la même
-                            raison : SEULEMENT quand un acompte en ligne est
-                            demandé. Un rendez-vous sans acompte s'insère depuis
-                            le NAVIGATEUR ; y brancher le bon reviendrait à
-                            laisser le client écrire lui-même sa remise. Le bon
-                            reste utilisable au comptoir dans ce cas.
+                            🔴 IL NE DÉPEND PLUS DE L'ACOMPTE (Alex, 31/08).
+
+                            Il était réservé aux rendez-vous à acompte, et deux
+                            raisons le justifiaient. Aucune ne tient plus.
+
+                            La première était que le rendez-vous sans acompte
+                            s'insérait DEPUIS LE NAVIGATEUR : brancher le bon
+                            revenait à laisser le client écrire sa remise. Faux
+                            depuis le 30/08 : `/api/rdv/reserver` revalide le
+                            code contre le commerce, le statut, l'expiration et
+                            le solde, puis débite lui-même. L'écran propose, le
+                            serveur décide.
+
+                            La seconde était qu'on brûlerait le bon des semaines
+                            avant un rendez-vous qui ne fait sortir aucun argent,
+                            pour rien si la personne ne vient pas. Faux aussi
+                            depuis le 30/08 au soir : l'annulation re-crédite le
+                            bon, et le no-show ne garde que la GARANTIE. Sans
+                            acompte demandé, la garantie vaut zéro, donc le bon
+                            revient ENTIER même en cas de lapin.
+
+                            ⚠️ ET SURTOUT, LE BON N'EST PAS UN PAIEMENT, C'EST UN
+                            AVOIR CHEZ CE COMMERÇANT. Cet argent est déjà versé,
+                            déjà chez lui. Faire venir le porteur avec un code à
+                            réciter, alors qu'on sait l'appliquer tout seul dès
+                            qu'un acompte existe, lui faisait porter un risque
+                            d'oubli pour rien.
 
                             ⚠️ ET IL N'EST PAS ACTIF D'OFFICE : un bon de 50 €
                             posé sur une prestation à 20 € en brûlerait 30. */}
-                        {mesBonsIci.length > 0 && !seanceSurAbo && prixBase != null && acompteEnLigne && (
+                        {mesBonsIci.length > 0 && !seanceSurAbo && prixBase != null && (
                           <div style={{ background: bonChoisi ? '#F0FDF4' : '#fff', border: `1.5px solid ${bonChoisi ? '#86EFAC' : T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 12 }}>
                             <p style={{ margin: '0 0 6px', fontSize: '0.62rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
                               {mesBonsIci.length > 1 ? 'Tes bons cadeaux ici' : 'Ton bon cadeau ici'}
@@ -3442,13 +3463,16 @@ export default function CommanderRdvSlug() {
                             oublie est de l'argent que le commerçant a encaissé
                             sans jamais revoir le client.
 
-                            ⚠️ INFORMATIF, PAS ACTIONNABLE, et c'est la décision
-                            d'Alex : sans paiement en ligne, on INFORME, on ne
-                            débite pas. Débiter des semaines avant un rendez-vous
-                            qui ne fait sortir aucun argent, ce serait brûler le
-                            bon pour rien si la personne ne vient pas. Le
-                            commerçant le voit sur sa fiche et l'applique au
-                            comptoir.
+                            🔴 CE BLOC NE SERT PLUS QU'AVANT LE CHOIX DE LA
+                            PRESTATION (31/08). Dès qu'un prix existe, c'est le
+                            bloc ACTIONNABLE au-dessus qui prend la main, et il
+                            montre déjà le code quand le bon n'est pas retenu.
+
+                            ⚠️ ON LE GARDE POUR `prixBase == null`, ET C'EST
+                            VOLONTAIRE : sans prestation choisie, il n'y a rien à
+                            déduire, mais il y a quelque chose à SAVOIR. Un bon
+                            qu'on oublie est de l'argent que le commerçant a
+                            encaissé sans jamais revoir le client.
 
                             ⚠️ CE QU'ON N'ÉCRIT PAS : « le reste de ton bon
                             soldera ta prestation au comptoir ». Vérifié : les
@@ -3457,7 +3481,7 @@ export default function CommanderRdvSlug() {
                             donc s'il reste du solde il n'y a plus rien à solder,
                             et s'il reste à payer le bon est vide. La phrase
                             promettrait un cas impossible. */}
-                        {mesBonsIci.length > 0 && !seanceSurAbo && !acompteEnLigne && (
+                        {mesBonsIci.length > 0 && !seanceSurAbo && prixBase == null && (
                           <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 14, padding: '10px 12px', marginBottom: 12 }}>
                             <p style={{ margin: '0 0 6px', fontSize: '0.62rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
                               {mesBonsIci.length > 1 ? 'Tes bons cadeaux ici' : 'Ton bon cadeau ici'}
@@ -3566,7 +3590,29 @@ export default function CommanderRdvSlug() {
                             </div>
                           ) : (
                             <div style={{ padding: '11px 14px', background: T.pale }}>
-                              <span style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 700 }}>Rien à payer maintenant, tu règles sur place.</span>
+                              {/* 🔴 CETTE PHRASE NE DISAIT AUCUN MONTANT (Alex,
+                                  31/08). « Tu règles sur place » sans chiffre,
+                                  alors que la ligne « Solde à régler sur place »
+                                  ci-dessous ne s'affiche QUE si l'on paie aussi
+                                  en ligne : sur ce chemin-là, le Yopper ne
+                                  voyait jamais ce qu'il devait emporter.
+                                  Un montant n'est pas une information, mais son
+                                  absence n'en est pas une non plus.
+
+                                  ⚠️ ET LES TROIS CAS NE SE DISENT PAS PAREIL.
+                                  « Ton bon couvre tout » serait un mensonge sur
+                                  une séance d'abonnement, qui ne coûte rien pour
+                                  une tout autre raison : on ne nomme le bon que
+                                  s'il a réellement déduit quelque chose. */}
+                              <span style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 700 }}>
+                                {surPlace == null
+                                  ? 'Rien à payer maintenant, tu règles sur place.'
+                                  : surPlace > 0
+                                    ? `Rien à payer maintenant, tu règles ${euros(surPlace)} sur place.`
+                                    : remiseBon > 0
+                                      ? 'Ton bon couvre tout. Rien à régler, ni maintenant ni sur place.'
+                                      : 'Rien à régler pour ce rendez-vous.'}
+                              </span>
                             </div>
                           )}
                           {surPlace != null && surPlace > 0 && aPayerMaintenant > 0 && (

@@ -142,10 +142,17 @@ const MUTATIONS = [
     de: "                              {' '}{libelleResteBon(Number(bonApplique.solde) - remiseBonEffective(), commercant?.nom)}",
     vers: '                              {remiseBonEffective() < Number(bonApplique.solde) && ` · il restera ${euros(Number(bonApplique.solde) - remiseBonEffective())} sur ton bon`}' },
 
-  // ─── LE BON INVISIBLE SANS ACOMPTE (30/08) ───────────────────────────
+  // ─── LE BON INVISIBLE SANS ACOMPTE (30/08, puis 31/08) ───────────────
+  //
+  // ⚠️ CETTE MUTATION A CHANGÉ DE CIBLE, ET LA NOTER VAUT MIEUX QUE LA JETER.
+  // Le 30/08, le bon sans acompte était rendu VISIBLE dans un bloc informatif,
+  // et la mutation éteignait ce bloc. Le 31/08 il est devenu ACTIONNABLE : le
+  // bloc informatif ne sert plus qu'avant le choix d'une prestation. La règle
+  // qu'on protège n'a pas bougé d'un pouce — un bon ne doit jamais redevenir
+  // invisible — mais l'endroit où elle vit, si.
   { nom: '🔴 le bon redevient invisible quand rien ne se paie en ligne',
     banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
-    de: '                        {mesBonsIci.length > 0 && !seanceSurAbo && !acompteEnLigne && (',
+    de: '                        {mesBonsIci.length > 0 && !seanceSurAbo && prixBase == null && (',
     vers: '                        {false && mesBonsIci.length > 0 && !seanceSurAbo && (' },
 
   { nom: '🔴 le bloc informatif ne montre plus le code à présenter',
@@ -378,6 +385,44 @@ const MUTATIONS = [
     banc: 'verif:comptable', fichier: 'lib/commande-notifs.js',
     de: '  const parTauxNet = imputerRemise(parTauxTicket, cmd.fidelite_remise)',
     vers: '  const parTauxNet = imputerRemise(parTauxTicket, Number(cmd.fidelite_remise || 0) + Number(cmd.bon_cadeau_montant || 0))' },
+
+  // ═══ LE BON S'APPLIQUE MÊME SANS ACOMPTE (31/08) ════════════════════════
+  //
+  // 🔴 Le bon n'est pas un paiement, c'est un AVOIR chez ce commerçant. Le
+  // réserver aux rendez-vous à acompte faisait porter au client un risque
+  // d'oubli sur de l'argent déjà versé.
+  { nom: '🔴 le bon redevient réservé aux rendez-vous à acompte',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '{mesBonsIci.length > 0 && !seanceSurAbo && prixBase != null && (',
+    vers: '{mesBonsIci.length > 0 && !seanceSurAbo && prixBase != null && acompteEnLigne && (' },
+
+  { nom: '🔴 le bloc s’affiche mais ne propose plus de l’utiliser',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: 'onClick={() => setBonChoisi(actif ? null : b)}',
+    vers: 'onClick={() => {}}' },
+
+  { nom: '🔴 le repli informatif reprend la place de l’actionnable',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '{mesBonsIci.length > 0 && !seanceSurAbo && prixBase == null && (',
+    vers: '{mesBonsIci.length > 0 && !seanceSurAbo && !acompteEnLigne && (' },
+
+  { nom: '🔴 le code du bon disparaît du bloc actionnable',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                                        : b.code}',
+    vers: '                                        : null}' },
+
+  // 🔴 ET LE RÉCAPITULATIF : un montant absent n'est pas une information.
+  { nom: '🔴 le récapitulatif cesse de chiffrer ce qu’il faut emporter',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '? `Rien à payer maintenant, tu règles ${euros(surPlace)} sur place.`',
+    vers: "? 'Rien à payer maintenant, tu règles sur place.'" },
+
+  // ⚠️ ET LA PHRASE DU BON NE DOIT PAS SE DIRE SUR UNE SÉANCE D'ABONNEMENT,
+  // qui ne coûte rien pour une tout autre raison.
+  { nom: '🔴 « ton bon couvre tout » se dit même sans aucune déduction',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                                    : remiseBon > 0',
+    vers: '                                    : true' },
 ]
 
 function lancer(banc) {

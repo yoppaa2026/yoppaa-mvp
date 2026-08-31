@@ -619,23 +619,61 @@ const egal = (nom, obtenu, attendu) =>
 // voyait RIEN et se présentait sans savoir qu'il avait de l'argent à dépenser.
 {
   const src = lireCode('app/commander/rdv/[slug]/page.js')
-  verifie('un bloc s’affiche quand AUCUN acompte n’est pris en ligne',
-    /mesBonsIci\.length > 0 && !seanceSurAbo && !acompteEnLigne &&/.test(src))
+
+  // 🔴 ET DEPUIS LE 31/08, IL EST ACTIONNABLE, ACOMPTE OU PAS.
+  //
+  // Le bon n'est pas un paiement, c'est un AVOIR chez ce commerçant : cet argent
+  // est déjà versé, déjà chez lui. Les deux raisons de ne pas le débiter sont
+  // tombées le 30/08 au soir : la route serveur revalide et débite elle-même, et
+  // l'annulation comme le no-show rendent le bon quand la garantie vaut zéro.
+  //
+  // ⚠️ LES CONDITIONS SONT TESTÉES EN ENTIER, PARENTHÈSE COMPRISE. Sans le
+  // « ( » final, ré-insérer `acompteEnLigne` laisserait la garde verte : le
+  // texte cherché n'en serait plus qu'un PRÉFIXE.
+  const CONDITION_ACTIF = '{mesBonsIci.length > 0 && !seanceSurAbo && prixBase != null && ('
+  const CONDITION_INFO = '{mesBonsIci.length > 0 && !seanceSurAbo && prixBase == null && ('
+  const debutActif = src.indexOf(CONDITION_ACTIF)
+  const debutInfo = src.indexOf(CONDITION_INFO)
+
+  verifie('🔴 le bon est proposé même sans acompte en ligne',
+    debutActif >= 0,
+    'le bloc actionnable est de nouveau conditionné à l’acompte')
+  verifie('🔴 et le repli informatif ne sert plus qu’avant le choix de la prestation',
+    debutInfo > debutActif,
+    'le bloc informatif a disparu ou passe avant l’actionnable')
+
+  const blocActif = debutActif >= 0 && debutInfo > debutActif ? src.slice(debutActif, debutInfo) : ''
+  const blocInfo = debutInfo >= 0 ? src.slice(debutInfo, debutInfo + 2400) : ''
+  verifie('les deux blocs sont bien isolés',
+    blocActif.length > 800 && blocInfo.length > 300,
+    `${blocActif.length} / ${blocInfo.length} caractères`)
+
+  verifie('🔴 le bloc actionnable propose bien de l’utiliser',
+    /setBonChoisi\(/.test(blocActif))
+  verifie('et le repli, lui, ne débite rien', !/setBonChoisi\(/.test(blocInfo))
   verifie('il annonce le solde disponible ici',
     /sur ton bon cadeau ici\./.test(src))
-  verifie('et le geste à faire', /Présente ton code au comptoir/.test(src))
+  verifie('et le geste à faire', /Présente ton code au comptoir/.test(blocInfo))
   // ⚠️ LE CODE SOUS LES YEUX : c'est lui qu'on donne au comptoir, et il ne vit
-  // sinon que dans un email reçu il y a trois mois.
-  verifie('le code du bon est affiché', /\{b\.code\}/.test(src))
-  // ⚠️ INFORMATIF, PAS ACTIONNABLE : sans paiement en ligne, on informe, on ne
-  // débite pas. Un bouton « Utiliser » ici brûlerait le bon des semaines avant
-  // un rendez-vous qui ne fait sortir aucun argent.
-  const blocInfo = (() => {
-    const i = src.indexOf('mesBonsIci.length > 0 && !seanceSurAbo && !acompteEnLigne &&')
-    return i < 0 ? '' : src.slice(i, src.indexOf('\n                        )}', i))
-  })()
-  verifie('le bloc informatif est bien isolé', blocInfo.length > 300, `${blocInfo.length} caractères`)
-  verifie('il ne propose aucun bouton d’utilisation', !/setBonChoisi/.test(blocInfo))
+  // sinon que dans un email reçu il y a trois mois. Il est dans LES DEUX blocs,
+  // parce que l'actionnable l'affiche tant que le bon n'est pas retenu.
+  verifie('le code du bon est affiché dans le repli', /\{b\.code\}/.test(blocInfo))
+  verifie('🔴 et aussi dans le bloc actionnable, tant que le bon n’est pas retenu',
+    /: b\.code/.test(blocActif))
+
+  // 🔴 ET LE RÉCAPITULATIF DIT ENFIN CE QU'IL Y A À EMPORTER.
+  //
+  // « Rien à payer maintenant, tu règles sur place. » ne portait AUCUN montant,
+  // et la ligne « Solde à régler sur place » ne s'affiche que si l'on paie aussi
+  // en ligne : sur ce chemin, le Yopper ne voyait jamais son chiffre.
+  verifie('🔴 le récapitulatif chiffre ce qui reste à régler sur place',
+    /tu règles \$\{euros\(surPlace\)\} sur place\./.test(src))
+  verifie('et il dit quand le bon a tout couvert',
+    /Ton bon couvre tout\./.test(src))
+  // ⚠️ ET IL NE LE DIT QUE SI LE BON A RÉELLEMENT DÉDUIT : une séance
+  // d'abonnement ne coûte rien pour une tout autre raison.
+  verifie('🔴 « ton bon couvre tout » est gardé par une déduction réelle',
+    /remiseBon > 0[\s\S]{0,80}Ton bon couvre tout\./.test(src))
 
   // 🔴 CE QU'ON N'ÉCRIT PAS, ET LA GARDE EXISTE POUR QU'ON NE LE RÉÉCRIVE PAS.
   //

@@ -1304,6 +1304,66 @@ for (const chemin of [
     egal('et le bon revient tout de même en entier', p.bonRestitue, 40)
   }
 
+  // ── 🔴 LE PAIEMENT D'AVANCE, ET LA BORNE QUI LE REND POSSIBLE (31/08) ───
+  //
+  // `gardeEnCaisse` valait l'encaissé TOUT COURT : le commerçant gardait tout
+  // l'argent entré, quelle que soit la garantie. Ça ne se voyait pas, parce que
+  // l'acompte encaissé ne dépasse jamais l'acompte dû. Le paiement d'avance
+  // rend ce dépassement normal, et sans cette borne le premier lapin ferait
+  // perdre au client la TOTALITÉ de son argent.
+  {
+    const p = restitutionNoShow({
+      acompte_du: 0, acompte_montant: 20, acompte_paye: true, acompte_paye_en_ligne: true,
+      bon_cadeau_montant: 0, fidelite_remise: 0,
+    })
+    egal('🔴 aucune garantie exigée, donc rien n’est gardé', p.gardeEnCaisse, 0)
+    egal('🔴 et les 20 € payés d’avance repartent en entier', p.carteRestituee, 20)
+    egal('la garantie annoncée vaut bien zéro', p.garantie, 0)
+  }
+  {
+    // ⚠️ L'ACOMPTE ORDINAIRE NE BOUGE PAS D'UN CENTIME. Une borne qui
+    // rembourserait aussi les acomptes serait une régression, pas un correctif.
+    const p = restitutionNoShow({
+      acompte_du: 25, acompte_montant: 25, acompte_paye: true, acompte_paye_en_ligne: true,
+      bon_cadeau_montant: 0, fidelite_remise: 0,
+    })
+    egal('un acompte normal reste chez le commerçant', p.gardeEnCaisse, 25)
+    egal('et rien ne part sur la carte', p.carteRestituee, 0)
+  }
+  {
+    // ⚠️ ET UN ACOMPTE DE 100 % N'EST PAS UNE AVANCE : le commerçant l'a
+    // EXIGÉ. C'est toute la différence que porte `acompte_du`, et c'est
+    // pourquoi aucune colonne de nature n'a été créée.
+    const p = restitutionNoShow({
+      acompte_du: 60, acompte_montant: 60, acompte_paye: true, acompte_paye_en_ligne: true,
+      bon_cadeau_montant: 0, fidelite_remise: 0,
+    })
+    egal('🔴 un acompte exigé à 100 % se garde en entier', p.gardeEnCaisse, 60)
+    egal('et rien n’est remboursé', p.carteRestituee, 0)
+  }
+  {
+    // Le cas complet : avance de 20 €, un bon de 40 € et une récompense.
+    const p = restitutionNoShow({
+      acompte_du: 0, acompte_montant: 20, acompte_paye: true, acompte_paye_en_ligne: true,
+      bon_cadeau_montant: 40, fidelite_remise: 10,
+    })
+    egal('l’avance revient', p.carteRestituee, 20)
+    egal('le bon aussi, en entier', p.bonRestitue, 40)
+    egal('et la récompense', p.recompenseRendue, 10)
+    egal('le commerçant ne garde rien du tout', p.gardeEnCaisse + p.gardeSurBon, 0)
+  }
+  {
+    // ⚠️ ET LA PHRASE LE DIT. Sur un rendez-vous payé d'avance, c'est le plus
+    // gros des trois retours et le seul qui quitte vraiment sa poche.
+    const { garde, rend } = libelleNoShow(restitutionNoShow({
+      acompte_du: 0, acompte_montant: 20, acompte_paye: true, acompte_paye_en_ligne: true,
+      bon_cadeau_montant: 0, fidelite_remise: 0,
+    }))
+    verifie('🔴 la phrase annonce le remboursement sur la carte',
+      /20,00/.test(rend) && /carte/.test(rend), rend)
+    egal('et le commerçant ne lit pas qu’il garde quelque chose', garde, '')
+  }
+
   // ── LES DEUX PHRASES, ET AUCUNE NE MENT ────────────────────────────────
   {
     const { garde, rend } = libelleNoShow(restitutionNoShow({
@@ -1373,6 +1433,40 @@ for (const chemin of [
   // ⚠️ ET LE REJEU NE RESTITUE PAS DEUX FOIS.
   verifie('la bascule de statut sert de verrou',
     /\.neq\('statut', 'no_show'\)/.test(src) && /basculees \|\| \[\]\)\.length === 0/.test(src))
+
+  // ─── 🔴 LE REMBOURSEMENT DE CE QUI DÉPASSE LA GARANTIE (31/08) ──────────
+  //
+  // Cette route ne remboursait RIEN, et ça suffisait tant que l'encaissé ne
+  // pouvait pas dépasser la garantie. Calculer une restitution sans la verser,
+  // ce serait annoncer un geste qu'on ne fait pas.
+  for (const col of ['stripe_payment_intent_id', 'stripe_refund_id', 'stripe_account_id']) {
+    verifie(`🔴 le select du no-show charge ${col}`,
+      new RegExp(col).test(selectRdv), selectRdv.slice(0, 320))
+  }
+  verifie('🔴 la route rembourse ce qui dépasse la garantie',
+    /part\.carteRestituee > 0/.test(src) && /stripe\.refunds\.create/.test(src))
+  // ⚠️ LE MONTANT EST OBLIGATOIRE. Un `refunds.create` sans `amount` rend TOUT
+  // le paiement : le commerçant perdrait la garantie qu'il a le droit de garder.
+  verifie('🔴 et il rembourse un MONTANT, pas la totalité du paiement',
+    /amount: Math\.round\(part\.carteRestituee \* 100\)/.test(src),
+    'refunds.create sans amount rembourserait aussi la garantie')
+  verifie('un remboursement déjà fait n’est pas rejoué',
+    /!rdv\.stripe_refund_id/.test(src))
+  verifie('et la trace du remboursement est écrite',
+    /stripe_refund_id: refund\.id/.test(src) && /stripe_refund_amount: part\.carteRestituee/.test(src))
+  // 🔴 L'ORDRE, ET C'EST LA LEÇON DU 30/08 AU SOIR : on rend les avantages
+  // AVANT de rembourser, sinon le webhook `charge.refunded` passe devant nous
+  // et refait les mêmes gestes pendant qu'on les fait.
+  verifie('🔴 on rend AVANT de rembourser',
+    src.indexOf('rendreAvantagesRdv(') < src.indexOf('stripe.refunds.create'),
+    'le remboursement passe avant la restitution : le webhook doublera')
+  // ⚠️ ON ANNONCE L'ÉTAT, PAS NOTRE INTENTION. Les deux champs se distinguent :
+  // ce qui est DÛ, et ce qui est réellement PARTI.
+  verifie('la réponse distingue le dû du versé',
+    /carte_a_restituer: part\.carteRestituee/.test(src)
+    && /carte_restituee: refundId \?/.test(src))
+  verifie('et un échec de remboursement remonte jusqu’à l’écran',
+    /remboursement_erreur: refundError/.test(src))
 }
 {
   // ⚠️ LES QUATRE CHEMINS DE CRÉATION FIGENT L'ACOMPTE DÛ, sans quoi le partage

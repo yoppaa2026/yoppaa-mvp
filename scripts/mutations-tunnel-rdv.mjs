@@ -231,7 +231,9 @@ const MUTATIONS = [
   // gardant du liquide au-delà de la garantie.
   { nom: '🔴 l’acompte encaissé ne s’impute plus sur la garantie',
     fichier: 'lib/rdv-paiement.js',
-    de: '  const resteAImputer = Math.max(0, arr(garantie - enCaisse))',
+    // ⚠️ RECIBLÉE LE 31/08 : la ligne lit désormais `gardeEnCaisse`, borné par
+    // la garantie, et non plus `enCaisse` brut. La règle mesurée n'a pas bougé.
+    de: '  const resteAImputer = Math.max(0, arr(garantie - gardeEnCaisse))',
     vers: '  const resteAImputer = Math.max(0, arr(garantie))' },
 
   // 🔴 LE PIÈGE DU ZÉRO, HUITIÈME FOIS : confondre « on ne sait pas » et
@@ -533,6 +535,54 @@ const MUTATIONS = [
     fichier: 'app/commander/rdv/[slug]/page.js',
     de: "        const res = await fetchAvecPreuveSiConnecte('/api/rdv/reserver', {",
     vers: "        const res = await fetch('/api/rdv/reserver', {" },
+
+  // ─── 14) LA BORNE QUI REND LE PAIEMENT D'AVANCE POSSIBLE (31/08) ──────
+  //
+  // ⚠️ UNE GARDE DE CE LOT N'EST PAS MESURÉE ICI, ET JE PRÉFÈRE LE DIRE :
+  // « on rend AVANT de rembourser » repose sur une comparaison de POSITION
+  // dans le fichier (`indexOf` de l'un contre l'autre). Inverser deux blocs
+  // ne s'exprime pas en un remplacement de chaîne, et fabriquer une mutation
+  // qui casse la compilation ne mesurerait rien : un banc qui explose n'est
+  // pas un banc rouge. La garde existe et se lit ; elle n'est pas prouvée.
+  { nom: '🔴 le commerçant garde de nouveau TOUT l’encaissé',
+    fichier: 'lib/rdv-paiement.js',
+    de: '  const gardeEnCaisse = arr(Math.min(enCaisse, garantie))',
+    vers: '  const gardeEnCaisse = arr(enCaisse)' },
+
+  { nom: '🔴 ce qui dépasse la garantie ne repart plus',
+    fichier: 'lib/rdv-paiement.js',
+    de: '  const carteRestituee = arr(enCaisse - gardeEnCaisse)',
+    vers: '  const carteRestituee = 0' },
+
+  { nom: '🔴 la phrase du no-show tait le remboursement sur la carte',
+    fichier: 'lib/rdv-paiement.js',
+    de: '    retours.push(`${euros(part.carteRestituee)} lui sont remboursés sur sa carte`)',
+    vers: '    retours.push(`un montant lui revient`)' },
+
+  { nom: '🔴 le remboursement rend TOUT le paiement, garantie comprise',
+    fichier: 'app/api/rdv/no-show/route.js',
+    de: '            amount: Math.round(part.carteRestituee * 100),',
+    vers: '' },
+
+  { nom: '🔴 la route ne charge plus l’intention de paiement',
+    fichier: 'app/api/rdv/no-show/route.js',
+    de: '        stripe_payment_intent_id, stripe_refund_id,',
+    vers: '' },
+
+  { nom: '🔴 ni le compte Stripe du commerçant',
+    fichier: 'app/api/rdv/no-show/route.js',
+    de: '        commercant:commercants(stripe_account_id)',
+    vers: '        commercant_id as c2' },
+
+  { nom: '🔴 un remboursement raté redevient silencieux',
+    fichier: 'app/api/rdv/no-show/route.js',
+    de: '      remboursement_erreur: refundError,',
+    vers: '' },
+
+  { nom: '🔴 l’écran ne distingue plus le dû du versé',
+    fichier: 'app/api/rdv/no-show/route.js',
+    de: '      carte_restituee: refundId ? part.carteRestituee : 0,',
+    vers: '      carte_restituee: part.carteRestituee,' },
 ]
 
 function lancer() {

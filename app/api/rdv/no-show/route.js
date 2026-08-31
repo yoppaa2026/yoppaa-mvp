@@ -37,6 +37,7 @@ import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { restitutionNoShow } from '@/lib/rdv-paiement'
 import { rendreAvantagesRdv } from '@/lib/rdv-annulation-server'
 import { annulerPush } from '@/lib/onesignal'
+import { stripe, requireStripe } from '@/lib/stripe'
 
 export async function POST(request) {
   try {
@@ -55,16 +56,24 @@ export async function POST(request) {
     const nonAutorise = refus(verdict, NextResponse)
     if (nonAutorise) return nonAutorise
 
-    // ⚠️ LES SEPT COLONNES SONT OBLIGATOIRES. Absente d'un `select`, chacune
+    // ⚠️ CHACUNE DE CES COLONNES EST OBLIGATOIRE. Absente d'un `select`, elle
     // vaut `undefined`, `Number(undefined || 0)` vaut zéro, et la restitution
     // se ferait au mauvais montant SANS QU'AUCUNE ERREUR NE SE LÈVE. C'est le
     // défaut le plus fréquent de ce projet.
+    //
+    // 🔴 LES TROIS DERNIÈRES SONT ARRIVÉES AVEC LE REMBOURSEMENT (31/08).
+    // `stripe_payment_intent_id` désigne le paiement à rembourser,
+    // `stripe_refund_id` empêche de rembourser deux fois, et le compte connecté
+    // du commerçant est l'endroit OÙ le remboursement se fait. Sans elles, la
+    // route aurait calculé une restitution qu'elle n'aurait jamais versée.
     const { data: rdv } = await supabase
       .from('rdv_reservations')
       .select(`
         id, statut, acompte_paye, acompte_paye_en_ligne, acompte_montant, acompte_du,
         bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id, fidelite_remise,
-        rappel_push_id, commercant_id
+        rappel_push_id, commercant_id,
+        stripe_payment_intent_id, stripe_refund_id,
+        commercant:commercants(stripe_account_id)
       `)
       .eq('id', rdv_id)
       .is('deleted_at', null)
@@ -92,10 +101,12 @@ export async function POST(request) {
     // ─── LE PARTAGE, calculé par le module qui porte les règles d'argent ────
     const part = restitutionNoShow(rdv)
 
-    // ⚠️ ON ÉCRIT LE STATUT AVANT DE RESTITUER, et c'est l'inverse de
-    // l'annulation. Là-bas on rendait d'abord parce qu'un remboursement Stripe
-    // réveille un webhook concurrent ; ici il n'y a aucun remboursement, donc
-    // aucune course, et le statut sert de verrou contre un double clic.
+    // ⚠️ ON ÉCRIT LE STATUT D'ABORD, ET IL SERT DE VERROU contre le double clic.
+    // Le remboursement, lui, vient EN DERNIER : c'est la règle du 30/08 au soir,
+    // on rend les avantages AVANT de rembourser, parce qu'un remboursement
+    // Stripe réveille un webhook concurrent qui refait les mêmes gestes. Dans ce
+    // sens-là, le webhook redevient un vrai secours ; dans l'autre, il passe
+    // devant nous.
     const { data: basculees, error: errUpd } = await supabase
       .from('rdv_reservations')
       .update({ statut: 'no_show', motif_annulation: 'commercant' })
@@ -125,6 +136,48 @@ export async function POST(request) {
       refs: { rdv_id: rdv.id },
     })
 
+    // ─── ET CE QUI DÉPASSE LA GARANTIE SUR LA CARTE REPART AUSSI ───────────
+    //
+    // 🔴 CETTE ROUTE NE REMBOURSAIT RIEN, ET ÇA SUFFISAIT TANT QUE L'ENCAISSÉ
+    // NE POUVAIT PAS DÉPASSER LA GARANTIE. Le paiement d'avance change ça : sans
+    // acompte exigé, la garantie vaut zéro et le client a pourtant payé le prix
+    // entier. Calculer une restitution sans la verser, ce serait annoncer un
+    // geste qu'on ne fait pas.
+    //
+    // ⚠️ LE MONTANT EST OBLIGATOIRE ICI, contrairement aux deux annulations qui
+    // remboursent la totalité du paiement. Un `refunds.create` sans `amount`
+    // rend TOUT : le commerçant perdrait la garantie qu'il a le droit de garder.
+    let refundId = null
+    let refundError = null
+    const aPayeEnLigne = Boolean(rdv.acompte_paye_en_ligne) && !!rdv.stripe_payment_intent_id
+
+    if (part.carteRestituee > 0 && aPayeEnLigne && !rdv.stripe_refund_id) {
+      if (!rdv.commercant?.stripe_account_id) {
+        refundError = 'Compte Stripe indisponible'
+      } else {
+        try {
+          requireStripe()
+          const refund = await stripe.refunds.create({
+            payment_intent: rdv.stripe_payment_intent_id,
+            amount: Math.round(part.carteRestituee * 100),
+            reason: 'requested_by_customer',
+            metadata: { yoppaa_rdv_id: rdv.id, yoppaa_motif: 'no_show_au_dela_garantie' },
+          }, { stripeAccount: rdv.commercant.stripe_account_id })
+          refundId = refund.id
+          await supabase.from('rdv_reservations').update({
+            stripe_refund_id: refund.id,
+            stripe_refund_amount: part.carteRestituee,
+            stripe_refund_date: new Date().toISOString(),
+          }).eq('id', rdv.id)
+        } catch (e) {
+          // ⚠️ ON LE DIT. Un remboursement raté qui se tait, c'est de l'argent
+          // qui reste chez le commerçant pendant que l'écran annonce l'inverse.
+          console.error('[rdv/no-show] remboursement KO', e?.message, { rdvId: rdv.id })
+          refundError = e?.message || 'Remboursement Stripe échoué'
+        }
+      }
+    }
+
     // Le rappel de la veille n'a plus lieu d'être.
     if (rdv.rappel_push_id) annulerPush(rdv.rappel_push_id).catch(() => {})
 
@@ -137,6 +190,12 @@ export async function POST(request) {
       garde_sur_bon: part.gardeSurBon,
       bon_restitue: rendu.bon,
       recompense_rendue: rendu.recompense,
+      // ⚠️ ON REND CE QUI EST DÛ **ET** CE QUI EST RÉELLEMENT PARTI. Les deux
+      // coïncident presque toujours ; le jour où ils divergent, c'est
+      // exactement ce que l'écran doit pouvoir dire.
+      carte_a_restituer: part.carteRestituee,
+      carte_restituee: refundId ? part.carteRestituee : 0,
+      remboursement_erreur: refundError,
     })
   } catch (e) {
     console.error('[rdv/no-show]', e)

@@ -423,6 +423,49 @@ const MUTATIONS = [
     banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
     de: '                                    : remiseBon > 0',
     vers: '                                    : true' },
+
+  // ═══ LE STOCK GLOBAL QUE LE SERVEUR IGNORAIT (31/08) ════════════════════
+  //
+  // 🔴 « Stock du jour (défaut) » n'était plafonné que par le navigateur : dix
+  // pains annoncés, quarante vendables. Le méta-défaut du projet, quatrième
+  // fois : l'écran calcule, le serveur décide.
+  { nom: '🔴 le serveur cesse de lire le stock global',
+    banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
+    de: "    supabase.from('articles')\n      .select('id, stock_jour')\n      .in('id', stockArticleIds),",
+    vers: "    Promise.resolve({ data: [] })," },
+
+  { nom: '🔴 l’absence d’entrée redevient « aucune limite »',
+    banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
+    de: '      : (stockGlobalParArticle[artId] > 0 ? stockGlobalParArticle[artId] : null)',
+    vers: '      : null' },
+
+  { nom: '🔴 le stock global l’emporte sur la grille du jour',
+    banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
+    de: '      ? (stockEntry.stock || 0)',
+    vers: '      ? Math.max(stockEntry.stock || 0, stockGlobalParArticle[artId] || 0)' },
+
+  { nom: '🔴 une grille à zéro retombe sur le stock global',
+    banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
+    de: '    const stockBrut = stockEntry',
+    vers: '    const stockBrut = (stockEntry && stockEntry.stock > 0)' },
+
+  // ⚠️ ET LA MOITIÉ SQL COMPTE AUTANT : sans elle, la course reste ouverte.
+  { nom: '🔴 la fonction atomique perd son repli sur le stock global',
+    banc: 'verif:logique', fichier: 'migrations/MIGRATION_STOCK_GLOBAL_SERVEUR.sql',
+    de: '      SELECT stock_jour INTO v_stock',
+    vers: '      SELECT NULL INTO v_stock' },
+
+  { nom: '🔴 elle lit le stock global SANS le verrouiller',
+    banc: 'verif:logique', fichier: 'migrations/MIGRATION_STOCK_GLOBAL_SERVEUR.sql',
+    de: '      WHERE id = v_article_id\n      FOR UPDATE;',
+    vers: '      WHERE id = v_article_id;' },
+
+  // ⚠️ EN PLPGSQL UNE VARIABLE SURVIT D'UNE ITÉRATION À L'AUTRE : sans ce
+  // réarmement, un article sans entrée hérite du `v_actif` du précédent.
+  { nom: '🔴 les variables ne sont plus réarmées entre deux articles',
+    banc: 'verif:logique', fichier: 'migrations/MIGRATION_STOCK_GLOBAL_SERVEUR.sql',
+    de: '    v_actif := NULL;',
+    vers: '' },
 ]
 
 function lancer(banc) {

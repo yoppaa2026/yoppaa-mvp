@@ -195,7 +195,12 @@ egal('supplément ajouté après remise', r.lignes[0].prix_unitaire, 21.71)
 // ═══════════════════════════════════════════════════════════════════════════
 // 3. STOCK — l'agrégation par article
 // ═══════════════════════════════════════════════════════════════════════════
-function supabaseFactice({ stocks = [], commandes = [], reservations = [] } = {}) {
+// ⚠️ CHAQUE TABLE EST NOMMÉE, ET LE DÉFAUT LÈVE. Un aiguillage en cascade
+// rendait `reservations` pour tout ce qu'il ne connaissait pas : la table
+// `articles`, ajoutée le 31/08, aurait donc rendu la liste des réservations
+// sans que rien ne le signale, et la garde du stock global serait passée par
+// accident. Un faux client trop conciliant fabrique des bancs verts.
+function supabaseFactice({ stocks = [], articles = [], commandes = [], reservations = [] } = {}) {
   const table = (rows) => {
     const q = {
       select: () => q, in: () => q, eq: () => q, not: () => q, gt: () => q,
@@ -203,7 +208,18 @@ function supabaseFactice({ stocks = [], commandes = [], reservations = [] } = {}
     }
     return q
   }
-  return { from: (nom) => table(nom === 'article_stock_jour' ? stocks : nom === 'commande_articles' ? commandes : reservations) }
+  const parNom = {
+    article_stock_jour: stocks,
+    articles,
+    commande_articles: commandes,
+    commande_stock_reservation: reservations,
+  }
+  return {
+    from: (nom) => {
+      if (!(nom in parNom)) throw new Error(`table non simulée : ${nom}`)
+      return table(parNom[nom])
+    },
+  }
 }
 
 const lignesStock = [
@@ -235,7 +251,86 @@ stock = await verifierStockDisponible({
   supabase: supabaseFactice({ stocks: [] }),
   lignes: lignesStock, commercantId: 'c1', dateCommande: JOUR,
 })
-verifier('sans entrée de stock = pas de limite', stock.ok)
+verifier('sans entrée de stock NI stock global = pas de limite', stock.ok)
+
+// ═══ 🔴 LE STOCK GLOBAL, QUE LE SERVEUR IGNORAIT (31/08) ═══════════════════
+//
+// Le champ « Stock du jour (défaut) » n'était plafonné QUE par le navigateur.
+// Le serveur traitait l'absence d'entrée dans la grille comme « aucune limite ».
+// Dix pains annoncés, quarante vendables.
+{
+  const s = await verifierStockDisponible({
+    supabase: supabaseFactice({ stocks: [], articles: [{ id: 'a1', stock_jour: 4 }] }),
+    lignes: lignesStock, commercantId: 'c1', dateCommande: JOUR,
+  })
+  verifier('🔴 le stock global plafonne aussi côté serveur',
+    !s.ok && s.status === 409, JSON.stringify(s))
+}
+{
+  const s = await verifierStockDisponible({
+    supabase: supabaseFactice({ stocks: [], articles: [{ id: 'a1', stock_jour: 10 }] }),
+    lignes: lignesStock, commercantId: 'c1', dateCommande: JOUR,
+  })
+  verifier('et il laisse passer ce qui tient dedans', s.ok, JSON.stringify(s))
+}
+{
+  // ⚠️ LA GRILLE DU JOUR FAIT FOI, Y COMPRIS QUAND ELLE EST PLUS BASSE. Un
+  // repli qui prendrait le plus grand des deux rendrait la grille inutile.
+  const s = await verifierStockDisponible({
+    supabase: supabaseFactice({
+      stocks: [{ article_id: 'a1', jour_semaine: 'mercredi', stock: 4, actif: true }],
+      articles: [{ id: 'a1', stock_jour: 100 }],
+    }),
+    lignes: lignesStock, commercantId: 'c1', dateCommande: JOUR,
+  })
+  verifier('🔴 l’entrée du jour l’emporte sur le stock global', !s.ok, JSON.stringify(s))
+}
+{
+  // ⚠️ ET UNE ENTRÉE À ZÉRO N'EST PAS UNE ABSENCE. Les confondre ferait vendre
+  // un article explicitement épuisé pour la journée, en retombant sur le global.
+  const s = await verifierStockDisponible({
+    supabase: supabaseFactice({
+      stocks: [{ article_id: 'a1', jour_semaine: 'mercredi', stock: 0, actif: true }],
+      articles: [{ id: 'a1', stock_jour: 100 }],
+    }),
+    lignes: lignesStock, commercantId: 'c1', dateCommande: JOUR,
+  })
+  verifier('🔴 une grille à zéro épuise, elle ne retombe pas sur le global', !s.ok, JSON.stringify(s))
+}
+{
+  // Un stock global à zéro ou négatif ne veut pas dire « épuisé », il veut dire
+  // « non géré » : c'est la règle du navigateur, mot pour mot.
+  const s = await verifierStockDisponible({
+    supabase: supabaseFactice({ stocks: [], articles: [{ id: 'a1', stock_jour: 0 }] }),
+    lignes: lignesStock, commercantId: 'c1', dateCommande: JOUR,
+  })
+  verifier('un stock global à zéro veut dire « non géré »', s.ok, JSON.stringify(s))
+}
+
+// ⚠️ ET LES DEUX COPIES DE LA RÈGLE DOIVENT DIRE LA MÊME CHOSE. L'une garde une
+// transaction SQL, l'autre un écran : elles ne peuvent pas fusionner, donc on
+// vérifie qu'elles se ressemblent. Sans la moitié SQL, la course reste ouverte.
+{
+  const { readFileSync } = await import('node:fs')
+  const sql = readFileSync(new URL('../migrations/MIGRATION_STOCK_GLOBAL_SERVEUR.sql', import.meta.url), 'utf8')
+  verifier('🔴 la fonction atomique porte le même repli',
+    /FROM articles/.test(sql) && /stock_jour INTO v_stock/.test(sql))
+  // ⚠️ ON COMPTE DANS LE CORPS DE LA FONCTION, PAS DANS LE FICHIER. La requête
+  // de contrôle en fin de fichier cite elle aussi « FOR UPDATE » : compter sur
+  // tout le fichier mesurait mon propre commentaire.
+  const corps = sql.slice(sql.indexOf('AS $$'), sql.indexOf('$$;'))
+  verifier('le corps de la fonction est bien isolé', corps.length > 800, `${corps.length} caractères`)
+  verifier('et elle le verrouille',
+    (corps.match(/FOR UPDATE/g) || []).length === 2,
+    `${(corps.match(/FOR UPDATE/g) || []).length} verrou(s) dans le corps`)
+  // ⚠️ DANS LE CORPS, LÀ AUSSI, ET C'EST UNE MUTATION QUI ME L'A APPRIS. La
+  // requête de contrôle en fin de fichier cite `v_actif := NULL;` pour le
+  // vérifier en base : la garde le trouvait donc TOUJOURS, même après avoir
+  // supprimé la vraie ligne. Elle était verte grâce à son jumeau.
+  verifier('🔴 et elle réarme ses variables à chaque tour de boucle',
+    /v_actif := NULL;/.test(corps),
+    'en plpgsql une variable survit d’une itération à l’autre')
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 4. LIBELLÉS DE RETRAIT — le piège du mode_retrait

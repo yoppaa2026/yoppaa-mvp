@@ -788,6 +788,45 @@ console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
     /setErreurChargement\(true\)/.test(src))
 }
 
+// ═══ L'HISTORIQUE SE PLIE, ET SON TITRE CONTINUE DE PARLER (31/08) ════════
+//
+// 🔴 Demande d'Alex : les listes terminées poussaient vers le bas ce que le
+// Yopper vient réellement chercher, c'est-à-dire ce qui est EN COURS.
+{
+  const repli = lire('app/commander/HistoriqueRepli.js')
+  const page = lire('app/commander/page.js')
+
+  // ⚠️ ON DÉMONTE, ON NE CACHE PAS. Un `display: none` garderait des dizaines
+  // de cartes dans le document, et c'est précisément le poids qu'on retire.
+  verifier('🔴 le repli DÉMONTE son contenu au lieu de le cacher',
+    /\{ouvert && children\}/.test(repli) && !/display: 'none'/.test(repli))
+  // ⚠️ TOUTE LA BARRE EST LE BOUTON : une flèche de 14 pixels au doigt se rate
+  // une fois sur trois.
+  verifier('la barre entière est cliquable, et elle se dit aux lecteurs d’écran',
+    /<button/.test(repli) && /aria-expanded=\{ouvert\}/.test(repli)
+    && /width: '100%'/.test(repli))
+  // 🔴 REPLIÉ NE VEUT PAS DIRE MUET. Sans compte, il faut ouvrir pour savoir
+  // s'il vaut la peine d'être ouvert : on n'a rien gagné.
+  verifier('🔴 le compte reste visible une fois plié',
+    /\{compte \?/.test(repli))
+
+  // ── Les deux historiques passent par lui, et aucun ne garde l'ancienne barre.
+  const usages = (page.match(/<HistoriqueRepli/g) || []).length
+  egal('les deux historiques du Suivi sont repliables', usages, 2)
+  verifier('et le composant est bien importé',
+    /import HistoriqueRepli from '\.\/HistoriqueRepli'/.test(page))
+  // ⚠️ ON COMPTE LES SURVIVANTS, on ne cherche pas un succès. Une barre
+  // « Historique » écrite à la main qui subsisterait serait invisible autrement.
+  const barresManuelles = (page.match(/letterSpacing: '0\.5px' \}\}>Historique</g) || []).length
+  egal('🔴 aucune barre « Historique » n’est restée à la main', barresManuelles, 0)
+
+  // 🔴 ET LE COMPTE ANNONCE CE QUE LE BLOC CONTIENT, PAS CE QUI EXISTE. La
+  // liste s'arrête à cinq : promettre douze pour en montrer cinq serait un
+  // mensonge de plus dans un écran d'argent.
+  const comptes = (page.match(/compte=\{`\$\{Math\.min\(/g) || []).length
+  egal('🔴 les deux comptes disent ce qui est AFFICHÉ, pas le total', comptes, 2)
+}
+
 if (ko > 0) {
   console.log('\nÉCHECS :')
   echecs.forEach(e => console.log('  ✕ ' + e))

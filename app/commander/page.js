@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper, estSessionPerdue } from '@/lib/fetch-yopper'
 import CarteAbonnement from './CarteAbonnement'
+import HistoriqueRepli from './HistoriqueRepli'
 import { libelleRetrait } from '@/lib/libelle-retrait'
 // La décision « reste-t-il quelque chose à gauche, à droite » vit en fonction
 // pure et testée : un voile éteint au mauvais moment cache du contenu.
@@ -3515,12 +3516,18 @@ export default function Commander() {
                   <button onClick={() => setOnglet('accueil')} style={{ ...btnPrimary, width: 'auto', padding: '0.75rem 1.5rem' }}>Commander maintenant</button>
                 </div>
               )}
+              {/* 🔴 L'HISTORIQUE SE PLIE (Alex, 31/08). Il poussait vers le bas
+                  ce que le Yopper vient réellement chercher : ce qui est EN
+                  COURS. Le compte reste visible plié, sinon replier revient à
+                  cacher au lieu de ranger.
+                  ⚠️ ON ANNONCE CE QUE LE BLOC CONTIENT, pas ce qui existe : la
+                  liste s'arrête à cinq, et promettre douze commandes pour en
+                  montrer cinq serait un mensonge de plus dans un écran d'argent. */}
               {commandesTerminees.length > 0 && (
-                <div style={{ marginTop: '1.5rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historique</span>
-                    <div style={{ flex: 1, height: 1, background: T.pale }}/>
-                  </div>
+                <HistoriqueRepli
+                  style={{ marginTop: '1.5rem' }}
+                  compte={`${Math.min(commandesTerminees.length, 5)} commande${Math.min(commandesTerminees.length, 5) > 1 ? 's' : ''}`}
+                >
                   {commandesTerminees.slice(0, 5).map(c => {
                     // Mapping statuts terminaux vers libellés FR + couleur
                     const statutMapCmd = {
@@ -3570,7 +3577,7 @@ export default function Commander() {
                       </div>
                     )
                   })}
-                </div>
+                </HistoriqueRepli>
               )}
 
               {/* Empty state alimentaires si Yopper connecte sans commande */}
@@ -3699,11 +3706,10 @@ export default function Commander() {
 
                 {/* RDVs passes / annules */}
                 {rdvsPasses.length > 0 && (
-                  <div style={{ marginTop: rdvsAVenir.length > 0 ? '1.5rem' : 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Historique</span>
-                      <div style={{ flex: 1, height: 1, background: T.pale }}/>
-                    </div>
+                  <HistoriqueRepli
+                    style={{ marginTop: rdvsAVenir.length > 0 ? '1.5rem' : 0 }}
+                    compte={`${Math.min(rdvsPasses.length, 5)} rendez-vous`}
+                  >
                     {rdvsPasses.slice(0, 5).map(r => {
                       const dateObj = r.date_rdv ? new Date(r.date_rdv + 'T12:00:00') : null
                       // Mapping statuts vers libellés FR + couleur (badge)
@@ -3751,7 +3757,7 @@ export default function Commander() {
                         </div>
                       )
                     })}
-                  </div>
+                  </HistoriqueRepli>
                 )}
 
                 {/* Empty state */}

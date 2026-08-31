@@ -466,6 +466,39 @@ const MUTATIONS = [
     banc: 'verif:logique', fichier: 'migrations/MIGRATION_STOCK_GLOBAL_SERVEUR.sql',
     de: '    v_actif := NULL;',
     vers: '' },
+
+  // ═══ L'HISTORIQUE REPLIABLE DU SUIVI (31/08) ════════════════════════════
+  { nom: '🔴 le repli CACHE son contenu au lieu de le démonter',
+    banc: 'verif:yopper', fichier: 'app/commander/HistoriqueRepli.js',
+    de: '      {ouvert && children}',
+    vers: "      <div style={{ display: ouvert ? 'block' : 'none' }}>{children}</div>" },
+
+  { nom: '🔴 le bloc plié redevient muet, sans son compte',
+    banc: 'verif:yopper', fichier: 'app/commander/HistoriqueRepli.js',
+    de: '        {compte ? (',
+    vers: '        {false ? (' },
+
+  { nom: '🔴 seule la flèche devient cliquable',
+    banc: 'verif:yopper', fichier: 'app/commander/HistoriqueRepli.js',
+    de: "          display: 'flex', alignItems: 'center', gap: 8, width: '100%',",
+    vers: "          display: 'flex', alignItems: 'center', gap: 8," },
+
+  { nom: '🔴 le repli ne se dit plus aux lecteurs d’écran',
+    banc: 'verif:yopper', fichier: 'app/commander/HistoriqueRepli.js',
+    de: '        aria-expanded={ouvert}',
+    vers: '' },
+
+  { nom: '🔴 l’historique des rendez-vous redevient déplié en dur',
+    banc: 'verif:yopper', fichier: 'app/commander/page.js',
+    de: '                  <HistoriqueRepli',
+    vers: '                  <div' },
+
+  // ⚠️ ET LE COMPTE NE DOIT PAS PROMETTRE PLUS QUE CE QU'IL MONTRE : la liste
+  // s'arrête à cinq.
+  { nom: '🔴 le compte annonce le total alors que la liste s’arrête à cinq',
+    banc: 'verif:yopper', fichier: 'app/commander/page.js',
+    de: 'compte={`${Math.min(rdvsPasses.length, 5)} rendez-vous`}',
+    vers: 'compte={`${rdvsPasses.length} rendez-vous`}' },
 ]
 
 function lancer(banc) {

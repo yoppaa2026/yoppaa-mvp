@@ -499,6 +499,34 @@ const MUTATIONS = [
     banc: 'verif:yopper', fichier: 'app/commander/page.js',
     de: 'compte={`${Math.min(rdvsPasses.length, 5)} rendez-vous`}',
     vers: 'compte={`${rdvsPasses.length} rendez-vous`}' },
+
+  // ⚠️ « TERMINÉ » N'EST PAS « PAS VALABLE » : `valable` rend faux pour un
+  // abonnement qui n'a PAS ENCORE COMMENCÉ, et l'archiver serait l'exact
+  // contraire de ce qu'il est.
+  { nom: '🔴 « terminé » redevient « pas valable » (le pas-encore-commencé archivé)',
+    banc: 'verif:yopper', fichier: 'lib/abonnements.js',
+    de: '    termine: Boolean(\n      solde === 0\n      || (estDate(abonnement.date_fin) && estDate(aujourdhui) && aujourdhui > abonnement.date_fin)',
+    vers: '    termine: Boolean(\n      !valable\n      || (false)' },
+
+  { nom: '🔴 un abonnement épuisé reste rangé dans « en cours »',
+    banc: 'verif:yopper', fichier: 'lib/abonnements.js',
+    de: '      solde === 0\n      || (estDate(abonnement.date_fin)',
+    vers: '      false\n      || (estDate(abonnement.date_fin)' },
+
+  { nom: '🔴 le dernier jour de validité archive déjà l’abonnement',
+    banc: 'verif:yopper', fichier: 'lib/abonnements.js',
+    de: 'aujourdhui > abonnement.date_fin)',
+    vers: 'aujourdhui >= abonnement.date_fin)' },
+
+  { nom: '🔴 un contrat résilié reste affiché comme en cours',
+    banc: 'verif:yopper', fichier: 'lib/abonnements.js',
+    de: "      || abonnement.statut === 'resilie'",
+    vers: '' },
+
+  { nom: '🔴 l’écran refait la règle au lieu de lire le module',
+    banc: 'verif:yopper', fichier: 'app/commander/page.js',
+    de: 'clientAbonnements.filter(a => !a.termine).map',
+    vers: 'clientAbonnements.filter(a => a.valable).map' },
 ]
 
 function lancer(banc) {

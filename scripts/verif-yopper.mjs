@@ -741,9 +741,6 @@ for (const chemin of routesAdmin) {
     /user\.email !== ADMIN_EMAIL[\s\S]{0,180}?403/.test(src))
 }
 
-console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
-
-
 // ═══ LA LISTE SE CHARGE AU MONTAGE, ET SE RELANCE AU RETOUR ════════════════
 //
 // 🔴 DEUX PANNES OPPOSÉES, UN SEUL ÉCRAN, LE MÊME JOUR.
@@ -812,7 +809,7 @@ console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 
   // ── Les deux historiques passent par lui, et aucun ne garde l'ancienne barre.
   const usages = (page.match(/<HistoriqueRepli/g) || []).length
-  egal('les deux historiques du Suivi sont repliables', usages, 2)
+  egal('les trois historiques du Suivi sont repliables', usages, 3)
   verifier('et le composant est bien importé',
     /import HistoriqueRepli from '\.\/HistoriqueRepli'/.test(page))
   // ⚠️ ON COMPTE LES SURVIVANTS, on ne cherche pas un succès. Une barre
@@ -825,7 +822,54 @@ console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
   // mensonge de plus dans un écran d'argent.
   const comptes = (page.match(/compte=\{`\$\{Math\.min\(/g) || []).length
   egal('🔴 les deux comptes disent ce qui est AFFICHÉ, pas le total', comptes, 2)
+
+  // ── 🔴 « TERMINÉ » N'EST PAS « PAS VALABLE » ────────────────────────────
+  //
+  // `valable` rend faux pour quatre raisons, dont deux qui ne sont pas des
+  // fins : un abonnement pas encore commencé, et un contrat sans dates.
+  // Ranger le premier dans l'historique archiverait un abonnement acheté ce
+  // matin pour le mois prochain.
+  const { etatAbonnement } = await import('../lib/abonnements.js')
+  const AUJ = '2026-08-31'
+  const etat = (a) => etatAbonnement({ id: 'a', statut: 'actif', ...a }, [], { aujourdhui: AUJ })
+
+  verifier('🔴 un abonnement PAS ENCORE COMMENCÉ n’est pas terminé',
+    etat({ date_debut: '2026-10-01', date_fin: '2026-12-31', seances_total: 10 }).termine === false)
+  verifier('🔴 un abonnement dont la fin est passée est terminé',
+    etat({ date_debut: '2026-01-01', date_fin: '2026-08-30', seances_total: 10 }).termine === true)
+  verifier('un abonnement en cours ne l’est pas',
+    etat({ date_debut: '2026-08-01', date_fin: '2026-09-30', seances_total: 10 }).termine === false)
+  verifier('le dernier jour compte encore',
+    etat({ date_debut: '2026-08-01', date_fin: AUJ, seances_total: 10 }).termine === false)
+  verifier('🔴 des séances épuisées terminent l’abonnement',
+    etat({ date_debut: '2026-08-01', date_fin: '2026-09-30', seances_total: 0 }).termine === true)
+  verifier('un contrat résilié est terminé',
+    etat({ statut: 'resilie', date_debut: '2026-08-01', date_fin: '2026-09-30', seances_total: 10 }).termine === true)
+  // ⚠️ ET UN SOLDE INCONNU N'EST PAS UN SOLDE ÉPUISÉ, neuvième fois.
+  verifier('🔴 un solde INCONNU ne termine rien',
+    etat({ date_debut: '2026-08-01', date_fin: '2026-09-30', seances_total: null }).termine === false)
+  // ⚠️ ET UN CARNET SANS DATES RESTE OUVERT tant qu'il lui reste des séances.
+  verifier('un carnet sans dates reste en cours',
+    etat({ seances_total: 10 }).termine === false)
+
+  // L'écran filtre bien sur ce drapeau, et ne recalcule pas la règle.
+  verifier('🔴 l’écran lit le drapeau du module au lieu de refaire la règle',
+    /filter\(a => !a\.termine\)/.test(page) && /filter\(a => a\.termine\)/.test(page))
+  verifier('et il ne se sert pas de `valable` pour trancher',
+    !/a\.valable/.test(page))
 }
+
+// 🔴 LE TOTAL S'IMPRIMAIT AU MILIEU DU FICHIER (trouvé le 31/08).
+//
+// Il vivait cent lignes avant la fin, et ignorait donc tout ce qui suivait :
+// les gardes du chargement, celles du repli, celles des abonnements. Le banc
+// annonçait « 224 vérifications » en en ayant fait bien davantage.
+//
+// ⚠️ LES ÉCHECS, EUX, ÉTAIENT BIEN COMPTÉS : le bloc final lit `ko` après tout
+// le monde. Rien n'est jamais passé au travers. Mais un banc qui sous-déclare
+// son propre travail est un banc dont on ne peut pas suivre la progression, et
+// c'est précisément le chiffre que je recopie dans chaque message de commit.
+console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 
 if (ko > 0) {
   console.log('\nÉCHECS :')

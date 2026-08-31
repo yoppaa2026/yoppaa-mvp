@@ -3598,7 +3598,23 @@ export default function Commander() {
                   ⚠️ L'onglet n'existe QUE s'il y a un abonnement, sans quoi il
                   resterait vide à vie pour la quasi totalité des Yoppers. */}
               <div style={{ padding: '1rem', display: sousOngletCmd === 'abos' ? 'block' : 'none' }}>
-                {clientAbonnements.map(a => <CarteAbonnement key={a.id} abonnement={a} />)}
+                {/* 🔴 L'ONGLET LISTAIT TOUT À PLAT (Alex, 31/08). Un abonnement
+                    épuisé l'an dernier occupait la même place qu'un carnet en
+                    cours. Le critère de « terminé » vit dans `lib/abonnements`,
+                    au même endroit que le solde et la validité : le partager ici
+                    aurait fait une deuxième source de vérité.
+                    ⚠️ ET « TERMINÉ » N'EST PAS « PAS VALABLE » : un abonnement
+                    qui commence le mois prochain n'est pas valable aujourd'hui,
+                    et il n'a rien à faire dans un historique. */}
+                {clientAbonnements.filter(a => !a.termine).map(a => <CarteAbonnement key={a.id} abonnement={a} />)}
+                {clientAbonnements.some(a => a.termine) && (
+                  <HistoriqueRepli
+                    style={{ marginTop: clientAbonnements.some(a => !a.termine) ? '1.5rem' : 0 }}
+                    compte={`${clientAbonnements.filter(a => a.termine).length} abonnement${clientAbonnements.filter(a => a.termine).length > 1 ? 's' : ''}`}
+                  >
+                    {clientAbonnements.filter(a => a.termine).map(a => <CarteAbonnement key={a.id} abonnement={a} />)}
+                  </HistoriqueRepli>
+                )}
                 <p style={{ margin: '10px 2px 0', fontSize: '0.78rem', color: T.muted, lineHeight: 1.5 }}>
                   Tes séances réservées apparaissent dans <strong style={{ color: T.deep }}>Rendez-vous</strong>.
                 </p>

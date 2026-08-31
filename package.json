@@ -44,7 +44,8 @@
     "audit:colonnes": "node scripts/audit-colonnes-select.mjs",
     "verif:bons": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-bons-cadeaux.mjs",
     "verif:tunnel-rdv": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-tunnel-rdv.mjs",
-    "mutations:admin": "node scripts/mutations-admin.mjs"
+    "mutations:admin": "node scripts/mutations-admin.mjs",
+    "mutations:session": "node scripts/mutations-session.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.3",

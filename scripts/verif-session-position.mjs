@@ -20,7 +20,7 @@ import { decisionGeoloc } from '../lib/geoloc.js'
 // qu'on mesure pour pouvoir le mesurer.
 process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'http://localhost:54321'
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= 'banc'
-const { doitRestaurer } = await import('../lib/session-permanente.js')
+const { doitRestaurer, construireRappelAuth } = await import('../lib/session-permanente.js')
 
 let ok = 0
 const echecs = []
@@ -208,9 +208,36 @@ function egale(nom, recu, attendu) {
     /const DELAI_MAX_COMMERCES_MS = \d+/.test(src))
   // ⚠️ LE DÉLAI DOIT ÊTRE BRANCHÉ, pas seulement déclaré. Une constante non
   // utilisée est exactement le genre de garde verte qui ne protège rien.
+  // ⚠️ ON ISOLE LA FONCTION AVANT DE MESURER. Ces mots vivent ailleurs dans un
+  // fichier de 4 500 lignes, et une garde qui les y trouve ne prouve rien.
+  //
+  // ⚠️ ET AUCUNE EXPRESSION N'EST ANCRÉE SUR `\n` NU : le dépôt est en CRLF, et
+  // un `\n` seul ne correspond alors JAMAIS. Ce piège-là ne dit rien : il rend
+  // une garde muette, dans le sens qui arrange, sans le moindre message.
+  const debut = src.indexOf('async function chargerCommercants')
+  const finFinally = src.indexOf('setCommercesEnChargement(false)', debut)
+  const relatif = src.slice(finFinally).search(/\r?\n {2}\}\r?\n/)
+  const bloc = src.slice(debut, relatif > 0 ? finFinally + relatif : finFinally)
+  verifie('la fonction de chargement est bien isolée pour la mesure',
+    debut > 0 && relatif > 0 && bloc.length > 400 && bloc.length < 4500,
+    `${bloc.length} caractères (le fichier en fait plus de 200 000)`)
+
   verifie('et il abandonne réellement la requête',
-    /setTimeout\(\(\) => abandon\.abort\(\), DELAI_MAX_COMMERCES_MS\)/.test(src)
-    && /\.abortSignal\(abandon\.signal\)/.test(src))
+    /abandon\.abort\(\)/.test(bloc) && /\.abortSignal\(abandon\.signal\)/.test(bloc))
+
+  // 🔴 ET L'ABANDON NE SUFFIT PAS : C'ÉTAIT LE DÉFAUT DU 31/08.
+  //
+  // Un `abortSignal` ne connaît que le `fetch`. Or supabase-js résout le jeton
+  // AVANT d'émettre la requête : `await getAccessToken()` précède le `fetch`.
+  // Quand cette résolution se bloque, la requête n'est jamais partie, il n'y a
+  // rien à abandonner, et la porte de sortie du 25/08 se trouvait du mauvais
+  // côté du mur. Le délai doit garder TOUTE l'opération, donc REJETER.
+  verifie('🔴 le délai rend la main même si la requête n’est jamais partie',
+    /rejeter\(/.test(bloc) && /DELAI_MAX_COMMERCES_MS\)/.test(bloc),
+    'le minuteur abandonne sans jamais rejeter : il ne couvre que la phase HTTP')
+  verifie('🔴 et l’échéance court bien CONTRE la requête',
+    /await Promise\.race\(\[/.test(bloc) && /echeance,\s*\]/.test(bloc),
+    'l’échéance existe mais personne ne l’attend')
   verifie('le drapeau de chargement retombe quoi qu\'il arrive',
     /finally \{\s*\n\s*clearTimeout\(minuteur\)\s*\n\s*setCommercesEnChargement\(false\)/.test(src))
 
@@ -344,6 +371,130 @@ function egale(nom, recu, attendu) {
     verifie(`${nom} : aucun « Retour à Yoppaa » sans sa phrase`,
       notes === retours, `${notes} phrase(s) pour ${retours} retour(s)`)
   }
+}
+
+// ═══ LE RAPPEL D'AUTH NE DOIT JAMAIS ATTENDRE L'AUTH ══════════════════════
+//
+// 🔴 LE DÉFAUT DU 31/08, ET IL FERMAIT L'APPLICATION ENTIÈRE.
+//
+// Le rappel était `async` et faisait `await restaurerSession()`, qui appelle
+// `supabase.auth.setSession()`. Or `_notifyAllSubscribers` ATTEND ce rappel en
+// tenant le verrou d'auth. Notre appel repartait dans `_acquireLock`, tombait
+// dans la branche ré-entrante, et y attendait l'opération qui nous attendait.
+// Cette branche n'a AUCUN délai : le verrou restait pris pour toujours, et
+// chaque `.from(...)` résolvant son jeton avant d'émettre sa requête, plus rien
+// ne partait.
+//
+// ⚠️ LA RÈGLE N'EST PAS « PAS D'`await` ICI », C'EST « LE RAPPEL D'AUTH NE
+// RAPPELLE JAMAIS L'AUTH ». Et ce qui la PROUVE n'est pas la forme du code,
+// c'est qu'il RENDE LA MAIN avant que la restauration ne parte.
+{
+  const attendreUnTour = () => new Promise(r => setTimeout(r, 0))
+
+  // ── La garde qui compte : rendre la main AVANT d'agir ──────────────────
+  let restaurationPartie = false
+  let differee = null
+  const rappel = construireRappelAuth({
+    restaurer: async () => { restaurationPartie = true; return true },
+    voulue: () => false,
+    memoriser: () => {},
+    differer: (faire) => { differee = faire },
+    surSessionPerdue: () => {},
+  })
+  const rendu = rappel('SIGNED_OUT', null)
+
+  verifie('🔴 le rappel rend la main AVANT que la restauration ne parte',
+    restaurationPartie === false,
+    'la restauration est partie pendant le rappel : le verrou se referme sur lui-même')
+  verifie('🔴 le rappel ne rend AUCUNE promesse que la bibliothèque attendrait',
+    rendu === undefined || typeof rendu?.then !== 'function',
+    `le rappel rend « ${typeof rendu} »`)
+  verifie('et il a bien confié la restauration à plus tard',
+    typeof differee === 'function')
+
+  // ── Et une fois différée, elle fait bien son travail ───────────────────
+  const dits = []
+  const rejoue = (resultat) => {
+    dits.length = 0
+    let f = null
+    construireRappelAuth({
+      restaurer: () => (resultat instanceof Error ? Promise.reject(resultat) : Promise.resolve(resultat)),
+      voulue: () => false,
+      memoriser: () => {},
+      differer: (faire) => { f = faire },
+      surSessionPerdue: (perdue) => dits.push(perdue),
+    })('SIGNED_OUT', null)
+    f?.()
+    return attendreUnTour()
+  }
+  await rejoue(true)
+  egale('une restauration réussie n’annonce AUCUNE perte', dits.join(','), 'false')
+  await rejoue(false)
+  egale('une restauration ratée annonce la perte', dits.join(','), 'true')
+  await rejoue(new Error('boum'))
+  egale('🔴 une restauration qui LÈVE annonce la perte, elle ne se tait pas',
+    dits.join(','), 'true')
+
+  // ── Une déconnexion voulue ne déclenche rien du tout ───────────────────
+  let differeeVoulue = null
+  const ditsVoulue = []
+  construireRappelAuth({
+    restaurer: async () => { throw new Error('jamais appelée') },
+    voulue: () => true,
+    memoriser: () => {},
+    differer: (faire) => { differeeVoulue = faire },
+    surSessionPerdue: (perdue) => ditsVoulue.push(perdue),
+  })('SIGNED_OUT', null)
+  verifie('une déconnexion voulue ne diffère rien', differeeVoulue === null)
+  egale('et elle n’annonce aucune perte', ditsVoulue.join(','), 'false')
+
+  // ── Les évènements heureux mémorisent et rassurent ─────────────────────
+  for (const evt of ['SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED']) {
+    const memorisees = []
+    const ditsOk = []
+    construireRappelAuth({
+      restaurer: async () => true, voulue: () => false,
+      memoriser: (s) => memorisees.push(s),
+      differer: () => { throw new Error('rien à différer ici') },
+      surSessionPerdue: (perdue) => ditsOk.push(perdue),
+    })(evt, { access_token: 'a' })
+    egale(`${evt} mémorise la session`, memorisees.length, 1)
+    egale(`${evt} n’annonce aucune perte`, ditsOk.join(','), 'false')
+  }
+}
+
+// ⚠️ ET LA RÈGLE VAUT POUR TOUS LES RAPPELS D'AUTH DU DÉPÔT, PAS SEULEMENT
+// CELUI-LÀ. On COMPTE les fautifs et on exige ZÉRO : chercher « est-ce que
+// quelqu'un fait bien » laisserait passer le prochain.
+{
+  const { readdirSync } = await import('node:fs')
+  const racine = new URL('../', import.meta.url)
+  const fichiers = []
+  const parcourir = (rel) => {
+    for (const e of readdirSync(new URL(rel, racine), { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name.startsWith('.')) continue
+      if (e.isDirectory()) parcourir(`${rel}${e.name}/`)
+      else if (/\.(js|jsx|ts|tsx)$/.test(e.name)) fichiers.push(`${rel}${e.name}`)
+    }
+  }
+  parcourir('app/'); parcourir('lib/')
+
+  const appelants = fichiers.filter(f =>
+    readFileSync(new URL(f, racine), 'utf8').includes('onAuthStateChange'))
+  verifie('des rappels d’authentification existent bien à surveiller',
+    appelants.length >= 3, `${appelants.length} fichier(s)`)
+
+  const fautifs = appelants.filter(f => {
+    const src = readFileSync(new URL(f, racine), 'utf8')
+    // Un rappel `async` rend une promesse que la bibliothèque attend.
+    return /onAuthStateChange\(\s*async/.test(src)
+  })
+  egale('🔴 aucun rappel onAuthStateChange n’est `async`', fautifs.join(' · '), '')
+
+  // Et celui de la session passe bien par la fabrique mesurée ci-dessus.
+  const srcSession = readFileSync(new URL('lib/session-permanente.js', racine), 'utf8')
+  verifie('le rappel de la session vient de la fabrique',
+    /onAuthStateChange\(\s*\n?\s*construireRappelAuth\(/.test(srcSession))
 }
 
 console.log(`\nSession + position : ${ok} vérifications`)

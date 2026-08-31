@@ -2044,17 +2044,41 @@ export default function Commander() {
     // ⚠️ C'est le même motif que le bouton « Redirection… » du 24/08 : un état
     // de chargement sans porte de sortie. Là c'était le cache du navigateur,
     // ici c'est le réseau, et le remède est le même : PRÉVOIR LA SORTIE.
+    //
+    // 🔴 ET LA PORTE DE SORTIE ÉTAIT DU MAUVAIS CÔTÉ DU MUR (Alex, 31/08).
+    //
+    // L'abandon posé le 25/08 ne coupe QUE la requête HTTP, parce qu'un
+    // `abortSignal` ne connaît que le `fetch`. Or supabase-js résout d'abord le
+    // jeton : `await getAccessToken()` s'exécute AVANT que la requête ne parte.
+    // Quand cette résolution se bloque, la requête n'est jamais émise, il n'y a
+    // rien à abandonner, et le minuteur coupait un fil qui n'existait pas.
+    //
+    // ⚠️ LE DÉLAI DOIT DONC GARDER TOUTE L'OPÉRATION, pas sa seule moitié
+    // visible. On garde l'abandon, qui reste utile quand la requête est bien
+    // partie, et on ajoute une échéance qui REND LA MAIN quoi qu'il arrive.
+    //
+    // ⚠️ Le minuteur est éteint dans le `finally` : sans ça, l'échéance
+    // rejetterait dans le vide après un chargement réussi.
     setErreurChargement(false)
     setCommercesEnChargement(true)
     const abandon = new AbortController()
-    const minuteur = setTimeout(() => abandon.abort(), DELAI_MAX_COMMERCES_MS)
+    let minuteur = null
+    const echeance = new Promise((_, rejeter) => {
+      minuteur = setTimeout(() => {
+        abandon.abort()
+        rejeter(new Error('delai_depasse'))
+      }, DELAI_MAX_COMMERCES_MS)
+    })
     try {
-      const { data, error } = await supabase
-        .from('commercants_public')  // vue publique (colonnes sûres, publiés) — RLS commercants
-        .select('*')
-        .eq('statut_publication', 'publie')
-        .order('nom')
-        .abortSignal(abandon.signal)
+      const { data, error } = await Promise.race([
+        supabase
+          .from('commercants_public')  // vue publique (colonnes sûres, publiés) — RLS commercants
+          .select('*')
+          .eq('statut_publication', 'publie')
+          .order('nom')
+          .abortSignal(abandon.signal),
+        echeance,
+      ])
       if (error) throw error
       setCommercants(data || [])
       if (data?.length > 0) {

@@ -527,6 +527,39 @@ const MUTATIONS = [
     banc: 'verif:yopper', fichier: 'app/commander/page.js',
     de: 'clientAbonnements.filter(a => !a.termine).map',
     vers: 'clientAbonnements.filter(a => a.valable).map' },
+
+  // ═══ LE NOM DU BON SUIT LE MÉTIER (31/08) ═══════════════════════════════
+  //
+  // 🔴 LA MUTATION QUI COMPTE EST CELLE DU REPLI. `lib/plans.js` traite une
+  // catégorie absente comme de l'alimentaire ; reprendre ce réflexe ici ferait
+  // dire « bon gourmand » chez un coiffeur dont la catégorie n'a pas été
+  // chargée, et un email part sans qu'on puisse le rattraper.
+  { nom: '🔴 une catégorie absente bascule du côté gourmand',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: "  const gourmand = String(categorie || '').trim().toLowerCase() === CATEGORIE_GOURMANDE",
+    vers: "  const gourmand = String(categorie || 'alimentaire').trim().toLowerCase() === CATEGORIE_GOURMANDE" },
+
+  { nom: '🔴 le détail se met à dire « gourmand »',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: "  cadeau: { un: 'bon cadeau', des: 'bons cadeaux' },",
+    vers: "  cadeau: { un: 'bon gourmand', des: 'bons gourmands' }," },
+
+  { nom: '🔴 l’alimentaire redevient « cadeau »',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: "  gourmand: { un: 'bon gourmand', des: 'bons gourmands' },",
+    vers: "  gourmand: { un: 'bon cadeau', des: 'bons cadeaux' }," },
+
+  // ⚠️ LE PLURIEL FRANÇAIS N'EST PAS UNE CONCATÉNATION : ma première version
+  // rendait « bons cadeaus », et le banc l'a attrapé au premier tour.
+  { nom: '🔴 le pluriel se fabrique en ajoutant un s',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: "  cadeau: { un: 'bon cadeau', des: 'bons cadeaux' },",
+    vers: "  cadeau: { un: 'bon cadeau', des: 'bons cadeaus' }," },
+
+  { nom: '🔴 la casse de la base fait basculer le mot',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: "String(categorie || '').trim().toLowerCase()",
+    vers: "String(categorie || '')" },
 ]
 
 function lancer(banc) {

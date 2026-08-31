@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs'
 import { euros, eurosNus } from '../lib/montants.js'
 import { elisionDe } from '../lib/francais.js'
 import { doitMontrerFlottant, SEUIL_CACHER, SEUIL_MONTRER } from '../lib/bouton-flottant.js'
-import { calculerRemiseBon, normaliserCodeBon, bonExpire, libelleResteBon } from '../lib/bons-cadeaux.js'
+import { calculerRemiseBon, normaliserCodeBon, bonExpire, libelleResteBon, libelleBon } from '../lib/bons-cadeaux.js'
 import { resteAEncaisser, soldeRdv, etatPaiementRdv, caDesRdvs, montantNetCommande, phraseAvantages } from '../lib/rdv-paiement.js'
 import { emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire } from '../lib/resend.js'
 import { texteBonVendu } from '../lib/bons-vendus.js'
@@ -610,6 +610,48 @@ const egal = (nom, obtenu, attendu) =>
     verifie(`${f.split('/').slice(-2).join('/')} ne la réécrit plus à la main`,
       !/restera \$\{euros/.test(src) && !/restera \$\{/.test(src.replace(/Il te restera[^\n]*/g, '')))
   }
+}
+
+// ═══ LE NOM DU BON CHANGE AVEC LE MÉTIER (31/08) ══════════════════════════
+//
+// 🔴 « Bon cadeau » dit l'intention, pas l'usage. On n'offre pas un paquet de
+// frites : on offre un repas, une tarte, de quoi tenir la semaine.
+{
+  egal('l’alimentaire dit « bon gourmand »', libelleBon('alimentaire'), 'bon gourmand')
+  egal('le détail dit « bon cadeau »', libelleBon('detail'), 'bon cadeau')
+  egal('les services aussi', libelleBon('vitrine'), 'bon cadeau')
+  egal('et un service public également', libelleBon('publique'), 'bon cadeau')
+
+  // 🔴 LA GARDE QUI COMPTE : le repli d'une catégorie INCONNUE.
+  //
+  // `lib/plans.js` traite une catégorie absente comme de l'alimentaire, parce
+  // que c'est le métier historique. Reprendre ce réflexe ici ferait dire « bon
+  // gourmand » chez un coiffeur dont la catégorie n'a pas été chargée, et un
+  // email part sans qu'on puisse le rattraper.
+  for (const absente of [null, undefined, '', '   ']) {
+    egal(`🔴 une catégorie absente (${JSON.stringify(absente)}) reste « cadeau »`,
+      libelleBon(absente), 'bon cadeau')
+  }
+  egal('🔴 et une catégorie inconnue aussi', libelleBon('coiffeur'), 'bon cadeau')
+
+  // ⚠️ LA SAISIE N'EST PAS TOUJOURS PROPRE : une majuscule ou une espace en
+  // base ne doivent pas faire basculer le mot.
+  egal('la casse ne change rien', libelleBon('Alimentaire'), 'bon gourmand')
+  egal('les espaces non plus', libelleBon('  alimentaire  '), 'bon gourmand')
+
+  egal('le pluriel se dit', libelleBon('alimentaire', { pluriel: true }), 'bons gourmands')
+  egal('et pour les autres', libelleBon('detail', { pluriel: true }), 'bons cadeaux')
+  egal('la majuscule aussi', libelleBon('alimentaire', { majuscule: true }), 'Bon gourmand')
+  egal('les deux ensemble', libelleBon('detail', { pluriel: true, majuscule: true }), 'Bons cadeaux')
+
+  // ⚠️ ET LE MODULE NE S'APPUIE PAS SUR `estAlimentaire`, dont le repli est
+  // l'EXACT INVERSE du nôtre. Les deux fonctions se ressemblent et ne disent
+  // pas la même chose : les confondre ferait basculer tous les commerces sans
+  // catégorie du mauvais côté, en silence.
+  const srcModule = lireCode('lib/bons-cadeaux.js')
+  verifie('🔴 le libellé ne s’appuie pas sur `estAlimentaire`',
+    !/estAlimentaire/.test(srcModule),
+    'son repli traite une catégorie absente comme de l’alimentaire')
 }
 
 // ═══ LE BON INVISIBLE QUAND RIEN NE SE PAIE EN LIGNE (30/08) ══════════════

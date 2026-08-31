@@ -13,6 +13,7 @@ import { scoreOnboarding, SEUIL_SOUMISSION } from '@/lib/score-onboarding'
 import { conseilPhoto, MAX_PHOTOS } from '@/lib/guide-photos'
 import { SHOP_PRODUCTS, classerProduitsParCategorie, prixProduitTexte } from '@/lib/produits-boutique'
 import { FRAIS_STRIPE_TEXTE } from '@/lib/frais-paiement'
+import { libelleBon } from '@/lib/bons-cadeaux'
 // Icônes Lucide React : SVG inline alignés sur la charte canonique Yoppaa.
 // Convention : stroke-width 1.8, currentColor pour hériter de la palette parent.
 // Aucun emoji dans l'UI (règle Master), sauf exceptions soleil GMY + 🟣 signature.
@@ -905,8 +906,12 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
     {
       // ⚠️ Le module est complet depuis le 31/07 et n'apparaissait nulle part
       // dans le signup : un commerçant payait pour une fonction qu'il ignorait.
-      Icon: Gift, titre: 'Bons cadeaux',
-      desc: 'Tes clients achètent un bon d’un montant qu’ils choisissent, à offrir. Le bénéficiaire le fait valoir chez toi, et le solde restant se garde pour la prochaine fois. Tu es payé à l’achat du bon.',
+      // ⚠️ LE MOT SUIT LE MÉTIER DÈS L'INSCRIPTION, et c'est ici qu'il compte le
+      // plus : le commerçant n'a encore rien vu de Yoppaa, il lit une liste de
+      // fonctions pour décider s'il paie. Un frituriste à qui l'on propose des
+      // « bons cadeaux » se dit que ce n'est pas pour lui et passe la ligne.
+      Icon: Gift, titre: libelleBon(categorie, { pluriel: true, majuscule: true }),
+      desc: `Tes clients achètent un ${libelleBon(categorie)} d’un montant qu’ils choisissent, à offrir. Le bénéficiaire le fait valoir chez toi, et le solde restant se garde pour la prochaine fois. Tu es payé à l’achat du bon.`,
       plan: 'vendre',
     },
     {
@@ -3174,7 +3179,7 @@ function CardPlan({ plan, categorie, actif, onClick }) {
         'Tout Communiquer, plus :',
         VENDRE_FEATURE_TRANSACTIONNEL,
         'Paiement en ligne, sans commission Yoppaa',
-        'Carte de fidélité, bons cadeaux, export comptable',
+        `Carte de fidélité, ${libelleBon(categorie, { pluriel: true })}, export comptable`,
       ],
       note: 'Sans engagement, résiliable en 1 clic',
     },

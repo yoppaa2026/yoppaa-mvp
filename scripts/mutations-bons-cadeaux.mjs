@@ -560,6 +560,42 @@ const MUTATIONS = [
     banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
     de: "String(categorie || '').trim().toLowerCase()",
     vers: "String(categorie || '')" },
+
+  // ═══ LE CÂBLAGE DE LA CATÉGORIE (31/08) ═════════════════════════════════
+  //
+  // 🔴 CES CINQ MUTATIONS SONT LE CŒUR DE LA TRANCHE. Le mot lui-même est
+  // prouvé depuis ce matin ; ce qui casse en vrai, c'est le FIL : une signature
+  // qui cesse de recevoir la catégorie, un appel qui cesse de la passer, un
+  // libellé qu'on regèle par réflexe. Aucune ne fait planter quoi que ce soit,
+  // toutes affichent un texte lisible et faux : c'est exactement pour ça
+  // qu'elles doivent rougir.
+  { nom: '🔴 TabLivraison ne reçoit plus la catégorie',
+    banc: 'verif:bons', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: 'function TabLivraison({ commercantId, categorie, toast, surModifications }) {',
+    vers: 'function TabLivraison({ commercantId, toast, surModifications }) {' },
+
+  { nom: '🔴 l’appel de TabComptabilite cesse de passer la catégorie',
+    banc: 'verif:bons', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '<TabComptabilite commercantId={commercantId} categorie={commercant?.categorie} toast={showToast} />',
+    vers: '<TabComptabilite commercantId={commercantId} toast={showToast} />' },
+
+  { nom: '🔴 un libellé regelé revient dans l’en-tête de l’onglet',
+    banc: 'verif:bons', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "letterSpacing: '1.5px', marginBottom: 2 }}>{nomBonsMaj}</p>",
+    vers: "letterSpacing: '1.5px', marginBottom: 2 }}>Bons cadeaux</p>" },
+
+  { nom: '🔴 le signup regèle le mot dans la liste des fonctions',
+    banc: 'verif:bons', fichier: 'app/signup/page.js',
+    de: '`Carte de fidélité, ${libelleBon(categorie, { pluriel: true })}, export comptable`,',
+    vers: "'Carte de fidélité, bons cadeaux, export comptable'," },
+
+  // ⚠️ ET LA FRONTIÈRE DANS L'AUTRE SENS : l'export part chez un comptable,
+  // il ne doit PAS suivre le métier. Une garde qui ne tient qu'un bord laisse
+  // passer la sur-correction, et c'est le défaut que j'ai commis trois fois.
+  { nom: '🔴 SUR-CORRECTION : l’export comptable se met à varier',
+    banc: 'verif:bons', fichier: 'lib/export-comptable.js',
+    de: "import { jourBruxelles, heureBruxelles } from './timezone'",
+    vers: "import { jourBruxelles, heureBruxelles } from './timezone'\nimport { libelleBon } from './bons-cadeaux'" },
 ]
 
 function lancer(banc) {

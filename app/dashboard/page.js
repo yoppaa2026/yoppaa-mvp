@@ -27,6 +27,7 @@ import { Reply, ClipboardList } from 'lucide-react'
 // vraiment en vigueur. ⚠️ Cette fonction a besoin de `created_at` : le
 // chargement de cet écran fait bien `select('*')`.
 import { canDo, planEffectif } from '@/lib/plans'
+import { libelleBon } from '@/lib/bons-cadeaux'
 import { remplissageCreneaux } from '@/lib/creneaux'
 import BandeDefilante from '@/app/components/BandeDefilante'
 import { partagerCommandes } from '@/lib/commandes-vue'
@@ -2652,7 +2653,7 @@ export default function Dashboard() {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 10, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 2 }}>
-                {nouveauBon.nombre > 1 ? `${nouveauBon.nombre} bons cadeaux vendus` : 'Bon cadeau vendu'}
+                {nouveauBon.nombre > 1 ? `${nouveauBon.nombre} ${libelleBon(commercant?.categorie, { pluriel: true })} vendus` : `${libelleBon(commercant?.categorie, { majuscule: true })} vendu`}
               </p>
               <p style={{ fontSize: 13, fontWeight: 700, color: T.ink, margin: 0, lineHeight: 1.35 }}>{nouveauBon.corps}</p>
             </div>
@@ -2908,7 +2909,7 @@ export default function Dashboard() {
               },
               canDo(planEffectif(commercant), 'bons_cadeaux') && commercant.bons_cadeaux_actif && {
                 key: 'bons',
-                label: 'Bon cadeau',
+                label: libelleBon(commercant?.categorie, { majuscule: true }),
                 aide: 'Encaisser un code',
                 icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>,
               },
@@ -3093,7 +3094,7 @@ export default function Dashboard() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        {resumeBons.nombre > 1 ? `${resumeBons.nombre} bons cadeaux vendus` : 'Bon cadeau vendu'}
+                        {resumeBons.nombre > 1 ? `${resumeBons.nombre} ${libelleBon(commercant?.categorie, { pluriel: true })} vendus` : `${libelleBon(commercant?.categorie, { majuscule: true })} vendu`}
                       </p>
                       <p style={{ fontSize: '0.95rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.3px', margin: '1px 0 0' }}>
                         {euros(resumeBons.total)}

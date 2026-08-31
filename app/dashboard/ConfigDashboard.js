@@ -17,7 +17,7 @@ import {
 import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
 // elles auraient menti au commerçant le jour où on les change.
-import { normaliserCodeBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-cadeaux'
+import { normaliserCodeBon, libelleBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-cadeaux'
 // ⚠️ UN MONTANT S'ÉCRIT « 12,50 € », ET CET ÉCRAN L'IGNORAIT (Alex, 28/08). Le
 // Yopper lisait « 8,00 € » dans son email pendant que le commerçant lisait
 // « 8.00€ » dans le même produit, sur la même commande. Deux définitions du
@@ -3433,7 +3433,12 @@ function TabCreneaux({ commercantId, toast }) {
 // ─── Onglet LIVRAISON ─────────────────────────────────────────────────────────
 // Config zone (codes postaux) + frais (fixe + gratuit dès X€). Créneaux livraison
 // gérés dans un second temps (calqués sur TabCreneaux via livraison_creneaux).
-function TabLivraison({ commercantId, toast, surModifications }) {
+// ⚠️ `categorie` N'EST PAS UN DÉTAIL DE PLUS DANS LA SIGNATURE : c'est elle qui
+// décide du nom du bon (« bon gourmand » chez un traiteur, « bon cadeau »
+// ailleurs). Sans elle, `libelleBon()` retomberait sur « cadeau » chez un
+// commerce alimentaire, et ce serait un défaut silencieux : le texte s'affiche,
+// il est simplement faux. Voir lib/bons-cadeaux.js.
+function TabLivraison({ commercantId, categorie, toast, surModifications }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [codesPostaux, setCodesPostaux] = useState([])
@@ -3601,7 +3606,7 @@ function TabLivraison({ commercantId, toast, surModifications }) {
           })()}
         </p>
         <p style={{ margin: '6px 0 0', fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
-          Le minimum se compte sur les articles, sans les frais de livraison ni un éventuel bon cadeau :
+          Le minimum se compte sur les articles, sans les frais de livraison ni un éventuel {libelleBon(categorie)} :
           tu roules toujours pour au moins ce montant de marchandise.
         </p>
       </div>
@@ -6494,6 +6499,12 @@ const SIGN_TYPE_ICON = {
 // bons (RLS ownership) ; l'achat et l'activation passent par les API
 // service_role (Stripe Checkout + webhook).
 function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModifications }) {
+  // Le nom du bon suit le métier : « bons gourmands » chez un frituriste,
+  // « bons cadeaux » chez un coiffeur. C'est le COMMERÇANT que ce mot doit
+  // atteindre en premier, sur son propre tableau de bord.
+  const nomBon = libelleBon(commercant?.categorie)
+  const nomBons = libelleBon(commercant?.categorie, { pluriel: true })
+  const nomBonsMaj = libelleBon(commercant?.categorie, { pluriel: true, majuscule: true })
   const [actif, setActif] = useState(!!commercant?.bons_cadeaux_actif)
   const [validite, setValidite] = useState(String(commercant?.bons_cadeaux_validite_mois || 12))
   const [savingCfg, setSavingCfg] = useState(false)
@@ -6535,7 +6546,7 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
     setValidite(String(mois))
     // La durée bornée est celle qui part en base : c'est elle la référence.
     setInitial({ actif, validite: String(mois) })
-    toast(actif ? 'Bons cadeaux activés 🟣' : 'Bons cadeaux désactivés')
+    toast(actif ? `${nomBonsMaj} activés 🟣` : `${nomBonsMaj} désactivés`)
     onSaved?.()
     return true
   }
@@ -6607,7 +6618,7 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
     <div>
       {/* En-tête panel violet (pattern des autres onglets) */}
       <div style={{ background: T.bgPanel, borderRadius: 14, padding: '18px 20px', marginBottom: 14, color: '#fff' }}>
-        <p style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>Bons cadeaux</p>
+        <p style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>{nomBonsMaj}</p>
         <h2 style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', margin: 0 }}>
           Tes clients offrent ton commerce
         </h2>
@@ -6627,7 +6638,7 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
         </p>
         <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11.5, color: T.deep, lineHeight: 1.7 }}>
           <li><strong>C&rsquo;est l&rsquo;acheteur qui choisit le montant</strong>, librement, entre {BON_MONTANT_MIN} et {BON_MONTANT_MAX} €. Tu n&rsquo;as rien à préparer ni à mettre en vente.</li>
-          <li><strong>Un bon cadeau est une somme, pas un article.</strong> Le bénéficiaire l&rsquo;utilise sur ce qu&rsquo;il veut chez toi, ce qui t&rsquo;évite de devoir garder un produit en réserve pendant des mois.</li>
+          <li><strong>Un {nomBon} est une somme, pas un article.</strong> Le bénéficiaire l&rsquo;utilise sur ce qu&rsquo;il veut chez toi, ce qui t&rsquo;évite de devoir garder un produit en réserve pendant des mois.</li>
           <li><strong>Il s&rsquo;utilise en plusieurs fois.</strong> Un bon de 50 € dépensé à hauteur de 30 € en garde 20 pour la prochaine visite, en ligne comme au comptoir.</li>
           <li><strong>Tu es payé tout de suite</strong>, à l&rsquo;achat du bon, sur ton compte. Quand le bénéficiaire vient le dépenser, il ne te doit plus rien : c&rsquo;est déjà encaissé.</li>
           <li><strong>La validité court à partir de la vente</strong> et se règle juste en dessous. Passé ce délai, le bon ne peut plus être utilisé.</li>
@@ -6636,7 +6647,7 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
 
       {/* Configuration */}
       <div style={{ ...s.card, marginBottom: 14 }}>
-        <Toggle value={actif} onChange={setActif} label="Proposer les bons cadeaux sur ma fiche"/>
+        <Toggle value={actif} onChange={setActif} label={`Proposer les ${nomBons} sur ma fiche`}/>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 12 }}>
           <div style={{ flex: '0 0 140px' }}>
             <label style={s.label}>Validité (mois)</label>
@@ -6703,7 +6714,7 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
         <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 10px' }}>Derniers bons vendus</p>
         {bons.length === 0 ? (
           <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>
-            Aucun bon vendu pour le moment. Active le module ci-dessus : le bouton « Offrir un bon cadeau » apparaîtra sur ta fiche.
+            Aucun bon vendu pour le moment. Active le module ci-dessus : le bouton « Offrir un {nomBon} » apparaîtra sur ta fiche.
           </p>
         ) : bons.map(b => {
           const badge = soldeBadge(b)
@@ -9841,7 +9852,12 @@ function TabAvis({ commercantId, toast }) {
 // Le téléchargement passe par un fetch authentifié plutôt que par un simple
 // lien : la route exige le jeton du commerçant, et on ne met jamais un jeton
 // dans une URL (il finirait dans l'historique et dans les logs).
-function TabComptabilite({ commercantId, toast }) {
+// ⚠️ ICI L'ÉCRAN SUIT LE MÉTIER, MAIS LE FICHIER EXPORTÉ NON, et la frontière
+// est le DESTINATAIRE : ce tableau, c'est le commerçant qui le lit, dans son
+// vocabulaire. Le CSV, lui, part chez un comptable qui rapproche des dizaines
+// de dossiers : un intitulé qui change d'un client à l'autre lui coûterait du
+// temps sans rien lui apprendre. Voir lib/export-comptable.js, inchangé.
+function TabComptabilite({ commercantId, categorie, toast }) {
   const aujourdHui = new Date()
   const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   const debutMois = new Date(aujourdHui.getFullYear(), aujourdHui.getMonth(), 1)
@@ -10030,7 +10046,7 @@ function TabComptabilite({ commercantId, toast }) {
               ...(totaux.terminal > 0 ? [{ l: 'Dont terminal', v: eur(totaux.terminal) }] : []),
               ...(totaux.especes > 0 ? [{ l: 'Dont espèces', v: eur(totaux.especes) }] : []),
               ...(totaux.virement > 0 ? [{ l: 'Dont virement', v: eur(totaux.virement) }] : []),
-              { l: 'Bons cadeaux', v: eur(totaux.bonCadeau) },
+              { l: libelleBon(categorie, { pluriel: true, majuscule: true }), v: eur(totaux.bonCadeau) },
               // ⚠️ CE QUI N'EST PAS ENCORE RENTRÉ, et ce n'est pas une colonne
               // de plus « pour faire complet » : c'est elle qui ferme le compte.
               // Chiffre TTC = en ligne + au comptoir + bons cadeaux + celle-ci.
@@ -10486,7 +10502,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
     // Fidélité : Communiquer (comptoir) et Vendre (comptoir + crédit auto)
     { id: 'fidelite', label: 'Fidélité', icon: 'heart', feature: 'fidelite' },
     // Bons cadeaux : Vendre uniquement (l'achat passe par Stripe)
-    { id: 'bons', label: 'Bons cadeaux', icon: 'gift', feature: 'bons_cadeaux' },
+    { id: 'bons', label: libelleBon(commercant?.categorie, { pluriel: true, majuscule: true }), icon: 'gift', feature: 'bons_cadeaux' },
     { id: 'paiements', label: 'Paiements', icon: 'tag', feature: 'paiement_ligne' },
     // Journal des transactions et export : promis par la formule Vendre.
     { id: 'comptabilite', label: 'Comptabilité', icon: 'tag', feature: 'export_comptable' },
@@ -10567,12 +10583,12 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
       {tab === 'actus'    && peut(commercant, 'actus_illimitees') && <TabActus commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'ia'       && iaActif && <TabGenerateur commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'creneaux' && peut(commercant, 'commande') && <TabCreneaux commercantId={commercantId} toast={showToast} />}
-      {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} toast={showToast} surModifications={declarerModifications} />}
+      {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} categorie={commercant?.categorie} toast={showToast} surModifications={declarerModifications} />}
       {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}
       {tab === 'fidelite' && peut(commercant, 'fidelite') && <TabFidelite commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
       {tab === 'bons' && peut(commercant, 'bons_cadeaux') && <TabBonsCadeaux commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
-      {tab === 'comptabilite' && peut(commercant, 'export_comptable') && <TabComptabilite commercantId={commercantId} toast={showToast} />}
+      {tab === 'comptabilite' && peut(commercant, 'export_comptable') && <TabComptabilite commercantId={commercantId} categorie={commercant?.categorie} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
       {tab === 'accompagnement' && <TabAccompagnement commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}

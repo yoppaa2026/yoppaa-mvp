@@ -730,6 +730,60 @@ const egal = (nom, obtenu, attendu) =>
   }
 }
 
+// ═══ LE CÂBLAGE DE LA CATÉGORIE, ÉCRAN PAR ÉCRAN ═════════════════════════
+//
+// 🔴 LE DÉFAUT DE CE CHANTIER N'EST PAS LE MOT, C'EST LA CATÉGORIE. `libelleBon()`
+// retombe volontairement sur « cadeau » quand elle est absente : c'est le bon
+// repli, mais il rend le défaut MUET. Un composant qui appelle `libelleBon()`
+// sans recevoir sa catégorie affiche un texte parfaitement lisible, et faux.
+// C'est le motif « colonne absente d'un select », la sixième fois sur ce projet.
+//
+// La garde tient donc les DEUX bouts du fil : la signature qui reçoit, et
+// l'appel qui passe. Casser l'un des deux la fait rougir.
+{
+  const src = lireCode('app/dashboard/ConfigDashboard.js')
+
+  // Les composants qui nomment le bon sans posséder le commerçant entier :
+  // eux doivent déclarer `categorie` et se la voir passer à CHAQUE appel.
+  for (const composant of ['TabLivraison', 'TabComptabilite']) {
+    const signature = new RegExp(`function ${composant}\\(\\{([^}]*)\\}\\)`).exec(src)
+    verifie(`${composant} reçoit la catégorie`,
+      !!signature && /\bcategorie\b/.test(signature[1]),
+      signature ? `signature : { ${signature[1].trim()} }` : 'composant introuvable')
+
+    // ⚠️ TOUS LES APPELS, PAS LE PREMIER. Une deuxième version d'un écran
+    // (mobile, modale) est exactement l'endroit où le fil se coupe sans bruit.
+    const appels = src.match(new RegExp(`<${composant}\\b[^>]*/>`, 'g')) || []
+    verifie(`${composant} est appelé au moins une fois`, appels.length > 0)
+    const muets = appels.filter(a => !/\bcategorie=\{/.test(a))
+    verifie(`les ${appels.length} appel(s) de ${composant} passent la catégorie`,
+      muets.length === 0, `${muets.length} appel(s) muet(s)`)
+  }
+
+  // TabBonsCadeaux, lui, reçoit le commerçant entier : c'est de là qu'il tire
+  // la catégorie, et il ne doit plus contenir un seul libellé figé.
+  verifie('TabBonsCadeaux lit la catégorie du commerçant',
+    /const nomBon = libelleBon\(commercant\?\.categorie\)/.test(src))
+
+  // 🔴 PLUS AUCUN LIBELLÉ GELÉ DANS LES ÉCRANS DU COMMERÇANT. Ce n'est pas une
+  // règle de style : chaque littéral restant est un endroit où le frituriste
+  // relit « bon cadeau » après qu'on lui a promis le contraire.
+  for (const fichier of ['app/dashboard/ConfigDashboard.js', 'app/dashboard/page.js', 'app/signup/page.js']) {
+    const restants = (lireCode(fichier).match(/bons? cadeaux?/gi) || [])
+    verifie(`aucun libellé figé dans ${fichier}`,
+      restants.length === 0, `${restants.length} restant(s) : ${restants.join(', ')}`)
+  }
+
+  // ⚠️ ET CE QUI NE VARIE PAS DOIT RESTER TEL QUEL. L'export part chez un
+  // comptable qui rapproche des dizaines de dossiers : un intitulé qui change
+  // d'un client à l'autre lui coûte du temps sans rien lui apprendre. La
+  // frontière est le DESTINATAIRE, et elle est gardée dans les deux sens.
+  verifie('l\'export comptable garde le mot canonique',
+    /bons? cadeaux?/i.test(lireCode('lib/export-comptable.js')))
+  verifie('l\'export comptable n\'appelle pas libelleBon',
+    !/libelleBon/.test(lire('lib/export-comptable.js')))
+}
+
 console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.`)
 if (echecs.length) {
   console.log('\nÉCHECS :')

@@ -553,12 +553,20 @@ verifier('le push ne promet plus de segmenter',
 // ⚠️ Le symétrique, tout aussi coûteux : un commerçant qui paie pour une
 // fonction qu'il ignore ne s'en sert pas, et trouve que Yoppaa ne vaut pas son
 // prix. Les bons cadeaux existaient depuis le 31/07 sans être mentionnés.
+// ⚠️ ET CETTE GARDE VIENT DE M'APPRENDRE QUELQUE CHOSE, le 31/08 : elle
+// cherchait le MOT « Bons cadeaux », alors que ce qu'elle défend est la
+// PRÉSENCE DE LA FONCTION. Le jour où le libellé s'est mis à suivre le métier
+// (« bon gourmand » chez un frituriste), elle a rougi sans qu'aucune promesse
+// n'ait disparu. Une garde qui surveille une FORME se déclenche sur un
+// changement de forme : c'est le méta-défaut le plus fréquent de ce projet.
+// Elle vise désormais l'ENTRÉE de la liste, quel que soit le mot affiché.
 for (const [nom, marqueur] of [
-  ['les bons cadeaux', 'Bons cadeaux'],
+  ['le bon, quel que soit son nom', /Icon: Gift, titre: libelleBon\(categorie/],
   ['les cours collectifs', 'Cours collectifs'],
   ['les emplacements multiples', 'Plusieurs endroits, ou un seul'],
 ]) {
-  verifier(`le signup annonce ${nom}`, signupSrcTxt.includes(marqueur))
+  verifier(`le signup annonce ${nom}`,
+    marqueur instanceof RegExp ? marqueur.test(signupSrcTxt) : signupSrcTxt.includes(marqueur))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

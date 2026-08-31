@@ -45,6 +45,7 @@
     "verif:bons": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-bons-cadeaux.mjs",
     "verif:tunnel-rdv": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-tunnel-rdv.mjs",
     "mutations:admin": "node scripts/mutations-admin.mjs",
+    "mutations:bons": "node scripts/mutations-bons-cadeaux.mjs",
     "mutations:session": "node scripts/mutations-session.mjs"
   },
   "dependencies": {

@@ -47,7 +47,7 @@ export async function POST(request) {
       .select(`
         id, date_rdv, heure_debut, acompte_paye_en_ligne, acompte_montant,
         client_email, client_prenom,
-        commercant:commercants(nom, slug),
+        commercant:commercants(nom, slug, categorie),
         prestation:rdv_prestations(nom)
       `)
       .eq('id', rdv_id)
@@ -67,6 +67,7 @@ export async function POST(request) {
         yopper_prenom:    rdv.client_prenom || 'Yopper',
         commercant_nom:   rdv.commercant?.nom || '',
         commercant_slug:  rdv.commercant?.slug || '',
+        commercant_categorie: rdv.commercant?.categorie || null,
         prestation_nom:   rdv.prestation?.nom || '',
         date_rdv:         rdv.date_rdv,
         heure_debut:      rdv.heure_debut,

@@ -26,6 +26,7 @@ import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant, emailAbonnementConfirme, emailAbonnementVenduCommercant } from '@/lib/resend'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { debiterBon, recrediterBon } from '@/lib/bons-cadeaux-server'
+import { libelleBon } from '@/lib/bons-cadeaux'
 import { consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { referenceRdv } from '@/lib/numero-commande'
@@ -624,11 +625,13 @@ async function handleBonCadeauSucceeded(paymentIntent, supabase) {
   // Emails (non-bloquants) : bénéficiaire OU acheteur selon le mode, + reçu
   // acheteur, + notification commerçant (mode 'chaque').
   const pourMoi = bon.destinataire_mode !== 'offrir'
+  // Le nom du bon suit le metier du commerce, jusque dans l objet de l email.
+  const nomBon = libelleBon(bon.commercant?.categorie)
   try {
     if (!pourMoi) {
       await envoyerAuCommercant({
         to: bon.beneficiaire_email,
-        subject: `${bon.acheteur_prenom ? bon.acheteur_prenom + ' t\'offre' : 'On t\'offre'} un bon cadeau chez ${bon.commercant?.nom || 'un commerçant'}`,
+        subject: `${bon.acheteur_prenom ? bon.acheteur_prenom + ' t\'offre' : 'On t\'offre'} un ${nomBon} chez ${bon.commercant?.nom || 'un commerçant'}`,
         html: emailBonCadeauBeneficiaire({
           beneficiaire_prenom: bon.beneficiaire_prenom,
           acheteur_prenom: bon.acheteur_prenom,
@@ -638,13 +641,14 @@ async function handleBonCadeauSucceeded(paymentIntent, supabase) {
           token: bon.token,
           message: bon.message,
           expires_at: bon.expires_at,
+          commercant_categorie: bon.commercant?.categorie || null,
         }),
       })
     }
     await envoyerAuCommercant({
       to: bon.acheteur_email,
       subject: pourMoi
-        ? `Ton bon cadeau chez ${bon.commercant?.nom || 'le commerçant'} est prêt`
+        ? `Ton ${nomBon} chez ${bon.commercant?.nom || 'le commerçant'} est prêt`
         : `Ton cadeau chez ${bon.commercant?.nom || 'le commerçant'} est envoyé`,
       html: emailBonCadeauAcheteur({
         acheteur_prenom: bon.acheteur_prenom,
@@ -656,17 +660,19 @@ async function handleBonCadeauSucceeded(paymentIntent, supabase) {
         beneficiaire_prenom: bon.beneficiaire_prenom,
         expires_at: bon.expires_at,
         pour_moi: pourMoi,
+        commercant_categorie: bon.commercant?.categorie || null,
       }),
     })
     if (bon.commercant?.notif_mode === 'chaque' && bon.commercant?.email) {
       await envoyerAuCommercant({
         to: bon.commercant.email,
-        subject: `Bon cadeau vendu · ${eurosNus(Number(bon.montant_initial))} €`,
+        subject: `${libelleBon(bon.commercant?.categorie, { majuscule: true })} vendu · ${eurosNus(Number(bon.montant_initial))} €`,
         html: emailBonCadeauVenduCommercant({
           nom_commercant: bon.commercant.nom,
           montant: bon.montant_initial,
           acheteur_email: bon.acheteur_email,
           pour_moi: pourMoi,
+          commercant_categorie: bon.commercant?.categorie || null,
         }),
       })
     }

@@ -54,7 +54,7 @@ export async function POST(request) {
       commercant_id, rappel_push_id, commande_id, fidelite_recompense_id,
       lieu_id, lieu_libelle, lieu_adresse,
       prix_estime, fidelite_remise, bon_cadeau_id, bon_cadeau_montant,
-      commercant:commercants(id, nom, slug, adresse, stripe_account_id, rdv_delai_annulation_heures),
+      commercant:commercants(id, nom, slug, adresse, stripe_account_id, rdv_delai_annulation_heures, categorie),
       prestation:rdv_prestations(nom)
     `
     const query = supabase.from('rdv_reservations').select(selectCols).is('deleted_at', null)
@@ -364,6 +364,7 @@ export async function POST(request) {
           yopper_prenom:     rdv.client_prenom || 'Yopper',
           commercant_nom:    commercant?.nom || '',
           commercant_slug:   commercant?.slug || '',
+          commercant_categorie: commercant?.categorie || null,
           prestation_nom:    rdv.prestation?.nom || '',
           date_rdv:          rdv.date_rdv,
           heure_debut:       rdv.heure_debut,

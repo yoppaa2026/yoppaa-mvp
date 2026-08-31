@@ -51,7 +51,7 @@ export async function POST(request) {
       client_email, client_nom, annulation_token, created_at, commercant_id,
       numero_commande, numero_prefixe, date_commande, creneau_id, rappel_push_id,
       bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id, fidelite_remise,
-      commercants:commercant_id (id, nom, slug, stripe_account_id, delai_annulation_heures),
+      commercants:commercant_id (id, nom, slug, stripe_account_id, delai_annulation_heures, categorie),
       creneau:creneaux!creneau_id (heure_debut)
     `
     const query = supabase.from('commandes').select(selectCols)
@@ -252,6 +252,7 @@ export async function POST(request) {
         const html = emailCommandeAnnuleeYopper({
           yopper_prenom:   cmd.client_nom?.split(' ')[0] || 'Yopper',
           commercant_nom:  commercant?.nom || '',
+          commercant_categorie: commercant?.categorie || null,
           numero_commande: referenceCommande(cmd),
           total:           cmd.total,
           // 🔴 CES DEUX MONTANTS MANQUAIENT (Alex, 27/08 : « rien ne dit que
@@ -287,6 +288,7 @@ export async function POST(request) {
       try {
         const html = emailCommandeAnnuleeCommercant({
           nom_commercant:  commercant.nom,
+          commercant_categorie: commercant?.categorie || null,
           yopper_prenom:   cmd.client_nom?.split(' ')[0],
           yopper_nom:      cmd.client_nom?.split(' ').slice(1).join(' '),
           numero_commande: referenceCommande(cmd),

@@ -26,7 +26,7 @@ import { elisionDe } from '../lib/francais.js'
 import { doitMontrerFlottant, SEUIL_CACHER, SEUIL_MONTRER } from '../lib/bouton-flottant.js'
 import { calculerRemiseBon, normaliserCodeBon, bonExpire, libelleResteBon, libelleBon } from '../lib/bons-cadeaux.js'
 import { resteAEncaisser, soldeRdv, etatPaiementRdv, caDesRdvs, montantNetCommande, phraseAvantages } from '../lib/rdv-paiement.js'
-import { emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire } from '../lib/resend.js'
+import { emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant } from '../lib/resend.js'
 import { texteBonVendu } from '../lib/bons-vendus.js'
 import { sansProse } from './lire-code.mjs'
 
@@ -880,6 +880,95 @@ const egal = (nom, obtenu, attendu) =>
   // qu'on ne le « corrige » pas dans six mois.
   verifie('le titre d\'onglet de la page d\'un bon reste neutre',
     /title: 'Mon bon · Yoppaa'/.test(codeSeul('app/cadeau/[token]/page.js')))
+}
+
+// ═══ LES EMAILS : ON EXÉCUTE LES GABARITS, ON NE LES LIT PAS ══════════════
+//
+// 🔴 UN EMAIL PART SANS RETOUR POSSIBLE. Sur un écran, un mot faux se corrige
+// au déploiement suivant ; dans une boîte mail, il reste. C'est ici que la
+// catégorie oubliée coûte le plus cher, et c'est donc ici qu'on exécute au
+// lieu de chercher une chaîne : on rend le gabarit et on lit ce qui en sort.
+{
+  const rendu = (fn, args) => fn({ ...args })
+
+  for (const [metier, attendu, absent] of [
+    ['alimentaire', 'bon gourmand', 'bon cadeau'],
+    ['detail', 'bon cadeau', 'bon gourmand'],
+    [null, 'bon cadeau', 'bon gourmand'],        // catégorie absente : repli
+  ]) {
+    const nomMetier = metier || 'catégorie absente'
+
+    const html = rendu(emailBonCadeauBeneficiaire, {
+      beneficiaire_prenom: 'Camille', acheteur_prenom: 'Alex',
+      commercant_nom: 'Chez Test', montant: 50, code: 'BC-AAAA-BBBB', token: 'tok',
+      commercant_categorie: metier,
+    })
+    verifie(`[${nomMetier}] l'email du bénéficiaire dit « ${attendu} »`, html.includes(attendu))
+    verifie(`[${nomMetier}] et jamais « ${absent} »`, !html.includes(absent))
+
+    const htmlAch = rendu(emailBonCadeauAcheteur, {
+      acheteur_prenom: 'Alex', commercant_nom: 'Chez Test', montant: 50,
+      code: 'BC-AAAA-BBBB', token: 'tok', pour_moi: true, commercant_categorie: metier,
+    })
+    verifie(`[${nomMetier}] l'email de l'acheteur dit « ${attendu} »`, htmlAch.includes(attendu))
+    verifie(`[${nomMetier}] et jamais « ${absent} »`, !htmlAch.includes(absent))
+
+    // ⚠️ ET L'EMAIL DU COMMERÇANT AUSSI : c'est lui qu'on veut atteindre en
+    // premier, la règle du 31/08 est née de son point de vue.
+    const htmlCom = rendu(emailBonCadeauVenduCommercant, {
+      nom_commercant: 'Chez Test', montant: 50, acheteur_email: 'a@b.be',
+      pour_moi: true, commercant_categorie: metier,
+    })
+    verifie(`[${nomMetier}] l'email du commerçant dit « ${attendu} »`, htmlCom.includes(attendu))
+    verifie(`[${nomMetier}] et jamais « ${absent} »`, !htmlCom.includes(absent))
+  }
+
+  // 🔴 ET LE FIL, POUR LA TROISIÈME FOIS DE LA JOURNÉE. Une route qui lit
+  // `commercant?.categorie` sans l'avoir demandée dans son `select` reçoit
+  // `undefined`, `libelleBon` retombe sur « cadeau », et l'email part. Aucune
+  // erreur nulle part : c'est le motif de la colonne absente d'un select, la
+  // sixième fois sur ce projet, et le seul endroit sans retour arrière.
+  const ROUTES_EMAIL = [
+    'app/api/emails/rdv-confirme/route.js',
+    'app/api/emails/rdv-annule/route.js',
+    'app/api/emails/rdv-no-show/route.js',
+    'app/api/emails/commande-confirmee/route.js',
+    'app/api/emails/commande-annulee/route.js',
+    'app/api/commande/cancel/route.js',
+    'app/api/rdv/cancel/route.js',
+    'app/api/cron/recap-jour-8h/route.js',
+    'app/api/stripe/webhook/route.js',
+    'lib/commande-notifs.js',
+  ]
+  for (const fichier of ROUTES_EMAIL) {
+    const src = lireCode(fichier)
+    verifie(`${fichier} passe la catégorie au gabarit`,
+      /commercant_categorie:|libelleBon\(/.test(src))
+    // Le select du commerçant doit charger la colonne, sinon on passe `undefined`.
+    const selects = src.match(/commercants?[^\n]*\(([^)]*)\)/g) || []
+    const commercantSelects = selects.filter(s => /nom|email|slug/.test(s))
+    verifie(`${fichier} demande bien « categorie » dans son select`,
+      commercantSelects.length === 0 || commercantSelects.some(s => /\bcategorie\b/.test(s)),
+      `aucun des ${commercantSelects.length} select(s) ne la charge`)
+  }
+
+  // ⚠️ CE QUI NE VARIE PAS, ET IL FAUT QUE CE SOIT GARDÉ AUSSI : les journaux.
+  // Sept lignes du webhook écrivent « bon cadeau » dans la console. Elles sont
+  // lues par un développeur qui cherche une trace, dans UN vocabulaire, et un
+  // journal au libellé variable se cherche deux fois.
+  //
+  // ⚠️ ET ON GARDE LA RÈGLE, PAS UN COMPTE. Ma première version comptait les
+  // journaux et exigeait « au moins cinq » : retirer le mot d'un seul en
+  // laissait six, la garde restait verte, et la mutation l'a montré. Un seuil
+  // n'est pas une règle. Ce qu'on interdit vraiment, c'est qu'un journal
+  // APPELLE `libelleBon` : c'est le geste qu'un développeur zélé ferait, et
+  // c'est lui qui rendrait les traces incherchables.
+  for (const fichier of ['app/api/stripe/webhook/route.js', 'lib/rdv-creation-server.js',
+                         'lib/rdv-annulation-server.js', 'app/api/commande/cancel/route.js']) {
+    const fautifs = (lireCode(fichier).match(/console\.(error|info|warn)\([^\n]*libelleBon\(/g) || [])
+    verifie(`aucun journal de ${fichier} n'appelle libelleBon`,
+      fautifs.length === 0, `${fautifs.length} journal(aux) fautif(s)`)
+  }
 }
 
 console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.`)

@@ -633,6 +633,49 @@ const MUTATIONS = [
   // ferait vraiment en croyant bien faire : câbler la fonction avec la seule
   // chose disponible ici, c'est-à-dire rien, ce qui affiche « bon cadeau » chez
   // un boulanger par le jeu du repli.
+  // ═══ LES EMAILS (31/08) ══════════════════════════════════════════════════
+  //
+  // 🔴 UN EMAIL PART SANS RETOUR POSSIBLE, d'où des mutations sur les DEUX
+  // bouts : le gabarit qui nomme, et la route qui charge la colonne.
+  //
+  // ⚠️ LA PREMIÈRE EST CELLE QUI M'A ATTRAPÉ EN VRAI. `blocBonCadeau` est
+  // appelé DEUX fois dans la bibliothèque, une fois par email ; mon
+  // remplacement n'en avait touché qu'un, et l'email de l'ACHETEUR disait
+  // encore « Bon cadeau · Chez Test » chez un boulanger. Aucune lecture ne
+  // l'avait vu : c'est le banc qui EXÉCUTE le gabarit et lit le HTML rendu
+  // qui l'a dit. La phrase en double, encore, pour la énième fois ici.
+  { nom: '🔴 le deuxième appel du bloc du bon réoublie la catégorie',
+    banc: 'verif:bons', fichier: 'lib/resend.js',
+    de: '      ? blocBonCadeau({ code, montant, commercant_nom, expires_at, commercant_categorie })',
+    vers: '      ? blocBonCadeau({ code, montant, commercant_nom, expires_at })' },
+
+  // ⚠️ MA PREMIÈRE VERSION RETIRAIT LE PARAMÈTRE DE LA SIGNATURE : le gabarit
+  // levait alors une `ReferenceError` et le banc PLANTAIT. Un plantage n'est
+  // pas une mesure, c'est une non-mesure qui en a l'air. Une mutation doit
+  // changer le RÉSULTAT, jamais la TERMINAISON. Celle-ci garde le paramètre et
+  // l'ignore, ce qui est exactement le défaut réel : un câblage à moitié fait.
+  { nom: '🔴 le gabarit du bénéficiaire ignore la catégorie qu’il reçoit',
+    banc: 'verif:bons', fichier: 'lib/resend.js',
+    de: "  const nom = libelleBon(commercant_categorie)\n  return layout({\n    audience: 'yopper',\n    commercantNom: commercant_nom,\n    title: `On t'offre un ${nom} 🟣`,",
+    vers: "  const nom = libelleBon(null)\n  return layout({\n    audience: 'yopper',\n    commercantNom: commercant_nom,\n    title: `On t'offre un ${nom} 🟣`," },
+
+  // 🔴 ET LE FIL CÔTÉ BASE : la colonne retirée du `select`. Rien ne casse,
+  // `libelleBon` retombe sur « cadeau », l'email part, et personne ne le sait.
+  { nom: '🔴 la route du bon annulé cesse de demander la catégorie en base',
+    banc: 'verif:bons', fichier: 'app/api/emails/rdv-annule/route.js',
+    de: 'commercant:commercants(nom, slug, adresse, telephone, email, categorie),',
+    vers: 'commercant:commercants(nom, slug, adresse, telephone, email),' },
+
+  // ⚠️ ET CELLE-CI ÉTAIT RESTÉE VERTE PARCE QUE MA GARDE COMPTAIT. Retirer un
+  // journal sur sept en laissait toujours cinq, donc le seuil tenait. Compter
+  // n'est pas garder : la garde vise désormais la RÈGLE, « aucun journal
+  // n'appelle `libelleBon` », et la mutation fait ce qu'un développeur zélé
+  // ferait un jour, câbler le mot du métier jusque dans la console.
+  { nom: '🔴 SUR-CORRECTION : un journal technique se met à varier',
+    banc: 'verif:bons', fichier: 'app/api/stripe/webhook/route.js',
+    de: "console.error('[stripe/webhook] bon cadeau introuvable', bonId)",
+    vers: "console.error(`[stripe/webhook] ${libelleBon(null)} introuvable`, bonId)" },
+
   { nom: '🔴 SUR-CORRECTION : l’écran d’annulation devine un métier qu’il ignore',
     banc: 'verif:bons', fichier: 'app/commander/cancel/page.js',
     de: 'Ton paiement, ton bon et ta récompense fidélité te reviennent automatiquement.',

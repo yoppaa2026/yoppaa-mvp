@@ -49,7 +49,7 @@ export async function POST(request) {
         client_email, client_nom, client_telephone,
         annulation_token,
         lieu_id, lieu_libelle, lieu_adresse,
-        commercant:commercants(id, nom, slug, adresse, email, notif_mode, delai_annulation_heures),
+        commercant:commercants(id, nom, slug, adresse, email, notif_mode, delai_annulation_heures, categorie),
         creneau:creneaux(heure_debut, heure_fin),
         articles:commande_articles(quantite, prix_unitaire, prix_total, option_libelle, article:articles(nom))
       `)
@@ -85,6 +85,7 @@ export async function POST(request) {
           commercant_nom:          cmd.commercant?.nom || '',
           commercant_adresse:      adresseRendezVous({ ...cmd, commercant: cmd.commercant }),
           commercant_slug:         cmd.commercant?.slug || '',
+          commercant_categorie:    cmd.commercant?.categorie || null,
           numero_commande:         referenceCommande(cmd),
           articles:                articlesFlat,
           total:                   cmd.total,
@@ -111,6 +112,7 @@ export async function POST(request) {
       try {
         const html = emailNouvelleCommandeCommercant({
           nom_commercant:  cmd.commercant.nom,
+          commercant_categorie: cmd.commercant?.categorie || null,
           yopper_prenom:   prenomClient(cmd),
           yopper_nom:      cmd.client_nom,
           yopper_email:    cmd.client_email,

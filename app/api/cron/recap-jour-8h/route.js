@@ -151,6 +151,7 @@ export async function GET(request) {
           total = cmdsFlat.length
           html = emailRecapCommandesJour({
             nom_commercant: c.nom,
+            commercant_categorie: c.categorie || null,
             date_jour:      dateJour,
             commandes:      cmdsFlat,
             bons_vendus:    bonsVeille || [],

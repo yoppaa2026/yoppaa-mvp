@@ -48,7 +48,7 @@ export async function POST(request) {
         id, numero_commande, numero_prefixe, total, date_commande, paye_en_ligne,
         client_email, client_nom,
         fidelite_remise, bon_cadeau_montant,
-        commercant:commercants(id, nom, email, notif_mode),
+        commercant:commercants(id, nom, email, notif_mode, categorie),
         creneau:creneaux(heure_debut, heure_fin),
         articles:commande_articles(quantite, prix_unitaire, prix_total, option_libelle, article:articles(nom))
       `)
@@ -74,6 +74,7 @@ export async function POST(request) {
         const html = emailCommandeAnnuleeYopper({
           yopper_prenom:   prenomClient(cmd) || 'Yopper',
           commercant_nom:  cmd.commercant?.nom || '',
+          commercant_categorie: cmd.commercant?.categorie || null,
           numero_commande: referenceCommande(cmd),
           total:           cmd.total,
           // ⚠️ SANS CES DEUX COLONNES LE GABARIT SE TAIT EN SILENCE :
@@ -100,6 +101,7 @@ export async function POST(request) {
       try {
         const html = emailCommandeAnnuleeCommercant({
           nom_commercant:  cmd.commercant.nom,
+          commercant_categorie: cmd.commercant?.categorie || null,
           yopper_prenom:   prenomClient(cmd),
           yopper_nom:      cmd.client_nom,
           numero_commande: referenceCommande(cmd),

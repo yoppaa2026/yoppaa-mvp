@@ -52,7 +52,7 @@ export async function POST(request) {
         id, date_rdv, heure_debut, heure_fin, acompte_paye_en_ligne, acompte_montant,
         client_email, client_prenom, rappel_push_id,
         lieu_id, lieu_libelle, lieu_adresse,
-        commercant:commercants(nom, slug, adresse, telephone, email),
+        commercant:commercants(nom, slug, adresse, telephone, email, categorie),
         prestation:rdv_prestations(nom)
       `)
       .eq('id', rdv_id)
@@ -92,6 +92,7 @@ export async function POST(request) {
       yopper_prenom:     rdv.client_prenom || 'Yopper',
       commercant_nom:    rdv.commercant?.nom || '',
       commercant_slug:   rdv.commercant?.slug || '',
+      commercant_categorie: rdv.commercant?.categorie || null,
       prestation_nom:    rdv.prestation?.nom || '',
       date_rdv:          rdv.date_rdv,
       heure_debut:       rdv.heure_debut,

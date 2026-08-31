@@ -1443,7 +1443,7 @@ export default function Dashboard() {
         const nouveaux = nouveauxRdvs(bonsConnusRef.current, bonsData)
         bonsConnusRef.current = idsDes(bonsData)
         if (nouveaux.length > 0) {
-          const { titre, corps } = texteBonVendu(nouveaux[0])
+          const { titre, corps } = texteBonVendu(nouveaux[0], commercant?.categorie)
           if (notificationsActives) envoyerNotification(titre, corps, 'yoppaa-bon')
           setNouveauBon({ titre, corps, nombre: nouveaux.length })
           setTimeout(() => setNouveauBon(null), 8000)
@@ -1942,7 +1942,7 @@ export default function Dashboard() {
       }))
       return
     }
-    setConfirmationRdvTexte(confirmationRdv(actionRdv.action, { rdv: actionRdv.rdv, raison: decision.raison, retours }))
+    setConfirmationRdvTexte(confirmationRdv(actionRdv.action, { rdv: actionRdv.rdv, raison: decision.raison, retours, categorie: commercant?.categorie }))
   }
 
   function fermerActionRdv() {

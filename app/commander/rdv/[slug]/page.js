@@ -60,6 +60,7 @@ import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompen
 import { euros } from '@/lib/montants'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import BonCadeauFiche from '../../BonCadeauFiche'
+import BonConfirmation from '../../BonConfirmation'
 import { redirectTop } from '@/lib/redirect-top'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { referenceRdv } from '@/lib/numero-commande'
@@ -322,6 +323,9 @@ export default function CommanderRdvSlug() {
   const nomBons = libelleBon(commercant?.categorie, { pluriel: true })
   const [bonModalOuvert, setBonModalOuvert] = useState(false)
   const [bonRetour, setBonRetour] = useState(null)          // 'ok' | 'annule' après retour Stripe achat de bon
+  // Le détail du bon acheté, lu par session Stripe. Null tant que la lecture
+  // n'a pas répondu : la confirmation s'affiche quand même.
+  const [bonConfirme, setBonConfirme] = useState(null)
   const [abonnementRetour, setAbonnementRetour] = useState(null)  // idem, achat d'abonnement
   const [contratAchete, setContratAchete] = useState(null)  // le contrat relu en base après paiement
   const [aboEnAttente, setAboEnAttente] = useState(false)   // on interroge encore, le webhook n'a pas fini
@@ -650,17 +654,39 @@ export default function CommanderRdvSlug() {
     return () => { vivant = false }
   }, [commercant?.id])
 
-  // Retour Stripe après achat d'un bon cadeau : ?bon=ok|annule → bandeau + URL nettoyée
+  // Retour Stripe après achat d'un bon : ?bon=ok|annule (+ session_id) →
+  // écran de confirmation + URL nettoyée. Jumeau exact de la fiche commerce :
+  // un bon s'achète depuis les deux tunnels.
+  //
+  // ⚠️ ON LIT LA SESSION AVANT DE NETTOYER L'URL, sinon on jette la seule clé
+  // qui dit quel bon vient d'être acheté.
   useEffect(() => {
+    let vivant = true
     try {
-      const p = new URLSearchParams(window.location.search).get('bon')
-      if (p === 'ok' || p === 'annule') {
-        setBonRetour(p)
-        const url = new URL(window.location.href)
-        url.searchParams.delete('bon')
-        window.history.replaceState({}, '', url.toString())
+      const params = new URLSearchParams(window.location.search)
+      const p = params.get('bon')
+      if (p !== 'ok' && p !== 'annule') return
+      const sessionId = params.get('session_id')
+      setBonRetour(p)
+
+      const url = new URL(window.location.href)
+      url.searchParams.delete('bon')
+      url.searchParams.delete('session_id')
+      window.history.replaceState({}, '', url.toString())
+
+      if (p === 'ok' && sessionId) {
+        fetch('/api/bons-cadeaux/confirmation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId }),
+        })
+          .then(r => r.json())
+          .then(j => { if (vivant && j?.ok && j.bon) setBonConfirme(j.bon) })
+          // Une lecture ratée ne doit pas effacer la confirmation.
+          .catch(() => {})
       }
     } catch { /* ignore */ }
+    return () => { vivant = false }
   }, [])
 
   // ⚠️ LE RETOUR D'UN ACHAT D'ABONNEMENT N'ÉTAIT LU PAR PERSONNE (défaut trouvé
@@ -2399,15 +2425,12 @@ export default function CommanderRdvSlug() {
                   )
                 })()}
 
-                {/* Retour d'achat d'un bon cadeau (Stripe success/cancel) */}
-                {etape === 1 && bonRetour && (
-                  <div style={{ marginTop: 12, background: bonRetour === 'ok' ? '#F0FDF4' : '#FFFBEB', border: `1.5px solid ${bonRetour === 'ok' ? '#86EFAC' : '#FCD34D'}`, borderRadius: 12, padding: '10px 14px' }}>
-                    <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: bonRetour === 'ok' ? '#065F46' : '#78350F', lineHeight: 1.5 }}>
-                      {bonRetour === 'ok'
-                        ? `Ton ${nomBon} est payé 🟣 Il arrive par email dans quelques instants (pense à vérifier les indésirables).`
-                        : `Paiement annulé : aucun ${nomBon} n'a été débité.`}
-                    </p>
-                  </div>
+                {/* Retour d'achat d'un bon (Stripe success/cancel).
+                    ⚠️ RESTE CONDITIONNÉ À L'ÉTAPE 1, qui est celle où l'on
+                    revient : Stripe recharge la page à neuf, le tunnel repart
+                    donc toujours de son premier écran. */}
+                {etape === 1 && (
+                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie}/>
                 )}
 
                 {/* Le bouton « Offrir un bon cadeau » est descendu sous les

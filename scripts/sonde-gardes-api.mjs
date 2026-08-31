@@ -82,6 +82,14 @@ const PUBLIQUES_ASSUMEES = {
     'acompte public ; le montant vient de la prestation en base',
   'app/api/rdv/from-session/route.js':
     'écran de confirmation après Stripe, appelé par le client qui vient de payer ; clé = l\'identifiant de session Stripe',
+  // ⚠️ MÊME RAISONNEMENT QUE SA JUMELLE CI-DESSUS, et volontairement : l'achat
+  // d'un bon se fait SANS COMPTE, exiger un jeton reviendrait à n'afficher
+  // aucune confirmation à la moitié des acheteurs. La clé est la session
+  // Stripe, connue de la seule personne qui vient de payer, et la route ne rend
+  // AUCUNE adresse email. Le code du bon n'en sort que si l'acheteur est le
+  // porteur : sur un cadeau, il ne quitte jamais le serveur.
+  'app/api/bons-cadeaux/confirmation/route.js':
+    'écran de confirmation après Stripe, appelé par l\'acheteur qui vient de payer ; clé = l\'identifiant de session Stripe, aucun email rendu',
   'app/api/rdv/schedule-rappel/route.js':
     'programmation du rappel juste après la réservation ; clé = l\'UUID du rendez-vous, que seul son auteur possède',
 }

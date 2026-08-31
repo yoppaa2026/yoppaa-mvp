@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs'
 import { euros, eurosNus } from '../lib/montants.js'
 import { elisionDe } from '../lib/francais.js'
 import { doitMontrerFlottant, SEUIL_CACHER, SEUIL_MONTRER } from '../lib/bouton-flottant.js'
-import { calculerRemiseBon, normaliserCodeBon, bonExpire, libelleResteBon, libelleBon } from '../lib/bons-cadeaux.js'
+import { calculerRemiseBon, normaliserCodeBon, bonExpire, libelleResteBon, libelleBon, confirmationDepuisBon, ETATS_CONFIRMATION } from '../lib/bons-cadeaux.js'
 import { resteAEncaisser, soldeRdv, etatPaiementRdv, caDesRdvs, montantNetCommande, phraseAvantages, etatPaiementClient } from '../lib/rdv-paiement.js'
 import { emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant } from '../lib/resend.js'
 import { texteBonVendu } from '../lib/bons-vendus.js'
@@ -1015,6 +1015,124 @@ const egal = (nom, obtenu, attendu) =>
   // partagé qui casserait ses anciens appelants serait un défaut de plus.
   verifie('sans catégorie, le module garde le mot compris partout',
     String(phraseAvantages({ bon_cadeau_montant: 12 })).includes('bon cadeau'))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L'ÉCRAN DE CONFIRMATION APRÈS L'ACHAT (31/08)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 IL N'EXISTAIT PAS, et Alex l'a vu en production : le parcours marchait,
+// les emails partaient, le bon arrivait bien dans le profil, mais l'acheteur
+// qui revenait de sa banque ne trouvait qu'un bandeau vert d'une ligne. L'app
+// ne pouvait rien dire de plus : `?bon=ok` ne portait AUCUN identifiant.
+{
+  const BASE = {
+    montant_initial: 50, solde: 50, statut: 'actif', code: 'BC-7K2M-9XQ4',
+    token: 'jeton-abc', expires_at: '2027-08-31T10:00:00.000Z',
+    commercant: { nom: 'Le Pain Doré', slug: 'le-pain-dore', categorie: 'alimentaire' },
+  }
+
+  // ─── L'ACHAT POUR SOI : le porteur, c'est l'acheteur ──────────────────────
+  const moi = confirmationDepuisBon({ ...BASE, destinataire_mode: 'moi' })
+  verifie('achat pour soi : la confirmation est rendue', moi.ok === true)
+  verifie('achat pour soi : le code est rendu', moi.bon?.code === 'BC-7K2M-9XQ4')
+  verifie('achat pour soi : le jeton est rendu', moi.bon?.token === 'jeton-abc')
+  verifie('achat pour soi : le montant est rendu', moi.bon?.montant === 50)
+  verifie('achat pour soi : aucun prénom de bénéficiaire',
+    moi.bon?.beneficiaire_prenom === null)
+
+  // ─── LE CADEAU : le porteur est QUELQU'UN D'AUTRE ─────────────────────────
+  //
+  // 🔴 C'EST LA GARDE QUI COMPTE LE PLUS DE TOUTE CETTE SECTION. Un code de bon
+  // est un instrument au porteur : le rendre à l'acheteur d'un cadeau, c'est
+  // mettre l'argent du destinataire sur un écran qu'il n'a pas encore reçu.
+  const offert = confirmationDepuisBon({
+    ...BASE, destinataire_mode: 'offrir', beneficiaire_prenom: 'Marie',
+  })
+  verifie('cadeau : la confirmation est rendue', offert.ok === true)
+  verifie('🔴 cadeau : le CODE NE SORT PAS du serveur', offert.bon?.code === null)
+  verifie('🔴 cadeau : le JETON NE SORT PAS non plus', offert.bon?.token === null)
+  verifie('cadeau : le prénom du bénéficiaire est rendu, lui',
+    offert.bon?.beneficiaire_prenom === 'Marie')
+  verifie('cadeau : le montant reste rendu', offert.bon?.montant === 50)
+
+  // ⚠️ ET LE REPLI EST « JE SUIS LE PORTEUR ». Un mode absent ou inconnu est un
+  // achat pour soi, cas majoritaire. Seul un 'offrir' EXPLICITE retient le
+  // code, comme seul un 'alimentaire' explicite dit « gourmand ».
+  for (const mode of [undefined, null, '', 'MOI', 'inconnu']) {
+    const r = confirmationDepuisBon({ ...BASE, destinataire_mode: mode })
+    verifie(`repli porteur : mode ${JSON.stringify(mode)} rend le code`,
+      r.ok === true && r.bon?.code === 'BC-7K2M-9XQ4')
+  }
+  // ⚠️ ET LE 'offrir' EXPLICITE, LUI, RETIENT TOUJOURS.
+  verifie('repli porteur : seul « offrir » retient le code',
+    confirmationDepuisBon({ ...BASE, destinataire_mode: 'offrir' }).bon?.code === null)
+
+  // ─── LE WEBHOOK N'EST PAS ENCORE PASSÉ ────────────────────────────────────
+  //
+  // 🔴 LE PIÈGE QUE J'AI FAILLI POSER. La page `/cadeau/<token>` refuse tout bon
+  // dont le statut n'est pas `actif`. Y rediriger l'acheteur afficherait « Bon
+  // introuvable » à quelqu'un qui vient de payer, parce que le webhook met
+  // quelques secondes. La confirmation, elle, doit accepter cet état ET le dire.
+  const enAttente = confirmationDepuisBon({ ...BASE, statut: 'paiement_en_attente', destinataire_mode: 'moi' })
+  verifie('webhook en retard : la confirmation est quand même rendue', enAttente.ok === true)
+  verifie('webhook en retard : `actif` vaut faux, l\'écran dira l\'attente',
+    enAttente.bon?.actif === false)
+  verifie('bon actif : `actif` vaut vrai', moi.bon?.actif === true)
+
+  // ─── CE QUI N'A PAS LE DROIT DE S'ANNONCER COMME UN ACHAT RÉUSSI ──────────
+  for (const statut of ['annule', 'utilise', 'expire', 'rembourse', '']) {
+    const r = confirmationDepuisBon({ ...BASE, statut, destinataire_mode: 'moi' })
+    verifie(`statut « ${statut || '(vide)'} » : refusé, pas de confirmation tiède`,
+      r.ok === false && r.raison === 'etat')
+  }
+  verifie('bon introuvable : refusé', confirmationDepuisBon(null).ok === false)
+  verifie('deux états seulement mènent à une confirmation',
+    ETATS_CONFIRMATION.length === 2
+    && ETATS_CONFIRMATION.includes('actif')
+    && ETATS_CONFIRMATION.includes('paiement_en_attente'))
+
+  // ─── LE CÂBLAGE, AUX DEUX BOUTS DU FIL ────────────────────────────────────
+  //
+  // ⚠️ LE FIL SE TIENT AUX DEUX BOUTS. La règle du 31/08 : une signature qui
+  // reçoit sans appelant qui passe donne l'air câblé sans l'être.
+  const checkout = lireCode('app/api/bons-cadeaux/checkout/route.js')
+  verifie('🔴 le retour de Stripe porte la session, sinon on ne sait RIEN',
+    /success_url:[^\n]*session_id=\{CHECKOUT_SESSION_ID\}/.test(checkout))
+
+  const routeConf = lireCode('app/api/bons-cadeaux/confirmation/route.js')
+  verifie('la route délègue la décision au module pur',
+    /confirmationDepuisBon\(/.test(routeConf))
+  // ⚠️ AUCUNE ADRESSE EMAIL NE DOIT SORTIR DE CETTE ROUTE : le `select` ne les
+  // demande même pas, et c'est ce qui rend la fuite impossible par distraction.
+  verifie('🔴 la route ne lit AUCUNE adresse email',
+    !/acheteur_email|beneficiaire_email/.test(routeConf))
+  verifie('la route refuse ce qui ne ressemble pas à une session Stripe',
+    /\^cs_/.test(routeConf))
+
+  for (const tunnel of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
+    const src = lireCode(tunnel)
+    verifie(`${tunnel} : la confirmation est montée`, /<BonConfirmation\b/.test(src))
+    verifie(`${tunnel} : la session est LUE avant que l'URL soit nettoyée`,
+      src.indexOf("params.get('session_id')") > 0
+      && src.indexOf("params.get('session_id')") < src.indexOf("searchParams.delete('session_id')"))
+    verifie(`${tunnel} : la session part bien à la route de confirmation`,
+      /\/api\/bons-cadeaux\/confirmation/.test(src))
+  }
+
+  // ⚠️ ET LE COMPOSANT NE DEVINE PAS LA CATÉGORIE : sans elle il dirait « bon
+  // cadeau » chez un boulanger, par le jeu du repli.
+  const comp = lireCode('app/commander/BonConfirmation.js')
+  verifie('le composant reçoit la catégorie, il ne la devine pas',
+    /export default function BonConfirmation\(\{[^}]*categorie/.test(comp))
+  verifie('le composant nomme le bon avec le module',
+    /libelleBon\(categorie/.test(comp))
+  // 🔴 UNE LECTURE RATÉE NE DOIT PAS EFFACER LA CONFIRMATION : le paiement a
+  // réussi, Stripe ne renvoie ici que dans ce cas.
+  verifie('sans détail, le composant confirme quand même le paiement',
+    /if \(!bon\)/.test(comp))
+  verifie('le lien vers la page du bon ne part que pour le porteur',
+    /bon\.pour_moi && bon\.token/.test(comp))
 }
 
 console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.`)

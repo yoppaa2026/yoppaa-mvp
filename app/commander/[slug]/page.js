@@ -86,6 +86,7 @@ import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import PillsStatut from '../PillsStatut'
 import CarteFideliteFiche from '../CarteFideliteFiche'
 import BonCadeauFiche from '../BonCadeauFiche'
+import BonConfirmation from '../BonConfirmation'
 // ⚠️ Les 31 montants de ce tunnel s'écrivaient au POINT. Le panier, les
 // suppléments, les deals, les frais de livraison, le reste à payer : tout.
 import { euros } from '@/lib/montants'
@@ -1097,6 +1098,10 @@ export default function CommanderSlug() {
   const [bonLoading, setBonLoading] = useState(false)
   const [bonModalOuvert, setBonModalOuvert] = useState(false)
   const [bonRetour, setBonRetour] = useState(null)  // 'ok' | 'annule' après retour Stripe achat de bon
+  // Le détail du bon qu'on vient d'acheter, lu par session Stripe. Null tant
+  // que la lecture n'a pas répondu : la confirmation s'affiche quand même,
+  // avec ce qu'on sait de sûr.
+  const [bonConfirme, setBonConfirme] = useState(null)
   const [loadingCancel, setLoadingCancel] = useState(false)
   const [cancelResult, setCancelResult] = useState(null)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '' })
@@ -2401,17 +2406,42 @@ export default function CommanderSlug() {
     return Number(livraisonConfig.frais_fixe || 0)
   }
   function totalAvecFrais() { return totalPanier() + fraisLivraison() }
-  // Retour Stripe après achat d'un bon cadeau : ?bon=ok|annule → bandeau + URL nettoyée
+  // Retour Stripe après achat d'un bon : ?bon=ok|annule (+ session_id) →
+  // écran de confirmation + URL nettoyée.
+  //
+  // ⚠️ ON LIT LA SESSION AVANT DE NETTOYER L'URL. Le nettoyage est ce qui
+  // évite de rejouer la confirmation à chaque rafraîchissement ; le faire trop
+  // tôt jetterait la seule clé qui permet de savoir quel bon vient d'être
+  // acheté.
   useEffect(() => {
+    let vivant = true
     try {
-      const p = new URLSearchParams(window.location.search).get('bon')
-      if (p === 'ok' || p === 'annule') {
-        setBonRetour(p)
-        const url = new URL(window.location.href)
-        url.searchParams.delete('bon')
-        window.history.replaceState({}, '', url.toString())
+      const params = new URLSearchParams(window.location.search)
+      const p = params.get('bon')
+      if (p !== 'ok' && p !== 'annule') return
+      const sessionId = params.get('session_id')
+      setBonRetour(p)
+
+      const url = new URL(window.location.href)
+      url.searchParams.delete('bon')
+      url.searchParams.delete('session_id')
+      window.history.replaceState({}, '', url.toString())
+
+      if (p === 'ok' && sessionId) {
+        fetch('/api/bons-cadeaux/confirmation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId }),
+        })
+          .then(r => r.json())
+          .then(j => { if (vivant && j?.ok && j.bon) setBonConfirme(j.bon) })
+          // ⚠️ UNE LECTURE RATÉE NE DOIT PAS EFFACER LA CONFIRMATION : le
+          // paiement a réussi, on retombe sur le message générique plutôt que
+          // sur un écran vide.
+          .catch(() => {})
       }
     } catch { /* ignore */ }
+    return () => { vivant = false }
   }, [])
   // Bon cadeau : config du commerçant (bouton Offrir + champ code du tunnel)
   useEffect(() => {
@@ -3673,15 +3703,7 @@ export default function CommanderSlug() {
                       Reste EN HAUT alors que le bouton est descendu : celui qui
                       revient de sa banque doit voir l'accusé de réception sans
                       avoir à faire défiler toute la fiche. */}
-                  {bonRetour && (
-                    <div style={{ marginTop: 12, background: bonRetour === 'ok' ? '#F0FDF4' : '#FFFBEB', border: `1.5px solid ${bonRetour === 'ok' ? '#86EFAC' : '#FCD34D'}`, borderRadius: 12, padding: '10px 14px' }}>
-                      <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: bonRetour === 'ok' ? '#065F46' : '#78350F', lineHeight: 1.5 }}>
-                        {bonRetour === 'ok'
-                          ? `Ton ${nomBon} est payé 🟣 Il arrive par email dans quelques instants (pense à vérifier les indésirables).`
-                          : `Paiement annulé : aucun ${nomBon} n'a été débité.`}
-                      </p>
-                    </div>
-                  )}
+                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie}/>
                 </div>
 
                 {/* Toutes les photos, couverture comprise : elle ne sert plus

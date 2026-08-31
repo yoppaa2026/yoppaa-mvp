@@ -130,8 +130,21 @@ export async function POST(request) {
       }],
       customer_email: acheteur_email,
       // Retour sur la fiche principale : fiche RDV pour les services, fiche
-      // commerce sinon (la fiche affiche le bandeau ?bon=ok / ?bon=annule).
-      success_url: `${STRIPE_CONFIG.appUrl}${commercant.categorie === 'vitrine' ? `/commander/rdv/${commercant.slug}` : `/commander/${commercant.slug}`}?bon=ok`,
+      // commerce sinon.
+      //
+      // 🔴 `?bon=ok` NE DISAIT PAS DE QUEL BON IL S'AGISSAIT (Alex, 31/08).
+      // L'acheteur revenait de sa banque sur un bandeau vert d'une ligne, sans
+      // montant, sans code, sans destinataire : l'app ne pouvait rien afficher
+      // de plus, parce qu'elle ne le savait pas. Une commande, elle, revient
+      // avec son `commande_id` et obtient un vrai écran de confirmation.
+      //
+      // ⚠️ LA CLÉ EST LA SESSION STRIPE, PAS L'IDENTIFIANT DU BON. Elle est
+      // déjà enregistrée sur la ligne (`stripe_session_id`, plus bas), elle
+      // n'est connue que de la personne qui vient de payer, et elle ne désigne
+      // aucune ressource devinable. Mettre `bon.id` dans l'URL donnerait la
+      // même page à qui la partagerait, code compris, et un code est de
+      // l'argent.
+      success_url: `${STRIPE_CONFIG.appUrl}${commercant.categorie === 'vitrine' ? `/commander/rdv/${commercant.slug}` : `/commander/${commercant.slug}`}?bon=ok&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:   `${STRIPE_CONFIG.appUrl}${commercant.categorie === 'vitrine' ? `/commander/rdv/${commercant.slug}` : `/commander/${commercant.slug}`}?bon=annule`,
       payment_intent_data: {
         application_fee_amount: calculApplicationFee(montantCents, commercant),

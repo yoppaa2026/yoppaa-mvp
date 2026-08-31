@@ -703,6 +703,93 @@ const MUTATIONS = [
     banc: 'verif:bons', fichier: 'app/commander/cancel/page.js',
     de: 'Ton paiement, ton bon et ta récompense fidélité te reviennent automatiquement.',
     vers: 'Ton paiement, ton {libelleBon(null)} et ta récompense fidélité te reviennent automatiquement.' },
+
+  // ─── L'ÉCRAN DE CONFIRMATION D'ACHAT (31/08) ──────────────────────────────
+
+  { nom: '🔴 LE CODE D’UN CADEAU SORT DU SERVEUR (argent du destinataire)',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: "  const pourMoi = String(bon.destinataire_mode || 'moi') !== 'offrir'",
+    vers: '  const pourMoi = true' },
+
+  { nom: '🔴 SUR-CORRECTION : plus personne ne reçoit son code, même en achetant pour soi',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: "  const pourMoi = String(bon.destinataire_mode || 'moi') !== 'offrir'",
+    vers: '  const pourMoi = false' },
+
+  { nom: '🔴 le repli bascule : un mode absent retiendrait le code',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: "  const pourMoi = String(bon.destinataire_mode || 'moi') !== 'offrir'",
+    vers: "  const pourMoi = String(bon.destinataire_mode || 'offrir') !== 'offrir'" },
+
+  { nom: '🔴 un bon annulé s’annonce comme un achat réussi',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: "export const ETATS_CONFIRMATION = ['actif', 'paiement_en_attente']",
+    vers: "export const ETATS_CONFIRMATION = ['actif', 'paiement_en_attente', 'annule']" },
+
+  { nom: '🔴 le webhook en retard fait échouer la confirmation d’un paiement réussi',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: "export const ETATS_CONFIRMATION = ['actif', 'paiement_en_attente']",
+    vers: "export const ETATS_CONFIRMATION = ['actif']" },
+
+  { nom: '🔴 « actif » devient vrai même quand le webhook n’est pas passé',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: "      actif: String(bon.statut || '') === 'actif',",
+    vers: '      actif: true,' },
+
+  { nom: '🔴 le retour de Stripe reperd sa session : l’app ne sait plus quel bon',
+    banc: 'verif:bons', fichier: 'app/api/bons-cadeaux/checkout/route.js',
+    de: "}?bon=ok&session_id={CHECKOUT_SESSION_ID}`,",
+    vers: '}?bon=ok`,' },
+
+  { nom: '🔴 la route de confirmation se remet à lire les adresses email',
+    banc: 'verif:bons', fichier: 'app/api/bons-cadeaux/confirmation/route.js',
+    de: ".select('code, token, montant_initial, solde, statut, expires_at, destinataire_mode, beneficiaire_prenom, commercant:commercants(nom, slug, categorie)')",
+    vers: ".select('code, token, montant_initial, solde, statut, expires_at, destinataire_mode, beneficiaire_prenom, acheteur_email, beneficiaire_email, commercant:commercants(nom, slug, categorie)')" },
+
+  { nom: '🔴 la fiche commerce cesse de monter la confirmation',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie}/>',
+    vers: '                  {null}' },
+
+  { nom: '🔴 la fiche rendez-vous cesse de monter la confirmation',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie}/>',
+    vers: '                  {null}' },
+
+  // ⚠️ CELLE-CI EST LE JUMEAU DU DÉFAUT MUET DU 31/08 : le composant reste
+  // monté, bien placé, et le mot cesse de suivre le métier. Rien ne se voit.
+  { nom: '🔴 la confirmation ne reçoit plus la catégorie du commerce',
+    banc: 'verif:fiche', fichier: 'app/commander/[slug]/page.js',
+    de: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie}/>',
+    vers: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme}/>' },
+
+  { nom: '🔴 la confirmation ne reçoit plus le détail du bon acheté',
+    banc: 'verif:fiche', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie}/>',
+    vers: '                  <BonConfirmation etat={bonRetour} categorie={commercant?.categorie}/>' },
+
+  // ⚠️ L'ORDRE EST LA RÈGLE : nettoyer l'URL avant d'avoir lu la session jette
+  // la seule clé qui dit quel bon vient d'être acheté. Le code compile, l'écran
+  // s'affiche, et il est vide. Défaut muet, exactement comme le précédent.
+  { nom: '🔴 l’URL est nettoyée AVANT que la session soit lue',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: "      const sessionId = params.get('session_id')\n      setBonRetour(p)",
+    vers: "      setBonRetour(p)" },
+
+  { nom: '🔴 une lecture ratée efface la confirmation d’un paiement réussi',
+    banc: 'verif:bons', fichier: 'app/commander/BonConfirmation.js',
+    de: '  if (!bon) {',
+    vers: '  if (false) {' },
+
+  { nom: '🔴 le lien vers la page du bon part aussi à qui OFFRE le bon',
+    banc: 'verif:bons', fichier: 'app/commander/BonConfirmation.js',
+    de: '        {bon.pour_moi && bon.token && (',
+    vers: '        {bon.token && (' },
+
+  { nom: '🔴 la route de confirmation accepte n’importe quelle chaîne comme session',
+    banc: 'verif:bons', fichier: 'app/api/bons-cadeaux/confirmation/route.js',
+    de: "!/^cs_[A-Za-z0-9_]{10,}$/.test(sessionId)",
+    vers: 'false' },
 ]
 
 function lancer(banc) {

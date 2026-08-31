@@ -176,12 +176,28 @@ for (const chemin of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/
       positions[i].index > positions[i - 1].index,
       `${positions[i - 1].nom}=${positions[i - 1].index}, ${positions[i].nom}=${positions[i].index}`)
   }
-  // Le message de retour de paiement, lui, reste EN HAUT : celui qui revient de
-  // sa banque doit le voir sans faire défiler la page.
-  const retour = src.search(/Ton \S+ est payé 🟣/)
+  // Le retour de paiement, lui, reste EN HAUT : celui qui revient de sa banque
+  // doit le voir sans faire défiler la page.
+  //
+  // ⚠️ CETTE GARDE VISAIT LA PHRASE, ELLE VISE MAINTENANT LE BLOC. Elle
+  // cherchait « Ton … est payé 🟣 », qui vivait dans le bandeau écrit en dur
+  // dans chaque tunnel. Le 31/08 ce bandeau est devenu un vrai écran de
+  // confirmation, partagé par les deux fiches : la phrase a déménagé dans le
+  // composant, la garde a rougi, et **la promesse n'avait pas bougé d'un
+  // pixel**. Ce qui ne doit pas changer, c'est la POSITION du bloc de retour,
+  // pas le texte qu'il contient.
+  const retour = src.search(/<BonConfirmation\b/)
   const bouton = /Offrir un [^<]*<\/span>/.exec(src)?.index ?? -1
   verifier(`${chemin} : le retour de paiement reste au-dessus du bouton`,
     retour > 0 && bouton > 0 && retour < bouton)
+  // ⚠️ ET IL DOIT RECEVOIR DE QUOI PARLER. Un `<BonConfirmation/>` sans son
+  // état ni sa catégorie serait bien placé et muet : la garde de position
+  // resterait verte sur un écran vide, et le mot ne suivrait plus le métier.
+  const appel = /<BonConfirmation[^>]*\/>/.exec(src)?.[0] || ''
+  verifier(`${chemin} : la confirmation reçoit l'état, le bon et la catégorie`,
+    /etat=\{bonRetour\}/.test(appel) && /bon=\{bonConfirme\}/.test(appel)
+    && /categorie=\{commercant\?\.categorie\}/.test(appel),
+    appel || 'aucun appel trouvé')
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

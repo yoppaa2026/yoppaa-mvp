@@ -590,6 +590,28 @@ egal('une vente en ligne n’emporte aucun moyen de comptoir', ligneCmdEnLigne.m
   verifier('le détail annonce la colonne', /Reste a encaisser/.test(detailCsv))
   verifier('et il la remplit ligne à ligne', /24,50/.test(detailCsv))
 
+  // ─── LE PÉRIMÈTRE DU FICHIER, ET PAS SEULEMENT SON STATUT LÉGAL ───────────
+  //
+  // 🔴 Alex, 31/08 : le commerçant ne peut corriger AUCUN montant. `encaisse_montant`
+  // vaut ce que Yoppaa croit dû, dérivé de `prix_estime` ; un supplément encaissé
+  // à sa caisse n'entre jamais ici. L'en-tête disait déjà « pas une caisse
+  // certifiée », ce qui est une mention LÉGALE et ne dit rien du CONTENU.
+  //
+  // ⚠️ ON MESURE LES DEUX SÉPARÉMENT, ET C'EST TOUT L'INTÉRÊT. Fondre les deux
+  // phrases en une seule ferait disparaître le périmètre pendant que le mot
+  // « SCE » survit : une garde qui chercherait « caisse » resterait verte sur un
+  // fichier qui ne dit plus ce qu'il contient.
+  for (const [nom, csv] of [['le journal', journalCsv], ['le détail', detailCsv]]) {
+    verifier(`🔴 ${nom} dit ce qu'il NE contient PAS`,
+      /ne contient que les transactions passees par Yoppaa/.test(csv),
+      'aucune mention de périmètre en tête de fichier')
+    verifier(`${nom} garde aussi sa mention légale`,
+      /caisse enregistree certifie \(SCE\)/.test(csv))
+  }
+  // ⚠️ ET DEUX LIGNES DISTINCTES, PAS UNE : on compte, on ne cherche pas.
+  egal('les deux mentions sont deux lignes séparées',
+    journalCsv.split('\r\n').filter(l => /SCE|ne contient que les transactions/.test(l)).length, 2)
+
   // ⚠️ 🔴 LE DÉTAIL SE TRIE PAR DATE **ET PAR HEURE**, ET RIEN NE LE VÉRIFIAIT.
   // Alex l'a vu sur son export du 23/08 : 15:29, 15:30, 15:34, puis 14:55 dans
   // la même journée. Le tri s'arrêtait à la date.
